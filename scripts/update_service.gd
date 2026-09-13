@@ -208,6 +208,15 @@ func _apply_binary() -> State:
 	if BuildInfo.is_android():
 		DirAccess.make_dir_recursive_absolute(BuildInfo.STAGING_DIR)
 		var apk_path := BuildInfo.STAGING_DIR.path_join("biogenic-%d.apk" % pending_version)
+
+		# Backing out of the system installer leaves a good APK on disk. Re-hash
+		# it rather than pulling ~50 MB down again -- cheap, and it keeps the
+		# "never install anything unverified" rule intact.
+		if _matches_pending_checksum(apk_path):
+			_verified_apk_path = apk_path
+			_busy = false
+			return _hand_off_to_installer()
+
 		var download_state := await _download_verified(url, apk_path)
 		if download_state != State.VERIFYING:
 			_busy = false
@@ -291,6 +300,14 @@ func _download_verified(url: String, dest: String) -> State:
 		return _fail("The download is corrupted (checksum mismatch) and was discarded.")
 
 	return State.VERIFYING
+
+
+## True when [param path] already holds exactly the bytes the manifest expects.
+func _matches_pending_checksum(path: String) -> bool:
+	var expected := str(pending_artifact.get("sha256", "")).strip_edges().to_lower()
+	if expected.is_empty() or not FileAccess.file_exists(path):
+		return false
+	return FileAccess.get_sha256(path).to_lower() == expected
 
 
 ## One HTTP GET. When [param download_to] is set the body is streamed to that
