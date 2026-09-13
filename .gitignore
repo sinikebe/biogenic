@@ -1,0 +1,18 @@
+# Godot's import cache and generated metadata
+.godot/
+*.translation
+
+# Build output
+/build/
+
+# Signing material must never be committed. The release key lives only in the
+# ANDROID_KEYSTORE_BASE64 repository secret -- see docs/UPDATES.md.
+*.keystore
+*.jks
+*.p12
+*.idsig
+
+# Local editor overrides
+export_presets.local.cfg
+.vscode/
+.idea/

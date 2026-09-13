@@ -1,0 +1,186 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_menu"]
+[ext_resource type="Shader" path="res://assets/shaders/bio_background.gdshader" id="2_bg"]
+[ext_resource type="Theme" path="res://assets/ui/biogenic_theme.tres" id="3_theme"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
+shader = ExtResource("2_bg")
+
+[node name="MainMenu" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("3_theme")
+script = ExtResource("1_menu")
+
+[node name="Background" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_bg")
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.023, 0.055, 0.05, 1)
+
+[node name="Content" type="MarginContainer" parent="."]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/margin_left = 48
+theme_override_constants/margin_top = 40
+theme_override_constants/margin_right = 48
+theme_override_constants/margin_bottom = 28
+
+[node name="Layout" type="VBoxContainer" parent="Content"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="Header" type="VBoxContainer" parent="Content/Layout"]
+layout_mode = 2
+theme_override_constants/separation = 0
+
+[node name="Title" type="Label" parent="Content/Layout/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.827, 1, 0.937, 1)
+theme_override_font_sizes/font_size = 62
+text = "BIOGENIC"
+
+[node name="Tagline" type="Label" parent="Content/Layout/Header"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
+theme_override_font_sizes/font_size = 17
+text = "early build · updates itself"
+
+[node name="MenuArea" type="CenterContainer" parent="Content/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+
+[node name="Buttons" type="VBoxContainer" parent="Content/Layout/MenuArea"]
+custom_minimum_size = Vector2(300, 0)
+layout_mode = 2
+theme_override_constants/separation = 12
+
+[node name="PlayButton" type="Button" parent="Content/Layout/MenuArea/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Play"
+
+[node name="QuitButton" type="Button" parent="Content/Layout/MenuArea/Buttons"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Quit"
+
+[node name="UpdateBar" type="PanelContainer" parent="Content/Layout"]
+layout_mode = 2
+
+[node name="Row" type="HBoxContainer" parent="Content/Layout/UpdateBar"]
+layout_mode = 2
+theme_override_constants/separation = 18
+
+[node name="StatusLabel" type="Label" parent="Content/Layout/UpdateBar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+theme_override_colors/font_color = Color(0.604, 0.776, 0.741, 1)
+theme_override_font_sizes/font_size = 16
+text = "Not checked yet."
+autowrap_mode = 3
+
+[node name="UpdateProgress" type="ProgressBar" parent="Content/Layout/UpdateBar/Row"]
+unique_name_in_owner = true
+custom_minimum_size = Vector2(160, 8)
+layout_mode = 2
+size_flags_vertical = 4
+show_percentage = false
+
+[node name="UpdateButton" type="Button" parent="Content/Layout/UpdateBar/Row"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_font_sizes/font_size = 17
+text = "Check for updates"
+
+[node name="VersionLabel" type="Label" parent="Content/Layout"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 8
+theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
+theme_override_font_sizes/font_size = 13
+text = "v0.0.0"
+
+[node name="UpdateOverlay" type="Control" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Dim" type="ColorRect" parent="UpdateOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.004, 0.016, 0.014, 0.784)
+
+[node name="Center" type="CenterContainer" parent="UpdateOverlay"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Dialog" type="PanelContainer" parent="UpdateOverlay/Center"]
+custom_minimum_size = Vector2(440, 0)
+layout_mode = 2
+
+[node name="Box" type="VBoxContainer" parent="UpdateOverlay/Center/Dialog"]
+layout_mode = 2
+theme_override_constants/separation = 14
+
+[node name="OverlayTitle" type="Label" parent="UpdateOverlay/Center/Dialog/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.827, 1, 0.937, 1)
+theme_override_font_sizes/font_size = 26
+text = "Update ready"
+
+[node name="OverlayBody" type="Label" parent="UpdateOverlay/Center/Dialog/Box"]
+unique_name_in_owner = true
+layout_mode = 2
+theme_override_colors/font_color = Color(0.663, 0.812, 0.78, 1)
+theme_override_font_sizes/font_size = 17
+text = "…"
+autowrap_mode = 3
+
+[node name="Actions" type="HBoxContainer" parent="UpdateOverlay/Center/Dialog/Box"]
+layout_mode = 2
+theme_override_constants/separation = 10
+alignment = 2
+
+[node name="OverlaySecondary" type="Button" parent="UpdateOverlay/Center/Dialog/Box/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Later"
+
+[node name="OverlayPrimary" type="Button" parent="UpdateOverlay/Center/Dialog/Box/Actions"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Restart now"

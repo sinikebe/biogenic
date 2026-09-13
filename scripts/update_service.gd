@@ -1,0 +1,456 @@
+extends Node
+## Autoload: checks GitHub Releases for a newer build and applies it.
+##
+## Two kinds of update, decided by the manifest:
+##
+##   BINARY  -- binary_version went up. Only a new APK/EXE can deliver it.
+##              On Android the APK is downloaded and handed to the system
+##              installer, which updates this app in place.
+##   CONTENT -- only content_version went up. A .pck is downloaded, staged in
+##              user://, and mounted at the next launch, so the app just has to
+##              restart. No reinstall, no app-store round trip.
+##
+## Every download is verified against the SHA-256 in the manifest before it is
+## allowed anywhere near the install step.
+
+const MANIFEST_URL := "https://github.com/sinikebe/biogenic/releases/latest/download/manifest.json"
+const RELEASES_PAGE := "https://github.com/sinikebe/biogenic/releases/latest"
+
+const USER_AGENT := "BiogenicUpdater/1.0 (+https://github.com/sinikebe/biogenic)"
+const REQUEST_TIMEOUT := 30.0
+const SUPPORTED_SCHEMA := 1
+
+enum State {
+	IDLE,             ## Nothing has been checked yet this session.
+	CHECKING,         ## Manifest request in flight.
+	UP_TO_DATE,       ## Manifest fetched, nothing newer.
+	CONTENT_READY,    ## A content update is available to download.
+	BINARY_READY,     ## A new APK/EXE is available to download.
+	DOWNLOADING,      ## Transfer in flight.
+	VERIFYING,        ## Hashing the finished download.
+	RESTART_REQUIRED, ## Content staged; relaunch to finish.
+	INSTALL_HANDOFF,  ## APK handed to the system installer.
+	UNAVAILABLE,      ## No build published for this platform.
+	FAILED,           ## Check or download failed; see last_error.
+}
+
+signal state_changed(new_state: State)
+signal progress_changed(downloaded_bytes: int, total_bytes: int)
+## Emitted once per check or apply with the outcome, for one-shot UI reactions.
+signal check_completed(final_state: State)
+
+var state: State = State.IDLE
+var last_error: String = ""
+var manifest: Dictionary = {}
+
+## Populated once a check finds something to download.
+var pending_kind: String = ""      ## "binary" or "content"
+var pending_artifact: Dictionary = {}
+var pending_version: int = 0
+
+var _busy := false
+var _active_request: HTTPRequest = null
+
+
+func _ready() -> void:
+	set_process(false)
+
+
+func _process(_delta: float) -> void:
+	if _active_request == null:
+		return
+	progress_changed.emit(_active_request.get_downloaded_bytes(), _active_request.get_body_size())
+
+
+# ---------------------------------------------------------------------------
+# Checking
+# ---------------------------------------------------------------------------
+
+## Fetches the manifest and works out whether anything newer exists.
+## Safe to call fire-and-forget; listen to [signal check_completed].
+func check_for_updates() -> State:
+	if _busy:
+		return state
+	_busy = true
+	_set_state(State.CHECKING)
+	last_error = ""
+
+	var response := await _request(MANIFEST_URL, "")
+	_busy = false
+
+	if not response.ok:
+		if response.code == 404:
+			return _fail("No release has been published yet.")
+		return _fail(response.error)
+
+	var parsed: Variant = JSON.parse_string(response.body.get_string_from_utf8())
+	if not parsed is Dictionary:
+		return _fail("The update manifest is malformed.")
+
+	manifest = parsed
+	var schema := int(manifest.get("schema", 0))
+	if schema > SUPPORTED_SCHEMA:
+		return _finish(State.UNAVAILABLE,
+			"This build is too old to understand the update feed. Please reinstall from GitHub.")
+
+	var platform := BuildInfo.platform_key()
+	var artifacts: Dictionary = manifest.get("artifacts", {})
+	var remote_binary := int(manifest.get("binary_version", 0))
+	var remote_content := int(manifest.get("content_version", 0))
+
+	# A new binary wins: it carries its own content, so there is no point
+	# downloading a content pack that the install would immediately supersede.
+	if remote_binary > BuildInfo.binary_version:
+		var binary_artifact := _artifact_for(artifacts, "binary", platform)
+		if binary_artifact.is_empty():
+			return _finish(State.UNAVAILABLE,
+				"Version %s needs a new app build, but none is published for %s yet." % [
+					manifest.get("version_name", "?"), platform])
+		pending_kind = "binary"
+		pending_artifact = binary_artifact
+		pending_version = remote_binary
+		return _finish(State.BINARY_READY, "")
+
+	if remote_content > BuildInfo.content_version:
+		var content_artifact := _artifact_for(artifacts, "content", platform)
+		if content_artifact.is_empty():
+			return _finish(State.UNAVAILABLE, "No content pack published for %s." % platform)
+		pending_kind = "content"
+		pending_artifact = content_artifact
+		pending_version = remote_content
+		return _finish(State.CONTENT_READY, "")
+
+	pending_kind = ""
+	pending_artifact = {}
+	pending_version = 0
+	return _finish(State.UP_TO_DATE, "")
+
+
+func _artifact_for(artifacts: Dictionary, kind: String, platform: String) -> Dictionary:
+	var by_platform: Variant = artifacts.get(kind, {})
+	if not by_platform is Dictionary:
+		return {}
+	var entry: Variant = by_platform.get(platform, {})
+	if not entry is Dictionary or not entry.has("url"):
+		return {}
+	return entry
+
+
+# ---------------------------------------------------------------------------
+# Applying
+# ---------------------------------------------------------------------------
+
+## Downloads and applies whatever the last check turned up.
+func apply_pending_update() -> State:
+	if _busy or pending_artifact.is_empty():
+		return state
+	if pending_kind == "binary":
+		return await _apply_binary()
+	return await _apply_content()
+
+
+func _apply_content() -> State:
+	_busy = true
+	var url := str(pending_artifact.get("url", ""))
+	var version := pending_version
+
+	DirAccess.make_dir_recursive_absolute(BuildInfo.STAGING_DIR)
+	DirAccess.make_dir_recursive_absolute(BuildInfo.CONTENT_DIR)
+
+	var staged := BuildInfo.STAGING_DIR.path_join("content-%d.pck.part" % version)
+	var download_state := await _download_verified(url, staged)
+	if download_state != State.VERIFYING:
+		_busy = false
+		return download_state
+
+	# Per-version filename: the pack mounted by this process stays locked on
+	# Windows, so a new one must never try to overwrite it.
+	var final_path := BuildInfo.CONTENT_DIR.path_join("content-%d.pck" % version)
+	if FileAccess.file_exists(final_path):
+		DirAccess.remove_absolute(final_path)
+	if DirAccess.rename_absolute(staged, final_path) != OK:
+		_busy = false
+		return _fail("Could not move the downloaded content into place.")
+
+	var size := 0
+	var probe := FileAccess.open(final_path, FileAccess.READ)
+	if probe != null:
+		size = probe.get_length()
+
+	BuildInfo.write_state({
+		"content_version": version,
+		"pack_path": final_path,
+		"size": size,
+		"sha256": str(pending_artifact.get("sha256", "")),
+		"version_name": str(manifest.get("version_name", "")),
+		"installed_at": Time.get_datetime_string_from_system(true),
+	})
+
+	_busy = false
+	return _finish(State.RESTART_REQUIRED, "")
+
+
+func _apply_binary() -> State:
+	_busy = true
+	var url := str(pending_artifact.get("url", ""))
+
+	if BuildInfo.is_android():
+		DirAccess.make_dir_recursive_absolute(BuildInfo.STAGING_DIR)
+		var apk_path := BuildInfo.STAGING_DIR.path_join("biogenic-%d.apk" % pending_version)
+		var download_state := await _download_verified(url, apk_path)
+		if download_state != State.VERIFYING:
+			_busy = false
+			return download_state
+
+		if not AndroidBridge.can_install_packages():
+			AndroidBridge.open_install_settings()
+			_busy = false
+			return _fail("Allow this app to install unknown apps, then tap Update again.")
+
+		if not AndroidBridge.install_apk(apk_path):
+			# The staged APK lives in private storage, so there is nothing the
+			# user could open by hand. Send them to the release page instead --
+			# a browser download lands somewhere they can install from.
+			_busy = false
+			OS.shell_open(RELEASES_PAGE)
+			return _fail("Could not open the installer. Opened the releases page so you can download the APK directly.")
+
+		_busy = false
+		return _finish(State.INSTALL_HANDOFF, "")
+
+	if OS.get_name() == "Windows":
+		var result := await _apply_windows_binary(url)
+		_busy = false
+		return result
+
+	# Nothing safe to automate here: point at the release page.
+	_busy = false
+	OS.shell_open(RELEASES_PAGE)
+	return _finish(State.UNAVAILABLE, "Download the new build from the GitHub releases page.")
+
+
+# ---------------------------------------------------------------------------
+# Transfer helpers
+# ---------------------------------------------------------------------------
+
+## Downloads [param url] to [param dest] and checks it against the manifest
+## hash. Returns State.VERIFYING on success, or a failure state.
+func _download_verified(url: String, dest: String) -> State:
+	if url.is_empty():
+		return _fail("The manifest entry has no download URL.")
+
+	_set_state(State.DOWNLOADING)
+	var response := await _request(url, dest)
+	if not response.ok:
+		DirAccess.remove_absolute(dest)
+		return _fail(response.error)
+
+	_set_state(State.VERIFYING)
+	var expected := str(pending_artifact.get("sha256", "")).strip_edges().to_lower()
+	if expected.is_empty():
+		# Refuse to install something we cannot authenticate.
+		DirAccess.remove_absolute(dest)
+		return _fail("The manifest is missing a checksum for this download.")
+
+	var actual := FileAccess.get_sha256(dest).to_lower()
+	if actual != expected:
+		DirAccess.remove_absolute(dest)
+		return _fail("The download is corrupted (checksum mismatch) and was discarded.")
+
+	return State.VERIFYING
+
+
+## One HTTP GET. When [param download_to] is set the body is streamed to that
+## file instead of being kept in memory.
+func _request(url: String, download_to: String) -> Dictionary:
+	var http := HTTPRequest.new()
+	http.timeout = REQUEST_TIMEOUT
+	http.use_threads = true
+	# GitHub serves release assets from a redirect to a signed CDN URL.
+	http.max_redirects = 8
+	if not download_to.is_empty():
+		http.download_file = download_to
+	add_child(http)
+
+	_active_request = http
+	set_process(true)
+
+	var headers := PackedStringArray([
+		"User-Agent: " + USER_AGENT,
+		"Accept: */*",
+		"Cache-Control: no-cache",
+	])
+
+	var error := http.request(url, headers, HTTPClient.METHOD_GET)
+	if error != OK:
+		_teardown_request(http)
+		return {
+			"ok": false, "code": 0, "body": PackedByteArray(),
+			"error": "Could not start the request (error %d). Check your connection." % error,
+		}
+
+	var result: Array = await http.request_completed
+	_teardown_request(http)
+
+	var outcome := int(result[0])
+	var code := int(result[1])
+	var body: PackedByteArray = result[3]
+
+	if outcome != HTTPRequest.RESULT_SUCCESS:
+		return {"ok": false, "code": code, "body": body, "error": _describe_transfer_failure(outcome)}
+	if code < 200 or code >= 300:
+		return {"ok": false, "code": code, "body": body, "error": "The server answered with HTTP %d." % code}
+
+	return {"ok": true, "code": code, "body": body, "error": ""}
+
+
+func _teardown_request(http: HTTPRequest) -> void:
+	_active_request = null
+	set_process(false)
+	http.queue_free()
+
+
+func _describe_transfer_failure(outcome: int) -> String:
+	match outcome:
+		HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CANT_RESOLVE:
+			return "Could not reach GitHub. Check your connection."
+		HTTPRequest.RESULT_TIMEOUT:
+			return "The connection timed out."
+		HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR:
+			return "Secure connection failed."
+		HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN, HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR:
+			return "Could not write the download to storage. Is the device full?"
+		_:
+			return "The download failed (error %d)." % outcome
+
+
+# ---------------------------------------------------------------------------
+# Restarting
+# ---------------------------------------------------------------------------
+
+## Relaunches the app so a staged content pack gets mounted.
+## Returns false if the caller has to ask the user to do it by hand.
+func restart_app() -> bool:
+	if BuildInfo.is_android():
+		return AndroidBridge.restart_app()
+
+	if OS.has_feature("editor"):
+		# get_executable_path() is the editor binary here, so relaunching it
+		# would open the editor rather than the game.
+		return false
+
+	var executable := OS.get_executable_path()
+	if executable.is_empty():
+		return false
+	if OS.create_process(executable, []) <= 0:
+		return false
+	get_tree().quit()
+	return true
+
+
+# ---------------------------------------------------------------------------
+# Windows in-place update
+# ---------------------------------------------------------------------------
+
+## Downloads the new .exe and leaves a detached helper that swaps it in once
+## this process has exited -- a running .exe cannot overwrite itself.
+##
+## The Windows build is a single self-contained executable (the content pack is
+## embedded at export time), so "installing" it is one file copy.
+func _apply_windows_binary(url: String) -> State:
+	DirAccess.make_dir_recursive_absolute(BuildInfo.STAGING_DIR)
+	var staged := BuildInfo.STAGING_DIR.path_join("Biogenic-%d.exe" % pending_version)
+
+	var download_state := await _download_verified(url, staged)
+	if download_state != State.VERIFYING:
+		return download_state
+
+	if OS.has_feature("editor"):
+		return _finish(State.UNAVAILABLE,
+			"Running from the editor — the new build was saved to %s." %
+				ProjectSettings.globalize_path(staged))
+
+	if not _spawn_windows_swap(staged, OS.get_executable_path()):
+		return _fail("Could not start the updater. The new build is at %s." %
+			ProjectSettings.globalize_path(staged))
+
+	get_tree().quit()
+	return _finish(State.INSTALL_HANDOFF, "")
+
+
+func _spawn_windows_swap(source_exe: String, target_exe: String) -> bool:
+	var script_res_path := BuildInfo.STAGING_DIR.path_join("apply_update.ps1")
+	var script := FileAccess.open(script_res_path, FileAccess.WRITE)
+	if script == null:
+		return false
+	# $PID is a reserved automatic variable in PowerShell, hence $OwnerPid.
+	var lines := PackedStringArray([
+		"param([int]$OwnerPid, [string]$Source, [string]$Target)",
+		"$ErrorActionPreference = 'Stop'",
+		"try { Wait-Process -Id $OwnerPid -Timeout 60 -ErrorAction SilentlyContinue } catch {}",
+		"Start-Sleep -Milliseconds 750",
+		"Copy-Item -LiteralPath $Source -Destination $Target -Force",
+		"Remove-Item -LiteralPath $Source -Force -ErrorAction SilentlyContinue",
+		"Start-Process -FilePath $Target -WorkingDirectory (Split-Path -Parent $Target)",
+	])
+	script.store_string("\r\n".join(lines) + "\r\n")
+	script.close()
+
+	return OS.create_process("powershell.exe", [
+		"-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass",
+		"-File", ProjectSettings.globalize_path(script_res_path),
+		"-OwnerPid", str(OS.get_process_id()),
+		"-Source", ProjectSettings.globalize_path(source_exe),
+		"-Target", target_exe,
+	]) > 0
+
+
+# ---------------------------------------------------------------------------
+# State plumbing
+# ---------------------------------------------------------------------------
+
+func _set_state(next: State) -> void:
+	state = next
+	state_changed.emit(state)
+
+
+func _fail(message: String) -> State:
+	last_error = message
+	push_warning("[UpdateService] " + message)
+	_set_state(State.FAILED)
+	check_completed.emit(state)
+	return state
+
+
+func _finish(next: State, message: String) -> State:
+	last_error = message
+	_set_state(next)
+	check_completed.emit(state)
+	return state
+
+
+## One line describing where the updater currently stands, for the menu.
+func status_text() -> String:
+	match state:
+		State.IDLE:
+			return "Not checked yet."
+		State.CHECKING:
+			return "Checking for updates…"
+		State.UP_TO_DATE:
+			return "Up to date."
+		State.DOWNLOADING:
+			return "Downloading…"
+		State.VERIFYING:
+			return "Verifying download…"
+		State.CONTENT_READY:
+			return "Content update available (v%s)." % manifest.get("version_name", pending_version)
+		State.BINARY_READY:
+			return "New app version available (v%s)." % manifest.get("version_name", pending_version)
+		State.RESTART_REQUIRED:
+			return "Update ready — restart to finish."
+		State.INSTALL_HANDOFF:
+			return "Handed over to the installer."
+		State.UNAVAILABLE, State.FAILED:
+			return last_error
+		_:
+			return ""
