@@ -67,10 +67,18 @@ immediately, with no lag. This is the single most important moment in the
 design: it is the proof that the player is connected to anything at all. The
 player learns: I steer, and the skin answers.
 
-**~0:10 — the bump.** An inert mote is placed on the initial drift path. Contact
-is a hard near-white flash of the whole contour plus a lingering bruise at the
-contact bearing. The player learns: things exist out there, and hitting them has
-a direction.
+**~0:06 — the bump.** An inert mote is placed 340px along the cell's *actual*
+velocity once it is moving. Contact is a hard near-white flash of the whole
+contour plus a lingering bruise at the contact bearing. The player learns:
+things exist out there, and hitting them has a direction.
+
+This was originally specced as a mote dead ahead at boot, on "the initial drift
+path". That phrase means nothing before there *is* a drift: the heading wanders
+between boot and arrival, and measured over 60 seeds the mote was missed roughly
+two thirds of the time. Placing it along the real velocity vector lands it on 53
+of 60 seeds, median 6.3s. It is still **likely, not authored** — one player in
+eight gets no bump in the first 30 seconds, and it can land before the player
+has turned, which inverts the intended order of the two lessons.
 
 **0:12–0:30 — the beat quickens.** The staged food cell's chemical field is
 entered. The beat period falls from 2.4s toward 1.6s. Turn away and it slows and
@@ -93,6 +101,24 @@ invisibility, and the beat becomes irregular. No bearing, no way to act, ten
 seconds of the water simply being wrong. Then the first pressure wake: the
 contour dents hard inward at one bearing with a hot white line. Now it has a
 direction, and now the player can turn.
+
+> **The shader has no term for "the contour desaturates".** That sentence
+> described an effect nothing implemented: `dread` only mixes the base colour,
+> so a first build rendered a full-strength contour on a drained field, which
+> read as a bug. Dread therefore drains the *beat* instead, via a floor on beat
+> strength — inverting this spec's own measured dread row, brightest
+> `(7,26,26)`, implies a pulse of about **0.15**. The shipped constant is 0.2,
+> which renders `(8,32,31)` against the measured `(7,26,26)`; it is ~30% high
+> and should be trimmed to 0.15 when predators actually arrive. Nothing in
+> normal mode fires `dread` yet, so this is inert today.
+>
+> **Compound floor warning.** Dread's floor multiplies with the starvation floor
+> in §6.2, and at full dread *and* full starvation the beat lands at
+> `0.35 × 0.2 = 0.07` — a contour of roughly `(4,13,16)` on a `(3,8,10)` base.
+> That is precisely the "reads as a broken screen rather than as dying" failure
+> §6.2 exists to prevent, arriving by a route §6.2 does not cover. Whoever
+> builds the predator owns resolving it; do not let the two floors multiply
+> unbounded.
 
 The predator is the only thing in the game that makes the screen *darker*. That
 is the whole horror of it.
@@ -255,8 +281,18 @@ black, measurably, and the predator makes it blacker.
 
 ### Both targets
 
-- No widgets in normal mode, so the 48px rule does not bite. Steering is drag
-  (Android) or `A`/`D` and arrows (desktop) — both occupy zero pixels.
+- No widgets on the *sensory* screen, so the 48px rule does not bite there.
+  Steering is drag (Android) or `A`/`D` and arrows (desktop) — both occupy zero
+  pixels.
+- **The pause screen is the one exception**, and it is deliberate: it carries
+  two buttons and the words `resume` and `leave`. A game whose only exit is the
+  hardware Back button, on a screen with no widgets, strands anyone who taps it
+  by accident. Pause is a separate surface from the sensory screen and the
+  §6.1 "only text in normal mode" rule is scoped to the latter.
+  The gap between those two buttons matters more than their size: 56 canvas px
+  is about 5.3mm on a 2400x1080 phone, under the ~9mm a thumb needs, and the
+  control directly below `resume` ends the run. They are separated by 48 canvas
+  px so a low tap misses into dead space rather than leaving.
 - **Nothing may ever be placed at the screen edge.** The edge is the sensory
   channel; a button there is a signal the player cannot read. Future HUD goes in
   the interior or nowhere.
@@ -324,15 +360,21 @@ absent on some fraction of devices can be used at all.
 
 ## 6. Left open — owner's call
 
-1. **One line of onboarding text.** A player on a phone facing a black screen
-   with no widgets may never discover that dragging steers. I recommend exactly
-   one line, first run only — `drag to turn` / `A · D to turn`, 18px,
-   `Color(0.855, 0.953, 0.933, 0.55)`, lower third, fading over 0.8s the instant
-   they first turn. It would be the only text in normal mode. It is a real dent
-   in the fiction and the owner should decide, not me.
-2. **Is the beat also the health readout?** Making beat rate double as starvation
-   would be elegant and free, but it couples perception to survival tuning and
-   that is a gameplay decision.
+1. ~~One line of onboarding text.~~ **DECIDED: yes, one line, first run only.**
+   `drag to turn` / `A · D to turn`, 18px, `Color(0.855, 0.953, 0.933, 0.55)`,
+   lower third, fading over 0.8s the instant they first turn, never shown again.
+   It is the only text in normal mode — do not let a second string join it.
+2. ~~Is the beat also the health readout?~~ **DECIDED: yes, beat rate is hunger.**
+   The metabolic beat slows and weakens as the cell starves; one signal carries
+   both "I exist" and "I am running out".
+
+   This is a deliberate coupling, so treat it as one: **hunger is now a
+   perception parameter, not just a survival number.** Any change to starvation
+   balance changes how the game reads, and any change to the beat envelope
+   changes how legible starvation is. Keep the mapping from hunger to beat rate
+   in exactly one place so the two can be reasoned about together, and expect
+   the floor to matter most — a beat that decays to nothing leaves the player
+   with no membrane at all, which reads as a broken screen rather than as dying.
 3. **The predator's escape window.** I have specced the *warning* — roughly 10s
    of dread, then a directional wake. Whether a slow cell can actually escape in
    that window is balance, and if it cannot, the warning is only cruelty.
