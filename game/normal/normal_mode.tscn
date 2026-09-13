@@ -1,0 +1,71 @@
+[gd_scene load_steps=6 format=3]
+
+[ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
+[ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
+[ext_resource type="Script" path="res://game/normal/metabolism.gd" id="3_metabolism"]
+[ext_resource type="Script" path="res://game/normal/cell.gd" id="4_cell"]
+[ext_resource type="Script" path="res://game/normal/motes.gd" id="5_motes"]
+
+[node name="NormalMode" type="Node"]
+process_mode = 3
+script = ExtResource("1_normal")
+
+[node name="Membrane" parent="." instance=ExtResource("2_membrane")]
+process_mode = 3
+
+[node name="Metabolism" type="Node" parent="."]
+process_mode = 1
+script = ExtResource("3_metabolism")
+
+[node name="Cell" type="Node" parent="."]
+process_mode = 1
+script = ExtResource("4_cell")
+
+[node name="Motes" type="Node" parent="."]
+process_mode = 1
+script = ExtResource("5_motes")
+
+[node name="Hud" type="CanvasLayer" parent="."]
+layer = 1
+
+[node name="Onboarding" type="Label" parent="Hud"]
+anchor_top = 0.72
+anchor_right = 1.0
+anchor_bottom = 0.72
+offset_bottom = 30.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.55)
+theme_override_font_sizes/font_size = 18
+text = "A · D to turn"
+horizontal_alignment = 1
+
+[node name="Pause" type="Control" parent="Hud"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Scrim" type="ColorRect" parent="Hud/Pause"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.023, 0.055, 0.05, 0.5)
+
+[node name="Center" type="CenterContainer" parent="Hud/Pause"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Buttons" type="VBoxContainer" parent="Hud/Pause/Center"]
+theme_override_constants/separation = 14
+
+[node name="Resume" type="Button" parent="Hud/Pause/Center/Buttons"]
+text = "resume"
+
+[node name="Leave" type="Button" parent="Hud/Pause/Center/Buttons"]
+text = "leave"

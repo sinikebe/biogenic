@@ -1,0 +1,25 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/perception/membrane.gd" id="1_membrane"]
+[ext_resource type="Shader" path="res://game/perception/membrane.gdshader" id="2_shader"]
+[ext_resource type="Script" path="res://game/perception/signal_bus.gd" id="3_bus"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_field"]
+shader = ExtResource("2_shader")
+
+[node name="Membrane" type="CanvasLayer"]
+layer = 0
+script = ExtResource("1_membrane")
+
+[node name="Field" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_field")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.023, 0.055, 0.05, 1)
+
+[node name="Signals" type="Node" parent="."]
+script = ExtResource("3_bus")
