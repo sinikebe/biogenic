@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "2b7109eb78859fc4d27e9a475bbb35226033e19d",
-  "subject": "Report when a game's workflows have drifted from the template",
-  "synced_at": "2026-09-13T15:49:56Z"
+  "commit": "0a0d1131c849f5b98c082defcc8aa36e6ff4929b",
+  "subject": "Stop baking Biogenic into the template",
+  "synced_at": "2026-09-13T16:00:46Z"
 }
