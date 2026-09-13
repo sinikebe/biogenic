@@ -54,6 +54,20 @@ shipped build never has to know a tag, call the GitHub API, or worry about rate
 limits. That is also why every asset name is version-free — `biogenic.apk`, not
 `biogenic-0.1.0.apk`.
 
+The artifact URLs *inside* the manifest are different: they are pinned to that
+release's own tag, not to `latest`. GitHub's CDN caches the two paths
+independently, so for a while after a release goes out,
+`latest/download/manifest.json` can still serve the previous manifest while
+`latest/download/biogenic.apk` already serves the new binary — observed in
+practice, not theoretical. Pinning makes each manifest internally consistent: a
+client handed a stale manifest installs that slightly older release and catches
+up on its next check, instead of pairing one release's checksum with another
+release's bytes and refusing the update.
+
+For the same reason the app appends a unique `?ts=` to its manifest request —
+GitHub ignores `Cache-Control` on that path, and a cache-buster is what actually
+gets a fresh answer.
+
 ```jsonc
 {
   "schema": 1,

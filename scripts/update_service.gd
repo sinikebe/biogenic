@@ -82,7 +82,11 @@ func check_for_updates() -> State:
 	_set_state(State.CHECKING)
 	last_error = ""
 
-	var response := await _request(MANIFEST_URL, "")
+	# GitHub's CDN caches /releases/latest/download/ and ignores Cache-Control on
+	# it, so a plain request can be answered with the previous release's manifest
+	# for a while after a new one goes out. A unique query defeats that.
+	var url := "%s?ts=%d" % [MANIFEST_URL, Time.get_unix_time_from_system()]
+	var response := await _request(url, "")
 	_busy = false
 
 	if not response.ok:

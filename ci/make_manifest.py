@@ -1,11 +1,19 @@
 #!/usr/bin/env python3
 """Build the update manifest the app polls, from the artifacts CI just produced.
 
-The manifest is itself published as a release asset named ``manifest.json``, and
-every URL in it points at ``releases/latest/download/<name>``. That path always
+The manifest is published as a release asset named ``manifest.json`` and fetched
+by the app from ``releases/latest/download/manifest.json`` -- a path that always
 redirects to the newest release, so a shipped build never has to know a release
-tag, call the GitHub API, or deal with rate limits -- it just fetches one stable
-URL.
+tag, call the GitHub API, or deal with rate limits.
+
+The artifact URLs inside it, however, are pinned to *this* release's tag rather
+than to ``latest``. That matters: GitHub's CDN caches the two paths
+independently, so during a release there is a window where
+``latest/download/manifest.json`` still serves the previous release while
+``latest/download/biogenic.apk`` already serves the new one. Tag-pinned URLs make
+each manifest internally consistent -- a client that gets a stale manifest simply
+installs that slightly older release and catches up on its next check, instead of
+pairing one release's checksum with another release's bytes and failing.
 
 Every artifact is hashed here, and the app refuses to install a download whose
 SHA-256 does not match.
@@ -19,6 +27,7 @@ import hashlib
 import json
 import pathlib
 import sys
+import urllib.parse
 
 SCHEMA_VERSION = 1
 VALID_KINDS = ("binary", "content")
@@ -64,7 +73,12 @@ def main() -> int:
     parser.add_argument("--out", required=True, type=pathlib.Path)
     args = parser.parse_args()
 
-    base_url = f"https://github.com/{args.repo}/releases/latest/download"
+    # quote() so a tag containing "+" (build metadata, as in v0.1.0+7) survives
+    # every HTTP client unambiguously.
+    base_url = (
+        f"https://github.com/{args.repo}/releases/download/"
+        f"{urllib.parse.quote(args.tag, safe='')}"
+    )
     artifacts: dict[str, dict[str, dict]] = {kind: {} for kind in VALID_KINDS}
 
     for raw in args.artifact:
