@@ -14,12 +14,18 @@ one line in `launcher_config.tres` that points `play_scene` at your entry scene.
 
 ## The environment you are actually in
 
-**There is no Godot binary in this container.** You cannot run the editor, you
-cannot import, you cannot boot the project, you cannot take a screenshot. Verify
-by reading and reasoning, not by running. This changes how you must work:
+**Godot 4.7 runs here, and you are expected to use it.** `CLAUDE.md` has the
+one-time install and the exact commands. Import the project, boot it, and
+screenshot what you built with `tools/shot.tscn` — at 1280x720 and at 2400x1080.
+Reading the code is not evidence that it works, and "it compiles" is not
+evidence that it looks right.
+
+Run it before you call anything done. Then still write as if it will not be run,
+because CI is what actually ships it:
 
 - Hand-write `.tscn` and `.tres` files in Godot 4.7 text format, correctly. A
-  malformed scene is not caught here — it is caught in CI, or by a player.
+  malformed scene fails the local import — which is exactly why you should run
+  it rather than find out from CI or from a player.
 - Every `ext_resource` path must exist. Check with `ls`, every time.
 - `.gd` files need a matching `.uid` only if one already exists; do not invent
   UIDs for new scripts — Godot generates them on first import.

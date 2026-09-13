@@ -55,8 +55,26 @@ not look like a different product when Play is pressed.
   a GitHub issue against the template. That is the only channel.
 - Game work lives in `game/`, plus `launcher_config.tres` for the handoff.
 
+## You must look at it before you call it done
+
+**Godot 4.7 runs here.** `CLAUDE.md` has the one-time install and the exact
+commands. Once a screen you specified has been built, render it with
+`tools/shot.tscn` and *look* at it — at 1280x720 and at 2400x1080, because
+phone-shaped is where layout breaks.
+
+A spec is not finished when it is written; it is finished when the built screen
+has been photographed and judged to look good. Overflowing text, colliding
+controls, contrast that vanishes against the background and touch targets that
+are fine in a table and wrong on a phone are all invisible in code and obvious
+in a screenshot. If it does not look good, say so and fix the spec — do not sign
+off on a render you have not seen.
+
+When a shot looks wrong, suspect the harness too: its first version overrode the
+project's stretch and rendered 1:1, inventing a layout bug that was not there.
+
 ## How to report
 
 Write your spec to `docs/design/` as markdown, then summarise in your final
-message: what you decided, what you deliberately left open, and any launcher
-problem worth an issue. Keep the spec short enough that it gets read.
+message: what you decided, what you deliberately left open, whether you have
+seen it rendered, and any launcher problem worth an issue. Keep the spec short
+enough that it gets read.
