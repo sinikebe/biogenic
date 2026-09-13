@@ -324,15 +324,21 @@ absent on some fraction of devices can be used at all.
 
 ## 6. Left open — owner's call
 
-1. **One line of onboarding text.** A player on a phone facing a black screen
-   with no widgets may never discover that dragging steers. I recommend exactly
-   one line, first run only — `drag to turn` / `A · D to turn`, 18px,
-   `Color(0.855, 0.953, 0.933, 0.55)`, lower third, fading over 0.8s the instant
-   they first turn. It would be the only text in normal mode. It is a real dent
-   in the fiction and the owner should decide, not me.
-2. **Is the beat also the health readout?** Making beat rate double as starvation
-   would be elegant and free, but it couples perception to survival tuning and
-   that is a gameplay decision.
+1. ~~One line of onboarding text.~~ **DECIDED: yes, one line, first run only.**
+   `drag to turn` / `A · D to turn`, 18px, `Color(0.855, 0.953, 0.933, 0.55)`,
+   lower third, fading over 0.8s the instant they first turn, never shown again.
+   It is the only text in normal mode — do not let a second string join it.
+2. ~~Is the beat also the health readout?~~ **DECIDED: yes, beat rate is hunger.**
+   The metabolic beat slows and weakens as the cell starves; one signal carries
+   both "I exist" and "I am running out".
+
+   This is a deliberate coupling, so treat it as one: **hunger is now a
+   perception parameter, not just a survival number.** Any change to starvation
+   balance changes how the game reads, and any change to the beat envelope
+   changes how legible starvation is. Keep the mapping from hunger to beat rate
+   in exactly one place so the two can be reasoned about together, and expect
+   the floor to matter most — a beat that decays to nothing leaves the player
+   with no membrane at all, which reads as a broken screen rather than as dying.
 3. **The predator's escape window.** I have specced the *warning* — roughly 10s
    of dread, then a directional wake. Whether a slow cell can actually escape in
    that window is balance, and if it cannot, the warning is only cruelty.
