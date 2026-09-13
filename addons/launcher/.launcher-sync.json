@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "c69a6edd6e65b8d4e01586f8284e541e2f090a52",
-  "subject": "Merge pull request #21 from sinikebe/1-script-injection-template-commit-subject-interpolated-into-run-block",
-  "synced_at": "2026-09-13T17:57:16Z"
+  "commit": "51f2623e48228296ac3aee8449cac799d0e07b8e",
+  "subject": "Merge pull request #26 from sinikebe/3-no-license-file",
+  "synced_at": "2026-09-13T20:30:01Z"
 }
