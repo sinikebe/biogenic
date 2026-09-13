@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "c922a7d3fbc53606896a2795356e37de3d9be353",
-  "subject": "Give the demo its own version.json and stop requiring export presets",
-  "synced_at": "2026-09-13T15:42:08Z"
+  "commit": "2b7109eb78859fc4d27e9a475bbb35226033e19d",
+  "subject": "Report when a game's workflows have drifted from the template",
+  "synced_at": "2026-09-13T15:49:56Z"
 }
