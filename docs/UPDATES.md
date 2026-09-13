@@ -121,6 +121,21 @@ maintaining a file.
 If a release has no notes at all, the dialog is skipped entirely and the update
 applies directly — an empty dialog is worse than no dialog.
 
+### Reading them at any time
+
+**What's new** in the update bar opens the full history, whether or not an
+update is pending, with the running build marked. It works with no network,
+from two sources:
+
+- the changelog from the last successful check, cached at
+  `user://changelog.json`;
+- the running build's *own* notes, baked into `scripts/build_version.gd` at
+  build time, so a fresh install can describe itself before it has ever reached
+  the network.
+
+The dialog caps its height and scrolls, so a long history cannot push the
+buttons off-screen.
+
 ## Per-platform behaviour
 
 ### Android — in-place self-update

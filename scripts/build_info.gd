@@ -27,6 +27,9 @@ var version_name: String = ""
 var commit: String = ""
 var built_at: String = ""
 var is_ci_build: bool = false
+## This build's own patch notes, baked in at build time so they are readable
+## offline and before the first update check.
+var own_changes: Array = []
 
 ## Absolute res-style path of the mounted pack, or "" when running stock content.
 var active_pack_path: String = ""
@@ -42,6 +45,7 @@ func _init() -> void:
 	commit = BuildVersion.COMMIT
 	built_at = BuildVersion.BUILT_AT
 	is_ci_build = BuildVersion.IS_CI_BUILD
+	own_changes = BuildVersion.CHANGES.duplicate()
 
 	_mount_staged_content()
 

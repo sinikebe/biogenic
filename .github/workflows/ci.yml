@@ -65,6 +65,11 @@ jobs:
           export/android/java_sdk_path = "${JAVA_HOME}"
           EOF
 
+      - name: Collect patch notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/collect_changes.sh
+
       - name: Stamp build version
         run: bash ci/prepare_build.sh
 

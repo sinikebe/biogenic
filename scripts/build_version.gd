@@ -6,7 +6,7 @@ extends RefCounted
 ## shipped APK/EXE and the shipped content pack each carry the versions they
 ## were built with.
 ##
-## See ci/generate_build_version.sh and docs/UPDATES.md.
+## See ci/prepare_build.sh and docs/UPDATES.md.
 
 ## Bumped by hand in version.json. A higher value than the installed one means
 ## a new APK/EXE is required -- a content pack cannot deliver this change.
@@ -27,3 +27,7 @@ const BUILT_AT: String = ""
 
 ## True when this build came out of CI rather than a local export/editor run.
 const IS_CI_BUILD: bool = false
+
+## What landed in this build, newest first. Baked in so the app can show its own
+## patch notes with no network access.
+const CHANGES := []

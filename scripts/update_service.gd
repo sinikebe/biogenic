@@ -17,6 +17,8 @@ const MANIFEST_URL := "https://github.com/sinikebe/biogenic/releases/latest/down
 const RELEASES_PAGE := "https://github.com/sinikebe/biogenic/releases/latest"
 
 const USER_AGENT := "BiogenicUpdater/1.0 (+https://github.com/sinikebe/biogenic)"
+## Last fetched changelog, so patch notes stay readable with no network.
+const CHANGELOG_CACHE_PATH := "user://changelog.json"
 const REQUEST_TIMEOUT := 30.0
 const SUPPORTED_SCHEMA := 1
 
@@ -99,6 +101,7 @@ func check_for_updates() -> State:
 		return _fail("The update manifest is malformed.")
 
 	manifest = parsed
+	_cache_changelog()
 	var schema := int(manifest.get("schema", 0))
 	if schema > SUPPORTED_SCHEMA:
 		return _finish(State.UNAVAILABLE,
@@ -479,6 +482,40 @@ func _finish(next: State, message: String) -> State:
 	return state
 
 
+## Every release this app knows about, newest first.
+##
+## Prefers the manifest from the current session, falls back to the copy cached
+## at the last successful check, and always includes the running build's own
+## notes -- so the history is readable offline and on a fresh install that has
+## never reached the network.
+func full_changelog() -> Array:
+	var source: Variant = manifest.get("changelog", [])
+	if not (source is Array and not source.is_empty()):
+		source = _read_cached_changelog()
+
+	var entries: Array = []
+	var seen := {}
+	if source is Array:
+		for entry: Variant in source:
+			if entry is Dictionary:
+				var version := int(entry.get("content_version", -1))
+				if not seen.has(version):
+					seen[version] = true
+					entries.append(entry)
+
+	if not seen.has(BuildInfo.content_version) and not BuildInfo.own_changes.is_empty():
+		entries.append({
+			"content_version": BuildInfo.content_version,
+			"version_name": BuildInfo.version_name,
+			"released_at": BuildInfo.built_at,
+			"changes": BuildInfo.own_changes,
+		})
+
+	entries.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return int(a.get("content_version", 0)) > int(b.get("content_version", 0)))
+	return entries
+
+
 ## The patch notes covering everything between the installed build and the
 ## release on offer, newest first.
 ##
@@ -499,10 +536,16 @@ func pending_changelog() -> Array:
 ## The pending patch notes as display text, capped so the dialog cannot outgrow
 ## the screen. Empty when there is nothing to show.
 func pending_notes_text(max_lines: int = 12) -> String:
-	var entries := pending_changelog()
-	if entries.is_empty():
-		return ""
+	return _format_entries(pending_changelog(), max_lines, false)
 
+
+## The whole known history, with the running build marked. Shown on demand, so
+## it is allowed to be long -- the dialog scrolls.
+func history_text(max_lines: int = 400) -> String:
+	return _format_entries(full_changelog(), max_lines, true)
+
+
+func _format_entries(entries: Array, max_lines: int, mark_installed: bool) -> String:
 	var lines: PackedStringArray = []
 	var dropped := 0
 
@@ -511,8 +554,11 @@ func pending_notes_text(max_lines: int = 12) -> String:
 		if not changes is Array or changes.is_empty():
 			continue
 
-		var heading := "v%s  ·  build %d" % [
-			entry.get("version_name", "?"), int(entry.get("content_version", 0))]
+		var version := int(entry.get("content_version", 0))
+		var heading := "v%s  ·  build %d" % [entry.get("version_name", "?"), version]
+		if mark_installed and version == BuildInfo.content_version:
+			heading += "     ← installed"
+
 		if lines.size() >= max_lines:
 			dropped += changes.size()
 			continue
@@ -533,6 +579,37 @@ func pending_notes_text(max_lines: int = 12) -> String:
 		lines.append("")
 		lines.append("…and %d more change%s." % [dropped, "" if dropped == 1 else "s"])
 	return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Changelog cache
+# ---------------------------------------------------------------------------
+
+## Keeps the last fetched changelog on disk so the history stays readable with
+## no network -- on a plane, or simply before the first check of a session.
+func _cache_changelog() -> void:
+	var entries: Variant = manifest.get("changelog", [])
+	if not entries is Array or entries.is_empty():
+		return
+	var file := FileAccess.open(CHANGELOG_CACHE_PATH, FileAccess.WRITE)
+	if file == null:
+		return
+	file.store_string(JSON.stringify({
+		"cached_at": Time.get_datetime_string_from_system(true),
+		"changelog": entries,
+	}, "\t"))
+
+
+func _read_cached_changelog() -> Array:
+	if not FileAccess.file_exists(CHANGELOG_CACHE_PATH):
+		return []
+	var file := FileAccess.open(CHANGELOG_CACHE_PATH, FileAccess.READ)
+	if file == null:
+		return []
+	var parsed: Variant = JSON.parse_string(file.get_as_text())
+	if parsed is Dictionary and parsed.get("changelog") is Array:
+		return parsed["changelog"]
+	return []
 
 
 ## One line describing where the updater currently stands, for the menu.

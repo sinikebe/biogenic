@@ -5,16 +5,21 @@ extends Control
 ## itself instead of failing silently.
 const GAME_SCENE := ""
 
+## Height the patch-note history is capped at before it starts scrolling.
+const HISTORY_VIEW_HEIGHT := 300.0
+
 @onready var _tagline: Label = %Tagline
 @onready var _play_button: Button = %PlayButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _version_label: Label = %VersionLabel
 @onready var _status_label: Label = %StatusLabel
 @onready var _update_button: Button = %UpdateButton
+@onready var _notes_button: Button = %NotesButton
 @onready var _progress: ProgressBar = %UpdateProgress
 
 @onready var _overlay: Control = %UpdateOverlay
 @onready var _overlay_title: Label = %OverlayTitle
+@onready var _overlay_scroll: ScrollContainer = %OverlayScroll
 @onready var _overlay_body: Label = %OverlayBody
 @onready var _overlay_primary: Button = %OverlayPrimary
 @onready var _overlay_secondary: Button = %OverlaySecondary
@@ -35,6 +40,7 @@ func _ready() -> void:
 	_play_button.pressed.connect(_on_play_pressed)
 	_quit_button.pressed.connect(_on_quit_pressed)
 	_update_button.pressed.connect(_on_update_pressed)
+	_notes_button.pressed.connect(_show_history)
 	_overlay_primary.pressed.connect(_on_overlay_primary)
 	_overlay_secondary.pressed.connect(_hide_overlay)
 
@@ -190,10 +196,37 @@ func _do_restart() -> void:
 # Overlay
 # ---------------------------------------------------------------------------
 
+## The full history, available whether or not an update is pending.
+func _show_history() -> void:
+	var history := UpdateService.history_text()
+	if history.is_empty():
+		_show_overlay(
+			"Patch notes",
+			"Nothing recorded yet. Notes arrive with the first successful update "
+			+ "check — tap \"Check for updates\" once you're online.",
+			"Close", Callable(self, "_hide_overlay"), "")
+		return
+	_show_overlay("Patch notes", history, "Close",
+		Callable(self, "_hide_overlay"), "", HISTORY_VIEW_HEIGHT)
+
+
+## [param scroll_height] of 0 lets the dialog size itself to the text; anything
+## larger caps it there and scrolls, which is what the long history needs.
 func _show_overlay(title: String, body: String, primary_text: String,
-		primary_action: Callable, secondary_text: String) -> void:
+		primary_action: Callable, secondary_text: String,
+		scroll_height: float = 0.0) -> void:
 	_overlay_title.text = title
 	_overlay_body.text = body
+
+	if scroll_height > 0.0:
+		_overlay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
+		_overlay_scroll.custom_minimum_size.y = scroll_height
+	else:
+		# Disabled vertical scrolling makes the container report its child's full
+		# height, so short dialogs keep hugging their text.
+		_overlay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+		_overlay_scroll.custom_minimum_size.y = 0.0
+	_overlay_scroll.scroll_vertical = 0
 	_overlay_primary.text = primary_text
 	_overlay_action = primary_action
 	_overlay_secondary.text = secondary_text

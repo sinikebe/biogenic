@@ -74,6 +74,13 @@ jobs:
           export/android/java_sdk_path = "${JAVA_HOME}"
           EOF
 
+      - name: Collect patch notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        # Must run before the version stamp: prepare_build.sh bakes these notes
+        # into the binary so the app can show its own changelog with no network.
+        run: bash ci/collect_changes.sh
+
       - name: Stamp build version
         id: version
         run: bash ci/prepare_build.sh
@@ -136,11 +143,6 @@ jobs:
           cp build/windows/Biogenic.exe build/release/
           cp build/content/content-android.pck build/release/
           cp build/content/content-windows.pck build/release/
-
-      - name: Collect patch notes
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: bash ci/collect_changes.sh
 
       - name: Build update manifest
         run: |
