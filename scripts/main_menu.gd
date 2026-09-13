@@ -72,6 +72,8 @@ func _on_update_pressed() -> void:
 	match UpdateService.state:
 		UpdateService.State.CONTENT_READY, UpdateService.State.BINARY_READY:
 			await UpdateService.apply_pending_update()
+		UpdateService.State.NEEDS_PERMISSION:
+			await UpdateService.retry_install()
 		UpdateService.State.RESTART_REQUIRED:
 			_prompt_restart()
 		_:
@@ -114,6 +116,8 @@ func _refresh_update_ui() -> void:
 			_update_button.text = "Update app"
 		UpdateService.State.CONTENT_READY:
 			_update_button.text = "Download update"
+		UpdateService.State.NEEDS_PERMISSION:
+			_update_button.text = "Install"
 		UpdateService.State.RESTART_REQUIRED:
 			_update_button.text = "Restart"
 		UpdateService.State.CHECKING:

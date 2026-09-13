@@ -30,6 +30,7 @@ enum State {
 	VERIFYING,        ## Hashing the finished download.
 	RESTART_REQUIRED, ## Content staged; relaunch to finish.
 	INSTALL_HANDOFF,  ## APK handed to the system installer.
+	NEEDS_PERMISSION, ## APK downloaded and verified, but Android will not let us install it yet.
 	UNAVAILABLE,      ## No build published for this platform.
 	FAILED,           ## Check or download failed; see last_error.
 }
@@ -50,6 +51,9 @@ var pending_version: int = 0
 
 var _busy := false
 var _active_request: HTTPRequest = null
+## Set once an APK has been downloaded and its checksum verified, so a retry
+## after granting the install permission does not download it a second time.
+var _verified_apk_path := ""
 
 
 func _ready() -> void:
@@ -205,21 +209,9 @@ func _apply_binary() -> State:
 			_busy = false
 			return download_state
 
-		if not AndroidBridge.can_install_packages():
-			AndroidBridge.open_install_settings()
-			_busy = false
-			return _fail("Allow this app to install unknown apps, then tap Update again.")
-
-		if not AndroidBridge.install_apk(apk_path):
-			# The staged APK lives in private storage, so there is nothing the
-			# user could open by hand. Send them to the release page instead --
-			# a browser download lands somewhere they can install from.
-			_busy = false
-			OS.shell_open(RELEASES_PAGE)
-			return _fail("Could not open the installer. Opened the releases page so you can download the APK directly.")
-
+		_verified_apk_path = apk_path
 		_busy = false
-		return _finish(State.INSTALL_HANDOFF, "")
+		return _hand_off_to_installer()
 
 	if OS.get_name() == "Windows":
 		var result := await _apply_windows_binary(url)
@@ -230,6 +222,40 @@ func _apply_binary() -> State:
 	_busy = false
 	OS.shell_open(RELEASES_PAGE)
 	return _finish(State.UNAVAILABLE, "Download the new build from the GitHub releases page.")
+
+
+## Hands the already-downloaded, already-verified APK to the system installer.
+##
+## Split out from the download so that granting the install permission and
+## trying again does not mean fetching ~50 MB a second time.
+func _hand_off_to_installer() -> State:
+	if _verified_apk_path.is_empty() or not FileAccess.file_exists(_verified_apk_path):
+		# Staging was cleared from under us; fall back to downloading again.
+		_verified_apk_path = ""
+		return _finish(State.BINARY_READY, "")
+
+	if not AndroidBridge.can_install_packages():
+		AndroidBridge.open_install_settings()
+		return _finish(State.NEEDS_PERMISSION,
+			"Allow Biogenic to install unknown apps, then tap Install.")
+
+	if not AndroidBridge.install_apk(_verified_apk_path):
+		# The APK sits in private storage, so there is nothing the user could
+		# open by hand. Send them to the release page instead -- a browser
+		# download lands somewhere they can install from.
+		OS.shell_open(RELEASES_PAGE)
+		return _fail("Could not open the installer. Opened the releases page so you can download the APK directly.")
+
+	return _finish(State.INSTALL_HANDOFF, "")
+
+
+## Retries the install after the user has granted the permission.
+func retry_install() -> State:
+	if _busy:
+		return state
+	if _verified_apk_path.is_empty():
+		return await apply_pending_update()
+	return _hand_off_to_installer()
 
 
 # ---------------------------------------------------------------------------
@@ -453,7 +479,7 @@ func status_text() -> String:
 			return "Update ready — restart to finish."
 		State.INSTALL_HANDOFF:
 			return "Handed over to the installer."
-		State.UNAVAILABLE, State.FAILED:
+		State.NEEDS_PERMISSION, State.UNAVAILABLE, State.FAILED:
 			return last_error
 		_:
 			return ""
