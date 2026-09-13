@@ -2,9 +2,9 @@ name: Sync launcher
 
 # Pulls launcher updates from the template repository into this game.
 #
-# Opens a pull request rather than pushing to main: merging main triggers a
-# release, and a launcher change should not reach players without someone
-# looking at it. Merging the PR is the only manual step.
+# Opens a pull request and stops there -- it never merges. Merging main in a
+# consuming game publishes a release to players, so deciding a launcher change
+# is safe to ship is the game developer's call. Do not add a merge step here.
 
 on:
   schedule:
@@ -112,7 +112,8 @@ jobs:
           > ${{ steps.sync.outputs.subject }}
 
           The project was imported and booted headless on this branch before the PR was opened.
-          Merging releases it to players, so skim the diff first."
+
+          **Review before merging** -- merging publishes a release to players."
 
           if [[ -n "${{ steps.sync.outputs.workflow_drift }}" ]]; then
             BODY="$BODY
@@ -123,8 +124,15 @@ jobs:
           fi
 
           TITLE="Sync launcher @ ${{ steps.sync.outputs.short_commit }}"
-          if gh pr view "$BRANCH" --json number >/dev/null 2>&1; then
-            gh pr edit "$BRANCH" --title "$TITLE" --body "$BODY"
+
+          # Match only OPEN pull requests. `gh pr view <branch>` also resolves
+          # merged and closed ones, so once the first sync PR was merged every
+          # later run would quietly re-title that dead PR and never open a new
+          # one -- leaving the branch pushed with nothing to review.
+          EXISTING="$(gh pr list --head "$BRANCH" --state open --json number --jq '.[0].number // empty')"
+
+          if [[ -n "$EXISTING" ]]; then
+            gh pr edit "$EXISTING" --title "$TITLE" --body "$BODY"
           elif ! gh pr create --head "$BRANCH" --base "$BASE" --title "$TITLE" --body "$BODY"; then
             # Opening a PR needs "Allow GitHub Actions to create and approve pull
             # requests" (Settings -> Actions -> General), which is off by default.
