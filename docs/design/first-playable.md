@@ -105,7 +105,7 @@ Notes the engineer must not skip:
   you avoid the whole `mouse_filter` ordering puzzle.
 - **Android Back must open the pause overlay, not quit.** Handle
   `NOTIFICATION_WM_GO_BACK_REQUEST` in `_notification()`. Left alone this quits the
-  entire app mid-run — see the launcher issue in §7.
+  entire app mid-run — see [template#19](https://github.com/sinikebe/godot-launcher-template/issues/19).
 
 ### Getting back to the launcher
 
@@ -117,7 +117,7 @@ get_tree().change_scene_to_file("res://addons/launcher/launcher.tscn")
 ```
 
 That path is hardcoded into a directory we are forbidden to edit. Accepted for now;
-flagged in §7.
+filed as [template#18](https://github.com/sinikebe/godot-launcher-template/issues/18).
 
 ---
 
@@ -447,6 +447,15 @@ not forgotten.
 ---
 
 ## 8. Launcher issues found (for the template, not this repo)
+
+All three are filed against `sinikebe/godot-launcher-template`, which this repo
+treats as read-only. They are closed over there, never by a merge here.
+
+| | Issue |
+|---|---|
+| No return path to the launcher | [#18](https://github.com/sinikebe/godot-launcher-template/issues/18) |
+| Android Back quits mid-run | [#19](https://github.com/sinikebe/godot-launcher-template/issues/19) |
+| `orientation=4` is landscape-only | [#20](https://github.com/sinikebe/godot-launcher-template/issues/20) |
 
 1. **No supported return path from a game to the launcher.** `_on_play_pressed()`
    calls `change_scene_to_file()`, which destroys the launcher, and nothing exposes
