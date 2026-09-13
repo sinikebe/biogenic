@@ -1,0 +1,28 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/vision/vision.gd" id="1_vision"]
+[ext_resource type="Shader" path="res://game/vision/water.gdshader" id="2_water"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_water"]
+shader = ExtResource("2_water")
+
+[sub_resource type="CanvasItemMaterial" id="CanvasItemMaterial_add"]
+blend_mode = 1
+
+[node name="Vision" type="CanvasLayer"]
+process_mode = 1
+layer = 1
+script = ExtResource("1_vision")
+
+[node name="Water" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_water")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 1)
+
+[node name="World" type="Node2D" parent="."]
+material = SubResource("CanvasItemMaterial_add")

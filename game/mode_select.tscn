@@ -1,0 +1,95 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/mode_select.gd" id="1_select"]
+[ext_resource type="Theme" path="res://addons/launcher/theme/launcher_theme.tres" id="2_theme"]
+[ext_resource type="Shader" path="res://addons/launcher/shaders/organic_background.gdshader" id="3_wash"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wash"]
+shader = ExtResource("3_wash")
+shader_parameter/drift_speed = 0.022
+shader_parameter/intensity = 0.5
+
+[node name="ModeSelect" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_select")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.023, 0.055, 0.05, 1)
+
+[node name="Wash" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_wash")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Center" type="CenterContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Column" type="VBoxContainer" parent="Center"]
+theme_override_constants/separation = 44
+
+[node name="Heading" type="Label" parent="Center/Column"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
+theme_override_font_sizes/font_size = 17
+text = "choose a view"
+horizontal_alignment = 1
+
+[node name="FullBlock" type="VBoxContainer" parent="Center/Column"]
+theme_override_constants/separation = 10
+
+[node name="Full" type="Button" parent="Center/Column/FullBlock"]
+text = "full vision"
+
+[node name="FullNote" type="Label" parent="Center/Column/FullBlock"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+text = "the water the cell is swimming in, and the membrane over it"
+horizontal_alignment = 1
+
+[node name="PovBlock" type="VBoxContainer" parent="Center/Column"]
+theme_override_constants/separation = 10
+
+[node name="Pov" type="Button" parent="Center/Column/PovBlock"]
+text = "point of view"
+
+[node name="PovNote" type="Label" parent="Center/Column/PovBlock"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+text = "only what the cell itself can feel"
+horizontal_alignment = 1
+
+[node name="Hint" type="Label" parent="."]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -48.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
+theme_override_font_sizes/font_size = 14
+text = "esc returns to the launcher"
+horizontal_alignment = 1

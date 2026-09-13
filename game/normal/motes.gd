@@ -17,7 +17,14 @@ extends Node
 const CellBody := preload("res://game/normal/cell.gd")
 
 ## Contact, in the cell's own terms: a bearing clockwise from its front.
-signal struck(bearing: float, strength: float)
+##
+## [param at] is the struck mote's world position, and it is emphatically NOT
+## part of the sensation -- the cell cannot know where anything is, and nothing
+## that reaches the signal bus may carry a position. It is here for an observer
+## of the world (the full-vision view), which is entitled to ground truth
+## precisely because it is not the organism. Whoever forwards this to the bus
+## must drop it.
+signal struck(bearing: float, strength: float, at: Vector2)
 
 const COUNT := 14
 const MOTE_RADIUS := 26.0
@@ -74,8 +81,24 @@ func _process(_delta: float) -> void:
 			sqrt(_cell.velocity.length() / CellBody.IMPULSE_SPEED), 0.35, 1.0)
 		var normal := -offset.normalized() if distance > 0.001 else -_cell.forward()
 		_cell.bump(normal)
-		struck.emit(bearing, strength)
+		# Emit the position rather than leaving a listener to work out which mote
+		# this was before the next line recycles it. That inference used to live
+		# in the vision layer and was wrong twice over: it depended on these two
+		# statements staying in this order, and it re-identified the mote by
+		# proximity, which picks the wrong one when two are in reach.
+		struck.emit(bearing, strength, _motes[i])
 		_motes[i] = _spawn_point()
+
+
+## Where the motes currently are, for an observer entitled to ground truth --
+## which is the full-vision view and nothing the organism can sense. Returns the
+## live array, so read it and do not hold it across frames.
+##
+## This exists so no caller has to reach for the private `_motes`. Reading a
+## private member across files is how the vision layer ended up silently
+## coupled to the internals of this one.
+func points() -> PackedVector2Array:
+	return _motes
 
 
 func _spawn_point() -> Vector2:
