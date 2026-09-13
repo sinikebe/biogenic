@@ -57,7 +57,10 @@ func _ready() -> void:
 
 
 func _process(_delta: float) -> void:
-	if _active_request == null:
+	# The manifest fetch goes through the same request helper, but a few hundred
+	# bytes of JSON is not worth reporting as a download -- and doing so would
+	# stomp the "Checking for updates…" status with a progress line.
+	if _active_request == null or state != State.DOWNLOADING:
 		return
 	progress_changed.emit(_active_request.get_downloaded_bytes(), _active_request.get_body_size())
 
