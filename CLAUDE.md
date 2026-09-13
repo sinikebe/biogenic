@@ -11,8 +11,11 @@ repository's GitHub releases.
   A clean tree and a merged branch are the definition of done, not a tidy-up.
 - **Work that comes from an issue gets a pull request that closes it.** Open the
   PR as though the branch had been created from the issue itself, and put a
-  `Closes #N` line in the body so the merge closes the issue. For an issue on
-  another repository, use the full `Closes owner/repo#N` form.
+  `Closes #N` line in the body so merging closes the issue. Closing keywords are
+  only honoured when the PR targets the default branch — ours always do.
+  The cross-repository form (`Closes owner/repo#N`) links the two, but closing
+  still needs write access on that repository. We have none on the template, so
+  a template issue is closed by hand over there — never by a merge here.
 
 ### What a merge costs
 
