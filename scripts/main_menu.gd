@@ -5,6 +5,7 @@ extends Control
 ## itself instead of failing silently.
 const GAME_SCENE := ""
 
+@onready var _tagline: Label = %Tagline
 @onready var _play_button: Button = %PlayButton
 @onready var _quit_button: Button = %QuitButton
 @onready var _version_label: Label = %VersionLabel
@@ -23,6 +24,10 @@ var _overlay_action: Callable = Callable()
 
 
 func _ready() -> void:
+	# Reads the live build number rather than a hardcoded string, so every
+	# update visibly changes the tagline -- which is the quickest way to confirm
+	# from across the room that an update actually landed.
+	_tagline.text = "build %d · updates itself" % BuildInfo.content_version
 	_version_label.text = BuildInfo.display_version()
 	_overlay.hide()
 	_progress.hide()
