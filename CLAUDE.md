@@ -65,9 +65,11 @@ the first time anything actually executes, so:
 
 Godot 4.7, **GL Compatibility** renderer on both targets — no Forward+ only
 features. No C#, no addons, no native plugins: each of those forces a new binary.
-Base viewport 1280x720, `canvas_items` stretch, `expand` aspect. Android
-orientation is `sensor`, so both portrait and landscape must work, with 48px
-minimum touch targets.
+Base viewport 1280x720, `canvas_items` stretch, `expand` aspect. Android is
+**landscape-locked**: `window/handheld/orientation=4` is `SCREEN_SENSOR_LANDSCAPE`,
+which flips between the two landscape directions and never reaches portrait (full
+sensor is `6`). Do not build portrait-specific layout for a mode the app cannot
+enter. Touch targets stay at 48px minimum.
 
 ## The game
 

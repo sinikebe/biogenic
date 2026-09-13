@@ -32,9 +32,10 @@ not look like a different product when Play is pressed.
 
 ## Constraints that shape every design
 
-- **Two very different targets.** Android (touch, portrait-capable, handheld
-  orientation 4 = sensor) and Windows desktop (mouse + keyboard). A design that
-  only works with a mouse is not done. Touch targets: 48px minimum.
+- **Two very different targets.** Android (touch, **landscape-locked** —
+  `orientation=4` is `SCREEN_SENSOR_LANDSCAPE`, not full sensor, so portrait is
+  never reached) and Windows desktop (mouse + keyboard). A design that only works
+  with a mouse is not done. Touch targets: 48px minimum.
 - **Base viewport is 1280x720**, `canvas_items` stretch, `expand` aspect. Design
   for that, then say explicitly what reflows on a tall phone screen.
 - **GL Compatibility renderer.** No Forward+ only features — that rules out

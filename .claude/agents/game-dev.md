@@ -40,7 +40,10 @@ crashes at `_ready()` when there is no window, no input device and no network.
 - Base viewport 1280x720, `canvas_items` stretch, `expand` aspect.
 - Two autoloads already exist and are the template's, not yours: `BuildInfo` and
   `UpdateService`. Read them to understand what is available; never edit them.
-- Android orientation is `sensor`. Handle both portrait and landscape.
+- Android is **landscape-locked**. `window/handheld/orientation=4` is
+  `SCREEN_SENSOR_LANDSCAPE` — it flips between the two landscape directions and
+  never reaches portrait (full sensor would be `6`). The viewport is therefore
+  always at least as wide as 1280x720, never taller.
 
 ## Boundaries — do not cross
 
