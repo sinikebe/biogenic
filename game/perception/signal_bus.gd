@@ -105,12 +105,16 @@ class Env:
 		_decay = maxf(decay, 0.001)
 
 	func fire(amp: float, at_bearing: float = 0.0) -> void:
-		bearing = at_bearing
 		if amp <= value:
-			# Already louder than the new hit; keep the louder decay going.
+			# Already louder than the new hit. Keep the louder decay going and
+			# keep ITS bearing: a quieter second contact must not drag the loud
+			# one round to where the quiet one happened, which is a sensation
+			# the player would feel as the first impact moving.
 			_peak = maxf(_peak, value)
-			_rising = false
+			# Deliberately not clearing _rising: a weaker hit arriving mid-attack
+			# would otherwise cut the louder one off below its intended peak.
 			return
+		bearing = at_bearing
 		_peak = amp
 		_rising = true
 

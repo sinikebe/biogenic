@@ -214,6 +214,14 @@ func _leave() -> void:
 
 ## Pause is the one screen in normal mode with widgets on it, so it is also the
 ## only place the 48px touch-target rule applies.
+##
+## The gap between the two buttons matters more than either button's size. They
+## are 56 canvas px tall, which on a 2400x1080 phone is about 5.3mm -- under the
+## ~9mm a thumb actually needs -- and the thing directly below "resume" is the
+## one that ends the run. The VBox separation is 48 canvas px for that reason
+## alone: it puts roughly 4.5mm of dead space between a safe tap and a
+## destructive one, so a low tap on resume misses into nothing instead of
+## leaving. Do not tighten it back up for looks.
 func _style_pause() -> void:
 	for button: Button in [_resume_button, _leave_button]:
 		button.custom_minimum_size = Vector2(232.0, 56.0)

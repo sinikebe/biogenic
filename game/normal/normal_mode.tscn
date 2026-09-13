@@ -62,7 +62,7 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="Buttons" type="VBoxContainer" parent="Hud/Pause/Center"]
-theme_override_constants/separation = 14
+theme_override_constants/separation = 48
 
 [node name="Resume" type="Button" parent="Hud/Pause/Center/Buttons"]
 text = "resume"
