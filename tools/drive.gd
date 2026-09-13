@@ -10,6 +10,7 @@ extends Node
 ##
 ## Arguments (all optional, all after the -- that shot.gd also reads):
 ##   --play=res://...        scene to drive, default normal mode
+##   --mode=0|1              force the view: 0 point of view, 1 full vision
 ##   --hold=a|d              hold a steering key for the whole run
 ##   --drag=<pixels>         press near the middle and drag this far sideways
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
@@ -18,7 +19,7 @@ extends Node
 ##   --back-at=<seconds>     fire NOTIFICATION_WM_GO_BACK_REQUEST exactly the
 ##                           way SceneTree does when Android Back is pressed
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right
+##                           esc, enter, up, down, left, right, v
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -51,6 +52,8 @@ var _drag_step := 0
 ## The freeze-on trigger ignores sensations before this time, so a later beat
 ## can be caught instead of the first one.
 var _arm_at := 0.0
+## -1 leaves the scene to pick up whatever the mode select last stored.
+var _mode := -1
 
 
 func _ready() -> void:
@@ -86,6 +89,8 @@ func _ready() -> void:
 			_freeze_on = text.trim_prefix("--freeze-on=")
 		elif text.begins_with("--freeze-delay="):
 			_freeze_delay = int(text.trim_prefix("--freeze-delay="))
+		elif text.begins_with("--mode="):
+			_mode = int(text.trim_prefix("--mode="))
 		elif text.begins_with("--hunger="):
 			_hunger = float(text.trim_prefix("--hunger="))
 		elif text.begins_with("--seed="):
@@ -96,7 +101,12 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	var scene: PackedScene = load(scene_path)
-	add_child(scene.instantiate())
+	var run := scene.instantiate()
+	if _mode >= 0:
+		# Set before the scene enters the tree, which is where it is read.
+		run.set("mode", _mode)
+		print("[drive] mode forced to ", _mode)
+	add_child(run)
 
 	_bus = _find_bus(self)
 	if _bus != null:
@@ -206,6 +216,7 @@ func _keycode(name: String) -> Key:
 		"down": return KEY_DOWN
 		"left": return KEY_LEFT
 		"right": return KEY_RIGHT
+		"v": return KEY_V
 		_: return KEY_NONE
 
 

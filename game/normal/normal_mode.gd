@@ -1,25 +1,27 @@
 extends Node
-## Normal mode: one cell, alone, in water it cannot see.
+## Normal mode: one cell, alone, in water. Drawn one of two ways.
 ##
 ## This node is only wiring. The cell knows nothing about the membrane, the
 ## membrane knows nothing about the cell, and everything that passes between
 ## them goes through the signal bus as a sensation -- which is what lets audio
 ## and haptics subscribe later without touching any of this.
 ##
+## It also owns [member mode], and that is the whole of the mode seam: the
+## simulation is identical in both views and only the drawing differs. If a view
+## ever changes how the cell behaves, full vision stops being evidence about
+## point of view and there is no reason to have two.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const MembraneLayer := preload("res://game/perception/membrane.gd")
+const VisionLayer := preload("res://game/vision/vision.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const MetabolismNode := preload("res://game/normal/metabolism.gd")
 const MotesField := preload("res://game/normal/motes.gd")
+const RunState := preload("res://game/run_state.gd")
 
-## Hardcoded because the launcher offers no "go back" API. Known template gap,
-## filed as template#18 and accepted for now.
-const LAUNCHER_SCENE := "res://addons/launcher/launcher.tscn"
-
-## Remembers only that the onboarding line has been shown. Separate from the
-## launcher's own state file.
-const STATE_PATH := "user://normal_mode.cfg"
+## Leaving a run goes back one step, to the screen that chose the view.
+const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
 
 ## The opening belongs to the beat alone, so the line waits its turn.
 const ONBOARD_DELAY := 2.2
@@ -29,11 +31,17 @@ const ONBOARD_FADE_OUT := 0.8
 
 enum Onboard { OFF, WAITING, FADE_IN, HOLD, FADE_OUT }
 
+## Which view this run is drawn with, as [enum RunState.Mode]. Set it before the
+## scene enters the tree to override the remembered choice; left alone it picks
+## up whatever the mode select last stored.
+var mode := -1
+
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _bus := _membrane.bus
 @onready var _cell: CellBody = $Cell
 @onready var _metabolism: MetabolismNode = $Metabolism
 @onready var _motes: MotesField = $Motes
+@onready var _vision: VisionLayer = $Vision
 @onready var _onboarding: Label = $Hud/Onboarding
 @onready var _pause_ui: Control = $Hud/Pause
 @onready var _resume_button: Button = $Hud/Pause/Center/Buttons/Resume
@@ -54,6 +62,10 @@ func _ready() -> void:
 	_cell.impulsed.connect(_on_impulsed)
 	_motes.struck.connect(_on_struck)
 	_motes.setup(_cell)
+
+	if mode < 0:
+		mode = RunState.load_mode()
+	_apply_mode()
 
 	_style_pause()
 	_pause_ui.hide()
@@ -79,8 +91,29 @@ func _on_impulsed(strength: float) -> void:
 	_bus.thrust(strength)
 
 
-func _on_struck(bearing: float, strength: float) -> void:
+## The mote's world position arrives with this and is deliberately dropped here.
+## The bus carries sensations, and a sensation is a bearing and an intensity --
+## never a position. The view that is allowed to know where things are listens
+## to the field directly.
+func _on_struck(bearing: float, strength: float, _at: Vector2) -> void:
 	_bus.hit(bearing, strength)
+
+
+# ---------------------------------------------------------------------------
+# The mode seam. Two views, one simulation: the only thing that changes here is
+# whether the world layer draws.
+# ---------------------------------------------------------------------------
+
+func _apply_mode() -> void:
+	_vision.set_active(mode == RunState.Mode.FULL_VISION)
+
+
+## Flips the view without leaving the run, so blind and sighted can be compared
+## on the same cell in the same water. Deliberately not remembered: the mode
+## select is the supported way to choose, and this is a comparison.
+func _toggle_mode() -> void:
+	mode = RunState.Mode.POV if mode == RunState.Mode.FULL_VISION else RunState.Mode.FULL_VISION
+	_apply_mode()
 
 
 # ---------------------------------------------------------------------------
@@ -145,20 +178,11 @@ func _touch_first() -> bool:
 
 
 func _seen_onboarding() -> bool:
-	var config := ConfigFile.new()
-	if config.load(STATE_PATH) != OK:
-		return false
-	return bool(config.get_value("onboarding", "seen", false))
+	return RunState.onboarding_seen()
 
 
 func _mark_onboarding_seen() -> void:
-	var config := ConfigFile.new()
-	config.load(STATE_PATH)
-	if bool(config.get_value("onboarding", "seen", false)):
-		return
-	config.set_value("onboarding", "seen", true)
-	if config.save(STATE_PATH) != OK:
-		push_warning("[NormalMode] Could not write %s" % STATE_PATH)
+	RunState.mark_onboarding_seen()
 
 
 # ---------------------------------------------------------------------------
@@ -179,6 +203,17 @@ func _notification(what: int) -> void:
 func _unhandled_input(event: InputEvent) -> void:
 	if event.is_action_pressed(&"ui_cancel"):
 		_toggle_pause()
+		get_viewport().set_input_as_handled()
+		return
+
+	# V flips the view. Desktop only by nature -- it costs no pixel and there is
+	# no key on a phone, where the mode select is the way in.
+	if get_tree().paused or not (event is InputEventKey):
+		return
+	var key := event as InputEventKey
+	if key.pressed and not key.echo \
+			and (key.keycode == KEY_V or key.physical_keycode == KEY_V):
+		_toggle_mode()
 		get_viewport().set_input_as_handled()
 
 
@@ -201,15 +236,17 @@ func _toggle_pause() -> void:
 		_resume_button.grab_focus()
 
 
+## Back one step, to the view chooser. The launcher is one more Back from
+## there, which keeps the whole stack reachable by the same gesture.
 func _leave() -> void:
 	get_tree().paused = false
-	if not ResourceLoader.exists(LAUNCHER_SCENE):
-		push_error("[NormalMode] No launcher at %s" % LAUNCHER_SCENE)
+	if not ResourceLoader.exists(MODE_SELECT_SCENE):
+		push_error("[NormalMode] No mode select at %s" % MODE_SELECT_SCENE)
 		_toggle_pause()
 		return
-	# Back behaves normally again once the launcher owns the screen.
-	get_tree().quit_on_go_back = true
-	get_tree().change_scene_to_file(LAUNCHER_SCENE)
+	# Deferred: this arrives from a button press inside input propagation, and
+	# the tree will not swap scenes out from under itself while it is busy.
+	get_tree().change_scene_to_file.call_deferred(MODE_SELECT_SCENE)
 
 
 ## Pause is the one screen in normal mode with widgets on it, so it is also the

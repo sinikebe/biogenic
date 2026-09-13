@@ -321,6 +321,26 @@ else writes shader uniforms. This is what makes §5 cheap.
 
 ## 4. What this forces later
 
+> **There are now two modes, and this document describes one of them.**
+> *Point of view* is everything below: the membrane, and only what the cell can
+> feel. *Full vision* draws the water underneath it — the cell, the motes, where
+> things actually are — and leaves the membrane running on top.
+>
+> Full vision exists to check that point of view is telling the truth: that a
+> bruise lands on the bearing the mote really was on, and later that a taste
+> wash really points at the food. Measured on the first build, reported and
+> rendered bruise bearings agreed within 4.2°, and the bearing the field
+> computed reached the bus exactly.
+>
+> **Both modes run the same simulation.** If a view ever changes how the cell
+> behaves, full vision stops being evidence about point of view and there is no
+> reason to have two. Nothing in `game/vision/` writes to the simulation, and
+> nothing that reaches the signal bus carries a world position — the mote's
+> position travels on `motes.struck` and is dropped before the bus sees it.
+>
+> Everything below is the point-of-view rule. Full vision spends the interior on
+> purpose; that is not a licence to spend it here.
+
 The rule to hold: **Phase 1 owns the outer 104px. The interior is currency.**
 
 Phase 1 encodes only *bearing* (coarse, lagged, jittering) and *intensity*

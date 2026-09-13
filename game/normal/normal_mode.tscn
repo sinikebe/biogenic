@@ -1,10 +1,11 @@
-[gd_scene load_steps=6 format=3]
+[gd_scene load_steps=7 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
 [ext_resource type="Script" path="res://game/normal/metabolism.gd" id="3_metabolism"]
 [ext_resource type="Script" path="res://game/normal/cell.gd" id="4_cell"]
 [ext_resource type="Script" path="res://game/normal/motes.gd" id="5_motes"]
+[ext_resource type="PackedScene" path="res://game/vision/vision.tscn" id="6_vision"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -24,6 +25,8 @@ script = ExtResource("4_cell")
 [node name="Motes" type="Node" parent="."]
 process_mode = 1
 script = ExtResource("5_motes")
+
+[node name="Vision" parent="." instance=ExtResource("6_vision")]
 
 [node name="Hud" type="CanvasLayer" parent="."]
 layer = 1
