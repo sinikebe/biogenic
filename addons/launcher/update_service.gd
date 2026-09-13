@@ -13,10 +13,7 @@ extends Node
 ## Every download is verified against the SHA-256 in the manifest before it is
 ## allowed anywhere near the install step.
 
-const MANIFEST_URL := "https://github.com/sinikebe/biogenic/releases/latest/download/manifest.json"
-const RELEASES_PAGE := "https://github.com/sinikebe/biogenic/releases/latest"
-
-const USER_AGENT := "BiogenicUpdater/1.0 (+https://github.com/sinikebe/biogenic)"
+const USER_AGENT := "GodotLauncher/1.0 (+https://github.com/sinikebe/godot-launcher-template)"
 ## Last fetched changelog, so patch notes stay readable with no network.
 const CHANGELOG_CACHE_PATH := "user://changelog.json"
 const REQUEST_TIMEOUT := 30.0
@@ -80,6 +77,9 @@ func _process(_delta: float) -> void:
 func check_for_updates() -> State:
 	if _busy:
 		return state
+	if not BuildInfo.config.updates_enabled():
+		return _finish(State.UNAVAILABLE,
+			"No update repository configured (set update_repo in the launcher config).")
 	_busy = true
 	_set_state(State.CHECKING)
 	last_error = ""
@@ -87,7 +87,7 @@ func check_for_updates() -> State:
 	# GitHub's CDN caches /releases/latest/download/ and ignores Cache-Control on
 	# it, so a plain request can be answered with the previous release's manifest
 	# for a while after a new one goes out. A unique query defeats that.
-	var url := "%s?ts=%d" % [MANIFEST_URL, Time.get_unix_time_from_system()]
+	var url := "%s?ts=%d" % [BuildInfo.config.manifest_url(), Time.get_unix_time_from_system()]
 	var response := await _request(url, "")
 	_busy = false
 
@@ -236,7 +236,7 @@ func _apply_binary() -> State:
 
 	# Nothing safe to automate here: point at the release page.
 	_busy = false
-	OS.shell_open(RELEASES_PAGE)
+	OS.shell_open(BuildInfo.config.releases_url())
 	return _finish(State.UNAVAILABLE, "Download the new build from the GitHub releases page.")
 
 
@@ -259,7 +259,7 @@ func _hand_off_to_installer() -> State:
 		# The APK sits in private storage, so there is nothing the user could
 		# open by hand. Send them to the release page instead -- a browser
 		# download lands somewhere they can install from.
-		OS.shell_open(RELEASES_PAGE)
+		OS.shell_open(BuildInfo.config.releases_url())
 		return _fail("Could not open the installer. Opened the releases page so you can download the APK directly.")
 
 	return _finish(State.INSTALL_HANDOFF, "")

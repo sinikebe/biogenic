@@ -2,7 +2,7 @@
 
 A Godot 4.7 game, built for Android and Windows, that keeps itself up to date.
 
-Install it once. From then on the main menu checks this repository's releases on
+Install it once. From then on the launcher checks this repository's releases on
 launch and applies whatever it finds — a new APK on Android, or just a content
 pack plus a restart when the change doesn't need a new binary.
 
@@ -20,12 +20,34 @@ On Android the first install needs "install unknown apps" allowed for whichever
 app opens the APK — your browser or your file manager. Later updates are handled
 by the game itself, which asks for that permission once.
 
+## The launcher
+
+The main menu, the updater and the release pipeline are **not maintained here**.
+They come from [`sinikebe/godot-launcher-template`](https://github.com/sinikebe/godot-launcher-template)
+and land in this repo under `addons/launcher/` and `ci/`.
+
+> **Do not edit `addons/launcher/` or `ci/` in this repo.** The sync job replaces
+> both wholesale, so any change there is silently reverted on the next run. Fix
+> the launcher in the template instead; it flows back here automatically.
+
+Everything Biogenic-specific about the launcher — title, tagline, background,
+button placement, which repo to poll — lives in
+[launcher_config.tres](launcher_config.tres). The
+[template README](https://github.com/sinikebe/godot-launcher-template#making-it-yours)
+documents every field.
+
+[.github/workflows/sync-launcher.yml](.github/workflows/sync-launcher.yml) runs
+daily, pulls the template, boots the project to prove it still loads, and opens
+a pull request if anything changed. Merging it releases to players, so it stops
+short of that on purpose.
+
 ## How updating works
 
 The release feed carries two version numbers, and the app compares both:
 
-- **binary version** — bumped by hand when a change can only ship as a new
-  APK/EXE: a Godot upgrade, a new permission, a native plugin, a new icon.
+- **binary version** — bumped by hand in [version.json](version.json) when a
+  change can only ship as a new APK/EXE: a Godot upgrade, a new permission, a
+  native plugin, a new icon.
 - **content version** — bumped automatically on every release. Scenes, scripts,
   art, audio, tuning. These ship as a `.pck` that the app downloads and mounts
   at the next launch, with no reinstall.
@@ -34,13 +56,11 @@ A new binary always wins over a pending content pack, since the binary carries
 its own content with it. Every download is checked against the SHA-256 in the
 manifest before anything is installed, and a mismatch is discarded.
 
-Each update comes with patch notes, shown before the download starts. They are
-built from the commit subjects since the previous release, and cover everything
-that landed since *your* build — not just the newest release — so coming back
-after a long break still tells you the whole story.
+Each update comes with patch notes, shown before the download starts and
+readable at any time from **What's new**, including offline.
 
-[docs/UPDATES.md](docs/UPDATES.md) covers the mechanism in full, including how
-to release a change and how to set up release signing.
+The full mechanism — and how to set up Android release signing — is documented in
+[the template's docs/UPDATES.md](https://github.com/sinikebe/godot-launcher-template/blob/main/docs/UPDATES.md).
 
 ## Developing
 
@@ -59,20 +79,18 @@ update path easy to exercise while developing.
 
 | Path | |
 |---|---|
-| [scenes/main_menu.tscn](scenes/main_menu.tscn) | The menu |
-| [scripts/main_menu.gd](scripts/main_menu.gd) | Menu wiring and the update UI |
-| [scripts/update_service.gd](scripts/update_service.gd) | Autoload — checks, downloads, verifies, installs |
-| [scripts/build_info.gd](scripts/build_info.gd) | Autoload — build identity; mounts content packs at startup |
-| [scripts/android_bridge.gd](scripts/android_bridge.gd) | Android install-intent and restart helpers |
-| [scripts/build_version.gd](scripts/build_version.gd) | Generated at build time; committed copy holds dev defaults |
-| [ci/](ci/) | Build scripts, shared by CI and usable locally |
+| [launcher_config.tres](launcher_config.tres) | **Everything you change about the launcher** |
 | [version.json](version.json) | The one file you edit to bump a version |
+| `addons/launcher/` | Synced from the template — do not edit |
+| `ci/` | Synced from the template — do not edit |
+| [build_version.gd](build_version.gd) | Generated at build time; the committed copy holds dev defaults |
 
 ### Adding the game
 
-`MainMenu.GAME_SCENE` in [scripts/main_menu.gd](scripts/main_menu.gd) is empty.
-Point it at your first scene and **Play** will load it; until then the button
-explains itself instead of failing quietly.
+`play_scene` in [launcher_config.tres](launcher_config.tres) is empty. Point it
+at your first scene and **Play** will load it; until then the button explains
+itself instead of failing quietly. To take the action over entirely, connect the
+launcher's `play_requested` signal.
 
 ## Releasing
 

@@ -1,24 +1,20 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=3 format=3]
 
-[ext_resource type="Script" path="res://scripts/main_menu.gd" id="1_menu"]
-[ext_resource type="Shader" path="res://assets/shaders/bio_background.gdshader" id="2_bg"]
-[ext_resource type="Theme" path="res://assets/ui/biogenic_theme.tres" id="3_theme"]
+[ext_resource type="Script" path="res://addons/launcher/launcher.gd" id="1_launcher"]
+[ext_resource type="Theme" path="res://addons/launcher/theme/launcher_theme.tres" id="2_theme"]
 
-[sub_resource type="ShaderMaterial" id="ShaderMaterial_bg"]
-shader = ExtResource("2_bg")
-
-[node name="MainMenu" type="Control"]
+[node name="Launcher" type="Control"]
 layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
-theme = ExtResource("3_theme")
-script = ExtResource("1_menu")
+theme = ExtResource("2_theme")
+script = ExtResource("1_launcher")
 
-[node name="Background" type="ColorRect" parent="."]
-material = SubResource("ShaderMaterial_bg")
+[node name="BackgroundColor" type="ColorRect" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -28,7 +24,8 @@ grow_vertical = 2
 mouse_filter = 2
 color = Color(0.023, 0.055, 0.05, 1)
 
-[node name="Content" type="MarginContainer" parent="."]
+[node name="BackgroundShader" type="ColorRect" parent="."]
+unique_name_in_owner = true
 layout_mode = 1
 anchors_preset = 15
 anchor_right = 1.0
@@ -36,59 +33,96 @@ anchor_bottom = 1.0
 grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
-theme_override_constants/margin_left = 48
-theme_override_constants/margin_top = 40
-theme_override_constants/margin_right = 48
-theme_override_constants/margin_bottom = 28
 
-[node name="Layout" type="VBoxContainer" parent="Content"]
-layout_mode = 2
-theme_override_constants/separation = 14
+[node name="BackgroundTexture" type="TextureRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+expand_mode = 1
+stretch_mode = 6
 
-[node name="Header" type="VBoxContainer" parent="Content/Layout"]
-layout_mode = 2
+[node name="BackgroundDim" type="ColorRect" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0, 0, 0, 0)
+
+[node name="TitleBlock" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 0
+offset_left = 48.0
+offset_top = 40.0
+offset_right = 448.0
+offset_bottom = 130.0
+mouse_filter = 2
 theme_override_constants/separation = 0
 
-[node name="Title" type="Label" parent="Content/Layout/Header"]
+[node name="Title" type="Label" parent="TitleBlock"]
+unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.827, 1, 0.937, 1)
 theme_override_font_sizes/font_size = 62
-text = "BIOGENIC"
+text = "YOUR GAME"
 
-[node name="Tagline" type="Label" parent="Content/Layout/Header"]
+[node name="Tagline" type="Label" parent="TitleBlock"]
 unique_name_in_owner = true
 layout_mode = 2
 theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
 theme_override_font_sizes/font_size = 17
-text = "early build · updates itself"
+text = "tagline"
 
-[node name="MenuArea" type="CenterContainer" parent="Content/Layout"]
-layout_mode = 2
-size_flags_vertical = 3
+[node name="MenuBlock" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -150.0
+offset_top = -60.0
+offset_right = 150.0
+offset_bottom = 60.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
 
-[node name="Buttons" type="VBoxContainer" parent="Content/Layout/MenuArea"]
-custom_minimum_size = Vector2(300, 0)
-layout_mode = 2
-theme_override_constants/separation = 12
+[node name="BottomStack" type="VBoxContainer" parent="."]
+unique_name_in_owner = true
+layout_mode = 1
+anchors_preset = 12
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 48.0
+offset_top = -110.0
+offset_right = -48.0
+offset_bottom = -28.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_constants/separation = 6
 
-[node name="PlayButton" type="Button" parent="Content/Layout/MenuArea/Buttons"]
+[node name="UpdateBar" type="PanelContainer" parent="BottomStack"]
 unique_name_in_owner = true
 layout_mode = 2
-text = "Play"
 
-[node name="QuitButton" type="Button" parent="Content/Layout/MenuArea/Buttons"]
-unique_name_in_owner = true
-layout_mode = 2
-text = "Quit"
-
-[node name="UpdateBar" type="PanelContainer" parent="Content/Layout"]
-layout_mode = 2
-
-[node name="Row" type="HBoxContainer" parent="Content/Layout/UpdateBar"]
+[node name="Row" type="HBoxContainer" parent="BottomStack/UpdateBar"]
 layout_mode = 2
 theme_override_constants/separation = 18
 
-[node name="StatusLabel" type="Label" parent="Content/Layout/UpdateBar/Row"]
+[node name="StatusLabel" type="Label" parent="BottomStack/UpdateBar/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 3
@@ -98,28 +132,28 @@ theme_override_font_sizes/font_size = 16
 text = "Not checked yet."
 autowrap_mode = 3
 
-[node name="UpdateProgress" type="ProgressBar" parent="Content/Layout/UpdateBar/Row"]
+[node name="UpdateProgress" type="ProgressBar" parent="BottomStack/UpdateBar/Row"]
 unique_name_in_owner = true
 custom_minimum_size = Vector2(160, 8)
 layout_mode = 2
 size_flags_vertical = 4
 show_percentage = false
 
-[node name="NotesButton" type="Button" parent="Content/Layout/UpdateBar/Row"]
+[node name="NotesButton" type="Button" parent="BottomStack/UpdateBar/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_font_sizes/font_size = 17
 text = "What's new"
 
-[node name="UpdateButton" type="Button" parent="Content/Layout/UpdateBar/Row"]
+[node name="UpdateButton" type="Button" parent="BottomStack/UpdateBar/Row"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_vertical = 4
 theme_override_font_sizes/font_size = 17
 text = "Check for updates"
 
-[node name="VersionLabel" type="Label" parent="Content/Layout"]
+[node name="VersionLabel" type="Label" parent="BottomStack"]
 unique_name_in_owner = true
 layout_mode = 2
 size_flags_horizontal = 8

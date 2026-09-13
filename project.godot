@@ -12,7 +12,7 @@ config_version=5
 
 config/name="Biogenic"
 config/description="Biogenic"
-run/main_scene="res://scenes/main_menu.tscn"
+run/main_scene="res://addons/launcher/launcher.tscn"
 config/features=PackedStringArray("4.7", "GL Compatibility")
 boot_splash/bg_color=Color(0.023, 0.055, 0.05, 1)
 boot_splash/show_image=false
@@ -20,8 +20,12 @@ config/icon="res://icon.svg"
 
 [autoload]
 
-BuildInfo="*res://scripts/build_info.gd"
-UpdateService="*res://scripts/update_service.gd"
+BuildInfo="*res://addons/launcher/build_info.gd"
+UpdateService="*res://addons/launcher/update_service.gd"
+
+[launcher]
+
+config_path="res://launcher_config.tres"
 
 [display]
 

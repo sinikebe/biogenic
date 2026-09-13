@@ -1,17 +1,35 @@
 extends Control
-## Main menu. Owns the update UI; UpdateService owns the update logic.
+## The launcher screen. Everything it shows comes from [LauncherConfig]; nothing
+## in this file should need editing to reskin a game's launcher.
+##
+## Update logic lives in UpdateService; this file only drives the UI.
 
-## Set this once there is a game to start. While it is empty, Play explains
-## itself instead of failing silently.
-const GAME_SCENE := ""
+## Emitted when one of [member LauncherConfig.extra_buttons] is pressed, with
+## that button's label. Connect it from your own scene to add Settings, Credits
+## or anything else without modifying the launcher.
+signal custom_button_pressed(label: String)
+
+## Emitted just before Play changes scene, or instead of it when no play scene
+## is configured. Lets a game take over the Play action entirely.
+signal play_requested()
 
 ## Height the patch-note history is capped at before it starts scrolling.
 const HISTORY_VIEW_HEIGHT := 300.0
 
+@onready var _bg_color: ColorRect = %BackgroundColor
+@onready var _bg_texture: TextureRect = %BackgroundTexture
+@onready var _bg_shader: ColorRect = %BackgroundShader
+@onready var _bg_dim: ColorRect = %BackgroundDim
+
+@onready var _title_block: VBoxContainer = %TitleBlock
+@onready var _title: Label = %Title
 @onready var _tagline: Label = %Tagline
-@onready var _play_button: Button = %PlayButton
-@onready var _quit_button: Button = %QuitButton
+
+@onready var _menu_block: VBoxContainer = %MenuBlock
 @onready var _version_label: Label = %VersionLabel
+
+@onready var _bottom_stack: VBoxContainer = %BottomStack
+@onready var _update_bar: PanelContainer = %UpdateBar
 @onready var _status_label: Label = %StatusLabel
 @onready var _update_button: Button = %UpdateButton
 @onready var _notes_button: Button = %NotesButton
@@ -24,23 +42,32 @@ const HISTORY_VIEW_HEIGHT := 300.0
 @onready var _overlay_primary: Button = %OverlayPrimary
 @onready var _overlay_secondary: Button = %OverlaySecondary
 
+var _config: LauncherConfig
+var _menu_box: BoxContainer
+var _first_button: Button = null
+## Guards the re-entrancy between _apply_layout() and minimum_size_changed.
+var _laying_out := false
 ## What the overlay's primary button should do when pressed.
 var _overlay_action: Callable = Callable()
 
 
 func _ready() -> void:
-	# Reads the live build number rather than a hardcoded string, so every
-	# update visibly changes the tagline -- which is the quickest way to confirm
-	# from across the room that an update actually landed.
-	_tagline.text = "build %d · updates itself" % BuildInfo.content_version
-	_version_label.text = BuildInfo.display_version()
+	_config = BuildInfo.config
+
+	if _config.theme_override != null:
+		theme = _config.theme_override
+
+	_apply_identity()
+	_apply_background()
+	_build_menu()
+	_apply_layout()
+
 	_overlay.hide()
 	_progress.hide()
+	_version_label.text = BuildInfo.display_version()
 
-	_play_button.pressed.connect(_on_play_pressed)
-	_quit_button.pressed.connect(_on_quit_pressed)
-	_update_button.pressed.connect(_on_update_pressed)
 	_notes_button.pressed.connect(_show_history)
+	_update_button.pressed.connect(_on_update_pressed)
 	_overlay_primary.pressed.connect(_on_overlay_primary)
 	_overlay_secondary.pressed.connect(_hide_overlay)
 
@@ -48,14 +75,147 @@ func _ready() -> void:
 	UpdateService.progress_changed.connect(_on_progress_changed)
 
 	if not BuildInfo.pack_error.is_empty():
-		push_warning("[MainMenu] " + BuildInfo.pack_error)
+		push_warning("[Launcher] " + BuildInfo.pack_error)
 
-	_play_button.grab_focus()
+	# Only the bar is conditional; the version stamp shares the stack and should
+	# survive a project that has the updater turned off.
+	_update_bar.visible = _config.show_update_bar and _config.updates_enabled()
 	_refresh_update_ui()
 
-	# Let the menu paint before touching the network.
-	await get_tree().create_timer(0.4).timeout
-	await UpdateService.check_for_updates()
+	if _first_button != null:
+		_first_button.grab_focus()
+	_apply_layout.call_deferred()
+
+	if _config.check_on_launch and _config.updates_enabled():
+		# Let the launcher paint before touching the network.
+		await get_tree().create_timer(0.4).timeout
+		await UpdateService.check_for_updates()
+
+
+# ---------------------------------------------------------------------------
+# Appearance
+# ---------------------------------------------------------------------------
+
+func _apply_identity() -> void:
+	_title.text = _config.game_title
+	var tagline := _config.resolved_tagline(BuildInfo.version_name, BuildInfo.content_version)
+	_tagline.text = tagline
+	_tagline.visible = not tagline.is_empty()
+
+
+func _apply_background() -> void:
+	_bg_color.color = _config.background_color
+
+	# A texture wins over the shader: an explicit image is always the more
+	# deliberate choice than the bundled default.
+	if _config.background_texture != null:
+		_bg_texture.texture = _config.background_texture
+		_bg_texture.stretch_mode = _stretch_mode_for(_config.background_stretch)
+		_bg_texture.show()
+		_bg_shader.hide()
+	elif _config.background_shader != null:
+		var material := ShaderMaterial.new()
+		material.shader = _config.background_shader
+		_bg_shader.material = material
+		_bg_shader.show()
+		_bg_texture.hide()
+	else:
+		_bg_texture.hide()
+		_bg_shader.hide()
+
+	_bg_dim.color = Color(0, 0, 0, _config.background_dim)
+	_bg_dim.visible = _config.background_dim > 0.0
+
+
+func _stretch_mode_for(index: int) -> int:
+	match index:
+		0: return TextureRect.STRETCH_SCALE
+		1: return TextureRect.STRETCH_TILE
+		2: return TextureRect.STRETCH_KEEP_CENTERED
+		4: return TextureRect.STRETCH_KEEP_ASPECT_CENTERED
+		_: return TextureRect.STRETCH_KEEP_ASPECT_COVERED
+
+
+# ---------------------------------------------------------------------------
+# Menu
+# ---------------------------------------------------------------------------
+
+func _build_menu() -> void:
+	_menu_box = VBoxContainer.new() if _config.menu_orientation == 0 else HBoxContainer.new()
+	_menu_box.add_theme_constant_override("separation", _config.menu_separation)
+	if _config.menu_orientation == 0:
+		_menu_box.custom_minimum_size.x = _config.menu_width
+	# MenuBlock is a container so it reports the button box's minimum size and
+	# lays it out; anchoring it with PRESET_MODE_MINSIZE then has a real size to
+	# work from, which a bare Control would not have provided.
+	_menu_block.add_child(_menu_box)
+	_menu_block.minimum_size_changed.connect(_apply_layout)
+
+	if _config.show_play:
+		_add_button(_config.play_text, _on_play_pressed)
+	for label in _config.extra_buttons:
+		var text := str(label)
+		if text.is_empty():
+			continue
+		_add_button(text, func() -> void: custom_button_pressed.emit(text))
+	if _config.show_quit:
+		_add_button(_config.quit_text, _on_quit_pressed)
+
+
+func _add_button(text: String, action: Callable) -> void:
+	var button := Button.new()
+	button.text = text
+	button.pressed.connect(action)
+	_menu_box.add_child(button)
+	if _first_button == null:
+		_first_button = button
+
+
+## Positions the title and menu blocks from the config's alignment settings.
+##
+## Anchors rather than containers, so the two blocks can be placed independently
+## anywhere on screen and still follow a resize.
+func _apply_layout() -> void:
+	if _laying_out:
+		return
+	_laying_out = true
+
+	var margin := float(_config.edge_margin)
+	_title_block.set_anchors_and_offsets_preset(
+		_preset_for(_config.title_h_align, _config.title_v_align),
+		Control.PRESET_MODE_MINSIZE, int(margin))
+	_menu_block.set_anchors_and_offsets_preset(
+		_preset_for(_config.menu_h_align, _config.menu_v_align),
+		Control.PRESET_MODE_MINSIZE, int(margin))
+
+	_title.horizontal_alignment = _text_align_for(_config.title_h_align)
+	_tagline.horizontal_alignment = _text_align_for(_config.title_h_align)
+
+	_bottom_stack.offset_left = margin
+	_bottom_stack.offset_right = -margin
+	_bottom_stack.offset_bottom = -margin
+
+	_laying_out = false
+
+
+func _preset_for(h_align: int, v_align: int) -> Control.LayoutPreset:
+	match [h_align, v_align]:
+		[0, 0]: return Control.PRESET_TOP_LEFT
+		[1, 0]: return Control.PRESET_CENTER_TOP
+		[2, 0]: return Control.PRESET_TOP_RIGHT
+		[0, 1]: return Control.PRESET_CENTER_LEFT
+		[2, 1]: return Control.PRESET_CENTER_RIGHT
+		[0, 2]: return Control.PRESET_BOTTOM_LEFT
+		[1, 2]: return Control.PRESET_CENTER_BOTTOM
+		[2, 2]: return Control.PRESET_BOTTOM_RIGHT
+		_: return Control.PRESET_CENTER
+
+
+func _text_align_for(h_align: int) -> HorizontalAlignment:
+	match h_align:
+		1: return HORIZONTAL_ALIGNMENT_CENTER
+		2: return HORIZONTAL_ALIGNMENT_RIGHT
+		_: return HORIZONTAL_ALIGNMENT_LEFT
 
 
 # ---------------------------------------------------------------------------
@@ -63,14 +223,15 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 
 func _on_play_pressed() -> void:
-	if GAME_SCENE.is_empty():
+	play_requested.emit()
+	if _config.play_scene.is_empty():
 		_show_overlay(
-			"Not built yet",
-			"This is where the game will start. Point MainMenu.GAME_SCENE at your "
-			+ "first scene and this button will load it.",
+			"Not wired up yet",
+			"This is where the game starts. Set play_scene in the launcher config, "
+			+ "or connect the launcher's play_requested signal to take over.",
 			"OK", Callable(self, "_hide_overlay"), "")
 		return
-	get_tree().change_scene_to_file(GAME_SCENE)
+	get_tree().change_scene_to_file(_config.play_scene)
 
 
 func _on_quit_pressed() -> void:
@@ -104,7 +265,7 @@ func _on_update_state_changed(_new_state: int) -> void:
 		UpdateService.State.INSTALL_HANDOFF:
 			_show_overlay(
 				"Installing",
-				"Confirm the update in the system installer. Biogenic will reopen "
+				"Confirm the update in the system installer. The game will reopen "
 				+ "on the new version once the install finishes.",
 				"OK", Callable(self, "_hide_overlay"), "")
 		_:
@@ -177,7 +338,7 @@ func _do_apply() -> void:
 
 
 func _prompt_restart() -> void:
-	var body := "The update is downloaded. Biogenic needs to restart to finish applying it."
+	var body := "The update is downloaded. The game needs to restart to finish applying it."
 	if OS.has_feature("editor"):
 		body += "\n\nRunning from the editor: stop and play the project again."
 	_show_overlay("Update ready", body, "Restart now", Callable(self, "_do_restart"), "Later")
@@ -188,7 +349,7 @@ func _do_restart() -> void:
 		return
 	_show_overlay(
 		"Restart needed",
-		"Close Biogenic and open it again to finish the update.",
+		"Close the game and open it again to finish the update.",
 		"OK", Callable(self, "_hide_overlay"), "")
 
 
@@ -227,6 +388,7 @@ func _show_overlay(title: String, body: String, primary_text: String,
 		_overlay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
 		_overlay_scroll.custom_minimum_size.y = 0.0
 	_overlay_scroll.scroll_vertical = 0
+
 	_overlay_primary.text = primary_text
 	_overlay_action = primary_action
 	_overlay_secondary.text = secondary_text
@@ -238,7 +400,8 @@ func _show_overlay(title: String, body: String, primary_text: String,
 func _hide_overlay() -> void:
 	_overlay.hide()
 	_overlay_action = Callable()
-	_play_button.grab_focus()
+	if _first_button != null:
+		_first_button.grab_focus()
 
 
 func _on_overlay_primary() -> void:
