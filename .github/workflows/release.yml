@@ -137,9 +137,16 @@ jobs:
           cp build/content/content-android.pck build/release/
           cp build/content/content-windows.pck build/release/
 
+      - name: Collect patch notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash ci/collect_changes.sh
+
       - name: Build update manifest
         run: |
           python3 ci/make_manifest.py \
+            --changes-file build/notes/changes.json \
+            --previous-manifest build/notes/previous.json \
             --repo "${GITHUB_REPOSITORY}" \
             --version-name "${{ steps.version.outputs.version_name }}" \
             --binary-version "${{ steps.version.outputs.binary_version }}" \

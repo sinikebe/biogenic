@@ -479,6 +479,62 @@ func _finish(next: State, message: String) -> State:
 	return state
 
 
+## The patch notes covering everything between the installed build and the
+## release on offer, newest first.
+##
+## Entries at or below the installed content version are already in this build,
+## so they are dropped -- the player only sees what they are about to get.
+func pending_changelog() -> Array:
+	var entries: Variant = manifest.get("changelog", [])
+	if not entries is Array:
+		return []
+
+	var result: Array = []
+	for entry: Variant in entries:
+		if entry is Dictionary and int(entry.get("content_version", 0)) > BuildInfo.content_version:
+			result.append(entry)
+	return result
+
+
+## The pending patch notes as display text, capped so the dialog cannot outgrow
+## the screen. Empty when there is nothing to show.
+func pending_notes_text(max_lines: int = 12) -> String:
+	var entries := pending_changelog()
+	if entries.is_empty():
+		return ""
+
+	var lines: PackedStringArray = []
+	var dropped := 0
+
+	for entry: Dictionary in entries:
+		var changes: Variant = entry.get("changes", [])
+		if not changes is Array or changes.is_empty():
+			continue
+
+		var heading := "v%s  ·  build %d" % [
+			entry.get("version_name", "?"), int(entry.get("content_version", 0))]
+		if lines.size() >= max_lines:
+			dropped += changes.size()
+			continue
+
+		if not lines.is_empty():
+			lines.append("")
+		lines.append(heading)
+
+		for change: Variant in changes:
+			if lines.size() >= max_lines:
+				dropped += 1
+			else:
+				lines.append("  •  %s" % str(change))
+
+	if lines.is_empty():
+		return ""
+	if dropped > 0:
+		lines.append("")
+		lines.append("…and %d more change%s." % [dropped, "" if dropped == 1 else "s"])
+	return "\n".join(lines)
+
+
 ## One line describing where the updater currently stands, for the menu.
 func status_text() -> String:
 	match state:

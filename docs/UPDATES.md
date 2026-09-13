@@ -81,7 +81,12 @@ gets a fresh answer.
     "binary":  { "android": { "file": "…", "url": "…", "size": 0, "sha256": "…" },
                  "windows": { … } },
     "content": { "android": { … }, "windows": { … } }
-  }
+  },
+  "changelog": [
+    { "content_version": 12, "binary_version": 1, "version_name": "0.1.0",
+      "released_at": "…", "changes": ["Add the spore bloom", "Fix menu focus"] },
+    { "content_version": 11, … }
+  ]
 }
 ```
 
@@ -91,6 +96,30 @@ content pack, because the binary carries its own content anyway.
 Every download is hashed and compared against `sha256` before it is installed.
 A mismatch is deleted, not installed. An artifact with no checksum is refused
 outright — an unauthenticated binary is worse than no update.
+
+## Patch notes
+
+Every release carries its own notes, and the menu shows them *before* the
+download starts — so nobody is asked to spend 50 MB on an unexplained update.
+
+They are generated, not hand-written. [`ci/collect_changes.sh`](../ci/collect_changes.sh)
+takes the commit subjects between the previous release tag and `HEAD`, drops the
+housekeeping ones (`chore`, `ci:`, `bump `, `wip`, `revert`, merges), and hands
+the rest to the manifest builder. The same list goes into the GitHub release body.
+
+**Write commit subjects on `main` as if a player will read them, because one
+will.** Squash-merging a PR with a tidy subject is the easiest way to get this
+right.
+
+The manifest carries a rolling `changelog` of the last 20 releases rather than
+just the newest entry, and the app shows every entry above its own
+`content_version`. Someone who has not launched the game in six releases sees all
+six, newest first, instead of one line about the latest. Each release carries the
+previous manifest's changelog forward, so the history accumulates without anyone
+maintaining a file.
+
+If a release has no notes at all, the dialog is skipped entirely and the update
+applies directly — an empty dialog is worse than no dialog.
 
 ## Per-platform behaviour
 

@@ -39,6 +39,17 @@ trap 'rm -f "$NOTES"' EXIT
 	echo "| Content version | \`${CONTENT_VERSION}\` |"
 	echo "| Commit | \`$(git rev-parse --short=8 HEAD)\` — ${COMMIT_SUBJECT} |"
 	echo ""
+	if [[ -s "build/notes/changes.json" ]]; then
+		echo "### What's new"
+		echo ""
+		python3 -c "
+import json, sys
+with open('build/notes/changes.json', encoding='utf-8') as fh:
+    for line in json.load(fh):
+        print(f'- {line}')
+" || true
+		echo ""
+	fi
 	echo "### Download"
 	echo ""
 	echo "- **Android** — [biogenic.apk](https://github.com/${GITHUB_REPOSITORY}/releases/latest/download/biogenic.apk)"

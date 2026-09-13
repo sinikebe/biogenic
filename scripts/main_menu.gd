@@ -71,7 +71,7 @@ func _on_quit_pressed() -> void:
 func _on_update_pressed() -> void:
 	match UpdateService.state:
 		UpdateService.State.CONTENT_READY, UpdateService.State.BINARY_READY:
-			await UpdateService.apply_pending_update()
+			await _prompt_update()
 		UpdateService.State.NEEDS_PERMISSION:
 			await UpdateService.retry_install()
 		UpdateService.State.RESTART_REQUIRED:
@@ -139,6 +139,30 @@ func _on_progress_changed(downloaded: int, total: int) -> void:
 		_progress.max_value = 1
 		_progress.value = 0
 		_status_label.text = "Downloading… %s" % _format_bytes(downloaded)
+
+
+## Shows what the update actually contains before spending a download on it.
+func _prompt_update() -> void:
+	var notes := UpdateService.pending_notes_text()
+	if notes.is_empty():
+		# Nothing worth reading; don't make anyone dismiss an empty dialog.
+		await UpdateService.apply_pending_update()
+		return
+
+	var is_binary := UpdateService.state == UpdateService.State.BINARY_READY
+	var size := _format_bytes(int(UpdateService.pending_artifact.get("size", 0)))
+	var summary := ("New app build · %s" if is_binary else "Content update · %s") % size
+
+	_show_overlay(
+		"What's new in v%s" % UpdateService.manifest.get("version_name", "?"),
+		"%s\n\n%s" % [summary, notes],
+		"Update now" if is_binary else "Download",
+		Callable(self, "_do_apply"),
+		"Later")
+
+
+func _do_apply() -> void:
+	await UpdateService.apply_pending_update()
 
 
 func _prompt_restart() -> void:

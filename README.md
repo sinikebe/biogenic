@@ -34,6 +34,11 @@ A new binary always wins over a pending content pack, since the binary carries
 its own content with it. Every download is checked against the SHA-256 in the
 manifest before anything is installed, and a mismatch is discarded.
 
+Each update comes with patch notes, shown before the download starts. They are
+built from the commit subjects since the previous release, and cover everything
+that landed since *your* build — not just the newest release — so coming back
+after a long break still tells you the whole story.
+
 [docs/UPDATES.md](docs/UPDATES.md) covers the mechanism in full, including how
 to release a change and how to set up release signing.
 
