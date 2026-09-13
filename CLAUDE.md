@@ -16,6 +16,14 @@ repository's GitHub releases.
   The cross-repository form (`Closes owner/repo#N`) links the two, but closing
   still needs write access on that repository. We have none on the template, so
   a template issue is closed by hand over there — never by a merge here.
+- **Check for a pending launcher upgrade immediately before every merge.** Look
+  for an open `launcher-sync` pull request, or compare the `commit` in
+  `addons/launcher/.launcher-sync.json` against the template's `main`. If one is
+  waiting, do not merge past it: take the new launcher, re-test your own changes
+  against it, fix whatever broke, and merge the two together. Merging your work
+  first and syncing afterwards means the combination ships to players untested —
+  the launcher is most of what the app *is*, so "it worked before the sync" is
+  not evidence about the release you are actually cutting.
 
 ### What a merge costs
 
