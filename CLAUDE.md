@@ -57,17 +57,52 @@ write it — so the sync job only reports drift there and copying across is manu
 
 Everything Biogenic-specific about the launcher lives in `launcher_config.tres`.
 
-## There is no Godot binary here
+## Run it. Do not guess.
 
-No editor, no import, no headless boot, no screenshot. Scenes and resources are
-hand-written as Godot 4.7 text format and reasoned about, never run locally.
+Godot 4.7 runs here and `xvfb` is installed, so the project can be imported,
+booted and **photographed** locally. Install the editor once:
 
-CI (`.github/workflows/ci.yml`) imports and headless-boots the project. That is
-the first time anything actually executes, so:
+```
+curl -fsSL -o /tmp/godot.zip \
+  https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
+unzip -q -o /tmp/godot.zip -d /tmp/g && mkdir -p ~/godot
+mv /tmp/g/Godot_v4.7-stable_linux.x86_64 ~/godot/godot && chmod +x ~/godot/godot
+```
+
+Then import once, and screenshot any scene:
+
+```
+xvfb-run -a ~/godot/godot --path . --import
+xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
+    --rendering-driver opengl3 res://tools/shot.tscn -- \
+    --out=/tmp/shot.png --wait=3.0
+```
+
+`tools/shot.gd` takes `--scene=`, `--out=`, `--wait=` and `--size=WxH`; it
+defaults to the launcher and is excluded from export, so it never ships. Shoot
+at 1280x720 **and** at 2400x1080 — phone-shaped is where layout breaks.
+
+Pass `--rendering-driver opengl3`: this container has no Vulkan, and the project
+is GL Compatibility anyway. Audio fails to open and falls back to a dummy
+driver; that is the container, not a bug.
+
+### Nothing is done until someone has looked at it
+
+A screenshot is the evidence. "The code looks right" is not, and neither is a
+green CI boot — the project can import, run and still be ugly or unreadable.
+This binds the UX/UI role especially: a screen is finished when it has been
+rendered and judged to look good, at both shapes.
+
+Check the harness itself when a shot looks wrong. Its first version forced
+`content_scale_size`, which overrode the project's `expand` stretch and rendered
+1:1 — inventing a layout bug that did not exist.
+
+### Still true, because CI is what ships
 
 - Every `ext_resource` path must exist — `ls` it, do not assume.
 - `load_steps` must equal the number of resource entries plus one; `format=3`.
-- Nothing in `_ready()` may assume a window, an input device or a network.
+- Nothing in `_ready()` may assume a window, an input device or a network:
+  `.github/workflows/ci.yml` boots the project headless, with no display.
 
 ## Engine constraints
 

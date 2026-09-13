@@ -19,10 +19,14 @@ environment and no manual gate. A broken scene does not fail a code review — i
 ships, and it ships to devices that already have the game installed. Review as
 if you are the last check before that, because you are.
 
-Also: **there is no Godot binary in this container.** Nobody who touched this
-code could run it. Everything was hand-written and reasoned about. Assume the
-kind of mistakes that only an engine or a device catches, and go looking for
-them specifically.
+Also: **Godot 4.7 runs here, so run it.** `CLAUDE.md` has the install and the
+commands. Import the project, boot it, and screenshot the screens under review
+with `tools/shot.tscn` at 1280x720 and 2400x1080. A review that only read the
+diff is half a review — look at the thing, and say in your report that you did.
+
+A screenshot is also the only way to catch what compiles and still fails: text
+that overflows its panel, controls that collide at phone shape, contrast that
+disappears against the background.
 
 ## What to check, in priority order
 
