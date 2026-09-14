@@ -114,6 +114,24 @@ which flips between the two landscape directions and never reaches portrait (ful
 sensor is `6`). Do not build portrait-specific layout for a mode the app cannot
 enter. Touch targets stay at 48px minimum.
 
+## Putting a decision to the owner
+
+Some calls are not ours: names, balance numbers that can only be judged by
+playing, and anything that changes what the game *is*. When work stops on one of
+those, present it as a table, never as prose:
+
+| # | Question | Options | What it means |
+|---|---|---|---|
+| 1 | The short question | Each option, with **✓ recommended** on one | The same thing again in plain words, no jargon |
+
+One row per decision. Always recommend one option and say which — an unmarked
+list makes the owner do the analysis twice. The last column exists so the
+decision can be made without reading the spec: say what actually changes for the
+player, not what changes in the code.
+
+Keep the nuance under the table, not inside it. A blocker that needs three
+paragraphs to explain is usually two decisions wearing one coat.
+
 ## The game
 
 Game code lives in `game/`. `play_scene` in `launcher_config.tres` points the

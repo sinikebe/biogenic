@@ -42,12 +42,23 @@ the `radius` that meals grow.
 
 ## Proposed
 
-**6 — The predator becomes prey.** Finish the arc Phase 4 opened: the hunter's
-chemistry stops blocking and starts tasting once you are the bigger cell (glow
-slot 3, reserved since Phase 1), and then you can eat it and take its genome.
-Depends on 5 because the growth curve is only fast enough to reach `radius 40`
-once genes make it real, and because "eat the predator" only means something
-when it means *take its thrust*.
+**6 — ~~The predator becomes prey.~~ Absorbed into 5.** This phase existed
+because there was a predator species to graduate past. There is not: `genes-and-
+cilia.md` §1 makes edibility a gape comparison evaluated per cell and in both
+directions, so *the* predator becoming prey is just *a* cell you have grown a
+mouth big enough for. It happens on the first run, without a phase.
+
+What was worth keeping from it has moved: the glow slot reserved since Phase 1
+now carries the taste of a cell you can eat, whatever it is, and the growth
+curve that made `radius 40` reachable is Phase 5's slot ladder.
+
+**6 — The chase, re-measured.** The successor, and it is smaller. Phase 4's two
+stated contracts — *a cell that does nothing must be caught*, and *you cannot
+outswim it* — were derived against a tier-1 cell and Phase 5 breaks both
+(`genes-and-cilia.md` §7.1). This is the pass that re-derives them across the
+tier range, against a real genome rather than a scripted evader, and it is the
+one thing in the whole plan that a human has to play rather than measure.
+Depends on 5 because there is nothing to measure until tiers exist.
 
 **7 — A third view.** The two existing views are *what the cell feels* and
 *what is actually there*. The missing one is **what the cell knows** — the world

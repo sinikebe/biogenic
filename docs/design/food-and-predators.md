@@ -9,6 +9,19 @@ document contradicts `perception.md` it says so and gives the measurement.
 
 Phase 5 is out of scope. `ingest` lands here and the hook is named in §3.4.
 
+> **Superseded on the world model.** This document describes a **food species**
+> and a **predator species**. There are neither: `genes-and-cilia.md` §1 makes
+> every object in the water a cell with a genome, and edibility a comparison of
+> one cell's body against another's *gape* — evaluated in both directions, so
+> "predator" is a relationship rather than a kind of thing, and it changes during
+> a run. `food.gd` and `predator.gd` become one thing (§7.0 there).
+>
+> **Everything below about perception still holds**, and that is the point: food
+> quickening the beat and something dangerous making it stumble, the wake, the
+> two deaths, the compound floor. Those were always properties of the
+> relationship. Only the question *"which is this?"* is answered differently —
+> by a gape comparison instead of by a species tag.
+>
 > **Superseded on one point.** This document calls the gene a *roll on eating*.
 > `genes-and-cilia.md` §3.4 replaces that: the gene is a property of the food,
 > fixed when it is seeded, because informed foraging requires that a prey cell
