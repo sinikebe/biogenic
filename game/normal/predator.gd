@@ -82,15 +82,19 @@ const WANDER_RATE := 0.09
 const WANDER_TAU := 3.2
 
 # --- The escape window ------------------------------------------------------
-## The contract, §5.4, stated on the game rather than on this AI: from the
-## moment the cell's steering is committed more than 90 degrees away from the
-## last wake bearing and stays committed, dread must begin falling within this,
-## and the predator must break off. A cell that does nothing must be caught.
+## The target §5.4 aimed at, and **not met** -- kept as the measurement it is,
+## not as a contract anything enforces.
 ##
-## It is the p90 time for the shipped drive model to swing its velocity 120
-## degrees. The window cannot be made shorter than about six seconds -- the cell
-## physically cannot turn faster -- so anything below 7 is cruelty by arithmetic.
-const ESCAPE_SECONDS := 7.0
+## Seven seconds is the p90 time for the shipped drive model to swing its
+## velocity 120 degrees. The cell physically cannot turn faster, so anything
+## below it would be cruelty by arithmetic, and that much is real.
+##
+## What is not real is the promise built on it: that dread begins falling within
+## this once the player commits away. A hunter 1.2x faster than the cell means
+## committing away buys no distance, so relief can only arrive when a *pass*
+## fails -- measured at 7-24s, median about 15. Nothing reads this constant, and
+## nothing should be tuned against it until the speeds change. §5.4.1.
+const ESCAPE_SECONDS_TARGET := 7.0
 ## Free tracking, out where the cell has no bearing to act on anyway.
 const AIM_GAP := 1.45
 ## **The window.** Once it is inside wake range it has committed to an attack
@@ -106,7 +110,7 @@ const LOCK_CONE_DEG := 70.0
 ## where the aim is, which depends on the time: three passes is convergence.
 const INTERCEPT_STEPS := 3
 ## Long enough that one frame of geometry cannot end a chase; short enough that
-## LOST_GRACE + the time to leave the cone stays inside ESCAPE_SECONDS.
+## LOST_GRACE + the time to leave the cone stays inside the escape target.
 const LOST_GRACE := 0.8
 ## **How the escape is actually paid off.** An attack run only ever closes; the
 ## moment the cell has taken this much ground back off the closest approach, the
@@ -143,6 +147,11 @@ const CALM_MAX := 55.0
 ## How far along its own heading the break-off aims. Only has to be past the
 ## horizon; the run ends at DREAD_RANGE, not here.
 const BREAK_AWAY := 3000.0
+## Hard ceiling on a break-off, as a guard rather than a mechanism. Swimming
+## directly away at LUNGE clears DREAD_RANGE in well under this, so it should
+## never fire; it exists because the state that could not frighten, wake or kill
+## is the worst one to be able to get stuck in.
+const BREAK_TIMEOUT := 20.0
 
 enum State { AWAY, STALK, BREAK }
 
@@ -166,6 +175,8 @@ var _lunging := false
 ## Closest approach so far in this attack run.
 var _best := INF
 var _rush := 0.0
+## How long the current break-off has been running, against BREAK_TIMEOUT.
+var _break_clock := 0.0
 var _stroke := 0.0
 var _wander := 0.0
 var _first := true
@@ -239,12 +250,31 @@ func _process(delta: float) -> void:
 
 	if _state == State.BREAK:
 		dread_level = 0.0
+		# Aim away from the CELL, recomputed every frame.
+		#
+		# This used to freeze one world point at break-off and steer at it. The
+		# predator then *reached* that point, the direction to it flipped through
+		# 180 degrees, and it turned around and came back -- oscillating about a
+		# stale marker, passing through the cell again and again. The whole time
+		# this branch returns before the dread term, the wake block and the
+		# contact check, so it could not frighten, wake or kill: a red thing
+		# swimming through you with no consequence, for up to eighty seconds, in
+		# the view a fresh install opens in. Measured at about one run in ten.
+		#
+		# Aiming away from the cell instead makes the distance monotonic -- the
+		# predator is faster than the cell, so it always reaches DREAD_RANGE.
+		_aim = position + _away_from_cell() * BREAK_AWAY
 		# It leaves at the speed it attacked with. A predator that saunters off
 		# at cruise stays inside dread range for a minute and a half, which is a
 		# minute and a half of nothing happening to a player who just earned
 		# something. Gone past dread range is gone.
 		_swim(delta, LUNGE)
-		if d > DREAD_RANGE:
+		_break_clock += delta
+		# Belt and braces. The line above should make this unreachable, and if it
+		# ever fires the predator has still stopped being a ghost -- AWAY can
+		# frighten and kill again, which is the failure this whole block exists
+		# to make impossible.
+		if d > DREAD_RANGE or _break_clock > BREAK_TIMEOUT:
 			_state = State.AWAY
 			_calm = randf_range(CALM_MIN, CALM_MAX)
 		return
@@ -365,10 +395,22 @@ func _break_off() -> void:
 	dread_level = 0.0
 	_lost = 0.0
 	_rush = 0.0
-	if _cell != null:
-		# Away, but not a handbrake turn: it sheers off the line it was on.
-		var away := _angle_of(position - _cell.position)
-		_aim = position + Vector2(sin(away), -cos(away)) * BREAK_AWAY
+	_break_clock = 0.0
+	# Still not a handbrake turn: the aim is away from the cell, but _swim()
+	# rate-limits the turn, so it sheers off the line it was on rather than
+	# spinning. The BREAK branch recomputes this every frame -- see the note
+	# there for why a frozen point was a bug.
+	_aim = position + _away_from_cell() * BREAK_AWAY
+
+
+## Unit vector pointing from the cell to the predator, i.e. straight away. Falls
+## back to its own heading in the degenerate case where the two bodies are at
+## exactly the same point, which contact makes reachable.
+func _away_from_cell() -> Vector2:
+	if _cell == null:
+		return forward()
+	var offset := position - _cell.position
+	return offset.normalized() if offset.length_squared() > 0.0001 else forward()
 
 
 func _swim(delta: float, speed: float) -> void:

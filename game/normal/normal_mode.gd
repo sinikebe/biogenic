@@ -67,6 +67,8 @@ var _onboard_clock := 0.0
 var _onboard_from := 0.0
 
 var _life := Life.ALIVE
+## A tap that arrived during the collapse, waiting for the black to be ready.
+var _tap_pending := false
 var _death_clock := 0.0
 var _death_loud := true
 var _vision_cut := false
@@ -110,10 +112,16 @@ func _process(delta: float) -> void:
 	# This node runs while paused so it can hear Esc and Back, and the membrane
 	# layer keeps beating under the pause scrim -- the cell is still alive, it is
 	# just not going anywhere. Everything else below here stops.
-	if get_tree().paused:
-		return
+	# Death is checked BEFORE pause, and the order is the point. The bus stops
+	# stepping its own envelopes while dying, so collapse()/revive() are the only
+	# writers of every uniform -- which means a frame that skips them does not
+	# pause the death, it freezes the membrane mid-collapse with nothing left to
+	# move it. Pausing while dying is not reachable today, but it is one stray
+	# code path away, and the failure is permanent rather than cosmetic.
 	if _life != Life.ALIVE:
 		_step_death(delta)
+		return
+	if get_tree().paused:
 		return
 
 	# Read once, post once. Nothing below carries a position.
@@ -175,6 +183,7 @@ func _die(loud: bool, bearing: float) -> void:
 	_death_loud = loud
 	_death_clock = 0.0
 	_vision_cut = false
+	_tap_pending = false
 	_set_simulating(false)
 	_cell.release()
 	if loud:
@@ -194,6 +203,11 @@ func _step_death(delta: float) -> void:
 				_vision_cut = true
 				_vision.set_active(false)
 				_life = Life.WAITING
+				# Someone already reached for it mid-collapse. Honour it now
+				# rather than making them tap a second time.
+				if _tap_pending:
+					_tap_pending = false
+					_wake_up()
 		Life.RETURNING:
 			_bus.revive(_death_clock)
 			if _death_clock >= SignalBus.DEATH_RETURN:
@@ -349,6 +363,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	# aim at, so anything counts.
 	if _life == Life.WAITING and _is_tap(event):
 		_wake_up()
+		get_viewport().set_input_as_handled()
+		return
+	# A tap during the collapse is latched rather than dropped. Being killed is
+	# the most startling thing in the game and the likeliest moment for a reflex
+	# tap, and the aperture takes up to 2.6s to shut -- long enough that a player
+	# who reacts immediately would otherwise get no response at all and conclude
+	# the game had stopped listening. Honoured the instant WAITING begins.
+	if _life == Life.DYING and _is_tap(event):
+		_tap_pending = true
 		get_viewport().set_input_as_handled()
 		return
 	if _life != Life.ALIVE:

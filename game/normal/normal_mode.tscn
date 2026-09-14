@@ -88,7 +88,7 @@ text = "light"
 horizontal_alignment = 1
 
 [node name="Slider" type="HSlider" parent="Hud/Pause/Center/Buttons/Light"]
-min_value = 0.7
+min_value = 1.0
 max_value = 2.4
 step = 0.05
 value = 1.0

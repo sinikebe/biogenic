@@ -176,7 +176,11 @@ tint the flood.
 **Eating while hunted is safe to read, and that is measured, not assumed.** The
 interior flood is `ingest * interior * 0.38`; `interior` has decayed to 0.08 by
 the contour, so the rim is untouched (measured: the ingest frame's brightest
-pixel is the *contour* at `(27,123,99)`, not the flood). A pressure wake lands at
+pixel is normally the flood itself -- `(30,76,42)` at centre, measured between
+beats, when there is no contour on screen at all; the contour only wins when a
+beat peak happens to coincide. What is load-bearing survives either way: a wake
+through a live flood measures `(169,214,204)`, so a strike stays readable while
+eating). A pressure wake lands at
 `(185,238,229)` straight through it. No extra term needed.
 
 ## 4. The predator
@@ -393,7 +397,7 @@ the wake and committing away from it saves you.
 Four things carry it, and only the first is in the original text:
 
 - the pursuit solution is up to `LOCK_SECONDS = 7.0` stale inside wake range
-- the attack run **commits at `COMMIT_RANGE = 420`**, not at `LUNGE_RANGE`. This
+- the attack run **commits at `COMMIT_RANGE = 310`**, not at `LUNGE_RANGE`. This
   is the number the whole dodge lives in and it had to be found by measuring:
   committed at 220 the run is only 2.3s long, a full-steer cell curves about 87
   units off the straight prediction, and the two bodies are 66 wide — so a
@@ -517,7 +521,8 @@ strength over `INVITE_RISE = 6.0s` and then repeats forever without ever
 resolving, which is what separates a screen that is waiting from a screen that is
 still playing.
 
-Rendered at both sizes: black between breaths (`(0,2,1)` at the trough) and
+Rendered at both sizes: black between breaths (`(0,0,0)` exactly at the trough --
+the base hue is fully faded by then) and
 `(11,60,50)` at the peak of a late one, on a field that is `(0,0,0)` everywhere
 else. The slit's height swings 120 → 188 canvas px, identical at 1280x720 and
 2400x1080 because it is driven by `half_ext.y`. It is the only thing on the
@@ -574,7 +579,8 @@ var spread := deg_to_rad(lerpf(TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _t
 > starvation signature. Shipped as
 > `clampf(_beat_period * jitter, 0.05, maxf(BEAT_PERIOD_MAX, _beat_period))`, so
 > an authored period is never shortened and only the random half is capped. A
-> dying, hunted cell therefore jitters 5.25–7.5s rather than 4.5–10.5s.
+> dying, hunted cell therefore jitters 4.5–7.5s rather than 4.5–10.5s: the
+> jitter is +/-40%, and the top of that range is clipped by the 7.5s ceiling.
 
 Plus one new method, `collapse(t: float)`, owning the death frames: it writes
 `inset_px`, holds `flash`, idles all four glow lobes, and fades `base_color` /

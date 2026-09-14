@@ -160,7 +160,14 @@ const INVITE_OPEN_PX := 34.0
 ## phone in daylight is close to invisible. Exposed on the pause screen, where
 ## the problem is actually felt and the membrane is still visible behind the
 ## scrim, so the player sees the effect live as they drag.
-const GAIN_MIN := 0.70
+## The control exists to *rescue* a dim screen in daylight, so it only goes up.
+##
+## It used to bottom out at 0.70, and at that setting a starving, hunted cell
+## renders (5,19,20) -- within a unit or two of the (5,15,17) frame that the
+## beat floor in beat_strength() exists to make unreachable. A slider that can
+## undo a guarantee by another route is worse than no slider, and nothing wants
+## the game dimmer than its designed values.
+const GAIN_MIN := 1.0
 const GAIN_MAX := 2.40
 const GAIN_DEFAULT := 1.0
 const GAIN_STEP := 0.05
