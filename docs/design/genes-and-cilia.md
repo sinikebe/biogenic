@@ -287,11 +287,48 @@ const ARRIVAL_RADIUS_MAX := 40.0
   above 40 — which is the exact meal at which the genome fills. Dread stops
   arriving, and that is the readout that the run is won.
 
+  **The ceiling binds what the water seeds, not what a cell becomes.** §1.2 lets
+  every cell grow by eating, and growth is not clamped — a body that has been
+  feeding passes `ARRIVAL_GAPE_MAX` and keeps hunting. The first draft did not
+  notice that §1.2 and §1.3 contradict each other here, and the build measured
+  it: bodies at gape 45.4 and 40.8, and a field cell reaching `r41` with the
+  arrival ceiling at 40.
+
+  **Settled by the owner: it stays unclamped, and it is the feature rather than
+  the bug.** At radius 40 the *seeded* water goes quiet, which is the readout
+  that the run is won; the only thing that can still threaten a full-grown cell
+  is one that earned it by eating, in view, on the same rules. That is §9.8's
+  legendary organism arriving for free, with no boss authored and no second
+  system — and it is why the ending is a floor rather than a ceiling. The
+  alternative was rejected on its cost: the only way to enforce an absolute
+  ceiling is to take a cytostome tier *off* a living cell, and §4.3 draws that
+  tier on the body, so the enforcement would read to the player as a rendering
+  glitch.
+
+  It needs no new art. §1.1.1 already turns the lip bow `PREDATOR_TINT` and adds
+  teeth whenever `other.gape > my.radius`, so an over-ceiling feeder is drawn as
+  exactly what it is the moment it becomes dangerous.
+
   Capping the gape also shapes the population for free, with no second constant:
   a radius-40 arrival can carry at most `cytostome 1` (`0.82 x 40 = 33`), while a
   radius-28 one can carry `cytostome 3` (`1.40 x 28 = 39`). **Big bodies get small
   mouths and small bodies get big mouths**, which is precisely the mix that makes
   §1.1 worth reading, and it falls out of one clamp rather than being authored.
+
+**What the build measured against these numbers.** Two claims did not
+survive contact and are corrected rather than quietly retuned:
+
+- **§1.3's rendered table said `edible` moves 1 → 5 as you grow. It does not.**
+  Measured over 16,000 seeded bodies, `edible` is flat near 60% at every player
+  radius, because the drifter floor is half the water and edible at all sizes.
+  What growth actually changes is **danger**: `eats me` falls 19% → 7% → 0% at
+  r26 / r33 / r40, and `standoff` rises 17% → 34% → 38%. The two frames are
+  still two different pictures — the axis is danger, not menu.
+- **§7.2's `flagellum` ladder understates the top.** Measured straight-line net
+  speed by tier is **41.0 / 56.8 / 80.1 / 111.1** u/s, not the ~78 the text
+  extrapolated for tier 3. Tier 1 reproduces Phase 4's measured 56.5 exactly, so
+  the constants are right and only the prose arithmetic was wrong. Phase 6
+  re-measures the chase against this.
 
 **Rendered, at both sizes, with §1.1.1's threat colour on.** The same seeded
 water drawn against a born cell (`r26`, gape 21) and against a full cell (`r40`,
@@ -301,6 +338,10 @@ gape 32):
 | --- | --- | --- | --- |
 | player `r26` | 1 | **1, drawn red** | 4 |
 | player `r40` | 5 | **0** | 1 |
+
+*One field of four is a small sample, and the `edible` column of it was
+misleading — see the measurement above, taken over 16,000 bodies. The `can eat
+me` column is the one that holds, and it is the column that matters.*
 
 **The two frames are different pictures, which is the whole point** — put the
 old rule's two frames beside them and they are the same picture at two zoom
@@ -1154,9 +1195,12 @@ works at a glance and under any colour vision.
    Three consequences, and they are binding on what gets built now:
 
    - **`ARRIVAL_GAPE_MAX` is a property of this water, not of the game.** It is
-     the number that decides where this water stops being able to threaten you,
-     and a second water (roadmap §8) sets its own. Write it where an environment
-     can override it, not as a global ceiling on the species.
+     the number that decides where this water stops *seeding* things that can
+     threaten you, and a second water (roadmap §8) sets its own. Write it where
+     an environment can override it, not as a global ceiling on the species.
+     **It bounds arrivals only** — a cell that has been feeding grows past it,
+     which §1.3 now records as deliberate: that cell is the first legendary
+     organism, and it costs nothing to author.
    - **Seven full slots is a starting position, not a finish.** What is
      interesting past radius 40 is *which* seven, so the genome must stay
      swappable at maximum — which §9.7 has just guaranteed by leaving even the
