@@ -69,7 +69,7 @@ func _process(_delta: float) -> void:
 		if distance > CULL:
 			_motes[i] = _spawn_point()
 			continue
-		if distance >= CellBody.RADIUS + MOTE_RADIUS:
+		if distance >= _cell.radius + MOTE_RADIUS:
 			continue
 
 		var bearing := _cell.bearing_to(_motes[i])

@@ -15,8 +15,18 @@ extends Node
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
 
-## Body radius in world units, used for contact.
-const RADIUS := 26.0
+## Body radius in world units, used for contact. A variable, not a constant,
+## because Phase 4 makes it the only number in the game that matters twice: you
+## can eat anything smaller than you, and anything bigger can eat you. One
+## comparison, no species tag -- the predator never changes, the player does.
+## docs/design/food-and-predators.md §4.1.
+const BASE_RADIUS := 26.0
+## **Phase 5 seam.** A placeholder: 28 meals to edibility is over an hour, and
+## genes are what should make that curve real. What matters now is that the
+## comparison exists at all and that dread already falls off with it.
+const GROWTH_PER_MEAL := 0.5
+
+var radius := BASE_RADIUS
 
 # --- Drive -----------------------------------------------------------------
 ## Speed added along the heading by one flagellar beat.
@@ -67,6 +77,18 @@ var _pointer_x := 0.0
 
 func _ready() -> void:
 	_impulse_timer = randf_range(0.6, 1.4)
+
+
+## A new cell in new water, for the restart after a death.
+func reset() -> void:
+	position = Vector2.ZERO
+	heading = randf_range(-PI, PI)
+	velocity = Vector2.ZERO
+	radius = BASE_RADIUS
+	_omega = 0.0
+	_wander = 0.0
+	_impulse_timer = randf_range(0.6, 1.4)
+	release()
 
 
 func _process(delta: float) -> void:

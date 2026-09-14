@@ -16,57 +16,103 @@ signal hunger_changed(hunger: float)
 
 ## Beat period when fed and in plain water. The rest state of the whole game.
 const REST_PERIOD := 2.4
-## The floor on the beat *rate*. A starving cell beats this slowly and no
-## slower -- the membrane must still be there to read.
+## The floor on the beat *rate* while there is still time to fix it. A starving
+## cell beats this slowly -- the membrane must still be there to read.
 const STARVED_PERIOD := 4.8
-## Deep inside a nutrient field. Nothing reaches this yet; food is a later phase.
+## Deep inside a nutrient field.
 const RICH_PERIOD := 0.55
+## Past the point of fixing: the last forty seconds stretch to here. Intervals
+## long enough that you sit waiting, wondering whether it is coming back. Rate
+## is free -- it costs no light, and nothing else is using it at that moment.
+const DYING_PERIOD := 7.5
 
 const FULL_AMPLITUDE := 1.0
 ## The floor on the beat *strength*, and the more important of the two floors.
 ## A beat that decays to nothing leaves no membrane at all, which reads as a
-## broken screen rather than as dying.
+## broken screen rather than as dying. It holds through the grace as well: the
+## floor rule has no exceptions, and only the period is allowed past it.
 const STARVED_AMPLITUDE := 0.35
 
-## Seconds of swimming from fed to as starved as this build goes. Half an hour,
-## so a session cannot starve out before there is anything to eat. This is the
-## number food will rebalance, and it is deliberately the only one.
-const HUNGER_SECONDS := 1800.0
+## Seconds of swimming from fed to starved. Seven minutes, so with competent
+## foraging -- a meal every 60 to 90 seconds -- the bar is usually somewhere in
+## the middle and the beat is usually saying something.
+##
+## **Move this first if the pace is wrong.** docs/design/food-and-predators.md §3.3.
+const HUNGER_SECONDS := 420.0
+## What one food cell is worth. Near half a bar on purpose: a single meal is
+## felt and two are needed.
+const MEAL := 0.50
+## Seconds at full hunger before the cell dies. It exists so that food ten
+## seconds away is still worth swimming for.
+const STARVE_GRACE := 40.0
 
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
-## Nutrient concentration at the cell, 0.0 until food exists. Kept here because
-## it is the other half of the same mapping.
+## Nutrient concentration at the cell, 0..1, written by the food field.
 var concentration := 0.0
+## Seconds held at full hunger. Public so the dev harness can photograph the end
+## of the grace without waiting forty seconds for it.
+var starve_seconds := 0.0
 
 
 func _process(delta: float) -> void:
 	if HUNGER_SECONDS > 0.0:
 		set_hunger(hunger + delta / HUNGER_SECONDS)
+	if hunger >= 1.0:
+		starve_seconds += delta
+	else:
+		starve_seconds = 0.0
 
 
 func set_hunger(value: float) -> void:
 	var next := clampf(value, 0.0, 1.0)
+	if next < 1.0:
+		starve_seconds = 0.0
 	if next == hunger:
 		return
 	hunger = next
 	hunger_changed.emit(hunger)
 
 
-## For food, when there is food.
+## A meal. Eating at full does not waste the food -- the caller still fires
+## ingest and still rolls the gene, so there is always a reason to eat.
 func feed(amount: float) -> void:
 	set_hunger(hunger - amount)
 
 
+## Back to a cell with nothing wrong with it.
+func reset() -> void:
+	starve_seconds = 0.0
+	concentration = 0.0
+	set_hunger(0.0)
+
+
+## How far into the last forty seconds, 0..1.
+func dying() -> float:
+	if STARVE_GRACE <= 0.0:
+		return 1.0 if hunger >= 1.0 else 0.0
+	return clampf(starve_seconds / STARVE_GRACE, 0.0, 1.0)
+
+
+## The grace has run out.
+func starved() -> bool:
+	return hunger >= 1.0 and starve_seconds >= STARVE_GRACE
+
+
 ## THE mapping, half one. Seconds between beats.
 ##
-## Starving stretches the period toward [constant STARVED_PERIOD]; swimming into
-## chemistry collapses it toward [constant RICH_PERIOD]. The square root is what
-## makes the field's near edge read: a faint 0.2 concentration already pulls the
-## period to about 1.6s, which is the "beat quickens" moment in §2.
+## Starving stretches the period toward [constant STARVED_PERIOD] and then, in
+## the last forty seconds, toward [constant DYING_PERIOD]. Chemistry is a
+## *multiplier* on whatever that came to, not a second lerp that replaces it:
+## nested, a starving cell in rich food beat at 0.55s, exactly as fast as a
+## healthy one, and starvation became invisible at the moment the player most
+## needed to read it. Multiplied, a starving cell's best possible beat is 1.10s
+## against a fed cell's 0.55s, so "my best beat is getting worse" survives a
+## meal. docs/design/food-and-predators.md §2.1.
 func beat_period() -> float:
 	var starved := lerpf(REST_PERIOD, STARVED_PERIOD, hunger)
-	return lerpf(starved, RICH_PERIOD, sqrt(clampf(concentration, 0.0, 1.0)))
+	starved = lerpf(starved, DYING_PERIOD, dying())
+	return starved * lerpf(1.0, RICH_PERIOD / REST_PERIOD, sqrt(clampf(concentration, 0.0, 1.0)))
 
 
 ## THE mapping, half two. How hard each beat lands, 0..1.
