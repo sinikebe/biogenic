@@ -40,6 +40,33 @@ so specialising means giving something up. `docs/design/genes-and-cilia.md`.
 Depends on 4 because the gene rides on `food.eaten` and the slot count rides on
 the `radius` that meals grow.
 
+## What the ending is for
+
+Phase 5 lands the arc on radius 40: the genome fills on the same meal that
+nothing in the water can swallow you. The owner settled that shape and attached
+the reason it is not the end of the game:
+
+> *"We will later add so much possibilities, bosses, legendary organisms that it
+> will still be fun even with a maxed out organism. The player can still discover
+> new combinations of genes that makes it very fun, or even become cheated (that
+> must stay hard to do tho)."*
+
+So **the ending is a floor for later content, not a ceiling on the design.** It
+changes what the phases below are for:
+
+- **A maxed genome is a starting position.** Seven slots full is where the
+  interesting question starts — *which* seven — so the genome stays swappable at
+  maximum and every later gene is a new combination rather than a new number.
+  `genes-and-cilia.md` §9.8 carries the constraints this puts on Phase 5 itself.
+- **Bosses and legendary organisms are the natural Phase 8 content**, not a
+  separate phase. A second water needed a reason to exist; "this is where the
+  things a finished cell cannot yet beat live" is that reason, and it is better
+  than "somewhere else to swim".
+- **Overpowered builds are allowed, and must be expensive.** Not forbidden by a
+  rule — gated by upkeep, by how many meals the combination costs to assemble,
+  and by having to survive the assembly. A build that is strong on every axis
+  should be one that starves.
+
 ## Proposed
 
 **6 — ~~The predator becomes prey.~~ Absorbed into 5.** This phase existed
@@ -81,9 +108,11 @@ because before genes there is one sense and the map is trivial; the mode enum in
 they had something else in mind — the slot in the order is what matters.*
 
 **8 — A second water.** Somewhere else to swim, with its own chemistry and its
-own hazard. Depends on 6: author a second place only once the first has a
-complete arc — born, specialise, outgrow the hunter — because "what is different
-here" is not a question you can answer without a baseline.
+own hazard, and the natural home for the first organisms a finished cell cannot
+beat. Depends on 6: author a second place only once the first has a complete arc
+— born, specialise, outgrow the water — because "what is different here" is not a
+question you can answer without a baseline. The baseline is exactly what the
+radius-40 ending provides.
 
 **9 — Multicellular bodies.** Where the original concept's "synthesise the
 corresponding cell" finally lands: spend genome capacity and mass to bud a

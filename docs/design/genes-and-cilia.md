@@ -31,7 +31,7 @@ prototype was built in a throwaway copy of the project outside the repository.
 1. **Cilia are the visible expression of ability, and every cell wears them** —
    you and everything else. One drawing routine, one subject.
 2. **The starting cell is already full.** Three slots, three organs:
-   `cytostome` *eat*, `kinety` *turn*, `flagellum` *swim*, all at tier 1 (§9.1).
+   `cytostome` *eat*, `cirrus` *turn*, `flagellum` *swim*, all at tier 1 (§9.1).
    You are not an empty vessel; you are mediocre at three things, and becoming
    something means stopping being something.
 3. **Genome size is capacity, not currency.** There are no genetic points.
@@ -349,7 +349,7 @@ all three since Phase 1, in its self-register:
 | organ | what it is in code | what point of view already feels |
 | --- | --- | --- |
 | **`cytostome`** *eat* | `metabolism.beat_period/amplitude` | the metabolic beat |
-| **`kinety`** *turn* | `TURN_RATE_MAX`, `TURN_RESPONSE` | the turn shear on the outside of the turn |
+| **`cirrus`** *turn* | `TURN_RATE_MAX`, `TURN_RESPONSE` | the turn shear on the outside of the turn |
 | **`flagellum`** *swim* | `IMPULSE_SPEED`, `IMPULSE_GAP_*` | the thrust bloom at bearing 0° |
 
 So the retrofit is the discovery that **the membrane's three self-signals and
@@ -360,7 +360,7 @@ change is a change in the sensation the player already knows:
 | gene | tier 1 | tier 2 | tier 3 | uniform |
 | --- | --- | --- | --- | --- |
 | `flagellum` | bloom 0.14 / 60° | 0.19 / 52° | 0.25 / 44° | `glow_lobes[0]` (`THRUST_PEAK`, `THRUST_HALFWIDTH_DEG`) |
-| `kinety` | shear 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK`) |
+| `cirrus` | shear 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK`) |
 | `cytostome` | flood decay 1.2s | 1.5s | 1.9s | `INGEST_DECAY` |
 
 No new shader term, no new lobe, no HUD. A `flagellum`-specialised cell feels
@@ -447,6 +447,12 @@ claim now.) At Phase 4 foraging rates — a meal every 60–90s — 14 meals is 
 **14–21 minute arc**: a session, not a campaign, which is right for a game with
 no save.
 
+**"The run ends" is about this water, not about the game.** Radius 40 is where
+*this* water runs out of things that can eat you; it is not a ceiling on the
+species or a claim that a full genome is finished content. See §9.8, which the
+owner attached to this decision and which binds how `ARRIVAL_GAPE_MAX` is
+written.
+
 ### 3.2 A gene has a tier, and tiers cost upkeep
 
 Eating a cell whose dominant gene is X (§3.4):
@@ -483,7 +489,7 @@ _metabolism.upkeep = _genome.upkeep()
 ```
 
 A cell with one tier-3 gene starves in 420 / 1.36 = **309s**; a late cell with
-`cytostome 2, kinety 3, flagellum 3, stigma 2` in 420 / 2.08 = **202s**.
+`cytostome 2, cirrus 3, flagellum 3, stigma 2` in 420 / 2.08 = **202s**.
 Upkeep needs no number on screen: it is read off the beat, which has been the
 hunger readout since `perception.md` §6.2.
 
@@ -497,8 +503,8 @@ hunger readout since `perception.md` §6.2.
 > | born, `cytostome 1` | 1.00 | 0.50 | **210** |
 > | `cytostome 2` | 1.18 | 0.62 | **221** |
 > | `cytostome 3` | 1.36 | 0.78 | **241** |
-> | `cytostome 1, kinety 3, flagellum 3` | 1.72 | 0.50 | **122** |
-> | `cytostome 2, kinety 2, flagellum 2, stigma 2` | 1.72 | 0.62 | **151** |
+> | `cytostome 1, cirrus 3, flagellum 3` | 1.72 | 0.50 | **122** |
+> | `cytostome 2, cirrus 2, flagellum 2, stigma 2` | 1.72 | 0.62 | **151** |
 >
 > **The mouth is free and everything else is expensive.** If `cytostome` tier
 > raises `MEAL` as well as the gape, every tier of it *increases* your slack
@@ -593,7 +599,7 @@ does not need to be one.
 
 ```gdscript
 # food.gd -- weights, drawn in _seed()
-const GENE_WEIGHTS := {&"cytostome": 3, &"kinety": 3, &"flagellum": 3, &"stigma": 2}
+const GENE_WEIGHTS := {&"cytostome": 3, &"cirrus": 3, &"flagellum": 3, &"stigma": 2}
 ```
 
 **A cell has a genome, not a gene, so a meal has to say which one you get.**
@@ -601,7 +607,7 @@ const GENE_WEIGHTS := {&"cytostome": 3, &"kinety": 3, &"flagellum": 3, &"stigma"
 the previous draft left it open, which an engineer cannot.
 
 > **You absorb what the cell was most made of: its highest-tier gene.** Ties are
-> broken by the arc order in §4.1 — `cytostome`, `kinety`, `flagellum`, then
+> broken by the arc order in §4.1 — `cytostome`, `cirrus`, `flagellum`, then
 > earned genes in genome order — so it is deterministic and it is the same order
 > the body is drawn in.
 
@@ -625,8 +631,8 @@ across `sin(t) * (1 - 0.30 * cos t)`, scaled `1.18r` x `0.94r`).
 | arc | `t` (deg) | bearing (deg) | occupant |
 | --- | --- | --- | --- |
 | anterior | −42 … 42 | ±29 | **`cytostome`** |
-| lateral, starboard | 66 … 118 | 58 … 120 | **`kinety`** |
-| lateral, port | −118 … −66 | −120 … −58 | **`kinety`** |
+| lateral, starboard | 66 … 118 | 58 … 120 | **`cirrus`** |
+| lateral, port | −118 … −66 | −120 … −58 | **`cirrus`** |
 | posterior | 146 … 214 | 146 … 214 | **`flagellum`** |
 | free 1 | 42 … 66 | 29 … 58 | earned |
 | free 2 | −66 … −42 | −58 … −29 | earned |
@@ -653,7 +659,7 @@ All lengths are fractions of the body radius `r`, so a grown cell is not a small
 cell with stubble. `clock` is `vision.gd`'s `_clock`; `u` runs 0→1 across the
 arc; strokes are `draw_polyline` in world space.
 
-| | **`cytostome`** | **`kinety`** | **`flagellum`** | **earned** |
+| | **`cytostome`** | **`cirrus`** | **`flagellum`** | **earned** |
 | --- | --- | --- | --- | --- |
 | count | 15 across the arc | 5 per side | 6 | 4 |
 | root | surface + `0.06r` | surface | surface | surface |
@@ -667,7 +673,7 @@ The **earned** gene also carries a pigment organelle: filled discs of `0.20r` at
 alpha 0.55 and `0.10r` at alpha 0.85, seated at `surface(r * 0.80, mid_t)`, over
 three haze rings at `0.30r x (1 + 1.6q)`, alpha `0.030(1 − q)`.
 
-**The `kinety` leans with the steer.** The outboard side of the turn works harder:
+**The `cirrus` leans with the steer.** The outboard side of the turn works harder:
 `bias = 1.0 + 0.55 * clamp(-steer * side, -1, 1)` on the swing. This is a motion
 cue, not a still-frame cue — it does not show in a screenshot and is not claimed
 to.
@@ -688,7 +694,7 @@ tier 1 against tier 3 is unmistakable in every arc.
 | gene | `Color(r, g, b, a)` | wheel |
 | --- | --- | --- |
 | **`cytostome`** *eat* | `Color(0.62, 1.00, 0.38, 1)` | 95° |
-| **`kinety`** *turn* | `Color(0.36, 0.62, 0.98, 1)` | 216° |
+| **`cirrus`** *turn* | `Color(0.36, 0.62, 0.98, 1)` | 216° |
 | **`flagellum`** *swim* | `Color(0.80, 0.42, 0.95, 1)` | 291° |
 | **`stigma`** *see* | `Color(0.98, 0.78, 0.30, 1)` | 45° |
 | *reserved* | `Color(0.48, 0.42, 0.95, 1)` indigo | 250° |
@@ -709,7 +715,7 @@ only dense fine mat.
 
 > **Measured colour-blindness check.** A Viénot deuteranope simulation of the
 > render collapses cytostome-green and stigma-amber onto the same yellow, and
-> brings kinety-blue and flagellum-orchid close. **On a body this does not matter** — a
+> brings cirrus-blue and flagellum-orchid close. **On a body this does not matter** — a
 > luminance-only render separates all four by arc, length and density with no
 > ambiguity. It matters in exactly two places, and both are handled: every cell
 > wears the organ as well as the hue (§4.5), and genome slots are labelled with a
@@ -847,7 +853,7 @@ strip above them they stretch to 652px. Rendered, and it looked wrong.
   held), centred at `y = 15`
 - the organ: an arc of radius 13 at `centre = (w/2, 0.66h)`, spanning
   `1.04π … 1.96π`, gene hue at `a = 0.30`, with the gene's own stroke count and
-  length (`cytostome` 9 x 8px, `kinety` 5 x 13px, `flagellum` 6 x 17px, earned 5 x 11px plus a
+  length (`cytostome` 9 x 8px, `cirrus` 5 x 13px, `flagellum` 6 x 17px, earned 5 x 11px plus a
   4.2px pigment disc), gene hue at `a = 0.88`, width 1.7
 - tier pips: three dots radius 2.6 at `y = h − 9`, spaced 9px; filled at
   `a = 0.92`, outline at `a = 0.22`
@@ -1010,7 +1016,7 @@ bound exists.
 Both are stated against a tier-1 cell and Phase 5 invalidates both. Neither is a
 reason not to ship; both must be re-measured.
 
-- **`kinety` tier 3 sets `TURN_RATE_MAX = 1.02`** (58°/s, half-turn in 3.1s)
+- **`cirrus` tier 3 sets `TURN_RATE_MAX = 1.02`** (58°/s, half-turn in 3.1s)
   against the 0.62 that `ESCAPE_SECONDS = 7.0` was derived from — and against
   `predator.TURN_RATE`, which is also 0.62, so a tier-3 cell out-turns its hunter
   by 1.65x. The dodge gets much easier. That is the reward; re-measure
@@ -1023,7 +1029,7 @@ reason not to ship; both must be re-measured.
   the pursuit solution uses to aim, so it starts leading the wrong point.
   **Recommended: `PREY_SPEED` becomes the cell's realised speed and
   `CRUISE = PREY_SPEED * 1.20`**, so the chase stays a chase at every tier and
-  only `kinety` improves the dodge. Owner's call; recorded.
+  only `cirrus` improves the dodge. Owner's call; recorded.
 
 ### 7.2 New and changed files
 
@@ -1046,8 +1052,8 @@ Tier targets, for the engineer:
 | gene | constant | t1 | t2 | t3 |
 | --- | --- | --- | --- | --- |
 | `cytostome` | gape, as `x radius` (§1.1) | 0.82 | 1.05 | 1.40 |
-| `kinety` | `cell.TURN_RATE_MAX` | 0.62 | 0.80 | 1.02 |
-| `kinety` | `cell.TURN_RESPONSE` | 1.10 | 0.85 | 0.65 |
+| `cirrus` | `cell.TURN_RATE_MAX` | 0.62 | 0.80 | 1.02 |
+| `cirrus` | `cell.TURN_RESPONSE` | 1.10 | 0.85 | 0.65 |
 | `flagellum` | `cell.IMPULSE_SPEED` | 138 | 162 | 190 |
 | `flagellum` | `cell.IMPULSE_GAP_MIN/MAX` | 1.7 / 3.6 | 1.45 / 3.0 | 1.2 / 2.5 |
 | `stigma` | `LIGHT_HALFWIDTH_DEG` | 26° | 19° | 13° |
@@ -1083,7 +1089,7 @@ works at a glance and under any colour vision.
    | gene | word | what it is |
    |---|---|---|
    | **cytostome** | *eat* | the mouth. Its tier sets the gape, and the gape decides what you can swallow (§1.1). |
-   | **kinety** | *turn* | the ciliary row along the flank. Steering. |
+   | **cirrus** | *turn* | the tuft of fused cilia on the flank. Steering. |
    | **flagellum** | *swim* | the tail. Thrust. |
    | **stigma** | *see* | the light-sensitive spot. The first earned gene (§6). |
 
@@ -1092,17 +1098,16 @@ works at a glance and under any colour vision.
    than the list — a new gene gets a real organ name and one word, or it does
    not ship.
 
-   > **Reopened on one of the four: `kinety`.** Checked against the biology, it
-   > is a real term and the gloss is accurate — a longitudinal row of kinetosomes
-   > and their cilia. But kineties are the **somatic ciliature that does the
-   > swimming**, all over the body, and this document gives swimming to
-   > `flagellum` and hands `kinety` the steering. The organ that actually steers a
-   > ciliate is the **`cirrus`** — a tuft of fused cilia used for directional
-   > control, which is also exactly what §4.2 already draws (*"two oars, beating
-   > in antiphase, five per side"*). `cirrus` is the more familiar word as well:
-   > `kinety` is the only one of the four a player will read as a typo.
-   > **Recommended: `cirrus` *turn*.** Names are the owner's, so nothing below is
-   > renamed; see the decision table in the review.
+   > **The steering organ was `kinety` in the first draft; the owner renamed it.**
+   > `kinety` is a real term and its gloss was accurate — a longitudinal row of
+   > kinetosomes and their cilia. But kineties are the **somatic ciliature that
+   > does the swimming**, all over the body, and this document gives swimming to
+   > `flagellum`. The organ that actually steers a ciliate is the **`cirrus`** — a
+   > tuft of fused cilia used for directional control, which is also exactly what
+   > §4.2 already draws (*"two oars, beating in antiphase, five per side"*). It is
+   > the more familiar word as well: `kinety` was the only one of the four a player
+   > would read as a typo. **Renamed throughout.**
+
 2. ~~Does the predator's cruise track the cell's speed?~~ **Moot, and better.**
    There is no predator to tune. Every cell swims on its own `flagellum` tier,
    so a cell that out-swims you does it because it has more tail than you, and
@@ -1116,22 +1121,53 @@ works at a glance and under any colour vision.
    starts as the basic cell — three organs, all tier 1. Death is a clean restart
    and the arc is one session. Lineage is a real design and it is not this one.
    Previously open as `food-and-predators.md` §9.2.
-5. **A dedicated gesture for the genome** (two-finger tap / `G`) instead of
-   going through pause. Not recommended: pause already works on both targets and
-   costs nothing. Recorded because it will be asked.
+5. ~~A dedicated gesture for the genome~~ (two-finger tap / `G`) instead of
+   going through pause. **DECIDED: pause only.** It already works on both targets
+   and costs nothing; a dedicated gesture is one more thing to teach and one more
+   thing to fire by accident on a touchscreen. Recorded because it will be asked
+   again.
 6. **The four seeding numbers of §1.3** — `DRIFTER_SHARE`, `PEER_SPREAD`,
    `ARRIVAL_GAPE_MAX`, and the cytostome weights inside the peer band. The shape
    is settled and defended; the values are the water's difficulty and can only be
    judged by swimming in it. They replace the old §9 entry that said the
    distribution was "centred on the player" and left it there.
-7. **Can the player replace their own `cytostome`?** §5.2's two-tap swap is
-   unrestricted, so a player can put a fourth gene over their mouth and drop to
+7. ~~Can the player replace their own `cytostome`?~~ **DECIDED: yes, allow it.**
+   §5.2's two-tap swap is unrestricted, so a player can put a fourth gene over
+   their mouth and drop to
    gape `0.58 r` — at r26 that is 15, which eats only the smallest drifters, and
    it cannot be undone. It is either a real and interesting mistake or a soft
    lock, and which one it is depends entirely on §1.3's drifter floor holding.
-   **Recommended: allow it.** The floor guarantees the mistake is survivable, the
-   tile shows three pips going dark, and a genome you cannot ruin is not a
-   choice. Recorded because it is the one irreversible action in the game.
+   The floor guarantees the mistake is survivable, the tile shows three pips going
+   dark before it is confirmed, and a genome you cannot ruin is not a choice. It
+   is the one irreversible action in the game, and it stays in.
+
+8. **What "the run ends" means, and what it does not.** §3.1 lands the arc on
+   radius 40: the genome fills on the same meal that nothing left in the water has
+   a gape wide enough for you. The owner has settled that this is the shape — and
+   attached the reason it does not make a maxed cell the end of the game:
+
+   > *"We will later add so much possibilities, bosses, legendary organisms that
+   > it will still be fun even with a maxed out organism. The player can still
+   > discover new combinations of genes that makes it very fun, or even become
+   > cheated (that must stay hard to do tho)."*
+
+   Three consequences, and they are binding on what gets built now:
+
+   - **`ARRIVAL_GAPE_MAX` is a property of this water, not of the game.** It is
+     the number that decides where this water stops being able to threaten you,
+     and a second water (roadmap §8) sets its own. Write it where an environment
+     can override it, not as a global ceiling on the species.
+   - **Seven full slots is a starting position, not a finish.** What is
+     interesting past radius 40 is *which* seven, so the genome must stay
+     swappable at maximum — which §9.7 has just guaranteed by leaving even the
+     mouth replaceable. A design that locked the genome once full would close the
+     door this note is holding open.
+   - **Overpowered builds are allowed to exist; they must be hard to assemble.**
+     Not gated by a rule that forbids them — gated by the cost of getting there.
+     `UPKEEP_PER_TIER` (§9.3) is the lever: a build that is strong on every axis
+     should be one that starves. Whenever a later phase adds a gene, the question
+     to ask of it is not "is this too strong" but "is the strong combination it
+     enables expensive enough to be an achievement".
 
 ## 10. What was rendered
 
