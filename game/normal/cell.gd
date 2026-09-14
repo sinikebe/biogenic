@@ -31,6 +31,37 @@ const GROWTH_PER_MEAL := 1.0
 
 var radius := BASE_RADIUS
 
+# --- Integrity -------------------------------------------------------------
+# **What a mouth does to a body it cannot swallow.** The gape rule still decides
+# *swallowed whole* against *bitten*, so everything §1.1.1 draws still means what
+# it meant; this is what happens on the other side of that line. It is a
+# property of a body and not of the player, so every cell in the water carries
+# one -- food.gd's Body has the same field, mended by the same static below.
+
+## How long a body takes to knit a whole wound back up, in seconds of not being
+## bitten. Slow enough that a fight is not undone by swimming away for a moment,
+## fast enough that surviving one means something. **The first number to move if
+## biting feels wrong**, ahead of the bite table below.
+const MEND_SECONDS := 75.0
+
+## `cytostome` / bite. What one bite takes out of a body too big to swallow,
+## before the target's skin is taken into account. Tier 0 is a cell with no
+## mouth at all and it is a hard zero, not an extrapolated step: drifters have
+## no cytostome, and a floor that could chew on you would not be a floor.
+const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
+## Seconds between bites from one mouth. One mouth, one bite, whatever it is
+## resting against -- so a cell wedged between two others does not chew both.
+const BITE_GAP := 0.85
+## `toxicyst` / venom, from the other end. Swallowing a venomous cell already
+## kills the swallower; *biting* one costs this share of the damage just dealt,
+## which makes venom the answer to being gnawed as well as to being eaten.
+const VENOM_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
+
+## 0 is whole and 1 is a body that has come apart. There is no bar for this
+## anywhere: point of view feels each bite as a `hit` at the bearing it came
+## from, and full vision draws the tears (cilia.gd).
+var wound := 0.0
+
 ## The genome this cell wears. Written by normal_mode.gd, which is the only
 ## place the two halves are introduced to each other.
 ##
@@ -242,6 +273,7 @@ func reset() -> void:
 	heading = randf_range(-PI, PI)
 	velocity = Vector2.ZERO
 	radius = BASE_RADIUS
+	wound = 0.0
 	_omega = 0.0
 	_wander = 0.0
 	_impulse_timer = randf_range(0.6, 1.4)
@@ -251,6 +283,12 @@ func reset() -> void:
 
 func _process(delta: float) -> void:
 	steer = _read_steer()
+
+	# The body knits itself back up whenever nothing is chewing on it. Here
+	# rather than in the water, because it is a thing a body does and not a
+	# thing that happens to it -- and because _set_simulating() stops this node
+	# on a death, which is exactly when it should stop.
+	wound = mended(wound, delta)
 
 	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
@@ -382,6 +420,44 @@ func swim_speed() -> float:
 
 static func gape_of(cytostome_tier: int, body_radius: float) -> float:
 	return GAPE_BY_TIER[_tier_index(cytostome_tier)] * body_radius
+
+
+## **What one bite is worth.** One definition, asked in both directions: the
+## water runs it for a cell chewing on the player and for the player chewing on
+## a cell, and neither gets its own arithmetic.
+##
+## Three terms, and none of them is a new stat:
+##
+## - the **tier** of the mouth doing it ([constant BITE_BY_TIER]);
+## - **how near the target came to fitting in it** -- `gape / radius`, which is
+##   1 for a body that has only just outgrown this mouth and falls away as it
+##   grows. That is what keeps the bite continuous with the swallow instead of
+##   making a mouth equally dangerous to everything it cannot eat;
+## - the target's **`pellicle`**, which already means "how hard this body is to
+##   get down" and now also means how much of a bite it turns away.
+##
+## [param target_radius] is the body, not its swallow radius: armour is counted
+## once, on the bottom of this expression, and counting it twice would make
+## pellicle the only gene in the game with a square in it.
+static func bite_damage(cytostome_tier: int, gape: float, target_radius: float,
+		target_pellicle_tier: int) -> float:
+	var base := BITE_BY_TIER[_tier_index(cytostome_tier)]
+	if base <= 0.0:
+		return 0.0
+	return base * minf(gape / maxf(target_radius, 0.001), 1.0) \
+		/ ARMOR_BY_TIER[_tier_index(target_pellicle_tier)]
+
+
+## What a venomous body does back to the mouth that just bit it.
+static func venom_back(toxicyst_tier: int, damage: float) -> float:
+	return damage * VENOM_BITE_BACK_BY_TIER[_tier_index(toxicyst_tier)]
+
+
+## A wound knitting up over [param delta] seconds. Every body in the water uses
+## this one -- the player's through [method _process], the field's through
+## food.gd -- so there is one definition of how fast a cell recovers.
+static func mended(hurt: float, delta: float) -> float:
+	return clampf(hurt - delta / MEND_SECONDS, 0.0, 1.0)
 
 
 static func slots_for(body_radius: float) -> int:

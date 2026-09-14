@@ -30,6 +30,12 @@ extends Node
 
 const CellBody := preload("res://game/normal/cell.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## **Only for [method Cilia.mouth_touches]**, which is where the lip bow's
+## geometry is defined and therefore where the water has to ask whether a mouth
+## is actually on something. Nothing else in that file is read from here and
+## nothing here draws. The preload chain is cilia -> genome -> cell, so this
+## adds no cycle.
+const Cilia := preload("res://game/vision/cilia.gd")
 
 ## A meal, in the cell's own terms.
 ##
@@ -51,6 +57,15 @@ signal eaten(nutrition: float, gene: StringName, at: Vector2)
 signal waked(bearing: float, strength: float)
 ## The membrane closes and you are gone. [param bearing] is where it came from.
 signal killed(bearing: float)
+## A mouth closed on something and could not swallow it. [param bearing] is
+## where it happened -- a mouth on your skin, or your own mouth on a body it is
+## chewing through -- and [param strength] is 0..1, how hard.
+##
+## **Deliberately not a new channel.** The run posts this as the `hit` the
+## membrane has had since Phase 1, which is the sensation that already means
+## *contact, there*. A wound is learnt by being bitten at a bearing enough
+## times, which is the same way everything else in this game is learnt.
+signal bitten(bearing: float, strength: float)
 ## `toxicyst`: it swallowed you and died of it. You are alive, at a bearing and
 ## a price the run pays out of hunger.
 signal stung(bearing: float)
@@ -179,6 +194,35 @@ const EDIBLE_FADE_IN := 0.85
 ## means eating bodies near your own size, whose own mouths may take you.
 const MEAL_MIN := 0.35
 const MEAL_MAX := 1.40
+
+# --- The bite ---------------------------------------------------------------
+# **What the mouth does to what it cannot swallow.** The gape rule is untouched
+# and still decides which of the two happens: a body that fits is swallowed
+# whole exactly as before, and a body that does not is bitten. cell.gd owns what
+# a bite is worth ([method CellBody.bite_damage]); this owns how loud it is.
+
+## How loud the worst bite in the game is on the skin. Everything else is
+## measured against it, so a tier-1 mouth gnawing an armoured body reads as the
+## small thing it is and a tier-3 mouth on bare membrane reads as the end.
+const BITE_HIT_FLOOR := 0.22
+## A bite you land is felt through your own mouth rather than through your skin,
+## so it is the same sensation at a fraction of the strength. It has to be felt
+## at all: point of view cannot see that its mouth is on something, and a
+## mechanic with no readout is not a mechanic.
+const BITE_FELT_SHARE := 0.45
+
+# --- Bodies are solid -------------------------------------------------------
+## How much of an overlap is pushed out per frame. Below 1 on purpose: a full
+## resolve every frame makes three stacked bodies jitter against each other,
+## and a cell is a soft thing in thick water rather than a billiard ball. At
+## 0.5 an overlap is 97% gone in five frames.
+const PUSH_SHARE := 0.5
+## How much a shoulder-charge bounces, against [method CellBody.bump]'s 0.55 for
+## a grain of grit. Low because this has to leave the player able to *hold* its
+## nose against something it is biting -- a bouncy collision would spit them off
+## the thing they are trying to chew through, and the whittle is the one new
+## option the player gets out of all this.
+const PUSH_RESTITUTION := 0.12
 
 # --- Ring placement ---------------------------------------------------------
 ## Recycled to the far edge when culled, and the field now lives at the same
@@ -420,6 +464,12 @@ class Body:
 	## body landed in the index its prey used to occupy.
 	var serial := 0
 	var meals := 0
+	## How far through this body something has chewed, 0..1. Mends on its own at
+	## [constant CellBody.MEND_SECONDS], exactly as the player's does.
+	var wound := 0.0
+	## Seconds until this mouth can bite again, against [constant
+	## CellBody.BITE_GAP].
+	var bite := 0.0
 
 	var state := 0  # State.DRIFT
 	var target := -1  # TARGET_NONE
@@ -527,6 +577,9 @@ var dart_cooldown := 0.0
 ## `toxicyst`. Negative means the cell has no venom and a kill is a kill.
 var venom_cost := -1.0
 var _dart_clock := 0.0
+## The player's own mouth, reloading. Here and not on the cell for the same
+## reason [member _dart_clock] is: the encounter lives in this file.
+var _bite_clock := 0.0
 
 var _cell: CellBody = null
 var _cells: Array[Body] = []
@@ -538,6 +591,7 @@ var _serial := 0
 var _points := PackedVector2Array()
 var _radii := PackedFloat32Array()
 var _headings := PackedFloat32Array()
+var _wounds := PackedFloat32Array()
 
 
 ## Seeds the water around [param cell]. Cell 0 is held back until the cell is
@@ -566,6 +620,7 @@ func setup(cell: CellBody) -> void:
 	_ping_age = -1.0
 	ping_front = -1.0
 	_dart_clock = 0.0
+	_bite_clock = 0.0
 
 
 func _process(delta: float) -> void:
@@ -582,11 +637,16 @@ func _process(delta: float) -> void:
 		_first_hunt -= delta
 
 	_dart_clock = maxf(_dart_clock - delta, 0.0)
+	_bite_clock = maxf(_bite_clock - delta, 0.0)
 	for i in _cells.size():
 		_step_body(i, delta)
 	_step_recycle()
+	# Contact first, then separation: a body is eaten or bitten on the frame it
+	# arrives in a mouth, and only then pushed back out of the one it is in.
+	# The other order would make the mouth chase a body it has just shoved away.
 	if not _step_contacts():
 		return
+	_step_separate()
 	_step_sense()
 	_step_beams()
 	_step_pings(delta)
@@ -601,6 +661,10 @@ func _process(delta: float) -> void:
 
 func _step_body(index: int, delta: float) -> void:
 	var b := _cells[index]
+	# Every body knits and every mouth reloads, in every state. Neither is
+	# behaviour: a cell does not decide to heal.
+	b.wound = CellBody.mended(b.wound, delta)
+	b.bite = maxf(b.bite - delta, 0.0)
 	match b.state:
 		State.STALK:
 			_step_stalk(index, b, delta)
@@ -917,6 +981,34 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 # food to A when B's body fits in A's mouth. §1.3's "inside the field, cells
 # genuinely eat each other" is the whole of it -- no special case, no abstraction
 # of the ecosystem, and no difficulty curve anyone had to author.
+#
+# **Two things changed here and both are about the mouth being an organ.**
+#
+# 1. *Where* contact is. It used to be `distance < a.radius + b.radius`, which
+#    is proximity: a cell ate you by bumping you anywhere, with its flank, with
+#    its tail, while swimming away from you. The art had spent the whole of
+#    §1.1.1 promising the opposite -- a bow across the nose with a measured span
+#    -- so the game was contradicting its own drawing, and being eaten from
+#    behind was the commonest way that showed. Contact is now
+#    [method Cilia.mouth_touches]: the other body has to overlap the region the
+#    lip bow actually occupies. One function, asked in both directions.
+#
+# 2. *What happens* when the mouth is on something it cannot swallow. It used to
+#    be nothing at all -- a standoff at contact, with neither cell able to do
+#    anything about the other. The gape still decides which of the two happens,
+#    which is what keeps every mark §1.1.1 draws meaning what it meant:
+#
+#      mouth on it, body fits the gape -> swallowed whole, exactly as before
+#      mouth on it, body too big       -> a bite, and bites accumulate
+#
+#    A body bitten to nothing comes apart and feeds whoever finished it. That
+#    makes `pellicle` a real defence (it divides the bite) and `toxicyst` a real
+#    punishment (it charges the biter a share of what it just did), using the
+#    two genes that already meant exactly those things.
+#
+# **Nothing here is gated on state except the one asymmetry that was already
+# here**, and nothing here reaches dread. A bite asks no question with a yes/no
+# answer that dread can see; the sum in _step_sense() is untouched.
 # ---------------------------------------------------------------------------
 
 ## Returns false when the player has just been killed.
@@ -937,11 +1029,19 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 ## else may be added there** -- the rule is "no second effect on the field", not
 ## "no statements".
 func _step_contacts() -> bool:
+	var my_gape := _cell.gape()
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
-		if b.pos.distance_to(_cell.position) >= b.radius + _cell.radius:
+		# **The whole of the fix, and it is two lines.** Its mouth on me, and my
+		# mouth on it, measured against the bow each of us is drawn with. Both
+		# can be false while the two bodies are overlapping -- that is two cells
+		# barging each other, and it is now a thing that can happen.
+		var its_mouth := _mouth_reaches(b, _gape(b), _cell.position, _cell.radius)
+		var my_mouth := Cilia.mouth_touches(_cell.position, _cell.heading,
+			_cell.radius, my_gape, b.pos, b.radius)
+		if not (its_mouth or my_mouth):
 			continue
 		# Both directions can be true at once, and then it is whoever committed
 		# first -- which is the cell in the middle of an attack run.
@@ -961,7 +1061,7 @@ func _step_contacts() -> bool:
 		# hunter that has just given up and swum through you is a fair reading
 		# of that moment. It used to cost everything -- commitment was forbidden
 		# inside DREAD_RANGE, so a close mouth could never commit at all.
-		if b.state == State.STALK and b.target == TARGET_PLAYER \
+		if its_mouth and b.state == State.STALK and b.target == TARGET_PLAYER \
 				and _cell.swallow_radius() < _gape(b):
 			# **`toxicyst`. It got you and it dies of it.** The one thing in the
 			# game that undoes a death, and it is not free: the run pays for it
@@ -974,29 +1074,22 @@ func _step_contacts() -> bool:
 			killed.emit(_cell.bearing_to(b.pos))
 			_break_off(b)
 			return false
-		if b.radius < _cell.gape():
+		if my_mouth and b.radius < my_gape:
 			# Emit where it was before recycling it, so a listener never has to
 			# work out which one this was -- the mistake motes.gd documents.
 			eaten.emit(_meal_value(b.radius), Genome.dominant_of(b.genome), b.pos)
 			_seed(i)
-		# Otherwise a standoff at contact, and there is nothing for either of
-		# them to do about it.
-		#
-		# **The view has now been asked and it says yes, this wants a bump.**
-		# Rendered: two r28-r30 bodies that cannot swallow each other, posed 25
-		# units apart, draw as two crossing rims with one cell's cirrus tuft
-		# inside the other's body and two nuclei side by side. It reads as a
-		# drawing fault rather than as two organisms, which is exactly the
-		# failure §1.3 warns about when it refuses to take a cytostome tier off
-		# a living cell. It is uncommon -- four bodies in a 3000-unit field --
-		# but §1.1's whole point is that standoffs are the most numerous
-		# relationship at every radius, so it will be seen.
-		#
-		# Left alone deliberately: cell.gd already has [method CellBody.bump]
-		# and giving bodies the same treatment is a change to how the water
-		# moves, not to how it is drawn. It belongs to whoever owns the
-		# simulation, with a re-measurement of COMMIT_RANGE behind it, because
-		# a body that can be shouldered is a body a chase can be blocked by.
+			continue
+		# Not swallowed, either way round. What used to be a standoff with
+		# nothing in it is now two mouths doing what mouths do.
+		var serial := b.serial
+		if its_mouth and _bitten_by(i, b):
+			return false
+		# Its own venom may have just taken that body out of the water, and
+		# then this slot is a different cell somewhere else entirely. The
+		# player's mouth was measured against the one that has gone.
+		if my_mouth and b.serial == serial and _bite_from_me(i, b):
+			return false
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -1007,9 +1100,20 @@ func _step_contacts() -> bool:
 			if j == i:
 				continue
 			var other := _cells[j]
-			if not other.seeded or other.radius >= gape:
+			if not other.seeded:
 				continue
-			if b.pos.distance_to(other.pos) >= b.radius + other.radius:
+			if not _mouth_reaches(b, gape, other.pos, other.radius):
+				continue
+			if other.radius >= gape:
+				# Too big to swallow, so it gets chewed instead. Same clock,
+				# same table and same two defending genes as the player's.
+				if _chew(b, other) >= 1.0:
+					_devour(b, other)
+					_seed(j)
+				if b.wound >= 1.0:
+					# Its own venom finished the biter. Nothing feeds on that.
+					_seed(i)
+					break
 				continue
 			_devour(b, other)
 			_seed(j)
@@ -1028,6 +1132,166 @@ func _step_contacts() -> bool:
 			b.calm = randf_range(CALM_MIN, CALM_MAX)
 			break  # One meal per cell per frame. It has to swallow.
 	return true
+
+
+## Is [param b]'s mouth on a body of [param body_radius] centred at [param at].
+## [param gape] is passed in rather than looked up because the cell-against-cell
+## pass asks this of one mouth against every body in the water.
+func _mouth_reaches(b: Body, gape: float, at: Vector2, body_radius: float) -> bool:
+	return Cilia.mouth_touches(b.pos, b.heading, b.radius, gape, at, body_radius)
+
+
+## One cell's mouth closing on another it cannot swallow. Returns the target's
+## wound afterwards, so the caller can see whether that was the last bite.
+## Does nothing at all, and costs nothing, while the mouth is still reloading.
+func _chew(b: Body, other: Body) -> float:
+	if b.bite > 0.0:
+		return other.wound
+	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
+		_gape(b), other.radius, Genome.tier_of(other.genome, &"pellicle"))
+	if damage <= 0.0:
+		return other.wound
+	b.bite = CellBody.BITE_GAP
+	other.wound = clampf(other.wound + damage, 0.0, 1.0)
+	b.wound = clampf(b.wound + CellBody.venom_back(
+		Genome.tier_of(other.genome, &"toxicyst"), damage), 0.0, 1.0)
+	return other.wound
+
+
+## **Something has its mouth on you and cannot swallow you.** Returns true when
+## that bite was the one that finished the player, on the same contract as the
+## kill above: the caller stops touching the field immediately.
+func _bitten_by(index: int, b: Body) -> bool:
+	if b.bite > 0.0:
+		return false
+	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
+		_gape(b), _cell.radius, _cell.extra(&"pellicle"))
+	if damage <= 0.0:
+		return false
+	b.bite = CellBody.BITE_GAP
+	var bearing := _cell.bearing_to(b.pos)
+	_cell.wound = clampf(_cell.wound + damage, 0.0, 1.0)
+	if _cell.wound >= 1.0:
+		# Chewed through rather than swallowed, and it ends the same way. The
+		# player has felt every one of the bites that got here, at this bearing.
+		killed.emit(bearing)
+		if b.state == State.STALK:
+			_break_off(b)
+		return true
+	# `toxicyst` from the other end: biting a venomous body costs the mouth a
+	# share of what it just did, and enough of them kill it.
+	b.wound = clampf(b.wound + CellBody.venom_back(
+		_cell.extra(&"toxicyst"), damage), 0.0, 1.0)
+	if b.wound >= 1.0:
+		_seed(index)
+	bitten.emit(bearing, _felt(damage))
+	return false
+
+
+## **Your own mouth on a body too big to swallow.** The option the player never
+## had: whittle it down and it comes apart, and then it is a meal on exactly the
+## terms a swallowed one is. Returns true when the venom in it finished you.
+func _bite_from_me(index: int, b: Body) -> bool:
+	if _bite_clock > 0.0:
+		return false
+	var damage := CellBody.bite_damage(_cell.tier(&"cytostome"), _cell.gape(),
+		b.radius, Genome.tier_of(b.genome, &"pellicle"))
+	if damage <= 0.0:
+		return false
+	_bite_clock = CellBody.BITE_GAP
+	var bearing := _cell.bearing_to(b.pos)
+	b.wound = clampf(b.wound + damage, 0.0, 1.0)
+	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"toxicyst"), damage)
+	_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
+	# The death is checked before the meal, and in that order on purpose:
+	# `eaten` is not idempotent and feeding a corpse would be silent.
+	if _cell.wound >= 1.0:
+		killed.emit(bearing)
+		return true
+	if b.wound >= 1.0:
+		eaten.emit(_meal_value(b.radius), Genome.dominant_of(b.genome), b.pos)
+		_seed(index)
+	bitten.emit(bearing,
+		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)))
+	return false
+
+
+## How loud a wound of [param damage] is on the skin, 0..1, against the worst
+## bite any mouth in the game can land. The cap that matters is the signal
+## bus's; this is only the shape of it.
+func _felt(damage: float) -> float:
+	if damage <= 0.0:
+		return 0.0
+	var worst: float = CellBody.BITE_BY_TIER[CellBody.BITE_BY_TIER.size() - 1]
+	return clampf(damage / maxf(worst, 0.001), BITE_HIT_FLOOR, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# Bodies are solid.
+#
+# Cells used to pass through each other, and the designer's note on the
+# standoff branch above is what this answers: two bodies posed at contact drew
+# as crossing rims with one cell's cilia inside the other's body, which reads as
+# a drawing fault rather than as two organisms.
+#
+# **This is a change to how the water moves and not only to how it is drawn.**
+# A body that can be shouldered is a body a chase can be blocked by. Nothing
+# here re-tunes COMMIT_RANGE or the escape contract to compensate -- §7.1 hands
+# that measurement to Phase 6, and it has to be made against this, not guessed
+# at from here.
+#
+# It runs *after* contact, so a mouth still gets the frame in which something
+# arrived in it. That is not a nicety: the lip bow reaches past the nose
+# (1.24 r + 0.3 gape against a body of 1.18 r), so a mouth closes on prey
+# **before** the two bodies touch at all, and eating survives solid bodies for
+# exactly that reason.
+# ---------------------------------------------------------------------------
+
+func _step_separate() -> void:
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var offset := _cell.position - b.pos
+		var d := offset.length()
+		var overlap := b.radius + _cell.radius - d
+		if overlap <= 0.0:
+			continue
+		var normal := offset / d if d > 0.001 else -_forward(b.heading)
+		# Share it by **area**, so a big body shoulders a small one aside
+		# instead of the two meeting in the middle. A drifter bounces off the
+		# player; a grown cell moves them.
+		var share := _give_way(b.radius, _cell.radius)
+		_cell.position += normal * (overlap * share * PUSH_SHARE)
+		b.pos -= normal * (overlap * (1.0 - share) * PUSH_SHARE)
+		# And it is felt as motion, not only as a position: the same knock a
+		# mote gives, softer, because a cell is not a grain of grit.
+		_cell.bump(normal, PUSH_RESTITUTION)
+
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		for j in range(i + 1, _cells.size()):
+			var other := _cells[j]
+			if not other.seeded:
+				continue
+			var offset := b.pos - other.pos
+			var d := offset.length()
+			var overlap := b.radius + other.radius - d
+			if overlap <= 0.0:
+				continue
+			var normal := offset / d if d > 0.001 else _forward(b.heading)
+			var share := _give_way(other.radius, b.radius)
+			b.pos += normal * (overlap * share * PUSH_SHARE)
+			other.pos -= normal * (overlap * (1.0 - share) * PUSH_SHARE)
+
+
+## What share of an overlap the second body gives up, by area.
+func _give_way(theirs: float, mine: float) -> float:
+	var them := theirs * theirs
+	var me := mine * mine
+	return them / maxf(them + me, 0.001)
 
 
 ## What one cell gains by eating another: a unit of radius, and whatever the
@@ -1306,6 +1570,17 @@ func radii() -> PackedFloat32Array:
 	return _radii
 
 
+## How far through each body something has chewed, 0..1, index-matched to
+## [method points]. Ground truth, like [method points]: point of view learns it
+## by being bitten, and full vision draws the tears.
+func wounds() -> PackedFloat32Array:
+	if _wounds.size() != _cells.size():
+		_wounds.resize(_cells.size())
+	for i in _cells.size():
+		_wounds[i] = _cells[i].wound
+	return _wounds
+
+
 ## Which way each body is pointing, index-matched to [method points]. Radians
 ## clockwise from world north, the cell's own convention.
 ##
@@ -1382,6 +1657,8 @@ func _seed(index: int) -> void:
 	b.stroke = randf_range(0.2, STROKE_GAP)
 	b.wander = 0.0
 	b.meals = 0
+	b.wound = 0.0
+	b.bite = 0.0
 	_serial += 1
 	b.serial = _serial
 

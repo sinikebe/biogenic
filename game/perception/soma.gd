@@ -87,6 +87,13 @@ func _draw_figure() -> void:
 	var r := _cell.radius * SCALE
 	# Front is up: heading 0 in the figure's own frame, which is the frame the
 	# whole point-of-view screen is already in.
+	#
+	# **The wound is shown, and it is not a health bar.** It is a fact about
+	# this body and about nothing in the water, which is exactly the line this
+	# figure is allowed to stand on -- the same line the gape and the fringe are
+	# already over. Drawing the figure whole while the cell is coming apart
+	# would be the one thing proprioception cannot do, which is lie about the
+	# body it is a picture of.
 	Cilia.draw_cell(_figure, _figure.size * 0.5, 0.0, r, tiers,
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
-		clampf(beat, 0.0, 1.0), 0.0, 1.0, order)
+		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound)
