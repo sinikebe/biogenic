@@ -48,9 +48,12 @@ cilia.md` §1 makes edibility a gape comparison evaluated per cell and in both
 directions, so *the* predator becoming prey is just *a* cell you have grown a
 mouth big enough for. It happens on the first run, without a phase.
 
-What was worth keeping from it has moved: the glow slot reserved since Phase 1
-now carries the taste of a cell you can eat, whatever it is, and the growth
-curve that made `radius 40` reachable is Phase 5's slot ladder.
+What was worth keeping from it has moved: the *taste* of a cell you can eat is
+now the ordinary taste field, summed over whatever your gape fits rather than
+over a species, so it needs no reserved slot at all — **glow slot 3 goes back to
+being free headroom.** The growth curve that made `radius 40` reachable is Phase
+5's slot ladder, and `radius 40` is now where the water stops being able to eat
+you (`genes-and-cilia.md` §1.3).
 
 **6 — The chase, re-measured.** The successor, and it is smaller. Phase 4's two
 stated contracts — *a cell that does nothing must be caught*, and *you cannot
@@ -59,6 +62,13 @@ outswim it* — were derived against a tier-1 cell and Phase 5 breaks both
 tier range, against a real genome rather than a scripted evader, and it is the
 one thing in the whole plan that a human has to play rather than measure.
 Depends on 5 because there is nothing to measure until tiers exist.
+
+**The review widened it by one item.** Phase 5's seeding numbers —
+`DRIFTER_SHARE`, `PEER_SPREAD`, `ARRIVAL_GAPE_MAX` and the peer cytostome
+weights (`genes-and-cilia.md` §1.3, §9.6) — are the same kind of thing as the
+chase contracts: settled in shape, unsettled in value, and answerable only by
+swimming. They belong in this pass rather than in a later one, because the chase
+cannot be measured against a water whose difficulty is still a free variable.
 
 **7 — A third view.** The two existing views are *what the cell feels* and
 *what is actually there*. The missing one is **what the cell knows** — the world
@@ -91,6 +101,6 @@ place to put one.
   phase that needs a new binary, every time; see `CLAUDE.md`.
 - **Each phase leaves its own headroom.** Phase 1 specced four glow lobes and
   two pressure lobes for senses that did not exist; Phase 4 reserved slot 3 for
-  the edible predator; Phase 5 leaves four free arcs on the body and two
-  reserved hues. Keep doing that and the next phase costs a diff rather than a
+  the edible predator, and Phase 5 handed it straight back unspent; Phase 5
+  leaves four free arcs on the body and two reserved hues. Keep doing that and the next phase costs a diff rather than a
   rewrite.
