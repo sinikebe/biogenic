@@ -34,6 +34,13 @@ extends Node
 ##                           strip. Reaching it by playing means eating a fourth
 ##                           gene with a full genome, which is fourteen minutes
 ##                           and a lot of luck.
+##   --sample-left=<secs>    how many of the forty-five seconds that sample has
+##                           left, held there, so early, mid-clock and about to
+##                           lapse are three photographs instead of one taken
+##                           three times. Default is the whole SAMPLE_SECONDS.
+##   --wound=<0..1>          hold the player's body at that much damage. Bodies
+##                           knit up every frame, so a wound cannot be posed by
+##                           setting it once.
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -182,6 +189,8 @@ var _posed: Array = []
 ## [[seconds, canvas position], ...], consumed as the clock passes each one.
 var _touches: Array = []
 var _sample: StringName = &""
+var _sample_left := -1.0
+var _wound := -1.0
 ## Cumulative meals eaten by one field cell off another, which is the one thing
 ## in section 1.3 that has to be observed rather than argued about. Field cells
 ## are recycled, so this is accumulated by watching each slot's serial.
@@ -290,8 +299,12 @@ func _ready() -> void:
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
 			_posed.append(_parse_pose(text.trim_prefix("--cell=")))
+		elif text.begins_with("--sample-left="):
+			_sample_left = float(text.trim_prefix("--sample-left="))
 		elif text.begins_with("--sample="):
 			_sample = StringName(text.trim_prefix("--sample="))
+		elif text.begins_with("--wound="):
+			_wound = float(text.trim_prefix("--wound="))
 		elif text.begins_with("--touch="):
 			var touch := text.trim_prefix("--touch=").split(":")
 			if touch.size() == 2:
@@ -714,6 +727,13 @@ func _hold_world() -> void:
 		_place(1, _hold_point(_food_at, -35.0))
 	if _starve >= 0.0 and _metabolism != null:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
+	if _wound >= 0.0:
+		cell.wound = _wound
+	# A held sample runs down whether or not anything is watching, so a posed
+	# one has to be put back every frame to stay where it was posed.
+	if _sample != &"" and _sample_left >= 0.0 and _genome != null:
+		_genome.held_sample = _sample
+		_genome.held_remaining = _sample_left
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
 	_apply_poses(false)

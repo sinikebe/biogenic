@@ -818,33 +818,29 @@ func _draw_cell(a: float) -> void:
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
 		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.layout() if _genome_node != null else [], _cell.wound)
-	_draw_held_sample(p, fwd, stb, r, beat, a)
+	_draw_held_sample(p, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)
 	_draw_velocity(p, r, a)
 
 
-## A gene swallowed with nowhere to put it (§3.3). Point of view gets a second,
-## smaller heartbeat behind every beat; full vision gets the literal thing --
-## a disc of the gene's hue inside the body, offset to port of the nucleus,
-## pulsing on the beat and shrinking as the sample runs out of time.
+## A gene swallowed with nowhere to put it yet, and the empty arcs it could go
+## on. §3.3 gave this a disc inside the body and the owner played a run and
+## never saw it; docs/design/diegetic-hud.md replaces the disc with a vesicle
+## adrift, a tuft of the organ it would become floating clear of the skin, and a
+## thread between them. **The routine is cilia.gd's and it is the same one the
+## point-of-view figure calls**, so the two views are one picture at two scales
+## rather than two drawings that have to be kept in step by hand.
 ##
-## The two are the same state drawn twice, which is the whole discipline of
-## having two views: what the membrane says obliquely, the world says plainly.
-func _draw_held_sample(p: Vector2, fwd: Vector2, stb: Vector2, r: float,
-		beat: float, a: float) -> void:
-	if _genome_node == null or _genome_node.held_sample == &"":
-		return
-	var left := 1.0
-	if GenomeNode.SAMPLE_SECONDS > 0.0:
-		left = clampf(_genome_node.held_remaining / GenomeNode.SAMPLE_SECONDS,
-			0.0, 1.0)
-	var at := p - fwd * (r * 0.26) - stb * (r * 0.30)
-	var tone := Cilia.hue(_genome_node.held_sample)
-	var size := r * 0.16 * (0.55 + 0.45 * left) * (1.0 + 0.22 * beat)
-	_world.draw_circle(at, size * 2.4, Color(tone, 0.10 * a), true, -1.0, true)
-	_world.draw_circle(at, size, Color(tone, (0.55 + 0.35 * beat) * a),
-		true, -1.0, true)
+## Point of view still gets the second, smaller heartbeat as well. The rhythm
+## says *something in you is unresolved*; the body says what it is and where it
+## could go, which is the discipline of having two views.
+func _draw_held_sample(p: Vector2, r: float, beat: float, a: float) -> void:
+	Cilia.draw_pending(_world, p, _cell.heading, r,
+		_genome_node.layout() if _genome_node != null else [],
+		_genome_node.held_sample if _genome_node != null else &"",
+		_genome_node.held_remaining if _genome_node != null else 0.0,
+		beat, _clock, a, 1.0 / ZOOM)
 
 
 ## Where the cell is pointing. Teal, thin, and always exactly the same length --
