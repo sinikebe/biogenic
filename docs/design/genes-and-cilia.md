@@ -105,11 +105,31 @@ safety, because nothing your own size is neutral any more.
 
 The mouth is a bow across the nose, seated at `r * 1.05` along the heading,
 bulging forward by `0.30 * gape`, with two stems back to the body so it reads as
-an organ rather than a floating bracket. **The clear span between the lip tips is
-exactly `2 * gape`**, so the widest body that fits between them is the widest
-body it can swallow — the rule is drawn at 1:1 and needs no legend. The span is
-measured across the heading, so it is the same number of pixels whichever way the
-cell is pointing; a cell cannot hide its mouth by turning.
+an organ rather than a floating bracket. The clear span between the lip tips is
+`2 * gape`, measured across the heading, so it is the same number of pixels
+whichever way the cell is pointing; a cell cannot hide its mouth by turning.
+
+> **The caliper claim is withdrawn — the third pass measured it.** The previous
+> draft said the span being `2 * gape` meant "the widest body that fits between
+> the lips is the widest body it can swallow — drawn at 1:1, no legend needed."
+> It is drawn at 1:1. It cannot be *read* at 1:1, for two measured reasons.
+>
+> The first is the body it has to be read against. The ovoid presents between
+> **1.96 r and 2.36 r** of width depending on which way it is pointing (across
+> the heading `2 x 0.9785 r`, along it `2 x 1.18 r`) — a **20% spread from
+> orientation alone**, against a smallest tier step in the gape of 28%
+> (`0.82 r` to `1.05 r`). The error is nearly the size of the thing being
+> measured, and you cannot tell a cell's orientation well enough to correct for
+> it at 400 units.
+>
+> The second is worse and is not a numbers problem: the caliper asks the player
+> to compare **two lengths at two different places on the screen** with no shared
+> baseline, at a glance, while swimming. That is a task people are bad at under
+> laboratory conditions.
+>
+> So the span is a *truthful drawing of the mouth*, not an instrument. A bigger
+> mouth looks bigger, which is worth having. What tells the player whether a body
+> fits inside it is the scent bloom below, on the body, not the bow.
 
 > **The previous draft's render claim was too kind and is withdrawn.** It said
 > the small-body-huge-mouth case "reads as alarming rather than as prey". At the
@@ -168,6 +188,28 @@ units and at the frame edge, in full colour and under the deuteranope
 simulation: the `r21`/gape-29 cell reads as dangerous at a glance from across the
 screen, and the `r33` mouthless giant stays blue and reads as something to
 ignore. Both were wrong without it.
+
+**And the third pass found the half that had no mark at all.** Everything above
+is about *its* mouth. Nothing above is about *your* mouth — and "I can eat it"
+is the commonest decision in the game. It was supposed to be carried by the
+scent haze; measured off the built render, the haze was **0.6 of 255** brighter
+around an edible cell than around an inedible one, which is not a weak readout,
+it is none. §4.5 has the measurement and the fix. In one line: every cell that
+fits in your mouth now wears a soft green bloom, gene-blind, weighted by exactly
+the curve the membrane's taste band reads. All four relationships are then drawn,
+each on the thing that causes it, and none of the four marks is in the same place
+as another:
+
+| relationship | what is drawn |
+| --- | --- |
+| **I can eat it** | a scent bloom around **its body**, `FOOD_TINT` |
+| **It can eat me** | a red toothed lip bow on **its mouth** |
+| **Both** | bloom *and* red toothed bow — different places, they do not fight |
+| **Neither** | a plain tinted body: no bloom, and a green or absent bow |
+
+Rendered at both sizes with all four posed at 400–560 units and at the frame
+edge, which is the test the first pass skipped: all four are callable at a
+glance.
 
 ### 1.2 Other cells evolve too
 
@@ -809,12 +851,84 @@ Three things the single routine has to be told, none of which were written down:
   single most common cell in the water, so it is worth being the clearest signal
   in the vocabulary.
 
-Everything about the **scent haze is unchanged and must stay unchanged**: the
-three haze rings stay `FOOD_TINT (0.35, 0.88, 0.42)` on every cell that is edible
-to the player, gene-blind. The haze is the drawn form of the scent field the
-membrane's green band is reading — if it were gene-coloured, full vision would be
-showing a distinction point of view cannot make, in the one channel where the two
-views must agree.
+**What the scent haze means is unchanged and must stay unchanged. What it
+measured was wrong by a factor of fifty, and the third pass fixed it.**
+
+It is still `FOOD_TINT (0.35, 0.88, 0.42)` on every cell that fits in your
+mouth, gene-blind, weighted by exactly `food.gd`'s `EDIBLE_FADE_IN/OUT` curve —
+the drawn form of the scent field the membrane's green band is reading. If it
+were gene-coloured, full vision would be showing a distinction point of view
+cannot make, in the one channel where the two views must agree. **That rule is
+not what was broken and nothing here touches it.**
+
+What was broken was the alpha. Measured off the render, at both sizes:
+
+| | median green, of 255 |
+| --- | --- |
+| empty water | 13–14 |
+| the water shader's own organic wash, at its blobs | up to **79** |
+| haze ring around an **edible** r18 cell, as shipped | **13.3** |
+| the same ring around an **inedible** r33 cell | 12.7 |
+
+**The edible/not distinction was 0.6 of 255 — six times smaller than the
+dithering step, and thirty times smaller than the background's own texture in
+the same channel.** It was not a weak signal, it was no signal, and it was
+carrying the commonest decision in the game on its own. Three arithmetic faults
+in one line did it:
+
+- the outermost of the three rings was drawn at alpha **exactly zero** —
+  `0.014 * (1 - t)` with `t` reaching 1. One of three draw calls, every frame,
+  for every cell, painting nothing;
+- the largest ring was the faintest, so the ink was spread from 2.9 to 6.0 body
+  radii — a cloud twelve bodies wide and dense nowhere;
+- peak alpha 0.0093, about a third of what 8-bit output can even represent.
+
+**The replacement is one radial `GradientTexture2D`, drawn once per cell.** Not
+more rings: six visible rings are six boundaries, and the code's own comment
+already said why that is wrong — *a ring here would be a boundary, and the cell
+cannot perceive a boundary*. Built and photographed with six rings first; it
+banded at 1280x720 and worse at 2400x1080, where the canvas scale makes each
+band half again as wide.
+
+```gdscript
+# vision.gd
+const HAZE_OUTER := 3.0     # body radii
+const HAZE_PEAK  := 0.24    # alpha at the plateau, before the edibility weight
+const HAZE_TEXTURE_SIZE := 128
+# Gradient, FILL_RADIAL, alpha by offset:
+#   0.00 -> 1.00   0.42 -> 0.90   0.62 -> 0.42   0.82 -> 0.12   1.00 -> 0.00
+```
+
+Flat out to 0.42 and then away, so the brightest part is the annulus **just
+outside the rim** — the middle is behind the body and cannot be seen. Measured
+after, median green by distance from a r18 edible cell: **99** at the rim, 36 at
+1.3 r, 24 at 1.65 r, background by 2.7 r; an inedible cell of any size stays flat
+at 10–12. One `draw_texture_rect` instead of six polygons, plain `ImageTexture`
+under GL Compatibility.
+
+**Why a bloom on the body and not something cleverer.** It is attached: the
+water's organic wash is hundreds of pixels across and attached to nothing, and
+this is concentric with a cell and the size of that cell. Attachment, not
+brightness, is what separates them — which matters, because the wash is the same
+hue family and is sometimes brighter.
+
+> **Add to §4.4's rule for the next designer.** Colour-blindness broke the
+> safe/threat bow pair because both were *marks*, differing only in hue; the fix
+> was shape. The edible mark is the other kind — **presence against absence** —
+> and that is the one class of signal colour vision cannot break at all. Under
+> the same Viénot deuteranope simulation the bloom is 9.5x the water's luminance
+> at 1.3 r and 25x at the rim. If a later gene needs a readout and can be
+> expressed as *there is a thing here / there is not*, spend that before
+> spending a hue.
+
+**One thing the bloom is deliberately not: range-attenuated.** The membrane
+samples the scent field where the cell is standing, so its taste lobe fades with
+distance; full vision draws the field where it is made, so the bloom is the same
+strength at any distance on screen. This is not a divergence the two views can
+be caught in — `BEARING_RANGE` is 680 and the visible half-width is 640 at
+1280x720 and 800 at 2400x1080, so a cell that is on screen is essentially always
+inside taste range anyway. §2.3's measured claim about the size of full vision's
+advantage stands.
 
 ### 4.6 Two changes to shipped `vision.gd`
 
@@ -850,18 +964,57 @@ desktop). It costs no new input, no new pixels in play and no new binary.
 Always visible as a readout; interactive only when a sample is held.
 
 ```
-Hud/Pause/Center/Buttons  VBoxContainer  separation = 48
+Hud/Pause/Scrim            ColorRect  Color(0.023, 0.055, 0.05, a)   <-- a is per view
+Hud/Pause/Center/Buttons   VBoxContainer  separation = 48
   ├── Genome              VBoxContainer  separation = 10          <-- NEW
   │     ├── Caption       Label   "genome"  15px  Color(0.855, 0.953, 0.933, 0.45)
   │     ├── Row           HBoxContainer  separation = 20  alignment = CENTER
   │     │     ├── Sample  PanelContainer  76x76   (only while held)
   │     │     ├── Arrow   Control  30x76          (only while held)
-  │     │     └── Slot0.. PanelContainer  76x76 x slots()
+  │     │     ├── Slot0.. PanelContainer  76x76 x slots()
+  │     │     └── Tail    Control  126x0          (only while held)  <-- NEW
   │     └── Hint          Label   14px  Color(0.855, 0.953, 0.933, 0.38)
-  ├── Light               (unchanged)
+  ├── Light               PanelContainer  slab                        <-- CHANGED
+  │     └── Box           VBoxContainer  separation = 6
+  │           ├── Caption Label   "light"  15px
+  │           └── Slider  HSlider  192 x 48
   ├── Resume              (unchanged)
   └── Leave               (unchanged)
 ```
+
+**The scrim is set per view, and the reason is the camera (third pass).** The
+camera holds the player's cell at the exact centre of the screen; the pause
+column is centred too. In full vision the light control is therefore drawn
+across the player's own body, always, and nothing can move — the cell is pinned
+by the camera and the column by the house style. Phase 5 is what made it
+intolerable rather than merely true: the cell acquired a bright multicoloured
+fringe and a wide gape bow, the slider track started running through the cilia
+and `light` landed on the mouth. Worse at 1280x720 than at 2400x1080, because
+the cell is the same size in canvas units and the canvas is 320 px wider there.
+
+| view | scrim alpha | why |
+| --- | --- | --- |
+| point of view | **0.50**, unchanged from Phase 4 | the membrane behind it is the live preview of the very slider below it, and it costs nothing: measured, the membrane only ever draws in the outer ~150 canvas px, which the column never reaches |
+| full vision | **0.86** | takes the world to 14%. The cell becomes a watermark behind the mirror, which is what §2.4 says this screen is |
+
+**And `Light` becomes a `PanelContainer` with the same slab as its neighbours.**
+This was the real find: the genome tiles are panels, `resume` and `leave` are
+slabs, and the light caption and its track were the one group on the column that
+was bare strokes floating on the water — which is exactly why they were the pair
+the cell tangled with. Slab at `_slab(-0.2)` (fainter than a button: it is a
+surface, not a third thing to press), slider `192 x 48` so that 192 plus the
+slab's 20px side margins is 232 — the button width, so the column has one edge
+rather than two. **Rule for later screens: every group on the pause column is a
+surface.**
+
+**The slots do not move when a sample arrives.** `Row` is centred, so the slot
+block used to slide 73px right the moment a sample appeared and 73px back when
+it lapsed. §5.3 spotted the shift and argued it was harmless because nothing is
+tappable once the sample is gone; that holds for taps and not for reading, and
+a sample lapses on a 45-second timer that does not stop because the pause screen
+is open. A trailing `Control` of `TILE + separation + ARROW = 126` px makes the
+row symmetric about the slots, so centring the row centres the slots and the
+sample and its arrow hang off to the left. One invisible node, no new anchor.
 
 **Which name goes on the tile: the plain word.** §9.1 gives every gene two
 names and §5.2 said only "the gene's name", which an engineer cannot act on.
@@ -918,26 +1071,30 @@ the destructive control here is not adjacent to `resume`.
 
 | | value |
 | --- | --- |
-| tile | 76 x 76 canvas px (touch rule: ≥48 ✓) |
+| tile | 76 x 76 canvas px (touch rule: ≥48 ✓; 114 device px at 2400x1080) |
 | tile gap | 20 |
-| widest state (7 slots + sample + arrow) | **798** canvas px |
-| margin at 1280x720 | 241 px each side |
-| margin at 2400x1080 (canvas 1600x720) | 401 px each side |
-| tallest state (genome + hint + light + two buttons) | **465** canvas px of 720 |
+| widest state **reachable in Phase 5** — 7 slots, no sample | **652** canvas px |
+| widest *held* state — 3 slots + sample + arrow + tail | **560** canvas px |
+| margin at 1280x720, 7 slots | 314 px each side |
+| margin at 2400x1080 (canvas 1600x720), 7 slots | 474 px each side |
+| tallest state (genome + hint + light slab + two buttons) | **489** canvas px of 720 |
 
-Rendered at both sizes at 3 slots, 7 slots, held, and armed. Nothing overflows,
-nothing collides, and the buttons stay 232px wide once shrink-centred.
+> **The 798px "widest state" the second pass measured cannot happen.** A sample
+> is only *held* when `filled() == slots()`, and Phase 5 ships four genes, so a
+> genome can never be full at more than four slots — and a fifth gene would be
+> needed to have something left over. The only held state the game can reach is
+> **3 slots**, on a born r26 cell that has just eaten a `stigma`. Everything
+> wider than that was measured against a state that does not exist. It fits
+> anyway; the number was just not describing the game.
+
+Rendered at both sizes at 3 slots, 7 slots, held, and armed — the armed state
+driven by a synthetic **touch at 2400x1080**, which is the one input path a
+phone actually uses and the one the canvas offset (a centred widget is 160 px
+further right at 20:9) could have broken. It lands. Nothing overflows and
+nothing collides.
 
 **Reflow:** the canvas is 720 tall at both shapes, so the vertical stack is
 identical. Only the horizontal margins change, and the strip is centred.
-
-**One thing the render shows that the spec did not predict:** because the whole
-`Row` is centred, the slot tiles shift **73px to the right** when a sample
-appears and back again when it lapses. It is harmless — the strip is only
-interactive while a sample is held, so nothing moves under a finger that was
-about to press it — but a sample lapsing while the pause screen is open makes the
-strip jump. If that reads badly in play, centre the `Row` on the *slots* and let
-the sample and arrow hang to the left; it costs one anchor and no new node.
 
 ## 6. The one earned gene Phase 5 ships: `stigma`
 
@@ -1000,6 +1157,23 @@ Rendered on a `dread = 0.95` frame at 1280x720: the amber lobe is the brightest
 thing on screen at **`(77, 83, 48)`** against dread's own `(7, 27, 27)` — a
 precise bearing on a drained membrane. Rendered beside a full-strength taste
 lobe: amber and green read as two different substances with no ambiguity.
+
+Re-measured by the third pass and it holds: peak **`(66, 71, 41)`** against a
+membrane centre at `(4, 9, 11)`, and it is the brightest pixel in the frame. On
+a calm frame the screen is black with one amber patch on the rim and nothing
+else — which is also the check that point of view has not quietly acquired
+anything §2 forbids. It has not: the scent bloom of §4.5 lives in `vision.gd`,
+which does not draw in this view at all.
+
+> **One property nobody had written down, and it is not Phase 5's to fix.** The
+> membrane maps a bearing onto a rounded rectangle, so the *same* bearing lands
+> in a visibly different place and shape at the two aspect ratios: at 1280x720,
+> −60° sits in the top-left corner; at 2400x1080 it runs down the left edge. The
+> direction still reads at both, and the mapping is monotonic and stable within
+> one device, so a player learns one mapping and keeps it. But it is a property
+> of **every** lobe since Phase 1, not of the `stigma`, and it is the reason the
+> word "certain" in this section should be read as *does not jitter and does not
+> lag* rather than as *degrees you could act on*.
 
 ## 7. What this breaks, and who owns it
 
@@ -1077,15 +1251,15 @@ reason not to ship; both must be re-measured.
 | file | change |
 | --- | --- |
 | `game/normal/genome.gd` | **new.** A plain `Node`, no `class_name`, same shape as `food.gd`: holds `{gene: tier}`, the held sample and its clock, `slots()`, `upkeep()`, `integrate()`. Computes; does not post. |
-| `game/normal/normal_mode.tscn` | **new** `Genome` node, `process_mode = 1`; pause gains the `Genome` block (§5.2); `Light`/`Resume`/`Leave` get `size_flags_horizontal = 4` |
-| `game/normal/normal_mode.gd` | fills `gene` from `_on_eaten`, writes `_metabolism.upkeep`, owns the strip and the two-tap arming |
+| `game/normal/normal_mode.tscn` | **new** `Genome` node, `process_mode = 1`; pause gains the `Genome` block (§5.2); `Light`/`Resume`/`Leave` get `size_flags_horizontal = 4`. **Third pass:** `Light` becomes a `PanelContainer` wrapping a `Box` VBox (§5.2) |
+| `game/normal/normal_mode.gd` | fills `gene` from `_on_eaten`, writes `_metabolism.upkeep`, owns the strip and the two-tap arming. **Third pass:** `SCRIM_POV`/`SCRIM_FULL_VISION` set on opening pause, the `Light` slab, slider 192 wide, and the trailing spacer that pins the slots (§5.2) |
 | `game/normal/food.gd` | `GENE_WEIGHTS`; a genome per cell, chosen in `_seed()`; the §1.3 seeding (drifters, peers, `ARRIVAL_GAPE_MAX`, the one-drifter floor); a `genomes()` accessor for full vision, index-matched to `points()` |
 | `game/normal/cell.gd` | `GROWTH_PER_MEAL` 0.5 → 1.0; `SLOT_*`; `gape()`; drive constants read from the genome |
 | `game/normal/metabolism.gd` | `upkeep`. **`MEAL` stays a `const`** — §3.2 takes it off the tier table and scales the meal by prey size at the call site instead |
 | `game/normal/predator.gd` | **merged into `food.gd` and deleted** (§7.0). The aim machine, `COMMIT_RANGE`, the lunge and the break-off move across as how any cell pursues; `RADIUS` and `PREY_SPEED` do not. |
 | `game/perception/signal_bus.gd` | `LOBE_LIGHT`/`LIGHT_COLOR` in `attach()`, `light()`, the `LOBE_LIGHT` branch in `_compose_lobes()`, `ingest()` writing `ingest_color`, the held echo in `_step_beat()` |
 | `game/vision/cilia.gd` | **new.** The one drawing routine (§4.5): body tint, genome fringe, and the gape with its threat colour. Used by every cell in the water and by the genome tiles. |
-| `game/vision/vision.gd` | §4.6 |
+| `game/vision/vision.gd` | §4.6. **Third pass:** `_draw_scent` replaces the three-ring haze with one radial `GradientTexture2D` -- `HAZE_OUTER`, `HAZE_PEAK`, `HAZE_TEXTURE_SIZE` (§4.5) |
 | `game/perception/membrane.gdshader` | **no change.** Every uniform this phase needs already exists. |
 
 Tier targets, for the engineer:
@@ -1250,6 +1424,31 @@ Added by the review, because §1.1–1.3 had been written against two frames:
 - the genome strip labelled with the biological names and with the plain words,
   both sizes, at seven slots with a sample held (§5.2)
 
+Added by the third pass, which photographed the **built** Phase 5 rather than a
+prototype, at 1280x720 and 2400x1080, through `tools/drive.tscn`:
+
+- **the four relationships posed on purpose** with `--cell=`, at 400–560 units
+  and at the frame edge, before and after the scent fix. Before: the edible/not
+  difference measured **0.6 of 255** and the two frames are indistinguishable.
+  After: all four are callable at a glance at both shapes (§1.1.1, §4.5)
+- **a real field of drifters**, r14–21, one gene each, at 300–600 units — "no
+  green at the nose" holds, and every one of them now also says *edible*
+- **the tier ladder** 1/2/3 at r26 and at r40, against a player whose gape puts
+  the ladder on the safe side and against one it does not. Tier reads as
+  magnitude at both body sizes, and the bloom does not swamp the fringe
+- **the pause screen** at 3 and 7 slots, held, and armed, in **both views**, at
+  both shapes — which is what found the scrim and the `light` slab (§5.2)
+- **the armed state driven by a touch at 2400x1080**, to prove the input path
+  lands where the canvas offset puts the tile
+- **point of view** calm and at `dread = 0.95`, and the pause screen over a lit
+  membrane, to check the light slider still previews what it changes
+
 Three things in this document are made of time and cannot be photographed: **the
 second heartbeat, the steering lean, and every number in §1.3.** They must be
 judged by playing, and they are the things here most likely to be wrong.
+
+**A fourth thing, found by looking and not by measuring:** in ordinary play the
+water often has **no cell on screen at all** — `food.COUNT` is 4 and the field is
+much larger than the viewport. Two unposed frames at 22 s and 30 s had one cell
+and none. That is a §1.3 population question, not a drawing one, and it is
+listed here only because it is invisible in every posed frame in this section.

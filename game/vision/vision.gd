@@ -518,16 +518,87 @@ func _draw_cells(a: float) -> void:
 		# food.gd owns the curve; this reads it. §4.5, last paragraph.
 		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
 			r / maxf(_cell.gape(), 0.001))
-		for k in 3:
-			var t := float(k + 1) / 3.0
-			_world.draw_circle(p, r * (1.4 + 4.6 * t),
-				Color(FOOD_TINT, 0.014 * (1.0 - t) * a * smell), true, -1.0, true)
+		_draw_scent(p, r, smell * a)
 
 		Cilia.draw_cell(_world, p,
 			float(headings[i]) if i < headings.size() else 0.0, r,
 			genomes[i] if i < genomes.size() else {},
 			_food_node.gape_at(i), _cell.radius, false, _clock, a,
 			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM)
+
+
+## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
+## full vision has for the commonest decision in the game, and as shipped it was
+## not a weak mark, it was no mark: measured off the render, the haze ring
+## around an edible cell came out **0.5 of 255 greener than empty water**, while
+## the water shader's own organic wash swings through ±25 in the same channel.
+## The three defects were all arithmetic and all in one line:
+##
+## - the outermost of the three rings was drawn at alpha exactly zero, every
+##   frame, for every cell -- `(1 - t)` with `t` reaching 1;
+## - the largest ring was the faintest, so what ink there was got spread from
+##   2.9 to 6.0 body radii, a cloud twelve bodies wide and dense nowhere;
+## - the peak alpha, 0.0093, was a third of what the dithering can even carry.
+##
+## **Nothing about what it means has changed, and nothing may.** It is still
+## `FOOD_TINT` on every edible cell whatever gene it carries, still weighted by
+## exactly `food.gd`'s taste curve, so it still says precisely what the
+## membrane's green band says and never more. What changed is that it is now a
+## bloom that hugs the body -- brightest at the rim, gone by three radii --
+## instead of a wash spread so thin it fell under the water's own texture.
+## Hugging the body is also what keeps it from being mistaken for that texture:
+## the wash is hundreds of pixels across and attached to nothing, and this is
+## concentric with a cell and the size of that cell.
+##
+## **One texture, not a stack of discs**, and the reason is the sentence the old
+## code wrote and then broke: *a ring here would be a boundary, and the cell
+## cannot perceive a boundary.* Six concentric `draw_circle`s at a visible alpha
+## are six boundaries -- built that way first, rendered, and it banded at
+## 1280x720 and worse at 2400x1080, where the canvas scale makes each band half
+## again as wide. A radial `GradientTexture2D` drawn once per cell has no edge
+## anywhere, costs one `draw_texture_rect` instead of six polygons, and is plain
+## `ImageTexture` under GL Compatibility.
+##
+## The ramp holds flat out to 0.42 and then falls away, so the brightest part of
+## the bloom is the annulus **just outside the rim** rather than the middle --
+## the middle is behind the body and cannot be seen anyway. Measured after, in
+## median green of 255 out from a r18 edible cell: **99** at the rim, 36 at
+## 1.3 r, 24 at 1.65 r, water by 2.7 r. An inedible cell of any size stays flat
+## at 10-12, which is the water.
+const HAZE_OUTER := 3.0
+## Alpha at the plateau, before the edibility weight.
+const HAZE_PEAK := 0.24
+const HAZE_TEXTURE_SIZE := 128
+
+var _haze: GradientTexture2D = null
+
+
+## Built once. A run draws it four times a frame and never changes it.
+func _build_haze() -> GradientTexture2D:
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.42, 0.62, 0.82, 1.0])
+	ramp.colors = PackedColorArray([
+		Color(1, 1, 1, 1.00), Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42),
+		Color(1, 1, 1, 0.12), Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = ramp
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = HAZE_TEXTURE_SIZE
+	tex.height = HAZE_TEXTURE_SIZE
+	return tex
+
+
+func _draw_scent(at: Vector2, r: float, strength: float) -> void:
+	if strength <= 0.0:
+		return
+	if _haze == null:
+		_haze = _build_haze()
+	var reach := r * HAZE_OUTER
+	_world.draw_texture_rect(_haze,
+		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
+		Color(FOOD_TINT, HAZE_PEAK * strength))
 
 
 ## A meal, held where it was long enough that the interior flood has something

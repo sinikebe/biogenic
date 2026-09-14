@@ -98,18 +98,20 @@ theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
 
-[node name="Light" type="VBoxContainer" parent="Hud/Pause/Center/Buttons"]
+[node name="Light" type="PanelContainer" parent="Hud/Pause/Center/Buttons"]
 size_flags_horizontal = 4
+
+[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Buttons/Light"]
 theme_override_constants/separation = 6
 
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Light"]
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Light/Box"]
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
 theme_override_font_sizes/font_size = 15
 text = "light"
 horizontal_alignment = 1
 
-[node name="Slider" type="HSlider" parent="Hud/Pause/Center/Buttons/Light"]
+[node name="Slider" type="HSlider" parent="Hud/Pause/Center/Buttons/Light/Box"]
 min_value = 1.0
 max_value = 2.4
 step = 0.05

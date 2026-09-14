@@ -40,6 +40,14 @@ const ONBOARD_FADE_IN := 1.1
 ## Specced: fades over 0.8s the instant they first turn, never shown again.
 const ONBOARD_FADE_OUT := 0.8
 
+## The pause scrim, in the launcher's base colour, at two strengths. Point of
+## view keeps Phase 4's half-veil because the membrane behind it is the live
+## preview of the light slider. Full vision needs far more, because behind it is
+## a lit world with the player's own cell pinned dead centre by the camera --
+## exactly where the centred pause column has to sit. See _toggle_pause.
+const SCRIM_POV := Color(0.023, 0.055, 0.05, 0.5)
+const SCRIM_FULL_VISION := Color(0.023, 0.055, 0.05, 0.86)
+
 enum Onboard { OFF, WAITING, FADE_IN, HOLD, FADE_OUT }
 ## ALIVE, then the collapse, then the black that holds until they touch it,
 ## then the aperture opening on a new cell.
@@ -60,10 +68,12 @@ var mode := -1
 @onready var _vision: VisionLayer = $Vision
 @onready var _onboarding: Label = $Hud/Onboarding
 @onready var _pause_ui: Control = $Hud/Pause
+@onready var _scrim: ColorRect = $Hud/Pause/Scrim
 @onready var _resume_button: Button = $Hud/Pause/Center/Buttons/Resume
 @onready var _leave_button: Button = $Hud/Pause/Center/Buttons/Leave
-@onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Light/Caption
-@onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Light/Slider
+@onready var _light_panel: PanelContainer = $Hud/Pause/Center/Buttons/Light
+@onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Light/Box/Caption
+@onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Light/Box/Slider
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
 @onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
@@ -307,7 +317,14 @@ func _set_simulating(on: bool) -> void:
 # ---------------------------------------------------------------------------
 
 func _apply_mode() -> void:
-	_vision.set_active(mode == RunState.Mode.FULL_VISION)
+	_vision.set_active(_vision_active())
+
+
+## True while the world layer is the thing behind the Hud. Read by the pause
+## scrim as well as by the mode seam, because how much has to be covered up
+## depends entirely on whether there is a lit world under it.
+func _vision_active() -> bool:
+	return mode == RunState.Mode.FULL_VISION
 
 
 ## Flips the view without leaving the run, so blind and sighted can be compared
@@ -475,6 +492,24 @@ func _toggle_pause() -> void:
 	if paused:
 		# A finger still down when the pause opened must not keep steering.
 		_cell.release()
+		# **The scrim is set per view, and the reason is the camera.** The
+		# camera holds the player's cell at the exact centre of the screen and
+		# the pause column is centred too, so in full vision the light control
+		# is always drawn across the player's own body. Nothing can move: the
+		# cell is pinned by the camera and the column is pinned by the house
+		# style. Since Phase 5 gave every body a bright multicoloured fringe and
+		# a gape bow, that overlap stopped being quiet and started being
+		# unreadable -- the slider track runs through the cilia and `light`
+		# lands on the mouth.
+		#
+		# So the world is taken down to a ghost instead. Nothing is lost: pause
+		# is a surface the *player* consults (§5.1) and the water is not what
+		# they came to read. In point of view the scrim stays where Phase 4 put
+		# it, because there the membrane is the live preview of the very slider
+		# below it -- and that costs nothing, because the membrane only ever
+		# draws in the outer ~150px of the viewport, which the column never
+		# reaches. Measured, at both shapes.
+		_scrim.color = SCRIM_FULL_VISION if _vision_active() else SCRIM_POV
 		# Built on opening rather than kept in step: the genome cannot change
 		# while the tree is paused except by the two taps below, and a strip
 		# rebuilt sixty times a second to say the same thing is five nodes of
@@ -543,8 +578,18 @@ func _on_gain_settled(changed: bool) -> void:
 ## Rendered, and it looked wrong; at 232 they stay the buttons Phase 4 shipped
 ## whatever is above them.
 func _style_pause() -> void:
-	for control: Control in [_gain_slider.get_parent(), _resume_button, _leave_button]:
+	for control: Control in [_light_panel, _resume_button, _leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+	# **Every group on the pause column is a surface, and `light` was the one
+	# that was not.** The genome tiles are panels, `resume` and `leave` are
+	# slabs, and the light caption and its track were bare strokes floating on
+	# the water -- which is why they were the pair the player's own cell tangled
+	# with. Same slab, same border, same radius -- but fainter than a button on
+	# purpose, because it is a surface and not a third thing to press. One rule
+	# a later screen can apply without asking: every group on this column is a
+	# surface.
+	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
 
 	_genome_caption.add_theme_font_size_override("font_size", 15)
 	_genome_caption.add_theme_color_override("font_color",
@@ -572,7 +617,10 @@ func _style_pause() -> void:
 	_gain_slider.min_value = SignalBus.GAIN_MIN
 	_gain_slider.max_value = SignalBus.GAIN_MAX
 	_gain_slider.step = SignalBus.GAIN_STEP
-	_gain_slider.custom_minimum_size = Vector2(232.0, 48.0)
+	# 192 plus the slab's 20px side margins is 232 -- exactly the button width,
+	# so the column has one edge rather than two. Still 48 tall, and 192 canvas
+	# px is 18mm of travel on a 2400x1080 phone.
+	_gain_slider.custom_minimum_size = Vector2(192.0, 48.0)
 	_gain_slider.focus_mode = Control.FOCUS_ALL
 	_gain_slider.add_theme_constant_override("center_grabber", 1)
 	_gain_slider.add_theme_stylebox_override("slider", _track(
@@ -691,10 +739,7 @@ func _build_genome_strip() -> void:
 
 	var held := _genome.held_sample
 	if held != &"":
-		# The sample and its arrow only exist while one is held. The whole Row
-		# is centred, so the slots shift right when they appear -- harmless,
-		# because the strip is only interactive while a sample is held, so
-		# nothing moves under a finger that was about to press it.
+		# The sample and its arrow only exist while one is held.
 		_genome_row.add_child(_make_tile(held, 1, Tile.HELD, -1))
 		_genome_row.add_child(_make_arrow())
 
@@ -709,6 +754,25 @@ func _build_genome_strip() -> void:
 			_genome_row.add_child(_make_tile(gene, int(tiers[gene]), state, i))
 		else:
 			_genome_row.add_child(_make_tile(&"", 0, Tile.EMPTY, i))
+
+	# **The slots do not move when a sample arrives, and that is worth one
+	# invisible node.** Row is centred, so without this the whole slot block
+	# slid 73px right the moment a sample appeared and 73px back the moment it
+	# lapsed -- and a sample lapses on a 45-second timer that does not stop
+	# because the pause screen is open, so the strip jumped sideways under the
+	# player's eye while they were reading it. §5.3 spotted the shift and
+	# guessed it was harmless because nothing is tappable once the sample is
+	# gone; the argument holds for taps and not for reading. A trailing spacer
+	# the width of the sample block, minus the separation the box adds in front
+	# of it, makes the row symmetric about the slots, so centring the row now
+	# centres the slots. The sample and its arrow hang off to the left, which is
+	# the right emphasis anyway: the slots are the thing that is always true.
+	if held != &"":
+		var gap := float(_genome_row.get_theme_constant(&"separation"))
+		var spacer := Control.new()
+		spacer.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		spacer.custom_minimum_size = Vector2(TILE_SIZE + gap + ARROW_SIZE.x, 0.0)
+		_genome_row.add_child(spacer)
 
 	_update_hint()
 
