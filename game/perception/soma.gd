@@ -42,6 +42,23 @@ const SCALE := 1.7
 ## any part of it. Raise this and the figure starts competing with the `stigma`.
 const FADE := 0.34
 
+## The one part of the figure that is drawn brighter than the figure, and the
+## reason is what it is for. The body is a frame of reference and should stay
+## under everything; a gene loose inside you is a **decision that is waiting**,
+## and the owner's complaint was that at the body's own fade nobody ever saw it.
+## It is the only thing on this figure that is ever asking for anything, so it
+## is the only thing allowed to be louder than the outline it sits in.
+##
+## **0.78 was too loud by one measurement and this is that measurement.** The
+## rule the mark has to obey is that every *sensation* beats it, and a peak
+## pixel is the wrong way to check that -- a 1.6px ring stroke out-peaks a
+## 200px dread swell and is plainly not the louder thing. Low-passed at sigma 6,
+## which is about what a glance integrates over at 1280x720, a dread lobe came
+## to 60.4 and this mark to 60.8: a dead heat, and a dead heat is not losing.
+## At 0.68 it reads 53 against dread's 60, a beam return's 67 and a taste
+## band's 136, and the ordering is right in every pair.
+const FADE_PENDING := 0.68
+
 ## The nucleus takes the beat, so the figure breathes on the same heart the
 ## contour does rather than on a clock of its own.
 var beat := 0.0
@@ -94,6 +111,16 @@ func _draw_figure() -> void:
 	# already over. Drawing the figure whole while the cell is coming apart
 	# would be the one thing proprioception cannot do, which is lie about the
 	# body it is a picture of.
-	Cilia.draw_cell(_figure, _figure.size * 0.5, 0.0, r, tiers,
+	var centre := _figure.size * 0.5
+	Cilia.draw_cell(_figure, centre, 0.0, r, tiers,
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound)
+	# **What is loose in you, and where it could go.** Both are facts about this
+	# body and about nothing in the water, so both are inside the line this
+	# figure stands on -- and the second heartbeat the membrane already carries
+	# now has a picture to belong to. The rhythm says *something is unresolved*;
+	# this says *what*, and *where*.
+	Cilia.draw_pending(_figure, centre, 0.0, r, order,
+		_genome.held_sample if _genome != null else &"",
+		_genome.held_remaining if _genome != null else 0.0,
+		clampf(beat, 0.0, 1.0), _clock, FADE_PENDING)

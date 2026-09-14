@@ -747,6 +747,16 @@ In full vision the same state is drawn literally: a disc of radius `0.16r` in
 the gene's hue inside the body, offset `0.30r` to port of the nucleus, pulsing
 on the beat and shrinking with `remaining`.
 
+> **The disc is retired; see `diegetic-hud.md`.** The owner played a run, was
+> given a gene and never saw it: the echo is a rhythm nobody has been taught to
+> read, and the disc is one small mark inside a 60px body. Both views now draw
+> the sample as a vesicle adrift, a tuft of the organ it would become floating
+> clear of the skin, and a thread between them — through one routine that point
+> of view and full vision both call. **The echo in this section stands and is
+> unchanged**; what changed is that it now has a picture to belong to, and the
+> two are already synchronised because `soma.beat` is `_bus.pulse()`, which the
+> echo pumps. `HELD_FADE` here and `HELD_WILT` there must stay equal.
+
 If the sample lapses it is simply gone. There is no discard control and there
 does not need to be one.
 

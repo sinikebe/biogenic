@@ -831,6 +831,359 @@ static func _lip(base: Vector2, fwd: Vector2, stb: Vector2, gape: float,
 
 
 # ---------------------------------------------------------------------------
+# A gene with nowhere to be yet, and the places it could go
+# (docs/design/diegetic-hud.md; extends genes-and-cilia.md section 3.3)
+# ---------------------------------------------------------------------------
+#
+# **The body is the readout.** A held sample is a fact about your own body, so
+# it is drawn on the body rather than in a corner, in exactly the vocabulary the
+# body already has -- and the vocabulary already contains the thing it needs.
+# An *integrated* gene is a pigment organelle: seated on the skin, filled, with
+# a tuft of bristles growing out of the arc. So an unintegrated one is the
+# negative of that on every axis, which is what makes it readable with no legend
+# and no colour at all:
+#
+# | integrated | held |
+# | --- | --- |
+# | seated on an arc | adrift inside the body |
+# | a filled disc | a ring with a small core -- a vesicle, not a spot |
+# | bristles rooted in the skin | a tuft floating clear of the skin, not rooted |
+# | permanent | its ring tears open, the way a dying body's rim does |
+#
+# The gap under the floating tuft is the whole signal: **it is the organ you
+# would have, drawn not touching you.** That is shape, not hue, so it survives
+# the deuteranope check section 4.4 sets, and it survives being the same green
+# as the mouth it may be sitting next to.
+
+## The empty sockets an earned gene could root in: four beads on the skin, at
+## the exact points [method _draw_earned] would put its bristles. Quiet on their
+## own -- "there is room in you" is worth about as much ink as that sentence
+## deserves -- and they are the thing the ghost tuft grows out of, so the
+## vacancy and the destination are one mark at two intensities rather than two
+## marks that have to be related by the player.
+## **Off the skin, not on it.** Seated exactly on the surface these were
+## invisible at both shapes, and the reason is not alpha: the rim is a 2.2px
+## stroke of the same teal running straight through them, so a socket bead was
+## a teal dot drawn on a teal line. Lifted clear of the rim they read as a row
+## of empty roots, which is what they are.
+const VACANCY_LIFT := 0.055      ## of r
+const VACANCY_DOT := 0.038       ## of r
+## A floor in canvas pixels, which section 4.5 refused for cilia and is right
+## for this: a 4.0px stroke moved to 4.5 is a no-op, a 1.0px dot moved to 1.6 is
+## the difference between a mark and a smudge. Full vision draws the body at
+## r26 against the figure's r44, so this only ever bites there.
+const VACANCY_DOT_MIN := 1.6     ## canvas px
+const VACANCY_ALPHA := 0.52
+const VACANCY_HELD := 1.7        ## how much brighter the one socket being tried gets
+
+## The organ that is not there yet. Same strokes as [constant LEN_EARNED], at a
+## fraction of the length, standing off the skin by [constant GHOST_GAP] -- and
+## that gap is not a margin, it is the message.
+## Measured, not chosen: at 0.13 the tuft sat inside the cirrus oars and the
+## gape's starboard stem -- which is seated at t 54, the exact middle of free
+## arc 1 -- and the one thing it had to say, *this is not attached*, was the
+## thing the crowding took away. At 0.24 it floats outboard of every rowing
+## cilium and inboard of the flagellum, in a band of the body nothing else uses.
+const GHOST_GAP := 0.24          ## of r, skin to the root of the floating tuft
+const GHOST_LEN := 0.74          ## of LEN_EARNED
+const GHOST_ALPHA := 0.74
+const GHOST_BEAT := 0.5          ## extra on the beat, as a fraction of the base
+const GHOST_WIDTH := 1.7
+
+## The vesicle itself, adrift. It circles the nucleus rather than sitting
+## anywhere: a slow lap is about fourteen seconds, which is three laps in a
+## sample's life -- far slower than any cilium, so it never reads as one.
+const VESICLE_R := 0.21          ## of r
+## **Pulled in from 0.52 by the render.** The haze below is drawn about this
+## point, and at 0.52 the far edge of the cloud reached `1.22 r` from the
+## nucleus -- outside the `1.18 r / 0.94 r` ovoid, so the one thing this mark
+## exists to say, *it is loose inside you*, was contradicted by a grey bloom
+## hanging off the flank. 0.42 still clipped the rim on the beam; at 0.34 the
+## cloud's worst case is `0.34 + 0.26 + 0.40 = 0.86 r` abeam against a half
+## width of `0.94 r`, and it stays under the skin whichever way it has drifted.
+const VESICLE_ORBIT := 0.34      ## of r, about the nucleus
+const VESICLE_RATE := 0.45       ## radians a second, before the wilt slows it
+const VESICLE_RING_ALPHA := 0.85
+const VESICLE_CORE := 0.36       ## of the vesicle radius
+## **The core is off centre, and that is not decoration.** Centred inside its
+## own ring it was a bullseye, and a bullseye is an icon; §4.4's rule that a
+## mark must differ in shape applies here against the whole class of widgets.
+## Offset away from the reach it becomes a dense end and a straining end, which
+## is an organelle under tension rather than a target.
+const VESICLE_CORE_OFF := 0.34   ## of the vesicle radius, opposite the reach
+## The haze is doing more work than it looks like it is, and full vision is
+## why. There the body is drawn at its real r26 against the figure's r44, so
+## every stroke on it is small; a soft warm cloud the width of a third of the
+## body is a **low-frequency** cue, which is the kind that survives being small.
+## Tightened from 2.9 and brightened to match: the wide version spread the same
+## ink over four times the area and read as a smudge over the nucleus, and it
+## was what leaked past the rim.
+##
+## **Three stacked rings, not one flat disc, and it is the pigment organelle's
+## own construction** -- [method _draw_earned] builds an integrated gene's cloud
+## exactly this way. One `draw_circle` at a flat alpha has a crisp edge, and a
+## crisp-edged disc of even tone is the silhouette of a widget; stacked, the
+## falloff reads as something wet diffusing into the cytoplasm. Three is the
+## count the body already uses and it does not band; §4.5 measured six and it
+## did. Accumulated centre alpha is 0.24, the outermost band 0.04.
+const VESICLE_HAZE := 1.0        ## of the vesicle radius, innermost ring
+const VESICLE_HAZE_GROW := 1.6   ## how much wider the outermost ring is
+const VESICLE_HAZE_RINGS := 3
+const VESICLE_HAZE_ALPHA := 0.13
+const VESICLE_WIDTH := 1.6
+const VESICLE_STEPS := 28
+## **Two harmonics, not one, and neither of them three.** A single `sin(3a)`
+## wobble is threefold symmetry, which at this size is a crest on a shield --
+## rendered, the held sample read as a heraldic badge sitting on the body, the
+## exact thing a playfield with no icons in it cannot have. Two incommensurate
+## lobes drifting at different rates never settle into a symmetry, so the
+## outline stays a small wet thing that is never quite the same shape twice.
+const VESICLE_WOBBLE := 0.09     ## the slow two-lobed squash
+const VESICLE_WOBBLE_FINE := 0.06  ## the faster five-lobed ripple over it
+## How far the outline is drawn out toward the socket it is reaching for: a
+## teardrop with its tip at the thread and its fat end where the core is. This
+## is the last of the three things that stop it being a symbol -- a symbol is
+## the same shape whichever way it is facing, and this one is not.
+const VESICLE_DRAWN := 0.16      ## of the vesicle radius
+## It comes apart the way a body does, and for the same reason: a broken outline
+## is the one damage signal this game has already taught, and a player who has
+## seen a chewed cell needs nothing explained.
+const VESICLE_TEARS := 4
+const VESICLE_TEAR_DEG := 38.0
+
+## The reach: one thread from the vesicle toward the nearest empty socket,
+## stopping short of it. Carries direction and nothing else, and it swings as
+## the vesicle drifts, so a genome with three holes in it is shown trying each.
+## **It leaves the vesicle's edge, not its middle.** Struck from the centre it
+## passed through the ring wall and the whole mark became a lollipop -- a loop
+## on a stick, which is a widget with a handle. From the edge it is a strand
+## coming off a droplet.
+const THREAD_REACH := 0.62       ## of the way there
+const THREAD_ALPHA := 0.42
+const THREAD_WIDTH := 1.3
+const THREAD_BOW := 0.09         ## of the chord, perpendicular to it
+
+## Seconds of the sample's life over which the picture wilts. **The twin of
+## signal_bus.gd's `HELD_FADE`, and it must stay the twin**: the second
+## heartbeat and the picture on the body are one event seen twice, and a player
+## who feels the rhythm weaken while the organ is still bright is reading two
+## clocks. It is a constant here rather than an import because this file draws
+## and must not depend on the sensory bus.
+const HELD_WILT := 15.0
+
+
+## Everything the body has to say about its own genome that is not an organ it
+## already wears: which slots are empty, and whether something is loose inside
+## looking for one.
+##
+## [param order] is the slot layout -- slot index to gene, `&""` for empty --
+## the same array [method draw_cell] takes. [param gene] is the held sample or
+## `&""`, and [param remaining] its seconds. [param beat] is 0..1 and is the
+## same heartbeat the nucleus takes, so the reach and the tuft breathe on the
+## body's own clock rather than on one of their own.
+##
+## Drawn after the body, by whichever view is drawing it, and **only for the
+## player's own cell**: every other body in the water has a genome too, but what
+## is loose inside it is not something a cell could see from outside, and a
+## water full of vacancy beads would be ink spent on nothing anyone can act on.
+static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
+		r: float, order: Array, gene: StringName, remaining: float,
+		beat: float, clock: float, fade: float = 1.0,
+		unit: float = 1.0) -> void:
+	if fade <= 0.0 or r <= 0.0:
+		return
+	var free := free_arcs(order)
+	var held := gene != &"" and remaining > 0.0
+	if free.is_empty() and not held:
+		return
+	var fwd := Vector2(sin(heading), -cos(heading))
+	var stb := Vector2(cos(heading), sin(heading))
+	var tone := hue(gene) if held else SELF_TINT
+	# Two clocks, on purpose. `left` runs the whole forty-five seconds and is
+	# what shrinks the vesicle, so early and mid-clock are different pictures;
+	# `wilt` is flat until the last fifteen and then falls, so *about to lapse*
+	# is an event rather than a slope nobody notices they are on.
+	var left := clampf(remaining / Genome.SAMPLE_SECONDS, 0.0, 1.0) if held else 0.0
+	var wilt := clampf(remaining / HELD_WILT, 0.0, 1.0) if held else 0.0
+	var pulse := clampf(beat, 0.0, 1.0)
+
+	# Where the sample is this instant, and which empty socket it is nearest.
+	# Both are wanted before anything is drawn, because the tuft and the thread
+	# have to agree about which hole is being tried.
+	var seat := at
+	var size := 0.0
+	var tried := -1
+	if held:
+		var core := at - fwd * (r * NUCLEUS_BACK)
+		var spin := clock * VESICLE_RATE * (0.40 + 0.60 * wilt)
+		seat = core + (fwd * cos(spin) + stb * sin(spin)) * (r * VESICLE_ORBIT)
+		size = VESICLE_R * r * (0.60 + 0.40 * left) * (1.0 + 0.14 * pulse)
+		var near := INF
+		for i in free.size():
+			var arc: Vector2 = free[i]
+			var mid := _surface(at, fwd, stb, r,
+				deg_to_rad((arc.x + arc.y) * 0.5))
+			var d := seat.distance_squared_to(mid)
+			if d < near:
+				near = d
+				tried = i
+
+	for i in free.size():
+		_draw_socket(canvas, at, fwd, stb, r, free[i], tone, i == tried,
+			wilt, pulse, fade, unit)
+	if not held:
+		return
+	var target := seat
+	if tried >= 0:
+		var arc: Vector2 = free[tried]
+		target = _surface(at, fwd, stb, r, deg_to_rad((arc.x + arc.y) * 0.5))
+	_draw_vesicle(canvas, seat, size, target, tried >= 0, -fwd, tone, wilt,
+		pulse, clock, fade, unit)
+
+
+## The slots this genome has and has not filled, as arcs. Empty on a cell whose
+## layout is unknown, which is every cell but the player's.
+static func free_arcs(order: Array) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	for slot in mini(order.size(), 3 + ARC_FREE.size()):
+		if StringName(order[slot]) == &"":
+			out.append(arc_for_slot(slot))
+	return out
+
+
+## One empty socket: the beads that are always there, and -- on the one socket
+## the sample is currently reaching for -- the tuft it would become, floating
+## clear of the skin.
+##
+## **[param tuft] is one socket's privilege, not every free socket's, and the
+## render is why.** Drawn on all four holes of a grown cell it was a halo of
+## sixteen pale spikes standing off the skin at every diagonal: louder than the
+## real fringe, and it read as *this cell has four new organs* rather than as
+## *one gene is waiting*. One tuft, on the hole the thread is pointing at, is
+## the same sentence at a quarter of the ink -- and because the vesicle drifts,
+## a genome with three holes in it is still shown trying each of them in turn,
+## which is what the four at once were trying to say and could not.
+static func _draw_socket(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, arc: Vector2, tone: Color, tuft: bool,
+		wilt: float, beat: float, fade: float, unit: float) -> void:
+	var count := COUNT_EARNED
+	var strokes := PackedVector2Array()
+	var seats := PackedVector2Array()
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
+		var dir := _normal(fwd, stb, t)
+		var root := _surface(at, fwd, stb, r, t)
+		seats.append(root + dir * (r * VACANCY_LIFT))
+		if not tuft:
+			continue
+		# The tuft starts *off* the body and ends short of where a real one
+		# would. Both halves of that are the reading: it is not rooted, and it
+		# is not finished.
+		var length := LEN_EARNED * r * GHOST_LEN * (0.30 + 0.70 * wilt) \
+			* (0.86 + 0.14 * sin(u * PI))
+		var lift := root + dir * (r * GHOST_GAP)
+		strokes.append(lift)
+		strokes.append(lift + dir * length)
+	var dot := maxf(r * VACANCY_DOT, VACANCY_DOT_MIN * unit)
+	# **Only the socket being tried brightens.** Lifting every free socket when
+	# a sample arrived put sixteen bright beads round the rim of a grown cell
+	# and the figure grew a necklace; the quiet ones stay quiet, which is what
+	# *there is also room over here* is worth.
+	var ink := clampf(VACANCY_ALPHA * (VACANCY_HELD if tuft else 1.0), 0.0, 1.0)
+	for seat: Vector2 in seats:
+		canvas.draw_circle(seat, dot, Color(tone, ink * fade), true, -1.0, true)
+	if tuft:
+		_stroke(canvas, strokes, tone,
+			GHOST_ALPHA * (0.34 + 0.66 * wilt) * (1.0 + GHOST_BEAT * beat) * fade,
+			GHOST_WIDTH * unit)
+
+
+## The sample: a vesicle circling the nucleus, with a thread out toward the
+## nearest socket it has not managed to reach.
+static func _draw_vesicle(canvas: CanvasItem, seat: Vector2, size: float,
+		target: Vector2, reaching: bool, aft: Vector2, tone: Color, wilt: float,
+		beat: float, clock: float, fade: float, unit: float) -> void:
+	if size <= 0.0:
+		return
+	# Which way it is straining. With nowhere to go -- a full genome, where the
+	# only way out is a swap on the strip -- there is no thread, and it leans
+	# aft instead of at a socket: **the body's own aft, not the screen's down**,
+	# so the shape is body-relative in full vision exactly as it is in point of
+	# view, and the figure never says anything about which way north is.
+	var out := (target - seat).normalized() if reaching else aft
+
+	# The thread first, so the vesicle sits on top of its own reach.
+	if reaching:
+		var reach := THREAD_REACH * (0.55 + 0.45 * wilt) * (0.86 + 0.28 * beat)
+		var to := seat.lerp(target, clampf(reach, 0.0, 1.0))
+		var from := seat + out * _vesicle_edge(size, out, out.angle(), clock)
+		if seat.distance_squared_to(to) > seat.distance_squared_to(from):
+			# Bowed, not ruled. A dead straight line between two marks is a
+			# leader line, which is the one piece of chart furniture this screen
+			# must never grow; one control point off the chord makes it a
+			# strand being pulled between them.
+			var bow := (to - from).orthogonal() * THREAD_BOW
+			canvas.draw_polyline(PackedVector2Array([
+					from, from.lerp(to, 0.5) + bow, to]),
+				Color(tone, THREAD_ALPHA * (0.30 + 0.70 * wilt) * fade),
+				THREAD_WIDTH * unit, true)
+
+	for k in VESICLE_HAZE_RINGS:
+		var q := float(k) / float(VESICLE_HAZE_RINGS)
+		canvas.draw_circle(seat,
+			size * VESICLE_HAZE * (1.0 + VESICLE_HAZE_GROW * q),
+			Color(tone, VESICLE_HAZE_ALPHA * (1.0 - q)
+				* (0.40 + 0.60 * wilt) * fade), true, -1.0, true)
+	# **Not a circle, and not a crest either.** A true circle at this size reads
+	# as a widget; a single three-lobed wobble read as a shield. Two lobes under
+	# five, drifting at unrelated rates, and the whole outline drawn out toward
+	# whatever it is reaching for, is a small wet thing that is never the same
+	# shape twice and never the same shape in two directions -- at the cost of
+	# one more sine and one dot product.
+	var ring := PackedVector2Array()
+	var open := 1.0 - wilt
+	for i in VESICLE_STEPS:
+		var a0 := TAU * float(i) / float(VESICLE_STEPS)
+		var a1 := TAU * float(i + 1) / float(VESICLE_STEPS)
+		if _vesicle_torn((a0 + a1) * 0.5, open):
+			continue
+		ring.append(seat + Vector2(cos(a0), sin(a0))
+			* _vesicle_edge(size, out, a0, clock))
+		ring.append(seat + Vector2(cos(a1), sin(a1))
+			* _vesicle_edge(size, out, a1, clock))
+	_stroke(canvas, ring, tone, VESICLE_RING_ALPHA * (0.45 + 0.55 * wilt) * fade,
+		VESICLE_WIDTH * unit)
+	canvas.draw_circle(seat - out * (size * VESICLE_CORE_OFF), size * VESICLE_CORE,
+		Color(tone, (0.42 + 0.34 * beat) * (0.35 + 0.65 * wilt) * fade),
+		true, -1.0, true)
+
+
+## How far the membrane is from [param seat] at angle [param a], given that the
+## whole drop is being pulled toward [param out].
+static func _vesicle_edge(size: float, out: Vector2, a: float,
+		clock: float) -> float:
+	var dir := Vector2(cos(a), sin(a))
+	return size * (1.0 + VESICLE_WOBBLE * sin(a * 2.0 + clock * 0.9)
+		+ VESICLE_WOBBLE_FINE * sin(a * 5.0 - clock * 1.4)
+		- VESICLE_DRAWN * dir.dot(out))
+
+
+## Whether the vesicle's own membrane is open at [param a]. The same one-at-a-
+## time rule the body's tears use, so the two read as the same kind of damage.
+static func _vesicle_torn(a: float, open: float) -> bool:
+	for k in VESICLE_TEARS:
+		var amount := clampf(open * float(VESICLE_TEARS) - float(k), 0.0, 1.0)
+		if amount <= 0.0:
+			continue
+		var centre := TAU * float(k) / float(VESICLE_TEARS) + 0.6
+		if absf(angle_difference(a, centre)) \
+				< deg_to_rad(VESICLE_TEAR_DEG) * amount:
+			return true
+	return false
+
+
+# ---------------------------------------------------------------------------
 # Where the mouth is -- the one thing in this file the *simulation* asks.
 #
 # **The bow is not decoration.** Eating used to be a proximity test, `distance <
