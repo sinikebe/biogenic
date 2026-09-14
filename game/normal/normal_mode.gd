@@ -26,6 +26,10 @@ const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const RunState := preload("res://game/run_state.gd")
+## The genome strip draws the same organs, in the same hues, as the water does.
+## One vocabulary: §2.4's promise is that a point-of-view player who looks in
+## the mirror already speaks the language if they ever switch views.
+const Cilia := preload("res://game/vision/cilia.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -60,6 +64,19 @@ var mode := -1
 @onready var _leave_button: Button = $Hud/Pause/Center/Buttons/Leave
 @onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Light/Caption
 @onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Light/Slider
+@onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
+@onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
+@onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
+
+## Which slot is armed, or -1. Arming is reversible and that is why a mis-tap
+## costs nothing, which is in turn why 20px between tiles is acceptable.
+var _armed := -1
+## Milliseconds, from Time, not an accumulated delta: the strip only exists
+## while the tree is paused, and a paused tree hands this node a delta for a
+## frame in which nothing else moved.
+var _armed_at := 0
+## The gene in each slot, left to right, index-matched to the tiles in Row.
+var _slot_genes: Array[StringName] = []
 
 var _last_toggle_frame := -1
 var _onboard := Onboard.OFF
@@ -126,6 +143,10 @@ func _process(delta: float) -> void:
 		_step_death(delta)
 		return
 	if get_tree().paused:
+		# The genome strip is the one thing on screen that still has a clock
+		# running: an armed slot lapses after four seconds whether or not the
+		# simulation is moving. §5.2.
+		_step_arming()
 		return
 
 	# Read once, post once. Nothing below carries a position.
@@ -133,6 +154,12 @@ func _process(delta: float) -> void:
 	_metabolism.upkeep = _genome.upkeep()
 	_bus.taste(_food.taste_bearing, _food.concentration)
 	_bus.dread(_food.dread_level)
+	# The stigma only reports if the cell has grown one. The field works out
+	# what the water is doing either way -- what is out there is not a function
+	# of which organs are watching -- and this is where the organ is consulted.
+	var eye := _cell.tier(&"stigma")
+	_bus.light(_food.shadow_bearing, _food.shadow if eye > 0 else 0.0, eye)
+	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
 	_step_onboarding(delta)
@@ -158,7 +185,7 @@ func _on_struck(bearing: float, strength: float, _at: Vector2) -> void:
 ## [param gene] is what the prey was most made of (§3.4), and it is the only
 ## thing about the meal the cell is entitled to know besides how much of it
 ## there was. It goes into the genome and into the ingest payload, which is
-## where Phase 5B's flood picks up its colour -- a payload is still not a
+## where the flood picks up its colour (§2.2) -- a payload is still not a
 ## position, so it is allowed on the bus.
 ##
 ## [param nutrition] is already the prey's size measured against this body and
@@ -180,10 +207,15 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# only one definition of this rule.
 	_cell.radius += CellBody.GROWTH_PER_MEAL
 	_genome.integrate(gene)
-	# Phase 5B: signal_bus.gd does not read this yet -- ingest_color and the
-	# held echo are the rendering half. Passing it now costs nothing and means
-	# the seam is exercised rather than assumed.
-	_bus.ingest({"gene": gene})
+	# The flood takes the gene's hue (§2.2), which is the one place a gene is
+	# ever identified on the sensory screen -- a contact event, chemistry
+	# already inside you, bounded to this one signal and this one frame. The
+	# colour is resolved here rather than in the bus so there stays exactly one
+	# table of gene hues, and it is the table the body is drawn from.
+	var payload := {"gene": gene}
+	if gene != &"":
+		payload["color"] = Cilia.hue(gene)
+	_bus.ingest(payload)
 	_metabolism.feed(MetabolismNode.MEAL * nutrition)
 
 
@@ -443,6 +475,12 @@ func _toggle_pause() -> void:
 	if paused:
 		# A finger still down when the pause opened must not keep steering.
 		_cell.release()
+		# Built on opening rather than kept in step: the genome cannot change
+		# while the tree is paused except by the two taps below, and a strip
+		# rebuilt sixty times a second to say the same thing is five nodes of
+		# churn a frame for nothing.
+		_disarm()
+		_build_genome_strip()
 		_resume_button.grab_focus()
 	else:
 		RunState.save_gain(_bus.gain)
@@ -498,7 +536,23 @@ func _on_gain_settled(changed: bool) -> void:
 ##
 ## The light slider sits **above** resume in the same box, so it inherits the
 ## same 48px gap and nothing destructive ever sits under a dragging thumb.
+##
+## **`Light`, `Resume` and `Leave` are shrink-centred**, here and in the scene.
+## They used to inherit the VBox's width, which is the width of the widest thing
+## in it -- and with a seven-slot genome strip above them that is 652px.
+## Rendered, and it looked wrong; at 232 they stay the buttons Phase 4 shipped
+## whatever is above them.
 func _style_pause() -> void:
+	for control: Control in [_gain_slider.get_parent(), _resume_button, _leave_button]:
+		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+
+	_genome_caption.add_theme_font_size_override("font_size", 15)
+	_genome_caption.add_theme_color_override("font_color",
+		Color(0.855, 0.953, 0.933, 0.45))
+	_genome_hint.add_theme_font_size_override("font_size", 14)
+	_genome_hint.add_theme_color_override("font_color",
+		Color(0.855, 0.953, 0.933, 0.38))
+
 	for button: Button in [_resume_button, _leave_button]:
 		button.custom_minimum_size = Vector2(232.0, 56.0)
 		button.focus_mode = Control.FOCUS_ALL
@@ -553,3 +607,304 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 	box.content_margin_top = 5.0
 	box.content_margin_bottom = 5.0
 	return box
+
+
+# ---------------------------------------------------------------------------
+# The genome strip, on the pause screen. docs/design/genes-and-cilia.md §5.
+#
+# **A launcher-themed panel, not the membrane aesthetic.** The membrane is what
+# the cell feels; a panel is what the player consults, and the launcher theme
+# marks every surface where the player rather than the cell is being addressed.
+# This surface is not sensory -- it is a representation, it needs touch targets
+# and it needs words, all three of which the sensory screen forbids.
+#
+# It lives on pause because pause already has widgets, already has the house
+# style and is already reachable by a gesture the player knows. It costs no new
+# input, no new pixels in play and no new binary.
+#
+# Always visible as a readout; interactive only while a sample is held.
+# ---------------------------------------------------------------------------
+
+## Touch rule is 48; 76 is what the organ needs to be legible under a word.
+const TILE_SIZE := 76.0
+const ARROW_SIZE := Vector2(30.0, 76.0)
+## The second tap cannot land sooner than this after the first, so a double-tap
+## -- or the mouse event Godot emulates from a touch -- cannot commit.
+const ARM_GUARD_MS := 300
+## Arming lapses on its own, so a strip left armed is not a trap.
+const ARM_TIMEOUT_MS := 4000
+
+## Every word Phase 5 adds to the screen is here or on a tile. perception.md
+## §6.1's one string in normal mode is untouched.
+const HINT_ARM := "tap a slot to replace it"
+const HINT_COMMIT := "tap again to integrate"
+
+## **The plain word, never the biological name.** Four short verbs are parsed
+## instantly at arm's length; nine letters of Greek are not, on the one screen
+## whose whole job is a quick decision. §5.2, and the nine-character ceiling it
+## sets is why a new gene needs a short word as well as a real organ name.
+const WORDS := {
+	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
+	&"stigma": "see",
+}
+
+enum Tile { OCCUPIED, EMPTY, HELD, ARMED }
+
+## Tile states (§5.2). PanelContainer plus StyleBoxFlat, corner radius 8.
+const TILE_BG: Array[Color] = [
+	Color(0.063, 0.141, 0.125, 0.62),  # occupied
+	Color(0.047, 0.082, 0.075, 0.50),  # empty
+	Color(0.063, 0.141, 0.125, 0.80),  # held sample
+	Color(0.086, 0.204, 0.176, 0.80),  # armed
+]
+const TILE_BORDER: Array[int] = [1, 1, 2, 2]
+const TILE_BORDER_ALPHA: Array[float] = [0.45, 1.0, 0.90, 0.85]
+## The one state whose border is not the gene's hue: an empty slot has no gene.
+const EMPTY_BORDER := Color(0.141, 0.278, 0.247, 0.85)
+const EMPTY_PLUS := Color(0.141, 0.278, 0.247, 0.75)
+const PLUS_ARM := 16.0
+
+const LABEL_TINT := Color(0.855, 0.953, 0.933, 0.66)
+const LABEL_TINT_LOUD := Color(0.855, 0.953, 0.933, 0.92)
+const LABEL_SIZE := 13
+const LABEL_BASELINE := 15.0
+const PIP_RADIUS := 2.6
+const PIP_GAP := 9.0
+const PIP_BOTTOM := 9.0
+## Focus has to be drawn: a PanelContainer has no focus stylebox, and the strip
+## is navigable by keyboard as well as by thumb.
+const FOCUS_TINT := Color(0.588, 1.0, 0.859, 0.85)
+
+
+## Rebuilds the strip from the genome as it is right now. Cheap and total: five
+## to nine tiny nodes, built on opening the pause screen and after a swap, which
+## are the only two moments the answer can have changed.
+func _build_genome_strip() -> void:
+	for child in _genome_row.get_children():
+		_genome_row.remove_child(child)
+		child.queue_free()
+	_slot_genes.clear()
+
+	var tiers := _genome.tiers()
+	for gene: StringName in tiers:
+		_slot_genes.append(gene)
+
+	var held := _genome.held_sample
+	if held != &"":
+		# The sample and its arrow only exist while one is held. The whole Row
+		# is centred, so the slots shift right when they appear -- harmless,
+		# because the strip is only interactive while a sample is held, so
+		# nothing moves under a finger that was about to press it.
+		_genome_row.add_child(_make_tile(held, 1, Tile.HELD, -1))
+		_genome_row.add_child(_make_arrow())
+
+	# maxi, not slots(), so a genome can never be wider than the strip that
+	# claims to show it. It cannot happen today; a strip that quietly hid a gene
+	# could not be noticed if it ever did.
+	var count := maxi(_genome.slots(), _slot_genes.size())
+	for i in count:
+		if i < _slot_genes.size():
+			var gene: StringName = _slot_genes[i]
+			var state := Tile.ARMED if i == _armed else Tile.OCCUPIED
+			_genome_row.add_child(_make_tile(gene, int(tiers[gene]), state, i))
+		else:
+			_genome_row.add_child(_make_tile(&"", 0, Tile.EMPTY, i))
+
+	_update_hint()
+
+
+func _update_hint() -> void:
+	if _genome.held_sample == &"":
+		_genome_hint.text = ""
+		return
+	_genome_hint.text = HINT_COMMIT if _armed >= 0 else HINT_ARM
+
+
+func _make_tile(gene: StringName, tier: int, state: int, index: int) -> PanelContainer:
+	var tile := PanelContainer.new()
+	tile.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
+	tile.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	tile.add_theme_stylebox_override("panel", _tile_box(gene, state))
+
+	var live := index >= 0 and _genome.held_sample != &""
+	tile.mouse_filter = Control.MOUSE_FILTER_STOP if live else Control.MOUSE_FILTER_IGNORE
+	tile.focus_mode = Control.FOCUS_ALL if live else Control.FOCUS_NONE
+
+	var face := Control.new()
+	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	face.draw.connect(_draw_tile_face.bind(face, tile, gene, tier, state))
+	tile.add_child(face)
+
+	if live:
+		tile.gui_input.connect(_on_tile_input.bind(tile, index))
+		tile.focus_entered.connect(face.queue_redraw)
+		tile.focus_exited.connect(face.queue_redraw)
+	return tile
+
+
+func _tile_box(gene: StringName, state: int) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = TILE_BG[state]
+	box.border_color = EMPTY_BORDER if state == Tile.EMPTY \
+		else Color(Cilia.hue(gene), TILE_BORDER_ALPHA[state])
+	box.set_border_width_all(TILE_BORDER[state])
+	box.set_corner_radius_all(8)
+	# The tile is measured in §5.3 at exactly 76 square, so the panel adds no
+	# margins of its own and the face gets the whole of it.
+	box.content_margin_left = 0.0
+	box.content_margin_right = 0.0
+	box.content_margin_top = 0.0
+	box.content_margin_bottom = 0.0
+	return box
+
+
+## The tile face (§5.3): the word, the organ, and the tier as pips.
+##
+## The organ comes from cilia.gd, which is what draws it on a body -- one
+## vocabulary, so a player who learns it here can read the water, and a player
+## who learns it in the water can read this.
+func _draw_tile_face(face: Control, tile: Control, gene: StringName, tier: int,
+		state: int) -> void:
+	var box := face.size
+	if state == Tile.EMPTY:
+		var mid := box * 0.5
+		var arm := PLUS_ARM * 0.5
+		face.draw_line(mid - Vector2(arm, 0.0), mid + Vector2(arm, 0.0),
+			EMPTY_PLUS, 1.6, true)
+		face.draw_line(mid - Vector2(0.0, arm), mid + Vector2(0.0, arm),
+			EMPTY_PLUS, 1.6, true)
+		return
+
+	var font := face.get_theme_default_font()
+	var loud := state == Tile.ARMED or state == Tile.HELD
+	if font != null:
+		face.draw_string(font, Vector2(0.0, LABEL_BASELINE),
+			WORDS.get(gene, String(gene)), HORIZONTAL_ALIGNMENT_CENTER,
+			box.x, LABEL_SIZE, LABEL_TINT_LOUD if loud else LABEL_TINT)
+
+	Cilia.draw_tile_organ(face, gene, tier, box)
+
+	# Three pips, filled to the tier. The one thing on the tile that is a count
+	# rather than a magnitude: at 13 pixels the 22% length step §4.3 uses on a
+	# body is a single pixel, so the tile spells it out instead.
+	var tone := Cilia.hue(gene)
+	var y := box.y - PIP_BOTTOM
+	for i in 3:
+		var at := Vector2(box.x * 0.5 + (float(i) - 1.0) * PIP_GAP, y)
+		if i < tier:
+			face.draw_circle(at, PIP_RADIUS, Color(tone, 0.92), true, -1.0, true)
+		else:
+			face.draw_circle(at, PIP_RADIUS, Color(tone, 0.22), false, 1.2, true)
+
+	if tile.has_focus():
+		face.draw_rect(Rect2(Vector2(2.0, 2.0), box - Vector2(4.0, 4.0)),
+			FOCUS_TINT, false, 1.5)
+
+
+## Thirty pixels of "this goes into one of those". Drawn rather than written,
+## because §8's text budget is spent and an arrow is not a word.
+func _make_arrow() -> Control:
+	var arrow := Control.new()
+	arrow.custom_minimum_size = ARROW_SIZE
+	arrow.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	arrow.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	arrow.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	arrow.draw.connect(_draw_arrow.bind(arrow))
+	return arrow
+
+
+func _draw_arrow(arrow: Control) -> void:
+	var mid := arrow.size * 0.5
+	var tint := Color(0.855, 0.953, 0.933, 0.34)
+	arrow.draw_line(mid - Vector2(11.0, 0.0), mid + Vector2(9.0, 0.0), tint, 1.6, true)
+	arrow.draw_line(mid + Vector2(9.0, 0.0), mid + Vector2(2.0, -6.0), tint, 1.6, true)
+	arrow.draw_line(mid + Vector2(9.0, 0.0), mid + Vector2(2.0, 6.0), tint, 1.6, true)
+
+
+# --- Two taps on the same target -------------------------------------------
+# The only pattern that is safe on touch and navigable by keyboard. A mis-tap
+# costs nothing because arming is reversible, and that is the argument that
+# makes 20px between tiles acceptable even though it is about 1.5mm on a phone.
+# The destructive control here is not adjacent to `resume`.
+
+## **[param tile] is dead after [method _build_genome_strip] runs below.** Both
+## branches of this handler rebuild the strip, which removes and frees every
+## tile -- including the one whose `gui_input` we are standing inside. That is
+## legal (`queue_free` is deferred and `remove_child` during emission is fine)
+## and it is exercised on both the touch path and the keyboard path, but it
+## means nothing may touch `tile` after the rebuild. Read the new node out of
+## Row instead, the way the focus line does.
+func _on_tile_input(event: InputEvent, tile: Control, index: int) -> void:
+	if not _is_tile_tap(event):
+		return
+	tile.accept_event()
+	if _armed == index:
+		# **The guard is not politeness, it is the touch path working.** Godot
+		# emulates a mouse click from every screen touch, so one thumb press
+		# arrives here twice; without this the second copy would commit the
+		# swap in the same frame the first one armed it, and the one
+		# irreversible action in the game would need no confirmation at all.
+		if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
+			return
+		_commit_slot(index)
+		return
+	_armed = index
+	_armed_at = Time.get_ticks_msec()
+	# Rebuilding frees the node this event arrived on, so anything that was
+	# focused has to be put back afterwards -- but only for a key press. A thumb
+	# does not want a focus ring, and the armed tile already says it is armed.
+	var by_key := event is InputEventKey
+	_build_genome_strip()
+	if by_key:
+		var armed := _genome_row.get_child(_row_child_of(index)) as Control
+		if armed != null and armed.focus_mode == Control.FOCUS_ALL:
+			armed.grab_focus()
+
+
+## Where slot [param index] sits among Row's children: two nodes further along
+## whenever a sample and its arrow are in front of it.
+func _row_child_of(index: int) -> int:
+	return index + (2 if _genome.held_sample != &"" else 0)
+
+
+func _is_tile_tap(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).pressed
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		return click.pressed and click.button_index == MOUSE_BUTTON_LEFT
+	return event.is_action_pressed(&"ui_accept")
+
+
+## The one irreversible action in the game (§9.7). A genome you cannot ruin is
+## not a choice, and §1.3's drifter floor is what makes even the worst swap --
+## dropping a fourth gene over your own mouth -- survivable rather than a soft
+## lock.
+func _commit_slot(index: int) -> void:
+	if index < 0 or index >= _slot_genes.size():
+		return
+	_genome.replace(_slot_genes[index])
+	_disarm()
+	# The bus is told now rather than on the next unpaused frame: the membrane
+	# keeps beating under the scrim, and an echo for a sample that no longer
+	# exists is the game lying about the player's own body.
+	_bus.hold(0.0)
+	_build_genome_strip()
+	# Every tile has just been freed and the strip is no longer interactive, so
+	# a keyboard player would be left with nothing focused at all.
+	_resume_button.grab_focus()
+
+
+func _step_arming() -> void:
+	if _armed < 0:
+		return
+	if Time.get_ticks_msec() - _armed_at < ARM_TIMEOUT_MS:
+		return
+	_disarm()
+	_build_genome_strip()
+
+
+func _disarm() -> void:
+	_armed = -1
+	_armed_at = 0

@@ -19,7 +19,21 @@ extends Node
 ##   --back-at=<seconds>     fire NOTIFICATION_WM_GO_BACK_REQUEST exactly the
 ##                           way SceneTree does when Android Back is pressed
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right, v
+##                           esc, enter, up, down, left, right, tab, v
+##   --touch=<seconds>:<x>,<y>
+##                           press and release one finger at that canvas point;
+##                           repeatable. This is how the genome strip's two-tap
+##                           arming gets exercised on the input path a phone
+##                           actually uses. Coordinates are in canvas units, not
+##                           window pixels -- but note the canvas is only 1280
+##                           wide at 16:9: `expand` keeps the height at 720 and
+##                           widens it, so at 2400x1080 the canvas is 1600 across
+##                           and a centred widget is 160 further right.
+##   --sample=<gene>         put a gene in the genome's held sample, the state
+##                           §3.3 gives a second heartbeat and §5.2 gives the
+##                           strip. Reaching it by playing means eating a fourth
+##                           gene with a full genome, which is fourteen minutes
+##                           and a lot of luck.
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -57,6 +71,16 @@ extends Node
 ##                           ladder, the gape and the whole of what the water
 ##                           seeds around you. r40 is where section 3.1 says the
 ##                           run is won
+##   --cell=i,dist,bearing,radius[,gene:tier+gene:tier]
+##                           park field cell i at that range and body-relative
+##                           bearing, with that body and that genome, and hold
+##                           it there. Repeatable, and the only way to frame
+##                           section 1.1's four relationships in one photograph:
+##                           `eat it`, `it eats me`, `both` and `neither` are a
+##                           pair of gapes, and waiting for the water to seed
+##                           all four at a readable distance is not a test, it
+##                           is a lottery. Genes are separated by `+` because a
+##                           comma is already the field separator.
 ##   --genome=<g:t,g:t>      force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
 ##                           way to reach a tier-3 cell without playing for
@@ -111,6 +135,11 @@ var _prey_radius := -1.0
 var _radius := -1.0
 var _genome_spec := ""
 var _check_seeding := 0
+## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
+var _posed: Array = []
+## [[seconds, canvas position], ...], consumed as the clock passes each one.
+var _touches: Array = []
+var _sample: StringName = &""
 ## Cumulative meals eaten by one field cell off another, which is the one thing
 ## in section 1.3 that has to be observed rather than argued about. Field cells
 ## are recycled, so this is accumulated by watching each slot's serial.
@@ -212,6 +241,17 @@ func _ready() -> void:
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
+		elif text.begins_with("--cell="):
+			_posed.append(_parse_pose(text.trim_prefix("--cell=")))
+		elif text.begins_with("--sample="):
+			_sample = StringName(text.trim_prefix("--sample="))
+		elif text.begins_with("--touch="):
+			var touch := text.trim_prefix("--touch=").split(":")
+			if touch.size() == 2:
+				var xy := touch[1].split(",")
+				if xy.size() == 2:
+					_touches.append([float(touch[0]),
+						Vector2(float(xy[0]), float(xy[1]))])
 		elif text == "--evade":
 			_evade = true
 		elif text == "--forage":
@@ -247,6 +287,10 @@ func _ready() -> void:
 				_radius, body.slots()])
 	if _genome_spec != "" and _genome != null:
 		_force_genome(_genome_spec)
+	if _sample != &"" and _genome != null:
+		_genome.held_sample = _sample
+		_genome.held_remaining = _genome.SAMPLE_SECONDS
+		print("[drive] holding a sample of ", _sample)
 	if _check_seeding > 0:
 		_run_seeding_check(_check_seeding)
 		get_tree().quit(0)
@@ -284,6 +328,7 @@ func _ready() -> void:
 				_prey_radius, _food.gape_at(1)])
 	if _food_at >= 0.0 and _food != null:
 		print("[drive] field cell 1 parked at %.0f units" % _food_at)
+	_apply_poses(true)
 
 	if hold == "a" or hold == "d":
 		_send_key(KEY_A if hold == "a" else KEY_D, true)
@@ -328,6 +373,11 @@ func _process(delta: float) -> void:
 			_send_key(code, false)
 			print("[drive] %5.2f  tap %d" % [_clock, code])
 			_taps.remove_at(i)
+
+	for i in range(_touches.size() - 1, -1, -1):
+		if _clock >= float(_touches[i][0]):
+			_send_touch(_touches[i][1])
+			_touches.remove_at(i)
 
 	if _back_at >= 0.0 and _clock >= _back_at:
 		_back_at = -1.0
@@ -540,6 +590,56 @@ func _hold_world() -> void:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
+	_apply_poses(false)
+
+
+func _parse_pose(spec: String) -> Array:
+	var bits := spec.split(",", false)
+	var tiers := {}
+	if bits.size() > 4:
+		for pair in bits[4].split("+", false):
+			var gene := str(pair).split(":")
+			if gene.size() == 2:
+				tiers[StringName(gene[0].strip_edges())] = int(gene[1])
+	return [
+		int(bits[0]) if bits.size() > 0 else 0,
+		float(bits[1]) if bits.size() > 1 else 400.0,
+		float(bits[2]) if bits.size() > 2 else 0.0,
+		float(bits[3]) if bits.size() > 3 else 20.0,
+		tiers,
+	]
+
+
+## Held every frame, because the field keeps swimming and recycling underneath.
+## Reaching for a private member is a thing only tools/ is allowed to do.
+func _apply_poses(announce: bool) -> void:
+	if _posed.is_empty() or _food == null:
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		return
+	var bodies: Array = _food.get("_cells")
+	for pose: Array in _posed:
+		var index: int = pose[0]
+		if index < 0 or index >= bodies.size():
+			continue
+		var b: Object = bodies[index]
+		b.set("radius", pose[3])
+		b.set("genome", (pose[4] as Dictionary).duplicate())
+		b.set("drifter", (pose[4] as Dictionary).is_empty())
+		b.set("seeded", true)
+		b.set("state", FoodField.State.DRIFT)
+		b.set("target", FoodField.TARGET_NONE)
+		b.set("calm", 999.0)
+		b.set("pos", _hold_point(pose[1], pose[2]))
+		# Facing the player, so the mouth is pointed at the thing it is being
+		# read against -- which is the frame a forager actually gets.
+		var away: Vector2 = cell.position - _hold_point(pose[1], pose[2])
+		b.set("heading", atan2(away.x, -away.y))
+		if announce:
+			print("[drive] cell %d posed: r%.1f gape %.1f at %.0f units, %s" % [
+				index, float(pose[3]), _food.gape_at(index), float(pose[1]),
+				_genome_text(pose[4])])
 
 
 func _hold_point(distance: float, bearing_deg: float) -> Vector2:
@@ -605,7 +705,11 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 	# empties its hunger while the shot harness is still waiting. One meal is
 	# what was wanted.
 	if kind == &"ingest":
+		# Anything parked inside contact range would be eaten again every frame,
+		# which grows the cell and empties its hunger while the shot harness is
+		# still waiting. One meal is what was wanted.
 		_food_at = -1.0
+		_posed.clear()
 		_meals += 1
 		print("[drive] %5.2f  meal %d" % [_clock, _meals])
 	if kind == &"taste":
@@ -636,8 +740,27 @@ func _keycode(name: String) -> Key:
 		"down": return KEY_DOWN
 		"left": return KEY_LEFT
 		"right": return KEY_RIGHT
+		"tab": return KEY_TAB
 		"v": return KEY_V
 		_: return KEY_NONE
+
+
+## One finger, down and up, at a point in the **design canvas** rather than in
+## the window: the project stretches canvas_items with an expand aspect, so the
+## same widget is at the same canvas coordinate at 1280x720 and at 2400x1080 and
+## only the margins differ. Sent as a touch, which is the event a phone
+## actually produces; Godot emulates the mouse from it.
+func _send_touch(canvas: Vector2) -> void:
+	var at := canvas * get_viewport().get_screen_transform().get_scale() \
+		+ get_viewport().get_screen_transform().get_origin()
+	for pressed in [true, false]:
+		var event := InputEventScreenTouch.new()
+		event.index = 0
+		event.pressed = pressed
+		event.position = at
+		Input.parse_input_event(event)
+	print("[drive] %5.2f  touch %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, at.x, at.y, canvas.x, canvas.y])
 
 
 func _send_key(keycode: Key, pressed: bool) -> void:

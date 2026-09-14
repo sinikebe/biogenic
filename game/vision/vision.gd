@@ -32,7 +32,9 @@ extends CanvasLayer
 const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
+const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
+const Cilia := preload("res://game/vision/cilia.gd")
 
 ## Master switch. False takes the world view out everywhere, including from
 ## full-vision mode, which then renders as point of view. For when something in
@@ -91,18 +93,18 @@ const RING_STEPS := 64
 ## Decay of the beat echo, matching the membrane's own pulse decay.
 const BEAT_DECAY := 0.42
 
-const OVOID_STEPS := 40
 const MOTE_STEPS := 22
 const HALO_STEPS := 7
-## Phase 5B: this 32-cilium rose is retired by §4.1 and replaced by the genome
-## fringe -- seven arcs drawn from the cell's own tiers, on every body in the
-## water rather than only on the player. §4.6 also moves the heading needle's
-## base from r*1.55 to r*1.80, because a tier-3 cytostome crest reaches r*1.61
-## and collides with the chevron. Both are the rendering half; the simulation
-## half leaves them exactly as Phase 4 shipped them.
-const CILIA := 32
 ## Fixed length, always: this is where the cell is pointing, never how fast.
 const HEADING_LEN := 46.0
+## Where the heading needle starts, as a multiple of radius. **Moved from 1.55
+## to 1.80 by §4.6**: a tier-3 `cytostome` crest reaches r * 1.61 and collided
+## with the chevron. The 32-cilium bearing rose that used to live under it is
+## retired with it -- under a tier-2 fringe its pale cardinal ticks were
+## invisible at both sizes, and the fringe now carries meaning that a protractor
+## laid over it only muddles. The bearing checks this view exists for are drawn
+## as rays from the cell (_draw_hits, _draw_wakes) and are their own instrument.
+const HEADING_BASE := 1.80
 ## Variable length: how far ahead the current velocity reaches. Scaled so it is
 ## almost never the same length as the heading needle, because the one thing
 ## these two must never do is be mistaken for each other.
@@ -137,6 +139,7 @@ const PREDATOR_TINT := Color(0.78, 0.24, 0.30)
 var _cell: CellBody = null
 var _motes_node: MotesField = null
 var _food_node: FoodField = null
+var _genome_node: GenomeNode = null
 var _bus: SignalBus = null
 var _shader: ShaderMaterial = null
 
@@ -161,8 +164,8 @@ var _kicks: Array[Array] = []
 var _hits: Array[Array] = []
 ## [[world position, age], ...] -- motes the field has already recycled.
 var _ghosts: Array[Array] = []
-## [[world position, radius, age], ...] -- food eaten since, held so the ingest
-## flood has something to be checked against.
+## [[world position, radius, age, gene hue], ...] -- cells eaten since, held so
+## the ingest flood has something to be checked against.
 var _meals: Array[Array] = []
 ## [[world position, world direction, strength, age], ...] -- reported wakes.
 var _wakes: Array[Array] = []
@@ -327,12 +330,19 @@ func _on_mote_struck(_bearing: float, _strength: float, at: Vector2) -> void:
 
 ## Same contract, same reason: the field hands over where the meal was, because
 ## by the next frame it has been recycled to the far side of the water.
-func _on_eaten(_nutrition: float, _gene: StringName, at: Vector2) -> void:
+func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	if not _active:
 		return
-	# Phase 5B: the ring is drawn at the top of the drifter band because the
-	# meal signal carries no radius. Cilia rendering will want the real one.
-	_meals.append([at, FoodField.DRIFTER_MAX, 0.0])
+	# The meal signal still carries no radius, and it does not need to:
+	# `nutrition` is the prey's radius over this body's, and food.gd clamps it
+	# only at MEAL_MIN 0.35 and MEAL_MAX 1.40. The upper clamp is unreachable --
+	# a gape of 1.40r is the widest mouth there is, so nothing eaten was ever
+	# wider than that -- and the lower one is off by at most a pixel on the
+	# smallest drifter swallowed by the largest cell. Adding a fourth argument
+	# to a signal three files forward it would cost more than a pixel is worth.
+	var r := clampf(nutrition * _cell.radius,
+		FoodField.DRIFTER_MIN, FoodField.ARRIVAL_RADIUS_MAX)
+	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 
 ## A body-relative bearing turned back into a world direction. The one place
@@ -364,7 +374,7 @@ func _on_world_draw() -> void:
 	_draw_trail(a)
 	_draw_kicks(a)
 	_draw_motes(a)
-	_draw_food(a)
+	_draw_cells(a)
 	_draw_ghosts(a)
 	_draw_meals(a)
 	_draw_hits(a)
@@ -477,63 +487,67 @@ func _draw_hits(a: float) -> void:
 			Color(IMPACT_TINT, 0.42 * fade * strength), 1.6 / ZOOM, true)
 
 
-## Every cell in the water. The same green the taste lobe glows, so the scent
-## and the thing leaking it read as one substance.
+## Every cell in the water, drawn by exactly the routine that draws the player
+## (§4.5). There is no species branch here and there must never be one: two
+## drawing paths would drift, and the thing the player reads off a body would
+## stop being true of their own.
 ##
-## Phase 5B: this is Phase 4's food drawing with **one** interim addition -- a
-## cell whose gape is wider than the player's radius is rimmed in the threat
-## colour instead of the food colour, so the thing that can eat you is not drawn
-## identically to lunch. §1.1.1 puts that red on the mouth, with teeth, and
-## §4.1-4.5 put a genome fringe on every body; both are the rendering half and
-## neither is attempted here. Delete the two threat lines when cilia.gd lands.
-func _draw_food(a: float) -> void:
+## What this file still owns is the **scent haze**, because the haze is not a
+## property of the cell -- it is the drawn form of the scent field the
+## membrane's green band is reading, and it is therefore a property of the
+## relationship between that cell and this one.
+func _draw_cells(a: float) -> void:
 	if _food_node == null:
 		return
 	var points := _food_node.points()
 	var radii := _food_node.radii()
+	var headings := _food_node.headings()
+	var genomes := _food_node.genomes()
 	for i in points.size():
 		var p: Vector2 = points[i]
 		var r: float = float(radii[i]) if i < radii.size() else FoodField.DRIFTER_MAX
-		var tint := FOOD_TINT
-		if _food_node.gape_at(i) > _cell.radius:
-			tint = PREDATOR_TINT
 		# The scent as a soft haze rather than a ring: a ring here would be a
 		# boundary, and the cell cannot perceive a boundary.
 		#
-		# The haze is gene-blind -- always FOOD_TINT, never the body's colour --
-		# but it is **weighted by exactly what the taste field weights the body
-		# by**, so a cell too big to fit in the mouth fades out of the drawn
-		# scent as it fades out of the smelled one. The two views must agree in
-		# this one channel or full vision stops being evidence about the
-		# membrane. food.gd owns the curve; this reads it.
+		# **Gene-blind, and it stays gene-blind** -- always FOOD_TINT, never the
+		# body's colour -- but weighted by exactly what the taste field weights
+		# the body by, so a cell too big to fit in the mouth fades out of the
+		# drawn scent as it fades out of the smelled one. If it were gene
+		# coloured, full vision would be showing a distinction point of view
+		# cannot make, in the one channel where the two views must agree.
+		# food.gd owns the curve; this reads it. §4.5, last paragraph.
 		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
 			r / maxf(_cell.gape(), 0.001))
 		for k in 3:
 			var t := float(k + 1) / 3.0
 			_world.draw_circle(p, r * (1.4 + 4.6 * t),
 				Color(FOOD_TINT, 0.014 * (1.0 - t) * a * smell), true, -1.0, true)
-		_world.draw_circle(p, r * 0.78, Color(tint, 0.22 * a), true, -1.0, true)
-		# Knocked out of round with a stable per-slot grain, like the motes: a
-		# perfect disc reads as a drawn shape rather than as something alive.
-		var grit := float(i) * 5.1
-		var shell := PackedVector2Array()
-		shell.resize(MOTE_STEPS + 1)
-		for j in MOTE_STEPS + 1:
-			var t2 := TAU * float(j % MOTE_STEPS) / float(MOTE_STEPS)
-			var wobble := 1.0 + 0.13 * (_noise(grit + float(j % MOTE_STEPS) * 1.7) - 0.5) * 2.0
-			shell[j] = p + Vector2(cos(t2), sin(t2)) * r * wobble
-		_world.draw_polyline(shell, Color(tint, 0.70 * a), 1.6 / ZOOM, true)
+
+		Cilia.draw_cell(_world, p,
+			float(headings[i]) if i < headings.size() else 0.0, r,
+			genomes[i] if i < genomes.size() else {},
+			_food_node.gape_at(i), _cell.radius, false, _clock, a,
+			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM)
 
 
 ## A meal, held where it was long enough that the interior flood has something
 ## to be checked against.
+##
+## **In the gene's hue, and this is not the scent haze.** The haze is gene-blind
+## because it is the drawn form of something point of view genuinely cannot
+## resolve. The instant of swallowing is the opposite case: §2.2 makes the
+## interior flood the gene's colour, which is `perception.md`'s one licensed
+## exception, and this ring is the only thing that flood can be checked
+## against. Drawing it green while the membrane floods amber would leave the
+## one breach in the rule unverifiable by the view that exists to verify.
 func _draw_meals(a: float) -> void:
 	for meal: Array in _meals:
 		var at: Vector2 = meal[0]
 		var t: float = float(meal[2]) / GHOST_LIFE
 		var fade := (1.0 - t) * (1.0 - t) * a
+		var tint: Color = meal[3]
 		_world.draw_arc(at, float(meal[1]) * (1.0 + 2.6 * t), 0.0, TAU, 34,
-			Color(FOOD_TINT, 0.45 * fade), 1.6 / ZOOM, true)
+			Color(tint, 0.45 * fade), 1.6 / ZOOM, true)
 
 
 ## The bearing each pressure wake reported, drawn from the cell that felt it.
@@ -603,6 +617,10 @@ func _threshold(centre: Vector2, d: float, radius: float, tint: Color, a: float)
 		Color(tint, 0.14 * near * a), 1.3 / ZOOM, true)
 
 
+## The player's cell: the same routine as every other body in the water, plus
+## the three instruments that are about *this* cell rather than about being a
+## cell -- the beat halo, the heading needle and the velocity plume. The
+## organism is drawn by cilia.gd; the measurements are drawn here.
 func _draw_cell(a: float) -> void:
 	var p := _cell.position
 	var fwd := _cell.forward()
@@ -618,56 +636,49 @@ func _draw_cell(a: float) -> void:
 		_world.draw_circle(p, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * a), true, -1.0, true)
 
-	# Body: an ovoid, narrower at the front, so the cell has a nose even before
-	# the heading needle is read.
-	var body := PackedVector2Array()
-	body.resize(OVOID_STEPS)
-	for i in OVOID_STEPS:
-		var t := TAU * float(i) / float(OVOID_STEPS)
-		var along := cos(t)
-		var across := sin(t) * (1.0 - 0.30 * along)
-		# A slow breath, so it never looks like a drawn shape.
-		var breathe := 1.0 + 0.035 * sin(t * 3.0 + _clock * 1.7)
-		body[i] = p + fwd * (along * r * 1.18 * breathe) + stb * (across * r * 0.94 * breathe)
-	_world.draw_colored_polygon(body, Color(SELF_TINT, 0.15 * a))
-	var rim := body.duplicate()
-	rim.push_back(body[0])
-	_world.draw_polyline(rim, Color(SELF_TINT, 0.66 * a), 2.2 / ZOOM, true)
-
-	# Cilia, and the bearing rose hiding inside them: the four cardinals are
-	# marked and everything between is even. Reading "45 degrees off my nose"
-	# off the water by eye is what makes the membrane's bearings checkable.
-	for i in CILIA:
-		var bearing := TAU * float(i) / float(CILIA)
-		var dir := fwd * cos(bearing) + stb * sin(bearing)
-		var wave := 1.0 + 0.30 * sin(bearing * 3.0 + _clock * 2.1)
-		var length := 6.5 * wave
-		var alpha := 0.20
-		if i % (CILIA / 4) == 0:
-			# The four cardinals. Front, starboard, aft, port: enough to read a
-			# bearing off the water by eye without a protractor on screen.
-			length = 10.0
-			alpha = 0.42
-		_world.draw_line(p + dir * (r * 1.04), p + dir * (r * 1.04 + length),
-			Color(SELF_TINT, alpha * a), 1.4 / ZOOM, true)
-
-	# Nucleus, sitting back from the nose.
-	var core := p - fwd * (r * 0.26)
-	_world.draw_circle(core, r * 0.46, Color(SELF_TINT, (0.07 + 0.15 * beat) * a), true, -1.0, true)
-	_world.draw_circle(core, r * 0.22, Color(SELF_TINT, (0.20 + 0.40 * beat) * a), true, -1.0, true)
+	var tiers := _genome_node.tiers() if _genome_node != null else GenomeNode.BORN
+	# `is_self` is what keeps the player's own body pure SELF_TINT and its own
+	# lip bow green: you are the one cell in the water whose identity you do not
+	# have to read, and your own mouth cannot swallow you.
+	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
+		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM)
+	_draw_held_sample(p, fwd, stb, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)
 	_draw_velocity(p, r, a)
+
+
+## A gene swallowed with nowhere to put it (§3.3). Point of view gets a second,
+## smaller heartbeat behind every beat; full vision gets the literal thing --
+## a disc of the gene's hue inside the body, offset to port of the nucleus,
+## pulsing on the beat and shrinking as the sample runs out of time.
+##
+## The two are the same state drawn twice, which is the whole discipline of
+## having two views: what the membrane says obliquely, the world says plainly.
+func _draw_held_sample(p: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		beat: float, a: float) -> void:
+	if _genome_node == null or _genome_node.held_sample == &"":
+		return
+	var left := 1.0
+	if GenomeNode.SAMPLE_SECONDS > 0.0:
+		left = clampf(_genome_node.held_remaining / GenomeNode.SAMPLE_SECONDS,
+			0.0, 1.0)
+	var at := p - fwd * (r * 0.26) - stb * (r * 0.30)
+	var tone := Cilia.hue(_genome_node.held_sample)
+	var size := r * 0.16 * (0.55 + 0.45 * left) * (1.0 + 0.22 * beat)
+	_world.draw_circle(at, size * 2.4, Color(tone, 0.10 * a), true, -1.0, true)
+	_world.draw_circle(at, size, Color(tone, (0.55 + 0.35 * beat) * a),
+		true, -1.0, true)
 
 
 ## Where the cell is pointing. Teal, thin, and always exactly the same length --
 ## it carries direction and nothing else.
 func _draw_heading(p: Vector2, fwd: Vector2, stb: Vector2, r: float, a: float) -> void:
 	var tint := Color(SELF_TINT, 0.62 * a)
-	# Starts clear of the rim and the cilia. Three teal things stacked on one
-	# pixel clip to white, and white belongs to impact.
-	var base := p + fwd * (r * 1.55)
-	var tip := p + fwd * (r * 1.55 + HEADING_LEN)
+	# Starts clear of the rim, the fringe and the lip bow. Three teal things
+	# stacked on one pixel clip to white, and white belongs to impact.
+	var base := p + fwd * (r * HEADING_BASE)
+	var tip := p + fwd * (r * HEADING_BASE + HEADING_LEN)
 	_world.draw_line(base, tip - fwd * 4.0, tint, 1.7 / ZOOM, true)
 	# An open chevron, sitting off the end of the needle: nothing else in the
 	# world view has this shape.
@@ -719,7 +730,8 @@ func _find_simulation() -> void:
 	if root == null:
 		root = get_tree().root
 	_walk(root)
-	if _cell == null or _motes_node == null or _bus == null or _food_node == null:
+	if _cell == null or _motes_node == null or _bus == null or _food_node == null \
+			or _genome_node == null:
 		# Instanced somewhere unusual: widen the search once before giving up.
 		_walk(get_tree().root)
 	if _cell == null:
@@ -733,6 +745,8 @@ func _walk(node: Node) -> void:
 		_motes_node = node as MotesField
 	elif _food_node == null and node is FoodField:
 		_food_node = node as FoodField
+	elif _genome_node == null and node is GenomeNode:
+		_genome_node = node as GenomeNode
 	elif _bus == null and node is SignalBus:
 		_bus = node as SignalBus
 	for child in node.get_children():

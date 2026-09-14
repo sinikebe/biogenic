@@ -27,6 +27,10 @@ signal sensation(kind: StringName, info: Dictionary)
 # --- no flash. Chemistry is the only other hue phase 1 is allowed.
 const SELF_COLOR := Vector3(0.12, 0.70, 0.58)
 const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
+## `stigma`, the first earned gene: the light-sensitive spot, and the same amber
+## the gene wears on the outside (docs/design/genes-and-cilia.md §4.4). Slot 2
+## has been reserved since Phase 1 for exactly this.
+const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -79,6 +83,40 @@ const PULSE_DECAY := 0.42
 const INGEST_ATTACK := 0.12
 const INGEST_DECAY := 1.2
 
+# --- The stigma (§6) --------------------------------------------------------
+## What the light-sensitive spot is worth on the contour. Deliberately modest:
+## it is the *sharpest* thing on the membrane, not the loudest, and sharpness is
+## what it was bought for.
+const LIGHT_PEAK := 0.28
+## By tier. Taste is 78 degrees wide at range and only 26 on top of the food;
+## the stigma is its tier's width at **every** range. It does not jitter and it
+## does not lag, and those two properties are most of what a slot is paying for.
+const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
+## Below this the lobe is idled rather than drawn at nothing.
+const LIGHT_FLOOR := 0.02
+
+# --- A held sample is a second heartbeat (§3.3) -----------------------------
+# The one new point-of-view signal Phase 5 adds, and the answer to "how does a
+# player with no HUD know a decision is waiting". It is rhythm, which
+# food-and-predators.md §5.1 established as the channel that survives
+# everything: it outlives dread and it outlives starvation.
+#
+# It is **teal, not the gene's colour** -- perception.md's rule stands, the
+# contour carries bearing and intensity and never identity. The echo says
+# *there is something in you that is not resolved*, and nothing else. It costs
+# no interior and no new uniform: it is pulse_now() on a delay.
+
+## How loud the echo is, as a fraction of the beat it follows.
+const HELD_ECHO := 0.44
+## Seconds after the beat. 0.58 clears PULSE_ATTACK + PULSE_DECAY = 0.51, so the
+## two pulses are separate. Below a 1.7s beat period the delay compresses and at
+## rich-food periods the two merge into a flutter -- which is acceptable,
+## because it is still not the normal rhythm. Do not add a uniform to fix it.
+const HELD_ECHO_DELAY := 0.58
+## The echo weakens over the last seconds of the sample, so a lapse is felt
+## coming rather than noticed afterwards.
+const HELD_FADE := 15.0
+
 ## Dread rises over about ten seconds and falls in about four and a half. The
 ## asymmetry is the whole of §5.4: relief has to arrive fast enough that a
 ## player can connect it to the turn they just committed to, or escape cannot
@@ -111,9 +149,11 @@ const POST_ANGLE_EPSILON := 0.05
 ## An unused lobe: cos(halfwidth) = 2 can never be reached by a dot product.
 const IDLE_LOBE := Vector4(0.0, -1.0, 2.0, 0.0)
 
-## Lobe slots. 2 and 3 are headroom for later senses -- see §4.
+## Lobe slots. 3 is headroom for a later sense -- see perception.md §4.
 const LOBE_SELF := 0
 const LOBE_NUTRIENT := 1
+## Reserved since Phase 1 and spent by Phase 5 on the `stigma`.
+const LOBE_LIGHT := 2
 
 # --- Death ------------------------------------------------------------------
 # docs/design/food-and-predators.md §6. Predation slams the membrane shut;
@@ -256,11 +296,29 @@ var _taste_jitter_clock := 0.0
 var _dread := 0.0
 var _dread_target := 0.0
 
+## The shadow of something big, at its true bearing. No envelope: it is a
+## continuous state like taste, posted every frame by whoever owns the run.
+var _light := 0.0
+var _light_bearing := 0.0
+var _light_width := LIGHT_HALFWIDTH_DEG[1]
+
+## Seconds left on the held sample, 0 for none, and the echo it schedules.
+var _held := 0.0
+var _echo_at := 0.0
+## Negative means nothing is waiting.
+var _echo_in := -1.0
+
+## What the next flood floods with. The gene's hue while a gene arrived with the
+## meal, nutrient green otherwise -- which is every meal Phase 4 ever served.
+var _ingest_hue := NUTRIENT_COLOR
+
 # Last values announced on [signal sensation], for the gate above.
 var _said_taste := -1.0
 var _said_taste_bearing := 0.0
 var _said_shear := 0.0
 var _said_dread := 0.0
+var _said_light := -1.0
+var _said_light_bearing := 0.0
 
 var _beat_period := 2.4
 var _beat_amplitude := 1.0
@@ -290,7 +348,7 @@ func attach(material: ShaderMaterial) -> void:
 	if _material == null:
 		return
 	var colors := PackedVector3Array([
-		SELF_COLOR, NUTRIENT_COLOR, Vector3.ZERO, Vector3.ZERO])
+		SELF_COLOR, NUTRIENT_COLOR, LIGHT_COLOR, Vector3.ZERO])
 	_material.set_shader_parameter("glow_colors", colors)
 	_apply()
 
@@ -350,13 +408,69 @@ func dread(level: float) -> void:
 		sensation.emit(&"dread", {"strength": next})
 
 
+## The shadow of something bigger than you, passing between the cell and the
+## light above. The `stigma`, §6.
+##
+## [param bearing] is body-relative like every other bearing here, and
+## [param tier] only decides how sharp the lobe is. Continuous, so it is posted
+## every frame and gated like taste.
+##
+## **Dread does not muffle it, and that is the purchase.** Dread is a blocked
+## chemoreceptor; light is a different organ, so TASTE_DREAD_SUPPRESS has no
+## business here. At the moment the player can see least, the thing they bought
+## still works.
+##
+## It says *mass*, never danger: a shadow's size is a fact about a body, so the
+## small cell with the huge mouth casts none and the mouthless giant casts a
+## large one. That is honest optics and it keeps "never an identity".
+func light(bearing: float, strength: float, tier: int) -> void:
+	_light = clampf(strength, 0.0, 1.0)
+	_light_bearing = bearing
+	_light_width = LIGHT_HALFWIDTH_DEG[clampi(tier, 0, LIGHT_HALFWIDTH_DEG.size() - 1)]
+	if absf(_light - _said_light) > POST_EPSILON \
+			or absf(angle_difference(bearing, _said_light_bearing)) > POST_ANGLE_EPSILON:
+		_said_light = _light
+		_said_light_bearing = bearing
+		sensation.emit(&"light", {"bearing": bearing, "strength": _light})
+
+
+## A gene swallowed with nowhere to put it. [param remaining] is seconds left on
+## the sample and 0 is "nothing held"; posted every frame, like taste and dread.
+##
+## Nothing is drawn for this and nothing new is written: it schedules a second,
+## smaller pulse behind each beat (§3.3). The player is told a decision is
+## waiting by the rhythm of their own body, which is the only channel that
+## survives dread and starvation both.
+func hold(remaining: float) -> void:
+	var next := maxf(remaining, 0.0)
+	var was := _held > 0.0
+	_held = next
+	if next <= 0.0:
+		_echo_in = -1.0
+	if (next > 0.0) != was:
+		sensation.emit(&"hold", {"strength": 1.0 if next > 0.0 else 0.0})
+
+
 ## The one licensed flood of the interior.
 ##
-## [param payload] is the Phase 5 seam and nothing else: the gene rolled on the
-## meal will arrive here and tint `ingest_color`. Phase 4 always passes {} and
-## nothing reads it. Note that a payload is still not a position -- whatever
-## lands here has to be something the cell could actually taste.
+## [param payload] carries `gene` and `color`: §2.2 spends the seam Phase 4
+## reserved and makes the flood the gene's own hue, which is the only place a
+## gene is ever identified on the sensory screen. It is a contact event --
+## chemistry already inside you -- and it is bounded to this one signal and this
+## one frame. **Do not let it spread to the band.**
+##
+## A payload is still not a position: whatever lands here has to be something
+## the cell could actually taste. A meal with no gene floods nutrient green,
+## exactly as every Phase 4 meal did.
 func ingest(payload: Dictionary = {}) -> void:
+	# Read defensively rather than with a typed get(): this payload crosses a
+	# public seam that later phases and an audio layer will both write to, and a
+	# wrong type here would be a crash on the most common action in the game.
+	_ingest_hue = NUTRIENT_COLOR
+	if payload.get("color") is Color:
+		var tone: Color = payload["color"]
+		if tone.a > 0.0:
+			_ingest_hue = Vector3(tone.r, tone.g, tone.b)
 	_ingest.fire(1.0)
 	sensation.emit(&"ingest", payload)
 
@@ -531,9 +645,16 @@ func _end_collapse() -> void:
 	_taste_bearing = 0.0
 	_taste_bearing_lp = 0.0
 	_taste_jitter = 0.0
+	_light = 0.0
+	_light_bearing = 0.0
+	_held = 0.0
+	_echo_in = -1.0
+	_echo_at = 0.0
+	_ingest_hue = NUTRIENT_COLOR
 	_said_taste = -1.0
 	_said_shear = 0.0
 	_said_dread = 0.0
+	_said_light = -1.0
 	_shear = 0.0
 	_last_pulse = 0.0
 	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest]:
@@ -574,11 +695,27 @@ func _process(delta: float) -> void:
 
 
 func _step_beat(delta: float) -> void:
+	# The echo first, so a beat landing this frame schedules the *next* echo
+	# rather than cancelling the one it is still waiting on.
+	if _echo_in >= 0.0:
+		_echo_in -= delta
+		if _echo_in <= 0.0:
+			_echo_in = -1.0
+			pulse_now(_echo_at)
+			sensation.emit(&"echo", {"strength": _echo_at})
+
 	_beat_phase += delta / _beat_this_period
 	if _beat_phase < 1.0:
 		return
 	_beat_phase -= floorf(_beat_phase)
 	pulse_now()
+	if _held > 0.0:
+		# Weaker as the sample runs out, so the lapse is felt coming. The delay
+		# is capped at a third of the period as well as at HELD_ECHO_DELAY, so
+		# on a fast beat the echo stays inside its own beat instead of landing
+		# on top of the next one.
+		_echo_at = HELD_ECHO * minf(_held / HELD_FADE, 1.0)
+		_echo_in = minf(HELD_ECHO_DELAY, 0.34 * _beat_this_period)
 	# The beat is the game's one permanent signal and the hunger readout, so it
 	# is the first thing an audio layer will want to hear about.
 	sensation.emit(&"beat", {"strength": beat_strength(), "period": _beat_period})
@@ -635,6 +772,15 @@ func _compose_lobes() -> void:
 	else:
 		_glow_lobes[LOBE_NUTRIENT] = IDLE_LOBE
 
+	# The stigma. No low-pass on the bearing and no jitter added to it: the
+	# whole of what this gene sells is that direction can be certain. And no
+	# dread term -- see light().
+	if _light > LIGHT_FLOOR:
+		_glow_lobes[LOBE_LIGHT] = _lobe(
+			_light_bearing, _light_width, LIGHT_PEAK * _light)
+	else:
+		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
+
 	if _wake.value > 0.0:
 		_press_lobes[0] = _lobe(_wake.bearing, WAKE_HALFWIDTH_DEG, _wake.value)
 	else:
@@ -663,5 +809,6 @@ func _apply() -> void:
 	_material.set_shader_parameter("press_lobes", _press_lobes)
 	_material.set_shader_parameter("flash", _flash.value)
 	_material.set_shader_parameter("ingest", _ingest.value)
+	_material.set_shader_parameter("ingest_color", _ingest_hue)
 	_material.set_shader_parameter("dread", _dread)
 	_material.set_shader_parameter("gain", gain)

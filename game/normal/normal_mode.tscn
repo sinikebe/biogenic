@@ -77,7 +77,29 @@ mouse_filter = 2
 [node name="Buttons" type="VBoxContainer" parent="Hud/Pause/Center"]
 theme_override_constants/separation = 48
 
+[node name="Genome" type="VBoxContainer" parent="Hud/Pause/Center/Buttons"]
+theme_override_constants/separation = 10
+
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
+theme_override_font_sizes/font_size = 15
+text = "genome"
+horizontal_alignment = 1
+
+[node name="Row" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
+theme_override_constants/separation = 20
+alignment = 1
+
+[node name="Hint" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
 [node name="Light" type="VBoxContainer" parent="Hud/Pause/Center/Buttons"]
+size_flags_horizontal = 4
 theme_override_constants/separation = 6
 
 [node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Light"]
@@ -94,7 +116,9 @@ step = 0.05
 value = 1.0
 
 [node name="Resume" type="Button" parent="Hud/Pause/Center/Buttons"]
+size_flags_horizontal = 4
 text = "resume"
 
 [node name="Leave" type="Button" parent="Hud/Pause/Center/Buttons"]
+size_flags_horizontal = 4
 text = "leave"

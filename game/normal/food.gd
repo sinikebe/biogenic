@@ -95,8 +95,8 @@ const ARRIVAL_RADIUS_MAX := 40.0
 ## could not be seen in advance.
 ##
 ## **The `cytostome` entry is never drawn from.** Quoted whole from §3.4 because
-## it is that document's constant and Phase 5B's genome strip will want the same
-## four keys, but the mouth is not a weighted outcome here: §1.3 gives every peer
+## it is that document's constant and the genome strip uses the same four keys,
+## but the mouth is not a weighted outcome here: §1.3 gives every peer
 ## one and no drifter one, so the only pool this is ever consulted with is
 ## [constant DRIFTER_GENES], which excludes it by construction.
 const GENE_WEIGHTS := {&"cytostome": 3, &"cirrus": 3, &"flagellum": 3, &"stigma": 2}
@@ -199,6 +199,34 @@ const DREAD_CAP := 0.95
 ## at zero -- so "the water is wrong" has never meant "that one can eat me".
 const THREAT_LOW := 0.85
 const THREAT_HIGH := 1.35
+
+# --- The shadow, for the stigma (§6) ----------------------------------------
+# A body passing between the cell and the light above occludes it. That costs
+# no new world content -- no sun, no lamp -- and it gives point of view a
+# sharp, certain, continuous bearing on **mass**, where before it had only
+# intermittent wakes and directionless dread.
+#
+# **Mass, not danger, and after §1.1 those are no longer the same thing.** The
+# ratio is on the radius, so the stigma is silent about the two cells §1.1
+# exists to create: the small cell with a huge mouth casts no shadow and the
+# mouthless giant casts a large one. That is honest optics, it keeps
+# perception.md's "never an identity", and it is the gap §2.3's reserved
+# chemoreceptor gene is there to sell later.
+
+## Inside WAKE_RANGE 760 on purpose: the gene sharpens what the cell knows, it
+## never extends how far it knows it.
+const SHADOW_RANGE := 620.0
+const SHADOW_CORE := 180.0
+## Bodies below this fraction of your own radius cast nothing.
+const SHADOW_MIN_RATIO := 0.8
+## **A divergence from §6, and the same one §7.0 forced on dread.** The design
+## writes the ratio as a threshold -- "any cell with radius >= SHADOW_MIN_RATIO
+## * cell.radius" -- and a threshold is a boolean, so a body drifting across it
+## would pop the amber lobe on and off. Every gate in this file has been taken
+## off exactly that argument. So 0.8 is where a shadow starts and a body your
+## own size casts a whole one, with a curve in between; nothing below 0.8 casts
+## anything, which is what the number in §6 actually means.
+const SHADOW_FULL_RATIO := 1.05
 
 # --- The wake ---------------------------------------------------------------
 const WAKE_RANGE := 760.0
@@ -351,6 +379,14 @@ var dread_level := 0.0
 ## window dread is, ignoring distance. Public for the dev harness, which needs
 ## to be able to show that this varies continuously rather than stepping.
 var threat := 0.0
+## How much light is being blocked, 0..1, and from where. Read by whoever owns
+## the run and posted to the bus as the `stigma`'s lobe -- but only if the cell
+## has grown one. The field computes it either way: what the water is doing is
+## not a function of which organs are watching it. §6.
+var shadow := 0.0
+## Body-relative bearing of the summed occlusion. Meaningless when [member
+## shadow] is 0.
+var shadow_bearing := 0.0
 
 var _cell: CellBody = null
 var _cells: Array[Body] = []
@@ -361,6 +397,7 @@ var _opening := false
 var _serial := 0
 var _points := PackedVector2Array()
 var _radii := PackedFloat32Array()
+var _headings := PackedFloat32Array()
 
 
 ## Seeds the water around [param cell]. Cell 0 is held back until the cell is
@@ -766,8 +803,23 @@ func _step_contacts() -> bool:
 			eaten.emit(_meal_value(b.radius), Genome.dominant_of(b.genome), b.pos)
 			_seed(i)
 		# Otherwise a standoff at contact, and there is nothing for either of
-		# them to do about it. Phase 5B: the two bodies pass through each other;
-		# whether that wants a bump is a question for the view that draws it.
+		# them to do about it.
+		#
+		# **The view has now been asked and it says yes, this wants a bump.**
+		# Rendered: two r28-r30 bodies that cannot swallow each other, posed 25
+		# units apart, draw as two crossing rims with one cell's cirrus tuft
+		# inside the other's body and two nuclei side by side. It reads as a
+		# drawing fault rather than as two organisms, which is exactly the
+		# failure §1.3 warns about when it refuses to take a cytostome tier off
+		# a living cell. It is uncommon -- four bodies in a 3000-unit field --
+		# but §1.1's whole point is that standoffs are the most numerous
+		# relationship at every radius, so it will be seen.
+		#
+		# Left alone deliberately: cell.gd already has [method CellBody.bump]
+		# and giving bodies the same treatment is a change to how the water
+		# moves, not to how it is drawn. It belongs to whoever owns the
+		# simulation, with a re-measurement of COMMIT_RANGE behind it, because
+		# a body that can be shouldered is a body a chase can be blocked by.
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -837,6 +889,8 @@ func _step_sense() -> void:
 	var dread := 0.0
 	var worst := 0.0
 	var gape := _cell.gape()
+	var shade := 0.0
+	var shade_pull := Vector2.ZERO
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -854,6 +908,21 @@ func _step_sense() -> void:
 			if c > 0.0:
 				total += c
 				pull += offset / maxf(d, 0.001) * c
+
+		# The shadow, over every body big enough to cast one. Summed and given a
+		# bearing exactly the way taste is, for the same reason: two bodies
+		# blocking the light really do block more of it than one, and a summed
+		# vector moves continuously where a pick-the-biggest would jump the
+		# bearing across the screen the frame two shadows swapped rank.
+		var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
+			b.radius / maxf(_cell.radius, 0.001))
+		if mass > 0.0 and d < SHADOW_RANGE:
+			var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
+				0.0, 1.0)
+			var blocked := mass * near
+			if blocked > 0.0:
+				shade += blocked
+				shade_pull += offset / maxf(d, 0.001) * blocked
 
 		# Dread, over **every** body, with no question asked that has a yes/no
 		# answer -- see THREAT_LOW for the three steps that gating this put into
@@ -875,6 +944,14 @@ func _step_sense() -> void:
 		taste_bearing = _cell.bearing_to(_cell.position + pull)
 	else:
 		taste_bearing = 0.0
+	shadow = minf(shade, 1.0)
+	# Deliberately left where it was when the last shadow faded rather than
+	# snapped to dead ahead: the lobe is already dark at strength 0, and a
+	# bearing that resets would swing the amber round to the nose on its way
+	# out -- a movement the player would read as something passing in front of
+	# them, at the moment nothing is.
+	if shadow > 0.0 and shade_pull.length_squared() > 0.0:
+		shadow_bearing = _cell.bearing_to(_cell.position + shade_pull)
 	threat = worst
 	dread_level = minf(dread, 1.0) * DREAD_CAP
 
@@ -909,6 +986,21 @@ func radii() -> PackedFloat32Array:
 	for i in _cells.size():
 		_radii[i] = _cells[i].radius
 	return _radii
+
+
+## Which way each body is pointing, index-matched to [method points]. Radians
+## clockwise from world north, the cell's own convention.
+##
+## Only the view wants this, and it wants it because §4.1 places cilia by the
+## ovoid's own parameter rather than by bearing: a fringe with an anterior arc
+## and a posterior arc is meaningless on a body with no front. It is ground
+## truth, like [method points] -- nothing the organism can sense.
+func headings() -> PackedFloat32Array:
+	if _headings.size() != _cells.size():
+		_headings.resize(_cells.size())
+	for i in _cells.size():
+		_headings[i] = _cells[i].heading
+	return _headings
 
 
 ## Each cell's `{gene: tier}`, index-matched to [method points]. The live

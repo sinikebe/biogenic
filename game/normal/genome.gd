@@ -24,7 +24,7 @@ extends Node
 const CellBody := preload("res://game/normal/cell.gd")
 
 ## What eating something did. Returned by [method integrate] so the caller --
-## and, in Phase 5B, the genome strip -- can react without re-deriving it.
+## and the genome strip on the pause screen -- can react without re-deriving it.
 enum Result {
 	NOTHING,     ## the prey carried no gene, or there was nothing to do
 	INTEGRATED,  ## a new gene, at tier 1, in a free slot
@@ -43,10 +43,11 @@ const TIER_MAX := 3
 ## the body is drawn in this order, so the cell you can see is the gene you get.
 ## Genes outside this list are later phases' and sort after it, in genome order.
 ##
-## Phase 5B: `stigma` is carried, integrated and inherited here like any other
-## gene, and it does nothing yet -- §6 gives it the light lobe, which needs
-## LOBE_LIGHT in signal_bus.gd. A slot spent on it today is a slot spent on
-## nothing, which is §9.7's irreversible mistake arriving early.
+## `stigma` is carried, integrated and inherited here like any other gene. What
+## it buys is §6's light lobe -- a sharp, certain bearing on **mass**, at its
+## tier's width at every range, which dread cannot muffle. It is silent about
+## the two cells §1.1 exists to create, and deliberately: a shadow is a fact
+## about a body, not about a mouth.
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma"]
 
@@ -65,12 +66,12 @@ const SAMPLE_SECONDS := 45.0
 
 ## The gene whose sample is waiting for a free slot, or &"" for none.
 ##
-## Phase 5B: this is the state, and nothing yet expresses it. §3.3 puts a second,
-## smaller heartbeat behind every beat while a sample is held -- `pulse_now()` on
-## a delay, in signal_bus.gd's _step_beat -- and full vision draws it as a disc
-## of the gene's hue inside the body. §5.2's two-tap swap is what resolves it.
-## Both are the rendering half; the clock below runs regardless, so a sample
-## already lapses at the right time.
+## Expressed twice, which is what having two views is for. Point of view gets a
+## second, smaller heartbeat behind every beat (§3.3): `pulse_now()` on a delay,
+## in signal_bus.gd's _step_beat, carrying no identity at all -- only *there is
+## something in you that is not resolved*. Full vision gets the literal thing, a
+## disc of the gene's hue inside the body. §5.2's two-tap swap on the pause
+## screen is what resolves it, through [method replace].
 var held_sample: StringName = &""
 ## Seconds left on that sample.
 var held_remaining := 0.0
@@ -103,7 +104,7 @@ func _process(delta: float) -> void:
 	if held_sample == &"":
 		return
 	# **A slot may have opened since.** Growth adds one every 3.5 units of
-	# radius, and Phase 5B's swap will free one on demand; a sample is waiting
+	# radius, and §5.2's swap frees one on demand; a sample is waiting
 	# for exactly that, so it takes it. Without this the sample lapses beside an
 	# empty slot, which is a state §3.3 and §5.2 both assume cannot exist -- and
 	# it is not a rare one, because a meal that only raises a tier still grows
@@ -128,7 +129,7 @@ func tier(gene: StringName) -> int:
 
 
 ## The live `{gene: tier}` map. Read it; do not write it -- [method integrate]
-## is the only thing allowed to, and Phase 5B's swap will go through here too.
+## and [method replace] are the only things allowed to.
 func tiers() -> Dictionary:
 	return _tiers
 
@@ -166,6 +167,37 @@ func integrate(gene: StringName) -> int:
 	held_sample = gene
 	held_remaining = SAMPLE_SECONDS
 	return Result.HELD
+
+
+## Puts the held sample over [param gene], at tier 1. §5.2's two-tap swap, and
+## §9.7's one irreversible action in the game: the player may drop this over
+## their own `cytostome` and fall to gape 0.58r, which cannot be undone. It is
+## either a real and interesting mistake or a soft lock, and §1.3's drifter
+## floor is what makes it the first -- there is always something small enough
+## left to eat.
+##
+## **The new gene takes the old one's place in the dictionary, not the end of
+## it.** Order is what §4.1 assigns free arcs by and what [method dominant_of]
+## breaks ties by, so appending would silently rearrange the body and the strip
+## around a tile the player only meant to change. Rebuilt in place instead: the
+## tile you tapped is the tile that changes.
+func replace(gene: StringName) -> int:
+	if held_sample == &"" or not _tiers.has(gene):
+		return Result.NOTHING
+	var taking := held_sample
+	if taking == gene:
+		return Result.NOTHING
+	var rebuilt := {}
+	for key: StringName in _tiers:
+		if key == gene:
+			rebuilt[taking] = 1
+		elif key != taking:
+			rebuilt[key] = int(_tiers[key])
+	_tiers.clear()
+	_tiers.merge(rebuilt)
+	held_sample = &""
+	held_remaining = 0.0
+	return Result.INTEGRATED
 
 
 # ---------------------------------------------------------------------------
