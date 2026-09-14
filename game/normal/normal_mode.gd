@@ -25,6 +25,7 @@ const MetabolismNode := preload("res://game/normal/metabolism.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+const SomaLayer := preload("res://game/perception/soma.gd")
 const RunState := preload("res://game/run_state.gd")
 ## The genome strip draws the same organs, in the same hues, as the water does.
 ## One vocabulary: §2.4's promise is that a point-of-view player who looks in
@@ -39,6 +40,35 @@ const ONBOARD_DELAY := 2.2
 const ONBOARD_FADE_IN := 1.1
 ## Specced: fades over 0.8s the instant they first turn, never shown again.
 const ONBOARD_FADE_OUT := 0.8
+## How long the "a sense grew" line holds before it fades on its own. It has no
+## verb to wait for the way the steering line does -- the gene may be placed now
+## or in forty seconds -- so it is a notice with a timer on it.
+const SENSE_LINE_HOLD := 7.0
+
+# --- The free opening sense -------------------------------------------------
+# **The point of the whole change.** A born cell has no sense of any kind since
+# `chemocyte` took taste behind a gene, so an unhelped opening is a cell
+# wandering an invisible ocean until something eats it. Five seconds in it is
+# handed one, free, drawn at random, and told so in the one line of text this
+# mode has.
+#
+# It arrives as a **held sample the player places**, not as an auto-placement:
+# the `ocellus` is directional and worthless unplaced, and this makes the free
+# gene the natural first lesson in the one placement decision the game has.
+# genome.gd's `bonus_slots` is what guarantees it lands -- the born genome is
+# already full at three, so the gift comes with somewhere to put it, and a
+# player who never opens the pause screen still gets the gene when the sample
+# lapses into that slot.
+
+## About five seconds of swimming, which is two involuntary impulses -- long
+## enough to have felt the cell move and be wondering what to do with it.
+const FIRST_SENSE_AT := 5.0
+## The four senses that answer *where is something*. Drawn flat. `stigma` is the
+## weakest opening of the four -- a shadow is mass, and the authored first
+## arrival is a drifter with almost none -- but it is a real sense, and what it
+## does see is the half of the water that can eat you.
+const FIRST_SENSES: Array[StringName] = [
+	&"ocellus", &"ampulla", &"chemocyte", &"stigma"]
 
 ## The pause scrim, in the launcher's base colour, at two strengths. Point of
 ## view keeps Phase 4's half-veil because the membrane behind it is the live
@@ -59,6 +89,7 @@ enum Life { ALIVE, DYING, WAITING, RETURNING }
 var mode := -1
 
 @onready var _membrane: MembraneLayer = $Membrane
+@onready var _soma: SomaLayer = $Soma
 @onready var _bus := _membrane.bus
 @onready var _cell: CellBody = $Cell
 @onready var _metabolism: MetabolismNode = $Metabolism
@@ -95,6 +126,17 @@ var _last_toggle_frame := -1
 var _onboard := Onboard.OFF
 var _onboard_clock := 0.0
 var _onboard_from := 0.0
+## Seconds HOLD lasts before fading on its own; 0 means "wait for the verb",
+## which is what the steering line does.
+var _onboard_hold := 0.0
+## True while the line on screen is the steering one, which is the only line
+## that is onboarding rather than a notice.
+var _onboard_steer := false
+
+## Seconds swum this life, against FIRST_SENSE_AT, and whether the free sense
+## has already been handed over. Both reset with the cell.
+var _sense_clock := 0.0
+var _sensed := false
 
 ## **Forward is always up.** The world turns instead of the cell, which is the
 ## other way of reading a heading and the one a player who has been staring at
@@ -132,6 +174,7 @@ func _ready() -> void:
 	_motes.setup(_cell)
 	_food.setup(_cell)
 	_genome.setup(_cell)
+	_soma.setup(_cell, _genome)
 
 	# Read before _apply_mode(), which is what carries it into the world view: a
 	# player who chose "forward up" last run must not have to choose it again.
@@ -200,7 +243,18 @@ func _process(delta: float) -> void:
 	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
 	_food.beam_range = _cell.beam_range()
 	_food.beam_bearings = _beam_bearings()
-	_bus.taste(_food.taste_bearing, _food.concentration)
+	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
+	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
+	# field so it can answer in bearings -- the same contract as beam_range.
+	_food.smell_range = _cell.smell_range()
+	_food.ping_range = _cell.ping_range()
+	_food.ping_period = _cell.ping_period()
+	# **`taste_level`, not `concentration`.** The first is what this nose picks
+	# up and the second is what the water is like; the beat above reads the
+	# water, the membrane reads the organ. A cell with no chemocyte hands over a
+	# flat zero and gets no green band at all -- which is the whole change, and
+	# is enforced again inside the bus.
+	_bus.taste(_food.taste_bearing, _food.taste_level)
 	_bus.dread(_food.dread_level)
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
 	# the beat, and it is what makes a tier change something point of view can
@@ -220,8 +274,10 @@ func _process(delta: float) -> void:
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"statocyst"),
-		_cell.extra(&"rhabdom"))
+		_cell.extra(&"rhabdom"), _cell.extra(&"chemocyte"),
+		_cell.extra(&"ampulla"))
 	_post_beam()
+	_post_pings()
 	# `statocyst`: absolute up, as a bearing this body reads it -- which is
 	# minus the heading, and the one bearing on the membrane that moves when the
 	# cell turns rather than when the water does.
@@ -232,6 +288,10 @@ func _process(delta: float) -> void:
 	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
+	# Proprioception is not a sensation and does not go on the bus: it is a
+	# view, and it is handed the one number it cannot derive for itself.
+	_soma.beat = _bus.pulse()
+	_step_sense_grant(delta)
 	_step_onboarding(delta)
 
 	if _metabolism.starved():
@@ -276,6 +336,50 @@ func _post_beam() -> void:
 			best = near
 			bearing = float(beam[0])
 	_bus.beam(bearing, best)
+
+
+## **The ping's returns**, drained from the field and posted one at a time.
+##
+## Unlike the beam these do not compete before they reach the bus: each return
+## is a separate event at a separate bearing, and the membrane's envelope is
+## what resolves two that land in the same instant. Spacing them out in *time*
+## is the field's job, and it is what makes one pulse read as a sweep.
+func _post_pings() -> void:
+	for echo: Array in _food.pings:
+		_bus.ping(float(echo[0]), float(echo[1]))
+
+
+# ---------------------------------------------------------------------------
+# The free opening sense.
+# ---------------------------------------------------------------------------
+
+## Five seconds in, one sensing gene, free, as a sample waiting for a slot.
+##
+## Unconditional: there is no check on whether the water has been kind, because
+## the state this exists to prevent -- a cell that cannot sense anything at all
+## -- is the state every run now starts in.
+func _step_sense_grant(delta: float) -> void:
+	if _sensed:
+		return
+	_sense_clock += delta
+	if _sense_clock < FIRST_SENSE_AT:
+		return
+	_sensed = true
+	var gene: StringName = FIRST_SENSES[randi() % FIRST_SENSES.size()]
+	# Only reachable from the dev harness, which can force a genome that already
+	# carries one of the four. Nothing to give, and nothing to say about it.
+	if _genome.tier(gene) > 0:
+		return
+	# The gift comes with somewhere to put it, but only when there is nowhere:
+	# a cell that has grown itself a spare slot does not need a second one.
+	if not _genome.layout().has(&""):
+		_genome.bonus_slots += 1
+	if _genome.integrate(gene) != GenomeNode.Result.HELD:
+		return
+	# The strip is built when the pause screen opens, so there is nothing to
+	# rebuild here -- but the echo behind the beat starts on the next frame's
+	# hold(), and the line says what the echo cannot.
+	_say_sense()
 
 
 func _on_impulsed(strength: float) -> void:
@@ -376,6 +480,9 @@ func _die(loud: bool, bearing: float) -> void:
 	_tap_pending = false
 	_set_simulating(false)
 	_cell.release()
+	# The collapse owns the screen. A body still swimming calmly in the middle
+	# of a membrane slamming shut is the game contradicting itself.
+	_soma.set_active(false)
 	if loud:
 		# The sensation they already know, one last time.
 		_bus.hit(bearing, 1.0)
@@ -402,6 +509,10 @@ func _step_death(delta: float) -> void:
 			_bus.revive(_death_clock)
 			if _death_clock >= SignalBus.DEATH_RETURN:
 				_life = Life.ALIVE
+				# The body comes back with the light. _apply_mode() ran while
+				# this was still RETURNING, so the figure is still hidden and
+				# nothing else will ever turn it back on.
+				_soma.set_active(not _vision_active())
 				# The first beat on arrival: 2.4s and full strength, after
 				# minutes of a slow faint one.
 				_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
@@ -420,6 +531,12 @@ func _wake_up() -> void:
 	_motes.setup(_cell)
 	_food.setup(_cell)
 	_genome.setup(_cell)
+	_soma.setup(_cell, _genome)
+	# A new cell is a born cell, and a born cell has no senses: the five-second
+	# clock starts again, and so does the line that announces it. §9.4 -- death
+	# keeps nothing, and that has to include the leg-up.
+	_sense_clock = 0.0
+	_sensed = false
 	_set_simulating(true)
 	_apply_mode()
 
@@ -441,6 +558,10 @@ func _set_simulating(on: bool) -> void:
 func _apply_mode() -> void:
 	_vision.set_active(_vision_active())
 	_vision.set_camera_locked(_camera_locked)
+	# The self-figure is the point-of-view answer to "where am I facing". Full
+	# vision already draws the real body at the real place, so a second, scaled,
+	# screen-centred copy of it would be two cells claiming to be the player.
+	_soma.set_active(not _vision_active() and _life == Life.ALIVE)
 
 
 ## **Forward is always up.** Beside `light` on the pause column, same slab, same
@@ -475,27 +596,66 @@ func _toggle_mode() -> void:
 
 
 # ---------------------------------------------------------------------------
-# Onboarding: one line, first run only, and the only text in normal mode.
+# The one line of text in normal mode. It carries two things now.
+#
+# The steering line is onboarding: first run only, held until the player turns.
+# The sense line is a **notice** -- something happened to your body a moment
+# ago -- and it shows on every run, because the thing it announces happens on
+# every run and a player who missed it once is a player swimming blind. It is
+# short, lowercase and in the same voice, and it is gone seven seconds later.
+#
+# perception.md §6.1's "one string in normal mode" is stretched to two by this,
+# and deliberately: the alternative to telling the player a gene is waiting is
+# a second heartbeat they have never been taught to read.
 # ---------------------------------------------------------------------------
 
 func _begin_onboarding() -> void:
 	_onboarding.modulate.a = 0.0
+	_onboard_from = 0.0
+	_onboard_hold = 0.0
 	if _seen_onboarding():
 		_onboarding.hide()
 		_onboard = Onboard.OFF
 		return
+	_onboard_steer = true
 	_onboarding.text = "drag to turn" if _touch_first() else "A · D to turn"
 	_onboarding.show()
 	_onboard = Onboard.WAITING
 	_onboard_clock = 0.0
 
 
+## **A sense arrived, and here is where to put it.** The pause screen is the
+## only place a sample can be placed, so the line names the gesture that gets
+## there -- Back on the one touch platform we ship, Escape everywhere else --
+## and the strip's own hint takes over from there.
+func _say_sense() -> void:
+	_say("a sense grew · back to place it" if _touch_first()
+		else "a sense grew · esc to place it", SENSE_LINE_HOLD)
+
+
+## Puts [param text] on the line and fades it in from wherever the line already
+## is, so a notice arriving over the steering line is a change of words and not
+## a blink. [param hold] is how long it stays once it is up.
+func _say(text: String, hold: float) -> void:
+	_onboard_steer = false
+	_onboard_from = _onboarding.modulate.a
+	_onboard_hold = hold
+	_onboarding.text = text
+	_onboarding.show()
+	_onboard_clock = 0.0
+	_onboard = Onboard.FADE_IN
+
+
 func _step_onboarding(delta: float) -> void:
 	if _onboard == Onboard.OFF:
 		return
 
-	# The instant they first turn, whatever the line is doing, it goes.
-	if _onboard != Onboard.FADE_OUT and absf(_cell.steer) > CellBody.STEER_DEADZONE:
+	# The instant they first turn, whatever the line is doing, it goes -- but
+	# only while the line is the one that is teaching them to turn. A notice
+	# about their own body must not vanish because they happened to be steering
+	# when it arrived, which at five seconds in they usually are.
+	if _onboard_steer and _onboard != Onboard.FADE_OUT \
+			and absf(_cell.steer) > CellBody.STEER_DEADZONE:
 		_mark_onboarding_seen()
 		_onboard_from = _onboarding.modulate.a
 		_onboard_clock = 0.0
@@ -508,15 +668,21 @@ func _step_onboarding(delta: float) -> void:
 				_onboard_clock = 0.0
 				_onboard = Onboard.FADE_IN
 		Onboard.FADE_IN:
-			_onboarding.modulate.a = minf(_onboard_clock / ONBOARD_FADE_IN, 1.0)
+			_onboarding.modulate.a = lerpf(_onboard_from, 1.0,
+				minf(_onboard_clock / ONBOARD_FADE_IN, 1.0))
 			if _onboard_clock >= ONBOARD_FADE_IN:
 				# It has been read. Even if they quit now, do not nag next run.
-				_mark_onboarding_seen()
+				if _onboard_steer:
+					_mark_onboarding_seen()
 				_onboard_clock = 0.0
 				_onboard = Onboard.HOLD
 		Onboard.HOLD:
-			# Stays until they turn. They have not learned the verb yet.
-			pass
+			# The steering line stays until they turn -- they have not learned
+			# the verb yet. A notice has no verb to wait for, so it times out.
+			if _onboard_hold > 0.0 and _onboard_clock >= _onboard_hold:
+				_onboard_from = _onboarding.modulate.a
+				_onboard_clock = 0.0
+				_onboard = Onboard.FADE_OUT
 		Onboard.FADE_OUT:
 			var t := minf(_onboard_clock / ONBOARD_FADE_OUT, 1.0)
 			_onboarding.modulate.a = _onboard_from * (1.0 - t)
@@ -627,6 +793,14 @@ func _toggle_pause() -> void:
 	var paused := not get_tree().paused
 	get_tree().paused = paused
 	_pause_ui.visible = paused
+	# **Both of these are the scrim argument again.** The pause column is
+	# centred and so is the self-figure, so the light slider's track ran
+	# straight through the cell's own cilia -- the exact failure that took the
+	# world view down to a ghost behind SCRIM_FULL_VISION. The membrane stays,
+	# because it is the live preview of the slider; the body and the line are
+	# not, and the strip above is a better mirror than either. Rendered.
+	_soma.set_active(not paused and not _vision_active() and _life == Life.ALIVE)
+	_onboarding.visible = not paused and _onboard != Onboard.OFF
 	if paused:
 		# A finger still down when the pause opened must not keep steering.
 		_cell.release()
@@ -860,7 +1034,7 @@ const WORDS := {
 	&"statocyst": "level", &"rhabdom": "focus", &"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
 	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
-	&"crista": "burn",
+	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
 enum Tile { OCCUPIED, EMPTY, HELD, ARMED }

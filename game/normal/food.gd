@@ -109,8 +109,13 @@ const ARRIVAL_RADIUS_MAX := 40.0
 ## mouth is a run that cannot eat. Everything earned is rarer, and the two that
 ## change the most about a run -- the beam and the voluntary push -- are the
 ## rarest of all.
+## **`chemocyte` is weighted like a starting organ, and that is deliberate.**
+## Taste stopped being innate with this phase, so a nose is the difference
+## between a run and a wander -- it has to be the commonest thing the water can
+## hand you, on a par with the three organs you are born with.
 const GENE_WEIGHTS := {
 	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
+	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
 	&"statocyst": 2, &"rhabdom": 2, &"palp": 2, &"myoneme": 2,
 	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
@@ -119,7 +124,7 @@ const GENE_WEIGHTS := {
 ## Everything a drifter can be, and therefore everything the player can ever
 ## eat their way into. The mouth is not on this list by construction.
 const DRIFTER_GENES: Array[StringName] = [
-	&"cirrus", &"flagellum", &"stigma",
+	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
@@ -151,6 +156,12 @@ const SCENT_WINDOW := 250.0    ## smooth the outer cutoff so it cannot pop
 ## exists at all -- about twelve seconds of swimming. Everything outside it is
 ## hot-and-cold with no bearing in it. Named here because it is a property of
 ## the field, and the full-vision view draws it as a threshold ring.
+##
+## **It is one source's contribution, not the whole field.** Thirty-four bodies
+## sum, so a bearing exists long before any single one crosses this -- and since
+## `chemocyte` arrived, a cell only sums what is inside its own nose's reach
+## ([constant CellBody.SMELL_RANGE_BY_TIER]). The ring stays what it always was:
+## where one body on its own becomes worth smelling.
 const BEARING_RANGE := 680.0
 
 ## How a body fades out of the scent as it stops fitting in your mouth. §7.0 is
@@ -186,11 +197,21 @@ const MEAL_MAX := 1.40
 const RING_MIN := 920.0
 const RING_MAX := 1350.0
 const CULL := 1700.0
-## Authored, like mote 0: placed along the cell's real velocity once it moves,
-## just outside scent range, so the beat quickens at about 0:12. The drifter
-## floor guarantees cell 0 is a drifter at setup, so the first thing the player
-## ever meets is always something it can eat.
-const FIRST_DISTANCE := 1400.0
+## Authored, like mote 0: placed along the cell's real velocity once it moves.
+## The drifter floor guarantees cell 0 is a drifter at setup, so the first thing
+## the player ever meets is always something it can eat.
+##
+## **It has to be findable with whatever sense you were handed at five seconds**
+## (normal_mode.gd's FIRST_SENSES), which is what moved it down from 1400. The
+## weakest of the two senses that can actually reach a drifter is a tier-1
+## `chemocyte` at 1100; a tier-1 `ampulla` pings to 1100 as well. 1000 sits
+## inside both, and still outside the frame -- the half-diagonal of a 20:9
+## canvas is 877 -- so the opening is not a body sitting in the corner at t=0.
+##
+## The other two draws are allowed to miss it, and that is the cost of the
+## placement decision: an `ocellus` reaches 620 and only along the arc it was
+## put on, and a `stigma` sees mass, which a drifter does not have.
+const FIRST_DISTANCE := 1000.0
 
 # --- Dread ------------------------------------------------------------------
 const DREAD_RANGE := 1400.0
@@ -258,6 +279,34 @@ const SHADOW_MIN_RATIO := 0.8
 ## own size casts a whole one, with a curve in between; nothing below 0.8 casts
 ## anything, which is what the number in §6 actually means.
 const SHADOW_FULL_RATIO := 1.05
+
+# --- The ping (`ampulla`) ---------------------------------------------------
+## How fast a return comes back, in world units per second. **This is the whole
+## reason the ping reads as a sweep rather than as a chord**: the nearest body
+## answers first and the farthest last, so one pulse arrives on the membrane as
+## a series of separate marks walking outward in time. At 1250 a tier-1 return
+## from the edge of reach lands 0.88s after the pulse left, which is comfortably
+## longer than the mark it fires takes to decay.
+const PING_SPEED := 1250.0
+## How many bodies one pulse may answer for, nearest first. A cap rather than a
+## rule: thirty-four bodies inside reach would be a strobe, and the far half of
+## them would be inaudible under the near half anyway.
+const PING_RETURNS := 5
+## How a return fades with range. **Deliberately not linear**, and measured: the
+## water keeps most of its bodies between 900 and 1400 units out, so a linear
+## fall put nearly every tier-1 return at strength 0.14 -- a mark too faint to
+## be a mark, for the one gene whose whole promise is *there is something over
+## there*. At 0.6 the same return reads 0.30 and a body at half reach reads
+## 0.66, so distance is still legible and nothing is silent.
+const PING_FALLOFF := 0.6
+## **The smallest gap between two returns of one pulse.** Flight time alone does
+## not carry the sweep, and that was measured rather than assumed: the water
+## keeps its bodies in a band, so four of them routinely answered within 30ms of
+## each other and the membrane's one envelope collapsed the lot into a single
+## mark. A return is pushed back to at least this far behind the one in front of
+## it, so a pulse is always heard as a series. The fiction is the organ's, not
+## the water's -- an ear resolves one thing at a time.
+const PING_MIN_GAP := 0.17
 
 # --- The wake ---------------------------------------------------------------
 const WAKE_RANGE := 760.0
@@ -432,6 +481,39 @@ var beam_range := 0.0
 ## `[bearing, distance, hit]` -- `distance` is the full reach when nothing was
 ## hit and `hit` is false then.
 var beams: Array = []
+## `chemocyte`. How far this cell's chemoreceptors reach, written once a frame
+## by the run. 0 is a cell with no nose, and a cell with no nose gets no
+## bearing to anything edible at all.
+var smell_range := 0.0
+## **What the scent field is worth to this particular nose**: the same sum as
+## [member concentration], restricted to sources inside [member smell_range].
+##
+## Two numbers rather than one, and the split is the point. [member
+## concentration] is what the *water* is like, and it drives the metabolic beat,
+## which is a property of the body and not of its senses -- an eyeless, noseless
+## cell still beats faster in rich water. This is what the *organ* picks up, and
+## it is the only one of the two that reaches the membrane.
+var taste_level := 0.0
+## `ampulla`. How far a pulse carries and how often one goes out, written once a
+## frame by the run. Either at 0 is a cell with no electroreceptor.
+var ping_range := 0.0
+var ping_period := 0.0
+## Returns that became due **this frame**: `[bearing, strength]`, nearest first,
+## strength 1 against the skin and 0 at the edge of reach. Drained by the run,
+## which is the only thing allowed to post them. Bodies, not meals: a ping
+## answers off anything with a body in it, which is exactly what the scent field
+## can never do.
+var pings: Array = []
+## How far the newest wavefront has travelled, or -1 for nothing in flight.
+## Ground truth for the full-vision view, which draws the sweep; the organism
+## only ever gets [member pings].
+var ping_front := -1.0
+## `[seconds until due, world position, strength]` for returns still in flight.
+## The position stops here: [method _step_pings] turns it into a bearing at the
+## moment the return lands, exactly as [method _step_touch] does.
+var _echoes: Array = []
+var _ping_clock := 0.0
+var _ping_age := -1.0
 ## `palp`. Range in, bearing and strength out: the nearest body inside touch
 ## range, which is the one thing a blind cell can know for certain.
 var touch_range := 0.0
@@ -477,6 +559,12 @@ func setup(cell: CellBody) -> void:
 	threat = 0.0
 	beams.clear()
 	touch_level = 0.0
+	taste_level = 0.0
+	pings.clear()
+	_echoes.clear()
+	_ping_clock = 0.0
+	_ping_age = -1.0
+	ping_front = -1.0
 	_dart_clock = 0.0
 
 
@@ -501,6 +589,7 @@ func _process(delta: float) -> void:
 		return
 	_step_sense()
 	_step_beams()
+	_step_pings(delta)
 	_step_touch()
 
 
@@ -979,6 +1068,10 @@ func _step_sense() -> void:
 	var gape := _cell.gape()
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
+	# The same sum again, over only what this cell's nose reaches. Kept apart
+	# from `total` on purpose: see [member taste_level].
+	var smelt := 0.0
+	var smelt_pull := Vector2.ZERO
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -996,6 +1089,9 @@ func _step_sense() -> void:
 			if c > 0.0:
 				total += c
 				pull += offset / maxf(d, 0.001) * c
+				if d < smell_range:
+					smelt += c
+					smelt_pull += offset / maxf(d, 0.001) * c
 
 		# The shadow, over every body big enough to cast one. Summed and given a
 		# bearing exactly the way taste is, for the same reason: two bodies
@@ -1028,8 +1124,13 @@ func _step_sense() -> void:
 		dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE), 0.0, 1.0) * level
 
 	concentration = minf(total, 1.0)
-	if concentration > 0.0 and pull.length_squared() > 0.0:
-		taste_bearing = _cell.bearing_to(_cell.position + pull)
+	# **The bearing is the nose's, not the water's.** A cell with no chemocyte
+	# leaves here with taste_level 0 and taste_bearing 0, which is what makes
+	# "an organ you have not grown is silent" true at the source as well as at
+	# the two gates downstream of it.
+	taste_level = minf(smelt, 1.0)
+	if taste_level > 0.0 and smelt_pull.length_squared() > 0.0:
+		taste_bearing = _cell.bearing_to(_cell.position + smelt_pull)
 	else:
 		taste_bearing = 0.0
 	shadow = minf(shade, 1.0)
@@ -1076,6 +1177,77 @@ func _step_beams() -> void:
 				best = hit
 				found = true
 		beams.append([bearing, best, found])
+
+
+## **The ping.** `ampulla`: a pulse on its own clock, and a bearing for every
+## body it comes back off -- edible, inedible, hunting you or asleep. That is
+## the whole of what makes it a different sense from `chemocyte` rather than a
+## second skin on it: the scent field is a statement about food, and most of
+## what is out there is not food.
+##
+## Returns are staggered by their own flight time, which is what turns one pulse
+## into a sweep: the nearest body answers at `d / PING_SPEED` and the farthest
+## almost a second later. Nothing here posts and nothing here keeps a position
+## past the frame it becomes a bearing.
+func _step_pings(delta: float) -> void:
+	pings.clear()
+	if _cell == null:
+		return
+	if ping_range <= 0.0 or ping_period <= 0.0:
+		# The organ was lost, or was never grown. Anything still in flight is
+		# dropped rather than delivered: it was never heard.
+		_echoes.clear()
+		_ping_clock = 0.0
+		_ping_age = -1.0
+		ping_front = -1.0
+		return
+
+	_ping_clock -= delta
+	if _ping_clock <= 0.0:
+		_ping_clock = ping_period
+		_ping_age = 0.0
+		_cast_ping()
+	elif _ping_age >= 0.0:
+		_ping_age += delta
+
+	var front := _ping_age * PING_SPEED
+	ping_front = front if _ping_age >= 0.0 and front <= ping_range else -1.0
+
+	# Backwards, so removing one does not skip the next.
+	for i in range(_echoes.size() - 1, -1, -1):
+		var echo: Array = _echoes[i]
+		echo[0] -= delta
+		if echo[0] > 0.0:
+			continue
+		pings.append([_cell.bearing_to(echo[1]), echo[2]])
+		_echoes.remove_at(i)
+	# Loudest first. The membrane has one envelope for this and it keeps the
+	# loudest mark, so the order only matters to a later subscriber -- but
+	# "nearest thing first" is the only order a radar return has.
+	pings.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
+
+
+## Everything inside reach, nearest first, capped at [constant PING_RETURNS].
+func _cast_ping() -> void:
+	var found: Array = []
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var d := b.pos.distance_to(_cell.position) - b.radius
+		if d >= ping_range:
+			continue
+		found.append([maxf(d, 0.0), b.pos])
+	if found.is_empty():
+		return
+	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var due := 0.0
+	for i in mini(found.size(), PING_RETURNS):
+		var d: float = found[i][0]
+		var flight := d / PING_SPEED
+		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
+		_echoes.append([due, found[i][1],
+			pow(clampf(1.0 - d / ping_range, 0.0, 1.0), PING_FALLOFF)])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --

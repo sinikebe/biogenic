@@ -100,7 +100,12 @@ extends Node
 ##                           without a tap and without writing the choice to
 ##                           user:// where the next run would inherit it.
 ##   --forage                steer up the taste gradient, to measure §3.3's
-##                           "a meal every 60 to 90 seconds" without a human
+##                           "a meal every 60 to 90 seconds" without a human.
+##                           **Needs a nose.** Taste went behind `chemocyte`, so
+##                           a forced genome without one has no bearing to climb
+##                           and this steers straight: pass
+##                           `--genome=cytostome:1,cirrus:1,flagellum:1` and let
+##                           the five-second grant land, or force `chemocyte:1`
 ##   --evade                 play the escape contract in §5.4: hold full steer
 ##                           while the last wake bearing is ahead, release once
 ##                           it is astern, and do not waver. This is the only

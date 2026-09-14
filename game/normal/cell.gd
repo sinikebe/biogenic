@@ -108,6 +108,28 @@ const BEAM_RANGE_BY_TIER: Array[float] = [0.0, 620.0, 900.0, 1240.0]
 const BEAM_COUNT_BY_TIER: Array[int] = [0, 1, 2, 3]
 const BEAM_FAN_DEG_BY_TIER: Array[float] = [0.0, 0.0, 22.0, 50.0]
 
+## `chemocyte` / smell. **How far this cell's chemoreceptors reach.** The scent
+## field itself is unchanged -- what the water is doing is not a function of who
+## is sniffing it -- but only sources inside this radius reach the taste lobe,
+## so a poor nose smells what is near and a good one smells the whole field.
+##
+## Tier 0 is a cell with no chemoreceptor at all, and it is **not** the
+## extrapolated step the drive tables use: it is a hard zero, because taste is
+## now a gene and a cell without it gets no bearing to food whatsoever. Tier 3
+## is food.gd's SCENT_RANGE, so a saturated nose is exactly the always-on taste
+## every build before this one shipped with.
+const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
+
+## `ampulla` / ping. Electroreception: a pulse every so often, and the bearing
+## of **every** body it comes back off, edible or not. That is the difference
+## from `chemocyte` -- the scent field can only ever describe a meal, and most
+## of what matters in this water is not a meal.
+##
+## Range and rate both climb, because a radar is worth having for how far it
+## reaches and for how often it tells you.
+const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
+const PING_PERIOD_BY_TIER: Array[float] = [0.0, 3.2, 2.2, 1.4]
+
 ## `axoneme` / push. Acceleration along the heading while the player holds, in
 ## units per second squared. **This is the flagellum made voluntary**: the
 ## random involuntary impulse keeps firing underneath it at whatever tier the
@@ -303,6 +325,21 @@ func swallow_radius() -> float:
 ## cilia -> genome -> cell would be a preload cycle.
 func beam_range() -> float:
 	return BEAM_RANGE_BY_TIER[_tier_index(extra(&"ocellus"))]
+
+
+## How far this cell can smell, 0 for a cell with no `chemocyte`.
+func smell_range() -> float:
+	return SMELL_RANGE_BY_TIER[_tier_index(extra(&"chemocyte"))]
+
+
+## How far a ping carries, 0 for a cell with no `ampulla`.
+func ping_range() -> float:
+	return PING_RANGE_BY_TIER[_tier_index(extra(&"ampulla"))]
+
+
+## Seconds between pings, 0 for a cell with no `ampulla`.
+func ping_period() -> float:
+	return PING_PERIOD_BY_TIER[_tier_index(extra(&"ampulla"))]
 
 
 ## How many genes this body can carry.

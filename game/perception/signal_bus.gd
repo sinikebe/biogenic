@@ -167,11 +167,35 @@ const TOUCH_PEAK := 0.26
 ## sharpness in the channel the player has used since the first minute.
 const FOCUS_BY_TIER: Array[float] = [1.0, 0.74, 0.56, 0.40]
 
-## The earned senses, in genome order: `ocellus`, `statocyst`, `rhabdom`.
-## Written once a frame by [method sense_organs], exactly like [method organs].
+## `ampulla` / ping. One electroreceptive pulse, and a mark on the contour for
+## every body it comes back off. **It shares [constant LOBE_BEAM] with the
+## ocellus** -- there are four glow lobes in the shader and a fifth is a new
+## uniform and a new binary -- and that sharing is honest rather than a
+## compromise: both mean *a hard surface, that way, that far*, and the loudest
+## one wins exactly as the three self-signals do in lobe 0.
+##
+## What keeps them apart on screen is time, not colour. The beam is a steady
+## mark that sits where the ray is pointed for as long as it is pointed there; a
+## ping is a run of short marks walking outward, one per body, spaced by their
+## own flight time. Louder than the beam, because a return is a whole body
+## answering rather than a ray clipping one, and shorter-lived than anything
+## else on the contour.
+const PING_PEAK := 0.55
+const PING_HALFWIDTH_DEG: Array[float] = [0.0, 17.0, 13.0, 10.0]
+const PING_ATTACK := 0.035
+## Shorter than food.gd's PING_MIN_GAP, so a sweep reads as separate marks
+## rather than as one smear that wanders across the contour. The two constants
+## are a pair: raise this above that one and the series becomes a chord again.
+const PING_DECAY := 0.15
+
+## The earned senses, in genome order: `ocellus`, `statocyst`, `rhabdom`, then
+## the two this phase adds. Written once a frame by [method sense_organs],
+## exactly like [method organs].
 const SENSE_OCELLUS := 0
 const SENSE_STATOCYST := 1
 const SENSE_RHABDOM := 2
+const SENSE_CHEMOCYTE := 3
+const SENSE_AMPULLA := 4
 
 # --- A held sample is a second heartbeat (§3.3) -----------------------------
 # The one new point-of-view signal Phase 5 adds, and the answer to "how does a
@@ -380,6 +404,7 @@ var _bruise := Env.new(BRUISE_ATTACK, BRUISE_DECAY)
 var _flash := Env.new(FLASH_ATTACK, FLASH_DECAY)
 var _wake := Env.new(WAKE_ATTACK, WAKE_DECAY)
 var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY_BY_TIER[1])
+var _ping := Env.new(PING_ATTACK, PING_DECAY)
 
 ## **What body this membrane is attached to** (§2.1), in `genes-and-cilia.md`'s
 ## arc order: `cytostome`, `cirrus`, `flagellum`, `stigma`. Written once a frame
@@ -392,8 +417,10 @@ var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY_BY_TIER[1])
 ## Defaults are the born cell: mediocre at three things and blind. Nothing here
 ## may become a way to describe what is *outside* the cell.
 var _organs := PackedInt32Array([1, 1, 1, 0])
-## `ocellus`, `statocyst`, `rhabdom`. A born cell has none of them.
-var _senses := PackedInt32Array([0, 0, 0])
+## `ocellus`, `statocyst`, `rhabdom`, `chemocyte`, `ampulla`. A born cell has
+## none of them -- **including the nose**, which is the change this phase makes
+## to what "born" means. Taste was innate from Phase 1 to Phase 5.
+var _senses := PackedInt32Array([0, 0, 0, 0, 0])
 
 ## Shear has no attack at all -- it is the proof that the player is connected to
 ## something, so it must answer the same frame the turn starts.
@@ -512,10 +539,13 @@ func organs(cytostome: int, cirrus: int, flagellum: int, stigma: int) -> void:
 ##
 ## Same rule as [method organs] and it is not a loophole: three small integers
 ## about this cell's own anatomy are not a fact about anything in the water.
-func sense_organs(ocellus: int, statocyst: int, rhabdom: int) -> void:
+func sense_organs(ocellus: int, statocyst: int, rhabdom: int,
+		chemocyte: int = 0, ampulla: int = 0) -> void:
 	_senses[SENSE_OCELLUS] = clampi(ocellus, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_STATOCYST] = clampi(statocyst, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_RHABDOM] = clampi(rhabdom, 0, ORGAN_TIER_MAX)
+	_senses[SENSE_CHEMOCYTE] = clampi(chemocyte, 0, ORGAN_TIER_MAX)
+	_senses[SENSE_AMPULLA] = clampi(ampulla, 0, ORGAN_TIER_MAX)
 
 
 # ---------------------------------------------------------------------------
@@ -524,16 +554,27 @@ func sense_organs(ocellus: int, statocyst: int, rhabdom: int) -> void:
 
 ## Chemistry soaking through the band. Continuous: post it every frame with the
 ## current concentration, 0 for "nothing out there".
+##
+## **A cell with no `chemocyte` smells nothing**, enforced here as well as at
+## the call site, exactly the way [method light] is gated on the `stigma`. This
+## was innate for five phases and is not any more: the green band is the one
+## signal that says *food, that way*, and a sense that is handed out for free is
+## a sense that can never be a decision.
+##
+## It is still the only sense that lies -- the low-pass, the jitter and dread's
+## suppression all stay where they were. What the tier buys is reach, and reach
+## is applied before this: food.gd sums only what is inside the nose.
 func taste(bearing: float, concentration: float) -> void:
-	_taste_bearing = bearing
-	_taste_c = clampf(concentration, 0.0, 1.0)
+	var smelt := _senses[SENSE_CHEMOCYTE] > 0
+	_taste_bearing = bearing if smelt else 0.0
+	_taste_c = clampf(concentration, 0.0, 1.0) if smelt else 0.0
 	# Continuous signals are posted every frame; only tell subscribers when
 	# something actually moved, or this allocates sixty dictionaries a second.
 	if absf(_taste_c - _said_taste) > POST_EPSILON \
-			or absf(angle_difference(bearing, _said_taste_bearing)) > POST_ANGLE_EPSILON:
+			or absf(angle_difference(_taste_bearing, _said_taste_bearing)) > POST_ANGLE_EPSILON:
 		_said_taste = _taste_c
-		_said_taste_bearing = bearing
-		sensation.emit(&"taste", {"bearing": bearing, "strength": _taste_c})
+		_said_taste_bearing = _taste_bearing
+		sensation.emit(&"taste", {"bearing": _taste_bearing, "strength": _taste_c})
 
 
 ## A pressure wave: the contour dents physically inward at one bearing.
@@ -617,6 +658,26 @@ func beam(bearing: float, strength: float) -> void:
 		_said_beam = _beam
 		_said_beam_bearing = _beam_bearing
 		sensation.emit(&"beam", {"bearing": _beam_bearing, "strength": _beam})
+
+
+## **A return came back.** `ampulla`: one mark on the contour for one body the
+## pulse found, at its bearing, [param strength] 1 against the skin and 0 at the
+## edge of reach. Fired once per return, several times per pulse, spaced by the
+## returns' own flight times -- so a pulse arrives as a sweep and not as a
+## chord. See [constant PING_PEAK] for why it shares the beam's lobe.
+##
+## It says *a body*, not *a meal* and not *a threat*: that is the whole purchase
+## over the scent field, and it keeps perception.md's "never an identity"
+## because a body is the least a return can possibly mean. A cell with no
+## ampulla reports nothing, enforced here as well as at the call site.
+func ping(bearing: float, strength: float) -> void:
+	if _senses[SENSE_AMPULLA] <= 0:
+		return
+	var s := clampf(strength, 0.0, 1.0)
+	if s <= 0.0:
+		return
+	_ping.fire(PING_PEAK * s, bearing)
+	sensation.emit(&"ping", {"bearing": bearing, "strength": s})
 
 
 ## **Which way is up**, in a game where the body is the only frame of reference
@@ -728,6 +789,15 @@ func beat_strength() -> float:
 	return maxf(_beat_amplitude * lerpf(1.0, DREAD_BEAT_FLOOR, _dread), DREAD_BEAT_FLOOR)
 
 
+## **What the beat is doing right now**, 0..1. A read, not a write, and the only
+## one in this file: the proprioceptive figure at the centre of the point-of-view
+## screen brightens its nucleus on the same heartbeat the contour does, and two
+## clocks for one heart would drift apart on screen where it would be seen.
+## Whoever owns the run reads this and hands it on; nothing else may.
+func pulse() -> float:
+	return _pulse.value
+
+
 ## Fires the beat immediately at [param scale] of its current strength, for the
 ## probe and for a scene that wants the membrane alive on its first frame.
 func pulse_now(scale: float = 1.0) -> void:
@@ -796,6 +866,7 @@ func collapse(t: float, loud: bool = true) -> void:
 		_idle_lobes()
 	_ingest.hold(0.0)
 	_wake.hold(0.0)
+	_ping.hold(0.0)
 
 	if t >= wait:
 		_invite(t - wait)
@@ -875,7 +946,7 @@ func _end_collapse() -> void:
 	_said_light = -1.0
 	_shear = 0.0
 	_last_pulse = 0.0
-	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest]:
+	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest, _ping]:
 		env.reset()
 	# A new cell is the born cell: mediocre at three things and blind. The run
 	# posts the real answer on its first frame, but the first frame of a new
@@ -883,7 +954,7 @@ func _end_collapse() -> void:
 	# the dead cell's tiers. After the envelope resets, because this retunes one
 	# of them.
 	organs(1, 1, 1, 0)
-	sense_organs(0, 0, 0)
+	sense_organs(0, 0, 0, 0, 0)
 	_idle_lobes()
 	_beat_phase = 0.0
 	_beat_this_period = _beat_period
@@ -908,6 +979,7 @@ func _process(delta: float) -> void:
 	_flash.step(delta)
 	_wake.step(delta)
 	_ingest.step(delta)
+	_ping.step(delta)
 
 	# Decays at its own peak over its own time, so a tier-3 cirrus does not
 	# also hold the shear on for longer than a tier-1 one: what the tier buys
@@ -1013,12 +1085,20 @@ func _compose_lobes() -> void:
 	else:
 		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
 
-	# The beam's hit, in the last glow slot there is.
-	if _beam > BEAM_FLOOR:
-		_glow_lobes[LOBE_BEAM] = _lobe(_beam_bearing,
-			BEAM_HALFWIDTH_DEG[_senses[SENSE_OCELLUS]], BEAM_PEAK * _beam)
-	else:
-		_glow_lobes[LOBE_BEAM] = IDLE_LOBE
+	# The last glow slot, shared by the beam and the ping. They compete rather
+	# than sum, exactly as the three self-signals do in lobe 0: the loudest
+	# thing out there is the thing worth telling a blind cell about. A ping
+	# return punches through a steady beam for a quarter of a second and then
+	# gives it back, which is the right way round -- a body answering is a newer
+	# fact than a ray that has been resting on something for seconds.
+	var hard := BEAM_PEAK * _beam if _beam > BEAM_FLOOR else 0.0
+	var hard_bearing := _beam_bearing
+	var hard_width := BEAM_HALFWIDTH_DEG[_senses[SENSE_OCELLUS]]
+	if _ping.value > hard:
+		hard = _ping.value
+		hard_bearing = _ping.bearing
+		hard_width = PING_HALFWIDTH_DEG[_senses[SENSE_AMPULLA]]
+	_glow_lobes[LOBE_BEAM] = _lobe(hard_bearing, hard_width, hard)
 
 	if _wake.value > 0.0:
 		_press_lobes[0] = _lobe(_wake.bearing, WAKE_HALFWIDTH_DEG, _wake.value)
