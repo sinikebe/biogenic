@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "51f2623e48228296ac3aee8449cac799d0e07b8e",
-  "subject": "Merge pull request #26 from sinikebe/3-no-license-file",
-  "synced_at": "2026-09-13T20:30:01Z"
+  "commit": "f8ce63f003e052e49d3601f6140fd5511ab94082",
+  "subject": "Merge pull request #31 from sinikebe/4-30-second-http-timeout-android-self-update",
+  "synced_at": "2026-09-13T23:02:56Z"
 }
