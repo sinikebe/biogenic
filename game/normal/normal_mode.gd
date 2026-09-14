@@ -7,7 +7,7 @@ extends Node
 ## and haptics subscribe later without touching any of this.
 ##
 ## It is also the only place allowed to talk to the bus, which is why the food
-## field and the predator compute their state and post nothing: the discipline
+## field and the genome compute their state and post nothing: the discipline
 ## that keeps positions off the bus is easier to hold when there is one door.
 ##
 ## It also owns [member mode], and that is the whole of the mode seam: the
@@ -24,7 +24,7 @@ const CellBody := preload("res://game/normal/cell.gd")
 const MetabolismNode := preload("res://game/normal/metabolism.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
-const PredatorBody := preload("res://game/normal/predator.gd")
+const GenomeNode := preload("res://game/normal/genome.gd")
 const RunState := preload("res://game/run_state.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
@@ -52,7 +52,7 @@ var mode := -1
 @onready var _metabolism: MetabolismNode = $Metabolism
 @onready var _motes: MotesField = $Motes
 @onready var _food: FoodField = $Food
-@onready var _predator: PredatorBody = $Predator
+@onready var _genome: GenomeNode = $Genome
 @onready var _vision: VisionLayer = $Vision
 @onready var _onboarding: Label = $Hud/Onboarding
 @onready var _pause_ui: Control = $Hud/Pause
@@ -83,11 +83,15 @@ func _ready() -> void:
 	_cell.impulsed.connect(_on_impulsed)
 	_motes.struck.connect(_on_struck)
 	_food.eaten.connect(_on_eaten)
-	_predator.waked.connect(_on_waked)
-	_predator.killed.connect(_on_killed)
+	_food.waked.connect(_on_waked)
+	_food.killed.connect(_on_killed)
+	# The two halves of one cell, introduced here and nowhere else: the body
+	# reads its drive constants out of the genome, and the genome takes its
+	# capacity from the body's radius.
+	_cell.genome = _genome
 	_motes.setup(_cell)
 	_food.setup(_cell)
-	_predator.setup(_cell)
+	_genome.setup(_cell)
 
 	if mode < 0:
 		mode = RunState.load_mode()
@@ -126,8 +130,9 @@ func _process(delta: float) -> void:
 
 	# Read once, post once. Nothing below carries a position.
 	_metabolism.concentration = _food.concentration
+	_metabolism.upkeep = _genome.upkeep()
 	_bus.taste(_food.taste_bearing, _food.concentration)
-	_bus.dread(_predator.dread_level)
+	_bus.dread(_food.dread_level)
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
 	_step_onboarding(delta)
@@ -150,13 +155,22 @@ func _on_struck(bearing: float, strength: float, _at: Vector2) -> void:
 
 ## The moment of eating. Same contract: [param at] stops here.
 ##
-## [param gene] is the **Phase 5 seam**. It is always &"" in Phase 4; when it is
-## not, it goes into the ingest payload and tints the flood, and nothing else on
-## this line moves.
+## [param gene] is what the prey was most made of (§3.4), and it is the only
+## thing about the meal the cell is entitled to know besides how much of it
+## there was. It goes into the genome and into the ingest payload, which is
+## where Phase 5B's flood picks up its colour -- a payload is still not a
+## position, so it is allowed on the bus.
+##
+## [param nutrition] is already the prey's size measured against this body and
+## clamped (food.gd, §3.2). MEAL stays the constant it always was and this is
+## the call site that scales it: a big meal fills more of the bar, and the bar
+## is the beat.
 func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
-	if gene != &"":
-		push_warning("[NormalMode] gene %s rolled, but Phase 5 is not built" % gene)
-	_bus.ingest()
+	_genome.integrate(gene)
+	# Phase 5B: signal_bus.gd does not read this yet -- ingest_color and the
+	# held echo are the rendering half. Passing it now costs nothing and means
+	# the seam is exercised rather than assumed.
+	_bus.ingest({"gene": gene})
 	_metabolism.feed(MetabolismNode.MEAL * nutrition)
 	_cell.radius += CellBody.GROWTH_PER_MEAL
 
@@ -229,7 +243,7 @@ func _wake_up() -> void:
 	_metabolism.reset()
 	_motes.setup(_cell)
 	_food.setup(_cell)
-	_predator.setup(_cell)
+	_genome.setup(_cell)
 	_set_simulating(true)
 	_apply_mode()
 
@@ -238,7 +252,7 @@ func _wake_up() -> void:
 ## world view both have to keep running through a death, one to draw it and one
 ## to fade out of it.
 func _set_simulating(on: bool) -> void:
-	for node: Node in [_cell, _metabolism, _motes, _food, _predator]:
+	for node: Node in [_cell, _metabolism, _motes, _food, _genome]:
 		node.set_process(on)
 	_cell.set_process_unhandled_input(on)
 

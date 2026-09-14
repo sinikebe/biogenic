@@ -1,50 +1,113 @@
 extends Node
-## The nutrient field: four small cells, drifting, and the chemistry they leak.
+## The water and everything alive in it: four cells, each with its own genome,
+## each eating whatever fits in its mouth.
 ##
-## The cell reads exactly two things out of this field and nothing else: its
-## **total** concentration, which sets the beat rate, and its **gradient
-## bearing**, which sets the green band wash. Concentrations sum and bearings
-## average, so two sources either side give a bearing that points between them
-## at a strength neither one has. Swimming into the middle and finding nothing
-## is a correct outcome of a crude sense and is not designed out.
+## There is no food species and no predator species. **"Predator" is a
+## relationship, read off a body, and it changes in both directions during a
+## run**: you can eat a cell whose body fits in your gape, it can eat you if
+## yours fits in its, and both can be true at once. One rule, evaluated per pair.
+## docs/design/genes-and-cilia.md §1.1 and §7.0.
 ##
-## That is why foraging is run-and-tumble, which is what a cell actually does:
-## the player's only verb is turning and the cell fires its own impulses, so the
-## loop is turn, wait for an impulse, did the beat quicken, keep or change. It
-## teaches itself because it is the only thing that can be done.
+## This file is Phase 4's food field and Phase 4's predator merged, because they
+## were always two names for one object. What came across unchanged: the scent
+## field and its inverse-power falloff, the ring recycling, the authored first
+## arrival, the aim state machine, COMMIT_RANGE, the lunge and the break-off.
+## What died: a fixed predator RADIUS and a hard-coded PREY_SPEED, both of which
+## assumed the hunter and the hunted were different kinds of thing.
 ##
-## This node computes; it does not post. [member concentration] and
-## [member taste_bearing] are read once a frame by whoever owns the run, which
-## is the only place allowed to talk to the signal bus. A per-frame signal here
-## would allocate a dictionary sixty times a second to say the same thing.
+## The cell reads exactly three things out of this field: its **total scent
+## concentration**, which sets the beat rate, its **gradient bearing**, which
+## sets the green band wash, and **dread**, a scalar with no bearing at all.
+## Everything else it learns by being hit.
 ##
-## docs/design/food-and-predators.md §2 and §3.
+## This node computes; it does not post. [member concentration],
+## [member taste_bearing] and [member dread_level] are read once a frame by
+## whoever owns the run, which is the only place allowed to talk to the signal
+## bus; discrete events are signals. A per-frame signal here would allocate a
+## dictionary sixty times a second to say the same thing.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+const Genome := preload("res://game/normal/genome.gd")
 
 ## A meal, in the cell's own terms.
 ##
-## [param nutrition] is a portion of one meal, so a later flavour can be worth
-## more or less without touching the balance number in metabolism.gd.
-## [param gene] is the **Phase 5 seam** and is always &"" here; Phase 5 rolls it
-## on eating, subscribes to this same signal and needs no refactor.
-## [param at] is the food's world position and is emphatically NOT part of the
+## [param nutrition] is the portion of one whole meal this body was worth, and
+## §3.2 makes it the prey's size measured **against your own body, not against
+## your gape**: against the gape every cytostome tier would normalise away and a
+## wider mouth would buy no bigger dinner. Against the body, a wider mouth lets
+## you reach a bigger dinner and you have to go and take it.
+## [param gene] is the prey's dominant gene -- what it was most made of (§3.4).
+## [param at] is the prey's world position and is emphatically NOT part of the
 ## sensation -- the cell cannot know where anything is, and nothing that reaches
 ## the signal bus may carry a position. It is here for the full-vision view,
 ## which is entitled to ground truth precisely because it is not the organism.
 ## The same contract as motes.struck: whoever forwards this to the bus drops it.
 signal eaten(nutrition: float, gene: StringName, at: Vector2)
+## One stroke of a hunting cell's flagellum, felt at its true bearing.
+## [param strength] is 0..1; the cap lives in the signal bus, which owns every
+## envelope. The only directional information a hunter ever gives.
+signal waked(bearing: float, strength: float)
+## The membrane closes and you are gone. [param bearing] is where it came from.
+signal killed(bearing: float)
 
 const COUNT := 4
-const RADIUS_MIN := 14.0
-const RADIUS_MAX := 20.0
-## Smaller than you, passive, does not flee. Slow enough that it is never a
-## chase and never a fixed target either.
+
+# --- Seeding (§1.3) ---------------------------------------------------------
+# A floor that never moves, a middle that tracks you, and a ceiling you can
+# reach. Three constants and a coin flip, in the function that already reseeds
+# a culled cell. These are the three numbers to move if the water feels wrong,
+# in this order; §9.6 leaves all of them open to play-testing.
+
+## Share of arrivals drawn absolutely rather than relative to the player.
+const DRIFTER_SHARE := 0.45
+## The Phase 4 food band, unchanged. Drifters have **no cytostome**, so their
+## gape tops out at 12.2 and they eat nothing, including each other. They are
+## edible at every player radius and at every cytostome tier, which is what
+## makes "there is always a way back from a bad run" a fact rather than a hope.
+const DRIFTER_MIN := 13.0
+const DRIFTER_MAX := 21.0
+## Everything else is the player's own radius, give or take this much. These are
+## what keep pace, and they are where danger and the mutual band live.
+const PEER_SPREAD := 0.34
+
+## **The ceiling is on the gape, not on the body.** A seeded cell takes its
+## radius from the draw and then has its cytostome tier reduced until its mouth
+## fits under this. At radius 40 nothing the water seeds can swallow you, which
+## is the exact meal at which the genome fills (§3.1) -- dread stops arriving,
+## and that is the readout that the run is won.
+##
+## Capping the gape also shapes the population for free: a radius-40 arrival can
+## carry at most cytostome 1, while a radius-28 one can carry cytostome 3. Big
+## bodies get small mouths and small bodies get big mouths.
+##
+## **§9.8 is binding: this is a property of THIS water, not of the species.** It
+## lives on the field that seeds the water, so a second environment writes its
+## own seeder with its own ceiling and nothing here has to change. Do not lift it
+## into cell.gd or into genome.gd, where it would become a rule about what a cell
+## can ever be.
+const ARRIVAL_GAPE_MAX := 40.0
+const ARRIVAL_RADIUS_MAX := 40.0
+
+## What a seeded cell is made of. §3.4: a genome is fixed when it is seeded and
+## full vision draws it, so informed foraging is possible -- a roll on eating
+## could not be seen in advance.
+const GENE_WEIGHTS := {&"cytostome": 3, &"cirrus": 3, &"flagellum": 3, &"stigma": 2}
+## Everything a drifter can be. The mouth is not on this list by construction.
+const DRIFTER_GENES: Array[StringName] = [&"cirrus", &"flagellum", &"stigma"]
+## How likely each tier is in the peer band, weighted so most cells are
+## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
+## tier 1 of whatever it carries. One of §9.6's open numbers.
+const TIER_WEIGHTS: Array[int] = [0, 3, 2, 1]
+
+## Smaller than you, passive, does not flee: a cell that is not hunting anything
+## drifts exactly as Phase 4's food did. Slow enough that it is never a chase and
+## never a fixed target either.
 const DRIFT_SPEED := 9.0
 const DRIFT_TURN := 1.1
 
+# --- Scent (unchanged from Phase 4) -----------------------------------------
 ## Inverse-power falloff, the shape a diffusing metabolite actually has.
 const CORE_RANGE := 130.0      ## c = 1 at or inside this
 const SCENT_RANGE := 1600.0    ## c = 0 at or outside this
@@ -56,46 +119,207 @@ const SCENT_WINDOW := 250.0    ## smooth the outer cutoff so it cannot pop
 ## the field, and the full-vision view draws it as a threshold ring.
 const BEARING_RANGE := 680.0
 
-## Ring placement, exactly like motes.gd: recycled to the far edge when culled.
+## How a body fades out of the scent as it stops fitting in your mouth. §7.0 is
+## explicit that this must not be a boolean: a body drifting across your gape
+## limit has to fade out of the taste field rather than pop out of it, exactly
+## as dread fades rather than snapping. The ratio is `radius / my gape`, so 1.0
+## is a body exactly the width of the mouth and it smells half as strong as one
+## comfortably inside it.
+const EDIBLE_FADE_OUT := 1.15
+const EDIBLE_FADE_IN := 0.85
+
+## A meal is worth what it weighs, as a fraction of one whole meal. §3.2: this
+## is what stops `cytostome` being a strictly dominant gene -- a big mouth is a
+## loss if you keep eating drifters and a win only if you use it, and using it
+## means eating bodies near your own size, whose own mouths may take you.
+const MEAL_MIN := 0.35
+const MEAL_MAX := 1.40
+
+# --- Ring placement ---------------------------------------------------------
+## Exactly like motes.gd: recycled to the far edge when culled. (motes.gd culls
+## at 1900; that is the inert dust, a different field that carries no genes.)
 const RING_MIN := 800.0
 const RING_MAX := 2200.0
 const CULL := 3000.0
 ## Authored, like mote 0: placed along the cell's real velocity once it moves,
-## just outside scent range, so the beat quickens at about 0:12.
+## just outside scent range, so the beat quickens at about 0:12. The drifter
+## floor guarantees cell 0 is a drifter at setup, so the first thing the player
+## ever meets is always something it can eat.
 const FIRST_DISTANCE := 2200.0
 
-## What one whole food cell is worth, as a portion of metabolism.MEAL. Phase 4
-## has one flavour and it is a whole meal; Phase 5's flavours are what make this
-## anything else.
-const NUTRITION := 1.0
+# --- Dread ------------------------------------------------------------------
+const DREAD_RANGE := 1400.0
+const DREAD_CORE := 240.0
+const DREAD_CAP := 0.95
+## The ratio window, unchanged from Phase 4 -- same two constants, same curve,
+## same feel. What changed is the ratio: it was the predator's fixed radius over
+## yours, and it is now **the other cell's gape over your radius**, which is the
+## same question asked of a body that can grow a mouth.
+##
+## Summing booleans would make dread a step function that snaps 0 -> 1 the frame
+## a cell's gape crosses your radius, and the most-praised readout in Phase 4
+## would be gone. Substituted into the curve instead, a cell growing its
+## cytostome becomes frightening *gradually*, which is the Phase 4 experience
+## run backwards. §7.0's blockquote.
+const THREAT_LOW := 0.85
+const THREAT_HIGH := 1.35
 
-## Total concentration at the cell, 0..1. The other half of metabolism's beat
-## mapping, and the reason the outer kilometre is hot-and-cold with no direction
-## in it.
+# --- The wake ---------------------------------------------------------------
+const WAKE_RANGE := 760.0
+const WAKE_CORE := 170.0
+const STROKE_GAP := 1.45
+const STROKE_JITTER := 0.35
+## Inside this the stroke gap halves, the wake strength pins and it swims at its
+## lunge speed. This is the sprint, not the decision.
+const LUNGE_RANGE := 220.0
+## Inside this it stops correcting: one solution, then a straight line through
+## whatever happens next. The decision is made well before the sprint, which is
+## why the skill the encounter tests is committing early.
+##
+## Everything about the dodge lives in this number, and it was measured against
+## a tier-1 cell, not chosen. At 220 the run is only 2.3s and a committed turn
+## was eaten about a third of the time. At 420 a cell swimming straight stops
+## being caught. At 310, over 14 seeds each: never-steers caught 11/14,
+## commits-away escapes 13/14. **§7.1 hands the re-measurement against a tier-3
+## cell to Phase 6; it is deliberately not re-tuned here.**
+const COMMIT_RANGE := 310.0
+
+# --- Swimming ---------------------------------------------------------------
+## A hunter cruises this much faster than its prey's realised speed, and lunges
+## this much faster. Both were 68 and 96 against Phase 4's hard-coded 56.5, and
+## they still are for a tier-1 cell -- but the reference is now **the prey's own
+## speed**, so the chase stays a chase at every `flagellum` tier and only
+## `cirrus` improves the dodge. The owner's call, recorded in §7.1.
+const CRUISE_OVER_PREY := 1.20
+const LUNGE_OVER_PREY := 1.70
+const WANDER_RATE := 0.09
+const WANDER_TAU := 3.2
+
+# --- The chase --------------------------------------------------------------
+## Free tracking, out where the cell has no bearing to act on anyway.
+const AIM_GAP := 1.45
+## **The window.** Once it is inside wake range it has committed to an attack
+## run, and it swims at a solution this many seconds old. Seven is not a guess:
+## it is the p90 time for a tier-1 cell to swing its velocity 120 degrees.
+const LOCK_SECONDS := 7.0
+## It re-acquires only while the prey is still roughly where it is swimming.
+const LOCK_CONE_DEG := 70.0
+## How many times to settle the intercept. The time to reach the aim depends on
+## where the aim is, which depends on the time: three passes is convergence.
+const INTERCEPT_STEPS := 3
+## Long enough that one frame of geometry cannot end a chase.
+const LOST_GRACE := 0.8
+## **How the escape is actually paid off.** An attack run only ever closes; the
+## moment the prey has taken this much ground back off the closest approach, the
+## run has failed and the hunter sheers off. It reads as the only thing it could
+## read as -- it stopped gaining -- and it is what turns a committed turn into
+## relief within a few seconds rather than at the end of a timeout.
+const LOST_GROUND := 90.0
+## The backstop under that, for a stern chase that neither closes nor opens.
+## Longer dread is longer taste blackout, which starves a player for being good
+## at the game, so it is a cap and not a mechanic.
+const RUSH_SECONDS := 24.0
+## How far along its own heading a break-off aims. Only has to be past the
+## horizon; the run ends at DREAD_RANGE, not here.
+const BREAK_AWAY := 3000.0
+## Hard ceiling on a break-off, as a guard rather than a mechanism.
+const BREAK_TIMEOUT := 20.0
+## Long enough to get a meal in before the next one.
+const CALM_MIN := 30.0
+const CALM_MAX := 55.0
+## How far off a cell notices something it could eat. Phase 4's predator spawned
+## at 1400-1900 and hunted from there, so this is the range the shipped chase
+## was actually measured over.
+const NOTICE_RANGE := 1900.0
+## **The authored opening survives as an opening, not as a species spawn.**
+## Nothing may commit to the *player* before this, and then only from outside
+## DREAD_RANGE -- so the first dread of a run still arrives at 0:45-1:00 and
+## still rises out of nothing, which is the whole of perception.md §2.
+const FIRST_DELAY := 42.0
+
+enum State { DRIFT, STALK, BREAK }
+
+## [member Body.target] when there is nothing to chase, and when the thing being
+## chased is the player. Anything >= 0 is an index into the field itself.
+const TARGET_NONE := -1
+const TARGET_PLAYER := -2
+
+
+## One body in the water. Plain data: every rule that acts on it is a function
+## on the field, so there is one place to read the behaviour rather than one
+## per state. Four of these exist at a time.
+class Body:
+	var pos := Vector2.ZERO
+	## Radians clockwise from world north, the cell's own convention.
+	var heading := 0.0
+	var radius := 0.0
+	## `{gene: tier}`, fixed at seeding and grown by eating. Never null.
+	var genome := {}
+	## No cytostome, r13-21, eats nothing: the floor of §1.3.
+	var drifter := true
+	## False until _seed() has run, so the drifter counter cannot mistake an
+	## uninitialised slot for a drifter.
+	var seeded := false
+	## Bumped on every reseed, so a chase cannot silently transfer to whatever
+	## body landed in the index its prey used to occupy.
+	var serial := 0
+	var meals := 0
+
+	var state := 0  # State.DRIFT
+	var target := -1  # TARGET_NONE
+	var target_serial := 0
+	var calm := 0.0
+	var aim := Vector2.ZERO
+	var aim_clock := 0.0
+	var lost := 0.0
+	var rush := 0.0
+	var best := INF
+	var lunging := false
+	var break_clock := 0.0
+	var stroke := 0.0
+	var wander := 0.0
+
+
+## Total scent concentration at the cell, 0..1. The other half of metabolism's
+## beat mapping, and the reason the outer kilometre is hot-and-cold with no
+## direction in it.
 var concentration := 0.0
 ## Body-relative bearing of the summed gradient, radians clockwise from the
 ## cell's front. Meaningless when [member concentration] is 0.
 var taste_bearing := 0.0
+## What the membrane should be told, 0..1. No bearing, ever: a hunter's
+## metabolites saturate the chemoreceptor, and a blocked receptor has no
+## differential to read a direction from.
+var dread_level := 0.0
+## The largest gape-over-radius threat weight currently hunting the player, run
+## through the same window dread is. Public for the dev harness, which needs to
+## be able to show that this varies continuously rather than stepping.
+var threat := 0.0
 
 var _cell: CellBody = null
-var _pos := PackedVector2Array()
-var _radius := PackedFloat32Array()
-var _drift := PackedFloat32Array()
+var _cells: Array[Body] = []
 var _first_pending := false
+var _first_hunt := FIRST_DELAY
+var _serial := 0
+var _points := PackedVector2Array()
+var _radii := PackedFloat32Array()
 
 
-## Seeds the field around [param cell]. Food 0 is held back until the cell is
+## Seeds the water around [param cell]. Cell 0 is held back until the cell is
 ## actually moving, for the same reason mote 0 is.
 func setup(cell: CellBody) -> void:
 	_cell = cell
-	_pos.resize(COUNT)
-	_radius.resize(COUNT)
-	_drift.resize(COUNT)
+	_cells.clear()
+	for i in COUNT:
+		_cells.append(Body.new())
 	for i in COUNT:
 		_seed(i)
 	_first_pending = true
+	_first_hunt = FIRST_DELAY
 	concentration = 0.0
 	taste_bearing = 0.0
+	dread_level = 0.0
+	threat = 0.0
 
 
 func _process(delta: float) -> void:
@@ -103,41 +327,391 @@ func _process(delta: float) -> void:
 		return
 
 	# The drift path does not exist until the cell drifts. Placing the first
-	# food along the real velocity vector is what makes the beat quicken at
+	# body along the real velocity vector is what makes the beat quicken at
 	# about 0:12 instead of whenever the wander happens to point at something.
 	if _first_pending and _cell.velocity.length_squared() > 1.0:
 		_first_pending = false
-		_pos[0] = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
+		_cells[0].pos = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
+	if _first_hunt > 0.0:
+		_first_hunt -= delta
 
-	var total := 0.0
-	var pull := Vector2.ZERO
-	for i in _pos.size():
-		_drift[i] = wrapf(_drift[i] + randf_range(-DRIFT_TURN, DRIFT_TURN) * delta, -PI, PI)
-		_pos[i] += Vector2(cos(_drift[i]), sin(_drift[i])) * DRIFT_SPEED * delta
+	for i in _cells.size():
+		_step_body(i, delta)
+	_step_recycle()
+	if not _step_contacts():
+		return
+	_step_sense()
 
-		var offset := _pos[i] - _cell.position
-		var d := offset.length()
-		if d > CULL:
-			_seed(i)
+
+# ---------------------------------------------------------------------------
+# Behaviour. A cell that is not hunting drifts, which is exactly what Phase 4's
+# food did; a cell that is hunting runs Phase 4's predator. Same object, two
+# states, and the transition between them is the gape rule.
+# ---------------------------------------------------------------------------
+
+func _step_body(index: int, delta: float) -> void:
+	var b := _cells[index]
+	match b.state:
+		State.STALK:
+			_step_stalk(index, b, delta)
+		State.BREAK:
+			_step_break(b, delta)
+		_:
+			_step_drift(index, b, delta)
+
+
+func _step_drift(index: int, b: Body, delta: float) -> void:
+	b.calm = maxf(b.calm - delta, 0.0)
+	b.heading = wrapf(b.heading + randf_range(-DRIFT_TURN, DRIFT_TURN) * delta, -PI, PI)
+	b.pos += _forward(b.heading) * DRIFT_SPEED * delta
+	if b.calm <= 0.0 and not b.drifter:
+		_look_for_prey(index, b)
+
+
+## The nearest thing this cell can swallow, if anything. A drifter never gets
+## here: with no cytostome its gape is under every body in the water.
+func _look_for_prey(index: int, b: Body) -> void:
+	var gape := _gape(b)
+	var best := TARGET_NONE
+	var best_serial := 0
+	var best_d := INF
+
+	# The player, but only from outside dread range and only after the opening.
+	# A cell that commits from inside the range dread is measured over would
+	# make dread arrive as a step, which is the one thing §7.0 forbids.
+	if _first_hunt <= 0.0 and _cell.radius < gape:
+		var d := b.pos.distance_to(_cell.position)
+		if d >= DREAD_RANGE and d <= NOTICE_RANGE:
+			best = TARGET_PLAYER
+			best_d = d
+
+	for j in _cells.size():
+		if j == index:
 			continue
-		if d < _cell.radius + _radius[i]:
+		var other := _cells[j]
+		if not other.seeded or other.radius >= gape:
+			continue
+		var d := b.pos.distance_to(other.pos)
+		if d <= NOTICE_RANGE and d < best_d:
+			best = j
+			best_serial = other.serial
+			best_d = d
+
+	if best == TARGET_NONE:
+		return
+	b.target = best
+	b.target_serial = best_serial
+	b.state = State.STALK
+	b.lost = 0.0
+	b.rush = 0.0
+	b.aim_clock = 0.0
+	b.lunging = false
+	b.best = INF
+	b.break_clock = 0.0
+	b.stroke = randf_range(0.2, STROKE_GAP)
+	b.wander = 0.0
+	b.heading = _angle_of(_target_pos(b) - b.pos, b.heading)
+	b.aim = _target_pos(b)
+
+
+func _step_stalk(index: int, b: Body, delta: float) -> void:
+	# The prey may have been eaten, culled and reseeded, or simply grown out of
+	# this mouth while the run was on -- which is §1.2 in one line: a cell you
+	# were prey to can stop being able to eat you without leaving the screen.
+	if not _target_valid(index, b):
+		_break_off(b)
+		return
+
+	var offset := _target_pos(b) - b.pos
+	var d := offset.length()
+	_step_aim(b, d, offset, delta)
+	if b.state != State.STALK:
+		return
+	_swim(b, delta, _lunge_speed(b) if d < LUNGE_RANGE else _cruise_speed(b))
+
+	# The wake. One dent per stroke of its flagellum, at its true bearing, and
+	# only ever felt from a cell that is hunting *you*.
+	if b.target != TARGET_PLAYER:
+		return
+	b.stroke -= delta
+	if b.stroke > 0.0:
+		return
+	var committed := d < LUNGE_RANGE
+	b.stroke = STROKE_GAP * (0.5 if committed else 1.0) \
+		+ randf_range(-STROKE_JITTER, STROKE_JITTER) * (0.5 if committed else 1.0)
+	if d < WAKE_RANGE:
+		# No bearing jitter. The imprecision is in the interval.
+		var push := 1.0 if committed else smoothstep(WAKE_RANGE, WAKE_CORE, d)
+		waked.emit(_cell.bearing_to(b.pos), push)
+
+
+func _step_break(b: Body, delta: float) -> void:
+	# Aim away from the PREY, recomputed every frame.
+	#
+	# This used to freeze one world point at break-off and steer at it. The
+	# hunter then *reached* that point, the direction to it flipped through 180
+	# degrees, and it turned around and came back -- oscillating about a stale
+	# marker, passing through the cell again and again, unable to frighten, wake
+	# or kill for up to eighty seconds. Aiming away from the prey instead makes
+	# the distance monotonic.
+	var away := _away_from(b)
+	b.aim = b.pos + away * BREAK_AWAY
+	# It leaves at the speed it attacked with. A hunter that saunters off at
+	# cruise stays inside dread range for a minute and a half, which is a minute
+	# and a half of nothing happening to a player who just earned something.
+	_swim(b, delta, _lunge_speed(b))
+	b.break_clock += delta
+	# Belt and braces. The line above should make the timeout unreachable, and
+	# if it ever fires the hunter has still stopped being a ghost.
+	if b.pos.distance_to(_target_pos(b)) > DREAD_RANGE or b.break_clock > BREAK_TIMEOUT:
+		b.state = State.DRIFT
+		b.target = TARGET_NONE
+		b.calm = randf_range(CALM_MIN, CALM_MAX)
+
+
+## Course corrections, and the one way out of them.
+##
+## Outside wake range it tracks freely -- there is nothing the prey could do
+## about it anyway, because there is no bearing yet. Inside, it has committed to
+## an attack run: it swims at a solution that goes stale, and it only re-acquires
+## while the prey is still roughly ahead of it. A cell that turns hard and keeps
+## turning walks out of that cone while the hunter is still swimming at where it
+## would have been.
+func _step_aim(b: Body, d: float, offset: Vector2, delta: float) -> void:
+	if d > WAKE_RANGE:
+		b.lost = 0.0
+		b.rush = 0.0
+		b.lunging = false
+		b.best = INF
+		b.aim_clock -= delta
+		if b.aim_clock <= 0.0:
+			b.aim_clock = AIM_GAP
+			b.aim = _intercept(b, d)
+		return
+
+	b.rush += delta
+	b.best = minf(b.best, d)
+	var off := absf(angle_difference(b.heading, _angle_of(offset, b.heading)))
+	if off > deg_to_rad(LOCK_CONE_DEG):
+		b.lost += delta
+	else:
+		b.lost = 0.0
+
+	if b.lost >= LOST_GRACE or b.rush >= RUSH_SECONDS or d > b.best + LOST_GROUND:
+		_break_off(b)
+		return
+
+	if d > COMMIT_RANGE:
+		b.lunging = false
+		b.aim_clock -= delta
+		if b.aim_clock <= 0.0:
+			b.aim_clock = LOCK_SECONDS
+			b.aim = _intercept(b, d)
+		return
+
+	# Committed. One fresh solution at the moment the run starts, and then
+	# nothing: once it begins at 220 units the encounter is over in 2.3 seconds,
+	# and a hunter that corrects through the lunge cannot be dodged at all.
+	if not b.lunging:
+		b.lunging = true
+		b.aim = _intercept(b, d)
+		return
+	# The pass is over the moment the aim point is behind it. No contact by then
+	# is a clean miss, and a clean miss ends the encounter.
+	if (b.aim - b.pos).dot(_forward(b.heading)) <= 0.0:
+		_break_off(b)
+
+
+## Where the prey will be, if it keeps doing what it is doing.
+func _intercept(b: Body, d: float) -> Vector2:
+	var speed := maxf(_lunge_speed(b) if d < LUNGE_RANGE else _cruise_speed(b), 1.0)
+	var t := clampf(d / speed, 0.0, 9.0)
+	var aim := _predict(b, t)
+	# Settle it: how long the swim takes depends on where the aim is, and where
+	# the aim is depends on how long the swim takes.
+	for i in INTERCEPT_STEPS:
+		t = clampf(b.pos.distance_to(aim) / speed, 0.0, 9.0)
+		aim = _predict(b, t)
+	return aim
+
+
+## Where the prey drifts to in [param t] seconds if it keeps this heading.
+##
+## For the player there are two terms, because its motion has two parts: the
+## average drift along the heading it is holding, and the transient of being
+## faster or slower than that average right now. The first is made along its
+## *heading* -- precisely the thing a turning player changes, and therefore the
+## whole of the dodge. The answer is always a straight line, and a cell that
+## keeps turning is never on one.
+##
+## **The average is the prey's own realised speed** (§7.1), not a constant: a
+## flagellum-3 cell that outswims a hard-coded 56.5 would otherwise be led at
+## the wrong point and could not be caught at all.
+func _predict(b: Body, t: float) -> Vector2:
+	if b.target != TARGET_PLAYER:
+		var prey := _target_body(b)
+		if prey == null:
+			return _target_pos(b)
+		var speed := DRIFT_SPEED if prey.state == State.DRIFT else _cruise_speed(prey)
+		return prey.pos + _forward(prey.heading) * speed * t
+	var cruise := _cell.forward() * _cell.swim_speed()
+	var k := maxf(CellBody.DRAG, 0.001)
+	return _cell.position + cruise * t + (_cell.velocity - cruise) * ((1.0 - exp(-k * t)) / k)
+
+
+func _break_off(b: Body) -> void:
+	b.state = State.BREAK
+	b.lost = 0.0
+	b.rush = 0.0
+	b.break_clock = 0.0
+	# Still not a handbrake turn: the aim is away from the prey, but _swim()
+	# rate-limits the turn, so it sheers off the line it was on rather than
+	# spinning. _step_break() recomputes this every frame -- see the note there
+	# for why a frozen point was a bug.
+	b.aim = b.pos + _away_from(b) * BREAK_AWAY
+
+
+## Unit vector pointing from the prey to the hunter, i.e. straight away. Falls
+## back to its own heading in the degenerate case where the two bodies are at
+## exactly the same point, which contact makes reachable.
+func _away_from(b: Body) -> Vector2:
+	var offset := b.pos - _target_pos(b)
+	return offset.normalized() if offset.length_squared() > 0.0001 \
+		else _forward(b.heading)
+
+
+func _swim(b: Body, delta: float, speed: float) -> void:
+	var rate := CellBody.turn_rate_for(Genome.tier_of(b.genome, &"cirrus"))
+	var want := _angle_of(b.aim - b.pos, b.heading)
+	var turn := clampf(angle_difference(b.heading, want), -rate * delta, rate * delta)
+	b.wander = lerpf(b.wander, randf_range(-WANDER_RATE, WANDER_RATE),
+		1.0 - exp(-delta / WANDER_TAU))
+	b.heading = wrapf(b.heading + turn + b.wander * delta, -PI, PI)
+	b.pos += _forward(b.heading) * speed * delta
+
+
+# ---------------------------------------------------------------------------
+# Eating. The same rule for every pair in the water, including the player: B is
+# food to A when B's body fits in A's mouth. §1.3's "inside the field, cells
+# genuinely eat each other" is the whole of it -- no special case, no abstraction
+# of the ecosystem, and no difficulty curve anyone had to author.
+# ---------------------------------------------------------------------------
+
+## Returns false when the player has just been killed, because the run stops
+## this node's _process from inside that signal and nothing after it is valid.
+func _step_contacts() -> bool:
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		if b.pos.distance_to(_cell.position) >= b.radius + _cell.radius:
+			continue
+		# Both directions can be true at once, and then it is whoever committed
+		# first -- which is the cell in the middle of an attack run.
+		if b.state == State.STALK and b.target == TARGET_PLAYER \
+				and _cell.radius < _gape(b):
+			killed.emit(_cell.bearing_to(b.pos))
+			_break_off(b)
+			return false
+		if b.radius < _cell.gape():
 			# Emit where it was before recycling it, so a listener never has to
 			# work out which one this was -- the mistake motes.gd documents.
-			eaten.emit(NUTRITION, &"", _pos[i])
+			eaten.emit(_meal_value(b.radius), Genome.dominant_of(b.genome), b.pos)
 			_seed(i)
-			continue
+		# Otherwise a standoff at contact, and there is nothing for either of
+		# them to do about it. Phase 5B: the two bodies pass through each other;
+		# whether that wants a bump is a question for the view that draws it.
 
-		var c := scent(d)
-		if c <= 0.0:
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded or b.drifter:
 			continue
-		total += c
-		pull += offset / maxf(d, 0.001) * c
+		var gape := _gape(b)
+		for j in _cells.size():
+			if j == i:
+				continue
+			var other := _cells[j]
+			if not other.seeded or other.radius >= gape:
+				continue
+			if b.pos.distance_to(other.pos) >= b.radius + other.radius:
+				continue
+			_devour(b, other)
+			_seed(j)
+			break  # One meal per cell per frame. It has to swallow.
+	return true
+
+
+## What one cell gains by eating another: a unit of radius, and whatever the
+## prey was most made of, by exactly the rules the player's genome obeys.
+##
+## Note that this is **not** clamped to ARRIVAL_GAPE_MAX. The ceiling is a
+## property of what the water *seeds* (§1.3/§9.8); a cell that has been feeding
+## is allowed past it, which is §1.2's "the longest-lived cells become the most
+## dangerous without anyone authoring a difficulty curve". The bound on it is
+## that nothing outside CULL is simulated at all.
+func _devour(b: Body, prey: Body) -> void:
+	b.radius += CellBody.GROWTH_PER_MEAL
+	b.meals += 1
+	Genome.integrate_into(b.genome, Genome.dominant_of(prey.genome),
+		CellBody.slots_for(b.radius))
+
+
+func _meal_value(prey_radius: float) -> float:
+	return clampf(prey_radius / maxf(_cell.radius, 0.001), MEAL_MIN, MEAL_MAX)
+
+
+func _step_recycle() -> void:
+	for i in _cells.size():
+		if _cells[i].pos.distance_to(_cell.position) > CULL:
+			_seed(i)
+
+
+# ---------------------------------------------------------------------------
+# What the cell can actually sense: a summed concentration, a summed bearing,
+# and a scalar with no bearing in it.
+# ---------------------------------------------------------------------------
+
+func _step_sense() -> void:
+	var total := 0.0
+	var pull := Vector2.ZERO
+	var dread := 0.0
+	var worst := 0.0
+	var gape := _cell.gape()
+
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var offset := b.pos - _cell.position
+		var d := offset.length()
+
+		# Taste, over everything I can eat, weighted so a body crossing my gape
+		# limit fades rather than pops.
+		var edible := smoothstep(EDIBLE_FADE_OUT, EDIBLE_FADE_IN,
+			b.radius / maxf(gape, 0.001))
+		if edible > 0.0:
+			var c := scent(d) * edible
+			if c > 0.0:
+				total += c
+				pull += offset / maxf(d, 0.001) * c
+
+		# Dread, over everything hunting me. Nine seconds of closing separate
+		# the first dread from the first wake: ten seconds of the water simply
+		# being wrong, then a direction.
+		if b.state != State.STALK or b.target != TARGET_PLAYER:
+			continue
+		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
+			_gape(b) / maxf(_cell.radius, 0.001))
+		worst = maxf(worst, level)
+		dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE), 0.0, 1.0) * level
 
 	concentration = minf(total, 1.0)
 	if concentration > 0.0 and pull.length_squared() > 0.0:
 		taste_bearing = _cell.bearing_to(_cell.position + pull)
 	else:
 		taste_bearing = 0.0
+	threat = worst
+	dread_level = minf(dread, 1.0) * DREAD_CAP
 
 
 ## Concentration contributed by one source at distance [param d].
@@ -148,22 +722,261 @@ func scent(d: float) -> float:
 	return minf(1.0, v * smoothstep(SCENT_RANGE, SCENT_RANGE - SCENT_WINDOW, d))
 
 
-## Where the food currently is, for an observer entitled to ground truth --
-## which is the full-vision view and nothing the organism can sense. Returns the
-## live array, so read it and do not hold it across frames.
+# ---------------------------------------------------------------------------
+# Ground truth, for an observer entitled to it -- which is the full-vision view
+# and nothing the organism can sense.
+# ---------------------------------------------------------------------------
+
+## Where the cells currently are. Rebuilt on the spot rather than kept in step,
+## so it is never one frame stale; read it and do not hold it across frames.
 func points() -> PackedVector2Array:
-	return _pos
+	if _points.size() != _cells.size():
+		_points.resize(_cells.size())
+	for i in _cells.size():
+		_points[i] = _cells[i].pos
+	return _points
 
 
 ## Body radii, index-matched to [method points].
 func radii() -> PackedFloat32Array:
-	return _radius
+	if _radii.size() != _cells.size():
+		_radii.resize(_cells.size())
+	for i in _cells.size():
+		_radii[i] = _cells[i].radius
+	return _radii
 
+
+## Each cell's `{gene: tier}`, index-matched to [method points]. The live
+## dictionaries: read them, and do not write through them.
+func genomes() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	out.resize(_cells.size())
+	for i in _cells.size():
+		out[i] = _cells[i].genome
+	return out
+
+
+## How wide cell [param index]'s mouth opens, in world units. Anything whose
+## radius is below this fits in it -- including, sometimes, the player.
+func gape_at(index: int) -> float:
+	return _gape(_cells[index]) if index >= 0 and index < _cells.size() else 0.0
+
+
+## Is anything hunting the player at all, and which one. -1 for none; the
+## nearest when there is more than one.
+func hunter() -> int:
+	var best := -1
+	var best_d := INF
+	for i in _cells.size():
+		var b := _cells[i]
+		if b.state != State.STALK or b.target != TARGET_PLAYER:
+			continue
+		var d := b.pos.distance_to(_cell.position)
+		if d < best_d:
+			best_d = d
+			best = i
+	return best
+
+
+func hunting() -> bool:
+	return hunter() >= 0
+
+
+# ---------------------------------------------------------------------------
+# Seeding. §1.3: a floor that never moves, a middle that tracks you, and a
+# ceiling you can reach.
+# ---------------------------------------------------------------------------
 
 func _seed(index: int) -> void:
+	var b := _cells[index]
 	var angle := randf_range(-PI, PI)
 	var distance := randf_range(RING_MIN, RING_MAX)
 	var origin := _cell.position if _cell != null else Vector2.ZERO
-	_pos[index] = origin + Vector2(cos(angle), sin(angle)) * distance
-	_radius[index] = randf_range(RADIUS_MIN, RADIUS_MAX)
-	_drift[index] = randf_range(-PI, PI)
+	b.pos = origin + Vector2(cos(angle), sin(angle)) * distance
+	b.heading = randf_range(-PI, PI)
+	b.state = State.DRIFT
+	b.target = TARGET_NONE
+	b.target_serial = 0
+	b.calm = 0.0
+	b.aim = b.pos
+	b.aim_clock = 0.0
+	b.lost = 0.0
+	b.rush = 0.0
+	b.best = INF
+	b.lunging = false
+	b.break_clock = 0.0
+	b.stroke = randf_range(0.2, STROKE_GAP)
+	b.wander = 0.0
+	b.meals = 0
+	_serial += 1
+	b.serial = _serial
+
+	# **The floor is an invariant, not a probability.** COUNT is 4, so a 0.45
+	# coin lands zero drifters in the whole field about 9% of the time. One
+	# counter fixes it: if seeding this cell would leave no drifter in the
+	# field, it is a drifter. "The world cannot degenerate" then stops being a
+	# statistical claim -- there is always something edible at every radius and
+	# at every cytostome tier, so there is always a way back from a bad run.
+	#
+	# At setup this makes cell 0 a drifter, because nothing else is seeded yet,
+	# and cell 0 is the authored first arrival. The opening is therefore always
+	# something the player can eat, which is the right way round.
+	if randf() < DRIFTER_SHARE or not _other_drifter(index):
+		_seed_drifter(b)
+	else:
+		_seed_peer(b)
+	b.seeded = true
+
+
+func _other_drifter(index: int) -> bool:
+	for i in _cells.size():
+		if i != index and _cells[i].seeded and _cells[i].drifter:
+			return true
+	return false
+
+
+func _seed_drifter(b: Body) -> void:
+	b.drifter = true
+	b.radius = randf_range(DRIFTER_MIN, DRIFTER_MAX)
+	# One gene at tier 1 and no mouth. It still carries something worth eating:
+	# drifters are half the water, and a floor that fed you nothing to grow a
+	# genome with would make the early game a dead end.
+	b.genome = {}
+	b.genome[_draw_gene(DRIFTER_GENES)] = 1
+
+
+func _seed_peer(b: Body) -> void:
+	b.drifter = false
+	var mine := _cell.radius if _cell != null else CellBody.BASE_RADIUS
+	# The floor of the drifter band is a guard, not a rule: the player only ever
+	# grows, so in practice this clamp is the ceiling doing the work.
+	b.radius = clampf(mine * (1.0 + randf_range(-PEER_SPREAD, PEER_SPREAD)),
+		DRIFTER_MIN, ARRIVAL_RADIUS_MAX)
+	b.genome = _draw_genome(b.radius)
+
+
+## A real genome: a mouth, then as many other organs as the body has slots for.
+## Every cell in the water is full to its own capacity, which is what makes
+## §1's "the starting cell is already full" a property of cells rather than a
+## special case for the player.
+func _draw_genome(body_radius: float) -> Dictionary:
+	var tiers := {&"cytostome": _draw_tier()}
+	var capacity := CellBody.slots_for(body_radius)
+	var pool: Array[StringName] = DRIFTER_GENES.duplicate()
+	while tiers.size() < capacity and not pool.is_empty():
+		var gene := _draw_gene(pool)
+		pool.erase(gene)
+		tiers[gene] = _draw_tier()
+	# The ceiling, applied where §1.3 puts it: on the mouth, by taking tiers off
+	# until it fits. A radius-40 arrival comes out at cytostome 1; a radius-28
+	# one can keep cytostome 3.
+	while tiers[&"cytostome"] > 0 \
+			and CellBody.gape_of(int(tiers[&"cytostome"]), body_radius) > ARRIVAL_GAPE_MAX:
+		tiers[&"cytostome"] = int(tiers[&"cytostome"]) - 1
+	return tiers
+
+
+func _draw_gene(pool: Array[StringName]) -> StringName:
+	var total := 0
+	for gene: StringName in pool:
+		total += int(GENE_WEIGHTS.get(gene, 1))
+	var roll := randi_range(1, maxi(total, 1))
+	for gene: StringName in pool:
+		roll -= int(GENE_WEIGHTS.get(gene, 1))
+		if roll <= 0:
+			return gene
+	return pool[pool.size() - 1]
+
+
+func _draw_tier() -> int:
+	var total := 0
+	for weight: int in TIER_WEIGHTS:
+		total += weight
+	var roll := randi_range(1, maxi(total, 1))
+	for tier in TIER_WEIGHTS.size():
+		roll -= TIER_WEIGHTS[tier]
+		if roll <= 0:
+			return tier
+	return 1
+
+
+# ---------------------------------------------------------------------------
+# Small shared arithmetic.
+# ---------------------------------------------------------------------------
+
+func _gape(b: Body) -> float:
+	return CellBody.gape_of(Genome.tier_of(b.genome, &"cytostome"), b.radius)
+
+
+## What this cell swims at while chasing: the chase's reference speed times the
+## margin Phase 4 measured. A hunter is faster than what it is chasing, always,
+## which is why dread does not mean "flee" -- it means commit away from that
+## bearing now, before it lunges.
+func _cruise_speed(b: Body) -> float:
+	return _reference_speed(b) * CRUISE_OVER_PREY
+
+
+func _lunge_speed(b: Body) -> float:
+	return _reference_speed(b) * LUNGE_OVER_PREY
+
+
+## The speed the chase is scaled to.
+##
+## **Against the player this is exactly §7.1's settled contract**: the prey's own
+## realised speed, so the chase stays a chase at every `flagellum` tier and only
+## `cirrus` improves the dodge. Nothing here re-tunes that; §7.1's measurement is
+## Phase 6's.
+##
+## Against another cell in the field it is the larger of the prey's speed and the
+## hunter's own, and it has to be. A drifter moves at 9 u/s, and 1.2x9 is not a
+## chase -- it is two objects converging at walking pace for three minutes, and
+## §1.3's "cells genuinely eat each other" would be a thing that is technically
+## possible and never observed. The player is never on this branch.
+func _reference_speed(b: Body) -> float:
+	if b.target == TARGET_PLAYER:
+		return _cell.swim_speed()
+	var mine := _own_speed(b)
+	var prey := _target_body(b)
+	if prey == null:
+		return mine
+	return maxf(mine, DRIFT_SPEED if prey.state == State.DRIFT else _own_speed(prey))
+
+
+## A cell's own natural speed, derived from its flagellum tier through the same
+## model the player's is -- so a chase between two field cells is the same chase
+## the player is in.
+func _own_speed(b: Body) -> float:
+	return CellBody.speed_for(Genome.tier_of(b.genome, &"flagellum"))
+
+
+func _target_body(b: Body) -> Body:
+	if b.target < 0 or b.target >= _cells.size():
+		return null
+	var prey := _cells[b.target]
+	return prey if prey.serial == b.target_serial else null
+
+
+func _target_pos(b: Body) -> Vector2:
+	if b.target == TARGET_PLAYER:
+		return _cell.position
+	var prey := _target_body(b)
+	return prey.pos if prey != null else _cell.position
+
+
+func _target_valid(index: int, b: Body) -> bool:
+	if b.target == TARGET_PLAYER:
+		return _cell.radius < _gape(b)
+	var prey := _target_body(b)
+	return prey != null and b.target != index and prey.radius < _gape(b)
+
+
+## Same convention as the cell: radians clockwise from world north, front is the
+## top of the screen.
+func _forward(heading: float) -> Vector2:
+	return Vector2(sin(heading), -cos(heading))
+
+
+func _angle_of(v: Vector2, fallback: float) -> float:
+	if v.length_squared() <= 0.0:
+		return fallback
+	return atan2(v.x, -v.y)

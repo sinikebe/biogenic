@@ -15,25 +15,68 @@ extends Node
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
 
-## Body radius in world units, used for contact. A variable, not a constant,
-## because Phase 4 makes it the only number in the game that matters twice: you
-## can eat anything smaller than you, and anything bigger can eat you. One
-## comparison, no species tag -- the predator never changes, the player does.
-## docs/design/food-and-predators.md §4.1.
+## Body radius in world units. A variable, not a constant, because it is the one
+## number in the game that means three things at once: what can eat me, what I
+## can eat, and how much genome I can carry.
+## docs/design/genes-and-cilia.md §1.1 and §3.1.
 const BASE_RADIUS := 26.0
-## **Phase 5 seam.** A placeholder: 28 meals to edibility is over an hour, and
-## genes are what should make that curve real. What matters now is that the
-## comparison exists at all and that dread already falls off with it.
-const GROWTH_PER_MEAL := 0.5
+## One meal, one unit of radius. Phase 4 shipped 0.5 as an admitted placeholder;
+## §3.1 makes the ladder a count of meals, so fourteen meals is a full genome
+## and a 14-21 minute arc -- a session, not a campaign.
+const GROWTH_PER_MEAL := 1.0
 
 var radius := BASE_RADIUS
 
+## The genome this cell wears. Written by normal_mode.gd, which is the only
+## place the two halves are introduced to each other.
+##
+## Deliberately typed as plain [Node]: genome.gd preloads *this* file for the
+## slot ladder, and a preload back the other way is a cycle GDScript will not
+## resolve. Null is legal and means the born cell -- nothing in here may assume
+## the wiring has happened, because a headless boot builds this node first.
+var genome: Node = null
+
+# --- The gape --------------------------------------------------------------
+## How wide the mouth opens, as a multiple of body radius, by cytostome tier.
+## Index 0 is a cell with no mouth at all, which is a real state: drifters have
+## no cytostome, and §9.7 lets the player put a fourth gene over their own.
+##
+## **This is the whole edibility rule.** A can eat B when `B.radius < A.gape()`,
+## evaluated in both directions independently, which is what makes a small cell
+## with an enormous mouth both prey and predator. §1.1.
+const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
+
+# --- Slots -----------------------------------------------------------------
+## Genome size is capacity, not currency: one more slot per this much growth.
+## Three slots at birth, seven at radius 40 -- the same radius at which nothing
+## the water seeds can swallow you. §3.1.
+const SLOT_RADIUS := 3.5
+const SLOT_MIN := 3
+const SLOT_MAX := 7
+
 # --- Drive -----------------------------------------------------------------
-## Speed added along the heading by one flagellar beat.
-const IMPULSE_SPEED := 138.0
-## Seconds between impulses, resampled after each one.
-const IMPULSE_GAP_MIN := 1.7
-const IMPULSE_GAP_MAX := 3.6
+# Every number in this block is indexed by a gene tier rather than fixed, and
+# the mapping lives here -- next to the constant it replaces -- for the same
+# reason perception.md §6.2 put the hunger-to-beat mapping in one place. §7.2.
+#
+# Tier 0 is the cell that has lost this organ entirely (§9.7 allows it). It is
+# **not in the design**: it is extrapolated one step below tier 1 on the
+# ladder's own spacing, which is the least invented answer available.
+
+## Speed added along the heading by one flagellar beat, by `flagellum` tier.
+const IMPULSE_SPEED_BY_TIER: Array[float] = [118.0, 138.0, 162.0, 190.0]
+## Seconds between impulses, resampled after each one, by `flagellum` tier.
+const IMPULSE_GAP_MIN_BY_TIER: Array[float] = [2.00, 1.70, 1.45, 1.20]
+const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
+## Mean of the per-impulse strength roll below, for [method speed_for].
+const IMPULSE_MEAN := 0.85
+## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
+## exactly v0/DRAG of displacement however long it is left to, so a train of
+## them every T seconds makes v0/(DRAG*T) along the heading and there is no free
+## parameter in it -- except that the heading is not straight. This is the
+## measured shortfall, set so a tier-1 cell comes out at the 56.5 u/s that
+## Phase 4 measured over 40 seeds and hard-coded into the pursuit.
+const SPREAD_LOSS := 0.945
 ## The organelle does not aim well: each impulse strays this far off the heading
 ## and kicks the heading itself by about this much.
 const IMPULSE_SPREAD := 0.24
@@ -42,12 +85,13 @@ const IMPULSE_KICK := 0.16
 const DRAG := 0.74
 
 # --- Steering --------------------------------------------------------------
-## Flat out, the cell turns this fast: about 35 deg/s, so a half turn costs five
-## seconds. Slow on purpose.
-const TURN_RATE_MAX := 0.62
+## Flat out, the cell turns this fast, by `cirrus` tier. Tier 1 is about
+## 35 deg/s, so a half turn costs five seconds: slow on purpose. Tier 3 is
+## 58 deg/s, and §7.1 gives the whole of the improved dodge to this one number.
+const TURN_RATE_BY_TIER: Array[float] = [0.48, 0.62, 0.80, 1.02]
 ## Seconds for the turn to actually build. The lag is what makes steering feel
-## like leaning on something rather than driving it.
-const TURN_RESPONSE := 1.1
+## like leaning on something rather than driving it; a better cirrus shortens it.
+const TURN_RESPONSE_BY_TIER: Array[float] = [1.43, 1.10, 0.85, 0.65]
 ## The water pushes back: a slow random walk on the heading the player never
 ## asked for and cannot switch off.
 const WANDER_RATE := 0.13
@@ -94,7 +138,7 @@ func reset() -> void:
 func _process(delta: float) -> void:
 	steer = _read_steer()
 
-	_omega = lerpf(_omega, steer * TURN_RATE_MAX, 1.0 - exp(-delta / TURN_RESPONSE))
+	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
 	# buzzing, so it reads as current rather than as noise.
 	var pull := 1.0 - exp(-delta / WANDER_TAU)
@@ -110,12 +154,90 @@ func _process(delta: float) -> void:
 
 
 func _fire_impulse() -> void:
-	_impulse_timer = randf_range(IMPULSE_GAP_MIN, IMPULSE_GAP_MAX)
+	_impulse_timer = randf_range(impulse_gap_min(), impulse_gap_max())
 	heading = wrapf(heading + randf_range(-IMPULSE_KICK, IMPULSE_KICK), -PI, PI)
 	var strength := randf_range(0.7, 1.0)
 	var aim := heading + randf_range(-IMPULSE_SPREAD, IMPULSE_SPREAD)
-	velocity += Vector2(sin(aim), -cos(aim)) * IMPULSE_SPEED * strength
+	velocity += Vector2(sin(aim), -cos(aim)) * impulse_speed() * strength
 	impulsed.emit(strength)
+
+
+# ---------------------------------------------------------------------------
+# What the genome buys. Every one of these is a read, not a stored value: a
+# gene integrated mid-run has to take effect on the next frame, and a cached
+# copy is one more thing that can be stale when it matters.
+# ---------------------------------------------------------------------------
+
+## Tier of one gene, 1 if there is no genome attached yet -- the born cell is
+## tier 1 across the board, so an unwired cell behaves exactly as Phase 4 did.
+func tier(gene: StringName) -> int:
+	return genome.tier(gene) if genome != null else 1
+
+
+## How wide this cell's mouth opens, in world units. Anything whose radius is
+## below this fits in it, and nothing else does.
+func gape() -> float:
+	return gape_of(tier(&"cytostome"), radius)
+
+
+## How many genes this body can carry.
+func slots() -> int:
+	return slots_for(radius)
+
+
+func impulse_speed() -> float:
+	return IMPULSE_SPEED_BY_TIER[_tier_index(tier(&"flagellum"))]
+
+
+func impulse_gap_min() -> float:
+	return IMPULSE_GAP_MIN_BY_TIER[_tier_index(tier(&"flagellum"))]
+
+
+func impulse_gap_max() -> float:
+	return IMPULSE_GAP_MAX_BY_TIER[_tier_index(tier(&"flagellum"))]
+
+
+func turn_rate() -> float:
+	return TURN_RATE_BY_TIER[_tier_index(tier(&"cirrus"))]
+
+
+func turn_response() -> float:
+	return TURN_RESPONSE_BY_TIER[_tier_index(tier(&"cirrus"))]
+
+
+## The net speed this cell actually makes, which is what anything chasing it
+## has to lead. §7.1: this replaces Phase 4's hard-coded 56.5, so the chase
+## stays a chase at every tier and only `cirrus` improves the dodge.
+func swim_speed() -> float:
+	return speed_for(tier(&"flagellum"))
+
+
+# --- The same, for a cell that is not this one -----------------------------
+# Every other body in the water is a `{gene: tier}` dictionary in food.gd, not
+# a node. These are how it asks the same questions, so there is exactly one
+# definition of what a tier buys.
+
+static func gape_of(cytostome_tier: int, body_radius: float) -> float:
+	return GAPE_BY_TIER[_tier_index(cytostome_tier)] * body_radius
+
+
+static func slots_for(body_radius: float) -> int:
+	return clampi(SLOT_MIN + int((body_radius - BASE_RADIUS) / SLOT_RADIUS),
+		SLOT_MIN, SLOT_MAX)
+
+
+static func turn_rate_for(cirrus_tier: int) -> float:
+	return TURN_RATE_BY_TIER[_tier_index(cirrus_tier)]
+
+
+static func speed_for(flagellum_tier: int) -> float:
+	var index := _tier_index(flagellum_tier)
+	var gap := (IMPULSE_GAP_MIN_BY_TIER[index] + IMPULSE_GAP_MAX_BY_TIER[index]) * 0.5
+	return IMPULSE_SPEED_BY_TIER[index] * IMPULSE_MEAN * SPREAD_LOSS / (DRAG * gap)
+
+
+static func _tier_index(value: int) -> int:
+	return clampi(value, 0, GAPE_BY_TIER.size() - 1)
 
 
 ## World direction the cell is facing.
@@ -142,7 +264,7 @@ func bearing_to(point: Vector2) -> float:
 ## player pushes -- that answer is the only proof they are connected to
 ## anything, and a second of lag destroys it.
 func shear_rate() -> float:
-	var turning := _omega / TURN_RATE_MAX
+	var turning := _omega / turn_rate()
 	return steer if absf(steer) > absf(turning) else turning
 
 

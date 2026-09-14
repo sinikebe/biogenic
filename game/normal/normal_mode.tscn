@@ -7,7 +7,7 @@
 [ext_resource type="Script" path="res://game/normal/motes.gd" id="5_motes"]
 [ext_resource type="PackedScene" path="res://game/vision/vision.tscn" id="6_vision"]
 [ext_resource type="Script" path="res://game/normal/food.gd" id="7_food"]
-[ext_resource type="Script" path="res://game/normal/predator.gd" id="8_predator"]
+[ext_resource type="Script" path="res://game/normal/genome.gd" id="8_genome"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -32,9 +32,9 @@ script = ExtResource("5_motes")
 process_mode = 1
 script = ExtResource("7_food")
 
-[node name="Predator" type="Node" parent="."]
+[node name="Genome" type="Node" parent="."]
 process_mode = 1
-script = ExtResource("8_predator")
+script = ExtResource("8_genome")
 
 [node name="Vision" parent="." instance=ExtResource("6_vision")]
 
