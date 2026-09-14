@@ -74,6 +74,9 @@ var mode := -1
 @onready var _light_panel: PanelContainer = $Hud/Pause/Center/Buttons/Light
 @onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Light/Box/Caption
 @onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Light/Box/Slider
+@onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/View
+@onready var _view_caption: Label = $Hud/Pause/Center/Buttons/View/Box/Caption
+@onready var _view_button: Button = $Hud/Pause/Center/Buttons/View/Box/Toggle
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
 @onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
@@ -92,6 +95,13 @@ var _last_toggle_frame := -1
 var _onboard := Onboard.OFF
 var _onboard_clock := 0.0
 var _onboard_from := 0.0
+
+## **Forward is always up.** The world turns instead of the cell, which is the
+## other way of reading a heading and the one a player who has been staring at
+## a body-relative membrane already has. Full vision only -- point of view is
+## body-relative by construction, so the toggle is a no-op there and says so by
+## simply not changing anything. Off by default.
+var _camera_locked := false
 
 var _life := Life.ALIVE
 ## A tap that arrived during the collapse, waiting for the black to be ready.
@@ -112,6 +122,9 @@ func _ready() -> void:
 	_food.eaten.connect(_on_eaten)
 	_food.waked.connect(_on_waked)
 	_food.killed.connect(_on_killed)
+	_food.stung.connect(_on_stung)
+	_food.darted.connect(_on_darted)
+	_cell.dashed.connect(_on_dashed)
 	# The two halves of one cell, introduced here and nowhere else: the body
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
@@ -120,6 +133,9 @@ func _ready() -> void:
 	_food.setup(_cell)
 	_genome.setup(_cell)
 
+	# Read before _apply_mode(), which is what carries it into the world view: a
+	# player who chose "forward up" last run must not have to choose it again.
+	_camera_locked = RunState.load_camera_locked()
 	if mode < 0:
 		mode = RunState.load_mode()
 	_apply_mode()
@@ -128,6 +144,9 @@ func _ready() -> void:
 	_pause_ui.hide()
 	_resume_button.pressed.connect(_toggle_pause)
 	_leave_button.pressed.connect(_leave)
+
+	_view_button.pressed.connect(_toggle_camera)
+	_update_view_button()
 
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
 		SignalBus.GAIN_MIN, SignalBus.GAIN_MAX)
@@ -162,6 +181,25 @@ func _process(delta: float) -> void:
 	# Read once, post once. Nothing below carries a position.
 	_metabolism.concentration = _food.concentration
 	_metabolism.upkeep = _genome.upkeep()
+	# `vacuole` and `plastid`: a bigger tank and a body that makes some of its
+	# own. Both land on the beat, which is where every cost in this game lands.
+	_metabolism.reserve = CellBody.STORE_BY_TIER[
+		mini(_cell.extra(&"vacuole"), CellBody.STORE_BY_TIER.size() - 1)]
+	_metabolism.photosynthesis = CellBody.SUN_BY_TIER[
+		mini(_cell.extra(&"plastid"), CellBody.SUN_BY_TIER.size() - 1)]
+	# What the water has to be told about this body before it answers. All
+	# scalars about the cell's own anatomy; the field turns them into bearings.
+	_food.touch_range = CellBody.TOUCH_RANGE_BY_TIER[
+		mini(_cell.extra(&"palp"), CellBody.TOUCH_RANGE_BY_TIER.size() - 1)]
+	var dart := mini(_cell.extra(&"trichocyst"),
+		CellBody.DART_RANGE_BY_TIER.size() - 1)
+	_food.dart_range = CellBody.DART_RANGE_BY_TIER[dart]
+	_food.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[dart]
+	var venom := mini(_cell.extra(&"toxicyst"),
+		CellBody.VENOM_COST_BY_TIER.size() - 1)
+	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
+	_food.beam_range = _cell.beam_range()
+	_food.beam_bearings = _beam_bearings()
 	_bus.taste(_food.taste_bearing, _food.concentration)
 	_bus.dread(_food.dread_level)
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
@@ -179,6 +217,18 @@ func _process(delta: float) -> void:
 	# sensations a minute for an organ it does not have.
 	var eye := _cell.tier(&"stigma") > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
+	# The earned senses, beside organs() and for the same reason: a tier is a
+	# property of the organ, not of what it senses.
+	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"statocyst"),
+		_cell.extra(&"rhabdom"))
+	_post_beam()
+	# `statocyst`: absolute up, as a bearing this body reads it -- which is
+	# minus the heading, and the one bearing on the membrane that moves when the
+	# cell turns rather than when the water does.
+	_bus.level(-_cell.heading, 1.0 if _cell.extra(&"statocyst") > 0 else 0.0)
+	# `palp`: something solid, right there, felt with no light at all.
+	if _food.touch_level > 0.0:
+		_bus.touch(_food.touch_bearing, _food.touch_level)
 	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
@@ -188,8 +238,70 @@ func _process(delta: float) -> void:
 		_die(false, 0.0)
 
 
+## Which way this cell's beams look. **The slot is the arc and the arc is the
+## bearing** -- that is the whole of placement mattering, and it is resolved
+## here because this file has both the genome and cilia.gd's arc table. cell.gd
+## cannot: cilia.gd preloads genome.gd, which preloads cell.gd, so a preload
+## back the other way would be a cycle GDScript will not resolve.
+func _beam_bearings() -> PackedFloat32Array:
+	var out := PackedFloat32Array()
+	var tier := mini(_cell.extra(&"ocellus"), CellBody.BEAM_COUNT_BY_TIER.size() - 1)
+	var count := CellBody.BEAM_COUNT_BY_TIER[tier]
+	if count <= 0:
+		return out
+	var slot := _genome.slot_of(&"ocellus")
+	if slot < 0:
+		return out
+	var middle := Cilia.slot_bearing(slot)
+	var fan := deg_to_rad(CellBody.BEAM_FAN_DEG_BY_TIER[tier])
+	for i in count:
+		var u := 0.0 if count < 2 else -1.0 + 2.0 * float(i) / float(count - 1)
+		out.append(wrapf(middle + u * fan, -PI, PI))
+	return out
+
+
+## The one beam the membrane hears about: the nearest hit. There is one glow
+## lobe left in the shader and three beams at tier 3, so they compete rather
+## than sum -- the closest surface is the one worth telling a blind cell about.
+## Full vision draws all of them, which is what full vision is for.
+func _post_beam() -> void:
+	var best := 0.0
+	var bearing := 0.0
+	var reach := _food.beam_range
+	for beam: Array in _food.beams:
+		if not bool(beam[2]):
+			continue
+		var near := 1.0 - clampf(float(beam[1]) / maxf(reach, 1.0), 0.0, 1.0)
+		if near > best:
+			best = near
+			bearing = float(beam[0])
+	_bus.beam(bearing, best)
+
+
 func _on_impulsed(strength: float) -> void:
 	_bus.thrust(strength)
+
+
+## `myoneme`. The cell asked for the burst and cannot spend hunger itself.
+func _on_dashed(cost: float) -> void:
+	if _life != Life.ALIVE:
+		return
+	_metabolism.feed(-cost)
+
+
+## `trichocyst`. The dart went off; something that was committed to you is not
+## any more. Felt as a shove at its bearing -- it is a thing that happened out
+## there, at a direction, which is exactly what a shove says.
+func _on_darted(bearing: float) -> void:
+	_bus.shove(bearing, 0.7)
+
+
+## `toxicyst`. It swallowed you and died of it, and you are starving for it.
+func _on_stung(bearing: float) -> void:
+	if _life != Life.ALIVE:
+		return
+	_bus.hit(bearing, 1.0)
+	_metabolism.feed(-_food.venom_cost)
 
 
 ## The mote's world position arrives with this and is deliberately dropped here.
@@ -328,6 +440,22 @@ func _set_simulating(on: bool) -> void:
 
 func _apply_mode() -> void:
 	_vision.set_active(_vision_active())
+	_vision.set_camera_locked(_camera_locked)
+
+
+## **Forward is always up.** Beside `light` on the pause column, same slab, same
+## 48px gap, because it is the same kind of thing: how this player wants the
+## game presented, not a property of the run. Remembered, so a player who wants
+## it does not re-choose it every launch.
+func _toggle_camera() -> void:
+	_camera_locked = not _camera_locked
+	_vision.set_camera_locked(_camera_locked)
+	RunState.save_camera_locked(_camera_locked)
+	_update_view_button()
+
+
+func _update_view_button() -> void:
+	_view_button.text = "forward up" if _camera_locked else "north up"
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause
@@ -588,7 +716,8 @@ func _on_gain_settled(changed: bool) -> void:
 ## Rendered, and it looked wrong; at 232 they stay the buttons Phase 4 shipped
 ## whatever is above them.
 func _style_pause() -> void:
-	for control: Control in [_light_panel, _resume_button, _leave_button]:
+	for control: Control in [_light_panel, _view_panel, _resume_button,
+			_leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	# **Every group on the pause column is a surface, and `light` was the one
@@ -600,6 +729,11 @@ func _style_pause() -> void:
 	# a later screen can apply without asking: every group on this column is a
 	# surface.
 	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
+	# Same slab, same rule: every group on this column is a surface.
+	_view_panel.add_theme_stylebox_override("panel", _slab(-0.2))
+	_view_caption.add_theme_font_size_override("font_size", 16)
+	_view_caption.add_theme_color_override("font_color",
+		Color(0.855, 0.953, 0.933, 0.52))
 
 	_genome_caption.add_theme_font_size_override("font_size", 15)
 	_genome_caption.add_theme_color_override("font_color",
@@ -607,6 +741,21 @@ func _style_pause() -> void:
 	_genome_hint.add_theme_font_size_override("font_size", 14)
 	_genome_hint.add_theme_color_override("font_color",
 		Color(0.855, 0.953, 0.933, 0.38))
+
+	# The camera toggle is a button, so it is styled like one -- but narrower and
+	# shorter than `resume`, because it is a setting inside a surface and not a
+	# thing that ends the run. Still 48 tall, which is the touch rule.
+	_view_button.custom_minimum_size = Vector2(192.0, 48.0)
+	_view_button.focus_mode = Control.FOCUS_ALL
+	_view_button.add_theme_font_size_override("font_size", 16)
+	for state: String in ["font_color", "font_hover_color", "font_focus_color",
+			"font_pressed_color"]:
+		_view_button.add_theme_color_override(state,
+			Color(0.855, 0.953, 0.933, 0.92))
+	_view_button.add_theme_stylebox_override("normal", _slab(0.0))
+	_view_button.add_theme_stylebox_override("hover", _slab(0.35))
+	_view_button.add_theme_stylebox_override("pressed", _slab(0.5))
+	_view_button.add_theme_stylebox_override("focus", _slab(0.35))
 
 	for button: Button in [_resume_button, _leave_button]:
 		button.custom_minimum_size = Vector2(232.0, 56.0)
@@ -694,8 +843,12 @@ const ARM_TIMEOUT_MS := 4000
 
 ## Every word Phase 5 adds to the screen is here or on a tile. perception.md
 ## §6.1's one string in normal mode is untouched.
-const HINT_ARM := "tap a slot to replace it"
-const HINT_COMMIT := "tap again to integrate"
+##
+## **"place", not "replace".** Every new gene is a placement decision now, and
+## most of them land in an empty slot -- the slot is the arc, so which empty one
+## is the whole question. The compass on each tile is what answers it.
+const HINT_ARM := "tap a slot to place it"
+const HINT_COMMIT := "tap again to place"
 
 ## **The plain word, never the biological name.** Four short verbs are parsed
 ## instantly at arm's length; nine letters of Greek are not, on the one screen
@@ -703,7 +856,11 @@ const HINT_COMMIT := "tap again to integrate"
 ## sets is why a new gene needs a short word as well as a real organ name.
 const WORDS := {
 	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
-	&"stigma": "see",
+	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
+	&"statocyst": "level", &"rhabdom": "focus", &"palp": "touch",
+	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
+	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
+	&"crista": "burn",
 }
 
 enum Tile { OCCUPIED, EMPTY, HELD, ARMED }
@@ -764,8 +921,11 @@ func _build_genome_strip() -> void:
 	_slot_genes.clear()
 
 	var tiers := _genome.tiers()
-	for gene: StringName in tiers:
-		_slot_genes.append(gene)
+	# **The layout, not the dictionary.** Slot index is the arc a gene is worn
+	# on, and the layout is the only thing that knows about holes -- a genome
+	# with the beam in slot 6 and nothing in slots 3 to 5 is a genome the player
+	# built on purpose.
+	_slot_genes.assign(_genome.layout())
 
 	var held := _genome.held_sample
 	if held != &"":
@@ -778,12 +938,17 @@ func _build_genome_strip() -> void:
 	# could not be noticed if it ever did.
 	var count := maxi(_genome.slots(), _slot_genes.size())
 	for i in count:
-		if i < _slot_genes.size():
-			var gene: StringName = _slot_genes[i]
-			var state := Tile.ARMED if i == _armed else Tile.OCCUPIED
-			_genome_row.add_child(_make_tile(gene, int(tiers[gene]), state, i))
+		var gene: StringName = _slot_genes[i] if i < _slot_genes.size() else &""
+		if gene == &"":
+			# **An empty slot is armable now.** It was inert when the only thing
+			# a sample could do was overwrite; it is the common case now that
+			# every gene is placed by hand.
+			var blank := Tile.ARMED if i == _armed else Tile.EMPTY
+			_genome_row.add_child(_make_tile(&"", 0, blank, i))
 		else:
-			_genome_row.add_child(_make_tile(&"", 0, Tile.EMPTY, i))
+			var state := Tile.ARMED if i == _armed else Tile.OCCUPIED
+			_genome_row.add_child(_make_tile(gene, int(tiers.get(gene, 0)),
+				state, i))
 
 	# **The slots do not move when the sample block appears or goes, and that is
 	# worth one invisible node.** Row is centred, so without this the whole slot
@@ -888,8 +1053,13 @@ func _make_tile(gene: StringName, tier: int, state: int, index: int) -> PanelCon
 func _tile_box(gene: StringName, state: int) -> StyleBoxFlat:
 	var box := StyleBoxFlat.new()
 	box.bg_color = TILE_BG[state]
-	box.border_color = EMPTY_BORDER if state == Tile.EMPTY \
-		else Color(Cilia.hue(gene), TILE_BORDER_ALPHA[state])
+	# An armed empty slot borders in the hue of the gene about to go into it, so
+	# the second tap is confirming something the tile is already showing.
+	var edge := gene
+	if gene == &"" and state == Tile.ARMED:
+		edge = _genome.held_sample
+	box.border_color = EMPTY_BORDER if edge == &"" \
+		else Color(Cilia.hue(edge), TILE_BORDER_ALPHA[state])
 	box.set_border_width_all(TILE_BORDER[state])
 	box.set_corner_radius_all(8)
 	# The tile is measured in §5.3 at exactly 76 square, so the panel adds no
@@ -909,13 +1079,24 @@ func _tile_box(gene: StringName, state: int) -> StyleBoxFlat:
 func _draw_tile_face(face: Control, tile: Control, gene: StringName, tier: int,
 		state: int) -> void:
 	var box := face.size
-	if state == Tile.EMPTY:
+	var slot := int(tile.get_meta(&"slot", -1))
+	if gene == &"":
 		var mid := box * 0.5
 		var arm := PLUS_ARM * 0.5
+		var plus := EMPTY_PLUS
+		if state == Tile.ARMED and _genome.held_sample != &"":
+			plus = Color(Cilia.hue(_genome.held_sample), 0.85)
 		face.draw_line(mid - Vector2(arm, 0.0), mid + Vector2(arm, 0.0),
-			EMPTY_PLUS, 1.6, true)
+			plus, 1.6, true)
 		face.draw_line(mid - Vector2(0.0, arm), mid + Vector2(0.0, arm),
-			EMPTY_PLUS, 1.6, true)
+			plus, 1.6, true)
+		# **The compass is on the empty tiles too, and that is the point.** The
+		# player is choosing a direction, not a box, so an empty slot has to say
+		# which way it looks before anything is in it.
+		Cilia.draw_tile_direction(face, slot, Color(0.855, 0.953, 0.933, 0.6), box)
+		if tile.has_focus():
+			face.draw_rect(Rect2(Vector2(2.0, 2.0), box - Vector2(4.0, 4.0)),
+				FOCUS_TINT, false, 1.5)
 		return
 
 	var font := face.get_theme_default_font()
@@ -926,6 +1107,8 @@ func _draw_tile_face(face: Control, tile: Control, gene: StringName, tier: int,
 			box.x, LABEL_SIZE, LABEL_TINT_LOUD if loud else LABEL_TINT)
 
 	Cilia.draw_tile_organ(face, gene, tier, box)
+	# Which arc this slot is -- the whole of why placement is a choice.
+	Cilia.draw_tile_direction(face, slot, Cilia.hue(gene), box)
 
 	# Three pips, filled to the tier. The one thing on the tile that is a count
 	# rather than a magnitude: at 13 pixels the 22% length step §4.3 uses on a
@@ -1014,9 +1197,9 @@ func _is_tile_tap(event: InputEvent) -> bool:
 ## dropping a fourth gene over your own mouth -- survivable rather than a soft
 ## lock.
 func _commit_slot(index: int) -> void:
-	if index < 0 or index >= _slot_genes.size():
+	if index < 0 or index >= _genome.slots():
 		return
-	_genome.replace(_slot_genes[index])
+	_genome.place(index)
 	_disarm()
 	# The bus is told now rather than on the next unpaused frame: the membrane
 	# keeps beating under the scrim, and an echo for a sample that no longer

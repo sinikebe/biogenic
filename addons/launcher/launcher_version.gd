@@ -16,13 +16,13 @@ extends RefCounted
 ## launcher. That is what went unsignalled at 1.0.0, and it is why this is 2.0.0
 ## rather than 1.0.1: UpdateService.REQUEST_TIMEOUT was removed after 1.0.0 was
 ## declared, and BuildInfo.launcher_source() was added.
-const VERSION: String = "2.0.0"
+const VERSION: String = "2.1.0"
 
 ## Template commit this copy came from, or "local" inside the template itself.
-const COMMIT: String = "5e9e6230"
+const COMMIT: String = "6a3796da"
 
 ## RFC3339 date this copy was synced, or "" inside the template.
-const SYNCED_AT: String = "2026-09-14T16:35:07Z"
+const SYNCED_AT: String = "2026-09-14T18:42:18Z"
 
 ## Repository it was synced from, or "" inside the template.
 const SOURCE: String = "sinikebe/godot-launcher-template"

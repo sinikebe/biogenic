@@ -81,15 +81,24 @@ extends Node
 ##                           all four at a readable distance is not a test, it
 ##                           is a lottery. Genes are separated by `+` because a
 ##                           comma is already the field separator.
-##   --genome=<g:t,g:t>      force the player's genome, e.g.
+##   --genome=<g:t[:slot],...>
+##                           force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
 ##                           way to reach a tier-3 cell without playing for
-##                           fifteen minutes.
+##                           fifteen minutes. A third field is the **slot**, and
+##                           the slot is the arc the organ is worn on: 0 nose,
+##                           1 starboard flank, 2 astern, 3 and 4 the forward
+##                           diagonals, 5 and 6 the rear ones. That is how a
+##                           beam gets aimed.
 ##   --check-seeding=<n>     reseed the field n times and print what §1.3's
 ##                           distribution actually produces, including whether
 ##                           the drifter floor ever fails. Quits when done.
 ##   --trace=<seconds>       print the field, dread, threat and the player's
 ##                           realised speed on that interval
+##   --locked                turn the world with the cell, so forward is always
+##                           up. The pause screen's camera toggle, reached
+##                           without a tap and without writing the choice to
+##                           user:// where the next run would inherit it.
 ##   --forage                steer up the taste gradient, to measure §3.3's
 ##                           "a meal every 60 to 90 seconds" without a human
 ##   --evade                 play the escape contract in §5.4: hold full steer
@@ -165,6 +174,7 @@ var _last_pos := Vector2.ZERO
 var _have_last_pos := false
 var _speed_clock := 0.0
 var _evade := false
+var _locked := false
 ## World angle of the last wake, so the body-relative bearing can be recomputed
 ## as the cell turns instead of going stale the moment it does.
 var _wake_world := 0.0
@@ -260,6 +270,8 @@ func _ready() -> void:
 				if xy.size() == 2:
 					_touches.append([float(touch[0]),
 						Vector2(float(xy[0]), float(xy[1]))])
+		elif text == "--locked":
+			_locked = true
 		elif text == "--evade":
 			_evade = true
 		elif text == "--forage":
@@ -338,8 +350,18 @@ func _ready() -> void:
 		print("[drive] field cell 1 parked at %.0f units" % _food_at)
 	_apply_poses(true)
 
+	if _locked:
+		var view := _find_node_with(self, &"set_camera_locked")
+		if view != null:
+			view.call(&"set_camera_locked", true)
+			print("[drive] camera locked: forward is up")
+
+	# `w` is `axoneme`: hold to push. The steer keys are the other two.
+	var held := _keycode(hold) if hold == "w" else KEY_NONE
 	if hold == "a" or hold == "d":
-		_send_key(KEY_A if hold == "a" else KEY_D, true)
+		held = KEY_A if hold == "a" else KEY_D
+	if held != KEY_NONE:
+		_send_key(held, true)
 		print("[drive] holding ", hold.to_upper())
 
 
@@ -785,6 +807,9 @@ func _keycode(name: String) -> Key:
 		"right": return KEY_RIGHT
 		"tab": return KEY_TAB
 		"v": return KEY_V
+		# `myoneme` on desktop, and the one key normal mode did not already use.
+		"space": return KEY_SPACE
+		"w": return KEY_W
 		_: return KEY_NONE
 
 
@@ -893,13 +918,45 @@ func _place(index: int, at: Vector2) -> void:
 
 ## `cytostome:3,cirrus:2` -- straight into the genome node, before the first
 ## frame, so the cell boots as whatever the measurement needs it to be.
+## `gene:tier` as before, and `gene:tier:slot` to say **which slot**, which is
+## which arc, which is which way a directional gene looks. Without the third
+## field the genes land in the order they are written, in the first slots that
+## will take them -- so `--genome=cytostome:1,ocellus:1` aims the beam forward
+## and `ocellus:1:6` aims it over the rear-port quarter.
 func _force_genome(spec: String) -> void:
 	var tiers: Dictionary = _genome.tiers()
 	tiers.clear()
+	var placed := {}
 	for pair in spec.split(",", false):
 		var bits := str(pair).split(":")
-		if bits.size() == 2:
-			tiers[StringName(bits[0].strip_edges())] = int(bits[1])
+		if bits.size() < 2:
+			continue
+		var gene := StringName(bits[0].strip_edges())
+		tiers[gene] = int(bits[1])
+		if bits.size() >= 3:
+			placed[gene] = int(bits[2])
+	if not placed.is_empty():
+		var layout: Array[StringName] = []
+		for i in _genome.slots():
+			layout.append(&"")
+		for gene: StringName in placed:
+			var slot := int(placed[gene])
+			if slot >= 0 and slot < layout.size():
+				layout[slot] = gene
+		for gene: StringName in tiers:
+			if placed.has(gene) and layout.has(gene):
+				continue
+			if placed.has(gene):
+				# Asked for a slot this body does not have yet -- the ladder is
+				# the radius, so `--radius=40` is what buys slots 5 and 6. Say so
+				# rather than silently dropping the gene somewhere else.
+				print("[drive] slot %d is past this body's %d slots" % [
+					int(placed[gene]), layout.size()])
+			var free := layout.find(&"")
+			if free >= 0:
+				layout[free] = gene
+		_genome.set("_order", layout)
+		print("[drive] layout forced to ", layout)
 	print("[drive] genome forced to %s, upkeep %.2f" % [
 		_genome_text(tiers), _genome.upkeep()])
 

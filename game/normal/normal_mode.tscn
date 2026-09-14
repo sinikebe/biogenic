@@ -117,6 +117,22 @@ max_value = 2.4
 step = 0.05
 value = 1.0
 
+[node name="View" type="PanelContainer" parent="Hud/Pause/Center/Buttons"]
+size_flags_horizontal = 4
+
+[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Buttons/View"]
+theme_override_constants/separation = 6
+
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/View/Box"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
+theme_override_font_sizes/font_size = 15
+text = "camera"
+horizontal_alignment = 1
+
+[node name="Toggle" type="Button" parent="Hud/Pause/Center/Buttons/View/Box"]
+text = "north up"
+
 [node name="Resume" type="Button" parent="Hud/Pause/Center/Buttons"]
 size_flags_horizontal = 4
 text = "resume"

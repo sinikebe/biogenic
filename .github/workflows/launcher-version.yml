@@ -10,12 +10,6 @@ name: Launcher version
 # request whose export had failed would launder it to green. And sharing a
 # concurrency group with ci.yml meant a label run and a push run could not both
 # survive; split into their own group here, the newest label state always wins.
-#
-# In THIS repository the check is a deliberate no-op: ci/check_launcher_version.sh
-# stands down wherever addons/launcher/.launcher-sync.json exists, because a
-# consuming game changes addons/launcher/ only by sync, and the sync writes
-# COMMIT and never VERSION. Carried anyway so the workflow set does not drift
-# from the template -- drift here is invisible until a release goes wrong.
 
 on:
   pull_request:
