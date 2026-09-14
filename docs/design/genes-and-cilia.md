@@ -5,9 +5,17 @@ with a fixed number of slots, filled by what you eat, worn on the outside as
 cilia.
 
 Extends `perception.md` and `food-and-predators.md`; it contradicts both in
-places and says so where it does. Every number below was rendered under GL
-Compatibility at 1280x720 **and** 2400x1080 and looked at. The prototype was
-built in a throwaway copy of the project outside the repository.
+places and says so where it does. Every number that can be *seen* was rendered
+under GL Compatibility at 1280x720 **and** 2400x1080 and looked at; §10 lists
+what, and the numbers that cannot be seen are flagged where they appear. The
+prototype was built in a throwaway copy of the project outside the repository.
+
+> **Reviewed after merge, and §1.1–1.3 did not survive intact.** The gape rule
+> stands; the claim that it reads at a glance was withdrawn and replaced (§1.1.1),
+> and the ecosystem bound was rewritten from an unparameterised sentence into a
+> seeding function that can actually be built (§1.3). The economy in §3.2 made the
+> mouth a strictly dominant gene and is corrected. Everything the review changed
+> says so in place.
 
 ## 1. The decisions, in one place
 
@@ -22,9 +30,10 @@ built in a throwaway copy of the project outside the repository.
    way you do — by eating gene-carrying cells. See §1.1.
 1. **Cilia are the visible expression of ability, and every cell wears them** —
    you and everything else. One drawing routine, one subject.
-2. **The starting cell is already full.** Three slots, three organs: feed,
-   orient, thrust, all at tier 1. You are not an empty vessel; you are mediocre
-   at three things, and becoming something means stopping being something.
+2. **The starting cell is already full.** Three slots, three organs:
+   `cytostome` *eat*, `kinety` *turn*, `flagellum` *swim*, all at tier 1 (§9.1).
+   You are not an empty vessel; you are mediocre at three things, and becoming
+   something means stopping being something.
 3. **Genome size is capacity, not currency.** There are no genetic points.
    Slots come from body radius — the one number the game already has, which now
    means three things: what can eat me, what I can eat, and how much I can be.
@@ -73,12 +82,92 @@ the cell you have to look at rather than glance at.
 It also makes the owner's premise literally true: the thing that decides
 edibility *is* an organ, and organs are worn on the outside.
 
-**Rendered, at real scale and distance, before being specified.** Three cells at
-the sizes above: the small one reads as a meal, the large one's gape reads
-unmistakably as a wide open jaw, and the small-body-huge-mouth case reads as
-alarming rather than as prey. `NEITHER` — a cell of about your size with about
-your mouth — looks like a peer, which is correct. The ambiguity in this rule
-sits exactly at the boundary, where being wrong should cost something.
+**What the multipliers actually buy — tier 2 is a threshold, not a step.** Write
+the rule as a ratio, `rho = B.radius / A.radius`, for two cells with the same
+cytostome tier `g`. A eats B below `g`; B eats A above `1/g`. So:
+
+| tier | `g` | two equal cells are… |
+|---|---|---|
+| none | 0.58 | standoff across `0.58 … 1.72` — a very wide safe band |
+| 1 | 0.82 | standoff across `0.82 … 1.22` |
+| 2 | 1.05 | **mutual** across `0.95 … 1.05` |
+| 3 | 1.40 | **mutual** across `0.71 … 1.40` — almost everything near you |
+
+**Cytostome 2 is where the water stops having standoffs in it.** Below it, a
+peer is something you pass; at and above it, a peer is a fight neither of you can
+walk away from, decided by who commits first. That is the most interesting thing
+these four numbers do and it should be kept: it means specialising into the mouth
+does not just widen the menu, it changes the *genre* of every encounter. It also
+says where the ceiling is — tier 3 does not trivialise foraging so much as delete
+safety, because nothing your own size is neutral any more.
+
+### 1.1.1 How the gape is drawn, and the one thing the render caught
+
+The mouth is a bow across the nose, seated at `r * 1.05` along the heading,
+bulging forward by `0.30 * gape`, with two stems back to the body so it reads as
+an organ rather than a floating bracket. **The clear span between the lip tips is
+exactly `2 * gape`**, so the widest body that fits between them is the widest
+body it can swallow — the rule is drawn at 1:1 and needs no legend. The span is
+measured across the heading, so it is the same number of pixels whichever way the
+cell is pointing; a cell cannot hide its mouth by turning.
+
+> **The previous draft's render claim was too kind and is withdrawn.** It said
+> the small-body-huge-mouth case "reads as alarming rather than as prey". At the
+> distance it was photographed — near frame centre, conveniently placed — that is
+> true. Re-rendered at real foraging distance (250–640 world units, which at
+> `ZOOM 1.0` is mid-screen to the frame edge) it is **false**: a cell of `r21`
+> with a tier-3 mouth reads as lunch, because the only comparison on screen is
+> the mouth against *its own* body, and against its own body it is merely
+> frilly. The two cases the gape rule was invented for — the small cell that can
+> swallow you, and the harmless giant — are exactly the two the silhouette gets
+> wrong, and drawing the gape truthfully does not fix that on its own.
+
+**So the gape carries the relationship, not just the measurement.** One
+comparison, and a colour *and* a shape, on the organ that causes it:
+
+| the other cell's gape | lip bow |
+| --- | --- |
+| `gape <= my.radius` — it cannot swallow me | cytostome green `Color(0.62, 1.00, 0.38)`, alpha `0.30 + 0.16 * tier`, width 1.7, smooth |
+| `gape > my.radius` — it can | **`Color(0.78, 0.24, 0.30)`**, alpha `>= 0.72`, width 2.6, **and seven teeth** |
+
+The teeth are 7 ticks spaced evenly along the bow at `s = -0.86 … 0.86`, each
+`0.22 * gape` long, pointing **back into the mouth** along `-fwd`, same colour,
+alpha `0.9 * bow`. They are not decoration — see the colour-vision note below.
+
+That red is `PREDATOR_TINT`, unchanged from Phase 4. **It does not die with
+`predator.gd` (§7.0); it moves from the body to the mouth.** The thing that can
+kill you is still red, it is still the only red in the water, and now it is red
+on the organ that does the killing rather than on a species. A cell that grows
+its cytostome past your radius turns red in front of you.
+
+This is legal in full vision and only in full vision: `perception.md` §4 says
+full vision exists to show what is actually there, and "this can swallow you" is
+a fact about what is there. **The membrane is not told.** Point of view reads
+danger the way it always has — dread and the wake (§7.0) — and identity on the
+skin is still forbidden.
+
+**Why teeth and not just red — measured, because colour alone does not survive
+the check.** A safe bow and a threat bow are the same shape in the same place
+with opposite meanings, which is the worst case for a colour-only signal. Under a
+Viénot deuteranope simulation of the actual render:
+
+| | sRGB | as a deuteranope sees it | relative luminance |
+| --- | --- | --- | --- |
+| safe green | `(158, 255, 97)` | `(232, 232, 102)` | **0.797** |
+| threat red | `(199, 61, 76)` | `(124, 124, 70)` | **0.160** |
+
+Both collapse to the same yellow hue, and the dangerous one ends up **five times
+darker than the harmless one** — the wrong way round for the more urgent signal.
+Colour is therefore carrying nothing for roughly one man in twelve. The teeth fix
+it on shape: rendered and simulated, a toothed bow reads as a distinct hooked
+form at 500 units even when both bows are the same olive. Width helps too (2.6
+against 1.7) but shape is what does the work.
+
+Rendered with the threat colour and teeth at 1280x720 and 2400x1080, at 250–640
+units and at the frame edge, in full colour and under the deuteranope
+simulation: the `r21`/gape-29 cell reads as dangerous at a glance from across the
+screen, and the `r33` mouthless giant stays blue and reads as something to
+ignore. Both were wrong without it.
 
 ### 1.2 Other cells evolve too
 
@@ -90,6 +179,13 @@ a difficulty curve.**
 That is the best thing in this idea and the one most able to go wrong, so it is
 bounded rather than trusted. What that bound is — and whether other cells truly
 eat each other or the ecosystem is abstracted — is §1.3.
+
+**One consequence worth naming here rather than discovering in play:** because
+gape and growth are both live, a cell you decided to ignore can become a cell
+that eats you **without leaving the screen**. Its lip bow changes from green to
+red in front of you (§1.1.1) the moment it crosses your radius. Nothing else in
+the game changes state that way, and it is the strongest argument for drawing the
+relationship rather than only the measurement.
 
 ### 1.3 Real where you can see it, a distribution where you cannot
 
@@ -105,25 +201,130 @@ So the rule is split by what can be observed:
 growth, no special case for the player. In full vision you can watch a cell
 close on a smaller one and come away bigger, and the cell that just ate is now
 a cell you may no longer be able to eat. That is real, and it is the thing the
-owner asked for.
+owner asked for. Unchanged, and the best idea in this document.
 
-**Outside the field, nothing is simulated at all.** Cells are already culled at
-`CULL = 1900` and recycled to the far edge — that is shipped behaviour from
-Phase 4. The only change is **what a recycled cell comes back as**: it is drawn
-from a distribution centred on *the player's current radius*, not inherited from
-whatever left.
+**Outside the field, nothing is simulated at all.** Cells are culled at
+`food.CULL = 3000` and recycled to a ring at `RING_MIN 800 … RING_MAX 2200` —
+shipped Phase 4 behaviour. (The previous draft cited `CULL = 1900`; that is
+`motes.gd`, the inert dust, which is a different field and does not carry genes.)
+The only change is **what a recycled cell comes back as.**
 
-That one choice is the whole bound, and it buys three things at once:
+> **The previous draft said "a distribution centred on the player's current
+> radius" and stopped there. That is not a bound, and it does not survive
+> arithmetic.** Three things are wrong with it and all three are checkable.
+>
+> **It has no parameters, so it is not one design but a family of very different
+> games.** Sampling `rho = arrival.radius / player.radius` uniformly about 1.0,
+> with every cell at cytostome 1 and the player likewise:
+>
+> | spread | eat it | it eats me | both | **neither** |
+> |---|---|---|---|---|
+> | ±25% | 14% | 6% | 0% | **80%** |
+> | ±40% | 28% | 22% | 0% | **50%** |
+> | ±50% | 32% | 28% | 0% | **40%** |
+>
+> With `food.COUNT = 4`, a ±25% spread puts **0.6 edible cells in the entire
+> field** against a 420-second hunger clock that wants a meal every 60–90s. The
+> newborn cell starves surrounded by food it cannot fit in its mouth. Let the
+> arrivals' cytostome tier vary 1:1:1 instead and the numbers invert: **50% of
+> everything can eat you, permanently, at every radius.**
+>
+> **A player who does not grow cannot start.** At cytostome 1 the gape is
+> `0.82 r`, which is *below* your own radius — so a distribution whose mode is
+> your own radius puts its mode in the inedible zone. The failure is a loop: you
+> cannot eat because you have not grown, and you cannot grow because you cannot
+> eat. That is precisely the unwinnable state the section claims cannot exist.
+>
+> **And a player who grows fast gains nothing.** Every quantity in §1.1 is a
+> ratio, so if arrivals scale with the player the ratio distribution is
+> *invariant*: the fraction of the water you can eat, the fraction that can eat
+> you, and the fraction that is a standoff are identical at your 1st meal and
+> your 14th. **Rendered side by side — the born cell against its peers, and the
+> full-grown cell against its peers — the two frames are the same picture at two
+> zoom levels.** That is the rubber-band failure in one image, and it silently
+> breaks three other claims in this document: §3.1's "the genome fills up at the
+> moment you outgrow the thing that has been hunting you", §6's "it goes quiet
+> when you outgrow the predator", and Phase 4's dread falling off with the size
+> ratio. None of them can ever fire.
 
-- **The world cannot degenerate.** There is always something edible and always
-  something dangerous in reach, because the distribution guarantees both. No
-  unwinnable state exists, by construction rather than by tuning.
-- **Difficulty tracks growth without a curve.** Grow, and what arrives is
-  bigger. Nobody authors a ramp; the ramp is a consequence of the same number
-  that gives you slots.
-- **It is cheap.** No global population, no off-screen bookkeeping, no
-  save state. A handful of cells, the rules they already follow, and one
-  seeding function.
+**The bound that does work: a floor that never moves, a middle that tracks you,
+and a ceiling you can reach.** One seeding function, three constants, and a
+coin flip:
+
+```gdscript
+# food.gd _seed() -- replaces RADIUS_MIN/RADIUS_MAX
+const DRIFTER_SHARE := 0.45     # of arrivals, drawn absolutely
+const DRIFTER_MIN := 13.0       # the Phase 4 food band, unchanged
+const DRIFTER_MAX := 21.0
+const PEER_SPREAD := 0.34       # of the player's radius, drawn relatively
+
+## The ceiling is on the GAPE, not on the body. A seeded cell takes its radius
+## from the draw, then has its cytostome tier reduced until it fits. 40.0 is the
+## top of the slot ladder -- see section 3.1.
+const ARRIVAL_GAPE_MAX := 40.0
+const ARRIVAL_RADIUS_MAX := 40.0
+```
+
+- **Drifters — the floor.** Just under half of all arrivals are `r 13–21` with
+  **no cytostome** (gape `0.58 r`, so at most 12 — they eat nothing, including
+  each other). They are Phase 4's food cells, kept exactly as they are. They are
+  edible at *every* player radius and at every cytostome tier, so **there is
+  always a way back from a bad run, and it does not depend on tuning.** As you
+  grow they get relatively smaller and safer, which is the felt reward for
+  growing that the relative-only version deletes.
+
+  **Make the floor a guarantee, not a probability.** `food.COUNT` is 4, so a
+  0.45 coin lands zero drifters in the whole field about 9% of the time. One
+  counter fixes it: *if seeding this cell would leave no drifter in the field, it
+  is a drifter.* "The world cannot degenerate" then stops being a statistical
+  claim and becomes an invariant, which is the only kind worth writing down.
+- **Peers — the middle.** The rest are `player.radius * (1 ± PEER_SPREAD)` with a
+  real genome, clamped to the ceiling. These are what keep pace, and they are
+  where danger and the mutual band live.
+- **The ceiling — the ending.** Capping the *gape* rather than the body is what
+  makes the arc land on the number the slot ladder already uses. **At radius 40
+  nothing in the water can swallow you**, because nothing in the water has a gape
+  above 40 — which is the exact meal at which the genome fills. Dread stops
+  arriving, and that is the readout that the run is won.
+
+  Capping the gape also shapes the population for free, with no second constant:
+  a radius-40 arrival can carry at most `cytostome 1` (`0.82 x 40 = 33`), while a
+  radius-28 one can carry `cytostome 3` (`1.40 x 28 = 39`). **Big bodies get small
+  mouths and small bodies get big mouths**, which is precisely the mix that makes
+  §1.1 worth reading, and it falls out of one clamp rather than being authored.
+
+**Rendered, at both sizes, with §1.1.1's threat colour on.** The same seeded
+water drawn against a born cell (`r26`, gape 21) and against a full cell (`r40`,
+gape 32):
+
+| | edible | can eat me | standoff |
+| --- | --- | --- | --- |
+| player `r26` | 1 | **1, drawn red** | 4 |
+| player `r40` | 5 | **0** | 1 |
+
+**The two frames are different pictures, which is the whole point** — put the
+old rule's two frames beside them and they are the same picture at two zoom
+levels. Growth now changes what the water is, not just how big it looks.
+
+The three original claims now hold, for a reason rather than by assertion:
+
+- **The world cannot degenerate** — because the drifter floor is absolute and
+  does not consult the player at all.
+- **Difficulty tracks growth** — because the peer band does, up to a ceiling
+  that lets it stop. Tracking without a ceiling is not difficulty, it is
+  rubber-banding.
+- **It is cheap** — two draws and a `randf()`, in the function that already
+  reseeds a culled cell.
+
+`DRIFTER_SHARE`, `PEER_SPREAD` and `ARRIVAL_GAPE_MAX` are the three numbers to
+move if the water feels wrong, in that order.
+
+**One knob is deliberately left open: the cytostome weights inside the peer
+band.** How dangerous the water is turns almost entirely on them — with peers
+uniform over tiers 1–3 about half of everything can eat a born cell, and with
+peers mostly at tier 1 almost nothing can — and it is not a thing a still frame
+can answer. Ship the same `GENE_WEIGHTS` the drop table uses (§3.4) and treat it
+as the first dial after the three above. See §9.
 
 **What this deliberately is not.** There is no persistent world, no lineage, no
 species that remembers. A cell you flee from and never see again does not go on
@@ -147,9 +348,9 @@ all three since Phase 1, in its self-register:
 
 | organ | what it is in code | what point of view already feels |
 | --- | --- | --- |
-| **feed** | `metabolism.beat_period/amplitude` | the metabolic beat |
-| **orient** | `TURN_RATE_MAX`, `TURN_RESPONSE` | the turn shear on the outside of the turn |
-| **thrust** | `IMPULSE_SPEED`, `IMPULSE_GAP_*` | the thrust bloom at bearing 0° |
+| **`cytostome`** *eat* | `metabolism.beat_period/amplitude` | the metabolic beat |
+| **`kinety`** *turn* | `TURN_RATE_MAX`, `TURN_RESPONSE` | the turn shear on the outside of the turn |
+| **`flagellum`** *swim* | `IMPULSE_SPEED`, `IMPULSE_GAP_*` | the thrust bloom at bearing 0° |
 
 So the retrofit is the discovery that **the membrane's three self-signals and
 the cell's three cilia are the same three organs seen from inside and from
@@ -158,12 +359,12 @@ change is a change in the sensation the player already knows:
 
 | gene | tier 1 | tier 2 | tier 3 | uniform |
 | --- | --- | --- | --- | --- |
-| thrust | bloom 0.14 / 60° | 0.19 / 52° | 0.25 / 44° | `glow_lobes[0]` (`THRUST_PEAK`, `THRUST_HALFWIDTH_DEG`) |
-| orient | shear 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK`) |
-| feed | flood decay 1.2s | 1.5s | 1.9s | `INGEST_DECAY` |
+| `flagellum` | bloom 0.14 / 60° | 0.19 / 52° | 0.25 / 44° | `glow_lobes[0]` (`THRUST_PEAK`, `THRUST_HALFWIDTH_DEG`) |
+| `kinety` | shear 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK`) |
+| `cytostome` | flood decay 1.2s | 1.5s | 1.9s | `INGEST_DECAY` |
 
-No new shader term, no new lobe, no HUD. A thrust-specialised cell feels its own
-push harder and more sharply; a feeder savours the meal longer.
+No new shader term, no new lobe, no HUD. A `flagellum`-specialised cell feels
+its own push harder and more sharply; a big mouth savours the meal longer.
 
 ### 2.2 What you just ate — the flood is the gene's colour
 
@@ -179,7 +380,7 @@ a gene is ever identified on the sensory screen.
 > the one signal `perception.md` already exempted and to the one frame where
 > the thing is inside you. Do not let it spread to the band.
 
-Rendered, amber (`eyespot`): interior centre **`(99, 88, 41)`**, against the
+Rendered, amber (`stigma`): interior centre **`(99, 88, 41)`**, against the
 nutrient green flood's `(39, 98, 52)`. The rim survives the flood at
 `(33, 121, 98)`, as in Phase 4.
 
@@ -239,14 +440,16 @@ func slots() -> int:
 | **40.0** | **7** | **14** |
 
 `SLOT_MAX = 7` is not arbitrary: the body has exactly seven arcs (§4.1), and 40
-is `predator.RADIUS`. **The genome fills up at the moment you outgrow the thing
-that has been hunting you.** At Phase 4 foraging rates (a meal every 60–90s)
-that is a 15–21 minute arc — a session, not a campaign, which is right for a
-game with no save.
+is `ARRIVAL_GAPE_MAX` — the widest mouth the water ever produces (§1.3). **The
+genome fills up on the same meal that nothing left in the water can eat you.** (The previous draft anchored this to
+`predator.RADIUS = 40`, a constant §7.0 deletes; the ceiling is what carries the
+claim now.) At Phase 4 foraging rates — a meal every 60–90s — 14 meals is a
+**14–21 minute arc**: a session, not a campaign, which is right for a game with
+no save.
 
 ### 3.2 A gene has a tier, and tiers cost upkeep
 
-Eating a food cell that carries gene X:
+Eating a cell whose dominant gene is X (§3.4):
 
 - **X not held, a slot free** → integrates at tier 1, immediately, no screen, no
   pause. The flood is X's colour and the cilia grow in over `GROW_SECONDS = 2.5`.
@@ -280,13 +483,66 @@ _metabolism.upkeep = _genome.upkeep()
 ```
 
 A cell with one tier-3 gene starves in 420 / 1.36 = **309s**; a late cell with
-`feed 2, orient 3, thrust 3, eyespot 2` in 420 / 2.08 = **202s**. That is the
-whole economy: **the specialist eats constantly and moves; the generalist is
-slow and lives.** And `feed` is how you pay for it — its tiers raise `MEAL`
-(0.50 / 0.62 / 0.78), so a broad eater can afford a narrow body.
+`cytostome 2, kinety 3, flagellum 3, stigma 2` in 420 / 2.08 = **202s**.
+Upkeep needs no number on screen: it is read off the beat, which has been the
+hunger readout since `perception.md` §6.2.
 
-Nothing about this needs a number on screen. Upkeep is read off the beat, which
-has been the hunger readout since `perception.md` §6.2.
+> **Two things the previous draft claimed about this economy are false, and the
+> arithmetic is short enough to check here.** The unit that matters is not
+> "how long until I starve" but **how many seconds of life one meal buys**,
+> `420 * MEAL / upkeep`.
+>
+> | build | upkeep | `MEAL` | seconds bought per meal |
+> |---|---|---|---|
+> | born, `cytostome 1` | 1.00 | 0.50 | **210** |
+> | `cytostome 2` | 1.18 | 0.62 | **221** |
+> | `cytostome 3` | 1.36 | 0.78 | **241** |
+> | `cytostome 1, kinety 3, flagellum 3` | 1.72 | 0.50 | **122** |
+> | `cytostome 2, kinety 2, flagellum 2, stigma 2` | 1.72 | 0.62 | **151** |
+>
+> **The mouth is free and everything else is expensive.** If `cytostome` tier
+> raises `MEAL` as well as the gape, every tier of it *increases* your slack
+> after upkeep — and it simultaneously widens the menu. It is a strictly dominant
+> gene and there is no reason to ever put anything else in a slot until it is at
+> 3. And the line "the specialist eats constantly and moves; the generalist is
+> slow and lives" is backwards: the generalist buys the **fewest** seconds per
+> meal of any sensible build.
+
+**The fix, and it is one line: `MEAL` leaves the tier table, and a meal is worth
+what it weighs.** `cytostome` tier buys the gape and nothing else:
+
+```gdscript
+# metabolism.gd
+const MEAL := 0.50   # unchanged, and now the value of a meal your own size
+# normal_mode.gd, on eaten():
+_metabolism.feed(MEAL * clampf(prey.radius / cell.radius, 0.35, 1.40))
+```
+
+Measured against **your own body**, not against your gape — that distinction is
+the whole fix. Against the gape, every cytostome tier would normalise away and a
+wider mouth would buy no bigger dinner. Against the body, a wider mouth lets you
+*reach* a bigger dinner, and you have to go and take it:
+
+| what you eat | `cytostome 1` (upkeep 1.00) | `cytostome 3` (upkeep 1.36) |
+|---|---|---|
+| a drifter at `0.5 r` — safe | **105s** | **77s** |
+| the biggest thing your gape allows | **172s** (at `0.82 r`) | **216s** (at `1.40 r`) |
+
+**`cytostome` stops being dominant and becomes conditional.** A big mouth is a
+loss if you keep eating drifters and a win only if you use it — and using it means
+eating bodies near your own size, which by §1.1 are exactly the ones whose own
+mouths may take you. The tier is now a bet on your nerve rather than a free
+upgrade, and the timid player is correctly punished for buying it.
+
+It also puts a **reward on the risk axis §1.1 created.** With a flat `MEAL` the
+optimal play was always to eat the smallest thing in sight — that is, to avoid
+the entire mechanic the phase is built on. And it makes growth legible: a big
+meal fills more of the bar, and the bar is the beat.
+
+`GROWTH_PER_MEAL` stays flat at 1.0 — radius is the slot ladder and the slot
+ladder should be a count of meals, not a count of calories. The economy answers
+*"was that worth it"*; the ladder answers *"how far along am I"*, and they should
+not be the same number.
 
 ### 3.3 A held sample is a second heartbeat
 
@@ -328,21 +584,35 @@ on the beat and shrinking with `remaining`.
 If the sample lapses it is simply gone. There is no discard control and there
 does not need to be one.
 
-### 3.4 Where the gene comes from — the food, not a roll
+### 3.4 Where the gene comes from — the body, not a roll
 
 > **Contradicts `food-and-predators.md`**, which called this "the gene roll on
 > eating". A roll cannot be seen in advance, and informed foraging requires that
-> it can. **Each food cell's gene is fixed when it is seeded**, and full vision
-> draws it.
+> it can. **A cell's genome is fixed when it is seeded**, and full vision draws
+> it.
 
 ```gdscript
 # food.gd -- weights, drawn in _seed()
-const GENE_WEIGHTS := {&"feed": 3, &"orient": 3, &"thrust": 3, &"eyespot": 2}
+const GENE_WEIGHTS := {&"cytostome": 3, &"kinety": 3, &"flagellum": 3, &"stigma": 2}
 ```
 
+**A cell has a genome, not a gene, so a meal has to say which one you get.**
+§1 requires this — every cell needs a `cytostome` tier or it has no gape — and
+the previous draft left it open, which an engineer cannot.
+
+> **You absorb what the cell was most made of: its highest-tier gene.** Ties are
+> broken by the arc order in §4.1 — `cytostome`, `kinety`, `flagellum`, then
+> earned genes in genome order — so it is deterministic and it is the same order
+> the body is drawn in.
+
+That is the right answer rather than merely a workable one, because the dominant
+gene is also **what the cell looks like**: it is the longest, densest, brightest
+fringe on the body, and §4.5 makes it the body's tint. What you can see before
+you commit is exactly what you get. A cell that is all tail gives you `flagellum`.
+
 `eaten(nutrition, gene, at)` already exists with exactly this signature and
-`normal_mode.gd` already forwards it. Phase 5 fills `gene` and removes the
-`push_warning` guard. No refactor.
+`normal_mode.gd` already forwards it. Phase 5 fills `gene` with the dominant and
+removes the `push_warning` guard. No refactor.
 
 ## 4. Cilia
 
@@ -354,10 +624,10 @@ across `sin(t) * (1 - 0.30 * cos t)`, scaled `1.18r` x `0.94r`).
 
 | arc | `t` (deg) | bearing (deg) | occupant |
 | --- | --- | --- | --- |
-| anterior | −42 … 42 | ±29 | **feed** |
-| lateral, starboard | 66 … 118 | 58 … 120 | **orient** |
-| lateral, port | −118 … −66 | −120 … −58 | **orient** |
-| posterior | 146 … 214 | 146 … 214 | **thrust** |
+| anterior | −42 … 42 | ±29 | **`cytostome`** |
+| lateral, starboard | 66 … 118 | 58 … 120 | **`kinety`** |
+| lateral, port | −118 … −66 | −120 … −58 | **`kinety`** |
+| posterior | 146 … 214 | 146 … 214 | **`flagellum`** |
 | free 1 | 42 … 66 | 29 … 58 | earned |
 | free 2 | −66 … −42 | −58 … −29 | earned |
 | free 3 | 118 … 146 | 120 … 146 | earned |
@@ -383,7 +653,7 @@ All lengths are fractions of the body radius `r`, so a grown cell is not a small
 cell with stubble. `clock` is `vision.gd`'s `_clock`; `u` runs 0→1 across the
 arc; strokes are `draw_polyline` in world space.
 
-| | **feed** | **orient** | **thrust** | **earned** |
+| | **`cytostome`** | **`kinety`** | **`flagellum`** | **earned** |
 | --- | --- | --- | --- | --- |
 | count | 15 across the arc | 5 per side | 6 | 4 |
 | root | surface + `0.06r` | surface | surface | surface |
@@ -397,7 +667,7 @@ The **earned** gene also carries a pigment organelle: filled discs of `0.20r` at
 alpha 0.55 and `0.10r` at alpha 0.85, seated at `surface(r * 0.80, mid_t)`, over
 three haze rings at `0.30r x (1 + 1.6q)`, alpha `0.030(1 − q)`.
 
-**Orient leans with the steer.** The outboard side of the turn works harder:
+**The `kinety` leans with the steer.** The outboard side of the turn works harder:
 `bias = 1.0 + 0.55 * clamp(-steer * side, -1, 1)` on the swing. This is a motion
 cue, not a still-frame cue — it does not show in a screenshot and is not claimed
 to.
@@ -417,57 +687,92 @@ tier 1 against tier 3 is unmistakable in every arc.
 
 | gene | `Color(r, g, b, a)` | wheel |
 | --- | --- | --- |
-| **feed** | `Color(0.62, 1.00, 0.38, 1)` | 95° |
-| **orient** | `Color(0.36, 0.62, 0.98, 1)` | 216° |
-| **thrust** | `Color(0.80, 0.42, 0.95, 1)` | 291° |
-| **eyespot** | `Color(0.98, 0.78, 0.30, 1)` | 45° |
+| **`cytostome`** *eat* | `Color(0.62, 1.00, 0.38, 1)` | 95° |
+| **`kinety`** *turn* | `Color(0.36, 0.62, 0.98, 1)` | 216° |
+| **`flagellum`** *swim* | `Color(0.80, 0.42, 0.95, 1)` | 291° |
+| **`stigma`** *see* | `Color(0.98, 0.78, 0.30, 1)` | 45° |
 | *reserved* | `Color(0.48, 0.42, 0.95, 1)` indigo | 250° |
 | *reserved* | `Color(0.94, 0.42, 0.68, 1)` rose | 333° |
 
 Rules for the next designer: a new gene hue must sit **≥30° from every other
-gene hue** and **≥40° from self teal `(0.12, 0.70, 0.58)` and predator red
-`(0.78, 0.24, 0.30)`**.
+gene hue** and **≥40° from self teal `(0.12, 0.70, 0.58)` and threat red
+`(0.78, 0.24, 0.30)`** — the red that was the predator's body in Phase 4 and is
+the dangerous lip bow in Phase 5 (§1.1.1). It is reserved, not retired.
 
 **Feed breaks the first rule on purpose.** It is deliberately in the nutrient
-green family, because feed *is* nutrition and the taste lobe is already that
-green. It is brighter and yellower than `FOOD_TINT (0.35, 0.88, 0.42)` so it
-separates from the food body it sits on — rendered at 1x, it does. It is the
-least legible of the four at range and its positive tell is texture: feed is the
+green family, because the mouth *is* nutrition and the taste lobe is already that
+green. It is brighter and yellower than both `FOOD_TINT (0.35, 0.88, 0.42)` and
+the green-tinted body of a cytostome-dominant cell (§4.5), so it separates from
+whatever it sits on — rendered at 1x, it does. It is the
+least legible of the four at range and its positive tell is texture: `cytostome` is the
 only dense fine mat.
 
 > **Measured colour-blindness check.** A Viénot deuteranope simulation of the
-> render collapses feed-green and eyespot-amber onto the same yellow, and brings
-> orient-blue and thrust-orchid close. **On a body this does not matter** — a
+> render collapses cytostome-green and stigma-amber onto the same yellow, and
+> brings kinety-blue and flagellum-orchid close. **On a body this does not matter** — a
 > luminance-only render separates all four by arc, length and density with no
-> ambiguity. It matters in exactly two places, and both are handled: food cells
-> wear the organ as well as the hue (§4.5), and genome slots are labelled (§5.2).
+> ambiguity. It matters in exactly two places, and both are handled: every cell
+> wears the organ as well as the hue (§4.5), and genome slots are labelled with a
+> word (§5.2).
+>
+> **§1.1.1's threat red is a third place and it is the only one where colour
+> genuinely fails.** Green lip bow and red lip bow are the same shape in the same
+> place with opposite meanings; simulated, they collapse to one hue and the
+> dangerous one is the darker. That is why the threat bow carries teeth. The rule
+> the next designer should take from this is not *"check the hues"* — it is
+> **any signal whose opposite is drawn on the same shape must differ in shape,
+> not only in colour.**
 
-### 4.5 Food and the predator wear cilia too
+### 4.5 One routine, one subject
 
-**One routine, three subjects.** A food cell is drawn with its single gene at
-tier 2 geometry (it is small; the organ needs to survive at `r` 14–20), facing
-its drift heading.
+> **Rewritten.** The previous draft was called *"Food and the predator wear cilia
+> too"* and specified a food species drawn at fake tier-2 geometry and a predator
+> hard-coded to `{flagellum: 3}` on a red body. §1 deletes both species, so both
+> paragraphs described objects that no longer exist. The tier is information now
+> and cannot be faked, and the red body has moved to the mouth (§1.1.1).
 
-Everything else about food is **unchanged and must stay unchanged**: the core
-disc, the wobbled shell outline and the three haze rings all stay
-`FOOD_TINT (0.35, 0.88, 0.42)`. The haze is the drawn form of the scent field
-that the membrane's green band is reading — if it were gene-coloured, full
-vision would be showing a distinction point of view cannot make, in the one
-channel where the two views must agree.
+**Every cell in the water is drawn by the same routine from its own genome, at
+its own tiers, plus its gape.** The player's cell included. There is no second
+code path and no species branch, which is the whole reason §7.0 collapses two
+files into one.
 
-**The predator is drawn with `{thrust: 3}` and nothing else**, in the thrust
-orchid, over the red body and its existing flagellum. It costs one line. It is
-the whole visual language in one glance: **the thing that is all tail is the
-thing that catches you**, and you are the thing with three small organs. When
-you specialise into thrust you start to look like it — which is the arc.
+Three things the single routine has to be told, none of which were written down:
 
-Rendered at 1280x720: the orchid brush on the red body does not muddy; the
-silhouette comparison with the player's cell is instant.
+- **Body tint.** A cell's fill and rim are `SELF_TINT (0.12, 0.70, 0.58)` lerped
+  **0.55** toward its dominant gene's hue (§3.4), so the largest coloured area on
+  screen agrees with the fringe rather than fighting it. **The player's own cell
+  is always pure `SELF_TINT`** — you are the one cell in the water whose identity
+  you do not have to read. Rendered: a `flagellum`-dominant cell is a cold
+  violet-grey, a `cytostome`-dominant one is green, and neither is mistakable for
+  the player.
+- **Nothing is clamped for small bodies, and the render says why.** Cilium
+  lengths are fractions of `r`, so on a `r13–21` drifter a tier-1 fringe is a
+  4px stub. The obvious fix is a minimum stroke in canvas px; **it was built and
+  photographed and it is a no-op** — at `r14` the clamp moves a 3.8px stroke to
+  4.5px and the frame is indistinguishable. Do not spend a constant on it.
+  What the render shows instead is the useful division: at drifter size **the
+  tier stops being readable and the gape does not**, because the gape is one long
+  stroke (`2 x gape` is 23px at `r14` tier 1 and 39px at tier 3) while the tier is
+  a 4px fringe. That is the right way round — the gape is what decides the
+  encounter, the tier is only how the gape got that way — so it is a property to
+  keep, not a defect to fix.
+- **Drifters have no cytostome at all** (§1.3), so they draw no anterior mat and
+  their lip bow is `SELF_TINT` at alpha 0.30 — effectively absent. **"No green at
+  the nose" is the read for "this thing cannot eat anything"**, and it is the
+  single most common cell in the water, so it is worth being the clearest signal
+  in the vocabulary.
+
+Everything about the **scent haze is unchanged and must stay unchanged**: the
+three haze rings stay `FOOD_TINT (0.35, 0.88, 0.42)` on every cell that is edible
+to the player, gene-blind. The haze is the drawn form of the scent field the
+membrane's green band is reading — if it were gene-coloured, full vision would be
+showing a distinction point of view cannot make, in the one channel where the two
+views must agree.
 
 ### 4.6 Two changes to shipped `vision.gd`
 
 - `HEADING_LEN`'s needle base moves from `r * 1.55` to **`r * 1.80`**. A tier-3
-  feed crest reaches `r * 1.61` and collided with the chevron. Rendered.
+  `cytostome` crest reaches `r * 1.61` and collided with the chevron. Rendered.
 - The `CILIA = 32` block is replaced by the genome routine (§4.1–4.3).
 
 ## 5. The genome surface — `perception.md` §6.4, settled
@@ -511,6 +816,18 @@ Hud/Pause/Center/Buttons  VBoxContainer  separation = 48
   └── Leave               (unchanged)
 ```
 
+**Which name goes on the tile: the plain word.** §9.1 gives every gene two
+names and §5.2 said only "the gene's name", which an engineer cannot act on.
+**The tile reads `eat` / `turn` / `swim` / `see`; the biological name is what the
+code calls it and never appears on screen in normal mode.** Rendered both ways at
+both sizes: `cytostome` and `flagellum` *do* fit inside a 76px tile at 13px, with
+about 2px of air either side, so the choice is not forced by layout — it is
+forced by the glance. Four short verbs are parsed instantly at arm's length; nine
+letters of Greek are not, on the one screen whose whole job is a quick decision.
+Two consequences: **no gene name may exceed nine characters at 13px** or the tile
+has to grow, and the biological names stay where they belong — in the code, in
+this document, and in §9.1.
+
 **`Light`, `Resume` and `Leave` must be given `size_flags_horizontal =
 SIZE_SHRINK_CENTER`.** They currently inherit the VBox's width; with a seven-slot
 strip above them they stretch to 652px. Rendered, and it looked wrong.
@@ -530,7 +847,7 @@ strip above them they stretch to 652px. Rendered, and it looked wrong.
   held), centred at `y = 15`
 - the organ: an arc of radius 13 at `centre = (w/2, 0.66h)`, spanning
   `1.04π … 1.96π`, gene hue at `a = 0.30`, with the gene's own stroke count and
-  length (feed 9 x 8px, orient 5 x 13px, thrust 6 x 17px, earned 5 x 11px plus a
+  length (`cytostome` 9 x 8px, `kinety` 5 x 13px, `flagellum` 6 x 17px, earned 5 x 11px plus a
   4.2px pigment disc), gene hue at `a = 0.88`, width 1.7
 - tier pips: three dots radius 2.6 at `y = h − 9`, spaced 9px; filled at
   `a = 0.92`, outline at `a = 0.22`
@@ -567,7 +884,15 @@ nothing collides, and the buttons stay 232px wide once shrink-centred.
 **Reflow:** the canvas is 720 tall at both shapes, so the vertical stack is
 identical. Only the horizontal margins change, and the strip is centred.
 
-## 6. The one earned gene Phase 5 ships: `eyespot`
+**One thing the render shows that the spec did not predict:** because the whole
+`Row` is centred, the slot tiles shift **73px to the right** when a sample
+appears and back again when it lapses. It is harmless — the strip is only
+interactive while a sample is held, so nothing moves under a finger that was
+about to press it — but a sample lapsing while the pause screen is open makes the
+strip jump. If that reads badly in play, centre the `Row` on the *slots* and let
+the sample and arrow hang to the left; it costs one anchor and no new node.
+
+## 6. The one earned gene Phase 5 ships: `stigma`
 
 `perception.md` §4 promised it: *"a new glow lobe in slot 2, in a colour not yet
 used… sharper (half-width ~20°) and does not jitter… the moment the player
@@ -576,8 +901,18 @@ learns that direction can be certain."* Slot 2 has been reserved since Phase 1.
 **What it sees: the shadow of anything bigger than you.** A body passing between
 you and the light above occludes it. This costs no new world content — no sun,
 no lamp — and it gives point of view a *sharp, certain, continuous* bearing on
-the predator where before it had only intermittent wakes and directionless
-dread.
+**mass**, where before it had only intermittent wakes and directionless dread.
+
+> **Mass, not danger — and after §1.1 those are no longer the same thing.** A
+> shadow's size is a fact about a body, so `SHADOW_MIN_RATIO` stays on the radius
+> and the `stigma` says nothing about the gape. It is therefore **silent about the
+> two cells §1.1 exists to create**: the small cell with a huge mouth casts no
+> shadow, and the mouthless giant casts a large one. That is not a bug to patch —
+> it is honest optics, it keeps `perception.md`'s "never an identity", and it
+> leaves the gap that §2.3's reserved chemoreceptor gene is there to sell. Say it
+> plainly rather than letting a player assume the amber lobe means *predator*: the
+> `stigma` tells you **where the big thing is**, and after Phase 5 big is only
+> correlated with dangerous.
 
 ```gdscript
 # signal_bus.gd
@@ -586,7 +921,8 @@ const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)   # glow_colors[2], was ZERO
 const LIGHT_PEAK := 0.28
 const LIGHT_HALFWIDTH_DEG := [0.0, 26.0, 19.0, 13.0]   # by tier
 
-# predator / anything with radius >= SHADOW_MIN_RATIO * cell.radius
+# any cell with radius >= SHADOW_MIN_RATIO * cell.radius. Size, not threat --
+# see the note above.
 const SHADOW_RANGE := 620.0      # inside WAKE_RANGE 760: it sharpens, never extends
 const SHADOW_CORE := 180.0
 const SHADOW_MIN_RATIO := 0.8
@@ -595,13 +931,23 @@ const SHADOW_MIN_RATIO := 0.8
 Three properties, all load-bearing:
 
 - **It does not jitter and it does not lag.** Taste is 78° wide at range and only
-  26° on top of the food; the eyespot is its tier's width at *every* range.
+  26° on top of the food; the `stigma` is its tier's width at *every* range.
 - **Dread cannot muffle it.** Dread is a blocked chemoreceptor; light is a
   different organ. `TASTE_DREAD_SUPPRESS` must not be applied to `LOBE_LIGHT`.
   This is the fiction and it is also the purchase: at the moment the player can
   see least, the thing they bought still works.
-- **It goes quiet when you outgrow the predator**, because `SHADOW_MIN_RATIO`
-  stops being met. The silence is itself the readout that you have won.
+- **It fades out at the end of the run rather than announcing it.** The previous
+  draft said the silence *is* the readout that you have won. Two corrections.
+  First, it is false without §1.3's ceiling at all: under a distribution that
+  scales with the player a ratio threshold is never crossed and the lobe never
+  goes quiet. Second, even with the ceiling the arithmetic puts it in the wrong
+  place — `ARRIVAL_RADIUS_MAX = 40` against `SHADOW_MIN_RATIO = 0.8` means the
+  last shadow fades at radius **50**, ten meals *after* dread stops at 40.
+  **Dread stopping is the readout that you have won**; the `stigma` going quiet is
+  a late, quieter echo of it, and for those ten meals it is showing you giants
+  that can no longer hurt you. That is acceptable and even nice — the water is
+  still full, it just cannot reach you — but it must not be sold as the victory
+  signal.
 
 Rendered on a `dread = 0.95` frame at 1280x720: the amber lobe is the brightest
 thing on screen at **`(77, 83, 48)`** against dread's own `(7, 27, 27)` — a
@@ -624,11 +970,30 @@ predator:
 |---|---|
 | `predator.gd`'s aim state machine, `COMMIT_RANGE`, the lunge, the break-off | how **any** cell pursues something it can eat. Was always general; only the name was specific. |
 | `threat` — the `RADIUS / cell.radius` ratio | the **gape comparison** of §1.1, evaluated per cell and in both directions |
-| `dread_level` | still a scalar, now the sum over cells that can eat *me*. Dread was always a property of the relationship, not of a species. |
+| `dread_level` | still a scalar, now summed over cells that can eat *me*. Dread was always a property of the relationship, not of a species. **It must stay continuous — see below.** |
 | `food.gd`'s scent field, `concentration`, `taste_bearing` | unchanged in kind, but summed over everything **I** can eat rather than over a food species |
 | `FIRST_DELAY`, `SPAWN_MIN/MAX`, the authored first arrival | the seeding distribution of §1.3. The authored first encounter survives as an authored *opening*, not as a species spawn. |
 | `PREY_SPEED = 56.5`, hard-coded | dies. Every cell swims on its own `flagellum` tier. |
 | `RADIUS = 40` — the predator's fixed size | dies. Size is per-cell and grows. |
+
+> **The one place this collapse would have broken something.** `A can eat B` is a
+> boolean, and Phase 4's dread is not: it is
+> `smoothstep(THREAT_LOW 0.85, THREAT_HIGH 1.35, ratio)`, deliberately gradual so
+> the player *feels themselves stop being afraid*. Summing booleans makes dread a
+> step function that snaps 0 → 1 the frame a cell's gape crosses your radius, and
+> the most-praised readout in Phase 4 is gone. **Substitute the gape into the
+> existing formula rather than replacing it:**
+>
+> ```gdscript
+> threat_of(other) = smoothstep(THREAT_LOW, THREAT_HIGH, other.gape() / my.radius)
+> ```
+>
+> Same two constants, same curve, same feel; `other.gape()` simply replaces
+> `predator.RADIUS`. A cell growing its cytostome now becomes frightening
+> *gradually*, which is exactly the Phase 4 experience run backwards. Apply the
+> same treatment to the taste field: weight each cell by
+> `smoothstep(1.15, 0.85, other.radius / my.gape())` so a body drifting across
+> your gape limit fades into and out of the scent rather than popping.
 
 **Phase 4's perception design survives intact**, which is the reassuring part:
 food quickens the beat and something dangerous makes it stumble, and both are
@@ -645,20 +1010,20 @@ bound exists.
 Both are stated against a tier-1 cell and Phase 5 invalidates both. Neither is a
 reason not to ship; both must be re-measured.
 
-- **`orient` tier 3 sets `TURN_RATE_MAX = 1.02`** (58°/s, half-turn in 3.1s)
+- **`kinety` tier 3 sets `TURN_RATE_MAX = 1.02`** (58°/s, half-turn in 3.1s)
   against the 0.62 that `ESCAPE_SECONDS = 7.0` was derived from — and against
   `predator.TURN_RATE`, which is also 0.62, so a tier-3 cell out-turns its hunter
   by 1.65x. The dodge gets much easier. That is the reward; re-measure
   `predator.COMMIT_RANGE` (310) against a tier-3 cell with
   `tools/drive.gd --hunt --evade`, and check that *"a cell that does nothing must
   be caught"* still holds at tier 1.
-- **`thrust` tier 3 sets `IMPULSE_SPEED = 190`**, taking the cell's net speed
+- **`flagellum` tier 3 sets `IMPULSE_SPEED = 190`**, taking the cell's net speed
   from 56.5 to roughly 78 u/s — past `predator.CRUISE = 68`. *"You cannot outswim
   it"* stops being true, and `predator.PREY_SPEED` is a hard-coded `56.5` that
   the pursuit solution uses to aim, so it starts leading the wrong point.
   **Recommended: `PREY_SPEED` becomes the cell's realised speed and
   `CRUISE = PREY_SPEED * 1.20`**, so the chase stays a chase at every tier and
-  only `orient` improves the dodge. Owner's call; recorded.
+  only `kinety` improves the dodge. Owner's call; recorded.
 
 ### 7.2 New and changed files
 
@@ -667,12 +1032,12 @@ reason not to ship; both must be re-measured.
 | `game/normal/genome.gd` | **new.** A plain `Node`, no `class_name`, same shape as `food.gd`: holds `{gene: tier}`, the held sample and its clock, `slots()`, `upkeep()`, `integrate()`. Computes; does not post. |
 | `game/normal/normal_mode.tscn` | **new** `Genome` node, `process_mode = 1`; pause gains the `Genome` block (§5.2); `Light`/`Resume`/`Leave` get `size_flags_horizontal = 4` |
 | `game/normal/normal_mode.gd` | fills `gene` from `_on_eaten`, writes `_metabolism.upkeep`, owns the strip and the two-tap arming |
-| `game/normal/food.gd` | `GENE_WEIGHTS`; a gene per slot, chosen in `_seed()`; a `genes()` accessor for full vision, index-matched to `points()` |
-| `game/normal/cell.gd` | `GROWTH_PER_MEAL` 0.5 → 1.0; `SLOT_*`; drive constants read from the genome |
-| `game/normal/metabolism.gd` | `upkeep`; `MEAL` read from the genome |
-| `game/normal/predator.gd` | §7, if the owner takes the recommendation |
+| `game/normal/food.gd` | `GENE_WEIGHTS`; a genome per cell, chosen in `_seed()`; the §1.3 seeding (drifters, peers, `ARRIVAL_GAPE_MAX`, the one-drifter floor); a `genomes()` accessor for full vision, index-matched to `points()` |
+| `game/normal/cell.gd` | `GROWTH_PER_MEAL` 0.5 → 1.0; `SLOT_*`; `gape()`; drive constants read from the genome |
+| `game/normal/metabolism.gd` | `upkeep`. **`MEAL` stays a `const`** — §3.2 takes it off the tier table and scales the meal by prey size at the call site instead |
+| `game/normal/predator.gd` | **merged into `food.gd` and deleted** (§7.0). The aim machine, `COMMIT_RANGE`, the lunge and the break-off move across as how any cell pursues; `RADIUS` and `PREY_SPEED` do not. |
 | `game/perception/signal_bus.gd` | `LOBE_LIGHT`/`LIGHT_COLOR` in `attach()`, `light()`, the `LOBE_LIGHT` branch in `_compose_lobes()`, `ingest()` writing `ingest_color`, the held echo in `_step_beat()` |
-| `game/vision/cilia.gd` | **new.** The drawing routine. Used by the player's cell, food, the predator and the genome tiles. |
+| `game/vision/cilia.gd` | **new.** The one drawing routine (§4.5): body tint, genome fringe, and the gape with its threat colour. Used by every cell in the water and by the genome tiles. |
 | `game/vision/vision.gd` | §4.6 |
 | `game/perception/membrane.gdshader` | **no change.** Every uniform this phase needs already exists. |
 
@@ -680,12 +1045,12 @@ Tier targets, for the engineer:
 
 | gene | constant | t1 | t2 | t3 |
 | --- | --- | --- | --- | --- |
-| feed | `metabolism.MEAL` | 0.50 | 0.62 | 0.78 |
-| orient | `cell.TURN_RATE_MAX` | 0.62 | 0.80 | 1.02 |
-| orient | `cell.TURN_RESPONSE` | 1.10 | 0.85 | 0.65 |
-| thrust | `cell.IMPULSE_SPEED` | 138 | 162 | 190 |
-| thrust | `cell.IMPULSE_GAP_MIN/MAX` | 1.7 / 3.6 | 1.45 / 3.0 | 1.2 / 2.5 |
-| eyespot | `LIGHT_HALFWIDTH_DEG` | 26° | 19° | 13° |
+| `cytostome` | gape, as `x radius` (§1.1) | 0.82 | 1.05 | 1.40 |
+| `kinety` | `cell.TURN_RATE_MAX` | 0.62 | 0.80 | 1.02 |
+| `kinety` | `cell.TURN_RESPONSE` | 1.10 | 0.85 | 0.65 |
+| `flagellum` | `cell.IMPULSE_SPEED` | 138 | 162 | 190 |
+| `flagellum` | `cell.IMPULSE_GAP_MIN/MAX` | 1.7 / 3.6 | 1.45 / 3.0 | 1.2 / 2.5 |
+| `stigma` | `LIGHT_HALFWIDTH_DEG` | 26° | 19° | 13° |
 
 These must be *read from the genome*, not stored as `const`. Put the mapping in
 one place per file, next to the constant it replaces, for the same reason
@@ -702,10 +1067,12 @@ Phase 1 and carries `light` already: the caption `genome`, the hint
 (`tap a slot to replace it` / `tap again to integrate`), and one lowercase word
 per slot.
 
-**Genes are named on the genome strip and nowhere else.** The names are the
-owner's to set; what is decided is that a *word* is there. A permanent,
+**Genes are named on the genome strip and nowhere else, and the name on the
+tile is the plain word** — `eat`, `turn`, `swim`, `see` (§5.2). The biological
+name is what the code calls it and never reaches the screen. A permanent,
 irreversible swap needs an unambiguous label, and the deuteranope render in §4.4
-shows that hue alone is not one.
+shows that hue alone is not one; four short verbs are the cheapest label that
+works at a glance and under any colour vision.
 
 ## 9. Left open — owner's call
 
@@ -718,12 +1085,24 @@ shows that hue alone is not one.
    | **cytostome** | *eat* | the mouth. Its tier sets the gape, and the gape decides what you can swallow (§1.1). |
    | **kinety** | *turn* | the ciliary row along the flank. Steering. |
    | **flagellum** | *swim* | the tail. Thrust. |
-   | **stigma** | *see* | the eyespot. The first earned gene (§6). |
+   | **stigma** | *see* | the light-sensitive spot. The first earned gene (§6). |
 
    These are the real terms for these organs, which is the point: the game is
    about being a cell, and a cell's parts have names. Extend the pattern rather
    than the list — a new gene gets a real organ name and one word, or it does
    not ship.
+
+   > **Reopened on one of the four: `kinety`.** Checked against the biology, it
+   > is a real term and the gloss is accurate — a longitudinal row of kinetosomes
+   > and their cilia. But kineties are the **somatic ciliature that does the
+   > swimming**, all over the body, and this document gives swimming to
+   > `flagellum` and hands `kinety` the steering. The organ that actually steers a
+   > ciliate is the **`cirrus`** — a tuft of fused cilia used for directional
+   > control, which is also exactly what §4.2 already draws (*"two oars, beating
+   > in antiphase, five per side"*). `cirrus` is the more familiar word as well:
+   > `kinety` is the only one of the four a player will read as a typo.
+   > **Recommended: `cirrus` *turn*.** Names are the owner's, so nothing below is
+   > renamed; see the decision table in the review.
 2. ~~Does the predator's cruise track the cell's speed?~~ **Moot, and better.**
    There is no predator to tune. Every cell swims on its own `flagellum` tier,
    so a cell that out-swims you does it because it has more tail than you, and
@@ -740,23 +1119,57 @@ shows that hue alone is not one.
 5. **A dedicated gesture for the genome** (two-finger tap / `G`) instead of
    going through pause. Not recommended: pause already works on both targets and
    costs nothing. Recorded because it will be asked.
+6. **The four seeding numbers of §1.3** — `DRIFTER_SHARE`, `PEER_SPREAD`,
+   `ARRIVAL_GAPE_MAX`, and the cytostome weights inside the peer band. The shape
+   is settled and defended; the values are the water's difficulty and can only be
+   judged by swimming in it. They replace the old §9 entry that said the
+   distribution was "centred on the player" and left it there.
+7. **Can the player replace their own `cytostome`?** §5.2's two-tap swap is
+   unrestricted, so a player can put a fourth gene over their mouth and drop to
+   gape `0.58 r` — at r26 that is 15, which eats only the smallest drifters, and
+   it cannot be undone. It is either a real and interesting mistake or a soft
+   lock, and which one it is depends entirely on §1.3's drifter floor holding.
+   **Recommended: allow it.** The floor guarantees the mistake is survivable, the
+   tile shows three pips going dark, and a genome you cannot ruin is not a
+   choice. Recorded because it is the one irreversible action in the game.
 
 ## 10. What was rendered
 
 Prototyped in a throwaway copy outside the repository, at 1280x720 and
-2400x1080, under `--rendering-driver opengl3`:
+2400x1080, under `--rendering-driver opengl3`.
 
-- the born cell (1/1/1, r26) and the maximum cell (3/3/3 + eyespot 3, r40) in
+From the first pass:
+
+- the born cell (1/1/1, r26) and the maximum cell (3/3/3 + `stigma` 3, r40) in
   full vision, against the live halo, beat, trail, velocity plume and heading
 - all three organs at all three tiers, side by side, at r26 / r30 / r34 / r40
 - the same frame in luminance only and under a Viénot deuteranope simulation
-- four gene-bearing food cells at 250–300 units, and one at 430 canvas px
-- the predator with its `{thrust: 3}` brush, stalking at 210 units
+- four gene-bearing cells at 250–300 units, and one at 430 canvas px
 - the genome strip on the pause screen at 3 slots, at 7 slots, with a held
   sample, and armed — at both sizes
-- point of view: the eyespot lobe at 13° / 19° / 26° on a `dread = 0.95` frame,
-  the eyespot beside a full-strength taste lobe, and the amber ingest flood
+- point of view: the `stigma` lobe at 13° / 19° / 26° on a `dread = 0.95`
+  frame, the `stigma` beside a full-strength taste lobe, and the amber ingest
+  flood
 
-Two things in this document are made of time and cannot be photographed: **the
-second heartbeat and the orient lean.** They must be judged by playing, and they
-are the two things here most likely to be wrong.
+Added by the review, because §1.1–1.3 had been written against two frames:
+
+- **the cytostome ladder** — tiers 0/1/2/3 at r26 and r40, both sizes
+- **all four relationships at real foraging distance** (250–640 units) and again
+  **with every cell at the frame edge**, which is where the first-pass claim
+  about the small-body-huge-mouth case failed (§1.1.1)
+- the same two frames **with the threat colour and teeth on**, which is what
+  fixed it, and both again under a Viénot deuteranope simulation — which is what
+  proved the colour alone was not enough (§1.1.1)
+- **drifter-sized bodies**, r14–20 at all three cytostome tiers, with and without
+  a minimum-stroke clamp — the clamp is a no-op and was cut (§4.5)
+- **the rubber-band frame**: the born cell among peers scaled to it, beside the
+  full-grown cell among peers scaled to it. Identical pictures, which is what
+  killed the first version of §1.3
+- **the respecified water** (§1.3) seeded against a r26 player and a r40 player,
+  both sizes — two different pictures, which is what the fix had to produce
+- the genome strip labelled with the biological names and with the plain words,
+  both sizes, at seven slots with a sample held (§5.2)
+
+Three things in this document are made of time and cannot be photographed: **the
+second heartbeat, the steering lean, and every number in §1.3.** They must be
+judged by playing, and they are the things here most likely to be wrong.

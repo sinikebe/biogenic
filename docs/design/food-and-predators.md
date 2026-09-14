@@ -112,6 +112,13 @@ Smaller than you, passive, does not flee. `radius` 14–20. Drifts at ~9 units/s
 on a slow random walk, so it is never a fixed target but never a chase either.
 Phase 4 has one flavour; fleeing prey and a second flavour are later glow slots.
 
+> **Phase 5 keeps this cell and demotes it.** It survives exactly as written — a
+> passive `r13–21` drifter with no mouth — as the **floor** of the seeding
+> distribution in `genes-and-cilia.md` §1.3, which is what guarantees there is
+> always something edible. What changes is that it is no longer *the* food: about
+> half of what arrives is now a peer sized against the player, with a genome, a
+> gape, and the ability to eat you or be eaten.
+
 ### 3.2 The field — `game/normal/food.gd`
 
 ```gdscript
@@ -209,6 +216,14 @@ eating). A pressure wake lands at
 **You can eat anything smaller than you. Anything bigger can eat you.** One
 comparison, no species tag. The predator never changes; the player does.
 
+> **Superseded by `genes-and-cilia.md` §1.1 — read that before implementing
+> anything in this section.** The comparison is no longer body against body but
+> **body against `gape`**, where `gape = radius x [0.58, 0.82, 1.05, 1.40]` by
+> `cytostome` tier, and it is evaluated in both directions independently. "Bigger"
+> and "can eat me" come apart: a small cell with a wide mouth eats you, and a
+> large mouthless one cannot. Everything below about *how danger is expressed*
+> stands; only the test that produces it has changed.
+
 ```gdscript
 # cell.gd: RADIUS stops being a const.
 var radius := 26.0
@@ -224,6 +239,12 @@ Two consequences worth having now:
   before they can eat it. That is the best available readout of a growth curve on
   a screen with no numbers on it.
 
+  > **Still live in Phase 5, with one substitution.** The formula, both constants
+  > and the curve are kept exactly; `other.gape()` replaces `predator.RADIUS`, and
+  > the result is summed over every cell rather than read off one.
+  > `genes-and-cilia.md` §7.0 explains why it must stay a `smoothstep` and not
+  > become a count of cells that can eat you.
+
   > **Arithmetic correction, found when built.** This section said "at 34 it is
   > 0.44". `smoothstep(0.85, 1.35, 40/34)` is **0.72**; 0.44 is reached at cell
   > radius ≈ 37. The formula is what ships and it is the right shape — the
@@ -231,7 +252,12 @@ Two consequences worth having now:
   > just not as far as the number claimed.
 - When the ratio crosses 1.0 the predator's chemistry stops blocking and starts
   tasting, in **glow slot 3** (slot 2 stays reserved for the eyespot, per §4 of
-  `perception.md`), in a colour not yet used. **Specced, not built.** 28 meals is
+  `perception.md`), in a colour not yet used. **Specced, not built.**
+
+  > **Dropped, and the slot is given back.** With no species there is no second
+  > chemistry to switch on: a cell you can eat is simply part of the taste field,
+  > in the green that field already uses. **Glow slot 3 is unspent headroom
+  > again** — do not build this. Slot 2 is still the `stigma`. 28 meals is
   well over an hour at Phase 4 rates; Phase 5's genes are what make the arc real,
   and they will rebalance `GROWTH_PER_MEAL`. Ship the comparison anyway — it
   costs one variable and it is what stops the predator being scenery.
@@ -730,11 +756,11 @@ this document most likely to be wrong.
    auto-restart did not. It costs no new screen and no second string of text; the
    affordance is the breathing aperture in §6.3, which is made of the same
    membrane as everything else.
-2. **Does a run remember anything?** Phase 4 says no: death is a clean restart.
-   Phase 5 will want lineage, and that is the natural moment to decide whether
-   `run_state.gd` grows or a run is always the first of its line.
-3. **`GROWTH_PER_MEAL = 0.5` is a placeholder.** 28 meals to edibility is over an
-   hour. Genes are what should make the curve real, so Phase 5 owns it; what
-   matters now is that the comparison exists and dread already falls off with it.
-4. Still open from `perception.md` §6.4: **where the gene screen lives.** It is
-   the next thing that has to be decided, and Phase 5 cannot start without it.
+2. ~~**Does a run remember anything?**~~ **Closed by `genes-and-cilia.md` §9.4:
+   it keeps nothing.** Every run starts as the basic cell, three organs at tier 1.
+   Lineage is a real design and it is not this one.
+3. ~~**`GROWTH_PER_MEAL = 0.5` is a placeholder.**~~ **Closed by
+   `genes-and-cilia.md` §3.1: 1.0.** 14 meals now fills the genome and, with the
+   §1.3 ceiling, is the same meal at which nothing in the water can eat you.
+4. ~~Still open from `perception.md` §6.4: **where the gene screen lives.**~~
+   **Closed by `genes-and-cilia.md` §5: the pause screen, launcher-themed.**
