@@ -1,6 +1,6 @@
 extends RefCounted
-## The little the game remembers between runs: which view was last chosen, and
-## whether the one line of onboarding has been read.
+## The little the game remembers between runs: which view was last chosen, how
+## bright the membrane is, and whether the one line of onboarding has been read.
 ##
 ## One small file in user://, separate from the launcher's own state, and never
 ## instanced -- everything here is static. It is deliberately not an autoload:
@@ -38,6 +38,24 @@ static func load_mode() -> int:
 
 static func save_mode(mode: int) -> void:
 	_store("run", "mode", mode)
+
+
+## Membrane sensitivity, stored next to the mode choice because it is the same
+## kind of thing: a property of how this player wants the game presented, not of
+## the run. The range and the default belong to the signal bus, which owns
+## `gain`; this file only remembers a number.
+static func load_gain(fallback: float) -> float:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return fallback
+	var value := float(config.get_value("run", "gain", fallback))
+	if not is_finite(value):
+		return fallback
+	return value
+
+
+static func save_gain(value: float) -> void:
+	_store("run", "gain", value)
 
 
 static func onboarding_seen() -> bool:

@@ -197,9 +197,15 @@ const RADIUS := 40.0
 Two consequences worth having now:
 
 - **Dread scales with the ratio**, `smoothstep(0.85, 1.35, predator.radius / cell.radius)`.
-  At 26 that is 1.0; at 34 it is 0.44. The player *feels themselves stop being
-  afraid of it* long before they can eat it. That is the best available readout
-  of a growth curve on a screen with no numbers on it.
+  At 26 that is 1.0. The player *feels themselves stop being afraid of it* long
+  before they can eat it. That is the best available readout of a growth curve on
+  a screen with no numbers on it.
+
+  > **Arithmetic correction, found when built.** This section said "at 34 it is
+  > 0.44". `smoothstep(0.85, 1.35, 40/34)` is **0.72**; 0.44 is reached at cell
+  > radius ≈ 37. The formula is what ships and it is the right shape — the
+  > annotation was simply mis-evaluated. Dread is still meaningfully down by 34,
+  > just not as far as the number claimed.
 - When the ratio crosses 1.0 the predator's chemistry stops blocking and starts
   tasting, in **glow slot 3** (slot 2 stays reserved for the eyespot, per §4 of
   `perception.md`), in a colour not yet used. **Specced, not built.** 28 meals is
@@ -368,6 +374,54 @@ Suggested implementation, not binding: hold a bearing for `LOCK_SECONDS = 7.0`,
 re-acquire only if the cell is within `LOCK_CONE = 70°` of the predator's own
 heading at re-acquire.
 
+### 5.4.1 What was built, and what it measures
+
+Implemented as `game/normal/predator.gd`, and measured headless over 14 seeds
+per case with `tools/drive.gd --hunt=900`, against two scripted players: one that
+never steers, and one that plays the contract above (`--evade`: full steer away
+from the last wake bearing until it is 130° astern, then hold, with hysteresis so
+it cannot waver).
+
+| | caught | escaped |
+| --- | --- | --- |
+| never steers | **11 / 14** | 3 |
+| commits away and holds | 1 | **13 / 14** |
+
+The asymmetry is the mechanic and it is large. Doing nothing kills you; reading
+the wake and committing away from it saves you.
+
+Four things carry it, and only the first is in the original text:
+
+- the pursuit solution is up to `LOCK_SECONDS = 7.0` stale inside wake range
+- the attack run **commits at `COMMIT_RANGE = 420`**, not at `LUNGE_RANGE`. This
+  is the number the whole dodge lives in and it had to be found by measuring:
+  committed at 220 the run is only 2.3s long, a full-steer cell curves about 87
+  units off the straight prediction, and the two bodies are 66 wide — so a
+  committed turn missed by too little and was eaten about a third of the time.
+  Committed at 420 the run is 4–5s, the curve is ~240 units, and it is a clean
+  miss. Shipped at **310**, which is where a cell swimming straight still gets
+  caught 11 times in 14 and a turning one escapes 13 times in 14; at 420 the
+  passive catch rate collapses to 5 in 14, which breaks the other half of the
+  contract.
+- one missed pass ends the encounter. The run is over the moment the frozen aim
+  point is behind the predator, and it sheers off then.
+- `LOST_GROUND = 90.0`: a run that stops gaining is over too.
+
+**Where the contract as written is not met.** "Dread must begin falling within
+`ESCAPE_SECONDS`" is not achievable by an honest pursuit, and this is arithmetic
+rather than tuning: the predator is 1.2× the cell's speed, so committing away
+creates no distance, and relief can only arrive when a pass has *failed*. Across
+the 13 escapes the measured delay from the first evasive input to dread falling
+is **7–24s, median about 15s**. The commitment is what causes the escape — it is
+just paid off one failed pass later, not within seven seconds.
+
+Two levers if that is too long: drop `RUSH_SECONDS` (24.0) toward 12, which caps
+it directly at the cost of letting some passive cells go; or narrow
+`LOCK_CONE_DEG` below 70, which makes the hunter give up on geometry sooner.
+Both trade against "a cell that does nothing must be caught". Recorded, not
+taken — this is the one number in the encounter that should be settled by
+playing it rather than by measuring it.
+
 **If playtesting says it is wrong:**
 
 - *Too hard* — drop `ESCAPE_SECONDS` to 5.0 and widen the course correction the
@@ -394,6 +448,21 @@ enough that you sit waiting, wondering whether it is coming back. It has been
 telegraphed for minutes; the grace exists so that food ten seconds away is still
 worth swimming for.
 
+**And then the last one does not come.** The end of the grace closes the same
+aperture §6.2 closes, `FAINT_COLLAPSE = 2.60s` against predation's 0.75, with no
+white in it at all: the light on the shutting membrane is one final beat at
+exactly the strength `beat_strength()` was already returning, fading out across
+the close and the `FAINT_BLACK = 1.20s` after it. Rendered at both sizes, the
+two deaths are the same geometry at opposite temperature and tempo — a teal
+aperture sinking shut against a white one slamming. Measured mid-close:
+`(10,36,31)` quiet against `(231,255,255)` loud.
+
+The first build let the quiet collapse be lit by whatever the last beat had left
+behind, and when the death landed between beats the membrane shut in the dark
+and the screen simply went out. Floor it with `beat_strength()`; that constant is
+already floored, so a quiet death cannot be invisible however starved and however
+hunted the cell was.
+
 ### 6.2 Predation — loud
 
 The predator reaches `cell.radius + predator.radius`. Then, and this is the one
@@ -404,10 +473,11 @@ other time the interior is spent:
 | 0.00 | `hit` at the strike bearing. Flash 0.80 + bruise — the sensation they already know |
 | 0.15 | **the collapse.** `inset_px` ramps 28 → **300** over `DEATH_COLLAPSE = 0.75s` on `t²`, `flash` held at 0.80, every glow lobe idled |
 | 0.90 | `DEATH_BLACK = 0.35s`: `flash` → 0, `base_color` and `dread_color` → `(0,0,0)` |
-| 1.25 | `DEATH_HOLD = 1.80s`. Nothing. Measurably nothing |
-| 3.05 | `DEATH_RETURN = 0.90s`: colours and `inset_px` back, new cell, new water, hunger 0, first beat on arrival |
+| 1.25 | `DEATH_HOLD = 1.80s`. Nothing. Measurably nothing — rendered `(0,0,0)` |
+| 3.05 | **the invitation** (§6.3). The black holds here until the player touches it |
+| tap + 0.90 | `DEATH_RETURN = 0.90s`: colours and `inset_px` back, new cell, new water, hunger 0, first beat on arrival |
 
-Total 3.95s. No text, no button, no new screen.
+No text, no button, no new screen.
 
 **Why `inset_px` and not `push_px`.** Pushing the SDF offsets a rounded box by a
 constant, so once the push passes `corner_px = 150` the radius goes negative and
@@ -427,11 +497,36 @@ Two details found by looking at it:
 
 Measured at `inset_px = 300`: brightest `(229,255,254)`, both sizes.
 
-### 6.3 What happens next
+### 6.3 What happens next — it waits for a tap
 
-It restarts itself. No run-restart screen, no second string of text — §6.1 of
-`perception.md` allows exactly one line in normal mode and this does not spend
-it. The exit already exists and costs no pixels: **Back or Esc during the death
+**Owner's decision, replacing the auto-restart in §9.1.** The black holds until
+the player touches the screen, presses a key or clicks. There has to be a place
+to put the phone down, and the end of a run is it.
+
+That creates the one problem auto-restart did not have: on a near-black screen
+with no widgets, how does anyone know a tap is wanted? §6.1 of `perception.md`
+allows exactly one line of text in normal mode and this does not get to spend it,
+so the invitation has to be made of membrane.
+
+**The invitation is the beat, still trying, and failing to open the shut
+membrane.** After `DEATH_HOLD` the closed aperture breathes on the cell's old
+rest period of 2.4s: `pulse` rises to 0.62 on a heartbeat envelope — fast in,
+slow out, then a silence longer than the sound — and `inset_px` lifts 34px off
+`DEATH_INSET`, parting the slit and losing it again. It ramps in from half
+strength over `INVITE_RISE = 6.0s` and then repeats forever without ever
+resolving, which is what separates a screen that is waiting from a screen that is
+still playing.
+
+Rendered at both sizes: black between breaths (`(0,2,1)` at the trough) and
+`(11,60,50)` at the peak of a late one, on a field that is `(0,0,0)` everywhere
+else. The slit's height swings 120 → 188 canvas px, identical at 1280x720 and
+2400x1080 because it is driven by `half_ext.y`. It is the only thing on the
+screen and it moves; nothing else in the game looks remotely like it.
+
+Input is accepted from the moment the aperture shuts — through the fade and the
+hold, before the first breath — so a player who taps early is never ignored.
+
+The exit is unchanged and still costs no pixels: **Back or Esc during the death
 sequence goes straight to the mode select**, skipping the pause screen, because
 pausing a dead cell is nonsense.
 
@@ -473,9 +568,21 @@ var spread := deg_to_rad(lerpf(TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _t
     * (1.0 + _dread)
 ```
 
+> **`BEAT_PERIOD_MAX` is a ceiling on the jitter, not on the period.**
+> `clampf(_beat_period * jitter, 0.05, BEAT_PERIOD_MAX)` as written cuts
+> §6.1's `DYING_PERIOD = 7.5` down to 6.5 and quietly deletes the last of the
+> starvation signature. Shipped as
+> `clampf(_beat_period * jitter, 0.05, maxf(BEAT_PERIOD_MAX, _beat_period))`, so
+> an authored period is never shortened and only the random half is capped. A
+> dying, hunted cell therefore jitters 5.25–7.5s rather than 4.5–10.5s.
+
 Plus one new method, `collapse(t: float)`, owning the death frames: it writes
 `inset_px`, holds `flash`, idles all four glow lobes, and fades `base_color` /
-`dread_color`. **Nothing outside the bus writes a uniform** — that rule holds.
+`dread_color`. **Nothing outside the bus writes a uniform** — that rule holds. Shipped as
+`collapse(t: float, loud: bool = true)`, because the two deaths share every
+frame of geometry and differ only in tempo and temperature (§6.1), plus
+`revive(t: float)` for the tap and the 0.90s back. `t` keeps counting through the
+hold, so the caller owns a clock and nothing else.
 
 ### 7.2 `game/normal/metabolism.gd`
 
@@ -488,6 +595,16 @@ Plus one new method, `collapse(t: float)`, owning the death frames: it writes
 `game/normal/food.gd`, `game/normal/predator.gd`. Same shape as `motes.gd`: a
 plain `Node`, no `class_name`, a ring of positions, a `points()` accessor for
 full vision, world positions emitted on the signal and **dropped before the bus**.
+
+One convention added while building, because it is what keeps that last rule
+cheap to hold: **these nodes compute and do not post.** Continuous state
+(`food.concentration`, `food.taste_bearing`, `predator.dread_level`) is read once
+a frame by `normal_mode.gd`, which is the only node that talks to the bus;
+discrete events (`eaten`, `waked`, `killed`) are signals it forwards. The §3.2
+sketch has the field calling `bus.taste()` itself; posting a continuous signal
+from four places is how a world position eventually reaches the bus by accident,
+and a per-frame `taste` signal would allocate a dictionary sixty times a second
+besides. `dread()` is gated on the bus for the same reason `taste()` already was.
 
 `game/normal/cell.gd`: `RADIUS` const → `radius` var.
 
@@ -534,10 +651,27 @@ Two verification draws, following `_draw_hits`:
 - One asymmetry, accepted: at 2400x1080 full vision shows more world, so a
   predator is visible sooner. Point of view is aspect-corrected and unaffected,
   and point of view is the game.
-- **`gain` should become a real setting before this ships.** Phase 4 introduces
-  the first state where dimness is a failure rather than a mood, and a
+- **`gain` is now a real setting, and it lives on the pause screen.** Phase 4
+  introduces the first state where dimness is a failure rather than a mood, and a
   `(6,23,23)` contour on an LCD phone in sunlight is the one risk this design
-  carries. The escape hatch already exists; wire it to a slider.
+  carries.
+
+  It is on pause rather than on a settings screen because that is where the
+  problem is felt: the membrane keeps beating behind the scrim, so the effect is
+  visible live as the player drags, and it costs no new surface. One lowercase
+  caption, `light`, on the one screen in normal mode that already carries words.
+  Range 0.70–2.40 in steps of 0.05, shipping at 1.0, persisted next to the mode
+  choice in `run_state.gd`.
+
+  Measured on the starving-and-hunted frame, which is the case it exists for:
+  contour `(6,23,23)` at gain 1.0 becomes `(22,58,55)` at 2.40, and the ordinary
+  rest beat at 2.40 is `(45,243,202)` — lifted hard and still not clipped, which
+  is what sets the top of the range.
+
+  The slider sits **above** `resume` in the same box, so it inherits the same 48
+  canvas px of separation and nothing destructive is ever under a dragging thumb.
+  Its control rect is 48px tall for the touch-target rule even though the drawn
+  track is thinner.
 
 ## 8. Measured output
 
@@ -566,10 +700,11 @@ this document most likely to be wrong.
 
 ## 9. Left open — owner's call
 
-1. **Auto-restart on death, or wait for a tap?** Specced as auto after 3.95s,
-   because it needs no new screen and no second string of text. On Android it
-   means you cannot put the phone down mid-run without pressing Back. If that is
-   wrong, the fix is to hold the black until any input — one line, no new UI.
+1. ~~Auto-restart on death, or wait for a tap?~~ **DECIDED: wait for a tap.**
+   Holding the black gives the player somewhere to put the phone down, which
+   auto-restart did not. It costs no new screen and no second string of text; the
+   affordance is the breathing aperture in §6.3, which is made of the same
+   membrane as everything else.
 2. **Does a run remember anything?** Phase 4 says no: death is a clean restart.
    Phase 5 will want lineage, and that is the natural moment to decide whether
    `run_state.gd` grows or a run is always the first of its line.
