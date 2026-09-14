@@ -57,7 +57,7 @@ signal stung(bearing: float)
 ## `trichocyst`: the dart went off and something hunting you broke away.
 signal darted(bearing: float)
 
-const COUNT := 4
+const COUNT := 34
 
 # --- Seeding (§1.3) ---------------------------------------------------------
 # A floor that never moves, a middle that tracks you, and a ceiling you can
@@ -170,16 +170,27 @@ const MEAL_MIN := 0.35
 const MEAL_MAX := 1.40
 
 # --- Ring placement ---------------------------------------------------------
-## Exactly like motes.gd: recycled to the far edge when culled. (motes.gd culls
-## at 1900; that is the inert dust, a different field that carries no genes.)
-const RING_MIN := 800.0
-const RING_MAX := 2200.0
-const CULL := 3000.0
+## Recycled to the far edge when culled, and the field now lives at the same
+## scale as motes.gd's dust rather than eight times wider.
+##
+## The old numbers (COUNT 4, ring 800-2200, cull 3000) spread four bodies over a
+## disc of radius 3000 -- 28 million square units against a viewport of 0.92
+## million, so the expected number of cells on screen was **0.13**. One sighting
+## every eight screens, which is the "swim for minutes without seeing anything"
+## the owner reported and the review measured from the other direction.
+##
+## RING_MIN is also a visibility bound, and 800 was wrong for it. The half
+## diagonal of the base viewport is 734, and of a 20:9 phone canvas 877 -- so at
+## 800 a recycled body could appear *on screen*, which is most of the time on the
+## shape the owner actually plays. 920 clears both.
+const RING_MIN := 920.0
+const RING_MAX := 1350.0
+const CULL := 1700.0
 ## Authored, like mote 0: placed along the cell's real velocity once it moves,
 ## just outside scent range, so the beat quickens at about 0:12. The drifter
 ## floor guarantees cell 0 is a drifter at setup, so the first thing the player
 ## ever meets is always something it can eat.
-const FIRST_DISTANCE := 2200.0
+const FIRST_DISTANCE := 1400.0
 
 # --- Dread ------------------------------------------------------------------
 const DREAD_RANGE := 1400.0
