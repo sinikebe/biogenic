@@ -11,8 +11,17 @@ built in a throwaway copy of the project outside the repository.
 
 ## 1. The decisions, in one place
 
+0. **There is no predator and no food. There are cells with genomes.** The
+   owner's revision, and the one every other decision now hangs off:
+
+   > It's just a cell, with its own genes, and genes will tell if you can eat
+   > another one or not by seeing their cilia.
+
+   "Predator" is not a kind of thing; it is a **relationship**, it is read off a
+   body, and it changes in both directions during a run. Other cells grow the
+   way you do — by eating gene-carrying cells. See §1.1.
 1. **Cilia are the visible expression of ability, and every cell wears them** —
-   you, the food, the predator. One drawing routine, three subjects.
+   you and everything else. One drawing routine, one subject.
 2. **The starting cell is already full.** Three slots, three organs: feed,
    orient, thrust, all at tier 1. You are not an empty vessel; you are mediocre
    at three things, and becoming something means stopping being something.
@@ -28,6 +37,99 @@ built in a throwaway copy of the project outside the repository.
 7. **"Synthesis" is not a Phase 5 word.** Phase 5 integrates genes into one
    cell. Making *other* cells belongs with multicellular bodies, which the owner
    deferred; see `roadmap.md`.
+
+### 1.1 What decides whether you can eat something: the gape
+
+**You can eat a cell whose body fits in your mouth.** That is the whole rule.
+
+The mouth is an organ — the **cytostome** — and like every organ it has a tier
+and it is drawn. Its tier sets how wide the mouth opens, as a multiple of your
+own body radius:
+
+| cytostome | gape | at r26 |
+|---|---|---|
+| none | `0.58 r` | 15 |
+| tier 1 | `0.82 r` | 21 |
+| tier 2 | `1.05 r` | 27 |
+| tier 3 | `1.40 r` | 36 |
+
+`A can eat B` is `B.radius < A.gape`. Nothing else. It is evaluated in both
+directions independently, which is what makes it interesting: there are four
+relationships, not two.
+
+| | they fit in my mouth | they do not |
+|---|---|---|
+| **I fit in theirs** | **both** — whoever commits first | **it eats me** |
+| **I do not** | **eat it** | **neither** — a standoff |
+
+**Why the gape and not the radius.** A pure size comparison is a single number
+with a single ordering: everything smaller is food, everything bigger is death,
+and there is nothing to read because the answer is the silhouette. Splitting the
+mouth out from the body makes the two independent, and the moment they are
+independent the interesting cells exist — **a small cell with an enormous mouth
+is both prey and predator**, and a large cell with no mouth is neither. That is
+the cell you have to look at rather than glance at.
+
+It also makes the owner's premise literally true: the thing that decides
+edibility *is* an organ, and organs are worn on the outside.
+
+**Rendered, at real scale and distance, before being specified.** Three cells at
+the sizes above: the small one reads as a meal, the large one's gape reads
+unmistakably as a wide open jaw, and the small-body-huge-mouth case reads as
+alarming rather than as prey. `NEITHER` — a cell of about your size with about
+your mouth — looks like a peer, which is correct. The ambiguity in this rule
+sits exactly at the boundary, where being wrong should cost something.
+
+### 1.2 Other cells evolve too
+
+They eat what fits in their mouths, and they grow by it, on the same rules. A
+cell that has been feeding is bigger and has a wider gape than it started with,
+so **the longest-lived cells become the most dangerous without anyone authoring
+a difficulty curve.**
+
+That is the best thing in this idea and the one most able to go wrong, so it is
+bounded rather than trusted. What that bound is — and whether other cells truly
+eat each other or the ecosystem is abstracted — is §1.3.
+
+### 1.3 Real where you can see it, a distribution where you cannot
+
+A true ecosystem is a simulation that drifts. Left to run, it has three endings
+and two of them are bad: it eats itself down to a few giants and the player
+starves with nothing edible in reach; or nothing ever eats anything and the
+water is inert; or one cell runs away with it. None of those announce
+themselves — the run just quietly stops being a game.
+
+So the rule is split by what can be observed:
+
+**Inside the field, cells genuinely eat each other.** Same gape rule, same
+growth, no special case for the player. In full vision you can watch a cell
+close on a smaller one and come away bigger, and the cell that just ate is now
+a cell you may no longer be able to eat. That is real, and it is the thing the
+owner asked for.
+
+**Outside the field, nothing is simulated at all.** Cells are already culled at
+`CULL = 1900` and recycled to the far edge — that is shipped behaviour from
+Phase 4. The only change is **what a recycled cell comes back as**: it is drawn
+from a distribution centred on *the player's current radius*, not inherited from
+whatever left.
+
+That one choice is the whole bound, and it buys three things at once:
+
+- **The world cannot degenerate.** There is always something edible and always
+  something dangerous in reach, because the distribution guarantees both. No
+  unwinnable state exists, by construction rather than by tuning.
+- **Difficulty tracks growth without a curve.** Grow, and what arrives is
+  bigger. Nobody authors a ramp; the ramp is a consequence of the same number
+  that gives you slots.
+- **It is cheap.** No global population, no off-screen bookkeeping, no
+  save state. A handful of cells, the rules they already follow, and one
+  seeding function.
+
+**What this deliberately is not.** There is no persistent world, no lineage, no
+species that remembers. A cell you flee from and never see again does not go on
+existing. That is invisible from inside the game — you cannot observe the
+absence of a thing you are not looking at — and it is the difference between a
+phase that ships and one that becomes a research project.
 
 ## 2. The tension: point of view cannot see its own cilia
 
@@ -508,8 +610,40 @@ lobe: amber and green read as two different substances with no ambiguity.
 
 ## 7. What this breaks, and who owns it
 
-Two Phase 4 contracts are stated against a tier-1 cell and Phase 5 invalidates
-both. Neither is a reason not to ship; both must be re-measured.
+### 7.0 `food.gd` and `predator.gd` become one thing
+
+They are two classes describing one kind of object, and §1 collapses them. This
+is rework on shipped, working code, and it should be done rather than deferred:
+building the genome on top of a split that is about to close would mean writing
+the gene system twice.
+
+What carries over, because the behaviour was never really about being a
+predator:
+
+| shipped | becomes |
+|---|---|
+| `predator.gd`'s aim state machine, `COMMIT_RANGE`, the lunge, the break-off | how **any** cell pursues something it can eat. Was always general; only the name was specific. |
+| `threat` — the `RADIUS / cell.radius` ratio | the **gape comparison** of §1.1, evaluated per cell and in both directions |
+| `dread_level` | still a scalar, now the sum over cells that can eat *me*. Dread was always a property of the relationship, not of a species. |
+| `food.gd`'s scent field, `concentration`, `taste_bearing` | unchanged in kind, but summed over everything **I** can eat rather than over a food species |
+| `FIRST_DELAY`, `SPAWN_MIN/MAX`, the authored first arrival | the seeding distribution of §1.3. The authored first encounter survives as an authored *opening*, not as a species spawn. |
+| `PREY_SPEED = 56.5`, hard-coded | dies. Every cell swims on its own `flagellum` tier. |
+| `RADIUS = 40` — the predator's fixed size | dies. Size is per-cell and grows. |
+
+**Phase 4's perception design survives intact**, which is the reassuring part:
+food quickens the beat and something dangerous makes it stumble, and both are
+now computed from the same gape comparison instead of from two species. Nothing
+in `perception.md` or in the membrane changes.
+
+What genuinely dies is the *authored menace*: a single hand-placed hunter with a
+scripted arrival. What replaces it is a field where the dangerous cell is
+whichever one has been eating, which is better, and which is also why §1.3's
+bound exists.
+
+### 7.1 Two Phase 4 contracts, re-measured
+
+Both are stated against a tier-1 cell and Phase 5 invalidates both. Neither is a
+reason not to ship; both must be re-measured.
 
 - **`orient` tier 3 sets `TURN_RATE_MAX = 1.02`** (58°/s, half-turn in 3.1s)
   against the 0.62 that `ESCAPE_SECONDS = 7.0` was derived from — and against
@@ -526,7 +660,7 @@ both. Neither is a reason not to ship; both must be re-measured.
   `CRUISE = PREY_SPEED * 1.20`**, so the chase stays a chase at every tier and
   only `orient` improves the dodge. Owner's call; recorded.
 
-### 7.1 New and changed files
+### 7.2 New and changed files
 
 | file | change |
 | --- | --- |
@@ -575,18 +709,34 @@ shows that hue alone is not one.
 
 ## 9. Left open — owner's call
 
-1. **Gene names.** `feed`, `orient`, `thrust`, `eyespot` are placeholders and
-   read like engineering. They are content and they are yours.
-2. **Does the predator's cruise track the cell's speed?** (§7.) Recommended, but
-   it changes the character of a chase and should be felt, not argued.
-3. **`UPKEEP_PER_TIER = 0.18` is the only number here that cannot be checked by
-   looking.** It sets whether specialising feels like a bargain or a trap. Move
-   it first if the late game feels either free or airless; `HUNGER_SECONDS`
-   second.
-4. **Does a run remember its genome?** Still open from
-   `food-and-predators.md` §9.2. Phase 5 assumes **no** — death is a clean
-   restart and the arc is one session. Lineage is a real design and it is not
-   this one.
+1. ~~Gene names.~~ **DECIDED: the biological name, plus one plain word.** The
+   biological name is the identity and what the code calls it; the one word is
+   what a player reads. Nothing carries a sentence.
+
+   | gene | word | what it is |
+   |---|---|---|
+   | **cytostome** | *eat* | the mouth. Its tier sets the gape, and the gape decides what you can swallow (§1.1). |
+   | **kinety** | *turn* | the ciliary row along the flank. Steering. |
+   | **flagellum** | *swim* | the tail. Thrust. |
+   | **stigma** | *see* | the eyespot. The first earned gene (§6). |
+
+   These are the real terms for these organs, which is the point: the game is
+   about being a cell, and a cell's parts have names. Extend the pattern rather
+   than the list — a new gene gets a real organ name and one word, or it does
+   not ship.
+2. ~~Does the predator's cruise track the cell's speed?~~ **Moot, and better.**
+   There is no predator to tune. Every cell swims on its own `flagellum` tier,
+   so a cell that out-swims you does it because it has more tail than you, and
+   you can see that before it happens. `PREY_SPEED` and its hard-coded 56.5 go
+   with `predator.gd` (§7).
+3. ~~`UPKEEP_PER_TIER = 0.18`.~~ **DECIDED: ships at 0.18**, to be judged by
+   playing. Still the only number here that cannot be checked by looking, so it
+   stays the first thing to move if the late game feels either free or airless;
+   `HUNGER_SECONDS` second.
+4. ~~Does a run remember its genome?~~ **DECIDED: it keeps nothing.** Every run
+   starts as the basic cell — three organs, all tier 1. Death is a clean restart
+   and the arc is one session. Lineage is a real design and it is not this one.
+   Previously open as `food-and-predators.md` §9.2.
 5. **A dedicated gesture for the genome** (two-finger tap / `G`) instead of
    going through pause. Not recommended: pause already works on both targets and
    costs nothing. Recorded because it will be asked.
