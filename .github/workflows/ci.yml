@@ -108,6 +108,11 @@ jobs:
           ~/godot/godot --headless --path . --export-pack "Android" build/content/content-android.pck
           ~/godot/godot --headless --path . --export-pack "Windows Desktop" build/content/content-windows.pck
 
+      - name: Check the shell scripts
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
+          shellcheck --severity=warning ci/*.sh
+
       - name: Upload build for inspection
         uses: actions/upload-artifact@v7
         with:
