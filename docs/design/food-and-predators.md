@@ -7,8 +7,14 @@ Extends `perception.md`; does not revisit it. Every number below was rendered
 under GL Compatibility at 1280x720 **and** 2400x1080 and looked at. Where this
 document contradicts `perception.md` it says so and gives the measurement.
 
-Phase 5 (the gene roll on eating) is out of scope. `ingest` lands here and the
-hook is named in §3.4.
+Phase 5 is out of scope. `ingest` lands here and the hook is named in §3.4.
+
+> **Superseded on one point.** This document calls the gene a *roll on eating*.
+> `genes-and-cilia.md` §3.4 replaces that: the gene is a property of the food,
+> fixed when it is seeded, because informed foraging requires that a prey cell
+> can advertise what it carries *before* you eat it — and a roll cannot be seen
+> in advance. The signal shape below is unchanged; only where the value comes
+> from is.
 
 ## 1. The decision
 
@@ -154,15 +160,15 @@ is usually saying something. **Move `HUNGER_SECONDS` first if the pace is wrong;
 `MEAL` sets how much one success is worth and should stay near half a bar so a
 single meal is felt and two are needed.**
 
-Eating at full does not waste the food: it still fires `ingest` and still rolls
-the gene. There is always a reason to eat.
+Eating at full does not waste the food: it still fires `ingest` and still
+carries the gene. There is always a reason to eat.
 
 ### 3.4 The moment of eating, and the Phase 5 hook
 
 On `d < cell.radius + food.radius`:
 
 ```gdscript
-## Nutrition, the rolled gene, and where it happened. `at` is for the full-vision
+## Nutrition, the food's gene, and where it happened. `at` is for the full-vision
 ## view only and MUST be dropped before the bus -- the same contract as
 ## motes.struck. In phase 4 `gene` is always &"".
 signal eaten(nutrition: float, gene: StringName, at: Vector2)
