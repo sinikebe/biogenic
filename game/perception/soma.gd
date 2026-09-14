@@ -46,10 +46,18 @@ const FADE := 0.34
 ## reason is what it is for. The body is a frame of reference and should stay
 ## under everything; a gene loose inside you is a **decision that is waiting**,
 ## and the owner's complaint was that at the body's own fade nobody ever saw it.
-## It is still well under a taste band or a beam hit -- measured, not chosen --
-## and it is the only thing on this figure that is ever asking for anything, so
-## it is the only thing allowed to be louder than the outline it sits in.
-const FADE_PENDING := 0.78
+## It is the only thing on this figure that is ever asking for anything, so it
+## is the only thing allowed to be louder than the outline it sits in.
+##
+## **0.78 was too loud by one measurement and this is that measurement.** The
+## rule the mark has to obey is that every *sensation* beats it, and a peak
+## pixel is the wrong way to check that -- a 1.6px ring stroke out-peaks a
+## 200px dread swell and is plainly not the louder thing. Low-passed at sigma 6,
+## which is about what a glance integrates over at 1280x720, a dread lobe came
+## to 60.4 and this mark to 60.8: a dead heat, and a dead heat is not losing.
+## At 0.68 it reads 53 against dread's 60, a beam return's 67 and a taste
+## band's 136, and the ordering is right in every pair.
+const FADE_PENDING := 0.68
 
 ## The nucleus takes the beat, so the figure breathes on the same heart the
 ## contour does rather than on a clock of its own.
