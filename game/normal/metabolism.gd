@@ -65,6 +65,15 @@ var concentration := 0.0
 ## as a number on a screen. genome.gd owns what it comes to;
 ## docs/design/genes-and-cilia.md §3.2.
 var upkeep := 1.0
+## `vacuole` / store: how much bigger this cell's reserve is than a born
+## cell's. Written once a frame by the run, like [member upkeep]. A larger tank
+## is the same tank drained more slowly -- hunger is normalised 0..1, so there
+## is nowhere else for capacity to go.
+var reserve := 1.0
+## `plastid` / sun: a fraction of upkeep that simply does not happen, because
+## the cell is making it. Subtracted from the rate rather than added to feeding,
+## so it reads on the beat as "this body runs cheap" and never as a meal.
+var photosynthesis := 0.0
 ## Seconds held at full hunger. Public so the dev harness can photograph the end
 ## of the grace without waiting forty seconds for it.
 var starve_seconds := 0.0
@@ -72,7 +81,8 @@ var starve_seconds := 0.0
 
 func _process(delta: float) -> void:
 	if HUNGER_SECONDS > 0.0:
-		set_hunger(hunger + delta * maxf(upkeep, 0.0) / HUNGER_SECONDS)
+		var rate := maxf(upkeep - photosynthesis, 0.0) / maxf(reserve, 0.05)
+		set_hunger(hunger + delta * rate / HUNGER_SECONDS)
 	if hunger >= 1.0:
 		starve_seconds += delta
 	else:
@@ -100,6 +110,8 @@ func reset() -> void:
 	starve_seconds = 0.0
 	concentration = 0.0
 	upkeep = 1.0
+	reserve = 1.0
+	photosynthesis = 0.0
 	set_hunger(0.0)
 
 

@@ -51,6 +51,11 @@ signal eaten(nutrition: float, gene: StringName, at: Vector2)
 signal waked(bearing: float, strength: float)
 ## The membrane closes and you are gone. [param bearing] is where it came from.
 signal killed(bearing: float)
+## `toxicyst`: it swallowed you and died of it. You are alive, at a bearing and
+## a price the run pays out of hunger.
+signal stung(bearing: float)
+## `trichocyst`: the dart went off and something hunting you broke away.
+signal darted(bearing: float)
 
 const COUNT := 4
 
@@ -99,9 +104,24 @@ const ARRIVAL_RADIUS_MAX := 40.0
 ## but the mouth is not a weighted outcome here: §1.3 gives every peer
 ## one and no drifter one, so the only pool this is ever consulted with is
 ## [constant DRIFTER_GENES], which excludes it by construction.
-const GENE_WEIGHTS := {&"cytostome": 3, &"cirrus": 3, &"flagellum": 3, &"stigma": 2}
-## Everything a drifter can be. The mouth is not on this list by construction.
-const DRIFTER_GENES: Array[StringName] = [&"cirrus", &"flagellum", &"stigma"]
+## **Weights, not a list**: the three starting organs stay the commonest thing
+## in the water, because a genome that fills up with exotica before it has a
+## mouth is a run that cannot eat. Everything earned is rarer, and the two that
+## change the most about a run -- the beam and the voluntary push -- are the
+## rarest of all.
+const GENE_WEIGHTS := {
+	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
+	&"ocellus": 2, &"axoneme": 2,
+	&"statocyst": 2, &"rhabdom": 2, &"palp": 2, &"myoneme": 2,
+	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
+	&"plastid": 2, &"vacuole": 2, &"crista": 2,
+}
+## Everything a drifter can be, and therefore everything the player can ever
+## eat their way into. The mouth is not on this list by construction.
+const DRIFTER_GENES: Array[StringName] = [
+	&"cirrus", &"flagellum", &"stigma",
+	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
 ## tier 1 of whatever it carries.
@@ -388,6 +408,33 @@ var shadow := 0.0
 ## shadow] is 0.
 var shadow_bearing := 0.0
 
+# --- The earned senses, computed here and posted by the run -----------------
+# Same contract as everything above: this node computes and does not post, and
+# not one of these is a position. Bearings are body-relative and distances are
+# scalars along a bearing the cell chose.
+
+## `ocellus`. Written once a frame by the run: the body-relative bearings this
+## cell's beams point along, and how far they reach.
+var beam_bearings := PackedFloat32Array()
+var beam_range := 0.0
+## Answered here, index-matched to [member beam_bearings]:
+## `[bearing, distance, hit]` -- `distance` is the full reach when nothing was
+## hit and `hit` is false then.
+var beams: Array = []
+## `palp`. Range in, bearing and strength out: the nearest body inside touch
+## range, which is the one thing a blind cell can know for certain.
+var touch_range := 0.0
+var touch_level := 0.0
+var touch_bearing := 0.0
+## `trichocyst`. How close something hunting you gets before the dart fires, and
+## how long until there is another one. The clock lives here because the
+## encounter lives here.
+var dart_range := 0.0
+var dart_cooldown := 0.0
+## `toxicyst`. Negative means the cell has no venom and a kill is a kill.
+var venom_cost := -1.0
+var _dart_clock := 0.0
+
 var _cell: CellBody = null
 var _cells: Array[Body] = []
 var _first_pending := false
@@ -417,6 +464,9 @@ func setup(cell: CellBody) -> void:
 	taste_bearing = 0.0
 	dread_level = 0.0
 	threat = 0.0
+	beams.clear()
+	touch_level = 0.0
+	_dart_clock = 0.0
 
 
 func _process(delta: float) -> void:
@@ -432,12 +482,15 @@ func _process(delta: float) -> void:
 	if _first_hunt > 0.0:
 		_first_hunt -= delta
 
+	_dart_clock = maxf(_dart_clock - delta, 0.0)
 	for i in _cells.size():
 		_step_body(i, delta)
 	_step_recycle()
 	if not _step_contacts():
 		return
 	_step_sense()
+	_step_beams()
+	_step_touch()
 
 
 # ---------------------------------------------------------------------------
@@ -493,7 +546,7 @@ func _look_for_prey(index: int, b: Body, reach: float) -> void:
 	# through you is the most obvious lie the game could tell. The floor is gone
 	# and the continuity it was protecting is now protected properly, by dread
 	# not being a function of this decision at all (see THREAT_LOW).
-	if _first_hunt <= 0.0 and _cell.radius < gape:
+	if _first_hunt <= 0.0 and _cell.swallow_radius() < gape:
 		var d := b.pos.distance_to(_cell.position)
 		if d <= maxf(reach, b.radius + _cell.radius):
 			best = TARGET_PLAYER
@@ -571,6 +624,15 @@ func _step_stalk(index: int, b: Body, delta: float) -> void:
 	# The wake. One dent per stroke of its flagellum, at its true bearing, and
 	# only ever felt from a cell that is hunting *you*.
 	if b.target != TARGET_PLAYER:
+		return
+	# **`trichocyst`. It came inside dart range and it is leaving.** Automatic
+	# rather than a button: the design has no second control to spend and the
+	# whole of the gene is the cooldown -- one run broken off, then a long wait,
+	# so it buys an escape and never safety.
+	if dart_range > 0.0 and d < dart_range and _dart_clock <= 0.0:
+		_dart_clock = dart_cooldown
+		darted.emit(_cell.bearing_to(b.pos))
+		_break_off(b)
 		return
 	b.stroke -= delta
 	if b.stroke > 0.0:
@@ -800,7 +862,15 @@ func _step_contacts() -> bool:
 		# of that moment. It used to cost everything -- commitment was forbidden
 		# inside DREAD_RANGE, so a close mouth could never commit at all.
 		if b.state == State.STALK and b.target == TARGET_PLAYER \
-				and _cell.radius < _gape(b):
+				and _cell.swallow_radius() < _gape(b):
+			# **`toxicyst`. It got you and it dies of it.** The one thing in the
+			# game that undoes a death, and it is not free: the run pays for it
+			# in hunger, which is the channel every other cost is paid in. The
+			# body that swallowed you is reseeded -- it is gone, not fleeing.
+			if venom_cost >= 0.0:
+				stung.emit(_cell.bearing_to(b.pos))
+				_seed(i)
+				continue
 			killed.emit(_cell.bearing_to(b.pos))
 			_break_off(b)
 			return false
@@ -940,7 +1010,7 @@ func _step_sense() -> void:
 		# Nine seconds of closing still separate the first dread from the first
 		# wake: ten seconds of the water simply being wrong, then a direction.
 		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
-			_gape(b) / maxf(_cell.radius, 0.001))
+			_gape(b) / maxf(_cell.swallow_radius(), 0.001))
 		if level <= 0.0:
 			continue
 		worst = maxf(worst, level)
@@ -961,6 +1031,64 @@ func _step_sense() -> void:
 		shadow_bearing = _cell.bearing_to(_cell.position + shade_pull)
 	threat = worst
 	dread_level = minf(dread, 1.0) * DREAD_CAP
+
+
+## **The beams.** One ray per ocellus, cast against every body in the water:
+## the nearest surface along the ray, or nothing. Sixteen ray-circle tests a
+## frame at the very worst, which is four bodies by four beams.
+##
+## Deliberately blind to the motes: they are inert dust with no chemistry and no
+## genome, and a beam that stopped on grit would spend the one clear signal the
+## player owns on something that does not matter.
+func _step_beams() -> void:
+	beams.clear()
+	if beam_range <= 0.0 or beam_bearings.is_empty() or _cell == null:
+		return
+	var origin := _cell.position
+	for bearing: float in beam_bearings:
+		var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
+		var best := beam_range
+		var found := false
+		for i in _cells.size():
+			var b := _cells[i]
+			if not b.seeded:
+				continue
+			var to := b.pos - origin
+			var along := to.dot(dir)
+			if along <= 0.0 or along - b.radius > best:
+				continue
+			var perp := (to - dir * along).length()
+			if perp >= b.radius:
+				continue
+			var hit := along - sqrt(maxf(b.radius * b.radius - perp * perp, 0.0))
+			if hit >= 0.0 and hit < best:
+				best = hit
+				found = true
+		beams.append([bearing, best, found])
+
+
+## `palp`. The nearest body inside touch range, as a bearing and a closeness --
+## 1 against the skin, 0 at the edge of reach. No light, no chemistry, no size:
+## touching something tells you it is there and nothing else, which is exactly
+## what makes it worth a slot to a cell that cannot see.
+func _step_touch() -> void:
+	touch_level = 0.0
+	if touch_range <= 0.0 or _cell == null:
+		return
+	var best := INF
+	var at := Vector2.ZERO
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var d := b.pos.distance_to(_cell.position) - b.radius - _cell.radius
+		if d < best:
+			best = d
+			at = b.pos
+	if best >= touch_range:
+		return
+	touch_level = clampf(1.0 - maxf(best, 0.0) / touch_range, 0.0, 1.0)
+	touch_bearing = _cell.bearing_to(at)
 
 
 ## Concentration contributed by one source at distance [param d].
@@ -1257,7 +1385,7 @@ func _target_present(index: int, b: Body) -> bool:
 ## about to be given up on -- over OUTGROWN_GRACE, not instantly.
 func _target_edible(b: Body) -> bool:
 	if b.target == TARGET_PLAYER:
-		return _cell.radius < _gape(b)
+		return _cell.swallow_radius() < _gape(b)
 	var prey := _target_body(b)
 	return prey != null and prey.radius < _gape(b)
 

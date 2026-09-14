@@ -31,11 +31,64 @@ const Genome := preload("res://game/normal/genome.gd")
 ## Gene identity, one hue used in four places: the cilia on your body, the cilia
 ## on the cell that carries it, the ingest flood at the instant you eat it, and
 ## the slot on the genome strip. No legend, no lookup.
+## **§4.4's 30-degree separation rule is broken here, deliberately, and it had
+## to be.** The rule was written for adding *one* gene to four. Sixteen genes
+## cannot sit 30 degrees apart on a wheel that also forbids 40 degrees either
+## side of self teal and threat red -- that leaves about 200 usable degrees, so
+## the real spacing is 12. What still carries identity is what §4.4 said carries
+## it when colour fails: **shape**. Every gene has its own stroke count on the
+## body and on the tile ([constant EARNED_COUNT]), and every tile is labelled
+## with a word. The hue is now the coarse channel, not the only one.
+##
+## What is *not* relaxed: nothing sits within 25 degrees of self teal (168) or
+## of threat red (355), because those two are the only colours in the game whose
+## meaning is a relationship rather than a name.
 const HUES := {
-	&"cytostome": Color(0.62, 1.00, 0.38),  # eat, 95 deg
-	&"cirrus": Color(0.36, 0.62, 0.98),     # turn, 216 deg
-	&"flagellum": Color(0.80, 0.42, 0.95),  # swim, 291 deg
-	&"stigma": Color(0.98, 0.78, 0.30),     # see, 45 deg
+	&"cytostome": Color(0.62, 1.00, 0.38),   # eat, 95 deg
+	&"cirrus": Color(0.36, 0.62, 0.98),      # turn, 216 deg
+	&"flagellum": Color(0.80, 0.42, 0.95),   # swim, 291 deg
+	&"stigma": Color(0.98, 0.78, 0.30),      # see, 45 deg
+	# The headline gene: a beam, so it is drawn as light. Indigo-violet is the
+	# one hue that is far from teal, far from red, far from the nutrient greens
+	# and still bright enough to be a line on near-black water.
+	&"ocellus": Color(0.62, 0.55, 1.00),     # beam, 251 deg
+	# The flagellum's evolution, so it keeps the flagellum's family: orchid ->
+	# magenta. Close on purpose -- these two are the same organ, twice.
+	&"axoneme": Color(0.98, 0.44, 0.90),     # push, 306 deg
+	&"statocyst": Color(0.38, 0.76, 1.00),   # level, 202 deg
+	&"rhabdom": Color(0.84, 0.98, 0.28),     # focus, 72 deg
+	&"palp": Color(1.00, 0.68, 0.48),        # touch, 23 deg
+	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
+	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
+	&"pellicle": Color(0.36, 0.88, 0.96),    # armor, 186 deg
+	&"toxicyst": Color(0.34, 1.00, 0.52),    # venom, 128 deg
+	&"plastid": Color(1.00, 0.86, 0.26),     # sun, 52 deg
+	&"vacuole": Color(0.44, 0.58, 1.00),     # store, 232 deg
+	&"crista": Color(0.86, 0.50, 0.22),      # burn, 26 deg, darker than palp
+}
+
+## Stroke count on the arc and on the tile, per gene. **This is what actually
+## separates one earned gene from another**, now that sixteen hues cannot be 30
+## degrees apart: a three-bristle tuft and a nine-bristle tuft are different
+## objects at a glance and stay different under any colour-blindness simulation.
+## Anything not listed falls back to [constant COUNT_EARNED].
+const EARNED_COUNT := {
+	&"stigma": 4,
+	&"ocellus": 3,
+	&"axoneme": 8,
+	&"statocyst": 2,
+	&"rhabdom": 6,
+	&"palp": 8,
+	&"myoneme": 5,
+	&"trichocyst": 3,
+	&"pellicle": 7,
+	&"toxicyst": 6,
+	# 8 is the ceiling, found by rendering: a tier-3 tuft multiplies the count
+	# by 1.70, and above about 14 strokes a 24-degree arc closes up into a solid
+	# flag and stops being a texture -- the same failure the oral mat documents.
+	&"plastid": 8,
+	&"vacuole": 2,
+	&"crista": 6,
 }
 ## Held for the next gene, in wheel order, so a later phase does not have to
 ## re-derive the separation rule. An unknown gene draws in the first of these
@@ -92,14 +145,51 @@ const ARC_CYTOSTOME := Vector2(-42.0, 42.0)
 const ARC_CIRRUS_STARBOARD := Vector2(66.0, 118.0)
 const ARC_CIRRUS_PORT := Vector2(-118.0, -66.0)
 const ARC_FLAGELLUM := Vector2(146.0, 214.0)
-## Earned genes fill these in genome order. Three home arcs plus four free arcs
-## is cell.gd's SLOT_MAX of 7, which is not a coincidence.
+## Genome slots 4..7 (zero-based 3..6) land on these, one each, in order.
+## Three home arcs plus four free arcs is cell.gd's SLOT_MAX of 7, which is not
+## a coincidence.
 const ARC_FREE: Array[Vector2] = [
 	Vector2(42.0, 66.0),
 	Vector2(-66.0, -42.0),
 	Vector2(118.0, 146.0),
 	Vector2(-146.0, -118.0),
 ]
+
+## **The genome slot IS the arc.** Slot 0 is the anterior arc, 1 the lateral
+## pair, 2 the posterior, and 3..6 the four diagonals in [constant ARC_FREE] --
+## two forward, two rear. That is the whole of placement being a choice: the
+## two-tap on the pause strip already lets the player pick which slot a gene
+## goes into, and a directional gene reads its facing off the arc it landed on.
+## A laser in slot 5 looks backwards and cannot show you where you are going.
+static func arc_for_slot(slot: int) -> Vector2:
+	match slot:
+		0:
+			return ARC_CYTOSTOME
+		1:
+			return ARC_CIRRUS_STARBOARD
+		2:
+			return ARC_FLAGELLUM
+		_:
+			return ARC_FREE[clampi(slot - 3, 0, ARC_FREE.size() - 1)]
+
+
+## The body-relative bearing an arc looks along: radians clockwise from the
+## front, which is the only way this game is allowed to describe a direction.
+##
+## Derived from the ovoid rather than from the arc's own degrees, because the
+## two are not the same number -- the parameter `t` runs faster than the bearing
+## near the nose. §4.1's table is what this reproduces: the middle of free arc 1
+## is `t` 54 and bearing 42.
+static func arc_bearing(arc: Vector2) -> float:
+	var t := deg_to_rad((arc.x + arc.y) * 0.5)
+	return atan2(sin(t) * (1.0 - OVOID_PINCH * cos(t)) * OVOID_ACROSS,
+		cos(t) * OVOID_ALONG)
+
+
+## Where a gene in [param slot] points. The one call a directional gene makes.
+static func slot_bearing(slot: int) -> float:
+	return arc_bearing(arc_for_slot(slot))
+
 
 # --- Geometry, at tier 1 (§4.2) ---------------------------------------------
 # All lengths are fractions of the body radius, so a grown cell is not a small
@@ -231,6 +321,10 @@ const TILE_LEN := {
 }
 const TILE_COUNT_EARNED := 5
 const TILE_LEN_EARNED := 11.0
+## The slot compass, in the tile's own pixels.
+const TILE_COMPASS_X := 12.0
+const TILE_COMPASS_Y := 13.0
+const TILE_COMPASS_R := 6.5
 
 
 # ---------------------------------------------------------------------------
@@ -274,10 +368,16 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## of its own beat, so everything else passes 0.
 ## [param phase] is any stable per-cell number: it offsets the breath so four
 ## bodies do not inhale in unison.
+## [param order] is the cell's slot layout -- slot index to gene, `&""` for an
+## empty slot -- and it is what decides which arc each earned gene wears
+## ([method arc_for_slot]). Left empty it is derived from [param tiers], which
+## is what every cell in the water does: only the player has a layout the player
+## chose.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
-		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0) -> void:
+		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
+		order: Array = []) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -286,7 +386,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 
 	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade)
-	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit)
+	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order)
 	draw_gape(canvas, at, fwd, stb, r, gape,
 		Genome.tier_of(tiers, &"cytostome"),
 		not is_self and gape > viewer_radius, fade, unit)
@@ -346,9 +446,26 @@ static func _normal(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
 # and 400 draw calls a frame is not a thing to ask of a phone.
 # ---------------------------------------------------------------------------
 
+## The slot layout of a cell that has never been given one: the three home
+## organs in their home arcs, everything else in the free arcs in whatever order
+## the dictionary holds it. Every cell in the water but the player is this.
+static func default_order(tiers: Dictionary) -> Array:
+	var out: Array[StringName] = [&"", &"", &""]
+	if tiers.has(&"cytostome"):
+		out[0] = &"cytostome"
+	if tiers.has(&"cirrus"):
+		out[1] = &"cirrus"
+	if tiers.has(&"flagellum"):
+		out[2] = &"flagellum"
+	for gene: StringName in tiers:
+		if gene != &"cytostome" and gene != &"cirrus" and gene != &"flagellum":
+			out.append(gene)
+	return out
+
+
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
-		steer: float, unit: float) -> void:
+		steer: float, unit: float, order: Array = []) -> void:
 	if tiers.is_empty():
 		return
 
@@ -376,17 +493,19 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 			ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
 			WIDTH_FLAGELLUM * unit)
 
-	var free := 0
-	for gene: StringName in tiers:
-		if gene == &"cytostome" or gene == &"cirrus" or gene == &"flagellum":
+	# **The slot is the arc.** Walked by slot rather than by dictionary order, so
+	# a gene the player placed in the rear-left diagonal is drawn -- and aimed --
+	# in the rear-left diagonal.
+	var layout := order if not order.is_empty() else default_order(tiers)
+	for slot in layout.size():
+		var gene: StringName = layout[slot]
+		if gene == &"" or gene == &"cytostome" or gene == &"cirrus" \
+				or gene == &"flagellum":
 			continue
-		if free >= ARC_FREE.size():
-			break
-		var tier := int(tiers[gene])
+		var tier := int(tiers.get(gene, 0))
 		if tier > 0:
-			_draw_earned(canvas, at, fwd, stb, r, gene, tier, ARC_FREE[free],
-				fade, unit)
-		free += 1
+			_draw_earned(canvas, at, fwd, stb, r, gene, tier,
+				arc_for_slot(slot), fade, unit)
 
 
 ## The oral mat: dense, fine, standing just off the surface, with a beat that
@@ -494,7 +613,7 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	canvas.draw_circle(seat, r * PIGMENT_INNER, Color(tone, 0.85 * fade),
 		true, -1.0, true)
 
-	var count := _count(COUNT_EARNED, tier)
+	var count := _count(int(EARNED_COUNT.get(gene, COUNT_EARNED)), tier)
 	var scale := _tier(TIER_LEN, tier)
 	var strokes := PackedVector2Array()
 	for i in count:
@@ -604,7 +723,8 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	canvas.draw_arc(centre, TILE_ARC_RADIUS, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA), TILE_ARC_WIDTH, true)
 
-	var count := int(TILE_COUNT.get(gene, TILE_COUNT_EARNED))
+	var count := int(TILE_COUNT.get(gene,
+		EARNED_COUNT.get(gene, TILE_COUNT_EARNED)))
 	var length := float(TILE_LEN.get(gene, TILE_LEN_EARNED))
 	var earned := not TILE_COUNT.has(gene)
 	if earned:
@@ -634,6 +754,39 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	# difference is one pixel, so magnitude cannot carry it here the way it does
 	# on a body. This is the one place the two vocabularies deliberately differ,
 	# and the tile says why -- it is a label, not an organism.
+
+
+## **Which arc this slot is, drawn small.** A compass in the tile's top-left
+## corner with one needle on it, pointing the way the slot looks -- screen up is
+## the cell's front, exactly as every bearing in this game is read.
+##
+## It is on empty tiles too, and that is the point: the player is choosing where
+## to put a gene, so the empty slots are the part of the strip they are actually
+## reading. Two forward diagonals and two rear ones look nothing alike here, and
+## "placed behind, it does not let you see where you are going" becomes a thing
+## you can see before you commit rather than after.
+static func draw_tile_direction(canvas: CanvasItem, slot: int, tone: Color,
+		size: Vector2) -> void:
+	if slot < 0:
+		return
+	var centre := Vector2(TILE_COMPASS_X, TILE_COMPASS_Y)
+	canvas.draw_arc(centre, TILE_COMPASS_R, 0.0, TAU, 20,
+		Color(tone, 0.28), 1.0, true)
+	var bearing := slot_bearing(slot)
+	var dir := Vector2(sin(bearing), -cos(bearing))
+	var side := Vector2(-dir.y, dir.x)
+	# **A dart, not a needle.** A needle was built first and it fails at exactly
+	# the distinction this mark exists to make: forward-starboard and rear-port
+	# are the same 45-degree line, so which end is the point has to be carried by
+	# the shape and not by which end is brighter. Rendered at 13 pixels, a dot on
+	# one end is not enough and a filled dart is unmistakable.
+	var head := centre + dir * TILE_COMPASS_R
+	var tail := centre - dir * (TILE_COMPASS_R * 0.55)
+	canvas.draw_colored_polygon(PackedVector2Array([
+		head,
+		tail + side * (TILE_COMPASS_R * 0.70),
+		centre - dir * (TILE_COMPASS_R * 0.10),
+		tail - side * (TILE_COMPASS_R * 0.70)]), Color(tone, 0.95))
 
 
 # ---------------------------------------------------------------------------

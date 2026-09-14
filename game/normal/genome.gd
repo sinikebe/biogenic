@@ -49,7 +49,9 @@ const TIER_MAX := 3
 ## the two cells §1.1 exists to create, and deliberately: a shadow is a fact
 ## about a body, not about a mouth.
 const GENE_ORDER: Array[StringName] = [
-	&"cytostome", &"cirrus", &"flagellum", &"stigma"]
+	&"cytostome", &"cirrus", &"flagellum", &"stigma",
+	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
 ## You are not an empty vessel; you are mediocre at three things. §1.
@@ -77,12 +79,21 @@ var held_sample: StringName = &""
 var held_remaining := 0.0
 
 var _tiers := {}
+## **Slot index to gene, `&""` for an empty slot.** The dictionary above says
+## what this cell has; this says *where*, and where is the arc it is worn on
+## (cilia.gd's [method arc_for_slot]). A directional gene reads its facing off
+## that arc, so this array is the whole of the player's one placement decision.
+##
+## It has holes on purpose: a dictionary cannot, and "put the beam in the
+## forward-right diagonal while slots 4 and 6 are still empty" needs one.
+var _order: Array[StringName] = []
 var _cell: CellBody = null
 
 
 func _ready() -> void:
 	if _tiers.is_empty():
 		_tiers = BORN.duplicate()
+	_sync_order()
 
 
 ## Binds the genome to the body whose radius decides its capacity. Called by
@@ -96,31 +107,41 @@ func setup(cell: CellBody) -> void:
 ## Every run starts as the basic cell. Death keeps nothing: §9.4.
 func reset() -> void:
 	_tiers = BORN.duplicate()
+	_order = [&"cytostome", &"cirrus", &"flagellum"]
+	_sync_order()
 	held_sample = &""
 	held_remaining = 0.0
 
 
 func _process(delta: float) -> void:
+	_sync_order()
 	if held_sample == &"":
 		return
-	# **A slot may have opened since.** Growth adds one every 3.5 units of
-	# radius, and §5.2's swap frees one on demand; a sample is waiting
-	# for exactly that, so it takes it. Without this the sample lapses beside an
-	# empty slot, which is a state §3.3 and §5.2 both assume cannot exist -- and
-	# it is not a rare one, because a meal that only raises a tier still grows
-	# the body and so still widens the genome.
+	# **A slot opening no longer places the sample, and that is the change.**
+	# Phase 5 auto-filled the first free slot, which meant the player only ever
+	# chose a slot on the swap path -- that is, only once the genome was full,
+	# which is the *end* of a run. The slot is the arc, so auto-placing is the
+	# game aiming the player's laser for them. It waits for a tap now.
 	#
-	# Any answer other than "still no room" resolves it: the gene arriving by
-	# another route, or turning out to be at TIER_MAX already, both mean there
-	# is nothing left for the sample to be.
-	if integrate_into(_tiers, held_sample, slots()) != Result.NO_ROOM:
+	# What still resolves itself is the case where there is nothing left for the
+	# sample to be: the gene arrived by some other route while it was held.
+	if _tiers.has(held_sample):
+		integrate_into(_tiers, held_sample, slots())
 		held_sample = &""
 		held_remaining = 0.0
 		return
 	held_remaining -= delta
-	if held_remaining <= 0.0:
-		held_sample = &""
-		held_remaining = 0.0
+	if held_remaining > 0.0:
+		return
+	# **A lapse with room still settles.** Forty-five seconds of not choosing is
+	# an answer -- "anywhere" -- and throwing the gene away for it would punish
+	# a player who never opens the pause screen by quietly deleting the whole
+	# progression. With no room it is simply gone, exactly as it always was.
+	var free := _first_free()
+	if free >= 0:
+		_write(free, held_sample)
+	held_sample = &""
+	held_remaining = 0.0
 
 
 ## Tier of one gene, 0 if the cell does not have that organ.
@@ -155,11 +176,26 @@ func dominant() -> StringName:
 	return dominant_of(_tiers)
 
 
-## A meal's gene, by §3.2's four cases. Returns which one happened.
+## A meal's gene, by §3.2's four cases -- with one of them rewritten.
+##
+## **A gene you do not already carry is always a placement decision**, free slot
+## or not. It arrives as a held sample and waits for the player to say which
+## slot, because the slot is the arc and the arc is where the organ looks. The
+## old behaviour -- drop it in the first empty slot and tell nobody -- gave the
+## player a say only once the genome was full, which is the one moment the
+## choice is also destructive. Now it is a choice every time, made on the strip
+## that already existed, with the two taps that already existed.
+##
+## Raising a tier is not a placement decision: the organ is already somewhere.
 func integrate(gene: StringName) -> int:
-	var result := integrate_into(_tiers, gene, slots())
-	if result != Result.NO_ROOM:
-		return result
+	if gene == &"":
+		return Result.NOTHING
+	if _tiers.has(gene):
+		var value := int(_tiers[gene])
+		if value >= TIER_MAX:
+			return Result.SATURATED
+		_tiers[gene] = value + 1
+		return Result.RAISED
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
 	# is told by a second, smaller heartbeat rather than by a screen. A sample
 	# arriving while one is already held replaces it -- the newest thing you
@@ -176,28 +212,71 @@ func integrate(gene: StringName) -> int:
 ## floor is what makes it the first -- there is always something small enough
 ## left to eat.
 ##
-## **The new gene takes the old one's place in the dictionary, not the end of
-## it.** Order is what §4.1 assigns free arcs by and what [method dominant_of]
-## breaks ties by, so appending would silently rearrange the body and the strip
-## around a tile the player only meant to change. Rebuilt in place instead: the
-## tile you tapped is the tile that changes.
-func replace(gene: StringName) -> int:
-	if held_sample == &"" or not _tiers.has(gene):
+## **The slot the player tapped is the slot the gene lands in**, empty or not.
+## That is the one placement decision in the game, and [member _order] is what
+## makes it survivable: the gene goes to that index whatever else is empty, so
+## the arc it will be worn on is the arc the tile's compass promised.
+func place(slot: int) -> int:
+	if held_sample == &"":
+		return Result.NOTHING
+	_sync_order()
+	if slot < 0 or slot >= _order.size():
 		return Result.NOTHING
 	var taking := held_sample
-	if taking == gene:
-		return Result.NOTHING
-	var rebuilt := {}
-	for key: StringName in _tiers:
-		if key == gene:
-			rebuilt[taking] = 1
-		elif key != taking:
-			rebuilt[key] = int(_tiers[key])
-	_tiers.clear()
-	_tiers.merge(rebuilt)
 	held_sample = &""
 	held_remaining = 0.0
+	if _tiers.has(taking):
+		# It arrived by another route while the sample was held. Nothing to do,
+		# and certainly not a second copy in a second slot.
+		return Result.NOTHING
+	_write(slot, taking)
 	return Result.INTEGRATED
+
+
+## The gene in each slot, `&""` for empty. Read it; do not write it.
+func layout() -> Array[StringName]:
+	_sync_order()
+	return _order
+
+
+## Which slot a gene is worn in, or -1. The one question a directional gene
+## asks, because the answer is the arc and the arc is the bearing.
+func slot_of(gene: StringName) -> int:
+	_sync_order()
+	return _order.find(gene)
+
+
+## Puts [param gene] in [param slot], evicting whatever was there.
+func _write(slot: int, gene: StringName) -> void:
+	var old := _order[slot]
+	if old != &"":
+		_tiers.erase(old)
+	_order[slot] = gene
+	_tiers[gene] = 1
+
+
+func _first_free() -> int:
+	_sync_order()
+	return _order.find(&"")
+
+
+## Keeps the layout the width of the body and free of anything the genome no
+## longer carries. Growth only ever widens it, so nothing is dropped by this;
+## the erase branch is what keeps a swap honest.
+func _sync_order() -> void:
+	for gene: StringName in _tiers:
+		if not _order.has(gene):
+			var free := _order.find(&"")
+			if free >= 0:
+				_order[free] = gene
+			else:
+				_order.append(gene)
+	for i in _order.size():
+		if _order[i] != &"" and not _tiers.has(_order[i]):
+			_order[i] = &""
+	var want := slots()
+	while _order.size() < want:
+		_order.append(&"")
 
 
 # ---------------------------------------------------------------------------
@@ -215,7 +294,12 @@ static func upkeep_of(tiers: Dictionary) -> float:
 	var extra := 0
 	for value: int in tiers.values():
 		extra += maxi(value - 1, 0)
-	return 1.0 + UPKEEP_PER_TIER * float(extra)
+	# `crista` / burn is the one gene that buys upkeep back, and it is applied
+	# as a multiplier on the whole bill rather than as a subtraction: it is
+	# worth most to the expensive build, which is the one that needs it.
+	var burn := CellBody.BURN_BY_TIER[clampi(tier_of(tiers, &"crista"), 0,
+		CellBody.BURN_BY_TIER.size() - 1)]
+	return (1.0 + UPKEEP_PER_TIER * float(extra)) * burn
 
 
 ## The highest-tier gene, ties broken by arc order. Deterministic on purpose:

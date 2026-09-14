@@ -52,6 +52,11 @@ const CAM_LAG := 0.30
 const CAM_LEAD := 0.16
 ## How far off centre the camera is ever allowed to leave the cell.
 const CAM_MAX_OFFSET := 72.0
+## Seconds the *rotation* takes to catch up when the camera is locked to the
+## body. Slower than the position lag on purpose: the heading wanders
+## constantly, and a world that answered it frame for frame would be a world
+## that never stops rocking.
+const CAM_TURN_LAG := 0.22
 
 # --- Fade ------------------------------------------------------------------
 ## Switching views is a dissolve, not a cut.
@@ -150,6 +155,10 @@ var _amount := 0.0
 var _clock := 0.0
 var _camera := Vector2.ZERO
 var _view := Vector2(1280.0, 720.0)
+## **Forward is always up.** The world turns instead of the cell. Off by
+## default; the pause screen owns the switch.
+var _locked := false
+var _spin := 0.0
 
 ## Beat echo, so the body swells on the same beat the contour does. Deliberately
 ## a copy rather than a reach into the bus's envelopes: this is decoration, and
@@ -220,6 +229,25 @@ func is_active() -> bool:
 	return _active
 
 
+## **Forward is always up**, or the world is north-up. Set from the pause
+## screen. The cell is already pinned to the centre of the frame by the camera,
+## so this is the only other thing a camera can be.
+##
+## The water shader is deliberately **not** turned with it: it is anchored to
+## world coordinates by an origin and a scale, with no rotation term, and giving
+## it one would be a new uniform and therefore a new binary. Locked, the wash
+## still slides with the camera and stops turning with it -- which costs one of
+## the four motion cues in the header and keeps the other three.
+func set_camera_locked(on: bool) -> void:
+	if on == _locked:
+		return
+	_locked = on
+	# No easing in from whatever the old spin was: the switch happens under a
+	# pause scrim, where nothing is moving and a 180-degree slew would be the
+	# only thing on screen.
+	_spin = -_cell.heading if (_locked and _cell != null) else 0.0
+
+
 func _process(delta: float) -> void:
 	_amount = move_toward(_amount, 1.0 if _active else 0.0, delta / FADE_SECONDS)
 	if _amount <= 0.0 and not _active:
@@ -239,7 +267,15 @@ func _process(delta: float) -> void:
 	_step_camera(delta)
 	_step_trail(delta)
 
-	_world.position = _view * 0.5 - _camera * ZOOM
+	# The world-to-screen transform, in one place. Unlocked it is a translation
+	# and nothing else, exactly as it has always been; locked, the whole world
+	# turns about the camera so that the cell's nose points up the screen.
+	if _locked and _cell != null:
+		_spin = lerp_angle(_spin, -_cell.heading, 1.0 - exp(-delta / CAM_TURN_LAG))
+	else:
+		_spin = 0.0
+	_world.rotation = _spin
+	_world.position = _view * 0.5 - (_camera * ZOOM).rotated(_spin)
 	_push_shader()
 	_world.queue_redraw()
 
@@ -379,6 +415,7 @@ func _on_world_draw() -> void:
 	_draw_meals(a)
 	_draw_hits(a)
 	_draw_wakes(a)
+	_draw_beams(a)
 	_draw_cell(a)
 
 
@@ -643,6 +680,43 @@ func _draw_wakes(a: float) -> void:
 			1.8 / ZOOM, true)
 
 
+## **The `ocellus`.** One line per beam, from the rim out to whatever it found,
+## and a bright point where it found it.
+##
+## This is the gene drawn literally, and the two views say the same thing in
+## their own register: the membrane gets a lobe at that bearing and nothing
+## else, and here the line that produced it is on screen -- so "the beam is
+## pointing backwards because I put it in a rear slot" is a thing that can be
+## seen rather than deduced. The fiction is that the hit point is *all* you can
+## see; full vision draws the water anyway, because that is what full vision is
+## for.
+##
+## A beam that hits nothing is drawn faint and short of its reach: a laser in
+## open water is not nothing, it is the absence of anything, and the absence has
+## to be visible or the gene reads as broken.
+func _draw_beams(a: float) -> void:
+	if _food_node == null:
+		return
+	var tone := Cilia.hue(&"ocellus")
+	var origin := _cell.position
+	for beam: Array in _food_node.beams:
+		var dir := _ray(float(beam[0]))
+		var reach := float(beam[1])
+		var found := bool(beam[2])
+		var root := origin + dir * (_cell.radius * 1.06)
+		var tip := origin + dir * maxf(reach, _cell.radius * 1.2)
+		var head := Color(tone, (0.62 if found else 0.16) * a)
+		_world.draw_polyline_colors(PackedVector2Array([root, tip]),
+			PackedColorArray([Color(tone, (0.34 if found else 0.10) * a), head]),
+			(1.8 if found else 1.2) / ZOOM, true)
+		if not found:
+			continue
+		# The hit. A filled point with a halo, because it is the one thing in
+		# this view the blind cell can also see.
+		_world.draw_circle(tip, 9.0, Color(tone, 0.16 * a), true, -1.0, true)
+		_world.draw_circle(tip, 3.4, Color(tone, 0.92 * a), true, -1.0, true)
+
+
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
 ## one and faded out either side.
 ##
@@ -712,7 +786,8 @@ func _draw_cell(a: float) -> void:
 	# lip bow green: you are the one cell in the water whose identity you do not
 	# have to read, and your own mouth cannot swallow you.
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
-		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM)
+		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM,
+		_genome_node.layout() if _genome_node != null else [])
 	_draw_held_sample(p, fwd, stb, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)

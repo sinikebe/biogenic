@@ -31,6 +31,10 @@ const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
 ## the gene wears on the outside (docs/design/genes-and-cilia.md §4.4). Slot 2
 ## has been reserved since Phase 1 for exactly this.
 const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
+## `ocellus`, the beam. The fourth glow slot, held empty since Phase 1 and spent
+## here -- and it is the last one, so no gene after this one gets a colour of
+## its own on the membrane. Same indigo-violet the gene wears on the outside.
+const BEAM_COLOR := Vector3(0.62, 0.55, 1.00)
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -130,6 +134,45 @@ const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
 ## Below this the lobe is idled rather than drawn at nothing.
 const LIGHT_FLOOR := 0.02
 
+# --- The genes that reach the membrane --------------------------------------
+# Four of the new organs are senses, so four of them land here. Nothing below
+# adds a uniform: the beam takes the last free glow lobe, `level` takes the last
+# free *pressure* lobe, `touch` fires the bruise envelope the membrane has had
+# since Phase 1, and `focus` narrows a lobe that already exists.
+
+## `ocellus` / beam. **The only thing you can see**: the point where the beam
+## hits something, at that bearing and nothing else. Louder than the stigma's
+## lobe because it is a fact rather than a hint, and tighter with tier -- a
+## better eye resolves the hit more precisely, it does not shout about it.
+const BEAM_PEAK := 0.46
+const BEAM_HALFWIDTH_DEG: Array[float] = [0.0, 14.0, 11.0, 8.0]
+const BEAM_FLOOR := 0.02
+
+## `statocyst` / level. Absolute up, as a steady dent that does **not** turn
+## with the body -- turn the cell and it walks round the contour, which is the
+## whole readout. A pressure lobe rather than a glow one on purpose: it is not a
+## thing out there, it is which way is up, and the game already has one channel
+## that means "something is pressing on you from over there".
+const LEVEL_PUSH_BY_TIER: Array[float] = [0.0, 0.13, 0.17, 0.23]
+const LEVEL_HALFWIDTH_DEG: Array[float] = [0.0, 30.0, 22.0, 15.0]
+
+## `palp` / touch. Feeling a body at close range with no light at all: the
+## bruise envelope, held at a level rather than struck, so it reads as pressure
+## against the skin rather than as a collision. Capped below BRUISE_PEAK so a
+## real contact always buries it.
+const TOUCH_PEAK := 0.26
+
+## `rhabdom` / focus. A multiplier on the taste lobe's width and on its bearing
+## jitter, which are the two things that make the scent direction vague. It buys
+## sharpness in the channel the player has used since the first minute.
+const FOCUS_BY_TIER: Array[float] = [1.0, 0.74, 0.56, 0.40]
+
+## The earned senses, in genome order: `ocellus`, `statocyst`, `rhabdom`.
+## Written once a frame by [method sense_organs], exactly like [method organs].
+const SENSE_OCELLUS := 0
+const SENSE_STATOCYST := 1
+const SENSE_RHABDOM := 2
+
 # --- A held sample is a second heartbeat (§3.3) -----------------------------
 # The one new point-of-view signal Phase 5 adds, and the answer to "how does a
 # player with no HUD know a decision is waiting". It is rhythm, which
@@ -189,6 +232,9 @@ const LOBE_SELF := 0
 const LOBE_NUTRIENT := 1
 ## Reserved since Phase 1 and spent by Phase 5 on the `stigma`.
 const LOBE_LIGHT := 2
+## The last free glow slot, spent on the `ocellus` beam. There are four and the
+## shader has four; a fifth would be a new uniform and a new binary.
+const LOBE_BEAM := 3
 
 ## Organ slots in [method organs], in genes-and-cilia.md §4.1's arc order --
 ## which is the order the body is drawn in, the order ties break in, and now the
@@ -346,6 +392,8 @@ var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY_BY_TIER[1])
 ## Defaults are the born cell: mediocre at three things and blind. Nothing here
 ## may become a way to describe what is *outside* the cell.
 var _organs := PackedInt32Array([1, 1, 1, 0])
+## `ocellus`, `statocyst`, `rhabdom`. A born cell has none of them.
+var _senses := PackedInt32Array([0, 0, 0])
 
 ## Shear has no attack at all -- it is the proof that the player is connected to
 ## something, so it must answer the same frame the turn starts.
@@ -366,6 +414,13 @@ var _dread_target := 0.0
 var _light := 0.0
 var _light_bearing := 0.0
 
+## Where the beam is hitting something and how near, and which way is up. Both
+## continuous, both posted every frame, neither with an envelope.
+var _beam := 0.0
+var _beam_bearing := 0.0
+var _level := 0.0
+var _level_bearing := 0.0
+
 ## Seconds left on the held sample, 0 for none, and the echo it schedules.
 var _held := 0.0
 var _echo_at := 0.0
@@ -383,6 +438,8 @@ var _said_shear := 0.0
 var _said_dread := 0.0
 var _said_light := -1.0
 var _said_light_bearing := 0.0
+var _said_beam := -1.0
+var _said_beam_bearing := 0.0
 
 var _beat_period := 2.4
 var _beat_amplitude := 1.0
@@ -412,7 +469,7 @@ func attach(material: ShaderMaterial) -> void:
 	if _material == null:
 		return
 	var colors := PackedVector3Array([
-		SELF_COLOR, NUTRIENT_COLOR, LIGHT_COLOR, Vector3.ZERO])
+		SELF_COLOR, NUTRIENT_COLOR, LIGHT_COLOR, BEAM_COLOR])
 	_material.set_shader_parameter("glow_colors", colors)
 	_apply()
 
@@ -447,6 +504,18 @@ func organs(cytostome: int, cirrus: int, flagellum: int, stigma: int) -> void:
 	# envelope rather than being read at the moment it is used, so it is pushed
 	# rather than pulled.
 	_ingest.retune_decay(INGEST_DECAY_BY_TIER[_organs[ORGAN_CYTOSTOME]])
+
+
+## **What earned senses this cell has**, beside [method organs] and for exactly
+## the same reason: a tier is a property of the organ, not of the thing it
+## senses, so it arrives once a frame rather than riding on every event.
+##
+## Same rule as [method organs] and it is not a loophole: three small integers
+## about this cell's own anatomy are not a fact about anything in the water.
+func sense_organs(ocellus: int, statocyst: int, rhabdom: int) -> void:
+	_senses[SENSE_OCELLUS] = clampi(ocellus, 0, ORGAN_TIER_MAX)
+	_senses[SENSE_STATOCYST] = clampi(statocyst, 0, ORGAN_TIER_MAX)
+	_senses[SENSE_RHABDOM] = clampi(rhabdom, 0, ORGAN_TIER_MAX)
 
 
 # ---------------------------------------------------------------------------
@@ -528,6 +597,50 @@ func light(bearing: float, strength: float) -> void:
 		_said_light = _light
 		_said_light_bearing = _light_bearing
 		sensation.emit(&"light", {"bearing": _light_bearing, "strength": _light})
+
+
+## **The beam found something.** [param bearing] is where along the beam, which
+## is the beam's own bearing, and [param strength] is how near the hit is -- 1
+## at the cell's nose, 0 at the end of its reach.
+##
+## This is the whole of what an `ocellus` gives point of view: *there is a
+## surface, that way, that far*. It says nothing about what the surface is, so
+## it stays inside perception.md's "never an identity" the way every other lobe
+## does. A cell with no ocellus reports nothing, enforced here as well as at the
+## call site, exactly as [method light] is.
+func beam(bearing: float, strength: float) -> void:
+	var seen := _senses[SENSE_OCELLUS] > 0
+	_beam = clampf(strength, 0.0, 1.0) if seen else 0.0
+	_beam_bearing = bearing if seen else 0.0
+	if absf(_beam - _said_beam) > POST_EPSILON \
+			or absf(angle_difference(_beam_bearing, _said_beam_bearing)) > POST_ANGLE_EPSILON:
+		_said_beam = _beam
+		_said_beam_bearing = _beam_bearing
+		sensation.emit(&"beam", {"bearing": _beam_bearing, "strength": _beam})
+
+
+## **Which way is up**, in a game where the body is the only frame of reference
+## there has ever been. [param bearing] is body-relative like everything else --
+## that is the point: it is the one bearing that moves when you turn and stays
+## still when you do not.
+##
+## Not gated for subscribers: it changes every frame a turning cell exists, and
+## a gate that fires every frame is a gate that costs more than it saves.
+func level(bearing: float, strength: float) -> void:
+	var seen := _senses[SENSE_STATOCYST] > 0
+	_level = clampf(strength, 0.0, 1.0) if seen else 0.0
+	_level_bearing = bearing if seen else 0.0
+
+
+## **Something solid is right there**, felt and not seen. `palp`: the bruise
+## envelope held at a level instead of struck, so it is pressure rather than
+## collision, and no flash -- there is nothing sudden about touching something
+## you were already up against.
+func touch(bearing: float, strength: float) -> void:
+	var s := clampf(strength, 0.0, 1.0)
+	if s <= 0.0:
+		return
+	_bruise.fire(TOUCH_PEAK * s, bearing)
 
 
 ## A gene swallowed with nowhere to put it. [param remaining] is seconds left on
@@ -747,6 +860,11 @@ func _end_collapse() -> void:
 	_taste_jitter = 0.0
 	_light = 0.0
 	_light_bearing = 0.0
+	_beam = 0.0
+	_beam_bearing = 0.0
+	_said_beam = -1.0
+	_level = 0.0
+	_level_bearing = 0.0
 	_held = 0.0
 	_echo_in = -1.0
 	_echo_at = 0.0
@@ -765,6 +883,7 @@ func _end_collapse() -> void:
 	# the dead cell's tiers. After the envelope resets, because this retunes one
 	# of them.
 	organs(1, 1, 1, 0)
+	sense_organs(0, 0, 0)
 	_idle_lobes()
 	_beat_phase = 0.0
 	_beat_this_period = _beat_period
@@ -851,7 +970,8 @@ func _step_taste(delta: float) -> void:
 		_taste_jitter_clock = fmod(_taste_jitter_clock, step)
 		# Dread doubles the confusion as well as muffling the signal.
 		var spread := deg_to_rad(lerpf(
-			TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _taste_c)) * (1.0 + _dread)
+			TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _taste_c)) \
+			* (1.0 + _dread) * FOCUS_BY_TIER[_senses[SENSE_RHABDOM]]
 		_taste_jitter = randf_range(-spread, spread)
 
 
@@ -876,7 +996,8 @@ func _compose_lobes() -> void:
 		# Suppressed, not deleted: a hunted cell can still smell, badly.
 		var intensity := smoothstep(TASTE_FLOOR, 1.0, _taste_c) * TASTE_PEAK \
 			* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
-		var width := lerpf(TASTE_WIDE_DEG, TASTE_TIGHT_DEG, _taste_c)
+		var width := lerpf(TASTE_WIDE_DEG, TASTE_TIGHT_DEG, _taste_c) \
+			* FOCUS_BY_TIER[_senses[SENSE_RHABDOM]]
 		_glow_lobes[LOBE_NUTRIENT] = _lobe(
 			_taste_bearing_lp + _taste_jitter, width, intensity)
 	else:
@@ -892,10 +1013,27 @@ func _compose_lobes() -> void:
 	else:
 		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
 
+	# The beam's hit, in the last glow slot there is.
+	if _beam > BEAM_FLOOR:
+		_glow_lobes[LOBE_BEAM] = _lobe(_beam_bearing,
+			BEAM_HALFWIDTH_DEG[_senses[SENSE_OCELLUS]], BEAM_PEAK * _beam)
+	else:
+		_glow_lobes[LOBE_BEAM] = IDLE_LOBE
+
 	if _wake.value > 0.0:
 		_press_lobes[0] = _lobe(_wake.bearing, WAKE_HALFWIDTH_DEG, _wake.value)
 	else:
 		_press_lobes[0] = IDLE_LOBE
+
+	# Absolute up, in the last pressure slot. Steady, so it is the only mark on
+	# the membrane that is not an event -- and it walks round the contour as the
+	# cell turns, which is the whole of what a statocyst knows.
+	var level_tier := _senses[SENSE_STATOCYST]
+	if _level > 0.0 and level_tier > 0:
+		_press_lobes[1] = _lobe(_level_bearing,
+			LEVEL_HALFWIDTH_DEG[level_tier], LEVEL_PUSH_BY_TIER[level_tier] * _level)
+	else:
+		_press_lobes[1] = IDLE_LOBE
 
 
 ## A bearing is body-relative, clockwise from the cell's front. Front is the top

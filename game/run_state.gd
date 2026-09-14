@@ -58,6 +58,21 @@ static func save_gain(value: float) -> void:
 	_store("run", "gain", value)
 
 
+## **Forward is always up**, or north is. A property of how this player wants
+## the game presented, exactly like [method load_gain], so it is remembered in
+## the same place. Off by default: the world-anchored camera is what every
+## rendered frame of the design was judged at.
+static func load_camera_locked() -> bool:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return false
+	return bool(config.get_value("run", "camera_locked", false))
+
+
+static func save_camera_locked(value: bool) -> void:
+	_store("run", "camera_locked", value)
+
+
 static func onboarding_seen() -> bool:
 	var config := ConfigFile.new()
 	if config.load(PATH) != OK:

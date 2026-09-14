@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "5e9e6230166b2de6657e846fb15045401a05aa4f",
-  "subject": "Merge pull request #46 from sinikebe/8-elif-gh-pr-create-swallows-every-failure-and-reports-the-wrong-cause",
-  "synced_at": "2026-09-14T16:35:07Z"
+  "commit": "6a3796dab7adc31b893970f14a246f5abe853938",
+  "subject": "Merge pull request #48 from sinikebe/9-what-s-new-visibility-predicate-does-not-match-the-dialog-s-own-emptiness-test",
+  "synced_at": "2026-09-14T18:42:18Z"
 }
