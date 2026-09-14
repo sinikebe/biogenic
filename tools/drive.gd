@@ -117,6 +117,12 @@ var _check_seeding := 0
 var _field_meals := 0
 var _watch_serial := PackedInt32Array()
 var _watch_meals := PackedInt32Array()
+## Seconds to wait before reporting where a cell that just fed ended up.
+const AFTER_MEAL_LOOK := 6.0
+var _after_meal: Array = []
+var _dread_seconds := 0.0
+var _dread_area := 0.0
+var _run_seconds := 0.0
 var _travelled := 0.0
 var _last_pos := Vector2.ZERO
 var _have_last_pos := false
@@ -412,11 +418,13 @@ func _step_trace(delta: float) -> void:
 	print("[trace] %6.2f  me r%5.2f gape %5.2f swim %5.1f (real %5.1f) %s" % [
 		_clock, cell.radius, cell.gape(), cell.swim_speed(), speed,
 		_genome_text(_genome.tiers() if _genome != null else {})])
-	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d" % [
+	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
 		_food.dread_level, _food.threat,
 		"none" if hunter < 0 else str(hunter), range_text,
 		_metabolism.upkeep if _metabolism != null else 1.0,
-		_metabolism.hunger if _metabolism != null else 0.0, _field_meals])
+		_metabolism.hunger if _metabolism != null else 0.0, _field_meals,
+		100.0 * _dread_seconds / maxf(_run_seconds, 0.001),
+		_dread_area / maxf(_run_seconds, 0.001)])
 	for i in _food.points().size():
 		print("        cell %d  %s" % [i, _field_text(i, cell)])
 
@@ -470,14 +478,42 @@ func _watch_field(delta: float) -> void:
 			continue
 		if meals > _watch_meals[i]:
 			_field_meals += meals - _watch_meals[i]
-			print("[field] %5.2f  cell %d ate one and is now r%.2f gape %.2f %s" % [
+			var here: Vector2 = _food.points()[i]
+			print("[field] %5.2f  cell %d ate one and is now r%.2f gape %.2f %s  (%.0f units from you)" % [
 				_clock, i, bodies[i].get("radius"), _food.gape_at(i),
-				_genome_text(bodies[i].get("genome"))])
+				_genome_text(bodies[i].get("genome")), _away(i)])
+			# A cell that has just fed is newly dangerous and belongs in the
+			# water, not ejected from it. Check where it actually went.
+			_after_meal.append([i, serial, here, _clock])
 			_watch_meals[i] = meals
+
+	for k in range(_after_meal.size() - 1, -1, -1):
+		var mark: Array = _after_meal[k]
+		if _clock - float(mark[3]) < AFTER_MEAL_LOOK:
+			continue
+		_after_meal.remove_at(k)
+		var index: int = mark[0]
+		if bodies[index].get("serial") != mark[1]:
+			continue
+		# Its own displacement, not the gap to a player swimming at 56 u/s.
+		# A break-off runs at lunge speed, so fleeing shows up as 570-1100
+		# units in six seconds; drifting shows up as about 54.
+		var moved: float = (mark[2] as Vector2).distance_to(_food.points()[index])
+		print("[field] %5.2f  cell %d travelled %4.0f units in the %.0fs after its meal: %s" % [
+			_clock, index, moved, AFTER_MEAL_LOOK,
+			"drifting" if moved < 200.0 else "BOLTED"])
 
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
 		return
+	# Only while the cell is actually alive. _set_simulating(false) stops the
+	# metabolism, and counting the frozen post-death frames made the duty cycle
+	# climb on its own -- an instrument that reports the death as dread.
+	if _metabolism != null and _metabolism.is_processing():
+		_run_seconds += delta
+		_dread_area += _food.dread_level * delta
+		if _food.dread_level > 0.05:
+			_dread_seconds += delta
 	if _have_last_pos:
 		_travelled += _last_pos.distance_to(cell.position)
 		_speed_clock += delta
@@ -794,3 +830,11 @@ func _run_seeding_check(rounds: int) -> void:
 		100.0 * float(dangerous) / float(maxi(seeds, 1)),
 		100.0 * float(both) / float(maxi(seeds, 1)),
 		100.0 * float(seeds - edible - dangerous - both) / float(maxi(seeds, 1))])
+
+
+## How far field cell [param index] is from the player right now.
+func _away(index: int) -> float:
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null or _food == null:
+		return 0.0
+	return _food.points()[index].distance_to(cell.position)

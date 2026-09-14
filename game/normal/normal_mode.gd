@@ -166,13 +166,25 @@ func _on_struck(bearing: float, strength: float, _at: Vector2) -> void:
 ## the call site that scales it: a big meal fills more of the bar, and the bar
 ## is the beat.
 func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
+	# A meal cannot arrive for a cell that is already dying. Not reachable
+	# today -- the field stops the frame the kill lands -- but this signal is
+	# not idempotent, and feeding and growing a corpse would be silent.
+	if _life != Life.ALIVE:
+		return
+	# **Grow, then integrate, in that order.** The radius is the slot ladder, so
+	# taking the meal's gene against the pre-meal radius means the meal that
+	# unlocks a slot is exactly the meal that cannot fill it: it comes back with
+	# nowhere to go, becomes a held sample, and lapses beside an empty slot --
+	# a state §3.3 and §5.2 both assume cannot happen. food.gd's _devour() grows
+	# first for the same reason, and genome.gd's docstring promises there is
+	# only one definition of this rule.
+	_cell.radius += CellBody.GROWTH_PER_MEAL
 	_genome.integrate(gene)
 	# Phase 5B: signal_bus.gd does not read this yet -- ingest_color and the
 	# held echo are the rendering half. Passing it now costs nothing and means
 	# the seam is exercised rather than assumed.
 	_bus.ingest({"gene": gene})
 	_metabolism.feed(MetabolismNode.MEAL * nutrition)
-	_cell.radius += CellBody.GROWTH_PER_MEAL
 
 
 func _on_waked(bearing: float, strength: float) -> void:

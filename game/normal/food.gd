@@ -93,12 +93,26 @@ const ARRIVAL_RADIUS_MAX := 40.0
 ## What a seeded cell is made of. §3.4: a genome is fixed when it is seeded and
 ## full vision draws it, so informed foraging is possible -- a roll on eating
 ## could not be seen in advance.
+##
+## **The `cytostome` entry is never drawn from.** Quoted whole from §3.4 because
+## it is that document's constant and Phase 5B's genome strip will want the same
+## four keys, but the mouth is not a weighted outcome here: §1.3 gives every peer
+## one and no drifter one, so the only pool this is ever consulted with is
+## [constant DRIFTER_GENES], which excludes it by construction.
 const GENE_WEIGHTS := {&"cytostome": 3, &"cirrus": 3, &"flagellum": 3, &"stigma": 2}
 ## Everything a drifter can be. The mouth is not on this list by construction.
 const DRIFTER_GENES: Array[StringName] = [&"cirrus", &"flagellum", &"stigma"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
-## tier 1 of whatever it carries. One of §9.6's open numbers.
+## tier 1 of whatever it carries.
+##
+## **A divergence, flagged.** §9.6 leaves "the cytostome weights inside the peer
+## band" open and §1.3 reads as though GENE_WEIGHTS covers it -- but that
+## constant is per *gene*, not per *tier*, and says nothing about how good a
+## mouth an arrival gets. This is the missing distribution, invented here. It is
+## the number that sets how much of the water can eat you (about a fifth of it
+## at r26), so it is the first thing to move if the water feels wrong, ahead of
+## DRIFTER_SHARE and PEER_SPREAD.
 const TIER_WEIGHTS: Array[int] = [0, 3, 2, 1]
 
 ## Smaller than you, passive, does not flee: a cell that is not hunting anything
@@ -161,6 +175,28 @@ const DREAD_CAP := 0.95
 ## would be gone. Substituted into the curve instead, a cell growing its
 ## cytostome becomes frightening *gradually*, which is the Phase 4 experience
 ## run backwards. §7.0's blockquote.
+##
+## **Dread is therefore a pure relation: this curve, times distance, summed over
+## every body in the water.** It asks no question with a yes/no answer -- not
+## "can it eat me", not "is it hunting me" -- because every such question is a
+## boolean, and a boolean anywhere in this sum puts a step back into the one
+## readout §7.0 exists to protect. Three steps were found by gating it:
+##
+## - gating on `_state == STALK` made dread jump by up to 0.90 the frame a close
+##   cell acquired you, which is why acquisition used to be forbidden inside
+##   DREAD_RANGE -- and forbidding it is what made the player untouchable at
+##   contact range (nothing could ever commit from close in).
+## - gating on `_target == player` made dread fall to zero the frame its owner
+##   broke off, which is every frame the player ate something: a 0.30 drop on
+##   the most common action in the game.
+## - gating on "can eat me" left a 0.216 floor at ratio 1.0, so dread still
+##   stepped at the moment a mouth crossed your radius.
+##
+## Ungated, all three are gone and nothing was lost: a body below THREAT_LOW
+## contributes exactly 0.0, so the curve does its own gating, continuously.
+## Phase 4 already decoupled dread from lethality in precisely this way -- its
+## predator could kill you at every ratio, including ratios this window scores
+## at zero -- so "the water is wrong" has never meant "that one can eat me".
 const THREAT_LOW := 0.85
 const THREAT_HIGH := 1.35
 
@@ -232,10 +268,22 @@ const CALM_MAX := 55.0
 ## was actually measured over.
 const NOTICE_RANGE := 1900.0
 ## **The authored opening survives as an opening, not as a species spawn.**
-## Nothing may commit to the *player* before this, and then only from outside
-## DREAD_RANGE -- so the first dread of a run still arrives at 0:45-1:00 and
-## still rises out of nothing, which is the whole of perception.md §2.
+## Nothing may commit to the *player* before this, so the opening has no chase,
+## no wake and no death in it -- which is the part of perception.md §2 that
+## matters. Dread no longer waits on it, because dread no longer waits on
+## anything (see THREAT_LOW); what keeps the opening quiet instead is [method
+## _seed]'s rule that **nothing seeded at setup that could eat you starts inside
+## DREAD_RANGE**. Danger has to arrive, and arriving is continuous.
 const FIRST_DELAY := 42.0
+## How long a hunter keeps swimming at prey that has just outgrown its mouth.
+##
+## Without it a cell abandons its run on the exact frame the player eats
+## something, because one meal is a whole unit of radius and a gape sitting
+## anywhere in `(radius, radius + 1)` loses its claim in a single step. Losing
+## interest over a moment is both more believable and less abrupt. It cannot
+## turn into a kill it should not have: contact re-checks the gape every frame,
+## so a hunter inside this grace can reach the player and simply fail.
+const OUTGROWN_GRACE := 1.5
 
 enum State { DRIFT, STALK, BREAK }
 
@@ -269,6 +317,14 @@ class Body:
 	var target := -1  # TARGET_NONE
 	var target_serial := 0
 	var calm := 0.0
+	## Seconds this run has been swimming at prey it can no longer swallow,
+	## against OUTGROWN_GRACE.
+	var stale := 0.0
+	## Last known position of the prey, and therefore the point a break-off
+	## flees from. Held separately because the prey may be gone by then, and
+	## "gone" used to fall back to the player -- which sent every cell that
+	## finished a meal bolting away from you for no reason it could explain.
+	var flee_from := Vector2.ZERO
 	var aim := Vector2.ZERO
 	var aim_clock := 0.0
 	var lost := 0.0
@@ -291,15 +347,17 @@ var taste_bearing := 0.0
 ## metabolites saturate the chemoreceptor, and a blocked receptor has no
 ## differential to read a direction from.
 var dread_level := 0.0
-## The largest gape-over-radius threat weight currently hunting the player, run
-## through the same window dread is. Public for the dev harness, which needs to
-## be able to show that this varies continuously rather than stepping.
+## The largest gape-over-radius threat weight in the water, run through the same
+## window dread is, ignoring distance. Public for the dev harness, which needs
+## to be able to show that this varies continuously rather than stepping.
 var threat := 0.0
 
 var _cell: CellBody = null
 var _cells: Array[Body] = []
 var _first_pending := false
 var _first_hunt := FIRST_DELAY
+## True only while [method setup] is laying the opening field out. See _seed().
+var _opening := false
 var _serial := 0
 var _points := PackedVector2Array()
 var _radii := PackedFloat32Array()
@@ -312,8 +370,10 @@ func setup(cell: CellBody) -> void:
 	_cells.clear()
 	for i in COUNT:
 		_cells.append(Body.new())
+	_opening = true
 	for i in COUNT:
 		_seed(i)
+	_opening = false
 	_first_pending = true
 	_first_hunt = FIRST_DELAY
 	concentration = 0.0
@@ -364,24 +424,41 @@ func _step_drift(index: int, b: Body, delta: float) -> void:
 	b.calm = maxf(b.calm - delta, 0.0)
 	b.heading = wrapf(b.heading + randf_range(-DRIFT_TURN, DRIFT_TURN) * delta, -PI, PI)
 	b.pos += _forward(b.heading) * DRIFT_SPEED * delta
-	if b.calm <= 0.0 and not b.drifter:
-		_look_for_prey(index, b)
+	if b.drifter:
+		return
+	# **Calm suppresses seeking, not opportunity.** The calm after an encounter
+	# is there so a failed run is not retried on the spot; it was never meant to
+	# make a mouth decline a body that has drifted into it. Left as a blanket
+	# gate it reproduced the original defect in a slower form: a lethal cell
+	# resting for fifty seconds was found pressed against the player, inert, at
+	# contact range. Resting means it will not cross the water for you. It does
+	# not mean it will not close.
+	_look_for_prey(index, b, NOTICE_RANGE if b.calm <= 0.0 else 0.0)
 
 
-## The nearest thing this cell can swallow, if anything. A drifter never gets
-## here: with no cytostome its gape is under every body in the water.
-func _look_for_prey(index: int, b: Body) -> void:
+## The nearest thing this cell can swallow inside [param reach], if anything.
+## [param reach] is 0 for a cell that is resting, which leaves only what is
+## already touching it -- and touching is never out of reach.
+func _look_for_prey(index: int, b: Body, reach: float) -> void:
 	var gape := _gape(b)
 	var best := TARGET_NONE
 	var best_serial := 0
 	var best_d := INF
 
-	# The player, but only from outside dread range and only after the opening.
-	# A cell that commits from inside the range dread is measured over would
-	# make dread arrive as a step, which is the one thing §7.0 forbids.
+	# The player, at any range, once the opening is over.
+	#
+	# This used to require `d >= DREAD_RANGE`, so that dread could only ever
+	# begin at the distance where its range weight is zero. The cost was
+	# absurd and was measured: a cell that could swallow the player and was
+	# *already close* could never acquire them at all, so it drifted through
+	# their body indefinitely and nothing happened -- 96% of the time a lethal
+	# cell was in range it was harmless, and a red-rimmed mouth passing straight
+	# through you is the most obvious lie the game could tell. The floor is gone
+	# and the continuity it was protecting is now protected properly, by dread
+	# not being a function of this decision at all (see THREAT_LOW).
 	if _first_hunt <= 0.0 and _cell.radius < gape:
 		var d := b.pos.distance_to(_cell.position)
-		if d >= DREAD_RANGE and d <= NOTICE_RANGE:
+		if d <= maxf(reach, b.radius + _cell.radius):
 			best = TARGET_PLAYER
 			best_d = d
 
@@ -392,7 +469,7 @@ func _look_for_prey(index: int, b: Body) -> void:
 		if not other.seeded or other.radius >= gape:
 			continue
 		var d := b.pos.distance_to(other.pos)
-		if d <= NOTICE_RANGE and d < best_d:
+		if d <= maxf(reach, b.radius + other.radius) and d < best_d:
 			best = j
 			best_serial = other.serial
 			best_d = d
@@ -410,17 +487,42 @@ func _look_for_prey(index: int, b: Body) -> void:
 	b.break_clock = 0.0
 	b.stroke = randf_range(0.2, STROKE_GAP)
 	b.wander = 0.0
-	b.heading = _angle_of(_target_pos(b) - b.pos, b.heading)
+	b.stale = 0.0
 	b.aim = _target_pos(b)
+	b.flee_from = b.aim
+	# Only swing the nose onto a target it has spotted from a distance. A cell
+	# that acquires something already touching it keeps the heading it had:
+	# snapping to face the prey would be an instant handbrake turn, and the
+	# rate-limited turn in _swim() is the whole reason a lunge can be dodged.
+	if b.pos.distance_to(b.aim) > LUNGE_RANGE:
+		b.heading = _angle_of(b.aim - b.pos, b.heading)
 
 
 func _step_stalk(index: int, b: Body, delta: float) -> void:
-	# The prey may have been eaten, culled and reseeded, or simply grown out of
-	# this mouth while the run was on -- which is §1.2 in one line: a cell you
-	# were prey to can stop being able to eat you without leaving the screen.
-	if not _target_valid(index, b):
+	# The prey may simply not be there any more: eaten by something else, or
+	# culled and recycled into a different body. Nothing to chase, so the run
+	# ends at once -- and it ends fleeing the place the prey last was, not the
+	# player.
+	if not _target_present(index, b):
 		_break_off(b)
 		return
+
+	b.flee_from = _target_pos(b)
+
+	# Or it may still be there and have outgrown this mouth, which is §1.2 in
+	# one line: a cell you were prey to can stop being able to eat you without
+	# leaving the screen. That deserves a moment rather than a frame. The
+	# player's radius moves a whole unit per meal, so a gape anywhere inside
+	# `(radius, radius + 1)` loses its claim on the exact frame they swallow
+	# something, and a hunter that vanishes off your back at that instant reads
+	# as the game reacting to your inventory rather than to your body.
+	if _target_edible(b):
+		b.stale = 0.0
+	else:
+		b.stale += delta
+		if b.stale >= OUTGROWN_GRACE:
+			_break_off(b)
+			return
 
 	var offset := _target_pos(b) - b.pos
 	var d := offset.length()
@@ -446,7 +548,15 @@ func _step_stalk(index: int, b: Body, delta: float) -> void:
 
 
 func _step_break(b: Body, delta: float) -> void:
-	# Aim away from the PREY, recomputed every frame.
+	# Aim away from where the PREY was, recomputed every frame.
+	#
+	# "Where the prey was" and not "where the prey is": by the time a run ends
+	# the prey has often been eaten or recycled, and asking for its position
+	# then used to answer with the *player's* -- so every cell that finished a
+	# meal turned and fled from the player at lunge speed, straight out past the
+	# dread radius, and sat calm for the next fifty seconds. A cell that had
+	# just grown and just become more dangerous was systematically removed from
+	# the water, which is the exact inverse of §1.2.
 	#
 	# This used to freeze one world point at break-off and steer at it. The
 	# hunter then *reached* that point, the direction to it flipped through 180
@@ -456,14 +566,21 @@ func _step_break(b: Body, delta: float) -> void:
 	# the distance monotonic.
 	var away := _away_from(b)
 	b.aim = b.pos + away * BREAK_AWAY
-	# It leaves at the speed it attacked with. A hunter that saunters off at
-	# cruise stays inside dread range for a minute and a half, which is a minute
-	# and a half of nothing happening to a player who just earned something.
+	# It leaves at a lunge, not a saunter. A hunter that sheers off at cruise
+	# stays inside dread range for a minute and a half, which is a minute and a
+	# half of nothing happening to a player who just earned something.
+	#
+	# The target is dropped at break-off, so this is its *own* lunge speed
+	# rather than its prey's -- its own body is what does the swimming, and it
+	# no longer has a prey to scale against. The slowest possible cell
+	# (flagellum 0, 70 u/s) covers 1394 units in the 20s of BREAK_TIMEOUT, a
+	# whisker short of DREAD_RANGE, so that guard is the one that ends its run
+	# rather than the distance test. Both end in DRIFT; neither can strand it.
 	_swim(b, delta, _lunge_speed(b))
 	b.break_clock += delta
 	# Belt and braces. The line above should make the timeout unreachable, and
 	# if it ever fires the hunter has still stopped being a ghost.
-	if b.pos.distance_to(_target_pos(b)) > DREAD_RANGE or b.break_clock > BREAK_TIMEOUT:
+	if b.pos.distance_to(b.flee_from) > DREAD_RANGE or b.break_clock > BREAK_TIMEOUT:
 		b.state = State.DRIFT
 		b.target = TARGET_NONE
 		b.calm = randf_range(CALM_MIN, CALM_MAX)
@@ -563,7 +680,13 @@ func _break_off(b: Body) -> void:
 	b.state = State.BREAK
 	b.lost = 0.0
 	b.rush = 0.0
+	b.stale = 0.0
 	b.break_clock = 0.0
+	# The chase is over, so the target is dropped here rather than left behind
+	# for something else to read. Everything the break-off needs is in
+	# [member Body.flee_from], which is the last place the prey actually was.
+	b.target = TARGET_NONE
+	b.target_serial = 0
 	# Still not a handbrake turn: the aim is away from the prey, but _swim()
 	# rate-limits the turn, so it sheers off the line it was on rather than
 	# spinning. _step_break() recomputes this every frame -- see the note there
@@ -575,7 +698,7 @@ func _break_off(b: Body) -> void:
 ## back to its own heading in the degenerate case where the two bodies are at
 ## exactly the same point, which contact makes reachable.
 func _away_from(b: Body) -> Vector2:
-	var offset := b.pos - _target_pos(b)
+	var offset := b.pos - b.flee_from
 	return offset.normalized() if offset.length_squared() > 0.0001 \
 		else _forward(b.heading)
 
@@ -597,8 +720,16 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 # of the ecosystem, and no difficulty curve anyone had to author.
 # ---------------------------------------------------------------------------
 
-## Returns false when the player has just been killed, because the run stops
-## this node's _process from inside that signal and nothing after it is valid.
+## Returns false when the player has just been killed.
+##
+## `killed` is emitted from inside this node's own _process, and the run handles
+## it synchronously: by the time the signal returns, the cell is dying and this
+## node has had set_process(false) called on it. Returning immediately is not
+## about the stale [member dread_level] -- the run stops reading that on the
+## next frame anyway. It is about **everything below this line**. `eaten` is not
+## idempotent: emitting it after the death would feed and grow a corpse, and the
+## cell-against-cell pass below would go on reshaping a field nobody is in any
+## more. Nothing may be added between the emit and this return.
 func _step_contacts() -> bool:
 	for i in _cells.size():
 		var b := _cells[i]
@@ -608,6 +739,22 @@ func _step_contacts() -> bool:
 			continue
 		# Both directions can be true at once, and then it is whoever committed
 		# first -- which is the cell in the middle of an attack run.
+		#
+		# **The one asymmetry in the water, and it is deliberate.** Cell eats
+		# cell on contact alone; cell eats player only from a committed run. It
+		# is written down here because §1.3 says there is no special case for
+		# the player, and this is one: it buys the guarantee that a death is
+		# always preceded by a commitment the player could feel -- dread rising
+		# and a wake at a true bearing -- rather than by a body that happened to
+		# drift into them. perception.md §2 sells that guarantee and it is worth
+		# an asymmetry.
+		#
+		# It costs almost nothing now that a cell can commit from any range: the
+		# only window in which a lethal body is touching the player and not
+		# hunting them is the calm after it has just broken off one run, and a
+		# hunter that has just given up and swum through you is a fair reading
+		# of that moment. It used to cost everything -- commitment was forbidden
+		# inside DREAD_RANGE, so a close mouth could never commit at all.
 		if b.state == State.STALK and b.target == TARGET_PLAYER \
 				and _cell.radius < _gape(b):
 			killed.emit(_cell.bearing_to(b.pos))
@@ -637,6 +784,19 @@ func _step_contacts() -> bool:
 				continue
 			_devour(b, other)
 			_seed(j)
+			# It has just eaten, so the run is over -- ended here, as a meal,
+			# rather than left to unravel as a broken-off chase against a slot
+			# that has since been recycled into somebody else. That route took
+			# it through BREAK, which fled the prey that was no longer there,
+			# which used to resolve to the player: every cell-against-cell meal
+			# ejected a newly grown, newly dangerous cell out past the dread
+			# radius. It stays where it is, bigger, and it is the player's
+			# problem now. §1.2.
+			b.state = State.DRIFT
+			b.target = TARGET_NONE
+			b.target_serial = 0
+			b.stale = 0.0
+			b.calm = randf_range(CALM_MIN, CALM_MAX)
 			break  # One meal per cell per frame. It has to swallow.
 	return true
 
@@ -695,13 +855,18 @@ func _step_sense() -> void:
 				total += c
 				pull += offset / maxf(d, 0.001) * c
 
-		# Dread, over everything hunting me. Nine seconds of closing separate
-		# the first dread from the first wake: ten seconds of the water simply
-		# being wrong, then a direction.
-		if b.state != State.STALK or b.target != TARGET_PLAYER:
-			continue
+		# Dread, over **every** body, with no question asked that has a yes/no
+		# answer -- see THREAT_LOW for the three steps that gating this put into
+		# the one readout §7.0 exists to protect. A body too small-mouthed to
+		# matter scores 0.0 on the curve and drops out on its own, continuously,
+		# which is what the curve is for.
+		#
+		# Nine seconds of closing still separate the first dread from the first
+		# wake: ten seconds of the water simply being wrong, then a direction.
 		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
 			_gape(b) / maxf(_cell.radius, 0.001))
+		if level <= 0.0:
+			continue
 		worst = maxf(worst, level)
 		dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE), 0.0, 1.0) * level
 
@@ -792,19 +957,18 @@ func _seed(index: int) -> void:
 	var angle := randf_range(-PI, PI)
 	var distance := randf_range(RING_MIN, RING_MAX)
 	var origin := _cell.position if _cell != null else Vector2.ZERO
-	b.pos = origin + Vector2(cos(angle), sin(angle)) * distance
 	b.heading = randf_range(-PI, PI)
 	b.state = State.DRIFT
 	b.target = TARGET_NONE
 	b.target_serial = 0
 	b.calm = 0.0
-	b.aim = b.pos
 	b.aim_clock = 0.0
 	b.lost = 0.0
 	b.rush = 0.0
 	b.best = INF
 	b.lunging = false
 	b.break_clock = 0.0
+	b.stale = 0.0
 	b.stroke = randf_range(0.2, STROKE_GAP)
 	b.wander = 0.0
 	b.meals = 0
@@ -825,6 +989,21 @@ func _seed(index: int) -> void:
 		_seed_drifter(b)
 	else:
 		_seed_peer(b)
+
+	# **The opening, and the only thing left that is authored.** Nothing that
+	# could swallow the player begins the run already inside the range dread is
+	# measured over, so a run opens on water that is quiet because it is quiet,
+	# not because a timer says so. Danger then has to *arrive*, and arriving is
+	# continuous -- which is the whole reason this is a placement rule and not a
+	# gate on dread. It applies at setup only: a recycled cell is free to come
+	# back anywhere in the ring, by which point the player has been swimming for
+	# a while and knows what the water does.
+	if _opening and _cell != null and _gape(b) > _cell.radius:
+		distance = randf_range(maxf(DREAD_RANGE, RING_MIN), RING_MAX)
+
+	b.pos = origin + Vector2(cos(angle), sin(angle)) * distance
+	b.aim = b.pos
+	b.flee_from = b.pos
 	b.seeded = true
 
 
@@ -956,18 +1135,32 @@ func _target_body(b: Body) -> Body:
 	return prey if prey.serial == b.target_serial else null
 
 
+## Where the prey is. Falls back to the hunter's own position, which steers
+## nothing anywhere -- deliberately not the player's, which is what turned a
+## missing prey into a cell fleeing from the player.
 func _target_pos(b: Body) -> Vector2:
 	if b.target == TARGET_PLAYER:
 		return _cell.position
 	var prey := _target_body(b)
-	return prey.pos if prey != null else _cell.position
+	return prey.pos if prey != null else b.pos
 
 
-func _target_valid(index: int, b: Body) -> bool:
+## Is there still a body at the other end of this chase at all.
+func _target_present(index: int, b: Body) -> bool:
+	if b.target == TARGET_PLAYER:
+		return true
+	return _target_body(b) != null and b.target != index
+
+
+## Does it still fit in this mouth. Separate from [method _target_present]
+## because the two deserve different answers: a prey that has gone is a chase
+## with nothing in it, and a prey that has outgrown the mouth is a chase that is
+## about to be given up on -- over OUTGROWN_GRACE, not instantly.
+func _target_edible(b: Body) -> bool:
 	if b.target == TARGET_PLAYER:
 		return _cell.radius < _gape(b)
 	var prey := _target_body(b)
-	return prey != null and b.target != index and prey.radius < _gape(b)
+	return prey != null and prey.radius < _gape(b)
 
 
 ## Same convention as the cell: radians clockwise from world north, front is the

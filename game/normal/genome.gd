@@ -102,6 +102,20 @@ func reset() -> void:
 func _process(delta: float) -> void:
 	if held_sample == &"":
 		return
+	# **A slot may have opened since.** Growth adds one every 3.5 units of
+	# radius, and Phase 5B's swap will free one on demand; a sample is waiting
+	# for exactly that, so it takes it. Without this the sample lapses beside an
+	# empty slot, which is a state §3.3 and §5.2 both assume cannot exist -- and
+	# it is not a rare one, because a meal that only raises a tier still grows
+	# the body and so still widens the genome.
+	#
+	# Any answer other than "still no room" resolves it: the gene arriving by
+	# another route, or turning out to be at TIER_MAX already, both mean there
+	# is nothing left for the sample to be.
+	if integrate_into(_tiers, held_sample, slots()) != Result.NO_ROOM:
+		held_sample = &""
+		held_remaining = 0.0
+		return
 	held_remaining -= delta
 	if held_remaining <= 0.0:
 		held_sample = &""
