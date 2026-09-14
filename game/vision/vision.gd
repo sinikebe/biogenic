@@ -416,6 +416,7 @@ func _on_world_draw() -> void:
 	_draw_hits(a)
 	_draw_wakes(a)
 	_draw_beams(a)
+	_draw_ping(a)
 	_draw_cell(a)
 
 
@@ -715,6 +716,30 @@ func _draw_beams(a: float) -> void:
 		# this view the blind cell can also see.
 		_world.draw_circle(tip, 9.0, Color(tone, 0.16 * a), true, -1.0, true)
 		_world.draw_circle(tip, 3.4, Color(tone, 0.92 * a), true, -1.0, true)
+
+
+## **The `ampulla`.** The wavefront of the pulse that is currently in flight, as
+## a ring expanding out of the cell and fading as it goes.
+##
+## The same two-register agreement the beam has: point of view gets a run of
+## marks on the contour as each body answers, and here the thing that produced
+## them is on screen -- so "the blips stopped because nothing is within reach"
+## is visible rather than deduced. The returns themselves need no mark of their
+## own, because in full vision the bodies they came off are already drawn.
+func _draw_ping(a: float) -> void:
+	if _food_node == null:
+		return
+	var front: float = _food_node.ping_front
+	var reach: float = _food_node.ping_range
+	if front <= 0.0 or reach <= 0.0:
+		return
+	# Off the top of the screen long before it reaches its range, so the fade is
+	# the thing that has to sell "it is still going".
+	var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
+	# Brighter than a threshold ring, because those are measuring instruments
+	# and this is a thing the cell actually did. Rendered against them.
+	_world.draw_arc(_cell.position, front, 0.0, TAU, 96,
+		Color(Cilia.hue(&"ampulla"), 0.46 * fade * a), 1.8 / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing

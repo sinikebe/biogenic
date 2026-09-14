@@ -52,6 +52,17 @@ const HUES := {
 	# one hue that is far from teal, far from red, far from the nutrient greens
 	# and still bright enough to be a line on near-black water.
 	&"ocellus": Color(0.62, 0.55, 1.00),     # beam, 251 deg
+	# The nose. It owns the scent band, and the scent band has been nutrient
+	# green since Phase 1 -- so the gene that grants it is a green, sitting in
+	# the one wide gap the wheel still had (97 to 136). Same argument as
+	# `axoneme` below: a gene whose whole job is one existing signal wears that
+	# signal's family.
+	&"chemocyte": Color(0.405, 1.00, 0.30),  # smell, 111 deg
+	# The ping shares the beam's glow lobe -- both mean *a hard surface, that
+	# way* -- so it shares the beam's family too, deeper and more saturated than
+	# the ocellus's pale periwinkle. Six pores against the ocellus's three
+	# strokes is what actually tells them apart; see EARNED_COUNT.
+	&"ampulla": Color(0.655, 0.44, 1.00),    # ping, 263 deg
 	# The flagellum's evolution, so it keeps the flagellum's family: orchid ->
 	# magenta. Close on purpose -- these two are the same organ, twice.
 	&"axoneme": Color(0.98, 0.44, 0.90),     # push, 306 deg
@@ -75,6 +86,13 @@ const HUES := {
 const EARNED_COUNT := {
 	&"stigma": 4,
 	&"ocellus": 3,
+	# A chemoreceptor is a *field* of pores, so it wears the densest tuft in the
+	# water -- 8 is the rendered ceiling documented under `plastid` below.
+	&"chemocyte": 8,
+	# Ampullae of Lorenzini come in clusters of pores, and six of them next to
+	# the ocellus's three is the whole of what separates two neighbouring
+	# violets at a glance.
+	&"ampulla": 6,
 	&"axoneme": 8,
 	&"statocyst": 2,
 	&"rhabdom": 6,

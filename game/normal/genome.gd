@@ -48,9 +48,13 @@ const TIER_MAX := 3
 ## tier's width at every range, which dread cannot muffle. It is silent about
 ## the two cells §1.1 exists to create, and deliberately: a shadow is a fact
 ## about a body, not about a mouth.
+## `chemocyte` and `ampulla` are inserted after `ocellus` rather than anywhere
+## more natural, so that no tie between two genes that already existed changes
+## which one a body is drawn as.
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
-	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"ocellus", &"chemocyte", &"ampulla",
+	&"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
@@ -77,6 +81,20 @@ const SAMPLE_SECONDS := 45.0
 var held_sample: StringName = &""
 ## Seconds left on that sample.
 var held_remaining := 0.0
+
+## **Slots the body did not earn.** Exactly one thing grants these: the free
+## sensing gene normal_mode.gd hands over at five seconds.
+##
+## It exists because the born cell is *already full* -- three slots, three
+## organs -- so a sample granted into it would have nowhere to lapse to and
+## would simply evaporate after forty-five seconds, leaving a player who never
+## opened the pause screen with no sense at all. That is the one outcome the
+## grant exists to make impossible, so the gift comes with somewhere to put it.
+##
+## It is absorbed rather than permanent: [method slots] still clamps at
+## SLOT_MAX, so by the time the body has earned seven the leg-up is gone. Reset
+## with everything else on death.
+var bonus_slots := 0
 
 var _tiers := {}
 ## **Slot index to gene, `&""` for an empty slot.** The dictionary above says
@@ -108,6 +126,7 @@ func setup(cell: CellBody) -> void:
 func reset() -> void:
 	_tiers = BORN.duplicate()
 	_order = [&"cytostome", &"cirrus", &"flagellum"]
+	bonus_slots = 0
 	_sync_order()
 	held_sample = &""
 	held_remaining = 0.0
@@ -158,7 +177,8 @@ func tiers() -> Dictionary:
 ## How many slots the body can carry right now. The arithmetic lives in cell.gd
 ## next to the radius it is made of; this is the accessor everything else uses.
 func slots() -> int:
-	return CellBody.slots_for(_cell.radius) if _cell != null else CellBody.SLOT_MIN
+	var earned := CellBody.slots_for(_cell.radius) if _cell != null else CellBody.SLOT_MIN
+	return clampi(earned + bonus_slots, CellBody.SLOT_MIN, CellBody.SLOT_MAX)
 
 
 ## How many are in use.

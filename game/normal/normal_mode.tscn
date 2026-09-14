@@ -1,4 +1,4 @@
-[gd_scene load_steps=9 format=3]
+[gd_scene load_steps=10 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -8,12 +8,16 @@
 [ext_resource type="PackedScene" path="res://game/vision/vision.tscn" id="6_vision"]
 [ext_resource type="Script" path="res://game/normal/food.gd" id="7_food"]
 [ext_resource type="Script" path="res://game/normal/genome.gd" id="8_genome"]
+[ext_resource type="PackedScene" path="res://game/perception/soma.tscn" id="9_soma"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
 script = ExtResource("1_normal")
 
 [node name="Membrane" parent="." instance=ExtResource("2_membrane")]
+process_mode = 3
+
+[node name="Soma" parent="." instance=ExtResource("9_soma")]
 process_mode = 3
 
 [node name="Metabolism" type="Node" parent="."]

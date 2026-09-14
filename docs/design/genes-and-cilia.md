@@ -451,6 +451,30 @@ cell and read its gene.
 
 **This is resolved by not solving it in the same place three times.**
 
+> **Owner override, Phase 6: the premise above is partly withdrawn.** Point of
+> view now draws the player's own body — the ovoid, the fringe and the gape, at
+> `SELF_TINT`, faint, at the centre of the screen, always, with no gene behind
+> it. `game/perception/soma.gd`.
+>
+> The reason is that a screen with nothing at all on it is disorienting rather
+> than tense, and this phase makes that worse: taste stopped being innate and
+> went behind `chemocyte`, so the opening minute of a run had no signal in it
+> whatsoever. A blind cell needs a frame of reference, and the least invented
+> one available is the only object it is entitled to know about with no organ at
+> all — itself. What it shows is bounded by that: shape, heading, organs, tiers.
+> Nothing about the water, nothing about any other body, no position of
+> anything. Proprioception, not a minimap.
+>
+> **§2.1 to §2.4 still stand and are not rewritten.** Feeling a tier through
+> thrust, shear and the flood is the only channel that works while you are
+> actually moving and looking at the contour, and it is worth having whether or
+> not there is a figure in the middle of the screen. §2.4's mirror argument
+> loses its *necessity* and keeps its *content*: the pause strip is still the
+> only surface that can say which slot a gene is in and what a tier is worth in
+> words, and the figure is deliberately hidden while the pause screen is open —
+> the column is centred and so is the body, and the light slider ran straight
+> through the cilia.
+
 ### 2.1 What you can do — you already feel it, and always have
 
 The three starting cilia are not new capabilities. They are `metabolism.gd` and
@@ -1520,3 +1544,137 @@ water often has **no cell on screen at all** — `food.COUNT` is 4 and the field
 much larger than the viewport. Two unposed frames at 22 s and 30 s had one cell
 and none. That is a §1.3 population question, not a drawing one, and it is
 listed here only because it is invisible in every posed frame in this section.
+
+---
+
+## 11. Phase 6: taste becomes a gene, and the opening stops being empty
+
+The owner's report was one sentence: *"When we start, we don't see anything."*
+Three changes answer it, and the third is the point of the other two.
+
+### 11.1 `chemocyte` — *smell*
+
+**Taste stops being innate.** From Phase 1 to Phase 5 `normal_mode.gd` posted
+`_bus.taste(...)` unconditionally: a free, always-on bearing to anything edible,
+which is the single most useful piece of information in the game and the only
+one nobody had to earn. It is now gated on `chemocyte` exactly the way the light
+lobe is gated on `stigma` — at the call site, and again inside the bus, so *an
+organ you have not grown is silent* is a property of the bus and not a
+discipline four call sites have to remember.
+
+The tier buys **reach**, and nothing else:
+
+```
+# cell.gd
+const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
+```
+
+Sharpness is deliberately left alone: `rhabdom` / *focus* already owns the taste
+lobe's width and jitter, and a second gene doing the same thing would make one
+of them pointless. Tier 3 is `food.gd`'s `SCENT_RANGE`, so a saturated nose is
+exactly the always-on taste every build before this one shipped with.
+
+Two numbers come out of the field where there was one. `concentration` is what
+the *water* is like and still drives the metabolic beat — a noseless cell
+still beats faster in rich water, because the beat is a property of the body and
+not of its senses. `taste_level` is what the *organ* picks up, summed only over
+sources inside `smell_range`, and it is the only one of the two that reaches the
+membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level`
+and `taste_bearing` both flat zero.
+
+`dread` stays innate. Fear of being eaten is not a sense you grow.
+
+### 11.2 `ampulla` — *ping*
+
+Electroreception, and the first sense in the game that is **not about food**. A
+pulse every `PING_PERIOD_BY_TIER` seconds out to `PING_RANGE_BY_TIER`, and a
+bearing for every body it comes back off — edible, inedible, hunting you, or
+asleep. That is the whole of why it is a different sense from `chemocyte` rather
+than a second skin on it: the scent field can only ever describe a meal, and
+most of what matters in this water is not a meal.
+
+```
+# cell.gd
+const PING_RANGE_BY_TIER:  Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
+const PING_PERIOD_BY_TIER: Array[float] = [0.0,    3.2,    2.2,    1.4]
+```
+
+**It reads as a sweep because the returns are staggered by their own flight
+time.** `food.gd` holds each echo for `distance / PING_SPEED` seconds before it
+becomes a bearing, so one pulse arrives on the membrane as a run of separate
+marks walking outward — nearest first, loudest first — over about a second. The
+scent field is a steady wide band that lags and jitters; the ping is a burst of
+tight marks that are exactly where they say they are and then gone. Nothing else
+in the game behaves like either.
+
+It shares `LOBE_BEAM` with the `ocellus`, which is not a compromise: there are
+four glow lobes in the shader, a fifth is a new uniform and a new binary, and
+both of these genes mean *a hard surface, that way, that far*. They compete
+rather than sum, exactly as the three self-signals do in lobe 0.
+
+Full vision draws the wavefront as a ring expanding out of the cell, for the
+same reason it draws the beam's line: so that "the blips stopped because nothing
+is in reach" is visible rather than deduced.
+
+### 11.3 The free opening sense, at five seconds
+
+A born cell now has **no sense of any kind**, which makes the opening minute
+worse than it has ever been unless something is done about it. So, five seconds
+in, unconditionally, once per life:
+
+> one sensing gene, free, drawn flat at random from `ocellus`, `ampulla`,
+> `chemocyte`, `stigma`.
+
+**It arrives as a held sample the player places**, not as an auto-placement. Two
+reasons: the `ocellus` is directional and worthless unplaced, and this makes the
+free gene the natural first lesson in §5.2's placement mechanic — which was
+previously first met about fourteen minutes into a run, at the one moment the
+decision is also destructive.
+
+It is announced on the one line of text this mode has (§8), in the same voice:
+`a sense grew · esc to place it`, or `· back to place it` on touch. Unlike the
+steering line this shows on **every** run, because the thing it announces
+happens on every run and a player who missed it once is a player swimming blind.
+
+**Guaranteeing it lands cost one new idea.** The born genome is already full —
+three slots, three organs — so a sample granted into it has nowhere to lapse to
+and evaporates after forty-five seconds, leaving exactly the state the grant
+exists to prevent. `genome.gd` grows a `bonus_slots` counter, and the grant takes
+one *only when there is no free slot*: the gift comes with somewhere to put it.
+It is absorbed rather than permanent, because `slots()` still clamps at
+`SLOT_MAX`. A player who never opens the pause screen gets the gene anyway, in
+that slot, at fifty seconds.
+
+`FIRST_DISTANCE` moves from 1400 to 1000 so the authored first arrival is inside
+the reach of a tier-1 `chemocyte` (1100) and a tier-1 `ampulla` (1100), and still
+outside the frame — the half-diagonal of a 20:9 canvas is 877. The other two
+draws are allowed to miss it: an `ocellus` reaches 620 and only along the arc it
+was put on, and a `stigma` sees mass, which a drifter does not have. **The
+`stigma` draw is the weakest of the four and is known to be so** — it is a real
+sense and what it does see is the half of the water that can eat you, but it
+will not find the first meal, and if the opening still reads as empty one run in
+four that is the row to change.
+
+### 11.4 What was rendered
+
+At 1280x720 and at 2400x1080, point of view, with `tools/drive.gd`:
+
+- a **blind** cell — the three born organs and nothing else: no band, no mark,
+  and the self-figure (§2) as the only thing on screen. This is the state the
+  grant exists to end, and it is three seconds long
+- a **`chemocyte`** cell: the green band, in the corner, at the bearing
+- an **`ampulla`** cell frozen 45 ms after a return: one tight violet mark on the
+  contour, brighter than anything else in frame
+- the **pause screen at five seconds**: the held sample, the arrow, three
+  occupied tiles and the one empty bonus slot with its compass
+- the **whole placement path driven by two touches** at the tile, and the gene
+  pinging three seconds later
+- the **lapse path**, headless to ninety seconds: nothing placed, sample settles
+  at 50.0 s, genome reads `[che1 cir1 cyt1 fla1]` at 60 s
+- an **`ocellus` and an `ampulla` in one genome**, at slots 0 and 4, to check
+  that sharing lobe 3 does not silence either: the beam holds the lobe between
+  pulses and the returns punch through it
+- a **death and a revive**, to check the figure comes back and the five-second
+  clock starts again — `hold` fires 5.0 s after the aperture reopens
+- **full vision**, frozen mid-pulse: the wavefront ring past the frame edge, and
+  no self-figure — the real body is already drawn there

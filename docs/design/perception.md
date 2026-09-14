@@ -253,7 +253,8 @@ Play is a continuous cut with no flash.
 | metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s → 0.55s as concentration rises |
 | thrust bloom | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.14 | 60° at bearing 0° | attack 60ms, decay 500ms, on each impulse |
 | turn shear | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.10 × `|ω|/ω_max` | 84° at ±90°, outside of the turn | no lag; decay 180ms |
-| nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `smoothstep(0.06,1,c) * 0.62` | `lerp(78°, 26°, c)` | bearing low-passed 0.6s; jitter `lerp(22°,4°,c)` resampled 1.5Hz; off below c = 0.06 |
+| nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `smoothstep(0.06,1,c) * 0.62` | `lerp(78°, 26°, c)` | bearing low-passed 0.6s; jitter `lerp(22°,4°,c)` resampled 1.5Hz; off below c = 0.06. **Phase 6: silent without `chemocyte`, and `c` is summed only inside that organ's reach** |
+| ping return | glow lobe 3, `Color(0.62,0.55,1.00,1)` | 0.55 × nearness | 17°/13°/10° by `ampulla` tier | attack 35ms, decay 260ms; one per body per pulse, staggered by `distance / 1250` so a pulse reads as a sweep. **Shares lobe 3 with the `ocellus` beam, loudest wins** |
 | pressure wake | press lobe 0 | `smoothstep(3.5r, 0.8r, dist)`, cap 0.95 | 34°, no jitter | attack 70ms, decay 260ms — it is a shock, it must be sudden |
 | contact | `flash` | **0.80** | whole contour | attack 1 frame, decay 90ms; plus a 0.35 glow bruise at the contact bearing, decay 600ms |
 | dread | `dread` | → 0.95 over ~10s | — | beat period jitters ±30% once `dread > 0.4` |
@@ -289,6 +290,13 @@ black, measurably, and the predator makes it blacker.
   hardware Back button, on a screen with no widgets, strands anyone who taps it
   by accident. Pause is a separate surface from the sensory screen and the
   §6.1 "only text in normal mode" rule is scoped to the latter.
+- **Phase 6 spends a second string on the sensory screen**, on the same label
+  and for a bounded reason: `a sense grew · esc to place it`, once per life, at
+  five seconds, held seven seconds. Taste is now a gene, so a run opens with no
+  sense at all and one is granted free — and the alternative to naming it is a
+  second heartbeat the player has never been taught to read. It is a notice
+  rather than onboarding, so it shows on every run and not only the first.
+  `genes-and-cilia.md` §11.3.
   The gap between those two buttons matters more than their size: 56 canvas px
   is about 5.3mm on a 2400x1080 phone, under the ~9mm a thumb needs, and the
   control directly below `resume` ends the run. They are separated by 48 canvas
