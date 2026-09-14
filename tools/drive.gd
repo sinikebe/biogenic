@@ -19,7 +19,21 @@ extends Node
 ##   --back-at=<seconds>     fire NOTIFICATION_WM_GO_BACK_REQUEST exactly the
 ##                           way SceneTree does when Android Back is pressed
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right, v
+##                           esc, enter, up, down, left, right, tab, v
+##   --touch=<seconds>:<x>,<y>
+##                           press and release one finger at that canvas point;
+##                           repeatable. This is how the genome strip's two-tap
+##                           arming gets exercised on the input path a phone
+##                           actually uses. Coordinates are in canvas units, not
+##                           window pixels -- but note the canvas is only 1280
+##                           wide at 16:9: `expand` keeps the height at 720 and
+##                           widens it, so at 2400x1080 the canvas is 1600 across
+##                           and a centred widget is 160 further right.
+##   --sample=<gene>         put a gene in the genome's held sample, the state
+##                           §3.3 gives a second heartbeat and §5.2 gives the
+##                           strip. Reaching it by playing means eating a fourth
+##                           gene with a full genome, which is fourteen minutes
+##                           and a lot of luck.
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -31,17 +45,51 @@ extends Node
 ##                           starvation floor actually leaves on screen
 ##   --starve=<seconds>      seconds already spent at full hunger, so the end of
 ##                           the forty-second grace can be reached in one frame
-##   --stalk=<units>         park the predator this far off the cell's front
+##   --stalk=<units>         park a hunting cell this far off the cell's front
 ##                           quarter and hold it there, so dread, a wake and a
 ##                           lunge can each be photographed at a known range
-##   --food-at=<units>       same, for one food cell
+##   --food-at=<units>       same, for field cell 1, left drifting. Cell 0 is
+##                           what --stalk and --hunt pose, so the two handles
+##                           can be used together to frame both halves of the
+##                           gape rule in one photograph
 ##   --gain=<0.7..2.4>       hold membrane sensitivity here, to photograph what
 ##                           the pause screen's light slider actually buys
-##   --hunt=<units>          spawn the predator this far off, once, and then let
-##                           it hunt for itself. This is how the escape-window
-##                           contract in the design doc gets measured, since it
-##                           is made of time and cannot be photographed.
-##   --trace=<seconds>       print range, state and dread on that interval
+##   --hunt=<units>          put a cell that can eat you this far off, once, and
+##                           then let it hunt for itself. This is how the
+##                           escape-window contract in the design doc gets
+##                           measured, since it is made of time and cannot be
+##                           photographed.
+##   --prey-radius=<r>       give field cell 1 this body radius and a real
+##                           genome, so the other half of the gape rule -- a
+##                           cell near your own size that you can swallow -- can
+##                           be set up on purpose instead of waited for
+##   --hunter-gape=<mult>    the hunter's gape as a multiple of your radius,
+##                           default 1.40. Below 0.85 it cannot eat you at all
+##                           and below 1.35 dread lands part-way up the curve,
+##                           which is how the continuity of §7.0 gets shown.
+##   --radius=<r>            force the player's body radius, which is the slot
+##                           ladder, the gape and the whole of what the water
+##                           seeds around you. r40 is where section 3.1 says the
+##                           run is won
+##   --cell=i,dist,bearing,radius[,gene:tier+gene:tier]
+##                           park field cell i at that range and body-relative
+##                           bearing, with that body and that genome, and hold
+##                           it there. Repeatable, and the only way to frame
+##                           section 1.1's four relationships in one photograph:
+##                           `eat it`, `it eats me`, `both` and `neither` are a
+##                           pair of gapes, and waiting for the water to seed
+##                           all four at a readable distance is not a test, it
+##                           is a lottery. Genes are separated by `+` because a
+##                           comma is already the field separator.
+##   --genome=<g:t,g:t>      force the player's genome, e.g.
+##                           cytostome:3,cirrus:3,flagellum:3. This is the only
+##                           way to reach a tier-3 cell without playing for
+##                           fifteen minutes.
+##   --check-seeding=<n>     reseed the field n times and print what §1.3's
+##                           distribution actually produces, including whether
+##                           the drifter floor ever fails. Quits when done.
+##   --trace=<seconds>       print the field, dread, threat and the player's
+##                           realised speed on that interval
 ##   --forage                steer up the taste gradient, to measure §3.3's
 ##                           "a meal every 60 to 90 seconds" without a human
 ##   --evade                 play the escape contract in §5.4: hold full steer
@@ -53,8 +101,18 @@ extends Node
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
 ## presets exclude, so none of this ships.
+##
+## **Driving the game as far as `leave` changes scenes**, and a scene change
+## frees whatever `SceneTree.current_scene` points at. `tools/shot.gd` hands
+## `current_scene` to the scene it instantiates for exactly this reason; without
+## that it would be the harness that gets freed, mid-await, and the run would
+## hang rather than fail. If a run of this driver ever stops producing output
+## and never exits, that is the shape of the fault -- and `--quit-after <n>` on
+## the engine, before the `--`, bounds it whatever happens.
 
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
+const FoodField := preload("res://game/normal/food.gd")
+const CellBody := preload("res://game/normal/cell.gd")
 
 var _clock := 0.0
 var _esc_at := -1.0
@@ -70,7 +128,7 @@ var _freeze_after := -1.0
 var _bus: Node = null
 var _run: Node = null
 var _metabolism: Node = null
-var _predator: Node = null
+var _genome: Node = null
 var _food: Node = null
 var _hunger := -1.0
 var _starve := -1.0
@@ -80,6 +138,32 @@ var _gain := -1.0
 var _hunt := -1.0
 var _trace := -1.0
 var _trace_clock := 0.0
+var _hunter_gape := 1.40
+var _prey_radius := -1.0
+var _radius := -1.0
+var _genome_spec := ""
+var _check_seeding := 0
+## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
+var _posed: Array = []
+## [[seconds, canvas position], ...], consumed as the clock passes each one.
+var _touches: Array = []
+var _sample: StringName = &""
+## Cumulative meals eaten by one field cell off another, which is the one thing
+## in section 1.3 that has to be observed rather than argued about. Field cells
+## are recycled, so this is accumulated by watching each slot's serial.
+var _field_meals := 0
+var _watch_serial := PackedInt32Array()
+var _watch_meals := PackedInt32Array()
+## Seconds to wait before reporting where a cell that just fed ended up.
+const AFTER_MEAL_LOOK := 6.0
+var _after_meal: Array = []
+var _dread_seconds := 0.0
+var _dread_area := 0.0
+var _run_seconds := 0.0
+var _travelled := 0.0
+var _last_pos := Vector2.ZERO
+var _have_last_pos := false
+var _speed_clock := 0.0
 var _evade := false
 ## World angle of the last wake, so the body-relative bearing can be recomputed
 ## as the cell turns instead of going stale the moment it does.
@@ -106,7 +190,7 @@ func _ready() -> void:
 	# could never press anything on a pause screen.
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	# And it has to run *after* the game, so that anything it holds in place --
-	# a parked predator, a forced hunger -- survives the frame it set it in.
+	# a parked hunter, a forced hunger -- survives the frame it set it in.
 	process_priority = 1000
 
 	var scene_path := DEFAULT_SCENE
@@ -155,6 +239,27 @@ func _ready() -> void:
 			_hunt = float(text.trim_prefix("--hunt="))
 		elif text.begins_with("--trace="):
 			_trace = float(text.trim_prefix("--trace="))
+		elif text.begins_with("--prey-radius="):
+			_prey_radius = float(text.trim_prefix("--prey-radius="))
+		elif text.begins_with("--hunter-gape="):
+			_hunter_gape = float(text.trim_prefix("--hunter-gape="))
+		elif text.begins_with("--radius="):
+			_radius = float(text.trim_prefix("--radius="))
+		elif text.begins_with("--genome="):
+			_genome_spec = text.trim_prefix("--genome=")
+		elif text.begins_with("--check-seeding="):
+			_check_seeding = int(text.trim_prefix("--check-seeding="))
+		elif text.begins_with("--cell="):
+			_posed.append(_parse_pose(text.trim_prefix("--cell=")))
+		elif text.begins_with("--sample="):
+			_sample = StringName(text.trim_prefix("--sample="))
+		elif text.begins_with("--touch="):
+			var touch := text.trim_prefix("--touch=").split(":")
+			if touch.size() == 2:
+				var xy := touch[1].split(",")
+				if xy.size() == 2:
+					_touches.append([float(touch[0]),
+						Vector2(float(xy[0]), float(xy[1]))])
 		elif text == "--evade":
 			_evade = true
 		elif text == "--forage":
@@ -175,8 +280,32 @@ func _ready() -> void:
 	add_child(run)
 	_run = run
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
-	_predator = _find_script(self, "res://game/normal/predator.gd")
+	_genome = _find_script(self, "res://game/normal/genome.gd")
 	_food = _find_script(self, "res://game/normal/food.gd")
+
+	if _radius > 0.0:
+		var body := _find_node_with(self, &"bearing_to")
+		if body != null:
+			body.radius = _radius
+			# The water is seeded around the player's radius, so it has to be
+			# seeded again once that has been forced.
+			if _food != null:
+				_food.setup(body)
+			print("[drive] radius forced to %.1f -> %d slots" % [
+				_radius, body.slots()])
+	if _genome_spec != "" and _genome != null:
+		_force_genome(_genome_spec)
+	if _sample != &"" and _genome != null:
+		_genome.held_sample = _sample
+		_genome.held_remaining = _genome.SAMPLE_SECONDS
+		print("[drive] holding a sample of ", _sample)
+	if _check_seeding > 0:
+		_run_seeding_check(_check_seeding)
+		get_tree().quit(0)
+		return
+
+	if _food != null:
+		_food.eaten.connect(_on_meal)
 
 	_bus = _find_bus(self)
 	if _bus != null:
@@ -191,23 +320,45 @@ func _ready() -> void:
 		print("[drive] hunger forced to %.2f -> beat %.2fs at %.2f strength" % [
 			_hunger, _metabolism.beat_period(), _metabolism.beat_amplitude()])
 
-	if _stalk >= 0.0 and _predator != null:
-		_predator.enter(_hold_point(_stalk, 40.0))
-		print("[drive] predator parked at %.0f units" % _stalk)
-	if _hunt >= 0.0 and _predator != null:
-		_predator.enter(_hold_point(_hunt, 40.0))
-		print("[drive] predator hunting from %.0f units" % _hunt)
+	if _stalk >= 0.0 and _food != null:
+		_make_hunter(0, _hold_point(_stalk, 40.0))
+		print("[drive] hunter parked at %.0f units" % _stalk)
+	if _hunt >= 0.0 and _food != null:
+		_make_hunter(0, _hold_point(_hunt, 40.0))
+		print("[drive] hunter released from %.0f units" % _hunt)
+	if _prey_radius > 0.0 and _food != null:
+		var bodies: Array = _food.get("_cells")
+		if bodies.size() > 1:
+			bodies[1].set("radius", _prey_radius)
+			bodies[1].set("drifter", false)
+			bodies[1].set("genome", {&"cytostome": 1, &"cirrus": 2})
+			print("[drive] field cell 1 forced to r%.1f gape %.1f" % [
+				_prey_radius, _food.gape_at(1)])
 	if _food_at >= 0.0 and _food != null:
-		print("[drive] food parked at %.0f units" % _food_at)
+		print("[drive] field cell 1 parked at %.0f units" % _food_at)
+	_apply_poses(true)
 
 	if hold == "a" or hold == "d":
 		_send_key(KEY_A if hold == "a" else KEY_D, true)
 		print("[drive] holding ", hold.to_upper())
 
 
+## Ground truth about a meal, straight off the field: what it weighed against
+## this body, which gene came out of it, and what that did to the genome. The
+## bus is deliberately not told the first two, so this is the only place they
+## can be checked.
+func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	print("[meal]  %5.2f  nutrition %.2f of one meal (%.2f hunger)  gene %s -> %s  me r%.2f gape %.2f" % [
+		_clock, nutrition, 0.5 * nutrition, gene if gene != &"" else &"none",
+		_genome_text(_genome.tiers() if _genome != null else {}),
+		cell.radius if cell != null else 0.0, cell.gape() if cell != null else 0.0])
+
+
 func _process(delta: float) -> void:
 	_clock += delta
 	_hold_world()
+	_watch_field(delta)
 	_step_forage()
 	_step_evade()
 	_step_trace(delta)
@@ -230,6 +381,11 @@ func _process(delta: float) -> void:
 			_send_key(code, false)
 			print("[drive] %5.2f  tap %d" % [_clock, code])
 			_taps.remove_at(i)
+
+	for i in range(_touches.size() - 1, -1, -1):
+		if _clock >= float(_touches[i][0]):
+			_send_touch(_touches[i][1])
+			_touches.remove_at(i)
 
 	if _back_at >= 0.0 and _clock >= _back_at:
 		_back_at = -1.0
@@ -296,8 +452,45 @@ func _step_evade() -> void:
 	_evade_key = want
 
 
+## Everything the simulation half of Phase 5 has to be judged on, once every
+## [param --trace] seconds: what the player is, what the water is, who is
+## hunting whom and how hard the water is leaning on the membrane.
+## What §2.1's three mappings are actually worth right now, read straight off
+## the lobes the bus has composed rather than off a photograph.
+##
+## The thrust bloom and the turn shear share `glow_lobes[0]` -- the loudest
+## thing happening to your own skin is the thing you feel -- so a still frame
+## cannot separate "the bloom got louder" from "the beat happened to land". The
+## uniform can, exactly, which is the only honest way to check a table whose
+## whole claim is that three numbers move with a tier.
+##
+## Reaching for a private member is a thing only tools/ is allowed to do.
+func _membrane_text() -> String:
+	if _bus == null:
+		return "membrane: no bus"
+	# Untyped on purpose: get() on a member that has been renamed returns null,
+	# and a typed local would turn a stale harness into a crash rather than a
+	# line of text saying the harness is stale.
+	var raw_lobes: Variant = _bus.get("_glow_lobes")
+	var raw_organs: Variant = _bus.get("_organs")
+	if not (raw_lobes is PackedVector4Array) or not (raw_organs is PackedInt32Array):
+		return "membrane: unavailable"
+	var lobes: PackedVector4Array = raw_lobes
+	var organs: PackedInt32Array = raw_organs
+	if lobes.size() < 3 or organs.size() < 4:
+		return "membrane: unavailable"
+	var me: Vector4 = lobes[0]
+	var light: Vector4 = lobes[2]
+	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
+		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
+		organs[0], organs[1], organs[2], organs[3],
+		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
+		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
+		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
+
+
 func _step_trace(delta: float) -> void:
-	if _trace <= 0.0 or _predator == null or _run == null:
+	if _trace <= 0.0 or _food == null or _run == null:
 		return
 	_trace_clock += delta
 	if _trace_clock < _trace:
@@ -306,10 +499,119 @@ func _step_trace(delta: float) -> void:
 	var cell := _find_node_with(_run, &"bearing_to")
 	if cell == null:
 		return
-	var d: float = cell.position.distance_to(_predator.position)
-	print("[trace] %6.2f  range %7.1f  dread %.3f  hunting %s  heading %+6.1f" % [
-		_clock, d, _predator.dread_level, _predator.hunting(),
-		rad_to_deg(cell.heading)])
+
+	var hunter: int = _food.hunter()
+	var range_text := "     --"
+	if hunter >= 0:
+		range_text = "%7.1f" % _food.points()[hunter].distance_to(cell.position)
+	var speed := _travelled / maxf(_speed_clock, 0.001)
+	_travelled = 0.0
+	_speed_clock = 0.0
+	print("[trace] %6.2f  me r%5.2f gape %5.2f swim %5.1f (real %5.1f) %s" % [
+		_clock, cell.radius, cell.gape(), cell.swim_speed(), speed,
+		_genome_text(_genome.tiers() if _genome != null else {})])
+	print("        %s" % _membrane_text())
+	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
+		_food.dread_level, _food.threat,
+		"none" if hunter < 0 else str(hunter), range_text,
+		_metabolism.upkeep if _metabolism != null else 1.0,
+		_metabolism.hunger if _metabolism != null else 0.0, _field_meals,
+		100.0 * _dread_seconds / maxf(_run_seconds, 0.001),
+		_dread_area / maxf(_run_seconds, 0.001)])
+	for i in _food.points().size():
+		print("        cell %d  %s" % [i, _field_text(i, cell)])
+
+
+func _field_text(index: int, cell: Node) -> String:
+	var bodies: Array = _food.get("_cells")
+	var b: Object = bodies[index]
+	var radius: float = b.get("radius")
+	var gape: float = _food.gape_at(index)
+	var state: int = b.get("state")
+	var names := ["drift", "stalk", "break"]
+	var target: int = b.get("target")
+	var target_text := "-"
+	if target == FoodField.TARGET_PLAYER:
+		target_text = "player"
+	elif target >= 0:
+		target_text = "cell %d" % target
+	return "r%5.2f gape %5.2f %-5s -> %-6s  d %7.1f  %s  %s%s" % [
+		radius, gape, names[state], target_text,
+		cell.position.distance_to(b.get("pos")),
+		"EATS ME" if gape > cell.radius else "       ",
+		"edible" if radius < cell.gape() else "      ",
+		"  %s" % _genome_text(b.get("genome"))]
+
+
+func _genome_text(tiers: Dictionary) -> String:
+	var parts: Array[String] = []
+	for gene: StringName in tiers:
+		parts.append("%s%d" % [str(gene).substr(0, 3), int(tiers[gene])])
+	parts.sort()
+	return "[%s]" % " ".join(parts)
+
+
+## Watches the field for cells eating each other. Slots are recycled, so a jump
+## in a slot's serial means a different body, not a meal.
+func _watch_field(delta: float) -> void:
+	if _food == null:
+		return
+	var bodies: Array = _food.get("_cells")
+	if bodies == null:
+		return
+	if _watch_serial.size() != bodies.size():
+		_watch_serial.resize(bodies.size())
+		_watch_meals.resize(bodies.size())
+	for i in bodies.size():
+		var serial: int = bodies[i].get("serial")
+		var meals: int = bodies[i].get("meals")
+		if serial != _watch_serial[i]:
+			_watch_serial[i] = serial
+			_watch_meals[i] = meals
+			continue
+		if meals > _watch_meals[i]:
+			_field_meals += meals - _watch_meals[i]
+			var here: Vector2 = _food.points()[i]
+			print("[field] %5.2f  cell %d ate one and is now r%.2f gape %.2f %s  (%.0f units from you)" % [
+				_clock, i, bodies[i].get("radius"), _food.gape_at(i),
+				_genome_text(bodies[i].get("genome")), _away(i)])
+			# A cell that has just fed is newly dangerous and belongs in the
+			# water, not ejected from it. Check where it actually went.
+			_after_meal.append([i, serial, here, _clock])
+			_watch_meals[i] = meals
+
+	for k in range(_after_meal.size() - 1, -1, -1):
+		var mark: Array = _after_meal[k]
+		if _clock - float(mark[3]) < AFTER_MEAL_LOOK:
+			continue
+		_after_meal.remove_at(k)
+		var index: int = mark[0]
+		if bodies[index].get("serial") != mark[1]:
+			continue
+		# Its own displacement, not the gap to a player swimming at 56 u/s.
+		# A break-off runs at lunge speed, so fleeing shows up as 570-1100
+		# units in six seconds; drifting shows up as about 54.
+		var moved: float = (mark[2] as Vector2).distance_to(_food.points()[index])
+		print("[field] %5.2f  cell %d travelled %4.0f units in the %.0fs after its meal: %s" % [
+			_clock, index, moved, AFTER_MEAL_LOOK,
+			"drifting" if moved < 200.0 else "BOLTED"])
+
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		return
+	# Only while the cell is actually alive. _set_simulating(false) stops the
+	# metabolism, and counting the frozen post-death frames made the duty cycle
+	# climb on its own -- an instrument that reports the death as dread.
+	if _metabolism != null and _metabolism.is_processing():
+		_run_seconds += delta
+		_dread_area += _food.dread_level * delta
+		if _food.dread_level > 0.05:
+			_dread_seconds += delta
+	if _have_last_pos:
+		_travelled += _last_pos.distance_to(cell.position)
+		_speed_clock += delta
+	_last_pos = cell.position
+	_have_last_pos = true
 
 
 ## Parks whatever the shot needs at a fixed body-relative bearing and range.
@@ -320,20 +622,67 @@ func _hold_world() -> void:
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
 		return
-	if _stalk >= 0.0 and _predator != null:
-		_predator.position = _hold_point(_stalk, 40.0)
+	if _stalk >= 0.0 and _food != null:
+		_place(0, _hold_point(_stalk, 40.0))
 	if _food_at >= 0.0 and _food != null:
-		# Packed arrays are copy-on-write, so the accessor cannot be written
-		# through -- the harness has to hand a whole array back. Reaching for a
-		# private member is a thing only tools/ is allowed to do.
-		var points: PackedVector2Array = _food.get("_pos")
-		if points.size() > 0:
-			points[0] = _hold_point(_food_at, -35.0)
-			_food.set("_pos", points)
+		# Reaching for a private member is a thing only tools/ is allowed to do.
+		# The bodies are objects rather than packed arrays now, so this writes
+		# through instead of handing a whole array back.
+		_place(1, _hold_point(_food_at, -35.0))
 	if _starve >= 0.0 and _metabolism != null:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
+	_apply_poses(false)
+
+
+func _parse_pose(spec: String) -> Array:
+	var bits := spec.split(",", false)
+	var tiers := {}
+	if bits.size() > 4:
+		for pair in bits[4].split("+", false):
+			var gene := str(pair).split(":")
+			if gene.size() == 2:
+				tiers[StringName(gene[0].strip_edges())] = int(gene[1])
+	return [
+		int(bits[0]) if bits.size() > 0 else 0,
+		float(bits[1]) if bits.size() > 1 else 400.0,
+		float(bits[2]) if bits.size() > 2 else 0.0,
+		float(bits[3]) if bits.size() > 3 else 20.0,
+		tiers,
+	]
+
+
+## Held every frame, because the field keeps swimming and recycling underneath.
+## Reaching for a private member is a thing only tools/ is allowed to do.
+func _apply_poses(announce: bool) -> void:
+	if _posed.is_empty() or _food == null:
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		return
+	var bodies: Array = _food.get("_cells")
+	for pose: Array in _posed:
+		var index: int = pose[0]
+		if index < 0 or index >= bodies.size():
+			continue
+		var b: Object = bodies[index]
+		b.set("radius", pose[3])
+		b.set("genome", (pose[4] as Dictionary).duplicate())
+		b.set("drifter", (pose[4] as Dictionary).is_empty())
+		b.set("seeded", true)
+		b.set("state", FoodField.State.DRIFT)
+		b.set("target", FoodField.TARGET_NONE)
+		b.set("calm", 999.0)
+		b.set("pos", _hold_point(pose[1], pose[2]))
+		# Facing the player, so the mouth is pointed at the thing it is being
+		# read against -- which is the frame a forager actually gets.
+		var away: Vector2 = cell.position - _hold_point(pose[1], pose[2])
+		b.set("heading", atan2(away.x, -away.y))
+		if announce:
+			print("[drive] cell %d posed: r%.1f gape %.1f at %.0f units, %s" % [
+				index, float(pose[3]), _food.gape_at(index), float(pose[1]),
+				_genome_text(pose[4])])
 
 
 func _hold_point(distance: float, bearing_deg: float) -> Vector2:
@@ -399,7 +748,11 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 	# empties its hunger while the shot harness is still waiting. One meal is
 	# what was wanted.
 	if kind == &"ingest":
+		# Anything parked inside contact range would be eaten again every frame,
+		# which grows the cell and empties its hunger while the shot harness is
+		# still waiting. One meal is what was wanted.
 		_food_at = -1.0
+		_posed.clear()
 		_meals += 1
 		print("[drive] %5.2f  meal %d" % [_clock, _meals])
 	if kind == &"taste":
@@ -430,8 +783,27 @@ func _keycode(name: String) -> Key:
 		"down": return KEY_DOWN
 		"left": return KEY_LEFT
 		"right": return KEY_RIGHT
+		"tab": return KEY_TAB
 		"v": return KEY_V
 		_: return KEY_NONE
+
+
+## One finger, down and up, at a point in the **design canvas** rather than in
+## the window: the project stretches canvas_items with an expand aspect, so the
+## same widget is at the same canvas coordinate at 1280x720 and at 2400x1080 and
+## only the margins differ. Sent as a touch, which is the event a phone
+## actually produces; Godot emulates the mouse from it.
+func _send_touch(canvas: Vector2) -> void:
+	var at := canvas * get_viewport().get_screen_transform().get_scale() \
+		+ get_viewport().get_screen_transform().get_origin()
+	for pressed in [true, false]:
+		var event := InputEventScreenTouch.new()
+		event.index = 0
+		event.pressed = pressed
+		event.position = at
+		Input.parse_input_event(event)
+	print("[drive] %5.2f  touch %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, at.x, at.y, canvas.x, canvas.y])
 
 
 func _send_key(keycode: Key, pressed: bool) -> void:
@@ -469,3 +841,166 @@ func _find_node_with(node: Node, method: StringName) -> Node:
 		if found != null:
 			return found
 	return null
+
+
+# ---------------------------------------------------------------------------
+# Reaching into the world on purpose. The game has no hooks for any of this and
+# must not grow any: a simulation that can be posed from outside is one that can
+# be posed by accident.
+# ---------------------------------------------------------------------------
+
+## Turns field cell [param index] into something that can eat the player, puts
+## it at [param at] and starts its run. The gape multiple is the whole point of
+## the handle: at 1.40 it is terrifying, at 0.90 it can still eat you but dread
+## barely registers, and at 0.80 it cannot.
+func _make_hunter(index: int, at: Vector2) -> void:
+	var cell := _find_node_with(_run, &"bearing_to")
+	if cell == null or _food == null:
+		return
+	var bodies: Array = _food.get("_cells")
+	if index >= bodies.size():
+		return
+	var b: Object = bodies[index]
+	# A body the player's own size, with whatever mouth the test asked for. The
+	# tier ladder is coarse, so the multiple is written straight into the body
+	# rather than approximated by a tier -- this is a measuring instrument.
+	b.set("radius", cell.radius)
+	b.set("drifter", false)
+	b.set("genome", {&"cytostome": 3, &"flagellum": 2})
+	b.set("pos", at)
+	b.set("state", FoodField.State.STALK)
+	b.set("target", FoodField.TARGET_PLAYER)
+	b.set("aim", cell.position)
+	b.set("aim_clock", 0.0)
+	b.set("lost", 0.0)
+	b.set("rush", 0.0)
+	b.set("best", INF)
+	b.set("lunging", false)
+	b.set("stroke", 0.2)
+	b.set("heading", atan2((cell.position - at).x, -(cell.position - at).y))
+	# Scale the radius so the gape comes out at exactly the multiple asked for.
+	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
+	b.set("radius", cell.radius * _hunter_gape / tier_gape)
+	print("[drive] hunter %d: r%.1f gape %.1f against your r%.1f" % [
+		index, b.get("radius"), _food.gape_at(index), cell.radius])
+
+
+func _place(index: int, at: Vector2) -> void:
+	var bodies: Array = _food.get("_cells")
+	if index < bodies.size():
+		bodies[index].set("pos", at)
+
+
+## `cytostome:3,cirrus:2` -- straight into the genome node, before the first
+## frame, so the cell boots as whatever the measurement needs it to be.
+func _force_genome(spec: String) -> void:
+	var tiers: Dictionary = _genome.tiers()
+	tiers.clear()
+	for pair in spec.split(",", false):
+		var bits := str(pair).split(":")
+		if bits.size() == 2:
+			tiers[StringName(bits[0].strip_edges())] = int(bits[1])
+	print("[drive] genome forced to %s, upkeep %.2f" % [
+		_genome_text(tiers), _genome.upkeep()])
+
+
+## §1.3's distribution, measured rather than argued about. Reseeds the whole
+## field over and over at a range of player radii and reports what actually
+## comes out -- above all whether the field is ever left with no drifter in it,
+## which is the invariant the "there is always a way back" claim rests on.
+func _run_seeding_check(rounds: int) -> void:
+	var cell := _find_node_with(_run, &"bearing_to")
+	if cell == null or _food == null:
+		print("[check] no simulation to seed")
+		return
+	var bodies: Array = _food.get("_cells")
+	var drifterless := 0
+	var min_drifters := 99
+	var drifters := 0
+	var seeds := 0
+	var max_gape := 0.0
+	var max_radius := 0.0
+	var tier_counts := {0: 0, 1: 0, 2: 0, 3: 0}
+	var edible := 0
+	var dangerous := 0
+	var both := 0
+	var buckets := {}
+
+	for round_index in rounds:
+		# Sweep the player across the whole arc, because half of §1.3 is the
+		# claim that the water is a different picture at r26 and at r40.
+		cell.radius = lerpf(CellBody.BASE_RADIUS, 40.0,
+			float(round_index % 15) / 14.0)
+		_food.setup(cell)
+		for k in bodies.size():
+			_food.call("_seed", k)
+			var live := 0
+			for i in bodies.size():
+				if bodies[i].get("drifter"):
+					live += 1
+			min_drifters = mini(min_drifters, live)
+			if live == 0:
+				drifterless += 1
+		for i in bodies.size():
+			seeds += 1
+			var b: Object = bodies[i]
+			var radius: float = b.get("radius")
+			var gape: float = _food.gape_at(i)
+			if b.get("drifter"):
+				drifters += 1
+			max_gape = maxf(max_gape, gape)
+			max_radius = maxf(max_radius, radius)
+			var tier: int = int((b.get("genome") as Dictionary).get(&"cytostome", 0))
+			tier_counts[tier] = int(tier_counts[tier]) + 1
+			var i_eat: bool = radius < cell.gape()
+			var it_eats: bool = cell.radius < gape
+			if i_eat and it_eats:
+				both += 1
+			elif i_eat:
+				edible += 1
+			elif it_eats:
+				dangerous += 1
+			# The claim §1.3 had to produce: the born cell and the full-grown
+			# cell must not be looking at the same picture at two zoom levels.
+			var bucket := int(roundf(cell.radius))
+			if not buckets.has(bucket):
+				buckets[bucket] = [0, 0, 0, 0]
+			var row: Array = buckets[bucket]
+			row[0] += 1
+			if i_eat and it_eats:
+				row[3] += 1
+			elif i_eat:
+				row[1] += 1
+			elif it_eats:
+				row[2] += 1
+
+	print("[check] %d rounds, %d seeded bodies" % [rounds, seeds])
+	print("[check] drifter-free fields: %d  (minimum drifters seen in a field: %d)"
+		% [drifterless, min_drifters])
+	print("[check] drifters %.1f%%  cytostome tiers 0/1/2/3: %d/%d/%d/%d" % [
+		100.0 * float(drifters) / float(maxi(seeds, 1)),
+		tier_counts[0], tier_counts[1], tier_counts[2], tier_counts[3]])
+	print("[check] max radius %.2f  max gape %.2f  (ARRIVAL_GAPE_MAX %.1f)" % [
+		max_radius, max_gape, FoodField.ARRIVAL_GAPE_MAX])
+	for bucket: int in [26, 33, 40]:
+		if not buckets.has(bucket):
+			continue
+		var row: Array = buckets[bucket]
+		var n := float(maxi(int(row[0]), 1))
+		print("[check] a player at r%d, out of %d bodies: edible %.0f%%  eats me %.0f%%  both %.0f%%  standoff %.0f%%" % [
+			bucket, int(row[0]), 100.0 * float(row[1]) / n, 100.0 * float(row[2]) / n,
+			100.0 * float(row[3]) / n,
+			100.0 * float(int(row[0]) - int(row[1]) - int(row[2]) - int(row[3])) / n])
+	print("[check] relationship to the player: edible %.1f%%  eats me %.1f%%  both %.1f%%  standoff %.1f%%" % [
+		100.0 * float(edible) / float(maxi(seeds, 1)),
+		100.0 * float(dangerous) / float(maxi(seeds, 1)),
+		100.0 * float(both) / float(maxi(seeds, 1)),
+		100.0 * float(seeds - edible - dangerous - both) / float(maxi(seeds, 1))])
+
+
+## How far field cell [param index] is from the player right now.
+func _away(index: int) -> float:
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null or _food == null:
+		return 0.0
+	return _food.points()[index].distance_to(cell.position)

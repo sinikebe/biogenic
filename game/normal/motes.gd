@@ -78,7 +78,7 @@ func _process(_delta: float) -> void:
 		# slowly and a linear reading makes almost every bump the same minimum
 		# tap. Never less than a third, or the bruise has no bearing to read.
 		var strength := clampf(
-			sqrt(_cell.velocity.length() / CellBody.IMPULSE_SPEED), 0.35, 1.0)
+			sqrt(_cell.velocity.length() / _cell.impulse_speed()), 0.35, 1.0)
 		var normal := -offset.normalized() if distance > 0.001 else -_cell.forward()
 		_cell.bump(normal)
 		# Emit the position rather than leaving a listener to work out which mote

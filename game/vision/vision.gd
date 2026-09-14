@@ -6,7 +6,7 @@ extends CanvasLayer
 ## Full vision draws the world underneath it and leaves the membrane running on
 ## top, untouched, so the blind signals can be checked against the truth: does
 ## the bruise land on the bearing the mote was really on, does the taste wash
-## really point at the food.
+## really point at the cell it came off.
 ##
 ## **Nothing in here writes to the simulation.** The cell, the motes and the
 ## signal bus are read exactly as they are, and the two views must never differ
@@ -32,8 +32,9 @@ extends CanvasLayer
 const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
-const PredatorBody := preload("res://game/normal/predator.gd")
+const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
+const Cilia := preload("res://game/vision/cilia.gd")
 
 ## Master switch. False takes the world view out everywhere, including from
 ## full-vision mode, which then renders as point of view. For when something in
@@ -72,8 +73,8 @@ const KICK_LIFE := 5.0
 const HIT_LIFE := 2.4
 const GHOST_LIFE := 2.4
 ## The reported wake bearing, drawn as a ray from the cell. If it does not point
-## at the predator, the membrane is lying -- and catching exactly that is the
-## only reason this view exists.
+## at the cell that is hunting, the membrane is lying -- and catching exactly
+## that is the only reason this view exists.
 const WAKE_LIFE := 1.45
 
 # --- Threshold rings -------------------------------------------------------
@@ -92,12 +93,18 @@ const RING_STEPS := 64
 ## Decay of the beat echo, matching the membrane's own pulse decay.
 const BEAT_DECAY := 0.42
 
-const OVOID_STEPS := 40
 const MOTE_STEPS := 22
 const HALO_STEPS := 7
-const CILIA := 32
 ## Fixed length, always: this is where the cell is pointing, never how fast.
 const HEADING_LEN := 46.0
+## Where the heading needle starts, as a multiple of radius. **Moved from 1.55
+## to 1.80 by §4.6**: a tier-3 `cytostome` crest reaches r * 1.61 and collided
+## with the chevron. The 32-cilium bearing rose that used to live under it is
+## retired with it -- under a tier-2 fringe its pale cardinal ticks were
+## invisible at both sizes, and the fringe now carries meaning that a protractor
+## laid over it only muddles. The bearing checks this view exists for are drawn
+## as rays from the cell (_draw_hits, _draw_wakes) and are their own instrument.
+const HEADING_BASE := 1.80
 ## Variable length: how far ahead the current velocity reaches. Scaled so it is
 ## almost never the same length as the heading needle, because the one thing
 ## these two must never do is be mistaken for each other.
@@ -120,9 +127,10 @@ const WATER_TINT := Color(0.10, 0.62, 0.52)
 ## Food, in exactly the green the taste lobe uses, so "the green on my rim" and
 ## "the green thing out there" are visibly one substance.
 const FOOD_TINT := Color(0.35, 0.88, 0.42)
-## The predator. Full vision only, never on the membrane -- which is the whole
-## point of it. Against the teal water it is unmistakable, and the size
-## difference does the work even without the hue.
+## The colour of the thing that can eat you. Full vision only, never on the
+## membrane -- which is the whole point of it. It no longer belongs to a species:
+## §1.1.1 moves it onto the mouth, so a cell that grows its cytostome past your
+## radius turns red in front of you.
 const PREDATOR_TINT := Color(0.78, 0.24, 0.30)
 
 @onready var _water: ColorRect = $Water
@@ -131,7 +139,7 @@ const PREDATOR_TINT := Color(0.78, 0.24, 0.30)
 var _cell: CellBody = null
 var _motes_node: MotesField = null
 var _food_node: FoodField = null
-var _predator_node: PredatorBody = null
+var _genome_node: GenomeNode = null
 var _bus: SignalBus = null
 var _shader: ShaderMaterial = null
 
@@ -156,8 +164,8 @@ var _kicks: Array[Array] = []
 var _hits: Array[Array] = []
 ## [[world position, age], ...] -- motes the field has already recycled.
 var _ghosts: Array[Array] = []
-## [[world position, radius, age], ...] -- food eaten since, held so the ingest
-## flood has something to be checked against.
+## [[world position, radius, age, gene hue], ...] -- cells eaten since, held so
+## the ingest flood has something to be checked against.
 var _meals: Array[Array] = []
 ## [[world position, world direction, strength, age], ...] -- reported wakes.
 var _wakes: Array[Array] = []
@@ -322,10 +330,19 @@ func _on_mote_struck(_bearing: float, _strength: float, at: Vector2) -> void:
 
 ## Same contract, same reason: the field hands over where the meal was, because
 ## by the next frame it has been recycled to the far side of the water.
-func _on_eaten(_nutrition: float, _gene: StringName, at: Vector2) -> void:
+func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	if not _active:
 		return
-	_meals.append([at, FoodField.RADIUS_MAX, 0.0])
+	# The meal signal still carries no radius, and it does not need to:
+	# `nutrition` is the prey's radius over this body's, and food.gd clamps it
+	# only at MEAL_MIN 0.35 and MEAL_MAX 1.40. The upper clamp is unreachable --
+	# a gape of 1.40r is the widest mouth there is, so nothing eaten was ever
+	# wider than that -- and the lower one is off by at most a pixel on the
+	# smallest drifter swallowed by the largest cell. Adding a fourth argument
+	# to a signal three files forward it would cost more than a pixel is worth.
+	var r := clampf(nutrition * _cell.radius,
+		FoodField.DRIFTER_MIN, FoodField.ARRIVAL_RADIUS_MAX)
+	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
 
 
 ## A body-relative bearing turned back into a world direction. The one place
@@ -357,12 +374,11 @@ func _on_world_draw() -> void:
 	_draw_trail(a)
 	_draw_kicks(a)
 	_draw_motes(a)
-	_draw_food(a)
+	_draw_cells(a)
 	_draw_ghosts(a)
 	_draw_meals(a)
 	_draw_hits(a)
 	_draw_wakes(a)
-	_draw_predator(a)
 	_draw_cell(a)
 
 
@@ -471,51 +487,146 @@ func _draw_hits(a: float) -> void:
 			Color(IMPACT_TINT, 0.42 * fade * strength), 1.6 / ZOOM, true)
 
 
-## Food. The same green the taste lobe glows, so the two read as one substance.
-func _draw_food(a: float) -> void:
+## Every cell in the water, drawn by exactly the routine that draws the player
+## (§4.5). There is no species branch here and there must never be one: two
+## drawing paths would drift, and the thing the player reads off a body would
+## stop being true of their own.
+##
+## What this file still owns is the **scent haze**, because the haze is not a
+## property of the cell -- it is the drawn form of the scent field the
+## membrane's green band is reading, and it is therefore a property of the
+## relationship between that cell and this one.
+func _draw_cells(a: float) -> void:
 	if _food_node == null:
 		return
 	var points := _food_node.points()
 	var radii := _food_node.radii()
+	var headings := _food_node.headings()
+	var genomes := _food_node.genomes()
 	for i in points.size():
 		var p: Vector2 = points[i]
-		var r: float = float(radii[i]) if i < radii.size() else FoodField.RADIUS_MAX
+		var r: float = float(radii[i]) if i < radii.size() else FoodField.DRIFTER_MAX
 		# The scent as a soft haze rather than a ring: a ring here would be a
 		# boundary, and the cell cannot perceive a boundary.
-		for k in 3:
-			var t := float(k + 1) / 3.0
-			_world.draw_circle(p, r * (1.4 + 4.6 * t),
-				Color(FOOD_TINT, 0.014 * (1.0 - t) * a), true, -1.0, true)
-		_world.draw_circle(p, r * 0.78, Color(FOOD_TINT, 0.22 * a), true, -1.0, true)
-		# Knocked out of round with a stable per-slot grain, like the motes: a
-		# perfect disc reads as a drawn shape rather than as something alive.
-		var grit := float(i) * 5.1
-		var shell := PackedVector2Array()
-		shell.resize(MOTE_STEPS + 1)
-		for j in MOTE_STEPS + 1:
-			var t2 := TAU * float(j % MOTE_STEPS) / float(MOTE_STEPS)
-			var wobble := 1.0 + 0.13 * (_noise(grit + float(j % MOTE_STEPS) * 1.7) - 0.5) * 2.0
-			shell[j] = p + Vector2(cos(t2), sin(t2)) * r * wobble
-		_world.draw_polyline(shell, Color(FOOD_TINT, 0.70 * a), 1.6 / ZOOM, true)
+		#
+		# **Gene-blind, and it stays gene-blind** -- always FOOD_TINT, never the
+		# body's colour -- but weighted by exactly what the taste field weights
+		# the body by, so a cell too big to fit in the mouth fades out of the
+		# drawn scent as it fades out of the smelled one. If it were gene
+		# coloured, full vision would be showing a distinction point of view
+		# cannot make, in the one channel where the two views must agree.
+		# food.gd owns the curve; this reads it. §4.5, last paragraph.
+		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
+			r / maxf(_cell.gape(), 0.001))
+		_draw_scent(p, r, smell * a)
+
+		Cilia.draw_cell(_world, p,
+			float(headings[i]) if i < headings.size() else 0.0, r,
+			genomes[i] if i < genomes.size() else {},
+			_food_node.gape_at(i), _cell.radius, false, _clock, a,
+			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM)
+
+
+## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
+## full vision has for the commonest decision in the game, and as shipped it was
+## not a weak mark, it was no mark: measured off the render, the haze ring
+## around an edible cell came out **0.5 of 255 greener than empty water**, while
+## the water shader's own organic wash swings through ±25 in the same channel.
+## The three defects were all arithmetic and all in one line:
+##
+## - the outermost of the three rings was drawn at alpha exactly zero, every
+##   frame, for every cell -- `(1 - t)` with `t` reaching 1;
+## - the largest ring was the faintest, so what ink there was got spread from
+##   2.9 to 6.0 body radii, a cloud twelve bodies wide and dense nowhere;
+## - the peak alpha, 0.0093, was a third of what the dithering can even carry.
+##
+## **Nothing about what it means has changed, and nothing may.** It is still
+## `FOOD_TINT` on every edible cell whatever gene it carries, still weighted by
+## exactly `food.gd`'s taste curve, so it still says precisely what the
+## membrane's green band says and never more. What changed is that it is now a
+## bloom that hugs the body -- brightest at the rim, gone by three radii --
+## instead of a wash spread so thin it fell under the water's own texture.
+## Hugging the body is also what keeps it from being mistaken for that texture:
+## the wash is hundreds of pixels across and attached to nothing, and this is
+## concentric with a cell and the size of that cell.
+##
+## **One texture, not a stack of discs**, and the reason is the sentence the old
+## code wrote and then broke: *a ring here would be a boundary, and the cell
+## cannot perceive a boundary.* Six concentric `draw_circle`s at a visible alpha
+## are six boundaries -- built that way first, rendered, and it banded at
+## 1280x720 and worse at 2400x1080, where the canvas scale makes each band half
+## again as wide. A radial `GradientTexture2D` drawn once per cell has no edge
+## anywhere, costs one `draw_texture_rect` instead of six polygons, and is plain
+## `ImageTexture` under GL Compatibility.
+##
+## The ramp holds flat out to 0.42 and then falls away, so the brightest part of
+## the bloom is the annulus **just outside the rim** rather than the middle --
+## the middle is behind the body and cannot be seen anyway. Measured after, in
+## median green of 255 out from a r18 edible cell: **99** at the rim, 36 at
+## 1.3 r, 24 at 1.65 r, water by 2.7 r. An inedible cell of any size stays flat
+## at 10-12, which is the water.
+const HAZE_OUTER := 3.0
+## Alpha at the plateau, before the edibility weight.
+const HAZE_PEAK := 0.24
+const HAZE_TEXTURE_SIZE := 128
+
+var _haze: GradientTexture2D = null
+
+
+## Built once. A run draws it four times a frame and never changes it.
+func _build_haze() -> GradientTexture2D:
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.42, 0.62, 0.82, 1.0])
+	ramp.colors = PackedColorArray([
+		Color(1, 1, 1, 1.00), Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42),
+		Color(1, 1, 1, 0.12), Color(1, 1, 1, 0.0)])
+	var tex := GradientTexture2D.new()
+	tex.gradient = ramp
+	tex.fill = GradientTexture2D.FILL_RADIAL
+	tex.fill_from = Vector2(0.5, 0.5)
+	tex.fill_to = Vector2(1.0, 0.5)
+	tex.width = HAZE_TEXTURE_SIZE
+	tex.height = HAZE_TEXTURE_SIZE
+	return tex
+
+
+func _draw_scent(at: Vector2, r: float, strength: float) -> void:
+	if strength <= 0.0:
+		return
+	if _haze == null:
+		_haze = _build_haze()
+	var reach := r * HAZE_OUTER
+	_world.draw_texture_rect(_haze,
+		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
+		Color(FOOD_TINT, HAZE_PEAK * strength))
 
 
 ## A meal, held where it was long enough that the interior flood has something
 ## to be checked against.
+##
+## **In the gene's hue, and this is not the scent haze.** The haze is gene-blind
+## because it is the drawn form of something point of view genuinely cannot
+## resolve. The instant of swallowing is the opposite case: §2.2 makes the
+## interior flood the gene's colour, which is `perception.md`'s one licensed
+## exception, and this ring is the only thing that flood can be checked
+## against. Drawing it green while the membrane floods amber would leave the
+## one breach in the rule unverifiable by the view that exists to verify.
 func _draw_meals(a: float) -> void:
 	for meal: Array in _meals:
 		var at: Vector2 = meal[0]
 		var t: float = float(meal[2]) / GHOST_LIFE
 		var fade := (1.0 - t) * (1.0 - t) * a
+		var tint: Color = meal[3]
 		_world.draw_arc(at, float(meal[1]) * (1.0 + 2.6 * t), 0.0, TAU, 34,
-			Color(FOOD_TINT, 0.45 * fade), 1.6 / ZOOM, true)
+			Color(tint, 0.45 * fade), 1.6 / ZOOM, true)
 
 
 ## The bearing each pressure wake reported, drawn from the cell that felt it.
 ##
 ## This is the Phase 4 version of the bruise ray, and it is the check the whole
-## view exists for: the predator is usually off-screen when a wake lands, so the
+## view exists for: the hunter is usually off-screen when a wake lands, so the
 ## ray is drawn long and faded out along its length, and it has to run through
-## the predator when the predator is visible. If it does not, the membrane is
+## the hunting cell when that cell is visible. If it does not, the membrane is
 ## lying about the only direction it ever gives for the thing hunting you.
 func _draw_wakes(a: float) -> void:
 	var reach := _view.length()
@@ -530,46 +641,6 @@ func _draw_wakes(a: float) -> void:
 		_world.draw_polyline_colors(line, PackedColorArray([
 			Color(PREDATOR_TINT, 0.60 * fade), Color(PREDATOR_TINT, 0.0)]),
 			1.8 / ZOOM, true)
-
-
-## The predator, and the only place in the game it is ever drawn.
-func _draw_predator(a: float) -> void:
-	if _predator_node == null or not _predator_node.hunting():
-		return
-	var p: Vector2 = _predator_node.position
-	var fwd: Vector2 = _predator_node.forward()
-	var stb := Vector2(-fwd.y, fwd.x)
-	var r := PredatorBody.RADIUS
-
-	for i in HALO_STEPS:
-		var k := 1.0 - float(i) / float(HALO_STEPS)
-		_world.draw_circle(p, r * (1.02 + 1.45 * k),
-			Color(PREDATOR_TINT, 0.016 * (1.0 - k) * a), true, -1.0, true)
-
-	# Longer and narrower than the cell, and half again as big. The silhouette
-	# is what says "bigger than you" before the colour does.
-	var body := PackedVector2Array()
-	body.resize(OVOID_STEPS)
-	for i in OVOID_STEPS:
-		var t := TAU * float(i) / float(OVOID_STEPS)
-		var along := cos(t)
-		var across := sin(t) * (1.0 - 0.42 * along)
-		var breathe := 1.0 + 0.030 * sin(t * 4.0 + _clock * 3.1)
-		body[i] = p + fwd * (along * r * 1.30 * breathe) + stb * (across * r * 0.76 * breathe)
-	_world.draw_colored_polygon(body, Color(PREDATOR_TINT, 0.17 * a))
-	var rim := body.duplicate()
-	rim.push_back(body[0])
-	_world.draw_polyline(rim, Color(PREDATOR_TINT, 0.80 * a), 2.4 / ZOOM, true)
-
-	# The flagellum. One stroke of this is one pressure wake, so it is drawn
-	# lashing -- the wakes on the membrane should look like they come from here.
-	var tail := PackedVector2Array()
-	tail.resize(13)
-	for i in 13:
-		var u := float(i) / 12.0
-		var lash := sin(u * 5.2 - _clock * 6.4) * r * 0.40 * u
-		tail[i] = p - fwd * (r * (1.15 + 1.55 * u)) + stb * lash
-	_world.draw_polyline(tail, Color(PREDATOR_TINT, 0.42 * a), 2.0 / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
@@ -592,12 +663,14 @@ func _draw_thresholds(a: float) -> void:
 			_threshold(points[nearest], nearest_d, FoodField.BEARING_RANGE, FOOD_TINT, a)
 			_threshold(points[nearest], nearest_d, FoodField.CORE_RANGE, FOOD_TINT, a)
 
-	if _predator_node != null and _predator_node.hunting():
-		var at: Vector2 = _predator_node.position
-		var pd := at.distance_to(_cell.position)
-		_threshold(at, pd, PredatorBody.DREAD_RANGE, PREDATOR_TINT, a)
-		_threshold(at, pd, PredatorBody.WAKE_RANGE, PREDATOR_TINT, a)
-		_threshold(at, pd, PredatorBody.LUNGE_RANGE, PREDATOR_TINT, a)
+	if _food_node != null:
+		var hunter := _food_node.hunter()
+		if hunter >= 0:
+			var at: Vector2 = _food_node.points()[hunter]
+			var pd := at.distance_to(_cell.position)
+			_threshold(at, pd, FoodField.DREAD_RANGE, PREDATOR_TINT, a)
+			_threshold(at, pd, FoodField.WAKE_RANGE, PREDATOR_TINT, a)
+			_threshold(at, pd, FoodField.LUNGE_RANGE, PREDATOR_TINT, a)
 
 
 func _threshold(centre: Vector2, d: float, radius: float, tint: Color, a: float) -> void:
@@ -615,6 +688,10 @@ func _threshold(centre: Vector2, d: float, radius: float, tint: Color, a: float)
 		Color(tint, 0.14 * near * a), 1.3 / ZOOM, true)
 
 
+## The player's cell: the same routine as every other body in the water, plus
+## the three instruments that are about *this* cell rather than about being a
+## cell -- the beat halo, the heading needle and the velocity plume. The
+## organism is drawn by cilia.gd; the measurements are drawn here.
 func _draw_cell(a: float) -> void:
 	var p := _cell.position
 	var fwd := _cell.forward()
@@ -630,56 +707,49 @@ func _draw_cell(a: float) -> void:
 		_world.draw_circle(p, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * a), true, -1.0, true)
 
-	# Body: an ovoid, narrower at the front, so the cell has a nose even before
-	# the heading needle is read.
-	var body := PackedVector2Array()
-	body.resize(OVOID_STEPS)
-	for i in OVOID_STEPS:
-		var t := TAU * float(i) / float(OVOID_STEPS)
-		var along := cos(t)
-		var across := sin(t) * (1.0 - 0.30 * along)
-		# A slow breath, so it never looks like a drawn shape.
-		var breathe := 1.0 + 0.035 * sin(t * 3.0 + _clock * 1.7)
-		body[i] = p + fwd * (along * r * 1.18 * breathe) + stb * (across * r * 0.94 * breathe)
-	_world.draw_colored_polygon(body, Color(SELF_TINT, 0.15 * a))
-	var rim := body.duplicate()
-	rim.push_back(body[0])
-	_world.draw_polyline(rim, Color(SELF_TINT, 0.66 * a), 2.2 / ZOOM, true)
-
-	# Cilia, and the bearing rose hiding inside them: the four cardinals are
-	# marked and everything between is even. Reading "45 degrees off my nose"
-	# off the water by eye is what makes the membrane's bearings checkable.
-	for i in CILIA:
-		var bearing := TAU * float(i) / float(CILIA)
-		var dir := fwd * cos(bearing) + stb * sin(bearing)
-		var wave := 1.0 + 0.30 * sin(bearing * 3.0 + _clock * 2.1)
-		var length := 6.5 * wave
-		var alpha := 0.20
-		if i % (CILIA / 4) == 0:
-			# The four cardinals. Front, starboard, aft, port: enough to read a
-			# bearing off the water by eye without a protractor on screen.
-			length = 10.0
-			alpha = 0.42
-		_world.draw_line(p + dir * (r * 1.04), p + dir * (r * 1.04 + length),
-			Color(SELF_TINT, alpha * a), 1.4 / ZOOM, true)
-
-	# Nucleus, sitting back from the nose.
-	var core := p - fwd * (r * 0.26)
-	_world.draw_circle(core, r * 0.46, Color(SELF_TINT, (0.07 + 0.15 * beat) * a), true, -1.0, true)
-	_world.draw_circle(core, r * 0.22, Color(SELF_TINT, (0.20 + 0.40 * beat) * a), true, -1.0, true)
+	var tiers := _genome_node.tiers() if _genome_node != null else GenomeNode.BORN
+	# `is_self` is what keeps the player's own body pure SELF_TINT and its own
+	# lip bow green: you are the one cell in the water whose identity you do not
+	# have to read, and your own mouth cannot swallow you.
+	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
+		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM)
+	_draw_held_sample(p, fwd, stb, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)
 	_draw_velocity(p, r, a)
+
+
+## A gene swallowed with nowhere to put it (§3.3). Point of view gets a second,
+## smaller heartbeat behind every beat; full vision gets the literal thing --
+## a disc of the gene's hue inside the body, offset to port of the nucleus,
+## pulsing on the beat and shrinking as the sample runs out of time.
+##
+## The two are the same state drawn twice, which is the whole discipline of
+## having two views: what the membrane says obliquely, the world says plainly.
+func _draw_held_sample(p: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		beat: float, a: float) -> void:
+	if _genome_node == null or _genome_node.held_sample == &"":
+		return
+	var left := 1.0
+	if GenomeNode.SAMPLE_SECONDS > 0.0:
+		left = clampf(_genome_node.held_remaining / GenomeNode.SAMPLE_SECONDS,
+			0.0, 1.0)
+	var at := p - fwd * (r * 0.26) - stb * (r * 0.30)
+	var tone := Cilia.hue(_genome_node.held_sample)
+	var size := r * 0.16 * (0.55 + 0.45 * left) * (1.0 + 0.22 * beat)
+	_world.draw_circle(at, size * 2.4, Color(tone, 0.10 * a), true, -1.0, true)
+	_world.draw_circle(at, size, Color(tone, (0.55 + 0.35 * beat) * a),
+		true, -1.0, true)
 
 
 ## Where the cell is pointing. Teal, thin, and always exactly the same length --
 ## it carries direction and nothing else.
 func _draw_heading(p: Vector2, fwd: Vector2, stb: Vector2, r: float, a: float) -> void:
 	var tint := Color(SELF_TINT, 0.62 * a)
-	# Starts clear of the rim and the cilia. Three teal things stacked on one
-	# pixel clip to white, and white belongs to impact.
-	var base := p + fwd * (r * 1.55)
-	var tip := p + fwd * (r * 1.55 + HEADING_LEN)
+	# Starts clear of the rim, the fringe and the lip bow. Three teal things
+	# stacked on one pixel clip to white, and white belongs to impact.
+	var base := p + fwd * (r * HEADING_BASE)
+	var tip := p + fwd * (r * HEADING_BASE + HEADING_LEN)
 	_world.draw_line(base, tip - fwd * 4.0, tint, 1.7 / ZOOM, true)
 	# An open chevron, sitting off the end of the needle: nothing else in the
 	# world view has this shape.
@@ -699,7 +769,7 @@ func _draw_velocity(p: Vector2, r: float, a: float) -> void:
 	var dir := _cell.velocity / speed
 	var side := Vector2(-dir.y, dir.x)
 	var reach := minf(speed * VELOCITY_SCALE, VELOCITY_MAX)
-	var norm := clampf(speed / CellBody.IMPULSE_SPEED, 0.0, 1.0)
+	var norm := clampf(speed / _cell.impulse_speed(), 0.0, 1.0)
 	# Starts at the rim, never over the body: a pale wedge laid across a teal
 	# cell just turns both of them grey.
 	var root := p + dir * (r * 1.02)
@@ -731,8 +801,8 @@ func _find_simulation() -> void:
 	if root == null:
 		root = get_tree().root
 	_walk(root)
-	if _cell == null or _motes_node == null or _bus == null \
-			or _food_node == null or _predator_node == null:
+	if _cell == null or _motes_node == null or _bus == null or _food_node == null \
+			or _genome_node == null:
 		# Instanced somewhere unusual: widen the search once before giving up.
 		_walk(get_tree().root)
 	if _cell == null:
@@ -746,8 +816,8 @@ func _walk(node: Node) -> void:
 		_motes_node = node as MotesField
 	elif _food_node == null and node is FoodField:
 		_food_node = node as FoodField
-	elif _predator_node == null and node is PredatorBody:
-		_predator_node = node as PredatorBody
+	elif _genome_node == null and node is GenomeNode:
+		_genome_node = node as GenomeNode
 	elif _bus == null and node is SignalBus:
 		_bus = node as SignalBus
 	for child in node.get_children():

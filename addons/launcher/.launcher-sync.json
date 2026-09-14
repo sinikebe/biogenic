@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "15fe20fd19087ae7d8188614d7e16c16c9fd8920",
-  "subject": "Merge pull request #37 from sinikebe/6-workflow-drift-check-cannot-fire-in-the-situation-it-was-written-for",
-  "synced_at": "2026-09-14T09:21:51Z"
+  "commit": "5e9e6230166b2de6657e846fb15045401a05aa4f",
+  "subject": "Merge pull request #46 from sinikebe/8-elif-gh-pr-create-swallows-every-failure-and-reports-the-wrong-cause",
+  "synced_at": "2026-09-14T16:35:07Z"
 }

@@ -39,8 +39,15 @@ const STARVED_AMPLITUDE := 0.35
 ##
 ## **Move this first if the pace is wrong.** docs/design/food-and-predators.md §3.3.
 const HUNGER_SECONDS := 420.0
-## What one food cell is worth. Near half a bar on purpose: a single meal is
-## felt and two are needed.
+## What a meal your own size is worth. Near half a bar on purpose: a single meal
+## is felt and two are needed.
+##
+## **This stays a const.** §3.2 took it off the tier table: if `cytostome` tier
+## raised the value of a meal as well as the gape, every tier of it would
+## increase your slack after upkeep *and* widen the menu, which makes the mouth
+## a strictly dominant gene with no reason ever to put anything else in a slot.
+## The meal is scaled by what the prey weighed instead, at the call site --
+## food.gd measures it against your body, not against your gape.
 const MEAL := 0.50
 ## Seconds at full hunger before the cell dies. It exists so that food ten
 ## seconds away is still worth swimming for.
@@ -50,6 +57,14 @@ const STARVE_GRACE := 40.0
 var hunger := 0.0
 ## Nutrient concentration at the cell, 0..1, written by the food field.
 var concentration := 0.0
+## Metabolic multiplier, written once a frame by the run exactly as
+## [member concentration] is: 1.0 for a cell that is tier 1 across the board,
+## and higher for every tier above that. **The price of power, and it is paid in
+## the channel the game already reads** -- a cell with one tier-3 gene starves in
+## 420 / 1.36 = 309s, and that arrives as a beat that will not settle rather than
+## as a number on a screen. genome.gd owns what it comes to;
+## docs/design/genes-and-cilia.md §3.2.
+var upkeep := 1.0
 ## Seconds held at full hunger. Public so the dev harness can photograph the end
 ## of the grace without waiting forty seconds for it.
 var starve_seconds := 0.0
@@ -57,7 +72,7 @@ var starve_seconds := 0.0
 
 func _process(delta: float) -> void:
 	if HUNGER_SECONDS > 0.0:
-		set_hunger(hunger + delta / HUNGER_SECONDS)
+		set_hunger(hunger + delta * maxf(upkeep, 0.0) / HUNGER_SECONDS)
 	if hunger >= 1.0:
 		starve_seconds += delta
 	else:
@@ -84,6 +99,7 @@ func feed(amount: float) -> void:
 func reset() -> void:
 	starve_seconds = 0.0
 	concentration = 0.0
+	upkeep = 1.0
 	set_hunger(0.0)
 
 
