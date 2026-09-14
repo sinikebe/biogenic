@@ -541,6 +541,7 @@ func _draw_cells(a: float) -> void:
 	var radii := _food_node.radii()
 	var headings := _food_node.headings()
 	var genomes := _food_node.genomes()
+	var wounds := _food_node.wounds()
 	for i in points.size():
 		var p: Vector2 = points[i]
 		var r: float = float(radii[i]) if i < radii.size() else FoodField.DRIFTER_MAX
@@ -558,11 +559,15 @@ func _draw_cells(a: float) -> void:
 			r / maxf(_cell.gape(), 0.001))
 		_draw_scent(p, r, smell * a)
 
+		# The wound is drawn here and nowhere else in the game: full vision is
+		# entitled to ground truth, and point of view finds out by biting and
+		# by being bitten.
 		Cilia.draw_cell(_world, p,
 			float(headings[i]) if i < headings.size() else 0.0, r,
 			genomes[i] if i < genomes.size() else {},
 			_food_node.gape_at(i), _cell.radius, false, _clock, a,
-			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM)
+			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
+			float(wounds[i]) if i < wounds.size() else 0.0)
 
 
 ## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
@@ -812,7 +817,7 @@ func _draw_cell(a: float) -> void:
 	# have to read, and your own mouth cannot swallow you.
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
 		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM,
-		_genome_node.layout() if _genome_node != null else [])
+		_genome_node.layout() if _genome_node != null else [], _cell.wound)
 	_draw_held_sample(p, fwd, stb, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)

@@ -147,6 +147,40 @@ const BREATHE := 0.035
 const BODY_FILL_ALPHA := 0.16
 const BODY_RIM_ALPHA := 0.66
 const BODY_RIM_WIDTH := 2.2
+
+# --- A body that has been bitten --------------------------------------------
+# **No health bar and no new colour.** A wound is drawn as what it is: the
+# membrane is open, so the rim has holes in it and what was inside has mostly
+# gone. It has to survive the same test §4.4 sets for the threat bow -- readable
+# with the colour taken away -- which is why it is entirely shape.
+
+## How many tears a body can have. They open one at a time (see [method
+## _tear_at]), so this is also how many steps of damage the drawing resolves.
+const WOUND_TEARS := 5
+## Where the first tear sits, in ovoid parameter radians, before the per-cell
+## offset. **Not zero, and the render is why**: at zero the first tear opens
+## across the nose, which is where the lip bow, the oral mat and the heading
+## needle all already are, and the body came out reading as *pointed* rather
+## than as torn. 0.9 puts it on the starboard bow, in the diagonal gap, and the
+## other four follow it round.
+const WOUND_TEAR_SEAT := 0.9
+## How wide one fully open tear is, in ovoid parameter degrees. The ovoid is
+## drawn in [constant OVOID_STEPS] segments of 9 degrees, so a full tear takes
+## about three of them out of the rim, and five full tears take 39% of it.
+## **Measured off the render at half a wound**, where 22 left a body that had
+## been chewed to the middle of its life looking very nearly intact.
+const WOUND_TEAR_DEG := 28.0
+## How much of the rim's brightness a whole wound takes with it. The second
+## channel, and the one that works below the first tear: a body starts to go
+## faint before it starts to come apart.
+const WOUND_DIM := 0.32
+## How much of the fill a whole wound takes away. Not all of it: an empty
+## outline would read as a ghost, and the fill is also how a body is told apart
+## from the water behind it.
+const WOUND_FILL := 0.72
+## How far the torn flap hangs inward, as a share of the radius.
+const WOUND_GASH := 0.24
+
 ## The nucleus, sitting back from the nose. Brightens on the beat, which only
 ## the player has a reading of; everything else draws it at rest.
 const NUCLEUS_BACK := 0.26
@@ -318,6 +352,17 @@ const TOOTH_SPAN := 0.86
 const TOOTH_LEN := 0.22
 const TOOTH_ALPHA := 0.9
 
+## How thick the bow is, as a fraction of the gape -- a lip has a body, and the
+## threat bow's teeth already hang [constant TOOTH_LEN] back into the mouth at
+## exactly this depth. Anything within this of the bow curve is in the mouth,
+## which is the whole of what the water asks ([method mouth_touches]).
+const MOUTH_BITE := TOOTH_LEN
+## Segments the bow is measured in. Twenty is what [method draw_gape] draws it
+## with; eight is indistinguishable at the widest gape in the game (a 36-unit
+## bow has a 0.6-unit sagitta per segment) and this runs against every pair of
+## bodies in the water, every frame.
+const MOUTH_STEPS := 8
+
 # --- The tile face (§5.3) ---------------------------------------------------
 # The genome strip is 76 canvas pixels of panel, not a body, so the organ on it
 # is measured in pixels. The *shapes* are the ones above -- the same generator
@@ -391,18 +436,23 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## ([method arc_for_slot]). Left empty it is derived from [param tiers], which
 ## is what every cell in the water does: only the player has a layout the player
 ## chose.
+## [param wound] is 0..1 and is how far through this body a mouth has chewed:
+## at 1 it comes apart. **Drawn as damage to the membrane and in no new colour**
+## -- the rim tears open and the body leaks out of the gaps. §4.4 forbids a red
+## here: threat red means "that can eat you", and a wounded cell is very often
+## the opposite of that.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
-		order: Array = []) -> void:
+		order: Array = [], wound: float = 0.0) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
 	var stb := Vector2(cos(heading), sin(heading))
 	var tint := body_tint(tiers, is_self)
 
-	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit)
+	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order)
 	draw_gape(canvas, at, fwd, stb, r, gape,
@@ -411,21 +461,74 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 
 
 ## The body: an ovoid, narrower at the front, so the cell has a nose even before
-## the heading needle is read.
+## the heading needle is read -- and, once something has been biting it, a rim
+## with holes in it.
 static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tint: Color, clock: float, fade: float,
-		phase: float, unit: float) -> void:
+		phase: float, unit: float, wound: float = 0.0) -> void:
 	var body := PackedVector2Array()
 	body.resize(OVOID_STEPS)
 	for i in OVOID_STEPS:
 		var t := TAU * float(i) / float(OVOID_STEPS)
 		var breathe := 1.0 + BREATHE * sin(t * 3.0 + clock * 1.7 + phase)
 		body[i] = _surface(at, fwd, stb, r * breathe, t)
-	canvas.draw_colored_polygon(body, Color(tint, BODY_FILL_ALPHA * fade))
-	var rim := body.duplicate()
-	rim.push_back(body[0])
-	canvas.draw_polyline(rim, Color(tint, BODY_RIM_ALPHA * fade),
-		BODY_RIM_WIDTH * unit, true)
+
+	# **The body is not drawn smaller.** The radius is what decides every
+	# encounter in the water, so a wounded cell that looked smaller would be
+	# lying about the one number that matters. It holds less instead.
+	var hurt := clampf(wound, 0.0, 1.0)
+	canvas.draw_colored_polygon(body,
+		Color(tint, BODY_FILL_ALPHA * (1.0 - WOUND_FILL * hurt) * fade))
+	if hurt <= 0.0:
+		var whole := body.duplicate()
+		whole.push_back(body[0])
+		canvas.draw_polyline(whole, Color(tint, BODY_RIM_ALPHA * fade),
+			BODY_RIM_WIDTH * unit, true)
+		return
+
+	# Torn. The tears open **one at a time** rather than all together, so the
+	# damage is legible as a quantity and not only as a state: one gap at a
+	# fifth gone, five at the end. Their seats come off `phase`, which is
+	# already the per-cell number the breath uses, so a given body's tears stay
+	# in the same places for as long as it lives.
+	var rim := PackedVector2Array()
+	var flaps := PackedVector2Array()
+	var ink := BODY_RIM_ALPHA * (1.0 - WOUND_DIM * hurt) * fade
+	for i in OVOID_STEPS:
+		var t := TAU * (float(i) + 0.5) / float(OVOID_STEPS)
+		if _tear_at(t, phase, hurt) <= 0.0:
+			rim.append(body[i])
+			rim.append(body[(i + 1) % OVOID_STEPS])
+	_stroke(canvas, rim, tint, ink, BODY_RIM_WIDTH * unit)
+
+	# A flap of membrane hanging into each tear, so a gap reads as a hole in a
+	# body rather than as a dashed line.
+	for k in WOUND_TEARS:
+		var open := clampf(hurt * float(WOUND_TEARS) - float(k), 0.0, 1.0)
+		if open <= 0.0:
+			continue
+		var t := _tear_seat(phase, k)
+		var edge := _surface(at, fwd, stb, r, t)
+		flaps.append(edge)
+		flaps.append(edge + (at - edge).normalized() * (r * WOUND_GASH * open))
+	_stroke(canvas, flaps, tint, ink, BODY_RIM_WIDTH * unit)
+
+
+## How far open the tear nearest ovoid parameter [param t] is, 0 for intact rim.
+static func _tear_at(t: float, phase: float, hurt: float) -> float:
+	for k in WOUND_TEARS:
+		var open := clampf(hurt * float(WOUND_TEARS) - float(k), 0.0, 1.0)
+		if open <= 0.0:
+			continue
+		if absf(angle_difference(t, _tear_seat(phase, k))) \
+				< deg_to_rad(WOUND_TEAR_DEG) * open:
+			return open
+	return 0.0
+
+
+## Where tear [param k] sits on a body whose breath offset is [param phase].
+static func _tear_seat(phase: float, k: int) -> float:
+	return phase + WOUND_TEAR_SEAT + TAU * float(k) / float(WOUND_TEARS)
 
 
 static func _draw_nucleus(canvas: CanvasItem, at: Vector2, fwd: Vector2,
@@ -725,6 +828,76 @@ static func draw_gape(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 static func _lip(base: Vector2, fwd: Vector2, stb: Vector2, gape: float,
 		s: float) -> Vector2:
 	return base + stb * (s * gape) + fwd * (GAPE_BULGE * gape * (1.0 - s * s))
+
+
+# ---------------------------------------------------------------------------
+# Where the mouth is -- the one thing in this file the *simulation* asks.
+#
+# **The bow is not decoration.** Eating used to be a proximity test, `distance <
+# a.radius + b.radius`, so a cell ate you by bumping you anywhere -- with its
+# tail, with its flank, while swimming away from you -- and the art had spent
+# the whole of §1.1.1 promising that the organ on the nose is the thing that
+# eats. The water now asks this file where that organ actually is, rather than
+# keeping a second copy of GAPE_SEAT, GAPE_BULGE and the span; two copies would
+# drift, and the frame they drift is the frame the drawn mouth stops being the
+# mouth that ate you.
+#
+# The rest of this file is drawing and reads nothing; these three functions read
+# nothing either. Geometry is not a view.
+# ---------------------------------------------------------------------------
+
+## How far the bow can possibly reach from the body's own centre. A bound for
+## the broad phase and nothing else: the farthest point of the bow is the apex
+## or a lip tip, and this is comfortably above both.
+static func mouth_reach(r: float, gape: float) -> float:
+	return r * OVOID_ALONG * GAPE_SEAT + gape * (1.0 + GAPE_BULGE)
+
+
+## Distance from [param body] to the nearest point of this cell's lip bow, in
+## world units. The measurement the water runs both ways round: it is the same
+## number whether the question is "can it eat me" or "can I eat it".
+static func mouth_gap(at: Vector2, heading: float, r: float, gape: float,
+		body: Vector2) -> float:
+	var fwd := Vector2(sin(heading), -cos(heading))
+	var stb := Vector2(cos(heading), sin(heading))
+	var base := at + fwd * (r * OVOID_ALONG * GAPE_SEAT)
+	var near := INF
+	var last := _lip(base, fwd, stb, gape, -1.0)
+	for i in range(1, MOUTH_STEPS + 1):
+		var next := _lip(base, fwd, stb, gape,
+			-1.0 + 2.0 * float(i) / float(MOUTH_STEPS))
+		near = minf(near, _to_segment(body, last, next))
+		last = next
+	return near
+
+
+## **Is that body in this mouth.** The whole of contact, in both directions.
+##
+## A body counts as in the mouth when its disc overlaps the bow -- so a cell is
+## eaten by the organ that eats and not by the tail of the thing that owns it.
+## The disc is the body's [member radius] and not its swallow radius: `pellicle`
+## makes you harder to *get down*, not harder to reach.
+static func mouth_touches(at: Vector2, heading: float, r: float, gape: float,
+		body: Vector2, body_radius: float) -> bool:
+	if gape <= 0.0:
+		return false
+	var slack := body_radius + gape * MOUTH_BITE
+	var bound := mouth_reach(r, gape) + slack
+	# The broad phase, and it is why this is affordable at 34 bodies squared.
+	if at.distance_squared_to(body) > bound * bound:
+		return false
+	return mouth_gap(at, heading, r, gape, body) <= slack
+
+
+## Distance from a point to a segment. Local because nothing else in the game
+## has ever needed it.
+static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
+	var span := b - a
+	var length := span.length_squared()
+	if length <= 0.0001:
+		return point.distance_to(a)
+	var t := clampf((point - a).dot(span) / length, 0.0, 1.0)
+	return point.distance_to(a + span * t)
 
 
 # ---------------------------------------------------------------------------

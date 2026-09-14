@@ -164,6 +164,7 @@ func _ready() -> void:
 	_food.eaten.connect(_on_eaten)
 	_food.waked.connect(_on_waked)
 	_food.killed.connect(_on_killed)
+	_food.bitten.connect(_on_bitten)
 	_food.stung.connect(_on_stung)
 	_food.darted.connect(_on_darted)
 	_cell.dashed.connect(_on_dashed)
@@ -406,6 +407,18 @@ func _on_stung(bearing: float) -> void:
 		return
 	_bus.hit(bearing, 1.0)
 	_metabolism.feed(-_food.venom_cost)
+
+
+## A mouth closed on a body it could not swallow -- yours on something too big,
+## or something's on you. **The same `hit` a mote gives**, and deliberately not
+## a channel of its own: contact at a bearing is a sensation this membrane has
+## had since Phase 1, and a bite is contact. There is no readout of how much of
+## you is left, because there is no organ that could report it; a player learns
+## they are in trouble by being bitten, repeatedly, from the same direction.
+func _on_bitten(bearing: float, strength: float) -> void:
+	if _life != Life.ALIVE:
+		return
+	_bus.hit(bearing, strength)
 
 
 ## The mote's world position arrives with this and is deliberately dropped here.

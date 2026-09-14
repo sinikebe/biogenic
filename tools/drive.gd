@@ -48,6 +48,15 @@ extends Node
 ##   --stalk=<units>         park a hunting cell this far off the cell's front
 ##                           quarter and hold it there, so dread, a wake and a
 ##                           lunge can each be photographed at a known range
+##   --stalk-at=<deg>        the body-relative bearing --stalk and --hunt park
+##                           it on, default 40. 180 is directly astern, which is
+##                           where "it ate me with its tail" used to happen
+##   --stalk-face=<deg>      force that hunter's heading every frame, as degrees
+##                           away from facing the player: 0 is nose-on, 180 is
+##                           pointed directly away. Unset leaves it to swim. The
+##                           only way to hold a mouth off its target while the
+##                           bodies are in contact, which is the whole of the
+##                           directional-mouth measurement
 ##   --food-at=<units>       same, for field cell 1, left drifting. Cell 0 is
 ##                           what --stalk and --hunt pose, so the two handles
 ##                           can be used together to frame both halves of the
@@ -71,7 +80,7 @@ extends Node
 ##                           ladder, the gape and the whole of what the water
 ##                           seeds around you. r40 is where section 3.1 says the
 ##                           run is won
-##   --cell=i,dist,bearing,radius[,gene:tier+gene:tier]
+##   --cell=i,dist,bearing,radius[,gene:tier+gene:tier[,facing]]
 ##                           park field cell i at that range and body-relative
 ##                           bearing, with that body and that genome, and hold
 ##                           it there. Repeatable, and the only way to frame
@@ -80,7 +89,10 @@ extends Node
 ##                           pair of gapes, and waiting for the water to seed
 ##                           all four at a readable distance is not a test, it
 ##                           is a lottery. Genes are separated by `+` because a
-##                           comma is already the field separator.
+##                           comma is already the field separator. `facing` is
+##                           degrees away from facing the player, default 0:
+##                           180 turns its mouth away, which is what proves a
+##                           mouth has to be pointed at you to reach you
 ##   --genome=<g:t[:slot],...>
 ##                           force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
@@ -127,6 +139,11 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Only for [method Cilia.mouth_gap], which is how far a mouth is from a body.
+## The measurement the directional-contact fix has to be judged on, and it
+## cannot be judged by eye: two bodies overlapping tells you nothing about
+## whether either mouth is on the other.
+const Cilia := preload("res://game/vision/cilia.gd")
 
 var _clock := 0.0
 var _esc_at := -1.0
@@ -147,6 +164,9 @@ var _food: Node = null
 var _hunger := -1.0
 var _starve := -1.0
 var _stalk := -1.0
+var _stalk_at := 40.0
+## Degrees away from facing the player, or NAN to leave its heading alone.
+var _stalk_face := NAN
 var _food_at := -1.0
 var _gain := -1.0
 var _hunt := -1.0
@@ -246,6 +266,10 @@ func _ready() -> void:
 			_starve = float(text.trim_prefix("--starve="))
 		elif text.begins_with("--stalk="):
 			_stalk = float(text.trim_prefix("--stalk="))
+		elif text.begins_with("--stalk-at="):
+			_stalk_at = float(text.trim_prefix("--stalk-at="))
+		elif text.begins_with("--stalk-face="):
+			_stalk_face = float(text.trim_prefix("--stalk-face="))
 		elif text.begins_with("--food-at="):
 			_food_at = float(text.trim_prefix("--food-at="))
 		elif text.begins_with("--gain="):
@@ -338,10 +362,18 @@ func _ready() -> void:
 			_hunger, _metabolism.beat_period(), _metabolism.beat_amplitude()])
 
 	if _stalk >= 0.0 and _food != null:
-		_make_hunter(0, _hold_point(_stalk, 40.0))
-		print("[drive] hunter parked at %.0f units" % _stalk)
+		_make_hunter(0, _hold_point(_stalk, _stalk_at))
+		# Before the first frame, not after it: _make_hunter points the mouth at
+		# the player, and the game's own _process runs ahead of this node's, so
+		# a hunter turned away only in _hold_world has already had one frame
+		# nose-on -- which at contact range is one frame too many.
+		_face(0, _stalk_face)
+		print("[drive] hunter parked at %.0f units, bearing %+.0f deg, facing %s" % [
+			_stalk, _stalk_at,
+			"as it likes" if is_nan(_stalk_face) else "%+.0f deg off you" % _stalk_face])
 	if _hunt >= 0.0 and _food != null:
-		_make_hunter(0, _hold_point(_hunt, 40.0))
+		_make_hunter(0, _hold_point(_hunt, _stalk_at))
+		_face(0, _stalk_face)
 		print("[drive] hunter released from %.0f units" % _hunt)
 	if _prey_radius > 0.0 and _food != null:
 		var bodies: Array = _food.get("_cells")
@@ -534,8 +566,10 @@ func _step_trace(delta: float) -> void:
 	var speed := _travelled / maxf(_speed_clock, 0.001)
 	_travelled = 0.0
 	_speed_clock = 0.0
-	print("[trace] %6.2f  me r%5.2f gape %5.2f swim %5.1f (real %5.1f) %s" % [
-		_clock, cell.radius, cell.gape(), cell.swim_speed(), speed,
+	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) %s" % [
+		_clock, cell.radius, cell.gape(), cell.wound,
+		"alive" if _metabolism != null and _metabolism.is_processing() else " DEAD",
+		cell.swim_speed(), speed,
 		_genome_text(_genome.tiers() if _genome != null else {})])
 	print("        %s" % _membrane_text())
 	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
@@ -562,9 +596,20 @@ func _field_text(index: int, cell: Node) -> String:
 		target_text = "player"
 	elif target >= 0:
 		target_text = "cell %d" % target
-	return "r%5.2f gape %5.2f %-5s -> %-6s  d %7.1f  %s  %s%s" % [
-		radius, gape, names[state], target_text,
-		cell.position.distance_to(b.get("pos")),
+	# **Whose mouth is on whom**, which is the whole of the directional contact
+	# rule and the one thing two overlapping circles cannot tell you. The gap is
+	# from the body's centre to the nearest point of the other's lip bow, so a
+	# negative number is a mouth that has closed on it.
+	var pos: Vector2 = b.get("pos")
+	var heading: float = b.get("heading")
+	var its_gap: float = Cilia.mouth_gap(pos, heading, radius, gape,
+		cell.position) - cell.radius - gape * Cilia.MOUTH_BITE
+	var my_gape: float = cell.gape()
+	var my_gap: float = Cilia.mouth_gap(cell.position, cell.heading,
+		cell.radius, my_gape, pos) - radius - my_gape * Cilia.MOUTH_BITE
+	return "r%5.2f gape %5.2f wound %4.2f %-5s -> %-6s  d %7.1f  mouth on me %+7.1f  my mouth on it %+7.1f  %s  %s%s" % [
+		radius, gape, float(b.get("wound")), names[state], target_text,
+		cell.position.distance_to(pos), its_gap, my_gap,
 		"EATS ME" if gape > cell.radius else "       ",
 		"edible" if radius < cell.gape() else "      ",
 		"  %s" % _genome_text(b.get("genome"))]
@@ -650,7 +695,18 @@ func _hold_world() -> void:
 	if cell == null:
 		return
 	if _stalk >= 0.0 and _food != null:
-		_place(0, _hold_point(_stalk, 40.0))
+		_place(0, _hold_point(_stalk, _stalk_at))
+		_face(0, _stalk_face)
+		# **Held committed as well as held in place.** A parked hunter's aim
+		# point is behind it within a frame or two of contact, so it breaks off
+		# and the pose stops being the thing it claims to be -- and the kill
+		# branch is gated on STALK, so a test of *why* a kill did or did not
+		# land has to keep the state constant and vary only the geometry.
+		var bodies: Array = _food.get("_cells")
+		if not bodies.is_empty():
+			bodies[0].set("state", FoodField.State.STALK)
+			bodies[0].set("target", FoodField.TARGET_PLAYER)
+			bodies[0].set("stale", 0.0)
 	if _food_at >= 0.0 and _food != null:
 		# Reaching for a private member is a thing only tools/ is allowed to do.
 		# The bodies are objects rather than packed arrays now, so this writes
@@ -677,6 +733,7 @@ func _parse_pose(spec: String) -> Array:
 		float(bits[2]) if bits.size() > 2 else 0.0,
 		float(bits[3]) if bits.size() > 3 else 20.0,
 		tiers,
+		float(bits[5]) if bits.size() > 5 else 0.0,
 	]
 
 
@@ -702,14 +759,15 @@ func _apply_poses(announce: bool) -> void:
 		b.set("target", FoodField.TARGET_NONE)
 		b.set("calm", 999.0)
 		b.set("pos", _hold_point(pose[1], pose[2]))
-		# Facing the player, so the mouth is pointed at the thing it is being
-		# read against -- which is the frame a forager actually gets.
-		var away: Vector2 = cell.position - _hold_point(pose[1], pose[2])
-		b.set("heading", atan2(away.x, -away.y))
+		# Facing the player by default, so the mouth is pointed at the thing it
+		# is being read against -- which is the frame a forager actually gets.
+		# The sixth field turns it away from that, and 180 is the pose the
+		# directional-mouth fix exists for: in contact, mouth pointed elsewhere.
+		_face(index, float(pose[5]))
 		if announce:
-			print("[drive] cell %d posed: r%.1f gape %.1f at %.0f units, %s" % [
+			print("[drive] cell %d posed: r%.1f gape %.1f at %.0f units, facing %+.0f deg off you, %s" % [
 				index, float(pose[3]), _food.gape_at(index), float(pose[1]),
-				_genome_text(pose[4])])
+				float(pose[5]), _genome_text(pose[4])])
 
 
 func _hold_point(distance: float, bearing_deg: float) -> Vector2:
@@ -919,6 +977,26 @@ func _place(index: int, at: Vector2) -> void:
 	var bodies: Array = _food.get("_cells")
 	if index < bodies.size():
 		bodies[index].set("pos", at)
+
+
+## Points field cell [param index] [param away] degrees off facing the player,
+## every frame, overriding whatever it wanted to swim at. NAN leaves it alone.
+##
+## The harness reaching into the world on purpose: a mouth that has to be
+## pointed at you to reach you cannot be tested by waiting for the water to
+## point one the wrong way.
+func _face(index: int, away: float) -> void:
+	if is_nan(away) or _food == null:
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	var bodies: Array = _food.get("_cells")
+	if cell == null or index >= bodies.size():
+		return
+	var to_player: Vector2 = cell.position - bodies[index].get("pos")
+	if to_player.length_squared() <= 0.0001:
+		return
+	bodies[index].set("heading",
+		wrapf(atan2(to_player.x, -to_player.y) + deg_to_rad(away), -PI, PI))
 
 
 ## `cytostome:3,cirrus:2` -- straight into the genome node, before the first
