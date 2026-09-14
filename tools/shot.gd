@@ -51,7 +51,22 @@ func _ready() -> void:
 		push_error("[shot] %s did not load as a PackedScene" % scene_path)
 		get_tree().quit(1)
 		return
-	add_child(packed.instantiate())
+	# **The subject goes under `root` and becomes `current_scene`, not under
+	# this node.** `change_scene_to_file` frees whatever `current_scene` points
+	# at, and left alone that is the harness: driving the game as far as the
+	# pause screen's `leave` freed `Shot` mid-await, so the await never resumed,
+	# `quit()` never ran, and the run hung until the shell killed it. Measured:
+	# 61 seconds and counting, against a 4-second `--wait`. It cost a reviewer
+	# eight minutes to establish that it was not the game.
+	#
+	# Reparenting is not optional cleanliness -- `SceneTree.current_scene` has
+	# an `ERR_FAIL_COND(p_scene->get_parent() != root)`, so assigning a child of
+	# this node does nothing at all and the hang stays. Deferred because root is
+	# still setting up its children while this `_ready` runs.
+	var subject := packed.instantiate()
+	get_tree().root.add_child.call_deferred(subject)
+	await subject.ready
+	get_tree().current_scene = subject
 
 	# Let the scene settle: layout, theme, any launch-time async work.
 	await get_tree().create_timer(wait).timeout

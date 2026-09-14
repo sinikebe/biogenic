@@ -101,6 +101,14 @@ extends Node
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
 ## presets exclude, so none of this ships.
+##
+## **Driving the game as far as `leave` changes scenes**, and a scene change
+## frees whatever `SceneTree.current_scene` points at. `tools/shot.gd` hands
+## `current_scene` to the scene it instantiates for exactly this reason; without
+## that it would be the harness that gets freed, mid-await, and the run would
+## hang rather than fail. If a run of this driver ever stops producing output
+## and never exits, that is the shape of the fault -- and `--quit-after <n>` on
+## the engine, before the `--`, bounds it whatever happens.
 
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
@@ -447,6 +455,40 @@ func _step_evade() -> void:
 ## Everything the simulation half of Phase 5 has to be judged on, once every
 ## [param --trace] seconds: what the player is, what the water is, who is
 ## hunting whom and how hard the water is leaning on the membrane.
+## What §2.1's three mappings are actually worth right now, read straight off
+## the lobes the bus has composed rather than off a photograph.
+##
+## The thrust bloom and the turn shear share `glow_lobes[0]` -- the loudest
+## thing happening to your own skin is the thing you feel -- so a still frame
+## cannot separate "the bloom got louder" from "the beat happened to land". The
+## uniform can, exactly, which is the only honest way to check a table whose
+## whole claim is that three numbers move with a tier.
+##
+## Reaching for a private member is a thing only tools/ is allowed to do.
+func _membrane_text() -> String:
+	if _bus == null:
+		return "membrane: no bus"
+	# Untyped on purpose: get() on a member that has been renamed returns null,
+	# and a typed local would turn a stale harness into a crash rather than a
+	# line of text saying the harness is stale.
+	var raw_lobes: Variant = _bus.get("_glow_lobes")
+	var raw_organs: Variant = _bus.get("_organs")
+	if not (raw_lobes is PackedVector4Array) or not (raw_organs is PackedInt32Array):
+		return "membrane: unavailable"
+	var lobes: PackedVector4Array = raw_lobes
+	var organs: PackedInt32Array = raw_organs
+	if lobes.size() < 3 or organs.size() < 4:
+		return "membrane: unavailable"
+	var me: Vector4 = lobes[0]
+	var light: Vector4 = lobes[2]
+	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
+		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
+		organs[0], organs[1], organs[2], organs[3],
+		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
+		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
+		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
+
+
 func _step_trace(delta: float) -> void:
 	if _trace <= 0.0 or _food == null or _run == null:
 		return
@@ -468,6 +510,7 @@ func _step_trace(delta: float) -> void:
 	print("[trace] %6.2f  me r%5.2f gape %5.2f swim %5.1f (real %5.1f) %s" % [
 		_clock, cell.radius, cell.gape(), cell.swim_speed(), speed,
 		_genome_text(_genome.tiers() if _genome != null else {})])
+	print("        %s" % _membrane_text())
 	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
 		_food.dread_level, _food.threat,
 		"none" if hunter < 0 else str(hunter), range_text,

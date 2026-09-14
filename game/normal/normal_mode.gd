@@ -164,11 +164,21 @@ func _process(delta: float) -> void:
 	_metabolism.upkeep = _genome.upkeep()
 	_bus.taste(_food.taste_bearing, _food.concentration)
 	_bus.dread(_food.dread_level)
+	# **What body this membrane is attached to** (§2.1). One post a frame, beside
+	# the beat, and it is what makes a tier change something point of view can
+	# feel: the thrust bloom, the turn shear and the ingest flood are the same
+	# three organs the fringe draws, seen from inside.
+	_bus.organs(_cell.tier(&"cytostome"), _cell.tier(&"cirrus"),
+		_cell.tier(&"flagellum"), _cell.tier(&"stigma"))
 	# The stigma only reports if the cell has grown one. The field works out
 	# what the water is doing either way -- what is out there is not a function
-	# of which organs are watching -- and this is where the organ is consulted.
-	var eye := _cell.tier(&"stigma")
-	_bus.light(_food.shadow_bearing, _food.shadow if eye > 0 else 0.0, eye)
+	# of which organs are watching -- but a cell with no eye is handed **no
+	# bearing**, not a zero-strength reading at a real one. The bearing is
+	# derived from ground truth, the post gate fires on bearing movement as well
+	# as on strength, and an ungated eyeless cell posted forty `light`
+	# sensations a minute for an organ it does not have.
+	var eye := _cell.tier(&"stigma") > 0
+	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
@@ -725,9 +735,29 @@ const FOCUS_TINT := Color(0.588, 1.0, 0.859, 0.85)
 
 
 ## Rebuilds the strip from the genome as it is right now. Cheap and total: five
-## to nine tiny nodes, built on opening the pause screen and after a swap, which
-## are the only two moments the answer can have changed.
+## to nine tiny nodes, built on opening the pause screen, on arming, on the arm
+## lapsing and after a swap.
+##
+## **Every rebuild frees the tile the keyboard was standing on, so every rebuild
+## has to hand the keyboard somewhere.** Godot does no focus navigation from a
+## null focus: with `gui.key_focus` cleared, Tab does nothing, Enter does
+## nothing, and `resume` and `leave` are unreachable until the player finds a
+## mouse or presses Esc -- which resumes the run, which is not what they asked
+## for. That is a dead pause screen, and it sits on top of the one irreversible
+## action in the game.
+##
+## It lives here rather than at the call sites because there are four of them
+## and the first attempt got three. [method _commit_slot] carried its own copy
+## and [method _step_arming] did not, three lines apart; measured on a real
+## display, arming a tile and then simply reading it for four seconds -- which
+## is the behaviour §9.7 asks for when it sells *"three pips going dark before
+## it is confirmed"* -- killed the keyboard.
 func _build_genome_strip() -> void:
+	# Taken before anything is freed. -1 means the keyboard was not on the
+	# strip at all, and then nothing here should move it: the player is on
+	# `resume`, or on the slider, or is using a thumb and has no focus ring to
+	# lose.
+	var keeping := _focused_slot()
 	for child in _genome_row.get_children():
 		_genome_row.remove_child(child)
 		child.queue_free()
@@ -755,18 +785,23 @@ func _build_genome_strip() -> void:
 		else:
 			_genome_row.add_child(_make_tile(&"", 0, Tile.EMPTY, i))
 
-	# **The slots do not move when a sample arrives, and that is worth one
-	# invisible node.** Row is centred, so without this the whole slot block
-	# slid 73px right the moment a sample appeared and 73px back the moment it
-	# lapsed -- and a sample lapses on a 45-second timer that does not stop
-	# because the pause screen is open, so the strip jumped sideways under the
-	# player's eye while they were reading it. §5.3 spotted the shift and
-	# guessed it was harmless because nothing is tappable once the sample is
-	# gone; the argument holds for taps and not for reading. A trailing spacer
-	# the width of the sample block, minus the separation the box adds in front
-	# of it, makes the row symmetric about the slots, so centring the row now
-	# centres the slots. The sample and its arrow hang off to the left, which is
-	# the right emphasis anyway: the slots are the thing that is always true.
+	# **The slots do not move when the sample block appears or goes, and that is
+	# worth one invisible node.** Row is centred, so without this the whole slot
+	# block sat 73px right of where it sits with no sample -- and it snapped
+	# back across that 73px the frame a swap was committed, which is the frame
+	# the player is looking hardest at the tile they just changed.
+	#
+	# The sample cannot *lapse* under the open pause screen, whatever §5.3
+	# assumed: `Genome` is `process_mode = 1`, so its 45-second clock stops with
+	# the rest of the simulation. Committing is the only thing that can change
+	# this strip while it is on screen, and committing is exactly the moment
+	# that must not move.
+	#
+	# A trailing spacer the width of the sample block, minus the separation the
+	# box adds in front of it, makes the row symmetric about the slots, so
+	# centring the row centres the slots. The sample and its arrow hang off to
+	# the left, which is the right emphasis anyway: the slots are the thing that
+	# is always true.
 	if held != &"":
 		var gap := float(_genome_row.get_theme_constant(&"separation"))
 		var spacer := Control.new()
@@ -775,6 +810,45 @@ func _build_genome_strip() -> void:
 		_genome_row.add_child(spacer)
 
 	_update_hint()
+	_restore_focus(keeping)
+
+
+## Which slot the keyboard is on, or -1 for "not on the strip".
+##
+## Read off a meta rather than off the child's position in Row, because the two
+## disagree at exactly the moment this is called: a slot's index among Row's
+## children depends on whether a sample and its arrow sit in front of it, and
+## [method _commit_slot] clears the sample *before* rebuilding -- so the offset
+## that describes the strip being torn down is not the offset the genome would
+## compute. A tile carrying its own slot number cannot be wrong about it.
+func _focused_slot() -> int:
+	for child in _genome_row.get_children():
+		var tile := child as Control
+		if tile != null and tile.has_focus():
+			return int(tile.get_meta(&"slot", -1))
+	return -1
+
+
+## Puts the keyboard back on [param slot] after a rebuild.
+##
+## **Which slot, rather than `resume`, and the distinction is the whole fix.**
+## An arm that lapses does not lapse the sample -- ARM_TIMEOUT_MS is four
+## seconds and SAMPLE_SECONDS is forty-five -- so the tiles are still live and
+## the player is still mid-decision, in front of the same tile they were
+## reading. Sending them to `resume` would answer "can I still use the
+## keyboard" with yes and "am I where I was" with no. A commit is the opposite
+## case: the sample is spent, every tile has gone inert, and there is nothing on
+## the strip left to stand on, so the fallback below carries it to `resume`.
+func _restore_focus(slot: int) -> void:
+	if slot < 0:
+		return
+	for child in _genome_row.get_children():
+		var tile := child as Control
+		if tile != null and tile.focus_mode == Control.FOCUS_ALL \
+				and int(tile.get_meta(&"slot", -1)) == slot:
+			tile.grab_focus()
+			return
+	_resume_button.grab_focus()
 
 
 func _update_hint() -> void:
@@ -790,6 +864,10 @@ func _make_tile(gene: StringName, tier: int, state: int, index: int) -> PanelCon
 	tile.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	tile.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	tile.add_theme_stylebox_override("panel", _tile_box(gene, state))
+
+	# Its own slot number, so a rebuild can find the tile that replaced it
+	# without re-deriving an offset that may have changed underneath.
+	tile.set_meta(&"slot", index)
 
 	var live := index >= 0 and _genome.held_sample != &""
 	tile.mouse_filter = Control.MOUSE_FILTER_STOP if live else Control.MOUSE_FILTER_IGNORE
@@ -915,21 +993,11 @@ func _on_tile_input(event: InputEvent, tile: Control, index: int) -> void:
 		return
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
-	# Rebuilding frees the node this event arrived on, so anything that was
-	# focused has to be put back afterwards -- but only for a key press. A thumb
-	# does not want a focus ring, and the armed tile already says it is armed.
-	var by_key := event is InputEventKey
+	# The rebuild frees the node this event arrived on and hands the keyboard
+	# back to the tile that replaced it. Nothing to do here: that is one rule
+	# in one place, and it is the rule this function used to carry a private
+	# and slightly different copy of.
 	_build_genome_strip()
-	if by_key:
-		var armed := _genome_row.get_child(_row_child_of(index)) as Control
-		if armed != null and armed.focus_mode == Control.FOCUS_ALL:
-			armed.grab_focus()
-
-
-## Where slot [param index] sits among Row's children: two nodes further along
-## whenever a sample and its arrow are in front of it.
-func _row_child_of(index: int) -> int:
-	return index + (2 if _genome.held_sample != &"" else 0)
 
 
 func _is_tile_tap(event: InputEvent) -> bool:
@@ -954,12 +1022,18 @@ func _commit_slot(index: int) -> void:
 	# keeps beating under the scrim, and an echo for a sample that no longer
 	# exists is the game lying about the player's own body.
 	_bus.hold(0.0)
+	# The rebuild carries the keyboard: every tile has gone inert, so
+	# [method _restore_focus] falls through to `resume`.
 	_build_genome_strip()
-	# Every tile has just been freed and the strip is no longer interactive, so
-	# a keyboard player would be left with nothing focused at all.
-	_resume_button.grab_focus()
 
 
+## The armed slot lapses on its own, so a strip left armed is not a trap.
+##
+## **This does not lapse the sample.** Four seconds is a hesitation; the sample
+## has forty-five, and its clock is not even running -- `Genome` is
+## `process_mode = 1`, so it stops with the rest of the simulation while the
+## pause screen is open. So the player is still holding a gene, the tiles are
+## still live, and the rebuild puts them back on the tile they were reading.
 func _step_arming() -> void:
 	if _armed < 0:
 		return

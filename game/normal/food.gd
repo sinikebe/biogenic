@@ -766,7 +766,14 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 ## next frame anyway. It is about **everything below this line**. `eaten` is not
 ## idempotent: emitting it after the death would feed and grow a corpse, and the
 ## cell-against-cell pass below would go on reshaping a field nobody is in any
-## more. Nothing may be added between the emit and this return.
+## more.
+##
+## The one line that does sit between the emit and the return is the killer's
+## own `_break_off`, and it is there on purpose: without it that cell is left in
+## STALK against a player who no longer exists, and the next run starts with it
+## already committed. It touches nothing but the body that just ate. **Nothing
+## else may be added there** -- the rule is "no second effect on the field", not
+## "no statements".
 func _step_contacts() -> bool:
 	for i in _cells.size():
 		var b := _cells[i]

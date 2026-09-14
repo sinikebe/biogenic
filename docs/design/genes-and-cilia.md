@@ -103,11 +103,29 @@ safety, because nothing your own size is neutral any more.
 
 ### 1.1.1 How the gape is drawn, and the one thing the render caught
 
-The mouth is a bow across the nose, seated at `r * 1.05` along the heading,
-bulging forward by `0.30 * gape`, with two stems back to the body so it reads as
-an organ rather than a floating bracket. The clear span between the lip tips is
-`2 * gape`, measured across the heading, so it is the same number of pixels
-whichever way the cell is pointing; a cell cannot hide its mouth by turning.
+The mouth is a bow across the nose, seated at **`1.05` of the nose** along the
+heading, bulging forward by `0.30 * gape`, with two stems back to the body so it
+reads as an organ rather than a floating bracket. The clear span between the lip
+tips is `2 * gape`, measured across the heading, so it is the same number of
+pixels whichever way the cell is pointing; a cell cannot hide its mouth by
+turning.
+
+> **Corrected from `r * 1.05` by the build.** That number is right for a round
+> cell and wrong for this one: §4.1's ovoid reaches `r * 1.18` along the heading,
+> so a bow seated at `1.05 r` is *inside the nose*. Rendered, it was a flat brim
+> lying across the top of the body with the oral mat poking through it, and it
+> read as a hat. Taken as 1.05 of the surface instead — `1.18 * 1.05 = 1.24 r`,
+> which is what the number means on a circle — the bow clears the nose, the
+> stems have something to span, and at tier 3 the mat crest (`1.67 r`) converges
+> on the bow's apex (`1.66 r`) rather than crossing it. §4.6's new needle base
+> at `1.80 r` clears both, which is the arithmetic that says 1.24 is the number
+> the design meant all along.
+>
+> The **stems** land at `t = ±54°` — the middle of free arcs 1 and 2, the
+> diagonal gap — and not at the ends of the anterior arc. At a tier-3 gape the
+> lip tips are `1.4 r` out to the side, so stems to `±42°` run back almost
+> horizontally and saw straight through the oral mat. From the shoulder they
+> pass outside it at every tier.
 
 > **The caliper claim is withdrawn — the third pass measured it.** The previous
 > draft said the span being `2 * gape` meant "the widest body that fits between
@@ -399,8 +417,18 @@ The three original claims now hold, for a reason rather than by assertion:
 - **It is cheap** — two draws and a `randf()`, in the function that already
   reseeds a culled cell.
 
-`DRIFTER_SHARE`, `PEER_SPREAD` and `ARRIVAL_GAPE_MAX` are the three numbers to
-move if the water feels wrong, in that order.
+**`TIER_WEIGHTS`, then `DRIFTER_SHARE`, `PEER_SPREAD`, `ARRIVAL_GAPE_MAX`** are
+the numbers to move if the water feels wrong, in that order.
+
+`TIER_WEIGHTS` is the one this section did not name and the one that matters
+most. The text above reads as though `GENE_WEIGHTS` covers the cytostome
+distribution inside the peer band, and it does not: that constant is per *gene*,
+and says nothing about how good a mouth an arrival gets. The build had to invent
+the missing one, `[0, 3, 2, 1]` over tiers 0-3, weighted so most cells are
+mediocre and a few are terrifying. Measured over 16,000 seeded bodies it puts
+**19% of the water able to eat a born cell at r26**, falling to 7% at r33 and 0%
+at r40. Uniform tiers instead would put about half the water above you
+permanently. It is one line and it is most of the difficulty curve.
 
 **One knob is deliberately left open: the cytostome weights inside the peer
 band.** How dangerous the water is turns almost entirely on them — with peers
@@ -440,14 +468,39 @@ the cell's three cilia are the same three organs seen from inside and from
 outside.** Nothing new is needed in point of view to express ability — a tier
 change is a change in the sensation the player already knows:
 
-| gene | tier 1 | tier 2 | tier 3 | uniform |
-| --- | --- | --- | --- | --- |
-| `flagellum` | bloom 0.14 / 60° | 0.19 / 52° | 0.25 / 44° | `glow_lobes[0]` (`THRUST_PEAK`, `THRUST_HALFWIDTH_DEG`) |
-| `cirrus` | shear 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK`) |
-| `cytostome` | flood decay 1.2s | 1.5s | 1.9s | `INGEST_DECAY` |
+| gene | tier 0 | tier 1 | tier 2 | tier 3 | uniform |
+| --- | --- | --- | --- | --- | --- |
+| `flagellum` | bloom 0.10 / 68° | 0.14 / 60° | 0.19 / 52° | 0.25 / 44° | `glow_lobes[0]` (`THRUST_PEAK_BY_TIER`, `THRUST_HALFWIDTH_BY_TIER`) |
+| `cirrus` | shear 0.07 | 0.10 | 0.14 | 0.19 | `glow_lobes[0]` (`SHEAR_PEAK_BY_TIER`) |
+| `cytostome` | flood decay 1.0s | 1.2s | 1.5s | 1.9s | `INGEST_DECAY_BY_TIER` |
 
 No new shader term, no new lobe, no HUD. A `flagellum`-specialised cell feels
 its own push harder and more sharply; a big mouth savours the meal longer.
+
+**Tier 0 is added by the build**, because §9.7 lets a fourth gene go over any of
+the three and the first draft's table stopped at tier 1. It is not designed: it
+is extrapolated one step below tier 1 on each ladder's own spacing, which is
+what `cell.gd`'s drive tables already do and the least invented answer there is.
+
+**How the tiers reach the bus.** One call a frame, `organs(cytostome, cirrus,
+flagellum, stigma)`, beside `set_beat` — a continuous property of the body that
+shapes the discrete events, rather than an argument riding on each one. That
+keeps `thrust()`, `shear()` and `ingest()` about the sensation, which is what
+the audio and haptics subscribers downstream of `sensation` will be reading, and
+it is where the `stigma`'s lobe width comes from too. `normal_mode.gd` remains
+the only node that talks to the bus. Four integers about this cell's own anatomy
+are not a fact about anything else in the water, so `perception.md`'s "never an
+identity" is untouched.
+
+> **One thing the build had to check rather than assume: where the `cirrus`
+> tier lands.** `cell.gd`'s `shear_rate()` returns demand-or-rotation normalised
+> to `-1 … 1`, so it is the *same number at every tier* — which reads like a bug
+> that makes this row a no-op, and is not. The table above is the whole of the
+> difference, and it works: measured off the composed lobe at full steer, the
+> shear peaks at **0.067 / 0.096 / 0.135 / 0.183** across tiers 0-3 against a
+> designed 0.07 / 0.10 / 0.14 / 0.19. De-normalising `shear_rate()` as well
+> would count the tier twice and put a tier-3 cirrus at 0.31, 58% over the
+> number this section specifies. The normalisation stays.
 
 ### 2.2 What you just ate — the flood is the gene's colour
 
@@ -1125,12 +1178,24 @@ const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)   # glow_colors[2], was ZERO
 const LIGHT_PEAK := 0.28
 const LIGHT_HALFWIDTH_DEG := [0.0, 26.0, 19.0, 13.0]   # by tier
 
-# any cell with radius >= SHADOW_MIN_RATIO * cell.radius. Size, not threat --
-# see the note above.
+# Size, not threat -- see the note above.
 const SHADOW_RANGE := 620.0      # inside WAKE_RANGE 760: it sharpens, never extends
 const SHADOW_CORE := 180.0
+# A body this fraction of your radius starts casting; one your own size casts a
+# whole shadow. A window, not a threshold -- see below.
 const SHADOW_MIN_RATIO := 0.8
+const SHADOW_FULL_RATIO := 1.05
 ```
+
+> **`SHADOW_FULL_RATIO` is the build's correction and it is the same correction
+> §7.0 spends a page making to dread.** The first draft wrote the rule as *"any
+> cell with radius >= SHADOW_MIN_RATIO * cell.radius"*, and that is a boolean:
+> a body drifting across ratio 0.8 would pop the amber lobe on and off, putting
+> a step into a signal whose entire selling point is that it is steady. Every
+> other gate in `food.gd` has been taken off exactly that argument. Built as
+> `smoothstep(0.80, 1.05, ratio)`: nothing below 0.8 casts anything, which is
+> what the number in this section actually means, and a body your own size casts
+> a whole one.
 
 Three properties, all load-bearing:
 
@@ -1341,10 +1406,13 @@ works at a glance and under any colour vision.
    and costs nothing; a dedicated gesture is one more thing to teach and one more
    thing to fire by accident on a touchscreen. Recorded because it will be asked
    again.
-6. **The four seeding numbers of §1.3** — `DRIFTER_SHARE`, `PEER_SPREAD`,
-   `ARRIVAL_GAPE_MAX`, and the cytostome weights inside the peer band. The shape
-   is settled and defended; the values are the water's difficulty and can only be
-   judged by swimming in it. They replace the old §9 entry that said the
+6. **The four seeding numbers of §1.3** — **`TIER_WEIGHTS`** first, then
+   `DRIFTER_SHARE`, `PEER_SPREAD` and `ARRIVAL_GAPE_MAX`. `TIER_WEIGHTS` is the
+   cytostome distribution inside the peer band, `[0, 3, 2, 1]` as built; it is
+   the dial this list used to describe in words and not name, and it is the one
+   that decides how much of the water can eat you — measured at 19% for a born
+   cell. The shape is settled and defended; the values are the water's difficulty
+   and can only be judged by swimming in it. They replace the old §9 entry that said the
    distribution was "centred on the player" and left it there.
 7. ~~Can the player replace their own `cytostome`?~~ **DECIDED: yes, allow it.**
    §5.2's two-tap swap is unrestricted, so a player can put a fourth gene over

@@ -39,12 +39,44 @@ const DREAD_COLOR := Vector3(0.013, 0.030, 0.043)
 
 # --- Measured values. Every number below is from the signal table in
 # --- docs/design/perception.md §3; change them there first.
-const THRUST_PEAK := 0.14
-const THRUST_HALFWIDTH_DEG := 60.0
+#
+# --- Three of them are indexed by an organ's tier rather than flat, and that is
+# --- genes-and-cilia.md §2.1 -- the answer to the tension §2 opens with.
+# --- **Point of view cannot see its own cilia**, so a tier change has to be a
+# --- change in a sensation the player already knows. The discovery §2.1 rests
+# --- on is that the membrane's three self-signals and the cell's three cilia
+# --- are the same three organs seen from inside and from outside:
+# ---
+# ---   cytostome / eat   is the metabolic beat and the flood that follows it
+# ---   cirrus    / turn  is the shear on the outside of the turn
+# ---   flagellum / swim  is the thrust bloom at bearing 0
+# ---
+# --- So a flagellum-specialised cell feels its own push harder and more
+# --- sharply, and a big mouth savours the meal longer. No new shader term, no
+# --- new lobe, no HUD -- and tier 1 reproduces every shipped Phase 1-4 value
+# --- exactly, so nothing that has been rendered and judged before moves.
+# ---
+# --- Index 0 is the cell that has lost the organ entirely, which §9.7 allows by
+# --- letting a fourth gene go over any of the three. It is not in the design:
+# --- it is extrapolated one step below tier 1 on the ladder's own spacing,
+# --- which is what cell.gd's drive tables do and the least invented answer
+# --- available.
+
+## The cell's own impulse blooming at its front, by `flagellum` tier. Louder and
+## tighter with a better tail: 0.14/60 degrees at tier 1, 0.25/44 at tier 3.
+const THRUST_PEAK_BY_TIER: Array[float] = [0.10, 0.14, 0.19, 0.25]
+const THRUST_HALFWIDTH_BY_TIER: Array[float] = [68.0, 60.0, 52.0, 44.0]
 const THRUST_ATTACK := 0.06
 const THRUST_DECAY := 0.5
 
-const SHEAR_PEAK := 0.10
+## Water shearing past the membrane on the outside of a turn, by `cirrus` tier.
+##
+## The tier lands here and **only** here: cell.gd's [method CellBody.shear_rate]
+## returns demand-or-rotation normalised to -1..1 on purpose, so it is the same
+## number at every tier and this table is the whole of the difference. That is
+## the right way round -- de-normalising the rate as well would count the tier
+## twice, and a tier-3 cirrus would shear at 0.31 against a designed 0.19.
+const SHEAR_PEAK_BY_TIER: Array[float] = [0.07, 0.10, 0.14, 0.19]
 const SHEAR_HALFWIDTH_DEG := 84.0
 const SHEAR_DECAY := 0.18
 
@@ -81,7 +113,10 @@ const PULSE_ATTACK := 0.09
 const PULSE_DECAY := 0.42
 
 const INGEST_ATTACK := 0.12
-const INGEST_DECAY := 1.2
+## How long the flood takes to drain, by `cytostome` tier: a bigger mouth
+## savours the meal longer. Attack is deliberately flat -- what a wider mouth
+## buys is the lingering, not a faster swallow.
+const INGEST_DECAY_BY_TIER: Array[float] = [1.0, 1.2, 1.5, 1.9]
 
 # --- The stigma (§6) --------------------------------------------------------
 ## What the light-sensitive spot is worth on the contour. Deliberately modest:
@@ -154,6 +189,15 @@ const LOBE_SELF := 0
 const LOBE_NUTRIENT := 1
 ## Reserved since Phase 1 and spent by Phase 5 on the `stigma`.
 const LOBE_LIGHT := 2
+
+## Organ slots in [method organs], in genes-and-cilia.md §4.1's arc order --
+## which is the order the body is drawn in, the order ties break in, and now the
+## order the membrane is told in. One ordering, everywhere.
+const ORGAN_CYTOSTOME := 0
+const ORGAN_CIRRUS := 1
+const ORGAN_FLAGELLUM := 2
+const ORGAN_STIGMA := 3
+const ORGAN_TIER_MAX := 3
 
 # --- Death ------------------------------------------------------------------
 # docs/design/food-and-predators.md §6. Predation slams the membrane shut;
@@ -252,6 +296,15 @@ class Env:
 				value = 0.0
 				_peak = 0.0
 
+	## How long this envelope takes to drain, when that is a property of the
+	## body rather than a constant. §2.1 gives a bigger `cytostome` a longer
+	## flood, and the body it belongs to can change mid-decay -- a meal that
+	## raises the tier arrives during the flood it caused -- so this is written
+	## every frame rather than at construction. Changing it mid-decay just bends
+	## the remaining fall, because [method step] divides by it afresh.
+	func retune_decay(decay: float) -> void:
+		_decay = maxf(decay, 0.001)
+
 	## Pinned from outside, for the death frames the bus drives directly rather
 	## than through an envelope. Keeps _peak honest so a later fire() behaves.
 	func hold(level: float) -> void:
@@ -280,7 +333,19 @@ var _thrust := Env.new(THRUST_ATTACK, THRUST_DECAY)
 var _bruise := Env.new(BRUISE_ATTACK, BRUISE_DECAY)
 var _flash := Env.new(FLASH_ATTACK, FLASH_DECAY)
 var _wake := Env.new(WAKE_ATTACK, WAKE_DECAY)
-var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY)
+var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY_BY_TIER[1])
+
+## **What body this membrane is attached to** (§2.1), in `genes-and-cilia.md`'s
+## arc order: `cytostome`, `cirrus`, `flagellum`, `stigma`. Written once a frame
+## by [method organs], exactly the way metabolism's state arrives through
+## [method set_beat] -- a continuous property of the organism that shapes the
+## discrete events, rather than an argument riding on each one. That keeps every
+## sensation entry point about the sensation, which is what the audio and
+## haptics subscribers downstream of [signal sensation] will be reading.
+##
+## Defaults are the born cell: mediocre at three things and blind. Nothing here
+## may become a way to describe what is *outside* the cell.
+var _organs := PackedInt32Array([1, 1, 1, 0])
 
 ## Shear has no attack at all -- it is the proof that the player is connected to
 ## something, so it must answer the same frame the turn starts.
@@ -300,7 +365,6 @@ var _dread_target := 0.0
 ## continuous state like taste, posted every frame by whoever owns the run.
 var _light := 0.0
 var _light_bearing := 0.0
-var _light_width := LIGHT_HALFWIDTH_DEG[1]
 
 ## Seconds left on the held sample, 0 for none, and the echo it schedules.
 var _held := 0.0
@@ -359,6 +423,32 @@ func set_geometry(rect: Vector2, inset: float) -> void:
 	_inset = maxf(inset, 0.0)
 
 
+## **What organs this cell has, and how good they are** -- genes-and-cilia.md
+## §2.1. Posted every frame by whoever owns the run, like [method set_beat],
+## and the only thing in this file that is about the body rather than about
+## what is happening to it.
+##
+## Nothing new appears on the membrane because of this. Three signals the player
+## has known since Phase 1 change magnitude and shape: the thrust bloom gets
+## louder and tighter with a better tail, the turn shear gets stronger with a
+## better cirrus, and the ingest flood lingers with a wider mouth. That is the
+## whole of §2's answer to *"point of view cannot see its own cilia"* -- you do
+## not look at what you can do, you feel it, and you always have.
+##
+## It carries **no identity and no position**. Four small integers about this
+## cell's own anatomy are not a fact about anything else in the water, which is
+## the line perception.md draws and this does not cross.
+func organs(cytostome: int, cirrus: int, flagellum: int, stigma: int) -> void:
+	_organs[ORGAN_CYTOSTOME] = clampi(cytostome, 0, ORGAN_TIER_MAX)
+	_organs[ORGAN_CIRRUS] = clampi(cirrus, 0, ORGAN_TIER_MAX)
+	_organs[ORGAN_FLAGELLUM] = clampi(flagellum, 0, ORGAN_TIER_MAX)
+	_organs[ORGAN_STIGMA] = clampi(stigma, 0, ORGAN_TIER_MAX)
+	# The flood's decay is the only one of the three that lives inside an
+	# envelope rather than being read at the moment it is used, so it is pushed
+	# rather than pulled.
+	_ingest.retune_decay(INGEST_DECAY_BY_TIER[_organs[ORGAN_CYTOSTOME]])
+
+
 # ---------------------------------------------------------------------------
 # Sensations. Everything gameplay is allowed to say to the membrane.
 # ---------------------------------------------------------------------------
@@ -411,9 +501,15 @@ func dread(level: float) -> void:
 ## The shadow of something bigger than you, passing between the cell and the
 ## light above. The `stigma`, §6.
 ##
-## [param bearing] is body-relative like every other bearing here, and
-## [param tier] only decides how sharp the lobe is. Continuous, so it is posted
-## every frame and gated like taste.
+## [param bearing] is body-relative like every other bearing here. How sharp the
+## lobe is comes from the `stigma` tier in [method organs], not from an argument
+## here -- the tier is a property of the organ, not of the shadow.
+##
+## **A cell with no stigma reports nothing at all**, which is enforced here as
+## well as at the call site. The caller already declines to hand over a bearing
+## it has no organ to have sensed; this is the backstop that makes "an organ you
+## have not grown is silent" a property of the bus rather than a discipline four
+## call sites have to remember.
 ##
 ## **Dread does not muffle it, and that is the purchase.** Dread is a blocked
 ## chemoreceptor; light is a different organ, so TASTE_DREAD_SUPPRESS has no
@@ -423,15 +519,15 @@ func dread(level: float) -> void:
 ## It says *mass*, never danger: a shadow's size is a fact about a body, so the
 ## small cell with the huge mouth casts none and the mouthless giant casts a
 ## large one. That is honest optics and it keeps "never an identity".
-func light(bearing: float, strength: float, tier: int) -> void:
-	_light = clampf(strength, 0.0, 1.0)
-	_light_bearing = bearing
-	_light_width = LIGHT_HALFWIDTH_DEG[clampi(tier, 0, LIGHT_HALFWIDTH_DEG.size() - 1)]
+func light(bearing: float, strength: float) -> void:
+	var seen := _organs[ORGAN_STIGMA] > 0
+	_light = clampf(strength, 0.0, 1.0) if seen else 0.0
+	_light_bearing = bearing if seen else 0.0
 	if absf(_light - _said_light) > POST_EPSILON \
-			or absf(angle_difference(bearing, _said_light_bearing)) > POST_ANGLE_EPSILON:
+			or absf(angle_difference(_light_bearing, _said_light_bearing)) > POST_ANGLE_EPSILON:
 		_said_light = _light
-		_said_light_bearing = bearing
-		sensation.emit(&"light", {"bearing": bearing, "strength": _light})
+		_said_light_bearing = _light_bearing
+		sensation.emit(&"light", {"bearing": _light_bearing, "strength": _light})
 
 
 ## A gene swallowed with nowhere to put it. [param remaining] is seconds left on
@@ -475,17 +571,21 @@ func ingest(payload: Dictionary = {}) -> void:
 	sensation.emit(&"ingest", payload)
 
 
-## Self-signal: the cell's own impulse blooming at its front.
+## Self-signal: the cell's own impulse blooming at its front. How hard and how
+## tightly it blooms is the `flagellum` tier, out of [method organs] (§2.1).
 func thrust(strength: float = 1.0) -> void:
-	_thrust.fire(THRUST_PEAK * clampf(strength, 0.0, 1.0))
+	_thrust.fire(THRUST_PEAK_BY_TIER[_organs[ORGAN_FLAGELLUM]]
+		* clampf(strength, 0.0, 1.0))
 	sensation.emit(&"thrust", {"bearing": 0.0, "strength": strength})
 
 
 ## Self-signal: water shearing past the membrane on the outside of a turn.
-## [param rate] is signed and normalised, -1 hard to port, +1 hard to starboard.
+## [param rate] is signed and normalised, -1 hard to port, +1 hard to starboard
+## **at every tier** -- how hard that normalised push actually shears is the
+## `cirrus` tier, out of [method organs] (§2.1), and nowhere else.
 func shear(rate: float) -> void:
 	var r := clampf(rate, -1.0, 1.0)
-	var level := SHEAR_PEAK * absf(r)
+	var level := SHEAR_PEAK_BY_TIER[_organs[ORGAN_CIRRUS]] * absf(r)
 	if level > _shear:
 		_shear = level
 	if absf(r) > 0.001:
@@ -659,6 +759,12 @@ func _end_collapse() -> void:
 	_last_pulse = 0.0
 	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest]:
 		env.reset()
+	# A new cell is the born cell: mediocre at three things and blind. The run
+	# posts the real answer on its first frame, but the first frame of a new
+	# life is the one beat the player is watching for, and it must not land at
+	# the dead cell's tiers. After the envelope resets, because this retunes one
+	# of them.
+	organs(1, 1, 1, 0)
 	_idle_lobes()
 	_beat_phase = 0.0
 	_beat_this_period = _beat_period
@@ -684,7 +790,11 @@ func _process(delta: float) -> void:
 	_wake.step(delta)
 	_ingest.step(delta)
 
-	_shear = maxf(_shear - delta * (SHEAR_PEAK / SHEAR_DECAY), 0.0)
+	# Decays at its own peak over its own time, so a tier-3 cirrus does not
+	# also hold the shear on for longer than a tier-1 one: what the tier buys
+	# is how hard the water pushes back, not how long it takes to let go.
+	_shear = maxf(_shear - delta
+		* (SHEAR_PEAK_BY_TIER[_organs[ORGAN_CIRRUS]] / SHEAR_DECAY), 0.0)
 	# Asymmetric: ten seconds to arrive, four and a half to let go.
 	_dread = move_toward(_dread, _dread_target,
 		delta * (DREAD_RATE if _dread_target > _dread else DREAD_FALL_RATE))
@@ -751,7 +861,7 @@ func _step_taste(delta: float) -> void:
 func _compose_lobes() -> void:
 	var level := _thrust.value
 	var bearing := 0.0
-	var halfwidth := THRUST_HALFWIDTH_DEG
+	var halfwidth := THRUST_HALFWIDTH_BY_TIER[_organs[ORGAN_FLAGELLUM]]
 	if _shear > level:
 		level = _shear
 		bearing = _shear_bearing
@@ -777,7 +887,8 @@ func _compose_lobes() -> void:
 	# dread term -- see light().
 	if _light > LIGHT_FLOOR:
 		_glow_lobes[LOBE_LIGHT] = _lobe(
-			_light_bearing, _light_width, LIGHT_PEAK * _light)
+			_light_bearing,
+			LIGHT_HALFWIDTH_DEG[_organs[ORGAN_STIGMA]], LIGHT_PEAK * _light)
 	else:
 		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
 
