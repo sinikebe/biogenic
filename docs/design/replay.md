@@ -314,17 +314,41 @@ rings, bruise rays, ghosts, meals and wake rays unchanged. Closing it is
 ### 4.6 What it costs in the hot loop
 
 About 295 indexed float writes into one preallocated array and about forty
-property reads. No allocation, no dictionary, no signal. Estimated at tens of
-microseconds against a 16.6 ms budget.
+property reads. No allocation, no dictionary, no signal.
 
-**That estimate is not a measurement and must not be cited as one.** The number
-to take is `Time.get_ticks_usec()` around `capture()`, as a rolling maximum, on
-the device — it belongs in this section once it exists.
+**Measured**, with `Time.get_ticks_usec()` around `capture()` as a rolling
+maximum, over a 150-second `--forage --evade` run at `--fixed-fps 60` — 9,000
+captures, five meals, a division and the ring wrapping twice:
+
+| | µs |
+| --- | --- |
+| mean | **47** |
+| rolling maximum | **148** |
+
+Against a 16,600 µs frame budget that is 0.3% mean and 0.9% at its worst. The
+figures are from the headless container (llvmpipe, no Vulkan), not from the
+phone; they are an upper bound on the GDScript interpreter's share, which is all
+of it — nothing here touches the GPU.
+
+**Two things had to change to get there, and the first is the interesting one.**
+
+- **`food.gape_at()` is not a property read.** It resolves to
+  `gape_of(tier_of(genome))`: a dictionary lookup and two static calls, 102 of
+  them a frame, and measured at **34 of the 80 µs** the first working version
+  cost — 43% of the whole capture for one of the six columns. A gape is
+  `GAPE_BY_TIER[tier] * radius` and the tier only moves when the genome does,
+  which the recorder already watches, so the multiplier is cached on that event
+  and the hot loop does a multiply. The float written is bit-identical.
+- The genome-change detection is an integer compare per body, never a dictionary
+  walk: a body's `serial` and `meals` catch a reseed and a meal between them,
+  and one summed hash catches everything about the player's genome. Costed at
+  about 20 µs of the 47.
 
 The one thing that would cause a stutter is allocation, and the ring removes it.
 The second would be `food.gd`'s accessors: `genomes()` allocates a fresh array on
-every call. The recorder must read `_cells` directly rather than adding an
-eighth rebuild.
+every call. The recorder reads the bodies directly rather than adding an eighth
+rebuild — through a `bodies()` accessor that returns the live array, so no file
+is reaching into another's privates to do it.
 
 ### 4.7 Constraints
 

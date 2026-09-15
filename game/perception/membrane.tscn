@@ -5,6 +5,7 @@
 [ext_resource type="Script" path="res://game/perception/signal_bus.gd" id="3_bus"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_field"]
+resource_local_to_scene = true
 shader = ExtResource("2_shader")
 
 [node name="Membrane" type="CanvasLayer"]

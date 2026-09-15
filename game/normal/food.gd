@@ -1724,6 +1724,46 @@ func scent(d: float) -> float:
 # and nothing the organism can sense.
 # ---------------------------------------------------------------------------
 
+## **The bodies themselves**, live, with nothing rebuilt. Every other accessor
+## here copies out the one column it is asked for, which is right for a view
+## that wants positions and wrong for anything that wants all of them at once:
+## `genomes()` allocates a fresh array on every call, and the replay recorder
+## reads six numbers off every body sixty times a second.
+##
+## Read it, and do not hold it across frames. docs/design/replay.md §4.6.
+func bodies() -> Array[Body]:
+	return _cells
+
+
+## **Where a body was, written back from a recording.** The one thing in this
+## file that is not simulation, and it is only reachable when the simulation has
+## stopped for good: a run keeps nothing, so the replay scribbles the recorded
+## state onto these bodies and lets `vision.gd` read them exactly as it does
+## now, and `_wake_up()` builds all thirty-four again. §3.
+##
+## It deliberately writes only what the trace carries. Nothing here touches a
+## state machine, a target, a serial or a clock -- a body being replayed is not
+## deciding anything.
+func restore_body(index: int, pos: Vector2, heading: float, radius: float,
+		wound: float) -> void:
+	if index < 0 or index >= _cells.size():
+		return
+	var b := _cells[index]
+	b.pos = pos
+	b.heading = heading
+	b.radius = radius
+	b.wound = wound
+
+
+## The same, for the one part of a body that is not a float. Stepped at the
+## moments the recording says it changed, never interpolated.
+func restore_genome(index: int, genome: Dictionary) -> void:
+	if index < 0 or index >= _cells.size():
+		return
+	_cells[index].genome = genome
+	_cells[index].seeded = true
+
+
 ## Where the cells currently are. Rebuilt on the spot rather than kept in step,
 ## so it is never one frame stale; read it and do not hold it across frames.
 func points() -> PackedVector2Array:

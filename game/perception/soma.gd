@@ -74,8 +74,17 @@ var beat := 0.0
 ## water and this figure never draws her again.
 var division := {}
 
-## How far either side of centre the two of them are seated, in canvas px.
+## How far either side of centre the two of them are seated, in canvas px **at
+## a 1280-wide canvas**, scaled by the width of the frame this figure is drawn
+## in. It was a bare constant, and it was the one length on the figure that is
+## not a fraction of something -- so at 2400x1080, where `canvas_items/expand`
+## makes the canvas 1600 across, the daughters sat closer together relative to
+## everything around them, and in a 640-wide replay pane two r28.28 bodies at
+## +/-132 span 408px against a 425px black middle: eight pixels a side, with the
+## outer flagellum tips in the faint tail of the band. docs/design/replay.md
+## §4.3 and §6.2.
 const DIVIDE_SEAT := 132.0
+const DIVIDE_SEAT_WIDTH := 1280.0
 
 var _cell: CellBody = null
 var _genome: GenomeNode = null
@@ -101,6 +110,19 @@ func setup(cell: CellBody, genome: GenomeNode) -> void:
 ## calmly in the middle of it would be the game contradicting itself.
 func set_active(on: bool) -> void:
 	visible = on
+
+
+## **Which part of the screen this figure is centred in.** The whole viewport in
+## normal mode, where nothing calls this; the left pane on the replay screen,
+## where *what you felt* is the point-of-view half. The figure is not scaled
+## down with it: a fully grown cell is 204px across and a 640px pane has 110px
+## of black either side of it. docs/design/replay.md §4.3.
+func set_frame(rect: Rect2) -> void:
+	_figure.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_figure.position = rect.position
+	_figure.size = rect.size
+	_figure.clip_contents = true
+	_figure.queue_redraw()
 
 
 func _process(delta: float) -> void:
@@ -158,7 +180,8 @@ func _draw_figure() -> void:
 func _draw_daughters(centre: Vector2) -> void:
 	var bodies: Array = division["bodies"]
 	var r := float(division.get("radius", 28.28)) * SCALE
-	var spread := float(division.get("spread", 1.0)) * DIVIDE_SEAT
+	var spread := float(division.get("spread", 1.0)) * DIVIDE_SEAT \
+		* (_figure.size.x / DIVIDE_SEAT_WIDTH)
 	for side in bodies.size():
 		var one: Dictionary = bodies[side]
 		var tiers: Dictionary = one["tiers"]

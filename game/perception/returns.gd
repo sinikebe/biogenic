@@ -111,6 +111,17 @@ const WAVE_STEPS := 96
 const WAVE_WIDTH := 2.2
 const WAVE_ALPHA := 0.52
 
+## **Whether something other than the field is stepping the water.** Left false
+## by the run, where [method FoodField.is_processing] is the whole answer -- a
+## division and a death both stop the field, and a stopped field's beams and
+## wavefront are last frame's claims about a place that is no longer true.
+##
+## The replay screen sets it, because there the field is stepped from a
+## recording instead of from its own `_process`: the beams and the front are as
+## live as they ever were, they are simply being written by something else.
+## docs/design/replay.md §4.5.
+var driven := false
+
 var _cell: CellBody = null
 var _food: FoodField = null
 @onready var _marks: Control = $Marks
@@ -138,6 +149,18 @@ func set_active(on: bool) -> void:
 	visible = on
 
 
+## **Which part of the screen the marks are drawn in.** The whole viewport in
+## normal mode, where nothing calls this; the left pane on the replay screen.
+## The edge fade reads its distances off this rect, so a mark near the middle of
+## the pane is near the middle of a membrane that is exactly that size.
+func set_frame(rect: Rect2) -> void:
+	_marks.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_marks.position = rect.position
+	_marks.size = rect.size
+	_marks.clip_contents = true
+	_marks.queue_redraw()
+
+
 func _process(_delta: float) -> void:
 	if not visible:
 		return
@@ -153,7 +176,7 @@ func _draw_marks() -> void:
 	# frozen pointer sitting over the division beat, claiming a place that is no
 	# longer true. This is the same silence `normal_mode._hush()` puts on the
 	# bus, said in the one register that does not go through the bus.
-	if not _food.is_processing():
+	if not (driven or _food.is_processing()):
 		return
 	var centre := _marks.size * 0.5
 	_draw_wave(centre)

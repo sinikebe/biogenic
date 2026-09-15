@@ -28,6 +28,15 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const ReturnsLayer := preload("res://game/perception/returns.gd")
 const RunState := preload("res://game/run_state.gd")
+## The last sixty seconds of the run, kept in memory by the last child of this
+## node. **Preloaded for the type only**, and it is safe to preload precisely
+## because the recorder knows nothing about this file: the replay *screen* is
+## the one that reads back the other way, so it is reached by path and loaded
+## when the button is pressed. docs/design/replay.md §4.5.
+const RecorderNode := preload("res://game/replay/recorder.gd")
+## Loaded on the press, never preloaded: `replay.gd` reads this file's division
+## fades, and a preload back would be a cycle GDScript will not resolve.
+const REPLAY_SCENE := "res://game/replay/replay.tscn"
 ## The genome strip draws the same organs, in the same hues, as the water does.
 ## One vocabulary: §2.4's promise is that a point-of-view player who looks in
 ## the mirror already speaks the language if they ever switch views.
@@ -142,6 +151,20 @@ const SISTER_DISTANCE := 560.0
 ## The one line, at the first division of a run only.
 const DIVIDE_LINE := "lean into one of them"
 
+# --- The offer (docs/design/replay.md §4.5) ---------------------------------
+# **One centred button, on every death, and a tap anywhere else still
+# restarts.** The button consumes its own press, so `_unhandled_input` never
+# sees it and a player who does not want a replay experiences no change at all.
+# Owner's calls 3 and 4 in §7.
+#
+# It is offered on a first-generation death as well, and that is the point:
+# dying in the first thirty seconds is the death a new player most needs
+# explained.
+const WATCH_WIDTH := 232.0
+const WATCH_HEIGHT := 56.0
+## Nothing to watch below this, which is a death inside the first breath.
+const WATCH_MIN_SECONDS := 2.0
+
 ## Which view this run is drawn with, as [enum RunState.Mode]. Set it before the
 ## scene enters the tree to override the remembered choice; left alone it picks
 ## up whatever the mode select last stored.
@@ -175,6 +198,12 @@ var mode := -1
 @onready var _explain_says: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Says
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
 @onready var _pause_tap: Control = $Hud/PauseTap
+@onready var _recorder: RecorderNode = $Recorder
+@onready var _watch_ui: CenterContainer = $Hud/Watch
+@onready var _watch_button: Button = $Hud/Watch/Button
+## The replay screen while it is up, as a child of this run so that the ring is
+## never freed and no scene change happens.
+var _replay: Node = null
 
 ## Which locus is selected, or [constant SLOT_NONE]. Selecting is reversible and
 ## that is why a mis-tap costs nothing, which is in turn why no gap between loci
@@ -295,6 +324,23 @@ func _ready() -> void:
 	_pause_ui.hide()
 	_resume_button.pressed.connect(_toggle_pause)
 	_leave_button.pressed.connect(_leave)
+
+	# The offer, hidden until there is something to watch. Styled like the pause
+	# column because that is the register: a panel the player consults.
+	_watch_ui.hide()
+	_watch_button.custom_minimum_size = Vector2(WATCH_WIDTH, WATCH_HEIGHT)
+	_watch_button.focus_mode = Control.FOCUS_NONE
+	_watch_button.add_theme_font_size_override("font_size", 20)
+	_watch_button.add_theme_color_override("font_color",
+		Color(0.855, 0.953, 0.933, 0.82))
+	_watch_button.add_theme_color_override("font_hover_color",
+		Color(0.855, 0.953, 0.933, 1.0))
+	_watch_button.add_theme_color_override("font_pressed_color",
+		Color(1.0, 1.0, 1.0, 1.0))
+	_watch_button.add_theme_stylebox_override("normal", _slab(0.0))
+	_watch_button.add_theme_stylebox_override("hover", _slab(0.35))
+	_watch_button.add_theme_stylebox_override("pressed", _slab(0.5))
+	_watch_button.pressed.connect(_watch)
 
 	# **No focus.** The playfield has no other focusable control, so giving this
 	# one a focus ring would put arrow keys on GUI navigation the moment anyone
@@ -942,6 +988,9 @@ func _die(loud: bool, bearing: float) -> void:
 	_division = {}
 	_hand_division()
 	_set_simulating(false)
+	# **The ring is sealed here**, before the collapse writes a single frame of
+	# itself into it. What the player is offered is the run, not the dying.
+	_recorder.seal()
 	_cell.release()
 	# The collapse owns the screen. A body still swimming calmly in the middle
 	# of a membrane slamming shut is the game contradicting itself.
@@ -968,6 +1017,8 @@ func _step_death(delta: float) -> void:
 				if _tap_pending:
 					_tap_pending = false
 					_wake_up()
+				else:
+					_offer_replay(true)
 		Life.RETURNING:
 			_bus.revive(_death_clock)
 			if _death_clock >= SignalBus.DEATH_RETURN:
@@ -984,9 +1035,74 @@ func _step_death(delta: float) -> void:
 			pass
 
 
+# ---------------------------------------------------------------------------
+# The replay. docs/design/replay.md §4.5: four edits, none of them inside
+# _process, and the screen itself is a child of this run so that the recorder's
+# ring is never freed and no scene change happens.
+# ---------------------------------------------------------------------------
+
+## Puts the offer up, or takes it and the screen behind it down.
+func _offer_replay(on: bool) -> void:
+	if on:
+		# A death inside the first breath has nothing to show, and an offer
+		# that opens on two frames of water is worse than no offer.
+		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS
+		return
+	_watch_ui.hide()
+	_close_replay()
+	_recorder.clear()
+
+
+## The button. Instances the screen as a child of this run -- never a scene
+## change, because the buffer it is playing back lives in a sibling node.
+##
+## **Detaching the bus is not housekeeping.** `_step_death` goes on calling
+## `collapse()` for as long as the black holds, and `collapse()` writes every
+## uniform on the membrane; the replay writes the same uniforms out of the
+## recording. Two writers on one material is a flicker at best. So the run's
+## membrane is unplugged for exactly as long as the screen is up -- and not a
+## frame longer, because the thing it is doing underneath is the invitation to
+## touch it, and a frozen invitation is the one thing a waiting screen may not
+## look like.
+func _watch() -> void:
+	if _replay != null:
+		return
+	if not ResourceLoader.exists(REPLAY_SCENE):
+		push_error("[NormalMode] No replay screen at %s" % REPLAY_SCENE)
+		return
+	var packed: PackedScene = load(REPLAY_SCENE)
+	if packed == null:
+		return
+	_watch_ui.hide()
+	_bus.attach(null)
+	_replay = packed.instantiate()
+	_replay.set(&"recorder", _recorder)
+	add_child(_replay)
+
+
+## Closing the screen puts the offer back: the run has not restarted, and a
+## second watch costs nothing.
+func _replay_closed() -> void:
+	_close_replay()
+	if _life == Life.WAITING:
+		_offer_replay(true)
+
+
+func _close_replay() -> void:
+	if _replay == null:
+		return
+	_replay.queue_free()
+	_replay = null
+	_bus.attach(_membrane.field.material as ShaderMaterial)
+
+
 ## A touch, a click or a key on the held black. Anything at all, because there
 ## is nothing on screen to aim at.
 func _wake_up() -> void:
+	# Before anything is rebuilt: the screen is reading the nodes below, and
+	# **a run keeps nothing** -- the replay is the last thing this run has and
+	# it dies with it.
+	_offer_replay(false)
 	_life = Life.RETURNING
 	_death_clock = 0.0
 	_cell.reset()
@@ -1309,9 +1425,13 @@ func _bar(alpha: float) -> StyleBoxFlat:
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# Back out of the replay first: it is a screen the player opened,
+			# and the gesture that closes a screen closes the top one.
+			if _replay != null:
+				_replay_closed()
 			# Pausing a dead cell is nonsense, so Back during a death is the
 			# exit -- straight out, skipping the pause screen.
-			if _life != Life.ALIVE:
+			elif _life != Life.ALIVE:
 				_leave()
 			else:
 				_toggle_pause()
@@ -1323,6 +1443,12 @@ func _notification(what: int) -> void:
 
 
 func _unhandled_input(event: InputEvent) -> void:
+	# **While the replay is up, this run is not listening.** The screen consumes
+	# everything it is handed and is deeper in the tree, so nothing should reach
+	# here at all -- but the failure if one ever did is that watching a replay
+	# restarts the run under it, which is not a failure to leave to tree order.
+	if _replay != null:
+		return
 	if event.is_action_pressed(&"ui_cancel"):
 		if _life != Life.ALIVE:
 			_leave()
@@ -1343,7 +1469,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	# The dead membrane is waiting to be touched, and there is nothing on it to
 	# aim at, so anything counts.
 	if _life == Life.WAITING and _is_tap(event):
-		_wake_up()
+		# **Except the one thing there now is to aim at.** A `Button` consumes
+		# its own press, so this branch should never see it -- and measured,
+		# under a real window, it does not. It is written down anyway because
+		# the cost of being wrong is the worst one on this screen: the offer
+		# would open the replay and start the next cell underneath it in the
+		# same frame, and whether a finger reaches here at all is a question
+		# about Godot's touch-to-mouse emulation rather than about this file.
+		# `_watch()` is idempotent, so the two paths agreeing costs nothing.
+		if _over_watch(event):
+			_watch()
+		else:
+			_wake_up()
 		get_viewport().set_input_as_handled()
 		return
 	# A tap during the collapse is latched rather than dropped. Being killed is
@@ -1434,6 +1571,21 @@ func _lean_at(at: Vector2) -> float:
 	if half <= 0.0:
 		return 0.0
 	return clampf((at.x - half) / half, -1.0, 1.0)
+
+
+## Whether a tap landed on the `watch` offer. False for anything with no
+## position -- a key or a pad button on the held black is the *anything at all*
+## the death screen has always accepted, and it still starts the next cell.
+func _over_watch(event: InputEvent) -> bool:
+	if not _watch_ui.visible:
+		return false
+	if event is InputEventScreenTouch:
+		return _watch_button.get_global_rect().has_point(
+			(event as InputEventScreenTouch).position)
+	if event is InputEventMouseButton:
+		return _watch_button.get_global_rect().has_point(
+			(event as InputEventMouseButton).position)
+	return false
 
 
 func _is_tap(event: InputEvent) -> bool:

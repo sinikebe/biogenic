@@ -1,4 +1,4 @@
-[gd_scene load_steps=11 format=3]
+[gd_scene load_steps=12 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -10,6 +10,7 @@
 [ext_resource type="Script" path="res://game/normal/genome.gd" id="8_genome"]
 [ext_resource type="PackedScene" path="res://game/perception/soma.tscn" id="9_soma"]
 [ext_resource type="PackedScene" path="res://game/perception/returns.tscn" id="10_returns"]
+[ext_resource type="Script" path="res://game/replay/recorder.gd" id="11_recorder"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -66,6 +67,16 @@ offset_left = 48.0
 offset_top = 48.0
 offset_right = 104.0
 offset_bottom = 104.0
+
+[node name="Watch" type="CenterContainer" parent="Hud"]
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Button" type="Button" parent="Hud/Watch"]
+text = "watch"
 
 [node name="Pause" type="Control" parent="Hud"]
 anchor_right = 1.0
@@ -173,3 +184,7 @@ text = "resume"
 [node name="Leave" type="Button" parent="Hud/Pause/Center/Buttons"]
 size_flags_horizontal = 4
 text = "leave"
+
+[node name="Recorder" type="Node" parent="."]
+process_mode = 1
+script = ExtResource("11_recorder")
