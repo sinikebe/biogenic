@@ -19,7 +19,12 @@ extends Node
 ##   --back-at=<seconds>     fire NOTIFICATION_WM_GO_BACK_REQUEST exactly the
 ##                           way SceneTree does when Android Back is pressed
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right, tab, v
+##                           esc, enter, up, down, left, right, tab, v, and the
+##                           two chords shift-left / shift-right. The chords
+##                           exist because the strand's move is `Shift`+arrow
+##                           read as a **raw** key -- a content pack cannot add
+##                           an InputMap action -- so nothing else in this
+##                           harness could reach it.
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
 ##                           repeatable. This is how the genome strip's two-tap
@@ -54,6 +59,16 @@ extends Node
 ##                           a press alone cannot pose and the one that decides
 ##                           whether reading a locus can commit a daughter.
 ##                           Repeatable, and the same convention again.
+##                           **It carries `relative`, and that is
+##                           load-bearing.** Godot emulates a mouse motion
+##                           from every screen
+##                           drag and copies `relative` across unchanged; the
+##                           GUI's drag machinery accumulates exactly that, and
+##                           `_get_drag_data` is only called once ten pixels
+##                           have piled up. Left at zero -- which is what this
+##                           sent for its first three phases -- no drag ever
+##                           starts, and Godot's own drag-and-drop path looks
+##                           dead on touch when it is not.
 ##   --lift=<seconds>      release finger 0, wherever `--press=` and `--slide=`
 ##                           have left it. The other half of `--press=`: without
 ##                           it the harness can only pose gestures that never
@@ -230,6 +245,9 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const PanesScreen := preload("res://game/replay/panes.gd")
 
 var _clock := 0.0
+## Where finger 0 was last put, so a slide can carry the `relative` the
+## GUI's drag threshold is accumulated from. See [method _send_slide].
+var _finger_was := Vector2.ZERO
 var _esc_at := -1.0
 var _esc_sent := false
 var _back_at := -1.0
@@ -1124,6 +1142,11 @@ func _keycode(name: String) -> Key:
 		"left": return KEY_LEFT
 		"right": return KEY_RIGHT
 		"tab": return KEY_TAB
+		# Shift and an arrow is the strand's move, and nothing in the
+		# InputMap binds it -- a content pack cannot add an action, so the
+		# locus reads the raw key. That makes this the only way to pose it.
+		"shift-left": return (KEY_LEFT | KEY_MASK_SHIFT) as Key
+		"shift-right": return (KEY_RIGHT | KEY_MASK_SHIFT) as Key
 		"v": return KEY_V
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
@@ -1170,6 +1193,9 @@ func _send_press(canvas: Vector2) -> void:
 	var at := canvas * get_viewport().get_screen_transform().get_scale() \
 		+ get_viewport().get_screen_transform().get_origin()
 	_finger = at
+	# Where the first slide measures its `relative` from, so the very first
+	# movement of a gesture carries a real delta rather than a whole screen.
+	_finger_was = at
 	var event := InputEventScreenTouch.new()
 	event.index = 0
 	event.pressed = true
@@ -1181,6 +1207,14 @@ func _send_press(canvas: Vector2) -> void:
 
 ## Finger 0 moves, without a fresh press. A resting thumb produces one of these
 ## the moment it shifts by a pixel, which is the case a press alone cannot pose.
+##
+## **`relative` is set, and without it this cannot pose a drag at all.** Godot
+## turns a screen drag into an emulated `InputEventMouseMotion` and copies
+## `relative` straight across; `Viewport`'s GUI accumulates that into
+## `gui.drag_accum` and only calls `_get_drag_data` once it passes ten pixels.
+## Sent as zero -- which is what this did until the pause strand needed a real
+## drag -- the accumulator never grows, the threshold is never crossed, and a
+## working drag-and-drop path photographs as a dead one.
 func _send_slide(canvas: Vector2) -> void:
 	var at := canvas * get_viewport().get_screen_transform().get_scale() \
 		+ get_viewport().get_screen_transform().get_origin()
@@ -1188,6 +1222,8 @@ func _send_slide(canvas: Vector2) -> void:
 	var event := InputEventScreenDrag.new()
 	event.index = 0
 	event.position = at
+	event.relative = at - _finger_was
+	_finger_was = at
 	Input.parse_input_event(event)
 	print("[drive] %5.2f  slide %.0f,%.0f (canvas %.0f,%.0f)" % [
 		_clock, at.x, at.y, canvas.x, canvas.y])
@@ -1242,10 +1278,16 @@ func _to_window(canvas: Vector2) -> Vector2:
 		+ get_viewport().get_screen_transform().get_origin()
 
 
+## One key, down or up. A keycode may carry `KEY_MASK_SHIFT`, which is masked
+## back off and set as the modifier instead: `InputEventKey.keycode` is the bare
+## key and `shift_pressed` is the chord, and a control reading a raw
+## `InputEventKey` -- which is the only way a content pack can bind one -- sees
+## exactly what a real keyboard would send.
 func _send_key(keycode: Key, pressed: bool) -> void:
 	var event := InputEventKey.new()
-	event.keycode = keycode
-	event.physical_keycode = keycode
+	event.keycode = (keycode & ~KEY_MASK_SHIFT) as Key
+	event.physical_keycode = event.keycode
+	event.shift_pressed = (keycode & KEY_MASK_SHIFT) != 0
 	event.pressed = pressed
 	Input.parse_input_event(event)
 
