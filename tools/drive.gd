@@ -29,6 +29,12 @@ extends Node
 ##                           wide at 16:9: `expand` keeps the height at 720 and
 ##                           widens it, so at 2400x1080 the canvas is 1600 across
 ##                           and a centred widget is 160 further right.
+##   --hover=<seconds>:<x>,<y>
+##                           warp the mouse to that canvas point, once, at that
+##                           time; repeatable. The desktop half of the genome
+##                           strip -- point at a tile and read what the gene
+##                           does -- has no touch equivalent and therefore no
+##                           other way to be photographed.
 ##   --sample=<gene>         put a gene in the genome's held sample, the state
 ##                           §3.3 gives a second heartbeat and §5.2 gives the
 ##                           strip. Reaching it by playing means eating a fourth
@@ -195,6 +201,8 @@ var _check_seeding := 0
 var _posed: Array = []
 ## [[seconds, canvas position], ...], consumed as the clock passes each one.
 var _touches: Array = []
+## The same, for the mouse: [[seconds, canvas position], ...].
+var _hovers: Array = []
 var _sample: StringName = &""
 var _sample_left := -1.0
 var _wound := -1.0
@@ -314,6 +322,13 @@ func _ready() -> void:
 			_sample = StringName(text.trim_prefix("--sample="))
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
+		elif text.begins_with("--hover="):
+			var hover := text.trim_prefix("--hover=").split(":")
+			if hover.size() == 2:
+				var at := hover[1].split(",")
+				if at.size() == 2:
+					_hovers.append([float(hover[0]),
+						Vector2(float(at[0]), float(at[1]))])
 		elif text.begins_with("--touch="):
 			var touch := text.trim_prefix("--touch=").split(":")
 			if touch.size() == 2:
@@ -472,6 +487,11 @@ func _process(delta: float) -> void:
 		if _clock >= float(_touches[i][0]):
 			_send_touch(_touches[i][1])
 			_touches.remove_at(i)
+
+	for i in range(_hovers.size() - 1, -1, -1):
+		if _clock >= float(_hovers[i][0]):
+			_send_hover(_hovers[i][1])
+			_hovers.remove_at(i)
 
 	if _back_at >= 0.0 and _clock >= _back_at:
 		_back_at = -1.0
@@ -909,6 +929,20 @@ func _keycode(name: String) -> Key:
 		"space": return KEY_SPACE
 		"w": return KEY_W
 		_: return KEY_NONE
+
+
+## The mouse, moved to a point in the design canvas. `warp_mouse` is what the
+## window manager would do; Godot turns the move into a motion event, which is
+## what raises `mouse_entered` on whatever control is under it.
+## **Canvas coordinates go in unscaled, unlike [method _send_touch].**
+## `Viewport.warp_mouse` takes a point in the viewport's own space and applies
+## the stretch transform itself, where `Input.parse_input_event` wants the point
+## already in window pixels. Scaling here as well put the cursor 1.5x too far
+## out at 2400x1080 and photographed a hover that had not happened.
+func _send_hover(canvas: Vector2) -> void:
+	get_viewport().warp_mouse(canvas)
+	print("[drive] %5.2f  hover canvas %.0f,%.0f" % [
+		_clock, canvas.x, canvas.y])
 
 
 ## One finger, down and up, at a point in the **design canvas** rather than in
