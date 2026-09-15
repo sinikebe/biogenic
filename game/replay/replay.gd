@@ -45,7 +45,16 @@ const BUTTON_HEIGHT := 48.0
 const PLAY_WIDTH := 112.0
 const SPEED_WIDTH := 96.0
 const LEAVE_WIDTH := 96.0
-const BUTTON_GAP := 12.0
+## **Not 12, and the number comes from the pause screen's own note.** That file
+## measured its 56px buttons at about 5.3mm on a 2400x1080 phone and put *48*
+## canvas px of dead water between the safe control and the destructive one --
+## "do not tighten it back up for looks". Twelve canvas px is 18 device px on
+## that phone, about 1.1mm: a thumb going for the speed toggle lands on `leave`.
+## `leave` here is reversible -- closing the screen puts the `watch` offer back,
+## so a mis-tap costs one tap and not the replay -- which is why this is 32 and
+## not the pause screen's 48. Thirty-two is 2.9mm, and the row still clears both
+## captions at 1280x720 and at 2400x1080.
+const BUTTON_GAP := 32.0
 ## How far up the band the row of controls starts, under the captions.
 const ROW_TOP := 32.0
 

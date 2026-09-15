@@ -65,10 +65,47 @@ const BACK_COLOR := Color(0.023, 0.055, 0.05, 1.0)
 ## player's own terms rather than in the project's.
 const FELT_TEXT := "what you felt"
 const TRUTH_TEXT := "what was there"
-const CAPTION_SIZE := 15
-const CAPTION_COLOR := Color(0.855, 0.953, 0.933, 0.45)
+## **Louder than the transport, because the captions are the thesis and the
+## transport is chrome.** Measured off a 2400x1080 render: at 15px and 0.45
+## alpha the glyphs came out at 5.05:1 against the band, while `pause` at 17px
+## and 0.82 on a lit slab came out at 7.71:1. Both clear AA -- the readability
+## was never the problem -- but the hierarchy was upside down: the video-player
+## buttons were the loudest thing on the screen and the one sentence the feature
+## exists to say was the quietest. 16px at 0.60 measures 6.39:1, which puts the
+## legend above the chrome and still under everything inside a pane.
+const CAPTION_SIZE := 16
+const CAPTION_COLOR := Color(0.855, 0.953, 0.933, 0.60)
 const CAPTION_TOP := 6.0
 const CAPTION_HEIGHT := 22.0
+
+## **The panes need an edge that does not depend on being felt.**
+##
+## The membrane's contour is the frame when there is something to feel, and on
+## a quiet frame it is not a frame at all: measured across the middle of a
+## resting replay, the contour peaks at G=14 against a G=13 background -- one
+## level out of 255, which is nothing. On the shipped one-pane screen that
+## costs exactly nothing, because the edge of the pane is the edge of the
+## screen and the player already knows where that is.
+##
+## Here it costs the whole reading. The world pane is clipped at the seam, so
+## on a quiet frame a body sliced vertically in half at x=640 with no line
+## beside it reads as a fault in the picture rather than as the edge of a
+## window -- and the two panes read as one wide field with two cells adrift in
+## it. The gap between what you felt and what was there cannot be read off a
+## picture whose two halves have no boundary. Rendered, at both shapes, and
+## that is how it was found.
+##
+## Quiet on purpose: at 0.20 over the base the rule lands near G=47, well under
+## the contour's own peak of 112, so the membrane still wins every frame it has
+## anything to say. It is a sill, not a chrome divider.
+const SEAM_WIDTH := 2.0
+const SEAM_COLOR := Color(0.12, 0.70, 0.58, 0.20)
+## The same line under both panes, fainter. It closes the bottom of each window
+## -- the other edge the world layer is clipped against -- and it is what makes
+## the transport band read as a surface the player consults rather than as more
+## water. §4.4's register, drawn rather than asserted.
+const SILL_HEIGHT := 1.0
+const SILL_COLOR := Color(0.12, 0.70, 0.58, 0.13)
 
 ## True while this screen is mirroring a run that is still being played, which
 ## is how it was first rendered and how the harness photographs it. The replay
@@ -91,6 +128,8 @@ var _soma: SomaLayer = null
 var _returns: ReturnsLayer = null
 var _felt_caption: Label = null
 var _truth_caption: Label = null
+var _seam: ColorRect = null
+var _sill: ColorRect = null
 
 var _view := Vector2(1280.0, 720.0)
 var _block := PackedFloat32Array()
@@ -245,11 +284,25 @@ func _build() -> void:
 	var legend := CanvasLayer.new()
 	legend.name = "Legend"
 	legend.layer = LAYER_LEGEND
+	# Above the world layer, because the thing being marked is where the world
+	# layer stops.
+	_seam = _rule("Seam", SEAM_COLOR)
+	_sill = _rule("Sill", SILL_COLOR)
+	legend.add_child(_sill)
+	legend.add_child(_seam)
 	_felt_caption = _caption(FELT_TEXT)
 	_truth_caption = _caption(TRUTH_TEXT)
 	legend.add_child(_felt_caption)
 	legend.add_child(_truth_caption)
 	add_child(legend)
+
+
+func _rule(name: String, tint: Color) -> ColorRect:
+	var rect := ColorRect.new()
+	rect.name = name
+	rect.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	rect.color = tint
+	return rect
 
 
 func _caption(text: String) -> Label:
@@ -306,6 +359,13 @@ func _relayout() -> void:
 	_soma.set_frame(felt)
 	_returns.set_frame(felt)
 	_vision.set_frame(truth)
+
+	_seam.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_seam.position = Vector2(truth.position.x - SEAM_WIDTH * 0.5, 0.0)
+	_seam.size = Vector2(SEAM_WIDTH, pane_height())
+	_sill.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_sill.position = Vector2(0.0, pane_height())
+	_sill.size = Vector2(_view.x, SILL_HEIGHT)
 
 	for pair: Array in [[_felt_caption, felt], [_truth_caption, truth]]:
 		var label: Label = pair[0]

@@ -10,11 +10,12 @@ against what was actually there. That is the principle the project has held
 since Phase 3 — full vision exists to catch the membrane lying — turned around
 and aimed at the player's own mistakes instead of at the engine.
 
-Status: nothing here is built. §1 and §2 are measurements taken against the
-shipped build with the harness that already exists. §2 was a bug in that build
-and **has been fixed separately from this feature**. §4 is a design that has
-been measured but not rendered; the two things it still owes a photograph are
-named where they occur.
+Status: built, and **rendered at 1280x720 and 2400x1080**. §1 and §2 are
+measurements taken against the shipped build with the harness that already
+exists. §2 was a bug in that build and **has been fixed separately from this
+feature**. §4 was measured before it was photographed; §4.8 is what the
+photographs changed, and it is the only part of this document written after
+looking rather than before.
 
 ## 1. The determinism measurement
 
@@ -356,6 +357,117 @@ Nothing here touches `project.godot`, `version.json`, `export_presets.cfg`,
 `addons/` or `ci/`. No new shader uniform. No `class_name`. No new input action,
 no new permission, no `user://` write. GL Compatibility throughout: no
 SubViewport, no render target, no canvas group. **This ships as a content pack.**
+
+### 4.8 What the renders changed
+
+Four things this document asserted survive a photograph unaltered: the clipping
+works, the membrane draws complete at 640x632 and at 800x632, `ZOOM` 1.0 keeps
+the kill in frame, and the two views do read as two views. Four did not.
+
+**1. The panes had no edge, and the membrane is not one.** On a quiet frame the
+contour peaks at **G=14 against a G=13 background** — one level out of 255.
+§4.3 assumed the membrane would frame each pane; it frames it only when there is
+something to feel. On the shipped one-pane screen that costs nothing, because
+the edge of the pane is the edge of the screen. Here the world layer is clipped
+at the seam, so a body sliced vertically in half at x=640 with no line beside it
+reads as a fault in the picture rather than as the edge of a window, and the two
+panes read as one wide field with two cells adrift in it. **The gap between the
+two panes cannot be read off a picture whose halves have no boundary.**
+
+The fix is two `ColorRect`s on the legend layer: a **2 px seam** at the pane
+join, `Color(0.12, 0.70, 0.58, 0.20)`, measuring G=47 — well under the contour's
+own peak of 112, so the membrane still wins every frame it has anything to say —
+and a **1 px sill** under both panes at 0.13, G=35, which also does §4.4's
+register job by drawing the band as a surface rather than asserting it.
+
+**2. The pointer fidelity gap is bigger than dead ahead.** `returns.gd`'s
+`EDGE_HIDE`/`EDGE_SHOW` are absolute canvas px and are *correct* absolute px —
+they are the contour's furthest inward reach and the band's inner lip, both of
+which are the same absolute depth in a pane as on a full screen. The loss comes
+from the pane being smaller, and it is not uniform, because a 640x632 pane is
+nearly square and a 1280x720 screen is not:
+
+| | full screen | left pane | loss |
+| --- | --- | --- | --- |
+| dead ahead, full strength | 134 units | 108 | −19% |
+| dead ahead, last trace | 179 | 153 | −15% |
+| **abeam, full strength** | **299** | **111** | **−63%** |
+| abeam, last trace | 344 | 155 | −55% |
+| any mark at all, by area | 245,800 sq units | 95,000 | **−61%** |
+
+So **the left pane shows the player about a third of the ocellus returns they
+actually had.** Inside ~108 units in every direction it is exact, which covers
+contact and the kill; what is lost is the approach between 110 and 300 units.
+
+It is not fixable, and the reason is worth writing down. Dropping `EDGE_SHOW`
+from 132 to 88 restores dead-ahead parity exactly and does *not* put a mark on
+the contour — measured, the membrane 88 px in from a pane edge is G≈17, forty px
+clear of the contour. But a constant that applies only in the pane makes the
+replay draw pointers at distances where the player had none. **A debugging tool
+may show less than happened; it may not show more.** A false negative sends the
+player back to the membrane lobe, which is recorded as uniforms, reproduced
+bit-exactly, and is the instrument of record beyond ~110 units anyway. A false
+positive teaches them they saw something they did not. Rendered, with an
+`ocellus` on the starboard flank: the felt pane keeps the violet lobe in the
+corner at the right bearing and loses only the dot. The bearing survives; the
+distance does not.
+
+**3. The division fits in both panes, and §4.3's collision was arithmetic rather
+than visible.** Measured at 1280x720, ink extents against the nominal 425 px
+black middle:
+
+| | ink spans | clear of the band lip |
+| --- | --- | --- |
+| point of view, `DIVIDE_SEAT` scaled | 214..442 | 106 / 90 px |
+| point of view, unscaled | 148..510 | 40 / 22 px |
+| **truth pane** (`DIVIDE_SPREAD` 160, world scale) | 774..1154 | **26 / 19 px** |
+
+The truth pane is four times tighter than the point-of-view pane, and nobody
+measured it, because §4.3's collision was about `DIVIDE_SEAT` and the truth pane
+does not use it. It does not collide either: across the daughters' row the band
+contributes **+1 to +3 green levels** between its nominal lip and the contour
+(G=15 at the lip, 22 at sixty px in, 111 at the contour). None of the three rows
+above is a collision anybody can see. At 2400x1080 the truth pane has 101 px
+clear and the question does not arise.
+
+Two costs of the scaling are real, and neither is a collision. In the pane it
+halves the seat while leaving the daughter radius alone, so the two bodies sit
+36 px apart where the player watched them 168 px apart — **the replay shows a
+division that does not look like the one it is replaying.** And because
+`_figure.size.x` is the whole viewport in normal mode, it moves the *shipped*
+2400x1080 division as well: the pair's half-span goes from 181 to 213 canvas px,
+57,123 pixels different from HEAD. Reverting it restores both, and the thing it
+was protecting against turns out to be invisible. Recommended; not taken here.
+
+**4. The transport broke the pause screen's own spacing rule.** `normal_mode.gd`
+writes it down: 56 px buttons with **48 canvas px of dead water** between the
+safe control and the destructive one, "do not tighten it back up for looks". The
+transport shipped 48 px buttons 12 canvas px apart — 18 device px, about 1.1 mm
+on a 2400x1080 phone — so a thumb going for the speed toggle lands on `leave`.
+Widened to **32**, about 2.9 mm; not the pause screen's 48, because `leave` here
+is reversible — closing the screen puts the `watch` offer back, so a mis-tap
+costs one tap and not the replay.
+
+The captions were also quieter than the chrome beside them: 15 px at 0.45
+measures 5.05:1 against `pause` at 17 px and 0.82 measuring 7.71:1. Both clear
+AA; readability was never the problem, the hierarchy was. At 16 px and 0.60 the
+legend measures 6.39:1 — above the chrome, under everything in a pane.
+
+**Left alone, deliberately.** The control row is centred at the bottom, which on
+a landscape phone is the least reachable point on the screen, and it is exactly
+where the pause screen puts its own `leave`, so moving it would break the one
+register §4.4 named. At 2400x1080 the band is 1600 canvas px wide with 368 px of
+buttons in the middle and 80% of it empty; if the owner wants `leave` under a
+thumb, the right pane's margin is where it goes. `1x` as a state label rather
+than a verb matches the pause screen's `north up` toggle, and it is the only
+number on the screen, so it reads.
+
+**The sister is off screen in the truth pane.** `SISTER_DISTANCE` is 560 world
+units, and its own comment says she is left "inside the frame in full vision, so
+the answer to *what happened to the other one* is visible". A 640-wide pane at
+`ZOOM` 1.0 reaches 320. She is visible in the shipped game and never in the
+replay. Halving the zoom is ruled out by §4.3 and is the wrong trade; this is
+the price of the pane, recorded rather than fixed.
 
 ## 5. What is a bad idea, including parts of the ask
 
