@@ -92,7 +92,7 @@ mouse_filter = 2
 theme_override_constants/separation = 48
 
 [node name="Genome" type="VBoxContainer" parent="Hud/Pause/Center/Buttons"]
-theme_override_constants/separation = 10
+theme_override_constants/separation = 8
 
 [node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
 mouse_filter = 2
@@ -102,14 +102,18 @@ text = "dna"
 horizontal_alignment = 1
 
 [node name="Row" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
-theme_override_constants/separation = 20
+theme_override_constants/separation = 0
 alignment = 1
 
 [node name="Explain" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
-custom_minimum_size = Vector2(0, 21)
+custom_minimum_size = Vector2(0, 26)
 mouse_filter = 2
 theme_override_constants/separation = 4
 alignment = 1
+
+[node name="Organ" type="Control" parent="Hud/Pause/Center/Buttons/Genome/Explain"]
+custom_minimum_size = Vector2(34, 26)
+mouse_filter = 2
 
 [node name="Gene" type="Label" parent="Hud/Pause/Center/Buttons/Genome/Explain"]
 mouse_filter = 2

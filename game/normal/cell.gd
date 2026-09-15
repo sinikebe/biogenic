@@ -24,10 +24,21 @@ signal dashed(cost: float)
 ## can eat, and how much genome I can carry.
 ## docs/design/genes-and-cilia.md §1.1 and §3.1.
 const BASE_RADIUS := 26.0
-## One meal, one unit of radius. Phase 4 shipped 0.5 as an admitted placeholder;
-## §3.1 makes the ladder a count of meals, so fourteen meals is a full genome
-## and a 14-21 minute arc -- a session, not a campaign.
-const GROWTH_PER_MEAL := 1.0
+## One meal, four units of radius. **A generation is three meals**, which is the
+## owner's "divide the split requirements by four": a daughter is born at 28.28
+## and divides at 40, so `(40 - 28.28) / 4` is 2.93.
+##
+## This is the dial and [constant DIVIDE_RADIUS] is not, because forty carries
+## three couplings a smaller number would break: `slots_for(40)` is 7, the body
+## has exactly seven arcs, and `food.ARRIVAL_GAPE_MAX` is 40 so the water never
+## seeds a mouth that can swallow a full-grown cell in one contact.
+##
+## **It is the whole water's growth, not the player's.** food.gd's `_devour`
+## reads the same constant, so a cell that has been feeding grows four times
+## faster too -- docs/design/genes-and-cilia.md §1.2 gets louder rather than
+## being switched off for everything except the player, which is the one thing
+## §1.3 forbids.
+const GROWTH_PER_MEAL := 4.0
 
 var radius := BASE_RADIUS
 
@@ -106,6 +117,16 @@ const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
 ## Genome size is capacity, not currency: one more slot per this much growth.
 ## Three slots at birth, seven at radius 40 -- and seven is every arc a body
 ## has, which is why [constant DIVIDE_RADIUS] is where it divides. §3.1.
+##
+## **Unchanged by the four-times growth, and the interval is why.** Two fixed
+## points pin it: `slots_for(26)` must be 3 and `slots_for(40)` must be 7, which
+## needs `14 / SLOT_RADIUS` in `[4, 5)` -- so the only legal values are
+## `(2.8, 3.5]` and 3.5 is already the top of that range. There is no dial here
+## to compensate with; what four-times growth really changes is that **capacity
+## stops being the binding constraint in the first generation** and the seven
+## arcs and the expression roll become it instead. From generation two a newborn
+## is over capacity anyway (lifecycle.md §3.1), which is where the swap
+## decision lives now.
 const SLOT_RADIUS := 3.5
 const SLOT_MIN := 3
 const SLOT_MAX := 7
@@ -124,7 +145,13 @@ const SLOT_MAX := 7
 ## Where a body divides, and where its radius stops.
 const DIVIDE_RADIUS := 40.0
 ## Two meals out, and where the nucleus starts to double.
-const DIVIDE_WARN_RADIUS := 37.0
+##
+## **Moved from 37 with [constant GROWTH_PER_MEAL], because it is written in
+## meals and not in units.** At four units a meal, a warning starting at 37 is
+## three quarters of one meal wide: a cell at 36.28 shows nothing and the next
+## mouthful takes it straight to 40, so the most legible "about to divide"
+## image in the game would have fired on no frame anybody saw.
+const DIVIDE_WARN_RADIUS := 32.0
 ## Of the mother's **area**, not her radius -- so a daughter is 40/sqrt(2) and
 ## slots_for(28.28) is 3, the same room to manoeuvre a run starts with. None of
 ## that was arranged; it falls out of conserving area on a ladder that was

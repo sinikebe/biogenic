@@ -42,7 +42,7 @@ Five consequences, and they are the design:
 | # | Question | Options | What it means |
 |---|---|---|---|
 | 1 | What triggers division? | **`DIVIDE_RADIUS = 40`, automatic ✓ recommended** / player chooses / a timer / food banked | At radius 40 the slot ladder saturates at seven and the body can hold no more genome — it can get bigger but it cannot become anything it is not already. So it divides. The player's control is *when to take the last meal*, and the body tells them two meals out (§4). |
-| 2 | Do daughters inherit tiers? | **inherit the DNA exactly, `INHERIT_TIER_LOSS = 0` ✓ recommended** / every gene drops one tier / all tier 1 | Inherit and the run compounds: each generation starts as the thing you spent the last one designing, and the price is upkeep on a small body. Drop a tier and every generation re-earns the same ground. Tier 1 makes generations a series of fresh starts with a costume change. |
+| 2 | Do daughters inherit tiers? | **inherit the DNA exactly, `INHERIT_TIER_LOSS = 0` ✓ recommended** (and see `dna-strand.md` §3: the DNA is inherited exactly, but each locus now *rolls* for whether the daughter wears it) / every gene drops one tier / all tier 1 | Inherit and the run compounds: each generation starts as the thing you spent the last one designing, and the price is upkeep on a small body. Drop a tier and every generation re-earns the same ground. Tier 1 makes generations a series of fresh starts with a costume change. |
 | 3 | How do the daughters differ? | **same mass, one faithful and one with a single visible mutation ✓ recommended** / asymmetric mass / both mutated / identical | Your plan against one sideways variation of it, both drawn as real bodies before you choose. It is not a gamble — you can see exactly what the mutation did. Both mutated would mean your plan never survives; identical would mean there is no choice. |
 | 4 | What does death cost? | **the run ends; restart as the born cell ✓ recommended** / you wake as the sister | A generation measures about two minutes (§5), so a run that reaches generation five is roughly ten and restarting is quick. Waking as the sister halves the stakes and doubles the run; it is the mercy option, and it is one saved snapshot if the owner wants it. |
 
@@ -65,10 +65,15 @@ with no terminal state of any kind.
 
 ```gdscript
 const DIVIDE_RADIUS := 40.0        ## and cell.radius clamps here
-const DIVIDE_WARN_RADIUS := 37.0   ## two meals out; the nucleus starts to double
+const DIVIDE_WARN_RADIUS := 32.0   ## two meals out; the nucleus starts to double
 const DIVIDE_SPLIT := 0.5          ## of the mother's AREA, not her radius
 const MUTATION_COUNT := 1
 ```
+
+> **`DIVIDE_WARN_RADIUS` was 37 and moved with `GROWTH_PER_MEAL`
+> (`dna-strand.md` §4).** It is written in meals, not in units: at four units a
+> meal, a warning starting at 37 is three quarters of one meal wide and the
+> doubling nucleus fires on no frame anybody sees. 32 is two meals again.
 
 Area halves, so a daughter is `40 / sqrt(2) = 28.28` — and `slots_for(28.28)` is
 3, the same capacity a run starts with. The lineage begins each generation four
@@ -90,6 +95,16 @@ read on comparison.** That is the right ordering — comparison is the only thin
 the player is being asked to do.
 
 ## 3. Two registers on one strip
+
+> **The pips are superseded by `docs/design/dna-strand.md` §1.2.** The argument
+> below is unchanged and is the reason the strand has the mark it has: the DNA is
+> the strip, the body is the other register, and the distinction has to be
+> **shape**. What changed is where it lives. A copy the body expresses is a rung
+> that reaches both backbones; one the DNA carries and the body does not floats
+> clear of them — which is the rooted-against-adrift vocabulary this section
+> rejected at 76 px and which works at a rung's scale. The 635-of-720 column
+> measurement is re-taken there: it is 678 of 720 now, with the camera panel that
+> shipped after this was written.
 
 The hard part. The panel has to say what you *are* and what your children *will
 be*, and the space it has to say it in is measured rather than assumed.
@@ -233,6 +248,13 @@ one substitution.
   "what happened to the other one" without a word.
 
 ## 5. The arc of a run
+
+> **Re-measured after the owner's ÷4 — see `dna-strand.md` §4.** A generation is
+> **three meals** now (four in the first), not twelve, because
+> `GROWTH_PER_MEAL` is 4.0. In wall clock that is roughly 30–45 seconds rather
+> than two minutes. The prediction below — that if a generation got much shorter
+> `GROWTH_PER_MEAL` was the dial and not `DIVIDE_RADIUS` — is exactly what
+> happened, in the other direction.
 
 Measured, not estimated: a competent forager takes **ten meals in 101 seconds**
 in the shipped water, and a generation is 11.7 units of radius — about twelve

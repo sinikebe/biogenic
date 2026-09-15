@@ -86,7 +86,20 @@ jobs:
       - name: Check for script and scene errors
         # Loads every autoload and the main scene, then quits. Any parse error,
         # bad preload or broken scene reference fails the job here.
-        run: ~/godot/godot --headless --path . --quit-after 120
+        #
+        # The main scene is the LAUNCHER, and the launcher does not touch
+        # game/ -- it only reaches it when a player presses Play. So this line
+        # alone passes with a GDScript parse error sitting in the game, and that
+        # error ships. Measured: a duplicate function name in normal_mode.gd
+        # reported clean here and only failed when the scene was booted by name.
+        #
+        # So boot the game's own scenes too. play_scene is the entry the Play
+        # button uses; normal_mode is what it leads to and where nearly all the
+        # code lives. Cheap -- seconds against an export measured in minutes.
+        run: |
+          ~/godot/godot --headless --path . --quit-after 120
+          ~/godot/godot --headless --path . --quit-after 60 res://game/mode_select.tscn
+          ~/godot/godot --headless --path . --quit-after 60 res://game/normal/normal_mode.tscn
 
       - name: Export Android APK
         env:

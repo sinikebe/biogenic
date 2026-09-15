@@ -86,6 +86,28 @@ const UPKEEP_PER_TIER := 0.18
 ## discard control and there does not need to be one. §3.3.
 const SAMPLE_SECONDS := 45.0
 
+# --- Expression: a copy is a chance, and three copies is a certainty ---------
+# docs/design/dna-strand.md §3. **Eating a gene puts it in the DNA; the DNA is
+# what a daughter is rolled from.** Every locus on the strand carries between
+# one and three copies -- what the tier ladder has always counted -- and copy
+# number is what decides whether a daughter wears the organ at all.
+#
+# Gene dosage is real: more copies of a gene means more of it is transcribed.
+# That is the whole justification for hanging this on the tier rather than
+# inventing a second number, and it is why the strand draws the tier as
+# **rungs** and not as pips.
+
+## Indexed by copies. One copy is a coin toss, two is likely, three is certain
+## -- so a player who wants a gene guaranteed can buy the guarantee by feeding
+## it, which is the answer to "a chance takes determinism out of the build".
+const EXPRESS_CHANCE: Array[float] = [0.0, 0.55, 0.80, 1.00]
+
+## **The mouth always expresses.** The same argument [method _mutate_drift]
+## already makes: a daughter born with no cytostome is not one of two builds to
+## choose between, it is a body that cannot feed itself, and nobody would pick
+## it. One exception, named, rather than a rule with a soft edge.
+const ALWAYS_EXPRESSED: Array[StringName] = [&"cytostome"]
+
 ## The gene whose sample is waiting for a free slot, or &"" for none.
 ##
 ## Expressed twice, which is what having two views is for. Point of view gets a
@@ -166,15 +188,26 @@ func reset() -> void:
 	express(BORN, [&"cytostome", &"cirrus", &"flagellum"])
 
 
-## **A body born of a DNA, expressing it whole.** The two registers are made one
-## here and nowhere else: a division, a death, and the dev harness forcing a
-## genome. [param dna] and [param order] are copied, never held.
-func express(dna: Dictionary, order: Array) -> void:
+## **A body born of a DNA.** The two registers are set here and nowhere else: a
+## division, a death, and the dev harness forcing a genome. [param dna] and
+## [param order] are copied, never held.
+##
+## [param body] is **what of that DNA this body actually wears**, and it is what
+## the expression roll ([method expressed]) returns. Left `null` it means
+## *expressed whole*, which is what a run's first cell and a forced genome both
+## are; a daughter is handed a rolled subset instead, and whatever failed to
+## express stays in her DNA to be rolled again by her own daughters.
+##
+## **`null` and not an empty dictionary**, because "nothing expressed" is a real
+## roll: a DNA with no cytostome in it has no guaranteed gene, and every other
+## locus can miss. Defaulting on emptiness would silently express that cell
+## whole -- the one body the roll had just said should be bare.
+func express(dna: Dictionary, order: Array, body: Variant = null) -> void:
 	_dna = dna.duplicate()
 	_order = []
 	for gene: Variant in order:
 		_order.append(StringName(gene))
-	_body = _dna.duplicate()
+	_body = (body as Dictionary).duplicate() if body != null else _dna.duplicate()
 	_body_slots = {}
 	for slot in _order.size():
 		var gene: StringName = _order[slot]
@@ -469,6 +502,42 @@ static func dominant_of(tiers: Dictionary) -> StringName:
 			best_tier = value
 			best = gene
 	return best
+
+
+## **What one daughter is made of: a roll against the DNA, gene by gene.**
+## Returns a `{gene: tier}` map of the organs that expressed, at the copy number
+## the DNA carries -- a gene that expresses is worn at full strength, because
+## copies are how likely it is and not how strong it is.
+##
+## Rolled once per daughter, so the two daughters of one division differ in
+## **body** as well as in the one mutation that differs in their DNA. That is
+## what makes the choosing beat a reading rather than a formality, and it is
+## also why a failed roll is not a punishment: the player sees both bodies drawn
+## before committing, so the odds shown on the strand are the odds of *one* of
+## two draws -- `1 - (1 - p)^2`, which at one copy is 0.80 across the pair.
+##
+## **Runs in the simulation, so the global stream is the right one.** The pause
+## screen may not draw from it (that was a shipped bug -- the strip was moving
+## the water); a division is not a view.
+static func expressed(dna: Dictionary) -> Dictionary:
+	var body := {}
+	for gene: StringName in dna:
+		var copies := clampi(int(dna[gene]), 0, TIER_MAX)
+		if copies <= 0:
+			continue
+		if ALWAYS_EXPRESSED.has(gene) or randf() < EXPRESS_CHANCE[copies]:
+			body[gene] = copies
+	return body
+
+
+## How likely one locus is to reach a daughter, for the one line on the pause
+## screen that says so. The strand draws the copies; this is what they mean.
+static func express_chance(gene: StringName, copies: int) -> float:
+	if copies <= 0:
+		return 0.0
+	if ALWAYS_EXPRESSED.has(gene):
+		return 1.0
+	return EXPRESS_CHANCE[clampi(copies, 0, TIER_MAX)]
 
 
 ## Writes [param gene] into [param tiers] in place. [param capacity] is how many
