@@ -53,10 +53,14 @@ the brief.
    DNAs disagree. Not because comparison is too much work, but because the
    expression roll otherwise *confounds* it: the two kinds of difference would
    be indistinguishable and they mean opposite things (§6).
-6. **First contact decides the gesture.** A press that lands on a locus is a
-   read and never becomes a lean, however far the finger slides; a press that
-   lands anywhere else is a lean and stays one, even over a locus. Measured on
-   the touch path (§4).
+6. **First contact decides the gesture**, and *we* decide it, keyed by pointer
+   index, before the GUI sees the event. A press that lands on a locus is a read
+   and never becomes a lean, however far the finger slides; a press that lands
+   anywhere else — **including a finger that was already down before the two
+   daughters existed** — is a lean and stays one, over a locus, across the
+   midline, on either block. Measured on the touch path *and* the mouse path
+   (§4.2), where the first attempt at this rule left a thumb resting on a block
+   unable to answer the division at all.
 7. **One shared explanation row and one shared hint row**, centred below the
    bodies, in the pause screen's own grammar (§5).
 8. **Identical in both views and at both shapes**, because the two daughters
@@ -75,7 +79,7 @@ The whole DNA the daughter carries, at `dna-strand.md`'s vocabulary unchanged:
 | which locus / which arc | the dart | yes |
 | selection | the lens between the backbones fills | yes |
 | a gene she does not wear | its word at `WORD_UNEXPRESSED` 0.42 | yes |
-| **the mutation** | a caret in the block's outer margin | **new**, §6 |
+| **the mutation** | a caret in the block's left-hand margin, on both strands | **new**, §6 |
 
 **Carried is the whole point and it is why the answer is the DNA and not the
 body.** The bodies already draw what each daughter wears; a strand that drew
@@ -151,7 +155,7 @@ All canvas px. Everything not listed is `dna-strand.md`'s constant, unchanged.
 const CHOOSE_LOCI := 7            ## §3.1 -- an invariant, not a maximum
 const CHOOSE_PITCH := 48.0        ## one locus, along the strand
 const CHOOSE_CAP_LOBES := 1       ## the lead-in and the tail
-const CHOOSE_BLOCK_W := 118.0
+const CHOOSE_BLOCK_W := 124.0    ## 118 in the frames of §10; see the note below
 const CHOOSE_COLUMN_TOP := 112.0
 const CHOOSE_SEAT := 232.0        ## centre to the block's inboard edge
 const CHOOSE_HELIX_MID := 34.0    ## the weave's axis, in the block
@@ -172,8 +176,9 @@ lines at `y = PITCH * 0.5 + (i - seat) * RUNG_GAP`, `RUNG_GAP` 8 unchanged: at
 centre rung (`sin(PI/2 ± PI/6)`), against 71% on the pause strand. Flatter,
 which is right at a smaller scale; the cluster still follows the lens.
 
-Inside a block, left to right: the caret at x 3..12, the weave at 16..52, the
-dart at 59..73, the word from 77.
+Inside a block, left to right: the caret at x 2.5..11.5, the weave at 16..52,
+the dart at 59..73, the word from 77 to the block's edge at 124 (§3.3's word
+budget).
 
 > **One thing the render caught and the number above does not fix.** Measured,
 > the port block's ink runs x 293 .. **409** against a block whose right edge is
@@ -182,16 +187,53 @@ dart at 59..73, the word from 77.
 > further out) but there is no slack, and a future gene with a six-letter word
 > would overflow silently. **Build it at `CHOOSE_BLOCK_W = 124`**, adding the
 > 6 px on the outboard side (`offset_left = -356`, `offset_right = -232`), which
-> leaves 11 px of tail and costs nothing: the block still has 180 px of clear
-> canvas outboard of it at 1280x720. Every frame in §10 was rendered at 118.
+> costs nothing: the block's outboard edge lands at canvas x 284, which is still
+> 180 px clear of the membrane's nominal 104 px band at 1280x720.
+>
+> Every frame in §10 was rendered at 118. **Built at 124** — and the tail it
+> leaves is 3 px, not the 11 this note first claimed. See the word budget below,
+> and note that "a six-letter word" was the wrong thing to be afraid of.
+
+**The word budget, and it is 3 px.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**
+of room for the word. Measured with `Font.get_string_size` at `LABEL_SIZE` 13 in
+the fallback font, the widest of the eighteen in `WORDS` is `venom` at **44.00**.
+Letters are not the measure — the font is proportional, and `shield` is six
+letters at 38.00 against `poison`'s six at 43.00 — so what a new gene has to pass
+is `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. Nothing
+clips the word, so the failure is silent ink past the block's edge.
 
 **The two blocks are identical, not mirrored**, and that is the one layout choice
 with a real argument behind it. Mirrored, the two strands would be different
 drawings and a player comparing them has to un-mirror one. Identical, **every
-corresponding mark on the two strands is exactly `2 * CHOOSE_SEAT` = 464 px
-apart, horizontally, at every locus** — the eye travels the same distance for
-every row, at both shapes, which is what makes a one-locus disagreement pop out
-of six agreements.
+corresponding mark on the two strands is exactly `2 * CHOOSE_SEAT + CHOOSE_BLOCK_W`
+= 232 + 232 + 124 = 588 px apart, horizontally, at every locus** — the eye
+travels the same distance for every row, at both shapes, which is what makes a
+one-locus disagreement pop out of six agreements. (`2 * CHOOSE_SEAT` = 464 is a
+different number and a real one: it is the gap between the two blocks' *inboard*
+edges, which is where the daughters sit. It is not the mark spacing, because
+identical blocks put corresponding marks a whole block width further apart than
+their facing edges are.)
+
+> **The consequence of identical, written down so nobody "fixes" it.** The two
+> blocks are the same drawing translated, so **every mark is in the same place
+> within its own block on both sides** — including the caret at
+> `CHOOSE_CARET_X` 7, which is therefore in the port block's *outboard* margin
+> and the starboard block's *inboard* one. That reads as an oversight and is
+> not. The spacing above is the mechanism of the whole screen, and mirroring the
+> starboard block to put its caret outboard would destroy it: mirrored, a mark
+> at x within one block faces one at `CHOOSE_BLOCK_W - x` in the other, so the
+> spacing between corresponding marks would change from 588 to
+> `464 + 2 * (CHOOSE_BLOCK_W - x)` — a *different distance for every column* of
+> the block. The word column and the caret column would scan at different
+> pitches and §1.3's fixed horizontal scan would be gone.
+>
+> The cost of leaving it is a caret 9 px wide sitting between the starboard
+> daughter and her strand, and it was measured rather than argued: on the widest
+> genome the game can produce (`cytostome 3, cirrus 3, flagellum 3`) the
+> starboard daughter's outermost ink ends at canvas x 840 and the caret's base
+> is the block's first ink at 874 — **33 px of clear black**, at 1280x720 in
+> point of view, and 30 px in full vision where the body reads 3 px wider. It
+> does not move over the beat (§3.4).
 
 ### 3.4 Why one placement serves both views
 
@@ -215,9 +257,38 @@ full vision `160 + 1.47 x 28.28 = 202`. The seat and the scale cancel. Whether
 that was designed or fell out of two independently rendered numbers, it is what
 lets one placement serve both views — and it is the thing to re-measure if either
 constant ever moves. `CHOOSE_SEAT` 232 puts the
-block's inboard edge 31 px outboard of that, and the measured ink-to-ink gap on
-the widest genome is **33 px** (full vision, 1280x720 — the tightest of the
-eight). On a typical genome it is 38–43 px.
+block's inboard edge 31 px outboard of that.
+
+**The ink-to-ink clearance, re-measured, because it was reported three different
+ways.** On the widest genome, with the ink threshold four levels above the
+field's own median (14 of 255), sampled at five points across the beat in each of
+four frames:
+
+| frame | starboard, daughter ink → block ink | port |
+| --- | --- | --- |
+| point of view, 1280x720 | **33** | 43 |
+| full vision, 1280x720 | **30** | 46 |
+| point of view, 2400x1080 | **34** | 43 |
+| full vision, 2400x1080 | 31–34 | 43–46 |
+
+So **30–34 px, tightest in full vision on the starboard side**, and §3.4's
+original 33 is accurate for the frame it names. Two corrections to things
+written down elsewhere:
+
+- **It does not vary over the beat.** The membrane keeps beating during
+  CHOOSING and 300 000 pixels change between two samples 0.2 s apart, but a
+  daughter's outermost ink stays at exactly x 840 (starboard) and x 439 (port)
+  in every sample. A figure of "22 px over the beat" does not reproduce; the
+  daughters' envelope is not what the beat moves.
+- **The starboard side is tighter than the port side and always will be**,
+  because the blocks are identical: the port block's inboard margin is the tail
+  of the word, which stops early, and the starboard block's inboard margin is
+  the caret column, which starts at x 2.5. That is the price §3.3 names and it
+  is 10–13 px, not a collision.
+
+The last digit of any of these is a threshold choice over a field of 14, so read
+them as a range and not as a constant. On a typical genome the port figure rises
+with the shorter word.
 
 So the answer to "what does the strand do in each view" is *the same thing, in
 the same place*, and it is right rather than convenient for three reasons:
@@ -246,8 +317,12 @@ outward with it; the vertical stack is byte-identical. Measured:
 | `lean into one of them`, y | 524 .. 538 | 524 .. 538 |
 | explanation row, y | 554 .. 573 | 554 .. 575 |
 | hint row, y | 586 .. 599 | 586 .. 600 |
-| port block, x | 290 .. 408 | 450 .. 568 |
+| port block box, x (at `CHOOSE_BLOCK_W` 124) | 284 .. 408 | 444 .. 568 |
 | glance peak of a strand block (σ = 6) | **62.0** | **62.0** |
+
+The `x` row is the box the built code lays out; the rows above it were measured
+at 118, where the box ran 290 .. 408. The six pixels went on outboard, so only
+the left edge moved.
 
 The extra 320 canvas px at 2400x1080 becomes margin, which is the correct thing
 for a phone to do with it.
@@ -286,9 +361,11 @@ generalised into one sentence:
 > however far the finger slides. A press that lands anywhere else is a lean, and
 > it stays a lean even when it slides over a locus.
 
-That is also what Godot's GUI capture already implements — press, drag and
-release for one index all route to the control that took the press — so it costs
-one `accept_event()` and no state.
+**That is not what Godot's GUI capture implements, and assuming it was is what
+made the first build of this screen unanswerable with a thumb already on the
+glass.** See §4.2: capture is real for the press and for the release, and absent
+for the drag — which is the one event the rule is about. The rule needs a flag
+per pointer and a handler that runs before the GUI does.
 
 ### 4.2 What a press on a locus must and must not do
 
@@ -299,13 +376,6 @@ Each locus is a `Control`, `MOUSE_FILTER_STOP`, `FOCUS_NONE`, inside a
 select the locus, fill its lens, set the explanation row and the hint row, and
 call `accept_event()`.
 
-**Must** also call `accept_event()` on the matching **release** and on every
-**`InputEventScreenDrag`** the control is handed. The drag is the one that is not
-obvious and it is the one that was measured: without it, a press on a locus
-followed by any finger movement falls through to `_unhandled_input`, whose drag
-branch *adopts* an unowned index (`if _touch_index == -2: _touch_index = drag.index`)
-— and a thumb that shifts one pixel while reading commits a daughter.
-
 **Must not**: start a lean, cancel or alter a lean already in progress, arm
 anything, commit anything, take keyboard focus, or change the DNA. Nothing on
 this screen is committable: there is no held sample and no placement here, so
@@ -313,20 +383,135 @@ none of the pause screen's `ARM_GUARD_MS` / `ARM_TIMEOUT_MS` machinery is needed
 or wanted. A second tap on the same locus is a no-op, not a deselect — the pause
 screen's rule, for the pause screen's reason.
 
-Measured, on the touch path a phone actually produces (`--press=`, `--slide=`,
-synthetic `InputEventScreenTouch` / `InputEventScreenDrag` through
-`Input.parse_input_event`):
+#### What the engine actually does with a drag
 
-| | at t=6.0 | then | at t=9.0 |
-| --- | --- | --- | --- |
-| **T1** press on a locus, held 3 s | locus (350,232) | — | still CHOOSING; nothing on the bus but the beat |
-| **T4** press on a locus, finger jitters 2 px | locus | three drags, ±2 px | still CHOOSING |
-| **T6** press on a locus, finger slides into open water | locus | drag to (200,400) | still CHOOSING |
-| **T2** press in open water, held | (200,400) | — | **committed** — `dread`/`light` at 7.9 s |
-| **T5** press in open water, slide onto a locus | (200,400) | drag to (350,232) | **committed** at 7.9 s |
-| **T3** tap a locus, then lean | tap locus | press water at 6.6 | **committed** |
+The first version of this section said a locus must also consume every
+`InputEventScreenDrag` it is handed, because otherwise the drag reaches
+`_unhandled_input` and is adopted as a lean. **Both halves of that are wrong on
+4.7**, and the second half is wrong in the direction that breaks the screen.
 
-`7.9 s` is exactly right: lean at 6.0, `CHOOSE_HOLD` 1.0, `DIVIDE_COMMIT` 0.9.
+Read from `scene/main/viewport.cpp`:
+
+- `Viewport::push_input` runs the **`_input` group first**, then
+  `_gui_input_event`, then the unhandled pass. That order is documented
+  propagation, and it is the hook this screen needs.
+- At the `InputEventScreenDrag` branch of `_gui_input_event`, `gui.touch_focus`
+  is looked up for the drag's index and, **when it is null, the drag is
+  hit-tested afresh at its current position**. `touch_focus` is only written
+  when the *press* landed on a `Control`.
+- A `MOUSE_FILTER_STOP` control that is handed any pointer event has it marked
+  handled one line later, whether the handler wanted it or not.
+
+Put together: a **lean's** press lands on the playfield, on nothing, so it has no
+`touch_focus`; every one of its drags is therefore hit-tested; and the first one
+that passes over a locus is eaten. `_unhandled_input` never sees it. The mouse
+has the same hole by the same mechanism — a motion is hit-tested whenever
+`gui.mouse_focus` is null.
+
+So the direction that was measured and fixed is the opposite of the one this
+section first described. Measured at `--fixed-fps 60`, on the code as first
+built:
+
+| gesture | result |
+| --- | --- |
+| press at 930,300 (**on** the starboard block), slide 2 px | **never leans. Ever.** No timeout, no default, no feedback |
+| press at 1100,400 (starboard open water), slide 2 px | commits at 7.92 s |
+| press at 200,400 (port water), then slide to 930,300 | commits the **port** daughter while the finger sits on the starboard side |
+
+A player whose thumb is already on the glass when the body pinches — which is
+every player who was steering, and the case §4.1 exists for — could not answer
+the division at all if their thumb happened to be where a block appeared.
+
+**What the built code does instead.** Ownership is a dictionary keyed by pointer
+index: `true` a read, `false` a lean, **absent a lean**. An `_input` handler,
+live only while `_split >= PART`:
+
+- registers a press as a lean and lets it through, so the GUI can route it; a
+  locus that is handed it claims the index as a read from its own `gui_input`,
+  on the same event, before the unhandled pass;
+- lets a release through, and erases the index;
+- **claims every drag and every held motion itself**, dispatching on who owns
+  the pointer and never on what is under it, and consuming it so
+  `_gui_input_event` is never reached.
+
+`accept_event()` on the locus stays, because this file's other consult surfaces
+consume their own press and the thing it guards is the one irreversible action
+in the game — but it is **not** what makes the drags safe, and neither is
+`MOUSE_FILTER_STOP`. Running before the GUI is.
+
+**Why that is proof and not a thing that happens to work.** The hit-test fallback
+lives inside `_gui_input_event`. An event consumed in the `_input` pass never
+reaches `_gui_input_event`, so the fallback cannot run — for any control, any
+mouse filter, any focus state, and still if the GUI's routing changes again,
+because nothing here depends on the routing. The only engine behaviour relied on
+is the one the same source settles: a press and its release route strictly by
+`touch_focus` and are never hit-tested, so the press really does decide and a
+locus can never be handed another finger's release.
+
+#### The permanent set
+
+Every row below is posed through `tools/drive.gd` on the input path a phone or a
+desktop actually produces, and re-run whenever this screen is touched. The recipe
+is §10.1; the detector is *any non-`beat` sensation after t=7.4*, and which
+daughter committed is read off `--trace`'s `dna`, which differs between the two
+at this seed.
+
+Touch, a locus at (350,232) and open water at (200,400):
+
+| | gesture | result |
+| --- | --- | --- |
+| **T1** | press a locus, hold | still CHOOSING |
+| **T2** | press open water, hold | commits **7.92 s** |
+| **T3** | tap a locus at 6.0, press water at 6.6 | commits **8.52 s** |
+| **T4** | press a locus, three jitter drags of ±2 px | still CHOOSING |
+| **T5** | press water, slide onto a locus | commits **7.92 s** |
+| **T6** | press a locus, slide into open water | still CHOOSING |
+| **T7** | press water, slide onto a locus, lift there | still CHOOSING — letting go undoes the lean, and the locus does not steal the release |
+| **T8** | press water, lift before `CHOOSE_HOLD` | still CHOOSING |
+
+**Already down before the surface existed** — pressed at t=1.0, during QUICKEN,
+and slid 2 px at t=6.0. The first four are the blocker and they are why this
+set exists at all:
+
+| | gesture | result |
+| --- | --- | --- |
+| **A1** | press 930,300 — **on the starboard block** | commits **7.92 s**, starboard |
+| **A2** | press 1100,400 — starboard open water | commits **7.92 s**, starboard |
+| **A3** | press 350,300 — **on the port block** | commits **7.92 s**, port |
+| **A4** | press 180,400 — port open water | commits **7.92 s**, port |
+| **A5** | A1, then lift at 6.3 | still CHOOSING — rule 4 holds for an adopted lean too |
+| **A6** | press port water at 6.0, slide to 930,300 at 6.3 — **arrives** on the far block | commits **8.22 s**, **starboard** |
+| **A7** | press the starboard block at 1.0, slide to port water at 6.0 | commits **7.92 s**, port |
+| **A8** | press port water, crossing the midline in five sampled steps | commits **8.17 s**, starboard |
+
+**A1 and A3 never committed at all before the fix** — still CHOOSING at 9.5 s
+and for as long as the thumb stayed down — and A6 committed the wrong daughter.
+A2, A4, A7 and A8 are the controls that were already passing, and they still
+pass unchanged.
+
+**Desktop**, through `--mouse-press=` / `--mouse-slide=` / `--mouse-lift=`, which
+exist because nothing in the harness could pose a held button before:
+
+| | gesture | result |
+| --- | --- | --- |
+| **D1** | button down at 1.0 on the starboard block, moved 2 px at 6.0 | commits **7.92 s**, starboard (**never leaned** before the fix) |
+| **D2** | button down on a locus at 6.0, moved 2 px | still CHOOSING |
+| **D3** | button down in open water, held | commits **7.92 s**, port |
+| **D4** | button down in port water, moved onto the starboard block | commits **8.22 s**, **starboard** (committed port before the fix) |
+| **D5** | button down in open water, released at 6.5 | still CHOOSING |
+| **D6** | `--hover=` a locus, no button | still CHOOSING; the line follows the cursor and the lens does not move |
+| **K1** | `--hold=d` — the key, from before the division | commits **6.85 s**, starboard |
+| **K2** | `--hold=a` | commits **6.85 s**, port |
+
+K1 and K2 commit at 6.85 rather than 7.92 because the key is already down when
+CHOOSING opens at 4.9, so the hold begins there: `4.9 + 1.0 + 0.9`. **They are
+also the row that calibrates the detector** — a t > 7.4 window built around a
+lean that starts at 6.0 steps straight over a commit at 6.85 and reports the
+next unrelated `thrust`. Read the whole sensation log for anything that leans
+earlier than 6.0.
+
+`7.92 s` is exactly right: lean at 6.0, `CHOOSE_HOLD` 1.0, `DIVIDE_COMMIT` 0.9.
+`8.22` is the same arithmetic from a lean that changed direction at 6.3.
 
 ### 4.3 What leaning costs, and it must stay cheap
 
@@ -337,15 +522,21 @@ that back. How much:
 | | canvas px² | share of the half |
 | --- | --- | --- |
 | screen half, 1280x720 | 460 800 | — |
-| one block, 118 x 432 | 50 976 | **11.1%** |
+| one block, 124 x 432 | 53 568 | **11.6%** |
 | screen half, 2400x1080 (canvas 1600 wide) | 576 000 | — |
-| one block | 50 976 | **8.9%** |
+| one block | 53 568 | **9.3%** |
 
-And it is the *right* 11%. The block sits at x 290 .. 408 in the port half, so
-the **outer 290 px of the half, full height, is untouched** — 208 800 px², and
+And it is the *right* 11.6%. The block sits at x 284 .. 408 in the port half, so
+the **outer 284 px of the half, full height, is untouched** — 204 480 px², and
 that is where a thumb rests in a two-handed landscape grip. The inboard 232 px
 is untouched too. Nothing is taken from either corner a thumb can reach without
 moving.
+
+And since §4.2, the 11.6% is not taken away from leaning either: a gesture that
+began in open water goes on leaning across a block, and a gesture that began on
+a block before the blocks existed leans from where it is. What a block costs is
+only the ability to *start* a new lean by pressing on it, and the corner a thumb
+can actually reach is not one of those places.
 
 ### 4.4 The keyboard, and what it does not get
 
@@ -378,7 +569,7 @@ so a HUD cannot compete with the senses — has nothing to bind here.
 | --- | --- |
 | `Explain/Organ` | 34 x 26, `Cilia.draw_tile_organ` at scale 0.60, seat (17, 18.5) — `dna-strand.md` §1.3 unchanged |
 | `Explain/Gene` | 15 px, `Color(Cilia.hue(gene), 0.95)` |
-| `Explain/Says` | 15 px, `EXPLAIN_TINT` `Color(0.855, 0.953, 0.933, 0.62)`, `"· " + EXPLAINS[gene]` |
+| `Explain/Line` | 15 px, `EXPLAIN_TINT` `Color(0.855, 0.953, 0.933, 0.62)`, `"· " + EXPLAINS[gene]` |
 | `Hint` | 14 px, `Color(0.855, 0.953, 0.933, 0.38)`, centred |
 
 The hint gains one clause at the front and invents no words:
@@ -419,9 +610,19 @@ opens on the first locus that carries anything.
 ## 6. The mutation mark
 
 **The set of loci at which the two DNAs disagree, marked on both strands.** A
-solid caret, 9 x 12, in the block's outer margin at `CHOOSE_CARET_X`, pointing
-inboard at the weave, in that locus's own hue on that strand (`PALE` where the
-locus is empty).
+solid caret, 9 x 12, at `CHOOSE_CARET_X` 7 — the block's **left-hand** margin,
+x 2.5 .. 11.5 of a block whose weave starts at 16 — pointing right at the weave,
+in that locus's own hue on that strand (`PALE` where the locus is empty).
+
+**"Left-hand", not "outer", and the difference matters.** The two blocks are the
+same drawing translated, not mirrored (§3.3), so the caret is in the *outboard*
+margin on the port strand and the *inboard* margin on the starboard one, where it
+sits between the daughter and her own strand. That looks like a mirroring bug and
+is the opposite: mirroring the starboard block would give every column of the
+block a different spacing to its opposite number — 588 px for the caret, more for
+the weave, more again for the word — and the constant 588 is the mechanism §1.3
+names. §3.3 has the arithmetic and the 33 px of measured clearance that pays for
+it. **Do not "fix" the mirroring.**
 
 Computed by comparing, not by asking `mutated()` which kind fired:
 
@@ -509,27 +710,34 @@ Hud  (CanvasLayer)
   Onboarding        Label             unchanged
   Choosing          Control           NEW -- PRESET_FULL_RECT, MOUSE_FILTER_IGNORE
     Port            VBoxContainer     separation 0, MOUSE_FILTER_IGNORE
-      Head          Control           118 x 48, IGNORE
-      Locus0..6     Control           118 x 48, STOP, FOCUS_NONE
-      Tail          Control           118 x 48, IGNORE
+      Head          Control           124 x 48, IGNORE
+      Locus0..6     Control           124 x 48, STOP, FOCUS_NONE
+      Tail          Control           124 x 48, IGNORE
     Starboard       VBoxContainer     identical
     Says            VBoxContainer     separation 4, MOUSE_FILTER_IGNORE
       Explain       HBoxContainer     separation 4, ALIGNMENT_CENTER, min (0, 26)
         Organ       Control           34 x 26
         Gene        Label             15 px
-        Says        Label             15 px
+        Line        Label             15 px -- see the note below
       Hint          Label             14 px, centred
   PauseTap          Control           unchanged -- hidden during a division
   Watch, Pause                        unchanged; Pause's scrim covers Choosing
 ```
 
-`Port`: `anchor_left = anchor_right = 0.5`, `offset_left = -350`,
+`Port`: `anchor_left = anchor_right = 0.5`, `offset_left = -356`,
 `offset_right = -232`, `offset_top = 112`, `offset_bottom = 544`.
-`Starboard`: `offset_left = 232`, `offset_right = 350`, same y.
+`Starboard`: `offset_left = 232`, `offset_right = 356`, same y.
 `Says`: `anchor_right = 1.0`, `offset_top = 552`, `offset_bottom = 610`.
 
-A locus target is **118 x 48 canvas px** = 177 x 72 device px at 2400x1080, and
-118 x 48 on a 1280x720 handset — the floor case, exactly at the 48 px rule.
+**The explanation's second label is `Explain/Line`.** This section first called
+it `Explain/Says`, inside a container also called `Says`, which is two different
+things with one name at two depths of the same path — `Hud/Choosing/Says/Explain/Says`.
+The container keeps the name (it is the pause screen's, and both rows under it
+are things the screen says); the label is `Line`, which is what the eighteen
+authored strings are called everywhere else in this document.
+
+A locus target is **124 x 48 canvas px** = 186 x 72 device px at 2400x1080, and
+124 x 48 on a 1280x720 handset — the floor case, exactly at the 48 px rule.
 Separation is 0 so the weave is continuous and adjacent targets touch; a mis-tap
 costs nothing, because selection is free, reversible, and commits nothing. That
 is the pause strand's argument and it is stronger here, since there is no
@@ -546,26 +754,67 @@ them to get a render; shipping that duplication would mean two helixes drifting
 apart, which is the exact failure `diegetic-hud.md` avoided by making the vesicle
 one routine called from two views.
 
-### 9.2 Two harness flags this needs, and they do not exist yet
+### 9.2 The harness flags this needs
 
-`tools/drive.gd` has `--touch=`, which presses **and releases** in one frame. A
-tap commits nothing by design, so the rule in §4 — *a finger resting on a locus
-is not a lean* — cannot be posed with it at all. Two flags were added to the
-prototype and are needed to test this for real; `tools/` is export-excluded, so
-they cost nothing:
+`tools/drive.gd` had only `--touch=`, which presses **and releases** in one
+frame. A tap commits nothing by design, so the rule in §4 — *a finger resting on
+a locus is not a lean* — cannot be posed with it at all. Six flags were added;
+`tools/` is export-excluded, so they cost nothing:
 
 ```
---press=<seconds>:<x>,<y>   one finger down at that canvas point, never released
---slide=<seconds>:<x>,<y>   finger 0 moves there, with no fresh press
+--press=<seconds>:<x>,<y>         one finger down there, never released
+--slide=<seconds>:<x>,<y>         finger 0 moves there, with no fresh press
+--lift=<seconds>                  finger 0 lets go, wherever it has got to
+--mouse-press=<seconds>:<x>,<y>   left button down there, held
+--mouse-slide=<seconds>:<x>,<y>   the cursor moves with the button still down
+--mouse-lift=<seconds>            the button is released
 ```
 
-Same convention as `--touch=`: **seconds first, canvas coordinates, unscaled.**
-Every measurement in §4.2 was taken through them.
+Same convention as `--touch=` throughout: **seconds first, canvas coordinates,
+unscaled.** Every measurement in §4.2 was taken through them.
+
+**The three `--mouse-` flags were added by the fix in §4.2**, because the desktop
+has the same hole the touch path did and nothing in the harness could pose a
+*held* button: `--hover=` warps the cursor with no button down, which is the one
+case that was never broken. Their absence is why "desktop still works" was a
+sentence nothing here could check.
 
 ## 10. What was rendered, and judged
 
 At 1280x720 **and** 2400x1080, `--rendering-driver opengl3`, through
 `tools/shot.tscn` with `tools/drive.tscn`.
+
+### 10.1 The recipe, and it does not reproduce without `--fixed-fps 60`
+
+```
+xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
+    --rendering-driver opengl3 --fixed-fps 60 res://tools/shot.tscn -- \
+    --scene=res://tools/drive.tscn --out=/tmp/x.png --size=1280x720 \
+    --wait=6.0 --seed=12345 --mode=0 --radius=40 \
+    --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,stigma:1:3,ampulla:2:4,pellicle:1:5,toxicyst:2:6
+```
+
+Every clause earns its place:
+
+| | why |
+| --- | --- |
+| `--fixed-fps 60` | **The one that was missing.** Without it, two runs of byte-identical code on this exact frame differ by **239 010 pixels, max delta 50** — the membrane's beat phase lands wherever the wall clock left it. (A quieter frame was measured at 21 834 and delta 3; the number is the frame's, the fault is the same.) With the flag, the two runs are **0 pixels apart**. Every "byte-identical" claim in this document is void without it |
+| `--radius=40` | puts the body at `DIVIDE_RADIUS`, so the split begins on the first frame: QUICKEN 2.4 + PINCH 1.5 + PART 1.0 means **CHOOSING opens at t ≈ 4.9** and a `--wait=6.0` lands in the middle of it |
+| `--seed=12345` | fixes the drift and the impulses, and therefore which daughter is the mutant. At this seed the port daughter is the faithful one |
+| `--mode=0` | full vision runs its water shader on `TIME`, which no seed reaches |
+| `--dna=` and not `--genome=` | raises the DNA and leaves the **body** alone, so the expression roll cannot change what is worn between runs. This is what makes a dense strand reproducible at all |
+| no `--touch=`, no held sample | both move state the strand draws |
+| `--size=` on the harness **and** the matching `-screen` on xvfb | the window and the X display have to agree or the shot is letterboxed |
+
+**For a gesture rather than a frame**, the PNG is beside the point and the log is
+the measurement: add `--wait=11.0 --trace=0.5` and the gesture flags. The commit
+time is the first non-`beat` sensation after t=7.4, and which daughter committed
+is `--trace`'s `dna` after t=8.3 — at seed 12345 the port daughter prints
+`[cir1 cyt1 fla1]` and the starboard one `[cyt1 fla1 pel1]`.
+
+**Use `[trace]` and not `[drive]`'s sensation log** for anything about the
+simulation itself: the bus prints the beat every 0.55 s, which is a noise floor
+above the signal, and two runs that differ can look identical in it.
 
 | frame | judgement |
 | --- | --- |
@@ -579,15 +828,17 @@ At 1280x720 **and** 2400x1080, `--rendering-driver opengl3`, through
 | a `drift` (`p3_sparse`, `p3_dense`) | passes; unmistakable without the caret, confirmed by it |
 | a sparse DNA — four genes in seven loci | passes; the empty loci draw weave and dart and keep the ladders aligned |
 | the densest DNA — seven genes, 3/3/3/2/2/1/1 | passes; three rungs at 8 px inside a 36 px lens are countable |
-| the widest genome — `cytostome 3, cirrus 3, flagellum 3` | passes; **33 px** ink-to-ink at the tightest of eight frames |
+| the widest genome — `cytostome 3, cirrus 3, flagellum 3` | passes; **30–34 px** ink-to-ink, starboard side, across both views and both shapes, and it does not move over the beat (§3.4) |
 | a locus selected, port and starboard | passes; lens, loud word, organ, name, line and hint all land |
 | the longest line, `toxicyst`, 519 px | passes; 19 px clear of the strands' lowest ink |
 | hover, desktop, while a different locus is selected | passes; the line follows the cursor, the selection keeps its lens |
 | **press a locus and hold 3 s** | passes — still CHOOSING, nothing on the bus |
-| **press a locus, finger jitters 2 px** | passes — still CHOOSING. Without consuming drags this is a commit |
+| **press a locus, finger jitters 2 px** | passes — still CHOOSING |
 | **press a locus, slide into open water** | passes — still CHOOSING |
-| **press open water, hold** | passes — commits at exactly 7.9 s |
+| **press open water, hold** | passes — commits at exactly 7.92 s |
 | **press open water, slide onto a locus** | passes — commits; the strand does not steal a lean in progress |
+| **a thumb already down on a strand block when the daughters appear** | passes — the lean accrues from where the thumb is, the leaned strand rises and the declined one falls. **This frame was identical to no input at all before §4.2's fix** |
+| **the same thumb, on the opposite block from where the lean began** | passes — the lean follows the finger across the midline and commits the side it ended on |
 | tap a locus, then lean | passes |
 | leaning, part way | passes; the leaned strand rises and the declined one falls with its body |
 | `PART`, fading in | passes |
@@ -652,6 +903,18 @@ At 1280x720 **and** 2400x1080, `--rendering-driver opengl3`, through
    §4.4's 30° rule and both carry a word, so nothing here fails — but it is the
    tightest pair on the wheel and this is the first surface that ever puts them
    48 px apart.
+6. **On Android a thumb that is leaning re-labels the explanation row**, because
+   Godot emulates a mouse from every touch and the emulated motion raises
+   `mouse_entered` on whatever locus the thumb is over. The lens does not move
+   and nothing commits; only the two lines below change, to the gene the thumb
+   happens to be resting on. **Pre-existing** — rendered on the code before
+   §4.2's fix and after, and identical in both — and not the same on desktop,
+   where §4.2 claims a held motion before the GUI sees it and hover therefore
+   stops while a lean is in progress. One gesture, two platforms, two answers.
+   Left alone because it is a divergence in the *quietest* channel on the screen
+   and closing it means consuming the emulated echo of a finger, which is a
+   change to how this file treats touch-to-mouse emulation everywhere. Worth
+   fixing the day anyone finds it distracting.
 
 ## 13. Owner's call
 

@@ -307,6 +307,22 @@ var _chosen := -1
 ## A finger on one half of the screen, as a signed lean past the deadzone.
 var _touch_lean := 0.0
 var _touch_index := -2
+## The two sentinels [member _touch_index] has always used, named, because
+## [member _choose_gesture] keys on the same numbers: **-1 is the mouse** and
+## **-2 is nobody**. A real touch index is never negative, so one keyspace holds
+## every pointer the game can be driven by.
+const POINTER_MOUSE := -1
+const POINTER_NONE := -2
+## **What each pointer's gesture is, keyed by its index: `true` a read, `false`
+## a lean** (§4.1). Written by [method _input] on the press and overwritten by
+## [method _on_choose_locus_input] on the same event when the press landed on a
+## locus; erased on the release.
+##
+## **Absent means a lean**, and that is the case that matters rather than a
+## default chosen for tidiness: a finger that was already down before the two
+## daughters existed has no press for this screen to have seen, and it is the
+## one [method _read_touch_lean]'s drag branch exists for.
+var _choose_gesture: Dictionary = {}
 ## Whether this run has said the one line yet.
 var _said_divide := false
 ## What the two views are drawing this frame. Empty means an ordinary body; see
@@ -652,6 +668,11 @@ func _begin_split() -> void:
 	_lean_clock = 0.0
 	_touch_lean = 0.0
 	_touch_index = -2
+	# Every finger on the glass is now a lean that has not been pressed. That is
+	# the rule, not an accident of clearing: a thumb that was steering when the
+	# body ran out of arcs is holding a gesture this screen never saw begin, and
+	# §4.1 gives it to the lean.
+	_choose_gesture.clear()
 	_daughters = _make_daughters()
 
 
@@ -901,6 +922,7 @@ func _be_born() -> void:
 	_lean = 0
 	_touch_lean = 0.0
 	_touch_index = -2
+	_choose_gesture.clear()
 	_division = {}
 	_hand_division()
 	_set_simulating(true)
@@ -1548,6 +1570,121 @@ func _notification(what: int) -> void:
 			_cell.release()
 
 
+## **First contact decides the gesture, and this is the function that makes that
+## true** (§4.1). It is here rather than in [method _unhandled_input] because
+## the unhandled pass cannot see the events it would have to decide about, and
+## that is a hole in the GUI layer no `MOUSE_FILTER` gets you out of.
+##
+## **What the engine does.** `Viewport::push_input` runs the `_input` group
+## first, then `_gui_input_event`, then the unhandled pass -- Godot's documented
+## propagation order, not an implementation detail. At the
+## `InputEventScreenDrag` branch of `_gui_input_event`, 4.7 reads
+## `gui.touch_focus[index]` and, **when it is null, hit-tests the drag afresh at
+## wherever the finger is now**. `touch_focus` is only written when the *press*
+## landed on a `Control`. A lean's press lands on the playfield, on nothing --
+## so it has no focus, every one of its drags gets hit-tested, and the first one
+## that passes over a locus is marked handled, because a `MOUSE_FILTER_STOP`
+## control that is handed a pointer event consumes it whether it wanted it or
+## not. `_unhandled_input` never sees that drag. The mouse has the same hole by
+## the same mechanism: motion is hit-tested whenever `gui.mouse_focus` is null.
+##
+## **What that cost, measured on the code before this existed**, at
+## `--fixed-fps 60`: a finger pressed at canvas 930,300 -- resting on the
+## starboard block -- and slid two pixels **never leans at all**. No timeout, no
+## default, no feedback; only lifting and pressing again outside the block
+## recovers it. The same finger 170 px outboard, in open water, commits at
+## 7.92 s. And a lean begun in port water that slides onto the starboard block
+## commits the **port** daughter while sitting on the starboard side, because
+## the drag that would have moved it was eaten in transit. One hole, both
+## symptoms.
+##
+## **Why claiming it here is proof rather than a thing that happens to work.**
+## The hit-test fallback lives inside `_gui_input_event`. An event consumed in
+## the `_input` pass never reaches `_gui_input_event` at all, so the fallback
+## cannot run -- and that holds for any control, any mouse filter, any focus
+## state, and it goes on holding if the GUI's routing changes again, because it
+## does not depend on the routing. Nothing below asks the engine what is under a
+## drag: ownership is decided once, at first contact, keyed by pointer index,
+## and every later event of that gesture is dispatched on **whose finger it is**
+## rather than on what it is over. The rect the loci occupy is never consulted
+## here, so it cannot disagree with the one the player sees light up.
+##
+## **The one engine behaviour this does lean on** is the one the same reading of
+## the source settles: a press and its release route strictly by `touch_focus`
+## and are never hit-tested. That is what lets the press decide -- a locus is
+## handed the press only when the press was really on it -- and it is what lets
+## both fall through untouched: the press so that a locus can claim the gesture
+## from its own `gui_input`, which runs after this function and before the
+## unhandled pass, and the release so that [method _read_touch_lean] can undo a
+## lean. A locus can never be handed another finger's release, so letting go is
+## safe to leave where it already was.
+## **The paused test is the gate's own safety argument, made local.** Inside
+## this gate the function swallows every held pointer motion, and `NormalMode`
+## is `process_mode = 3`, so `_input` fires through a pause. What makes that
+## harmless today is a fact in a different function: [method _toggle_pause]
+## returns early while `_split != Split.NONE`, so the pause screen provably
+## cannot be open during a division. That is true, and it is the kind of true
+## that stops being true silently -- anyone who later allows pausing mid-split
+## would find the light slider had stopped dragging, with no error and nothing
+## to grep for. `paused` is false for the whole of a division (`_set_simulating`
+## stops nodes with `set_process`, it does not pause the tree), so this test
+## costs nothing now and holds the invariant where it is used.
+func _input(event: InputEvent) -> void:
+	if _replay != null or _split < Split.PART or get_tree().paused:
+		return
+	var index := _pointer_index(event)
+	if index == POINTER_NONE:
+		return
+	if event is InputEventScreenTouch:
+		# A lean until a locus says otherwise, which it does on this same event,
+		# microseconds from now, in the GUI pass.
+		if (event as InputEventScreenTouch).pressed:
+			_choose_gesture[index] = false
+		else:
+			_choose_gesture.erase(index)
+		return
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if click.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if click.pressed:
+			_choose_gesture[index] = false
+		else:
+			_choose_gesture.erase(index)
+		return
+	if event is InputEventMouseMotion \
+			and ((event as InputEventMouseMotion).button_mask \
+				& MOUSE_BUTTON_MASK_LEFT) == 0:
+		# A bare hover is not a gesture and is left entirely alone, so the
+		# desktop read -- point at a locus, get its line -- still works (§4.4).
+		return
+	# Everything past here is a drag or a held motion: exactly the events the
+	# fallback above can reach, and therefore the only ones that have to be
+	# claimed before the GUI is given the chance.
+	if _choose_gesture.get(index, false):
+		# A read, for the life of the gesture, however far it slides -- into
+		# open water and back again included. Swallowed rather than forwarded:
+		# a locus does nothing with a drag but consume it, and one owner is
+		# easier to reason about than two.
+		get_viewport().set_input_as_handled()
+		return
+	if _read_touch_lean(event):
+		get_viewport().set_input_as_handled()
+
+
+## Which pointer an event belongs to: a touch index, [constant POINTER_MOUSE]
+## for anything the mouse produces, or [constant POINTER_NONE] for an event with
+## no pointer behind it -- a key, a pad button, `ui_accept`.
+func _pointer_index(event: InputEvent) -> int:
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).index
+	if event is InputEventScreenDrag:
+		return (event as InputEventScreenDrag).index
+	if event is InputEventMouseButton or event is InputEventMouseMotion:
+		return POINTER_MOUSE
+	return POINTER_NONE
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# **While the replay is up, this run is not listening.** The screen consumes
 	# everything it is handed and is deeper in the tree, so nothing should reach
@@ -1572,6 +1709,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# *held* -- so a tap commits nothing and there is no arming pattern in the
 	# playfield. Read here rather than on the cell, whose input has stopped with
 	# the rest of the simulation.
+	#
+	# **Presses and releases, in practice.** [method _input] has already claimed
+	# every drag and every held motion of a division, because those are the ones
+	# the GUI hit-tests and steals. What still arrives here is a press in open
+	# water, which starts a lean, and a release, which ends one -- both route
+	# strictly by `touch_focus` and reach the unhandled pass untouched. Left
+	# whole rather than split further: this is the same call either way, and the
+	# gesture it reads is the same gesture.
 	if _split >= Split.PART and _read_touch_lean(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -1644,6 +1789,12 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		# at, so the only event we will ever see from that finger is a drag --
 		# and asking them to lift and press again to answer the biggest beat in
 		# the game is the kind of thing that only looks fine in code.
+		#
+		# **It only fires because [method _input] calls this before the GUI
+		# pass.** Reached from the unhandled pass it was unreachable the moment
+		# that thumb was resting anywhere on a strand block, because the block
+		# ate the drag on the way past -- which is a player who cannot answer
+		# the division at all. Measured; see [method _input].
 		if _touch_index == -2:
 			_touch_index = drag.index
 		if _touch_index == drag.index:
@@ -2787,10 +2938,17 @@ const CHOOSE_PITCH := 48.0
 const CHOOSE_CAP_LOBES := 1
 ## **124 and not 118.** Rendered at 118, `armor` -- five letters at
 ## `LABEL_SIZE` -- ran one pixel past the block's own edge, which collides with
-## nothing today and would overflow silently the first time a gene needs six
-## letters. The six pixels are added outboard, so the gap to the daughter is
-## unchanged and the block still has 174 px of clear canvas outboard of it at
-## 1280x720.
+## nothing today and would overflow silently. The six pixels are added
+## outboard, so the gap to the daughter is unchanged and the block's outboard
+## edge lands at canvas x 284 -- still 180 px clear of the membrane's nominal
+## 104 px band at 1280x720. What it buys is measured beside
+## [constant CHOOSE_WORD_X], and it is 3 px, not six letters: the font is
+## proportional, so letter count is not the test.
+##
+## **This may not be widened on its own.** `CHOOSE_SEAT + CHOOSE_BLOCK_W` must
+## stay at or under half the canvas width, or a block crosses the midline and
+## every gesture on this screen reads the wrong side. The invariant, and what
+## exactly breaks, is beside [constant CHOOSE_SEAT].
 const CHOOSE_BLOCK_W := 124.0
 ## The column's top edge. Its ink starts 6 px lower -- the cap tapers in -- so
 ## the strand clears the membrane's nominal 104 px band, which in any case is
@@ -2800,14 +2958,50 @@ const CHOOSE_COLUMN_TOP := 112.0
 ## daughter reaches about 201 px from centre in point of view and 202 in full
 ## vision -- the seat and the body scale cancel -- so one placement serves both
 ## views, and this is 31 px outboard of that.
+##
+## **The midline invariant, which binds this to [constant CHOOSE_BLOCK_W] and is
+## the reason neither may be raised on its own:**
+##
+##     CHOOSE_SEAT + CHOOSE_BLOCK_W <= half the canvas width
+##
+## 232 + 124 = **356 against a 640 px half** at 1280x720, the narrowest shape
+## the game can be in -- the canvas only ever gets wider, because Android is
+## landscape locked and the stretch is `expand`, so 1280x720 is the only shape
+## to check. Each block therefore lies wholly inside its own screen half.
+##
+## **What breaks if it stops holding.** [method _lean_at] reads the sign of
+## `x - half` and nothing else, so a block that crossed the midline would put
+## part of one daughter's strand in the *other* daughter's half: a finger
+## leaning across that overhang would read the wrong side, and a press that
+## landed on it would light the port strand while sitting in starboard water.
+## The invariant is what makes "which half is the finger in" and "which daughter
+## is this strand" the same question, and every gesture on this screen -- the
+## whole of [method _input] included -- assumes they are.
 const CHOOSE_SEAT := 232.0
 ## The weave's axis and its swing, inside the block. The swing is the pause
 ## strand's own [constant HELIX_AMP]: same helix, different pitch.
 const CHOOSE_HELIX_MID := 34.0
 const CHOOSE_HELIX_AMP := HELIX_AMP
 ## Left to right inside a block: the caret, the weave at 16 .. 52, the dart, the
-## word. The word gets everything from `CHOOSE_WORD_X` to the block's edge.
+## word. The word gets everything from [constant CHOOSE_WORD_X] to the block's
+## edge.
 const CHOOSE_DART_X := 66.0
+## **The word budget, measured, because it is the number this block ran out of
+## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
+## [constant LABEL_SIZE] 13 in the fallback font the widest of
+## [constant WORDS]'s eighteen is `venom` at **44.00**. Three pixels of tail,
+## and that is the whole of it: the next word to need more has nowhere to go
+## and will run past the block's own edge, silently, because nothing clips it.
+##
+## **Letters are not the measure -- the font is proportional.** `shield` is six
+## letters and 38.00; `poison` is six and 43.00; `venom` is five and 44.00. What
+## has to be checked when [constant WORDS] gains an entry is
+## `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. The
+## answer if it fails is to add the difference to [constant CHOOSE_BLOCK_W] on
+## the **outboard** side, the way the 118 -> 124 widen already did, so the gap
+## to the daughter does not move -- bounded by
+## [constant CHOOSE_SEAT]'s midline invariant, which leaves 640 - 232 = 408 to
+## grow into and not one pixel more.
 const CHOOSE_WORD_X := 77.0
 ## The word's baseline below the locus's centre, so its x-height straddles the
 ## rung row rather than sitting under it.
@@ -3146,17 +3340,21 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 			Color(tone, CHOOSE_CARET_ALPHA))
 
 
-## **First contact decides** (§4.1), and the way that is implemented is that a
-## locus swallows every pointer event Godot hands it -- press, drag, motion and
-## release alike.
+## **Where a gesture becomes a read** (§4.1), and the only place it can. This
+## runs in the GUI pass, which is after [method _input] and before the unhandled
+## one, so the index is already in [member _choose_gesture] as a lean and the
+## line below overwrites it **on the same event**. That is "first contact
+## decides", written where the decision is actually available: a locus is handed
+## a press only when the press really was on it, because presses route by
+## `touch_focus` and are never hit-tested afresh. No rect is measured twice, so
+## what claims the gesture and what lights up cannot disagree.
 ##
-## **Godot's GUI capture is what makes that enough**, and it was measured rather
-## than assumed: press, drag and release for one index all route to the control
-## that took the press, so a locus is never handed the release of a lean that
-## began in open water. That is the case that decides whether letting go still
-## undoes a lean, and `--press=` / `--slide=` / `--lift=` pose it -- a finger
-## down in the water, dragged onto a locus and lifted there, releases the lean
-## and commits nothing.
+## Everything after the press is [method _input]'s, and has to be. A locus
+## cannot defend the drags of a gesture it never received: a lean's press lands
+## on nothing, so its drags are hit-tested at their current position and this
+## function is handed them by the engine anyway -- which is precisely the
+## blocker that put `_input` in this file. See there for the mechanism and the
+## measurements.
 ##
 ## **Honest about what the `accept_event()` is buying here.** Measured on 4.7,
 ## `MOUSE_FILTER_STOP` alone already keeps these events out of
@@ -3167,19 +3365,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 ## their own press explicitly -- and the thing it is guarding is the one
 ## irreversible action in the game, which should not rest on which of two engine
 ## mechanisms happens to fire first. What is *not* claimed is that it is what
-## makes the drags safe today.
-##
-## The drag and the motion are still the ones that matter, because they are what
-## [method _unhandled_input] would adopt: its drag branch takes an unowned index
-## and its motion branch takes the mouse whenever a button is held, so a thumb
-## that shifts one pixel while reading is a lean, and a second later a committed
-## daughter.
-##
-## Swallowing them cannot strand a lean that is already in progress. Both blocks
-## sit entirely inside their own screen half -- x 284..408 and 872..996 against
-## a midline at 640 -- so a lean frozen at the moment a finger crossed onto a
-## block has the same sign as any reading taken on it, and it resumes the moment
-## the finger leaves. The sign is the whole of what [method _read_lean] asks.
+## makes the drags safe: `_input` is.
 ##
 ## What this must **not** do: start a lean, alter one in progress, arm or commit
 ## anything, take keyboard focus, or change the DNA. Nothing on this screen is
@@ -3194,6 +3380,13 @@ func _on_choose_locus_input(event: InputEvent, node: Control, side: int,
 		node.accept_event()
 	if not _is_widget_tap(event):
 		return
+	# Claimed before the selection changes rather than after, and outside
+	# [method _choose_pick]'s early-out: pressing the locus that is *already*
+	# lit is still a read, and it is the one a thumb resting on the opening
+	# selection makes.
+	var index := _pointer_index(event)
+	if index != POINTER_NONE:
+		_choose_gesture[index] = true
 	_choose_pick(side, slot)
 
 
