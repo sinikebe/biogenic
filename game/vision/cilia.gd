@@ -1418,6 +1418,183 @@ static func draw_slot_dart(canvas: CanvasItem, slot: int, tone: Color,
 
 
 # ---------------------------------------------------------------------------
+# The strand (docs/design/dna-strand.md §1, docs/design/choosing.md §9.1)
+#
+# **Two surfaces draw this helix and there is one copy of it.** The pause
+# screen draws it horizontally at a 32px lobe; the division's choosing screen
+# draws it vertically, outboard of each daughter, at a 48px one. Everything
+# between those two facts is identical -- the depth-per-point backbone, the
+# filled lens, the three rung states -- so it lives here, beside
+# [method draw_slot_dart] and [method draw_tile_organ], which are the strand's
+# other furniture and were already shared for the same reason.
+#
+# It is here rather than in `normal_mode.gd` because the choosing screen is the
+# second caller and a second copy is how two helixes drift apart. That is the
+# failure diegetic-hud.md §2 avoided by making the vesicle one routine called
+# from two views, and the pause strand is a surface two releases have been
+# spent getting right.
+#
+# **The axis is an argument and nothing else is.** A vertical strand is the
+# horizontal one with x and y exchanged: `along` runs down the strand and
+# `across` is the swing, and [method strand_point] is the only place that knows
+# which is which. The per-surface geometry -- lobe length, the axis's seat, the
+# swing -- arrives as three floats, because those are the only numbers the two
+# surfaces disagree about.
+#
+# Nothing here reads the simulation and nothing here writes it, which is this
+# file's rule and is what lets the replay call the same routines later.
+# ---------------------------------------------------------------------------
+
+## Which way the strand runs. `ALONG_X` is the pause screen's row; `ALONG_Y` is
+## the choosing screen's column.
+const STRAND_ALONG_X := 0
+const STRAND_ALONG_Y := 1
+
+## The backbone is the cell's own teal, not a gene's hue: the strand is you and
+## the rungs are what you are made of.
+const STRAND_BACKBONE := Color(0.24, 0.80, 0.68)
+## Depth, drawn as alpha along the strand. A helix that is two crossing sine
+## waves is flat; the strand in front at a crossing is what makes it a helix,
+## and per-point colours on a polyline cost nothing to say so.
+const STRAND_FRONT := 0.66
+const STRAND_BACK := 0.13
+const STRAND_WIDTH := 2.0
+## Segments per lobe. Ten over 32 px leaves a 0.2 px sagitta, and over 48 a
+## 0.3 px one.
+const STRAND_STEPS := 10
+
+## Copies, along the strand. 8 px is 45 degrees of a 32px lobe, so the outer
+## pair come out at 71% of the centre rung's length -- the cluster follows the
+## lens, which is what a base pair near the edge of a turn actually does. At the
+## choosing screen's 48px lobe the same 8 px is 30 degrees and the outer pair
+## reach 87%: flatter, which is right at a smaller scale.
+const STRAND_RUNG_GAP := 8.0
+const STRAND_WORN_ALPHA := 0.92
+const STRAND_WORN_WIDTH := 3.0
+## A copy the DNA carries and the body does not wear: the rung does not reach
+## either backbone. Floating against seated, which is diegetic-hud.md §1's own
+## vocabulary -- rejected on a 76px tile because a 4px lift is invisible, and
+## right here because the gap is a third of a rung.
+const STRAND_CARRIED_ALPHA := 0.88
+const STRAND_CARRIED_WIDTH := 2.6
+const STRAND_CARRIED_SPAN := 0.42
+
+
+## A point on the strand: [param along] runs down it and [param across] is the
+## swing off its axis. The one place either surface's handedness is decided.
+static func strand_point(axis: int, along: float, across: float) -> Vector2:
+	return Vector2(along, across) if axis == STRAND_ALONG_X \
+		else Vector2(across, along)
+
+
+## Where the two strands are at [param along], for a control whose first
+## half-lens is [param lobe0]. [param along] is in that control's own pixels and
+## [param lobe] is how long one half-lens is.
+static func strand_phase(along: float, lobe0: int, lobe: float) -> float:
+	return PI * (float(lobe0) + along / lobe)
+
+
+## How much of the strand a control draws at [param along]: 1 everywhere on a
+## locus, ramping from nothing at the outer end of a cap. [param taper] is +1 at
+## the head, -1 at the tail and 0 for a locus.
+static func strand_fade(along: float, span: float, taper: int) -> float:
+	if taper == 0:
+		return 1.0
+	var t := clampf(along / maxf(span, 0.001), 0.0, 1.0)
+	return t if taper > 0 else 1.0 - t
+
+
+## Two sine strands a half-period out of phase, drawn as polylines with a
+## colour per point. **The colour per point is what makes it a helix**: depth is
+## `cos(t)`, so the strand in front at a crossing is bright and the one behind
+## it is faint, and they trade places every half turn. Two crossing sine waves
+## at one alpha are flat and read as a ribbon, not as DNA -- rendered both ways.
+##
+## No new node, no texture, no shader: `draw_polyline_colors` is one call per
+## strand per control.
+static func draw_weave(canvas: CanvasItem, axis: int, lobe: float, mid: float,
+		amp: float, lobes: int, lobe0: int, bright: float,
+		taper: int) -> void:
+	var span := float(lobes) * lobe
+	var steps := lobes * STRAND_STEPS
+	var a_pts := PackedVector2Array()
+	var b_pts := PackedVector2Array()
+	var a_col := PackedColorArray()
+	var b_col := PackedColorArray()
+	for i in steps + 1:
+		var along := span * float(i) / float(steps)
+		var t := strand_phase(along, lobe0, lobe)
+		var fade := strand_fade(along, span, taper)
+		var swing := amp * sin(t) * fade
+		a_pts.append(strand_point(axis, along, mid - swing))
+		b_pts.append(strand_point(axis, along, mid + swing))
+		# depth runs -1 (behind) to 1 (in front); the two strands are opposite.
+		var near := 0.5 * (cos(t) + 1.0)
+		a_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_BACK, STRAND_FRONT,
+			near) * fade * bright))
+		b_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK,
+			near) * fade * bright))
+	canvas.draw_polyline_colors(a_pts, a_col, STRAND_WIDTH, true)
+	canvas.draw_polyline_colors(b_pts, b_col, STRAND_WIDTH, true)
+
+
+## One lens of the weave, filled. Built from the same two strands, so the
+## selection is exactly the shape of the thing being selected.
+##
+## [param lens_lobe] is which half-lens of the control to fill, counted from its
+## own origin: the pause screen's locus is three lobes wide and fills its middle
+## one, and the choosing screen's is one lobe and fills that.
+static func draw_lens(canvas: CanvasItem, axis: int, lobe: float, mid: float,
+		amp: float, lobe0: int, lens_lobe: float, tone: Color) -> void:
+	var poly := PackedVector2Array()
+	var back := PackedVector2Array()
+	for i in STRAND_STEPS + 1:
+		var along := lobe * (lens_lobe + float(i) / float(STRAND_STEPS))
+		var swing := amp * sin(strand_phase(along, lobe0, lobe))
+		poly.append(strand_point(axis, along, mid - swing))
+		back.append(strand_point(axis, along, mid + swing))
+	back.reverse()
+	poly.append_array(back)
+	canvas.draw_colored_polygon(poly, tone)
+
+
+## **Copies, as rungs.** One, two or three of them at [param centre] along the
+## strand, in the gene's own hue, and each in one of two states:
+##
+##   worn     a complete rung, backbone to backbone -- this body expresses it
+##   carried  a bar floating clear of both -- the DNA has it, the body does not
+##
+## Worn against carried is **shape** and not hue, so it survives a
+## luminance-only render and a deuteranope one, which is the rule
+## genes-and-cilia.md §4.4 sets for any pair of marks whose opposites share a
+## place.
+##
+## **The cluster is centred on the copies it has, not on three places with the
+## empty ones ghosted.** The ghosts were built and photographed: at 1 px and 15%
+## they were invisible, and paying for them cost a one-copy locus its centring --
+## its single rung sat a third of a lens off the maximum and hung shorter than
+## every other one-copy locus on the strand. Centred, a single copy is the
+## longest rung the strand can draw, which is the right emphasis: it is the
+## whole of that gene.
+static func draw_rungs(canvas: CanvasItem, axis: int, lobe: float, mid: float,
+		amp: float, lobe0: int, centre: float, tone: Color, tier: int,
+		body_tier: int) -> void:
+	var seat := (float(tier) - 1.0) * 0.5
+	for i in tier:
+		var along := centre + (float(i) - seat) * STRAND_RUNG_GAP
+		var swing := absf(amp * sin(strand_phase(along, lobe0, lobe)))
+		if i < body_tier:
+			canvas.draw_line(strand_point(axis, along, mid - swing),
+				strand_point(axis, along, mid + swing),
+				Color(tone, STRAND_WORN_ALPHA), STRAND_WORN_WIDTH, true)
+		else:
+			var reach := swing * STRAND_CARRIED_SPAN
+			canvas.draw_line(strand_point(axis, along, mid - reach),
+				strand_point(axis, along, mid + reach),
+				Color(tone, STRAND_CARRIED_ALPHA), STRAND_CARRIED_WIDTH, true)
+
+
+# ---------------------------------------------------------------------------
 # Small shared arithmetic
 # ---------------------------------------------------------------------------
 

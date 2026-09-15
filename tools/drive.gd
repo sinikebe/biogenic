@@ -38,6 +38,27 @@ extends Node
 ##                           produces a tap on nothing, which reads as a
 ##                           control that does not respond. It has cost one
 ##                           false bug report already.
+##   --press=<seconds>:<x>,<y>
+##                           one finger down at that canvas point and **left
+##                           there** -- never released. `--touch=` presses and
+##                           releases in the same frame, and a tap commits
+##                           nothing by design, so the one rule the choosing
+##                           screen turns on -- *a finger resting on a locus is
+##                           a read and not a lean* -- cannot be posed with it
+##                           at all. Same convention as `--touch=`: seconds
+##                           first, canvas coordinates, unscaled.
+##   --slide=<seconds>:<x>,<y>
+##                           finger 0 moves there, as an `InputEventScreenDrag`
+##                           with no fresh press. A resting thumb produces one
+##                           the moment it shifts by a pixel, which is the case
+##                           a press alone cannot pose and the one that decides
+##                           whether reading a locus can commit a daughter.
+##                           Repeatable, and the same convention again.
+##   --lift=<seconds>      release finger 0, wherever `--press=` and `--slide=`
+##                           have left it. The other half of `--press=`: without
+##                           it the harness can only pose gestures that never
+##                           end, and *letting go undoes a lean* is a rule the
+##                           division screen turns on as hard as the other one.
 ##   --hover=<seconds>:<x>,<y>
 ##                           warp the mouse to that canvas point, once, at that
 ##                           time; repeatable. The desktop half of the genome
@@ -233,6 +254,16 @@ var _posed: Array = []
 var _touches: Array = []
 ## The same, for the mouse: [[seconds, canvas position], ...].
 var _hovers: Array = []
+## [[seconds, canvas position], ...] pressed and held, never released -- the
+## only way to photograph a finger resting somewhere.
+var _presses: Array = []
+## [[seconds, canvas position], ...] sent as a drag on finger 0.
+var _slides: Array = []
+## [seconds, ...] at which finger 0 lets go, wherever it has got to.
+var _lifts: Array = []
+## Where finger 0 was last put, so a release can be sent from the same point --
+## a release at the wrong place is a different gesture.
+var _finger := Vector2.ZERO
 var _sample: StringName = &""
 var _sample_left := -1.0
 var _wound := -1.0
@@ -375,6 +406,22 @@ func _ready() -> void:
 				if xy.size() == 2:
 					_touches.append([float(touch[0]),
 						Vector2(float(xy[0]), float(xy[1]))])
+		elif text.begins_with("--press="):
+			var press := text.trim_prefix("--press=").split(":")
+			if press.size() == 2:
+				var pxy := press[1].split(",")
+				if pxy.size() == 2:
+					_presses.append([float(press[0]),
+						Vector2(float(pxy[0]), float(pxy[1]))])
+		elif text.begins_with("--slide="):
+			var slide := text.trim_prefix("--slide=").split(":")
+			if slide.size() == 2:
+				var sxy := slide[1].split(",")
+				if sxy.size() == 2:
+					_slides.append([float(slide[0]),
+						Vector2(float(sxy[0]), float(sxy[1]))])
+		elif text.begins_with("--lift="):
+			_lifts.append(float(text.trim_prefix("--lift=")))
 		elif text.begins_with("--kill-at="):
 			_kill_at = float(text.trim_prefix("--kill-at="))
 		elif text.begins_with("--panes="):
@@ -540,6 +587,18 @@ func _process(delta: float) -> void:
 		if _clock >= float(_hovers[i][0]):
 			_send_hover(_hovers[i][1])
 			_hovers.remove_at(i)
+	for i in range(_presses.size() - 1, -1, -1):
+		if _clock >= float(_presses[i][0]):
+			_send_press(_presses[i][1])
+			_presses.remove_at(i)
+	for i in range(_slides.size() - 1, -1, -1):
+		if _clock >= float(_slides[i][0]):
+			_send_slide(_slides[i][1])
+			_slides.remove_at(i)
+	for i in range(_lifts.size() - 1, -1, -1):
+		if _clock >= float(_lifts[i]):
+			_send_lift()
+			_lifts.remove_at(i)
 
 	if _back_at >= 0.0 and _clock >= _back_at:
 		_back_at = -1.0
@@ -1053,6 +1112,46 @@ func _send_touch(canvas: Vector2) -> void:
 		Input.parse_input_event(event)
 	print("[drive] %5.2f  touch %.0f,%.0f (canvas %.0f,%.0f)" % [
 		_clock, at.x, at.y, canvas.x, canvas.y])
+
+
+## One finger down and left there. A tap commits nothing by design, so the only
+## way to photograph *a finger resting on a locus does not lean* is a press that
+## is never released.
+func _send_press(canvas: Vector2) -> void:
+	var at := canvas * get_viewport().get_screen_transform().get_scale() \
+		+ get_viewport().get_screen_transform().get_origin()
+	_finger = at
+	var event := InputEventScreenTouch.new()
+	event.index = 0
+	event.pressed = true
+	event.position = at
+	Input.parse_input_event(event)
+	print("[drive] %5.2f  press %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, at.x, at.y, canvas.x, canvas.y])
+
+
+## Finger 0 moves, without a fresh press. A resting thumb produces one of these
+## the moment it shifts by a pixel, which is the case a press alone cannot pose.
+func _send_slide(canvas: Vector2) -> void:
+	var at := canvas * get_viewport().get_screen_transform().get_scale() \
+		+ get_viewport().get_screen_transform().get_origin()
+	_finger = at
+	var event := InputEventScreenDrag.new()
+	event.index = 0
+	event.position = at
+	Input.parse_input_event(event)
+	print("[drive] %5.2f  slide %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, at.x, at.y, canvas.x, canvas.y])
+
+
+## Finger 0 lets go, from wherever the last `--press=` or `--slide=` left it.
+func _send_lift() -> void:
+	var event := InputEventScreenTouch.new()
+	event.index = 0
+	event.pressed = false
+	event.position = _finger
+	Input.parse_input_event(event)
+	print("[drive] %5.2f  lift  %.0f,%.0f" % [_clock, _finger.x, _finger.y])
 
 
 func _send_key(keycode: Key, pressed: bool) -> void:
