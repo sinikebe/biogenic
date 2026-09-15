@@ -1090,6 +1090,16 @@ advantage stands.
 
 ## 5. The genome surface — `perception.md` §6.4, settled
 
+> **§5.2's tiles and §5.3's measurements are superseded by
+> `docs/design/dna-strand.md`.** The owner asked for a DNA rather than square
+> slots, and the strip is now a chromosome: loci along a double helix, the tier
+> drawn as **copies** (rungs) rather than pips, and the held sample a loose base
+> pair floating over the locus it is bound for. §5.1's decision — that this is a
+> launcher-themed surface and not the membrane aesthetic — is unchanged and is
+> what the strand is drawn in. The two-tap placement, the 300 ms guard, the 4 s
+> timeout, the plain word and the slot compass are all unchanged; only the shape
+> they sit on is.
+
 ### 5.1 It is a launcher-themed panel, and the rule is general
 
 **Decision: launcher theme, not the membrane aesthetic.**

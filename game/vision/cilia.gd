@@ -1337,28 +1337,33 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 ## carries and the body does not wear draws its strokes fainter. The pips do the
 ## work -- see normal_mode.gd's tile face -- and this is honest about which one
 ## is which.
+## [param scale] shrinks the whole drawing about [param centre]. The strand has
+## no 76px tile to put an organ in, so the one organ on the pause screen is the
+## **selected** gene's, drawn once beside the sentence that explains it -- which
+## is a smaller row than a tile and needs the geometry to come with it.
 static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
-		size: Vector2, alpha: float = TILE_STROKE_ALPHA) -> void:
+		centre: Vector2, alpha: float = TILE_STROKE_ALPHA,
+		scale: float = 1.0) -> void:
 	var tone := hue(gene)
-	var centre := Vector2(size.x * 0.5, size.y * TILE_CENTRE_Y)
 	var ink := alpha / TILE_STROKE_ALPHA
-	canvas.draw_arc(centre, TILE_ARC_RADIUS, TILE_ARC_FROM, TILE_ARC_TO, 32,
-		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH, true)
+	var arc_r := TILE_ARC_RADIUS * scale
+	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
+		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 
 	var count := int(TILE_COUNT.get(gene,
 		EARNED_COUNT.get(gene, TILE_COUNT_EARNED)))
-	var length := float(TILE_LEN.get(gene, TILE_LEN_EARNED))
+	var length := float(TILE_LEN.get(gene, TILE_LEN_EARNED)) * scale
 	var earned := not TILE_COUNT.has(gene)
 	if earned:
-		canvas.draw_circle(centre + Vector2(0.0, -TILE_ARC_RADIUS * PIGMENT_SEAT),
-			TILE_PIGMENT, Color(tone, 0.85 * ink), true, -1.0, true)
+		canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
+			TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
 
 	var strokes := PackedVector2Array()
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
 		var angle := lerpf(TILE_ARC_FROM, TILE_ARC_TO, u)
 		var dir := Vector2(cos(angle), sin(angle))
-		var root := centre + dir * TILE_ARC_RADIUS
+		var root := centre + dir * arc_r
 		var span := length
 		if gene == &"cytostome":
 			# The same metachronal wave the body wears, held still at clock 0.
@@ -1371,29 +1376,30 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 			span *= 0.88 + 0.14 * sin(u * PI)
 		strokes.append(root)
 		strokes.append(root + dir * span)
-	_stroke(canvas, strokes, tone, alpha, TILE_ARC_WIDTH)
-	# Tier is drawn as pips by the strip itself: at 13 pixels a 22% length
+	_stroke(canvas, strokes, tone, alpha, TILE_ARC_WIDTH * scale)
+	# Tier is drawn as rungs by the strand itself: at 13 pixels a 22% length
 	# difference is one pixel, so magnitude cannot carry it here the way it does
 	# on a body. This is the one place the two vocabularies deliberately differ,
 	# and the tile says why -- it is a label, not an organism.
 
 
-## **Which arc this slot is, drawn small.** A compass in the tile's top-left
-## corner with one needle on it, pointing the way the slot looks -- screen up is
-## the cell's front, exactly as every bearing in this game is read.
+## **Which arc this slot is, drawn small.** A compass with one dart on it,
+## pointing the way the locus looks -- screen up is the cell's front, exactly as
+## every bearing in this game is read.
 ##
-## It is on empty tiles too, and that is the point: the player is choosing where
-## to put a gene, so the empty slots are the part of the strip they are actually
+## It is on empty loci too, and that is the point: the player is choosing where
+## to put a gene, so the empty ones are the part of the strand they are actually
 ## reading. Two forward diagonals and two rear ones look nothing alike here, and
 ## "placed behind, it does not let you see where you are going" becomes a thing
 ## you can see before you commit rather than after.
-static func draw_tile_direction(canvas: CanvasItem, slot: int, tone: Color,
-		size: Vector2) -> void:
+## [param centre] and [param radius] are given rather than taken from a tile
+## corner, because the strand has no corners: the dart sits under its own locus,
+## in the label row beside the plain word.
+static func draw_slot_dart(canvas: CanvasItem, slot: int, tone: Color,
+		centre: Vector2, radius: float = TILE_COMPASS_R) -> void:
 	if slot < 0:
 		return
-	var centre := Vector2(TILE_COMPASS_X, TILE_COMPASS_Y)
-	canvas.draw_arc(centre, TILE_COMPASS_R, 0.0, TAU, 20,
-		Color(tone, 0.28), 1.0, true)
+	canvas.draw_arc(centre, radius, 0.0, TAU, 20, Color(tone, 0.28), 1.0, true)
 	var bearing := slot_bearing(slot)
 	var dir := Vector2(sin(bearing), -cos(bearing))
 	var side := Vector2(-dir.y, dir.x)
@@ -1402,13 +1408,13 @@ static func draw_tile_direction(canvas: CanvasItem, slot: int, tone: Color,
 	# are the same 45-degree line, so which end is the point has to be carried by
 	# the shape and not by which end is brighter. Rendered at 13 pixels, a dot on
 	# one end is not enough and a filled dart is unmistakable.
-	var head := centre + dir * TILE_COMPASS_R
-	var tail := centre - dir * (TILE_COMPASS_R * 0.55)
+	var head := centre + dir * radius
+	var tail := centre - dir * (radius * 0.55)
 	canvas.draw_colored_polygon(PackedVector2Array([
 		head,
-		tail + side * (TILE_COMPASS_R * 0.70),
-		centre - dir * (TILE_COMPASS_R * 0.10),
-		tail - side * (TILE_COMPASS_R * 0.70)]), Color(tone, 0.95))
+		tail + side * (radius * 0.70),
+		centre - dir * (radius * 0.10),
+		tail - side * (radius * 0.70)]), Color(tone, 0.95))
 
 
 # ---------------------------------------------------------------------------
