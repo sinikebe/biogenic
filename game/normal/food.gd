@@ -1755,6 +1755,33 @@ func restore_body(index: int, pos: Vector2, heading: float, radius: float,
 	b.wound = wound
 
 
+## **Who was hunting the player, written back from a recording.**
+##
+## [method restore_body] deliberately writes no state machine, which is right --
+## a body being replayed is not deciding anything. But [method hunter] *is* a
+## question about the state machine, and `vision.gd` draws the dread, wake and
+## lunge rings off its answer. Left alone, every replayed body answers DRIFT and
+## the rings never draw at all: the truth pane loses the one instrument that
+## explains a predation death, in exactly the case it exists for.
+##
+## So the recording carries the index and this puts it back, on these two fields
+## and nothing else -- the two [method hunter] reads. [param index] is -1 for
+## nobody, which is also what a frame with no stalker recorded.
+##
+## Every other claim on the player is cleared on the way past, because a field
+## frozen at the moment of death still holds whatever was chasing you then, and
+## a replayed frame from twenty seconds earlier must not inherit it.
+func restore_hunter(index: int) -> void:
+	for i in _cells.size():
+		var b := _cells[i]
+		if i == index:
+			b.state = State.STALK
+			b.target = TARGET_PLAYER
+		elif b.state == State.STALK and b.target == TARGET_PLAYER:
+			b.state = State.DRIFT
+			b.target = TARGET_NONE
+
+
 ## The same, for the one part of a body that is not a float. Stepped at the
 ## moments the recording says it changed, never interpolated.
 func restore_genome(index: int, genome: Dictionary) -> void:

@@ -140,6 +140,26 @@ const DIVIDE_WORLD_FADE := 0.22
 ## the difference between two daughters is not callable. For the only time in
 ## the game the middle of the screen is the loudest thing on it, and that
 ## inversion is the beat.
+##
+## **These three are read by the replay, and the coupling is not visible from
+## here.** `recorder.gd` records the whole of a division choice as *one* float:
+## the difference between the two daughters' brightnesses, which `replay.gd`
+## divides by `DIVIDE_FADE - DIVIDE_FADE_DIM` to recover how far the lean has
+## accrued. That round-trip is exact only because of what [method _side_fade]
+## below does with these numbers -- both daughters leave the same
+## `DIVIDE_FADE_IDLE` on the same clock, so the leaned one's rise
+## `(DIVIDE_FADE - DIVIDE_FADE_IDLE)` plus the declined one's fall
+## `(DIVIDE_FADE_IDLE - DIVIDE_FADE_DIM)` is exactly the span the replay
+## divides by. Move one of the three, or give either daughter a different base
+## or a different curve, and the replay reconstructs the wrong pair of
+## brightnesses: **no error anywhere, and a division that replays differently
+## from the one the player watched.** Change these and re-render a POV
+## division against the replay of the same run. docs/design/replay.md §4.1.
+##
+## The other half of that float is the shed, which is signed and offset past 2.
+## It cannot collide with a lean, because the widest a lean can make the
+## difference is `DIVIDE_FADE - DIVIDE_FADE_DIM` = 0.66 -- 1.34 clear of 2.0,
+## which is a gulf in float32 rather than a rounding question.
 const DIVIDE_FADE := 1.0
 ## Before a lean, and after one, for the daughter being declined.
 const DIVIDE_FADE_IDLE := 0.82
@@ -228,6 +248,9 @@ var _armed_at := 0
 var _slot_genes: Array[StringName] = []
 
 var _last_toggle_frame := -1
+## The frame Back was last answered on, whichever door it came through. See
+## [method _back_once].
+var _last_back_frame := -1
 var _onboard := Onboard.OFF
 var _onboard_clock := 0.0
 var _onboard_from := 0.0
@@ -1067,6 +1090,14 @@ func _offer_replay(on: bool) -> void:
 func _watch() -> void:
 	if _replay != null:
 		return
+	# **Only over a run that has finished dying.** The screen writes recorded
+	# state onto the live nodes and stops the field processing on the way in;
+	# both are free once `_die()` has stopped the simulation for good and
+	# neither is free a frame earlier. Today nothing can reach here otherwise --
+	# the offer only goes up in WAITING -- which is exactly the kind of thing
+	# that stays true until a second caller appears.
+	if _life != Life.WAITING:
+		return
 	if not ResourceLoader.exists(REPLAY_SCENE):
 		push_error("[NormalMode] No replay screen at %s" % REPLAY_SCENE)
 		return
@@ -1077,6 +1108,17 @@ func _watch() -> void:
 	_bus.attach(null)
 	_replay = packed.instantiate()
 	_replay.set(&"recorder", _recorder)
+	# **The re-attach rides on the screen's own lifetime, not on this file's
+	# discipline.** The detach above and the attach in `_close_replay` were a
+	# hand-maintained pair, and a pair is only as good as the routes that
+	# honour it: the replay frees itself when its parent has no
+	# `_replay_closed`, and that route would have left `_replay` pointing at a
+	# freed object with the bus still unplugged -- a permanently frozen death
+	# screen, silent until somebody reported that the game had stopped.
+	# `tree_exited` fires however the screen goes away, including that one.
+	# Bound to the screen it came from so a late signal from a replaced one
+	# cannot take the new one down with it.
+	_replay.tree_exited.connect(_close_replay.bind(_replay))
 	add_child(_replay)
 
 
@@ -1088,12 +1130,28 @@ func _replay_closed() -> void:
 		_offer_replay(true)
 
 
-func _close_replay() -> void:
-	if _replay == null:
+## **Idempotent, and it has to be**, because it is now reached twice on the
+## ordinary path: once from `_replay_closed` and again when the node it just
+## freed leaves the tree. Clearing the handle *before* freeing is what makes
+## that safe -- the `tree_exited` that `queue_free` eventually causes finds a
+## null handle and returns, so there is no way round the loop a second time.
+##
+## [param from] is set only by that signal, and only to say which screen sent
+## it; anything else means the screen has already been replaced and the signal
+## is stale.
+func _close_replay(from: Node = null) -> void:
+	if _replay == null or (from != null and from != _replay):
 		return
-	_replay.queue_free()
+	var screen: Node = _replay
 	_replay = null
-	_bus.attach(_membrane.field.material as ShaderMaterial)
+	if is_instance_valid(screen) and not screen.is_queued_for_deletion():
+		screen.queue_free()
+	# Reached during this run's own teardown as well, when a scene change takes
+	# the whole tree out: everything has exited the tree by then but nothing has
+	# been freed, so the material is still there to write to. Guarded anyway,
+	# because a null uniform write is not worth a crash on the way out.
+	if is_instance_valid(_membrane) and is_instance_valid(_bus):
+		_bus.attach(_membrane.field.material as ShaderMaterial)
 
 
 ## A touch, a click or a key on the held black. Anything at all, because there
@@ -1422,9 +1480,38 @@ func _bar(alpha: float) -> StyleBoxFlat:
 # Leaving. Back on Android, Esc on desktop; neither costs a pixel.
 # ---------------------------------------------------------------------------
 
+## **One Back per frame, whichever way it arrives.**
+##
+## Android has historically delivered Back as a notification, as a key event, or
+## as both, depending on the version -- which is why `_toggle_pause` has carried
+## a same-frame latch since Phase 2. The replay gave that hazard a second and
+## worse ending: this notification closes the replay *synchronously*, so a
+## duplicate `ui_cancel` arriving behind it in the same frame finds `_replay`
+## already null and `_life` not ALIVE, and leaves the run. The player asked to
+## close a screen and lost the death screen under it.
+##
+## Latched here rather than by dropping the notification branch, because
+## dropping it is the version-dependent answer: on a build that delivers only
+## the notification, Back inside the replay would stop working altogether unless
+## the screen grew a `_notification` of its own -- which puts an Android quirk
+## inside a file that knows nothing about Android. One counter, both doors.
+##
+## Both doors are read inside the same engine iteration, so they see the same
+## `get_process_frames()`. That is the assumption `_toggle_pause`'s own latch
+## has been shipping on.
+func _back_once() -> bool:
+	var frame := Engine.get_process_frames()
+	if frame == _last_back_frame:
+		return false
+	_last_back_frame = frame
+	return true
+
+
 func _notification(what: int) -> void:
 	match what:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
+			if not _back_once():
+				return
 			# Back out of the replay first: it is a screen the player opened,
 			# and the gesture that closes a screen closes the top one.
 			if _replay != null:
@@ -1450,10 +1537,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _replay != null:
 		return
 	if event.is_action_pressed(&"ui_cancel"):
-		if _life != Life.ALIVE:
-			_leave()
-		else:
-			_toggle_pause()
+		# The other door Back comes through. Consumed either way: a Back already
+		# answered this frame is still a Back, and letting it fall through to
+		# the branches below would restart the run.
+		if _back_once():
+			if _life != Life.ALIVE:
+				_leave()
+			else:
+				_toggle_pause()
 		get_viewport().set_input_as_handled()
 		return
 

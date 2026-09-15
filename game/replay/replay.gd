@@ -30,6 +30,7 @@ const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+const SignalBus := preload("res://game/perception/signal_bus.gd")
 ## **For three numbers**, and they have to be these three: the daughters'
 ## brightnesses are what the recorder wrote a single `commit` float out of, and
 ## a second table of them here would be a division that looks different in the
@@ -71,6 +72,10 @@ var _cell: CellBody = null
 var _motes: MotesField = null
 var _food: FoodField = null
 var _genome: GenomeNode = null
+## The run's bus, found only so the panes can read the player's light setting
+## off it. Nothing here writes to it -- the run's membrane is detached while
+## this screen is up and the panes have a bus of their own.
+var _bus: SignalBus = null
 
 var _ui: CanvasLayer = null
 var _blocker: Control = null
@@ -97,7 +102,7 @@ func _ready() -> void:
 	_find(get_parent())
 	_panes = Panes.new()
 	_panes.name = "Panes"
-	_panes.watch(_cell, _motes, _food, _genome)
+	_panes.watch(_cell, _motes, _food, _genome, _bus)
 	add_child(_panes)
 	_build_transport()
 	_rewind()
@@ -156,6 +161,12 @@ func _write_state() -> void:
 		_food.beams = _read_beams()
 		_food.ping_front = _frame[RecorderNode.AT_PING_FRONT]
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
+		# **Before the world pane draws**, which is what `process_priority`
+		# -10 buys: `vision.gd` asks the field who is hunting and draws the
+		# three predator rings round the answer. Rounded rather than cast --
+		# the float is an index and the lerp is stepped, but -1.0 arriving as
+		# -0.9999 would truncate to 0 and put rings on an innocent drifter.
+		_food.restore_hunter(int(roundf(_frame[RecorderNode.AT_HUNTER])))
 	if _motes != null:
 		for i in RecorderNode.MOTES:
 			var at := RecorderNode.AT_MOTES + i * 2
@@ -274,7 +285,7 @@ func _rewind() -> void:
 
 
 # ---------------------------------------------------------------------------
-# The transport. Three controls, all at least 48px, in the 88px band the panes
+# The transport. Three controls, all at least 48px, in the 96px band the panes
 # gave up. The register is the pause screen's exactly: this is a panel the
 # player consults, not a sensory screen.
 # ---------------------------------------------------------------------------
@@ -412,5 +423,7 @@ func _walk(node: Node) -> void:
 		_food = node as FoodField
 	elif _genome == null and node is GenomeNode:
 		_genome = node as GenomeNode
+	elif _bus == null and node is SignalBus:
+		_bus = node as SignalBus
 	for child in node.get_children():
 		_walk(child)

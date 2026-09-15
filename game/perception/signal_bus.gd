@@ -530,6 +530,20 @@ func set_geometry(rect: Vector2, inset: float) -> void:
 	_inset = maxf(inset, 0.0)
 
 
+## **The light setting, on the material now rather than on the next frame.**
+##
+## A run sets [member gain] as a plain property and gets away with it, because
+## it is stepping envelopes sixty times a second and every one of those frames
+## ends in the same `_apply()` that writes this uniform. A screen that is not
+## stepping has no next frame to rely on -- the replay's panes write a recorded
+## block instead -- so it says it here and it lands at once.
+##
+## Clamped rather than trusted: this is reached from a stored file.
+func apply_gain(value: float) -> void:
+	gain = clampf(value, GAIN_MIN, GAIN_MAX)
+	_apply()
+
+
 # ---------------------------------------------------------------------------
 # The membrane as a block of numbers. docs/design/replay.md §4.1.
 #

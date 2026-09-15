@@ -35,17 +35,29 @@ const CellBody := preload("res://game/normal/cell.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+const RunState := preload("res://game/run_state.gd")
 
 const MEMBRANE_SCENE := preload("res://game/perception/membrane.tscn")
 const VISION_SCENE := preload("res://game/vision/vision.tscn")
 const SOMA_SCENE := preload("res://game/perception/soma.tscn")
 const RETURNS_SCENE := preload("res://game/perception/returns.tscn")
 
-## **The panes are 632 tall, not 720, and the 88 the transport takes is taken
+## **The panes are 624 tall, not 720, and the 96 the transport takes is taken
 ## off them rather than laid over them.** The membrane's band is 104px deep from
 ## every edge; a bar floating over the bottom would sit exactly on the astern
 ## channel, which is where *it ate me from behind* is written. §4.4.
-const BAND := 88.0
+##
+## **Ninety-six and not the eighty-eight this was designed at, because of the
+## gesture bar.** At 88 the transport row's bottom edge landed 8 canvas px from
+## the bottom of the screen -- 12 device px on a 2400x1080 phone -- and in
+## Android's sensor landscape that is where the system gesture handle lives.
+## This is the first control in the game to sit on that edge; `membrane.gd`'s
+## safe-area inset is about the contour and does not reach a Control. Eight more
+## pixels of band lifts the whole assembly by eight and costs the panes eight
+## rows of water, which is the cheap side of that trade. The captions keep the
+## designer's spacing exactly: the gap between a caption's box and the row below
+## it is 4 canvas px before and after, because both are measured off the band.
+const BAND := 96.0
 
 ## Where the two layers of this screen sit. The run underneath is on canvas
 ## layers 0 and 1, and every pixel of it is covered.
@@ -116,7 +128,8 @@ var _cell: CellBody = null
 var _motes: MotesField = null
 var _food: FoodField = null
 var _genome: GenomeNode = null
-## The run's bus, for [member live] only. Never written to.
+## The run's bus. Never written to: [member live] copies its block across, and
+## every path reads [member SignalBus.gain] off it. See [method _apply_gain].
 var _run_bus: SignalBus = null
 var _run_soma: SomaLayer = null
 
@@ -142,6 +155,7 @@ func _ready() -> void:
 	# the same nodes -- and it is the whole of the wiring when it has not.
 	_find(get_parent())
 	_build()
+	_apply_gain()
 	_relayout()
 	get_viewport().size_changed.connect(_relayout)
 
@@ -149,12 +163,43 @@ func _ready() -> void:
 ## **What these panes are panes of.** Called before [method Node.add_child], the
 ## same way [method VisionLayer.bind] is and for the same reason: the views
 ## inside search the tree when nobody tells them, and the tree has a run in it.
+##
+## [param bus] is the run's own, and it is handed over for one number: see
+## [method _apply_gain]. Optional because the harness raises these panes over a
+## live run without calling this at all, and finds it by walking instead.
 func watch(cell: CellBody, motes: MotesField, food: FoodField,
-		genome: GenomeNode) -> void:
+		genome: GenomeNode, bus: SignalBus = null) -> void:
 	_cell = cell
 	_motes = motes
 	_food = food
 	_genome = genome
+	_run_bus = bus
+
+
+## **The light setting is the player's, and this screen has to ask for it.**
+##
+## `signal_bus.gd` keeps `gain` out of the recorded block on purpose, and the
+## reason written there is right: it is a setting the player owns *now*, not a
+## fact about the run that ended. But out of the block means it has to arrive
+## by some other route, and these panes build a bus of their own. Left alone it
+## sits at `GAIN_DEFAULT`, which is also `GAIN_MIN`; [method
+## SignalBus.write_block] ends in an apply, so every replay frame would stamp
+## 1.0 onto the pane material and read nothing.
+##
+## That is an accessibility bug on a phone rather than a nicety. `normal_mode`
+## writes down the case the control exists for: a starving, hunted cell renders
+## at (6,23,23), and on an LCD phone in daylight that is close to invisible. A
+## player who turned the light up to see it would lose it again the moment they
+## pressed `watch` -- on the one screen built to explain the death.
+##
+## The run's own bus first, because that is the live value and includes a drag
+## the pause screen has not written to `user://` yet; the stored setting when
+## there is no run to ask. One write covers both panes: they share a material.
+func _apply_gain() -> void:
+	if _bus == null:
+		return
+	_bus.apply_gain(_run_bus.gain if _run_bus != null
+		else RunState.load_gain(SignalBus.GAIN_DEFAULT))
 
 
 ## The last thing the shipped views need that is not a node: the membrane, as a
@@ -316,14 +361,14 @@ func _caption(text: String) -> Label:
 
 
 # ---------------------------------------------------------------------------
-# Geometry. Two panes, no gap, 632 tall at every shape:
+# Geometry. Two panes, no gap, 624 tall at every shape:
 #
-#   1280x720   pane 640x632   black middle 425 x 418
-#   2400x1080  pane 800x632   black middle 585 x 417
+#   1280x720   pane 640x624   black middle 425 x 410
+#   2400x1080  pane 800x624   black middle 585 x 409
 #
 # The bearing map survives untouched because the shader's bearing is
 # aspect-corrected: a lobe at -42 degrees lands at the same relative spot on
-# 640x632 as on 1280x720, so the panes agree with each other and with the
+# 640x624 as on 1280x720, so the panes agree with each other and with the
 # shipped game by construction. §4.3.
 # ---------------------------------------------------------------------------
 

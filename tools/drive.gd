@@ -29,12 +29,26 @@ extends Node
 ##                           wide at 16:9: `expand` keeps the height at 720 and
 ##                           widens it, so at 2400x1080 the canvas is 1600 across
 ##                           and a centred widget is 160 further right.
+##                           **Do not pre-scale.** This applies the stretch
+##                           transform itself, because the event goes in through
+##                           `Input.parse_input_event`, which wants window
+##                           pixels -- unlike --hover= below, which does not.
+##                           Scaling a coordinate before passing it here puts
+##                           the finger 1.5x too far out at 2400x1080 and
+##                           produces a tap on nothing, which reads as a
+##                           control that does not respond. It has cost one
+##                           false bug report already.
 ##   --hover=<seconds>:<x>,<y>
 ##                           warp the mouse to that canvas point, once, at that
 ##                           time; repeatable. The desktop half of the genome
 ##                           strip -- point at a tile and read what the gene
 ##                           does -- has no touch equivalent and therefore no
-##                           other way to be photographed.
+##                           other way to be photographed. **Canvas units go in
+##                           unscaled**, the same as --touch= above and for the
+##                           opposite reason: `Viewport.warp_mouse` applies the
+##                           stretch transform on the way in, so this one must
+##                           not. Either way the number you write is the canvas
+##                           coordinate and nothing else.
 ##   --sample=<gene>         put a gene in the genome's held sample, the state
 ##                           §3.3 gives a second heartbeat and §5.2 gives the
 ##                           strip. Reaching it by playing means eating a fourth

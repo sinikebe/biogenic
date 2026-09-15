@@ -39,8 +39,8 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 295 float32 a frame is 1,180 bytes, which is 69 KB a second at 60 fps. A
-# four-hundred-second run would be 27.7 MB and mostly empty water; sixty
+# 296 float32 a frame is 1,184 bytes, which is 69 KB a second at 60 fps. A
+# four-hundred-second run would be 27.1 MB and mostly empty water; sixty
 # seconds is 4.1 MB, allocated once here and never grown. Nobody rewatches
 # seven minutes -- the mistake that killed you is in the last twenty seconds.
 # The constant below is the knob and the arithmetic is 69 KB per second bought.
@@ -71,7 +71,7 @@ const AT_MEMBRANE := AT_MOTES + MOTES * 2
 const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
 ## ping_front, ping_range, held_remaining, then the division's four, then the
-## frame's own delta and the beat.
+## frame's own delta, the beat and the hunter.
 const AT_TAIL := AT_BEAMS + BEAMS * BEAM_FLOATS
 const AT_PING_FRONT := AT_TAIL
 const AT_PING_RANGE := AT_TAIL + 1
@@ -85,7 +85,24 @@ const AT_DELTA := AT_TAIL + 7
 ## table names both and they are one value seen twice. The playback takes the
 ## one inside the block, because that is the one that reached the shader.
 const AT_BEAT := AT_TAIL + 8
-const STRIDE := AT_TAIL + 9
+## **Who was hunting you, as one float, and it is the whole of the reason this
+## column exists.** `hunter()` is a question about a state machine -- STALK, and
+## the target being the player -- and a state machine is the one thing
+## [method FoodField.restore_body] deliberately does not write. So in a replay
+## every body answers DRIFT and `vision.gd`'s predator rings do not draw at all:
+## the dread, wake and lunge circles are missing from the replay of a run that
+## ended in being eaten, which is the case the truth pane exists for. It is
+## worse than a stale ring, because the body that swallowed you is *reseeded* on
+## contact -- `food.gd` says "it is gone, not fleeing" -- so there is no stale
+## answer to fall back on either.
+##
+## Recorded rather than suppressed, and it costs one float: the rings are drawn
+## for the single nearest stalker and never for more than one. -1 is nobody, and
+## it is stepped rather than lerped at playback the way [constant AT_COMMIT] is
+## -- an index halfway between body 3 and body 9 is body 6, which is a different
+## cell in a different place. 4 bytes a frame is 0.24 KB/s against 69.
+const AT_HUNTER := AT_TAIL + 9
+const STRIDE := AT_TAIL + 10
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -118,7 +135,7 @@ var _genome: GenomeNode = null
 var _bus: SignalBus = null
 var _soma: SomaLayer = null
 
-## 60 x 60 x 295 float32, allocated once and never grown.
+## 60 x 60 x 296 float32, allocated once and never grown.
 var _ring := PackedFloat32Array()
 ## When each ring slot was recorded, in seconds since the run began.
 var _when := PackedFloat32Array()
@@ -155,7 +172,7 @@ var _gape_scale := PackedFloat32Array()
 
 
 func _ready() -> void:
-	# 4.25 MB, once. Nothing here touches a window, an input device or a
+	# 4.26 MB, once. Nothing here touches a window, an input device or a
 	# network: a headless boot allocates the ring and records nothing anybody
 	# will ever look at, which costs one allocation and no frames.
 	_ring.resize(CAPACITY * STRIDE)
@@ -262,6 +279,9 @@ func capture(delta: float) -> void:
 	_ring[at + AT_PING_FRONT] = _food.ping_front if _food != null else -1.0
 	_ring[at + AT_PING_RANGE] = _food.ping_range if _food != null else 0.0
 	_ring[at + AT_HELD] = _genome.held_remaining if _genome != null else 0.0
+	# One integer-valued float, and the only thing in this loop that asks the
+	# field a question rather than reading a number off it. See AT_HUNTER.
+	_ring[at + AT_HUNTER] = float(_food.hunter()) if _food != null else -1.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
@@ -378,6 +398,15 @@ func _sign_genome() -> int:
 
 func _on_sensation(kind: StringName, info: Dictionary) -> void:
 	if not _recording:
+		return
+	# **Nothing happens on the pause screen, and the bus does not agree.**
+	# `Membrane` is PROCESS_MODE_ALWAYS so the bus keeps beating through a
+	# pause; this node is PROCESS_MODE_PAUSABLE so `_clock` does not move. Left
+	# alone, a thirty-second pause files about forty-two `beat` rows at one
+	# identical timestamp, and `replay._fire_events()` fires every one of them
+	# in a single frame -- a burst of wake rays the player never saw. The same
+	# hazard §2 found in the random stream, in the one place it still reaches.
+	if get_tree().paused:
 		return
 	match kind:
 		&"thrust", &"hit", &"shove", &"beat":
@@ -521,13 +550,14 @@ func time_of(i: int) -> float:
 	return _when[(_start + clampi(i, 0, _count - 1)) % CAPACITY] - _origin
 
 
-## **One frame, interpolated**, into a 295-float array the caller owns.
+## **One frame, interpolated**, into a 296-float array the caller owns.
 ##
-## Everything lerps except the three things that would lie if they did: the
-## division's `commit`, which jumps when a daughter is chosen; a beam's hit
-## flag, which is a boolean; and any position that moved further than [constant
-## JUMP] between two frames, which is a body or a mote being recycled to the far
-## side of the water rather than swimming there.
+## Everything lerps except the four things that would lie if they did: the
+## division's `commit`, which jumps when a daughter is chosen; the hunter, which
+## is an index and not a quantity; a beam's hit flag, which is a boolean; and
+## any position that moved further than [constant JUMP] between two frames,
+## which is a body or a mote being recycled to the far side of the water rather
+## than swimming there.
 func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 	if _count <= 0:
 		return
@@ -553,6 +583,7 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 		var head := AT_BEAMS + slot * BEAM_FLOATS
 		out[head + 2] = _ring[from + head + 2]
 	out[AT_COMMIT] = _ring[from + AT_COMMIT]
+	out[AT_HUNTER] = _ring[from + AT_HUNTER]
 
 
 ## A position that jumped is held at the frame it jumped from until the frame it

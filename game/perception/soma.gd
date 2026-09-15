@@ -74,17 +74,22 @@ var beat := 0.0
 ## water and this figure never draws her again.
 var division := {}
 
-## How far either side of centre the two of them are seated, in canvas px **at
-## a 1280-wide canvas**, scaled by the width of the frame this figure is drawn
-## in. It was a bare constant, and it was the one length on the figure that is
-## not a fraction of something -- so at 2400x1080, where `canvas_items/expand`
-## makes the canvas 1600 across, the daughters sat closer together relative to
-## everything around them, and in a 640-wide replay pane two r28.28 bodies at
-## +/-132 span 408px against a 425px black middle: eight pixels a side, with the
-## outer flagellum tips in the faint tail of the band. docs/design/replay.md
-## §4.3 and §6.2.
+## How far either side of centre the two of them are seated, in canvas px.
+##
+## **It was briefly scaled by the width of the frame, and that was reverted.**
+## The argument for scaling was that this is the one length on the figure that
+## is not a fraction of anything, and that a 640-wide replay pane would put the
+## outer flagellum tips in the band. Rendered, neither half holds. The band
+## contributes exactly zero there -- the daughters' outer body edge sits 140px
+## from the pane edge, where the shader's `inner` term is still clamped off --
+## and at the full wobble it reaches 0.8 of 255 green, which is not a collision
+## anybody can see. What the scaling cost was real: it scaled the seat and not
+## [constant SCALE], so the daughters sat 36px apart in a pane where the player
+## had just watched them 168px apart, and because the frame is the whole
+## viewport in normal mode it moved the *shipped* 2400x1080 division as well.
+## A replay that misrepresents the frame it is replaying is the one failure this
+## screen may not have. docs/design/replay.md §4.8.
 const DIVIDE_SEAT := 132.0
-const DIVIDE_SEAT_WIDTH := 1280.0
 
 var _cell: CellBody = null
 var _genome: GenomeNode = null
@@ -180,8 +185,7 @@ func _draw_figure() -> void:
 func _draw_daughters(centre: Vector2) -> void:
 	var bodies: Array = division["bodies"]
 	var r := float(division.get("radius", 28.28)) * SCALE
-	var spread := float(division.get("spread", 1.0)) * DIVIDE_SEAT \
-		* (_figure.size.x / DIVIDE_SEAT_WIDTH)
+	var spread := float(division.get("spread", 1.0)) * DIVIDE_SEAT
 	for side in bodies.size():
 		var one: Dictionary = bodies[side]
 		var tiers: Dictionary = one["tiers"]
