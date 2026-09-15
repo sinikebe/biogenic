@@ -433,6 +433,29 @@ var _taste_bearing_lp := 0.0
 var _taste_jitter := 0.0
 var _taste_jitter_clock := 0.0
 
+## **This node's own generator, and it must stay its own.** Every other random
+## draw in the project comes off the global stream, which is what makes a run
+## reproducible from a seed at a fixed timestep -- measured byte-identical over
+## 200 seconds of real foraging. The bus is a VIEW, and a view drawing from that
+## stream puts the perception layer inside the simulation.
+##
+## It was, and the symptom was worse than it sounds. `Membrane` is
+## `process_mode = 3`, so this node keeps stepping while the tree is paused
+## while every simulation node stops. Five seconds on the pause screen pulled
+## about seven draws out of the shared stream, and at equal SIMULATION time
+## afterwards all 34 bodies were somewhere else -- one cell at 800.7 units
+## against 912.4. How long you left the pause screen open changed the world.
+##
+## That contradicted this file's own neighbours: normal_mode.gd's header, and
+## perception.md §4's "if a view ever changes how the cell behaves, full vision
+## stops being evidence". vision.gd was measured innocent; this file was not.
+##
+## So: every draw in this file goes through `_rng`, and no draw in this file
+## ever calls the global `randf`/`randi` again. That is a structural guarantee
+## rather than a discipline -- a future sensation cannot reintroduce the bug by
+## forgetting a gate.
+var _rng := RandomNumberGenerator.new()
+
 var _dread := 0.0
 var _dread_target := 0.0
 
@@ -1026,7 +1049,7 @@ func _step_beat(delta: float) -> void:
 	var shake := smoothstep(0.05, 0.45, _dread) * DREAD_JITTER
 	var jitter := 1.0
 	if shake > 0.0:
-		jitter = randf_range(1.0 - shake, 1.0 + shake)
+		jitter = _rng.randf_range(1.0 - shake, 1.0 + shake)
 	# The ceiling never shortens an authored period -- a dying cell really does
 	# beat at 7.5s -- it only stops the random half of it emptying the screen.
 	var ceiling := maxf(BEAT_PERIOD_MAX, _beat_period)
@@ -1044,7 +1067,7 @@ func _step_taste(delta: float) -> void:
 		var spread := deg_to_rad(lerpf(
 			TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _taste_c)) \
 			* (1.0 + _dread) * FOCUS_BY_TIER[_senses[SENSE_RHABDOM]]
-		_taste_jitter = randf_range(-spread, spread)
+		_taste_jitter = _rng.randf_range(-spread, spread)
 
 
 ## Lobe 0 carries every self-sensation, so the three compete instead of summing:
