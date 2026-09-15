@@ -217,6 +217,16 @@ var mode := -1
 @onready var _explain_name: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Gene
 @onready var _explain_says: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Says
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
+## The division's reading surface. Built once in [method _ready] and then only
+## ever redrawn: seven loci a side is an invariant, not a maximum.
+@onready var _choosing: Control = $Hud/Choosing
+@onready var _choose_port: VBoxContainer = $Hud/Choosing/Port
+@onready var _choose_starboard: VBoxContainer = $Hud/Choosing/Starboard
+@onready var _choose_says: Control = $Hud/Choosing/Says
+@onready var _choose_organ: Control = $Hud/Choosing/Says/Explain/Organ
+@onready var _choose_name: Label = $Hud/Choosing/Says/Explain/Gene
+@onready var _choose_line: Label = $Hud/Choosing/Says/Explain/Line
+@onready var _choose_hint: Label = $Hud/Choosing/Says/Hint
 @onready var _pause_tap: Control = $Hud/PauseTap
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
@@ -297,6 +307,22 @@ var _chosen := -1
 ## A finger on one half of the screen, as a signed lean past the deadzone.
 var _touch_lean := 0.0
 var _touch_index := -2
+## The two sentinels [member _touch_index] has always used, named, because
+## [member _choose_gesture] keys on the same numbers: **-1 is the mouse** and
+## **-2 is nobody**. A real touch index is never negative, so one keyspace holds
+## every pointer the game can be driven by.
+const POINTER_MOUSE := -1
+const POINTER_NONE := -2
+## **What each pointer's gesture is, keyed by its index: `true` a read, `false`
+## a lean** (§4.1). Written by [method _input] on the press and overwritten by
+## [method _on_choose_locus_input] on the same event when the press landed on a
+## locus; erased on the release.
+##
+## **Absent means a lean**, and that is the case that matters rather than a
+## default chosen for tidiness: a finger that was already down before the two
+## daughters existed has no press for this screen to have seen, and it is the
+## one [method _read_touch_lean]'s drag branch exists for.
+var _choose_gesture: Dictionary = {}
 ## Whether this run has said the one line yet.
 var _said_divide := false
 ## What the two views are drawing this frame. Empty means an ordinary body; see
@@ -345,6 +371,10 @@ func _ready() -> void:
 	_explain_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_explain_organ.draw.connect(_draw_explain_organ)
 	_pause_ui.hide()
+	# Eighteen Controls and two rows of text, built once. Nothing here asks for
+	# a window, an input device or a network, so a headless boot pays one
+	# allocation and draws nothing.
+	_build_choosing()
 	_resume_button.pressed.connect(_toggle_pause)
 	_leave_button.pressed.connect(_leave)
 
@@ -638,6 +668,11 @@ func _begin_split() -> void:
 	_lean_clock = 0.0
 	_touch_lean = 0.0
 	_touch_index = -2
+	# Every finger on the glass is now a lean that has not been pressed. That is
+	# the rule, not an accident of clearing: a thumb that was steering when the
+	# body ran out of arcs is holding a gesture this screen never saw begin, and
+	# §4.1 gives it to the lean.
+	_choose_gesture.clear()
 	_daughters = _make_daughters()
 
 
@@ -815,6 +850,11 @@ func _hand_division() -> void:
 	_soma.division = _division
 	_vision.division = _division
 	_vision.set_dim(DIVIDE_WORLD_FADE if _division.has("bodies") else 1.0)
+	# The strands are handed the same state at the same moment as the bodies,
+	# from the one place that hands it anywhere, so they cannot get out of step
+	# with the pair they belong to -- including the death that clears a division
+	# mid-quickening, which comes through here too.
+	_update_choosing()
 
 
 ## How bright daughter [param side] is: both up while nothing is being asked,
@@ -882,6 +922,7 @@ func _be_born() -> void:
 	_lean = 0
 	_touch_lean = 0.0
 	_touch_index = -2
+	_choose_gesture.clear()
 	_division = {}
 	_hand_division()
 	_set_simulating(true)
@@ -1529,6 +1570,121 @@ func _notification(what: int) -> void:
 			_cell.release()
 
 
+## **First contact decides the gesture, and this is the function that makes that
+## true** (§4.1). It is here rather than in [method _unhandled_input] because
+## the unhandled pass cannot see the events it would have to decide about, and
+## that is a hole in the GUI layer no `MOUSE_FILTER` gets you out of.
+##
+## **What the engine does.** `Viewport::push_input` runs the `_input` group
+## first, then `_gui_input_event`, then the unhandled pass -- Godot's documented
+## propagation order, not an implementation detail. At the
+## `InputEventScreenDrag` branch of `_gui_input_event`, 4.7 reads
+## `gui.touch_focus[index]` and, **when it is null, hit-tests the drag afresh at
+## wherever the finger is now**. `touch_focus` is only written when the *press*
+## landed on a `Control`. A lean's press lands on the playfield, on nothing --
+## so it has no focus, every one of its drags gets hit-tested, and the first one
+## that passes over a locus is marked handled, because a `MOUSE_FILTER_STOP`
+## control that is handed a pointer event consumes it whether it wanted it or
+## not. `_unhandled_input` never sees that drag. The mouse has the same hole by
+## the same mechanism: motion is hit-tested whenever `gui.mouse_focus` is null.
+##
+## **What that cost, measured on the code before this existed**, at
+## `--fixed-fps 60`: a finger pressed at canvas 930,300 -- resting on the
+## starboard block -- and slid two pixels **never leans at all**. No timeout, no
+## default, no feedback; only lifting and pressing again outside the block
+## recovers it. The same finger 170 px outboard, in open water, commits at
+## 7.92 s. And a lean begun in port water that slides onto the starboard block
+## commits the **port** daughter while sitting on the starboard side, because
+## the drag that would have moved it was eaten in transit. One hole, both
+## symptoms.
+##
+## **Why claiming it here is proof rather than a thing that happens to work.**
+## The hit-test fallback lives inside `_gui_input_event`. An event consumed in
+## the `_input` pass never reaches `_gui_input_event` at all, so the fallback
+## cannot run -- and that holds for any control, any mouse filter, any focus
+## state, and it goes on holding if the GUI's routing changes again, because it
+## does not depend on the routing. Nothing below asks the engine what is under a
+## drag: ownership is decided once, at first contact, keyed by pointer index,
+## and every later event of that gesture is dispatched on **whose finger it is**
+## rather than on what it is over. The rect the loci occupy is never consulted
+## here, so it cannot disagree with the one the player sees light up.
+##
+## **The one engine behaviour this does lean on** is the one the same reading of
+## the source settles: a press and its release route strictly by `touch_focus`
+## and are never hit-tested. That is what lets the press decide -- a locus is
+## handed the press only when the press was really on it -- and it is what lets
+## both fall through untouched: the press so that a locus can claim the gesture
+## from its own `gui_input`, which runs after this function and before the
+## unhandled pass, and the release so that [method _read_touch_lean] can undo a
+## lean. A locus can never be handed another finger's release, so letting go is
+## safe to leave where it already was.
+## **The paused test is the gate's own safety argument, made local.** Inside
+## this gate the function swallows every held pointer motion, and `NormalMode`
+## is `process_mode = 3`, so `_input` fires through a pause. What makes that
+## harmless today is a fact in a different function: [method _toggle_pause]
+## returns early while `_split != Split.NONE`, so the pause screen provably
+## cannot be open during a division. That is true, and it is the kind of true
+## that stops being true silently -- anyone who later allows pausing mid-split
+## would find the light slider had stopped dragging, with no error and nothing
+## to grep for. `paused` is false for the whole of a division (`_set_simulating`
+## stops nodes with `set_process`, it does not pause the tree), so this test
+## costs nothing now and holds the invariant where it is used.
+func _input(event: InputEvent) -> void:
+	if _replay != null or _split < Split.PART or get_tree().paused:
+		return
+	var index := _pointer_index(event)
+	if index == POINTER_NONE:
+		return
+	if event is InputEventScreenTouch:
+		# A lean until a locus says otherwise, which it does on this same event,
+		# microseconds from now, in the GUI pass.
+		if (event as InputEventScreenTouch).pressed:
+			_choose_gesture[index] = false
+		else:
+			_choose_gesture.erase(index)
+		return
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if click.button_index != MOUSE_BUTTON_LEFT:
+			return
+		if click.pressed:
+			_choose_gesture[index] = false
+		else:
+			_choose_gesture.erase(index)
+		return
+	if event is InputEventMouseMotion \
+			and ((event as InputEventMouseMotion).button_mask \
+				& MOUSE_BUTTON_MASK_LEFT) == 0:
+		# A bare hover is not a gesture and is left entirely alone, so the
+		# desktop read -- point at a locus, get its line -- still works (§4.4).
+		return
+	# Everything past here is a drag or a held motion: exactly the events the
+	# fallback above can reach, and therefore the only ones that have to be
+	# claimed before the GUI is given the chance.
+	if _choose_gesture.get(index, false):
+		# A read, for the life of the gesture, however far it slides -- into
+		# open water and back again included. Swallowed rather than forwarded:
+		# a locus does nothing with a drag but consume it, and one owner is
+		# easier to reason about than two.
+		get_viewport().set_input_as_handled()
+		return
+	if _read_touch_lean(event):
+		get_viewport().set_input_as_handled()
+
+
+## Which pointer an event belongs to: a touch index, [constant POINTER_MOUSE]
+## for anything the mouse produces, or [constant POINTER_NONE] for an event with
+## no pointer behind it -- a key, a pad button, `ui_accept`.
+func _pointer_index(event: InputEvent) -> int:
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).index
+	if event is InputEventScreenDrag:
+		return (event as InputEventScreenDrag).index
+	if event is InputEventMouseButton or event is InputEventMouseMotion:
+		return POINTER_MOUSE
+	return POINTER_NONE
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	# **While the replay is up, this run is not listening.** The screen consumes
 	# everything it is handed and is deeper in the tree, so nothing should reach
@@ -1553,6 +1709,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	# *held* -- so a tap commits nothing and there is no arming pattern in the
 	# playfield. Read here rather than on the cell, whose input has stopped with
 	# the rest of the simulation.
+	#
+	# **Presses and releases, in practice.** [method _input] has already claimed
+	# every drag and every held motion of a division, because those are the ones
+	# the GUI hit-tests and steals. What still arrives here is a press in open
+	# water, which starts a lean, and a release, which ends one -- both route
+	# strictly by `touch_focus` and reach the unhandled pass untouched. Left
+	# whole rather than split further: this is the same call either way, and the
+	# gesture it reads is the same gesture.
 	if _split >= Split.PART and _read_touch_lean(event):
 		get_viewport().set_input_as_handled()
 		return
@@ -1625,6 +1789,12 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		# at, so the only event we will ever see from that finger is a drag --
 		# and asking them to lift and press again to answer the biggest beat in
 		# the game is the kind of thing that only looks fine in code.
+		#
+		# **It only fires because [method _input] calls this before the GUI
+		# pass.** Reached from the unhandled pass it was unreachable the moment
+		# that thumb was resting anywhere on a strand block, because the block
+		# ate the drag on the way past -- which is a player who cannot answer
+		# the division at all. Measured; see [method _input].
 		if _touch_index == -2:
 			_touch_index = drag.index
 		if _touch_index == drag.index:
@@ -1972,8 +2142,6 @@ const LOBE_W := LOCUS_W / float(LOCUS_LOBES)
 ## the tail matches so the loci stay centred in the row whatever is held.
 const CAP_LOBES := 2
 const CAP_W := LOBE_W * float(CAP_LOBES)
-## Segments per lobe. Ten over 32 px leaves a 0.2 px sagitta.
-const LOBE_STEPS := 10
 
 ## Inside a locus, measured from its top edge.
 const BAND_MID := 13.0     ## the held sample floats here, over its destination
@@ -1982,31 +2150,14 @@ const HELIX_AMP := 18.0
 const LABEL_MID := 76.0    ## the dart's centre
 const LABEL_BASE := 81.0   ## the word's baseline
 
-## The backbone is the cell's own teal, not a gene's hue: the strand is you and
-## the rungs are what you are made of.
-const BACKBONE := Color(0.24, 0.80, 0.68)
-## Depth, drawn as alpha along the strand. A helix that is two crossing sine
-## waves is flat; the strand in front at a crossing is what makes it a helix,
-## and per-point colours on a polyline cost nothing to say so.
-const BACKBONE_FRONT := 0.66
-const BACKBONE_BACK := 0.13
-const BACKBONE_WIDTH := 2.0
+## **The backbone, the depth alpha, the rung states and the segment count all
+## live in `cilia.gd` now**, because the division's choosing screen draws the
+## same helix on its side and two copies of a drawing drift apart. See
+## `Cilia.STRAND_*` and choosing.md §9.1; what stays here is this surface's own
+## geometry, which is the only thing the two screens disagree about.
+##
 ## The selected locus's own stretch of backbone, brighter.
 const BACKBONE_LIT := 1.25
-
-## Copies, along the strand. 8 px is 45 degrees of the lobe, so the outer pair
-## come out at 71% of the centre rung's length -- the cluster follows the lens,
-## which is what a base pair near the edge of a turn actually does.
-const RUNG_GAP := 8.0
-const RUNG_WORN_ALPHA := 0.92
-const RUNG_WORN_WIDTH := 3.0
-## A copy the DNA carries and the body does not wear: the rung does not reach
-## either backbone. Floating against seated, which is diegetic-hud.md §1's own
-## vocabulary -- rejected on a 76 px tile because a 4 px lift is invisible, and
-## right here because the gap is a third of a 32 px rung.
-const RUNG_CARRIED_ALPHA := 0.88
-const RUNG_CARRIED_WIDTH := 2.6
-const RUNG_CARRIED_SPAN := 0.42
 
 ## The lens between the backbones, filled on the selected locus. Area, not a
 ## border -- there is no box to put a border on any more, and a filled lens is
@@ -2467,7 +2618,8 @@ func _on_locus_unhover(index: int) -> void:
 
 
 func _draw_cap(node: Control, lobe0: int, taper: int) -> void:
-	_draw_weave(node, CAP_LOBES, lobe0, 1.0, taper)
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
+		HELIX_AMP, CAP_LOBES, lobe0, 1.0, taper)
 	# A sample that has not been given a locus yet waits off the head, on
 	# nothing. That is the truthful picture and it is also the one that makes
 	# the first tap obvious: it is not anywhere until you say where.
@@ -2492,18 +2644,23 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 	# to put a border on any more; area between the backbones is the one mark on
 	# this surface that cannot be mistaken for a rung or for a strand.
 	if selected:
-		_draw_lens(node, lobe0, Color(tone, LENS_SELECTED))
-	_draw_weave(node, LOCUS_LOBES, lobe0, BACKBONE_LIT if selected else 1.0, 0)
+		# 1.0: a locus is three lobes wide and the lens is its middle one.
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
+			HELIX_AMP, lobe0, 1.0, Color(tone, LENS_SELECTED))
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID, HELIX_AMP,
+		LOCUS_LOBES, lobe0, BACKBONE_LIT if selected else 1.0, 0)
 
 	if gene != &"":
-		_draw_rungs(node, Cilia.hue(gene), tier, body_tier, lobe0)
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
+			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(gene), tier, body_tier)
 	elif selected and held != &"":
 		# What a second tap would do, drawn before it is done: a placed gene is
 		# written to the DNA and **not** to this body, so the preview is a
 		# carried rung and not a worn one. That is not a nicety -- it is the one
 		# frame where the player can see that placing changes their daughters
 		# and not themselves.
-		_draw_rungs(node, Cilia.hue(held), 1, 0, lobe0)
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
+			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(held), 1, 0)
 
 	if selected and held != &"" and slot >= 0:
 		_draw_sample(node, held, LOCUS_W * 0.5, HELIX_MID - HELIX_AMP)
@@ -2548,105 +2705,6 @@ func _draw_locus_label(node: Control, gene: StringName, body_tier: int,
 		tint = Color(PALE, WORD_UNEXPRESSED)
 	node.draw_string(font, Vector2(dart_x + DART_R + DART_GAP, LABEL_BASE),
 		word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, tint)
-
-
-# --- The weave --------------------------------------------------------------
-# Two sine strands a half-period out of phase, drawn as polylines with a colour
-# per point. **The colour per point is what makes it a helix**: depth is
-# `cos(t)`, so the strand in front at a crossing is bright and the one behind it
-# is faint, and they trade places every half turn. Two crossing sine waves at
-# one alpha are flat and read as a ribbon, not as DNA -- rendered both ways.
-#
-# No new node, no texture, no shader: `draw_polyline_colors` is one call per
-# strand per control.
-
-## Where the two strands are at [param x] inside a control whose first half-lens
-## is [param lobe0]. `x` is in that control's own pixels.
-func _strand_phase(x: float, lobe0: int) -> float:
-	return PI * (float(lobe0) + x / LOBE_W)
-
-
-## How much of the strand this control draws at [param x]: 1 everywhere on a
-## locus, ramping from nothing at the outer end of a cap.
-func _cap_fade(x: float, width: float, taper: int) -> float:
-	if taper == 0:
-		return 1.0
-	var t := clampf(x / maxf(width, 0.001), 0.0, 1.0)
-	return t if taper > 0 else 1.0 - t
-
-
-func _draw_weave(node: CanvasItem, lobes: int, lobe0: int, bright: float,
-		taper: int) -> void:
-	var span := float(lobes) * LOBE_W
-	var steps := lobes * LOBE_STEPS
-	var a_pts := PackedVector2Array()
-	var b_pts := PackedVector2Array()
-	var a_col := PackedColorArray()
-	var b_col := PackedColorArray()
-	for i in steps + 1:
-		var x := span * float(i) / float(steps)
-		var t := _strand_phase(x, lobe0)
-		var fade := _cap_fade(x, span, taper)
-		var swing := HELIX_AMP * sin(t) * fade
-		a_pts.append(Vector2(x, HELIX_MID - swing))
-		b_pts.append(Vector2(x, HELIX_MID + swing))
-		# depth runs -1 (behind) to 1 (in front); the two strands are opposite.
-		var near := 0.5 * (cos(t) + 1.0)
-		a_col.append(Color(BACKBONE, lerpf(BACKBONE_BACK, BACKBONE_FRONT, near)
-			* fade * bright))
-		b_col.append(Color(BACKBONE, lerpf(BACKBONE_FRONT, BACKBONE_BACK, near)
-			* fade * bright))
-	node.draw_polyline_colors(a_pts, a_col, BACKBONE_WIDTH, true)
-	node.draw_polyline_colors(b_pts, b_col, BACKBONE_WIDTH, true)
-
-
-## The middle lens of a locus, filled. Built from the same two strands, so the
-## selection is exactly the shape of the thing being selected.
-func _draw_lens(node: CanvasItem, lobe0: int, tone: Color) -> void:
-	var poly := PackedVector2Array()
-	var back := PackedVector2Array()
-	for i in LOBE_STEPS + 1:
-		var x := LOBE_W * (1.0 + float(i) / float(LOBE_STEPS))
-		var swing := HELIX_AMP * sin(_strand_phase(x, lobe0))
-		poly.append(Vector2(x, HELIX_MID - swing))
-		back.append(Vector2(x, HELIX_MID + swing))
-	back.reverse()
-	poly.append_array(back)
-	node.draw_colored_polygon(poly, tone)
-
-
-## **Copies, as rungs.** One, two or three of them at the locus's centre, in the
-## gene's own hue, and each in one of three states:
-##
-##   worn     a complete rung, backbone to backbone -- this body expresses it
-##   carried  a bar floating clear of both -- the DNA has it, the body does not
-##
-## Worn against carried is **shape** and not hue, so it survives a
-## luminance-only render and a deuteranope one, which is the rule §4.4 sets for
-## any pair of marks whose opposites share a place.
-##
-## **The cluster is centred on the copies it has, not on three places with the
-## empty ones ghosted.** The ghosts were built and photographed: at 1 px and 15%
-## they were invisible, and paying for them cost a one-copy locus its centring --
-## its single rung sat a third of a lens off the maximum and hung shorter than
-## every other one-copy locus on the strand. Centred, a single copy is the
-## longest rung the strand can draw, which is the right emphasis: it is the
-## whole of that gene.
-func _draw_rungs(node: CanvasItem, tone: Color, tier: int, body_tier: int,
-		lobe0: int) -> void:
-	var seat := (float(tier) - 1.0) * 0.5
-	for i in tier:
-		var x := LOCUS_W * 0.5 + (float(i) - seat) * RUNG_GAP
-		var swing := absf(HELIX_AMP * sin(_strand_phase(x, lobe0)))
-		if i < body_tier:
-			node.draw_line(Vector2(x, HELIX_MID - swing),
-				Vector2(x, HELIX_MID + swing), Color(tone, RUNG_WORN_ALPHA),
-				RUNG_WORN_WIDTH, true)
-		else:
-			var reach := swing * RUNG_CARRIED_SPAN
-			node.draw_line(Vector2(x, HELIX_MID - reach),
-				Vector2(x, HELIX_MID + reach),
-				Color(tone, RUNG_CARRIED_ALPHA), RUNG_CARRIED_WIDTH, true)
 
 
 ## **The held sample: a base pair that is not in a ladder yet.** A bar with a
@@ -2819,3 +2877,540 @@ func _step_arming() -> void:
 		return
 	_select_default()
 	_build_genome_strip()
+
+
+# ---------------------------------------------------------------------------
+# Choosing a daughter (docs/design/choosing.md)
+#
+# **Two vertical strands, one outboard of each daughter, drawn by the same code
+# as the pause screen's horizontal one.** The owner's ask was that the choice be
+# readable: the two bodies already draw what each daughter *wears*, and the one
+# thing they cannot draw is what she *carries* -- a gene that lost its
+# expression roll is still in her DNA and rolls again in her own daughters. A
+# port daughter wearing three organs against a starboard one wearing six reads
+# as a broken cell, and she is not; she carries the same seven genes.
+#
+# So the answer is the DNA and not a second picture of the body, and the
+# vocabulary is `dna-strand.md`'s, unchanged: hue is the gene, a rung is a copy,
+# a full rung is worn and a floating bar is carried, the dart is the arc, the
+# word is the plain verb, the lens fills on the locus being read. **The player
+# learns all of that on the pause screen and spends it here.** The only new mark
+# is the caret (§6), and it exists because the expression roll would otherwise
+# be indistinguishable from the mutation.
+#
+# Three things about the geometry are worth stating rather than deriving:
+#
+# - **Seven loci, always.** A division fires only at `DIVIDE_RADIUS` 40, where
+#   `slots_for(40)` is 7, and `Genome.mutated()` never changes the order's
+#   length. So the column is a fixed 432 px at every division of every
+#   generation and nothing ever reflows. Empty loci are drawn -- weave and pale
+#   dart, no rungs, no word -- because locus *i* has to sit at the same canvas y
+#   on both sides or the comparison stops being a horizontal scan, and that scan
+#   is the whole mechanism.
+# - **One lobe per locus, at 48 px.** The pause strand is 800 canvas px wide and
+#   the space beside a daughter is 335; it does not fit at either shape, so the
+#   pitch shrinks and the lobe count with it. A locus must begin and end at a
+#   crossing with its centre at maximum separation, which needs an odd count --
+#   and one is odd. At 48 : 36 the lens is 1.33:1, between the 2.67:1 that
+#   `dna-strand.md` §1.1 rejected as two crossing waves and the 0.89:1 that
+#   reads as DNA. Three lobes here would be 16 px against 36, which is the braid
+#   the same section rejected from the other side.
+# - **The two blocks are identical, not mirrored.** Mirrored, the two strands
+#   would be different drawings and a player comparing them has to un-mirror
+#   one. Identical, every corresponding mark is the same distance from its
+#   opposite number at every locus, which is what makes one disagreement pop out
+#   of six agreements.
+#
+# The one number that is not `dna-strand.md`'s and not measured off a body is
+# `CHOOSE_BLOCK_W`, and it was 118 until a five-letter word at `LABEL_SIZE` 13
+# was measured bleeding one pixel of antialiasing past the block's edge. The six
+# extra pixels go on the **outboard** side, so the inboard edge -- the one with
+# a daughter next to it -- does not move.
+# ---------------------------------------------------------------------------
+
+## §3.1 -- an invariant, not a maximum. See the note above.
+const CHOOSE_LOCI := 7
+## One locus, along the strand, and therefore one lobe of the weave.
+const CHOOSE_PITCH := 48.0
+## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
+## than starting mid-lens. One each, against the pause strand's two, because
+## there is no held sample to park off the head of this one.
+const CHOOSE_CAP_LOBES := 1
+## **124 and not 118.** Rendered at 118, `armor` -- five letters at
+## `LABEL_SIZE` -- ran one pixel past the block's own edge, which collides with
+## nothing today and would overflow silently. The six pixels are added
+## outboard, so the gap to the daughter is unchanged and the block's outboard
+## edge lands at canvas x 284 -- still 180 px clear of the membrane's nominal
+## 104 px band at 1280x720. What it buys is measured beside
+## [constant CHOOSE_WORD_X], and it is 3 px, not six letters: the font is
+## proportional, so letter count is not the test.
+##
+## **This may not be widened on its own.** `CHOOSE_SEAT + CHOOSE_BLOCK_W` must
+## stay at or under half the canvas width, or a block crosses the midline and
+## every gesture on this screen reads the wrong side. The invariant, and what
+## exactly breaks, is beside [constant CHOOSE_SEAT].
+const CHOOSE_BLOCK_W := 124.0
+## The column's top edge. Its ink starts 6 px lower -- the cap tapers in -- so
+## the strand clears the membrane's nominal 104 px band, which in any case is
+## not lit during a division: `_hush()` has zeroed every lobe.
+const CHOOSE_COLUMN_TOP := 112.0
+## Canvas px from the screen's centre to the block's **inboard** edge. A
+## daughter reaches about 201 px from centre in point of view and 202 in full
+## vision -- the seat and the body scale cancel -- so one placement serves both
+## views, and this is 31 px outboard of that.
+##
+## **The midline invariant, which binds this to [constant CHOOSE_BLOCK_W] and is
+## the reason neither may be raised on its own:**
+##
+##     CHOOSE_SEAT + CHOOSE_BLOCK_W <= half the canvas width
+##
+## 232 + 124 = **356 against a 640 px half** at 1280x720, the narrowest shape
+## the game can be in -- the canvas only ever gets wider, because Android is
+## landscape locked and the stretch is `expand`, so 1280x720 is the only shape
+## to check. Each block therefore lies wholly inside its own screen half.
+##
+## **What breaks if it stops holding.** [method _lean_at] reads the sign of
+## `x - half` and nothing else, so a block that crossed the midline would put
+## part of one daughter's strand in the *other* daughter's half: a finger
+## leaning across that overhang would read the wrong side, and a press that
+## landed on it would light the port strand while sitting in starboard water.
+## The invariant is what makes "which half is the finger in" and "which daughter
+## is this strand" the same question, and every gesture on this screen -- the
+## whole of [method _input] included -- assumes they are.
+const CHOOSE_SEAT := 232.0
+## The weave's axis and its swing, inside the block. The swing is the pause
+## strand's own [constant HELIX_AMP]: same helix, different pitch.
+const CHOOSE_HELIX_MID := 34.0
+const CHOOSE_HELIX_AMP := HELIX_AMP
+## Left to right inside a block: the caret, the weave at 16 .. 52, the dart, the
+## word. The word gets everything from [constant CHOOSE_WORD_X] to the block's
+## edge.
+const CHOOSE_DART_X := 66.0
+## **The word budget, measured, because it is the number this block ran out of
+## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
+## [constant LABEL_SIZE] 13 in the fallback font the widest of
+## [constant WORDS]'s eighteen is `venom` at **44.00**. Three pixels of tail,
+## and that is the whole of it: the next word to need more has nowhere to go
+## and will run past the block's own edge, silently, because nothing clips it.
+##
+## **Letters are not the measure -- the font is proportional.** `shield` is six
+## letters and 38.00; `poison` is six and 43.00; `venom` is five and 44.00. What
+## has to be checked when [constant WORDS] gains an entry is
+## `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. The
+## answer if it fails is to add the difference to [constant CHOOSE_BLOCK_W] on
+## the **outboard** side, the way the 118 -> 124 widen already did, so the gap
+## to the daughter does not move -- bounded by
+## [constant CHOOSE_SEAT]'s midline invariant, which leaves 640 - 232 = 408 to
+## grow into and not one pixel more.
+const CHOOSE_WORD_X := 77.0
+## The word's baseline below the locus's centre, so its x-height straddles the
+## rung row rather than sitting under it.
+const CHOOSE_WORD_LIFT := 4.7
+## The mutation mark's seat and size (§6). Its point is 4.5 px inboard of the
+## seat and its base 4.5 px outboard, so it occupies x 2.5 .. 11.5 of a block
+## whose weave starts at 16.
+const CHOOSE_CARET_X := 7.0
+const CHOOSE_CARET := Vector2(9.0, 12.0)
+const CHOOSE_CARET_ALPHA := 0.85
+## The two shared rows, under both columns. 8 px below the strands' box, and
+## tall enough for the 26 px explanation row, 4 of separation and the hint.
+const CHOOSE_SAYS_GAP := 8.0
+const CHOOSE_SAYS_H := 58.0
+
+## The hint gains one clause at the front and invents no words. The copy count
+## cannot say **whether this daughter got it**, and that is the register the
+## rung shape is already drawing -- said out loud for the same reason the pause
+## screen says the odds out loud.
+const CHOOSE_WORN := "worn"
+const CHOOSE_CARRIED := "carried"
+
+## Which locus is lit, as `[side, slot]`, and which one the mouse is over.
+## -1 for none. Hover wins over selection for the two lines below and never for
+## the lens: a mouse can ask about a locus without taking the selection off the
+## one the player chose.
+var _choose_side := -1
+var _choose_slot := -1
+var _choose_hot_side := -1
+var _choose_hot_slot := -1
+## The loci the two DNAs disagree at, as a set of slot indices. Recomputed once
+## per division; see [method _choose_differences].
+var _choose_diff: Dictionary = {}
+## What the explanation row is explaining. Deliberately **not** the pause
+## screen's [member _explain_gene]: the two surfaces are never up at the same
+## time, but sharing the variable would make that a rule rather than a fact.
+var _choose_gene: StringName = &""
+var _choose_tier := 0
+var _choose_worn := false
+
+
+## Built once, on the frame the scene enters the tree, and never rebuilt.
+## **The count is an invariant** (§3.1), so a division changes what a locus
+## draws and never how many there are -- which is also why nothing here reads
+## the genome: the draw handler does, when there is one.
+func _build_choosing() -> void:
+	# **The rect is computed here and not left to the scene**, the same way the
+	# explanation organ's box already is. Three of these numbers are derived --
+	# the column's height from the locus count, the outboard edge from the seat
+	# plus the block -- and a `.tscn` cannot add. Two places that have to agree
+	# about `CHOOSE_BLOCK_W` is one place too many; the scene carries the same
+	# figures so the tree is readable in an editor, and this is what binds.
+	var bottom := CHOOSE_COLUMN_TOP \
+		+ float(CHOOSE_LOCI + 2 * CHOOSE_CAP_LOBES) * CHOOSE_PITCH
+	for side in 2:
+		var column: VBoxContainer = _choose_port if side == 0 \
+			else _choose_starboard
+		column.anchor_left = 0.5
+		column.anchor_right = 0.5
+		# Identical, not mirrored (§3.3): the starboard block is the port one
+		# translated, so every corresponding mark on the two strands is the same
+		# distance from its opposite number at every locus.
+		column.offset_left = CHOOSE_SEAT if side == 1 \
+			else -CHOOSE_SEAT - CHOOSE_BLOCK_W
+		column.offset_right = column.offset_left + CHOOSE_BLOCK_W
+		column.offset_top = CHOOSE_COLUMN_TOP
+		column.offset_bottom = bottom
+		column.add_child(_make_choose_cap(0, 1))
+		for slot in CHOOSE_LOCI:
+			column.add_child(_make_choose_locus(side, slot))
+		column.add_child(_make_choose_cap(CHOOSE_CAP_LOBES + CHOOSE_LOCI, -1))
+	_choose_says.offset_top = bottom + CHOOSE_SAYS_GAP
+	_choose_says.offset_bottom = _choose_says.offset_top + CHOOSE_SAYS_H
+	_choose_organ.custom_minimum_size = EXPLAIN_ORGAN_SIZE
+	_choose_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_choose_organ.draw.connect(_draw_choose_organ)
+
+
+## The lead-in and the tail. Neither takes input: there is nothing at either end
+## to read.
+func _make_choose_cap(lobe0: int, taper: int) -> Control:
+	var node := Control.new()
+	node.custom_minimum_size = Vector2(CHOOSE_BLOCK_W,
+		CHOOSE_PITCH * float(CHOOSE_CAP_LOBES))
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.draw.connect(_draw_choose_cap.bind(node, lobe0, taper))
+	return node
+
+
+## One locus: 124 x 48 canvas px, which is 186 x 72 device px at 2400x1080 and
+## exactly the 48 px floor on a 1280x720 handset.
+##
+## **`FOCUS_NONE`, and on this screen that is sharper than it was for the pause
+## target**: the arrow keys *are* the decision here, so a focusable control would
+## hand them to GUI navigation the moment anyone pressed Tab and the player
+## would be unable to choose a daughter at all.
+##
+## Separation is 0 so the weave is continuous and adjacent targets touch. A
+## mis-tap costs nothing, because selecting is free, reversible and commits
+## nothing -- there is no irreversible action anywhere on this surface.
+func _make_choose_locus(side: int, slot: int) -> Control:
+	var node := Control.new()
+	node.custom_minimum_size = Vector2(CHOOSE_BLOCK_W, CHOOSE_PITCH)
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+	node.focus_mode = Control.FOCUS_NONE
+	node.draw.connect(_draw_choose_locus.bind(node, side, slot))
+	node.gui_input.connect(_on_choose_locus_input.bind(node, side, slot))
+	node.mouse_entered.connect(_on_choose_hover.bind(side, slot))
+	node.mouse_exited.connect(_on_choose_unhover.bind(side, slot))
+	return node
+
+
+## **What is drawn when** (§8). Called from [method _hand_division], which is
+## the one place the two daughters are handed anywhere, so the strands cannot
+## get out of step with the bodies they belong to.
+##
+## Each column takes its daughter's own [method _side_fade], which is read and
+## never recomputed: a lean brightens one strand and dims the other on exactly
+## the curve the bodies use, the declined strand goes out with her, and
+## `replay.md` §4.1's brightness round-trip is untouched because no constant
+## moved.
+func _update_choosing() -> void:
+	var on := _split >= Split.PART and _daughters.size() == 2
+	if not on:
+		if _choosing.visible:
+			_choosing.visible = false
+			_choose_hot_side = -1
+			_choose_hot_slot = -1
+		return
+	if not _choosing.visible:
+		_choosing.visible = true
+		_choose_begin()
+	# In with the daughters at PART, out with the whole surface at COMMIT.
+	var whole := 1.0
+	if _split == Split.PART:
+		whole = clampf(_split_clock / DIVIDE_PART, 0.0, 1.0)
+	elif _split == Split.COMMIT:
+		whole = 1.0 - clampf(_split_clock / DIVIDE_COMMIT, 0.0, 1.0)
+	_choosing.modulate.a = whole
+	_choose_port.modulate.a = _side_fade(0)
+	_choose_starboard.modulate.a = _side_fade(1)
+
+
+## The first frame of a pair: work out where the two DNAs disagree, light the
+## first locus that does, and redraw everything.
+##
+## **The screen opens with a locus already selected**, which is the pause
+## strand's own *never nothing* rule -- a surface that opens blank has to teach
+## the tap with a line of instructions, and normal mode is allowed exactly one
+## authored string. The locus it opens on is the first the two daughters
+## disagree at, because that is the locus that most wants reading and it
+## demonstrates the tap, the caret and the hint in one frame.
+func _choose_begin() -> void:
+	# Godot does not re-enter a control the cursor never left, so a screen that
+	# opens under a resting cursor has to start with no hover of its own.
+	_choose_hot_side = -1
+	_choose_hot_slot = -1
+	_choose_diff = _choose_differences()
+	_choose_side = 0
+	_choose_slot = -1
+	var order: Array = _daughters[0]["order"]
+	for i in CHOOSE_LOCI:
+		if _choose_diff.has(i):
+			_choose_slot = i
+			break
+	# A lineage with one gene can mutate into itself (`mutated()` returns &""),
+	# and then there is nothing to point at: fall back to the first locus that
+	# carries anything, and to locus 0 if even that fails.
+	if _choose_slot < 0:
+		for i in CHOOSE_LOCI:
+			if i < order.size() and order[i] != &"":
+				_choose_slot = i
+				break
+	if _choose_slot < 0:
+		_choose_slot = 0
+	_choose_say()
+	_redraw_choosing()
+
+
+## **The set of loci at which the two DNAs disagree**, computed by comparing
+## them rather than by asking `mutated()` which kind fired. That covers all
+## three kinds with no special cases -- `shift` marks the two slots that
+## swapped, `trade` the two whose counts moved, `drift` the one whose gene was
+## replaced -- and it stays correct if a fourth kind is ever added.
+func _choose_differences() -> Dictionary:
+	var out := {}
+	if _daughters.size() != 2:
+		return out
+	var port_order: Array = _daughters[0]["order"]
+	var stbd_order: Array = _daughters[1]["order"]
+	var port_dna: Dictionary = _daughters[0]["tiers"]
+	var stbd_dna: Dictionary = _daughters[1]["tiers"]
+	for i in CHOOSE_LOCI:
+		var a: StringName = port_order[i] if i < port_order.size() else &""
+		var b: StringName = stbd_order[i] if i < stbd_order.size() else &""
+		if a != b or int(port_dna.get(a, 0)) != int(stbd_dna.get(b, 0)):
+			out[i] = true
+	return out
+
+
+func _redraw_choosing() -> void:
+	for side in 2:
+		var column: Control = _choose_port if side == 0 else _choose_starboard
+		for child in column.get_children():
+			(child as Control).queue_redraw()
+
+
+## The gene a locus stands for, and what the daughter on that side does with it.
+## Returns `[gene, copies, worn copies]`.
+func _choose_at(side: int, slot: int) -> Array:
+	if side < 0 or slot < 0 or _daughters.size() != 2:
+		return [&"", 0, 0]
+	var order: Array = _daughters[side]["order"]
+	var gene: StringName = order[slot] if slot < order.size() else &""
+	if gene == &"":
+		return [&"", 0, 0]
+	var dna: Dictionary = _daughters[side]["tiers"]
+	var body: Dictionary = _daughters[side]["body"]
+	return [gene, int(dna.get(gene, 0)), int(body.get(gene, 0))]
+
+
+## **The two lines below, and they are shared rather than one per side.** The
+## eighteen gene lines are about the gene, and both strands carry the same gene
+## at five or six of seven loci, so a per-side line would be the same sentence
+## twice in most frames -- and the longest of them is 519 px, which two of,
+## centred under daughters 264 px apart, overlap by 255. Which strand is being
+## read is carried by the lit lens, on the thing the finger just touched.
+##
+## The hint's extra clause is the one thing the copy count cannot say: whether
+## *this* daughter got it.
+func _choose_say() -> void:
+	var side := _choose_hot_side if _choose_hot_slot >= 0 else _choose_side
+	var slot := _choose_hot_slot if _choose_hot_slot >= 0 else _choose_slot
+	var found := _choose_at(side, slot)
+	var gene: StringName = found[0]
+	_choose_gene = gene
+	_choose_tier = maxi(int(found[1]), 1) if gene != &"" else 0
+	_choose_worn = int(found[2]) > 0
+	_choose_organ.queue_redraw()
+	if gene == &"":
+		_choose_name.text = ""
+		# A locus with nothing in it still has a direction to explain, which is
+		# what the dart under it is for.
+		_choose_line.text = "" if slot < 0 else EXPLAIN_EMPTY
+		_choose_hint.text = "" if slot < 0 else HINT_EMPTY
+		return
+	_choose_name.text = String(gene)
+	_choose_name.add_theme_color_override("font_color",
+		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+	var says := String(EXPLAINS.get(gene, ""))
+	_choose_line.text = "" if says.is_empty() else "· " + says
+	var register := CHOOSE_WORN if _choose_worn else CHOOSE_CARRIED
+	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
+		_choose_hint.text = "%s · %s" % [register, HINT_CERTAIN]
+	else:
+		_choose_hint.text = "%s · %s" % [register,
+			HINT_CHANCE[clampi(int(found[1]), 0, HINT_CHANCE.size() - 1)]]
+
+
+## The one organ, beside the sentence that explains it -- the pause screen's own
+## row, unchanged, including the weaker strokes for a gene the daughter carries
+## and does not wear.
+func _draw_choose_organ() -> void:
+	if _choose_gene == &"":
+		return
+	Cilia.draw_tile_organ(_choose_organ, _choose_gene, _choose_tier,
+		EXPLAIN_ORGAN_SEAT,
+		Cilia.TILE_STROKE_ALPHA if _choose_worn else ORGAN_UNEXPRESSED,
+		EXPLAIN_ORGAN_SCALE)
+
+
+func _draw_choose_cap(node: Control, lobe0: int, taper: int) -> void:
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
+		CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, CHOOSE_CAP_LOBES, lobe0, 1.0, taper)
+
+
+func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
+	if _daughters.size() != 2:
+		return
+	var found := _choose_at(side, slot)
+	var gene: StringName = found[0]
+	var selected := _choose_side == side and _choose_slot == slot
+	var tone := Cilia.hue(gene) if gene != &"" else PALE
+	var lobe0 := CHOOSE_CAP_LOBES + slot
+	var mid := CHOOSE_PITCH * 0.5
+
+	# 0.0: a locus is one lobe wide and the lens is that lobe.
+	if selected:
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
+			CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, lobe0, 0.0,
+			Color(tone, LENS_SELECTED))
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
+		CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, 1, lobe0,
+		BACKBONE_LIT if selected else 1.0, 0)
+	if gene != &"":
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
+			CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, lobe0, mid, tone,
+			int(found[1]), int(found[2]))
+
+	# **An empty locus is drawn, and that invariant is the mechanism.** Weave
+	# and a pale dart, no rungs and no word: dropping it would break the
+	# alignment that makes the comparison a horizontal scan.
+	Cilia.draw_slot_dart(node, slot,
+		tone if gene != &"" else Color(PALE, 0.6),
+		Vector2(CHOOSE_DART_X, mid), DART_R)
+
+	var font := node.get_theme_default_font()
+	if gene != &"" and font != null:
+		var tint := LABEL_TINT
+		if selected:
+			tint = LABEL_TINT_LOUD
+		elif int(found[2]) <= 0:
+			# The third channel, agreeing with the floating rungs: a word for an
+			# organ this daughter does not wear is quieter than one she does.
+			tint = Color(PALE, WORD_UNEXPRESSED)
+		node.draw_string(font,
+			Vector2(CHOOSE_WORD_X, mid + CHOOSE_WORD_LIFT),
+			String(WORDS.get(gene, String(gene))), HORIZONTAL_ALIGNMENT_LEFT,
+			-1.0, LABEL_SIZE, tint)
+
+	# **The mutation, marked on both strands at every locus where the two DNAs
+	# disagree** (§6). Not because comparison is too much work -- `lifecycle.md`
+	# §2.2 is right that it is the skill -- but because the expression roll lands
+	# on the same seven rows and means the opposite thing. A hue, a word or a
+	# rung *count* is the mutation and is heritable; a rung *shape* is the roll
+	# and rolls again. Without the caret those two channels read as one.
+	#
+	# It marks difference and never says which is better, because nothing here
+	# is.
+	if _choose_diff.has(slot):
+		var half := CHOOSE_CARET * 0.5
+		node.draw_colored_polygon(PackedVector2Array([
+			Vector2(CHOOSE_CARET_X + half.x, mid),
+			Vector2(CHOOSE_CARET_X - half.x, mid - half.y),
+			Vector2(CHOOSE_CARET_X - half.x, mid + half.y)]),
+			Color(tone, CHOOSE_CARET_ALPHA))
+
+
+## **Where a gesture becomes a read** (§4.1), and the only place it can. This
+## runs in the GUI pass, which is after [method _input] and before the unhandled
+## one, so the index is already in [member _choose_gesture] as a lean and the
+## line below overwrites it **on the same event**. That is "first contact
+## decides", written where the decision is actually available: a locus is handed
+## a press only when the press really was on it, because presses route by
+## `touch_focus` and are never hit-tested afresh. No rect is measured twice, so
+## what claims the gesture and what lights up cannot disagree.
+##
+## Everything after the press is [method _input]'s, and has to be. A locus
+## cannot defend the drags of a gesture it never received: a lean's press lands
+## on nothing, so its drags are hit-tested at their current position and this
+## function is handed them by the engine anyway -- which is precisely the
+## blocker that put `_input` in this file. See there for the mechanism and the
+## measurements.
+##
+## **Honest about what the `accept_event()` is buying here.** Measured on 4.7,
+## `MOUSE_FILTER_STOP` alone already keeps these events out of
+## [method _unhandled_input]: with every `accept_event()` deleted, a press held
+## on a locus and a press plus three drags both still leave the run in CHOOSING.
+## It is kept anyway, for two reasons and neither is superstition. It is this
+## file's own precedent -- `PauseTap` and the pause strand's loci both consume
+## their own press explicitly -- and the thing it is guarding is the one
+## irreversible action in the game, which should not rest on which of two engine
+## mechanisms happens to fire first. What is *not* claimed is that it is what
+## makes the drags safe: `_input` is.
+##
+## What this must **not** do: start a lean, alter one in progress, arm or commit
+## anything, take keyboard focus, or change the DNA. Nothing on this screen is
+## committable -- there is no held sample and no placement here -- so none of
+## the pause screen's guard and timeout machinery is wanted. A second tap on the
+## same locus is a no-op rather than a deselect, which is the pause screen's
+## rule for the pause screen's reason.
+func _on_choose_locus_input(event: InputEvent, node: Control, side: int,
+		slot: int) -> void:
+	if event is InputEventScreenTouch or event is InputEventScreenDrag \
+			or event is InputEventMouseButton or event is InputEventMouseMotion:
+		node.accept_event()
+	if not _is_widget_tap(event):
+		return
+	# Claimed before the selection changes rather than after, and outside
+	# [method _choose_pick]'s early-out: pressing the locus that is *already*
+	# lit is still a read, and it is the one a thumb resting on the opening
+	# selection makes.
+	var index := _pointer_index(event)
+	if index != POINTER_NONE:
+		_choose_gesture[index] = true
+	_choose_pick(side, slot)
+
+
+func _choose_pick(side: int, slot: int) -> void:
+	if _choose_side == side and _choose_slot == slot:
+		return
+	_choose_side = side
+	_choose_slot = slot
+	_choose_say()
+	_redraw_choosing()
+
+
+## Desktop reads by hovering, which is free and gets all seven loci with no
+## clicks. It moves the two lines and deliberately not the lens: the selection
+## belongs to the thing the player actually touched.
+func _on_choose_hover(side: int, slot: int) -> void:
+	_choose_hot_side = side
+	_choose_hot_slot = slot
+	_choose_say()
+
+
+func _on_choose_unhover(side: int, slot: int) -> void:
+	if _choose_hot_side != side or _choose_hot_slot != slot:
+		return
+	_choose_hot_side = -1
+	_choose_hot_slot = -1
+	_choose_say()
