@@ -551,6 +551,71 @@ foraging.** You swim at the bearing your skin gives you and you take what is
 there. That is the honest consequence of the premise, and it is the first time a
 view's information advantage has become a strategic one.
 
+> **Owner override, Phase 6: two senses now return a place, and point of view
+> draws it.** `game/perception/returns.gd`, a third point-of-view layer beside
+> the membrane and the soma figure.
+>
+> - **`ocellus` — the pointer.** Where a beam is *stopped* by a body, the hit
+>   point is drawn in the water at the place it landed. Only when the beam is
+>   stopped, and only when that place is on screen: a beam that runs its whole
+>   reach into open water draws nothing, because the beam's existence is not the
+>   return. It restores the gene's original brief — *"you don't see nothing but
+>   the point where the laser touches something"* — which the shipped build had
+>   lost to a glow lobe that gave a direction and never a place.
+> - **`ampulla` — the wave.** The expanding wavefront is drawn in point of view
+>   the way full vision already draws it.
+>
+> **Why this is not a hole in the premise.** A beam that is stopped has
+> genuinely *measured* where a surface is; that is the difference between it and
+> every other sense in the game, and it is what the player spent a slot on. A
+> pulse is a thing this cell emitted, so this cell knows where its own
+> wavefront has got to. Both are returns the organ actually came back with.
+>
+> **What must not follow them in**, and the list is the whole of the override's
+> boundary: bodies, silhouettes, the scent bloom, wounds, threat colouring,
+> ping returns, anything a sense did not touch. Only the returns themselves. If
+> the layer ever draws a cell it has gone past the line.
+>
+> **"One simulation, two views" is untouched.** This is a drawing change: the
+> marks are read out of `food.gd` by the view, exactly as `vision.gd` reads
+> them, and no position reaches the signal bus — `normal_mode.gd` is still the
+> only node that talks to it and it still carries bearings and intensities
+> alone.
+>
+> **The membrane keeps its lobes.** The marks are drawn at
+> `soma.gd`'s SCALE of 1.7 canvas px per world unit, because the figure is the
+> only object on that screen with a known size and a mark at any other scale
+> makes *"two body-widths ahead"* a lie. That puts the full-strength limit at
+> 134 world units dead ahead, 299 abeam at 1280x720 and 393 abeam at 2400x1080,
+> against a tier-2 beam's reach of 900. Measured over a minute of foraging with
+> a tier-2 `ocellus`: 119 hits, 27 of them (23%) drawn at full strength and 35
+> (29%) drawing a mark at all. So the lobe is not redundant: **it is the
+> approach instrument and the pointer is the arrival instrument**, and a return
+> that has scrolled off screen still has a bearing worth having. It is also a
+> *sensation*, which is
+> what audio and haptics will subscribe to; deleting it would change what the
+> cell feels, and that is the one thing the two-views rule forbids.
+>
+> The two never agree by *angle*, and should not be expected to. The shader
+> measures bearing on an aspect-corrected ellipse, so its 45° lands in the
+> corner of whatever screen it is on; a position cannot be drawn in that space
+> without distorting the distance. At 1280x720 a 45° mark sits about 16° off its
+> own lobe, and about 21° at 2400x1080. They agree by quadrant and by which way
+> to swim, which is what they are for.
+>
+> **One thing the render caught.** Bodies in this water overlap — being eaten
+> and eating both happen at nought distance — and a beam is cast from the centre
+> of the cell, so a body pressed against you returns a distance shorter than
+> your own radius. Drawn honestly at that distance the pointer lands on the
+> soma's nucleus. A minute of foraging put two of them there. A mark is now
+> suppressed inside the body's own outline and fades in by 1.3 radii: a place in
+> the water that is *inside you* is not a place you can do anything with, and
+> contact already has three senses of its own.
+>
+> §2.3's argument below still stands for everything else. Neither of these
+> senses tells you *what* the thing is, so the chemoreceptor-discrimination slot
+> is still open and identity is still not something point of view can have.
+
 Two things keep it from being a punishment:
 
 - **The advantage is smaller than it sounds.** Measured: at ZOOM 1.0 the visible

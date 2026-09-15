@@ -26,6 +26,7 @@ const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
+const ReturnsLayer := preload("res://game/perception/returns.gd")
 const RunState := preload("res://game/run_state.gd")
 ## The genome strip draws the same organs, in the same hues, as the water does.
 ## One vocabulary: §2.4's promise is that a point-of-view player who looks in
@@ -140,6 +141,7 @@ var mode := -1
 
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
+@onready var _returns: ReturnsLayer = $Returns
 @onready var _bus := _membrane.bus
 @onready var _cell: CellBody = $Cell
 @onready var _metabolism: MetabolismNode = $Metabolism
@@ -249,6 +251,11 @@ func _ready() -> void:
 	_food.setup(_cell)
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
+	# Once, and only here: the marks layer holds the body and the water, and
+	# neither node is ever replaced -- a death and a birth reset those two rather
+	# than building new ones, which is why the figure is re-bound at both and
+	# this is not.
+	_returns.setup(_cell, _food)
 
 	# Read before _apply_mode(), which is what carries it into the world view: a
 	# player who chose "forward up" last run must not have to choose it again.
@@ -880,7 +887,7 @@ func _die(loud: bool, bearing: float) -> void:
 	_cell.release()
 	# The collapse owns the screen. A body still swimming calmly in the middle
 	# of a membrane slamming shut is the game contradicting itself.
-	_soma.set_active(false)
+	_show_self(false)
 	if loud:
 		# The sensation they already know, one last time.
 		_bus.hit(bearing, 1.0)
@@ -910,7 +917,7 @@ func _step_death(delta: float) -> void:
 				# The body comes back with the light. _apply_mode() ran while
 				# this was still RETURNING, so the figure is still hidden and
 				# nothing else will ever turn it back on.
-				_soma.set_active(not _vision_active())
+				_show_self(not _vision_active())
 				# The first beat on arrival: 2.4s and full strength, after
 				# minutes of a slow faint one.
 				_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
@@ -960,8 +967,20 @@ func _apply_mode() -> void:
 	_vision.set_camera_locked(_camera_locked)
 	# The self-figure is the point-of-view answer to "where am I facing". Full
 	# vision already draws the real body at the real place, so a second, scaled,
-	# screen-centred copy of it would be two cells claiming to be the player.
-	_soma.set_active(not _vision_active() and _life == Life.ALIVE)
+	# screen-centred copy of it would be two cells claiming to be the player --
+	# and the same argument retires the beam pointer and the ping wave, which
+	# full vision has been drawing in the water since Phase 5.
+	_show_self(not _vision_active() and _life == Life.ALIVE)
+
+
+## **The two point-of-view layers that draw over the membrane**, switched
+## together because they are on screen under exactly the same conditions: the
+## figure in the middle and the marks the senses leave in the water around it.
+## Four call sites had the condition written out; one of them drifting would be
+## a body with no returns or returns with no body, and neither is a picture.
+func _show_self(on: bool) -> void:
+	_soma.set_active(on)
+	_returns.set_active(on)
 
 
 ## **Forward is always up.** Beside `light` on the pause column, same slab, same
@@ -1281,7 +1300,7 @@ func _toggle_pause() -> void:
 	# world view down to a ghost behind SCRIM_FULL_VISION. The membrane stays,
 	# because it is the live preview of the slider; the body and the line are
 	# not, and the strip above is a better mirror than either. Rendered.
-	_soma.set_active(not paused and not _vision_active() and _life == Life.ALIVE)
+	_show_self(not paused and not _vision_active() and _life == Life.ALIVE)
 	_onboarding.visible = not paused and _onboard != Onboard.OFF
 	if paused:
 		# A finger still down when the pause opened must not keep steering.

@@ -132,6 +132,38 @@ player, not what changes in the code.
 Keep the nuance under the table, not inside it. A blocker that needs three
 paragraphs to explain is usually two decisions wearing one coat.
 
+## Realism is a tool, and gameplay is the point
+
+**Gameplay decides. Where realism serves it, use realism.** Those are not in
+tension most of the time, and when they are, the game wins — but reaching for
+the real answer first is usually cheaper than inventing one, and it is usually
+better.
+
+This is a description of what already works here, not a new direction:
+
+- The steering organ was going to be `kinety` until someone checked. A kinety is
+  the ciliature that *swims*, which this design gives to `flagellum`; the organ
+  that actually steers is a `cirrus`, and it is a tuft — which is exactly what
+  the renderer was already drawing. The real answer was also the clearer one.
+- The radar gene is `ampulla`, after the ampullae of Lorenzini, which are real
+  electroreception. A shark's sixth sense is nature's radar, so the name costs
+  nothing to learn and explains the mechanic on sight.
+- The laser is `ocellus`, a real eyespot, carrying an ability no eyespot has.
+  That is the pattern: **map an invented ability onto a real organ**, rather
+  than invent a name to go with it.
+- Defence needed no new genes, because a cell that turns its nose onto an
+  attacker is already harder to bite. The biology handed the mechanic over.
+
+Where it does not serve, drop it without apology. Cells do not fire lasers, a
+run is not a life cycle at real timescales, and nothing here is a simulation of
+anything. The test is always *does this make the game better to play* — realism
+is one of the better ways to answer yes, not a constraint on the answer.
+
+A useful consequence: when a mechanic needs a name, look up what the real
+organelle is called before making one up. When a mechanic feels arbitrary, ask
+what a real cell does about that problem. Often there is an answer, and it is
+more interesting than the invented one.
+
 ## The game
 
 Game code lives in `game/`. `play_scene` in `launcher_config.tres` points the
