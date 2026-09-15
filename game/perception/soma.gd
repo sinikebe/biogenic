@@ -63,6 +63,20 @@ const FADE_PENDING := 0.68
 ## contour does rather than on a clock of its own.
 var beat := 0.0
 
+## **The division**, written once a frame by the run. Empty is an ordinary body.
+## `double` and `pinch` are the mother becoming two; `bodies` is present only
+## once there are two of them, and its presence is what says to stop drawing one
+## figure and draw the pair. docs/design/lifecycle.md §4.
+##
+## Point of view may draw all of this, and the reason is not a loophole: during
+## the parting both bodies are self, and this layer's licence is *what a cell
+## can know about itself*. After the commit the sister is another body in the
+## water and this figure never draws her again.
+var division := {}
+
+## How far either side of centre the two of them are seated, in canvas px.
+const DIVIDE_SEAT := 132.0
+
 var _cell: CellBody = null
 var _genome: GenomeNode = null
 var _clock := 0.0
@@ -100,7 +114,11 @@ func _draw_figure() -> void:
 	if _cell == null:
 		return
 	var tiers := _genome.tiers() if _genome != null else GenomeNode.BORN
-	var order: Array = _genome.layout() if _genome != null else []
+	# **The body's layout for the body, the DNA's for what is loose in it.** The
+	# organs are where they were grown; an empty socket is a hole in the DNA,
+	# which is where a gene you are holding is actually going.
+	var order: Array = _genome.body_layout() if _genome != null else []
+	var dna: Array = _genome.layout() if _genome != null else []
 	var r := _cell.radius * SCALE
 	# Front is up: heading 0 in the figure's own frame, which is the frame the
 	# whole point-of-view screen is already in.
@@ -112,15 +130,44 @@ func _draw_figure() -> void:
 	# would be the one thing proprioception cannot do, which is lie about the
 	# body it is a picture of.
 	var centre := _figure.size * 0.5
+	if division.has("bodies"):
+		_draw_daughters(centre)
+		return
 	Cilia.draw_cell(_figure, centre, 0.0, r, tiers,
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
-		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound)
+		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
+		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on -- and the second heartbeat the membrane already carries
 	# now has a picture to belong to. The rhythm says *something is unresolved*;
 	# this says *what*, and *where*.
-	Cilia.draw_pending(_figure, centre, 0.0, r, order,
+	Cilia.draw_pending(_figure, centre, 0.0, r, dna,
 		_genome.held_sample if _genome != null else &"",
 		_genome.held_remaining if _genome != null else 0.0,
 		clampf(beat, 0.0, 1.0), _clock, FADE_PENDING)
+
+
+## **Two daughters, drawn as real bodies before the player commits.**
+##
+## At fade 1.0 rather than this layer's FADE: rendered at 0.34 the difference
+## between the two is not callable, and at 1.0 it is. The 0.34 exists so the
+## figure loses to sensations, and during a division there are no sensations --
+## for the only time in the game the middle of the screen is the loudest thing
+## on it, and that inversion is the beat.
+func _draw_daughters(centre: Vector2) -> void:
+	var bodies: Array = division["bodies"]
+	var r := float(division.get("radius", 28.28)) * SCALE
+	var spread := float(division.get("spread", 1.0)) * DIVIDE_SEAT
+	for side in bodies.size():
+		var one: Dictionary = bodies[side]
+		var tiers: Dictionary = one["tiers"]
+		var seat := centre + Vector2(spread * (-1.0 if side == 0 else 1.0), 0.0)
+		# Both are `is_self`: they are still you, so neither takes a gene tint
+		# and neither draws a threat bow. The one being declined takes her own
+		# colour on the way out, and that is `shed`.
+		Cilia.draw_cell(_figure, seat, 0.0, r, tiers,
+			CellBody.gape_of(int(tiers.get(&"cytostome", 0)), r), r, true,
+			_clock, float(one["fade"]), 0.0, clampf(beat, 0.0, 1.0),
+			float(side) * 2.7, 1.0, one["order"], 0.0, 0.0, 0.0,
+			float(one["shed"]))

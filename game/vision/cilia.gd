@@ -187,6 +187,16 @@ const NUCLEUS_BACK := 0.26
 const NUCLEUS_OUTER := 0.46
 const NUCLEUS_INNER := 0.22
 
+# --- A body about to become two (lifecycle.md §4) ----------------------------
+## How far apart the two cores get, as a share of the radius. See
+## [method _draw_nucleus] for why it is not smaller.
+const NUCLEUS_SPLIT_MAX := 0.52
+## What the ovoid becomes at the pinch: longer along the heading, and with a
+## waist. 1.62 against OVOID_ALONG's 1.18.
+const OVOID_SPLIT_ALONG := 1.62
+## How much of the half-width the waist takes, at the beam and nowhere else.
+const OVOID_SPLIT_WAIST := 0.46
+
 # --- Seven arcs, three of them spoken for (§4.1) ----------------------------
 # In ovoid parameter t, degrees: 0 is the nose, +90 starboard, 180 aft. The
 # free arcs are also the bearing rose -- while empty they are visible gaps at
@@ -441,19 +451,33 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## -- the rim tears open and the body leaks out of the gaps. §4.4 forbids a red
 ## here: threat red means "that can eat you", and a wounded cell is very often
 ## the opposite of that.
+##
+## The last three are the division (docs/design/lifecycle.md §4) and every one
+## of them is 0 for every body in the water:
+## [param double] is 0..1 and pulls the nucleus apart into two cores -- the most
+## legible *about to divide* image in biology, for one extra pair of circles.
+## [param pinch] is 0..1 and stretches the body along its heading and narrows
+## its waist, which is the parting itself.
+## [param shed] is 0..1 and is **how far this body has stopped being you**: the
+## daughter you did not choose takes her own dominant gene's tint on the way
+## out, and the moment she stops being you is the moment she gets a colour.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
-		order: Array = [], wound: float = 0.0) -> void:
+		order: Array = [], wound: float = 0.0, double: float = 0.0,
+		pinch: float = 0.0, shed: float = 0.0) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
 	var stb := Vector2(cos(heading), sin(heading))
 	var tint := body_tint(tiers, is_self)
+	if shed > 0.0:
+		tint = tint.lerp(body_tint(tiers, false), clampf(shed, 0.0, 1.0))
 
-	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound)
-	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade)
+	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound,
+		pinch)
+	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade, double)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order)
 	draw_gape(canvas, at, fwd, stb, r, gape,
 		Genome.tier_of(tiers, &"cytostome"),
@@ -465,13 +489,15 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 ## with holes in it.
 static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tint: Color, clock: float, fade: float,
-		phase: float, unit: float, wound: float = 0.0) -> void:
+		phase: float, unit: float, wound: float = 0.0,
+		pinch: float = 0.0) -> void:
 	var body := PackedVector2Array()
 	body.resize(OVOID_STEPS)
+	var squeeze := clampf(pinch, 0.0, 1.0)
 	for i in OVOID_STEPS:
 		var t := TAU * float(i) / float(OVOID_STEPS)
 		var breathe := 1.0 + BREATHE * sin(t * 3.0 + clock * 1.7 + phase)
-		body[i] = _surface(at, fwd, stb, r * breathe, t)
+		body[i] = _surface(at, fwd, stb, r * breathe, t, squeeze)
 
 	# **The body is not drawn smaller.** The radius is what decides every
 	# encounter in the water, so a wounded cell that looked smaller would be
@@ -531,24 +557,44 @@ static func _tear_seat(phase: float, k: int) -> float:
 	return phase + WOUND_TEAR_SEAT + TAU * float(k) / float(WOUND_TEARS)
 
 
+## The nucleus, and -- while [param double] is above zero -- the two it is
+## becoming.
+##
+## **0.52 was chosen by rendering it:** below about 0.40 the two cores overlap
+## into one brighter disc, and a brighter nucleus already means the beat. Two
+## distinct cores is a thing nothing else on a body does.
 static func _draw_nucleus(canvas: CanvasItem, at: Vector2, fwd: Vector2,
-		r: float, tint: Color, beat: float, fade: float) -> void:
+		r: float, tint: Color, beat: float, fade: float,
+		double: float = 0.0) -> void:
 	var core := at - fwd * (r * NUCLEUS_BACK)
 	var b := clampf(beat, 0.0, 1.0)
-	canvas.draw_circle(core, r * NUCLEUS_OUTER,
-		Color(tint, (0.07 + 0.15 * b) * fade), true, -1.0, true)
-	canvas.draw_circle(core, r * NUCLEUS_INNER,
-		Color(tint, (0.20 + 0.40 * b) * fade), true, -1.0, true)
+	var apart := fwd * (r * NUCLEUS_SPLIT_MAX * clampf(double, 0.0, 1.0) * 0.5)
+	var haze := Color(tint, (0.07 + 0.15 * b) * fade)
+	var lit := Color(tint, (0.20 + 0.40 * b) * fade)
+	canvas.draw_circle(core + apart, r * NUCLEUS_OUTER, haze, true, -1.0, true)
+	canvas.draw_circle(core + apart, r * NUCLEUS_INNER, lit, true, -1.0, true)
+	if apart.length_squared() <= 0.0:
+		return
+	canvas.draw_circle(core - apart, r * NUCLEUS_OUTER, haze, true, -1.0, true)
+	canvas.draw_circle(core - apart, r * NUCLEUS_INNER, lit, true, -1.0, true)
 
 
 ## A point on the ovoid at parameter [param t] (radians), and the outward
 ## normal there. The normal is the analytic one rather than a difference of two
 ## samples: a fringe rooted on a polygon's chords leans visibly at the joints.
+##
+## [param pinch] is the division: the body lengthens along its heading and
+## narrows at the waist. It is applied to the two ovoid constants rather than as
+## a second shape, so the fringe, the tears and the gape all follow the skin
+## they are rooted in for free.
 static func _surface(at: Vector2, fwd: Vector2, stb: Vector2, r: float,
-		t: float) -> Vector2:
+		t: float, pinch: float = 0.0) -> Vector2:
 	var along := cos(t)
 	var across := sin(t) * (1.0 - OVOID_PINCH * along)
-	return at + fwd * (along * r * OVOID_ALONG) + stb * (across * r * OVOID_ACROSS)
+	var long := lerpf(OVOID_ALONG, OVOID_SPLIT_ALONG, pinch)
+	var wide := OVOID_ACROSS * lerpf(1.0, 1.0 - OVOID_SPLIT_WAIST
+		* (1.0 - absf(along)), pinch)
+	return at + fwd * (along * r * long) + stb * (across * r * wide)
 
 
 static func _normal(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
@@ -855,19 +901,31 @@ static func _lip(base: Vector2, fwd: Vector2, stb: Vector2, gape: float,
 # the deuteranope check section 4.4 sets, and it survives being the same green
 # as the mouth it may be sitting next to.
 
-## The empty sockets an earned gene could root in: four beads on the skin, at
-## the exact points [method _draw_earned] would put its bristles. Quiet on their
+## The empty DNA slots a gene could be written into: one bead each, on a ring
+## about the nucleus, at the bearing of the arc it stands for. **They moved
+## inward with lifecycle.md** -- the organ never roots on this body, it roots on
+## your daughter, and the DNA is the nucleus. Quiet on their
 ## own -- "there is room in you" is worth about as much ink as that sentence
 ## deserves -- and they are the thing the ghost tuft grows out of, so the
 ## vacancy and the destination are one mark at two intensities rather than two
 ## marks that have to be related by the player.
-## **Off the skin, not on it.** Seated exactly on the surface these were
-## invisible at both shapes, and the reason is not alpha: the rim is a 2.2px
-## stroke of the same teal running straight through them, so a socket bead was
-## a teal dot drawn on a teal line. Lifted clear of the rim they read as a row
-## of empty roots, which is what they are.
-const VACANCY_LIFT := 0.055      ## of r
-const VACANCY_DOT := 0.038       ## of r
+## **They are no longer on the skin at all.** They were lifted `0.055 r` clear
+## of it, because seated exactly on the surface they were invisible at both
+## shapes -- the rim is a 2.2px stroke of the same teal running straight through
+## them, so a socket bead was a teal dot drawn on a teal line. lifecycle.md §7
+## moves them further still, off the rim entirely and in to the nucleus: the
+## organ never roots on this body, it roots on your daughter, and the hole it is
+## going into is in the DNA. The old lift is gone with them.
+##
+## How far the bead ring sits from the nucleus, as a share of the radius. Just
+## outside NUCLEUS_OUTER 0.46 so the beads read as *around* the nucleus rather
+## than on it, and well inside the skin so the mark is a thing in the middle of
+## the body. lifecycle.md §7.
+const VACANCY_RING := 0.62
+## of r. One bead per free slot now rather than four per arc, so each is bigger:
+## at 0.062 a born cell's spare hole is about 3.2 canvas px on the soma figure,
+## against 2.0 for one of the four it replaces.
+const VACANCY_DOT := 0.062       ## of r
 ## A floor in canvas pixels, which section 4.5 refused for cilia and is right
 ## for this: a 4.0px stroke moved to 4.5 is a no-op, a 1.0px dot moved to 1.6 is
 ## the difference between a mark and a smudge. Full vision draws the body at
@@ -976,9 +1034,10 @@ const HELD_WILT := 15.0
 ## already wears: which slots are empty, and whether something is loose inside
 ## looking for one.
 ##
-## [param order] is the slot layout -- slot index to gene, `&""` for empty --
-## the same array [method draw_cell] takes. [param gene] is the held sample or
-## `&""`, and [param remaining] its seconds. [param beat] is 0..1 and is the
+## [param order] is **the DNA's** slot layout -- slot index to gene, `&""` for
+## empty. Not the body's, which is what [method draw_cell] takes: what is loose
+## in you is going into the DNA, and a hole in the DNA is the hole it can go in.
+## [param gene] is the held sample or `&""`, and [param remaining] its seconds. [param beat] is 0..1 and is the
 ## same heartbeat the nucleus takes, so the reach and the tuft breathe on the
 ## body's own clock rather than on one of their own.
 ##
@@ -1020,10 +1079,8 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		size = VESICLE_R * r * (0.60 + 0.40 * left) * (1.0 + 0.14 * pulse)
 		var near := INF
 		for i in free.size():
-			var arc: Vector2 = free[i]
-			var mid := _surface(at, fwd, stb, r,
-				deg_to_rad((arc.x + arc.y) * 0.5))
-			var d := seat.distance_squared_to(mid)
+			var d := seat.distance_squared_to(_socket_bead(at, fwd, stb, r,
+				free[i]))
 			if d < near:
 				near = d
 				tried = i
@@ -1035,10 +1092,23 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		return
 	var target := seat
 	if tried >= 0:
-		var arc: Vector2 = free[tried]
-		target = _surface(at, fwd, stb, r, deg_to_rad((arc.x + arc.y) * 0.5))
+		target = _socket_bead(at, fwd, stb, r, free[tried])
 	_draw_vesicle(canvas, seat, size, target, tried >= 0, -fwd, tone, wilt,
 		pulse, clock, fade, unit)
+
+
+## **Where an empty DNA slot is drawn, and it is not on the skin.** The beads
+## used to sit at the seat where that organ's bristles would root; under
+## lifecycle.md §7 the organ never roots there *for you* -- it roots on your
+## daughter. **The DNA is the nucleus, and that is where a loose gene is going**,
+## so the beads are a ring about the nucleus, one per free slot, each still at
+## the bearing of the arc it stands for. It also declutters the skin, which
+## diegetic-hud.md §2 already called crowded.
+static func _socket_bead(at: Vector2, fwd: Vector2, stb: Vector2, r: float,
+		arc: Vector2) -> Vector2:
+	var bearing := arc_bearing(arc)
+	var core := at - fwd * (r * NUCLEUS_BACK)
+	return core + (fwd * cos(bearing) + stb * sin(bearing)) * (r * VACANCY_RING)
 
 
 ## The slots this genome has and has not filled, as arcs. Empty on a cell whose
@@ -1066,33 +1136,35 @@ static func free_arcs(order: Array) -> Array[Vector2]:
 static func _draw_socket(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, arc: Vector2, tone: Color, tuft: bool,
 		wilt: float, beat: float, fade: float, unit: float) -> void:
-	var count := COUNT_EARNED
 	var strokes := PackedVector2Array()
-	var seats := PackedVector2Array()
-	for i in count:
-		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
-		var dir := _normal(fwd, stb, t)
-		var root := _surface(at, fwd, stb, r, t)
-		seats.append(root + dir * (r * VACANCY_LIFT))
-		if not tuft:
-			continue
-		# The tuft starts *off* the body and ends short of where a real one
-		# would. Both halves of that are the reading: it is not rooted, and it
-		# is not finished.
-		var length := LEN_EARNED * r * GHOST_LEN * (0.30 + 0.70 * wilt) \
-			* (0.86 + 0.14 * sin(u * PI))
-		var lift := root + dir * (r * GHOST_GAP)
-		strokes.append(lift)
-		strokes.append(lift + dir * length)
+	# **The tuft stays on the skin and the bead has moved off it.** The two say
+	# different things now: the bead is the hole in the DNA, by the nucleus,
+	# where the gene is actually going; the tuft is the organ that hole would
+	# become, drawn where an organ would stand and not touching the body. They
+	# are on the same bearing, so the thread, the bead and the tuft read as one
+	# line out from the middle.
+	if tuft:
+		for i in COUNT_EARNED:
+			var u := (float(i) + 0.5) / float(COUNT_EARNED)
+			var t := deg_to_rad(lerpf(arc.x, arc.y, u))
+			var dir := _normal(fwd, stb, t)
+			var root := _surface(at, fwd, stb, r, t)
+			# It starts *off* the body and ends short of where a real one
+			# would. Both halves of that are the reading: it is not rooted, and
+			# it is not finished.
+			var length := LEN_EARNED * r * GHOST_LEN * (0.30 + 0.70 * wilt) \
+				* (0.86 + 0.14 * sin(u * PI))
+			var lift := root + dir * (r * GHOST_GAP)
+			strokes.append(lift)
+			strokes.append(lift + dir * length)
 	var dot := maxf(r * VACANCY_DOT, VACANCY_DOT_MIN * unit)
 	# **Only the socket being tried brightens.** Lifting every free socket when
 	# a sample arrived put sixteen bright beads round the rim of a grown cell
 	# and the figure grew a necklace; the quiet ones stay quiet, which is what
 	# *there is also room over here* is worth.
 	var ink := clampf(VACANCY_ALPHA * (VACANCY_HELD if tuft else 1.0), 0.0, 1.0)
-	for seat: Vector2 in seats:
-		canvas.draw_circle(seat, dot, Color(tone, ink * fade), true, -1.0, true)
+	canvas.draw_circle(_socket_bead(at, fwd, stb, r, arc), dot,
+		Color(tone, ink * fade), true, -1.0, true)
 	if tuft:
 		_stroke(canvas, strokes, tone,
 			GHOST_ALPHA * (0.34 + 0.66 * wilt) * (1.0 + GHOST_BEAT * beat) * fade,
@@ -1260,12 +1332,18 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 
 ## The organ on a genome tile: a dome of the gene's own strokes, so the tile and
 ## the body are one vocabulary. [param size] is the tile's own rect.
+##
+## [param alpha] is the second, weaker channel behind the pips: a gene the DNA
+## carries and the body does not wear draws its strokes fainter. The pips do the
+## work -- see normal_mode.gd's tile face -- and this is honest about which one
+## is which.
 static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
-		size: Vector2) -> void:
+		size: Vector2, alpha: float = TILE_STROKE_ALPHA) -> void:
 	var tone := hue(gene)
 	var centre := Vector2(size.x * 0.5, size.y * TILE_CENTRE_Y)
+	var ink := alpha / TILE_STROKE_ALPHA
 	canvas.draw_arc(centre, TILE_ARC_RADIUS, TILE_ARC_FROM, TILE_ARC_TO, 32,
-		Color(tone, TILE_ARC_ALPHA), TILE_ARC_WIDTH, true)
+		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH, true)
 
 	var count := int(TILE_COUNT.get(gene,
 		EARNED_COUNT.get(gene, TILE_COUNT_EARNED)))
@@ -1273,7 +1351,7 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	var earned := not TILE_COUNT.has(gene)
 	if earned:
 		canvas.draw_circle(centre + Vector2(0.0, -TILE_ARC_RADIUS * PIGMENT_SEAT),
-			TILE_PIGMENT, Color(tone, 0.85), true, -1.0, true)
+			TILE_PIGMENT, Color(tone, 0.85 * ink), true, -1.0, true)
 
 	var strokes := PackedVector2Array()
 	for i in count:
@@ -1293,7 +1371,7 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 			span *= 0.88 + 0.14 * sin(u * PI)
 		strokes.append(root)
 		strokes.append(root + dir * span)
-	_stroke(canvas, strokes, tone, TILE_STROKE_ALPHA, TILE_ARC_WIDTH)
+	_stroke(canvas, strokes, tone, alpha, TILE_ARC_WIDTH)
 	# Tier is drawn as pips by the strip itself: at 13 pixels a 22% length
 	# difference is one pixel, so magnitude cannot carry it here the way it does
 	# on a body. This is the one place the two vocabularies deliberately differ,

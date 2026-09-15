@@ -2,6 +2,22 @@ extends Node
 ## What a cell is made of: which organs it has, at what tier, and what that
 ## costs it to carry.
 ##
+## **Two registers, and they are the whole of docs/design/lifecycle.md §1.** A
+## body is fixed; a genome is not. The cell you are swimming is the genome you
+## were born with, expressed whole, and nothing you eat this life changes it.
+## What you eat writes **DNA**, and DNA is what your daughters are made of.
+##
+## So this node holds a pair of maps rather than one:
+##
+## - [method tiers] / [method tier] are **the body**: what is drawn, what the
+##   drive reads, what upkeep is paid on, what eating you would give. Written
+##   once, at birth, by [method express].
+## - [method dna] / [method dna_tier] are **what you are writing**: the strip on
+##   the pause screen, the thing a daughter is made of. Written by eating.
+##
+## At birth the two are identical, which is what "expressed whole" means. They
+## diverge over one generation and are made one again by the next division.
+##
 ## Genome size is **capacity, not currency** -- there are no genetic points.
 ## Slots come from body radius (cell.gd's ladder), and what fills them comes
 ## from what the cell has eaten: you absorb whatever the prey was most made of.
@@ -96,21 +112,42 @@ var held_remaining := 0.0
 ## with everything else on death.
 var bonus_slots := 0
 
-var _tiers := {}
+## The DNA: what this cell is writing, and what its daughters will be.
+var _dna := {}
 ## **Slot index to gene, `&""` for an empty slot.** The dictionary above says
-## what this cell has; this says *where*, and where is the arc it is worn on
+## what this DNA carries; this says *where*, and where is the arc it is worn on
 ## (cilia.gd's [method arc_for_slot]). A directional gene reads its facing off
 ## that arc, so this array is the whole of the player's one placement decision.
 ##
 ## It has holes on purpose: a dictionary cannot, and "put the beam in the
 ## forward-right diagonal while slots 4 and 6 are still empty" needs one.
+##
+## **It may be longer than [method slots], and that is intended**: a newborn
+## carries her mother's whole DNA on a body two thirds the size, so she may
+## replace but not add until she grows.
 var _order: Array[StringName] = []
+
+## The body: what this cell actually wears, fixed at birth.
+var _body := {}
+## Gene to slot for the body, also fixed at birth. A dictionary rather than an
+## array because the only question ever asked of it is *which arc is this organ
+## on*, and because the body may keep an organ the DNA has since replaced --
+## which an index into the DNA's layout could not express.
+var _body_slots := {}
+
+## The one gene that is expressed on the body it lands on rather than only on
+## the DNA: normal_mode.gd's five-second grant. §6 calls it an invariant against
+## blindness, and an invariant that only rescued the *next* generation would not
+## be one. It is not a meal -- it is the body growing an organ it was born able
+## to grow -- so it is the one thing that does not wait for a division.
+var _gift: StringName = &""
+
 var _cell: CellBody = null
 
 
 func _ready() -> void:
-	if _tiers.is_empty():
-		_tiers = BORN.duplicate()
+	if _dna.is_empty():
+		express(BORN, [&"cytostome", &"cirrus", &"flagellum"])
 	_sync_order()
 
 
@@ -122,14 +159,32 @@ func setup(cell: CellBody) -> void:
 	reset()
 
 
-## Every run starts as the basic cell. Death keeps nothing: §9.4.
+## Every run starts as the basic cell. **A run keeps nothing; a lineage keeps
+## everything** -- lifecycle.md §1.5, replacing §9.4. Death is still a clean
+## restart as the born cell, three organs, all tier 1.
 func reset() -> void:
-	_tiers = BORN.duplicate()
-	_order = [&"cytostome", &"cirrus", &"flagellum"]
+	express(BORN, [&"cytostome", &"cirrus", &"flagellum"])
+
+
+## **A body born of a DNA, expressing it whole.** The two registers are made one
+## here and nowhere else: a division, a death, and the dev harness forcing a
+## genome. [param dna] and [param order] are copied, never held.
+func express(dna: Dictionary, order: Array) -> void:
+	_dna = dna.duplicate()
+	_order = []
+	for gene: Variant in order:
+		_order.append(StringName(gene))
+	_body = _dna.duplicate()
+	_body_slots = {}
+	for slot in _order.size():
+		var gene: StringName = _order[slot]
+		if gene != &"" and _body.has(gene):
+			_body_slots[gene] = slot
 	bonus_slots = 0
-	_sync_order()
+	_gift = &""
 	held_sample = &""
 	held_remaining = 0.0
+	_sync_order()
 
 
 func _process(delta: float) -> void:
@@ -144,8 +199,14 @@ func _process(delta: float) -> void:
 	#
 	# What still resolves itself is the case where there is nothing left for the
 	# sample to be: the gene arrived by some other route while it was held.
-	if _tiers.has(held_sample):
-		integrate_into(_tiers, held_sample, slots())
+	if _dna.has(held_sample):
+		# It arrived by another route. If it was the anti-blindness grant, it
+		# still has to land on the *body* -- otherwise eating the same gene
+		# inside the forty-five seconds would quietly cancel the one rescue in
+		# the game and leave a blind cell blind.
+		if held_sample == _gift:
+			_express_gift(held_sample, _order.find(held_sample))
+		integrate_into(_dna, held_sample, maxi(slots(), _order.size()))
 		held_sample = &""
 		held_remaining = 0.0
 		return
@@ -163,15 +224,30 @@ func _process(delta: float) -> void:
 	held_remaining = 0.0
 
 
-## Tier of one gene, 0 if the cell does not have that organ.
+## Tier of one organ **this body wears**, 0 if it does not wear it. This is what
+## the drive, the gape and every encounter in the water read: a tier raised in
+## the DNA this life is a tier your daughters get, not one you grow.
 func tier(gene: StringName) -> int:
-	return int(_tiers.get(gene, 0))
+	return int(_body.get(gene, 0))
 
 
-## The live `{gene: tier}` map. Read it; do not write it -- [method integrate]
-## and [method replace] are the only things allowed to.
+## The live `{gene: tier}` map of **the body**. Read it; do not write it. It is
+## what draw_cell draws, what upkeep is paid on and what eating this cell would
+## give, because all three are questions about the organism and not about what
+## it is writing.
 func tiers() -> Dictionary:
-	return _tiers
+	return _body
+
+
+## The live `{gene: tier}` map of **the DNA**. Read it; do not write it --
+## [method integrate] and [method place] are the only things allowed to.
+func dna() -> Dictionary:
+	return _dna
+
+
+## Tier of one gene in the DNA, 0 if the lineage does not carry it.
+func dna_tier(gene: StringName) -> int:
+	return int(_dna.get(gene, 0))
 
 
 ## How many slots the body can carry right now. The arithmetic lives in cell.gd
@@ -181,19 +257,24 @@ func slots() -> int:
 	return clampi(earned + bonus_slots, CellBody.SLOT_MIN, CellBody.SLOT_MAX)
 
 
-## How many are in use.
+## How many DNA slots are in use.
 func filled() -> int:
-	return _tiers.size()
+	return _dna.size()
 
 
 ## The metabolic multiplier, 1.0 for a cell that is tier 1 across the board.
+##
+## **Paid on the body, not on the DNA.** You carry what you wear -- which is
+## what makes lifecycle.md §5's late game a subtraction problem: a newborn
+## expresses a dense DNA whole, on a body that started at 28 units, and pays for
+## all of it from her first second.
 func upkeep() -> float:
-	return upkeep_of(_tiers)
+	return upkeep_of(_body)
 
 
 ## What this cell is most made of, which is what eating it gives you. §3.4.
 func dominant() -> StringName:
-	return dominant_of(_tiers)
+	return dominant_of(_body)
 
 
 ## A meal's gene, by §3.2's four cases -- with one of them rewritten.
@@ -210,11 +291,11 @@ func dominant() -> StringName:
 func integrate(gene: StringName) -> int:
 	if gene == &"":
 		return Result.NOTHING
-	if _tiers.has(gene):
-		var value := int(_tiers[gene])
+	if _dna.has(gene):
+		var value := int(_dna[gene])
 		if value >= TIER_MAX:
 			return Result.SATURATED
-		_tiers[gene] = value + 1
+		_dna[gene] = value + 1
 		return Result.RAISED
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
 	# is told by a second, smaller heartbeat rather than by a screen. A sample
@@ -223,6 +304,17 @@ func integrate(gene: StringName) -> int:
 	held_sample = gene
 	held_remaining = SAMPLE_SECONDS
 	return Result.HELD
+
+
+## **The free sense, and the one gene that lands on the body as well as on the
+## DNA.** See [member _gift]. Everything else about it is an ordinary held
+## sample: it waits for a slot, it can be placed anywhere, and it lapses into
+## the first free one.
+func gift(gene: StringName) -> int:
+	var result := integrate(gene)
+	if result == Result.HELD:
+		_gift = gene
+	return result
 
 
 ## Puts the held sample over [param gene], at tier 1. §5.2's two-tap swap, and
@@ -245,7 +337,7 @@ func place(slot: int) -> int:
 	var taking := held_sample
 	held_sample = &""
 	held_remaining = 0.0
-	if _tiers.has(taking):
+	if _dna.has(taking):
 		# It arrived by another route while the sample was held. Nothing to do,
 		# and certainly not a second copy in a second slot.
 		return Result.NOTHING
@@ -253,26 +345,62 @@ func place(slot: int) -> int:
 	return Result.INTEGRATED
 
 
-## The gene in each slot, `&""` for empty. Read it; do not write it.
+## **The DNA's** slot layout, `&""` for empty. Read it; do not write it. This is
+## what the pause strip draws and what an empty socket on the body stands for --
+## a hole in the DNA is where a loose gene is going.
 func layout() -> Array[StringName]:
 	_sync_order()
 	return _order
 
 
-## Which slot a gene is worn in, or -1. The one question a directional gene
-## asks, because the answer is the arc and the arc is the bearing.
+## **The body's** slot layout, which is where its organs actually are. Built on
+## demand from [member _body_slots]: the two layouts agree at birth and drift
+## apart over one generation, and the difference is exactly the organ the body
+## still wears after the DNA has replaced it.
+func body_layout() -> Array[StringName]:
+	var out: Array[StringName] = []
+	out.resize(maxi(slots(), _order.size()))
+	out.fill(&"")
+	for gene: StringName in _body_slots:
+		var slot := int(_body_slots[gene])
+		if slot >= 0 and slot < out.size():
+			out[slot] = gene
+	return out
+
+
+## Which slot an organ is worn in **on this body**, or -1. The one question a
+## directional gene asks, because the answer is the arc and the arc is the
+## bearing -- and the organ is on the body, not in the DNA.
 func slot_of(gene: StringName) -> int:
-	_sync_order()
-	return _order.find(gene)
+	return int(_body_slots.get(gene, -1))
 
 
-## Puts [param gene] in [param slot], evicting whatever was there.
+## Puts [param gene] in DNA [param slot], evicting whatever was there.
+##
+## The body is left alone: an organ you are wearing stays worn even after the
+## DNA has written something else over its slot, which is what makes §9.7's
+## irreversible mistake gentler and better -- dropping a gene over your own
+## `cytostome` now costs your *daughters* a mouth, and you have a whole
+## generation to see it coming on the strip and put it right.
 func _write(slot: int, gene: StringName) -> void:
 	var old := _order[slot]
 	if old != &"":
-		_tiers.erase(old)
+		_dna.erase(old)
 	_order[slot] = gene
-	_tiers[gene] = 1
+	_dna[gene] = 1
+	_express_gift(gene, slot)
+
+
+## The one exception to *a body is fixed*, and the reason is in [member _gift]:
+## an invariant against blindness that only rescued the next generation would
+## not be one. Does nothing for any other gene.
+func _express_gift(gene: StringName, slot: int) -> void:
+	if gene == &"" or gene != _gift:
+		return
+	_gift = &""
+	_body[gene] = maxi(int(_body.get(gene, 0)), 1)
+	if slot >= 0:
+		_body_slots[gene] = slot
 
 
 func _first_free() -> int:
@@ -284,7 +412,7 @@ func _first_free() -> int:
 ## longer carries. Growth only ever widens it, so nothing is dropped by this;
 ## the erase branch is what keeps a swap honest.
 func _sync_order() -> void:
-	for gene: StringName in _tiers:
+	for gene: StringName in _dna:
 		if not _order.has(gene):
 			var free := _order.find(&"")
 			if free >= 0:
@@ -292,7 +420,7 @@ func _sync_order() -> void:
 			else:
 				_order.append(gene)
 	for i in _order.size():
-		if _order[i] != &"" and not _tiers.has(_order[i]):
+		if _order[i] != &"" and not _dna.has(_order[i]):
 			_order[i] = &""
 	var want := slots()
 	while _order.size() < want:
@@ -359,3 +487,116 @@ static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -
 		return Result.NO_ROOM
 	tiers[gene] = 1
 	return Result.INTEGRATED
+
+
+# ---------------------------------------------------------------------------
+# The mutation. lifecycle.md §2.2: one, drawn from three kinds, all **sideways**
+# -- none is better or worse than the DNA it came from, or the choice collapses
+# into "take the good one" and there is no decision in it at all.
+#
+# Rendered, all three read: drift is unmistakable, shift and trade read on
+# comparison. That is the right ordering, because comparison is the only thing
+# the player is being asked to do.
+# ---------------------------------------------------------------------------
+
+## How many mutations separate the two daughters.
+const MUTATION_COUNT := 1
+
+## One mutated copy of [param dna] and [param order]. Returns
+## `[dna, order, kind]`; `kind` is the word for what changed, `&""` if nothing
+## could (a one-gene DNA with nowhere to move it).
+##
+## The three kinds are tried in a random order and the first that applies wins,
+## so a DNA that cannot be traded is shifted rather than left alone.
+static func mutated(dna: Dictionary, order: Array) -> Array:
+	var next := dna.duplicate()
+	var seats: Array[StringName] = []
+	for gene: Variant in order:
+		seats.append(StringName(gene))
+	var kinds: Array[StringName] = [&"shift", &"trade", &"drift"]
+	kinds.shuffle()
+	for kind: StringName in kinds:
+		var done := false
+		match kind:
+			&"shift":
+				done = _mutate_shift(seats)
+			&"trade":
+				done = _mutate_trade(next)
+			_:
+				done = _mutate_drift(next, seats)
+		if done:
+			return [next, seats, kind]
+	return [next, seats, &""]
+
+
+## One gene moves to a different slot, swapping with whatever was there. The
+## slot is the arc, so an organ appears somewhere else on the body -- and a
+## directional gene starts looking somewhere else.
+static func _mutate_shift(seats: Array[StringName]) -> bool:
+	if seats.size() < 2:
+		return false
+	var filled_slots: Array[int] = []
+	for i in seats.size():
+		if seats[i] != &"":
+			filled_slots.append(i)
+	if filled_slots.is_empty():
+		return false
+	var from: int = filled_slots[randi() % filled_slots.size()]
+	var to := randi() % seats.size()
+	if to == from:
+		to = (from + 1 + randi() % (seats.size() - 1)) % seats.size()
+	var held := seats[from]
+	seats[from] = seats[to]
+	seats[to] = held
+	return true
+
+
+## One gene up a tier, another down. Neither end may leave the DNA: a gene
+## traded out of existence is an organ deleted, which is not sideways.
+static func _mutate_trade(tiers: Dictionary) -> bool:
+	var givers: Array[StringName] = []
+	var takers: Array[StringName] = []
+	for gene: StringName in tiers:
+		var value := int(tiers[gene])
+		if value >= 2:
+			givers.append(gene)
+		if value < TIER_MAX:
+			takers.append(gene)
+	if givers.is_empty():
+		return false
+	var giver: StringName = givers[randi() % givers.size()]
+	takers.erase(giver)
+	if takers.is_empty():
+		return false
+	var taker: StringName = takers[randi() % takers.size()]
+	tiers[giver] = int(tiers[giver]) - 1
+	tiers[taker] = int(tiers[taker]) + 1
+	return true
+
+
+## One gene is replaced by one the lineage does not carry, at the same tier: a
+## whole organ changes colour and shape, which is why this is the kind that is
+## unmistakable at a glance.
+##
+## **The mouth is never the gene that is replaced.** Every other trade here is
+## even; losing the cytostome is not, and a daughter born without a mouth is a
+## choice no one would make rather than a choice between two builds.
+static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
+	var goes: Array[StringName] = []
+	for gene: StringName in tiers:
+		if gene != &"cytostome":
+			goes.append(gene)
+	var comes: Array[StringName] = []
+	for gene: StringName in GENE_ORDER:
+		if gene != &"cytostome" and not tiers.has(gene):
+			comes.append(gene)
+	if goes.is_empty() or comes.is_empty():
+		return false
+	var out: StringName = goes[randi() % goes.size()]
+	var into: StringName = comes[randi() % comes.size()]
+	tiers[into] = int(tiers[out])
+	tiers.erase(out)
+	var slot := seats.find(out)
+	if slot >= 0:
+		seats[slot] = into
+	return true
