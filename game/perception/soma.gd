@@ -75,6 +75,20 @@ var beat := 0.0
 var division := {}
 
 ## How far either side of centre the two of them are seated, in canvas px.
+##
+## **It was briefly scaled by the width of the frame, and that was reverted.**
+## The argument for scaling was that this is the one length on the figure that
+## is not a fraction of anything, and that a 640-wide replay pane would put the
+## outer flagellum tips in the band. Rendered, neither half holds. The band
+## contributes exactly zero there -- the daughters' outer body edge sits 140px
+## from the pane edge, where the shader's `inner` term is still clamped off --
+## and at the full wobble it reaches 0.8 of 255 green, which is not a collision
+## anybody can see. What the scaling cost was real: it scaled the seat and not
+## [constant SCALE], so the daughters sat 36px apart in a pane where the player
+## had just watched them 168px apart, and because the frame is the whole
+## viewport in normal mode it moved the *shipped* 2400x1080 division as well.
+## A replay that misrepresents the frame it is replaying is the one failure this
+## screen may not have. docs/design/replay.md §4.8.
 const DIVIDE_SEAT := 132.0
 
 var _cell: CellBody = null
@@ -101,6 +115,19 @@ func setup(cell: CellBody, genome: GenomeNode) -> void:
 ## calmly in the middle of it would be the game contradicting itself.
 func set_active(on: bool) -> void:
 	visible = on
+
+
+## **Which part of the screen this figure is centred in.** The whole viewport in
+## normal mode, where nothing calls this; the left pane on the replay screen,
+## where *what you felt* is the point-of-view half. The figure is not scaled
+## down with it: a fully grown cell is 204px across and a 640px pane has 110px
+## of black either side of it. docs/design/replay.md §4.3.
+func set_frame(rect: Rect2) -> void:
+	_figure.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_figure.position = rect.position
+	_figure.size = rect.size
+	_figure.clip_contents = true
+	_figure.queue_redraw()
 
 
 func _process(delta: float) -> void:

@@ -29,12 +29,26 @@ extends Node
 ##                           wide at 16:9: `expand` keeps the height at 720 and
 ##                           widens it, so at 2400x1080 the canvas is 1600 across
 ##                           and a centred widget is 160 further right.
+##                           **Do not pre-scale.** This applies the stretch
+##                           transform itself, because the event goes in through
+##                           `Input.parse_input_event`, which wants window
+##                           pixels -- unlike --hover= below, which does not.
+##                           Scaling a coordinate before passing it here puts
+##                           the finger 1.5x too far out at 2400x1080 and
+##                           produces a tap on nothing, which reads as a
+##                           control that does not respond. It has cost one
+##                           false bug report already.
 ##   --hover=<seconds>:<x>,<y>
 ##                           warp the mouse to that canvas point, once, at that
 ##                           time; repeatable. The desktop half of the genome
 ##                           strip -- point at a tile and read what the gene
 ##                           does -- has no touch equivalent and therefore no
-##                           other way to be photographed.
+##                           other way to be photographed. **Canvas units go in
+##                           unscaled**, the same as --touch= above and for the
+##                           opposite reason: `Viewport.warp_mouse` applies the
+##                           stretch transform on the way in, so this one must
+##                           not. Either way the number you write is the canvas
+##                           coordinate and nothing else.
 ##   --sample=<gene>         put a gene in the genome's held sample, the state
 ##                           §3.3 gives a second heartbeat and §5.2 gives the
 ##                           strip. Reaching it by playing means eating a fourth
@@ -141,6 +155,19 @@ extends Node
 ##                           while the last wake bearing is ahead, release once
 ##                           it is astern, and do not waver. This is the only
 ##                           way to test a window that is made of time.
+##   --kill-at=<seconds>     starve the cell to death at that time, so the death
+##                           screen, the `watch` offer and the replay itself can
+##                           each be photographed without waiting seven minutes
+##                           for hunger or gambling on a hunter
+##   --panes=<seconds>       raise the two-pane replay screen over the live run
+##                           at that time, mirroring it frame for frame. The
+##                           split screen is the part of docs/design/replay.md
+##                           that had to be rendered rather than reasoned about
+##                           (§5), and this is how it gets photographed before
+##                           there is a recorder to feed it
+##   --capture-cost=<secs>   print the recorder's rolling maximum microseconds
+##                           per capture() on that interval. §4.6 asks for a
+##                           measurement and refuses to accept the estimate
 ##   --seed=<int>            deterministic drift and impulses
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
@@ -163,6 +190,9 @@ const CellBody := preload("res://game/normal/cell.gd")
 ## cannot be judged by eye: two bodies overlapping tells you nothing about
 ## whether either mouth is on the other.
 const Cilia := preload("res://game/vision/cilia.gd")
+## The two-pane screen, raised over a live run by --panes. Nothing else in the
+## game instances it this way; the replay screen owns it in a real run.
+const PanesScreen := preload("res://game/replay/panes.gd")
 
 var _clock := 0.0
 var _esc_at := -1.0
@@ -242,6 +272,15 @@ var _drag_step := 0
 var _arm_at := 0.0
 ## -1 leaves the scene to pick up whatever the mode select last stored.
 var _mode := -1
+## When to starve the cell to death, for photographing what happens next.
+var _kill_at := -1.0
+## When to raise the two-pane screen over the live run, and the node once it is.
+var _panes_at := -1.0
+var _panes: Node = null
+## How often to print what capture() costs, and the recorder it is asking.
+var _capture_cost := -1.0
+var _capture_clock := 0.0
+var _recorder: Node = null
 
 
 func _ready() -> void:
@@ -336,6 +375,12 @@ func _ready() -> void:
 				if xy.size() == 2:
 					_touches.append([float(touch[0]),
 						Vector2(float(xy[0]), float(xy[1]))])
+		elif text.begins_with("--kill-at="):
+			_kill_at = float(text.trim_prefix("--kill-at="))
+		elif text.begins_with("--panes="):
+			_panes_at = float(text.trim_prefix("--panes="))
+		elif text.begins_with("--capture-cost="):
+			_capture_cost = float(text.trim_prefix("--capture-cost="))
 		elif text == "--locked":
 			_locked = true
 		elif text == "--evade":
@@ -463,6 +508,9 @@ func _process(delta: float) -> void:
 	_step_forage()
 	_step_evade()
 	_step_trace(delta)
+	_step_kill()
+	_step_panes()
+	_step_capture_cost(delta)
 
 	if _freeze_countdown > 0:
 		_freeze_countdown -= 1
@@ -505,6 +553,50 @@ func _process(delta: float) -> void:
 	if _freeze_at >= 0.0 and _clock >= _freeze_at:
 		_freeze_at = -1.0
 		_freeze()
+
+
+## Straight to the end of the forty-second grace, which is a death this frame.
+func _step_kill() -> void:
+	if _kill_at < 0.0 or _clock < _kill_at or _metabolism == null:
+		return
+	_kill_at = -1.0
+	_metabolism.set_hunger(1.0)
+	_metabolism.starve_seconds = _metabolism.STARVE_GRACE + 1.0
+	print("[drive] %5.2f  starved" % _clock)
+
+
+## **The two panes, over a run that is still being played.** Not the replay --
+## there is no recording involved and nothing is being played back -- but the
+## same screen, built from the same four shipped views, so that the geometry,
+## the clipping and the membrane at 640x632 can be looked at. §5's last bullet.
+func _step_panes() -> void:
+	if _panes_at < 0.0 or _clock < _panes_at or _run == null:
+		return
+	_panes_at = -1.0
+	_panes = PanesScreen.new()
+	_panes.name = "Panes"
+	_panes.live = true
+	_run.add_child(_panes)
+	print("[drive] %5.2f  panes raised over the live run" % _clock)
+
+
+## What one capture() costs, as a rolling maximum in microseconds. §4.6.
+func _step_capture_cost(delta: float) -> void:
+	if _capture_cost <= 0.0:
+		return
+	if _recorder == null:
+		_recorder = _find_script(self, "res://game/replay/recorder.gd")
+		if _recorder == null:
+			_capture_cost = -1.0
+			print("[capture] no recorder in this build")
+			return
+	_capture_clock += delta
+	if _capture_clock < _capture_cost:
+		return
+	_capture_clock = 0.0
+	print("[capture] %6.2f  frames %d  peak %d us  last %d us  mean %.1f us" % [
+		_clock, _recorder.frames(), _recorder.peak_usec, _recorder.last_usec,
+		_recorder.mean_usec()])
 
 
 ## Turn until the taste sits at the top. The dumbest possible forager, which is

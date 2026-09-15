@@ -530,6 +530,96 @@ func set_geometry(rect: Vector2, inset: float) -> void:
 	_inset = maxf(inset, 0.0)
 
 
+## **The light setting, on the material now rather than on the next frame.**
+##
+## A run sets [member gain] as a plain property and gets away with it, because
+## it is stepping envelopes sixty times a second and every one of those frames
+## ends in the same `_apply()` that writes this uniform. A screen that is not
+## stepping has no next frame to rely on -- the replay's panes write a recorded
+## block instead -- so it says it here and it lands at once.
+##
+## Clamped rather than trusted: this is reached from a stored file.
+func apply_gain(value: float) -> void:
+	gain = clampf(value, GAIN_MIN, GAIN_MAX)
+	_apply()
+
+
+# ---------------------------------------------------------------------------
+# The membrane as a block of numbers. docs/design/replay.md §4.1.
+#
+# **The replay records the membrane as uniforms, not as the sensations that
+# produced them.** Re-running the sensations at playback would re-roll the taste
+# jitter and the beat jitter off this node's own generator, and a replay that
+# shows a *different* jitter from the one the player actually steered on is a
+# replay that lies about the one thing the screen exists to check.
+#
+# So these two functions, and this file stays the only one that knows a uniform
+# name. Three uniforms are deliberately NOT in the block: `rect_px` and
+# `inset_px` are the geometry of whatever rect is being drawn into -- a pane is
+# half a screen wide and has its own -- and `gain` is a setting the player owns
+# now, not a fact about the run that ended.
+# ---------------------------------------------------------------------------
+
+## Floats one captured membrane takes. Thirty-seven, and the count is checked
+## against the block layout below rather than trusted.
+const BLOCK_FLOATS := 37
+
+
+## Writes this membrane's state into [param out] at [param at]. No allocation:
+## it is called once a frame from the recorder's hot loop.
+func capture_block(out: PackedFloat32Array, at: int) -> void:
+	out[at] = _base_hue.x
+	out[at + 1] = _base_hue.y
+	out[at + 2] = _base_hue.z
+	out[at + 3] = _dread_hue.x
+	out[at + 4] = _dread_hue.y
+	out[at + 5] = _dread_hue.z
+	out[at + 6] = _pulse.value
+	var i := at + 7
+	for lobe: Vector4 in _glow_lobes:
+		out[i] = lobe.x
+		out[i + 1] = lobe.y
+		out[i + 2] = lobe.z
+		out[i + 3] = lobe.w
+		i += 4
+	for lobe: Vector4 in _press_lobes:
+		out[i] = lobe.x
+		out[i + 1] = lobe.y
+		out[i + 2] = lobe.z
+		out[i + 3] = lobe.w
+		i += 4
+	out[at + 31] = _flash.value
+	out[at + 32] = _ingest.value
+	out[at + 33] = _ingest_hue.x
+	out[at + 34] = _ingest_hue.y
+	out[at + 35] = _ingest_hue.z
+	out[at + 36] = _dread
+
+
+## Puts a captured membrane back on the shader, through this node's own state so
+## that it stays the only writer of a uniform. The caller stops this node
+## processing first -- an envelope stepping underneath a written block would
+## fight it for the same uniforms, exactly as the death frames would.
+func write_block(block: PackedFloat32Array, at: int) -> void:
+	_base_hue = Vector3(block[at], block[at + 1], block[at + 2])
+	_dread_hue = Vector3(block[at + 3], block[at + 4], block[at + 5])
+	_pulse.hold(block[at + 6])
+	var i := at + 7
+	for slot in _glow_lobes.size():
+		_glow_lobes[slot] = Vector4(block[i], block[i + 1], block[i + 2],
+			block[i + 3])
+		i += 4
+	for slot in _press_lobes.size():
+		_press_lobes[slot] = Vector4(block[i], block[i + 1], block[i + 2],
+			block[i + 3])
+		i += 4
+	_flash.hold(block[at + 31])
+	_ingest.hold(block[at + 32])
+	_ingest_hue = Vector3(block[at + 33], block[at + 34], block[at + 35])
+	_dread = block[at + 36]
+	_apply()
+
+
 ## **What organs this cell has, and how good they are** -- genes-and-cilia.md
 ## §2.1. Posted every frame by whoever owns the run, like [method set_beat],
 ## and the only thing in this file that is about the body rather than about

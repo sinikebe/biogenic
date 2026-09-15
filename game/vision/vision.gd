@@ -139,7 +139,14 @@ const FOOD_TINT := Color(0.35, 0.88, 0.42)
 const PREDATOR_TINT := Color(0.78, 0.24, 0.30)
 
 @onready var _water: ColorRect = $Water
-@onready var _world: Node2D = $World
+## **The clip.** `$World` is a `Node2D` and draws out past 1900 world units, so
+## anchors cannot hold it: put this view in half a screen and it would spill
+## across whatever is in the other half. A `Control` with `clip_contents` clips
+## its own canvas item and every child of it, which is the one part of
+## docs/design/replay.md §4.3 that had to be rendered rather than reasoned
+## about. It is the whole viewport in normal mode and clips nothing there.
+@onready var _frame: Control = $Frame
+@onready var _world: Node2D = $Frame/World
 
 var _cell: CellBody = null
 var _motes_node: MotesField = null
@@ -198,7 +205,11 @@ func _ready() -> void:
 	_world.draw.connect(_on_world_draw)
 	_world.scale = Vector2(ZOOM, ZOOM)
 
-	_find_simulation()
+	# Bound already means somebody instanced this view on purpose and told it
+	# what to look at ([method bind]); the search below is for the ordinary
+	# case, where this node is a child of the run and nothing hands it anything.
+	if _cell == null:
+		_find_simulation()
 	if _cell != null:
 		_camera = _cell.position
 	if _bus != null:
@@ -213,6 +224,38 @@ func _ready() -> void:
 		_food_node.eaten.connect(_on_eaten)
 
 	_apply_visibility()
+
+
+## **What this view is a view of**, for a second copy of it that is not a child
+## of the run. Called before [method Node.add_child], which is the only moment
+## it can be: [method _ready] falls back to searching the tree, and the search
+## finds the run's own nodes -- including the run's bus, which is the wrong bus
+## for a screen that re-plays recorded sensations of its own.
+##
+## The run itself never calls this and is unchanged by it. docs/design/replay.md
+## §4.5.
+func bind(cell: CellBody, motes: MotesField, food: FoodField,
+		genome: GenomeNode, bus: SignalBus) -> void:
+	_cell = cell
+	_motes_node = motes
+	_food_node = food
+	_genome_node = genome
+	_bus = bus
+
+
+## **Which part of the screen this view occupies.** The whole viewport in normal
+## mode, where nothing calls this; half of it, less the transport band, on the
+## two-pane replay screen.
+##
+## Both rects, and they are deliberately the same one: `Water` is what the water
+## shader fills and what sets the world-to-screen scale, and `Frame` is what
+## clips the drawing to it. replay.md §4.3.
+func set_frame(rect: Rect2) -> void:
+	for control: Control in [_water, _frame]:
+		control.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+		control.position = rect.position
+		control.size = rect.size
+	_view = rect.size
 
 
 ## The one thing the rest of the game says to this node. [param on] is true in
@@ -294,7 +337,14 @@ func _process(delta: float) -> void:
 	else:
 		_spin = 0.0
 	_world.rotation = _spin
-	_world.position = _view * 0.5 - (_camera * ZOOM).rotated(_spin)
+	# **Where the middle of the water is, in the frame's own coordinates.** The
+	# first term used to be missing, which assumed the water rect started at the
+	# viewport origin and that `$World` hung directly off the canvas layer. Both
+	# are true in normal mode and the term is exactly zero there -- it is the
+	# split screen, where the rect is half a viewport wide and sits at an
+	# offset, that needs it written down. replay.md §4.3.
+	_world.position = (_water.position - _frame.position) \
+		+ _view * 0.5 - (_camera * ZOOM).rotated(_spin)
 	_push_shader()
 	_world.queue_redraw()
 
@@ -398,6 +448,22 @@ func _on_eaten(nutrition: float, gene: StringName, at: Vector2) -> void:
 	var r := clampf(nutrition * _cell.radius,
 		FoodField.DRIFTER_MIN, FoodField.ARRIVAL_RADIUS_MAX)
 	_meals.append([at, r, 0.0, Cilia.hue(gene) if gene != &"" else FOOD_TINT])
+
+
+## **A recorded contact, replayed into this view's own marks.** Two lines, and
+## they exist so the replay screen never fires [signal MotesField.struck] or
+## [signal FoodField.eaten] to get a ghost drawn: those signals belong to the
+## live water, and the run sitting behind the replay screen is still subscribed
+## to them. docs/design/replay.md §4.5.
+##
+## The bearing and the strength are not passed because the handler drops them --
+## a ghost is a place, and the place is all that is held.
+func mark_struck(at: Vector2) -> void:
+	_on_mote_struck(0.0, 0.0, at)
+
+
+func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
+	_on_eaten(nutrition, gene, at)
 
 
 ## A body-relative bearing turned back into a world direction. The one place

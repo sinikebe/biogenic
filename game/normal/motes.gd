@@ -101,6 +101,19 @@ func points() -> PackedVector2Array:
 	return _motes
 
 
+## **Where a mote was, written back from a recording.** Only the replay does
+## this, and only once the run is over: *a run keeps nothing*, so the recorded
+## state is scribbled onto the real field and `vision.gd` reads it exactly as it
+## does now. `_wake_up()` seeds all fourteen again.
+##
+## It exists for the same reason [method points] does -- so no caller has to
+## reach for the private array -- and it is the write half of that bargain.
+## docs/design/replay.md §3.
+func restore_point(index: int, at: Vector2) -> void:
+	if index >= 0 and index < _motes.size():
+		_motes[index] = at
+
+
 func _spawn_point() -> Vector2:
 	var angle := randf_range(-PI, PI)
 	var distance := randf_range(RING_MIN, RING_MAX)
