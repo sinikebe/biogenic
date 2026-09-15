@@ -46,11 +46,14 @@ const ONBOARD_FADE_OUT := 0.8
 const SENSE_LINE_HOLD := 7.0
 
 # --- The free opening sense -------------------------------------------------
-# **The point of the whole change.** A born cell has no sense of any kind since
-# `chemocyte` took taste behind a gene, so an unhelped opening is a cell
-# wandering an invisible ocean until something eats it. Five seconds in it is
-# handed one, free, drawn at random, and told so in the one line of text this
-# mode has.
+# **An invariant against blindness, which is what it always meant.** A born cell
+# has no sense of any kind since `chemocyte` took taste behind a gene, so an
+# unhelped opening is a cell wandering an invisible ocean until something eats
+# it. Five seconds after any birth, *if the cell has no sensing gene at all*, it
+# is handed one, free, drawn at random, and told so in the one line of text this
+# mode has. Generation 1 always qualifies; a daughter qualifies only if the
+# player built a blind lineage, and granting unconditionally would hand out a
+# free gene every two minutes. lifecycle.md §6.
 #
 # It arrives as a **held sample the player places**, not as an auto-placement:
 # the `ocellus` is directional and worthless unplaced, and this makes the free
@@ -82,6 +85,53 @@ enum Onboard { OFF, WAITING, FADE_IN, HOLD, FADE_OUT }
 ## ALIVE, then the collapse, then the black that holds until they touch it,
 ## then the aperture opening on a new cell.
 enum Life { ALIVE, DYING, WAITING, RETURNING }
+
+# --- The division (docs/design/lifecycle.md §4) ------------------------------
+# **The largest dramatic beat the game will have, drawn entirely in the
+# vocabulary that already exists**: bodies, the fringe, the nucleus, the
+# aperture. No number, no icon, no text in the playfield beyond one onboarding
+# line, and no new shader uniform.
+#
+# The warning is not a phase: it is continuous in radius, from
+# DIVIDE_WARN_RADIUS, and it is the nucleus doubling. Everything below is what
+# happens once the body has run out of arcs.
+
+## QUICKEN still steers; PINCH stops the simulation, exactly as a death does.
+enum Split { NONE, QUICKEN, PINCH, PART, CHOOSING, COMMIT }
+
+## The beat runs up to RICH_PERIOD at full amplitude. Nothing is taken away.
+const DIVIDE_QUICKEN := 2.4
+## The body elongates along the heading and narrows at the waist.
+const DIVIDE_PINCH := 1.5
+## Two bodies, separating.
+const DIVIDE_PART := 1.0
+## The chosen one holds; the other falls to nothing and takes her own colour.
+const DIVIDE_COMMIT := 0.9
+## How long a lean has to be held before it commits. The commitment is drawn as
+## it accrues, so releasing early undoes it.
+const CHOOSE_HOLD := 1.0
+## How far either side of centre the daughters are seated, in canvas px on the
+## point-of-view figure and in world units in full vision. Both were rendered;
+## neither needs a camera zoom.
+const DIVIDE_SEAT_POV := 132.0
+const DIVIDE_SPREAD_WORLD := 160.0
+## What the world goes down to while the two of them are on screen. Through
+## vision.gd's existing fade, so it costs no uniform.
+const DIVIDE_WORLD_FADE := 0.22
+## The figures are drawn at this rather than at soma.gd's FADE: rendered at 0.34
+## the difference between two daughters is not callable. For the only time in
+## the game the middle of the screen is the loudest thing on it, and that
+## inversion is the beat.
+const DIVIDE_FADE := 1.0
+## Before a lean, and after one, for the daughter being declined.
+const DIVIDE_FADE_IDLE := 0.82
+const DIVIDE_FADE_DIM := 0.34
+## How far off the sister is left, on the side she was drawn on. Far enough not
+## to be a fight at birth, near enough to be met -- and inside the frame in full
+## vision, so the answer to "what happened to the other one" is visible.
+const SISTER_DISTANCE := 560.0
+## The one line, at the first division of a run only.
+const DIVIDE_LINE := "lean into one of them"
 
 ## Which view this run is drawn with, as [enum RunState.Mode]. Set it before the
 ## scene enters the tree to override the remembered choice; left alone it picks
@@ -152,6 +202,29 @@ var _death_clock := 0.0
 var _death_loud := true
 var _vision_cut := false
 
+# --- The division -----------------------------------------------------------
+var _split := Split.NONE
+var _split_clock := 0.0
+## How deep into the run the lineage is. Reset by death and by nothing else:
+## **a run keeps nothing; a lineage keeps everything.**
+var _generation := 1
+## The two of them, port first: `{"tiers": {}, "order": [], "mutation": &""}`.
+## Which is on which side is random, so the choice is made by reading rather
+## than by remembering.
+var _daughters: Array = []
+## -1 port, +1 starboard, 0 not leaning, and how long it has been held.
+var _lean := 0
+var _lean_clock := 0.0
+var _chosen := -1
+## A finger on one half of the screen, as a signed lean past the deadzone.
+var _touch_lean := 0.0
+var _touch_index := -2
+## Whether this run has said the one line yet.
+var _said_divide := false
+## What the two views are drawing this frame. Empty means an ordinary body; see
+## [method _push_division] for the contract.
+var _division := {}
+
 
 func _ready() -> void:
 	# Android Back must pause, not kill the app. quit_on_go_back is a SceneTree
@@ -221,6 +294,14 @@ func _process(delta: float) -> void:
 		# simulation is moving. §5.2.
 		_step_arming()
 		return
+	# The division. Its first phase leaves the simulation running -- steering
+	# still works and nothing is taken away -- and every phase after it has
+	# called _set_simulating(false), exactly as a death does, so there is
+	# nothing below here left to post.
+	if _split != Split.NONE:
+		_step_split(delta)
+		if _split >= Split.PINCH:
+			return
 
 	# Read once, post once. Nothing below carries a position.
 	_metabolism.concentration = _food.concentration
@@ -239,6 +320,11 @@ func _process(delta: float) -> void:
 		CellBody.DART_RANGE_BY_TIER.size() - 1)
 	_food.dart_range = CellBody.DART_RANGE_BY_TIER[dart]
 	_food.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[dart]
+	# **The dart looks along the arc it is worn on**, exactly as the beam does
+	# and resolved in the same place for the same reason: this file has both the
+	# genome and cilia.gd's arc table. A rear dart answers a flank, which is what
+	# makes `trichocyst` a placement decision instead of a radius.
+	_food.dart_bearing = _slot_bearing_of(&"trichocyst")
 	var venom := mini(_cell.extra(&"toxicyst"),
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
@@ -294,9 +380,22 @@ func _process(delta: float) -> void:
 	_soma.beat = _bus.pulse()
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
+	# After the beat above, because it replaces it: the quickening is the beat
+	# running up to RICH_PERIOD at full strength, and posting the metabolic one
+	# afterwards would undo it every frame.
+	if _split == Split.QUICKEN:
+		_bus.set_beat(lerpf(_metabolism.beat_period(), MetabolismNode.RICH_PERIOD,
+			clampf(_split_clock / DIVIDE_QUICKEN, 0.0, 1.0)), 1.0)
+	_push_division()
 
 	if _metabolism.starved():
 		_die(false, 0.0)
+		return
+	# **Seven arcs, and no room for an eighth organ.** Checked after the meal
+	# that grew the body, so the division is the consequence of the mouthful
+	# rather than of the frame after it.
+	if _split == Split.NONE and _cell.radius >= CellBody.DIVIDE_RADIUS:
+		_begin_split()
 
 
 ## Which way this cell's beams look. **The slot is the arc and the arc is the
@@ -319,6 +418,14 @@ func _beam_bearings() -> PackedFloat32Array:
 		var u := 0.0 if count < 2 else -1.0 + 2.0 * float(i) / float(count - 1)
 		out.append(wrapf(middle + u * fan, -PI, PI))
 	return out
+
+
+## Which way a directional organ looks: the bearing of the arc it is worn on,
+## dead ahead for a gene this body does not wear. **The body's slot, not the
+## DNA's** -- the organ is on the body, and the DNA is what the daughters get.
+func _slot_bearing_of(gene: StringName) -> float:
+	var slot := _genome.slot_of(gene)
+	return Cilia.slot_bearing(slot) if slot >= 0 else 0.0
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow
@@ -354,11 +461,16 @@ func _post_pings() -> void:
 # The free opening sense.
 # ---------------------------------------------------------------------------
 
-## Five seconds in, one sensing gene, free, as a sample waiting for a slot.
+## Five seconds after any birth -- a run's first cell or a daughter -- one
+## sensing gene, free, as a sample waiting for a slot.
 ##
-## Unconditional: there is no check on whether the water has been kind, because
-## the state this exists to prevent -- a cell that cannot sense anything at all
-## -- is the state every run now starts in.
+## **It stops being "every run" and becomes what it always meant: an invariant
+## against blindness.** The precondition that was already false for generation 1
+## is the one that decides it now: *if the cell has no sensing gene at all*. A
+## born cell always qualifies. A daughter qualifies only if the player built a
+## blind lineage, which is a real and rare thing to have done, and being rescued
+## from it is right -- granting unconditionally would hand out a free gene every
+## two minutes. lifecycle.md §6.
 func _step_sense_grant(delta: float) -> void:
 	if _sensed:
 		return
@@ -366,21 +478,281 @@ func _step_sense_grant(delta: float) -> void:
 	if _sense_clock < FIRST_SENSE_AT:
 		return
 	_sensed = true
+	for sense: StringName in FIRST_SENSES:
+		if _cell.extra(sense) > 0:
+			return
 	var gene: StringName = FIRST_SENSES[randi() % FIRST_SENSES.size()]
-	# Only reachable from the dev harness, which can force a genome that already
-	# carries one of the four. Nothing to give, and nothing to say about it.
-	if _genome.tier(gene) > 0:
+	# It is in the DNA already but not on this body -- a lineage that wrote a
+	# sense down and then never expressed it. Nothing to give.
+	if _genome.dna_tier(gene) > 0:
 		return
 	# The gift comes with somewhere to put it, but only when there is nowhere:
 	# a cell that has grown itself a spare slot does not need a second one.
 	if not _genome.layout().has(&""):
 		_genome.bonus_slots += 1
-	if _genome.integrate(gene) != GenomeNode.Result.HELD:
+	if _genome.gift(gene) != GenomeNode.Result.HELD:
 		return
 	# The strip is built when the pause screen opens, so there is nothing to
 	# rebuild here -- but the echo behind the beat starts on the next frame's
 	# hold(), and the line says what the echo cannot.
 	_say_sense()
+
+
+# ---------------------------------------------------------------------------
+# The division. docs/design/lifecycle.md §4.
+#
+# One state machine, six phases, and not one new node or pixel: the bodies are
+# cilia.gd's, the parting is two constants on the ovoid, the choice is the
+# gesture the game already has for every other decision, and the newborn's first
+# moment is the aperture envelope a revival was already written for.
+# ---------------------------------------------------------------------------
+
+## The body has run out of arcs. Nothing is taken away yet -- QUICKEN still
+## steers, and the player has 2.4 seconds of a body beating faster to read
+## before anything stops.
+func _begin_split() -> void:
+	_split = Split.QUICKEN
+	_split_clock = 0.0
+	_chosen = -1
+	_lean = 0
+	_lean_clock = 0.0
+	_touch_lean = 0.0
+	_touch_index = -2
+	_daughters = _make_daughters()
+
+
+## Two daughters of equal mass, one faithful and one with a single sideways
+## mutation, **both drawn as real bodies before the player commits**. It is not
+## a gamble: you can see exactly what the mutation did.
+func _make_daughters() -> Array:
+	var faithful := {
+		"tiers": _genome.dna().duplicate(),
+		"order": _genome.layout().duplicate(),
+		"mutation": &"",
+	}
+	var rolled: Array = GenomeNode.mutated(_genome.dna(), _genome.layout())
+	var changed := {"tiers": rolled[0], "order": rolled[1], "mutation": rolled[2]}
+	# Which one is on which side is random, so the choice is made by reading the
+	# two bodies rather than by remembering which side the safe one is on.
+	return [faithful, changed] if randf() < 0.5 else [changed, faithful]
+
+
+func _step_split(delta: float) -> void:
+	_split_clock += delta
+	# The line and its fade keep running: _step_onboarding is only called from
+	# the live branch of _process, which stops at the pinch.
+	if _split >= Split.PINCH:
+		_step_onboarding(delta)
+	match _split:
+		Split.QUICKEN:
+			if _split_clock >= DIVIDE_QUICKEN:
+				_split = Split.PINCH
+				_split_clock = 0.0
+				# The same call a death makes. The water stops, the body does
+				# not: what is left moving is the division itself.
+				_set_simulating(false)
+				_cell.release()
+		Split.PINCH:
+			_hush()
+			if _split_clock >= DIVIDE_PINCH:
+				_split = Split.PART
+				_split_clock = 0.0
+		Split.PART:
+			_hush()
+			if _split_clock >= DIVIDE_PART:
+				_split = Split.CHOOSING
+				_split_clock = 0.0
+				if not _said_divide:
+					_said_divide = true
+					# Hold 0 is "wait for the verb", and the verb is the lean.
+					_say(DIVIDE_LINE, 0.0)
+		Split.CHOOSING:
+			_hush()
+			_step_choosing(delta)
+		Split.COMMIT:
+			# The aperture shutting on one cell and opening on another, which is
+			# exactly the envelope this was written for.
+			_bus.revive(_split_clock)
+			if _split_clock >= DIVIDE_COMMIT:
+				_be_born()
+		_:
+			pass
+	_push_division()
+
+
+## **No sensations, for the only time in the game.** Everything the membrane is
+## holding is let go so the two bodies in the middle of the screen are the whole
+## of what is on it. Posted rather than switched off: the bus owns every
+## envelope, and this is the run telling it the truth about a cell that is
+## no longer swimming in anything.
+func _hush() -> void:
+	_bus.dread(0.0)
+	_bus.taste(0.0, 0.0)
+	_bus.light(0.0, 0.0)
+	_bus.beam(0.0, 0.0)
+	_bus.level(0.0, 0.0)
+	_bus.hold(0.0)
+	_bus.shear(0.0)
+
+
+## **You lean into one**, and the commitment is drawn as it accrues. Releasing
+## early undoes it; a tap commits nothing; there is no timeout and no default,
+## so a player who puts the phone down comes back to the same two bodies.
+func _step_choosing(delta: float) -> void:
+	var lean := _read_lean()
+	if lean != _lean:
+		_lean = lean
+		_lean_clock = 0.0
+		# The line has done its job the moment they lean, whichever way -- from
+		# wherever it had got to, which may be part way in: a player still
+		# holding a drag from before the pinch leans on the first frame there is
+		# anything to lean at, and the line must not stick at half brightness
+		# for the rest of the division.
+		if lean != 0 and not _onboard_steer \
+				and _onboard != Onboard.OFF and _onboard != Onboard.FADE_OUT:
+			_onboard_from = _onboarding.modulate.a
+			_onboard_clock = 0.0
+			_onboard = Onboard.FADE_OUT
+		return
+	if _lean == 0:
+		return
+	_lean_clock += delta
+	if _lean_clock < CHOOSE_HOLD:
+		return
+	_chosen = 0 if _lean < 0 else 1
+	_split = Split.COMMIT
+	_split_clock = 0.0
+
+
+## Which way the player is leaning, -1 port and +1 starboard.
+##
+## Read here rather than off the cell, because the cell's input has been
+## switched off with the rest of the simulation -- and because the target is a
+## screen half rather than a body: a 96 px daughter is not a 48 px target with a
+## thumb over it.
+func _read_lean() -> int:
+	if Input.is_action_pressed(&"ui_left") or Input.is_key_pressed(KEY_A):
+		return -1
+	if Input.is_action_pressed(&"ui_right") or Input.is_key_pressed(KEY_D):
+		return 1
+	if absf(_touch_lean) > CellBody.STEER_DEADZONE:
+		return -1 if _touch_lean < 0.0 else 1
+	return 0
+
+
+## **What the two views draw this frame, and the only thing either is told.**
+##
+## Empty is an ordinary body. `double` and `pinch` are the mother becoming two;
+## `bodies` is present only once there are two of them, and its presence is what
+## tells a view to stop drawing the cell and draw the pair.
+func _push_division() -> void:
+	var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS,
+		_cell.radius)
+	if _split == Split.NONE and double <= 0.0:
+		if not _division.is_empty():
+			_division = {}
+			_hand_division()
+		return
+	_division = {"double": double, "pinch": 0.0}
+	match _split:
+		Split.PINCH:
+			_division["pinch"] = clampf(_split_clock / DIVIDE_PINCH, 0.0, 1.0)
+		Split.PART, Split.CHOOSING, Split.COMMIT:
+			_division["pinch"] = 1.0
+		_:
+			pass
+	if _split >= Split.PART and _daughters.size() == 2:
+		var spread := 1.0
+		if _split == Split.PART:
+			spread = clampf(_split_clock / DIVIDE_PART, 0.0, 1.0)
+		_division["spread"] = spread
+		_division["radius"] = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+		var pair: Array = []
+		for side in 2:
+			pair.append({
+				"tiers": _daughters[side]["tiers"],
+				"order": _daughters[side]["order"],
+				"fade": _side_fade(side),
+				"shed": _side_shed(side),
+			})
+		_division["bodies"] = pair
+	_hand_division()
+
+
+func _hand_division() -> void:
+	_soma.division = _division
+	_vision.division = _division
+	_vision.set_dim(DIVIDE_WORLD_FADE if _division.has("bodies") else 1.0)
+
+
+## How bright daughter [param side] is: both up while nothing is being asked,
+## the one being leaned into rising and the other falling as the second of
+## commitment accrues, and then one of them going out.
+func _side_fade(side: int) -> float:
+	if _split == Split.COMMIT:
+		if side == _chosen:
+			return DIVIDE_FADE
+		return DIVIDE_FADE_DIM * (1.0 - clampf(_split_clock / DIVIDE_COMMIT,
+			0.0, 1.0))
+	if _lean == 0:
+		return DIVIDE_FADE_IDLE
+	var t := clampf(_lean_clock / CHOOSE_HOLD, 0.0, 1.0)
+	var leaned := 0 if _lean < 0 else 1
+	if side == leaned:
+		return lerpf(DIVIDE_FADE_IDLE, DIVIDE_FADE, t)
+	return lerpf(DIVIDE_FADE_IDLE, DIVIDE_FADE_DIM, t)
+
+
+## How far daughter [param side] has stopped being you. Only ever the one you
+## declined, and only on the way out.
+func _side_shed(side: int) -> float:
+	if _split != Split.COMMIT or side == _chosen:
+		return 0.0
+	return clampf(_split_clock / DIVIDE_COMMIT, 0.0, 1.0)
+
+
+## **What the newborn wakes into.** The same calls a revival makes, with one
+## substitution: she is a new body rather than a born one, and she is made of
+## the DNA her mother spent a life writing.
+func _be_born() -> void:
+	var pick: Dictionary = _daughters[_chosen]
+	var other: Dictionary = _daughters[1 - _chosen]
+	_generation += 1
+	# A new body, not a starving one: the mother spent herself. Her place and
+	# her heading are kept, so nothing about the frame jumps.
+	_cell.reset(true)
+	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	_metabolism.reset()
+	# The DNA becomes both registers again: expressed whole, at birth, which is
+	# the whole of INHERIT_TIER_LOSS being zero.
+	_genome.express(pick["tiers"], pick["order"])
+	_soma.setup(_cell, _genome)
+	_motes.setup(_cell)
+	# **The field is reseeded.** The water around you was sized to a 40-unit body
+	# and the newborn is 28; the field is a treadmill already, so this is that
+	# treadmill taking one large step. It re-fires the drifter-floor invariant,
+	# which is what guarantees the newborn a first meal she can certainly take.
+	_food.setup(_cell)
+	# And the one you did not take is left in it.
+	_food.put_sister(-PI * 0.5 if _chosen == 1 else PI * 0.5, SISTER_DISTANCE,
+		_cell.radius, other["tiers"])
+	# A daughter is a birth, so the anti-blindness grant's clock starts again --
+	# but the grant itself now asks whether she can sense anything at all, and a
+	# daughter almost always can. §6.
+	_sense_clock = 0.0
+	_sensed = false
+	_split = Split.NONE
+	_split_clock = 0.0
+	_daughters = []
+	_chosen = -1
+	_lean = 0
+	_touch_lean = 0.0
+	_touch_index = -2
+	_division = {}
+	_hand_division()
+	_set_simulating(true)
+	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
+	_bus.pulse_now()
 
 
 func _on_impulsed(strength: float) -> void:
@@ -454,7 +826,13 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# a state §3.3 and §5.2 both assume cannot happen. food.gd's _devour() grows
 	# first for the same reason, and genome.gd's docstring promises there is
 	# only one definition of this rule.
-	_cell.radius += CellBody.GROWTH_PER_MEAL
+	#
+	# **And it stops at DIVIDE_RADIUS**, because that is where the body runs out
+	# of arcs. A field cell is not clamped -- edibility.md §7 keeps the runaway
+	# and makes it killable from astern instead -- but the player's growth has
+	# somewhere else to go now, and it goes there.
+	_cell.radius = minf(_cell.radius + CellBody.GROWTH_PER_MEAL,
+		CellBody.DIVIDE_RADIUS)
 	_genome.integrate(gene)
 	# The flood takes the gene's hue (§2.2), which is the one place a gene is
 	# ever identified on the sensory screen -- a contact event, chemistry
@@ -491,6 +869,13 @@ func _die(loud: bool, bearing: float) -> void:
 	_death_clock = 0.0
 	_vision_cut = false
 	_tap_pending = false
+	# A death during the quickening -- the one phase the water is still moving
+	# in -- takes the division with it. The collapse owns the screen, and two
+	# daughters drawn under it would be the game contradicting itself twice.
+	_split = Split.NONE
+	_daughters = []
+	_division = {}
+	_hand_division()
 	_set_simulating(false)
 	_cell.release()
 	# The collapse owns the screen. A body still swimming calmly in the middle
@@ -546,10 +931,12 @@ func _wake_up() -> void:
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
 	# A new cell is a born cell, and a born cell has no senses: the five-second
-	# clock starts again, and so does the line that announces it. §9.4 -- death
-	# keeps nothing, and that has to include the leg-up.
+	# clock starts again, and so does the line that announces it. **A run keeps
+	# nothing** -- and that has to include the leg-up and the lineage.
 	_sense_clock = 0.0
 	_sensed = false
+	_generation = 1
+	_said_divide = false
 	_set_simulating(true)
 	_apply_mode()
 
@@ -751,6 +1138,15 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 		return
 
+	# **Leaning into one of them.** The screen halves are the targets, because a
+	# 96 px body is not a 48 px target with a thumb over it, and a lean has to be
+	# *held* -- so a tap commits nothing and there is no arming pattern in the
+	# playfield. Read here rather than on the cell, whose input has stopped with
+	# the rest of the simulation.
+	if _split >= Split.PART and _read_touch_lean(event):
+		get_viewport().set_input_as_handled()
+		return
+
 	# The dead membrane is waiting to be touched, and there is nothing on it to
 	# aim at, so anything counts.
 	if _life == Life.WAITING and _is_tap(event):
@@ -780,6 +1176,73 @@ func _unhandled_input(event: InputEvent) -> void:
 		get_viewport().set_input_as_handled()
 
 
+## A finger or a held click on one half of the screen, as a signed lean: -1 at
+## the port edge, +1 at the starboard edge, 0 at the exact middle. Returns true
+## when the event was one of ours.
+##
+## Absolute positions rather than relative, and the mouse only claims the lean
+## when touch has not -- the same two rules cell.gd's steering obeys, for the
+## same reason: Godot emulates a mouse from every touch, so the two arrive as a
+## pair on Android.
+func _read_touch_lean(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		if touch.pressed:
+			if _touch_index == -2:
+				_touch_index = touch.index
+				_touch_lean = _lean_at(touch.position)
+		elif _touch_index == touch.index:
+			_touch_index = -2
+			_touch_lean = 0.0
+		return true
+	if event is InputEventScreenDrag:
+		var drag := event as InputEventScreenDrag
+		# **A thumb that was already down is adopted here**, and it has to be:
+		# the steering gesture is a finger on the screen, so a player who was
+		# steering when the body pinched is still holding one when the two of
+		# them appear. Their press happened before there was anything to lean
+		# at, so the only event we will ever see from that finger is a drag --
+		# and asking them to lift and press again to answer the biggest beat in
+		# the game is the kind of thing that only looks fine in code.
+		if _touch_index == -2:
+			_touch_index = drag.index
+		if _touch_index == drag.index:
+			_touch_lean = _lean_at(drag.position)
+		return true
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if click.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		if click.pressed:
+			if _touch_index == -2:
+				_touch_index = -1
+				_touch_lean = _lean_at(click.position)
+		elif _touch_index == -1:
+			_touch_index = -2
+			_touch_lean = 0.0
+		return true
+	if event is InputEventMouseMotion:
+		var moved := event as InputEventMouseMotion
+		# The same adoption, for a button that went down before there was
+		# anything to press it at.
+		if _touch_index == -2 \
+				and (moved.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
+			_touch_index = -1
+		if _touch_index != -1:
+			return false
+		_touch_lean = _lean_at(moved.position)
+		return true
+	return false
+
+
+## Where a point on the screen falls, as a lean.
+func _lean_at(at: Vector2) -> float:
+	var half := get_viewport().get_visible_rect().size.x * 0.5
+	if half <= 0.0:
+		return 0.0
+	return clampf((at.x - half) / half, -1.0, 1.0)
+
+
 func _is_tap(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return (event as InputEventScreenTouch).pressed
@@ -798,6 +1261,12 @@ func _is_tap(event: InputEvent) -> bool:
 ## version, and two toggles in a frame would mean the pause screen never
 ## appears at all.
 func _toggle_pause() -> void:
+	# **Not during a division.** The tree is already stopped, the choice has no
+	# timeout and no default, and a pause screen over two daughters would put
+	# the DNA strip on top of the one moment it is a picture of. Back and Esc do
+	# nothing for the six seconds it takes; leaving is one lean away.
+	if _split != Split.NONE:
+		return
 	var frame := Engine.get_process_frames()
 	if frame == _last_toggle_frame:
 		return
@@ -1034,8 +1503,27 @@ const ARM_TIMEOUT_MS := 4000
 ## **"place", not "replace".** Every new gene is a placement decision now, and
 ## most of them land in an empty slot -- the slot is the arc, so which empty one
 ## is the whole question. The compass on each tile is what answers it.
-const HINT_ARM := "tap a slot to place it"
+## **"your daughters wear it", because placing no longer changes you.** One word
+## of difference, and it is the whole of lifecycle.md §1 said on the one surface
+## that can say it.
+const HINT_ARM := "tap a slot · your daughters wear it"
 const HINT_COMMIT := "tap again to place"
+## What the line says when nothing is held: how deep the lineage is, which is
+## the only readout of how far into the run the player is and the nearest thing
+## the game has to a score. Zero pixels -- Hint is already allocated 19 and is
+## usually empty.
+const ORDINALS: Array[String] = ["first", "second", "third", "fourth", "fifth",
+	"sixth", "seventh", "eighth", "ninth", "tenth"]
+
+## Three pip states, and the load-bearing distinction is shape: filled is an
+## organ you wear, a ring is one the DNA carries and you do not, faint is
+## neither. Under a luminance-only render -- no colour at all -- the three
+## separate cleanly at 1:1.
+const PIP_DNA_ALPHA := 0.85
+const PIP_DNA_WIDTH := 1.4
+## The second, weaker channel behind the pips: a gene the body does not wear
+## draws its organ fainter. Honest about which one does the work.
+const ORGAN_UNEXPRESSED := 0.52
 
 ## **The plain word, never the biological name.** Four short verbs are parsed
 ## instantly at arm's length; nine letters of Greek are not, on the one screen
@@ -1107,7 +1595,12 @@ func _build_genome_strip() -> void:
 		child.queue_free()
 	_slot_genes.clear()
 
-	var tiers := _genome.tiers()
+	# **The strip is the DNA**, and the body is the other register -- it is the
+	# thing in the middle of the screen the rest of the time. What the body
+	# dissents about is carried by the pips, which is where the tier is already
+	# read. lifecycle.md §3.
+	var dna := _genome.dna()
+	var body := _genome.tiers()
 	# **The layout, not the dictionary.** Slot index is the arc a gene is worn
 	# on, and the layout is the only thing that knows about holes -- a genome
 	# with the beam in slot 6 and nothing in slots 3 to 5 is a genome the player
@@ -1117,12 +1610,13 @@ func _build_genome_strip() -> void:
 	var held := _genome.held_sample
 	if held != &"":
 		# The sample and its arrow only exist while one is held.
-		_genome_row.add_child(_make_tile(held, 1, Tile.HELD, -1))
+		_genome_row.add_child(_make_tile(held, 1, 0, Tile.HELD, -1))
 		_genome_row.add_child(_make_arrow())
 
 	# maxi, not slots(), so a genome can never be wider than the strip that
-	# claims to show it. It cannot happen today; a strip that quietly hid a gene
-	# could not be noticed if it ever did.
+	# claims to show it. **A newborn is over capacity and that is intended**: she
+	# carries up to seven genes on a body whose slots() is 3, so she may replace
+	# but not add until she grows.
 	var count := maxi(_genome.slots(), _slot_genes.size())
 	for i in count:
 		var gene: StringName = _slot_genes[i] if i < _slot_genes.size() else &""
@@ -1131,11 +1625,11 @@ func _build_genome_strip() -> void:
 			# a sample could do was overwrite; it is the common case now that
 			# every gene is placed by hand.
 			var blank := Tile.ARMED if i == _armed else Tile.EMPTY
-			_genome_row.add_child(_make_tile(&"", 0, blank, i))
+			_genome_row.add_child(_make_tile(&"", 0, 0, blank, i))
 		else:
 			var state := Tile.ARMED if i == _armed else Tile.OCCUPIED
-			_genome_row.add_child(_make_tile(gene, int(tiers.get(gene, 0)),
-				state, i))
+			_genome_row.add_child(_make_tile(gene, int(dna.get(gene, 0)),
+				int(body.get(gene, 0)), state, i))
 
 	# **The slots do not move when the sample block appears or goes, and that is
 	# worth one invisible node.** Row is centred, so without this the whole slot
@@ -1205,12 +1699,21 @@ func _restore_focus(slot: int) -> void:
 
 func _update_hint() -> void:
 	if _genome.held_sample == &"":
-		_genome_hint.text = ""
+		_genome_hint.text = _generation_text()
 		return
 	_genome_hint.text = HINT_COMMIT if _armed >= 0 else HINT_ARM
 
 
-func _make_tile(gene: StringName, tier: int, state: int, index: int) -> PanelContainer:
+func _generation_text() -> String:
+	if _generation >= 1 and _generation <= ORDINALS.size():
+		return "%s generation" % ORDINALS[_generation - 1]
+	return "generation %d" % _generation
+
+
+## [param tier] is the DNA's and [param body_tier] is what this body wears. The
+## tile draws the first and the pips carry both.
+func _make_tile(gene: StringName, tier: int, body_tier: int, state: int,
+		index: int) -> PanelContainer:
 	var tile := PanelContainer.new()
 	tile.custom_minimum_size = Vector2(TILE_SIZE, TILE_SIZE)
 	tile.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
@@ -1227,7 +1730,8 @@ func _make_tile(gene: StringName, tier: int, state: int, index: int) -> PanelCon
 
 	var face := Control.new()
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	face.draw.connect(_draw_tile_face.bind(face, tile, gene, tier, state))
+	face.draw.connect(_draw_tile_face.bind(face, tile, gene, tier, body_tier,
+		state))
 	tile.add_child(face)
 
 	if live:
@@ -1264,7 +1768,7 @@ func _tile_box(gene: StringName, state: int) -> StyleBoxFlat:
 ## vocabulary, so a player who learns it here can read the water, and a player
 ## who learns it in the water can read this.
 func _draw_tile_face(face: Control, tile: Control, gene: StringName, tier: int,
-		state: int) -> void:
+		body_tier: int, state: int) -> void:
 	var box := face.size
 	var slot := int(tile.get_meta(&"slot", -1))
 	if gene == &"":
@@ -1293,19 +1797,33 @@ func _draw_tile_face(face: Control, tile: Control, gene: StringName, tier: int,
 			WORDS.get(gene, String(gene)), HORIZONTAL_ALIGNMENT_CENTER,
 			box.x, LABEL_SIZE, LABEL_TINT_LOUD if loud else LABEL_TINT)
 
-	Cilia.draw_tile_organ(face, gene, tier, box)
+	# The organ keeps its geometry and stays rooted; a gene the body does not
+	# wear simply draws fainter. That is the weaker of the two channels and the
+	# first version of it -- an organ lifted off its seat -- was photographed and
+	# dropped: at 76 px a 4 px lift is invisible and the tile read as *broken*.
+	var worn := state == Tile.HELD or body_tier > 0
+	Cilia.draw_tile_organ(face, gene, tier, box,
+		Cilia.TILE_STROKE_ALPHA if worn else ORGAN_UNEXPRESSED)
 	# Which arc this slot is -- the whole of why placement is a choice.
 	Cilia.draw_tile_direction(face, slot, Cilia.hue(gene), box)
 
-	# Three pips, filled to the tier. The one thing on the tile that is a count
-	# rather than a magnitude: at 13 pixels the 22% length step §4.3 uses on a
-	# body is a single pixel, so the tile spells it out instead.
+	# **Three pips, and two registers on them.** Filled is an organ you wear at
+	# that tier, a ring is one the DNA carries and you do not, faint is neither.
+	# One gene one filled pip and two rings against two filled and one faint is
+	# readable at a glance at both shapes, and it is shape rather than hue that
+	# carries it. The one thing on the tile that is a count rather than a
+	# magnitude: at 13 pixels the 22% length step §4.3 uses on a body is a single
+	# pixel, so the tile spells it out instead.
 	var tone := Cilia.hue(gene)
 	var y := box.y - PIP_BOTTOM
+	var mine := tier if state == Tile.HELD else body_tier
 	for i in 3:
 		var at := Vector2(box.x * 0.5 + (float(i) - 1.0) * PIP_GAP, y)
-		if i < tier:
+		if i < mine:
 			face.draw_circle(at, PIP_RADIUS, Color(tone, 0.92), true, -1.0, true)
+		elif i < tier:
+			face.draw_circle(at, PIP_RADIUS, Color(tone, PIP_DNA_ALPHA), false,
+				PIP_DNA_WIDTH, true)
 		else:
 			face.draw_circle(at, PIP_RADIUS, Color(tone, 0.22), false, 1.2, true)
 
@@ -1383,8 +1901,13 @@ func _is_tile_tap(event: InputEvent) -> bool:
 ## not a choice, and §1.3's drifter floor is what makes even the worst swap --
 ## dropping a fourth gene over your own mouth -- survivable rather than a soft
 ## lock.
+## **Gated on the strip, not on the ladder.** `_genome.slots()` is the capacity
+## the *body* earned, and a newborn carries her mother's whole DNA on a body two
+## thirds the size -- so gating on it would silently deaden four of seven live
+## tiles for the commonest state in the late game. The strip is the DNA and the
+## DNA is what is being placed into.
 func _commit_slot(index: int) -> void:
-	if index < 0 or index >= _genome.slots():
+	if index < 0 or index >= _slot_genes.size():
 		return
 	_genome.place(index)
 	_disarm()

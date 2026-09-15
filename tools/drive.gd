@@ -100,6 +100,12 @@ extends Node
 ##                           degrees away from facing the player, default 0:
 ##                           180 turns its mouth away, which is what proves a
 ##                           mouth has to be pointed at you to reach you
+##   --dna=<g:t[:slot],...>  force the player's DNA only, leaving the body it is
+##                           wearing alone. That is the state a cell reaches by
+##                           eating -- lifecycle.md §1 -- and the one the pause
+##                           strip's three pip states exist to show, so it is the
+##                           only way to photograph them without playing a whole
+##                           generation. Applied after --genome=.
 ##   --genome=<g:t[:slot],...>
 ##                           force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
@@ -183,6 +189,7 @@ var _hunter_gape := 1.40
 var _prey_radius := -1.0
 var _radius := -1.0
 var _genome_spec := ""
+var _dna_spec := ""
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -295,6 +302,8 @@ func _ready() -> void:
 			_radius = float(text.trim_prefix("--radius="))
 		elif text.begins_with("--genome="):
 			_genome_spec = text.trim_prefix("--genome=")
+		elif text.begins_with("--dna="):
+			_dna_spec = text.trim_prefix("--dna=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
@@ -349,6 +358,8 @@ func _ready() -> void:
 				_radius, body.slots()])
 	if _genome_spec != "" and _genome != null:
 		_force_genome(_genome_spec)
+	if _dna_spec != "" and _genome != null:
+		_force_dna(_dna_spec)
 	if _sample != &"" and _genome != null:
 		_genome.held_sample = _sample
 		_genome.held_remaining = _genome.SAMPLE_SECONDS
@@ -421,9 +432,12 @@ func _ready() -> void:
 ## can be checked.
 func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
-	print("[meal]  %5.2f  nutrition %.2f of one meal (%.2f hunger)  gene %s -> %s  me r%.2f gape %.2f" % [
+	# **The DNA, not the body.** A meal writes what your daughters will be and
+	# leaves the organism it went into alone (lifecycle.md §1), so printing the
+	# body here would show a genome that never changes however much you eat.
+	print("[meal]  %5.2f  nutrition %.2f of one meal (%.2f hunger)  gene %s -> dna %s  me r%.2f gape %.2f" % [
 		_clock, nutrition, 0.5 * nutrition, gene if gene != &"" else &"none",
-		_genome_text(_genome.tiers() if _genome != null else {}),
+		_genome_text(_genome.dna() if _genome != null else {}),
 		cell.radius if cell != null else 0.0, cell.gape() if cell != null else 0.0])
 
 
@@ -579,11 +593,12 @@ func _step_trace(delta: float) -> void:
 	var speed := _travelled / maxf(_speed_clock, 0.001)
 	_travelled = 0.0
 	_speed_clock = 0.0
-	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) %s" % [
+	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) body %s dna %s" % [
 		_clock, cell.radius, cell.gape(), cell.wound,
 		"alive" if _metabolism != null and _metabolism.is_processing() else " DEAD",
 		cell.swim_speed(), speed,
-		_genome_text(_genome.tiers() if _genome != null else {})])
+		_genome_text(_genome.tiers() if _genome != null else {}),
+		_genome_text(_genome.dna() if _genome != null else {})])
 	print("        %s" % _membrane_text())
 	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
 		_food.dread_level, _food.threat,
@@ -1027,8 +1042,32 @@ func _face(index: int, away: float) -> void:
 ## will take them -- so `--genome=cytostome:1,ocellus:1` aims the beam forward
 ## and `ocellus:1:6` aims it over the rear-port quarter.
 func _force_genome(spec: String) -> void:
-	var tiers: Dictionary = _genome.tiers()
-	tiers.clear()
+	var made := _parse_genes(spec)
+	# **Expressed whole**, which is what a birth does: the harness is forcing a
+	# cell, not feeding one, so the body and the DNA are the same thing.
+	_genome.express(made[0], made[1])
+	print("[drive] genome forced to %s in %s, upkeep %.2f" % [
+		_genome_text(made[0]), made[1], _genome.upkeep()])
+
+
+## **The DNA without the body**, which is the state a cell reaches by eating and
+## the one the pause strip exists to show: the organism and the plan disagreeing.
+## Reached by playing it is a whole generation of foraging, so it is posed here.
+## Reaching for a private member is a thing only tools/ is allowed to do.
+func _force_dna(spec: String) -> void:
+	var made := _parse_genes(spec)
+	_genome.set("_dna", made[0])
+	_genome.set("_order", made[1])
+	print("[drive] dna forced to %s in %s (body stays %s)" % [
+		_genome_text(made[0]), made[1], _genome_text(_genome.tiers())])
+
+
+## `cytostome:3,cirrus:2` into `[{gene: tier}, layout]`. `gene:tier` as before,
+## and `gene:tier:slot` to say **which slot**, which is which arc, which is which
+## way a directional gene looks. Without the third field the genes land in the
+## order they are written, in the first slots that will take them.
+func _parse_genes(spec: String) -> Array:
+	var tiers := {}
 	var placed := {}
 	for pair in spec.split(",", false):
 		var bits := str(pair).split(":")
@@ -1038,30 +1077,26 @@ func _force_genome(spec: String) -> void:
 		tiers[gene] = int(bits[1])
 		if bits.size() >= 3:
 			placed[gene] = int(bits[2])
-	if not placed.is_empty():
-		var layout: Array[StringName] = []
-		for i in _genome.slots():
-			layout.append(&"")
-		for gene: StringName in placed:
-			var slot := int(placed[gene])
-			if slot >= 0 and slot < layout.size():
-				layout[slot] = gene
-		for gene: StringName in tiers:
-			if placed.has(gene) and layout.has(gene):
-				continue
-			if placed.has(gene):
-				# Asked for a slot this body does not have yet -- the ladder is
-				# the radius, so `--radius=40` is what buys slots 5 and 6. Say so
-				# rather than silently dropping the gene somewhere else.
-				print("[drive] slot %d is past this body's %d slots" % [
-					int(placed[gene]), layout.size()])
-			var free := layout.find(&"")
-			if free >= 0:
-				layout[free] = gene
-		_genome.set("_order", layout)
-		print("[drive] layout forced to ", layout)
-	print("[drive] genome forced to %s, upkeep %.2f" % [
-		_genome_text(tiers), _genome.upkeep()])
+	var layout: Array[StringName] = []
+	for i in maxi(_genome.slots(), tiers.size()):
+		layout.append(&"")
+	for gene: StringName in placed:
+		var slot := int(placed[gene])
+		if slot >= 0 and slot < layout.size():
+			layout[slot] = gene
+	for gene: StringName in tiers:
+		if placed.has(gene) and layout.has(gene):
+			continue
+		if placed.has(gene):
+			# Asked for a slot this body does not have yet -- the ladder is
+			# the radius, so `--radius=40` is what buys slots 5 and 6. Say so
+			# rather than silently dropping the gene somewhere else.
+			print("[drive] slot %d is past this body's %d slots" % [
+				int(placed[gene]), layout.size()])
+		var free := layout.find(&"")
+		if free >= 0:
+			layout[free] = gene
+	return [tiers, layout]
 
 
 ## §1.3's distribution, measured rather than argued about. Reseeds the whole

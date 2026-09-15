@@ -57,6 +57,24 @@ const BITE_GAP := 0.85
 ## which makes venom the answer to being gnawed as well as to being eaten.
 const VENOM_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
 
+## Where on a body a bite lands, and therefore how much of it lands. The nose is
+## 1.0 because that is where the target's own mouth is and where it is thickest;
+## astern nothing it has can answer. A cosine, so there is no angle at which the
+## damage steps. docs/design/edibility.md §1.2.
+##
+## **2.10 is the number to move, and it is the whole difficulty of flanking.**
+## It is not measurable from a still frame; it is the first thing to change if
+## taking a big cell apart feels either hopeless or free.
+const FLANK_AHEAD := 1.00
+const FLANK_ASTERN := 2.10
+
+## How far off the arc it is worn on a `trichocyst` can answer. The dart used to
+## be a scalar range and fired at whatever was near, which under a positional
+## rule is a defence with no position: **a dart in a rear slot is the answer to
+## being flanked**, and placement becomes a defensive decision rather than only
+## an offensive one. §2.
+const DART_ARC_DEG := 110.0
+
 ## 0 is whole and 1 is a body that has come apart. There is no bar for this
 ## anywhere: point of view feels each bite as a `hit` at the bearing it came
 ## from, and full vision draws the tears (cilia.gd).
@@ -76,18 +94,47 @@ var genome: Node = null
 ## Index 0 is a cell with no mouth at all, which is a real state: drifters have
 ## no cytostome, and §9.7 lets the player put a fourth gene over their own.
 ##
-## **This is the whole edibility rule.** A can eat B when `B.radius < A.gape()`,
-## evaluated in both directions independently, which is what makes a small cell
-## with an enormous mouth both prey and predator. §1.1.
+## **The gape keeps its job and loses its veto.** It used to be the whole
+## edibility rule; docs/design/edibility.md §1 withdraws that. You can attack
+## anything -- the gape decides whether you swallow it whole (`B.radius <
+## A.gape()`, evaluated in both directions independently) or have to take it
+## apart a bite at a time, and [method bite_damage]'s `min(gape / radius, 1)`
+## keeps the two continuous with each other.
 const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
 
 # --- Slots -----------------------------------------------------------------
 ## Genome size is capacity, not currency: one more slot per this much growth.
-## Three slots at birth, seven at radius 40 -- the same radius at which nothing
-## the water seeds can swallow you. §3.1.
+## Three slots at birth, seven at radius 40 -- and seven is every arc a body
+## has, which is why [constant DIVIDE_RADIUS] is where it divides. §3.1.
 const SLOT_RADIUS := 3.5
 const SLOT_MIN := 3
 const SLOT_MAX := 7
+
+# --- The end of a body, and the beginning of two -----------------------------
+# docs/design/lifecycle.md §2. **Forty is where a body runs out of places to put
+# an organ**: SLOT_MAX is 7, the body has exactly seven arcs, and slots_for(40)
+# is 7. Growth past it is the one thing a cell can do that buys nothing it can
+# pass on, so the player's radius clamps here and the body divides instead.
+#
+# The old justifications for 40 -- "nothing left in the water can eat you" and
+# "the genome fills on the same meal" -- are both withdrawn by
+# docs/design/edibility.md §4 and by measurement respectively. The capacity
+# argument stands on its own and is the only one left.
+
+## Where a body divides, and where its radius stops.
+const DIVIDE_RADIUS := 40.0
+## Two meals out, and where the nucleus starts to double.
+const DIVIDE_WARN_RADIUS := 37.0
+## Of the mother's **area**, not her radius -- so a daughter is 40/sqrt(2) and
+## slots_for(28.28) is 3, the same room to manoeuvre a run starts with. None of
+## that was arranged; it falls out of conserving area on a ladder that was
+## already there.
+const DIVIDE_SPLIT := 0.5
+
+
+## What each daughter of a body of [param mother_radius] is born at.
+static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
+	return mother_radius * sqrt(DIVIDE_SPLIT)
 
 # --- Drive -----------------------------------------------------------------
 # Every number in this block is indexed by a gene tier rather than fixed, and
@@ -268,9 +315,15 @@ func _ready() -> void:
 
 
 ## A new cell in new water, for the restart after a death.
-func reset() -> void:
-	position = Vector2.ZERO
-	heading = randf_range(-PI, PI)
+##
+## [param keep_place] is a birth rather than a restart: a daughter carries on
+## from where her mother was and pointing the way her mother pointed, so the
+## world view's camera does not jump at the one moment the player is looking
+## hardest at the middle of the screen. Everything else about her is new.
+func reset(keep_place: bool = false) -> void:
+	if not keep_place:
+		position = Vector2.ZERO
+		heading = randf_range(-PI, PI)
 	velocity = Vector2.ZERO
 	radius = BASE_RADIUS
 	wound = 0.0
@@ -439,13 +492,27 @@ static func gape_of(cytostome_tier: int, body_radius: float) -> float:
 ## [param target_radius] is the body, not its swallow radius: armour is counted
 ## once, on the bottom of this expression, and counting it twice would make
 ## pellicle the only gene in the game with a square in it.
+##
+## [param theta] is **where on the body it landed**, measured at the target
+## between its own heading and the direction the mouth arrived from: 0 is dead
+## ahead and PI is dead astern. One definition, asked in both directions, so the
+## water chewing on the player and the player chewing on the water read the same
+## table. §1.2.
 static func bite_damage(cytostome_tier: int, gape: float, target_radius: float,
-		target_pellicle_tier: int) -> float:
+		target_pellicle_tier: int, theta: float) -> float:
 	var base := BITE_BY_TIER[_tier_index(cytostome_tier)]
 	if base <= 0.0:
 		return 0.0
-	return base * minf(gape / maxf(target_radius, 0.001), 1.0) \
+	return base * minf(gape / maxf(target_radius, 0.001), 1.0) * flank(theta) \
 		/ ARMOR_BY_TIER[_tier_index(target_pellicle_tier)]
+
+
+## How much of a bite arriving on bearing [param theta] actually lands. A
+## cosine: there is no angle at which the damage steps, and turning your nose
+## onto an attacker is what takes it back to 1.0 -- which is `cirrus`'s new job
+## and the whole of §2.
+static func flank(theta: float) -> float:
+	return lerpf(FLANK_AHEAD, FLANK_ASTERN, 0.5 - 0.5 * cos(theta))
 
 
 ## What a venomous body does back to the mouth that just bit it.

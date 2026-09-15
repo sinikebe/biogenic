@@ -80,7 +80,9 @@ const COUNT := 34
 # a culled cell. These are the three numbers to move if the water feels wrong,
 # in this order; §9.6 leaves all of them open to play-testing.
 
-## Share of arrivals drawn absolutely rather than relative to the player.
+## Share of arrivals drawn absolutely rather than relative to the player, for a
+## cell that can see what is coming. [method _drifter_share] is what the seeder
+## actually asks; a blind one gets [constant BLIND_DRIFTER_SHARE].
 const DRIFTER_SHARE := 0.45
 ## The Phase 4 food band, unchanged. Drifters have **no cytostome**, so their
 ## gape tops out at 12.2 and they eat nothing, including each other. They are
@@ -94,9 +96,14 @@ const PEER_SPREAD := 0.34
 
 ## **The ceiling is on the gape, not on the body.** A seeded cell takes its
 ## radius from the draw and then has its cytostome tier reduced until its mouth
-## fits under this. At radius 40 nothing the water seeds can swallow you, which
-## is the exact meal at which the genome fills (§3.1) -- dread stops arriving,
-## and that is the readout that the run is won.
+## fits under this.
+##
+## **It stops meaning "at r40 nothing can eat you" and starts meaning "the water
+## never seeds a mouth that can end you in one contact"** (edibility.md §4).
+## That claim is still true and still a real bound on the worst arrival. What is
+## gone is the safe harbour: anything with a mouth can take you apart given time
+## and position, so there is no radius at which the water cannot kill you -- and
+## therefore no won state. lifecycle.md §2 rebuilds the arc on capacity instead.
 ##
 ## Capping the gape also shapes the population for free: a radius-40 arrival can
 ## carry at most cytostome 1, while a radius-28 one can carry cytostome 3. Big
@@ -153,7 +160,42 @@ const DRIFTER_GENES: Array[StringName] = [
 ## the number that sets how much of the water can eat you (about a fifth of it
 ## at r26), so it is the first thing to move if the water feels wrong, ahead of
 ## DRIFTER_SHARE and PEER_SPREAD.
-const TIER_WEIGHTS: Array[int] = [0, 3, 2, 1]
+const TIER_WEIGHTS: Array[float] = [0.0, 3.0, 2.0, 1.0]
+
+# --- What a cell that cannot see meets ---------------------------------------
+# The owner: *"When blind, we have to make stronger enemies very rare. It must
+# be mostly defenceless food."*
+#
+# **Keyed on the player's own senses, never on the view.** "One simulation, two
+# views" has been load-bearing since Phase 3 -- the two views differ only in
+# what is drawn, and full vision exists to catch the membrane lying. A water
+# that were gentler in point of view would destroy that. Keyed on the genome
+# instead it reads identically in both views, because it depends on what the
+# body is and not on which camera is pointed at it.
+#
+# It is also fair in a way a difficulty slider is not: **the danger you face is
+# always danger you could have seen coming.** And it makes a slot spent on a
+# sense open up a richer world rather than merely reveal the same one.
+#
+# No new lever. A drifter has no cytostome and BITE_BY_TIER[0] is a hard zero,
+# so a drifter is *literally* defenceless food; the two numbers that decide how
+# much of the water is one are the two §9.6 already named.
+
+## The four genes that answer *where is something* -- the same four
+## normal_mode.gd hands out at five seconds. Nothing else counts as sight: the
+## ones left out sharpen or steady what these find.
+const SENSE_GENES: Array[StringName] = [
+	&"chemocyte", &"ampulla", &"ocellus", &"stigma"]
+## Summed sensory tiers at which the water is the shipped one. Five is a real
+## investment -- two organs, one of them grown -- and not the free tier-1 sense
+## every run is handed at five seconds, which lands this at 0.2.
+const SENSE_FULL := 5.0
+## Blind: nine bodies in ten have no mouth at all, and the rare peer that does
+## has the poorest one. Neither is a rule -- both are lerped toward the numbers
+## above by [method _sensed], so a cell growing its first eye watches the water
+## get worse continuously rather than in a step.
+const BLIND_DRIFTER_SHARE := 0.92
+const BLIND_TIER_WEIGHTS: Array[float] = [0.0, 8.0, 1.0, 0.0]
 
 ## Smaller than you, passive, does not flee: a cell that is not hunting anything
 ## drifts exactly as Phase 4's food did. Slow enough that it is never a chase and
@@ -295,6 +337,60 @@ const DREAD_CAP := 0.95
 ## at zero -- so "the water is wrong" has never meant "that one can eat me".
 const THREAT_LOW := 0.85
 const THREAT_HIGH := 1.35
+
+# --- Dread, and the hole in it that was measured -----------------------------
+# **A second term SUMMED onto the one above, never branched against it.** Two
+# r40 cells with cytostome 1 parked with their mouths 43 units off an r40
+# player's skin score a ratio of 0.82, which is below THREAT_LOW, so they
+# contributed *exactly zero* -- and they can chew that player to death in
+# eighteen seconds. The membrane was silent about a body that could kill you in
+# eighteen seconds. It was silent about it before edibility.md too, because the
+# bite has been shipped for a release: this is a defect being fixed rather than
+# a cost being paid. §3.
+#
+# Four properties, each of which is the reason for one constant:
+#
+# - **continuous everywhere.** bite_damage is continuous in every argument and
+#   clampf is continuous, so a body's contribution moves smoothly as its mouth
+#   grows, as you grow and as you are hurt. There is no question here with a
+#   yes/no answer, which is the rule the whole of THREAT_LOW's note defends.
+# - **theta = PI, not the live bearing.** Dread is what a body *could* do.
+#   Feeding it the real angle would make dread swing as the player turns, which
+#   is `statocyst`'s job and not fear's.
+# - **it keys on your own wound**, continuously: a whole body feels a third of
+#   it, a chewed one all of it. Being hurt genuinely does make the water more
+#   dangerous and the membrane should say so. It adds no state and no gate --
+#   it is a fact about your own body.
+# - **520, not 1400.** Something that needs twelve seconds of unbroken contact
+#   is not a threat at a kilometre. The short range is what stops seventeen
+#   mouthed peers raising the floor of the readout: the term is quiet almost
+#   always and loud exactly when something is on you.
+
+## A chewer never reads as loud as a swallower.
+const CHEW_SHARE := 0.55
+## The rate at which the term saturates: a mouth that could open you in twelve
+## seconds of contact is reading its whole share.
+const CHEW_FULL_SECONDS := 12.0
+## What a whole body feels of it, against a body already half eaten.
+const CHEW_HURT_FLOOR := 0.35
+## And its own, much shorter, distance falloff.
+const CHEW_RANGE := 520.0
+
+# --- Blood in the water ------------------------------------------------------
+## How far through a body something has to be before the rest of the water will
+## commit to finishing it. The owner's sentence from the other side -- *a body
+## that has been opened up is a body that could not defend itself* -- and it
+## produces the best emergent moment available: **you get hurt, and the water
+## changes its mind about you.** The wound is drawn on every body already, so
+## the player watches it happen to somebody else before it happens to them. §5.
+const CHEW_INVITE := 0.35
+## A committed hunter leads the point this far behind its target's nucleus
+## rather than the nucleus itself, so it arrives on the quarter and the water
+## plays by the rule it teaches. **The change with the largest felt effect in
+## edibility.md and the one most likely to be too strong**; it is the second
+## dial after FLANK_ASTERN and the first thing to turn off if the water feels
+## unfair.
+const AIM_STERN_SHARE := 0.6
 
 # --- The shadow, for the stigma (§6) ----------------------------------------
 # A body passing between the cell and the light above occludes it. That costs
@@ -574,6 +670,12 @@ var touch_bearing := 0.0
 ## encounter lives here.
 var dart_range := 0.0
 var dart_cooldown := 0.0
+## **Which way the dart looks**: the body-relative bearing of the arc the gene
+## is worn on, written once a frame by the run exactly as [member beam_bearings]
+## is. The organ answers only inside [constant CellBody.DART_ARC_DEG] of it, so
+## a dart in a rear slot is the answer to being flanked and placement becomes a
+## defensive decision. Meaningless while [member dart_range] is 0.
+var dart_bearing := 0.0
 ## `toxicyst`. Negative means the cell has no venom and a kill is a kill.
 var venom_cost := -1.0
 var _dart_clock := 0.0
@@ -710,7 +812,8 @@ func _look_for_prey(index: int, b: Body, reach: float) -> void:
 	# through you is the most obvious lie the game could tell. The floor is gone
 	# and the continuity it was protecting is now protected properly, by dread
 	# not being a function of this decision at all (see THREAT_LOW).
-	if _first_hunt <= 0.0 and _cell.swallow_radius() < gape:
+	if _first_hunt <= 0.0 and _worth_committing_to(b, gape,
+			_cell.swallow_radius(), _cell.wound):
 		var d := b.pos.distance_to(_cell.position)
 		if d <= maxf(reach, b.radius + _cell.radius):
 			best = TARGET_PLAYER
@@ -720,7 +823,8 @@ func _look_for_prey(index: int, b: Body, reach: float) -> void:
 		if j == index:
 			continue
 		var other := _cells[j]
-		if not other.seeded or other.radius >= gape:
+		if not other.seeded \
+				or not _worth_committing_to(b, gape, other.radius, other.wound):
 			continue
 		var d := b.pos.distance_to(other.pos)
 		if d <= maxf(reach, b.radius + other.radius) and d < best_d:
@@ -750,6 +854,25 @@ func _look_for_prey(index: int, b: Body, reach: float) -> void:
 	# rate-limited turn in _swim() is the whole reason a lunge can be dodged.
 	if b.pos.distance_to(b.aim) > LUNGE_RANGE:
 		b.heading = _angle_of(b.aim - b.pos, b.heading)
+
+
+## **What a cell will cross the water for.** The rules are symmetric; the
+## behaviour is not, and must not be, or the water becomes a brawl in which
+## every cell gnaws every other one. A cell still commits only to what it can
+## swallow -- plus the one addition edibility.md §5 makes: a body already opened
+## up past [constant CHEW_INVITE]. Blood in the water.
+##
+## Biting what it bumps into is unchanged and is not decided here: contact is
+## contact, and a mouth closing on something is always worth a bite.
+func _worth_committing_to(b: Body, gape: float, target_radius: float,
+		target_wound: float) -> bool:
+	if target_radius < gape:
+		return true
+	# It cannot swallow it, so the only reason to go is that somebody else has
+	# already opened it -- and only a mouth that could actually finish the job.
+	return target_wound >= CHEW_INVITE \
+		and CellBody.BITE_BY_TIER[clampi(Genome.tier_of(b.genome, &"cytostome"),
+			0, CellBody.BITE_BY_TIER.size() - 1)] > 0.0
 
 
 func _step_stalk(index: int, b: Body, delta: float) -> void:
@@ -789,15 +912,22 @@ func _step_stalk(index: int, b: Body, delta: float) -> void:
 	# only ever felt from a cell that is hunting *you*.
 	if b.target != TARGET_PLAYER:
 		return
-	# **`trichocyst`. It came inside dart range and it is leaving.** Automatic
-	# rather than a button: the design has no second control to spend and the
-	# whole of the gene is the cooldown -- one run broken off, then a long wait,
-	# so it buys an escape and never safety.
+	# **`trichocyst`. It came inside dart range, on the arc the organ is on, and
+	# it is leaving.** Automatic rather than a button: the design has no second
+	# control to spend and the whole of the gene is the cooldown -- one run
+	# broken off, then a long wait, so it buys an escape and never safety.
+	#
+	# **The arc is the point, and it is the one fix §2 calls required.** A dart
+	# that fired at whatever was near was a defence with no position, on a rule
+	# that is now entirely about position. The same wiring the `ocellus` already
+	# has: the slot is the arc, the arc is the bearing, and the run posts it.
 	if dart_range > 0.0 and d < dart_range and _dart_clock <= 0.0:
-		_dart_clock = dart_cooldown
-		darted.emit(_cell.bearing_to(b.pos))
-		_break_off(b)
-		return
+		var off := absf(angle_difference(dart_bearing, _cell.bearing_to(b.pos)))
+		if off <= deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
+			_dart_clock = dart_cooldown
+			darted.emit(_cell.bearing_to(b.pos))
+			_break_off(b)
+			return
 	b.stroke -= delta
 	if b.stroke > 0.0:
 		return
@@ -927,16 +1057,22 @@ func _intercept(b: Body, d: float) -> Vector2:
 ## **The average is the prey's own realised speed** (§7.1), not a constant: a
 ## flagellum-3 cell that outswims a hard-coded 56.5 would otherwise be led at
 ## the wrong point and could not be caught at all.
+## **It aims for the quarter, not the nucleus** ([constant AIM_STERN_SHARE]).
+## The water plays by the rule it teaches, and being flanked is how a player
+## learns to flank.
 func _predict(b: Body, t: float) -> Vector2:
 	if b.target != TARGET_PLAYER:
 		var prey := _target_body(b)
 		if prey == null:
 			return _target_pos(b)
 		var speed := DRIFT_SPEED if prey.state == State.DRIFT else _cruise_speed(prey)
-		return prey.pos + _forward(prey.heading) * speed * t
+		var ahead := _forward(prey.heading)
+		return prey.pos + ahead * (speed * t - prey.radius * AIM_STERN_SHARE)
 	var cruise := _cell.forward() * _cell.swim_speed()
 	var k := maxf(CellBody.DRAG, 0.001)
-	return _cell.position + cruise * t + (_cell.velocity - cruise) * ((1.0 - exp(-k * t)) / k)
+	return _cell.position + cruise * t \
+		+ (_cell.velocity - cruise) * ((1.0 - exp(-k * t)) / k) \
+		- _cell.forward() * (_cell.radius * AIM_STERN_SHARE)
 
 
 func _break_off(b: Body) -> void:
@@ -1148,7 +1284,8 @@ func _chew(b: Body, other: Body) -> float:
 	if b.bite > 0.0:
 		return other.wound
 	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
-		_gape(b), other.radius, Genome.tier_of(other.genome, &"pellicle"))
+		_gape(b), other.radius, Genome.tier_of(other.genome, &"pellicle"),
+		_flank_theta(other.heading, other.pos, b.pos))
 	if damage <= 0.0:
 		return other.wound
 	b.bite = CellBody.BITE_GAP
@@ -1158,18 +1295,33 @@ func _chew(b: Body, other: Body) -> float:
 	return other.wound
 
 
+## **Where a bite landed, measured at the body it landed on**: the angle between
+## that body's own heading and the direction the mouth arrived from. 0 is dead
+## ahead, PI is dead astern. One definition, so a cell being flanked and the
+## player being flanked are the same arithmetic. §1.2.
+func _flank_theta(target_heading: float, target_pos: Vector2,
+		mouth_pos: Vector2) -> float:
+	var from := mouth_pos - target_pos
+	if from.length_squared() <= 0.0001:
+		return 0.0
+	return absf(angle_difference(target_heading, _angle_of(from, target_heading)))
+
+
 ## **Something has its mouth on you and cannot swallow you.** Returns true when
 ## that bite was the one that finished the player, on the same contract as the
 ## kill above: the caller stops touching the field immediately.
 func _bitten_by(index: int, b: Body) -> bool:
 	if b.bite > 0.0:
 		return false
+	var bearing := _cell.bearing_to(b.pos)
+	# Measured at the player, who is the target here: the bearing the mouth is
+	# on *is* theta, because a body-relative bearing is already the angle from
+	# its own heading. A mouth astern is the 2.10.
 	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
-		_gape(b), _cell.radius, _cell.extra(&"pellicle"))
+		_gape(b), _cell.radius, _cell.extra(&"pellicle"), absf(bearing))
 	if damage <= 0.0:
 		return false
 	b.bite = CellBody.BITE_GAP
-	var bearing := _cell.bearing_to(b.pos)
 	_cell.wound = clampf(_cell.wound + damage, 0.0, 1.0)
 	if _cell.wound >= 1.0:
 		# Chewed through rather than swallowed, and it ends the same way. The
@@ -1194,8 +1346,12 @@ func _bitten_by(index: int, b: Body) -> bool:
 func _bite_from_me(index: int, b: Body) -> bool:
 	if _bite_clock > 0.0:
 		return false
+	# Measured at the body being chewed: its own heading against the direction
+	# this mouth arrived from. Holding your nose on a cell's stern is worth 2.10
+	# times holding it on its nose, and that is the owner's sentence made true.
 	var damage := CellBody.bite_damage(_cell.tier(&"cytostome"), _cell.gape(),
-		b.radius, Genome.tier_of(b.genome, &"pellicle"))
+		b.radius, Genome.tier_of(b.genome, &"pellicle"),
+		_flank_theta(b.heading, b.pos, _cell.position))
 	if damage <= 0.0:
 		return false
 	_bite_clock = CellBody.BITE_GAP
@@ -1382,10 +1538,27 @@ func _step_sense() -> void:
 		# wake: ten seconds of the water simply being wrong, then a direction.
 		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
 			_gape(b) / maxf(_cell.swallow_radius(), 0.001))
-		if level <= 0.0:
-			continue
 		worst = maxf(worst, level)
-		dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE), 0.0, 1.0) * level
+		if level > 0.0:
+			dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE),
+				0.0, 1.0) * level
+
+		# **And what it could chew through, added to that and never substituted
+		# for it.** The hole THREAT_LOW leaves: a mouth that cannot swallow you
+		# can still take you apart, and the membrane used to say nothing at all
+		# about one parked on your skin. See the CHEW_ block for why each of the
+		# four constants is there and why not one of them is a gate.
+		if d >= CHEW_RANGE:
+			continue
+		var rate := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
+			_gape(b), _cell.radius, _cell.extra(&"pellicle"), PI) \
+			/ CellBody.BITE_GAP
+		if rate <= 0.0:
+			continue
+		var urgency := clampf(rate * CHEW_FULL_SECONDS, 0.0, 1.0)
+		dread += CHEW_SHARE * urgency \
+			* clampf((CHEW_RANGE - d) / (CHEW_RANGE - DREAD_CORE), 0.0, 1.0) \
+			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * _cell.wound)
 
 	concentration = minf(total, 1.0)
 	# **The bearing is the nose's, not the water's.** A cell with no chemocyte
@@ -1662,17 +1835,21 @@ func _seed(index: int) -> void:
 	_serial += 1
 	b.serial = _serial
 
-	# **The floor is an invariant, not a probability.** COUNT is 4, so a 0.45
-	# coin lands zero drifters in the whole field about 9% of the time. One
-	# counter fixes it: if seeding this cell would leave no drifter in the
-	# field, it is a drifter. "The world cannot degenerate" then stops being a
-	# statistical claim -- there is always something edible at every radius and
-	# at every cytostome tier, so there is always a way back from a bad run.
+	# **The floor is an invariant, not a probability.** A coin, however weighted,
+	# lands zero drifters in the whole field some of the time. One counter fixes
+	# it: if seeding this cell would leave no drifter in the field, it is a
+	# drifter. "The world cannot degenerate" then stops being a statistical
+	# claim -- there is always something edible at every radius and at every
+	# cytostome tier, so there is always a way back from a bad run.
+	#
+	# **It has to hold at both ends of the sensory scale**, and it does, because
+	# it is downstream of the share rather than part of it: the counter is the
+	# same test whether the coin is 0.45 or 0.92.
 	#
 	# At setup this makes cell 0 a drifter, because nothing else is seeded yet,
 	# and cell 0 is the authored first arrival. The opening is therefore always
 	# something the player can eat, which is the right way round.
-	if randf() < DRIFTER_SHARE or not _other_drifter(index):
+	if randf() < _drifter_share() or not _other_drifter(index):
 		_seed_drifter(b)
 	else:
 		_seed_peer(b)
@@ -1692,6 +1869,38 @@ func _seed(index: int) -> void:
 	b.aim = b.pos
 	b.flee_from = b.pos
 	b.seeded = true
+
+
+## **The daughter you did not take, left in the water as an ordinary body.**
+## lifecycle.md §4.2: she is your size, your mouth and your armour -- the one
+## cell in the water that is an exact match for you -- and under edibility.md
+## that is a fight decided by facing and nerve rather than by size. It costs one
+## seeded body and no new system, and it answers "what happened to the other
+## one" without a word.
+##
+## [param bearing] is body-relative, and it is the side she was drawn on, so she
+## is where the player last saw her.
+func put_sister(bearing: float, distance: float, body_radius: float,
+		tiers: Dictionary) -> void:
+	if _cell == null or _cells.size() < 2:
+		return
+	var index := 1
+	# Seeded first, so every clock, counter and serial on that slot is reset by
+	# the one function that knows what a fresh body is; then made the sister.
+	_seed(index)
+	var b := _cells[index]
+	b.drifter = false
+	b.radius = body_radius
+	b.genome = tiers.duplicate()
+	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
+	b.pos = _cell.position + dir * distance
+	b.heading = _angle_of(dir, b.heading)
+	b.aim = b.pos
+	b.flee_from = b.pos
+	# **The floor is an invariant and this just took a body out of the water.**
+	# _seed() may have made that slot the only drifter in the field.
+	if not _other_drifter(index):
+		_seed_drifter(_cells[(index + 1) % _cells.size()])
 
 
 func _other_drifter(index: int) -> bool:
@@ -1755,15 +1964,47 @@ func _draw_gene(pool: Array[StringName]) -> StringName:
 
 
 func _draw_tier() -> int:
-	var total := 0
-	for weight: int in TIER_WEIGHTS:
-		total += weight
-	var roll := randi_range(1, maxi(total, 1))
+	var total := 0.0
 	for tier in TIER_WEIGHTS.size():
-		roll -= TIER_WEIGHTS[tier]
-		if roll <= 0:
+		total += _tier_weight(tier)
+	var roll := randf() * maxf(total, 0.001)
+	for tier in TIER_WEIGHTS.size():
+		roll -= _tier_weight(tier)
+		if roll <= 0.0:
 			return tier
 	return 1
+
+
+# ---------------------------------------------------------------------------
+# How much of the water can hurt you, as one readable function of what you can
+# see. See the SENSE_GENES block: keyed on the player's own organs, never on
+# which view is drawing them.
+# ---------------------------------------------------------------------------
+
+## **How much this cell can see coming**, 0 for blind and 1 for the water as
+## shipped. The sum of the four sensing tiers over [constant SENSE_FULL], which
+## is the least invented mapping available: every tier of every sense moves it,
+## and none of them moves it in a step.
+func _sensed() -> float:
+	if _cell == null:
+		return 1.0
+	var tiers := 0.0
+	for gene: StringName in SENSE_GENES:
+		tiers += float(_cell.extra(gene))
+	return clampf(tiers / SENSE_FULL, 0.0, 1.0)
+
+
+## Share of arrivals that are drifters -- no cytostome, no bite, edible at every
+## radius. A blind cell's water is nearly all of them.
+func _drifter_share() -> float:
+	return lerpf(BLIND_DRIFTER_SHARE, DRIFTER_SHARE, _sensed())
+
+
+## How likely one cytostome tier is inside the peer band. The rare peer a blind
+## cell meets carries the poorest mouth in the game.
+func _tier_weight(tier: int) -> float:
+	var i := clampi(tier, 0, TIER_WEIGHTS.size() - 1)
+	return lerpf(BLIND_TIER_WEIGHTS[i], TIER_WEIGHTS[i], _sensed())
 
 
 # ---------------------------------------------------------------------------
@@ -1844,10 +2085,12 @@ func _target_present(index: int, b: Body) -> bool:
 ## with nothing in it, and a prey that has outgrown the mouth is a chase that is
 ## about to be given up on -- over OUTGROWN_GRACE, not instantly.
 func _target_edible(b: Body) -> bool:
+	var gape := _gape(b)
 	if b.target == TARGET_PLAYER:
-		return _cell.swallow_radius() < _gape(b)
+		return _worth_committing_to(b, gape, _cell.swallow_radius(), _cell.wound)
 	var prey := _target_body(b)
-	return prey != null and prey.radius < _gape(b)
+	return prey != null \
+		and _worth_committing_to(b, gape, prey.radius, prey.wound)
 
 
 ## Same convention as the cell: radians clockwise from world north, front is the

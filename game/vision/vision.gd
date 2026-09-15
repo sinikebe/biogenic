@@ -152,6 +152,19 @@ var _shader: ShaderMaterial = null
 ## never flashes a frame of world before it is told which view it is.
 var _active := false
 var _amount := 0.0
+## What the world is allowed to reach. 1 normally; taken down to
+## DIVIDE_WORLD_FADE while two daughters are on screen, **through the fade this
+## view already has** -- so the beat costs no uniform and no new binary.
+var _dim := 1.0
+
+## **The division**, written once a frame by the run; same contract as
+## soma.gd's. Empty is an ordinary body. docs/design/lifecycle.md §4.
+var division := {}
+
+## How far apart the two of them are seated, in world units. Rendered at 1:1
+## with 160 between them, two r28 bodies read -- so no camera zoom, which would
+## touch a dozen call sites in a shipped file for a beat that does not need it.
+const DIVIDE_SPREAD := 160.0
 var _clock := 0.0
 var _camera := Vector2.ZERO
 var _view := Vector2(1280.0, 720.0)
@@ -248,8 +261,14 @@ func set_camera_locked(on: bool) -> void:
 	_spin = -_cell.heading if (_locked and _cell != null) else 0.0
 
 
+## How bright the world is allowed to be. The run takes it down while the two
+## daughters are drawn over it, and puts it back afterwards.
+func set_dim(level: float) -> void:
+	_dim = clampf(level, 0.0, 1.0)
+
+
 func _process(delta: float) -> void:
-	_amount = move_toward(_amount, 1.0 if _active else 0.0, delta / FADE_SECONDS)
+	_amount = move_toward(_amount, _dim if _active else 0.0, delta / FADE_SECONDS)
 	if _amount <= 0.0 and not _active:
 		_apply_visibility()
 		return
@@ -803,6 +822,14 @@ func _draw_cell(a: float) -> void:
 	var r := _cell.radius
 	var beat := clampf(_beat, 0.0, 1.0)
 
+	# **Two bodies where there was one**, drawn outside the dim the rest of the
+	# world is under and with none of the three instruments below: a heading
+	# needle and a velocity plume belong to a cell that is going somewhere, and
+	# for these two seconds nothing is.
+	if division.has("bodies"):
+		_draw_daughters(p, beat)
+		return
+
 	# Halo. Swells on the metabolic beat, which is the same beat the contour
 	# brightens on -- one organism, two ways of looking at it.
 	var lift := 0.6 + 0.9 * beat
@@ -817,11 +844,38 @@ func _draw_cell(a: float) -> void:
 	# have to read, and your own mouth cannot swallow you.
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
 		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM,
-		_genome_node.layout() if _genome_node != null else [], _cell.wound)
+		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
+		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
 	_draw_held_sample(p, r, beat, a)
 
 	_draw_heading(p, fwd, stb, r, a)
 	_draw_velocity(p, r, a)
+
+
+## The two of them, at world scale and at their own brightness. Both are
+## `is_self`, so both stay pure SELF_TINT and neither takes a gene tint: they are
+## still you, right up until one of them is not.
+##
+## **They part along the screen's horizontal, not along the body's beam**, and
+## that is not a liberty -- the gesture that chooses between them is *lean left
+## or lean right*. Parted abeam they land on whatever diagonal the cell happened
+## to be heading on, and a player leaning left at a daughter that is up and to
+## the right is being asked to read a picture that disagrees with the control.
+## Undoing the world's own rotation is what keeps the two views saying the same
+## thing, in the one frame where point of view is the body-relative one.
+func _draw_daughters(p: Vector2, beat: float) -> void:
+	var bodies: Array = division["bodies"]
+	var r := float(division.get("radius", 28.28))
+	var spread := float(division.get("spread", 1.0)) * DIVIDE_SPREAD
+	var across := Vector2.RIGHT.rotated(-_spin)
+	for side in bodies.size():
+		var one: Dictionary = bodies[side]
+		var tiers: Dictionary = one["tiers"]
+		var seat := p + across * (spread * (-1.0 if side == 0 else 1.0))
+		Cilia.draw_cell(_world, seat, _cell.heading, r, tiers,
+			CellBody.gape_of(int(tiers.get(&"cytostome", 0)), r), r, true,
+			_clock, float(one["fade"]), 0.0, beat, float(side) * 2.7,
+			1.0 / ZOOM, one["order"], 0.0, 0.0, 0.0, float(one["shed"]))
 
 
 ## A gene swallowed with nowhere to put it yet, and the empty arcs it could go
