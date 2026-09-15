@@ -82,6 +82,13 @@ const FIRST_SENSES: Array[StringName] = [
 const SCRIM_POV := Color(0.023, 0.055, 0.05, 0.5)
 const SCRIM_FULL_VISION := Color(0.023, 0.055, 0.05, 0.86)
 
+## **What "selected" means on the genome strip**, and it is three values rather
+## than two because the held sample is a tile you can read and not a slot you
+## can place into. Declared up here because [member _armed] is initialised from
+## it. See the strip's own section for what selection now buys.
+const SLOT_NONE := -9
+const SLOT_SAMPLE := -1
+
 enum Onboard { OFF, WAITING, FADE_IN, HOLD, FADE_OUT }
 ## ALIVE, then the collapse, then the black that holds until they touch it,
 ## then the aperture opening on a new cell.
@@ -162,11 +169,26 @@ var mode := -1
 @onready var _view_button: Button = $Hud/Pause/Center/Buttons/View/Box/Toggle
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
 @onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
+@onready var _explain_name: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Gene
+@onready var _explain_says: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Says
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
+@onready var _pause_tap: Control = $Hud/PauseTap
 
-## Which slot is armed, or -1. Arming is reversible and that is why a mis-tap
-## costs nothing, which is in turn why 20px between tiles is acceptable.
-var _armed := -1
+## Which tile is selected, or [constant SLOT_NONE]. Selecting is reversible and
+## that is why a mis-tap costs nothing, which is in turn why 20px between tiles
+## is acceptable.
+var _armed := SLOT_NONE
+## Which tile the mouse is over, or [constant SLOT_NONE]. Desktop only by
+## nature: a phone has no hover, which is exactly why the tap path above exists.
+var _hovered := SLOT_NONE
+
+## The pause target's two states and the four styleboxes they are made of,
+## built once in [method _style_pause] rather than per draw.
+var _pause_hot := false
+var _pause_well_rest: StyleBoxFlat = null
+var _pause_well_hot: StyleBoxFlat = null
+var _pause_bar_rest: StyleBoxFlat = null
+var _pause_bar_hot: StyleBoxFlat = null
 ## Milliseconds, from Time, not an accumulated delta: the strip only exists
 ## while the tree is paused, and a paused tree hands this node a delta for a
 ## frame in which nothing else moved.
@@ -269,6 +291,19 @@ func _ready() -> void:
 	_resume_button.pressed.connect(_toggle_pause)
 	_leave_button.pressed.connect(_leave)
 
+	# **No focus.** The playfield has no other focusable control, so giving this
+	# one a focus ring would put arrow keys on GUI navigation the moment anyone
+	# pressed Tab -- and the arrow keys are how the cell is steered. Desktop has
+	# Esc; this target is for the thumb that has no Back gesture to find.
+	_pause_tap.focus_mode = Control.FOCUS_NONE
+	_pause_tap.mouse_filter = Control.MOUSE_FILTER_STOP
+	_pause_tap.custom_minimum_size = Vector2(PAUSE_TAP_SIZE, PAUSE_TAP_SIZE)
+	_pause_tap.draw.connect(_draw_pause_tap)
+	_pause_tap.gui_input.connect(_on_pause_tap)
+	_pause_tap.mouse_entered.connect(_set_pause_hot.bind(true))
+	_pause_tap.mouse_exited.connect(_set_pause_hot.bind(false))
+	_update_pause_tap()
+
 	_view_button.pressed.connect(_toggle_camera)
 	_update_view_button()
 
@@ -283,6 +318,9 @@ func _ready() -> void:
 
 
 func _process(delta: float) -> void:
+	# Before every early return below, because the states those returns lead to
+	# -- dying, dividing, paused -- are exactly the ones with no button.
+	_update_pause_tap()
 	# This node runs while paused so it can hear Esc and Back, and the membrane
 	# layer keeps beating under the pause scrim -- the cell is still alive, it is
 	# just not going anywhere. Everything else below here stops.
@@ -297,8 +335,9 @@ func _process(delta: float) -> void:
 		return
 	if get_tree().paused:
 		# The genome strip is the one thing on screen that still has a clock
-		# running: an armed slot lapses after four seconds whether or not the
-		# simulation is moving. §5.2.
+		# running: a slot armed *over a held sample* lapses after four seconds
+		# whether or not the simulation is moving. §5.2. A selection with
+		# nothing to commit has no clock -- see [method _step_arming].
 		_step_arming()
 		return
 	# The division. Its first phase leaves the simulation running -- steering
@@ -1129,6 +1168,122 @@ func _mark_onboarding_seen() -> void:
 
 
 # ---------------------------------------------------------------------------
+# Reaching pause without the gesture that hides itself.
+#
+# **The problem is Android and it is real.** Back is the only way in on a phone,
+# and in a fullscreen app the gesture bar is hidden -- so reaching pause is a
+# swipe to reveal it and then a swipe to use it. Two actions for the one control
+# that every other control lives behind.
+#
+# **This is an addition, not a replacement.** Back and Esc are untouched; they
+# are still the fast path for anyone who has them. What is added is a target.
+#
+# docs/design/diegetic-hud.md §3 bans numbers, letters and icons in the
+# playfield. That rule is about *readouts* -- it exists so the HUD cannot
+# compete with the senses -- and a control the player presses is not a readout.
+# The lead has resolved the collision in favour of the control. What the rule
+# still binds is the volume: this is the quietest thing on the screen that can
+# still be found and hit.
+#
+# Three decisions and the argument for each:
+#
+# - **A geometric mark, in a corner.** The water contains no straight lines and
+#   no right angles -- that is precisely what the diegetic rule bought -- so a
+#   rounded slab with two bars in it cannot be mistaken for a sensation. The
+#   grammar that says *this is interface* was already paid for.
+# - **Quiet, and always there.** A phone has no hover, so a control that
+#   appeared on touch would need a touch to find, and a touch in the playfield
+#   already steers and dashes. It is visible at all times and faint enough to
+#   ignore; the mouse gets the bright state on hover, which costs a touch player
+#   nothing.
+# - **Top left, one launcher edge margin in.** The launcher puts BIOGENIC in
+#   that corner at `edge_margin = 48`, so the corner the player has already seen
+#   carrying this game's chrome is the corner the game keeps it in. Away from
+#   where a thumb rests in landscape, which is the bottom two corners, so the
+#   steering gesture cannot fire it by accident.
+# ---------------------------------------------------------------------------
+
+## 56 canvas px: above CLAUDE.md's 48, and 84 device px at 2400x1080, which is
+## about 7 mm of thumb.
+const PAUSE_TAP_SIZE := 56.0
+## Two bars, sized off the slab rather than off a glyph sheet: a third of it
+## tall, and far enough apart to still read as two at 1:1.
+const PAUSE_BAR_W := 4.0
+const PAUSE_BAR_H := 18.0
+const PAUSE_BAR_GAP := 6.0
+## The whole of the "quietest thing that is still hittable" decision. Rest is
+## what a touch player always sees; hot is the mouse hovering it.
+const PAUSE_REST := 0.17
+const PAUSE_HOT := 0.92
+
+func _update_pause_tap() -> void:
+	# **Hidden wherever pause cannot be reached**, which is not a nicety: a
+	# control that is drawn and does nothing teaches the player that tapping it
+	# does nothing. Pause is refused during a division (the choice has no
+	# default) and a dead cell's Back is the exit rather than the pause, so
+	# neither state gets a button.
+	var wanted := _life == Life.ALIVE and _split == Split.NONE \
+		and not get_tree().paused
+	if _pause_tap.visible == wanted:
+		return
+	_pause_tap.visible = wanted
+	if not wanted:
+		_pause_hot = false
+
+
+func _on_pause_tap(event: InputEvent) -> void:
+	if not _is_tile_tap(event):
+		return
+	# Swallowed, and it has to be: an unclaimed press in the playfield is a
+	# steer, and a short unclaimed press is a `myoneme` dash that costs hunger.
+	# Godot delivers a phone touch twice -- once as itself and once as an
+	# emulated click -- so both copies are claimed here and [method
+	# _toggle_pause]'s same-frame guard is what stops the pair toggling twice.
+	_pause_tap.accept_event()
+	_toggle_pause()
+
+
+func _set_pause_hot(hot: bool) -> void:
+	if _pause_hot == hot:
+		return
+	_pause_hot = hot
+	_pause_tap.queue_redraw()
+
+
+func _draw_pause_tap() -> void:
+	var box := _pause_tap.size
+	var well := _pause_well_hot if _pause_hot else _pause_well_rest
+	var bar := _pause_bar_hot if _pause_hot else _pause_bar_rest
+	_pause_tap.draw_style_box(well, Rect2(Vector2.ZERO, box))
+	var mid := box * 0.5
+	for i in 2:
+		var side := -1.0 if i == 0 else 1.0
+		var left := mid.x + side * (PAUSE_BAR_GAP + PAUSE_BAR_W) * 0.5 \
+			- PAUSE_BAR_W * 0.5
+		_pause_tap.draw_style_box(bar, Rect2(
+			Vector2(left, mid.y - PAUSE_BAR_H * 0.5),
+			Vector2(PAUSE_BAR_W, PAUSE_BAR_H)))
+
+
+## The slab, in the pause column's own colours: what you tap looks like a piece
+## of the surface it opens.
+func _well(fill: float, edge: float) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.063, 0.141, 0.125, fill)
+	box.border_color = Color(0.12, 0.70, 0.58, edge)
+	box.set_border_width_all(1)
+	box.set_corner_radius_all(12)
+	return box
+
+
+func _bar(alpha: float) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = Color(0.855, 0.953, 0.933, alpha)
+	box.set_corner_radius_all(2)
+	return box
+
+
+# ---------------------------------------------------------------------------
 # Leaving. Back on Android, Esc on desktop; neither costs a pixel.
 # ---------------------------------------------------------------------------
 
@@ -1294,6 +1449,10 @@ func _toggle_pause() -> void:
 	var paused := not get_tree().paused
 	get_tree().paused = paused
 	_pause_ui.visible = paused
+	# In the same frame rather than on the next one: the button is what was just
+	# tapped, and a frame of it still sitting there under the scrim is a frame of
+	# the game looking like it did not hear.
+	_update_pause_tap()
 	# **Both of these are the scrim argument again.** The pause column is
 	# centred and so is the self-figure, so the light slider's track ran
 	# straight through the cell's own cilia -- the exact failure that took the
@@ -1327,7 +1486,7 @@ func _toggle_pause() -> void:
 		# while the tree is paused except by the two taps below, and a strip
 		# rebuilt sixty times a second to say the same thing is five nodes of
 		# churn a frame for nothing.
-		_disarm()
+		_select_default()
 		_build_genome_strip()
 		_resume_button.grab_focus()
 	else:
@@ -1417,6 +1576,15 @@ func _style_pause() -> void:
 	_genome_hint.add_theme_color_override("font_color",
 		Color(0.855, 0.953, 0.933, 0.38))
 
+	for label: Label in [_explain_name, _explain_says]:
+		label.add_theme_font_size_override("font_size", 15)
+	_explain_says.add_theme_color_override("font_color", EXPLAIN_TINT)
+
+	_pause_well_rest = _well(0.13, 0.09)
+	_pause_well_hot = _well(0.58, 0.48)
+	_pause_bar_rest = _bar(PAUSE_REST)
+	_pause_bar_hot = _bar(PAUSE_HOT)
+
 	# The camera toggle is a button, so it is styled like one -- but narrower and
 	# shorter than `resume`, because it is a setting inside a surface and not a
 	# thing that ends the run. Still 48 tall, which is the touch rule.
@@ -1504,7 +1672,11 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 # style and is already reachable by a gesture the player knows. It costs no new
 # input, no new pixels in play and no new binary.
 #
-# Always visible as a readout; interactive only while a sample is held.
+# **Always visible, and always interactive.** It shipped interactive only
+# while a sample was held, which made it a picture for all but a few seconds
+# of a run -- and a picture cannot be asked what a gene does. Selecting a tile
+# is now always available and always free; *placing* into one is what still
+# needs a held sample, two taps and the guard between them.
 # ---------------------------------------------------------------------------
 
 ## Touch rule is 48; 76 is what the organ needs to be legible under a word.
@@ -1516,8 +1688,9 @@ const ARM_GUARD_MS := 300
 ## Arming lapses on its own, so a strip left armed is not a trap.
 const ARM_TIMEOUT_MS := 4000
 
-## Every word Phase 5 adds to the screen is here or on a tile. perception.md
-## §6.1's one string in normal mode is untouched.
+## Every word Phase 5 adds to the screen is here, on a tile, or on the
+## explanation line below the strip. perception.md §6.1's one string in normal
+## mode is untouched.
 ##
 ## **"place", not "replace".** Every new gene is a placement decision now, and
 ## most of them land in an empty slot -- the slot is the arc, so which empty one
@@ -1556,6 +1729,62 @@ const WORDS := {
 	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
+
+## **One line per gene, and it says what the gene does to the player** -- not
+## what the organelle is. Eighteen tiles carrying one word each are enough to
+## recognise a gene you already know and not enough to learn one, which is the
+## whole of the owner's ask.
+##
+## The voice is the screen's: lowercase, plain, no jargon, one clause and then
+## its consequence. No line names another gene, because a player reading `armor`
+## has not necessarily met `cytostome` yet. No line carries a number: tiers are
+## the pips' job and a line that said "+30%" would be the classic HUD this game
+## spent two phases not building.
+##
+## `that side` in `ocellus` and `trichocyst` is deliberate and it points at the
+## compass already drawn on the same tile -- the two directional genes are the
+## two whose line has to explain why the slot mattered.
+##
+## **This line is also the one place the biological name reaches the screen, and
+## that is a deliberate reading of §8 rather than a breach of it.** The rule §8
+## states is that *the tile* wears the plain word, and the argument it gives is
+## the glance: four short verbs are parsed at arm's length and nine letters of
+## Greek are not, on the surface whose whole job is a quick decision. This line
+## is not a glance -- it is read because the player stopped to read it -- so the
+## name sits at the head of it and the plain word keeps the tile. §9.1 gives
+## every gene two names on purpose; a name no player ever meets is a convention
+## for the compiler, and CLAUDE.md's *realism is a tool* is the argument that
+## `ampulla` is worth meeting.
+const EXPLAINS := {
+	&"cytostome": "a wider mouth swallows bigger things whole",
+	&"cirrus": "turns you faster, and sooner after you ask",
+	&"flagellum": "your tail beats harder, and more often",
+	&"stigma": "feels the shadow of anything big, however dark",
+	&"ocellus": "a ray out of that side, marking whatever it strikes",
+	&"chemocyte": "smells food, and which way it is",
+	&"ampulla": "a pulse that answers off everything, not just food",
+	&"axoneme": "holding on pushes you, instead of only steering",
+	&"statocyst": "always knows which way is up, however you turn",
+	&"rhabdom": "sharpens where a smell is coming from",
+	&"palp": "feels what is against you, with no light at all",
+	&"myoneme": "tap for a burst of speed, paid for in hunger",
+	&"trichocyst": "a dart at whatever closes in on that side",
+	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
+	&"toxicyst": "whatever bites you pays, and whatever swallows you dies",
+	&"plastid": "makes a little of its own food, so you starve slower",
+	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
+	&"crista": "burns cleaner, so everything you carry costs less",
+}
+## An empty slot has no gene to explain, so it explains the one thing it does
+## have: a direction. The compass on the tile is what "this way" refers to.
+const EXPLAIN_EMPTY := "nothing here yet · an organ here would look this way"
+## Loud enough to be the thing you are reading, quieter than the word on the
+## tile: caption 0.45, hint 0.38, tile word 0.66, this 0.62.
+const EXPLAIN_TINT := Color(0.855, 0.953, 0.933, 0.62)
+## The name is drawn in the gene's own hue, which is the hue of the tile border
+## the player just tapped -- that is what ties the line to the tile with no
+## arrow and no animation.
+const EXPLAIN_NAME_ALPHA := 0.95
 
 enum Tile { OCCUPIED, EMPTY, HELD, ARMED }
 
@@ -1609,6 +1838,10 @@ func _build_genome_strip() -> void:
 	# `resume`, or on the slider, or is using a thumb and has no focus ring to
 	# lose.
 	var keeping := _focused_slot()
+	# Every tile about to be freed takes its hover with it, and Godot will not
+	# re-enter a control the cursor never left. The selection carries the line
+	# until the mouse moves again, which is the same tile either way.
+	_hovered = SLOT_NONE
 	for child in _genome_row.get_children():
 		_genome_row.remove_child(child)
 		child.queue_free()
@@ -1628,8 +1861,15 @@ func _build_genome_strip() -> void:
 
 	var held := _genome.held_sample
 	if held != &"":
-		# The sample and its arrow only exist while one is held.
-		_genome_row.add_child(_make_tile(held, 1, 0, Tile.HELD, -1))
+		# The sample and its arrow only exist while one is held. **The sample
+		# tile is selectable and never committable**: it is the gene the player
+		# is about to spend a slot on, so it is the one they most need to be
+		# able to read, and there is nothing to place it *into* itself.
+		# Body tier 1 rather than 0, so that selecting the sample does not make
+		# its own organ draw unexpressed and its pip hollow: HELD short-circuits
+		# both of those and ARMED does not.
+		var sample_state := Tile.ARMED if _armed == SLOT_SAMPLE else Tile.HELD
+		_genome_row.add_child(_make_tile(held, 1, 1, sample_state, SLOT_SAMPLE))
 		_genome_row.add_child(_make_arrow())
 
 	# maxi, not slots(), so a genome can never be wider than the strip that
@@ -1675,6 +1915,7 @@ func _build_genome_strip() -> void:
 		_genome_row.add_child(spacer)
 
 	_update_hint()
+	_update_explain()
 	_restore_focus(keeping)
 
 
@@ -1690,8 +1931,8 @@ func _focused_slot() -> int:
 	for child in _genome_row.get_children():
 		var tile := child as Control
 		if tile != null and tile.has_focus():
-			return int(tile.get_meta(&"slot", -1))
-	return -1
+			return int(tile.get_meta(&"slot", SLOT_NONE))
+	return SLOT_NONE
 
 
 ## Puts the keyboard back on [param slot] after a rebuild.
@@ -1701,16 +1942,18 @@ func _focused_slot() -> int:
 ## seconds and SAMPLE_SECONDS is forty-five -- so the tiles are still live and
 ## the player is still mid-decision, in front of the same tile they were
 ## reading. Sending them to `resume` would answer "can I still use the
-## keyboard" with yes and "am I where I was" with no. A commit is the opposite
-## case: the sample is spent, every tile has gone inert, and there is nothing on
-## the strip left to stand on, so the fallback below carries it to `resume`.
+## keyboard" with yes and "am I where I was" with no. A commit is the same case
+## now that every tile stays selectable: the sample is spent, but the slot it
+## landed in is still a tile to stand on and still the one being read, so the
+## keyboard stays there too. The `resume` fallback below is what catches a slot
+## that no longer exists.
 func _restore_focus(slot: int) -> void:
-	if slot < 0:
+	if slot == SLOT_NONE:
 		return
 	for child in _genome_row.get_children():
 		var tile := child as Control
 		if tile != null and tile.focus_mode == Control.FOCUS_ALL \
-				and int(tile.get_meta(&"slot", -1)) == slot:
+				and int(tile.get_meta(&"slot", SLOT_NONE)) == slot:
 			tile.grab_focus()
 			return
 	_resume_button.grab_focus()
@@ -1720,7 +1963,79 @@ func _update_hint() -> void:
 	if _genome.held_sample == &"":
 		_genome_hint.text = _generation_text()
 		return
+	# `_armed >= 0` and not `!= SLOT_NONE`: the sample tile is selectable and
+	# committing into it is not a thing, so selecting it must not promise a
+	# second tap that does nothing.
 	_genome_hint.text = HINT_COMMIT if _armed >= 0 else HINT_ARM
+
+
+## **The answer line: what the selected gene does, in the player's terms.**
+##
+## Two labels rather than one, because the two halves are different kinds of
+## thing and the hue is what says so: the biological name in the gene's own
+## colour -- the colour of the tile border the player just tapped, and of the
+## organ on their own body -- and then the sentence in the pale tint every other
+## word on this column wears.
+##
+## Hover wins over selection, and only on desktop: a mouse can ask about a tile
+## without committing to it, which is the cheapest possible way to read all
+## eighteen. A thumb has no hover, so the tap path is the one that has to work,
+## and it is the one that is tested.
+func _update_explain() -> void:
+	var slot := _hovered if _hovered != SLOT_NONE else _armed
+	var gene := _gene_at(slot)
+	if gene == &"":
+		_explain_name.text = ""
+		# Two different silences: no tile chosen says nothing at all; a chosen
+		# empty slot still has a direction to explain.
+		_explain_says.text = "" if slot == SLOT_NONE else EXPLAIN_EMPTY
+		return
+	_explain_name.text = String(gene)
+	_explain_name.add_theme_color_override("font_color",
+		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+	# A gene this build has no line for -- a later phase's, arriving over an
+	# older binary in a content pack -- shows its name and says nothing, rather
+	# than showing a bare separator.
+	var says := String(EXPLAINS.get(gene, ""))
+	_explain_says.text = "" if says.is_empty() else "· " + says
+
+
+## The gene a tile stands for: the held sample, the gene in that slot, or &"".
+func _gene_at(slot: int) -> StringName:
+	if slot == SLOT_SAMPLE:
+		return _genome.held_sample
+	if slot >= 0 and slot < _slot_genes.size():
+		return _slot_genes[slot]
+	return &""
+
+
+## True when a second tap on [param slot] would place the held sample into it --
+## which is the only case that is irreversible, and therefore the only case that
+## needs the guard, the timeout and the confirming second tap.
+func _committable(slot: int) -> bool:
+	return slot >= 0 and _genome.held_sample != &""
+
+
+## What is selected when the pause screen opens, and after an arm lapses.
+##
+## **Never nothing.** A strip that opens with no line under it would have to
+## teach the tap with a line of instructions; a strip that opens with one tile
+## lit and its sentence underneath has already shown what tapping a tile does,
+## and the player's next tap is on a different tile. The held sample first,
+## because that is the decision they came here to make; otherwise the first gene
+## they actually carry, which on a born cell is the mouth.
+func _select_default() -> void:
+	_hovered = SLOT_NONE
+	_armed_at = Time.get_ticks_msec()
+	if _genome.held_sample != &"":
+		_armed = SLOT_SAMPLE
+		return
+	_armed = SLOT_NONE
+	var layout := _genome.layout()
+	for i in layout.size():
+		if layout[i] != &"":
+			_armed = i
+			return
 
 
 func _generation_text() -> String:
@@ -1743,9 +2058,16 @@ func _make_tile(gene: StringName, tier: int, body_tier: int, state: int,
 	# without re-deriving an offset that may have changed underneath.
 	tile.set_meta(&"slot", index)
 
-	var live := index >= 0 and _genome.held_sample != &""
-	tile.mouse_filter = Control.MOUSE_FILTER_STOP if live else Control.MOUSE_FILTER_IGNORE
-	tile.focus_mode = Control.FOCUS_ALL if live else Control.FOCUS_NONE
+	# **Every tile is live now, sample or no sample.** Until this change a tile
+	# only accepted input while a gene was waiting to be placed, so for all but
+	# a few seconds of a run the strip was a picture -- and a picture cannot be
+	# asked what `ampulla` does. Selecting is what the explanation line hangs
+	# off, and *committing* is still gated on a sample being held
+	# ([method _committable]), so nothing became easier to do by accident: the
+	# one irreversible action in the game needs exactly the same two taps, the
+	# same 300ms guard and the same held sample it always did.
+	tile.mouse_filter = Control.MOUSE_FILTER_STOP
+	tile.focus_mode = Control.FOCUS_ALL
 
 	var face := Control.new()
 	face.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -1753,11 +2075,28 @@ func _make_tile(gene: StringName, tier: int, body_tier: int, state: int,
 		state))
 	tile.add_child(face)
 
-	if live:
-		tile.gui_input.connect(_on_tile_input.bind(tile, index))
-		tile.focus_entered.connect(face.queue_redraw)
-		tile.focus_exited.connect(face.queue_redraw)
+	tile.gui_input.connect(_on_tile_input.bind(tile, index))
+	tile.focus_entered.connect(face.queue_redraw)
+	tile.focus_exited.connect(face.queue_redraw)
+	# Hover only moves the line; it deliberately does not restyle the tile and
+	# deliberately does not rebuild the strip. A strip rebuilt on every mouse
+	# crossing would be nine nodes a frame to say nothing, and a tile that lit
+	# under the cursor would be promising a second tap it has not been given.
+	tile.mouse_entered.connect(_on_tile_hover.bind(index))
+	tile.mouse_exited.connect(_on_tile_unhover.bind(index))
 	return tile
+
+
+func _on_tile_hover(index: int) -> void:
+	_hovered = index
+	_update_explain()
+
+
+func _on_tile_unhover(index: int) -> void:
+	if _hovered != index:
+		return
+	_hovered = SLOT_NONE
+	_update_explain()
 
 
 func _tile_box(gene: StringName, state: int) -> StyleBoxFlat:
@@ -1889,14 +2228,26 @@ func _on_tile_input(event: InputEvent, tile: Control, index: int) -> void:
 		return
 	tile.accept_event()
 	if _armed == index:
-		# **The guard is not politeness, it is the touch path working.** Godot
-		# emulates a mouse click from every screen touch, so one thumb press
-		# arrives here twice; without this the second copy would commit the
-		# swap in the same frame the first one armed it, and the one
-		# irreversible action in the game would need no confirmation at all.
-		if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
+		if _committable(index):
+			# **The guard is not politeness, it is the touch path working.**
+			# Godot emulates a mouse click from every screen touch, so one thumb
+			# press arrives here twice; without this the second copy would
+			# commit the swap in the same frame the first one armed it, and the
+			# one irreversible action in the game would need no confirmation at
+			# all.
+			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
+				return
+			_commit_slot(index)
 			return
-		_commit_slot(index)
+		# Nothing to commit -- no sample, or this is the sample itself -- so the
+		# second tap is simply the first one again and the tile stays selected.
+		#
+		# **It used to deselect, and the render is what killed that.** Godot
+		# focuses a control on click, so the tile a thumb has just tapped keeps
+		# a focus ring whether or not it is selected: deselecting left a tile
+		# ringed in pale teal with an empty sentence under it, which is the
+		# surface pointing at something and then refusing to say what. Blanking
+		# the one line the player came for is a worse answer than doing nothing.
 		return
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
@@ -1929,13 +2280,18 @@ func _commit_slot(index: int) -> void:
 	if index < 0 or index >= _slot_genes.size():
 		return
 	_genome.place(index)
-	_disarm()
+	# **The placed slot stays selected**, so the line under the strip is now the
+	# gene that just landed and the tile it landed in. The sample is spent, so
+	# nothing about that selection is committable any more -- it is a receipt,
+	# and the one moment in a run where the player most wants to know what they
+	# have just given their daughters.
+	_armed = index
+	_armed_at = Time.get_ticks_msec()
+	_hovered = SLOT_NONE
 	# The bus is told now rather than on the next unpaused frame: the membrane
 	# keeps beating under the scrim, and an echo for a sample that no longer
 	# exists is the game lying about the player's own body.
 	_bus.hold(0.0)
-	# The rebuild carries the keyboard: every tile has gone inert, so
-	# [method _restore_focus] falls through to `resume`.
 	_build_genome_strip()
 
 
@@ -1946,15 +2302,17 @@ func _commit_slot(index: int) -> void:
 ## `process_mode = 1`, so it stops with the rest of the simulation while the
 ## pause screen is open. So the player is still holding a gene, the tiles are
 ## still live, and the rebuild puts them back on the tile they were reading.
+## **Only a committable selection lapses**, which is the one rule that had to
+## change when selecting became something you do to read rather than only to
+## place. The timeout exists to make sure a strip left armed is not a trap; a
+## selection with no sample behind it is not a trap, it is a player reading a
+## sentence, and four seconds is not long enough to read one twice. So a tile
+## selected with nothing held stays selected until another tile is, and an arm
+## that does lapse falls back to the sample rather than to nothing.
 func _step_arming() -> void:
-	if _armed < 0:
+	if not _committable(_armed):
 		return
 	if Time.get_ticks_msec() - _armed_at < ARM_TIMEOUT_MS:
 		return
-	_disarm()
+	_select_default()
 	_build_genome_strip()
-
-
-func _disarm() -> void:
-	_armed = -1
-	_armed_at = 0
