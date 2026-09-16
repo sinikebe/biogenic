@@ -216,10 +216,6 @@ var mode := -1
 @onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/View
 @onready var _view_caption: Label = $Hud/Pause/Center/Buttons/Settings/View/Box/Caption
 @onready var _view_button: Button = $Hud/Pause/Center/Buttons/Settings/View/Box/Toggle
-@onready var _feel_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/Feel
-@onready var _feel_caption: Label = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Caption
-@onready var _feel_button: Button = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Toggle
-@onready var _controls: Control = $Hud/Controls
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
 ## **The body above and the DNA below**, at identical pitch and identical x, so
 ## column *i* is arc *i* on both rows and a comparison is a vertical scan. Only
@@ -351,8 +347,6 @@ var _lean_clock := 0.0
 var _chosen := -1
 ## A finger on one half of the screen, as a signed lean past the deadzone.
 var _touch_lean := 0.0
-## Where the finger that owns a drawn control is, so its deflection can be read.
-var _control_at := Vector2.ZERO
 var _touch_index := -2
 ## The two sentinels [member _touch_index] has always used, named, because
 ## [member _choose_gesture] keys on the same numbers: **-1 is the mouse** and
@@ -458,11 +452,6 @@ func _ready() -> void:
 	_view_button.pressed.connect(_toggle_camera)
 	_update_view_button()
 
-	_controls.scheme = RunState.load_scheme()
-	_cell.controls = _controls
-	_feel_button.pressed.connect(_cycle_scheme)
-	_update_feel_button()
-
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
 		SignalBus.GAIN_MIN, SignalBus.GAIN_MAX)
 	_gain_slider.value = _bus.gain
@@ -477,7 +466,6 @@ func _process(delta: float) -> void:
 	# Before every early return below, because the states those returns lead to
 	# -- dying, dividing, paused -- are exactly the ones with no button.
 	_update_pause_tap()
-	_update_controls()
 	# This node runs while paused so it can hear Esc and Back, and the membrane
 	# layer keeps beating under the pause scrim -- the cell is still alive, it is
 	# just not going anywhere. Everything else below here stops.
@@ -851,14 +839,6 @@ func _read_lean() -> int:
 		return -1
 	if Input.is_action_pressed(&"ui_right") or Input.is_key_pressed(KEY_D):
 		return 1
-	# **The control that steers is the control that chooses.** A thumb parked on
-	# the stick sits in the port half whichever way it is pushed, so the screen
-	# half is the wrong question the moment anything is drawn down there.
-	if _controls != null and _controls.held != _controls.NONE:
-		var lean: float = _controls.steer_for(_control_at)
-		if absf(lean) > CellBody.STEER_DEADZONE:
-			return -1 if lean < 0.0 else 1
-		return 0
 	if absf(_touch_lean) > CellBody.STEER_DEADZONE:
 		return -1 if _touch_lean < 0.0 else 1
 	return 0
@@ -1332,22 +1312,6 @@ func _update_view_button() -> void:
 	_view_button.text = "forward up" if _camera_locked else "north up"
 
 
-const SCHEME_WORDS := ["anywhere", "stick", "pads"]
-
-
-func _cycle_scheme() -> void:
-	_controls.scheme = (_controls.scheme + 1) % SCHEME_WORDS.size()
-	_controls.let_go()
-	_cell.release()
-	RunState.save_scheme(_controls.scheme)
-	_update_feel_button()
-	_controls.queue_redraw()
-
-
-func _update_feel_button() -> void:
-	_feel_button.text = SCHEME_WORDS[_controls.scheme]
-
-
 ## True while the world layer is the thing behind the Hud. Read by the pause
 ## scrim as well as by the mode seam, because how much has to be covered up
 ## depends entirely on whether there is a lit world under it.
@@ -1526,27 +1490,6 @@ const PAUSE_BAR_GAP := 6.0
 ## what a touch player always sees; hot is the mouse hovering it.
 const PAUSE_REST := 0.17
 const PAUSE_HOT := 0.92
-
-## The drawn controls are a readout of the genome: a pad appears when the organ
-## that works it does. A control that is drawn and does nothing teaches the
-## player that tapping it does nothing -- the same rule the pause target obeys.
-func _update_controls() -> void:
-	if _controls == null:
-		return
-	var push := _cell.extra(&"axoneme") > 0
-	var dash := _cell.extra(&"myoneme") > 0
-	# Turning is the lean, so the left half stays through a division; the two
-	# action pads have nothing to act on while the simulation is stopped.
-	var playing := _life == Life.ALIVE and not get_tree().paused
-	var show := playing and (_split == Split.NONE or _split >= Split.PART)
-	var acting := playing and _split == Split.NONE
-	if _controls.visible != show or _controls.has_push != (push and acting) \
-			or _controls.has_dash != (dash and acting):
-		_controls.visible = show
-		_controls.has_push = push and acting
-		_controls.has_dash = dash and acting
-		_controls.queue_redraw()
-
 
 func _update_pause_tap() -> void:
 	# **Hidden wherever pause cannot be reached**, which is not a nicety: a
@@ -1883,8 +1826,6 @@ func _unhandled_input(event: InputEvent) -> void:
 ## same reason: Godot emulates a mouse from every touch, so the two arrive as a
 ## pair on Android.
 func _read_touch_lean(event: InputEvent) -> bool:
-	if _controls != null and _controls.visible and _read_control(event):
-		return true
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
@@ -1939,50 +1880,6 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		_touch_lean = _lean_at(moved.position)
 		return true
 	return false
-
-
-## The drawn controls, during a division. cell.gd owns them while the cell is
-## simulating; here its input has stopped with the rest of it.
-func _read_control(event: InputEvent) -> bool:
-	var at := Vector2.ZERO
-	var down := false
-	var up := false
-	if event is InputEventScreenTouch:
-		at = (event as InputEventScreenTouch).position
-		down = (event as InputEventScreenTouch).pressed
-		up = not down
-	elif event is InputEventScreenDrag:
-		at = (event as InputEventScreenDrag).position
-	elif event is InputEventMouseButton:
-		var click := event as InputEventMouseButton
-		if click.button_index != MOUSE_BUTTON_LEFT:
-			return false
-		at = click.position
-		down = click.pressed
-		up = not down
-	elif event is InputEventMouseMotion:
-		at = (event as InputEventMouseMotion).position
-	else:
-		return false
-	at = get_viewport().get_screen_transform().affine_inverse() * at
-	if up:
-		if _controls.held == _controls.NONE:
-			return false
-		_controls.let_go()
-		return true
-	if down:
-		var which: int = _controls.hit(at)
-		if which == _controls.NONE:
-			return false
-		_control_at = at
-		_controls.grab(which, at)
-		return true
-	if _controls.held == _controls.NONE:
-		return false
-	_control_at = at
-	_controls.steer_for(at)
-	_controls.queue_redraw()
-	return true
 
 
 ## Where a point on the screen falls, as a lean.
@@ -2164,8 +2061,8 @@ func _on_gain_settled(changed: bool) -> void:
 ## and it looked wrong; at 232 they stay the buttons Phase 4 shipped whatever is
 ## above them.
 func _style_pause() -> void:
-	for control: Control in [_light_panel, _view_panel, _feel_panel,
-			_resume_button, _leave_button]:
+	for control: Control in [_light_panel, _view_panel, _resume_button,
+			_leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	# **Every group on the pause column is a surface, and `light` was the one
@@ -2180,10 +2077,6 @@ func _style_pause() -> void:
 	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
 	# Same slab, same rule: every group on this column is a surface.
 	_view_panel.add_theme_stylebox_override("panel", _slab(-0.2))
-	_feel_panel.add_theme_stylebox_override("panel", _slab(-0.2))
-	_feel_caption.add_theme_font_size_override("font_size", 16)
-	_feel_caption.add_theme_color_override("font_color",
-		Color(0.855, 0.953, 0.933, 0.52))
 	_view_caption.add_theme_font_size_override("font_size", 16)
 	_view_caption.add_theme_color_override("font_color",
 		Color(0.855, 0.953, 0.933, 0.52))
@@ -2207,18 +2100,17 @@ func _style_pause() -> void:
 	# The camera toggle is a button, so it is styled like one -- but narrower and
 	# shorter than `resume`, because it is a setting inside a surface and not a
 	# thing that ends the run. Still 48 tall, which is the touch rule.
-	for small: Button in [_view_button, _feel_button]:
-		small.custom_minimum_size = Vector2(192.0, 48.0)
-		small.focus_mode = Control.FOCUS_ALL
-		small.add_theme_font_size_override("font_size", 16)
-		for state: String in ["font_color", "font_hover_color",
-				"font_focus_color", "font_pressed_color"]:
-			small.add_theme_color_override(state,
-				Color(0.855, 0.953, 0.933, 0.92))
-		small.add_theme_stylebox_override("normal", _slab(0.0))
-		small.add_theme_stylebox_override("hover", _slab(0.35))
-		small.add_theme_stylebox_override("pressed", _slab(0.5))
-		small.add_theme_stylebox_override("focus", _slab(0.35))
+	_view_button.custom_minimum_size = Vector2(192.0, 48.0)
+	_view_button.focus_mode = Control.FOCUS_ALL
+	_view_button.add_theme_font_size_override("font_size", 16)
+	for state: String in ["font_color", "font_hover_color", "font_focus_color",
+			"font_pressed_color"]:
+		_view_button.add_theme_color_override(state,
+			Color(0.855, 0.953, 0.933, 0.92))
+	_view_button.add_theme_stylebox_override("normal", _slab(0.0))
+	_view_button.add_theme_stylebox_override("hover", _slab(0.35))
+	_view_button.add_theme_stylebox_override("pressed", _slab(0.5))
+	_view_button.add_theme_stylebox_override("focus", _slab(0.35))
 
 	for button: Button in [_resume_button, _leave_button]:
 		button.custom_minimum_size = Vector2(232.0, 56.0)

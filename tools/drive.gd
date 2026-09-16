@@ -218,10 +218,6 @@ extends Node
 ##   --capture-cost=<secs>   print the recorder's rolling maximum microseconds
 ##                           per capture() on that interval. §4.6 asks for a
 ##                           measurement and refuses to accept the estimate
-##   --scheme=0|1|2          force the control scheme: 0 anywhere, 1 stick,
-##                           2 pads. The choice lives in user://, so this is the
-##                           only way to photograph a scheme without writing it
-##                           there and inheriting it in the next run.
 ##   --seed=<int>            deterministic drift and impulses
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
@@ -282,9 +278,6 @@ var _hunter_gape := 1.40
 var _prey_radius := -1.0
 var _radius := -1.0
 var _genome_spec := ""
-var _scheme := -1
-var _rects := false
-var _rects_done := false
 var _dna_spec := ""
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
@@ -496,8 +489,6 @@ func _ready() -> void:
 			_evade = true
 		elif text == "--forage":
 			_forage = true
-		elif text.begins_with("--scheme="):
-			_scheme = int(text.trim_prefix("--scheme="))
 		elif text.begins_with("--seed="):
 			seed(int(text.trim_prefix("--seed=")))
 
@@ -513,14 +504,6 @@ func _ready() -> void:
 		print("[drive] mode forced to ", _mode)
 	add_child(run)
 	_run = run
-	if OS.get_cmdline_user_args().has("--rects"):
-		_rects = true
-	if _scheme >= 0:
-		var controls := _find_script(run, "res://game/normal/controls.gd")
-		if controls != null:
-			controls.scheme = _scheme
-			controls.queue_redraw()
-			print("[drive] control scheme forced to ", _scheme)
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
 	_genome = _find_script(self, "res://game/normal/genome.gd")
 	_food = _find_script(self, "res://game/normal/food.gd")
@@ -621,32 +604,6 @@ func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 
 
 func _process(delta: float) -> void:
-	if _rects and not _rects_done and _clock > 3.0 and _run != null:
-		_rects_done = true
-		var names := ["Hud/Pause/Center/Buttons", "Hud/Pause/Center/Buttons/Genome",
-			"Hud/Pause/Center/Buttons/Genome/Caption",
-			"Hud/Pause/Center/Buttons/Genome/Body",
-			"Hud/Pause/Center/Buttons/Genome/Row",
-			"Hud/Pause/Center/Buttons/Genome/Explain",
-			"Hud/Pause/Center/Buttons/Genome/Hint",
-			"Hud/Pause/Center/Buttons/Genome/Act",
-			"Hud/Pause/Center/Buttons/Settings",
-			"Hud/Pause/Center/Buttons/Settings/Light",
-			"Hud/Pause/Center/Buttons/Settings/View",
-			"Hud/Pause/Center/Buttons/Settings/Feel",
-			"Hud/Pause/Center/Buttons/Resume",
-			"Hud/Pause/Center/Buttons/Leave"]
-		for n: String in names:
-			var c := _run.get_node_or_null(NodePath(n))
-			if c is Control:
-				var r: Rect2 = (c as Control).get_global_rect()
-				print("[rect] %-46s x %7.1f .. %7.1f   y %6.1f .. %6.1f   %.0f x %.0f" % [
-					n.get_file(), r.position.x, r.end.x, r.position.y, r.end.y,
-					r.size.x, r.size.y])
-		var cc := _run.get_node_or_null(NodePath("Hud/Controls"))
-		if cc != null:
-			print("[rect] canvas %s" % str((cc as Control).size))
-
 	_clock += delta
 	_hold_world()
 	_watch_field(delta)

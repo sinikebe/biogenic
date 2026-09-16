@@ -1341,20 +1341,10 @@ static func _to_segment(point: Vector2, a: Vector2, b: Vector2) -> float:
 ## no 76px tile to put an organ in, so the one organ on the pause screen is the
 ## **selected** gene's, drawn once beside the sentence that explains it -- which
 ## is a smaller row than a tile and needs the geometry to come with it.
-static func draw_tile_organ_tinted(canvas: CanvasItem, gene: StringName,
-		tier: int, centre: Vector2, tone: Color,
-		alpha: float = TILE_STROKE_ALPHA, scale: float = 1.0) -> void:
-	_tile_organ(canvas, gene, tier, centre, tone, alpha, scale)
-
-
 static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 		centre: Vector2, alpha: float = TILE_STROKE_ALPHA,
 		scale: float = 1.0) -> void:
-	_tile_organ(canvas, gene, tier, centre, hue(gene), alpha, scale)
-
-
-static func _tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
-		centre: Vector2, tone: Color, alpha: float, scale: float) -> void:
+	var tone := hue(gene)
 	var ink := alpha / TILE_STROKE_ALPHA
 	var arc_r := TILE_ARC_RADIUS * scale
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
