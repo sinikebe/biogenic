@@ -572,6 +572,12 @@ func _process(delta: float) -> void:
 	_food.smell_range = _cell.smell_range()
 	_food.ping_range = _cell.ping_range()
 	_food.ping_period = _cell.ping_period()
+	# **Where the pulse leaves from**, resolved here for the same reason the
+	# beam's fan and the dart's arc are: this file has both the genome and
+	# cilia.gd's arc table. It is a bearing, not a place -- the field turns it
+	# into the one world position it needs and spends it inside `_cast_ping`.
+	_food.ping_bearing = _slot_bearing_of(&"ampulla")
+	_food.ping_through = _cell.ping_through()
 	# **`taste_level`, not `concentration`.** The first is what this nose picks
 	# up and the second is what the water is like; the beat above reads the
 	# water, the membrane reads the organ. A cell with no chemocyte hands over a

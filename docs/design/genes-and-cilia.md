@@ -1678,6 +1678,15 @@ asleep. That is the whole of why it is a different sense from `chemocyte` rather
 than a second skin on it: the scent field can only ever describe a meal, and
 most of what matters in this water is not a meal.
 
+**Every body it comes back off, and not one behind a shadow.** The pulse leaves
+the organ's own place on the skin and stops at the first thing it meets — your
+own hull included — so a tier-1 `ampulla` is deaf through roughly the hemisphere
+its organ faces away from. Higher tiers hear through an occluder at
+`PING_THROUGH_BY_TIER`, dimmer rather than further. `docs/design/three-senses.md`
+§1 is the whole of it, and §7.3.1 has the measurements. The consequence worth
+knowing before you place one: **at tier 1 a cell pressed against you behind the
+organ returns nothing at all** until you turn.
+
 ```
 # cell.gd
 const PING_RANGE_BY_TIER:  Array[float] = [0.0, 1100.0, 1500.0, 1900.0]

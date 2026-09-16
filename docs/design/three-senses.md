@@ -35,8 +35,11 @@ sense a blind player leans on and it carries the owner's call in §8.**
 `normal_mode.gd` is still the only node that talks to the signal bus, and no
 position reaches it. Occlusion is computed in `food.gd`, against positions that
 die in that file, and what leaves is a bearing and a strength — exactly as
-today. The `ping_origin` added below is a `Vector2` that `_cast_ping` consumes
-in the same function that produces it.
+today. The pulse's origin is a `Vector2` that `_cast_ping` makes and spends in
+the same function; **as built it is a local and not a field**, which is what the
+spec's own code below always did with it. A world position on the field's public
+surface is an invitation the invariant does not need, and nothing outside that
+function has a use for it.
 
 One simulation, two views: everything here is either a simulation change that
 both views read, or a drawing change made twice. The A/B in §7.2 is two runs of
@@ -65,7 +68,6 @@ const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.34, 0.58]
 # food.gd, written once a frame by the run, like beam_bearings
 var ping_bearing := 0.0      ## Cilia.slot_bearing(genome.slot_of(&"ampulla"))
 var ping_through := 0.0      ## CellBody.PING_THROUGH_BY_TIER[tier]
-var ping_origin := Vector2.ZERO   ## consumed inside _cast_ping; never posted
 
 ## The soft edge on the hull shadow, as a cosine. A hemisphere is a boolean and
 ## every gate in this file has been taken off that argument (§7.0 of
@@ -172,6 +174,14 @@ the same place on screen, for free, because both are read off the same arc.
 Measured on the tier-3 render (§7.3): the lit half of the ring reads 232 above
 base in summed sRGB and the penetrated half reads 135, a ratio of **0.58** — the
 constant, drawn. The picture and the simulation are one number seen twice.
+
+**The replay pays nothing for this.** Both panes draw the arc off
+`ping_bearing` and `ping_through`, and `recorder.gd` carries neither: `replay.gd`
+derives them from the genome and the body layout the ring already restores —
+`Cilia.slot_bearing(genome.slot_of(&"ampulla"))` and the cell's own tier, the
+same two calls a live run makes. The `STRIDE` does not move for the `ampulla`,
+and a watched run shows the wave leaving the slot the organ was actually worn
+in. Rendered on the two-pane screen, tier 3, and both halves are there.
 
 ---
 
@@ -487,7 +497,7 @@ because this container is not that phone.
 | file | change |
 | --- | --- |
 | `game/normal/cell.gd` | `BEAM_COUNT_BY_TIER = [0,1,5,20]`; new `PING_THROUGH_BY_TIER` |
-| `game/normal/food.gd` | `ping_bearing` / `ping_through` / `ping_origin`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it; orientation weight and `SMELL_TAIL` in `_step_sense`; `taste_bearing` becomes the organ's facing; `smelt_pull` is now dead and goes |
+| `game/normal/food.gd` | `ping_bearing` / `ping_through`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it; orientation weight and `SMELL_TAIL` in `_step_sense`; `taste_bearing` becomes the organ's facing; `smelt_pull` is now dead and goes |
 | `game/normal/normal_mode.gd` | write the four new field vars from `slot_of` + tier |
 | `game/perception/signal_bus.gd` | `SMELL_BEHIND`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; delete taste jitter and bearing low-pass; `FOCUS_BY_TIER` now feeds the floor |
 | `game/perception/returns.gd` | wave becomes an arc from the organ, `_wave_arc()` helper |
@@ -601,6 +611,49 @@ and should not be fixed.
 sRGB and the penetrated half 135 — a ratio of **0.58**, which is
 `PING_THROUGH_BY_TIER[3]` exactly. The picture and the simulation are one
 number.
+
+#### 7.3.1 Re-measured on the build, and one row came out stronger
+
+The table above is the prototype's. The same instrument on the shipped code —
+3 seeds (4242 / 77 / 1009) x 40 s, `--fixed-fps 60`, counting the `ping`
+sensations that reached the bus, `ampulla` in slot 3 (bearing +42.1):
+
+| | returns in 40s, per seed | behind the organ | mean strength |
+| --- | --- | --- | --- |
+| today, tier 1 | 65 | 41.0% | 0.645 |
+| occluded, tier 1 | 65 | **8.7%** | 0.500 (−22.5%) |
+| today, tier 3 | 144 (143 on one seed) | 46.4% | 0.817 |
+| occluded, tier 3 | 144 (143 on one seed) | **46.4%** | 0.651 (−20.3%) |
+
+Three of the four rows reproduce. **The tier-3 blind arc does not, and it is
+further in the direction the spec wanted**: on the build, occlusion at tier 3
+changes *nothing* about which five bodies answer — the same returns arrive at
+the same bearings, 20% quieter. At 0.58 per occluder, nothing in the nearest
+five ever falls under `PING_SILENT`, so tier 3 does not merely buy most of the
+circle back, it buys all of it and pays in loudness alone. The prototype's
+48% → 45% was the same finding inside its own sampling noise.
+
+The tier-1 residual is exactly the flight-time effect §7.3 names, and the shape
+proves it: binned by offset from the organ in 30-degree steps, the 195 tier-1
+returns go from `[43, 32, 40, 36, 18, 26]` to `[65, 50, 63, 17, 0, 0]`. Every
+survivor past 90 degrees is in the 90–120 bin — a return that left inside the
+lit half and landed after the cell had turned under it. Nothing at all comes
+back from 120 degrees or further.
+
+**Drawn, re-measured:** on a tier-3 frame whose ring is clear of the edge fade,
+the lit half's peak above base is 258 in summed sRGB and the penetrated half's
+150 — **0.581**. The absolute pair moves with the frame, because the wave fades
+with how much of its reach it has spent; the ratio is the constant and does not.
+Three renders of that command were byte-identical, 0 differing pixels of
+921,600 (`md5 d9cb6e3e...`), so it is a measurement.
+
+**What it costs.** `_cast_ping` fires once a pulse, not once a frame.
+Instrumented over 60 s: occlusion adds a mean **23 µs** per pulse at tier 1 (max
+32) and **20 µs** at tier 3 (max 46), against 41 µs and 78 µs for the gather and
+sort that were there before. Amortised at 60 fps that is **+0.12 µs a frame** at
+tier 1 and **+0.24 µs** at tier 3, and the worst single frame measured spends
+46 µs, which is 0.3% of one. The cap is what keeps it there: the loop stops at
+five audible returns, so the inner test runs about ten times and not 34 x 33.
 
 ### 7.4 The `chemocyte`'s swing, and where it is flat
 

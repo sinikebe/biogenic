@@ -107,7 +107,9 @@ const POINT_CLEAR := 1.3
 ## low-passed at sigma 6 against the local level -- band 96, soma figure 52,
 ## pointer 46, the beat's own contour 33, this ring 8. Everything the membrane
 ## does beats it, which is the order it has to be in.
-const WAVE_STEPS := 96
+## Half a ring rather than a whole one, so 64 points where the circle had 96 --
+## the same spacing on half the arc.
+const WAVE_STEPS := 64
 const WAVE_WIDTH := 2.2
 const WAVE_ALPHA := 0.52
 
@@ -215,10 +217,21 @@ func _draw_pointers(centre: Vector2) -> void:
 
 
 ## **The wave.** The wavefront of the pulse currently in flight, expanding out of
-## the body, exactly as full vision draws it -- a thing the cell emitted, so the
+## the organ, exactly as full vision draws it -- a thing the cell emitted, so the
 ## cell knows where it has got to.
 ##
-## Per-vertex alpha rather than one colour, so the ring dissolves into the
+## **A half-ring centred on the organ's own point on the membrane**, not a circle
+## centred on the cell, because that is where the pulse left from and the hull
+## takes the other half. Its centre lands exactly on the violet tuft the soma
+## figure already draws for the `ampulla`, for free: both are read off the same
+## arc. That is the mechanic taught with no text at all -- the water behind your
+## own body is not being asked, and the way to ask it is to turn.
+##
+## Where the gene has grown enough to hear through a body the far half is drawn
+## too, at `alpha x ping_through`. The picture is the constant: the dim half is
+## exactly as much of the lit half as the simulation lets through.
+##
+## Per-vertex alpha rather than one colour, so the arc dissolves into the
 ## membrane band as it passes out through it instead of being clipped at a
 ## rectangle. The corners hold it a moment longer than the top edge does, which
 ## is what the screen actually is.
@@ -232,14 +245,31 @@ func _draw_wave(centre: Vector2) -> void:
 	if front <= 0.0 or reach <= 0.0:
 		return
 	var r := front * SCALE
-	# Once the whole ring is past the far corner there is none of it left to
-	# see, and a 96-point circle three screens wide is drawn for nobody.
-	if r > _marks.size.length() * 0.5:
+	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
+	# Once the whole arc is past the far corner there is none of it left to
+	# see, and a 64-point arc three screens wide is drawn for nobody.
+	if r > _marks.size.length() * 0.5 + origin.distance_to(centre):
 		return
 	# Fades with how much of its reach it has spent, the same way full vision
-	# fades it: the ring is off the screen long before it is out of range, so
+	# fades it: the arc is off the screen long before it is out of range, so
 	# this is the only thing that can say *it is still going*.
 	var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
+	# Screen angle of the organ's own ray. `_ray` is (sin, -cos), which is
+	# `bearing - PI/2` once atan2 has it, and the lit half is the hemisphere
+	# either side of it.
+	var mid := _food.ping_bearing - PI * 0.5
+	_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
+	var through := clampf(_food.ping_through, 0.0, 1.0)
+	if through > 0.0:
+		_wave_arc(origin, r, mid + PI * 0.5, mid + PI * 1.5, carry * through)
+
+
+## One half of the wavefront, from [param from] to [param to] in screen angles,
+## at [param level] of the wave's own alpha. Per-vertex, so the edge fade is
+## taken at each point rather than at the arc.
+func _wave_arc(origin: Vector2, r: float, from: float, to: float, level: float) -> void:
+	if level <= 0.0:
+		return
 	var tone := Cilia.hue(&"ampulla")
 	var points := PackedVector2Array()
 	var colors := PackedColorArray()
@@ -247,9 +277,9 @@ func _draw_wave(centre: Vector2) -> void:
 	colors.resize(WAVE_STEPS + 1)
 	var seen := false
 	for i in WAVE_STEPS + 1:
-		var t := TAU * float(i % WAVE_STEPS) / float(WAVE_STEPS)
-		var p := centre + Vector2(sin(t), -cos(t)) * r
-		var vis := _edge_fade(p) * carry
+		var t := lerpf(from, to, float(i) / float(WAVE_STEPS))
+		var p := origin + Vector2(cos(t), sin(t)) * r
+		var vis := _edge_fade(p) * level
 		points[i] = p
 		colors[i] = Color(tone, WAVE_ALPHA * vis)
 		seen = seen or vis > 0.0

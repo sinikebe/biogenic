@@ -447,6 +447,25 @@ const PING_FALLOFF := 0.6
 ## it, so a pulse is always heard as a series. The fiction is the organ's, not
 ## the water's -- an ear resolves one thing at a time.
 const PING_MIN_GAP := 0.17
+## **The soft edge on the hull's own shadow, as a cosine.** A point source
+## sitting on the skin radiates into half the plane and the rest goes into the
+## body -- which is why a submarine has baffles, and why clearing them is done
+## by turning the boat. Turning is this game's only verb, so the geometry hands
+## over a mechanic with a counter the player already owns and no new control.
+##
+## A hard hemisphere would be a boolean, and a body drifting across the tangent
+## would pop a mark on and off; every gate in this file has been taken off
+## exactly that argument (genes-and-cilia.md §7.0). A ray leaving a few degrees
+## under the tangent really does graze the body and come back weak, so the
+## shadow gets a 27-degree soft edge instead: `acos(0.24)` is 76.1 degrees, so
+## the fade runs +-13.9 degrees either side of the hemisphere.
+const PING_GRAZE := 0.24
+## **A return below this is not worth one of the five slots.** [constant
+## PING_RETURNS] is applied *after* occlusion, so a return a shadow has silenced
+## stands aside for a fainter one in the lit half rather than spending a slot on
+## nothing. That is the whole of the compensation, and it is enough because the
+## cap was already discarding more than the shadow does.
+const PING_SILENT := 0.03
 
 # --- The wake ---------------------------------------------------------------
 const WAKE_RANGE := 760.0
@@ -644,6 +663,16 @@ var taste_level := 0.0
 ## frame by the run. Either at 0 is a cell with no electroreceptor.
 var ping_range := 0.0
 var ping_period := 0.0
+## **Where the organ is on the membrane**, as a body-relative bearing, written
+## once a frame by the run exactly as [member dart_bearing] is. The pulse leaves
+## the skin at that arc rather than from the middle of the cell, so the slot the
+## gene is worn in decides which half of the water your own body hides -- and
+## the only way to see behind you is to turn.
+var ping_bearing := 0.0
+## How much of the pulse survives one body in the way, including your own:
+## [constant CellBody.PING_THROUGH_BY_TIER] for the tier this cell wears. 0 is a
+## body nothing gets past.
+var ping_through := 0.0
 ## Returns that became due **this frame**: `[bearing, strength]`, nearest first,
 ## strength 1 against the skin and 0 at the edge of reach. Drained by the run,
 ## which is the only thing allowed to post them. Bodies, not meals: a ping
@@ -1617,15 +1646,17 @@ func _step_beams() -> void:
 
 
 ## **The ping.** `ampulla`: a pulse on its own clock, and a bearing for every
-## body it comes back off -- edible, inedible, hunting you or asleep. That is
-## the whole of what makes it a different sense from `chemocyte` rather than a
-## second skin on it: the scent field is a statement about food, and most of
-## what is out there is not food.
+## body it comes back off that is not in a shadow -- edible, inedible, hunting
+## you or asleep. That is the whole of what makes it a different sense from
+## `chemocyte` rather than a second skin on it: the scent field is a statement
+## about food, and most of what is out there is not food.
 ##
 ## Returns are staggered by their own flight time, which is what turns one pulse
 ## into a sweep: the nearest body answers at `d / PING_SPEED` and the farthest
-## almost a second later. Nothing here posts and nothing here keeps a position
-## past the frame it becomes a bearing.
+## almost a second later. **That stagger is also what resolves the one
+## ambiguity occlusion creates**: a shadowed near body and a clear far body both
+## come back faint, but the near one still answers early. Nothing here posts and
+## nothing here keeps a position past the frame it becomes a bearing.
 func _step_pings(delta: float) -> void:
 	pings.clear()
 	if _cell == null:
@@ -1664,27 +1695,88 @@ func _step_pings(delta: float) -> void:
 	pings.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
 
 
-## Everything inside reach, nearest first, capped at [constant PING_RETURNS].
+## Everything inside reach the pulse can actually reach, nearest first, capped
+## at [constant PING_RETURNS] **after** the shadows have been taken off.
+##
+## **The pulse leaves the skin, not the middle of the cell.** Its origin is the
+## organ's own point on the membrane -- [member ping_bearing] out at the body's
+## radius -- and every body in the way takes a bite out of what comes back,
+## starting with the body it left. The origin is a world position and it is a
+## local: it is made and spent inside this function, and what leaves this file
+## is still a bearing and a strength.
+##
+## Two terms and one loop, both multiplying into the range falloff:
+##
+## - the **hull**, which is the emitter looking at the hemisphere it faces, with
+##   [constant PING_GRAZE]'s soft edge on it;
+## - every **nearer body**, by how centrally the path crosses it -- dead through
+##   the middle takes the full bite, a graze past the rim takes none.
+##
+## Both survive at [member ping_through], per occluder, multiplying. So a
+## tier-1 cell hears nothing at all behind its own organ, and a tier-3 one hears
+## through itself at 0.58 and never quite as well as around itself, which is the
+## right direction for a build that has spent three tiers on one gene.
 func _cast_ping() -> void:
+	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
+	var origin := _cell.position + dir * _cell.radius
 	var found: Array = []
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
+		# Reach is still measured from the middle of the cell, as it always has
+		# been: moving the origin is about what the pulse can *see*, not about
+		# how far it carries or how a return fades, and a range that changed
+		# with the slot would make one slot strictly the best place for a radar.
 		var d := b.pos.distance_to(_cell.position) - b.radius
 		if d >= ping_range:
 			continue
-		found.append([maxf(d, 0.0), b.pos])
+		found.append([maxf(d, 0.0), b.pos, b.radius])
 	if found.is_empty():
 		return
 	found.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	var heard: Array = []
+	for i in found.size():
+		var at: Vector2 = found[i][1]
+		var level: float = pow(clampf(1.0 - float(found[i][0]) / ping_range, 0.0, 1.0),
+			PING_FALLOFF)
+		var path := at - origin
+		var reach := path.length()
+		# The hull. A body touching the organ has no direction to be on either
+		# side of, and `normalized()` on a zero vector is zero: the smoothstep
+		# lands mid-fade, which is the only honest answer to "which side".
+		var open := smoothstep(-PING_GRAZE, PING_GRAZE,
+			path.normalized().dot(dir))
+		level *= ping_through + (1.0 - ping_through) * open
+		# Everything nearer is in the way. `found` is sorted nearest-first, so
+		# every candidate occluder is already behind this one in the list.
+		var axis := path / reach if reach > 0.001 else dir
+		for j in i:
+			if level <= PING_SILENT:
+				break
+			var other: Vector2 = found[j][1]
+			var to_j := other - origin
+			var along := to_j.dot(axis)
+			# Not between the organ and the body: a body off the back of the
+			# emitter or beyond the target is not in this path.
+			if along <= 0.0 or along >= reach:
+				continue
+			var radius_j: float = found[j][2]
+			if radius_j <= 0.0:
+				continue
+			var clear := clampf((to_j - axis * along).length() / radius_j, 0.0, 1.0)
+			level *= ping_through + (1.0 - ping_through) * clear
+		if level <= PING_SILENT:
+			continue
+		heard.append([float(found[i][0]), at, level])
+		if heard.size() >= PING_RETURNS:
+			break
 	var due := 0.0
-	for i in mini(found.size(), PING_RETURNS):
-		var d: float = found[i][0]
+	for i in heard.size():
+		var d: float = heard[i][0]
 		var flight := d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
-		_echoes.append([due, found[i][1],
-			pow(clampf(1.0 - d / ping_range, 0.0, 1.0), PING_FALLOFF)])
+		_echoes.append([due, heard[i][1], heard[i][2]])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --

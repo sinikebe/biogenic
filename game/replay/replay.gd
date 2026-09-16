@@ -31,6 +31,9 @@ const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
+## For `slot_bearing` alone: the `ampulla`'s arc is not in the ring, because it
+## is derivable from the genome the ring already carries.
+const Cilia := preload("res://game/vision/cilia.gd")
 ## **For three numbers**, and they have to be these three: the daughters'
 ## brightnesses are what the recorder wrote a single `commit` float out of, and
 ## a second table of them here would be a division that looks different in the
@@ -161,6 +164,13 @@ func _write_state() -> void:
 		_food.beams = _read_beams()
 		_food.ping_front = _frame[RecorderNode.AT_PING_FRONT]
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
+		# **Where the organ was, derived rather than recorded.** The wavefront
+		# leaves the membrane at the `ampulla`'s own arc, and both panes read
+		# that bearing off the field. It costs no ring floats: the genome and
+		# its body layout are already restored above by `_apply_deltas`, and
+		# the slot is the arc exactly as it is in a live run.
+		_food.ping_bearing = _ping_bearing()
+		_food.ping_through = _cell.ping_through() if _cell != null else 0.0
 		# **Before the world pane draws**, which is what `process_priority`
 		# -10 buys: `vision.gd` asks the field who is hunting and draws the
 		# three predator rings round the answer. Rounded rather than cast --
@@ -175,6 +185,16 @@ func _write_state() -> void:
 		_genome.held_remaining = _frame[RecorderNode.AT_HELD]
 	_panes.set_division(_read_division())
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
+
+
+## Which way the `ampulla` was pointing on the body being watched. The slot is
+## the arc and the arc is the bearing, exactly as `normal_mode.gd` resolves it;
+## dead ahead for a run that never wore one, which also never drew a wave.
+func _ping_bearing() -> float:
+	if _genome == null:
+		return 0.0
+	var slot := _genome.slot_of(&"ampulla")
+	return Cilia.slot_bearing(slot) if slot >= 0 else 0.0
 
 
 func _read_beams() -> Array:
