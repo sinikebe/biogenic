@@ -39,11 +39,15 @@ Everything below was built in the working tree, photographed at 1280x720 **and**
 5. **A move is free, repeatable and reversible.** It is not §9.7's irreversible
    action and it does not weaken it. §4.
 6. **A move needs no new mark.** A gene that has moved is the same hue at two
-   different x on two rows, `worn` on one and `carried` on the other. The
-   vocabulary already had it. §2.4.
+   different x, and the body row prints the organ under the arc it is actually
+   worn on. **The rung is not one of those marks**: it goes on answering *does
+   this body express this gene at all*, which is the question `dna-strand.md`
+   §1.2 gave it. §2.4.
 7. **One new text row, `Act`**, carrying the verb. The hint keeps the odds. §5.
 8. **`light` and `camera` pair up side by side**, because the column has to find
    94 px for the second strand and it does not have them. §6.
+9. **A placement lands on the lift of the second tap, not on its press**,
+   because the press is now the beginning of a move as well. §3.7.
 
 ---
 
@@ -130,29 +134,61 @@ Measured: 7 px, and visible against the centred `Explain` line below it. This is
 `genes-and-cilia.md` §5.2's trailing-spacer trick, deleted by `dna-strand.md`
 §1.4 for a different job and earned again here.
 
-### 2.4 Worn means worn *here*
+### 2.4 A rung is expression, and the row above it is position
 
-The shipped strand computes a locus's worn/carried split as
-`body.get(gene, 0)` — *does this body have this gene at all*. With one strand
-that was the only question available. With two it is a lie the moment a gene
-moves: the DNA has it at locus 3, the organ is on arc 1, and locus 3 draws a
-full rung claiming otherwise.
+**The DNA row's rung keeps the meaning `dna-strand.md` §1.2 gave it:** worn is
+*this body expresses this gene*, carried is *the DNA has it and the body does
+not*, which §3 of that document glosses as *it rolls again in the next
+generation*.
 
 ```gdscript
 # _build_genome_strip, the dna row
-var here := int(body.get(gene, 0)) if _genome.slot_of(gene) == i else 0
+var here := int(body.get(gene, 0))
 ```
 
-So a moved gene draws **carried** on the DNA row — a bar floating clear of both
-backbones — and **worn** on the body row, a full rung, at a different x. Three
-channels agree without a new mark being invented:
+**It was briefly narrowed to *worn on this arc*, and that was the wrong fix for
+a two-row surface.** The lie being closed was real — with one strand, a gene the
+body wore at arc 1 drew a full rung at whatever DNA locus it was later placed
+into, and looked like it was claiming arc 3 — but **the body row closes it by
+existing.** The rows are labelled `body` and `dna`, they are at identical x, and
+the upper one prints the organ under the arc it is actually on. Narrowing the
+rung as well made one mark carry two facts, and it was measured rather than
+argued:
 
-- **position** — same hue, two columns
-- **shape** — full rung against floating bar, which survives greyscale
-- **word tint** — the DNA row's word drops to `WORD_UNEXPRESSED 0.42`, which is
-  the existing "the body does not wear this" channel, now narrowed to "not here"
+Two frames, built so that column 4 is `beam` worn over `ping` carried in both —
+one with `ping` **owned at arc 5**, one where `ping` **was never expressed**:
 
-Rendered in greyscale with no colour at all (§9): all three still read.
+| dna locus 4, the two frames compared | differing pixels |
+| --- | --- |
+| under `worn`-here | **0**, max delta 0 |
+| with the rung back to expression | **331**, max delta 224 |
+
+Two opposite facts — *you own this organ, it is elsewhere* against *this gene
+missed its roll and you do not own it at all* — were byte-identical at the
+locus, and the only evidence was 232 canvas px away on the other row. The
+contradiction also reached the text, in an ordinary frame with nothing unusual
+posed: move `cytostome`, and its locus drew *the body does not have this*
+directly above `the mouth · a daughter always wears it`, which `Hint` prints
+because `cytostome` is in `ALWAYS_EXPRESSED`. Rendered; §9.
+
+So each question is answered by the mark that can answer it locally:
+
+| question | where it is answered | cost to read |
+| --- | --- | --- |
+| **do I express this gene at all** | the rung's shape, at the locus | a glance |
+| **where is the organ** | the body row, same column | a glance up |
+| **has this gene moved** | the two rows disagreeing at that column, and the body row's word says what you are wearing there | a glance up |
+| **which two loci swapped** | same hue, two columns, two rows | a scan |
+
+The last one is a scan and that is accepted: it is a genuinely non-local
+question, and the body row answers it in words. A move is still marked three
+times — position, the body row's word, and the dart that comes with it — which
+is decision 6, unchanged. What it is **not** marked by is the rung, because the
+rung is already spoken for.
+
+**No caret, and not as an oversight.** `choosing.md` §6 spends that mark on
+*the two DNAs disagree*, on a screen the player reaches within seconds of this
+one. One shape cannot mean that there and *this gene is worn elsewhere* here.
 
 ---
 
@@ -291,6 +327,82 @@ picture, which is true), no locus draws the sample or its ghost rung, and the
 `Act` line reports the move. On release the sample rebinds to the selection as
 usual.
 
+### 3.7 A placement lands on the lift, because the press is ambiguous
+
+**This is the one part of §9.7's gesture the move had to change, and leaving it
+alone was a blocker rather than a caveat.** A pointer going *down* on an armed
+locus is two things at once: it is the confirming second tap of a placement, and
+it is how a move begins. Both readings are live on the same pixel in the same
+instant.
+
+Committing on the down-stroke resolved the ambiguity **by the wall clock**, and
+the two resolutions are opposites:
+
+| the same finger, the same two points | what happened |
+| --- | --- |
+| second press **more** than `ARM_GUARD_MS` after the arming tap | the placement fired on the press. The gene under it was evicted from the lineage, the strip rebuilt, Godot nulled `gui.mouse_focus` on the freed control, and the slide that followed did nothing |
+| second press **less** than 300 ms after it | the guard returned early without rebuilding, `drag_accum` crossed the threshold, and a move started normally. Nothing was placed |
+
+The sequence is ordinary, not exotic: with a sample held, *I want `sting` on my
+nose, so first move `eat` out of slot 0* — tap slot 0 to read it, which arms it,
+then drag. Under the old rule `eat` left the lineage, which is §9.7's own worked
+example of a fourth gene over your own mouth, performed by a gesture the player
+made as a move.
+
+**So the down-stroke only primes.** It records *a placement is waiting on this
+locus*, writes nothing, and is cancelled by the one event that proves the finger
+meant a move — `_get_drag_data` actually being called. The DNA is written on the
+up-stroke, and only if the finger is still inside the locus it pressed.
+
+Four properties, all measured on the input path rather than reasoned about:
+
+- **A drag can no longer perform a placement at all.** By the time a placement
+  could happen the drag has claimed the gesture and cleared the prime. Godot
+  helps here: with a drag in flight it delivers no button release to the source
+  control, because the release *is* the drop.
+- **The first tap still cannot place, however slow it is.** Priming needs the
+  locus to have been armed *before* this press, so a one-second press-and-hold
+  on an unarmed locus arms it and nothing else. Rendered.
+- **Sliding off cancels.** Godot keeps delivering to the control the press
+  landed on, so a finger that pressed an armed locus, slid four loci away and
+  lifted there gets its release back at the source with a local x of −336. That
+  release is refused: `Rect2(Vector2.ZERO, size).has_point()`. This is the only
+  path that matters on an *empty* armed locus, where no drag can start.
+- **The 300 ms guard has not moved** and is still measured press-to-press, so
+  §9.7's contract — two taps, and the second cannot follow the first inside
+  300 ms — is exactly what it was. What changed is which half of the second tap
+  the DNA is written on. The guard is also still what absorbs Godot's emulated
+  mouse click: one thumb press arrives at the locus twice, as an
+  `InputEventMouseButton` and then as an `InputEventScreenTouch`, one
+  millisecond apart, and so does one thumb release.
+
+The keyboard keeps confirming on the press, because **no drag can grow out of a
+key**: `ui_accept` is Enter, KP-Enter and Space. That path has its own hazard,
+and it needed the guard `_step_arming` already carried — a mouse drag in flight
+while the other hand presses Enter fired `_commit_slot` mid-gesture, placed the
+sample, rebuilt the strip under the drag, and then moved the gene that had just
+landed rather than the one the drag picked up. `_commit_slot` now refuses while
+`_dragging` is set.
+
+**Nothing on this surface refuses a drag silently.** The only refusal left is an
+empty locus, which has no gene to pick up, and the locus the press armed prints
+`nothing here yet · an organ here would look this way` on the `Explain` row
+before the finger has moved.
+
+**And one more silent gesture, found by rendering the pose at 2400x1080.** The
+four-second arming timeout is wall clock, and the renderer is slower at that
+shape than the harness's own clock — so the lapse landed *between* the press and
+the tenth pixel of the slide. A lapse rebuilds the strand, which frees the
+control the press landed on, so `_get_drag_data` was never called and the whole
+gesture did nothing: a finger on the strand, and no response. That is the same
+failure the select-redraws change fixed at the other end (§3.2), reached through
+the other door. `_step_arming` now returns while a finger is down, and it is the
+same argument the `_dragging` guard is made on: **a strip with a finger on it is
+not a strip left armed**, which is the only thing the timeout is for. The window
+is narrow — the press has to land in the last frames of the four seconds — and it
+is reachable on a real device by any player who reads a locus, thinks, and then
+starts to drag.
+
 ---
 
 ## 4. A move is not §9.7's irreversible action, and does not weaken it
@@ -345,10 +457,21 @@ const ACT_MOVE   := "drag it to another locus"
 const ACT_CARRY  := "%s · let go over a locus to move it there"
 const ACT_LAND   := "let go to move %s here"
 const ACT_SWAP   := "let go to swap %s and %s"
+const ACT_KEEP   := "let go to leave %s where it is"
 ```
 
 `Act` is empty when the selected locus is empty and nothing is held — there is
 nothing to do there.
+
+**`ACT_KEEP` is the line a cancelled move gets, and it was missing.** Lifting a
+gene, thinking better of it and putting it back where it came from is the first
+thing a nervous player tries, and the source locus said exactly what open water
+said: `%s · let go over a locus to move it there`, which is not what letting go
+there does. A drop on the source is refused by `_can_drop_data` and the gene
+simply stays, so the line now says that while the finger is still down, which is
+while the player is still deciding. The locus already drew the picture — its
+lens fills in the gene's own hue, which is that gene coming home — and this is
+the sentence for it.
 
 **A bug the split exposes, and it must be fixed with it.** `_update_hint` reads
 `HINT_CHANCE[dna_tier(gene)]`, and a *held sample* has `dna_tier == 0`, which is
@@ -357,9 +480,24 @@ first; once the instruction moves to `Act` the odds line goes blank at exactly
 the moment the player is deciding. `maxi(dna_tier(gene), 1)` — a sample is worth
 one copy if placed, which is what the line is for. Photographed both ways.
 
-**`Act` is teal and the other two are pale**, so the ordering on the column is
-*what this is* (loudest, with a coloured name) → *what it is worth* → *what you
-can do*. A fourth pale line would have read as a paragraph.
+**`Act` is teal and the other two are pale**, so the reading order down the
+column is *what this is* → *what it is worth* → *what you can do*. A fourth pale
+line would have read as a paragraph.
+
+**Only the first of those steps is a step down in loudness, and the third row is
+deliberately not the quietest.** Measured off the render at 1280x720, peak glyph
+luminance: `Explain` 213, `Act` 122, `Hint` 98. `Act` is separated from `Hint`
+by **hue** rather than by loudness, for two reasons and the second is the one
+that would make dimming it a bug:
+
+- Teal is this surface's colour for *this responds* — the focus underline, both
+  buttons and the camera toggle are all the same green.
+- **It is the only row that changes during a gesture, and on touch it is the
+  only feedback a thumb cannot cover.** `DRAG_LIFT` puts the travelling base
+  pair 34 px above the pointer and the destination lens fills *under* it; at
+  2400x1080 a fingertip is about one whole locus wide, so both of those are
+  under the hand making the move. The line that reads `let go to swap eat and
+  ping` cannot be the quietest thing on the column.
 
 ### 5.1 The move surface does not teach why a slot matters
 
@@ -470,6 +608,37 @@ so a thumb landing on it does nothing rather than something surprising, and it
 adds **no** Tab stops to the six to eight
 `gene-lines-and-the-pause-target.md` §6.4 already complains about.
 
+### 6.3 What the shorter column does to the world behind it, honestly
+
+A first pass at this recorded the reshape as a straight win for the full-vision
+ghost — *the cell used to show through the whole gap between the two stacked
+panels and now shows through a 48 px slice*. **That is not what the render says
+and it must not stand as the record.** Rendered on both trees, at both shapes:
+
+- The old horizontal band is gone: `light` and `camera` no longer sandwich a
+  48 px stripe of open screen across the middle of the cell.
+- But the column is 55 px shorter and `Settings` starts at y 365 instead of
+  y 244, which opens **121 px of new vertical space directly over the cell's
+  upper body** — and `Act` sits in it, at y 297..317.
+- So at both shapes the cell's `stigma` arc and its upper cilia are drawn
+  behind `drag it to another locus`.
+
+It is a trade, not a quieting. **Judged acceptable, and measured rather than
+eyeballed**, at 1280x720 and again at 2400x1080 where the numbers are identical
+because the canvas is:
+
+| | peak luminance |
+| --- | --- |
+| `Act` glyphs over the ghost | **136** |
+| the brightest thing the ghost puts under that row | 46 |
+| the brightest ghost pixel anywhere in the newly opened space | 69 |
+
+`SCRIM_FULL_VISION` is 0.86, so the world behind the column is at about a
+seventh of its own brightness; the text clears the brightest ghost pixel under
+it by 3:1 and the median background under the row is 13. The text stays
+readable and the ghost stays a ghost. No layout answer is wanted — and if one
+is ever wanted, it is `Act` that moves, not the strand.
+
 ---
 
 ## 7. What was rejected
@@ -502,6 +671,23 @@ adds **no** Tab stops to the six to eight
   groups that centre differently.
 - **Pairing `resume` and `leave` to save more height.** Not needed once `light`
   and `camera` pair, and `leave` ends the run.
+- **Refusing the commit when the press lands on a locus that holds a movable
+  gene** (§3.7's ambiguity, resolved by target instead of by gesture). Cheaper,
+  and it deletes §9.7: a fourth gene over your own mouth *is* a commit onto an
+  occupied locus, and it is that section's own worked example. It would leave
+  the one irreversible action in the game reachable only from the keyboard,
+  which on Android is not reachable at all.
+- **Requiring the confirming tap to be an `InputEventScreenTouch` or a
+  `ui_accept`** rather than any press. Traced on both paths, and it fixes
+  neither: on desktop it takes placement away from the mouse entirely, and on
+  touch the `InputEventScreenTouch` press *is* the start of the drag — it
+  arrives one millisecond after the emulated mouse press that Godot hangs the
+  drag off, so committing on it evicts a gene on the down-stroke exactly as
+  before.
+- **Narrowing the DNA rung to *worn on this arc*.** Built and shipped for one
+  commit, and reverted: §2.4 has the measurement and the frame that settles it.
+- **A caret for *this gene is worn elsewhere*.** `choosing.md` §6 already spends
+  that shape on *the two DNAs disagree*, one screen and a few seconds away.
 
 ---
 
@@ -511,7 +697,7 @@ adds **no** Tab stops to the six to eight
 | --- | --- |
 | `game/normal/genome.gd` | `move(from, to) -> bool`, §3.4. Nothing else. |
 | `game/normal/normal_mode.tscn` | `Genome/Body` before `Row`; `Genome/Act` after `Hint`; `Light` and `View` into a new `Settings` HBox |
-| `game/normal/normal_mode.gd` | the body row's constants and draw; `here` in §2.4; selection redraws instead of rebuilding (§3.2); the three drag callbacks; `Shift`+arrow; `Act`; the `maxi(dna_tier, 1)` fix; six `@onready` paths |
+| `game/normal/normal_mode.gd` | the body row's constants and draw; selection redraws instead of rebuilding (§3.2); the three drag callbacks; `Shift`+arrow; `Act` and `ACT_KEEP`; the `maxi(dna_tier, 1)` fix; six `@onready` paths; `_primed` and the press/lift split (§3.7); `_commit_slot`'s `_dragging` guard; `_step_arming` holding while a finger is down (§3.7). **The DNA rung is `body.get(gene, 0)`, unchanged from what ships** — §2.4 |
 | `game/vision/cilia.gd` | **nothing.** The statics already take an axis, a mid and an amplitude |
 | `tools/drive.gd` | `--slide=` must set `relative`; `--tap=shift-left` / `shift-right`. §9.1 |
 
@@ -533,8 +719,10 @@ deterministic surface in the game, so these reproduce.
 | the pair, seven loci, one disagreement, both shapes | passes. `beam` on the body row and `ping` on the dna row in the same column, and they are the only two words that are not in a pair |
 | a gene lifted, mid-drag, **touch**, both shapes | passes. Base pair above the finger, source lens in the displaced hue, destination backbone lit and lens tinted, `let go to swap eat and ping` |
 | the same on the **desktop** path (`--mouse-press/slide`) | passes, identically |
-| the drop committed, both shapes | passes. `eat` is worn at body slot 0 and carried at dna slot 4; `ping` is carried at dna slot 0; four words, two rows, one hue each |
-| **the same, greyscale, no colour at all** | passes. Full rung against floating bar at 42% length, and every gene named |
+| the drop committed, both shapes | passes. `eat` is worn at body slot 0 and **worn** at dna slot 4 — the body expresses it, and the rung says so; `beam` the same at the other end of the swap. Four words, two rows, one hue each, and the two columns where the rows disagree are the two the move touched |
+| the same locus, **`worn`-here against expression**, side by side at 2x | **this is the frame finding 3 turned on.** Under `worn`-here, `cytostome` moved to locus 4 drew a floating bar — *the DNA has it, the body does not* — directly above `the mouth · a daughter always wears it`. With the rung back to expression it is a full rung and the two channels agree |
+| `beam` worn over `ping` carried, `ping` **owned at arc 5** against `ping` **never expressed** | **0 differing pixels at dna locus 4** under `worn`-here; **331, max delta 224** with the rung back to expression. The A/B that settles §2.4 |
+| **the same A/B, greyscale, no colour at all** | passes. Full rung against floating bar, plus a bright word against a dim one; shape alone still carries it |
 | a drag onto an **empty** locus | passes. `let go to move beam here`, and the explanation row describes the travelling gene rather than the hole |
 | a drag **released over open screen** | passes. Nothing moved, and all three lines return to the selection |
 | a **held sample** bound for a locus, seven loci | passes. `sting` in the band, lens filled, `one copy · a daughter may not wear it`, `tap again to place` |
@@ -543,6 +731,17 @@ deterministic surface in the game, so these reproduce.
 | `Tab` x3 then `Shift`+`→` x2 | passes. `turn` walks from slot 1 to slot 3, `swim` and `see` slide back, three dissent words appear on the body row |
 | the whole column, seven loci, both shapes | passes. 629 of 720, 45 clear above and 46 below, against 684 with 18 today |
 | pause over **point of view**, scrim 0.50 | passes. The membrane draws in the outer band and never reaches the gutter, which is the leftmost new ink on the screen |
+| pause over **full vision**, scrim 0.86, both shapes | passes, and §6.3 has the measurement rather than the earlier claim. `Act` clears the brightest ghost pixel under it by 3:1 |
+| **armed locus, sample held, press and drag** (§3.7's blocker) | **failed first** — the press placed `sting` over `eat`, evicting it from the lineage, and the drag that followed did nothing. Fixed by priming on the press and writing on the lift; re-rendered, the drag moves `eat` to locus 4 and the sample is still held |
+| the same with the press **inside** 300 ms of the arming tap | passes, and it is now the *same* frame as the one above rather than its opposite |
+| a **one-second press-and-hold** on an unarmed locus with a sample held | passes. It arms and nothing else: priming needs a locus that was armed before this press |
+| press an armed **empty** locus, slide four loci away, lift there | passes. Nothing placed — the release comes back to the source control with a local x of −336 and is refused on the rect |
+| **two taps, the ordinary placement**, `--touch=` twice | passes. `sting` lands at locus 0, `eat` leaves the DNA and stays on the body, and the receipt is `one copy · a daughter may not wear it` |
+| **mouse drag with `Enter` pressed mid-gesture**, sample held | **failed first** — `sting` was placed into the source locus mid-drag and the release then moved the gene that had just landed. Guarded in `_commit_slot`; re-rendered, the key is a no-op and the drag completes as a move |
+| a drag **released back on its own source locus** | **said nothing at all** — identical to open water. Now `let go to leave eat where it is`, while the finger is still down. Re-rendered at 2400x1080, identical |
+| the blocker's own pose **at 2400x1080** | **failed, and found a third bug** — the arming timeout is wall clock and lapsed between the press and the drag threshold, freeing the control the press landed on. `_step_arming` now holds while a finger is down; re-rendered, the frame is the 1280x720 one. The four frames either side of that guard are **0 differing pixels**, so it costs nothing anywhere else |
+| `Esc` **mid-drag** | never reaches `_toggle_pause`: `Viewport` consumes `ui_cancel` while `gui.dragging` and cancels the drag itself. The comment claiming the drag guard was desktop-only was exactly backwards |
+| Android **Back** mid-drag (`--back-at`) | reaches `_toggle_pause` with `gui_is_dragging()` true, and `gui_cancel_drag()` is what stops a base pair floating over open water. The guard is live on the platform the comment said it was not needed on |
 
 ### 9.1 Two harness findings, and one of them blocks the test set
 
@@ -565,21 +764,28 @@ deterministic surface in the game, so these reproduce.
 1. **After a move, the destination is selected — and if a sample is held, one
    more tap would place it there.** That is the shipped two-tap rule reached by a
    new road, and the 300 ms guard still applies, but the finger is already on the
-   locus. Judged consistent rather than safe; re-judge if anyone overwrites a
-   gene they had just finished positioning.
-2. **The body row's words on a busy strand.** Four moves in one generation puts
+   locus. Safer than it was, because that tap now has to go down *and come back
+   up* on the locus (§3.7) and the guard is measured from the drop — but still
+   judged consistent rather than safe; re-judge if anyone overwrites a gene they
+   had just finished positioning.
+2. **A gene moved and a gene still where it was born look the same at their own
+   locus.** That is §2.4's deliberate trade: the rung is spent on expression,
+   and *has this moved* is read off the body row one row up. The state it is
+   least sure of is a strand where five of seven columns disagree, which is the
+   same state item 3 below worries about from the other side.
+3. **The body row's words on a busy strand.** Four moves in one generation puts
    four words on the upper row and it starts to look like two full label rows.
    True, self-limiting, and erased by the next division — but it is the state
    this design is least sure of, and it cannot be judged without a player who
    rearranges habitually.
-3. **The drop target's mark is the selection's mark.** Brighter backbone plus a
+4. **The drop target's mark is the selection's mark.** Brighter backbone plus a
    0.20 lens in the arriving hue, behind a rung that may be brighter than both.
    It reads at 1280x720; if a player ever drops on the wrong locus, raising the
    lens for a drop target specifically is the cheapest fix.
-4. **No animation on the landing.** The rungs are simply somewhere else on the
+5. **No animation on the landing.** The rungs are simply somewhere else on the
    next frame. A 150 ms slide would say *it moved* rather than *it is elsewhere*,
    and the pause screen has no tween in it today.
-5. **`Cilia.draw_weave` is now called twice per locus column.** At seven loci
+6. **`Cilia.draw_weave` is now called twice per locus column.** At seven loci
    the strip goes from nine controls to twenty-two, on a paused,
    redraw-on-demand surface; not measured, because nothing here runs during
    play, but it is the first time this surface has doubled.

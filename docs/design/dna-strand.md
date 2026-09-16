@@ -88,6 +88,15 @@ colour at all: a full rung and a floating bar are still two different objects.
 > yours. Here the gap is a third of a 32 px rung and the mark is the rung itself,
 > not a decoration on it. Same idea, a scale at which it works.
 
+> **A rung answers *does this body express this gene*, and nothing narrower.**
+> `moving-a-gene.md` added a second strand above this one, labelled `body`, and
+> tried narrowing this row's rung to *worn on **this** arc* at the same time.
+> That put two facts on one mark — a gene you own and moved drew exactly what a
+> gene that missed its roll draws, **0 differing pixels** at the locus — and it
+> contradicted the line under the strand for `cytostome`, which `ALWAYS_EXPRESSED`
+> guarantees. Reverted. *Where* an organ is worn is the body row's question and
+> the body row answers it in words; this row answers *whether*.
+
 > **The cluster is centred on the copies it has**, not on three fixed places with
 > the empty ones ghosted. The ghosts were built and photographed: at 1 px and 15%
 > alpha they were invisible, and paying for them cost a one-copy locus its
@@ -117,7 +126,11 @@ row.
   arming is reversible — the same argument the 20 px tile gap was made on.
 - **Focus is an underline**, not a box: `FOCUS_INSET 14`, width 2, at the
   locus's bottom edge. A focus rectangle would put the square back.
-- **The two taps, the 300 ms guard and the 4 s timeout are unchanged.**
+- **The two taps, the 300 ms guard and the 4 s timeout are unchanged.** The
+  guard is still measured press-to-press; what `moving-a-gene.md` §3.7 moved is
+  which half of the second tap the DNA is written on, because once a locus can
+  also be dragged, a press on it is two gestures at once. The placement lands on
+  the lift.
 - **Nothing in the row moves when a sample arrives or lapses.** The strand is the
   same width held or not, so `genes-and-cilia.md` §5.2's invisible trailing
   spacer is deleted rather than kept.
