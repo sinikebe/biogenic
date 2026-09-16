@@ -23,7 +23,12 @@ to get twenty times denser. `moving-a-gene.md` shipped the gesture that moves a
 gene between slots this morning; this is what gives that gesture something to
 be *for*.
 
-Status: prototyped and photographed at 1280x720 and 2400x1080 under
+Status: **§1, the `ampulla`, is built and in `main`. §2 and §3, smell and the
+beam fan, are not** — both are blocked on the owner's calls in §8 and neither
+constant has been moved. §4 says which line of which file is which; read it
+before treating any of this as a description of the game.
+
+Prototyped and photographed at 1280x720 and 2400x1080 under
 `--rendering-driver opengl3`. Every number below is measured off a render or off
 an instrumented run, and §7 says which. **The smell change is a nerf to the
 sense a blind player leans on and it carries the owner's call in §8.**
@@ -132,9 +137,18 @@ Three candidate shapes were considered and two rejected (§9):
   cannot count bodies, and it reintroduces exactly the boolean this file spent
   §7.0 removing.
 - **A dimmer return, compounding per body.** Chosen. It is the shape the physics
-  has — each interface takes a bite — it is continuous, it needs no rule for
-  "how deep", and it self-limits: the fourth rank at tier 3 arrives at 0.11 of
-  an echo already faded by range, under `PING_SILENT`, and drops out on its own.
+  has — each interface takes a bite — it is continuous, and it needs no rule for
+  "how deep": four bodies deep at tier 3 is `0.58^4 = 0.11` of an echo the range
+  has already faded, which is a mark nobody reads.
+
+  **It does not silence itself, and the spec used to say it did.** 0.11 is not
+  under `PING_SILENT`'s 0.03 — it only crosses it once the range term has fallen
+  below 0.265, which at `PING_FALLOFF` 0.6 means a body past 89% of the reach.
+  What keeps the fourth rank off the membrane is the cap: `PING_RETURNS` is five
+  and the loop stops at five *audible* returns, so a fifth body four deep is
+  competing for a slot with four nearer ones that are louder. `cell.gd`'s note
+  beside the constant states this arithmetic correctly and claims nothing more
+  than "a mark nobody reads"; this bullet now agrees with it.
 
 **It resolves the ambiguity it creates, and in a channel that already exists.**
 A shadowed near body and a clear far body both read as *faint*. But returns are
@@ -144,11 +158,22 @@ late faint mark is something far. That cue is free, it is the sweep the ping was
 already built to read as, and it is the reason this curve rather than one that
 throws distance away.
 
-Self-occlusion penetrates at the same rate, so the blind arc **softens with
-investment** rather than disappearing: a tier-1 `ampulla` is stone blind astern
-of its organ, a tier-3 one hears through its own body at 0.58 and never quite as
-well as around it. That is the right direction for a build that has spent three
-tiers on one gene.
+Self-occlusion penetrates at the same rate, so a tier-1 `ampulla` is stone blind
+astern of its organ and a tier-3 one hears through its own body at 0.58 — never
+quite as well as around it. That is the right direction for a build that has
+spent three tiers on one gene.
+
+**It does not *soften* with investment, though: it goes.** This spec claimed a
+blind arc that narrowed tier by tier, and the build does not do that and never
+did. Measured on the shipped code, at tier 2 and at tier 3 the pings arrive at
+the *same times* and the *same bearings* as with no occlusion at all,
+bin-for-bin and bearing-for-bearing; only the strength moves (§7.3.1). At 0.34
+and at 0.58 per occluder nothing in the nearest five ever falls under
+`PING_SILENT`, so the first upgrade buys the whole circle back at once and pays
+for it in loudness. The blind arc is a **tier-1 mechanic**: stone blind behind
+your own body until the first upgrade, and after it a quieter answer from the
+half you are not pointed at. Whether that is the right ladder is an owner
+question and `PING_THROUGH_BY_TIER` is not moved here.
 
 ### 1.4 What is drawn
 
@@ -166,22 +191,52 @@ Where `ping_through > 0` the other half is drawn too, at `alpha x ping_through`.
   than 96 — it is half the arc.
 - Point of view keeps its per-vertex alpha and `_edge_fade`, so the arc still
   dissolves into the band instead of clipping at a rectangle.
+- **The far half is inset half an angle step at both ends.** Drawn flush the two
+  arcs share a vertex at each seam, a shared vertex is composited twice, and the
+  join came out brighter than either half of the ring it joins: measured at
+  tier 3, plateaus of 257 and 150 summed sRGB above base meeting in a bead of
+  **407** in point of view, and a ring maximum of 342 against a 254 plateau in
+  full vision. With the inset the brightest pixel on the ring is on the lit
+  plateau where it belongs — 263 and 254. The cost is a notch of half a step at
+  each seam: 5 canvas px on the r212 ring that was measured, growing with the
+  ring because it is an angle, and about 10 px by the radius at which the arc is
+  fading into the band anyway. Rendered at both shapes and at three radii, it
+  reads as the boundary between the loud half and the quiet one, not as a break.
 
-In point of view the arc's centre lands **exactly on the violet tuft the soma
-figure already draws for the `ampulla`** — the organ and the wave leaving it are
-the same place on screen, for free, because both are read off the same arc.
+In point of view the arc's centre lands **on the violet tuft the soma figure
+already draws for the `ampulla`** — the organ and the wave leaving it are the
+same place on screen, for free, because both are read off the same arc. *On*,
+not exactly on: the wave leaves a circle of `cell.radius` and the figure is an
+ovoid (`OVOID_ALONG` 1.18 against `OVOID_ACROSS` 0.94), so the two agree to
+1.3 canvas px on the forward diagonals and part by 8 px at the nose and astern,
+where the origin sits that far inside the drawn rim.
 
 Measured on the tier-3 render (§7.3): the lit half of the ring reads 232 above
 base in summed sRGB and the penetrated half reads 135, a ratio of **0.58** — the
-constant, drawn. The picture and the simulation are one number seen twice.
+constant, drawn.
 
-**The replay pays nothing for this.** Both panes draw the arc off
-`ping_bearing` and `ping_through`, and `recorder.gd` carries neither: `replay.gd`
-derives them from the genome and the body layout the ring already restores —
-`Cilia.slot_bearing(genome.slot_of(&"ampulla"))` and the cell's own tier, the
-same two calls a live run makes. The `STRIDE` does not move for the `ampulla`,
-and a watched run shows the wave leaving the slot the organ was actually worn
-in. Rendered on the two-pane screen, tier 3, and both halves are there.
+**The ratio is the number seen twice; the edge is not.** `PING_GRAZE` gives the
+hull shadow a 27.8-degree fade — `acos(-0.24)` is 103.9 degrees — and
+`PING_SILENT` cuts what is left of it at about 101, so at tier 1 the simulation
+still answers for a body ten degrees behind the tangent while the drawn arc has
+stopped dead at 90. The arc is where the pulse is *loud*, not where it is *zero*. Softening
+it to match would mean a per-vertex fade in both views, and `vision.gd` draws
+the world arc with `draw_arc`, which takes one colour — so it is a change to two
+files and to this section, not a constant. Left as it is, and said here rather
+than claimed away.
+
+**The replay pays one dictionary key for this**, and it is not the one this spec
+predicted. Both panes draw the arc off `ping_bearing` and `ping_through`, and
+`recorder.gd` carries neither — `replay.gd` derives them from the restored
+genome, `Cilia.slot_bearing(genome.slot_of(&"ampulla"))` and the cell's own
+tier, the same two calls a live run makes. But `slot_of` reads the **body's**
+layout, and that layout was being rebuilt at playback from the **DNA's** order,
+which `move()` deliberately parts from it. Measured on a run with the `ampulla`
+worn at slot 3 and moved in the DNA to slot 5: live, the wave leaves at +42.09
+degrees; replayed, at +133.27 — and `soma.gd` drew the tuft on the same wrong
+arc, because it reads `body_layout()` too. The PLAYER delta now carries the
+body's layout beside the DNA's. It is a dictionary, so `STRIDE` still does not
+move for the `ampulla`, and both bearings now read +42.09 (§7.3.2).
 
 ---
 
@@ -494,15 +549,28 @@ because this container is not that phone.
 
 ## 4. What the game developer changes
 
-| file | change |
-| --- | --- |
-| `game/normal/cell.gd` | `BEAM_COUNT_BY_TIER = [0,1,5,20]`; new `PING_THROUGH_BY_TIER` |
-| `game/normal/food.gd` | `ping_bearing` / `ping_through`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it; orientation weight and `SMELL_TAIL` in `_step_sense`; `taste_bearing` becomes the organ's facing; `smelt_pull` is now dead and goes |
-| `game/normal/normal_mode.gd` | write the four new field vars from `slot_of` + tier |
-| `game/perception/signal_bus.gd` | `SMELL_BEHIND`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; delete taste jitter and bearing low-pass; `FOCUS_BY_TIER` now feeds the floor |
-| `game/perception/returns.gd` | wave becomes an arc from the organ, `_wave_arc()` helper |
-| `game/vision/vision.gd` | the same arc in world space |
-| `game/replay/recorder.gd` | `BEAMS` 3 -> 20, and the `STRIDE` arithmetic in §3.3 |
+> ## ONE THIRD OF THIS TABLE IS IN `main`. TWO THIRDS ARE NOT.
+>
+> **Built and shipped: the `ampulla` only** — §1, and the four `shipped` rows
+> below. **Not built: the `chemocyte` (§2) and the `ocellus` (§3)**, because
+> both are blocked on the owner's calls in §8 and neither constant has been
+> moved. `signal_bus.gd` and `recorder.gd` are **byte-identical** to what they
+> were before this spec existed, apart from the one PLAYER-delta key §1.4 needed
+> for the replay. Nothing in the smell or beam rows has been attempted, and a
+> reader of `main` should not have to diff the tree to find that out.
+
+| file | change | state |
+| --- | --- | --- |
+| `game/normal/cell.gd` | new `PING_THROUGH_BY_TIER` | **shipped** |
+| `game/normal/cell.gd` | `BEAM_COUNT_BY_TIER = [0,1,5,20]` | **not built** — §8 row 3 |
+| `game/normal/food.gd` | `ping_bearing` / `ping_through`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it | **shipped** |
+| `game/normal/food.gd` | orientation weight and `SMELL_TAIL` in `_step_sense`; `taste_bearing` becomes the organ's facing; `smelt_pull` goes | **not built** — §8 row 1 |
+| `game/normal/normal_mode.gd` | write `ping_bearing` and `ping_through` from `slot_of` + tier | **shipped** |
+| `game/perception/signal_bus.gd` | `SMELL_BEHIND`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; delete taste jitter and bearing low-pass; `FOCUS_BY_TIER` now feeds the floor | **not built** — §8 rows 1 and 2 |
+| `game/perception/returns.gd` | wave becomes an arc from the organ, `_wave_arc()` helper | **shipped** |
+| `game/vision/vision.gd` | the same arc in world space | **shipped** |
+| `game/replay/recorder.gd` | the PLAYER delta carries the body's layout (§1.4) | **shipped** |
+| `game/replay/recorder.gd` | `BEAMS` 3 -> 20, and the `STRIDE` arithmetic in §3.3 | **not built** — §8 row 3 |
 
 No shader change. No new uniform. No `class_name`. Nothing outside `game/`.
 It ships as a content pack.
@@ -612,40 +680,85 @@ sRGB and the penetrated half 135 — a ratio of **0.58**, which is
 `PING_THROUGH_BY_TIER[3]` exactly. The picture and the simulation are one
 number.
 
-#### 7.3.1 Re-measured on the build, and one row came out stronger
+#### 7.3.1 Measured three times. The invariants hold; the absolutes do not.
 
-The table above is the prototype's. The same instrument on the shipped code —
-3 seeds (4242 / 77 / 1009) x 40 s, `--fixed-fps 60`, counting the `ping`
-sensations that reached the bus, `ampulla` in slot 3 (bearing +42.1):
+The table above is the prototype's. It has since been measured twice more — once
+on the shipped build, once independently by review — and **the three runs agree
+on every structural claim and disagree on every absolute.** The structure is
+what this section now leads with, because that is what reproduced.
 
-| | returns in 40s, per seed | behind the organ | mean strength |
+| invariant | prototype | build | third run |
 | --- | --- | --- | --- |
-| today, tier 1 | 65 | 41.0% | 0.645 |
-| occluded, tier 1 | 65 | **8.7%** | 0.500 (−22.5%) |
-| today, tier 3 | 144 (143 on one seed) | 46.4% | 0.817 |
-| occluded, tier 3 | 144 (143 on one seed) | **46.4%** | 0.651 (−20.3%) |
+| tier-1 returns in 40 s, per seed | 65 | 65 | **65** |
+| tier-3 returns in 40 s, per seed | 150 | 144 (143 on one seed) | **145 (144 on one seed)** |
+| tier-1 bins collapse into the first four | — | `[65,50,63,17,0,0]` | **`[66,69,47,13,0,0]`** |
+| drawn ratio, penetrated half to lit | 0.58 | 0.581 | **0.584** |
 
-Three of the four rows reproduce. **The tier-3 blind arc does not, and it is
-further in the direction the spec wanted**: on the build, occlusion at tier 3
-changes *nothing* about which five bodies answer — the same returns arrive at
-the same bearings, 20% quieter. At 0.58 per occluder, nothing in the nearest
-five ever falls under `PING_SILENT`, so tier 3 does not merely buy most of the
-circle back, it buys all of it and pays in loudness alone. The prototype's
-48% → 45% was the same finding inside its own sampling noise.
+**The count is arithmetic, not water.** Forty seconds at a 3.2-second period is
+13 pulses, `PING_RETURNS` is 5, and 13 x 5 = 65; at tier 3 it is 29 x 5 = 145.
+The cap is full every time. That is the whole finding about cost: occlusion
+changes *which* five bodies answer and never *how many*, because the cap was
+already discarding more than the shadow does.
 
-The tier-1 residual is exactly the flight-time effect §7.3 names, and the shape
-proves it: binned by offset from the organ in 30-degree steps, the 195 tier-1
-returns go from `[43, 32, 40, 36, 18, 26]` to `[65, 50, 63, 17, 0, 0]`. Every
-survivor past 90 degrees is in the 90–120 bin — a return that left inside the
-lit half and landed after the cell had turned under it. Nothing at all comes
-back from 120 degrees or further.
+**The absolutes, all three, rather than the best one:**
+
+| | build | review | third run |
+| --- | --- | --- | --- |
+| tier 1, behind the organ, before -> after | 41.0% -> 8.7% | 32.3% -> 10.3% | — -> **6.7%** |
+| tier 1, mean strength | 0.645 -> 0.500 (−22.5%) | −20.5% | -> **0.544** |
+| tier 3, mean strength | 0.817 -> 0.651 (−20.3%) | −13.6% | -> **0.714** |
+| tier 3, behind the organ, after | 46.4% | — | **30.0%** |
+
+Those are three different numbers for one quantity and the spread is not noise
+between seeds — each column is already 3 seeds x 40 s. **The share arriving from
+behind the organ is a fact about where the bodies are**, the water is seeded
+around the player's own radius, and neither of the first two runs wrote down the
+`--radius=` it used. So the command is written down here instead:
+
+```
+xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
+  --rendering-driver opengl3 --fixed-fps 60 --quit-after 2500 \
+  res://tools/drive.tscn -- --size=1280x720 --seed=<4242|77|1009> --radius=30 \
+  --genome=cytostome:1,cirrus:1,flagellum:1,ampulla:<1|3>:3
+```
+
+Count the `[drive] ... ping` lines with a timestamp under 40, bin them by
+`angle_difference(bearing, +42.09)` — slot 3's arc — and the third column comes
+back. The `today` half of each row needs the tree at `1231dd3`, before occlusion
+existed; the third run measured only the occluded side and the two earlier runs
+are the source for the baselines.
+
+**Tier 3's blind arc does not narrow. It is gone — and so is tier 2's.** On the
+build, occlusion at tier 3 changes *nothing* about which five bodies answer —
+the same returns arrive at the same times and the same bearings, about 20%
+quieter. The review's run found the same at **tier 2**, bin-for-bin and
+bearing-for-bearing, with only the strength moved. The third run agrees from the
+other side: its tier-3 bins are `[130, 121, 53, 67, 33, 30]`, with 30 returns in
+the 150-180 bin, which is directly astern of the organ. At 0.34 and at 0.58 per occluder nothing in the
+nearest five ever falls under `PING_SILENT`, so the first upgrade buys the whole
+circle back at once. §1.3 used to call this a blind arc that softens with
+investment; it is a tier-1 mechanic that the first upgrade removes, and the
+ladder is an owner question rather than a number to quietly move.
+
+**Tier 1's residual is the flight-time effect §7.3 names**, and the bin shape is
+the proof: binned by offset from the organ in 30-degree steps, the 195 tier-1
+returns go from `[43, 32, 40, 36, 18, 26]` unoccluded to `[65, 50, 63, 17, 0, 0]`
+on the build and `[66, 69, 47, 13, 0, 0]` on the third run. Every survivor past
+90 degrees is in the 90-120 bin — a return that left inside the lit half and
+landed after the cell had turned under it.
+
+**Past 120 degrees is not quite nothing.** Two of the three runs saw zero
+returns there in 195; the review saw **one**, at 127.8 degrees, at strength 0.06
+— a mark at the bottom of the scale, about a fifth of a typical return. So: from
+120 degrees or further, roughly one return in two hundred, and faint. Not *none*,
+which is what this section said before and could not support.
 
 **Drawn, re-measured:** on a tier-3 frame whose ring is clear of the edge fade,
 the lit half's peak above base is 258 in summed sRGB and the penetrated half's
-150 — **0.581**. The absolute pair moves with the frame, because the wave fades
-with how much of its reach it has spent; the ratio is the constant and does not.
-Three renders of that command were byte-identical, 0 differing pixels of
-921,600 (`md5 d9cb6e3e...`), so it is a measurement.
+150 — **0.581**; on the third run's frame, 257 and 150 — **0.584**. The absolute
+pair moves with the frame, because the wave fades with how much of its reach it
+has spent; the ratio is the constant and does not. Three renders of each command
+were byte-identical, 0 differing pixels of 921,600, so both are measurements.
 
 **What it costs.** `_cast_ping` fires once a pulse, not once a frame.
 Instrumented over 60 s: occlusion adds a mean **23 µs** per pulse at tier 1 (max
@@ -654,6 +767,44 @@ sort that were there before. Amortised at 60 fps that is **+0.12 µs a frame** a
 tier 1 and **+0.24 µs** at tier 3, and the worst single frame measured spends
 46 µs, which is 0.3% of one. The cap is what keeps it there: the loop stops at
 five audible returns, so the inner test runs about ten times and not 34 x 33.
+
+#### 7.3.2 The replay was drawing the wave from the wrong slot
+
+Both panes derive `ping_bearing` from the restored genome rather than from the
+ring (§1.4), and for one commit that derivation went through the **DNA's**
+layout instead of the body's. `move()` parts the two deliberately, so the bug
+was one gesture away from any player who used the feature that shipped the same
+morning.
+
+Posed with the shipped gesture, not with a harness poke: `ampulla` worn at
+slot 3, `Esc`, five `Tab`s onto DNA locus 3, two `Shift`+`->`, resume, starve,
+`watch`.
+
+| | live | replayed, before | replayed, after |
+| --- | --- | --- | --- |
+| `ampulla`, body slot | 3 | 5 | 3 |
+| `ping_bearing` | +42.09 deg | **+133.27 deg** | **+42.09 deg** |
+
+Ninety-one degrees, on the screen whose whole job is to be trustworthy — and
+`soma.gd` draws the fringe off the same `body_layout()`, so the tuft moved with
+it. Rendered at 1280x720 and 2400x1080, point of view and full vision: before,
+the replay puts the tuft and the wave's origin on the rear-starboard quarter
+while the live frame has them forward-starboard; after, the two frames put them
+on the same arc.
+
+**The overwrite case is worse and is fixed by the same key.** Drop a held gene
+over the `ampulla`'s own DNA locus and the gene leaves the DNA while the organ
+stays on the body — `genes-and-cilia.md` §9.7's irreversible action, made gentle
+exactly by that. Rebuilt from the DNA, `slot_of` returned −1: the replay drew
+**no organ at all** on the figure and sent the wave **dead ahead** at 0.00
+degrees. Measured on a run that places a `stigma` over locus 3 and is then
+watched: bearing 0.00 and body slot −1 before the fix, +42.09 and slot 3 after.
+
+**The live run never had the bug**, which is why nothing but the replay changes:
+the live point-of-view and full-vision frames come out **byte-identical** before
+and after the fix — 0 differing pixels of 921,600 at 1280x720 and of 2,592,000
+at 2400x1080. `STRIDE` does not move either: the PLAYER delta is a dictionary
+and this is one more key in it.
 
 ### 7.4 The `chemocyte`'s swing, and where it is flat
 
@@ -911,8 +1062,12 @@ of "you cannot be sure".
 
 All under `--rendering-driver opengl3 --fixed-fps 60`, through
 `res://tools/shot.tscn -- --scene=res://tools/drive.tscn`, with `--seed=` on
-every frame that is compared against another. Prototype only — nothing in §4 is
-committed.
+every frame that is compared against another.
+
+**The `ampulla` frames were taken on a prototype and have since been re-taken on
+the build; the `chemocyte` and `ocellus` frames are the prototype's and nothing
+else** — those two are not in `main` (§4), so nothing below them can be
+re-photographed without building them first.
 
 **Before**
 

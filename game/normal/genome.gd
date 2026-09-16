@@ -202,15 +202,38 @@ func reset() -> void:
 ## roll: a DNA with no cytostome in it has no guaranteed gene, and every other
 ## locus can miss. Defaulting on emptiness would silently express that cell
 ## whole -- the one body the roll had just said should be bare.
-func express(dna: Dictionary, order: Array, body: Variant = null) -> void:
+##
+## [param worn] is **which slot each organ is worn in**, in the shape
+## [method body_layout] returns. Left `null` the two layouts are born agreeing,
+## which is what a birth is: an organ grows on the arc its gene sits on. It is
+## passed only by the replay, which is restoring a body that had since drifted
+## from its DNA -- a gene move parts them, and re-deriving the body's slots from
+## [param order] would draw the organ where the DNA has it rather than where it
+## was worn. `null` and not an empty array for the same reason [param body]
+## is: an empty layout is a real one, and it means nothing is worn anywhere.
+func express(dna: Dictionary, order: Array, body: Variant = null,
+		worn: Variant = null) -> void:
 	_dna = dna.duplicate()
 	_order = []
 	for gene: Variant in order:
 		_order.append(StringName(gene))
 	_body = (body as Dictionary).duplicate() if body != null else _dna.duplicate()
 	_body_slots = {}
-	for slot in _order.size():
-		var gene: StringName = _order[slot]
+	# **An empty `worn` means a caller got it wrong, never a real cell.**
+	# [method body_layout] sizes its result by `maxi(slots(), _order.size())` and
+	# `slots()` is at least three, so a genuine worn map is never empty -- while
+	# an empty one here would seat no organ at all: `slot_of` would answer -1 for
+	# every gene, every directional organ would point dead ahead and `soma.gd`
+	# would draw no fringe, silently, for the whole run. That is precisely the
+	# failure this parameter was added to clean up, and a default is not a guard
+	# against passing the wrong thing on purpose. Falling back to `_order` gives
+	# the born-agreeing answer, which is wrong only for a cell that has moved a
+	# gene rather than wrong for every cell.
+	var seats: Array = _order
+	if worn != null and not (worn as Array).is_empty():
+		seats = worn as Array
+	for slot in seats.size():
+		var gene := StringName(seats[slot])
 		if gene != &"" and _body.has(gene):
 			_body_slots[gene] = slot
 	bonus_slots = 0

@@ -164,11 +164,12 @@ func _write_state() -> void:
 		_food.beams = _read_beams()
 		_food.ping_front = _frame[RecorderNode.AT_PING_FRONT]
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
-		# **Where the organ was, derived rather than recorded.** The wavefront
-		# leaves the membrane at the `ampulla`'s own arc, and both panes read
-		# that bearing off the field. It costs no ring floats: the genome and
-		# its body layout are already restored above by `_apply_deltas`, and
-		# the slot is the arc exactly as it is in a live run.
+		# **Where the organ was**, off the body layout the PLAYER delta now
+		# carries. The wavefront leaves the membrane at the `ampulla`'s own arc
+		# and both panes read that bearing off the field, so what this needs is
+		# the slot the organ was *worn* in -- which is recorded, because it
+		# cannot be worked back out of the DNA once a move has parted the two.
+		# It still costs no ring floats: a delta is a dictionary.
 		_food.ping_bearing = _ping_bearing()
 		_food.ping_through = _cell.ping_through() if _cell != null else 0.0
 		# **Before the world pane draws**, which is what `process_priority`
@@ -188,8 +189,13 @@ func _write_state() -> void:
 
 
 ## Which way the `ampulla` was pointing on the body being watched. The slot is
-## the arc and the arc is the bearing, exactly as `normal_mode.gd` resolves it;
-## dead ahead for a run that never wore one, which also never drew a wave.
+## the arc and the arc is the bearing, exactly as `normal_mode.gd` resolves it,
+## and it is the slot the organ was **worn** in: a gene dropped over the
+## `ampulla`'s locus takes it out of the DNA and leaves the organ on the body,
+## so a body slot survives a DNA that no longer mentions the gene at all.
+##
+## Dead ahead for a run that never wore one -- which also never drew a wave,
+## because a cell with no `ampulla` has no reach and no pulse in flight.
 func _ping_bearing() -> float:
 	if _genome == null:
 		return 0.0
@@ -258,7 +264,15 @@ func _apply_deltas() -> void:
 			RecorderNode.Delta.PLAYER:
 				var state: Dictionary = row[3]
 				if _genome != null:
-					_genome.express(state["dna"], state["order"], state["body"])
+					# **Four registers, and the fourth is not derivable.**
+					# `order` is where the DNA keeps its genes and `worn` is
+					# where the body keeps its organs; a move parts them, and
+					# expressing without the fourth rebuilds the body's slots
+					# out of the DNA's -- which is the soma's fringe and the
+					# `ampulla`'s wave both drawn on an arc nothing was ever
+					# worn on. docs/design/replay.md §4.1.
+					_genome.express(state["dna"], state["order"],
+						state["body"], state["worn"])
 					_genome.bonus_slots = int(state["bonus"])
 					_genome.held_sample = state["sample"]
 			RecorderNode.Delta.BODY:

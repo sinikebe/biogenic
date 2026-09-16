@@ -345,6 +345,18 @@ func _watch_state() -> void:
 				"dna": _genome.dna().duplicate(),
 				"order": _genome.layout().duplicate(),
 				"body": _genome.tiers().duplicate(),
+				# **Where the organs are worn, and it cannot be derived.**
+				# `order` is the DNA's layout; this is the body's, and a gene
+				# move parts them -- `move()` swaps two loci in the DNA and
+				# leaves the body exactly where it is. Rebuilding this from
+				# `order` at playback drew every organ at the slot the DNA has
+				# it in rather than the slot it was grown in: the soma figure's
+				# fringe and the `ampulla`'s wavefront both read it, so a
+				# watched run put the tuft and the wave on the wrong arc from
+				# the moment the player moved a gene. A delta is a dictionary,
+				# so the one key costs nothing in [constant STRIDE].
+				# `body_layout()` builds a fresh array, hence no duplicate.
+				"worn": _genome.body_layout(),
 				"bonus": _genome.bonus_slots,
 				"sample": _genome.held_sample,
 			}])
@@ -376,13 +388,22 @@ func _watch_state() -> void:
 		_prune_deltas()
 
 
-## One integer for the whole genome: the body, the DNA, where the genes sit and
-## what is loose inside. Tier changes, a gene arriving, two genes swapping slots
-## and a sample being taken all move it.
+## One integer for the whole genome: the body, the DNA, where the genes sit on
+## each of them, and what is loose inside. Tier changes, a gene arriving, two
+## genes swapping slots and a sample being taken all move it.
+##
+## **Both layouts, because they are two facts.** A daughter can be expressed
+## from her mother's DNA unchanged and still wear an organ somewhere else --
+## the mother's move wrote the DNA and left her own body alone, and the birth
+## expresses that DNA onto a fresh body -- so a signature over the DNA alone
+## would find nothing changed on the one frame the arcs move. The worn slots go
+## in as `hash x slot` rather than as a bare slot number, so two organs trading
+## places cannot cancel each other out.
 func _sign_genome() -> int:
 	var sig: int = _genome.held_sample.hash()
 	for gene: StringName in _genome.tiers():
 		sig += gene.hash() * (int(_genome.tiers()[gene]) + 1)
+		sig += gene.hash() * (_genome.slot_of(gene) + 11)
 	for gene: StringName in _genome.dna():
 		sig += gene.hash() * (int(_genome.dna()[gene]) + 3)
 	var order: Array = _genome.layout()

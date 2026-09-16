@@ -94,6 +94,17 @@ const RING_ARC_MIN := 0.22
 const RING_ARC_MAX := 0.95
 const RING_STEPS := 64
 
+# --- The wave (`ampulla`) ---------------------------------------------------
+## Points on each half of the wavefront, matching `returns.gd`'s `WAVE_STEPS`:
+## the two views draw one picture at two scales and the segment count is part
+## of the picture.
+const PING_STEPS := 64
+## Half the angle between two of those points, taken off both ends of the far
+## half so the two arcs do not share a vertex with the near one. A vertex drawn
+## by two draw calls composites twice; measured in point of view, the ring's
+## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
+const PING_SEAM := PI / (2.0 * PING_STEPS)
+
 # --- Body ------------------------------------------------------------------
 ## Decay of the beat echo, matching the membrane's own pulse decay.
 const BEAT_DECAY := 0.42
@@ -839,11 +850,16 @@ func _draw_ping(a: float) -> void:
 	var tone := Cilia.hue(&"ampulla")
 	# Brighter than a threshold ring, because those are measuring instruments
 	# and this is a thing the cell actually did. Rendered against them.
-	_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5, 64,
+	_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5, PING_STEPS,
 		Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
 	var through := clampf(_food_node.ping_through, 0.0, 1.0)
 	if through > 0.0:
-		_world.draw_arc(origin, front, mid + PI * 0.5, mid + PI * 1.5, 64,
+		# Inset by half a step at both ends, the same half step `returns.gd`
+		# takes off its own far half and for the same reason: two arcs meeting
+		# at a shared vertex composite that vertex twice, and the bead it makes
+		# is brighter than either half of the ring it is joining.
+		_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
+			mid + PI * 1.5 - PING_SEAM, PING_STEPS,
 			Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
 
 
