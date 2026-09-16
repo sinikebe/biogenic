@@ -235,6 +235,25 @@ const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
 const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
 const PING_PERIOD_BY_TIER: Array[float] = [0.0, 3.2, 2.2, 1.4]
 
+## **How much of the pulse survives one body in the way, including your own.**
+## The pulse leaves the membrane at the organ's own arc and stops on everything
+## it meets, so the body it left is the first thing in the way: a tier-1
+## `ampulla` is stone blind astern of the slot it is worn in, which is the whole
+## of the owner's *"not at the first level of the gene"*.
+##
+## Applied **once per occluder, multiplying**, so a return two bodies deep at
+## tier 3 comes back at 0.58 x 0.58 = 0.34 and three deep at 0.20. A dimmer
+## echo rather than a range or a depth count: the membrane has intensity and
+## intensity is what a fainter echo is, a count is a step the player cannot
+## count, and this one needs no rule for *how deep* -- four bodies deep at tier
+## 3 is 0.11 of an echo the range has already faded, which is a mark nobody
+## reads, and at tier 1 the first body ends it.
+##
+## The ambiguity it makes -- a shadowed near body and a clear far body both read
+## faint -- is already answered in a channel that exists: returns are staggered
+## by their own flight time, so the shadowed near body still answers *early*.
+const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.34, 0.58]
+
 ## `axoneme` / push. Acceleration along the heading while the player holds, in
 ## units per second squared. **This is the flagellum made voluntary**: the
 ## random involuntary impulse keeps firing underneath it at whatever tier the
@@ -473,6 +492,14 @@ func ping_range() -> float:
 ## Seconds between pings, 0 for a cell with no `ampulla`.
 func ping_period() -> float:
 	return PING_PERIOD_BY_TIER[_tier_index(extra(&"ampulla"))]
+
+
+## How much of a pulse survives one body in the way, 0 at the first tier. Which
+## *way* the pulse leaves is a question about the genome's layout and is asked
+## where the arc table lives, exactly as the beam's bearing is -- this file
+## cannot preload cilia.gd.
+func ping_through() -> float:
+	return PING_THROUGH_BY_TIER[_tier_index(extra(&"ampulla"))]
 
 
 ## How many genes this body can carry.

@@ -102,12 +102,31 @@ const POINT_SKIN := 1.0
 const POINT_CLEAR := 1.3
 
 # --- The wave (`ampulla`) ---------------------------------------------------
+## Half a ring rather than a whole one, so 64 points where the circle had 96 --
+## the same spacing on half the arc.
+const WAVE_STEPS := 64
+## Half the angle between two of those points. The far half is inset by it at
+## both ends so that the two arcs do not **share** their endpoints: a vertex
+## drawn by two draw calls composites twice, and measured on a tier-3 frame the
+## ring's two plateaus of 257 and 150 summed sRGB above base met in a bead of
+## 407 -- brighter than the lit half, at the one place on the picture that is
+## supposed to say *here is where the wave stops being loud*.
+##
+## It leaves a notch instead, and a notch is the better artefact: a bright dot
+## on the wavefront reads as a *mark*, which in this layer means a body. An
+## angle rather than a distance, so the notch grows with the ring -- 5 canvas px
+## at r212, about 10 by the radius at which the arc is fading into the band
+## anyway. Rendered at three radii and at both shapes; it reads as the boundary
+## between the loud half and the quiet one.
+const WAVE_SEAM := PI / (2.0 * WAVE_STEPS)
 ## Quieter than the pointer on purpose: the pointer is an answer and this is the
 ## question going out. Measured on a frame with a taste band and dread present,
 ## low-passed at sigma 6 against the local level -- band 96, soma figure 52,
 ## pointer 46, the beat's own contour 33, this ring 8. Everything the membrane
-## does beats it, which is the order it has to be in.
-const WAVE_STEPS := 96
+## does beats it, which is the order it has to be in. **Those five numbers were
+## taken on the full ring this arc replaced**; the width and the alpha are
+## unchanged, so the order still holds, but the ring's own 8 is the circle's and
+## has not been re-measured on the arc.
 const WAVE_WIDTH := 2.2
 const WAVE_ALPHA := 0.52
 
@@ -215,10 +234,41 @@ func _draw_pointers(centre: Vector2) -> void:
 
 
 ## **The wave.** The wavefront of the pulse currently in flight, expanding out of
-## the body, exactly as full vision draws it -- a thing the cell emitted, so the
+## the organ, exactly as full vision draws it -- a thing the cell emitted, so the
 ## cell knows where it has got to.
 ##
-## Per-vertex alpha rather than one colour, so the ring dissolves into the
+## **A half-ring centred on the organ's own point on the membrane**, not a circle
+## centred on the cell, because that is where the pulse left from and the hull
+## takes the other half. Its centre lands on the violet tuft the soma figure
+## already draws for the `ampulla`, for free: both are read off the same arc.
+## That is the mechanic taught with no text at all -- the water behind your own
+## body is not being asked, and the way to ask it is to turn.
+##
+## **On, not exactly on.** The wave leaves a circle of `cell.radius` and the
+## figure is an ovoid ([constant Cilia.OVOID_ALONG] 1.18 against
+## [constant Cilia.OVOID_ACROSS] 0.94), so the two agree to about a pixel on the
+## four diagonals -- 1.3 canvas px at slot 3, r26 -- and part by up to 8 px at
+## the nose and astern, where the ovoid is longest and the origin sits that far
+## inside the drawn rim. The eye reads one place; the arithmetic does not, and
+## it is the arithmetic that would have to change to make it.
+##
+## Where the gene has grown enough to hear through a body the far half is drawn
+## too, at `alpha x ping_through`. The picture is the constant: the dim half is
+## exactly as much of the lit half as the simulation lets through -- measured on
+## the tier-3 frame, 150 against 257 summed sRGB above base, a ratio of 0.584
+## against a constant of 0.58.
+##
+## **The drawn boundary is a step and the simulation's is not.** `PING_GRAZE`
+## gives the hull shadow a 27.8-degree fade -- `acos(-0.24)` is 103.9 degrees --
+## and [constant FoodField.PING_SILENT] cuts what is left of it at about 101, so
+## at tier 1 the field still answers for a body ten degrees behind the tangent
+## while this arc has stopped dead at 90. The arc is where the pulse is *loud*,
+## not where it is *zero*, and it is drawn the same way in both views --
+## `vision.gd` uses `draw_arc`, which takes one colour and cannot carry a fade.
+## Softening it is a change to both files and to §1.4 of the spec, not a
+## constant.
+##
+## Per-vertex alpha rather than one colour, so the arc dissolves into the
 ## membrane band as it passes out through it instead of being clipped at a
 ## rectangle. The corners hold it a moment longer than the top edge does, which
 ## is what the screen actually is.
@@ -232,14 +282,34 @@ func _draw_wave(centre: Vector2) -> void:
 	if front <= 0.0 or reach <= 0.0:
 		return
 	var r := front * SCALE
-	# Once the whole ring is past the far corner there is none of it left to
-	# see, and a 96-point circle three screens wide is drawn for nobody.
-	if r > _marks.size.length() * 0.5:
+	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
+	# Once the whole arc is past the far corner there is none of it left to
+	# see, and a 64-point arc three screens wide is drawn for nobody.
+	if r > _marks.size.length() * 0.5 + origin.distance_to(centre):
 		return
 	# Fades with how much of its reach it has spent, the same way full vision
-	# fades it: the ring is off the screen long before it is out of range, so
+	# fades it: the arc is off the screen long before it is out of range, so
 	# this is the only thing that can say *it is still going*.
 	var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
+	# Screen angle of the organ's own ray. `_ray` is (sin, -cos), which is
+	# `bearing - PI/2` once atan2 has it, and the lit half is the hemisphere
+	# either side of it.
+	var mid := _food.ping_bearing - PI * 0.5
+	_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
+	var through := clampf(_food.ping_through, 0.0, 1.0)
+	if through > 0.0:
+		# Inset by [constant WAVE_SEAM] at both ends: flush, the two arcs share
+		# a vertex at each seam and the shared vertex composites twice.
+		_wave_arc(origin, r, mid + PI * 0.5 + WAVE_SEAM,
+			mid + PI * 1.5 - WAVE_SEAM, carry * through)
+
+
+## One half of the wavefront, from [param from] to [param to] in screen angles,
+## at [param level] of the wave's own alpha. Per-vertex, so the edge fade is
+## taken at each point rather than at the arc.
+func _wave_arc(origin: Vector2, r: float, from: float, to: float, level: float) -> void:
+	if level <= 0.0:
+		return
 	var tone := Cilia.hue(&"ampulla")
 	var points := PackedVector2Array()
 	var colors := PackedColorArray()
@@ -247,9 +317,9 @@ func _draw_wave(centre: Vector2) -> void:
 	colors.resize(WAVE_STEPS + 1)
 	var seen := false
 	for i in WAVE_STEPS + 1:
-		var t := TAU * float(i % WAVE_STEPS) / float(WAVE_STEPS)
-		var p := centre + Vector2(sin(t), -cos(t)) * r
-		var vis := _edge_fade(p) * carry
+		var t := lerpf(from, to, float(i) / float(WAVE_STEPS))
+		var p := origin + Vector2(cos(t), sin(t)) * r
+		var vis := _edge_fade(p) * level
 		points[i] = p
 		colors[i] = Color(tone, WAVE_ALPHA * vis)
 		seen = seen or vis > 0.0

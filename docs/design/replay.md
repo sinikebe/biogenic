@@ -171,10 +171,20 @@ after every other node's and it sees the finished frame. **Nothing is added to
 `normal_mode.gd`'s `_process`.**
 
 Alongside it, two small arrays of timestamped events: **state deltas** — the
-player's genome, DNA, layout and held sample, a field cell's genome after it
-eats, a division committing — and **sensations** — `thrust`, `hit` and `shove`
-off `bus.sensation`, plus `motes.struck` and `food.eaten` with their world
-positions, which is what the truth pane needs for its bearing rays.
+player's genome, DNA, **both layouts** and held sample, a field cell's genome
+after it eats, a division committing — and **sensations** — `thrust`, `hit` and
+`shove` off `bus.sensation`, plus `motes.struck` and `food.eaten` with their
+world positions, which is what the truth pane needs for its bearing rays.
+
+**Both layouts, and the second is not a duplicate of the first.** The DNA's
+layout is where the genes sit; the body's is where the organs are actually worn.
+`move()` swaps two loci in the DNA and deliberately leaves the body alone, so
+the two part company from the first move of a run — and the soma figure's
+fringe and the `ampulla`'s wavefront are both drawn off the body's. Rebuilding
+the body's layout from the DNA's at playback drew every organ on the arc its
+gene had been moved to rather than the arc it was grown on, which is a lie on
+the one screen built to catch lies. Deltas are dictionaries, so the second
+layout costs nothing in the ring.
 
 **The membrane is recorded as uniforms, not as bus inputs.** Regenerating the
 envelopes at playback would re-roll the taste jitter and the beat jitter, and a

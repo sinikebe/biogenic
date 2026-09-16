@@ -94,6 +94,17 @@ const RING_ARC_MIN := 0.22
 const RING_ARC_MAX := 0.95
 const RING_STEPS := 64
 
+# --- The wave (`ampulla`) ---------------------------------------------------
+## Points on each half of the wavefront, matching `returns.gd`'s `WAVE_STEPS`:
+## the two views draw one picture at two scales and the segment count is part
+## of the picture.
+const PING_STEPS := 64
+## Half the angle between two of those points, taken off both ends of the far
+## half so the two arcs do not share a vertex with the near one. A vertex drawn
+## by two draw calls composites twice; measured in point of view, the ring's
+## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
+const PING_SEAM := PI / (2.0 * PING_STEPS)
+
 # --- Body ------------------------------------------------------------------
 ## Decay of the beat echo, matching the membrane's own pulse decay.
 const BEAT_DECAY := 0.42
@@ -809,13 +820,20 @@ func _draw_beams(a: float) -> void:
 
 
 ## **The `ampulla`.** The wavefront of the pulse that is currently in flight, as
-## a ring expanding out of the cell and fading as it goes.
+## a half-ring expanding out of **the organ's own point on the membrane** and
+## fading as it goes.
 ##
 ## The same two-register agreement the beam has: point of view gets a run of
 ## marks on the contour as each body answers, and here the thing that produced
 ## them is on screen -- so "the blips stopped because nothing is within reach"
 ## is visible rather than deduced. The returns themselves need no mark of their
 ## own, because in full vision the bodies they came off are already drawn.
+##
+## The half is the hull: a source on the skin radiates into the hemisphere it
+## faces and the rest goes into the body. Where the gene has grown enough to
+## hear through a body, the other half is drawn at `ping_through` of the lit
+## one -- which is the same picture point of view gets, in world space instead
+## of at the figure's scale, and it is drawn off the same two numbers.
 func _draw_ping(a: float) -> void:
 	if _food_node == null:
 		return
@@ -826,10 +844,23 @@ func _draw_ping(a: float) -> void:
 	# Off the top of the screen long before it reaches its range, so the fade is
 	# the thing that has to sell "it is still going".
 	var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
+	var dir := _ray(_food_node.ping_bearing)
+	var origin := _cell.position + dir * _cell.radius
+	var mid := dir.angle()
+	var tone := Cilia.hue(&"ampulla")
 	# Brighter than a threshold ring, because those are measuring instruments
 	# and this is a thing the cell actually did. Rendered against them.
-	_world.draw_arc(_cell.position, front, 0.0, TAU, 96,
-		Color(Cilia.hue(&"ampulla"), 0.46 * fade * a), 1.8 / ZOOM, true)
+	_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5, PING_STEPS,
+		Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
+	var through := clampf(_food_node.ping_through, 0.0, 1.0)
+	if through > 0.0:
+		# Inset by half a step at both ends, the same half step `returns.gd`
+		# takes off its own far half and for the same reason: two arcs meeting
+		# at a shared vertex composite that vertex twice, and the bead it makes
+		# is brighter than either half of the ring it is joining.
+		_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
+			mid + PI * 1.5 - PING_SEAM, PING_STEPS,
+			Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
