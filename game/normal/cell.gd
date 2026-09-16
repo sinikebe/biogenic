@@ -335,6 +335,10 @@ var _pointer_from := 0.0
 var _pointer := -2
 var _pointer_anchor := 0.0
 var _pointer_x := 0.0
+## The drawn controls, or null under the `anywhere` scheme.
+var controls: Node = null
+## Which drawn control this pointer grabbed, so thrust knows what it is on.
+var _on := -1
 
 
 func _ready() -> void:
@@ -615,7 +619,10 @@ func bump(normal: Vector2, restitution: float = 0.55) -> void:
 ## the pause opened does not keep steering afterwards.
 func release() -> void:
 	_pointer = -2
+	_on = -1
 	steer = 0.0
+	if controls != null:
+		controls.let_go()
 
 
 # ---------------------------------------------------------------------------
@@ -633,7 +640,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
 			if _pointer == -2:
-				_grab(touch.index, touch.position.x)
+				_claim(touch.index, touch.position)
 		elif _pointer == touch.index:
 			_let_go()
 		return
@@ -641,7 +648,7 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
 		if _pointer == drag.index:
-			_pointer_x = drag.position.x
+			_move(drag.position)
 		return
 
 	if event is InputEventMouseButton:
@@ -650,7 +657,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if click.pressed:
 			if _pointer == -2:
-				_grab(-1, click.position.x)
+				_claim(-1, click.position)
 		elif _pointer == -1:
 			_let_go()
 		return
@@ -664,7 +671,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 
 	if event is InputEventMouseMotion and _pointer == -1:
-		_pointer_x = (event as InputEventMouseMotion).position.x
+		_move((event as InputEventMouseMotion).position)
 
 
 func _grab(index: int, x: float) -> void:
@@ -675,6 +682,32 @@ func _grab(index: int, x: float) -> void:
 	_pointer_from = x
 
 
+## A press, with the whole point rather than just its x, so a drawn control can
+## be asked whether it was hit. Returns false when the scheme draws controls and
+## this press landed on none of them -- open water is inert under those schemes.
+func _claim(index: int, at: Vector2) -> bool:
+	if controls == null or controls.scheme == 0:
+		_on = -1
+		_grab(index, at.x)
+		return true
+	var which: int = controls.hit(at)
+	if which == controls.NONE:
+		return false
+	_on = which
+	_grab(index, at.x)
+	controls.grab(which, at)
+	if which == controls.DASH:
+		_dash()
+	return true
+
+
+func _move(at: Vector2) -> void:
+	_pointer_x = at.x
+	if controls != null and _on >= 0:
+		controls.steer_for(at)
+		controls.queue_redraw()
+
+
 ## A press ending. **Short and still is a tap, which is `myoneme`; anything
 ## else was a steer.** One gesture carries both, so the dash costs no pixel of
 ## screen and no second finger -- and a player with no myoneme just lifts their
@@ -682,7 +715,10 @@ func _grab(index: int, x: float) -> void:
 func _let_go() -> void:
 	var held := float(Time.get_ticks_msec()) * 0.001 - _pointer_at
 	var moved := absf(_pointer_x - _pointer_from)
+	var was := _on
 	release()
+	if was >= 0:
+		return
 	if held <= TAP_SECONDS and moved <= TAP_SLOP:
 		_dash()
 
@@ -691,9 +727,15 @@ func _let_go() -> void:
 ## screen. Deliberately the same gesture that steers -- pushing and turning are
 ## things you do at the same time.
 func _pushing() -> bool:
-	if _pointer != -2:
+	if Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W):
 		return true
-	return Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W)
+	if controls == null or controls.scheme == 0:
+		return _pointer != -2
+	if controls.scheme == controls.STICK:
+		# Touching the stick is asking to swim, exactly as touching the water
+		# is under `anywhere`. Turning and pushing stay one gesture.
+		return _on == controls.ST
+	return _on == controls.PUSH
 
 
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on
@@ -719,4 +761,6 @@ func _read_steer() -> float:
 		return keys
 	if _pointer == -2:
 		return 0.0
+	if controls != null and controls.scheme != 0:
+		return controls.steer_held()
 	return clampf((_pointer_x - _pointer_anchor) / DRAG_SPAN, -1.0, 1.0)

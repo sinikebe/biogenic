@@ -73,6 +73,20 @@ static func save_camera_locked(value: bool) -> void:
 	_store("run", "camera_locked", value)
 
 
+## Which control scheme. Same pattern as [method load_camera_locked]: a property
+## of how this player wants to play, remembered between runs.
+static func load_scheme() -> int:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return 0
+	var value := int(config.get_value("run", "scheme", 0))
+	return value if value >= 0 and value <= 2 else 0
+
+
+static func save_scheme(value: int) -> void:
+	_store("run", "scheme", value)
+
+
 static func onboarding_seen() -> bool:
 	var config := ConfigFile.new()
 	if config.load(PATH) != OK:
