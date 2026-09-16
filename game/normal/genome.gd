@@ -378,6 +378,39 @@ func place(slot: int) -> int:
 	return Result.INTEGRATED
 
 
+## **Two loci trade places in the DNA, and nothing else changes.** The body is
+## left alone -- [member _body], [member _body_slots] and every tier are
+## untouched -- so the organs stay exactly where they are worn and the move
+## reaches the player's daughters rather than the player. Nothing is created and
+## nothing is destroyed, which is what makes a move free and repeatable and
+## leaves genes-and-cilia.md §9.7's eviction the one irreversible action there
+## is: a move cannot bring back a gene a placement wrote over, because that gene
+## is no longer in [member _dna] for any rearrangement to find.
+##
+## **Swapping rather than refusing**, because it is the operation the game
+## already performs on the player's behalf: [method _mutate_shift] -- one of the
+## three mutations a daughter can carry -- moves a gene to a different slot,
+## swapping with whatever was there. An empty destination is the degenerate case
+## of that same swap, so there is one rule and not two.
+##
+## Returns false and changes nothing when there is no move to make: the same
+## locus twice, either index off the strand, or an empty source.
+func move(from: int, to: int) -> bool:
+	_sync_order()
+	if from == to:
+		return false
+	if from < 0 or from >= _order.size():
+		return false
+	if to < 0 or to >= _order.size():
+		return false
+	if _order[from] == &"":
+		return false
+	var lifted := _order[from]
+	_order[from] = _order[to]
+	_order[to] = lifted
+	return true
+
+
 ## **The DNA's** slot layout, `&""` for empty. Read it; do not write it. This is
 ## what the pause strip draws and what an empty socket on the body stands for --
 ## a hole in the DNA is where a loose gene is going.

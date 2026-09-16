@@ -205,18 +205,29 @@ var mode := -1
 @onready var _scrim: ColorRect = $Hud/Pause/Scrim
 @onready var _resume_button: Button = $Hud/Pause/Center/Buttons/Resume
 @onready var _leave_button: Button = $Hud/Pause/Center/Buttons/Leave
-@onready var _light_panel: PanelContainer = $Hud/Pause/Center/Buttons/Light
-@onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Light/Box/Caption
-@onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Light/Box/Slider
-@onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/View
-@onready var _view_caption: Label = $Hud/Pause/Center/Buttons/View/Box/Caption
-@onready var _view_button: Button = $Hud/Pause/Center/Buttons/View/Box/Toggle
+## The two settings panels share a row now: the second strand and the `Act`
+## line cost 94 px on a column that had 36 px of slack, and stacking two
+## identical 232 x 101 panels was the only reason the column was as tall as it
+## was. Side by side they are 512 px wide, narrower than the strand block, so
+## the column gains no new outer edge.
+@onready var _light_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/Light
+@onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Settings/Light/Box/Caption
+@onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Settings/Light/Box/Slider
+@onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/View
+@onready var _view_caption: Label = $Hud/Pause/Center/Buttons/Settings/View/Box/Caption
+@onready var _view_button: Button = $Hud/Pause/Center/Buttons/Settings/View/Box/Toggle
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
+## **The body above and the DNA below**, at identical pitch and identical x, so
+## column *i* is arc *i* on both rows and a comparison is a vertical scan. Only
+## the lower one takes input: a row you cannot change must not look like one you
+## can, and the asymmetry is drawn by what responds rather than by a tint.
+@onready var _body_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Body
 @onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
 @onready var _explain_organ: Control = $Hud/Pause/Center/Buttons/Genome/Explain/Organ
 @onready var _explain_name: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Gene
 @onready var _explain_says: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Says
 @onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
+@onready var _genome_act: Label = $Hud/Pause/Center/Buttons/Genome/Act
 ## The division's reading surface. Built once in [method _ready] and then only
 ## ever redrawn: seven loci a side is an invariant, not a maximum.
 @onready var _choosing: Control = $Hud/Choosing
@@ -256,6 +267,36 @@ var _pause_bar_hot: StyleBoxFlat = null
 var _armed_at := 0
 ## The gene in each slot, left to right, index-matched to the loci in Row.
 var _slot_genes: Array[StringName] = []
+## Which DNA locus a gene has been lifted out of while a move is in the air, or
+## [constant SLOT_NONE]. Set by `_get_drag_data` and cleared by the drop or by
+## `NOTIFICATION_DRAG_END`, whichever arrives -- and one of them always does.
+var _dragging := SLOT_NONE
+## Which locus a finger is holding down with a placement waiting on the lift,
+## or [constant SLOT_NONE].
+##
+## **The confirming gesture and the drag-starting gesture cannot be the same
+## event, and this variable is what keeps them apart.** A pointer going *down*
+## on an armed locus is ambiguous by construction: it is the second tap of
+## §9.7's placement and it is also how a move begins, and both readings are
+## live at the same instant on the same pixel. Committing on the down-stroke
+## resolved that by the clock -- the same finger, the same two points on
+## screen, placed a gene or moved one depending on whether the press landed
+## more or less than [constant ARM_GUARD_MS] after the arming tap -- and one of
+## those two outcomes evicts a gene from the lineage for good.
+##
+## So the down-stroke only **primes**: it says *a placement is waiting on this
+## locus*, changes nothing, and is cancelled by the one thing that proves the
+## finger meant a move, which is the drag actually starting ([method
+## _locus_drag]). The irreversible half happens on the up-stroke, and only if
+## the finger is still inside the locus it pressed. A drag can no longer
+## perform a placement, because by the time a placement could happen the drag
+## has already claimed the gesture and cleared this.
+##
+## The 300 ms guard is unmoved and still measured press-to-press, so §9.7's
+## contract -- *two taps, and the second cannot follow the first inside
+## 300 ms* -- is what it always was. What changed is which half of the second
+## tap the DNA is written on.
+var _primed := SLOT_NONE
 
 var _last_toggle_frame := -1
 ## The frame Back was last answered on, whichever door it came through. See
@@ -1563,11 +1604,26 @@ func _notification(what: int) -> void:
 				_leave()
 			else:
 				_toggle_pause()
+		NOTIFICATION_DRAG_END:
+			# **A drag that ends on nothing is a move that did not happen.**
+			# Godot posts this to the whole tree whether the release landed on a
+			# drop target or on open screen, so the one place the lifted gene
+			# goes back into its locus is here -- and a mis-drag costs exactly
+			# what a mis-tap costs, which is nothing.
+			if _dragging != SLOT_NONE:
+				_dragging = SLOT_NONE
+				_redraw_strand()
+				_update_explain()
+				_update_hint()
 		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
 			# Switching apps mid-drag never delivers the release, and a pointer
 			# stuck down means a cell that turns forever. Deliberately does not
 			# pause: a pause screen nobody asked for is its own bug.
 			_cell.release()
+			# The same argument for the strand: a finger that left with the
+			# app never lifts, so the placement it was holding is abandoned
+			# rather than left waiting for a release that cannot come.
+			_primed = SLOT_NONE
 
 
 ## **First contact decides the gesture, and this is the function that makes that
@@ -1881,6 +1937,25 @@ func _toggle_pause() -> void:
 	var paused := not get_tree().paused
 	get_tree().paused = paused
 	_pause_ui.visible = paused
+	# **A gene in the air does not survive the screen closing.** Godot's drag
+	# preview is parented to the viewport and not to this column, so closing
+	# pause with a gene lifted would leave a base pair floating over open water
+	# until the finger came up.
+	#
+	# **This is reachable on Android and unreachable by Esc, which is the
+	# opposite of what it looks like.** Both halves were posed and traced.
+	# `Esc` mid-drag never gets here at all: `Viewport` consumes `ui_cancel`
+	# while `gui.dragging` and cancels the drag itself, so the key never
+	# reaches `_unhandled_input` and the guard is dead code on that path.
+	# Android Back does get here mid-drag, because it arrives as
+	# `NOTIFICATION_WM_GO_BACK_REQUEST` and not as an input event -- nothing
+	# consumes a notification -- and a thumb dragging a base pair can reach the
+	# Back gesture with its other hand or with the navigation bar. So this
+	# call is the only thing standing between a one-handed Back and a gene left
+	# hanging over the water, and it must not be deleted as desktop-only
+	# tidiness.
+	if get_viewport().gui_is_dragging():
+		get_viewport().gui_cancel_drag()
 	# In the same frame rather than on the next one: the button is what was just
 	# tapped, and a frame of it still sitting there under the scrim is a frame of
 	# the game looking like it did not hear.
@@ -1918,6 +1993,10 @@ func _toggle_pause() -> void:
 		# while the tree is paused except by the two taps below, and a strip
 		# rebuilt sixty times a second to say the same thing is five nodes of
 		# churn a frame for nothing.
+		# Nothing can be in the air on a screen that was not open, and a stale
+		# source locus would draw a hole in the strand.
+		_dragging = SLOT_NONE
+		_primed = SLOT_NONE
 		_select_default()
 		_build_genome_strip()
 		_resume_button.grab_focus()
@@ -2179,6 +2258,47 @@ const SAMPLE_HALO: Array[float] = [9.0, 13.5]
 const SAMPLE_HALO_ALPHA: Array[float] = [0.11, 0.05]
 const SAMPLE_THREAD_ALPHA := 0.38
 
+## **The body strand: the same weave at the same pitch**, with no sample band
+## and its label row *above* its helix. `HELIX_AMP` is shared, so the two rows
+## are the same object at the same scale and a rung on one is comparable with a
+## rung on the other by eye.
+##
+## **The labels go outboard of the pair, and it was built both ways.** With both
+## label rows under their own helix, the DNA row's 26 px sample band sits
+## beneath the body's words -- a held sample and a body dissent land 25 px apart
+## in one column -- and the two weaves end up 77 px apart instead of 37.
+## Outboard puts the sample alone in the band it owns and halves the distance
+## the eye travels to compare two rungs.
+const BODY_LOCUS_H := 58.0
+const BODY_HELIX_MID := 40.0     ## the helix spans 22 .. 58 of its own control
+const BODY_LABEL_MID := 11.0     ## the dart's centre
+const BODY_LABEL_BASE := 16.0    ## the word's baseline
+
+## How far above the pointer the travelling gene rides during a move.
+##
+## **Above the finger, not under it.** A fingertip is about 9 mm, which at
+## 2400x1080 is roughly 100 canvas units -- one whole locus -- so a preview
+## centred on the pointer and a lens filling beneath it are both under the thumb
+## on a phone. 34 px lifts the base pair into the band a DNA locus already
+## reserves for a held sample, which is as far as it can go before it collides
+## with the body row. It is drawn because a mouse can see it; the `Act` line is
+## what a thumb reads.
+const DRAG_LIFT := 34.0
+
+## The row label gutter: `body` over `dna`, right-aligned against the lead-in.
+## One caption per row, where a second `Label` row of the column would cost a
+## whole line of height to say two words.
+##
+## **Each row ends with the same width, invisible**, or the strand sits half a
+## gutter left of the centre every other group on this column is centred on.
+## Measured at 7 px, and visible against the `Explain` line below it. This is
+## genes-and-cilia.md §5.2's trailing-spacer trick, deleted by dna-strand.md
+## §1.4 when the sample stopped changing the strand's width, and earned again
+## here for a different reason.
+const GUTTER_W := 64.0
+const GUTTER_TINT := Color(0.855, 0.953, 0.933, 0.45)
+const GUTTER_SIZE := 15
+
 const DART_R := 6.5
 const DART_GAP := 4.0
 ## The second tap cannot land sooner than this after the first, so a double-tap
@@ -2215,6 +2335,51 @@ const HINT_CHANCE: Array[String] = [
 ## ALWAYS_EXPRESSED), so it says so instead of quoting odds it does not obey.
 const HINT_CERTAIN := "the mouth · a daughter always wears it"
 const HINT_EMPTY := "an empty locus · nothing to pass on from here"
+
+## **The verb line: what you can do about the locus you are reading.**
+##
+## The two placement instructions moved here out of the hint, which is where
+## they always belonged -- the hint's job is a readout and theirs is a verb --
+## and the move's own instructions join them.
+##
+## **It is the third row down and it is *not* the third loudest, and that is
+## deliberate rather than an oversight.** Measured off the render at 1280x720,
+## peak glyph luminance: `Explain` 213, `Act` 122, `Hint` 98. The reading order
+## down the column is still *what this is* -> *what it is worth* -> *what you
+## can do*, but only the first step of it is a step down in loudness; the third
+## row is separated from the second by **hue** instead. Two reasons, and the
+## second is the one that would make dimming it a bug:
+##
+## - Teal is this surface's colour for *this responds*: the focus underline,
+##   both buttons and the camera toggle are all the same green. A fourth pale
+##   line would have read as a paragraph with the readouts above it.
+## - **This is the only row that changes during a gesture, and on touch it is
+##   the only feedback a thumb cannot cover.** `DRAG_LIFT` puts the travelling
+##   base pair 34 px above the pointer and the destination lens fills *under*
+##   it; at 2400x1080 a fingertip is about one whole locus wide, so both of
+##   those are under the hand that is making the move. Making the line that
+##   says `let go to swap eat and ping` the quietest thing on the column would
+##   be quieting the one part of the move that is legible while it happens.
+##
+## It is empty when the selected locus is empty and nothing is held: there is
+## nothing to do there, and a line that said so would be an instruction to read
+## rather than a thing to act on.
+const ACT_ARM := "tap a locus · your daughters may wear it"
+const ACT_COMMIT := "tap again to place"
+const ACT_MOVE := "drag it to another locus"
+const ACT_CARRY := "%s · let go over a locus to move it there"
+const ACT_LAND := "let go to move %s here"
+const ACT_SWAP := "let go to swap %s and %s"
+## **Letting go where you picked up is a real answer, not a missed drop.** It
+## is the first thing a nervous player tries -- lift a gene, think better of
+## it, put it back -- and it was silent: the source locus said exactly what open
+## water said, so the one gesture whose whole point is *undo this* got no
+## acknowledgement at all. The locus already draws the picture (its lens fills
+## in the gene's own hue, which is that gene coming home); this is the sentence
+## for it, and it fires while the finger is still down, which is when the
+## player is still deciding.
+const ACT_KEEP := "let go to leave %s where it is"
+
 ## How deep the lineage is: the only readout of how far into the run the player
 ## is, and the nearest thing the game has to a score. It moved from the hint to
 ## the caption when the hint took on the odds -- zero pixels either way.
@@ -2348,9 +2513,15 @@ func _build_genome_strip() -> void:
 	# re-enter a control the cursor never left. The selection carries the line
 	# until the mouse moves again, which is the same locus either way.
 	_hovered = SLOT_NONE
-	for child in _genome_row.get_children():
-		_genome_row.remove_child(child)
-		child.queue_free()
+	# And with it goes any placement waiting on a finger: the control that took
+	# that press is about to be freed, so the lift it was waiting for will
+	# never arrive here. This is what makes the four-second lapse safe under a
+	# held finger -- the arm went, so the confirmation goes with it.
+	_primed = SLOT_NONE
+	for row: HBoxContainer in [_body_row, _genome_row]:
+		for child in row.get_children():
+			row.remove_child(child)
+			child.queue_free()
 	_slot_genes.clear()
 
 	# **The strip is the DNA**, and the body is the other register -- it is the
@@ -2371,26 +2542,73 @@ func _build_genome_strip() -> void:
 	# but not add until she grows.
 	var count := maxi(_genome.slots(), _slot_genes.size())
 
-	# **Nothing in the row moves when a sample arrives or lapses, and nothing
-	# has to be padded to make that true.** The old strip grew a tile and an
-	# arrow on the left and needed an invisible trailing spacer to stop the
-	# slots sliding 73 px; the sample now floats in a band the locus already
-	# reserves, so the strand is the same width held or not.
-	#
-	# The lead-in is where it waits before a locus has been chosen: off the head
-	# of the chromosome, attached to nothing, which is exactly what a held
+	# **Nothing in either row moves when a sample arrives or lapses.** The old
+	# strip grew a tile and an arrow on the left and needed an invisible
+	# trailing spacer to stop the slots sliding 73 px; the sample now floats in
+	# a band the locus already reserves, so the strand is the same width held or
+	# not. The lead-in is where it waits before a locus has been chosen: off the
+	# head of the chromosome, attached to nothing, which is exactly what a held
 	# sample is.
-	_genome_row.add_child(_make_cap(0, 1))
+	#
+	# A trailing spacer is back, and for a different job: it mirrors the row's
+	# label gutter so the weave stays centred on the column rather than sitting
+	# half a gutter left of everything else. See GUTTER_W.
+	#
+	# **The body row first, because it is what you are.** Read top to bottom the
+	# surface says *this is you* and then *this is what you are writing*, and
+	# that is the order the owner's two sentences are in.
+	var worn: Array[StringName] = _genome.body_layout()
+	_body_row.add_child(_make_gutter("body", BODY_LOCUS_H))
+	_body_row.add_child(_make_cap(0, 1, BODY_HELIX_MID, BODY_LOCUS_H))
+	for i in count:
+		var mine: StringName = worn[i] if i < worn.size() else &""
+		var written: StringName = _slot_genes[i] if i < _slot_genes.size() \
+			else &""
+		_body_row.add_child(_make_body_locus(mine, int(body.get(mine, 0)), i,
+			CAP_LOBES + i * LOCUS_LOBES, mine != written))
+	_body_row.add_child(_make_cap(CAP_LOBES + count * LOCUS_LOBES, -1,
+		BODY_HELIX_MID, BODY_LOCUS_H))
+	_body_row.add_child(_make_spacer(BODY_LOCUS_H))
+
+	_genome_row.add_child(_make_gutter("dna", LOCUS_H))
+	_genome_row.add_child(_make_cap(0, 1, HELIX_MID, LOCUS_H))
 	for i in count:
 		var gene: StringName = _slot_genes[i] if i < _slot_genes.size() else &""
+		# **A rung answers *do I express this gene at all*, and the row above
+		# answers *where*.** `dna-strand.md` §1.2 defines worn against carried
+		# as exactly that question, and it stays that question.
+		#
+		# It was briefly narrowed to *worn on this arc* -- `body.get(gene, 0)
+		# if slot_of(gene) == i else 0` -- to close a lie the one-row strand
+		# told: a gene the body wears at arc 1 drew a full rung at DNA locus 3
+		# and looked like it was claiming arc 3. **The body row closes that lie
+		# by existing**, because the rows are labelled and the upper one prints
+		# the organ under the arc it is actually on. Narrowing the rung as well
+		# put two different facts on one mark: a gene moved and a gene that
+		# missed its expression roll drew the same floating bar, and rendered
+		# at the same locus with the same hue they were **0 differing pixels**
+		# apart -- the only evidence 232 px away on the other row. Worse, it
+		# contradicted the line under the strand in an ordinary frame: move
+		# `cytostome` and locus 4 drew *the body does not have this* directly
+		# above `the mouth · a daughter always wears it`.
+		#
+		# So: carried means the roll missed, worn means the body expresses it,
+		# and both questions stay local to the mark that answers them.
+		# `moving-a-gene.md` §2.4.
+		var here := int(body.get(gene, 0))
 		_genome_row.add_child(_make_locus(gene, int(dna.get(gene, 0)),
-			int(body.get(gene, 0)), i, CAP_LOBES + i * LOCUS_LOBES))
-	_genome_row.add_child(_make_cap(CAP_LOBES + count * LOCUS_LOBES, -1))
+			here, i, CAP_LOBES + i * LOCUS_LOBES))
+	_genome_row.add_child(_make_cap(CAP_LOBES + count * LOCUS_LOBES, -1,
+		HELIX_MID, LOCUS_H))
+	_genome_row.add_child(_make_spacer(LOCUS_H))
 
 	# **The caption carries the generation now**, because the hint below the
 	# strand took on what a locus is worth to a daughter. Zero pixels either
-	# way: both lines already existed.
-	_genome_caption.text = "dna · %s" % _generation_text()
+	# way: both lines already existed. It says `genome` rather than `dna`
+	# because the group is now two registers and only one of them is the DNA --
+	# that word moved down to the row it actually names, with `body` above it,
+	# so both are on screen instead of one.
+	_genome_caption.text = "genome · %s" % _generation_text()
 	_update_hint()
 	_update_explain()
 	_restore_focus(keeping)
@@ -2440,25 +2658,90 @@ func _restore_focus(slot: int) -> void:
 ## daughter, which is the one thing the strand draws (copies) and cannot say in
 ## words on its own.
 func _update_hint() -> void:
-	if _genome.held_sample != &"":
-		# `_armed >= 0` and not `!= SLOT_NONE`: a sample waiting off the head of
-		# the strand is selected and not placeable, so it must not promise a
-		# second tap that does nothing.
-		_genome_hint.text = HINT_COMMIT if _armed >= 0 else HINT_ARM
-		return
+	_update_act()
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	if slot == SLOT_NONE:
 		_genome_hint.text = ""
 		return
-	var gene := _gene_at(slot)
+	# **The same gene the explanation line is describing**, through the same
+	# resolution, because the two rows are read together and a pair that
+	# disagrees about its subject is worse than either alone. The shipped code
+	# could not disagree -- both of its fallbacks were behind an early return
+	# that fired whenever a sample was held -- and moving the instruction to
+	# `Act` took that return away. Posed and it showed: a gene in the air over
+	# an empty locus explained the travelling gene and priced the hole.
+	var gene := _reading()
 	if gene == &"":
 		_genome_hint.text = HINT_EMPTY
 		return
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
 		_genome_hint.text = HINT_CERTAIN
 		return
-	_genome_hint.text = HINT_CHANCE[clampi(_genome.dna_tier(gene), 0,
+	# **`maxi(.., 1)` because a held sample is worth one copy, not none.** A
+	# locus always carries at least one, so this never used to matter; a sample
+	# has `dna_tier == 0`, which indexes the empty string, and the held-sample
+	# branch returning first is the only reason nobody ever saw it. Now that the
+	# instruction has moved to `Act` this line is reached while a sample is
+	# selected -- so without the clamp the odds go blank at exactly the moment
+	# the player is deciding what a placement is worth.
+	_genome_hint.text = HINT_CHANCE[clampi(maxi(_genome.dna_tier(gene), 1), 0,
 		HINT_CHANCE.size() - 1)]
+
+
+## **The verb line**, kept in step with the hint because the two are read
+## together and the state they read is the same. It is a separate row for the
+## reason gene-lines-and-the-pause-target.md §3 made the explanation one: both
+## are wanted at once, and the moment one would have to be chosen over the other
+## is the moment the player is about to change their daughters.
+func _update_act() -> void:
+	# A gene in the air outranks a held sample: the sample is not going anywhere
+	# while a move is in flight (see [method _draw_cap]), so the line reports
+	# the gesture that is actually happening.
+	if _dragging != SLOT_NONE:
+		# **The one piece of feedback a thumb cannot cover.** The travelling
+		# base pair rides above the finger and the lens fills under it; both are
+		# within a fingertip of the pointer on a phone. This line is not.
+		var flying := _gene_at(_dragging)
+		if _hovered == _dragging:
+			# Back over the locus it came out of: a drop here is refused by
+			# [method _locus_can_drop] and the gene simply stays, which is the
+			# gesture's own cancel and now says so.
+			_genome_act.text = ACT_KEEP % _word(flying)
+		elif _hovered >= 0:
+			var displaced := _gene_at(_hovered)
+			_genome_act.text = ACT_SWAP % [_word(flying), _word(displaced)] \
+				if displaced != &"" else ACT_LAND % _word(flying)
+		else:
+			_genome_act.text = ACT_CARRY % _word(flying)
+		return
+	if _genome.held_sample != &"":
+		# `_armed >= 0` and not `!= SLOT_NONE`: a sample waiting off the head of
+		# the strand is selected and not placeable, so it must not promise a
+		# second tap that does nothing.
+		_genome_act.text = ACT_COMMIT if _armed >= 0 else ACT_ARM
+		return
+	var slot := _hovered if _hovered != SLOT_NONE else _armed
+	_genome_act.text = ACT_MOVE if _movable(slot) else ""
+
+
+## The plain word a gene is read by on this surface. A gene this build has no
+## word for -- a later phase's, arriving over an older binary in a content pack
+## -- falls back to its own name rather than to nothing.
+func _word(gene: StringName) -> String:
+	return String(WORDS.get(gene, String(gene)))
+
+
+## True when [param slot] is a DNA locus with a gene in it, which is the only
+## thing a move can pick up.
+##
+## **No guard, no timeout and no second tap**, deliberately: that machinery
+## belongs to placement, which evicts a gene from the lineage for good. A move
+## creates nothing and destroys nothing, it cannot undo a placement -- the
+## evicted gene is not in the DNA for any rearrangement to find -- and it only
+## reaches the player's daughters, so it is free, repeatable and
+## self-cancelling.
+func _movable(slot: int) -> bool:
+	return slot >= 0 and _gene_at(slot) != &""
 
 
 ## **The answer line: what the selected gene does, in the player's terms.**
@@ -2481,9 +2764,7 @@ func _update_hint() -> void:
 ## what a second tap would overwrite and the player should read it first.
 func _update_explain() -> void:
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
-	var gene := _gene_at(slot)
-	if gene == &"":
-		gene = _genome.held_sample
+	var gene := _reading()
 	_explain_gene = gene
 	_explain_tier = maxi(_genome.dna_tier(gene), 1) if gene != &"" else 0
 	if _explain_organ != null:
@@ -2502,6 +2783,24 @@ func _update_explain() -> void:
 	# than showing a bare separator.
 	var says := String(EXPLAINS.get(gene, ""))
 	_explain_says.text = "" if says.is_empty() else "· " + says
+
+
+## **What the three lines under the strand are about**, resolved once.
+##
+## The locus being read -- hovered first, because a mouse can ask about a locus
+## without committing to it -- and then two fallbacks for the two ways a locus
+## can be empty while something is still in hand. An **occupied** locus always
+## describes its own gene: with a sample held that is what a second tap would
+## overwrite, and under a gene in the air that is what a drop would displace,
+## and either way it should be read before it goes.
+func _reading() -> StringName:
+	var slot := _hovered if _hovered != SLOT_NONE else _armed
+	var gene := _gene_at(slot)
+	if gene == &"" and _dragging != SLOT_NONE:
+		gene = _gene_at(_dragging)
+	if gene == &"":
+		gene = _genome.held_sample
+	return gene
 
 
 ## The gene a locus stands for: the held sample, the gene in that slot, or &"".
@@ -2586,6 +2885,16 @@ func _make_locus(gene: StringName, tier: int, body_tier: int, slot: int,
 	# locus that lit under the cursor would promise a tap it has not been given.
 	node.mouse_entered.connect(_on_locus_hover.bind(slot))
 	node.mouse_exited.connect(_on_locus_unhover.bind(slot))
+	# **The move is Godot's own drag, not a hand-rolled one, and the reason is
+	# choosing.md §4.2.** The engine records which control owns a pointer only
+	# when the *press* landed on a control, and re-hit-tests every drag
+	# otherwise; the built-in path is the one written around that. It also gets
+	# touch for free -- `emulate_mouse_from_touch` turns an
+	# `InputEventScreenDrag` into a motion, so the same machinery runs on a
+	# phone -- and it clears `gui.mouse_focus` when a drag begins, which is why
+	# `mouse_entered` keeps firing and the drop target is knowable at all.
+	node.set_drag_forwarding(_locus_drag.bind(node, slot),
+		_locus_can_drop.bind(slot), _locus_drop.bind(slot))
 	return node
 
 
@@ -2593,20 +2902,104 @@ func _make_locus(gene: StringName, tier: int, body_tier: int, slot: int,
 ## is +1 at the head and -1 at the tail; both ramp amplitude and alpha so the
 ## strand does not begin mid-lens. Neither takes input -- there is nothing at
 ## either end to choose.
-func _make_cap(lobe0: int, taper: int) -> Control:
+##
+## [param mid] and [param height] are the row's, because both rows have caps and
+## they sit at different seats in controls of different heights.
+func _make_cap(lobe0: int, taper: int, mid: float, height: float) -> Control:
 	var node := Control.new()
-	node.custom_minimum_size = Vector2(CAP_W, LOCUS_H)
+	node.custom_minimum_size = Vector2(CAP_W, height)
 	node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 	node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	node.draw.connect(_draw_cap.bind(node, lobe0, taper))
+	node.draw.connect(_draw_cap.bind(node, lobe0, taper, mid))
 	return node
+
+
+## The row's own name, in the gutter left of its lead-in. Two words name the two
+## registers where a second caption would cost a whole row of the column.
+func _make_gutter(text: String, height: float) -> Control:
+	var node := Label.new()
+	node.custom_minimum_size = Vector2(GUTTER_W, height)
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.focus_mode = Control.FOCUS_NONE
+	node.text = text
+	node.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
+	node.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	node.add_theme_font_size_override("font_size", GUTTER_SIZE)
+	node.add_theme_color_override("font_color", GUTTER_TINT)
+	return node
+
+
+## The gutter mirrored on the right, invisible, so the strand stays centred on
+## the column the `Explain` line below it is centred on. Without it the weave
+## sits 7 px left of everything else, which is small and is visible.
+func _make_spacer(height: float) -> Control:
+	var node := Control.new()
+	node.custom_minimum_size = Vector2(GUTTER_W, height)
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	return node
+
+
+## One locus of the **body** row: what this cell is wearing, on the arc it is
+## wearing it on.
+##
+## **Every rung is worn, by definition** -- a body has no carried copies, since
+## `Genome.expressed()` writes the DNA's whole copy count or none of it. And
+## nothing here takes input or takes focus: the body is fixed, so a row that
+## responded would promise an edit of a thing that cannot be edited, and it adds
+## no Tab stops to the six to eight this screen already costs.
+##
+## [param dissents] is whether the two rows disagree at this locus, which is the
+## only case that draws a word. See [method _draw_body_locus].
+func _make_body_locus(gene: StringName, tier: int, slot: int, lobe0: int,
+		dissents: bool) -> Control:
+	var node := Control.new()
+	node.custom_minimum_size = Vector2(LOCUS_W, BODY_LOCUS_H)
+	node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
+	node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	node.focus_mode = Control.FOCUS_NONE
+	node.draw.connect(_draw_body_locus.bind(node, gene, tier, slot, lobe0,
+		dissents))
+	return node
+
+
+## **A word on the body row only where the two rows disagree**, and it was
+## measured both ways. A word under every body locus is the same seven verbs
+## printed twice -- rendered, and it is a wall of text in which the one line
+## that is news disappears. Where the rows agree the DNA row's word sits in the
+## same column and names both. Where they disagree the body has something on
+## screen that nothing else says, so it says it -- and the dart comes with the
+## word, which is the first time this game has drawn *where an organ actually
+## is*. The row reserves its full height either way, so nothing moves when a
+## disagreement appears.
+func _draw_body_locus(node: Control, gene: StringName, tier: int, slot: int,
+		lobe0: int, dissents: bool) -> void:
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, BODY_HELIX_MID,
+		HELIX_AMP, LOCUS_LOBES, lobe0, 1.0, 0)
+	if gene != &"":
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, BODY_HELIX_MID,
+			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(gene), tier, tier)
+	# **The dart comes with the word and never on its own.** A locus the body
+	# leaves empty while the DNA fills it disagrees, but it has nothing to name,
+	# and a bare arrow over a bare weave is a mark with nothing to anchor to.
+	# `maxi(tier, 1)` is the word's tint rather than its count: a gene on the
+	# body row is worn by definition, so its word is never the dim one.
+	if dissents and gene != &"":
+		_draw_locus_label(node, gene, maxi(tier, 1), slot, false,
+			BODY_LABEL_MID, BODY_LABEL_BASE)
 
 
 func _on_locus_hover(index: int) -> void:
 	_hovered = index
 	_update_explain()
 	_update_hint()
+	# Hover deliberately does not light a locus -- except while a gene is in the
+	# air, when the locus under the pointer is where it would land and has to
+	# say so. Godot clears the pointer's captured control the moment a drag
+	# begins, which is exactly why hover keeps tracking through one.
+	if _dragging != SLOT_NONE:
+		_redraw_strand()
 
 
 func _on_locus_unhover(index: int) -> void:
@@ -2615,15 +3008,30 @@ func _on_locus_unhover(index: int) -> void:
 	_hovered = SLOT_NONE
 	_update_explain()
 	_update_hint()
+	if _dragging != SLOT_NONE:
+		_redraw_strand()
 
 
-func _draw_cap(node: Control, lobe0: int, taper: int) -> void:
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
+func _draw_cap(node: Control, lobe0: int, taper: int, mid: float) -> void:
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, mid,
 		HELIX_AMP, CAP_LOBES, lobe0, 1.0, taper)
+	# The body row has no sample band; only the DNA row's head can hold one.
+	if mid != HELIX_MID:
+		return
 	# A sample that has not been given a locus yet waits off the head, on
 	# nothing. That is the truthful picture and it is also the one that makes
 	# the first tap obvious: it is not anywhere until you say where.
-	if taper > 0 and _armed == SLOT_SAMPLE and _genome.held_sample != &"":
+	#
+	# **A sample waits off the lead-in whenever no locus is bound for it, and a
+	# gene in the air unbinds it.** That is the rule this surface already had,
+	# extended by one clause, and it is what stops a move and a placement from
+	# claiming the same locus: while a move is in flight the selection is the
+	# move's own source, which is not where the sample is going. Posed on
+	# purpose and it collided -- two base pairs and two words at one locus, and
+	# a line naming the wrong gesture. The sample goes back to hanging on
+	# nothing, which is what it is, and rebinds on release.
+	if taper > 0 and _genome.held_sample != &"" \
+			and (_armed == SLOT_SAMPLE or _dragging != SLOT_NONE):
 		_draw_sample(node, _genome.held_sample, CAP_W * 0.5, -1.0)
 
 
@@ -2640,6 +3048,23 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 	if gene == &"" and selected and held != &"":
 		tone = Cilia.hue(held)
 
+	# **Both ends of a swap show what would arrive at them, and nothing moves
+	# until the finger lifts.** The lens is the only mark that changes and it is
+	# the mark selection already uses, so the destination keeps drawing its own
+	# copies: what is about to be displaced stays readable right up to the drop.
+	if _dragging != SLOT_NONE:
+		if slot >= 0 and slot == _hovered and slot != _dragging:
+			var flying := _gene_at(_dragging)
+			if flying != &"":
+				selected = true
+				tone = Cilia.hue(flying)
+		elif slot == _dragging and _hovered >= 0 and _hovered != slot:
+			# The hole the gene came out of, filled with the hue of whatever is
+			# coming back into it -- the displaced gene, or the column's own
+			# pale if the destination is empty.
+			var displaced := _gene_at(_hovered)
+			tone = Cilia.hue(displaced) if displaced != &"" else PALE
+
 	# **The lens fills, and that is the whole of "selected".** There is no box
 	# to put a border on any more; area between the backbones is the one mark on
 	# this surface that cannot be mistaken for a rung or for a strand.
@@ -2650,10 +3075,15 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID, HELIX_AMP,
 		LOCUS_LOBES, lobe0, BACKBONE_LIT if selected else 1.0, 0)
 
+	# The gene is in the air: the locus it came out of has nothing in it until
+	# it lands, and drawing its rungs in both places would be the one lie a
+	# drag can tell.
+	if _dragging == slot:
+		gene = &""
 	if gene != &"":
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
 			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(gene), tier, body_tier)
-	elif selected and held != &"":
+	elif selected and held != &"" and _dragging == SLOT_NONE:
 		# What a second tap would do, drawn before it is done: a placed gene is
 		# written to the DNA and **not** to this body, so the preview is a
 		# carried rung and not a worn one. That is not a nicety -- it is the one
@@ -2662,7 +3092,7 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
 			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(held), 1, 0)
 
-	if selected and held != &"" and slot >= 0:
+	if selected and held != &"" and slot >= 0 and _dragging == SLOT_NONE:
 		_draw_sample(node, held, LOCUS_W * 0.5, HELIX_MID - HELIX_AMP)
 
 	_draw_locus_label(node, gene, body_tier, slot, selected)
@@ -2679,8 +3109,12 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 ## **The word is the strip's word, unchanged**: four short verbs parsed at arm's
 ## length, never the biological name. That belongs to the explanation line,
 ## which is read rather than glanced at.
+##
+## [param label_mid] and [param label_base] default to the DNA row's seats,
+## under its helix; the body row passes its own, which are above.
 func _draw_locus_label(node: Control, gene: StringName, body_tier: int,
-		slot: int, selected: bool) -> void:
+		slot: int, selected: bool, label_mid := LABEL_MID,
+		label_base := LABEL_BASE) -> void:
 	var font := node.get_theme_default_font()
 	var word := String(WORDS.get(gene, String(gene))) if gene != &"" else ""
 	var width := 0.0
@@ -2693,7 +3127,7 @@ func _draw_locus_label(node: Control, gene: StringName, body_tier: int,
 	var dart_x := LOCUS_W * 0.5 - group * 0.5 + DART_R
 	Cilia.draw_slot_dart(node, slot,
 		Cilia.hue(gene) if gene != &"" else Color(PALE, 0.6),
-		Vector2(dart_x, LABEL_MID), DART_R)
+		Vector2(dart_x, label_mid), DART_R)
 	if width <= 0.0 or font == null:
 		return
 	var tint := LABEL_TINT
@@ -2703,7 +3137,7 @@ func _draw_locus_label(node: Control, gene: StringName, body_tier: int,
 		# The third channel, agreeing with the floating rungs: a word for an
 		# organ this body does not wear is quieter than one it does.
 		tint = Color(PALE, WORD_UNEXPRESSED)
-	node.draw_string(font, Vector2(dart_x + DART_R + DART_GAP, LABEL_BASE),
+	node.draw_string(font, Vector2(dart_x + DART_R + DART_GAP, label_base),
 		word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, tint)
 
 
@@ -2777,27 +3211,68 @@ func _draw_explain_organ() -> void:
 # makes 20px between tiles acceptable even though it is about 1.5mm on a phone.
 # The destructive control here is not adjacent to `resume`.
 
-## **[param tile] is dead after [method _build_genome_strip] runs below.** Both
-## branches of this handler rebuild the strip, which removes and frees every
-## tile -- including the one whose `gui_input` we are standing inside. That is
-## legal (`queue_free` is deferred and `remove_child` during emission is fine)
-## and it is exercised on both the touch path and the keyboard path, but it
-## means nothing may touch `tile` after the rebuild. Read the new node out of
-## Row instead, the way the focus line does.
+## **[param tile] is dead after [method _build_genome_strip] runs.** A rebuild
+## removes and frees every tile -- including the one whose `gui_input` we are
+## standing inside. That is legal (`queue_free` is deferred and `remove_child`
+## during emission is fine) and it is exercised on both the touch path and the
+## keyboard path, but it means nothing may touch `tile` after the rebuild. Read
+## the new node out of Row instead, the way the focus line does.
+##
+## Two of the branches below rebuild -- a move and a commit -- and **selecting
+## does not**, because a press that selects may still become a drag and Godot
+## hangs the drag off the control that took the press. Everything `tile` is
+## used for happens before either rebuild: `accept_event()`, and the rect the
+## up-stroke is tested against.
 func _on_locus_input(event: InputEvent, tile: Control, index: int) -> void:
+	var step := _move_key(event)
+	if step != 0:
+		# `accept_event()` on the chord, or GUI focus navigation runs as well
+		# and the keyboard walks off the locus the gene just moved to.
+		tile.accept_event()
+		_move_slot(index, index + step)
+		return
+	# **The up-stroke, which is where a placement lands now.** See [member
+	# _primed] for why it cannot land on the down-stroke any more.
+	if _is_pointer_lift(event):
+		tile.accept_event()
+		var was_primed := _primed == index
+		_primed = SLOT_NONE
+		# `has_point` and not simply "this locus got the release": Godot keeps
+		# delivering to the control the press landed on, so a finger that
+		# pressed an armed locus, slid four loci away and lifted there gets its
+		# release *here*, with a local x of -336. That is a gesture the player
+		# aborted, and aborting by sliding off is the oldest cancel there is.
+		if was_primed and _dragging == SLOT_NONE \
+				and Rect2(Vector2.ZERO, tile.size).has_point(
+					_pointer_at(event)):
+			_commit_slot(index)
+		return
 	if not _is_widget_tap(event):
 		return
 	tile.accept_event()
+	# Any fresh down-stroke replaces whatever the last one was waiting to do.
+	_primed = SLOT_NONE
 	if _armed == index:
 		if _committable(index):
 			# **The guard is not politeness, it is the touch path working.**
 			# Godot emulates a mouse click from every screen touch, so one thumb
 			# press arrives here twice; without this the second copy would
-			# commit the swap in the same frame the first one armed it, and the
-			# one irreversible action in the game would need no confirmation at
-			# all.
+			# arm and prime in the same frame, and the one irreversible action
+			# in the game would need no confirmation at all.
 			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
 				return
+			if _is_pointer_press(event):
+				# Primed, not placed: a finger that goes down here may still be
+				# starting a move, and nothing may be written until it has said
+				# which.
+				_primed = index
+				return
+			# **A key is not ambiguous.** `ui_accept` is Enter, KP-Enter and
+			# Space; no drag can grow out of any of them, so the keyboard's
+			# confirm stays on the press where it always was. [method
+			# _commit_slot] carries the guard for the one way a key can still
+			# arrive mid-gesture: a mouse drag in flight while the other hand
+			# presses Enter.
 			_commit_slot(index)
 			return
 		# Nothing to commit -- no sample, or this is the sample itself -- so the
@@ -2812,11 +3287,133 @@ func _on_locus_input(event: InputEvent, tile: Control, index: int) -> void:
 		return
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
-	# The rebuild frees the node this event arrived on and hands the keyboard
-	# back to the tile that replaced it. Nothing to do here: that is one rule
-	# in one place, and it is the rule this function used to carry a private
-	# and slightly different copy of.
+	# **A selection redraws; it does not rebuild.** Freeing and remaking ten
+	# nodes to move one lens was always waste, and once a press can become a
+	# drag it is a bug rather than waste: Godot hangs a drag off the control
+	# that took the *press*, and this handler used to free that control before
+	# the finger had moved -- so the drag could never start and the gesture
+	# looked unimplemented. Nothing about the genome changed here, so nothing
+	# has to be rebuilt; the loci read [member _armed] at draw time. It also
+	# removes the focus churn [method _restore_focus] exists to repair.
+	_redraw_strand()
+	_update_explain()
+	_update_hint()
+
+
+## Every control on both rows, redrawn. The loci read the selection and the
+## drag out of [member _armed] and [member _dragging] at draw time, so this is
+## all either of them ever needs.
+func _redraw_strand() -> void:
+	for row: HBoxContainer in [_body_row, _genome_row]:
+		for child in row.get_children():
+			var node := child as CanvasItem
+			if node != null:
+				node.queue_redraw()
+
+
+# --- The move: a drag, because nothing is destroyed by one ------------------
+# A placement evicts a gene from the lineage and cannot be undone, so it is two
+# taps with a 300 ms guard. A move rearranges what is already there, destroys
+# nothing and only ever reaches the player's daughters, so it is a drag:
+# self-cancelling, repeatable, and over the moment the finger lifts. The two
+# consequences get two gestures, which is the cheapest possible way to say that
+# one of them is heavier than the other.
+#
+# Tap-then-tap was not available: a tap already selects a locus and reads it,
+# and a second tap already places a held sample. Redefining the pair as a move
+# would cost the ability to read a second gene, which is most of what the strand
+# is for.
+
+## The gene leaves its locus. Returning `null` refuses the drag, which is what
+## an empty locus does.
+func _locus_drag(_at: Vector2, node: Control, slot: int) -> Variant:
+	if not _movable(slot):
+		return null
+	var gene := _gene_at(slot)
+	# **The drag is what proves the press was not a tap**, so whatever that
+	# press primed is cancelled here. This is the line that makes a placement
+	# unreachable from a gesture the player made as a move; see [member
+	# _primed].
+	_primed = SLOT_NONE
+	_dragging = slot
+	_armed = slot
+	_armed_at = Time.get_ticks_msec()
+	# The travelling gene is the held sample's own base pair, because that is
+	# already this surface's picture of a gene that is not in a ladder: a bar,
+	# two halo rings and the plain word. Nothing new to learn.
+	var preview := Control.new()
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview.custom_minimum_size = Vector2(LOCUS_W, BAND_MID * 2.0)
+	preview.size = Vector2(LOCUS_W, BAND_MID * 2.0)
+	preview.position = Vector2(-LOCUS_W * 0.5, -BAND_MID - DRAG_LIFT)
+	preview.draw.connect(_draw_sample.bind(preview, gene, LOCUS_W * 0.5, -1.0))
+	# Godot seats a drag preview's *root* on the pointer, so the offset has to
+	# live on a child of it; a wrapper is the one way to lift the picture off
+	# the thumb.
+	var wrap := Control.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(preview)
+	node.set_drag_preview(wrap)
+	_redraw_strand()
+	_update_explain()
+	_update_hint()
+	return {&"move_from": slot, &"gene": gene}
+
+
+## Every DNA locus but the one the gene came out of. **Not refused on an
+## occupied one**: a late-game strand is dense, so refusing would fail most
+## drops and a gesture that usually does nothing reads as broken. An occupied
+## destination swaps, which is the same operation `Genome._mutate_shift`
+## already performs at every division -- and an empty one is the degenerate
+## case of that same swap, so there is one rule and not two.
+func _locus_can_drop(_at: Vector2, data: Variant, slot: int) -> bool:
+	if not (data is Dictionary) or not (data as Dictionary).has(&"move_from"):
+		return false
+	return slot >= 0 and slot < _slot_genes.size() \
+		and slot != int((data as Dictionary)[&"move_from"])
+
+
+func _locus_drop(_at: Vector2, data: Variant, slot: int) -> void:
+	_dragging = SLOT_NONE
+	# The moved gene stays selected and the keyboard follows it, so the three
+	# lines under the strand are a receipt for what moved and where it now
+	# points. That is the rule a commit already has.
+	_move_slot(int((data as Dictionary)[&"move_from"]), slot)
+
+
+## **`Shift` and an arrow, read raw.** A content pack cannot add an `InputMap`
+## action, and the bare arrows are how the GUI is navigated -- so the chord is
+## read off the key event itself rather than through an action. Returns -1, +1
+## or 0 for anything else.
+func _move_key(event: InputEvent) -> int:
+	var key := event as InputEventKey
+	if key == null or not key.pressed or not key.shift_pressed:
+		return 0
+	if key.keycode == KEY_LEFT:
+		return -1
+	return 1 if key.keycode == KEY_RIGHT else 0
+
+
+## One move, from either gesture.
+##
+## [param to] is **clamped rather than wrapped**: a gene that walked off the end
+## of the strand and reappeared at the other end would land on a different arc
+## from the one being aimed at, which is the whole thing a move is for.
+func _move_slot(from: int, to: int) -> void:
+	var target := clampi(to, 0, maxi(_slot_genes.size() - 1, 0))
+	if not _genome.move(from, target):
+		return
+	_armed = target
+	_armed_at = Time.get_ticks_msec()
+	_hovered = SLOT_NONE
+	# The genome really did change, so this one is a rebuild: both rows read
+	# their genes and their copy counts at build time, and the move changed
+	# both rows at once.
 	_build_genome_strip()
+	# The strip's own focus restore only fires for a locus that *had* focus, and
+	# a mouse drag never gave one to anything. Sending the keyboard after the
+	# gene it just moved is what makes `Shift`+arrow repeatable.
+	_restore_focus(target)
 
 
 func _is_widget_tap(event: InputEvent) -> bool:
@@ -2826,6 +3423,44 @@ func _is_widget_tap(event: InputEvent) -> bool:
 		var click := event as InputEventMouseButton
 		return click.pressed and click.button_index == MOUSE_BUTTON_LEFT
 	return event.is_action_pressed(&"ui_accept")
+
+
+## The down-stroke of a **pointer** specifically, which is the half of
+## [method _is_widget_tap] that can turn into a drag. Both copies of a thumb
+## press answer true: Godot emulates a mouse button from every screen touch and
+## the locus is handed both.
+func _is_pointer_press(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).pressed
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		return click.pressed and click.button_index == MOUSE_BUTTON_LEFT
+	return false
+
+
+## The matching up-stroke. **Measured, not assumed**: with no drag in flight
+## Godot delivers the release to the control the press landed on -- as both an
+## emulated mouse button and a screen touch, in that order, one millisecond
+## apart -- and when a drag *is* in flight it delivers no release here at all,
+## because the release is the drop. That is exactly the discrimination
+## [member _primed] needs, and it is free.
+func _is_pointer_lift(event: InputEvent) -> bool:
+	if event is InputEventScreenTouch:
+		return not (event as InputEventScreenTouch).pressed
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		return not click.pressed and click.button_index == MOUSE_BUTTON_LEFT
+	return false
+
+
+## Where a pointer event landed, in the locus's own coordinates. Off the end of
+## the strand is a legal answer and the reason this is asked at all.
+func _pointer_at(event: InputEvent) -> Vector2:
+	if event is InputEventScreenTouch:
+		return (event as InputEventScreenTouch).position
+	if event is InputEventMouseButton:
+		return (event as InputEventMouseButton).position
+	return Vector2(-1.0, -1.0)
 
 
 ## The one irreversible action in the game (§9.7). A genome you cannot ruin is
@@ -2838,6 +3473,17 @@ func _is_widget_tap(event: InputEvent) -> bool:
 ## tiles for the commonest state in the late game. The strip is the DNA and the
 ## DNA is what is being placed into.
 func _commit_slot(index: int) -> void:
+	# **Nothing is written while a gesture is in flight**, which is the guard
+	# [method _step_arming] already carries three functions down and this one
+	# was missing. The reachable case is desktop and it is one hand on each
+	# device: a mouse drag lifting `eat` out of locus 0 while the other hand
+	# presses Enter -- `ui_accept` is Enter, KP-Enter *and* Space -- on a
+	# focused locus with a sample held. Without this the sample lands, the
+	# strip rebuilds mid-drag, [member _dragging] still points at a locus that
+	# now holds a different gene, and the release moves the gene that was just
+	# placed rather than the one the drag picked up.
+	if _dragging != SLOT_NONE:
+		return
 	if index < 0 or index >= _slot_genes.size():
 		return
 	_genome.place(index)
@@ -2871,6 +3517,25 @@ func _commit_slot(index: int) -> void:
 ## selected with nothing held stays selected until another tile is, and an arm
 ## that does lapse falls back to the sample rather than to nothing.
 func _step_arming() -> void:
+	# **Nothing lapses while a gesture is in flight.** A lapse rebuilds the
+	# strand, which frees the locus the drag came out of and the one under the
+	# pointer -- and four seconds is an easy hold for a thumb that is choosing
+	# between seven destinations.
+	if _dragging != SLOT_NONE:
+		return
+	# **A finger already down counts as a gesture in flight**, and this one was
+	# found by posing the move at 2400x1080, where the renderer is slow enough
+	# that the wall clock outran the harness's own clock. A press lands on an
+	# armed locus, the four seconds run out before the finger has moved the ten
+	# pixels Godot needs to call `_get_drag_data`, the lapse rebuilds the strand
+	# and frees the control the press landed on -- and the drag can never start.
+	# The player's finger is on the strand and the gesture silently does
+	# nothing, which is the same failure the select-redraws change fixed at the
+	# other end. The window is narrow (the press has to land in the last frames
+	# of the timeout) and the cure is one line: a strip with a finger on it is
+	# not a strip left armed, which is the only thing the timeout is for.
+	if _primed != SLOT_NONE:
+		return
 	if not _committable(_armed):
 		return
 	if Time.get_ticks_msec() - _armed_at < ARM_TIMEOUT_MS:
