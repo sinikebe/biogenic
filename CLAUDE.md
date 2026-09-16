@@ -86,6 +86,19 @@ Pass `--rendering-driver opengl3`: this container has no Vulkan, and the project
 is GL Compatibility anyway. Audio fails to open and falls back to a dummy
 driver; that is the container, not a bug.
 
+### Comparing two frames? Pass `--seed=` — and prove it first
+
+`tools/drive.gd --seed=` is what makes a run reproducible, and for five phases
+it did not cover the membrane: `signal_bus.gd` jitters the beat and the taste
+bearing off a **private** generator, on purpose, and a private generator that
+nothing seeds is a private generator nothing can repeat. Three byte-identical
+runs of one `--freeze-at` command differed by up to **34.9% of the frame**.
+`--seed=` now seeds the bus as well.
+
+So, before any A/B: **render the frame three times and diff it.** If it is not
+0 differing pixels, whatever you were about to measure is smaller than the
+noise. `docs/design/perception.md` §4.1 is the long version and the numbers.
+
 ### Nothing is done until someone has looked at it
 
 A screenshot is the evidence. "The code looks right" is not, and neither is a

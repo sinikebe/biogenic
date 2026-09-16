@@ -317,6 +317,10 @@ const DRAG_SPAN := 190.0
 ## Below this the player is not really steering, so onboarding stays up.
 const STEER_DEADZONE := 0.12
 
+## Nothing held. Touch indices are >= 0 and the mouse is -1, so -2 is free.
+const POINTER_NONE := -2
+const POINTER_MOUSE := -1
+
 var position := Vector2.ZERO
 ## Radians, clockwise from world north. Front is the top of the screen.
 var heading := 0.0
@@ -332,9 +336,20 @@ var _dash_timer := 0.0
 var _pointer_at := 0.0
 var _pointer_from := 0.0
 ## -2 nothing held, -1 the mouse, >= 0 the touch index that owns the drag.
-var _pointer := -2
+## **One slot, and that is correct for `anywhere` and only for `anywhere`**: a
+## resting palm must not fight the steering thumb when the whole screen is the
+## control. The other two schemes need a finger per control, and that lives in
+## [member controls], keyed by pointer index -- so `port` and `push` can be held
+## at once, and a dash can be fired while the stick is deflected.
+var _pointer := POINTER_NONE
 var _pointer_anchor := 0.0
 var _pointer_x := 0.0
+
+## The drawn controls, or null under `anywhere` and in any scene that has none.
+## **Untyped on purpose.** cilia.gd preloads genome.gd, which preloads this
+## file, and controls.gd preloads cilia.gd -- so a preload back the other way
+## would be a cycle GDScript will not resolve.
+var controls: Node = null
 
 
 func _ready() -> void:
@@ -613,8 +628,14 @@ func bump(normal: Vector2, restitution: float = 0.55) -> void:
 
 ## Drops any held drag. Called when the game pauses, so a finger still down when
 ## the pause opened does not keep steering afterwards.
+##
+## **The drawn controls are not dropped here**, and that is deliberate: this is
+## also what the pinch of a division calls, and the steering control has to
+## survive it. `controls.let_go()` is the other half, called from the two places
+## that really do mean *every finger stops counting* -- the pause screen opening
+## and the app losing focus.
 func release() -> void:
-	_pointer = -2
+	_pointer = POINTER_NONE
 	steer = 0.0
 
 
@@ -632,14 +653,25 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
-			if _pointer == -2:
-				_grab(touch.index, touch.position.x)
-		elif _pointer == touch.index:
+			_claim(touch.index, touch.position)
+			return
+		# **`_dropped()` is not a predicate -- it lets the control go.** It has
+		# to run on every release, whoever owned the pointer, and only then does
+		# its answer decide whether this was also the floating stick's gesture.
+		# Written as `not _dropped(i) and _pointer == i` that was correct by
+		# evaluation order alone: reverse the two and a pad is never released at
+		# all, because the cheap-looking test in front would skip the call. The
+		# named local says which of those two lines this is, and this is the
+		# input path every player is on.
+		var released_a_control := _dropped(touch.index)
+		if not released_a_control and _pointer == touch.index:
 			_let_go()
 		return
 
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
+		if _moved(drag.index, drag.position):
+			return
 		if _pointer == drag.index:
 			_pointer_x = drag.position.x
 		return
@@ -649,9 +681,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if click.button_index != MOUSE_BUTTON_LEFT:
 			return
 		if click.pressed:
-			if _pointer == -2:
-				_grab(-1, click.position.x)
-		elif _pointer == -1:
+			_claim(POINTER_MOUSE, click.position)
+			return
+		# The same release, the same reason it is named. See the touch branch.
+		var released_a_control := _dropped(POINTER_MOUSE)
+		if not released_a_control and _pointer == POINTER_MOUSE:
 			_let_go()
 		return
 
@@ -663,8 +697,46 @@ func _unhandled_input(event: InputEvent) -> void:
 			_dash()
 		return
 
-	if event is InputEventMouseMotion and _pointer == -1:
-		_pointer_x = (event as InputEventMouseMotion).position.x
+	if event is InputEventMouseMotion:
+		var moved := event as InputEventMouseMotion
+		if _moved(POINTER_MOUSE, moved.position):
+			return
+		if _pointer == POINTER_MOUSE:
+			_pointer_x = moved.position.x
+
+
+## **A press, offered to the drawn controls first.** Under `anywhere` there are
+## none, [method Controls.press] answers `NONE` on every point, and what follows
+## is exactly the floating stick this file has always been. Under `stick` and
+## `pads` a press that misses every control is **nothing at all**: no steer, no
+## thrust, no dash. The water is inert under those schemes, which is the scheme
+## the player chose.
+##
+## The dash fires here, on the press, and never on the release -- a dash that
+## waits for a lift is a dash that arrives after the thing that was chasing you.
+func _claim(index: int, at: Vector2) -> void:
+	if controls != null:
+		var id: int = controls.press(index, at)
+		if id == controls.DASH:
+			_dash()
+			return
+		if id != controls.NONE:
+			return
+		if not controls.floating():
+			return
+	if _pointer == POINTER_NONE:
+		_grab(index, at.x)
+
+
+## True when that pointer belongs to a drawn control, which owns every later
+## event of its gesture. Ownership is decided once, at the press, and keyed by
+## pointer index -- nothing here ever asks what is under a finger now.
+func _moved(index: int, at: Vector2) -> bool:
+	return controls != null and controls.move(index, at)
+
+
+func _dropped(index: int) -> bool:
+	return controls != null and controls.release(index) != controls.NONE
 
 
 func _grab(index: int, x: float) -> void:
@@ -691,9 +763,12 @@ func _let_go() -> void:
 ## screen. Deliberately the same gesture that steers -- pushing and turning are
 ## things you do at the same time.
 func _pushing() -> bool:
-	if _pointer != -2:
+	if Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W):
 		return true
-	return Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W)
+	if controls != null and not controls.floating():
+		# Touching the stick, under `stick`; the `push` pad, under `pads`.
+		return controls.pushing()
+	return _pointer != POINTER_NONE
 
 
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on
@@ -717,6 +792,10 @@ func _read_steer() -> float:
 		keys += 1.0
 	if keys != 0.0:
 		return keys
-	if _pointer == -2:
+	# **Keys are unchanged under every scheme.** The scheme is a touch choice; a
+	# desktop player who picks `pads` gets the pads *and* the keys.
+	if controls != null and not controls.floating():
+		return controls.steer()
+	if _pointer == POINTER_NONE:
 		return 0.0
 	return clampf((_pointer_x - _pointer_anchor) / DRAG_SPAN, -1.0, 1.0)

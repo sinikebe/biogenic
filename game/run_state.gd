@@ -17,6 +17,20 @@ extends RefCounted
 ## nothing else has to move.
 enum Mode { POV, FULL_VISION }
 
+## Where the player's thumbs live. `ANYWHERE` is the scheme the game shipped
+## with -- drag the water, a finger down is thrust, a short still press is the
+## dash -- and it stays the default. `STICK` draws a knob in a channel and a
+## dash pad; `PADS` draws two turn pads, a push pad and a dash pad.
+##
+## Stored as an integer for the same reason [enum Mode] is: a fourth scheme
+## appends to this and nothing else has to move. A file written by a later build
+## that has one falls back to `ANYWHERE` here rather than crashing.
+enum Scheme { ANYWHERE, STICK, PADS }
+
+## What a fresh install gets: the game as it was designed. One finger, nothing
+## drawn over the water, and the dash costing no pixel and no second thumb.
+const DEFAULT_SCHEME := Scheme.ANYWHERE
+
 ## Kept at the old path so an installed game does not forget it has already
 ## shown the onboarding line.
 const PATH := "user://normal_mode.cfg"
@@ -71,6 +85,23 @@ static func load_camera_locked() -> bool:
 
 static func save_camera_locked(value: bool) -> void:
 	_store("run", "camera_locked", value)
+
+
+## Which control scheme this player chose, from the pause screen. Beside the
+## camera lock and for the same reason: it is a property of how this player
+## wants to hold the game, not of the run.
+static func load_scheme() -> int:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return DEFAULT_SCHEME
+	var value := int(config.get_value("run", "scheme", DEFAULT_SCHEME))
+	if value < Scheme.ANYWHERE or value > Scheme.PADS:
+		return DEFAULT_SCHEME
+	return value
+
+
+static func save_scheme(value: int) -> void:
+	_store("run", "scheme", value)
 
 
 static func onboarding_seen() -> bool:

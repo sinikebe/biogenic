@@ -454,6 +454,23 @@ var _taste_jitter_clock := 0.0
 ## ever calls the global `randf`/`randi` again. That is a structural guarantee
 ## rather than a discipline -- a future sensation cannot reintroduce the bug by
 ## forgetting a gate.
+##
+## **A private stream still has to be a seedable one**, and for five phases it
+## was not. `RandomNumberGenerator.new()` seeds itself from the system on
+## construction, `seed()` sets the GLOBAL stream and cannot reach an instance,
+## and nothing in the project ever assigned this one -- so the harness's
+## `--seed=` covered the simulation and never covered the membrane. The taste
+## jitter draws from here every 1/1.5 s from t=0 in **every** run, so two runs
+## of the same command were never the same picture: three byte-identical frames
+## measured 288,380 to 321,940 differing pixels of 921,600, max delta 125.
+## Every A/B this project has ever run on a membrane frame was reading that
+## noise as well as its own variable.
+##
+## [method seed_rng] is the whole fix and it is deliberately not called from the
+## game: a player's membrane keeps its system seed, because a run is not a thing
+## anyone replays frame-for-frame and a fixed jitter pattern is a worse picture.
+## It is called by `tools/drive.gd` from `--seed=`, which is the surface where
+## "the same command twice" has to mean something. See perception.md §4.1.
 var _rng := RandomNumberGenerator.new()
 
 var _dread := 0.0
@@ -528,6 +545,29 @@ func attach(material: ShaderMaterial) -> void:
 func set_geometry(rect: Vector2, inset: float) -> void:
 	_rect = Vector2(maxf(rect.x, 1.0), maxf(rect.y, 1.0))
 	_inset = maxf(inset, 0.0)
+
+
+## **Makes this node's own stream reproducible, without making it shared.**
+##
+## The whole argument above [member _rng] is that the bus must never draw from
+## the simulation's stream. That argument says nothing about the seed, and for
+## five phases the gap between the two swallowed every measurement taken on a
+## membrane frame: the global `seed()` the harness calls cannot reach an
+## instance generator, so `--seed=` reproduced the water and never the picture
+## of it.
+##
+## Called by `tools/drive.gd` only, before the first frame. It does not draw
+## from the global stream to do it -- that would advance the simulation's own
+## sequence by one and make this function change the run it is measuring -- so
+## the value is passed in, and a caller that wants the two locked together
+## passes the same number to both.
+##
+## **Assigning `seed` is what rewinds the stream**, and `state` must be left
+## alone: Godot's PCG keeps the sequence *in* `state`, so the seed setter writes
+## it and a well-meaning `state = 0` afterwards would throw the seed away and
+## give every value the same run.
+func seed_rng(value: int) -> void:
+	_rng.seed = value
 
 
 ## **The light setting, on the material now rather than on the next frame.**
