@@ -654,7 +654,17 @@ func _unhandled_input(event: InputEvent) -> void:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
 			_claim(touch.index, touch.position)
-		elif not _dropped(touch.index) and _pointer == touch.index:
+			return
+		# **`_dropped()` is not a predicate -- it lets the control go.** It has
+		# to run on every release, whoever owned the pointer, and only then does
+		# its answer decide whether this was also the floating stick's gesture.
+		# Written as `not _dropped(i) and _pointer == i` that was correct by
+		# evaluation order alone: reverse the two and a pad is never released at
+		# all, because the cheap-looking test in front would skip the call. The
+		# named local says which of those two lines this is, and this is the
+		# input path every player is on.
+		var released_a_control := _dropped(touch.index)
+		if not released_a_control and _pointer == touch.index:
 			_let_go()
 		return
 
@@ -672,7 +682,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if click.pressed:
 			_claim(POINTER_MOUSE, click.position)
-		elif not _dropped(POINTER_MOUSE) and _pointer == POINTER_MOUSE:
+			return
+		# The same release, the same reason it is named. See the touch branch.
+		var released_a_control := _dropped(POINTER_MOUSE)
+		if not released_a_control and _pointer == POINTER_MOUSE:
 			_let_go()
 		return
 

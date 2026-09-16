@@ -1395,11 +1395,24 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 ## [param centre] and [param radius] are given rather than taken from a tile
 ## corner, because the strand has no corners: the dart sits under its own locus,
 ## in the label row beside the plain word.
+##
+## **[param ring] is the bezel, and it is only a bezel where there is a
+## bearing.** On a locus the circle is the compass this dart is a needle on --
+## it says *this is a direction around the body*, and without it the dart is an
+## arrow floating in a label row. A turn pad borrows the dart for the opposite
+## job: it is a caption under a tuft of oars, there is no compass and no
+## bearing, and a circle there is the one shape diegetic-hud.md section 4 spends
+## its rule against -- *rounded rectangles, never circles*, because a ring is
+## what the water is made of. So the caller says whether its dart is on a
+## compass. Every existing caller is, and passes nothing.
 static func draw_slot_dart(canvas: CanvasItem, slot: int, tone: Color,
-		centre: Vector2, radius: float = TILE_COMPASS_R) -> void:
+		centre: Vector2, radius: float = TILE_COMPASS_R,
+		ring: bool = true) -> void:
 	if slot < 0:
 		return
-	canvas.draw_arc(centre, radius, 0.0, TAU, 20, Color(tone, 0.28), 1.0, true)
+	if ring:
+		canvas.draw_arc(centre, radius, 0.0, TAU, 20, Color(tone, 0.28), 1.0,
+			true)
 	var bearing := slot_bearing(slot)
 	var dir := Vector2(sin(bearing), -cos(bearing))
 	var side := Vector2(-dir.y, dir.x)

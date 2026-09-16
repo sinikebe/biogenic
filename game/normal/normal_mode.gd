@@ -377,9 +377,10 @@ const POINTER_NONE := -2
 ## locus; erased on the release.
 ##
 ## **Absent means a lean**, and that is the case that matters rather than a
-## default chosen for tidiness: a finger that was already down before the two
-## daughters existed has no press for this screen to have seen, and it is the
-## one [method _read_touch_lean]'s drag branch exists for.
+## default chosen for tidiness: a finger that was already down before this
+## screen started listening -- before the pinch, on the cell's watch -- has no
+## press for it to have seen, and it is the one [method _read_touch_lean]'s drag
+## branch exists for.
 var _choose_gesture: Dictionary = {}
 ## Whether this run has said the one line yet.
 var _said_divide := false
@@ -1819,8 +1820,33 @@ func _notification(what: int) -> void:
 ## to grep for. `paused` is false for the whole of a division (`_set_simulating`
 ## stops nodes with `set_process`, it does not pause the tree), so this test
 ## costs nothing now and holds the invariant where it is used.
+##
+## **The gate opens at the pinch, not at PART, and that is the hole §6 left.**
+## The pinch is where `_set_simulating(false)` stops `cell.gd`'s own input, so
+## from there to PART -- `DIVIDE_PINCH`, a second and a half -- **no node in the
+## tree consumed a pointer press at all.** Measured before the change, at
+## `--fixed-fps 60`: `--scheme=2 --radius=40 --press=3.0:216,624,0` logged
+## `held []  steer +0.00` for the whole run and never committed, while the same
+## press at 2.0 s -- one phase earlier, on the cell's own watch -- logged
+## `held [starboard#0]  steer +1.00` and committed. The turn pad stayed drawn
+## through all of it, which is exactly what §6 promises and exactly what makes
+## the hole a defect: a control that is drawn, unlit and inert is the thing
+## `gene-lines-and-the-pause-target.md` §4.1 forbids. It recovered on the first
+## pixel of movement, so a jittering thumb escaped and a still mouse did not.
+##
+## Two phases own pointer input and their boundary is the pinch: `cell.gd` up
+## to it, this file from it. There is no frame where both are listening and no
+## frame where neither is. Claiming drags a phase earlier costs nothing --
+## `_choosing` is not visible until PART, so there is no locus in the tree to
+## hit-test a drag against yet -- and it buys the other half of the same hole,
+## which is the worse half. **A release that arrived during the pinch was
+## nobody's either.** Measured: a turn pad pressed at 2.0 s and let go at 3.0 s
+## kept its owner, stayed lit, held `steer +1.00` with nothing on the glass, and
+## **committed a daughter on a lean the player had already abandoned** -- on a
+## screen whose own rule is that releasing early undoes it. Now the lift lands
+## where the press does, and neither commits anything on its own.
 func _input(event: InputEvent) -> void:
-	if _replay != null or _split < Split.PART or get_tree().paused:
+	if _replay != null or _split < Split.PINCH or get_tree().paused:
 		return
 	var index := _pointer_index(event)
 	if index == POINTER_NONE:
@@ -1907,7 +1933,15 @@ func _unhandled_input(event: InputEvent) -> void:
 	# strictly by `touch_focus` and reach the unhandled pass untouched. Left
 	# whole rather than split further: this is the same call either way, and the
 	# gesture it reads is the same gesture.
-	if _split >= Split.PART and _read_touch_lean(event):
+	#
+	# **From the pinch, not from PART.** The pinch is where the cell's own input
+	# stops, and until this matched it there was a second and a half in which a
+	# press reached nothing -- with the turn pads still drawn in the corner. See
+	# [method _input] for the measurement. A press landing here during the pinch
+	# does the same two things it does at PART: a drawn control claims it, or the
+	# screen half remembers where it was. Neither is read until `CHOOSING` asks,
+	# so arriving early only means the answer is ready when the question is.
+	if _split >= Split.PINCH and _read_touch_lean(event):
 		get_viewport().set_input_as_handled()
 		return
 
@@ -1971,9 +2005,19 @@ func _read_touch_lean(event: InputEvent) -> bool:
 			if _touch_index == -2:
 				_touch_index = touch.index
 				_touch_lean = _lean_at(touch.position)
-		elif _controls.release(touch.index) != _controls.NONE:
 			return true
-		elif _touch_index == touch.index:
+		# **`release()` is not a test, it lets the control go**, so it runs on
+		# every lift before anything decides what that lift meant. Named rather
+		# than left as an `elif` condition: a chain whose test does the work is
+		# one reordering away from a pad that can never be released, and nothing
+		# about the line says so.
+		#
+		# Typed rather than inferred: `_controls` is a `Control` and `release`
+		# is controls.gd's, so the call is dynamic and the comparison has no
+		# static type for `:=` to take.
+		var released_a_control: bool = \
+			_controls.release(touch.index) != _controls.NONE
+		if not released_a_control and _touch_index == touch.index:
 			_touch_index = -2
 			_touch_lean = 0.0
 		return true
@@ -1982,15 +2026,15 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		if _controls.move(drag.index, drag.position):
 			return true
 		# **A thumb already down is adopted**, here as much as below: its press
-		# happened during the quickening or before the pinch, so the only event
-		# it will ever produce is a drag. Steering controls only -- `push` and
-		# `dash` are not leans.
+		# happened during the quickening, before this screen was listening, so
+		# the only event it will ever produce is a drag. Steering controls only
+		# -- `push` and `dash` are not leans.
 		#
 		# **And only a thumb this screen never saw press.** `_choose_gesture`
-		# holds every pointer that went down after the daughters appeared, so a
-		# lean begun in open water and slid into the corner keeps its screen
-		# half rather than being taken over by the control it passed across --
-		# the same rule the strand blocks already obey in the other direction.
+		# holds every pointer that went down from the pinch onward, so a lean
+		# begun in open water and slid into the corner keeps its screen half
+		# rather than being taken over by the control it passed across -- the
+		# same rule the strand blocks already obey in the other direction.
 		if not _choose_gesture.has(drag.index) \
 				and _controls.adopt(drag.index, drag.position) \
 					!= _controls.NONE:
@@ -2023,9 +2067,11 @@ func _read_touch_lean(event: InputEvent) -> bool:
 			if _touch_index == -2:
 				_touch_index = -1
 				_touch_lean = _lean_at(click.position)
-		elif _controls.release(POINTER_MOUSE) != _controls.NONE:
 			return true
-		elif _touch_index == -1:
+		# The same release, named for the same reason. See the touch branch.
+		var released_a_control: bool = \
+			_controls.release(POINTER_MOUSE) != _controls.NONE
+		if not released_a_control and _touch_index == -1:
 			_touch_index = -2
 			_touch_lean = 0.0
 		return true

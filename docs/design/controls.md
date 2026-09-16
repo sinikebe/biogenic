@@ -13,7 +13,13 @@ that ships today stays the default and is not touched. Extends
 
 Everything below was built in the working tree, rendered at 1280x720 **and**
 2400x1080 under `--rendering-driver opengl3 --fixed-fps 60`, measured, and
-reverted. §8 lists the frames.
+reverted. §8 lists the frames; §8.1 lists what review then found and changed.
+
+**Every measurement on this page states its own command** and was verified
+reproducible by rendering it three times and diffing — 0 differing pixels.
+That is not politeness: the membrane's jitter came off an unseedable generator
+until this change, so the first version of §3.2 quoted numbers nobody could
+repeat. `perception.md` §4.1 is the rule that came out of it.
 
 ---
 
@@ -157,40 +163,130 @@ target's, and the pause target is a control you touch twice a run.
 
 ### 3.2 It subtracts light rather than adding it
 
-Glance peak is the σ = 6 px Gaussian peak on the 8-bit output — the measurement
-`diegetic-hud.md` §4 and `gene-lines-and-the-pause-target.md` §4.3 both use.
-Each frame is the same seed and the same clock with only the scheme changed, so
-the difference *is* the control.
+**The ranking first, because the ranking is the finding and the only part of it
+that survived being measured three different ways.** At both shapes, at a beat
+trough and at a beat peak: *the loudest thing the controls put on the screen
+stays under the quietest thing they share it with.* The starboard block peaks at
+**46.85 / 47.80** (trough / peak) at 1280x720 against a soma figure of
+**59.22 / 59.12**, and at **57.78 / 58.60** at 2400x1080 against
+**75.25 / 75.14**. That is the ranking `diegetic-hud.md` §4 asks for and it is
+reached without an alpha ramp.
 
-| point of view | port corner | starboard corner | **the controls add** | the soma figure |
+The absolute numbers below are reproducible rather than impressive, and that is
+deliberate: the first version of this section quoted figures nobody else could
+reproduce, because it stated neither the rectangle it measured nor the clock it
+froze. Both of those move every number on the page. So:
+
+**The method, stated.** Glance peak is the σ = 6 px Gaussian peak of Rec.709
+luminance on the 8-bit output — the measurement `diegetic-hud.md` §4 and
+`gene-lines-and-the-pause-target.md` §4.3 both use. The canvas is 720 tall at
+every shape; `W` is the canvas width, 1280 at 16:9 and 1600 at 20:9. Three
+rectangles, in **canvas** units, converted to device pixels by `H / 720`:
+
+| rectangle | canvas x | canvas y | why that box |
+| --- | --- | --- | --- |
+| **port block** | 48 .. 264 | 576 .. 672 | the stick (48..240) and both turn pads (48..264), so one box holds either scheme |
+| **starboard block** | W−264 .. W−48 | 576 .. 672 | `push` and `dash` |
+| **the figure** | W/2−200 .. W/2+200 | 180 .. 500 | the soma figure, stopping clear of the onboarding label's band at y 518..548 — so no number here depends on whether `user://` has the seen-flag |
+
+**The genome carries a sense on purpose.** `stigma:1` is in it so the free grant
+at five seconds finds one already there and does not fire: an unforced genome
+gets handed a random sense at t=5, which starts a held sample, a second
+heartbeat and a second line of text, and none of that is the same picture twice.
+
+**The exact command**, one scheme per run, `0` `1` `2`:
+
+```
+xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
+  --rendering-driver opengl3 --fixed-fps 60 res://tools/shot.tscn -- \
+  --scene=res://tools/drive.tscn --size=1280x720 --out=/tmp/g.png --wait=8 \
+  --seed=12345 --mode=0 --scheme=0 --freeze-at=6.0 \
+  --genome=cytostome:1,cirrus:1,flagellum:1,stigma:1,axoneme:1,myoneme:1
+```
+
+For 2400x1080, change the screen and `--size=`. For the beat-peak row, replace
+`--freeze-at=6.0` with `--arm-at=5.5 --freeze-on=beat --freeze-delay=2 --wait=9`,
+which freezes at 6.30 s.
+
+**`--seed=` is load-bearing and until this review it did not cover the
+membrane.** `signal_bus.gd`'s jitter came off an unseedable private generator,
+so the same command rendered a different frame every time — up to a third of the
+screen. `perception.md` §4.1 is the whole story. Every command on this page was
+verified by rendering it three times and diffing: **0 differing pixels.**
+
+#### At a beat trough — `--freeze-at=6.0`
+
+| point of view | port block | starboard block | **the controls add** | the figure |
 | --- | --- | --- | --- | --- |
-| `anywhere`, 1280x720 | 39.1 | 39.1 | — | 61.4 |
-| `stick`, 1280x720 | 39.8 | 46.7 | **+0.7 / +7.6** | 61.4 |
-| `pads`, 1280x720 | 48.6 | 46.7 | **+9.5 / +7.6** | 61.4 |
-| `anywhere`, 2400x1080 | 46.3 | 46.3 | — | 65.2 |
-| `stick`, 2400x1080 | 46.3 | 58.9 | **+0.0 / +12.6** | 65.2 |
-| `pads`, 2400x1080 | 62.7 | 58.9 | **+16.4 / +12.6** | 65.2 |
+| `anywhere`, 1280x720 | 11.65 | 11.63 | — | 59.22 |
+| `stick`, 1280x720 | 22.50 | 46.85 | **+10.85 / +35.22** | 59.22 |
+| `pads`, 1280x720 | 25.24 | 46.85 | **+13.59 / +35.22** | 59.22 |
+| `anywhere`, 2400x1080 | 11.64 | 11.63 | — | 75.25 |
+| `stick`, 2400x1080 | 25.69 | 57.78 | **+14.05 / +46.15** | 75.25 |
+| `pads`, 2400x1080 | 30.86 | 57.78 | **+19.22 / +46.15** | 75.25 |
 
-**+0.7 to +16.4**, against the pause target's own measured +8 to +18. Inside the
-envelope the precedent set, on a control the player uses constantly instead of
-twice, and the loudest block (62.7) is still under the figure it shares a screen
-with (65.2).
+#### At a beat peak — `--freeze-on=beat`, frozen at 6.30 s
+
+| point of view | port block | starboard block | **the controls add** | the figure |
+| --- | --- | --- | --- | --- |
+| `anywhere`, 1280x720 | 26.77 | 26.81 | — | 59.12 |
+| `stick`, 1280x720 | 29.12 | 47.80 | **+2.35 / +20.99** | 59.12 |
+| `pads`, 1280x720 | 27.86 | 47.80 | **+1.09 / +20.99** | 59.12 |
+| `anywhere`, 2400x1080 | 30.93 | 30.92 | — | 75.14 |
+| `stick`, 2400x1080 | 32.43 | 58.60 | **+1.50 / +27.68** | 75.14 |
+| `pads`, 2400x1080 | 32.05 | 58.60 | **+1.12 / +27.68** | 75.14 |
+
+Four things worth reading off those two tables:
+
+- **What a control adds depends almost entirely on what the contour is doing
+  underneath it.** The same `pads` block adds +13.59 to a dark port corner and
+  +1.09 to a lit one. Any single number for "what the controls cost" is a number
+  about a beat phase, which is why this section now states its clock and gives
+  two of them.
+- **`stick` and `pads` read identically to starboard**, at every row, because
+  the peak there is the `dash` burst and both schemes draw it in the same place.
+  The `push` wave never wins its own block: *swim is a wave, dash is a burst*,
+  and a wave is the quieter mark, which is the right way round for the one that
+  is held.
+- **At a beat peak `pads` is quieter in the port corner than `stick` is**
+  (27.86 against 29.12). The knob's border is the brightest object either scheme
+  draws; four flat wells are not.
+- **The starboard block is the loudest control object in the design**, and its
+  worst reading anywhere on this page is 58.60 against a 75.14 figure. If a
+  later change makes any control block beat the figure, it has crossed the line
+  this section exists to hold.
 
 **The worst case, posed on purpose.** A hunter at 150 units on bearing 220° with
 a tier-3 `stigma` and `gain` at maximum, so a saturated lobe blazes across
-exactly the pixels the pads occupy:
+exactly the pixels the pads occupy. Same rectangles, `--freeze-at=8.0`:
 
-| | glance peak at the port corner |
-| --- | --- |
-| the lobe, `anywhere` | **213.6** |
-| the same lobe with four pads over it | **212.3** |
+```
+  --seed=12345 --mode=0 --scheme=0 --stalk=150 --stalk-at=220 --gain=2.4 \
+  --freeze-at=8.0 --wait=10 \
+  --genome=cytostome:1,cirrus:1,flagellum:1,stigma:3,axoneme:1,myoneme:1
+```
 
-**The controls do not add light there, they subtract it.** The well is a
-13%-alpha dark teal, so over a bright lobe it is a slightly darker patch and the
-marks vanish into the glare. The silhouette survives, the bearing is still
+| | port block, `anywhere` | port block, four pads over it | the pads add |
+| --- | --- | --- | --- |
+| 1280x720 | **157.76** | **149.67** | **−8.09** |
+| 2400x1080 | **168.28** | **160.95** | **−7.33** |
+
+**The controls do not add light there, they subtract it**, and the sign is now
+outside the noise rather than inside it — the previous version of this row read
+213.6 against 212.3, a difference of 1.3 on a frame that moved by up to 125 of
+luminance between identical runs, and it was not evidence of anything. The well
+is a 13%-alpha dark teal, so over a bright lobe it is a slightly darker patch and
+the marks vanish into the glare. The silhouette survives, the bearing is still
 readable, the signal wins outright — the same result and the same mechanism the
-pause target measured at 219 against 218. This is the ranking `diegetic-hud.md`
-§4 asks for, reached without an alpha ramp.
+pause target measured at 219 against 218.
+
+**And the honest other half of that frame.** The starboard block in the same
+picture has no lobe on it at all: it reads **8.03** bare and **44.41** with the
+pads drawn at 1280x720, **8.04** against **55.55** at 2400x1080. Where there is
+nothing to hear, the control *is* the brightest thing in its own corner. It is
+still under the figure in the same frame (59.49 and 74.35), which is the rule;
+and the moment there is something to hear, the measurement above is what
+happens.
 
 ---
 
@@ -218,7 +314,11 @@ must be a dark, hard-edged object that occludes.
 - **The marks are the organism's, in the organ's own hue, at `0.36` alpha**, via
   `Cilia.draw_tile_organ` at scale 2.0 — the same glyph the pause screen draws
   beside that gene's name, so the player meets the mark on the surface where the
-  scheme is chosen.
+  scheme is chosen. The hues are **asked of `Cilia.hue()`, not copied out of
+  `Cilia.HUES`**: a second copy of a colour table is the drift `cilia.gd` warns
+  about in three separate comments, and these pads are the surface where a drift
+  would show worst — the mark on the pad and the glyph beside that gene's name
+  are meant to be one object seen twice.
   - `dash` — the `myoneme` burst, `Color(0.94, 0.42, 0.68)`.
   - `push` — **not** the `axoneme` tile glyph. Rendered side by side, `axoneme`
     and `myoneme` are near-twins in shape *and* hue (306° against 333°, and both
@@ -232,6 +332,18 @@ must be a dark, hard-edged object that occludes.
     `draw_slot_dart`'s comment had already reached the same conclusion for the
     strand's compass — *a filled dart is unmistakable* — so it is that mark doing
     that job again. On the stick the same dart sits at each end of the channel.
+  - **The dart comes without its compass bezel**, and that is a parameter rather
+    than an exception. `draw_slot_dart` draws a ring around its dart, and on a
+    locus that ring is the compass the dart is a needle on: it says *this is a
+    bearing around the body*. On a turn pad there is no compass and no bearing,
+    so the circle carried no sentence at all — and it sat in the one shape the
+    bullet above forbids by name. The first build kept it and it read as an
+    arrow in a button icon. `draw_slot_dart` now takes `ring: bool = true`; the
+    pad passes `false` and **every other caller renders exactly as it did**,
+    which was verified by rendering the pause strand and the choosing screen at
+    both shapes and diffing them against `main`: 0 differing pixels. A
+    byte-unchanged `cilia.gd` was a verification convenience, and a render is a
+    better one than a git hash.
 - **Pressed, the mark goes to `0.92` and the well lights.** On a phone that is
   under the thumb; it is for the desktop cursor and for the light that spills
   past a fingertip. It is also, at a division, the only confirmation a lean has
@@ -240,6 +352,15 @@ must be a dark, hard-edged object that occludes.
 Alphas were set by measurement, not by eye: the first pass at `0.42` put the
 `pads` block at 66.4 glance against a 65.2 figure, which is a dead heat, and a
 dead heat is not losing. `0.36` is what §3.2 measures.
+
+> **Those two numbers predate §3.2's stated method and are not reproducible
+> from it.** They were taken on an unstated rectangle, at an unstated clock,
+> with the membrane's jitter unseeded — so do not try to reproduce 66.4 against
+> 65.2. What survives is the comparison they were used for, which is the same
+> comparison §3.2 now makes under a method anyone can repeat: at `0.36` the
+> loudest control block is clear of the figure at both shapes and at both ends
+> of the beat, and at `0.42` it was not. If the alpha is ever revisited, take
+> the reading again under §3.2's command rather than against these.
 
 ---
 
@@ -338,6 +459,15 @@ for the screen half and for the same reason: the press happened before there was
 anything to lean at, so the only event that finger will ever produce is a drag.
 Adoption is refused for `push` and `dash`, which are not leans.
 
+**And a thumb that lands *during* the division is honoured on the frame it
+lands, which needed a fix.** "The steering control stays drawn through the
+division" and "the held pad lights" are the two promises above, and for the
+1.5 s of the pinch neither was true: the pad was drawn, it did not light, and
+pressing it did nothing at all, because the pinch is where the cell's input
+stops and nothing had picked it up yet. §7.2 is the measurement and the fix. It
+matters most for the player who cannot rescue it by accident — a phone thumb
+jitters by a pixel and recovers, a mouse held still does not.
+
 ---
 
 ## 7. What the game developer builds
@@ -346,14 +476,17 @@ Adoption is refused for `push` and `dash`, which are not leans.
 | --- | --- |
 | `game/normal/controls.gd` | **new.** A `Control` under `Hud`, before `PauseTap` so the pause scrim covers it. Holds the geometry, the drawing and `hit(point) -> int`. |
 | `game/normal/normal_mode.tscn` | `Hud/Controls`; `Settings/Feel` with its caption and toggle |
-| `game/normal/normal_mode.gd` | three `@onready`s, the cycle handler, `_update_controls()` in `_process`, the lean routing in `_read_lean`, `_read_control()` for a division |
+| `game/normal/normal_mode.gd` | three `@onready`s, the cycle handler, `_update_controls()` in `_process`, the lean routing in `_read_lean`, and the input gate opening at the pinch instead of at `PART` (§7.2) |
 | `game/normal/cell.gd` | a `controls` reference; `_claim()` replacing `_grab()` on a press; `_read_steer` and `_pushing` consult the scheme; **multi-pointer, §7.1** |
 | `game/run_state.gd` | `load_scheme` / `save_scheme` |
-| `game/vision/cilia.gd` | one optional `tone` parameter on `draw_tile_organ`, so a glyph can be drawn in something other than its own hue. Nothing else |
-| `tools/drive.gd` | `--scheme=0\|1\|2`. The choice lives in `user://`, so without it a scheme cannot be photographed without writing one the next run inherits |
+| `game/vision/cilia.gd` | one optional `ring` parameter on `draw_slot_dart`, defaulting `true`, so a turn pad can borrow the dart without the compass bezel that belongs to it (§4). `draw_tile_organ` needed nothing: it already takes an alpha and derives its tone from `hue()`, which is where the pads now read their hues from too |
+| `game/perception/signal_bus.gd` | `seed_rng()`, so the view's private generator can be reproduced without being shared. Not called from the game (§7.3) |
+| `tools/drive.gd` | `--scheme=0\|1\|2`, `--press=`/`--slide=`/`--lift=`, `--controls=`, `--size=`, and `--seed=` reaching the membrane bus. The scheme lives in `user://`, so without the flag a scheme cannot be photographed without writing one the next run inherits |
+| `.github/workflows/ci.yml` | one step that drives presses under each scheme (§7.4). Not a content-pack file, and not synced from the template — copying workflow changes across is manual either way |
 
 No `project.godot`, no `version.json`, no `export_presets.cfg`, no `addons/`, no
-`ci/`. **This ships as a content pack.**
+`ci/`. **This ships as a content pack.** The workflow file is not in the pack
+and is not in the binary; it is repository furniture.
 
 ### 7.1 Two rules the build must not get wrong
 
@@ -383,6 +516,116 @@ dash   = fired on the press, never on the release
 The dash fires on the press because a dash that waits for a lift is a dash that
 arrives after the thing that was chasing you.
 
+### 7.2 The pinch had no owner, and the corner was drawn anyway
+
+**Found in review, fixed here, and it is a defect of this feature because this
+feature is what draws something pressable in that corner.**
+
+Pointer input during a division has two owners in sequence. `cell.gd` owns it
+while the cell is swimming; `normal_mode.gd` owns it once the cell has stopped.
+The handover was written a phase apart and the two halves did not meet:
+
+- `_set_simulating(false)` runs at the **pinch** and stops `cell.gd`'s
+  `_unhandled_input`.
+- `normal_mode.gd`'s `_input` returned early while `_split < Split.PART`, and
+  its lean branch was gated on `_split >= Split.PART`.
+
+Between those two facts is `DIVIDE_PINCH` — **a second and a half in which no
+node in the tree consumed a pointer press at all.** Measured at `--fixed-fps 60`
+before the change: `--scheme=2 --radius=40 --press=3.0:216,624,0` logged
+`held []  steer +0.00` for the whole run and never committed; the same press at
+2.0 s, one phase earlier and on the cell's watch, logged
+`held [starboard#0]  steer +1.00` and committed at 6 s. The turn pad stayed
+drawn through all of it — which is what §6 promises and is exactly what makes
+the hole a defect: a control that is drawn, unlit and inert is the one thing
+`gene-lines-and-the-pause-target.md` §4.1 forbids. It recovered on the first
+pixel of movement, so a jittering thumb escaped it and a Windows mouse held
+still did not.
+
+**The fix is to move the boundary to where the other half already is:
+`Split.PINCH`.** From the pinch, `normal_mode.gd` owns pointer input; before it,
+`cell.gd` does. There is no frame where both listen and none where neither does.
+Nothing else in the corner changes: `_read_touch_lean` does at the pinch exactly
+what it did at PART — a drawn control claims the press, or the screen half
+remembers it — and neither is *read* until `CHOOSING` asks. Claiming drags a
+phase earlier costs nothing, because `_choosing` is not visible until PART and
+there is no locus in the tree to hit-test a drag against yet.
+
+Two things worth recording:
+
+- **It was never scheme-specific.** With the gate at PART the drive check in
+  §7.4 fails under `anywhere` too, and for the same reason: a press in the port
+  half during the pinch produced no event any node handled, and a finger that
+  then never moves produces no later event either — so the lean never began at
+  all and the division never committed. `anywhere` merely had nothing drawn
+  there to look pressable, which is why nobody had found it. The scheme that
+  ships gets this fix as well.
+- **The release had the same hole, and it was the worse one.** Measured, same
+  harness: a turn pad pressed at 2.0 s and **let go at 3.0 s**, inside the
+  pinch. Before the fix the lift reached nobody, the pad stayed lit, `steer`
+  stayed at +1.00 with nothing on the glass, and **the division committed the
+  starboard daughter on a lean the player had already abandoned.** After it, the
+  pad goes dark on the frame the finger leaves and the division correctly does
+  not commit — which is this screen's own rule: releasing early undoes it, there
+  is no timeout and no default. One boundary, both symptoms, and one of them was
+  choosing a daughter by itself.
+
+### 7.3 `--seed=` never reached the membrane, and every A/B on this page was affected
+
+`signal_bus.gd` draws its beat and taste jitter from a **private**
+`RandomNumberGenerator`, which is correct and must stay: the bus is a view, it
+keeps stepping while the tree is paused, and a view drawing off the simulation's
+stream once made how long you left the pause screen open change where every cell
+in the water was.
+
+What did not follow is that private meant seeded. It was not seeded anywhere,
+`RandomNumberGenerator.new()` takes a system seed, and the global `seed()` the
+harness called cannot reach an instance. So three byte-identical runs of one
+`--freeze-at` command differed by up to **34.9% of the frame**, and the spread
+between two runs of the *same* scheme was larger than the difference §3.2 was
+quoting between schemes.
+
+`seed_rng()` on the bus, called by `tools/drive.gd` from `--seed=`, is the whole
+fix; it does not draw from the global stream to seed itself, so measuring a run
+cannot change it. Not called from the game — a player's membrane keeps its
+system seed, because a fixed jitter pattern is a worse picture and nobody
+replays a run frame for frame. The durable version of this lives in
+`perception.md` §4.1, which is where the next person measuring will look.
+
+### 7.4 CI boots four scenes and presses nothing
+
+The boot check proves every scene **loads**. It cannot prove any of them
+**responds**, and the whole touch path is reachable only from a press.
+
+The nodes that own it are held in untyped `Node` references on purpose — the
+preload cycle is real, `cilia.gd` → `genome.gd` → `cell.gd` and
+`controls.gd` → `cilia.gd` — and GDScript treats an unknown member on an untyped
+base as `UNSAFE_PROPERTY_ACCESS` rather than an error. Measured: rename a
+constant inside `controls.gd`, leave `cell.gd`'s use of it stale, and
+`--check-only` on `cell.gd` exits 0 printing nothing while all four scenes boot
+with **zero** error lines. The first player's dash tap finds it, with
+`Invalid access to property or key 'DASH'`.
+
+So the boot set gains a scene that *acts*. One step, three runs of
+`tools/drive.tscn` — one per scheme — each pressing every control, sliding,
+lifting, pressing through the pinch and then repeating the gesture on the mouse
+path. Same grep as the boot check, **plus one positive assertion**: that the
+division actually commits. A step that only greps for errors goes green if the
+harness quietly stops driving anything, which is the same class of fault it was
+added to catch.
+
+Measured against both faults it exists for: the stale constant fails it under
+all three schemes, and so does §7.2's input gate. About fifteen seconds, against
+an export measured in minutes. `tools/` is excluded from export on both presets,
+so it ships nothing.
+
+**`--size=` is load-bearing and is the reason this needed more than one line.**
+Canvas coordinates go in through `get_screen_transform()`, and a headless run
+with no window of its own scales canvas 96,624 down to window **5,31** — a 96 px
+pad becomes five pixels, every press lands on nothing, and the check passes
+while testing nothing at all. `tools/shot.gd` already set the window for the
+same reason; `drive.gd` now takes the same flag so it can be booted directly.
+
 ---
 
 ## 8. What was rendered, and judged
@@ -402,17 +645,39 @@ At 1280x720 **and** 2400x1080, GL Compatibility, `--fixed-fps 60`, through
 | the turn pads as rotated fans | **failed.** Two similar sunbursts; rotation does not make a radial mark directional |
 | the turn pads as swept oars, no dart | **failed**, more subtly: distinguishable when enlarged, ambiguous at true size |
 | the turn pads as swept oars **plus the dart** | passes, and it is unmistakable at 1:1 at both shapes |
+| the same dart with its compass ring still on it | **failed, and shipped in the first build.** A ring is a bezel and a bezel needs a bearing; on a pad it read as an arrow in a button icon. See §4 and §8.1 |
 | the stick held, knob at +40 px, 1280x720 | passes. Well lit, knob moved, and the membrane's turn shear answers on the starboard band in the same frame |
 | the `dash` pad held | passes. The well lights, the burst goes to full rose, and the contour blooms with the dash |
-| saturated `stigma` lobe over the pads, gain 2.4 | **the frame that settles §3.2.** 213.6 bare against 212.3 with the pads over it: the control subtracts light and the signal wins |
+| saturated `stigma` lobe over the pads, gain 2.4 | **the frame that settles §3.2**, re-posed with a seeded bus. 157.76 bare against 149.67 with the pads over it at 1280x720, 168.28 against 160.95 at 2400x1080: the control subtracts light and the signal wins. The previous reading of this row — 213.6 against 212.3 — was inside the noise of a frame that moved by up to a third of itself between identical runs, and is withdrawn |
 | pause, 3 loci and 7, both shapes, with the `controls` panel | passes. y 45..674 and 629 of 720 at every combination — identical to the shipped column |
 | pause over point of view, controls previewing behind the scrim | passes. Plainly readable at scrim 0.50 |
 | pause over full vision, same | passes but faint at scrim 0.86. Recorded rather than fixed; the word on the button is still the answer |
-| a division with `pads`, port pad held, 1280x720 | passes. The turn pads stay, `push` and `dash` are gone, and **the held pad is lit** — feedback the lean has never had. 21 px of clear space between the starboard pad and the port strand block, which is the tightest gap in the design |
+| a division with `pads`, starboard pad held, 1280x720 | passes. The turn pads stay, `push` and `dash` are gone, and **the held pad is lit** — feedback the lean has never had. 21 px of clear space between the starboard pad and the port strand block, which is the tightest gap in the design |
 | the same at 2400x1080 | passes with room to spare; the strand blocks move outboard with the canvas |
+| the same division under `stick` | passes. Well lit, knob hard over to starboard, a dart at each end and no ring on either |
 | everything hidden during `QUICKEN` and `PINCH` | **failed.** The cell is still simulating during `QUICKEN`, so this took steering away from a moving cell. Now only the two action pads go, and only at the pinch |
 | a press in open water under `stick` and `pads` | correct: nothing. No steer, no thrust, no dash. The water is inert under those schemes, which is the scheme the player chose |
 | a genome with no `myoneme`, `stick` | passes — one control, no dash pad. The interface is the genome |
+
+### 8.1 What review added, and what it found
+
+| frame or run | judgement |
+| --- | --- |
+| the turn pad's dart **with** `draw_slot_dart`'s compass ring | **failed**, and was shipped in the first build. The ring is a bezel and a bezel needs a bearing; on a pad it says nothing and it is a circle in the one corner that may not have one. Now `ring: bool = true`, `false` from the pad |
+| the pause strand and the choosing screen, both shapes, against `main` | **0 differing pixels.** That is the regression check for the ring parameter, and it is a render rather than a git hash |
+| the `pads` corner before and after the ring came out | 188 pixels differ, in a 140 x 20 box around the two darts, and nothing else on the frame moves. That is also the proof that reading the hues off `Cilia.hue()` instead of copying them changed no colour |
+| a press during the pinch, `stick` and `pads`, both shapes | **failed before §7.2, passes after.** The pad lights on the frame the finger lands, the lean is held from there, and the division commits |
+| the same press under `anywhere` | also failed before, also fixed. The hole was never scheme-specific — see §7.2 |
+| a turn pad pressed at 2.0 s and **released at 3.0 s**, inside the pinch | **failed before §7.2, and worse than the press did.** The lift reached nobody, the pad stayed lit at `steer +1.00` with nothing on the glass, and the division committed a daughter on an abandoned lean. Now the pad goes dark on the frame the finger leaves and nothing commits |
+| three identical runs of the §3.2 command | **0 differing pixels.** Before `seed_rng()`, three runs of the same command differed by up to 34.9% of the frame |
+| the simulation, 30 s at `--seed=12345 --fixed-fps 60` | byte-identical between `--mode=0`, `--mode=1` and `main`. Nothing in this change reaches the water |
+| CI driving presses under all three schemes | passes in about 15 s, and fails on both of the two faults it was written for (§7.4) |
+| the `anywhere` playfield against `main`, both views, both shapes | **0 differing pixels.** The scheme that ships is still the scheme that ships |
+| a newborn on `pads` — no `axoneme`, no `myoneme` | passes. Two turn pads and an empty starboard corner. The interface is the genome |
+| two fingers at once, both schemes | `held [port#0, push#1]` with steer −1.00 and thrust on, and `held [stick#0, dash#1]` with the dash firing while the stick is over |
+| the screen-half floor under `pads` | a press in open water on the starboard half commits the starboard daughter with no control held. The floor is intact |
+| adoption granted, refused, and refused for `dash` | a thumb down before the pinch and dragged onto a turn pad is adopted and the pad lights; a thumb that pressed after the pinch and slid into the corner is refused and keeps its screen half; a thumb dragged onto `dash` is refused and keeps its screen half. All three commit the daughter the rule says they should |
+| the chooser cycling | one tap, one step, `anywhere` → `stick` → `pads` → `anywhere`, and `user://` follows. The first reading of this looked like a double-fire and was the harness inheriting the previous run's persisted scheme |
 
 ---
 

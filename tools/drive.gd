@@ -10,6 +10,16 @@ extends Node
 ##
 ## Arguments (all optional, all after the -- that shot.gd also reads):
 ##   --play=res://...        scene to drive, default normal mode
+##   --size=WxH              set the window before the scene is built, the same
+##                           flag `tools/shot.gd` takes and needed for the same
+##                           reason: canvas coordinates are converted through
+##                           the screen transform, so a run with no window of
+##                           its own puts every press somewhere else. Measured
+##                           under `--headless`, canvas 96,624 arrived as window
+##                           5,31 -- a 96 px pad quantised to five pixels, and
+##                           every press landing on nothing. Pass it whenever
+##                           this harness is booted directly rather than through
+##                           shot.tscn, which sets the window itself
 ##   --mode=0|1              force the view: 0 point of view, 1 full vision
 ##   --scheme=0|1|2          force the control scheme: 0 anywhere (the one that
 ##                           ships), 1 stick, 2 pads. The choice lives in
@@ -51,17 +61,18 @@ extends Node
 ##                           false bug report already.
 ##   --press=<seconds>:<x>,<y>[,<finger>]
 ##                           one finger down at that canvas point and **left
-##                           there** -- never released. `finger` is the touch
-##                           index and defaults to 0; a second one is the only
-##                           way to pose two controls held at once, which is
-##                           exactly what `pads` exists for -- `port` and `push`
-##                           together, or a dash fired while the stick is over. `--touch=` presses and
+##                           there** -- never released. `--touch=` presses and
 ##                           releases in the same frame, and a tap commits
 ##                           nothing by design, so the one rule the choosing
 ##                           screen turns on -- *a finger resting on a locus is
 ##                           a read and not a lean* -- cannot be posed with it
-##                           at all. Same convention as `--touch=`: seconds
-##                           first, canvas coordinates, unscaled.
+##                           at all. `finger` is the touch index and defaults to
+##                           0; a second one is the only way to pose two
+##                           controls held at once, which is exactly what `pads`
+##                           exists for -- `port` and `push` together, or a dash
+##                           fired while the stick is over. Same convention as
+##                           `--touch=`: seconds first, canvas coordinates,
+##                           unscaled.
 ##   --slide=<seconds>:<x>,<y>[,<finger>]
 ##                           that finger moves there, as an `InputEventScreenDrag`
 ##                           with no fresh press. A resting thumb produces one
@@ -242,7 +253,18 @@ extends Node
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
-##   --seed=<int>            deterministic drift and impulses
+##   --seed=<int>            deterministic drift and impulses -- **and the
+##                           membrane's own jitter**, which for five phases it
+##                           did not cover. `seed()` sets the global stream;
+##                           signal_bus.gd draws its beat and taste jitter from
+##                           a private `RandomNumberGenerator` on purpose, and
+##                           an instance generator cannot be reached by the
+##                           global call. So this seeds the bus explicitly as
+##                           well, and only then does the same command twice
+##                           mean the same frame twice. Without it, three
+##                           byte-identical runs of one `--freeze-at` command
+##                           differed by a third of the screen. See
+##                           docs/design/perception.md §4.1
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -323,6 +345,13 @@ var _lifts: Array = []
 ## How often to print the drawn controls' own state, or -1 for never.
 var _controls_trace := -1.0
 var _controls_clock := 0.0
+## What `--seed=` was given, kept rather than only spent. The global `seed()`
+## call is made where the flag is parsed; the membrane bus owns a private
+## generator that no global call can reach, so the number has to survive until
+## the bus has been found. A separate flag rather than a sentinel, because 0 is
+## a perfectly good seed.
+var _seed := 0
+var _seeded := false
 ## When to print the pause column's rects, or -1 for never.
 var _rects_at := -1.0
 ## The desktop three, same shapes: press and hold the left button, move with it
@@ -395,10 +424,15 @@ func _ready() -> void:
 
 	var scene_path := DEFAULT_SCENE
 	var hold := ""
+	var size := Vector2i.ZERO
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text.begins_with("--play="):
 			scene_path = text.trim_prefix("--play=")
+		elif text.begins_with("--size="):
+			var wh := text.trim_prefix("--size=").split("x")
+			if wh.size() == 2:
+				size = Vector2i(int(wh[0]), int(wh[1]))
 		elif text.begins_with("--hold="):
 			hold = text.trim_prefix("--hold=").to_lower()
 		elif text.begins_with("--drag="):
@@ -532,7 +566,22 @@ func _ready() -> void:
 		elif text == "--forage":
 			_forage = true
 		elif text.begins_with("--seed="):
-			seed(int(text.trim_prefix("--seed=")))
+			_seed = int(text.trim_prefix("--seed="))
+			_seeded = true
+			seed(_seed)
+
+	# **Set the window before anything is instanced.** Every coordinate this
+	# harness takes is a canvas coordinate and is converted on the way in by
+	# `get_screen_transform()`, so a run with no window of its own sends the
+	# whole canvas through whatever size the display server invented.
+	# Measured under `--headless`: canvas 96,624 arrives as window 5,31 --
+	# a scale of about 0.05, which quantises a 96 px pad down to five pixels
+	# and makes every press land on nothing. `tools/shot.gd` already does
+	# this for the same reason; this is what lets the input path be driven
+	# without one, which is what CI needs. Window only, never
+	# `content_scale_size` -- that overrides the project's `expand` stretch.
+	if size != Vector2i.ZERO:
+		get_window().size = size
 
 	if not ResourceLoader.exists(scene_path):
 		push_error("[drive] no scene at %s" % scene_path)
@@ -584,6 +633,22 @@ func _ready() -> void:
 	_bus = _find_bus(self)
 	if _bus != null:
 		_bus.sensation.connect(_on_sensation)
+		# **`--seed=` has to reach the membrane too, and until now it did not.**
+		# `seed()` sets the global stream; signal_bus.gd draws its beat and
+		# taste jitter from a private generator, deliberately, so that the view
+		# can never move the water -- and a private generator seeded from the
+		# system is a private generator nothing can reproduce. The taste jitter
+		# fires every 1/1.5 s from t=0 in every run, so this is not an edge
+		# case: without this line, two runs of one `--freeze-at` command were
+		# never the same frame, and three of them measured 288k to 322k
+		# differing pixels of 921,600.
+		#
+		# Here rather than at the flag, because the bus does not exist until the
+		# scene has been instanced -- and before the first `_process`, which is
+		# the first draw, because `add_child` above only ran `_ready`.
+		if _seeded:
+			_bus.seed_rng(_seed)
+			print("[drive] membrane bus seeded with ", _seed)
 	else:
 		print("[drive] no membrane bus found under ", scene_path)
 

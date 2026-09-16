@@ -131,6 +131,76 @@ jobs:
           done
           exit "$fail"
 
+      - name: Check the input path
+        # The step above proves every scene LOADS. It cannot prove any of them
+        # RESPONDS, and the gap is not theoretical.
+        #
+        # All four scenes boot with ZERO input events, and the whole touch path
+        # -- `cell.gd`'s `_claim`, `controls.gd`'s `press`/`release`, the lean
+        # a division is answered with -- is reachable only from a press. The
+        # nodes that own it are held in untyped `Node` references on purpose
+        # (the preload cycle is real: cilia.gd -> genome.gd -> cell.gd, and
+        # controls.gd -> cilia.gd), and GDScript treats an unknown member on an
+        # untyped base as UNSAFE_PROPERTY_ACCESS rather than an error. Measured:
+        # rename a constant in controls.gd and leave `cell.gd`'s use of it
+        # stale, and `--check-only` on cell.gd exits 0 printing nothing while
+        # all four scenes boot with zero error lines. The first player's dash
+        # tap finds it, with `Invalid access to property or key 'DASH'`.
+        #
+        # So this drives a few presses instead. Same grep as above, plus one
+        # positive assertion -- that the division actually commits -- because a
+        # step that only greps for errors goes green if the harness quietly
+        # stops driving anything. Measured against the two faults it exists for:
+        # the stale constant fails it under all three schemes, and so does the
+        # input gate that used to ignore every press for the 1.5s of the pinch.
+        #
+        # `--size=` is load-bearing. Canvas coordinates are converted through
+        # `get_screen_transform()`, and a headless run with no window of its own
+        # scales canvas 96,624 down to window 5,31 -- a 96px pad becomes five
+        # pixels, every press lands on nothing, and the check passes while
+        # testing nothing at all.
+        #
+        # `tools/` is excluded from export on both presets, so none of this
+        # reaches a player. About fifteen seconds for all three schemes.
+        run: |
+          set -uo pipefail
+          fail=0
+          genome="cytostome:1,cirrus:1,flagellum:1,axoneme:1,myoneme:1"
+          for scheme in 0 1 2; do
+            echo "--- driving scheme $scheme"
+            if ! out=$(~/godot/godot --headless --path . --fixed-fps 60 \
+                         --quit-after 660 res://tools/drive.tscn -- \
+                         --size=1280x720 --seed=12345 --scheme="$scheme" \
+                         --radius=40 --genome="$genome" --trace=2.0 \
+                         --press=1.0:144,624,0 --press=1.2:1064,624,1 \
+                         --touch=1.6:1184,624 --slide=1.8:200,624,0 \
+                         --lift=2.0:0 --lift=2.1:1 \
+                         --press=3.0:216,624,0 --lift=8.0:0 \
+                         --mouse-press=9.0:96,624 --mouse-slide=9.2:640,400 \
+                         --mouse-lift=9.4 2>&1); then
+              printf '%s\n' "$out"
+              echo "::error::scheme $scheme exited non-zero"
+              fail=1
+              continue
+            fi
+            if printf '%s\n' "$out" \
+                 | grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file"; then
+              echo "::error::scheme $scheme reported script errors under input"
+              fail=1
+            fi
+            # The cell is forced to DIVIDE_RADIUS, so it splits at once and the
+            # press at 3.0s is a held lean -- the port half under `anywhere`,
+            # the stick hard over under `stick`, the starboard pad under
+            # `pads`. A daughter is half the area, so r40 becomes r28.28: any
+            # r2x in the trace is a division that was answered.
+            if ! printf '%s\n' "$out" | grep -qE "^\[trace\].*me r2[0-9]\."; then
+              printf '%s\n' "$out" | grep -E "^\[trace\]" || true
+              echo "::error::scheme $scheme never committed a daughter -- a held lean did not reach the division"
+              fail=1
+            fi
+          done
+          exit "$fail"
+
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ steps.keystore.outputs.path }}

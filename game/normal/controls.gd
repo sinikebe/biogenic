@@ -16,9 +16,12 @@ extends Control
 ## handed a pointer event consumes it whether it wanted it or not, which cost a
 ## release blocker on the genome strand. A stick in the bottom-left corner is
 ## that same defect in the corner a thumb actually rests in. Everything here is
-## hit-tested by hand, from [method hit], by the two nodes that already own
-## input in their own phase: cell.gd while the cell is swimming, normal_mode.gd
-## during a division.
+## hit-tested by hand, and the two nodes that already own input in their own
+## phase drive it: cell.gd while the cell is swimming, normal_mode.gd from the
+## pinch of a division onward. They call [method press], [method adopt],
+## [method move] and [method release] and nothing else; [method hit] is the one
+## place a rect meets a position and it is reached only from the first two of
+## those, inside this file.
 ##
 ## **One pointer per control, not one pointer.** `_owner` maps a touch index (or
 ## [constant POINTER_MOUSE]) to the control it grabbed at the press, and every
@@ -91,16 +94,32 @@ const MARK_REST := 0.36
 ## only confirmation a lean has ever had.
 const MARK_HELD := 0.92
 
-## `cirrus` / turn and `axoneme` / push, read off the one hue table.
-const TURN_HUE := Color(0.36, 0.62, 0.98)
-const PUSH_HUE := Color(0.98, 0.44, 0.90)
+## `cirrus` / turn and `axoneme` / push, **asked of the one hue table rather
+## than copied out of it**. A copy is what `cilia.gd` warns about in three
+## separate comments, and the pads are the surface where a drift would show
+## worst: the mark on the pad and the glyph beside that gene's name on the
+## pause screen are supposed to be the same object seen twice.
+##
+## `static var` rather than `const` because a constant expression in GDScript
+## cannot contain a call, and an instance `var` would re-read the table for
+## every control on every frame it is drawn.
+static var TURN_HUE: Color = Cilia.hue(&"cirrus")
+static var PUSH_HUE: Color = Cilia.hue(&"axoneme")
 
-## [method Cilia.draw_slot_dart] owns its own alphas -- 0.95 on the dart, 0.28
-## on its compass ring -- and it is shared with the pause strand and the
-## choosing screen, so it is not forked to take one. The mark is quietened by
-## dimming the *tone* instead: over a near-black well, `tone * k` at alpha 0.95
-## composites as `tone` at alpha `0.95 * k`.
+## [method Cilia.draw_slot_dart] owns its own alpha -- 0.95 on the dart -- and
+## it is shared with the pause strand and the choosing screen, so it is not
+## forked to take one. The mark is quietened by dimming the *tone* instead:
+## over a near-black well, `tone * k` at alpha 0.95 composites as `tone` at
+## alpha `0.95 * k`.
 const DART_INK := 0.95
+## **No compass bezel on a turn pad.** `draw_slot_dart` draws a ring around
+## its dart, and in its home use that ring is the compass the dart is a needle
+## on -- *this is a bearing around the body*. A pad has no bearing to be on, so
+## here the circle carried no sentence at all, and it sat in the one shape
+## diegetic-hud.md section 4 forbids by name: *rounded rectangles, never
+## circles*, because a ring is what the water is full of. A parameter rather
+## than a fork -- every other caller renders exactly as it did.
+const DART_RING := false
 ## Slot 1 is the starboard cirrus arc, bearing 92.5 degrees -- a dart that
 ## points to starboard. The port dart is the same call under a mirror, because
 ## the arc table has no port lateral slot: the cirrus is a pair worn as one.
@@ -296,8 +315,11 @@ func _live(id: int) -> bool:
 			return false
 
 
-## The control under a canvas point, or [constant NONE]. The only place a rect
-## is ever compared against a position.
+## The control under a canvas point, or [constant NONE]. **The only place a rect
+## is ever compared against a position**, and it is consulted at first contact
+## only -- from [method press] and [method adopt], both in this file. Every
+## later event of a gesture is dispatched on whose finger it is, so nothing ever
+## asks what is under a finger now.
 func hit(at: Vector2) -> int:
 	for id: int in ORDER:
 		if _live(id) and rect_of(id).has_point(at):
@@ -554,10 +576,11 @@ func _draw_dart(centre: Vector2, side: float, ink: float,
 		radius: float = DART_R) -> void:
 	var tone := TURN_HUE * (ink / DART_INK)
 	if side > 0.0:
-		Cilia.draw_slot_dart(self, DART_SLOT, tone, centre, radius)
+		Cilia.draw_slot_dart(self, DART_SLOT, tone, centre, radius, DART_RING)
 		return
 	# The arc table has no port lateral slot, so port is starboard under a
 	# mirror rather than a second call with a made-up bearing.
 	draw_set_transform(centre, 0.0, Vector2(-1.0, 1.0))
-	Cilia.draw_slot_dart(self, DART_SLOT, tone, Vector2.ZERO, radius)
+	Cilia.draw_slot_dart(self, DART_SLOT, tone, Vector2.ZERO, radius,
+		DART_RING)
 	draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)

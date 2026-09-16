@@ -280,6 +280,10 @@ Sampled from the renders. The interior is the load-bearing number:
 The interior holds at `(5,13,12)` in every state but ingest. The screen is
 black, measurably, and the predator makes it blacker.
 
+**Before you sample a frame of your own, read §4.1.** The bus jitters off its
+own generator, that generator was unseedable until recently, and two runs of one
+command were never the same picture.
+
 ### Both targets
 
 - No widgets on the *sensory* screen, so the 48px rule does not bite there.
@@ -367,6 +371,61 @@ are exactly what later genes sell, so the ladder has somewhere to go:
   and one.
 - Nothing about §3 has to change to add any of this. New signals are new lobes
   on the same bus.
+
+### 4.1 The bus has its own generator, and a measurement has to seed it
+
+**Read this before measuring anything on a membrane frame.** It voided
+measurements in this repository for five phases and nobody noticed, because the
+failure is quiet: the numbers come out, they are just not the numbers of the
+thing being measured.
+
+`signal_bus.gd` draws its beat jitter and its taste jitter from a **private**
+`RandomNumberGenerator`, and that is deliberate and must stay — the bus is a
+view, `Membrane` is `process_mode = 3` so it keeps stepping through a pause, and
+a view drawing off the simulation's stream is what once made how long you left
+the pause screen open change where every cell in the water was.
+
+What did not follow, and was assumed to: **private did not mean seeded.**
+
+- `RandomNumberGenerator.new()` seeds itself from the system at construction.
+- The global `seed()` — which is what `tools/drive.gd --seed=` called — sets the
+  *global* stream and cannot reach an instance generator.
+- So `--seed=` covered the simulation and never covered the picture of it.
+
+It is not an edge case. The taste jitter is drawn every 1/1.5 s **from t = 0 in
+every run**, unconditionally; the beat jitter joins it as soon as dread crosses
+0.05, and the beat jitter moves the *whole contour*, not a detail of it.
+Measured on three byte-identical runs of one `--stalk=150 --gain=2.4
+--freeze-at=6.0 --fixed-fps 60` command: **288,380 to 321,940 differing pixels
+of 921,600 — up to 34.9% of the frame — with a maximum luminance delta of 125.**
+Any A/B whose own effect is smaller than that was measuring weather.
+
+**And you cannot tell which frames are affected by reading the command.**
+The same `--stalk=150 --gain=2.4` with a forced `stigma:3` genome and
+`--freeze-at=8.0` measured stable to the pixel over three unseeded runs, because
+a saturated dread lobe had swallowed the contour the jitter moves — same
+harness, same kind of frame, opposite answer. That is the argument for checking
+rather than for judging.
+
+**The rule.** A measurement on a rendered membrane frame is only a measurement
+if the same command renders the same frame. `tools/drive.gd` now calls
+`signal_bus.gd`'s `seed_rng()` from `--seed=`, so:
+
+> **Pass `--seed=` to every render you intend to compare against another
+> render.** Without it the bus keeps its system seed — which is the right
+> default for a player and the wrong one for a number. Prove reproducibility
+> before quoting a difference: run the frame three times and diff. It is one
+> command and it is the difference between evidence and a coincidence.
+
+`seed_rng()` does not draw from the global stream to seed itself — that would
+advance the simulation's own sequence and make the act of measuring change the
+run. The seed is passed in, so a harness that wants both locked together passes
+one number to both, which is what `--seed=` does.
+
+Everything in `diegetic-hud.md` §4, `gene-lines-and-the-pause-target.md` §4.3
+and `controls.md` §3.2 was measured before this existed. The rankings in them
+survived re-measurement; the absolute figures did not, and `controls.md` §3.2
+is the one that was rewritten to state its own method.
 
 ## 5. Audio and haptics — not needed, but keep the door open
 
