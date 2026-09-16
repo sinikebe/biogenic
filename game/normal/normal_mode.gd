@@ -190,6 +190,13 @@ const WATCH_MIN_SECONDS := 2.0
 ## up whatever the mode select last stored.
 var mode := -1
 
+## Which control scheme this run is played with, as [enum RunState.Scheme]. Set
+## it before the scene enters the tree to override the remembered choice --
+## which is what `tools/drive.gd --scheme=` does, because the choice lives in
+## `user://` and a harness that had to write one would leave it for the next
+## run to inherit.
+var scheme := -1
+
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
 @onready var _returns: ReturnsLayer = $Returns
@@ -216,6 +223,12 @@ var mode := -1
 @onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/View
 @onready var _view_caption: Label = $Hud/Pause/Center/Buttons/Settings/View/Box/Caption
 @onready var _view_button: Button = $Hud/Pause/Center/Buttons/Settings/View/Box/Toggle
+## The third panel in the same row, and it costs **zero vertical pixels**: the
+## row is already 101 tall and had horizontal room. `Settings` goes from 512 to
+## 792 wide, which is still inboard of a seven-locus strand block at 928.
+@onready var _feel_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/Feel
+@onready var _feel_caption: Label = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Caption
+@onready var _feel_button: Button = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Toggle
 @onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
 ## **The body above and the DNA below**, at identical pitch and identical x, so
 ## column *i* is arc *i* on both rows and a comparison is a vertical scan. Only
@@ -239,6 +252,10 @@ var mode := -1
 @onready var _choose_line: Label = $Hud/Choosing/Says/Explain/Line
 @onready var _choose_hint: Label = $Hud/Choosing/Says/Hint
 @onready var _pause_tap: Control = $Hud/PauseTap
+## The drawn controls, under `Hud` and **before** `PauseTap` in the tree so the
+## pause scrim covers them -- they stay drawn while paused, dead to input, which
+## is the whole wordless explanation of the chooser below them (§5.1).
+@onready var _controls: Control = $Hud/Controls
 @onready var _recorder: RecorderNode = $Recorder
 @onready var _watch_ui: CenterContainer = $Hud/Watch
 @onready var _watch_button: Button = $Hud/Watch/Button
@@ -405,6 +422,10 @@ func _ready() -> void:
 	_camera_locked = RunState.load_camera_locked()
 	if mode < 0:
 		mode = RunState.load_mode()
+	# Read in the same breath and for the same reason: a player who chose
+	# `stick` last run must not have to choose it again.
+	if scheme < 0:
+		scheme = RunState.load_scheme()
 	_apply_mode()
 
 	_style_pause()
@@ -452,6 +473,26 @@ func _ready() -> void:
 	_view_button.pressed.connect(_toggle_camera)
 	_update_view_button()
 
+	# **The wells a thumb presses are the pause target's own slab**, built by the
+	# one function that knows what a slab is. What you press looks like a piece
+	# of the surface the pause target opens.
+	_controls.setup({
+		&"well": _well(0.13, 0.09),
+		&"well_lit": _well(0.58, 0.48),
+		# A knob at 0.20 / 0.30 rendered as a solid grey block -- the loudest
+		# interface object on the screen and brighter than the cell. This is a
+		# watermark with an edge, which is what a control at the rim may be.
+		&"knob": _well(0.045, 0.28),
+		&"knob_lit": _well(0.16, 0.80),
+	})
+	_controls.set_scheme(scheme)
+	# The cell asks the controls what it is being told to do; the controls never
+	# reach back. Set after _ready has built them and before the first frame.
+	_cell.controls = _controls
+	_feel_button.pressed.connect(_cycle_scheme)
+	_update_scheme_button()
+	_update_controls()
+
 	_bus.gain = clampf(RunState.load_gain(SignalBus.GAIN_DEFAULT),
 		SignalBus.GAIN_MIN, SignalBus.GAIN_MAX)
 	_gain_slider.value = _bus.gain
@@ -466,6 +507,9 @@ func _process(delta: float) -> void:
 	# Before every early return below, because the states those returns lead to
 	# -- dying, dividing, paused -- are exactly the ones with no button.
 	_update_pause_tap()
+	# And before them for the opposite reason: the controls are drawn through a
+	# division and through a pause, and what changes is *which* of them.
+	_update_controls()
 	# This node runs while paused so it can hear Esc and Back, and the membrane
 	# layer keeps beating under the pause scrim -- the cell is still alive, it is
 	# just not going anywhere. Everything else below here stops.
@@ -839,6 +883,17 @@ func _read_lean() -> int:
 		return -1
 	if Input.is_action_pressed(&"ui_right") or Input.is_key_pressed(KEY_D):
 		return 1
+	# **A drawn control that is being held decides it.** A thumb parked on the
+	# stick sits at canvas x 144, which is the port half *whichever way it is
+	# pushing*, and under `pads` both turn pads are in the port half -- so the
+	# screen half cannot be the only read once anything is drawn down there. A
+	# steering control that is held and centred therefore means *no lean*, and
+	# does not fall through.
+	if _controls.steering():
+		var want: float = _controls.steer()
+		if absf(want) > CellBody.STEER_DEADZONE:
+			return -1 if want < 0.0 else 1
+		return 0
 	if absf(_touch_lean) > CellBody.STEER_DEADZONE:
 		return -1 if _touch_lean < 0.0 else 1
 	return 0
@@ -1312,6 +1367,76 @@ func _update_view_button() -> void:
 	_view_button.text = "forward up" if _camera_locked else "north up"
 
 
+# ---------------------------------------------------------------------------
+# Where the player's thumbs live. docs/design/controls.md.
+#
+# The owner asked for "more control options ... a left right joystick and
+# buttons. We can choose from the pause menu". Three schemes, one cycling
+# button beside `light` and `camera`, and the explanation is that **the controls
+# themselves stay drawn behind the pause scrim**, so cycling the word changes
+# the corners in front of the player. That costs no string, and today the game
+# has exactly one authored sentence.
+#
+# The scheme that ships is the default and is not touched: under `anywhere`
+# nothing is drawn, cell.gd's input path is exactly what it was, and a player
+# who never opens pause never sees any of this.
+# ---------------------------------------------------------------------------
+
+## The word on the button, and the whole of the chooser's vocabulary. Each says
+## what is on screen; `anywhere` also states the rule it names.
+const SCHEME_WORDS: Array[String] = ["anywhere", "stick", "pads"]
+
+
+## **No confirmation and no apply.** Cycling takes effect immediately and
+## `RunState` writes it, so the corners under the scrim are the preview and the
+## preview is the game.
+func _cycle_scheme() -> void:
+	scheme = (scheme + 1) % SCHEME_WORDS.size()
+	_controls.set_scheme(scheme)
+	RunState.save_scheme(scheme)
+	_update_scheme_button()
+	_update_controls()
+	# A finger still down when the scheme changed is not steering the new one.
+	_cell.release()
+	_controls.let_go()
+	# **The drawn control is the onboarding**, so the authored line is not shown
+	# under the two schemes that have one. `RunState`'s seen-flag is untouched:
+	# a player who switches back to `anywhere` still gets it if they never had
+	# it.
+	if _onboard_steer and _onboard != Onboard.OFF and not _floating():
+		_onboarding.hide()
+		_onboard = Onboard.OFF
+
+
+func _update_scheme_button() -> void:
+	_feel_button.text = SCHEME_WORDS[clampi(scheme, 0, SCHEME_WORDS.size() - 1)]
+
+
+## True while the water itself is the control. The one test anything outside
+## controls.gd makes about the scheme.
+func _floating() -> bool:
+	return scheme == RunState.Scheme.ANYWHERE
+
+
+## What is drawn in the corners this frame.
+##
+## **The controls are a readout of the genome** (`gene-lines-and-the-pause-target.md`
+## §4.1): a pad exists only when the organ that works it does, so a newborn on
+## `pads` has two controls and grows into four. Positions never move, so growing
+## a gene adds a control and never relocates one.
+##
+## **Only the two action pads go at the pinch**, and the steering control stays
+## for the whole division. A first build hid everything from `QUICKEN` to `PART`
+## and took steering away from a cell that was still swimming -- `QUICKEN` is
+## still simulating -- and a target that vanishes from under a thumb and returns
+## 1.5 s later is a target the player has to find twice at the one beat in a run
+## that cannot be replayed.
+func _update_controls() -> void:
+	_controls.update(not _floating() and _life == Life.ALIVE,
+		_split >= Split.PINCH,
+		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0)
+
+
 ## True while the world layer is the thing behind the Hud. Read by the pause
 ## scrim as well as by the mode seam, because how much has to be covered up
 ## depends entirely on whether there is a lit world under it.
@@ -1347,6 +1472,14 @@ func _begin_onboarding() -> void:
 	_onboard_from = 0.0
 	_onboard_hold = 0.0
 	if _seen_onboarding():
+		_onboarding.hide()
+		_onboard = Onboard.OFF
+		return
+	# **The drawn control is the onboarding.** Under `stick` and `pads` there is
+	# a picture in the corner saying what the sentence would have said, and the
+	# game keeps its one authored line. The seen-flag is deliberately not
+	# marked: a player who switches to `anywhere` later still gets it.
+	if not _floating():
 		_onboarding.hide()
 		_onboard = Onboard.OFF
 		return
@@ -1620,6 +1753,7 @@ func _notification(what: int) -> void:
 			# stuck down means a cell that turns forever. Deliberately does not
 			# pause: a pause screen nobody asked for is its own bug.
 			_cell.release()
+			_controls.let_go()
 			# The same argument for the strand: a finger that left with the
 			# app never lifts, so the placement it was holding is abandoned
 			# rather than left waiting for a release that cannot come.
@@ -1829,15 +1963,38 @@ func _read_touch_lean(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		if touch.pressed:
+			# The drawn controls own the corners for the whole division. A
+			# finger they claim never reaches the screen half, which is the
+			# point: under `stick` it would be reading the wrong side.
+			if _controls.press(touch.index, touch.position) != _controls.NONE:
+				return true
 			if _touch_index == -2:
 				_touch_index = touch.index
 				_touch_lean = _lean_at(touch.position)
+		elif _controls.release(touch.index) != _controls.NONE:
+			return true
 		elif _touch_index == touch.index:
 			_touch_index = -2
 			_touch_lean = 0.0
 		return true
 	if event is InputEventScreenDrag:
 		var drag := event as InputEventScreenDrag
+		if _controls.move(drag.index, drag.position):
+			return true
+		# **A thumb already down is adopted**, here as much as below: its press
+		# happened during the quickening or before the pinch, so the only event
+		# it will ever produce is a drag. Steering controls only -- `push` and
+		# `dash` are not leans.
+		#
+		# **And only a thumb this screen never saw press.** `_choose_gesture`
+		# holds every pointer that went down after the daughters appeared, so a
+		# lean begun in open water and slid into the corner keeps its screen
+		# half rather than being taken over by the control it passed across --
+		# the same rule the strand blocks already obey in the other direction.
+		if not _choose_gesture.has(drag.index) \
+				and _controls.adopt(drag.index, drag.position) \
+					!= _controls.NONE:
+			return true
 		# **A thumb that was already down is adopted here**, and it has to be:
 		# the steering gesture is a finger on the screen, so a player who was
 		# steering when the body pinched is still holding one when the two of
@@ -1861,17 +2018,28 @@ func _read_touch_lean(event: InputEvent) -> bool:
 		if click.button_index != MOUSE_BUTTON_LEFT:
 			return false
 		if click.pressed:
+			if _controls.press(POINTER_MOUSE, click.position) != _controls.NONE:
+				return true
 			if _touch_index == -2:
 				_touch_index = -1
 				_touch_lean = _lean_at(click.position)
+		elif _controls.release(POINTER_MOUSE) != _controls.NONE:
+			return true
 		elif _touch_index == -1:
 			_touch_index = -2
 			_touch_lean = 0.0
 		return true
 	if event is InputEventMouseMotion:
 		var moved := event as InputEventMouseMotion
-		# The same adoption, for a button that went down before there was
-		# anything to press it at.
+		if _controls.move(POINTER_MOUSE, moved.position):
+			return true
+		# The same adoption, and the same refusal, for a button that went down
+		# before there was anything to press it at.
+		if (moved.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0 \
+				and not _choose_gesture.has(POINTER_MOUSE) \
+				and _controls.adopt(POINTER_MOUSE, moved.position) \
+					!= _controls.NONE:
+			return true
 		if _touch_index == -2 \
 				and (moved.button_mask & MOUSE_BUTTON_MASK_LEFT) != 0:
 			_touch_index = -1
@@ -1971,6 +2139,12 @@ func _toggle_pause() -> void:
 	if paused:
 		# A finger still down when the pause opened must not keep steering.
 		_cell.release()
+		# Both halves: the free drag under `anywhere`, and every finger on a
+		# drawn control under the other two. The controls stay *drawn* behind
+		# the scrim -- that is the chooser's own explanation -- and they are
+		# dead to input there, because the `Cell` node is PAUSABLE and this run
+		# is only awake to hear Esc and Back.
+		_controls.let_go()
 		# **The scrim is set per view, and the reason is the camera.** The
 		# camera holds the player's cell at the exact centre of the screen and
 		# the pause column is centred too, so in full vision the light control
@@ -2061,8 +2235,8 @@ func _on_gain_settled(changed: bool) -> void:
 ## and it looked wrong; at 232 they stay the buttons Phase 4 shipped whatever is
 ## above them.
 func _style_pause() -> void:
-	for control: Control in [_light_panel, _view_panel, _resume_button,
-			_leave_button]:
+	for control: Control in [_light_panel, _view_panel, _feel_panel,
+			_resume_button, _leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	# **Every group on the pause column is a surface, and `light` was the one
@@ -2076,10 +2250,12 @@ func _style_pause() -> void:
 	# surface.
 	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
 	# Same slab, same rule: every group on this column is a surface.
-	_view_panel.add_theme_stylebox_override("panel", _slab(-0.2))
-	_view_caption.add_theme_font_size_override("font_size", 16)
-	_view_caption.add_theme_color_override("font_color",
-		Color(0.855, 0.953, 0.933, 0.52))
+	for panel: PanelContainer in [_view_panel, _feel_panel]:
+		panel.add_theme_stylebox_override("panel", _slab(-0.2))
+	for caption: Label in [_view_caption, _feel_caption]:
+		caption.add_theme_font_size_override("font_size", 16)
+		caption.add_theme_color_override("font_color",
+			Color(0.855, 0.953, 0.933, 0.52))
 
 	_genome_caption.add_theme_font_size_override("font_size", 15)
 	_genome_caption.add_theme_color_override("font_color",
@@ -2097,20 +2273,23 @@ func _style_pause() -> void:
 	_pause_bar_rest = _bar(PAUSE_REST)
 	_pause_bar_hot = _bar(PAUSE_HOT)
 
-	# The camera toggle is a button, so it is styled like one -- but narrower and
-	# shorter than `resume`, because it is a setting inside a surface and not a
-	# thing that ends the run. Still 48 tall, which is the touch rule.
-	_view_button.custom_minimum_size = Vector2(192.0, 48.0)
-	_view_button.focus_mode = Control.FOCUS_ALL
-	_view_button.add_theme_font_size_override("font_size", 16)
-	for state: String in ["font_color", "font_hover_color", "font_focus_color",
-			"font_pressed_color"]:
-		_view_button.add_theme_color_override(state,
-			Color(0.855, 0.953, 0.933, 0.92))
-	_view_button.add_theme_stylebox_override("normal", _slab(0.0))
-	_view_button.add_theme_stylebox_override("hover", _slab(0.35))
-	_view_button.add_theme_stylebox_override("pressed", _slab(0.5))
-	_view_button.add_theme_stylebox_override("focus", _slab(0.35))
+	# The camera toggle and the control-scheme toggle are buttons, so they are
+	# styled like ones -- but narrower and shorter than `resume`, because they
+	# are settings inside a surface and not things that end the run. Still 48
+	# tall, which is the touch rule. **One loop over both**, because they are
+	# the same kind of thing and a second copy is how two settings drift apart.
+	for toggle: Button in [_view_button, _feel_button]:
+		toggle.custom_minimum_size = Vector2(192.0, 48.0)
+		toggle.focus_mode = Control.FOCUS_ALL
+		toggle.add_theme_font_size_override("font_size", 16)
+		for state: String in ["font_color", "font_hover_color",
+				"font_focus_color", "font_pressed_color"]:
+			toggle.add_theme_color_override(state,
+				Color(0.855, 0.953, 0.933, 0.92))
+		toggle.add_theme_stylebox_override("normal", _slab(0.0))
+		toggle.add_theme_stylebox_override("hover", _slab(0.35))
+		toggle.add_theme_stylebox_override("pressed", _slab(0.5))
+		toggle.add_theme_stylebox_override("focus", _slab(0.35))
 
 	for button: Button in [_resume_button, _leave_button]:
 		button.custom_minimum_size = Vector2(232.0, 56.0)

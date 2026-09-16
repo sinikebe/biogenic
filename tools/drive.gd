@@ -11,6 +11,12 @@ extends Node
 ## Arguments (all optional, all after the -- that shot.gd also reads):
 ##   --play=res://...        scene to drive, default normal mode
 ##   --mode=0|1              force the view: 0 point of view, 1 full vision
+##   --scheme=0|1|2          force the control scheme: 0 anywhere (the one that
+##                           ships), 1 stick, 2 pads. The choice lives in
+##                           `user://`, so without this a scheme cannot be
+##                           photographed without writing one the next run --
+##                           and every other render in this project -- would
+##                           inherit
 ##   --hold=a|d              hold a steering key for the whole run
 ##   --drag=<pixels>         press near the middle and drag this far sideways
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
@@ -43,17 +49,21 @@ extends Node
 ##                           produces a tap on nothing, which reads as a
 ##                           control that does not respond. It has cost one
 ##                           false bug report already.
-##   --press=<seconds>:<x>,<y>
+##   --press=<seconds>:<x>,<y>[,<finger>]
 ##                           one finger down at that canvas point and **left
-##                           there** -- never released. `--touch=` presses and
+##                           there** -- never released. `finger` is the touch
+##                           index and defaults to 0; a second one is the only
+##                           way to pose two controls held at once, which is
+##                           exactly what `pads` exists for -- `port` and `push`
+##                           together, or a dash fired while the stick is over. `--touch=` presses and
 ##                           releases in the same frame, and a tap commits
 ##                           nothing by design, so the one rule the choosing
 ##                           screen turns on -- *a finger resting on a locus is
 ##                           a read and not a lean* -- cannot be posed with it
 ##                           at all. Same convention as `--touch=`: seconds
 ##                           first, canvas coordinates, unscaled.
-##   --slide=<seconds>:<x>,<y>
-##                           finger 0 moves there, as an `InputEventScreenDrag`
+##   --slide=<seconds>:<x>,<y>[,<finger>]
+##                           that finger moves there, as an `InputEventScreenDrag`
 ##                           with no fresh press. A resting thumb produces one
 ##                           the moment it shifts by a pixel, which is the case
 ##                           a press alone cannot pose and the one that decides
@@ -69,7 +79,8 @@ extends Node
 ##                           sent for its first three phases -- no drag ever
 ##                           starts, and Godot's own drag-and-drop path looks
 ##                           dead on touch when it is not.
-##   --lift=<seconds>      release finger 0, wherever `--press=` and `--slide=`
+##   --lift=<seconds>[:<finger>]
+##                         release that finger, wherever `--press=` and `--slide=`
 ##                           have left it. The other half of `--press=`: without
 ##                           it the harness can only pose gestures that never
 ##                           end, and *letting go undoes a lean* is a rule the
@@ -218,6 +229,19 @@ extends Node
 ##   --capture-cost=<secs>   print the recorder's rolling maximum microseconds
 ##                           per capture() on that interval. §4.6 asks for a
 ##                           measurement and refuses to accept the estimate
+##   --rects=<seconds>       print `get_global_rect()` for the pause column and
+##                           each of its groups, once, at that time. The column
+##                           is the one thing in this game measured in canvas
+##                           pixels rather than judged by eye -- docs/design/
+##                           moving-a-gene.md section 6 -- and a render cannot
+##                           show the rect of a container that draws nothing
+##   --controls=<seconds>    print what the drawn controls are being told to do
+##                           on that interval: which of them is held, by which
+##                           pointer, the steer they derive and whether they are
+##                           asking for thrust. The pads and the stick have no
+##                           other output -- `axoneme` thrust is a velocity add
+##                           and never reaches the bus -- so this is the only
+##                           way to check two fingers at once from a log
 ##   --seed=<int>            deterministic drift and impulses
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
@@ -245,9 +269,10 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const PanesScreen := preload("res://game/replay/panes.gd")
 
 var _clock := 0.0
-## Where finger 0 was last put, so a slide can carry the `relative` the
-## GUI's drag threshold is accumulated from. See [method _send_slide].
-var _finger_was := Vector2.ZERO
+## Where each finger was last put, so a slide can carry the `relative` the
+## GUI's drag threshold is accumulated from. See [method _send_slide]. Keyed by
+## touch index: one entry is the common case and two is what proves `pads`.
+var _finger_was: Dictionary = {}
 var _esc_at := -1.0
 var _esc_sent := false
 var _back_at := -1.0
@@ -274,6 +299,8 @@ var _gain := -1.0
 var _hunt := -1.0
 var _trace := -1.0
 var _trace_clock := 0.0
+## Which control scheme to force, or -1 to take whatever user:// remembers.
+var _scheme := -1
 var _hunter_gape := 1.40
 var _prey_radius := -1.0
 var _radius := -1.0
@@ -291,16 +318,21 @@ var _hovers: Array = []
 var _presses: Array = []
 ## [[seconds, canvas position], ...] sent as a drag on finger 0.
 var _slides: Array = []
-## [seconds, ...] at which finger 0 lets go, wherever it has got to.
+## [[seconds, finger], ...] at which a finger lets go, wherever it has got to.
 var _lifts: Array = []
+## How often to print the drawn controls' own state, or -1 for never.
+var _controls_trace := -1.0
+var _controls_clock := 0.0
+## When to print the pause column's rects, or -1 for never.
+var _rects_at := -1.0
 ## The desktop three, same shapes: press and hold the left button, move with it
 ## down, let go.
 var _mouse_presses: Array = []
 var _mouse_slides: Array = []
 var _mouse_lifts: Array = []
-## Where finger 0 was last put, so a release can be sent from the same point --
-## a release at the wrong place is a different gesture.
-var _finger := Vector2.ZERO
+## Where each finger was last put, so a release can be sent from the same point
+## -- a release at the wrong place is a different gesture.
+var _finger: Dictionary = {}
 ## The same, for the cursor.
 var _cursor := Vector2.ZERO
 var _sample: StringName = &""
@@ -393,6 +425,8 @@ func _ready() -> void:
 			_freeze_after = float(text.trim_prefix("--freeze-after="))
 		elif text.begins_with("--mode="):
 			_mode = int(text.trim_prefix("--mode="))
+		elif text.begins_with("--scheme="):
+			_scheme = int(text.trim_prefix("--scheme="))
 		elif text.begins_with("--hunger="):
 			_hunger = float(text.trim_prefix("--hunger="))
 		elif text.begins_with("--starve="):
@@ -449,18 +483,26 @@ func _ready() -> void:
 			var press := text.trim_prefix("--press=").split(":")
 			if press.size() == 2:
 				var pxy := press[1].split(",")
-				if pxy.size() == 2:
+				if pxy.size() >= 2:
 					_presses.append([float(press[0]),
-						Vector2(float(pxy[0]), float(pxy[1]))])
+						Vector2(float(pxy[0]), float(pxy[1])),
+						int(pxy[2]) if pxy.size() > 2 else 0])
 		elif text.begins_with("--slide="):
 			var slide := text.trim_prefix("--slide=").split(":")
 			if slide.size() == 2:
 				var sxy := slide[1].split(",")
-				if sxy.size() == 2:
+				if sxy.size() >= 2:
 					_slides.append([float(slide[0]),
-						Vector2(float(sxy[0]), float(sxy[1]))])
+						Vector2(float(sxy[0]), float(sxy[1])),
+						int(sxy[2]) if sxy.size() > 2 else 0])
 		elif text.begins_with("--lift="):
-			_lifts.append(float(text.trim_prefix("--lift=")))
+			var lift := text.trim_prefix("--lift=").split(":")
+			_lifts.append([float(lift[0]),
+				int(lift[1]) if lift.size() > 1 else 0])
+		elif text.begins_with("--controls="):
+			_controls_trace = float(text.trim_prefix("--controls="))
+		elif text.begins_with("--rects="):
+			_rects_at = float(text.trim_prefix("--rects="))
 		elif text.begins_with("--mouse-press="):
 			var mpress := text.trim_prefix("--mouse-press=").split(":")
 			if mpress.size() == 2:
@@ -502,6 +544,11 @@ func _ready() -> void:
 		# Set before the scene enters the tree, which is where it is read.
 		run.set("mode", _mode)
 		print("[drive] mode forced to ", _mode)
+	if _scheme >= 0:
+		# Same, and for a sharper reason: the scheme is remembered in user://,
+		# so cycling the pause button to photograph one would leave it behind.
+		run.set("scheme", _scheme)
+		print("[drive] scheme forced to ", _scheme)
 	add_child(run)
 	_run = run
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
@@ -610,6 +657,8 @@ func _process(delta: float) -> void:
 	_step_forage()
 	_step_evade()
 	_step_trace(delta)
+	_step_controls(delta)
+	_step_rects()
 	_step_kill()
 	_step_panes()
 	_step_capture_cost(delta)
@@ -644,15 +693,15 @@ func _process(delta: float) -> void:
 			_hovers.remove_at(i)
 	for i in range(_presses.size() - 1, -1, -1):
 		if _clock >= float(_presses[i][0]):
-			_send_press(_presses[i][1])
+			_send_press(_presses[i][1], int(_presses[i][2]))
 			_presses.remove_at(i)
 	for i in range(_slides.size() - 1, -1, -1):
 		if _clock >= float(_slides[i][0]):
-			_send_slide(_slides[i][1])
+			_send_slide(_slides[i][1], int(_slides[i][2]))
 			_slides.remove_at(i)
 	for i in range(_lifts.size() - 1, -1, -1):
-		if _clock >= float(_lifts[i]):
-			_send_lift()
+		if _clock >= float(_lifts[i][0]):
+			_send_lift(int(_lifts[i][1]))
 			_lifts.remove_at(i)
 	for i in range(_mouse_presses.size() - 1, -1, -1):
 		if _clock >= float(_mouse_presses[i][0]):
@@ -847,6 +896,64 @@ func _step_trace(delta: float) -> void:
 		_dread_area / maxf(_run_seconds, 0.001)])
 	for i in _food.points().size():
 		print("        cell %d  %s" % [i, _field_text(i, cell)])
+
+
+## The pause column, in canvas pixels. Containers draw nothing, so their extent
+## cannot be read off a frame -- and the column is the one surface in this game
+## whose fit is a measurement rather than a judgement.
+func _step_rects() -> void:
+	if _rects_at < 0.0 or _clock < _rects_at or _run == null:
+		return
+	_rects_at = -1.0
+	var base := "Hud/Pause/Center/Buttons"
+	var paths := {
+		"Buttons": base,
+		"Genome": base + "/Genome",
+		"Settings": base + "/Settings",
+		"Light": base + "/Settings/Light",
+		"View": base + "/Settings/View",
+		"Feel": base + "/Settings/Feel",
+		"Resume": base + "/Resume",
+		"Leave": base + "/Leave",
+	}
+	for name: String in paths:
+		var node := _run.get_node_or_null(paths[name])
+		if node == null:
+			print("[rect]  %-9s absent" % name)
+			continue
+		var r: Rect2 = node.get_global_rect()
+		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)" % [
+			name, r.position.x, r.end.x, r.size.x,
+			r.position.y, r.end.y, r.size.y])
+
+
+## What the drawn controls are being told, straight off the node that owns
+## them. The pads and the stick post nothing to the membrane bus -- `axoneme`
+## thrust is a velocity add and a turn is a steer -- so a log is the only way to
+## see two fingers holding two controls at the same instant.
+func _step_controls(delta: float) -> void:
+	if _controls_trace <= 0.0 or _run == null:
+		return
+	_controls_clock += delta
+	if _controls_clock < _controls_trace:
+		return
+	_controls_clock = 0.0
+	var node := _run.get_node_or_null("Hud/Controls")
+	if node == null:
+		print("[ctl]  %6.2f  no controls node" % _clock)
+		return
+	var owners: Dictionary = node.get("_owner")
+	var names := ["stick", "port", "starboard", "push", "dash"]
+	var held := PackedStringArray()
+	for pointer: int in owners:
+		var id: int = owners[pointer]
+		held.append("%s#%d" % [
+			names[id] if id >= 0 and id < names.size() else "?", pointer])
+	var cell := _find_node_with(_run, &"bearing_to")
+	print("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer %+5.2f" % [
+		_clock, node.scheme, "yes" if node.visible else "no ",
+		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
+		cell.steer if cell != null else 0.0])
 
 
 func _field_text(index: int, cell: Node) -> String:
@@ -1189,20 +1296,20 @@ func _send_touch(canvas: Vector2) -> void:
 ## One finger down and left there. A tap commits nothing by design, so the only
 ## way to photograph *a finger resting on a locus does not lean* is a press that
 ## is never released.
-func _send_press(canvas: Vector2) -> void:
+func _send_press(canvas: Vector2, finger: int = 0) -> void:
 	var at := canvas * get_viewport().get_screen_transform().get_scale() \
 		+ get_viewport().get_screen_transform().get_origin()
-	_finger = at
+	_finger[finger] = at
 	# Where the first slide measures its `relative` from, so the very first
 	# movement of a gesture carries a real delta rather than a whole screen.
-	_finger_was = at
+	_finger_was[finger] = at
 	var event := InputEventScreenTouch.new()
-	event.index = 0
+	event.index = finger
 	event.pressed = true
 	event.position = at
 	Input.parse_input_event(event)
-	print("[drive] %5.2f  press %.0f,%.0f (canvas %.0f,%.0f)" % [
-		_clock, at.x, at.y, canvas.x, canvas.y])
+	print("[drive] %5.2f  press#%d %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, finger, at.x, at.y, canvas.x, canvas.y])
 
 
 ## Finger 0 moves, without a fresh press. A resting thumb produces one of these
@@ -1215,28 +1322,29 @@ func _send_press(canvas: Vector2) -> void:
 ## Sent as zero -- which is what this did until the pause strand needed a real
 ## drag -- the accumulator never grows, the threshold is never crossed, and a
 ## working drag-and-drop path photographs as a dead one.
-func _send_slide(canvas: Vector2) -> void:
+func _send_slide(canvas: Vector2, finger: int = 0) -> void:
 	var at := canvas * get_viewport().get_screen_transform().get_scale() \
 		+ get_viewport().get_screen_transform().get_origin()
-	_finger = at
+	_finger[finger] = at
 	var event := InputEventScreenDrag.new()
-	event.index = 0
+	event.index = finger
 	event.position = at
-	event.relative = at - _finger_was
-	_finger_was = at
+	event.relative = at - (_finger_was.get(finger, at) as Vector2)
+	_finger_was[finger] = at
 	Input.parse_input_event(event)
-	print("[drive] %5.2f  slide %.0f,%.0f (canvas %.0f,%.0f)" % [
-		_clock, at.x, at.y, canvas.x, canvas.y])
+	print("[drive] %5.2f  slide#%d %.0f,%.0f (canvas %.0f,%.0f)" % [
+		_clock, finger, at.x, at.y, canvas.x, canvas.y])
 
 
 ## Finger 0 lets go, from wherever the last `--press=` or `--slide=` left it.
-func _send_lift() -> void:
+func _send_lift(finger: int = 0) -> void:
+	var at: Vector2 = _finger.get(finger, Vector2.ZERO)
 	var event := InputEventScreenTouch.new()
-	event.index = 0
+	event.index = finger
 	event.pressed = false
-	event.position = _finger
+	event.position = at
 	Input.parse_input_event(event)
-	print("[drive] %5.2f  lift  %.0f,%.0f" % [_clock, _finger.x, _finger.y])
+	print("[drive] %5.2f  lift#%d %.0f,%.0f" % [_clock, finger, at.x, at.y])
 
 
 ## The desktop half of [method _send_press] and [method _send_lift]: the left
