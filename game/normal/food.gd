@@ -424,10 +424,14 @@ const SHADOW_FULL_RATIO := 1.05
 ## How fast a return comes back, in world units per second. **This is the whole
 ## reason the ping reads as a sweep rather than as a chord**: the nearest body
 ## answers first and the farthest last, so one pulse arrives on the membrane as
-## a series of separate marks walking outward in time. At 1250 a tier-1 return
-## from the edge of reach lands 0.88s after the pulse left, which is comfortably
-## longer than the mark it fires takes to decay.
-const PING_SPEED := 1250.0
+## a series of separate marks walking outward in time.
+##
+## **Slowed five-fold at the owner's word**, from 1250. A tier-1 return from the
+## edge of reach now lands 4.4s after the pulse left rather than 0.88s, so the
+## sweep is something you watch travel rather than something that has already
+## happened. Untested by instruction -- the change is one number and the owner
+## wanted it shipped rather than measured.
+const PING_SPEED := 250.0
 ## How many bodies one pulse may answer for, nearest first. A cap rather than a
 ## rule: thirty-four bodies inside reach would be a strobe, and the far half of
 ## them would be inaudible under the near half anyway.
