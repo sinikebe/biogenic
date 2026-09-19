@@ -83,8 +83,14 @@ func _back() -> void:
 		push_error("[ModeSelect] No launcher at %s" % LAUNCHER_SCENE)
 		return
 	_leaving = true
-	# Back behaves normally again once the launcher owns the screen.
-	get_tree().quit_on_go_back = true
+	# Deferred, and the deferral is the whole of issue #23. The window
+	# propagates NOTIFICATION_WM_GO_BACK_REQUEST and *then* emits
+	# `go_back_requested`, which SceneTree has connected to its own quit check.
+	# Setting this directly here is therefore read microseconds later, by the
+	# same Back we are still inside, and the app dies with the launcher one
+	# frame old -- which is exactly what the issue describes. Deferring puts
+	# the restore after that read, so it means "from the next Back onwards".
+	get_tree().set_deferred(&"quit_on_go_back", true)
 	_go(LAUNCHER_SCENE)
 
 

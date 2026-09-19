@@ -201,6 +201,34 @@ jobs:
           done
           exit "$fail"
 
+      - name: Check the Back gesture
+        # Android Back is the one control this project could not test. A real
+        # Back propagates NOTIFICATION_WM_GO_BACK_REQUEST and *then* emits
+        # `go_back_requested`, which SceneTree has connected to its own quit
+        # check; `tools/drive.gd --back-at=` fired only the first half for five
+        # phases, so a handler that flipped `quit_on_go_back` mid-propagation
+        # read as fine here and killed the app on a phone. That is issue #23,
+        # and the fix for it re-created it two files over before this existed.
+        #
+        # `tools/back_probe.tscn` fires both halves and outlives the scene
+        # change, which `tools/drive.gd` cannot -- it is `current_scene`, so
+        # `change_scene_to_file` frees it mid-test and the restore it is
+        # supposed to be checking becomes unobservable.
+        #
+        # Grepped, not trusted to the exit code, and this step is the sharpest
+        # example of why that rule exists anywhere in this repo: with the bug
+        # re-introduced the app quits in the middle of the probe and Godot
+        # still exits 0, printing two PASS lines and no failure of any kind.
+        run: |
+          set -uo pipefail
+          out=$(~/godot/godot --headless --path . res://tools/back_probe.tscn 2>&1) || true
+          printf '%s\n' "$out" | grep -E "^\[back-probe\]" || true
+          if ! printf '%s\n' "$out" | grep -q "^\[back-probe\] ALL PASS$"; then
+            printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
+            echo "::error::Back did not walk back out of the game cleanly -- see the probe lines above"
+            exit 1
+          fi
+
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ steps.keystore.outputs.path }}
