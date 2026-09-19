@@ -220,13 +220,23 @@ extends Node
 ##                           up. The pause screen's camera toggle, reached
 ##                           without a tap and without writing the choice to
 ##                           user:// where the next run would inherit it.
-##   --forage                steer up the taste gradient, to measure §3.3's
-##                           "a meal every 60 to 90 seconds" without a human.
-##                           **Needs a nose.** Taste went behind `chemocyte`, so
-##                           a forced genome without one has no bearing to climb
-##                           and this steers straight: pass
+##   --sniff                 run and tumble up the smell gradient, to measure
+##                           how long a first meal takes without a human. Reads
+##                           `taste_level` off the field every SNIFF_STEP
+##                           seconds, holds a turn while it rises and reverses
+##                           when it falls. Deliberately stupid: if this can
+##                           feed itself, a player can.
+##                           **Needs a nose.** Smell went behind `chemocyte`, so
+##                           a forced genome without one reads a flat zero and
+##                           this turns one way forever: pass
 ##                           `--genome=cytostome:1,cirrus:1,flagellum:1` and let
-##                           the five-second grant land, or force `chemocyte:1`
+##                           the five-second grant land, or force `chemocyte:1`.
+##                           It replaces `--forage`, which steered onto the
+##                           taste bearing -- and there is no taste bearing any
+##                           more (three-senses.md §2): the number the bus posts
+##                           beside the level is the organ's own arc, so a
+##                           forager that climbed it would be measuring itself
+##                           and would circle forever.
 ##   --evade                 play the escape contract in §5.4: hold full steer
 ##                           while the last wake bearing is ahead, release once
 ##                           it is astern, and do not waver. This is the only
@@ -394,10 +404,20 @@ var _locked := false
 var _wake_world := 0.0
 var _have_wake := false
 var _evade_key := KEY_NONE
-var _forage := false
-var _taste_bearing := 0.0
-var _taste_c := 0.0
-var _forage_key := KEY_NONE
+var _sniff := false
+## How often the forager looks at the level. 0.4 s is long enough for a tier-1
+## `cirrus` to have actually turned (0.62 rad/s behind a 1.10 s build-up) and
+## short enough that the cell has not swum out of the patch it is reading.
+const SNIFF_STEP := 0.4
+var _sniff_clock := 0.0
+## The level at the previous sample, and -1 for "no sample yet", which is what
+## makes the first tick commit to a direction rather than compare against zero.
+var _sniff_last := -1.0
+## Whether the level went up at the previous sample. The reversal fires on the
+## edge of this rather than on every falling sample; the comment in
+## [method _step_sniff] is why, with the measurement.
+var _sniff_rising := true
+var _sniff_key := KEY_NONE
 var _meals := 0
 var _drag_px := 0.0
 var _drag_at := 0.5
@@ -567,8 +587,8 @@ func _ready() -> void:
 			_locked = true
 		elif text == "--evade":
 			_evade = true
-		elif text == "--forage":
-			_forage = true
+		elif text == "--sniff":
+			_sniff = true
 		elif text.begins_with("--seed="):
 			_seed = int(text.trim_prefix("--seed="))
 			_seeded = true
@@ -723,7 +743,7 @@ func _process(delta: float) -> void:
 	_clock += delta
 	_hold_world()
 	_watch_field(delta)
-	_step_forage()
+	_step_sniff(delta)
 	_step_evade()
 	_step_trace(delta)
 	_step_controls(delta)
@@ -854,23 +874,79 @@ func _step_capture_cost(delta: float) -> void:
 		_recorder.mean_usec()])
 
 
-## Turn until the taste sits at the top. The dumbest possible forager, which is
-## the point: if this cannot feed itself the field is too thin for a person.
-func _step_forage() -> void:
-	if not _forage:
+## **Run and tumble**, which is what chemotaxis actually is, and the only
+## strategy left now that smell has no direction in it. Sample the level every
+## [constant SNIFF_STEP]; hold the turn while it rises, reverse it when it
+## falls. The cell swims forward throughout, so the track is a spiral rather
+## than a circle -- and a spiral is what a real chemotactic track looks like.
+##
+## The dumbest possible forager, which is the point: if this cannot feed itself
+## the sense is too flat for a person. It is also **worse than a player**, and
+## that has to be said beside every number it produces -- it reads one channel
+## and ignores the beat entirely, and the beat is an independent, always-on
+## reading of the same water.
+##
+## **Read off the field, not off the bus.** signal_bus.gd gates its re-posts at
+## POST_EPSILON 0.02, so a subscriber sees a staircase where a player watching
+## the membrane sees a continuous glow. Measuring a gradient through a 0.02
+## quantiser would measure the quantiser.
+func _step_sniff(delta: float) -> void:
+	if not _sniff or _food == null:
 		return
+	_sniff_clock += delta
+	if _sniff_clock < SNIFF_STEP:
+		return
+	_sniff_clock = 0.0
 	# Evading wins. A hunted cell cannot smell its way out of the problem, and
 	# it should not try to eat its way out either.
-	var want := KEY_NONE
-	if _evade_key == KEY_NONE and _taste_c > 0.06 and absf(_taste_bearing) > 0.15:
-		want = KEY_D if _taste_bearing > 0.0 else KEY_A
-	if want == _forage_key:
+	if _evade_key != KEY_NONE:
+		if _sniff_key != KEY_NONE:
+			_send_key(_sniff_key, false)
+			_sniff_key = KEY_NONE
+		_sniff_last = -1.0
+		_sniff_rising = true
 		return
-	if _forage_key != KEY_NONE:
-		_send_key(_forage_key, false)
-	if want != KEY_NONE:
+	var level: float = _food.taste_level
+	var want := _sniff_key
+	var rising := level >= _sniff_last
+	if want == KEY_NONE:
+		# First tick of a sweep: commit to a side. Starboard, arbitrarily --
+		# the water has no handedness and neither does the cell. Entered as
+		# *rising*, so the first fall is a reversal like any other.
+		want = KEY_D
+		rising = true
+	elif _sniff_rising and not rising:
+		# It has stopped getting better. Turn the other way -- and keep turning
+		# that way until it gets better again, which is what the edge does.
+		want = KEY_A if want == KEY_D else KEY_D
+	# **The reversal is edge-triggered, and that is not a detail.** Reversing on
+	# every falling sample makes a cell that has just swum past its food
+	# alternate port/starboard every 0.4 s -- which is a straight line, at the
+	# one moment a straight line is the worst answer. Reversing once, at the
+	# turn, leaves the new direction held while the level keeps falling, so the
+	# heading sweeps until something gets better. Measured over the same eight
+	# seeds: 4 of 8 ate inside 90 s reversing on every falling sample, 5 of 8
+	# reversing on the edge, and the edge's median first meal is 47.0 s against
+	# 50.2 s. A small win, honestly reported -- but it is the version that does
+	# not do the obviously wrong thing at the moment that decides the meal.
+	#
+	# It matters here and not in the game because the actuator is slow. A
+	# tier-1 `cirrus` takes 1.10 s to build its turn and the sample is 0.4 s, so
+	# a bot that can reverse on consecutive samples never actually turns.
+	var turned := want != _sniff_key
+	_sniff_last = level
+	_sniff_rising = rising
+	if turned:
+		if _sniff_key != KEY_NONE:
+			_send_key(_sniff_key, false)
 		_send_key(want, true)
-	_forage_key = want
+		_sniff_key = want
+	# Printed every tick, not only on a reversal: the level is the measurement
+	# and a trace that showed only the decisions could not be checked against
+	# the field it was made from.
+	print("[sniff] %6.2f  level %.4f  %s%s" % [
+		_clock, level, "port " if want == KEY_A else "stbd ",
+		"  <- reversed" if turned else ""])
 
 
 ## Commit away from the wake and stay committed. Turns until the threat is 130
@@ -933,11 +1009,20 @@ func _membrane_text() -> String:
 	if lobes.size() < 3 or organs.size() < 4:
 		return "membrane: unavailable"
 	var me: Vector4 = lobes[0]
+	var taste: Vector4 = lobes[1]
 	var light: Vector4 = lobes[2]
+	# **The nutrient lobe is a ring now and a width cannot describe it.** Its
+	# `z` is under -1, so `acos` is meaningless; what the number means is how
+	# dim the ring's far side is against its near one, which is the shader's own
+	# `smoothstep(z, 1, -1)`. Printed beside the field's raw level, because the
+	# whole of three-senses.md §2 is that those two are one channel.
+	var far := smoothstep(taste.z, 1.0, -1.0) if taste.z < 1.0 else 0.0
 	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
+		+ "  taste %.3f ring far/near %.2f from level %.3f"
 		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
 		organs[0], organs[1], organs[2], organs[3],
 		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
+		taste.w, far, _food.taste_level if _food != null else 0.0,
 		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
 
@@ -1300,9 +1385,6 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 		_posed.clear()
 		_meals += 1
 		print("[drive] %5.2f  meal %d" % [_clock, _meals])
-	if kind == &"taste":
-		_taste_bearing = float(info.get("bearing", 0.0))
-		_taste_c = float(info.get("strength", 0.0))
 	if kind == &"shove" and _run != null:
 		var cell := _find_node_with(_run, &"bearing_to")
 		if cell != null:

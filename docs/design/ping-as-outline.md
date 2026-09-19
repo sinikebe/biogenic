@@ -256,7 +256,8 @@ promise to the player:
 **The interior is still not spent.** The wave is drawn there (the cell knows
 where its own front has got to) and so is the `ocellus` pointer, but the ping's
 returns stay on the membrane. Drawing an outline at its true *place* is vision,
-and that is what the gene after this one sells. §10 row 3.
+and that is what the gene after this one sells. **Settled**: §10 row 3 is (a) —
+the interior stays black until the next gene, which confirms what the code does.
 
 ---
 
@@ -524,7 +525,10 @@ is out there*. One frame, two registers, contradicting each other.
 
 It also takes §3.1 away: if the player cannot tell which pulse a mark belongs to,
 arrival time stops meaning distance, and a third of this spec is selling a
-reading that is not there. Three ways out, in §10 row 1.
+reading that is not there. Three ways out were put to the owner in §10 row 1 and
+**the answer is deferred**: the wave has to bounce first, and once it does every
+number in that row doubles. So this frame is still the frame — the ambiguity is
+live, and §10.2 corrects two things the row said about the ways out of it.
 
 ---
 
@@ -603,14 +607,58 @@ on the contour" stays true and is now the point rather than a restriction.
 
 ---
 
-## 10. Left open — owner's call
+## 10. Decided — two deferrals, two confirmations, and one correction
 
-| # | Question | Options | What it means |
-|---|---|---|---|
-| 1 | The slow wave means one pulse is still in the water when the next leaves (§7). Which way out? | (a) fire less often — 5.0 / 6.6 / 8.2 s between pulses; (b) **the better organ sweeps faster — 250 / 400 / 600 units per second ✓ recommended**; (c) leave it, and draw every wave at once | Right now a far answer can arrive after the next pulse has gone out, so you cannot tell how far away it was. (a) makes the best radar the slowest — eight seconds of silence between sweeps. (b) keeps the top tier feeling quick and keeps the slow wave where you asked for it, at the start. (c) is honest but the proof is only visible in the full-vision view. |
-| 2 | How much does the organ exaggerate? `PING_RING` and the `WIDTH_GAIN` column are the two dials. | (a) bare geometry — 1.0 and 1.0; (b) **2.0 and 1.5 / 3.5 / 6.0 ✓ recommended**; (c) louder — 3.0 and 3 / 7 / 12 | Real sizes at real distances are under three degrees and a tenth of a second: honest, and you would feel none of it. (b) is the smallest exaggeration that makes a big near thing and a small far thing feel different. (c) makes the sense dramatic and starts telling a first radar more than a first radar should know. |
-| 3 | Does a tier-3 ping draw its outline **inside** the membrane, at the place it actually is? | (a) **no — the interior stays black until the next gene ✓ recommended**; (b) yes, at tier 3 only | You said the cell must one day see. (a) keeps that moment for the gene that is *about* seeing, so it lands as an event. (b) spends it now, and the eye you grow later has nothing left to show you. |
-| 4 | Two bodies inside one beamwidth merge into one wider, longer mark. Bug or ladder? | (a) **merge — it is the ladder ✓ recommended**; (b) always separate them | (a) means a crowd feels like one big thing until your radar gets better, which is how a real one behaves and what makes the next tier worth eating for. (b) is clearer and removes the reason to upgrade. |
+**No ping constant moved in the build that wrote this section.** Rows 1 and 2
+are deferred for the same reason and rows 3 and 4 confirm what the code already
+does, so nothing here is a code change.
+
+| # | Question | Decision | What it means |
+| --- | --- | --- | --- |
+| 1 | The slow wave means one pulse is still in the water when the next leaves (§7). Which way out? | **Deferred. The wave has to bounce first.** | Nothing changes yet. A far answer can still arrive after the next pulse has gone out. |
+| 2 | How much does the organ exaggerate? `PING_RING` and the `WIDTH_GAIN` column. | **Deferred**, same reason. | Nothing changes yet. |
+| 3 | Does a tier-3 ping draw its outline **inside** the membrane, at the place it actually is? | **(a) no — the interior stays black until the next gene.** Confirms current behaviour. | You said the cell must one day see. This keeps that moment for the gene that is *about* seeing, so it lands as an event. |
+| 4 | Two bodies inside one beamwidth merge into one wider, longer mark. Bug or ladder? | **(a) merge — it is the ladder.** Confirms current behaviour. | A crowd feels like one big thing until your radar gets better, which is how a real one behaves and what makes the next tier worth eating for. |
+
+### 10.1 Why rows 1 and 2 are deferred rather than answered
+
+The owner is explicit that the wave **will** bounce. Today's answer time is
+one-way, `d / PING_SPEED` (`food.gd`, in `_cast_ping`). Once a return is a round
+trip it becomes `2d / PING_SPEED`, and **every number in both rows doubles**:
+the flight time, the number of pulses in the air at once, and the unambiguous
+range a given period buys. Settling either row now is settling it against a
+model that is about to be replaced, and the answer would have to be re-derived
+the same week.
+
+### 10.2 The correction: option (b) does not close the overlap, at any tier
+
+Row 1 above recommended *(b) 250 / 400 / 600 units per second* and said it
+closes the pulse overlap. **It does not.** Unambiguous range is
+`PING_PERIOD x PING_SPEED` — the distance a pulse can answer from before the
+next one leaves — and the reach is what it has to cover:
+
+| tier | reach | period | today, 250 u/s | (b), 250/400/600 | 350/700/1400 |
+| --- | --- | --- | --- | --- | --- |
+| 1 | 1100 | 3.20 s | 800 — **73%** | 800 — **73%** | 1120 — **100%** |
+| 2 | 1500 | 2.20 s | 550 — **37%** | 880 — **59%** | 1540 — **100%** |
+| 3 | 1900 | 1.40 s | 350 — **18%** | 840 — **44%** | 1960 — **100%** |
+
+Option (b) roughly doubles the covered fraction at tiers 2 and 3 and leaves
+tier 1 exactly where it was, because at tier 1 it *is* today's speed. It never
+reaches 100% at any tier, so the ambiguity §7 photographs survives it. The
+rightmost column is what closing it actually costs: speeds that rise faster than
+the reach does, roughly `reach / period`.
+
+**And option (a) was described wrongly too.** It was called *"eight seconds of
+silence between sweeps"*. At tier 3 the flight is 7.6 s inside an 8.2 s period,
+so the water is almost never empty — there is a pulse in it 93% of the time.
+Its real cost is refresh: a threat 200 units away is re-answered every 8.2 s
+instead of every 1.4 s, **six times less often**, at the tier that paid most for
+the organ. That is a worse thing than silence and it was not what the row said.
+
+Both corrections are recorded here rather than folded into the options, because
+the options are deferred and a corrected recommendation for a model we are
+replacing would be two wrong answers instead of one.
 
 ---
 
@@ -647,5 +695,5 @@ while writing it.
   things at once — is exactly what tier 1 must *not* have.
 - **Rescaling the point-of-view wavefront** so a whole 4.4 s flight fits on
   screen. §6.2: two distance scales in one picture.
-- **Drawing the returns in the interior.** §4 and §10 row 3. That is vision, and
-  it is the next gene's to sell.
+- **Drawing the returns in the interior.** §4 and §10 row 3, which the owner has
+  now answered (a). That is vision, and it is the next gene's to sell.

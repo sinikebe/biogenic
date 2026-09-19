@@ -1366,7 +1366,7 @@ predator:
 | `predator.gd`'s aim state machine, `COMMIT_RANGE`, the lunge, the break-off | how **any** cell pursues something it can eat. Was always general; only the name was specific. |
 | `threat` — the `RADIUS / cell.radius` ratio | the **gape comparison** of §1.1, evaluated per cell and in both directions |
 | `dread_level` | still a scalar, now summed over cells that can eat *me*. Dread was always a property of the relationship, not of a species. **It must stay continuous — see below.** |
-| `food.gd`'s scent field, `concentration`, `taste_bearing` | unchanged in kind, but summed over everything **I** can eat rather than over a food species |
+| `food.gd`'s scent field, `concentration`, `taste_level` | unchanged in kind, but summed over everything **I** can eat rather than over a food species. (`taste_bearing` was the third of these and is gone — three-senses.md §2.) |
 | `FIRST_DELAY`, `SPAWN_MIN/MAX`, the authored first arrival | the seeding distribution of §1.3. The authored first encounter survives as an authored *opening*, not as a species spawn. |
 | `PREY_SPEED = 56.5`, hard-coded | dies. Every cell swims on its own `flagellum` tier. |
 | `RADIUS = 40` — the predator's fixed size | dies. Size is per-cell and grows. |
@@ -1654,18 +1654,27 @@ The tier buys **reach**, and nothing else:
 const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
 ```
 
-Sharpness is deliberately left alone: `rhabdom` / *focus* already owns the taste
-lobe's width and jitter, and a second gene doing the same thing would make one
-of them pointless. Tier 3 is `food.gd`'s `SCENT_RANGE`, so a saturated nose is
-exactly the always-on taste every build before this one shipped with.
+Sharpness is not a thing the nose has any more. This paragraph used to read
+*"deliberately left alone: `rhabdom` / focus already owns the taste lobe's width
+and jitter"* — and `three-senses.md` §2 deleted the width and the jitter, then
+§8 row 2 retired `rhabdom`. Reach is now the whole of what a `chemocyte` tier
+buys. Tier 3 is `food.gd`'s `SCENT_RANGE`, so a saturated nose is exactly the
+always-on taste every build before this one shipped with.
 
 Two numbers come out of the field where there was one. `concentration` is what
 the *water* is like and still drives the metabolic beat — a noseless cell
 still beats faster in rich water, because the beat is a property of the body and
 not of its senses. `taste_level` is what the *organ* picks up, summed only over
 sources inside `smell_range`, and it is the only one of the two that reaches the
-membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level`
-and `taste_bearing` both flat zero.
+membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level` at
+flat zero, because `smell_range` is zero and nothing is ever inside the nose.
+
+**There is no `taste_bearing` any more**, and that is `three-senses.md` §2: what
+the nose reports is a level, weighted by how nearly each source lies along the
+organ's own arc. The bearing posted beside it is `smell_bearing` — where the
+organ is worn on *this* body, written once a frame by `normal_mode.gd` exactly
+the way `ping_bearing` and `dart_bearing` are. It carries nothing about the
+water and is the same number every frame of a run.
 
 `dread` stays innate. Fear of being eaten is not a sense you grow.
 

@@ -46,6 +46,13 @@ wounds, states, targets and genomes, and logs every sensation with a timestamp.
 | seed 999 against seed 12345 at 60 | 852 lines differ, so `seed()` is honoured and the test is not vacuous |
 | **`--mode=0` against `--mode=1`, same seed, 30 s** | **0 divergent simulation lines** |
 
+> **`--forage` no longer exists.** `three-senses.md` §2 took the bearing out of
+> smell, so a forager that steered onto it would steer onto its own organ;
+> `tools/drive.gd` carries `--sniff` in its place (§7.7 there). The two rows
+> above that used it were measuring determinism and the recorder's cost, not the
+> nose, so what they found still holds — but the commands as written will not
+> run, and re-taking them means substituting `--sniff`.
+
 So the simulation **is** bit-exactly reproducible across processes given a
 seeded global stream and a fixed timestep. Option A is reachable.
 
@@ -355,6 +362,10 @@ measuring the other's CPU:
 --mode=1 --seed=4242 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1 \
     --forage --evade --capture-cost=50
 ```
+
+(`--forage` is gone; the flag to re-take this with is `--sniff`. The cost being
+measured is one `capture()` per frame and does not depend on which way the cell
+was steering, so the numbers below stand.)
 
 | over 400 s, 24,000 captures | without the hunter column | shipped |
 | --- | --- | --- |

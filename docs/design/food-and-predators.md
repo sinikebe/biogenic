@@ -649,7 +649,7 @@ full vision, world positions emitted on the signal and **dropped before the bus*
 
 One convention added while building, because it is what keeps that last rule
 cheap to hold: **these nodes compute and do not post.** Continuous state
-(`food.concentration`, `food.taste_bearing`, `predator.dread_level`) is read once
+(`food.concentration`, `food.taste_level`, `predator.dread_level`) is read once
 a frame by `normal_mode.gd`, which is the only node that talks to the bus;
 discrete events (`eaten`, `waked`, `killed`) are signals it forwards. The §3.2
 sketch has the field calling `bus.taste()` itself; posting a continuous signal

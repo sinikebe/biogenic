@@ -23,15 +23,23 @@ to get twenty times denser. `moving-a-gene.md` shipped the gesture that moves a
 gene between slots this morning; this is what gives that gesture something to
 be *for*.
 
-Status: **§1, the `ampulla`, is built and in `main`. §2 and §3, smell and the
-beam fan, are not** — both are blocked on the owner's calls in §8 and neither
-constant has been moved. §4 says which line of which file is which; read it
-before treating any of this as a description of the game.
+Status: **§1 the `ampulla` and §2 the `chemocyte` are built. §3, the beam fan,
+is not.** The owner has answered all three rows of §8: smell ships as a level
+(row 1, option A), `rhabdom` is retired (row 2, option C), and the twenty-beam
+outline is allowed but ships on its own (row 3, option A — **not this build**).
+§4 says which line of which file is which; read it before treating any of this
+as a description of the game.
 
 Prototyped and photographed at 1280x720 and 2400x1080 under
 `--rendering-driver opengl3`. Every number below is measured off a render or off
 an instrumented run, and §7 says which. **The smell change is a nerf to the
-sense a blind player leans on and it carries the owner's call in §8.**
+sense a blind player leans on**; it was put to the owner in §8 and it shipped.
+
+**§7.5's meal table has been re-measured on the built code over 24 seeds and it
+does not reproduce.** The direction of every finding holds — the new nose is far
+more navigable by level alone than the field it replaces — and the absolute
+numbers are worse than the prototype's. §7.5.1 is the re-measurement, and it
+raises one number the owner may want back: `SMELL_TAIL`.
 
 ---
 
@@ -254,13 +262,15 @@ var w := c * (smell_floor + (1.0 - smell_floor) * lobe)   # accumulated below
 ```
 
 ```gdscript
-# signal_bus.gd
-## What a receptor pointed dead away still picks up, before `rhabdom` narrows
-## it. The whole of "orientation counts", and §2.3 is why it is not zero.
+# food.gd -- moved here from signal_bus.gd when `rhabdom` was retired. §8.2.
+## What a receptor pointed dead away still picks up. The whole of "orientation
+## counts", and §2.3 is why it is not zero.
 const SMELL_BEHIND := 0.22
-## smell_floor = SMELL_BEHIND * FOCUS_BY_TIER[rhabdom tier]
-##            = 0.220 / 0.163 / 0.123 / 0.088
 ```
+
+As built there is no tier table under it: `smell_floor` **is** `SMELL_BEHIND`,
+0.22 at every tier, because the gene that was going to scale it is retired
+(§8.1). What a `chemocyte` tier buys is reach and only reach.
 
 `taste_bearing` still exists and is still posted, but it is now
 `Cilia.slot_bearing(genome.slot_of(&"chemocyte"))` — **where the nose is on this
@@ -300,15 +310,17 @@ direction. It is one lobe, in the slot it already has, with its `z` pushed past
 
 ```gdscript
 _glow_lobes[LOBE_NUTRIENT] = Vector4(
-    sin(taste_bearing), -cos(taste_bearing), _ring_edge(smell_floor), intensity)
+    sin(_taste_bearing), -cos(_taste_bearing), _ring_z, intensity)
 
+## Solved once, at construction, and not once a frame: with `rhabdom` retired
+## the floor does not vary by tier, so this is a single number. A member rather
+## than a `const` because a `const` cannot call a function, and solved rather
+## than written down so the ring and the floor cannot drift apart.
+var _ring_z := _ring_edge(SMELL_RING_FLOOR)
 
 ## The lobe `z` for which the shader's `smoothstep(z, 1.0, dot)` equals [param
 ## ratio] at `dot = -1`. Newton on 3t^2 - 2t^3, then z = (t + 1) / (t - 1).
-## Called once a frame with a value that changes only when `rhabdom` does, so
-## the loop is free; a lookup table would be one more thing to keep in step
-## with FOCUS_BY_TIER.
-func _ring_edge(ratio: float) -> float:
+static func _ring_edge(ratio: float) -> float:
     var t := clampf(ratio, 0.001, 0.999)
     var x := 0.5
     for _i in 12:
@@ -323,7 +335,10 @@ func _ring_edge(ratio: float) -> float:
 `_ring_edge(ratio)` returns the `z` for which the shader's
 `smoothstep(z, 1.0, dot)` equals `ratio` at `dot = -1` — i.e. the `z` that makes
 the ring's dimmest point sit at the same fraction of its brightest that the
-*simulation's* floor sits at. `0.22 -> z = -1.87`; `0.088 -> z = -1.45`.
+*simulation's* floor sits at. `0.22 -> z = -1.87`. (The tier table that would
+have given `0.088 -> z = -1.45` went with `rhabdom`; §8.1.) Verified on the
+built code: `tools/drive.gd`'s trace prints the shader's own
+`smoothstep(z, 1, -1)` and it comes back at **0.22**.
 
 > **The shape on the skin is the organ's own directivity pattern.** The player
 > is looking at the sensitivity curve the maths is using. It is a full ring,
@@ -380,6 +395,13 @@ var intensity := pow(clampf((c - TASTE_FLOOR) / (TASTE_FULL - TASTE_FLOOR), 0.0,
 channel goes from **66 today to 77** — brighter than today, on a sense that has
 just lost its bearing.
 
+**Re-measured on the build**, one frame each from the tree at `40df405` and from
+this one, same seed, same posed body, same freeze: peak green on the band goes
+**74 -> 86**, and the mean green over the whole band **15.1 -> 18.6**. Different
+absolute numbers from the prototype's pair and the same direction and roughly
+the same size of step. The claim that holds is the one that matters: the sense
+that lost its bearing did not get dimmer.
+
 `TASTE_FULL` pins the top deliberately: above 0.45 the cell is inside
 `CORE_RANGE` of something edible and about to eat it, and a readout that keeps
 climbing while the mouth is closing is spending range on a decision that has
@@ -392,27 +414,34 @@ floor and the band disappears, which reads as *the gene has stopped working*
 rather than as *you are facing the wrong way*. Dimming is information; darkness
 is a bug report.
 
-### 2.4 `rhabdom` has to be re-aimed, and it is the same table
+### 2.4 `rhabdom` is retired, and this is what was rejected to get there
 
 `FOCUS_BY_TIER` multiplied the taste lobe's **width** and its **bearing jitter**.
 Both are gone. Left alone, `rhabdom` becomes a gene that does nothing — in the
 drop table, on the strand, in the gene lines, with a shipped sentence promising
 an effect it no longer has.
 
-It moves to the floor, and the shipped table generates it unchanged:
+This section used to propose moving it to the floor, and the arithmetic still
+holds: `smell_floor = SMELL_BEHIND * FOCUS_BY_TIER[tier]` generates
+`0.220 / 0.163 / 0.123 / 0.088`, and §7.4 measured that as the only re-aiming
+that buys anything — sharpening the cosine moved the swing by under 2%, while
+lowering the floor moved the contrast ratio from 1.63x to 1.92x at the opening
+and 2.00x to 2.52x at t=25s. `rhabdom` would have **traded coverage for
+contrast**: a focused nose reads less of the water but tells you more clearly
+which way it is.
 
-```
-smell_floor = SMELL_BEHIND * FOCUS_BY_TIER[tier]   ->  0.220 / 0.163 / 0.123 / 0.088
-```
+**The owner took option C instead: retire it** (§8 row 2). The measurement above
+is why that is defensible rather than lazy. What the re-aimed gene bought was a
+*ratio* — the ring's bright side against its dim side — on a readout the player
+is already reading as a single brightness that rises and falls. It is the one
+kind of improvement this membrane is worst at showing: `perception.md` §3's own
+argument is that a dark-adapted eye is poor at absolute brightness and good at
+edges, and `rhabdom` would have moved an edge that is already there by half a
+stop. A gene whose whole effect is a number nobody can see move is worse than
+one fewer gene in the water.
 
-Measured, that is the upgrade that actually buys something. Sharpening the
-cosine (raising its exponent) moved the swing by under 2% — the water is too
-evenly spread for a narrower lobe to find more of it. Lowering the floor moved
-the *contrast ratio* from 1.63x to 1.92x at the opening and 2.00x to 2.52x at
-t=25s. `rhabdom` therefore **trades coverage for contrast**: a focused nose
-reads less of the water but tells you more clearly which way it is.
-
-Its shipped line — *sharpens what you smell* — stays true, which is the test.
+§8.1 is what retiring it actually touched, and what a genome that still names it
+does.
 
 ### 2.5 What blind play is after this
 
@@ -454,7 +483,7 @@ spread the swing narrows: worst measured 1.41x on the shipped nose, and in that
 case the sense is saying *there is food and no direction is much better*, which
 is true and is also indistinguishable from *my sense is broken*. The honest
 summary is that smell becomes **reliable about how much and slower about
-where**, and that is the owner's call in §8.
+where**. That was the owner's call in §8 and the answer was ship it.
 
 ---
 
@@ -549,28 +578,34 @@ because this container is not that phone.
 
 ## 4. What the game developer changes
 
-> ## ONE THIRD OF THIS TABLE IS IN `main`. TWO THIRDS ARE NOT.
+> ## TWO THIRDS OF THIS TABLE IS IN `main`. ONE THIRD IS NOT.
 >
-> **Built and shipped: the `ampulla` only** — §1, and the four `shipped` rows
-> below. **Not built: the `chemocyte` (§2) and the `ocellus` (§3)**, because
-> both are blocked on the owner's calls in §8 and neither constant has been
-> moved. `signal_bus.gd` and `recorder.gd` are **byte-identical** to what they
-> were before this spec existed, apart from the one PLAYER-delta key §1.4 needed
-> for the replay. Nothing in the smell or beam rows has been attempted, and a
-> reader of `main` should not have to diff the tree to find that out.
+> **Built and shipped: the `ampulla` (§1) and the `chemocyte` (§2).** **Not
+> built: the `ocellus` (§3)** — the owner allowed it (§8 row 3) and it ships on
+> its own, because twenty rays rewrite `food.gd`'s beam loop, `cell.gd`'s tier
+> table, `cilia.gd` and the recorder's stride, and three of those four are files
+> the smell change has just moved. `recorder.gd` is unchanged by §2: the replay
+> captures a whole `Vector4` per glow lobe, so a ring costs it nothing and
+> `BLOCK_FLOATS` stays at 37.
 
 | file | change | state |
 | --- | --- | --- |
 | `game/normal/cell.gd` | new `PING_THROUGH_BY_TIER` | **shipped** |
+| `game/normal/cell.gd` | the `rhabdom` note beside `VENOM_COST_BY_TIER` records the retirement | **shipped** |
 | `game/normal/cell.gd` | `BEAM_COUNT_BY_TIER = [0,1,5,20]` | **not built** — §8 row 3 |
 | `game/normal/food.gd` | `ping_bearing` / `ping_through`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it | **shipped** |
-| `game/normal/food.gd` | orientation weight and `SMELL_TAIL` in `_step_sense`; `taste_bearing` becomes the organ's facing; `smelt_pull` goes | **not built** — §8 row 1 |
+| `game/normal/food.gd` | `SMELL_BEHIND` and `SMELL_TAIL`; the cosine weight and the loudest-plus-tail level in `_step_sense`; `smell_bearing` in, `taste_bearing` and `smelt_pull` gone | **shipped** |
+| `game/normal/food.gd` | `rhabdom` out of `GENE_WEIGHTS` and `DRIFTER_GENES` | **shipped** |
+| `game/normal/genome.gd` | `rhabdom` out of `GENE_ORDER`, which is also what `_mutate_drift` draws from | **shipped** |
 | `game/normal/normal_mode.gd` | write `ping_bearing` and `ping_through` from `slot_of` + tier | **shipped** |
-| `game/perception/signal_bus.gd` | `SMELL_BEHIND`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; delete taste jitter and bearing low-pass; `FOCUS_BY_TIER` now feeds the floor | **not built** — §8 rows 1 and 2 |
+| `game/normal/normal_mode.gd` | write `smell_bearing`; post the organ's arc to `taste()`; `rhabdom` out of `sense_organs`, `WORDS` and `EXPLAINS`; the `chemocyte` line rewritten | **shipped** |
+| `game/perception/signal_bus.gd` | `SMELL_RING_FLOOR`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; taste jitter and bearing low-pass deleted; `FOCUS_BY_TIER`, `SENSE_RHABDOM` and the fifth `_senses` slot gone | **shipped** |
+| `game/vision/cilia.gd` | `rhabdom` out of `HUES` and `EARNED_COUNT` | **shipped** |
 | `game/perception/returns.gd` | wave becomes an arc from the organ, `_wave_arc()` helper | **shipped** |
 | `game/vision/vision.gd` | the same arc in world space | **shipped** |
 | `game/replay/recorder.gd` | the PLAYER delta carries the body's layout (§1.4) | **shipped** |
 | `game/replay/recorder.gd` | `BEAMS` 3 -> 20, and the `STRIDE` arithmetic in §3.3 | **not built** — §8 row 3 |
+| `tools/drive.gd` | `--forage` replaced by `--sniff` (§7.7); the trace line carries the taste ring and the raw level | **shipped** |
 
 No shader change. No new uniform. No `class_name`. Nothing outside `game/`.
 It ships as a content pack.
@@ -605,8 +640,14 @@ land entirely on the sensory screen, which has no controls on it.
 - `perception.md` §4.1: still true and still binding; one of the two RNG draws
   goes away, the beat's does not.
 - `genes-and-cilia.md` §11.1: *"Sharpness is deliberately left alone: `rhabdom`
-  already owns the taste lobe's width and jitter"* — `rhabdom` now owns the
-  floor instead. Same division of labour, different quantity.
+  already owns the taste lobe's width and jitter"* — there is no width and no
+  jitter, and `rhabdom` is retired (§8 row 2). Corrected in that file.
+- `gene-lines-and-the-pause-target.md` §1: eighteen lines become seventeen, and
+  the `chemocyte` line changes from *smells food, and which way it is* to
+  *smells food, strongest where your nose is pointed*. Corrected there.
+- `choosing.md` §12's fifth open risk — *`rhabdom` and `cytostome` are the
+  tightest pair on the hue wheel* — is closed by the retirement rather than
+  answered. Corrected there.
 - `genes-and-cilia.md` §11.2: *"a bearing for every body it comes back off"* is
   now *every body it comes back off that is not in a shadow*.
 - `edibility.md`: untouched. Nothing here changes what can eat what.
@@ -868,6 +909,30 @@ That is *"turn and watch it brighten"*, photographed, and the two frames are not
 subtly different — one is a lit green ring and the other is a hint of one. On
 the plain summed nose the same pair moved only 20%.
 
+**Re-taken on the built code, and it holds.** Same pair, `chemocyte` in slot 3
+(bearing +42), an r12 body posed at 300 units at +42 and then at -138, seed 7,
+`--freeze-at=3.0`. Sampled as `green - blue` — the contour is teal and cancels —
+along 72 rays from the centre, taking the maximum on each:
+
+| | peak | at | dimmest | at | ring contrast |
+| --- | --- | --- | --- | --- | --- |
+| body in front of the nose | **64** | +35 deg | 25 | 230 deg | 2.56x |
+| body behind the nose | **37** | +5 deg | 19 | 225 deg | 1.95x |
+
+**73% brighter with the nose on the food, and the ring does not move**: the
+peak sits on the organ's own arc in both frames and the dimmest point sits
+opposite it, 180 degrees away, in both. That is the whole of §2.2 in two
+numbers — the shape is welded to the body and only the brightness answers the
+water. Three renders of each command were byte-identical (0 differing pixels of
+921,600), so both are measurements.
+
+The drawn contrast, 2.56x, is not `1 / 0.22`. The lobe itself is exact —
+`tools/drive.gd`'s trace prints the shader's own `smoothstep(z, 1, -1)` and it
+comes back at **0.22** — and what the render adds on top is the contour's base
+glow, which is lit by everything else on the membrane and floors the dim side.
+The constant is in the uniform; the picture is the constant plus the skin it is
+drawn on.
+
 ### 7.5 Blind play — and the measurement that changed the design
 
 This is the one that mattered and the one that nearly failed.
@@ -928,11 +993,87 @@ thing a run opens with. Two facts put it in proportion and neither excuses it:
   beat entirely, and the beat is an independent, always-on reading of the same
   water (§2.5). A player has two instruments and the bot has one.
 
-It remains the row in §8 that needs the owner.
+It was the row in §8 that needed the owner, and the owner shipped it. §7.5.1
+re-measures the whole table on the built code.
 
 `concentration`, and therefore the beat, is unchanged: it is still the plain
 unweighted sum over the whole field, so a noseless cell still beats faster in
 rich water and hunger reads exactly as it did.
+
+#### 7.5.1 Re-measured on the built code, over 24 seeds — and it does not reproduce
+
+Everything above is the prototype's, on one build and one bot. The built code
+was measured again with the shipped `--sniff` (§7.7) over **24 seeds**, 90-second
+cap, `--radius=30 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1`,
+`--fixed-fps 60`, headless. Three controls, one command each, differing only in
+which tree they were pointed at:
+
+| what the nose is | seeds | ate inside 90 s | median of those that ate |
+| --- | --- | --- | --- |
+| **today**, plain sum, steering onto the taste bearing (`--forage`, at `40df405`) | 8 | **8 of 8** | **20.8 s** |
+| **today**, plain sum, level only (`--sniff`, at `40df405`) | 24 | **6 of 24** | 60.8 s |
+| **shipped nose**, `SMELL_TAIL` 0.22, level only | 24 | **16 of 24** | 64.5 s |
+| **loudest-source nose**, `SMELL_TAIL` 0.00, level only | 24 | **19 of 24** | 36.8 s |
+
+(today/forage: 16.0 / 17.9 / 18.2 / 19.7 / 21.8 / 23.2 / 24.0 / 25.7 s.
+ shipped nose: 24.8 / 29.9 / 33.8 / 36.8 / 46.1 / 47.0 / 53.4 / 63.5 / 65.4 /
+ 68.5 / 69.0 / 73.2 / 75.3 / 79.7 / 81.2 / 83.5, and eight that did not eat.)
+
+**Two of the three findings reproduce and one inverts.**
+
+1. **The level-only strategy really is a coin toss on today's field**: 6 of 24,
+   which is the prototype's "1 in 5" again. That is a property of the scent
+   field and not of the orientation weight, exactly as §7.5 said.
+2. **The weighted nose is far more navigable by level alone**: 6 of 24 becomes
+   16 of 24. The change is doing the thing it was made to do.
+3. **`SMELL_TAIL` 0.22 is *worse* than 0.00, which is the opposite of §7.5.**
+   19 of 24 against 16, and a median first meal of 36.8 s against 64.5 s.
+
+**Why, and it is arithmetic.** On identical trajectories — same seed, same
+water, no steering, so the two builds fly the same path — the tail is a mean
+**40%** of the whole reading and reaches **67%** (3 seeds x 11 samples). With
+13-19 sources inside a tier-1 reach, `0.22 x 15` is 3.3, so "a tail of
+everything else" outweighs the loudest source by more than three to one. It is
+not a tail. It is most of the reading, and most of the reading is a slow
+position term that says nothing about facing — which is the plain sum this
+change exists to get away from, let back in at 22%.
+
+**The mechanism §7.5 claims for the tail is real, and it is small.** Over 5,208
+consecutive sample pairs from the same 24 runs:
+
+| | median \|ΔL\| | p99 \|ΔL\| | \|ΔL\| > 0.25 |
+| --- | --- | --- | --- |
+| tail 0.22 | 0.0117 | 0.193 | 0.65% |
+| tail 0.00 | 0.0080 | 0.256 | **1.09%** |
+
+The tail does damp the handovers — the worst 1% of steps are a third smaller and
+big jumps are 40% rarer — but it buys that by raising the *typical* step 46%,
+because it is adding a moving crowd to every sample. The prototype measured the
+damping and did not measure what it cost.
+
+**It ships at 0.22 anyway, because that is what the owner approved and because
+the meal count is not the only thing it buys.** A pure maximum is not
+*"whether the smell is strong or not"*, which is the owner's own sentence: it
+is how strong the single nearest thing is, and it does not rise in richer water.
+That is a design property the bot cannot see and a player can. The number is
+flagged for the owner in this file's own table rather than moved here.
+
+| # | Question | Options | What it means |
+| --- | --- | --- | --- |
+| 1 | `SMELL_TAIL` is 0.22. Measured on the built code over 24 seeds it is the thing making the first meal slow: 16 of 24 fed against 19, and a median 64.5 s against 36.8 s. Lower it? | A — leave it at 0.22 · **B — take it to about 0.06, so the tail is a tenth of the reading rather than 40% of it ✓ recommended** · C — take it to 0.00, pure loudest-source | **A**: the opening stays as it is now — slow, and about one run in three does not find a first meal in ninety seconds. **B**: the glow still rises when there is more food around you, but the thing your nose is actually pointed at dominates it, so turning tells you more. **C**: the glow stops saying how much food is near at all and only ever reports the single loudest thing; fastest to hunt with, and it drops half of what the owner asked smell to say. |
+
+0.06 rather than 0.00 because 0.06 x 15 is 0.9 — the crowd and the loudest
+source weigh about the same — which keeps *more food reads as more smell* true
+while leaving the facing term in charge. It is an estimate from the arithmetic
+above and **has not been measured**; it is a row for the owner, not a change.
+
+**One property of the field that neither table shows and a player will meet.**
+`scent()` saturates inside `CORE_RANGE`, 130 units, so the last 130 units to a
+meal have almost no gradient in them: the bot reached a clamped level of 1.000
+three times on seed 12345 and ate nothing, because the mouth needs contact and
+the nose stopped saying which way. That is not new — it is the shape of the
+scent field, unchanged since Phase 4 — but taking the bearing away is what makes
+it visible. A player has the same problem and two more instruments.
 
 ### 7.6 The `ocellus`
 
@@ -955,43 +1096,149 @@ Rendered at tier 3 with twenty rays, both views, both shapes.
   collided. The marks scale with the figure because both read `soma.gd`'s SCALE
   through the same stretch.
 
-### 7.7 A harness consequence that must be reported
+### 7.7 The harness consequence, and what replaced the flag
 
-`tools/drive.gd --forage` steers to put the **taste bearing** on the nose. After
-this change that bearing is the organ's own arc, so `--forage` turns one way
-forever. It is not a game bug, but every measurement in the repository taken
-with `--forage` and a `chemocyte` is void across this change, and anyone who
-runs it afterwards will photograph a cell swimming in circles and file a bug.
-`--forage` must be replaced by a gradient follower, or refuse to run when the
-posted bearing is body-fixed.
+`tools/drive.gd --forage` steered to put the **taste bearing** on the nose.
+After this change that bearing is the organ's own arc, so `--forage` would turn
+one way forever — it would be measuring itself. It is gone, and **`--sniff`**
+is in its place: sample `taste_level` off the field every 0.4 s, hold a turn
+while it rises, reverse when it falls.
+
+Three things about it that are not obvious and are all measured.
+
+**It reads the field, not the bus.** `signal_bus.gd` gates its re-posts at
+`POST_EPSILON` 0.02, so a subscriber sees a staircase where a player watching
+the membrane sees a continuous glow. Measuring a gradient through a 0.02
+quantiser would measure the quantiser.
+
+**The reversal is edge-triggered.** Reversing on *every* falling sample makes a
+cell that has just swum past its food alternate port/starboard every 0.4 s,
+which is a straight line — at the one moment a straight line is the worst
+answer. Reversing once, at the turn from rising to falling, leaves the new
+direction held while the level keeps falling, so the heading sweeps until
+something gets better. It matters because the actuator is slow: a tier-1
+`cirrus` takes 1.10 s to build its turn against a 0.4 s sample, so a bot allowed
+to reverse on consecutive samples never actually turns. Measured over the same
+eight seeds: 4 of 8 ate inside 90 s level-triggered, 5 of 8 edge-triggered.
+
+**Every measurement in this repository taken with `--forage` and a `chemocyte`
+is void across this change.** `replay.md` §3 and §9 quote two `--forage --evade`
+commands; those runs were about the recorder's determinism and its cost per
+frame, not about the nose, so their *findings* stand — but the commands as
+written no longer run, and re-taking them needs `--sniff`.
 
 ---
 
-## 8. Left open — owner's call
+## 8. Decided — the owner's answers
 
-| # | Question | Options | What it means |
+All three rows are settled. The questions and the evidence that supported them
+are kept; what changed is that each now has an answer and a state.
+
+| # | Question | Decision | What it means |
 | --- | --- | --- | --- |
-| 1 | Smell becomes a level with no direction. Measured over eight seeds, a first meal today takes a median 26 s and never fails; on a level alone it takes 73 s and one run in eight does not eat inside ninety. Ship it? | **A — ship it, with the loudest-source nose (§7.5) ✓ recommended** · B — ship the level but keep a coarse bearing under it, resolving only in the last 300 units · C — leave smell as it is | **A**: finding food becomes hunting rather than walking. You swing your nose about and watch the glow rise and fall. It takes roughly three times as long and it can go wrong — you will not starve, but the opening minute stops being safe — and it is the first sense that rewards knowing which way your body is pointed. **B**: the same sweep at range, but the glow still points once you are nearly on top of the food, so you never lose a meal you had found. **C**: nothing changes; smell keeps pointing. |
-| 2 | `rhabdom` sharpened the smell lobe's *width*, and there is no width any more. It has to be re-aimed or it does nothing. | **A — it sharpens the nose's directionality instead ✓ recommended** · B — move it to the eye, which is what a rhabdom actually is · C — retire it from the drop table | **A**: "focus" still means "smell more clearly which way", and the gene's existing sentence stays true. **B**: focus starts sharpening the `stigma` and the `ocellus` instead — better biology, more work, and everyone who has one loses what it did. **C**: one fewer gene in the water. |
-| 3 | Twenty beams draw twenty points on a body's near edge — an **outline**, in the middle of the screen. `perception.md` has forbidden shape in point of view since Phase 1. Allow it? | **A — allow it, at tier 3 only, for the `ocellus` alone ✓ recommended** · B — cap the drawn pointers at 3, keep 20 for the sim · C — cap the whole gene at fewer rays | **A**: pour three whole tiers into one eye and you finally *see* the shape of the thing in front of you. It is the biggest reward in the game and it is the only one. **B**: twenty beams still find things, but you never get the picture. **C**: the gene stops growing sooner. |
+| 1 | Smell becomes a level with no direction. Ship it? | **A — ship it, with the loudest-source nose (§7.5). BUILT.** | Finding food is hunting rather than walking: you swing your nose about and watch the glow rise and fall. It takes longer and it can go wrong — you will not starve, but the opening minute stops being safe — and it is the first sense that rewards knowing which way your body is pointed. |
+| 2 | `rhabdom` sharpened the smell lobe's *width*, and there is no width any more. | **C — retire it from the drop table. BUILT.** | One fewer gene in the water. Nothing in a player's build changes, because nothing could have a `rhabdom` from a version that still had one: no genome in this game is ever written to disk. |
+| 3 | Twenty beams draw an outline in the middle of the screen. Allow it? | **A — allow it, at tier 3 only, for the `ocellus` alone. NOT BUILT — ships separately.** | Pour three whole tiers into one eye and you finally *see* the shape of the thing in front of you. |
 
-Nuance under the table, not in it:
+Rows 1 and 2 are in this build. **Row 3 is not**, and deliberately: it collides
+with rows 1 and 2 in `food.gd`, `cell.gd` and `cilia.gd`, and a change that
+rewrites the beam fan, the recorder's stride and the drawn pointers at the same
+time as the nose is a release nobody can review. §3 still describes it and §4's
+table still marks it *not built*.
 
-**Row 1** is the risky one and the numbers are in §7.5. Option B is not a
-compromise for its own sake — it is today's behaviour restricted to the range at
-which today's bearing is *already* reliable (`BEARING_RANGE` 680), so it costs
-nothing to build and keeps the owner's *"orientation should count"* everywhere
-except the final approach. I recommend A anyway, because the whole point of the
-change is that finding food should be an activity, and B leaves the old
-autopilot switched on for exactly the part that decides the meal.
+### 8.1 What the retirement of `rhabdom` actually does, and the compatibility call
 
-**Row 3**: the override already exists for *position* (`genes-and-cilia.md`
-§2.3). This widens it to *shape* and only for a sense that physically measured
-every point it draws. Nothing else follows: no bodies, no identity, no scent
-bloom. If the answer is B, `returns.gd` sorts the landed beams by distance and
-draws the nearest three — one line.
+The owner's row 2 is option C. **`rhabdom` is retired by taking it out of the
+two tables that can *produce* a gene** — `food.gd`'s `GENE_WEIGHTS` and
+`DRIFTER_GENES`, which are what the water is seeded from — **and out of
+`genome.gd`'s `GENE_ORDER`, which is what `_mutate_drift` draws a replacement
+from.** Nothing in the shipped game can hand a player one after this.
 
----
+It is also taken out of the four tables that *describe* it — `cilia.gd`'s `HUES`
+and `EARNED_COUNT`, `normal_mode.gd`'s `WORDS` and `EXPLAINS` — and that is the
+deliberate half. Leaving `focus` and *sharpens where a smell is coming from*
+behind would be the pause screen promising an effect that no longer exists,
+which is the only way this change could actually corrupt something a player
+reads.
+
+**The compatibility question, answered by looking rather than by guessing.**
+A genome could in principle survive a version change through a save file, a
+serialised replay or `user://`. In this project **none of those exist**:
+
+- `grep -rn "FileAccess" game/` is empty. Nothing under `game/` writes a file.
+- `run_state.gd` is the only thing that touches `user://`, and it stores four
+  scalars: view, gain, camera lock, scheme, plus the onboarding flag. No genome.
+- `recorder.gd`'s own header states it and the code agrees: *"In memory and
+  nowhere else. No file, no `user://`, no serialisation, no version field."*
+  A replay cannot outlive the process that made it.
+- The only surface that names a gene as text is `tools/drive.gd`'s `--genome=`
+  and `--dna=`, and `tools/` is excluded from both export presets.
+
+So the retirement cannot meet an old genome, because there are no old genomes.
+**What was implemented instead is that it would survive one if there were.**
+Every table that consumes a gene name already answers for one it has never
+heard of, and that was checked rather than assumed:
+
+| lookup | what an unknown gene gets |
+| --- | --- |
+| `Genome.tier_of` | `.get(gene, 0)` — the tier is kept, not dropped |
+| `Genome.dominant_of` | an explicit second pass over keys outside `GENE_ORDER` |
+| `Genome.upkeep_of` | iterates `values()` — a retired gene still costs upkeep |
+| `Cilia.hue_of` | `RESERVED_HUES[0]`, indigo |
+| `Cilia`'s `EARNED_COUNT` | `COUNT_EARNED`, the default tuft |
+| `normal_mode.WORDS` | the raw gene name |
+| `normal_mode.EXPLAINS` | the empty string, so no line is drawn |
+
+**Photographed, not argued.** `--genome=cytostome:2,cirrus:1,flagellum:1,`
+`chemocyte:2,rhabdom:2,ocellus:1` boots, plays, pauses and divides. The pause
+strand draws the locus in indigo and labels it `rhabdom`; the line under it
+reads `rhabdom` with **no sentence**, because the gene no longer does anything
+and the screen declines to invent one. Nothing crashes, nothing is silently
+dropped from the genome, and the upkeep is paid.
+
+**One defect found by that photograph, and it is left alone on purpose.** The
+locus word falls back to the raw gene name, and `rhabdom` measures about 60 px
+against `normal_mode.gd`'s documented 47 px budget for a word on the *choosing*
+screen — so on a division it runs about 15 px past its block's nominal right
+edge. Rendered at 1280x720 and 2400x1080 nothing collides, because the next
+block is 232 px away; the overrun is invisible and real. It is not fixed here
+because it is unreachable without the harness, and because `normal_mode.gd`
+already writes down the fix if it ever matters: add the difference to
+`CHOOSE_BLOCK_W` on the **outboard** side.
+
+**72 degrees of the hue wheel is free again**, where `rhabdom`'s yellow-green
+sat. `cilia.gd` records it beside `RESERVED_HUES` rather than adding it to that
+list, because those two are in wheel order and a third entry would change which
+colour an unknown gene gets.
+
+### 8.2 `SMELL_BEHIND` lives in `food.gd`, and the ring is a second copy
+
+§2.1 put `SMELL_BEHIND` in `signal_bus.gd`, next to `FOCUS_BY_TIER`, because the
+floor was going to be `SMELL_BEHIND * FOCUS_BY_TIER[tier]`. With `rhabdom`
+retired there is no tier table and the floor is one number, so it moved to
+`food.gd`, which is the file that computes the level. The membrane keeps a
+second copy, `SMELL_RING_FLOOR`, and that is deliberate rather than an oversight:
+
+- the drawn ring **is** the organ's directivity pattern (§2.2), so the two
+  numbers are one number wearing two hats;
+- the membrane is a view and may not preload the field — a `signal_bus.gd` that
+  imported `food.gd` would put the water inside the skin;
+- the file already has exactly this pairing between `PING_DECAY` and `food.gd`'s
+  `PING_MIN_GAP`, documented the same way.
+
+Both comments name the other constant and say what breaks if they drift: the
+picture stops being the maths and becomes a decoration. Measured on the shipped
+build, the lobe's `smoothstep(z, 1, -1)` comes back at **0.22** exactly.
+
+### 8.3 §1.3's blind arc: confirmed, not changed
+
+`three-senses.md` §1.3 raised one question in prose that was never tabled — the
+blind arc does not narrow with investment, it *goes* at the first upgrade, and
+whether that is the right ladder is an owner call. **It is: the blind arc stays
+a tier-1 mechanic and `PING_THROUGH_BY_TIER` is unchanged at
+`[0.0, 0.0, 0.34, 0.58]`.** Stone blind behind your own body until the first
+upgrade; after it, a quieter answer from the half you are not pointed at. No
+code changed for this row and none should.
 
 ## 9. What was considered and rejected
 
@@ -1064,10 +1311,21 @@ All under `--rendering-driver opengl3 --fixed-fps 60`, through
 `res://tools/shot.tscn -- --scene=res://tools/drive.tscn`, with `--seed=` on
 every frame that is compared against another.
 
-**The `ampulla` frames were taken on a prototype and have since been re-taken on
-the build; the `chemocyte` and `ocellus` frames are the prototype's and nothing
-else** — those two are not in `main` (§4), so nothing below them can be
-re-photographed without building them first.
+**The `ampulla` and `chemocyte` frames have been taken on the build; the
+`ocellus` frames are the prototype's and nothing else** — §3 is not in `main`
+(§4), so nothing in the beam row can be re-photographed without building it
+first.
+
+Taken on the build, at both shapes, under `--rendering-driver opengl3`:
+
+- the taste ring with the food in front of the nose and behind it, 1280x720 and
+  2400x1080 — the A/B in §7.4, and the pair a reviewer should look at first
+- the pause screen's gene strip with `rhabdom` gone: `eat turn swim smell ping
+  beam`, and the `chemocyte` line reading *smells food, strongest where your
+  nose is pointed*
+- the division screen with the same line under a pair of daughters
+- the compatibility frame: a forced `rhabdom:2` drawn in the reserved indigo,
+  labelled with its raw name, with no sentence under it (§8.1)
 
 **Before**
 
@@ -1092,9 +1350,34 @@ re-fitted twice before it was bright enough to be a readout rather than a tint,
 and the numbers above are the second fit; at the first it measured peak green 52
 against today's 66 and it was, plainly, too dim to be a sense.
 
+**Judged again on the build, at both shapes.** The ring reads as a ring: at
+2400x1080 the bright side sits over the top and upper-starboard of the contour
+and the dim side over the lower-port corner, with no clipping and nothing
+colliding — the band simply gets wider, as §5 predicted. The A/B is not subtle;
+one frame is a lit green rim and the other is a suggestion of one, and neither
+goes out, which is the whole of why `SMELL_BEHIND` is 0.22 and not 0.10. The
+pause strip is one word shorter and reads better for it.
+
 ---
 
 ## 11. The verdict, in one paragraph
+
+Two of these three changes are straightforwardly good and cost almost nothing:
+the `ampulla`'s baffles add a mechanic with a counter the player already owns,
+and measured, they cost no returns at all — only which returns. Twenty rays are
+the payoff the interior has been black for since Phase 1. **The smell change is
+different**, and it was the row the owner had the least reason to want on the
+evidence. It shipped, and on the built code the honest summary is narrower than
+either the hope or the fear: a level-only forager finds food on **6 of 24**
+seeds against today's field and **16 of 24** against the new one, so the sense
+is more than twice as navigable as the thing it replaces — and still much slower
+than the autopilot it takes away, which fed on **8 of 8** in a median 20.8 s.
+The sense that comes out the far side is more interesting to use than the one
+that goes in, it never goes dark, and turning is now the thing that answers it.
+The one number worth revisiting is `SMELL_TAIL`, which at 0.22 is 40% of the
+whole reading and is measurably what makes the opening slow (§7.5.1).
+
+## 11.1 The paragraph this replaced, kept because it was the warning
 
 Two of these three changes are straightforwardly good and cost almost nothing:
 the `ampulla`'s baffles add a mechanic with a counter the player already owns,

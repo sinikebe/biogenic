@@ -16,12 +16,12 @@ extends Node
 ## assumed the hunter and the hunted were different kinds of thing.
 ##
 ## The cell reads exactly three things out of this field: its **total scent
-## concentration**, which sets the beat rate, its **gradient bearing**, which
-## sets the green band wash, and **dread**, a scalar with no bearing at all.
-## Everything else it learns by being hit.
+## concentration**, which sets the beat rate, its **taste level**, which sets
+## the green band wash and carries no direction at all, and **dread**, a scalar
+## with no bearing either. Everything else it learns by being hit.
 ##
 ## This node computes; it does not post. [member concentration],
-## [member taste_bearing] and [member dread_level] are read once a frame by
+## [member taste_level] and [member dread_level] are read once a frame by
 ## whoever owns the run, which is the only place allowed to talk to the signal
 ## bus; discrete events are signals. A per-frame signal here would allocate a
 ## dictionary sixty times a second to say the same thing.
@@ -139,15 +139,26 @@ const GENE_WEIGHTS := {
 	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
 	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
-	&"statocyst": 2, &"rhabdom": 2, &"palp": 2, &"myoneme": 2,
+	&"statocyst": 2, &"palp": 2, &"myoneme": 2,
 	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
 	&"plastid": 2, &"vacuole": 2, &"crista": 2,
 }
 ## Everything a drifter can be, and therefore everything the player can ever
 ## eat their way into. The mouth is not on this list by construction.
+##
+## **`rhabdom` is not on it either, and that is a retirement rather than an
+## omission.** It bought the taste lobe's width and its bearing jitter, and
+## three-senses.md §2 took both away: there is no width left to sharpen and no
+## bearing left to steady. Rather than re-aim it at the nose's floor -- a gene
+## whose whole effect would be a number nobody can see move -- the owner
+## retired it (§8 row 2, option C). This list and [constant GENE_WEIGHTS] are
+## the two places a gene can be *produced*, so taking it out of both is the
+## whole of the retirement; every table that *consumes* a gene name still
+## answers for one it has never heard of, which is why an old `{gene: tier}`
+## map that still names it loads and draws rather than crashing.
 const DRIFTER_GENES: Array[StringName] = [
 	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
-	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"ocellus", &"axoneme", &"statocyst", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
@@ -209,17 +220,76 @@ const CORE_RANGE := 130.0      ## c = 1 at or inside this
 const SCENT_RANGE := 1600.0    ## c = 0 at or outside this
 const SCENT_FALLOFF := 1.7
 const SCENT_WINDOW := 250.0    ## smooth the outer cutoff so it cannot pop
-## Where [method scent] crosses the bus's TASTE_FLOOR and a direction first
-## exists at all -- about twelve seconds of swimming. Everything outside it is
-## hot-and-cold with no bearing in it. Named here because it is a property of
-## the field, and the full-vision view draws it as a threshold ring.
+## Where one body on its own becomes worth smelling -- about twelve seconds of
+## swimming. Named here because it is a property of the field, and the
+## full-vision view draws it as a threshold ring.
 ##
-## **It is one source's contribution, not the whole field.** Thirty-four bodies
-## sum, so a bearing exists long before any single one crosses this -- and since
-## `chemocyte` arrived, a cell only sums what is inside its own nose's reach
-## ([constant CellBody.SMELL_RANGE_BY_TIER]). The ring stays what it always was:
-## where one body on its own becomes worth smelling.
+## **It is one source's contribution, not the whole field**, and it never was
+## the whole field: thirty-four bodies contribute, so the readout is lit long
+## before any single one crosses this. Since `chemocyte` arrived a cell only
+## reads what is inside its own nose's reach ([constant
+## CellBody.SMELL_RANGE_BY_TIER]), which is a different and much larger radius.
+##
+## **The name is historical and the comment used to be wrong.** It said this was
+## where "a direction first exists at all", which was already only half true and
+## is now false in both halves: three-senses.md §2 took the direction out of
+## smell entirely, and the bus's TASTE_FLOOR this was fitted against moved from
+## 0.06 to 0.02 in the same change. The number is left where it is because what
+## it does today is draw one ring in full vision and that ring is unchanged;
+## renaming it would touch vision.gd and two design documents for no difference
+## a player could see.
 const BEARING_RANGE := 680.0
+
+# --- What the nose does with that field (three-senses.md §2) ----------------
+# The owner: *"smell is not a directional sensor. It should only say whether the
+# smell is strong or not. Orientation should count. If the smell sensor is
+# facing towards nothing, the smell is less than when faced towards food."*
+#
+# Two constants, and both were measured rather than picked. The first is how
+# much orientation counts; the second is what stops the answer being a number
+# with no gradient in it.
+
+## What a receptor pointed dead away still picks up, as a fraction of what one
+## pointed straight at a source does -- the floor under the cosine lobe in
+## [method _step_sense].
+##
+## **0.22 and not lower, for one reason: the band must never go out.** At 0.22
+## the dimmest facing in every instrumented sample stays above the bus's
+## TASTE_FLOOR. At 0.10 a cell facing away from everything drops through the
+## floor and the green band disappears, which reads as *the gene has stopped
+## working* rather than as *you are facing the wrong way*. Dimming is
+## information; darkness is a bug report. three-senses.md §2.3.
+##
+## Mirrored, deliberately, by signal_bus.gd's SMELL_RING_FLOOR -- that file
+## draws this curve on the skin and may not preload this one. The comment there
+## says what breaks if the two drift.
+const SMELL_BEHIND := 0.22
+## How much of everything-but-the-loudest reaches the readout. The nose reports
+## the strongest thing it can smell, plus a tail of the rest -- so the reading
+## still rises in richer water, but one source can dominate it and a gradient
+## therefore exists.
+##
+## **Measured** (three-senses.md §7.5). Thirteen to nineteen sources inside a
+## tier-1 reach sum to something that barely moves with position or facing and
+## clamps at 1.0 for much of a run, so the plain sum this replaces was never
+## navigable at all. The tail keeps the owner's *"whether the smell is strong or
+## not"* literally true on top of that: more food still reads as more smell,
+## which a bare maximum cannot say.
+##
+## **0.22 is the number the owner approved and it is under review, with the
+## reasons written down.** §7.5 chose it because a bare maximum jumps between
+## bodies as the nose turns, which steps the level and tumbles a gradient
+## follower at random. Re-measured on the built code over 24 seeds
+## (three-senses.md §7.5.1), that damping is real and small -- the worst 1% of
+## sample-to-sample steps shrink from 0.256 to 0.193 -- and its cost is not:
+## with fifteen sources in reach, `0.22 x 15` means the tail is a mean **40%**
+## of the whole reading, so most of what the nose says is a slow position term
+## that carries nothing about facing. A level-only forager fed on 19 of 24 seeds
+## at 0.00 and 16 of 24 here, in a median 36.8 s against 64.5 s.
+##
+## Do not move it without the owner: it is balance, and only playing can judge
+## it. §7.5.1 puts the question with a recommendation.
+const SMELL_TAIL := 0.22
 
 ## How a body fades out of the scent as it stops fitting in your mouth. §7.0 is
 ## explicit that this must not be a boolean: a body drifting across your gape
@@ -617,9 +687,6 @@ class Body:
 ## beat mapping, and the reason the outer kilometre is hot-and-cold with no
 ## direction in it.
 var concentration := 0.0
-## Body-relative bearing of the summed gradient, radians clockwise from the
-## cell's front. Meaningless when [member concentration] is 0.
-var taste_bearing := 0.0
 ## What the membrane should be told, 0..1. No bearing, ever: a hunter's
 ## metabolites saturate the chemoreceptor, and a blocked receptor has no
 ## differential to read a direction from.
@@ -651,17 +718,31 @@ var beam_range := 0.0
 ## hit and `hit` is false then.
 var beams: Array = []
 ## `chemocyte`. How far this cell's chemoreceptors reach, written once a frame
-## by the run. 0 is a cell with no nose, and a cell with no nose gets no
-## bearing to anything edible at all.
+## by the run. 0 is a cell with no nose, and a cell with no nose smells nothing
+## edible at all.
 var smell_range := 0.0
-## **What the scent field is worth to this particular nose**: the same sum as
-## [member concentration], restricted to sources inside [member smell_range].
+## **Where the nose is on the membrane**, as a body-relative bearing, written
+## once a frame by the run exactly as [member ping_bearing] and [member
+## dart_bearing] are.
+##
+## Smell has no direction of its own any more (three-senses.md §2). What the
+## organ reports is a level, and how nearly a source lies along *this* arc is
+## the whole of how much of that source reaches the level. So the slot the gene
+## is worn in is the direction the player has to point to smell, and turning --
+## the one verb this game has -- is how they sweep for it.
+var smell_bearing := 0.0
+## **What the scent field is worth to this particular nose**, 0..1: the loudest
+## source inside [member smell_range], weighted by facing, plus [constant
+## SMELL_TAIL] of everything else.
 ##
 ## Two numbers rather than one, and the split is the point. [member
 ## concentration] is what the *water* is like, and it drives the metabolic beat,
 ## which is a property of the body and not of its senses -- an eyeless, noseless
 ## cell still beats faster in rich water. This is what the *organ* picks up, and
 ## it is the only one of the two that reaches the membrane.
+##
+## **Nothing else leaves the nose.** There is no taste bearing any more: the
+## organ answers *how strong*, and the player answers *which way* by turning.
 var taste_level := 0.0
 ## `ampulla`. How far a pulse carries and how often one goes out, written once a
 ## frame by the run. Either at 0 is a cell with no electroreceptor.
@@ -743,7 +824,6 @@ func setup(cell: CellBody) -> void:
 	_first_pending = true
 	_first_hunt = FIRST_DELAY
 	concentration = 0.0
-	taste_bearing = 0.0
 	dread_level = 0.0
 	threat = 0.0
 	beams.clear()
@@ -1509,22 +1589,23 @@ func _step_recycle() -> void:
 
 
 # ---------------------------------------------------------------------------
-# What the cell can actually sense: a summed concentration, a summed bearing,
-# and a scalar with no bearing in it.
+# What the cell can actually sense: a summed concentration, a level with no
+# bearing in it at all, and a scalar with no bearing in it.
 # ---------------------------------------------------------------------------
 
 func _step_sense() -> void:
 	var total := 0.0
-	var pull := Vector2.ZERO
 	var dread := 0.0
 	var worst := 0.0
 	var gape := _cell.gape()
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
-	# The same sum again, over only what this cell's nose reaches. Kept apart
-	# from `total` on purpose: see [member taste_level].
-	var smelt := 0.0
-	var smelt_pull := Vector2.ZERO
+	# **What the nose picks up, which is not the same sum again.** Restricted to
+	# sources inside [member smell_range], weighted by how nearly each one lies
+	# along the organ's own arc, and reported as *the loudest of them plus a
+	# tail of the rest* rather than as a total. [constant SMELL_TAIL] is why.
+	var smelt_top := 0.0
+	var smelt_rest := 0.0
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -1541,10 +1622,21 @@ func _step_sense() -> void:
 			var c := scent(d) * edible
 			if c > 0.0:
 				total += c
-				pull += offset / maxf(d, 0.001) * c
 				if d < smell_range:
-					smelt += c
-					smelt_pull += offset / maxf(d, 0.001) * c
+					# The whole of "orientation should count": a cosine lobe
+					# about the arc the organ is worn on, never falling below
+					# SMELL_BEHIND. A cone with a tier-scaled width was measured
+					# and buys under 2% of swing -- three-senses.md §7.4.
+					var lobe := 0.5 + 0.5 * cos(angle_difference(
+						smell_bearing, _cell.bearing_to(b.pos)))
+					var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
+					# Loudest and rest, in one pass and with no sort: the new
+					# maximum demotes the old one into the tail.
+					if w > smelt_top:
+						smelt_rest += smelt_top
+						smelt_top = w
+					else:
+						smelt_rest += w
 
 		# The shadow, over every body big enough to cast one. Summed and given a
 		# bearing exactly the way taste is, for the same reason: two bodies
@@ -1594,15 +1686,12 @@ func _step_sense() -> void:
 			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * _cell.wound)
 
 	concentration = minf(total, 1.0)
-	# **The bearing is the nose's, not the water's.** A cell with no chemocyte
-	# leaves here with taste_level 0 and taste_bearing 0, which is what makes
-	# "an organ you have not grown is silent" true at the source as well as at
-	# the two gates downstream of it.
-	taste_level = minf(smelt, 1.0)
-	if taste_level > 0.0 and smelt_pull.length_squared() > 0.0:
-		taste_bearing = _cell.bearing_to(_cell.position + smelt_pull)
-	else:
-		taste_bearing = 0.0
+	# **There is no bearing here any more, and that is the change.** A cell with
+	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
+	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
+	# you have not grown is silent" true at the source as well as at the two
+	# gates downstream of it.
+	taste_level = minf(smelt_top + SMELL_TAIL * smelt_rest, 1.0)
 	shadow = minf(shade, 1.0)
 	# Deliberately left where it was when the last shadow faded rather than
 	# snapped to dead ahead: the lobe is already dark at strength 0, and a

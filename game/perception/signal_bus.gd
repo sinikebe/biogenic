@@ -95,17 +95,49 @@ const FLASH_PEAK := 0.80
 const FLASH_ATTACK := 0.016
 const FLASH_DECAY := 0.09
 
+# --- Taste, which is a level and not a direction (three-senses.md §2) -------
+# Smell stopped pointing. What arrives here is how much this nose picks up, and
+# the bearing that comes with it is **the organ's own arc on this body** -- the
+# same number every frame of a run. So the lobe is drawn as a full ring,
+# brightest where the nose is and dimmest dead astern of it, and what the player
+# watches is the ring's brightness changing as they turn.
+#
+# Three things that used to be here have gone, and §2.2 is why: the lobe's two
+# widths, the bearing low-pass, and the bearing jitter. All three were vagueness
+# about a direction, and there is no direction left to be vague about. Vagueness
+# now lives in the level's own flatness, which is a truer place for it -- and
+# deleting the jitter removes one of the **two** draws this node made from its
+# private RNG. perception.md §4.1 is unchanged: the beat's draw remains, so
+# `--seed=` is still mandatory for any comparison.
+
 const TASTE_PEAK := 0.62
-const TASTE_FLOOR := 0.06
-const TASTE_WIDE_DEG := 78.0
-const TASTE_TIGHT_DEG := 26.0
-const TASTE_JITTER_WIDE_DEG := 22.0
-const TASTE_JITTER_TIGHT_DEG := 4.0
-const TASTE_BEARING_TAU := 0.6
-const TASTE_JITTER_HZ := 1.5
+## Where the readout starts, and where it fades in from. Both moved down with
+## the channel: the old 0.06 was `scent(680)`, a number off the plain summed
+## field this replaces, and the weighted level lives a whole band lower.
+const TASTE_FLOOR := 0.02
+const TASTE_FADE := 0.02
+## Where the readout saturates. Pinned deliberately below 1.0: above 0.45 the
+## cell is inside food.gd's CORE_RANGE of something edible and about to eat it,
+## and a readout still climbing while the mouth is closing is spending range on
+## a decision that has already been made. §2.3.
+const TASTE_FULL := 0.45
+## The shape between the two. Slightly concave, so the bottom of the band --
+## where a forager actually lives -- gets more of the curve than the top.
+const TASTE_CURVE := 0.8
+## What the drawn ring's dimmest point is worth against its brightest, which is
+## what [method _ring_edge] solves the lobe's `z` for.
+##
+## **This is food.gd's SMELL_BEHIND, drawn.** The ring is the organ's own
+## directivity pattern: the player is looking at the sensitivity curve the
+## simulation is using, so the two numbers are one number in two places. It is
+## copied rather than imported because the membrane is a view and may not
+## preload the field -- the same pairing this file already has between
+## PING_DECAY and food.gd's PING_MIN_GAP. If they drift, the picture stops
+## being the maths and starts being a decoration.
+const SMELL_RING_FLOOR := 0.22
 ## Dread costs something, which is what stops it being mood: a hunted cell
-## smells at 40% and its bearing jitter doubles. It cannot smell its way out of
-## the problem. docs/design/food-and-predators.md §4.2.
+## smells at 40%. It cannot smell its way out of the problem.
+## docs/design/food-and-predators.md §4.2.
 const TASTE_DREAD_SUPPRESS := 0.6
 
 const WAKE_CAP := 0.95
@@ -135,10 +167,10 @@ const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
 const LIGHT_FLOOR := 0.02
 
 # --- The genes that reach the membrane --------------------------------------
-# Four of the new organs are senses, so four of them land here. Nothing below
-# adds a uniform: the beam takes the last free glow lobe, `level` takes the last
-# free *pressure* lobe, `touch` fires the bruise envelope the membrane has had
-# since Phase 1, and `focus` narrows a lobe that already exists.
+# Nothing below adds a uniform: the beam takes the last free glow lobe, `level`
+# takes the last free *pressure* lobe, and `touch` fires the bruise envelope the
+# membrane has had since Phase 1. `focus` used to narrow a lobe that already
+# existed; the lobe it narrowed became a ring and the gene was retired.
 
 ## `ocellus` / beam. **The only thing you can see**: the point where the beam
 ## hits something, at that bearing and nothing else. Louder than the stigma's
@@ -162,10 +194,11 @@ const LEVEL_HALFWIDTH_DEG: Array[float] = [0.0, 30.0, 22.0, 15.0]
 ## real contact always buries it.
 const TOUCH_PEAK := 0.26
 
-## `rhabdom` / focus. A multiplier on the taste lobe's width and on its bearing
-## jitter, which are the two things that make the scent direction vague. It buys
-## sharpness in the channel the player has used since the first minute.
-const FOCUS_BY_TIER: Array[float] = [1.0, 0.74, 0.56, 0.40]
+## `rhabdom` / focus **was here**, as a multiplier on the taste lobe's width and
+## on its bearing jitter. Both went with three-senses.md §2 -- there is no width
+## and no jitter left -- and the owner retired the gene rather than re-aim it at
+## the nose's floor (§8 row 2). Nothing replaced the constant and nothing should:
+## the floor is [constant SMELL_RING_FLOOR] and it does not vary by tier.
 
 ## `ampulla` / ping. One electroreceptive pulse, and a mark on the contour for
 ## every body it comes back off. **It shares [constant LOBE_BEAM] with the
@@ -188,14 +221,17 @@ const PING_ATTACK := 0.035
 ## are a pair: raise this above that one and the series becomes a chord again.
 const PING_DECAY := 0.15
 
-## The earned senses, in genome order: `ocellus`, `statocyst`, `rhabdom`, then
-## the two this phase adds. Written once a frame by [method sense_organs],
-## exactly like [method organs].
+## The earned senses, in genome order: `ocellus`, `statocyst`, `chemocyte`,
+## `ampulla`. Written once a frame by [method sense_organs], exactly like
+## [method organs].
+##
+## `rhabdom` used to sit at index 2 and the indices below closed over its gap.
+## Nothing outside this file reads them -- [method sense_organs] takes named
+## arguments and every use is `_senses[SENSE_*]` -- so renumbering is contained.
 const SENSE_OCELLUS := 0
 const SENSE_STATOCYST := 1
-const SENSE_RHABDOM := 2
-const SENSE_CHEMOCYTE := 3
-const SENSE_AMPULLA := 4
+const SENSE_CHEMOCYTE := 2
+const SENSE_AMPULLA := 3
 
 # --- A held sample is a second heartbeat (§3.3) -----------------------------
 # The one new point-of-view signal Phase 5 adds, and the answer to "how does a
@@ -417,10 +453,10 @@ var _ping := Env.new(PING_ATTACK, PING_DECAY)
 ## Defaults are the born cell: mediocre at three things and blind. Nothing here
 ## may become a way to describe what is *outside* the cell.
 var _organs := PackedInt32Array([1, 1, 1, 0])
-## `ocellus`, `statocyst`, `rhabdom`, `chemocyte`, `ampulla`. A born cell has
-## none of them -- **including the nose**, which is the change this phase makes
-## to what "born" means. Taste was innate from Phase 1 to Phase 5.
-var _senses := PackedInt32Array([0, 0, 0, 0, 0])
+## `ocellus`, `statocyst`, `chemocyte`, `ampulla`. A born cell has none of them
+## -- **including the nose**, which is the change Phase 6 made to what "born"
+## means. Taste was innate from Phase 1 to Phase 5.
+var _senses := PackedInt32Array([0, 0, 0, 0])
 
 ## Shear has no attack at all -- it is the proof that the player is connected to
 ## something, so it must answer the same frame the turn starts.
@@ -428,10 +464,15 @@ var _shear := 0.0
 var _shear_bearing := 0.0
 
 var _taste_c := 0.0
+## The nose's own arc on this body, posted with the level. It moves only when
+## the player moves the gene, and all it decides is which side of the ring is
+## the bright one.
 var _taste_bearing := 0.0
-var _taste_bearing_lp := 0.0
-var _taste_jitter := 0.0
-var _taste_jitter_clock := 0.0
+## The taste ring's `z`, solved once from [constant SMELL_RING_FLOOR]. A member
+## rather than a constant because a `const` cannot call a function, and solved
+## rather than written down so the ring and the floor cannot drift apart by
+## somebody editing one of two numbers.
+var _ring_z := _ring_edge(SMELL_RING_FLOOR)
 
 ## **This node's own generator, and it must stay its own.** Every other random
 ## draw in the project comes off the global stream, which is what makes a run
@@ -459,12 +500,17 @@ var _taste_jitter_clock := 0.0
 ## was not. `RandomNumberGenerator.new()` seeds itself from the system on
 ## construction, `seed()` sets the GLOBAL stream and cannot reach an instance,
 ## and nothing in the project ever assigned this one -- so the harness's
-## `--seed=` covered the simulation and never covered the membrane. The taste
-## jitter draws from here every 1/1.5 s from t=0 in **every** run, so two runs
-## of the same command were never the same picture: three byte-identical frames
-## measured 288,380 to 321,940 differing pixels of 921,600, max delta 125.
-## Every A/B this project has ever run on a membrane frame was reading that
-## noise as well as its own variable.
+## `--seed=` covered the simulation and never covered the membrane. Two draws
+## fired from here in every run, the taste jitter's every 1/1.5 s from t=0 and
+## the beat's once a beat, so two runs of the same command were never the same
+## picture: three byte-identical frames measured 288,380 to 321,940 differing
+## pixels of 921,600, max delta 125. Every A/B this project has ever run on a
+## membrane frame was reading that noise as well as its own variable.
+##
+## **One of those two draws is gone** -- three-senses.md §2 deleted the taste
+## jitter with the bearing it was vague about -- and that changes nothing here.
+## The beat jitters on every frame of dread, so this stream is still live and
+## `--seed=` is still mandatory before any comparison.
 ##
 ## [method seed_rng] is the whole fix and it is deliberately not called from the
 ## game: a player's membrane keeps its system seed, because a run is not a thing
@@ -692,11 +738,10 @@ func organs(cytostome: int, cirrus: int, flagellum: int, stigma: int) -> void:
 ##
 ## Same rule as [method organs] and it is not a loophole: three small integers
 ## about this cell's own anatomy are not a fact about anything in the water.
-func sense_organs(ocellus: int, statocyst: int, rhabdom: int,
+func sense_organs(ocellus: int, statocyst: int,
 		chemocyte: int = 0, ampulla: int = 0) -> void:
 	_senses[SENSE_OCELLUS] = clampi(ocellus, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_STATOCYST] = clampi(statocyst, 0, ORGAN_TIER_MAX)
-	_senses[SENSE_RHABDOM] = clampi(rhabdom, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_CHEMOCYTE] = clampi(chemocyte, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_AMPULLA] = clampi(ampulla, 0, ORGAN_TIER_MAX)
 
@@ -706,17 +751,25 @@ func sense_organs(ocellus: int, statocyst: int, rhabdom: int,
 # ---------------------------------------------------------------------------
 
 ## Chemistry soaking through the band. Continuous: post it every frame with the
-## current concentration, 0 for "nothing out there".
+## current level, 0 for "nothing out there".
+##
+## **[param bearing] is not a direction to food.** It is the arc the nose is
+## worn on, and it is the same number every frame of a run unless the player
+## moves the gene: all it does here is decide which side of the ring is the
+## bright one. What the sense actually says is [param concentration], and
+## three-senses.md §2 is the whole argument for why that is the better sense.
 ##
 ## **A cell with no `chemocyte` smells nothing**, enforced here as well as at
 ## the call site, exactly the way [method light] is gated on the `stigma`. This
 ## was innate for five phases and is not any more: the green band is the one
-## signal that says *food, that way*, and a sense that is handed out for free is
-## a sense that can never be a decision.
+## signal that says *food is near*, and a sense that is handed out for free is a
+## sense that can never be a decision.
 ##
-## It is still the only sense that lies -- the low-pass, the jitter and dread's
-## suppression all stay where they were. What the tier buys is reach, and reach
-## is applied before this: food.gd sums only what is inside the nose.
+## It still lies, and it lies in a truer place than it used to. The low-pass and
+## the jitter are gone with the bearing they were vague about; what is left is
+## dread's suppression and the level's own flatness in evenly-fed water. What
+## the tier buys is reach, and reach is applied before this: food.gd weights
+## only what is inside the nose.
 func taste(bearing: float, concentration: float) -> void:
 	var smelt := _senses[SENSE_CHEMOCYTE] > 0
 	_taste_bearing = bearing if smelt else 0.0
@@ -1080,8 +1133,6 @@ func _end_collapse() -> void:
 	_dread_target = 0.0
 	_taste_c = 0.0
 	_taste_bearing = 0.0
-	_taste_bearing_lp = 0.0
-	_taste_jitter = 0.0
 	_light = 0.0
 	_light_bearing = 0.0
 	_beam = 0.0
@@ -1107,7 +1158,7 @@ func _end_collapse() -> void:
 	# the dead cell's tiers. After the envelope resets, because this retunes one
 	# of them.
 	organs(1, 1, 1, 0)
-	sense_organs(0, 0, 0, 0, 0)
+	sense_organs(0, 0, 0, 0)
 	_idle_lobes()
 	_beat_phase = 0.0
 	_beat_this_period = _beat_period
@@ -1143,7 +1194,6 @@ func _process(delta: float) -> void:
 	_dread = move_toward(_dread, _dread_target,
 		delta * (DREAD_RATE if _dread_target > _dread else DREAD_FALL_RATE))
 
-	_step_taste(delta)
 	_compose_lobes()
 	_apply()
 
@@ -1186,20 +1236,6 @@ func _step_beat(delta: float) -> void:
 	_beat_this_period = clampf(_beat_period * jitter, 0.05, ceiling)
 
 
-func _step_taste(delta: float) -> void:
-	_taste_bearing_lp = lerp_angle(
-		_taste_bearing_lp, _taste_bearing, 1.0 - exp(-delta / TASTE_BEARING_TAU))
-	_taste_jitter_clock += delta
-	var step := 1.0 / TASTE_JITTER_HZ
-	if _taste_jitter_clock >= step:
-		_taste_jitter_clock = fmod(_taste_jitter_clock, step)
-		# Dread doubles the confusion as well as muffling the signal.
-		var spread := deg_to_rad(lerpf(
-			TASTE_JITTER_WIDE_DEG, TASTE_JITTER_TIGHT_DEG, _taste_c)) \
-			* (1.0 + _dread) * FOCUS_BY_TIER[_senses[SENSE_RHABDOM]]
-		_taste_jitter = _rng.randf_range(-spread, spread)
-
-
 ## Lobe 0 carries every self-sensation, so the three compete instead of summing:
 ## the loudest thing happening to your own skin is the thing you feel. A bruise
 ## (0.35) buries a thrust bloom (0.14), which is the right way round.
@@ -1217,14 +1253,23 @@ func _compose_lobes() -> void:
 		halfwidth = BRUISE_HALFWIDTH_DEG
 	_glow_lobes[LOBE_SELF] = _lobe(bearing, halfwidth, level)
 
+	# The nose. A **ring**, not a lobe: an intensity with no bearing in it needs
+	# a shape the player cannot mistake for a direction, and this one is welded
+	# to the body -- it does not move when the water does. The one misreading it
+	# permits is not wrong: with the nose in slot 0 the top brightens when food
+	# is ahead, and *turn until the top is bright* is still the correct play.
 	if _taste_c > TASTE_FLOOR:
-		# Suppressed, not deleted: a hunted cell can still smell, badly.
-		var intensity := smoothstep(TASTE_FLOOR, 1.0, _taste_c) * TASTE_PEAK \
+		# The whole of TASTE_PEAK is spent over the levels a forager actually
+		# sees, because this is the only channel left. Still fades on from the
+		# floor rather than popping, and still suppressed rather than deleted by
+		# dread: a hunted cell can smell, badly.
+		var intensity := pow(clampf(
+			(_taste_c - TASTE_FLOOR) / (TASTE_FULL - TASTE_FLOOR), 0.0, 1.0),
+			TASTE_CURVE) * TASTE_PEAK \
+			* smoothstep(TASTE_FLOOR, TASTE_FLOOR + TASTE_FADE, _taste_c) \
 			* (1.0 - TASTE_DREAD_SUPPRESS * _dread)
-		var width := lerpf(TASTE_WIDE_DEG, TASTE_TIGHT_DEG, _taste_c) \
-			* FOCUS_BY_TIER[_senses[SENSE_RHABDOM]]
-		_glow_lobes[LOBE_NUTRIENT] = _lobe(
-			_taste_bearing_lp + _taste_jitter, width, intensity)
+		_glow_lobes[LOBE_NUTRIENT] = Vector4(sin(_taste_bearing),
+			-cos(_taste_bearing), _ring_z, intensity)
 	else:
 		_glow_lobes[LOBE_NUTRIENT] = IDLE_LOBE
 
@@ -1267,6 +1312,25 @@ func _compose_lobes() -> void:
 			LEVEL_HALFWIDTH_DEG[level_tier], LEVEL_PUSH_BY_TIER[level_tier] * _level)
 	else:
 		_press_lobes[1] = IDLE_LOBE
+
+
+## The lobe `z` for which the shader's `smoothstep(z, 1.0, dot)` equals [param
+## ratio] at `dot = -1` -- that is, the `z` that makes the drawn ring's dimmest
+## point sit at the same fraction of its brightest that the simulation's own
+## floor sits at. Newton on the smoothstep polynomial `3t^2 - 2t^3`, then
+## `z = (t + 1) / (t - 1)` out of `t = (-1 - z) / (1 - z)`.
+##
+## 0.22 solves to about -1.87. Static and called once, at construction.
+static func _ring_edge(ratio: float) -> float:
+	var t := clampf(ratio, 0.001, 0.999)
+	var x := 0.5
+	for _i in 12:
+		var f := 3.0 * x * x - 2.0 * x * x * x - t
+		var d := 6.0 * x - 6.0 * x * x
+		if absf(d) < 1e-5:
+			break
+		x = clampf(x - f / d, 0.001, 0.999)
+	return (x + 1.0) / (x - 1.0)
 
 
 ## A bearing is body-relative, clockwise from the cell's front. Front is the top

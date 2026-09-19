@@ -312,10 +312,14 @@ const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 ## swallows you dies of it and you are spat out starving.
 const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
 
-## `statocyst` / level and `rhabdom` / focus buy no number here: one is a lobe
-## on the membrane at a bearing that does not turn with the body, the other
-## narrows a lobe that already exists. Both live in signal_bus.gd, which owns
-## every envelope and every lobe.
+## `statocyst` / level buys no number here: it is a lobe on the membrane at a
+## bearing that does not turn with the body, and it lives in signal_bus.gd,
+## which owns every envelope and every lobe.
+##
+## `rhabdom` / focus used to be named here beside it, for narrowing a lobe that
+## already existed. Both of the things it narrowed -- the taste lobe's width and
+## its bearing jitter -- went with three-senses.md §2, and the owner retired the
+## gene rather than re-aim it (§8 row 2). Nothing in this file replaced it.
 
 # --- Steering --------------------------------------------------------------
 ## Flat out, the cell turns this fast, by `cirrus` tier. Tier 1 is about
