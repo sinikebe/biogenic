@@ -98,12 +98,12 @@ const RING_STEPS := 64
 ## Points on each half of the wavefront, matching `returns.gd`'s `WAVE_STEPS`:
 ## the two views draw one picture at two scales and the segment count is part
 ## of the picture.
-const PING_STEPS := 64
+const PING_STEPS := Cilia.WAVE_STEPS
 ## Half the angle between two of those points, taken off both ends of the far
 ## half so the two arcs do not share a vertex with the near one. A vertex drawn
 ## by two draw calls composites twice; measured in point of view, the ring's
 ## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
-const PING_SEAM := PI / (2.0 * PING_STEPS)
+const PING_SEAM := Cilia.WAVE_SEAM
 
 # --- Body ------------------------------------------------------------------
 ## Decay of the beat echo, matching the membrane's own pulse decay.

@@ -666,8 +666,7 @@ func _beam_bearings() -> PackedFloat32Array:
 ## dead ahead for a gene this body does not wear. **The body's slot, not the
 ## DNA's** -- the organ is on the body, and the DNA is what the daughters get.
 func _slot_bearing_of(gene: StringName) -> float:
-	var slot := _genome.slot_of(gene)
-	return Cilia.slot_bearing(slot) if slot >= 0 else 0.0
+	return Cilia.bearing_of(_genome, gene)
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow

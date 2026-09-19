@@ -402,8 +402,14 @@ func _watch_state() -> void:
 func _sign_genome() -> int:
 	var sig: int = _genome.held_sample.hash()
 	for gene: StringName in _genome.tiers():
-		sig += gene.hash() * (int(_genome.tiers()[gene]) + 1)
-		sig += gene.hash() * (_genome.slot_of(gene) + 11)
+		# Distinct primes on the two terms. Summed onto one multiplier they
+		# were `hash * (tier + slot + 12)`, so a tier rising by one while the
+		# worn slot fell by one in the same frame -- a birth after a move and
+		# a meal -- cancelled to the same integer, wrote no delta, and the
+		# replay drew the mother's organ on the old arc for the daughter's
+		# whole life.
+		sig += gene.hash() * (int(_genome.tiers()[gene]) + 1) * 31
+		sig += gene.hash() * (_genome.slot_of(gene) + 11) * 101
 	for gene: StringName in _genome.dna():
 		sig += gene.hash() * (int(_genome.dna()[gene]) + 3)
 	var order: Array = _genome.layout()
