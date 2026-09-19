@@ -1458,6 +1458,22 @@ static func draw_slot_dart(canvas: CanvasItem, slot: int, tone: Color,
 # file's rule and is what lets the replay call the same routines later.
 # ---------------------------------------------------------------------------
 
+## The ping wavefront's arc resolution, shared by both views so the seam inset
+## that hides the double-composited vertex cannot drift between them.
+const WAVE_STEPS := 64
+const WAVE_SEAM := PI / (2.0 * WAVE_STEPS)
+
+
+## **The slot is the arc is the bearing**, and there is one place that says so.
+## The live run and the replay both resolve a directional organ's bearing here;
+## an organ the body does not wear answers dead ahead.
+static func bearing_of(genome: Genome, gene: StringName) -> float:
+	if genome == null:
+		return 0.0
+	var slot: int = genome.slot_of(gene)
+	return slot_bearing(slot) if slot >= 0 else 0.0
+
+
 ## Which way the strand runs. `ALONG_X` is the pause screen's row; `ALONG_Y` is
 ## the choosing screen's column.
 const STRAND_ALONG_X := 0

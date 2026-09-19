@@ -197,10 +197,7 @@ func _write_state() -> void:
 ## Dead ahead for a run that never wore one -- which also never drew a wave,
 ## because a cell with no `ampulla` has no reach and no pulse in flight.
 func _ping_bearing() -> float:
-	if _genome == null:
-		return 0.0
-	var slot := _genome.slot_of(&"ampulla")
-	return Cilia.slot_bearing(slot) if slot >= 0 else 0.0
+	return Cilia.bearing_of(_genome, &"ampulla")
 
 
 func _read_beams() -> Array:

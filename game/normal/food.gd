@@ -1657,7 +1657,7 @@ func _step_beams() -> void:
 ##
 ## Returns are staggered by their own flight time, which is what turns one pulse
 ## into a sweep: the nearest body answers at `d / PING_SPEED` and the farthest
-## almost a second later. **That stagger is also what resolves the one
+## seconds later -- 4.4 s from the edge of tier-1 reach at 250. **That stagger is also what resolves the one
 ## ambiguity occlusion creates**: a shadowed near body and a clear far body both
 ## come back faint, but the near one still answers early. Nothing here posts and
 ## nothing here keeps a position past the frame it becomes a bearing.
@@ -1751,7 +1751,7 @@ func _cast_ping() -> void:
 		# lands mid-fade, which is the only honest answer to "which side".
 		var open := smoothstep(-PING_GRAZE, PING_GRAZE,
 			path.normalized().dot(dir))
-		level *= ping_through + (1.0 - ping_through) * open
+		level *= lerpf(ping_through, 1.0, open)
 		# Everything nearer is in the way, and "nearer" is measured from the
 		# cell while the path is measured from the organ -- so the two orders
 		# are not quite the same order, and `for j in i` can skip a body that
@@ -1788,7 +1788,7 @@ func _cast_ping() -> void:
 			if radius_j <= 0.0:
 				continue
 			var clear := clampf((to_j - axis * along).length() / radius_j, 0.0, 1.0)
-			level *= ping_through + (1.0 - ping_through) * clear
+			level *= lerpf(ping_through, 1.0, clear)
 		if level <= PING_SILENT:
 			continue
 		heard.append([float(found[i][0]), at, level])

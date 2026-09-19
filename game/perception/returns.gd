@@ -104,7 +104,7 @@ const POINT_CLEAR := 1.3
 # --- The wave (`ampulla`) ---------------------------------------------------
 ## Half a ring rather than a whole one, so 64 points where the circle had 96 --
 ## the same spacing on half the arc.
-const WAVE_STEPS := 64
+const WAVE_STEPS := Cilia.WAVE_STEPS
 ## Half the angle between two of those points. The far half is inset by it at
 ## both ends so that the two arcs do not **share** their endpoints: a vertex
 ## drawn by two draw calls composites twice, and measured on a tier-3 frame the
@@ -118,7 +118,7 @@ const WAVE_STEPS := 64
 ## at r212, about 10 by the radius at which the arc is fading into the band
 ## anyway. Rendered at three radii and at both shapes; it reads as the boundary
 ## between the loud half and the quiet one.
-const WAVE_SEAM := PI / (2.0 * WAVE_STEPS)
+const WAVE_SEAM := Cilia.WAVE_SEAM
 ## Quieter than the pointer on purpose: the pointer is an answer and this is the
 ## question going out. Measured on a frame with a taste band and dread present,
 ## low-passed at sigma 6 against the local level -- band 96, soma figure 52,
