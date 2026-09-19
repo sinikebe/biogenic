@@ -38,7 +38,8 @@ that does not also ship.
 
 Bump `binary_version` in `version.json` in the same commit when a change cannot
 ship as a content pack: an engine upgrade, a new permission, a native plugin, a
-new icon. Everything else goes out as content.
+new icon, or a launcher sync that moves `build_info.gd` (see below). Everything
+else goes out as content.
 
 ## The launcher is not ours
 
@@ -56,6 +57,26 @@ issue against the template**. That is the only channel.
 write it — so the sync job only reports drift there and copying across is manual.
 
 Everything Biogenic-specific about the launcher lives in `launcher_config.tres`.
+
+### A sync does not reach an installed game on its own
+
+`addons/launcher/` rides in the content pack, so most of a synced launcher
+arrives with the next content update. `build_info.gd` does not. It is autoload
+number one *because* it mounts the pack, so it is compiled from the binary
+before the pack exists, and the `launcher_version.gd` it `preload`s resolves at
+that same moment. That is why the stamp in the corner names the launcher the
+**APK was built with**, never the one actually running.
+
+`UpdateService` offers a new binary only when the manifest's `binary_version`
+exceeds the installed one — never on a commit, a date, or a launcher version. So
+a sync that moves `build_info.gd` needs `binary_version` bumped in the same
+merge, or that one file stays frozen on every installed device for good.
+
+It has already happened: an APK built on 14 September carried launcher 1.0.0,
+the sync to 2.1.0 landed hours later and shipped as content, and five days on
+the phone was running 2.1.0 everywhere except the file that prints the version —
+so it still read `launcher 1.0.0 · 15fe20fd`. Nothing was broken, but nothing
+could have fixed it either: no content pack can replace that file.
 
 ## Run it. Do not guess.
 
