@@ -22,7 +22,6 @@ config/icon="res://icon.svg"
 
 BuildInfo="*res://addons/launcher/build_info.gd"
 UpdateService="*res://addons/launcher/update_service.gd"
-AndroidBackHandler="*res://android_back_handler.gd"
 
 [display]
 

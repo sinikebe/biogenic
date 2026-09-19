@@ -32,8 +32,12 @@ extends Node
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
 ##   --arm-at=<seconds>      ignore --freeze-on before this time
 ##   --esc-at=<seconds>      send Escape once, at this time
-##   --back-at=<seconds>     fire NOTIFICATION_WM_GO_BACK_REQUEST exactly the
-##                           way SceneTree does when Android Back is pressed
+##   --back-at=<seconds>     press Android Back; repeatable, which is what
+##                           proves a restore actually landed: propagate
+##                           NOTIFICATION_WM_GO_BACK_REQUEST and then emit
+##                           `go_back_requested`, in that order, which is what
+##                           the window does on a device. The app really can
+##                           quit under this flag -- that is the point of it
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
 ##                           esc, enter, up, down, left, right, tab, v, and the
 ##                           two chords shift-left / shift-right. The chords
@@ -297,7 +301,7 @@ var _clock := 0.0
 var _finger_was: Dictionary = {}
 var _esc_at := -1.0
 var _esc_sent := false
-var _back_at := -1.0
+var _back_ats: Array[float] = []
 ## [[seconds, keycode], ...], consumed as the clock passes each one.
 var _taps: Array = []
 var _freeze_at := -1.0
@@ -444,7 +448,7 @@ func _ready() -> void:
 		elif text.begins_with("--esc-at="):
 			_esc_at = float(text.trim_prefix("--esc-at="))
 		elif text.begins_with("--back-at="):
-			_back_at = float(text.trim_prefix("--back-at="))
+			_back_ats.append(float(text.trim_prefix("--back-at=")))
 		elif text.begins_with("--tap="):
 			var parts := text.trim_prefix("--tap=").split(":")
 			if parts.size() == 2:
@@ -781,11 +785,22 @@ func _process(delta: float) -> void:
 			_send_mouse_button(_cursor, false)
 			_mouse_lifts.remove_at(i)
 
-	if _back_at >= 0.0 and _clock >= _back_at:
-		_back_at = -1.0
+	for i in range(_back_ats.size() - 1, -1, -1):
+		if _clock < _back_ats[i]:
+			continue
+		_back_ats.remove_at(i)
 		print("[drive] %5.2f  back (quit_on_go_back=%s)" % [
 			_clock, get_tree().quit_on_go_back])
+		# Both halves, in the engine's order. Window::_event_callback propagates
+		# the notification and *then* emits `go_back_requested`, which SceneTree
+		# has connected to its own quit check -- so a handler that flips
+		# `quit_on_go_back` during the propagation is read microseconds later
+		# and the app dies. Firing only the notification, which is what this
+		# did for five phases, makes that entire class of bug invisible here:
+		# issue #23 reproduces on a phone and not in this harness for exactly
+		# that reason.
 		get_tree().root.propagate_notification(NOTIFICATION_WM_GO_BACK_REQUEST)
+		get_tree().root.emit_signal(&"go_back_requested")
 
 	if _drag_px != 0.0 and _clock >= _drag_at:
 		_step_drag()

@@ -2233,8 +2233,6 @@ func _toggle_pause() -> void:
 ## there, which keeps the whole stack reachable by the same gesture.
 func _leave() -> void:
 	get_tree().paused = false
-	# Back behaves normally again once the launcher owns the screen.
-	get_tree().quit_on_go_back = true
 	RunState.save_gain(_bus.gain)
 	if not ResourceLoader.exists(MODE_SELECT_SCENE):
 		push_error("[NormalMode] No mode select at %s" % MODE_SELECT_SCENE)
