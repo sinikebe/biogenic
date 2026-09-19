@@ -83,8 +83,6 @@ func _back() -> void:
 		push_error("[ModeSelect] No launcher at %s" % LAUNCHER_SCENE)
 		return
 	_leaving = true
-	# Back behaves normally again once the launcher owns the screen.
-	get_tree().quit_on_go_back = true
 	_go(LAUNCHER_SCENE)
 
 
