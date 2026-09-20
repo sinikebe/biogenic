@@ -366,17 +366,29 @@ else writes shader uniforms. This is what makes §5 cheap.
 
 The rule to hold: **Phase 1 owns the outer 104px. The interior is currency.**
 
-Phase 1 encodes only *bearing* (coarse, lagged, jittering) and *intensity*
-(scalar). It never encodes position, distance, shape, count or identity. Those
-are exactly what later genes sell, so the ladder has somewhere to go:
+Phase 1 encodes *bearing* and *intensity*, and the first sensory gene adds
+*extent* — how wide a thing is, and how long its echo takes to pass. **This is a
+stage, not a rule.** A cell this early cannot resolve a form; it can feel that
+something is wide and near, or narrow and far, and that is the whole of what a
+tier-1 organ has earned. What is still unspent is *place*: no signal is yet
+drawn at the position of the thing that caused it, and the interior is still
+black. That is what the gene after this one sells, and it should feel enormous.
 
-> **Read `ping-as-outline.md` §0 and §9 beside this paragraph.** The owner has
-> said plainly that it is a statement about how far the cell has developed and
-> not a prohibition, and the wording proposed to replace it is in that file's
-> §9. Two decisions have since been taken against it and both went the
-> conservative way: the interior stays black until the gene that is *about*
-> seeing (§10 row 3 there), and the twenty-beam outline is allowed at tier 3 for
-> the `ocellus` alone (`three-senses.md` §8 row 3) — allowed, and not yet built.
+> **This paragraph used to be a prohibition** — *"it never encodes position,
+> distance, shape, count or identity"* — and was read as one for seven phases.
+> The owner said plainly it is a statement about how far the cell has developed,
+> and `ping-as-outline.md` §0 records that; the replacement above is that file's
+> §9, made here now that the outline has shipped. Two decisions were taken
+> against the old wording and both went the conservative way: the interior stays
+> black until the gene that is *about* seeing (§10 row 3 there), and the
+> twenty-beam outline is allowed at tier 3 for the `ocellus` alone
+> (`three-senses.md` §8 row 3) — allowed, and not yet built.
+>
+> **Distance is encoded now, twice, and both are honest.** A ping mark's level
+> falls with range, and its arrival time is the round trip — `2d / PING_SPEED`,
+> because the wave bounces. Neither is a *place*: a bearing with a distance on it
+> would be one, and the pair never reaches the bus together in a form that can be
+> recombined. `ping-as-outline.md` §0 is the four-scalar rule that keeps it so.
 >
 > One thing this paragraph said has gone the other way and is now simply true of
 > smell: **taste no longer encodes a bearing at all.** three-senses.md §2 made

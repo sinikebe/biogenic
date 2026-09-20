@@ -129,6 +129,30 @@ const WAVE_SEAM := Cilia.WAVE_SEAM
 ## has not been re-measured on the arc.
 const WAVE_WIDTH := 2.2
 const WAVE_ALPHA := 0.52
+## **The echo coming home**, and the reason this layer draws anything new.
+##
+## Brighter than the outgoing front, because the front is the question and this
+## is the answer arriving: the membrane lights at the instant this collapses
+## onto the organ, and a player who watched it walk in never has to work out
+## which pulse the mark belongs to. That is the whole of the bounce, drawn.
+##
+## Short, not a half-ring: an echo comes off one body over one span of bearings,
+## and drawing it any wider would say the whole hemisphere answered.
+const ECHO_WIDTH := 2.6
+const ECHO_ALPHA := 0.74
+## Points on one returning arc. Fewer than [constant WAVE_STEPS] because an echo
+## spans tens of degrees where the front spans 180, and the spacing is what
+## keeps a polyline from looking polygonal.
+const ECHO_STEPS := 18
+## **How many echoes this layer will draw at once**, nearest home first, off
+## screen ones skipped before any of them counts against it.
+##
+## There is no hard cap in the field -- at tier 3 eleven pulses are in the water
+## at once and each answers for five bodies -- and a screen with fifty
+## contracting arcs on it is not a sense, it is weather. Measured on the tier-3
+## ambiguity pose: at any instant three or four are inside the frame, so this
+## cuts a tail that is mostly off screen anyway.
+const ECHO_DRAWN := 6
 
 ## **Whether something other than the field is stepping the water.** Left false
 ## by the run, where [method FoodField.is_processing] is the whole answer -- a
@@ -199,6 +223,7 @@ func _draw_marks() -> void:
 		return
 	var centre := _marks.size * 0.5
 	_draw_wave(centre)
+	_draw_echoes(centre)
 	_draw_pointers(centre)
 
 
@@ -273,35 +298,97 @@ func _draw_pointers(centre: Vector2) -> void:
 ## rectangle. The corners hold it a moment longer than the top edge does, which
 ## is what the screen actually is.
 ##
-## The returns the wave brings back are *not* drawn: they stay marks on the
-## contour. A return is a body somewhere out there, and a body is the first thing
-## on the list this layer may not draw.
+## The bodies the wave finds are *not* drawn: their marks stay on the contour. A
+## return is a body somewhere out there, and a body is the first thing on the
+## list this layer may not draw. What [method _draw_echoes] adds is the pulse's
+## **own** echo walking home, which is the same class of thing as the front --
+## the cell emitted it and knows where it has got to.
+##
+## **Every live front, not just the newest.** A pulse is in the water for up to
+## 7.6 s and fires again after 1.4, so one scalar drew the new front over the
+## old one's returns -- a picture saying *the wave has just left* over a skin
+## saying *something is out there*. ping-as-outline.md §7 photographed exactly
+## that; this is the half of the fix that lives in a view. Only one or two are
+## ever on screen: a front leaves the frame in under a second.
 func _draw_wave(centre: Vector2) -> void:
-	var front: float = _food.ping_front
 	var reach: float = _food.ping_range
-	if front <= 0.0 or reach <= 0.0:
+	if reach <= 0.0:
 		return
-	var r := front * SCALE
 	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
 	# Once the whole arc is past the far corner there is none of it left to
 	# see, and a 64-point arc three screens wide is drawn for nobody.
-	if r > _marks.size.length() * 0.5 + origin.distance_to(centre):
-		return
-	# Fades with how much of its reach it has spent, the same way full vision
-	# fades it: the arc is off the screen long before it is out of range, so
-	# this is the only thing that can say *it is still going*.
-	var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
+	var horizon := _marks.size.length() * 0.5 + origin.distance_to(centre)
 	# Screen angle of the organ's own ray. `_ray` is (sin, -cos), which is
 	# `bearing - PI/2` once atan2 has it, and the lit half is the hemisphere
 	# either side of it.
 	var mid := _food.ping_bearing - PI * 0.5
-	_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
 	var through := clampf(_food.ping_through, 0.0, 1.0)
-	if through > 0.0:
-		# Inset by [constant WAVE_SEAM] at both ends: flush, the two arcs share
-		# a vertex at each seam and the shared vertex composites twice.
-		_wave_arc(origin, r, mid + PI * 0.5 + WAVE_SEAM,
-			mid + PI * 1.5 - WAVE_SEAM, carry * through)
+	for front: float in _food.ping_fronts:
+		if front <= 0.0:
+			continue
+		var r := front * SCALE
+		if r > horizon:
+			continue
+		# Fades with how much of its reach it has spent, the same way full
+		# vision fades it: the arc is off the screen long before it is out of
+		# range, so this is the only thing that can say *it is still going*.
+		var carry := 1.0 - clampf(front / reach, 0.0, 1.0)
+		_wave_arc(origin, r, mid - PI * 0.5, mid + PI * 0.5, carry)
+		if through > 0.0:
+			# Inset by [constant WAVE_SEAM] at both ends: flush, the two arcs
+			# share a vertex at each seam and it composites twice.
+			_wave_arc(origin, r, mid + PI * 0.5 + WAVE_SEAM,
+				mid + PI * 1.5 - WAVE_SEAM, carry * through)
+
+
+## **The echoes coming home.** One short arc per return still in flight, at the
+## bearing it will land on and over the span the membrane is about to open to,
+## contracting onto the organ at the instant the mark appears on the skin.
+##
+## This is what "it bounces" buys, and it is the answer to the ambiguity §7
+## photographs. Under a round trip a mark lands at `2d / PING_SPEED` while the
+## drawn front is out at `2d` -- twice the body's distance -- so arrival time on
+## its own no longer tells a player which pulse answered. It does not have to:
+## the echo is *visible* for the last second of its journey, so the mark arrives
+## attached to something the player has been watching walk in.
+##
+## **It is not the outline drawn at its place**, which is §10 row 3 and the next
+## gene's to sell. It is a wavelet collapsing onto the organ: it is only ever at
+## the body's own distance for the instant it leaves, it carries no shape, and
+## it is gone the moment it lands. What stays on the skin is still a bearing.
+func _draw_echoes(centre: Vector2) -> void:
+	if _food.ping_echoes.is_empty():
+		return
+	var tone := Cilia.hue(&"ampulla")
+	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
+	var horizon := _marks.size.length() * 0.5 + origin.distance_to(centre)
+	var drawn := 0
+	for echo: Array in _food.ping_echoes:
+		if drawn >= ECHO_DRAWN:
+			break
+		var r: float = float(echo[0]) * SCALE
+		if r > horizon:
+			continue
+		var level := clampf(float(echo[3]), 0.0, 1.0)
+		if level <= 0.0:
+			continue
+		drawn += 1
+		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
+		var mid := float(echo[1]) - PI * 0.5
+		var points := PackedVector2Array()
+		var colors := PackedColorArray()
+		points.resize(ECHO_STEPS + 1)
+		colors.resize(ECHO_STEPS + 1)
+		var seen := false
+		for i in ECHO_STEPS + 1:
+			var t := mid + lerpf(-span, span, float(i) / float(ECHO_STEPS))
+			var p := origin + Vector2(cos(t), sin(t)) * r
+			var vis := _edge_fade(p) * level
+			points[i] = p
+			colors[i] = Color(tone, ECHO_ALPHA * vis)
+			seen = seen or vis > 0.0
+		if seen:
+			_marks.draw_polyline_colors(points, colors, ECHO_WIDTH, true)
 
 
 ## One half of the wavefront, from [param from] to [param to] in screen angles,

@@ -32,9 +32,14 @@ const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
 ## has been reserved since Phase 1 for exactly this.
 const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
 ## `ocellus`, the beam. The fourth glow slot, held empty since Phase 1 and spent
-## here -- and it is the last one, so no gene after this one gets a colour of
-## its own on the membrane. Same indigo-violet the gene wears on the outside.
+## here. Same indigo-violet the gene wears on the outside.
 const BEAM_COLOR := Vector3(0.62, 0.55, 1.00)
+## `ampulla`, the ping's two arcs. The same violet the wave and the organ's own
+## tuft are drawn in -- `Cilia.hue(&"ampulla")`, copied rather than imported
+## because the membrane is a view and may not preload a sibling view. Deeper and
+## more saturated than the ocellus's pale periwinkle, which is the difference
+## the two lobes now have to carry on their own: they used to be one slot.
+const PING_COLOR := Vector3(0.655, 0.44, 1.00)
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -132,8 +137,9 @@ const TASTE_CURVE := 0.8
 ## simulation is using, so the two numbers are one number in two places. It is
 ## copied rather than imported because the membrane is a view and may not
 ## preload the field -- the same pairing this file already has between
-## PING_DECAY and food.gd's PING_MIN_GAP. If they drift, the picture stops
-## being the maths and starts being a decoration.
+## PING_WIDTH_FLOOR and food.gd's copy of it, and between PING_RELEASE and
+## food.gd's PING_MIN_GAP. If they drift, the picture stops being the maths and
+## starts being a decoration.
 const SMELL_RING_FLOOR := 0.22
 ## Dread costs something, which is what stops it being mood: a hunted cell
 ## smells at 40%. It cannot smell its way out of the problem.
@@ -201,25 +207,78 @@ const TOUCH_PEAK := 0.26
 ## the floor is [constant SMELL_RING_FLOOR] and it does not vary by tier.
 
 ## `ampulla` / ping. One electroreceptive pulse, and a mark on the contour for
-## every body it comes back off. **It shares [constant LOBE_BEAM] with the
-## ocellus** -- there are four glow lobes in the shader and a fifth is a new
-## uniform and a new binary -- and that sharing is honest rather than a
-## compromise: both mean *a hard surface, that way, that far*, and the loudest
-## one wins exactly as the three self-signals do in lobe 0.
+## every body its echo comes back off.
 ##
-## What keeps them apart on screen is time, not colour. The beam is a steady
-## mark that sits where the ray is pointed for as long as it is pointed there; a
-## ping is a run of short marks walking outward, one per body, spaced by their
-## own flight time. Louder than the beam, because a return is a whole body
-## answering rather than a ray clipping one, and shorter-lived than anything
-## else on the contour.
+## **It has two lobes of its own now, 4 and 5.** It used to share [constant
+## LOBE_BEAM] with the ocellus, on the argument that a fifth lobe was a new
+## uniform and a new binary. That argument was wrong: `export_presets.cfg` is
+## `export_filter="all_resources"`, so `membrane.gdshader` is inside the `.pck`
+## and a shader uniform is a **content** change. It had been standing since
+## phase 5. See ping-as-outline.md §11.
+##
+## Sharing was also reasonable when a return was 0.19 s long and is not now: a
+## mark lives most of a second, and a return that long would sit on the beam
+## permanently. **The `ocellus` gets lobe 3 back to itself.**
+##
+## What keeps a ping and a beam apart on screen is time, not colour. The beam is
+## a steady mark that sits where the ray is pointed for as long as it is pointed
+## there; a ping is a run of marks walking outward, one per body, spaced by
+## their own round trip. Louder than the beam, because a return is a whole body
+## answering rather than a ray clipping one.
 const PING_PEAK := 0.55
-const PING_HALFWIDTH_DEG: Array[float] = [0.0, 17.0, 13.0, 10.0]
+## **The organ's own beamwidth**, by tier: the narrowest a mark can ever be, and
+## the width it opens from and closes back to.
+##
+## This is food.gd's `PING_WIDTH_FLOOR`, drawn. The field uses it as the floor
+## under a measurement and the membrane uses it as the shape of the mark, and
+## they are one number in two places -- copied rather than imported, because the
+## membrane is a view and may not preload the field. Same pairing [constant
+## PING_RELEASE] has with food.gd's `PING_MIN_GAP`. If they drift, the mark
+## stops being the measurement.
+const PING_WIDTH_FLOOR: Array[float] = [0.0, 17.0, 13.0, 10.0]
+## How quickly a mark takes hold. The rest of its life is the crossing profile
+## in [class Arc], which is geometry rather than an envelope.
 const PING_ATTACK := 0.035
-## Shorter than food.gd's PING_MIN_GAP, so a sweep reads as separate marks
-## rather than as one smear that wanders across the contour. The two constants
-## are a pair: raise this above that one and the series becomes a chord again.
-const PING_DECAY := 0.15
+## How long a mark takes to let go once the echo is past. ping-as-outline.md
+## §5.3. Shorter than food.gd's PING_MIN_GAP, so a sweep stays a series.
+const PING_RELEASE := 0.12
+## How much brighter a mark's two limb flicks are than its broad middle. The
+## echo is loudest where it starts and where it stops, which is the near limb
+## and the far one.
+const PING_LIMB_ACCENT := 1.35
+## **How hollow a mark is**, by `ampulla` tier: 0 is a soft bump and 1 is two
+## edges with nothing between them. A bump is a *detection*; an outline is two
+## edges with a lit gap, because that is what the echo actually comes off.
+##
+## 0 at tier 1 on purpose -- a tier-1 mark is a smear with no edges in it at
+## all, which is the honest failure and the reason to upgrade. The top of the
+## ladder is 0.62 and **not** 1.0: measured at 0.85 the middle between one
+## body's two limbs fell to 21% of the peak and the pair read as two bodies,
+## which is the one thing a single body's outline must not say. §3.4.
+const PING_HOLLOW_BY_TIER: Array[float] = [0.0, 0.0, 0.35, 0.62]
+## **While a pulse is still in the water, the organ's own arc hums.** §6.2.
+##
+## The level was measured into place twice. At 0.06 it rendered at `B - G` = 3
+## on an 8-bit frame -- invisible. At 0.20 it swamped a genuine far return.
+##
+## **Measured again on the bouncing build**: at 0.08, with nothing arriving, the
+## hum reads `B - G` 5 at the organ's arc and 0 dead astern, against 46-69 for a
+## mark at its peak and about 15 for the quietest return the falloff produced in
+## a 60 s run. So a return is always at least three times the hum. **That ratio
+## is the constraint, not the constant**: whatever the hum is, it must sit under
+## the quietest return the range falloff can produce.
+##
+## It borrows a ping slot, so at tiers 2 and 3 it inherits that tier's
+## hollowness and is a faint double veil rather than a single one. At 0.08 that
+## difference is below anything a player will read, and giving it a lobe of its
+## own would cost a seventh uniform slot to say the same thing.
+const PING_HUM_LEVEL := 0.08
+const PING_HUM_HALFWIDTH := 54.0
+## How many returns can be ringing at once. Two reach the shader -- the two
+## loudest -- and the pool is deeper than that so a third arriving does not
+## evict a mark that is still opening. food.gd's PING_MIN_GAP is the other half
+## of this pair: raise that above the hold times and the sweep is a chord again.
+const PING_ARCS := 4
 
 ## The earned senses, in genome order: `ocellus`, `statocyst`, `chemocyte`,
 ## `ampulla`. Written once a frame by [method sense_organs], exactly like
@@ -287,14 +346,23 @@ const POST_ANGLE_EPSILON := 0.05
 ## An unused lobe: cos(halfwidth) = 2 can never be reached by a dot product.
 const IDLE_LOBE := Vector4(0.0, -1.0, 2.0, 0.0)
 
-## Lobe slots. 3 is headroom for a later sense -- see perception.md §4.
+## Lobe slots.
 const LOBE_SELF := 0
 const LOBE_NUTRIENT := 1
 ## Reserved since Phase 1 and spent by Phase 5 on the `stigma`.
 const LOBE_LIGHT := 2
-## The last free glow slot, spent on the `ocellus` beam. There are four and the
-## shader has four; a fifth would be a new uniform and a new binary.
+## The `ocellus` beam, and **its own again**: see [constant PING_PEAK].
 const LOBE_BEAM := 3
+## The two ping arcs. A return is an *extent* -- two limbs with a lit bridge --
+## and one pulse can be answering for two bodies at once, so two slots rather
+## than one. A shader uniform is a content change, which is what makes them
+## affordable; ping-as-outline.md §11 is the sentence that said otherwise for
+## three phases.
+const LOBE_PING_A := 4
+const LOBE_PING_B := 5
+## How many glow lobes the shader has. Written down once, because the block
+## layout, the colour palette and the idle sweep all count them.
+const LOBES := 6
 
 ## Organ slots in [method organs], in genes-and-cilia.md §4.1's arc order --
 ## which is the order the body is drawn in, the order ties break in, and now the
@@ -424,6 +492,73 @@ class Env:
 		_rising = false
 
 
+## **One ping return, held while the echo passes.** A crossing is not a strike
+## and a decay, so this is not an [class Env]: the width opens from the organ's
+## own beamwidth to the reported extent and closes again, over the hold time the
+## field measured off the body's radius.
+##
+## The profile is ping-as-outline.md §3.3's half-ellipse. At any instant the
+## echo is coming off exactly two points of the body's rim, at bearings
+## `theta +- phi(t)`, and `phi` opens from 0 at the near pole, reaches the
+## reported half-width across the limb, and closes again. Those two points are
+## the outline's edges, and they are what the hollow mark in the shader draws.
+##
+## Louder at the limbs than across the middle ([constant PING_LIMB_ACCENT]),
+## because the echo starts and stops there.
+class Arc:
+	## Degrees. What the shader is told this frame.
+	var width := 0.0
+	var level := 0.0
+	var bearing := 0.0
+	var _floor_deg := 0.0
+	var _wide_deg := 0.0
+	var _peak := 0.0
+	var _hold := 0.0
+	var _t := 0.0
+
+	## How much of the mark is left, for the pool: the quietest arc is the one a
+	## new return evicts. An idle arc answers 0 and is always evicted first.
+	func weight() -> float:
+		return level
+
+	func fire(amp: float, at_bearing: float, floor_deg: float,
+			wide_deg: float, hold: float) -> void:
+		bearing = at_bearing
+		_peak = amp
+		_floor_deg = floor_deg
+		_wide_deg = maxf(wide_deg, floor_deg)
+		_hold = maxf(hold, 0.001)
+		_t = 0.0
+		width = _floor_deg
+		level = 0.0
+
+	func step(delta: float) -> void:
+		if _hold <= 0.0:
+			return
+		_t += delta
+		var u := clampf(2.0 * _t / _hold - 1.0, -1.0, 1.0)
+		var profile := sqrt(maxf(1.0 - u * u, 0.0))
+		width = _floor_deg + (_wide_deg - _floor_deg) * profile
+		var gate := 1.0
+		if _t < PING_ATTACK:
+			gate = _t / PING_ATTACK
+		elif _t > _hold:
+			gate = maxf(1.0 - (_t - _hold) / PING_RELEASE, 0.0)
+		level = _peak * lerpf(1.0, PING_LIMB_ACCENT, absf(u)) * gate
+		if _t >= _hold + PING_RELEASE:
+			_hold = 0.0
+			level = 0.0
+			width = _floor_deg
+
+	func reset() -> void:
+		_hold = 0.0
+		_t = 0.0
+		_peak = 0.0
+		level = 0.0
+		width = 0.0
+		bearing = 0.0
+
+
 ## Membrane sensitivity. Ships at 1.0; the pause screen moves it.
 var gain := GAIN_DEFAULT
 
@@ -431,7 +566,8 @@ var _material: ShaderMaterial = null
 var _rect := Vector2(1280.0, 720.0)
 var _inset := 28.0
 
-var _glow_lobes := PackedVector4Array([IDLE_LOBE, IDLE_LOBE, IDLE_LOBE, IDLE_LOBE])
+var _glow_lobes := PackedVector4Array([IDLE_LOBE, IDLE_LOBE, IDLE_LOBE,
+	IDLE_LOBE, IDLE_LOBE, IDLE_LOBE])
 var _press_lobes := PackedVector4Array([IDLE_LOBE, IDLE_LOBE])
 
 var _pulse := Env.new(PULSE_ATTACK, PULSE_DECAY)
@@ -440,7 +576,18 @@ var _bruise := Env.new(BRUISE_ATTACK, BRUISE_DECAY)
 var _flash := Env.new(FLASH_ATTACK, FLASH_DECAY)
 var _wake := Env.new(WAKE_ATTACK, WAKE_DECAY)
 var _ingest := Env.new(INGEST_ATTACK, INGEST_DECAY_BY_TIER[1])
-var _ping := Env.new(PING_ATTACK, PING_DECAY)
+## The ping's returns, one [class Arc] each. Built from [constant PING_ARCS] so
+## the constant is the count rather than a comment beside a literal.
+var _arcs: Array[Arc] = _make_arcs()
+## The organ's own arc while it is listening: a bearing and a level, no
+## envelope, posted every frame by the run exactly as taste and dread are.
+var _hum := 0.0
+var _hum_bearing := 0.0
+## What hollowness the two ping lobes are carrying, so the palette is pushed
+## when the `ampulla` tier moves rather than every frame. It also rides in the
+## recorded block: the replay builds its own bus, which knows nothing about the
+## organ the recorded cell was wearing.
+var _pushed_hollow := -1.0
 
 ## **What body this membrane is attached to** (§2.1), in `genes-and-cilia.md`'s
 ## arc order: `cytostome`, `cirrus`, `flagellum`, `stigma`. Written once a frame
@@ -581,10 +728,55 @@ func attach(material: ShaderMaterial) -> void:
 	_material = material
 	if _material == null:
 		return
-	var colors := PackedVector3Array([
-		SELF_COLOR, NUTRIENT_COLOR, LIGHT_COLOR, BEAM_COLOR])
-	_material.set_shader_parameter("glow_colors", colors)
+	_pushed_hollow = -1.0
+	_push_colors()
 	_apply()
+
+
+## **The palette, and the hollowness that rides in its alpha.**
+##
+## `glow_colors` is a `vec4` per lobe: `rgb` is the hue and `a` is how hollow
+## the mark is -- 0 a soft bump, 1 two edges with nothing between them. It rides
+## here rather than in a uniform of its own so that [method attach] stays one
+## call, and it is pushed when the `ampulla` tier moves rather than every frame,
+## because a palette is not a per-frame fact.
+##
+## Idle lobes are safe hollow: `4a(1-a)` is 0 when `a` is 0, and an idle lobe's
+## `cos(halfwidth) = 2` can never be reached by a dot product anyway.
+func _push_colors() -> void:
+	_push_hollow(PING_HOLLOW_BY_TIER[_senses[SENSE_AMPULLA]])
+
+
+## The same write, told the hollowness instead of deriving it. The replay's own
+## bus takes this route: it plays back a recorded membrane and has no organ to
+## read a tier off.
+func _push_hollow(hollow: float) -> void:
+	if _material == null:
+		return
+	if is_equal_approx(hollow, _pushed_hollow):
+		return
+	_pushed_hollow = hollow
+	var colors := PackedVector4Array()
+	colors.resize(LOBES)
+	colors[LOBE_SELF] = _rgba(SELF_COLOR, 0.0)
+	colors[LOBE_NUTRIENT] = _rgba(NUTRIENT_COLOR, 0.0)
+	colors[LOBE_LIGHT] = _rgba(LIGHT_COLOR, 0.0)
+	colors[LOBE_BEAM] = _rgba(BEAM_COLOR, 0.0)
+	colors[LOBE_PING_A] = _rgba(PING_COLOR, hollow)
+	colors[LOBE_PING_B] = _rgba(PING_COLOR, hollow)
+	_material.set_shader_parameter("glow_colors", colors)
+
+
+static func _rgba(rgb: Vector3, a: float) -> Vector4:
+	return Vector4(rgb.x, rgb.y, rgb.z, a)
+
+
+## The ping's arc pool, at construction.
+static func _make_arcs() -> Array[Arc]:
+	var out: Array[Arc] = []
+	for _i in PING_ARCS:
+		out.append(Arc.new())
+	return out
 
 
 ## Viewport size and contour inset, both in canvas pixels.
@@ -646,9 +838,20 @@ func apply_gain(value: float) -> void:
 # now, not a fact about the run that ended.
 # ---------------------------------------------------------------------------
 
-## Floats one captured membrane takes. Thirty-seven, and the count is checked
-## against the block layout below rather than trusted.
-const BLOCK_FLOATS := 37
+## Floats one captured membrane takes. **Thirty-seven until the ping got two
+## lobes of its own**: six glow lobes instead of four is eight more floats, and
+## the hollowness is a ninth.
+##
+## Hollowness has to be in here, and that is not obvious. It rides in the
+## palette's alpha, and the palette is pushed from the `ampulla` tier -- which
+## the replay's own bus has never been told, because a pane rebuilds a membrane
+## out of uniforms and knows nothing about the body that wore it. Left out, a
+## recorded tier-3 outline plays back as a tier-1 bump: the one frame the truth
+## pane exists to check, quietly redrawn as something else.
+##
+## The recording never outlives the run that made it, so there is no format to
+## migrate. docs/design/replay.md §4.1.
+const BLOCK_FLOATS := 46
 
 
 ## Writes this membrane's state into [param out] at [param at]. No allocation:
@@ -674,12 +877,14 @@ func capture_block(out: PackedFloat32Array, at: int) -> void:
 		out[i + 2] = lobe.z
 		out[i + 3] = lobe.w
 		i += 4
-	out[at + 31] = _flash.value
-	out[at + 32] = _ingest.value
-	out[at + 33] = _ingest_hue.x
-	out[at + 34] = _ingest_hue.y
-	out[at + 35] = _ingest_hue.z
-	out[at + 36] = _dread
+	# 7 + 6 glow lobes x 4 + 2 pressure lobes x 4 = 39.
+	out[at + 39] = _flash.value
+	out[at + 40] = _ingest.value
+	out[at + 41] = _ingest_hue.x
+	out[at + 42] = _ingest_hue.y
+	out[at + 43] = _ingest_hue.z
+	out[at + 44] = _dread
+	out[at + 45] = PING_HOLLOW_BY_TIER[_senses[SENSE_AMPULLA]]
 
 
 ## Puts a captured membrane back on the shader, through this node's own state so
@@ -699,10 +904,14 @@ func write_block(block: PackedFloat32Array, at: int) -> void:
 		_press_lobes[slot] = Vector4(block[i], block[i + 1], block[i + 2],
 			block[i + 3])
 		i += 4
-	_flash.hold(block[at + 31])
-	_ingest.hold(block[at + 32])
-	_ingest_hue = Vector3(block[at + 33], block[at + 34], block[at + 35])
-	_dread = block[at + 36]
+	_flash.hold(block[at + 39])
+	_ingest.hold(block[at + 40])
+	_ingest_hue = Vector3(block[at + 41], block[at + 42], block[at + 43])
+	_dread = block[at + 44]
+	# The palette, because the hollowness of a ping mark lives in it and this
+	# bus has no organ to read it off. Pushed through the same guard the live
+	# one uses, so a whole replay costs one uniform write and not one a frame.
+	_push_hollow(block[at + 45])
 	_apply()
 
 
@@ -744,6 +953,10 @@ func sense_organs(ocellus: int, statocyst: int,
 	_senses[SENSE_STATOCYST] = clampi(statocyst, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_CHEMOCYTE] = clampi(chemocyte, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_AMPULLA] = clampi(ampulla, 0, ORGAN_TIER_MAX)
+	# How hollow a ping mark is rides in the palette's alpha, so a tier that has
+	# moved is pushed here. Guarded on the value, not on the call: this runs
+	# sixty times a second and the answer changes perhaps twice a run.
+	_push_colors()
 
 
 # ---------------------------------------------------------------------------
@@ -866,24 +1079,70 @@ func beam(bearing: float, strength: float) -> void:
 		sensation.emit(&"beam", {"bearing": _beam_bearing, "strength": _beam})
 
 
-## **A return came back.** `ampulla`: one mark on the contour for one body the
+## **An echo came home.** `ampulla`: one mark on the contour for one body the
 ## pulse found, at its bearing, [param strength] 1 against the skin and 0 at the
 ## edge of reach. Fired once per return, several times per pulse, spaced by the
-## returns' own flight times -- so a pulse arrives as a sweep and not as a
-## chord. See [constant PING_PEAK] for why it shares the beam's lobe.
+## returns' own round trips -- so a pulse arrives as a sweep and not as a chord.
+##
+## Two scalars beside the level, and they are what makes a mark an outline
+## rather than a blip (ping-as-outline.md §3):
+##
+## - [param halfwidth_deg] is **how wide the organ reports the body**, which is
+##   its own beamwidth floored under a magnified version of the body's true
+##   angular extent. The field measures it; the bus only draws it.
+## - [param hold] is **how long the echo takes to pass**, which is the body's
+##   depth and is independent of distance. Held, not struck: a return becomes
+##   something you wait out, and a big one takes visibly longer to say itself.
+##
+## **Still no position.** A bearing, a level, a width and a duration; the width
+## conflates size with distance on purpose, exactly as an ear does.
 ##
 ## It says *a body*, not *a meal* and not *a threat*: that is the whole purchase
 ## over the scent field, and it keeps perception.md's "never an identity"
 ## because a body is the least a return can possibly mean. A cell with no
 ## ampulla reports nothing, enforced here as well as at the call site.
-func ping(bearing: float, strength: float) -> void:
-	if _senses[SENSE_AMPULLA] <= 0:
+func ping(bearing: float, strength: float, halfwidth_deg: float = 0.0,
+		hold: float = 0.0) -> void:
+	var tier := _senses[SENSE_AMPULLA]
+	if tier <= 0:
 		return
 	var s := clampf(strength, 0.0, 1.0)
 	if s <= 0.0:
 		return
-	_ping.fire(PING_PEAK * s, bearing)
-	sensation.emit(&"ping", {"bearing": bearing, "strength": s})
+	# The quietest arc gives way, and an idle one is quietest of all. A pool of
+	# four against two drawn slots means a third return arriving never evicts a
+	# mark that is still opening.
+	var slot := 0
+	for i in _arcs.size():
+		if _arcs[i].weight() < _arcs[slot].weight():
+			slot = i
+	var floor_deg := PING_WIDTH_FLOOR[tier]
+	_arcs[slot].fire(PING_PEAK * s, bearing, floor_deg,
+		maxf(halfwidth_deg, floor_deg), hold)
+	sensation.emit(&"ping", {"bearing": bearing, "strength": s,
+		"halfwidth": maxf(halfwidth_deg, floor_deg), "hold": hold})
+
+
+## **The organ, listening.** While a pulse of this cell's is still in the water
+## its own arc hums, at [param level] of [constant PING_HUM_LEVEL] -- 1 the
+## instant the pulse leaves, 0 when it can no longer be answering.
+##
+## Continuous, posted every frame by the run like taste and dread, and it is not
+## a sensation about anything out there: it is the cell hearing its own organ
+## work. It costs no lobe, because it only ever takes a ping slot that is idle.
+##
+## It also draws the blind arc for free. The hum is where the pulse went, so the
+## half of the water your own body hides is the half that is dark -- and turning
+## is the only way to move it, which is the mechanic taught with no text at all.
+##
+## Not gated for subscribers: it changes every frame the organ is running, and a
+## gate that fires every frame costs more than it saves.
+func ping_out(bearing: float, level: float) -> void:
+	if _senses[SENSE_AMPULLA] <= 0:
+		_hum = 0.0
+		return
+	_hum = clampf(level, 0.0, 1.0)
+	_hum_bearing = bearing
 
 
 ## **Which way is up**, in a game where the body is the only frame of reference
@@ -1072,7 +1331,9 @@ func collapse(t: float, loud: bool = true) -> void:
 		_idle_lobes()
 	_ingest.hold(0.0)
 	_wake.hold(0.0)
-	_ping.hold(0.0)
+	_hum = 0.0
+	for arc: Arc in _arcs:
+		arc.reset()
 
 	if t >= wait:
 		_invite(t - wait)
@@ -1116,7 +1377,11 @@ func revive(t: float) -> void:
 
 
 func _idle_lobes() -> void:
-	for i in 4:
+	# **All of them**, counted off the array and not written down. It said `4`
+	# for five phases and was right until the ping got two lobes of its own; a
+	# ping mark surviving a death would have gone on glowing on a membrane that
+	# is supposed to be black.
+	for i in _glow_lobes.size():
 		_glow_lobes[i] = IDLE_LOBE
 	_press_lobes[0] = IDLE_LOBE
 	_press_lobes[1] = IDLE_LOBE
@@ -1150,8 +1415,12 @@ func _end_collapse() -> void:
 	_said_light = -1.0
 	_shear = 0.0
 	_last_pulse = 0.0
-	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest, _ping]:
+	for env: Env in [_pulse, _thrust, _bruise, _flash, _wake, _ingest]:
 		env.reset()
+	for arc: Arc in _arcs:
+		arc.reset()
+	_hum = 0.0
+	_hum_bearing = 0.0
 	# A new cell is the born cell: mediocre at three things and blind. The run
 	# posts the real answer on its first frame, but the first frame of a new
 	# life is the one beat the player is watching for, and it must not land at
@@ -1183,7 +1452,8 @@ func _process(delta: float) -> void:
 	_flash.step(delta)
 	_wake.step(delta)
 	_ingest.step(delta)
-	_ping.step(delta)
+	for arc: Arc in _arcs:
+		arc.step(delta)
 
 	# Decays at its own peak over its own time, so a tier-3 cirrus does not
 	# also hold the shear on for longer than a tier-1 one: what the tier buys
@@ -1283,20 +1553,35 @@ func _compose_lobes() -> void:
 	else:
 		_glow_lobes[LOBE_LIGHT] = IDLE_LOBE
 
-	# The last glow slot, shared by the beam and the ping. They compete rather
-	# than sum, exactly as the three self-signals do in lobe 0: the loudest
-	# thing out there is the thing worth telling a blind cell about. A ping
-	# return punches through a steady beam for a quarter of a second and then
-	# gives it back, which is the right way round -- a body answering is a newer
-	# fact than a ray that has been resting on something for seconds.
+	# The beam, and **its own lobe again**. It used to share this slot with the
+	# ping on the argument that a fifth lobe was a new binary; it is not, and a
+	# ping mark that lives most of a second would sit on the beam permanently.
 	var hard := BEAM_PEAK * _beam if _beam > BEAM_FLOOR else 0.0
-	var hard_bearing := _beam_bearing
-	var hard_width := BEAM_HALFWIDTH_DEG[_senses[SENSE_OCELLUS]]
-	if _ping.value > hard:
-		hard = _ping.value
-		hard_bearing = _ping.bearing
-		hard_width = PING_HALFWIDTH_DEG[_senses[SENSE_AMPULLA]]
-	_glow_lobes[LOBE_BEAM] = _lobe(hard_bearing, hard_width, hard)
+	_glow_lobes[LOBE_BEAM] = _lobe(_beam_bearing,
+		BEAM_HALFWIDTH_DEG[_senses[SENSE_OCELLUS]], hard)
+
+	# The ping's two arcs: the two loudest live returns, and then the organ's
+	# own hum in whichever of the two is still idle. A return never has to
+	# compete with the cell's own organ, and a third simultaneous return loses
+	# -- which is what food.gd's PING_MIN_GAP of 0.30 exists to make rare.
+	var first := -1
+	var second := -1
+	for i in _arcs.size():
+		if _arcs[i].level <= 0.0:
+			continue
+		if first < 0 or _arcs[i].level > _arcs[first].level:
+			second = first
+			first = i
+		elif second < 0 or _arcs[i].level > _arcs[second].level:
+			second = i
+	_glow_lobes[LOBE_PING_A] = _arc_lobe(first)
+	_glow_lobes[LOBE_PING_B] = _arc_lobe(second)
+	if _hum > 0.0:
+		var hum := _lobe(_hum_bearing, PING_HUM_HALFWIDTH, PING_HUM_LEVEL * _hum)
+		if first < 0:
+			_glow_lobes[LOBE_PING_A] = hum
+		elif second < 0:
+			_glow_lobes[LOBE_PING_B] = hum
 
 	if _wake.value > 0.0:
 		_press_lobes[0] = _lobe(_wake.bearing, WAKE_HALFWIDTH_DEG, _wake.value)
@@ -1331,6 +1616,13 @@ static func _ring_edge(ratio: float) -> float:
 			break
 		x = clampf(x - f / d, 0.001, 0.999)
 	return (x + 1.0) / (x - 1.0)
+
+
+## One ping arc as a lobe, or an idle one for a slot with nothing in it.
+func _arc_lobe(slot: int) -> Vector4:
+	if slot < 0:
+		return IDLE_LOBE
+	return _lobe(_arcs[slot].bearing, _arcs[slot].width, _arcs[slot].level)
 
 
 ## A bearing is body-relative, clockwise from the cell's front. Front is the top

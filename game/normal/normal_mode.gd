@@ -583,6 +583,10 @@ func _process(delta: float) -> void:
 	# into the one world position it needs and spends it inside `_cast_ping`.
 	_food.ping_bearing = _slot_bearing_of(&"ampulla")
 	_food.ping_through = _cell.ping_through()
+	# The organ's own resolution, beside its reach and its rate: how many bodies
+	# one pulse answers for and how much of each body's true angular extent
+	# survives into the readout. ping-as-outline.md §4.
+	_food.ping_tier = _cell.ping_tier()
 	# **`taste_level`, not `concentration`.** The first is what this nose picks
 	# up and the second is what the water is like; the beat above reads the
 	# water, the membrane reads the organ. A cell with no chemocyte hands over a
@@ -701,12 +705,24 @@ func _post_beam() -> void:
 ## **The ping's returns**, drained from the field and posted one at a time.
 ##
 ## Unlike the beam these do not compete before they reach the bus: each return
-## is a separate event at a separate bearing, and the membrane's envelope is
-## what resolves two that land in the same instant. Spacing them out in *time*
-## is the field's job, and it is what makes one pulse read as a sweep.
+## is a separate event at a separate bearing, and the membrane's arcs are what
+## resolve two that land in the same instant. Spacing them out in *time* is the
+## field's job, and it is what makes one pulse read as a sweep.
+##
+## **Four scalars, and still not one of them is a place.** A bearing, a level,
+## an angular half-width and a hold time: the width conflates size with distance
+## on purpose and the hold is a duration, so no arrangement of the four recovers
+## a position. ping-as-outline.md §0.
+##
+## Plus the organ's own arc, humming while its pulse is still in the water --
+## a bearing and a scalar, like everything else that reaches the bus. It is what
+## makes an eight-second wait read as *listening* rather than as nothing, and it
+## draws the blind arc for free: the hum is where the pulse went, so the half of
+## the water you are not asking is the half that is dark.
 func _post_pings() -> void:
 	for echo: Array in _food.pings:
-		_bus.ping(float(echo[0]), float(echo[1]))
+		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
+	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
 
 
 # ---------------------------------------------------------------------------
@@ -855,6 +871,7 @@ func _hush() -> void:
 	_bus.taste(0.0, 0.0)
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
+	_bus.ping_out(0.0, 0.0)
 	_bus.level(0.0, 0.0)
 	_bus.hold(0.0)
 	_bus.shear(0.0)

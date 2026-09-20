@@ -14,8 +14,8 @@ uniform float dread = 0.0;
 uniform float pulse = 0.0;
 uniform vec3  pulse_color = vec3(0.12, 0.70, 0.58);
 
-uniform vec4 glow_lobes[4];         // xy = bearing, z = cos(halfwidth), w = intensity
-uniform vec3 glow_colors[4];
+uniform vec4 glow_lobes[6];         // xy = bearing, z = cos(halfwidth), w = intensity
+uniform vec4 glow_colors[6];        // rgb = colour, a = hollowness (0 bump, 1 rim)
 uniform vec4 press_lobes[2];        // xy = bearing, z = cos(halfwidth), w = push
 uniform vec3 press_color = vec3(0.78, 0.94, 0.90);
 uniform float push_px = 86.0;
@@ -58,10 +58,22 @@ void fragment() {
 	float band  = inner * inner * (1.0 - smoothstep(0.0, 20.0, sdf));
 	float line  = 1.0 - smoothstep(0.0, line_px, abs(sdf));
 
+	// The band is zero across most of the frame and the glow is multiplied by
+	// it, so the only loop in this shader is skipped where it cannot be seen.
+	// A spatially coherent branch on a value every neighbouring fragment agrees
+	// about, and it buys back more than six lobes cost.
 	vec3 glow = vec3(0.0);
-	for (int i = 0; i < 4; i++) {
-		float w = smoothstep(glow_lobes[i].z, 1.0, dot(bd, glow_lobes[i].xy));
-		glow += glow_colors[i] * (w * glow_lobes[i].w);
+	if (band > 0.002) {
+		for (int i = 0; i < 6; i++) {
+			// `a` is the plain lobe. `4a(1-a)` is zero at its centre and peaks
+			// where a = 0.5, so a hollow lobe is two bright bearings with a
+			// dimmer middle -- two edges and a lit gap, which is what an echo
+			// off a body actually touches. An idle lobe is safe either way:
+			// cos(halfwidth) = 2 is unreachable and 4a(1-a) is 0 at a = 0.
+			float a = smoothstep(glow_lobes[i].z, 1.0, dot(bd, glow_lobes[i].xy));
+			float s = mix(a, 4.0 * a * (1.0 - a), glow_colors[i].a);
+			glow += glow_colors[i].rgb * (s * glow_lobes[i].w);
+		}
 	}
 
 	float interior = 1.0 - smoothstep(0.0, 1.15, length(vec2(d.x / c.x, d.y / c.y)));

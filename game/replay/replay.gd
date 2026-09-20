@@ -162,7 +162,8 @@ func _write_state() -> void:
 			_food.restore_body(i, Vector2(_frame[at], _frame[at + 1]),
 				_frame[at + 2], _frame[at + 3], _frame[at + 4])
 		_food.beams = _read_beams()
-		_food.ping_front = _frame[RecorderNode.AT_PING_FRONT]
+		_food.ping_fronts = _read_ping_fronts()
+		_food.ping_echoes = _read_ping_echoes()
 		_food.ping_range = _frame[RecorderNode.AT_PING_RANGE]
 		# **Where the organ was**, off the body layout the PLAYER delta now
 		# carries. The wavefront leaves the membrane at the `ampulla`'s own arc
@@ -207,6 +208,37 @@ func _read_beams() -> Array:
 		if _frame[at + 1] <= 0.0 and _frame[at + 2] <= 0.0:
 			continue
 		out.append([_frame[at], _frame[at + 1], _frame[at + 2] > 0.5])
+	return out
+
+
+## **The wave going out**, as radii from the organ. Recorded newest-first and
+## handed back that way: both views only iterate, and the field's own "oldest
+## first" is about which one is about to expire, which a replay never asks.
+func _read_ping_fronts() -> Array:
+	var out: Array = []
+	for slot in RecorderNode.PING_FRONTS:
+		var r := _frame[RecorderNode.AT_PING_FRONTS + slot]
+		if r <= 0.0:
+			continue
+		out.append(r)
+	return out
+
+
+## **The echoes coming home**, exactly the four scalars the live field hands the
+## views: `[radius, bearing, halfwidth_deg, level]`. A radius of -1 or a level of
+## 0 is an empty slot.
+##
+## These four are **stepped** between recorded frames rather than lerped, and
+## [method RecorderNode.sample] is where that is enforced and why: an echo slot
+## is not an identity, so slot 2 in two consecutive frames is routinely two
+## different bodies.
+func _read_ping_echoes() -> Array:
+	var out: Array = []
+	for slot in RecorderNode.PING_ECHOES:
+		var at := RecorderNode.AT_PING_ECHOES + slot * RecorderNode.ECHO_FLOATS
+		if _frame[at] <= 0.0 or _frame[at + 3] <= 0.0:
+			continue
+		out.append([_frame[at], _frame[at + 1], _frame[at + 2], _frame[at + 3]])
 	return out
 
 

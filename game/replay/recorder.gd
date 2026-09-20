@@ -39,11 +39,16 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 296 float32 a frame is 1,184 bytes, which is 69 KB a second at 60 fps. A
-# four-hundred-second run would be 27.1 MB and mostly empty water; sixty
-# seconds is 4.1 MB, allocated once here and never grown. Nobody rewatches
+# 322 float32 a frame is 1,288 bytes, which is 75 KB a second at 60 fps. A
+# four-hundred-second run would be 29.5 MB and mostly empty water; sixty
+# seconds is 4.4 MB, allocated once here and never grown. Nobody rewatches
 # seven minutes -- the mistake that killed you is in the last twenty seconds.
-# The constant below is the knob and the arithmetic is 69 KB per second bought.
+# The constant below is the knob and the arithmetic is 75 KB per second bought.
+#
+# It was 296 floats and 69 KB/s until the wave bounced. Two more glow lobes and
+# their hollowness are eight and one, and the pulse out and back is eighteen:
+# two front radii and four echoes of four scalars each. Measured on the new
+# stride, one capture() costs 186 us at its worst and 104 us on average.
 # §3.1 and owner's call 1 in §7.
 # ---------------------------------------------------------------------------
 
@@ -70,21 +75,35 @@ const AT_MEMBRANE := AT_MOTES + MOTES * 2
 ## 3 x (bearing, distance, hit)
 const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
-## ping_front, ping_range, held_remaining, then the division's four, then the
-## frame's own delta, the beat and the hunter.
+## **The ping, out and back.** Two outgoing fronts and four returning echoes,
+## then ping_range, held_remaining, the division's four, the frame's own delta,
+## the beat and the hunter.
+##
+## Two and four, and both numbers were measured rather than chosen. The field
+## can hold eleven fronts and fifty-five echoes at tier 3, and recording all of
+## them would cost 200 floats a frame for a picture that is mostly off screen: a
+## front leaves the frame in under a second against a 1.4 s period, so at most
+## two are ever inside it, and four echoes covers every instant of the tier-3
+## ambiguity pose. `food.gd` sorts the echoes nearest-home first, so the four
+## kept are the four about to land -- which are the ones a viewer is watching.
 const AT_TAIL := AT_BEAMS + BEAMS * BEAM_FLOATS
-const AT_PING_FRONT := AT_TAIL
-const AT_PING_RANGE := AT_TAIL + 1
-const AT_HELD := AT_TAIL + 2
-const AT_DOUBLE := AT_TAIL + 3
-const AT_PINCH := AT_TAIL + 4
-const AT_SPREAD := AT_TAIL + 5
-const AT_COMMIT := AT_TAIL + 6
-const AT_DELTA := AT_TAIL + 7
+const PING_FRONTS := 2
+const PING_ECHOES := 4
+## `[radius, bearing, halfwidth_deg, level]`.
+const ECHO_FLOATS := 4
+const AT_PING_FRONTS := AT_TAIL
+const AT_PING_ECHOES := AT_TAIL + PING_FRONTS
+const AT_PING_RANGE := AT_PING_ECHOES + PING_ECHOES * ECHO_FLOATS
+const AT_HELD := AT_PING_RANGE + 1
+const AT_DOUBLE := AT_PING_RANGE + 2
+const AT_PINCH := AT_PING_RANGE + 3
+const AT_SPREAD := AT_PING_RANGE + 4
+const AT_COMMIT := AT_PING_RANGE + 5
+const AT_DELTA := AT_PING_RANGE + 6
 ## The beat, and it is the same number as the membrane block's `pulse` -- §3.1's
 ## table names both and they are one value seen twice. The playback takes the
 ## one inside the block, because that is the one that reached the shader.
-const AT_BEAT := AT_TAIL + 8
+const AT_BEAT := AT_PING_RANGE + 7
 ## **Who was hunting you, as one float, and it is the whole of the reason this
 ## column exists.** `hunter()` is a question about a state machine -- STALK, and
 ## the target being the player -- and a state machine is the one thing
@@ -100,9 +119,9 @@ const AT_BEAT := AT_TAIL + 8
 ## for the single nearest stalker and never for more than one. -1 is nobody, and
 ## it is stepped rather than lerped at playback the way [constant AT_COMMIT] is
 ## -- an index halfway between body 3 and body 9 is body 6, which is a different
-## cell in a different place. 4 bytes a frame is 0.24 KB/s against 69.
-const AT_HUNTER := AT_TAIL + 9
-const STRIDE := AT_TAIL + 10
+## cell in a different place. 4 bytes a frame is 0.24 KB/s against 75.
+const AT_HUNTER := AT_PING_RANGE + 8
+const STRIDE := AT_PING_RANGE + 9
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -135,7 +154,7 @@ var _genome: GenomeNode = null
 var _bus: SignalBus = null
 var _soma: SomaLayer = null
 
-## 60 x 60 x 296 float32, allocated once and never grown.
+## 60 x 60 x 322 float32, allocated once and never grown.
 var _ring := PackedFloat32Array()
 ## When each ring slot was recorded, in seconds since the run began.
 var _when := PackedFloat32Array()
@@ -276,7 +295,7 @@ func capture(delta: float) -> void:
 		_ring[beam_at + 2] = hit
 		beam_at += BEAM_FLOATS
 
-	_ring[at + AT_PING_FRONT] = _food.ping_front if _food != null else -1.0
+	_capture_ping(at)
 	_ring[at + AT_PING_RANGE] = _food.ping_range if _food != null else 0.0
 	_ring[at + AT_HELD] = _genome.held_remaining if _genome != null else 0.0
 	# One integer-valued float, and the only thing in this loop that asks the
@@ -288,6 +307,40 @@ func capture(delta: float) -> void:
 	_when[_head] = _clock
 	_head = (_head + 1) % CAPACITY
 	_count = mini(_count + 1, CAPACITY)
+
+
+## **The pulse, out and back**, in eighteen floats. A radius per outgoing front
+## and four scalars per returning echo, both already sorted by the field -- the
+## fronts oldest first, so the newest and therefore smallest two are kept; the
+## echoes nearest-home first, so the four about to land are.
+##
+## A radius of -1 is an empty slot, which is the same convention the single
+## `ping_front` used for "nothing in flight". An echo with level 0 is empty and
+## neither view draws it.
+func _capture_ping(at: int) -> void:
+	for i in PING_FRONTS:
+		_ring[at + AT_PING_FRONTS + i] = -1.0
+	for i in PING_ECHOES:
+		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
+		_ring[e] = -1.0
+		_ring[e + 1] = 0.0
+		_ring[e + 2] = 0.0
+		_ring[e + 3] = 0.0
+	if _food == null:
+		return
+	var fronts: Array = _food.ping_fronts
+	# From the end: the fronts are oldest first and the newest are the ones
+	# still inside the frame.
+	for i in mini(fronts.size(), PING_FRONTS):
+		_ring[at + AT_PING_FRONTS + i] = float(fronts[fronts.size() - 1 - i])
+	var echoes: Array = _food.ping_echoes
+	for i in mini(echoes.size(), PING_ECHOES):
+		var echo: Array = echoes[i]
+		var e := at + AT_PING_ECHOES + i * ECHO_FLOATS
+		_ring[e] = float(echo[0])
+		_ring[e + 1] = float(echo[1])
+		_ring[e + 2] = float(echo[2])
+		_ring[e + 3] = float(echo[3])
 
 
 ## The division, in four floats. `double` and `pinch` are the mother becoming
@@ -577,7 +630,7 @@ func time_of(i: int) -> float:
 	return _when[(_start + clampi(i, 0, _count - 1)) % CAPACITY] - _origin
 
 
-## **One frame, interpolated**, into a 296-float array the caller owns.
+## **One frame, interpolated**, into a 322-float array the caller owns.
 ##
 ## Everything lerps except the four things that would lie if they did: the
 ## division's `commit`, which jumps when a daughter is chosen; the hunter, which
@@ -611,6 +664,14 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 		out[head + 2] = _ring[from + head + 2]
 	out[AT_COMMIT] = _ring[from + AT_COMMIT]
 	out[AT_HUNTER] = _ring[from + AT_HUNTER]
+	# **The ping's slots are not identities**, which is the same fault the
+	# hunter index has. The field re-sorts its echoes nearest-home every frame
+	# and a return that lands vacates one, so slot 2 in two consecutive frames
+	# is routinely two different bodies -- and lerping between them would slide
+	# one arc across the water to where another one was. A bearing cannot be
+	# lerped through the wrap at +-PI either. Stepped, therefore, whole.
+	for k in range(AT_TAIL, AT_PING_RANGE):
+		out[k] = _ring[from + k]
 
 
 ## A position that jumped is held at the frame it jumped from until the frame it

@@ -216,6 +216,15 @@ extends Node
 ##                           the drifter floor ever fails. Quits when done.
 ##   --trace=<seconds>       print the field, dread, threat and the player's
 ##                           realised speed on that interval
+##   --pings=<seconds>       print how many outgoing fronts and returning echoes
+##                           the `ampulla` has in the water on that interval,
+##                           with the running maxima and the four echoes
+##                           nearest home. The wave bounces, so a pulse is in
+##                           flight for 2 x range / speed and the overlap that
+##                           decides whether a mark is ambiguous is a count
+##                           nothing could take before this existed --
+##                           ping-as-outline.md section 7 was arithmetic off
+##                           three constants
 ##   --locked                turn the world with the cell, so forward is always
 ##                           up. The pause screen's camera toggle, reached
 ##                           without a tap and without writing the choice to
@@ -335,6 +344,14 @@ var _gain := -1.0
 var _hunt := -1.0
 var _trace := -1.0
 var _trace_clock := 0.0
+## How often to print what the `ampulla` has in the water, or -1 for never.
+var _pings_trace := -1.0
+var _pings_clock := 0.0
+## The most fronts and the most echoes seen live at one instant, over the whole
+## run. The overlap ping-as-outline.md section 7 is about is a maximum, not an
+## average: it is the worst instant that decides whether a mark is ambiguous.
+var _pings_peak_fronts := 0
+var _pings_peak_echoes := 0
 ## Which control scheme to force, or -1 to take whatever user:// remembers.
 var _scheme := -1
 var _hunter_gape := 1.40
@@ -503,6 +520,8 @@ func _ready() -> void:
 			_hunt = float(text.trim_prefix("--hunt="))
 		elif text.begins_with("--trace="):
 			_trace = float(text.trim_prefix("--trace="))
+		elif text.begins_with("--pings="):
+			_pings_trace = float(text.trim_prefix("--pings="))
 		elif text.begins_with("--prey-radius="):
 			_prey_radius = float(text.trim_prefix("--prey-radius="))
 		elif text.begins_with("--hunter-gape="):
@@ -746,6 +765,7 @@ func _process(delta: float) -> void:
 	_step_sniff(delta)
 	_step_evade()
 	_step_trace(delta)
+	_step_pings_trace(delta)
 	_step_controls(delta)
 	_step_rects()
 	_step_kill()
@@ -1025,6 +1045,36 @@ func _membrane_text() -> String:
 		taste.w, far, _food.taste_level if _food != null else 0.0,
 		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
+
+
+## **What the pulse actually has in the water**, which is arithmetic off three
+## constants until something counts it. `--pings=<seconds>` prints how many
+## outgoing fronts and returning echoes are live, the running maxima, and where
+## the nearest echoes have got to.
+##
+## The maxima are the numbers that matter: ping-as-outline.md section 7 is about
+## whether a player can tell which pulse a mark belongs to, and that is decided
+## by the worst instant and not by the mean.
+func _step_pings_trace(delta: float) -> void:
+	if _pings_trace <= 0.0 or _food == null:
+		return
+	var fronts: Array = _food.ping_fronts
+	var echoes: Array = _food.ping_echoes
+	_pings_peak_fronts = maxi(_pings_peak_fronts, fronts.size())
+	_pings_peak_echoes = maxi(_pings_peak_echoes, echoes.size())
+	_pings_clock += delta
+	if _pings_clock < _pings_trace:
+		return
+	_pings_clock = 0.0
+	var near := ""
+	for i in mini(echoes.size(), 4):
+		var echo: Array = echoes[i]
+		near += "  [r%6.1f  %+6.1fdeg  w%4.1f  lv%4.2f]" % [
+			float(echo[0]), rad_to_deg(float(echo[1])), float(echo[2]),
+			float(echo[3])]
+	print("[pings] %6.2f  fronts %2d (peak %2d)  echoes %2d (peak %2d)  listen %4.2f%s" % [
+		_clock, fronts.size(), _pings_peak_fronts, echoes.size(),
+		_pings_peak_echoes, _food.ping_listen, near])
 
 
 func _step_trace(delta: float) -> void:
@@ -1374,6 +1424,14 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 	var strength := ""
 	if info.has("strength"):
 		strength = "  strength %.2f" % float(info["strength"])
+	# The ping's two extra scalars: how wide the organ reported the body and
+	# how long the echo takes to pass. Without the hold on the line there is no
+	# way to work out, offline, how often two marks are ringing at once -- and
+	# the membrane only has two arcs to ring them with.
+	if info.has("halfwidth"):
+		strength += "  halfwidth %5.1f deg  hold %.2f s" % [
+			rad_to_deg(deg_to_rad(float(info["halfwidth"]))),
+			float(info.get("hold", 0.0))]
 	# Parked food would be eaten again every frame, which grows the cell and
 	# empties its hunger while the shot harness is still waiting. One meal is
 	# what was wanted.

@@ -491,21 +491,41 @@ const SHADOW_MIN_RATIO := 0.8
 const SHADOW_FULL_RATIO := 1.05
 
 # --- The ping (`ampulla`) ---------------------------------------------------
-## How fast a return comes back, in world units per second. **This is the whole
-## reason the ping reads as a sweep rather than as a chord**: the nearest body
-## answers first and the farthest last, so one pulse arrives on the membrane as
-## a series of separate marks walking outward in time.
+## How fast the pulse travels, in world units per second -- **out and back**.
+## This is the whole reason the ping reads as a sweep rather than as a chord:
+## the nearest body answers first and the farthest last, so one pulse arrives on
+## the membrane as a series of separate marks walking outward in time.
 ##
-## **Slowed five-fold at the owner's word**, from 1250. A tier-1 return from the
-## edge of reach now lands 4.4s after the pulse left rather than 0.88s, so the
-## sweep is something you watch travel rather than something that has already
-## happened. Untested by instruction -- the change is one number and the owner
-## wanted it shipped rather than measured.
+## **Slowed five-fold at the owner's word**, from 1250. Untested by instruction
+## -- the change is one number and the owner wanted it shipped rather than
+## measured -- and then measured here, because the round trip doubled every
+## consequence of it. A tier-1 return from the edge of reach lands **8.8 s**
+## after the pulse left rather than 4.4, and ping-as-outline.md §7 is what that
+## costs.
 const PING_SPEED := 250.0
-## How many bodies one pulse may answer for, nearest first. A cap rather than a
-## rule: thirty-four bodies inside reach would be a strobe, and the far half of
-## them would be inaudible under the near half anyway.
-const PING_RETURNS := 5
+## How many bodies one pulse may answer for, nearest first, **by `ampulla`
+## tier**. A cap rather than a rule: thirty-four bodies inside reach would be a
+## strobe, and the far half of them would be inaudible under the near half
+## anyway. Was a flat five; the ladder is ping-as-outline.md §4, and how many
+## things one pulse can resolve at once is most of what a better organ is.
+const PING_RETURNS_BY_TIER: Array[int] = [0, 3, 4, 5]
+## **How much longer the organ rings than the echo takes to pass**, §3.2. The
+## bare geometry is 1.0; 2.0 is what shipped, because 0.104 s against 0.320 s is
+## a real ratio hiding inside two numbers that are both "a blink". Measured over
+## 60 s of foraging, holds land between 0.21 and 0.70 s.
+const PING_RING := 2.0
+## **The organ's own beamwidth**, in degrees: the finest extent it can report,
+## and the floor every reported extent sits on. Was `signal_bus.gd`'s
+## `PING_HALFWIDTH_DEG`, which was the whole of what a mark's width said; it is
+## now the bottom of a measurement rather than the measurement.
+const PING_WIDTH_FLOOR: Array[float] = [0.0, 17.0, 13.0, 10.0]
+## **How much of a body's true angular half-width reaches the readout**, on top
+## of that floor. A magnification, and §3.3 is why one is needed: at seeding
+## distance every body in this water subtends under three degrees, so a literal
+## width would report every one of them as the same hairline.
+const PING_WIDTH_GAIN: Array[float] = [0.0, 1.5, 3.5, 6.0]
+## Past this a lobe has stopped being a bearing and become a mood.
+const PING_WIDTH_MAX := 52.0
 ## How a return fades with range. **Deliberately not linear**, and measured: the
 ## water keeps most of its bodies between 900 and 1400 units out, so a linear
 ## fall put nearly every tier-1 return at strength 0.14 -- a mark too faint to
@@ -520,7 +540,11 @@ const PING_FALLOFF := 0.6
 ## mark. A return is pushed back to at least this far behind the one in front of
 ## it, so a pulse is always heard as a series. The fiction is the organ's, not
 ## the water's -- an ear resolves one thing at a time.
-const PING_MIN_GAP := 0.17
+##
+## **Raised from 0.17** with ping-as-outline.md §3.2: a mark now lives 0.36 to
+## 0.80 s instead of 0.19, and the membrane holds two of them at once rather
+## than one. Two arcs and a 0.30 gap is the pair that keeps a sweep a series.
+const PING_MIN_GAP := 0.30
 ## **The soft edge on the hull's own shadow, as a cosine.** A point source
 ## sitting on the skin radiates into half the plane and the rest goes into the
 ## body -- which is why a submarine has baffles, and why clearing them is done
@@ -534,11 +558,12 @@ const PING_MIN_GAP := 0.17
 ## shadow gets a 27-degree soft edge instead: `acos(0.24)` is 76.1 degrees, so
 ## the fade runs +-13.9 degrees either side of the hemisphere.
 const PING_GRAZE := 0.24
-## **A return below this is not worth one of the five slots.** [constant
-## PING_RETURNS] is applied *after* occlusion, so a return a shadow has silenced
-## stands aside for a fainter one in the lit half rather than spending a slot on
-## nothing. That is the whole of the compensation, and it is enough because the
-## cap was already discarding more than the shadow does.
+## **A return below this is not worth one of the three-to-five slots.**
+## [constant PING_RETURNS_BY_TIER] is applied *after* occlusion, so a return a
+## shadow has silenced stands aside for a fainter one in the lit half rather
+## than spending a slot on nothing. That is the whole of the compensation, and
+## it is enough because the cap was already discarding more than the shadow
+## does.
 const PING_SILENT := 0.03
 
 # --- The wake ---------------------------------------------------------------
@@ -758,20 +783,54 @@ var ping_bearing := 0.0
 ## [constant CellBody.PING_THROUGH_BY_TIER] for the tier this cell wears. 0 is a
 ## body nothing gets past.
 var ping_through := 0.0
-## Returns that became due **this frame**: `[bearing, strength]`, nearest first,
-## strength 1 against the skin and 0 at the edge of reach. Drained by the run,
-## which is the only thing allowed to post them. Bodies, not meals: a ping
-## answers off anything with a body in it, which is exactly what the scent field
-## can never do.
+## The `ampulla` tier, written once a frame by the run beside the three above.
+## It decides how many bodies one pulse answers for and how much of a body's
+## true angular extent survives into the readout. ping-as-outline.md §4.
+var ping_tier := 0
+## Returns that became due **this frame**: `[bearing, strength, halfwidth_deg,
+## hold]`, loudest first. Strength is 1 against the skin and 0 at the edge of
+## reach; `halfwidth_deg` is how wide the organ reports the body (§3.3) and
+## `hold` is how long the echo takes to pass (§3.2). Drained by the run, which
+## is the only thing allowed to post them.
+##
+## **Four scalars, and not one of them is a place.** The half-width conflates
+## size with distance on purpose, exactly as an ear does; you cannot recover a
+## position from the four of them. Bodies, not meals: a ping answers off
+## anything with a body in it, which is exactly what the scent field can never
+## do.
 var pings: Array = []
-## How far the newest wavefront has travelled, or -1 for nothing in flight.
-## Ground truth for the full-vision view, which draws the sweep; the organism
-## only ever gets [member pings].
-var ping_front := -1.0
-## `[seconds until due, world position, strength]` for returns still in flight.
-## The position stops here: [method _step_pings] turns it into a bearing at the
-## moment the return lands, exactly as [method _step_touch] does.
+## **Every outgoing wavefront still inside reach**, as radii from the organ,
+## oldest first. Ground truth for the two views, which draw the sweep; the
+## organism only ever gets [member pings].
+##
+## An array and not a scalar, and that is ping-as-outline.md §7 being fixed
+## rather than photographed. The slow wave puts up to eleven pulses in the water
+## at once at tier 3, and one `ping_front` drew the newest while the membrane
+## was still reporting the oldest -- one frame saying *the wave has just left*
+## over a skin saying *something is out there*.
+var ping_fronts: Array = []
+## **Every echo on its way home**, as `[radius, bearing, halfwidth_deg, level]`,
+## nearest first. The radius is how far the echo still has to travel, so it
+## collapses onto the organ at the instant the matching entry appears in
+## [member pings] -- the wave coming back is the same event the skin reports.
+##
+## Recomputed every frame from the stored world position, so an echo that is
+## eight seconds out still arrives on the bearing the body is on *now* rather
+## than the one it was on when the pulse left.
+var ping_echoes: Array = []
+## **How much of the newest pulse's round trip is still to come**, 1 at the
+## instant it leaves and 0 when it can no longer be answering. The organ's own
+## arc hums at this while it listens (§6.2); it is a level and a bearing like
+## everything else that reaches the membrane.
+var ping_listen := 0.0
+## `[seconds until due, world position, strength, halfwidth_deg, hold]` for
+## returns still in flight. The position stops here: [method _step_pings] turns
+## it into a bearing at the moment the return lands, exactly as [method
+## _step_touch] does -- and into a bearing every frame for the drawn echo, which
+## is the same conversion done twice and never handed on.
 var _echoes: Array = []
+## Ages of the outgoing fronts still inside reach, oldest first.
+var _pulses: Array = []
 var _ping_clock := 0.0
 var _ping_age := -1.0
 ## `palp`. Range in, bearing and strength out: the nearest body inside touch
@@ -831,9 +890,12 @@ func setup(cell: CellBody) -> void:
 	taste_level = 0.0
 	pings.clear()
 	_echoes.clear()
+	_pulses.clear()
 	_ping_clock = 0.0
 	_ping_age = -1.0
-	ping_front = -1.0
+	ping_fronts.clear()
+	ping_echoes.clear()
+	ping_listen = 0.0
 	_dart_clock = 0.0
 	_bite_clock = 0.0
 
@@ -1744,52 +1806,113 @@ func _step_beams() -> void:
 ## `chemocyte` rather than a second skin on it: the scent field is a statement
 ## about food, and most of what is out there is not food.
 ##
-## Returns are staggered by their own flight time, which is what turns one pulse
-## into a sweep: the nearest body answers at `d / PING_SPEED` and the farthest
-## seconds later -- 4.4 s from the edge of tier-1 reach at 250. **That stagger is also what resolves the one
-## ambiguity occlusion creates**: a shadowed near body and a clear far body both
-## come back faint, but the near one still answers early. Nothing here posts and
-## nothing here keeps a position past the frame it becomes a bearing.
+## **It bounces.** The front travels out, reflects off the near edge of whatever
+## it meets, and the echo travels home; the organ hears it when it gets back, at
+## `2d / PING_SPEED`. That is the owner's word and it is also the only story
+## that makes the drawn picture and the felt one the same event -- you watch the
+## shout go out, you watch one piece of it come back, and the skin lights when
+## it lands. A bat is not a thing that shouts; it is a thing that listens.
+##
+## Returns are staggered by their own round trip, which is what turns one pulse
+## into a sweep: the nearest body answers at `2d / PING_SPEED` and the farthest
+## seconds later -- **8.8 s** from the edge of tier-1 reach at 250. **That
+## stagger is also what resolves the one ambiguity occlusion creates**: a
+## shadowed near body and a clear far body both come back faint, but the near
+## one still answers early. Nothing here posts and nothing here keeps a position
+## past the frame it becomes a bearing.
+##
+## **What the round trip does not double is the duration.** Only the near
+## hemisphere of a body answers -- the far side is in its own shadow -- so the
+## echo is spread over the depth from the near pole to the limb, which is `R`,
+## and arrives over `2R / PING_SPEED`. That is the same number the one-way front
+## took to cross the whole body, so ping-as-outline.md §3.2's table survives the
+## bounce untouched. Arrival time doubled; held time did not.
 func _step_pings(delta: float) -> void:
 	pings.clear()
+	ping_echoes.clear()
 	if _cell == null:
 		return
 	if ping_range <= 0.0 or ping_period <= 0.0:
 		# The organ was lost, or was never grown. Anything still in flight is
 		# dropped rather than delivered: it was never heard.
 		_echoes.clear()
+		_pulses.clear()
+		ping_fronts.clear()
+		ping_listen = 0.0
 		_ping_clock = 0.0
 		_ping_age = -1.0
-		ping_front = -1.0
 		return
 
 	_ping_clock -= delta
 	if _ping_clock <= 0.0:
 		_ping_clock = ping_period
 		_ping_age = 0.0
+		_pulses.append(0.0)
 		_cast_ping()
 	elif _ping_age >= 0.0:
 		_ping_age += delta
 
-	var front := _ping_age * PING_SPEED
-	ping_front = front if _ping_age >= 0.0 and front <= ping_range else -1.0
+	# Every front still inside reach, not just the newest. A front that has run
+	# out of range is dropped; the echoes it started are in `_echoes` and live
+	# their own lives from here. Aged in place and trimmed from the head, which
+	# is where they always expire -- they were appended in order and they all
+	# travel at the same speed, so the dead ones are always a prefix.
+	for i in _pulses.size():
+		_pulses[i] = float(_pulses[i]) + delta
+	while not _pulses.is_empty() and float(_pulses[0]) * PING_SPEED > ping_range:
+		_pulses.remove_at(0)
+	ping_fronts.clear()
+	for age: float in _pulses:
+		ping_fronts.append(age * PING_SPEED)
+
+	# The hum: how much of the newest pulse's **round trip** is still to come.
+	# It breathes at tier 1, where a 3.2 s period sits inside an 8.8 s trip, and
+	# it is nearly flat at tier 3, where the period is a tenth of the trip --
+	# which is honest, because a tier-3 organ really is always listening.
+	var trip := 2.0 * ping_range / PING_SPEED
+	ping_listen = 0.0
+	if _ping_age >= 0.0 and trip > 0.0:
+		ping_listen = 1.0 - clampf(_ping_age / trip, 0.0, 1.0)
 
 	# Backwards, so removing one does not skip the next.
 	for i in range(_echoes.size() - 1, -1, -1):
 		var echo: Array = _echoes[i]
 		echo[0] -= delta
 		if echo[0] > 0.0:
+			# Still coming. Where it is, for the two views: the radius is how
+			# far it still has to travel, so it walks in and lands on the organ
+			# at the instant the mark appears on the skin.
+			ping_echoes.append([float(echo[0]) * PING_SPEED,
+				_cell.bearing_to(echo[1]), float(echo[3]), float(echo[2])])
 			continue
-		pings.append([_cell.bearing_to(echo[1]), echo[2]])
+		pings.append([_cell.bearing_to(echo[1]), echo[2], echo[3], echo[4]])
 		_echoes.remove_at(i)
-	# Loudest first. The membrane has one envelope for this and it keeps the
-	# loudest mark, so the order only matters to a later subscriber -- but
-	# "nearest thing first" is the only order a radar return has.
+	# Nearest home first, so a view -- or the recorder, which has room for four
+	# -- keeps the ones about to land. `_echoes` is in no useful order once two
+	# pulses are overlapping in it, which at tier 3 is always.
+	ping_echoes.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	# Loudest first. The membrane has two arcs out of a pool of four and it keeps
+	# the two loudest, so the order decides which pair is drawn when three land
+	# inside one another's hold -- 23% of the time at tier 3, measured.
 	pings.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
 
 
 ## Everything inside reach the pulse can actually reach, nearest first, capped
-## at [constant PING_RETURNS] **after** the shadows have been taken off.
+## at [constant PING_RETURNS_BY_TIER] **after** the shadows have been taken off.
+##
+## Each one leaves with **two scalars beside its level**, both made out of
+## numbers this function already holds and both spent before it returns
+## (ping-as-outline.md §3):
+##
+## - `width`, how wide the organ reports it. The true angular half-width is
+##   `asin(R / D)`, and at seeding distance that is under three degrees for
+##   every body in this water -- invisible, and identical for a speck and a
+##   whale. So the organ's own beamwidth is a **floor** and the true extent is
+##   magnified on top of it. A transducer, not a camera; the mapping is monotone
+##   and the beam is the resolution limit, which is what the tier ladder lowers.
+## - `hold`, how long the echo takes to pass, which is `2R / PING_SPEED` and is
+##   **independent of distance**. This is the bat reading: echo duration is
+##   target depth.
 ##
 ## **The pulse leaves the skin, not the middle of the cell.** Its origin is the
 ## organ's own point on the membrane -- [member ping_bearing] out at the body's
@@ -1810,6 +1933,11 @@ func _step_pings(delta: float) -> void:
 ## through itself at 0.58 and never quite as well as around itself, which is the
 ## right direction for a build that has spent three tiers on one gene.
 func _cast_ping() -> void:
+	# Clamped here and not trusted: the run writes it every frame, and a headless
+	# boot casts a pulse before the first write lands.
+	var tier := clampi(ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
+	if PING_RETURNS_BY_TIER[tier] <= 0:
+		return
 	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
 	var origin := _cell.position + dir * _cell.radius
 	var found: Array = []
@@ -1880,15 +2008,26 @@ func _cast_ping() -> void:
 			level *= lerpf(ping_through, 1.0, clear)
 		if level <= PING_SILENT:
 			continue
-		heard.append([float(found[i][0]), at, level])
-		if heard.size() >= PING_RETURNS:
+		# The two readings beside the level, out of numbers this loop already
+		# has. `span` is organ-to-centre and is floored at the radius, so a body
+		# the organ is inside does not ask `asin` for more than 1.
+		var radius_i: float = found[i][2]
+		var span := maxf(reach, radius_i)
+		var alpha := rad_to_deg(asin(clampf(radius_i / span, 0.0, 1.0)))
+		var width := minf(PING_WIDTH_FLOOR[tier] + PING_WIDTH_GAIN[tier] * alpha,
+			PING_WIDTH_MAX)
+		var hold := PING_RING * 2.0 * radius_i / PING_SPEED
+		heard.append([float(found[i][0]), at, level, width, hold])
+		if heard.size() >= PING_RETURNS_BY_TIER[tier]:
 			break
 	var due := 0.0
 	for i in heard.size():
 		var d: float = heard[i][0]
-		var flight := d / PING_SPEED
+		# **Out and back.** The front reaches the near edge at `d / PING_SPEED`
+		# and the echo takes as long again to get home.
+		var flight := 2.0 * d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
-		_echoes.append([due, heard[i][1], heard[i][2]])
+		_echoes.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --

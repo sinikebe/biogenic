@@ -1223,8 +1223,9 @@ second copy, `SMELL_RING_FLOOR`, and that is deliberate rather than an oversight
   numbers are one number wearing two hats;
 - the membrane is a view and may not preload the field — a `signal_bus.gd` that
   imported `food.gd` would put the water inside the skin;
-- the file already has exactly this pairing between `PING_DECAY` and `food.gd`'s
-  `PING_MIN_GAP`, documented the same way.
+- the file already has exactly this pairing between `PING_RELEASE` and
+  `food.gd`'s `PING_MIN_GAP` — and, since `ping-as-outline.md`, a second one
+  between the two copies of `PING_WIDTH_FLOOR` — documented the same way.
 
 Both comments name the other constant and say what breaks if they drift: the
 picture stops being the maths and becomes a decoration. Measured on the shipped

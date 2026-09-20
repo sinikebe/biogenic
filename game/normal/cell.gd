@@ -506,6 +506,15 @@ func ping_through() -> float:
 	return PING_THROUGH_BY_TIER[_tier_index(extra(&"ampulla"))]
 
 
+## **The `ampulla` tier itself**, clamped to the tables, 0 for a cell with no
+## electroreceptor. The three above turn the tier into a distance, a period and
+## a fraction; the field needs the index as well, because how many bodies one
+## pulse answers for and how finely it reports each one are the organ's own
+## resolution and not a property of anything in the water.
+func ping_tier() -> int:
+	return _tier_index(extra(&"ampulla"))
+
+
 ## How many genes this body can carry.
 func slots() -> int:
 	return slots_for(radius)

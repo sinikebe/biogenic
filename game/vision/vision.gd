@@ -819,15 +819,22 @@ func _draw_beams(a: float) -> void:
 		_world.draw_circle(tip, 3.4, Color(tone, 0.92 * a), true, -1.0, true)
 
 
-## **The `ampulla`.** The wavefront of the pulse that is currently in flight, as
-## a half-ring expanding out of **the organ's own point on the membrane** and
-## fading as it goes.
+## **The `ampulla`.** Every wavefront currently in flight, as a half-ring
+## expanding out of **the organ's own point on the membrane** and fading as it
+## goes -- and every echo on its way back, as a short arc contracting onto the
+## same point.
 ##
 ## The same two-register agreement the beam has: point of view gets a run of
 ## marks on the contour as each body answers, and here the thing that produced
 ## them is on screen -- so "the blips stopped because nothing is within reach"
-## is visible rather than deduced. The returns themselves need no mark of their
-## own, because in full vision the bodies they came off are already drawn.
+## is visible rather than deduced. The bodies the echoes came off need no mark
+## of their own, because full vision draws them already.
+##
+## **This is where the round trip gets checked.** Full vision exists to prove
+## point of view is telling the truth, and the claim to check is that the skin
+## lights at the same instant, at the same bearing, over the same span, that an
+## echo lands on the organ. Both are drawn here off the same four numbers, so a
+## disagreement is visible in one frame rather than inferred.
 ##
 ## The half is the hull: a source on the skin radiates into the hemisphere it
 ## faces and the rest goes into the body. Where the gene has grown enough to
@@ -837,30 +844,49 @@ func _draw_beams(a: float) -> void:
 func _draw_ping(a: float) -> void:
 	if _food_node == null:
 		return
-	var front: float = _food_node.ping_front
 	var reach: float = _food_node.ping_range
-	if front <= 0.0 or reach <= 0.0:
+	if reach <= 0.0:
 		return
-	# Off the top of the screen long before it reaches its range, so the fade is
-	# the thing that has to sell "it is still going".
-	var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
 	var dir := _ray(_food_node.ping_bearing)
 	var origin := _cell.position + dir * _cell.radius
 	var mid := dir.angle()
 	var tone := Cilia.hue(&"ampulla")
-	# Brighter than a threshold ring, because those are measuring instruments
-	# and this is a thing the cell actually did. Rendered against them.
-	_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5, PING_STEPS,
-		Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
 	var through := clampf(_food_node.ping_through, 0.0, 1.0)
-	if through > 0.0:
-		# Inset by half a step at both ends, the same half step `returns.gd`
-		# takes off its own far half and for the same reason: two arcs meeting
-		# at a shared vertex composite that vertex twice, and the bead it makes
-		# is brighter than either half of the ring it is joining.
-		_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
-			mid + PI * 1.5 - PING_SEAM, PING_STEPS,
-			Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
+	# **All of them, not just the newest.** Up to eleven pulses are in this
+	# water at once at tier 3, and drawing one while the skin reported another
+	# was the contradiction ping-as-outline.md §7 photographed.
+	for front: float in _food_node.ping_fronts:
+		if front <= 0.0:
+			continue
+		# Off the top of the screen long before it reaches its range, so the
+		# fade is the thing that has to sell "it is still going".
+		var fade := 1.0 - clampf(front / reach, 0.0, 1.0)
+		# Brighter than a threshold ring, because those are measuring
+		# instruments and this is a thing the cell actually did.
+		_world.draw_arc(origin, front, mid - PI * 0.5, mid + PI * 0.5,
+			PING_STEPS, Color(tone, 0.46 * fade * a), 1.8 / ZOOM, true)
+		if through > 0.0:
+			# Inset by half a step at both ends, the same half step
+			# `returns.gd` takes off its own far half and for the same reason:
+			# two arcs meeting at a shared vertex composite that vertex twice,
+			# and the bead it makes is brighter than either half of the ring.
+			_world.draw_arc(origin, front, mid + PI * 0.5 + PING_SEAM,
+				mid + PI * 1.5 - PING_SEAM, PING_STEPS,
+				Color(tone, 0.46 * fade * a * through), 1.8 / ZOOM, true)
+	# The echoes. Brighter and thicker than the front that started them: the
+	# front is the question going out and this is the answer coming back, and
+	# the moment the mechanic becomes legible is the moment one of these lands.
+	for echo: Array in _food_node.ping_echoes:
+		var r: float = float(echo[0])
+		if r <= 0.0:
+			continue
+		var level := clampf(float(echo[3]), 0.0, 1.0)
+		if level <= 0.0:
+			continue
+		var span := deg_to_rad(clampf(float(echo[2]), 1.0, 180.0))
+		var at := float(echo[1]) - PI * 0.5
+		_world.draw_arc(origin, r, at - span, at + span, PING_STEPS,
+			Color(tone, 0.80 * level * a), 2.6 / ZOOM, true)
 
 
 ## Threshold rings, drawn only while the cell is within RING_WINDOW of crossing
