@@ -140,9 +140,42 @@ Check the harness itself when a shot looks wrong. Its first version forced
 
 ## Engine constraints
 
-Godot 4.7, **GL Compatibility** renderer on both targets — no Forward+ only
-features. No C#, no addons, no native plugins: each of those forces a new binary.
-Base viewport 1280x720, `canvas_items` stretch, `expand` aspect. Android is
+Godot 4.7, **GL Compatibility** renderer on both targets, which rules out
+Forward+ only features. Two reasons, both worth knowing before anyone proposes
+changing it: Forward+ needs Vulkan, which costs real Android device coverage on
+older and cheaper handsets; and this container has no Vulkan at all, so a
+Forward+ feature could not be photographed, CI-booted or measured here — it would
+ship on the strength of somebody's opinion. Base viewport 1280x720,
+`canvas_items` stretch, `expand` aspect.
+
+**C#, third-party addons, GDExtensions and Android Kotlin plugins are not
+forbidden. They are expensive, and the player pays.** None of them can ride in a
+content pack: a pack is GDScript and resources mounted over `res://`, and
+Android's linker only loads native libraries out of the APK's own `lib/`. So each
+one moves `binary_version`, which means the player must accept an *install*
+rather than take a content update — and a refused Android install strands them in
+`NEEDS_PERMISSION` with no way back but a manual reinstall.
+
+Three costs that are not obvious until you are paying them:
+
+- **A GDExtension is compiled per platform and per architecture.** This APK ships
+  `arm64-v8a` and `armeabi-v7a`, and Windows needs `x86_64`. That is an NDK,
+  `godot-cpp`, and a build step CI does not have.
+- **It is pinned to the engine.** `godot-cpp` must match 4.7, so an engine
+  upgrade recompiles everything.
+- **A Kotlin plugin needs Godot's custom Android build** — the Gradle path, an
+  `android/build` directory in the project, and a changed export pipeline.
+
+Reach for one when it is the right answer, and say in the commit why nothing
+cheaper would do. An Android foreground service is exactly that case: it is the
+only way a phone host survives the screen going off, because
+`GodotGLRenderView.onActivityStopped()` calls `pauseGLThread()` and the whole
+main loop stops — `multiplayer->poll()` included. No amount of GDScript reaches
+that.
+
+C# is the one still worth arguing against on its merits rather than its price: it
+needs the .NET export template, which is a different engine binary, and Android
+is its weakest target. Android is
 **landscape-locked**: `window/handheld/orientation=4` is `SCREEN_SENSOR_LANDSCAPE`,
 which flips between the two landscape directions and never reaches portrait (full
 sensor is `6`). Do not build portrait-specific layout for a mode the app cannot
