@@ -357,6 +357,14 @@ var _scheme := -1
 var _hunter_gape := 1.40
 var _prey_radius := -1.0
 var _radius := -1.0
+## `--sister=` -- a second cell of your own size, placed by the same call a real
+## division makes. The stand-in for another player: multiplayer.md step 0 asks
+## whether the membrane can show you someone is there and coming, and this is
+## the only way to pose that question without shipping a protocol first.
+var _sister_bearing := 0.0
+var _sister_distance := 0.0
+var _sister_spec := ""
+var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
 var _check_seeding := 0
@@ -528,6 +536,18 @@ func _ready() -> void:
 			_hunter_gape = float(text.trim_prefix("--hunter-gape="))
 		elif text.begins_with("--radius="):
 			_radius = float(text.trim_prefix("--radius="))
+		elif text.begins_with("--sister="):
+			var sp := text.trim_prefix("--sister=").split(",")
+			if sp.size() >= 2:
+				_sister_bearing = deg_to_rad(float(sp[0]))
+				_sister_distance = float(sp[1])
+			# A third field is her radius. The default is the player's, but the
+			# case worth photographing is a *bigger* player, because that is the
+			# only one the water already has a directional channel for.
+			if sp.size() >= 3:
+				_sister_radius = float(sp[2])
+		elif text.begins_with("--sister-genome="):
+			_sister_spec = text.trim_prefix("--sister-genome=")
 		elif text.begins_with("--genome="):
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--dna="):
@@ -665,6 +685,9 @@ func _ready() -> void:
 		_genome.held_sample = _sample
 		_genome.held_remaining = _genome.SAMPLE_SECONDS
 		print("[drive] holding a sample of ", _sample)
+	if _sister_distance > 0.0 and _food != null:
+		_put_sister()
+
 	if _check_seeding > 0:
 		_run_seeding_check(_check_seeding)
 		get_tree().quit(0)
@@ -1745,6 +1768,27 @@ func _face(index: int, away: float) -> void:
 ## field the genes land in the order they are written, in the first slots that
 ## will take them -- so `--genome=cytostome:1,ocellus:1` aims the beam forward
 ## and `ocellus:1:6` aims it over the rear-port quarter.
+## Places a second cell the way a division does, so what gets photographed is the
+## shipped code path and not a posed body. Her genome defaults to the player's,
+## because a stand-in for another player is another player's cell -- same size,
+## same capability, and therefore the hardest case to tell apart from the water.
+func _put_sister() -> void:
+	var body := _find_node_with(self, &"bearing_to")
+	if body == null:
+		print("[drive] no player cell; cannot place a sister")
+		return
+	var tiers: Dictionary = {}
+	if _sister_spec != "":
+		tiers = _parse_genes(_sister_spec)[0]
+	elif _genome != null:
+		tiers = _genome.tiers().duplicate()
+	var r: float = _sister_radius if _sister_radius > 0.0 else body.radius
+	_food.put_sister(_sister_bearing, _sister_distance, r, tiers)
+	print("[drive] sister at %+.0f deg, %.0f units, r%.1f, genome %s" % [
+		rad_to_deg(_sister_bearing), _sister_distance, r,
+		_genome_text(tiers)])
+
+
 func _force_genome(spec: String) -> void:
 	var made := _parse_genes(spec)
 	# **Expressed whole**, which is what a birth does: the harness is forcing a
