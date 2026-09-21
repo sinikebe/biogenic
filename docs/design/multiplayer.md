@@ -1239,6 +1239,43 @@ full vision at 1280×720 and 2400×1080, and a human answers: where is she, and 
 she coming? **If the membrane cannot show a second person, everything below is
 moot, and this costs an afternoon.**
 
+### Step 0 is answered: yes, with one caveat that is a design decision
+
+Measured on `76ea528`, which added `--sister=` to `tools/drive.gd` so the
+question could be posed at all. `put_sister()` existed but only as a consequence
+of a real division. Seed 7, r30 player carrying `ampulla:2`, sister at −40° and
+520 units, photographed in point of view and full vision at 1280×720 and
+2400×1080.
+
+**She is found, and only by the ping.** The same seed run with and without her
+differs by exactly one event: a mark at **3.93 s, bearing −53.1°**, absent
+otherwise. Smell never reports her — `taste 0.000` for the whole run — because
+she is the player's own size, so `gape_at()` never makes her edible and she
+never enters the scent loop at all. **A peer your own size is odourless.** That
+falls out of the edibility model rather than being a choice, and it means smell
+is structurally blind to other players of comparable size.
+
+**She is indistinguishable from a rock.** Her mark is strength 0.65, halfwidth
+24.6°, hold 0.48 s. Drifters in the same runs: 0.71 / 22.4° / 0.50 s and
+0.82 / 27.3° / 0.50 s. Nothing in the four scalars a return carries separates an
+agent from a lump of debris.
+
+**Size does read.** A r48 sister against a r30 player draws **31.6° and holds
+0.77 s** — visibly a broader wash along the contour at both shapes. The §4 tier
+ladder is carrying real information about how big the other person is.
+
+**A big neighbour pins dread, undirected.** `threat 1.000`, dread 0.89 → 0.95,
+**100 % duty from the first sample** — but `hunter none` and `range --`
+throughout. It says *you are not safe*; it cannot say where from, or whether
+they are closing. So the "is she coming?" half of step 0 is currently **no**.
+
+**The verdict.** The membrane can carry a second person, so the gate is passed
+and §4.2 is worth building. But today the game would tell a player *something
+large is roughly that way, once every twelve seconds*, and nothing else.
+Indistinguishable-from-a-rock may well be the right answer for a blind cell —
+but it should now be a decision rather than an accident, and the ping mark is
+the only channel where that information could go.
+
 **Step 1 — `net.json`, before any netcode.** A file in `build/release/` published
 by our own `release.yml`, read with a plain `HTTPRequest` (copying
 `update_service.gd`'s `?ts=` cache defence), carrying `{enabled, min_protocol,
