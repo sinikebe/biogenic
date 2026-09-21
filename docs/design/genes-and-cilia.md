@@ -1721,10 +1721,13 @@ scent field is a steady wide band that lags and jitters; the ping is a burst of
 tight marks that are exactly where they say they are and then gone. Nothing else
 in the game behaves like either.
 
-It shares `LOBE_BEAM` with the `ocellus`, which is not a compromise: there are
-four glow lobes in the shader, a fifth is a new uniform and a new binary, and
-both of these genes mean *a hard surface, that way, that far*. They compete
-rather than sum, exactly as the three self-signals do in lobe 0.
+It used to share `LOBE_BEAM` with the `ocellus`, on the argument that a fifth
+lobe meant a new uniform and therefore a new binary. **That argument was wrong
+and the sharing is gone.** The lobe count is a shader constant and a uniform
+array length, not an export setting, so it ships as content like anything else
+under `res://`; `ping-as-outline.md` §11 has the refutation. The ping now owns
+`LOBE_PING_A` and `LOBE_PING_B`, which is what lets one pulse hold two marks at
+once instead of making a crowd and a single body look identical.
 
 Full vision draws the wavefront as a ring expanding out of the cell, for the
 same reason it draws the beam's line: so that "the blips stopped because nothing
