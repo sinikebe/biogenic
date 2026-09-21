@@ -16,12 +16,12 @@ extends Node
 ## assumed the hunter and the hunted were different kinds of thing.
 ##
 ## The cell reads exactly three things out of this field: its **total scent
-## concentration**, which sets the beat rate, its **gradient bearing**, which
-## sets the green band wash, and **dread**, a scalar with no bearing at all.
-## Everything else it learns by being hit.
+## concentration**, which sets the beat rate, its **taste level**, which sets
+## the green band wash and carries no direction at all, and **dread**, a scalar
+## with no bearing either. Everything else it learns by being hit.
 ##
 ## This node computes; it does not post. [member concentration],
-## [member taste_bearing] and [member dread_level] are read once a frame by
+## [member taste_level] and [member dread_level] are read once a frame by
 ## whoever owns the run, which is the only place allowed to talk to the signal
 ## bus; discrete events are signals. A per-frame signal here would allocate a
 ## dictionary sixty times a second to say the same thing.
@@ -139,15 +139,26 @@ const GENE_WEIGHTS := {
 	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
 	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
-	&"statocyst": 2, &"rhabdom": 2, &"palp": 2, &"myoneme": 2,
+	&"statocyst": 2, &"palp": 2, &"myoneme": 2,
 	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
 	&"plastid": 2, &"vacuole": 2, &"crista": 2,
 }
 ## Everything a drifter can be, and therefore everything the player can ever
 ## eat their way into. The mouth is not on this list by construction.
+##
+## **`rhabdom` is not on it either, and that is a retirement rather than an
+## omission.** It bought the taste lobe's width and its bearing jitter, and
+## three-senses.md §2 took both away: there is no width left to sharpen and no
+## bearing left to steady. Rather than re-aim it at the nose's floor -- a gene
+## whose whole effect would be a number nobody can see move -- the owner
+## retired it (§8 row 2, option C). This list and [constant GENE_WEIGHTS] are
+## the two places a gene can be *produced*, so taking it out of both is the
+## whole of the retirement; every table that *consumes* a gene name still
+## answers for one it has never heard of, which is why an old `{gene: tier}`
+## map that still names it loads and draws rather than crashing.
 const DRIFTER_GENES: Array[StringName] = [
 	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
-	&"ocellus", &"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"ocellus", &"axoneme", &"statocyst", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
@@ -209,17 +220,109 @@ const CORE_RANGE := 130.0      ## c = 1 at or inside this
 const SCENT_RANGE := 1600.0    ## c = 0 at or outside this
 const SCENT_FALLOFF := 1.7
 const SCENT_WINDOW := 250.0    ## smooth the outer cutoff so it cannot pop
-## Where [method scent] crosses the bus's TASTE_FLOOR and a direction first
-## exists at all -- about twelve seconds of swimming. Everything outside it is
-## hot-and-cold with no bearing in it. Named here because it is a property of
-## the field, and the full-vision view draws it as a threshold ring.
+## Where one body on its own becomes worth smelling -- about twelve seconds of
+## swimming. Named here because it is a property of the field, and the
+## full-vision view draws it as a threshold ring.
 ##
-## **It is one source's contribution, not the whole field.** Thirty-four bodies
-## sum, so a bearing exists long before any single one crosses this -- and since
-## `chemocyte` arrived, a cell only sums what is inside its own nose's reach
-## ([constant CellBody.SMELL_RANGE_BY_TIER]). The ring stays what it always was:
-## where one body on its own becomes worth smelling.
+## **It is one source's contribution, not the whole field**, and it never was
+## the whole field: thirty-four bodies contribute, so the readout is lit long
+## before any single one crosses this. Since `chemocyte` arrived a cell only
+## reads what is inside its own nose's reach ([constant
+## CellBody.SMELL_RANGE_BY_TIER]), which is a different and much larger radius.
+##
+## **The name is historical and the comment used to be wrong.** It said this was
+## where "a direction first exists at all", which was already only half true and
+## is now false in both halves: three-senses.md §2 took the direction out of
+## smell entirely, and the bus's TASTE_FLOOR this was fitted against moved from
+## 0.06 to 0.02 in the same change. The number is left where it is because what
+## it does today is draw one ring in full vision and that ring is unchanged;
+## renaming it would touch vision.gd and two design documents for no difference
+## a player could see.
 const BEARING_RANGE := 680.0
+
+# --- What the nose does with that field (three-senses.md §2) ----------------
+# The owner: *"smell is not a directional sensor. It should only say whether the
+# smell is strong or not. Orientation should count. If the smell sensor is
+# facing towards nothing, the smell is less than when faced towards food."*
+#
+# Two constants, and both were measured rather than picked. The first is how
+# much orientation counts; the second is what stops the answer being a number
+# with no gradient in it.
+
+## What a receptor pointed dead away still picks up, as a fraction of what one
+## pointed straight at a source does -- the floor under the cosine lobe in
+## [method _step_sense].
+##
+## **0.22 and not lower, for one reason: the band must never go out.** At 0.22
+## the dimmest facing in every instrumented sample stays above the bus's
+## TASTE_FLOOR. At 0.10 a cell facing away from everything drops through the
+## floor and the green band disappears, which reads as *the gene has stopped
+## working* rather than as *you are facing the wrong way*. Dimming is
+## information; darkness is a bug report. three-senses.md §2.3.
+##
+## Mirrored, deliberately, by signal_bus.gd's SMELL_RING_FLOOR -- that file
+## draws this curve on the skin and may not preload this one. The comment there
+## says what breaks if the two drift.
+const SMELL_BEHIND := 0.22
+## How much of everything-but-the-loudest reaches the readout, and it is
+## **1.0: every source counts, in full**.
+##
+## Odour from several sources *adds*. Each body's plume is a diffusion field
+## and the fields superpose, so the water at one point has one concentration in
+## it and a nose reads that total -- it cannot pick a favourite source out of a
+## mixture it never resolved in the first place. Any tail below 1.0 is the
+## readout throwing away information a real nose has, and the two tails this
+## file has shipped (0.00 and 0.22) were both doing exactly that.
+##
+## **What made the full sum unnavigable was never the sum. It was the clamp.**
+## three-senses.md §7.5 measured a plain sum that ended in `minf(..., 1.0)`,
+## found that 13-19 sources in reach pinned it at 1.0 for much of a run, and
+## concluded that the sum had no gradient in it. The gradient was there; the
+## clamp was eating it. A receptor does not clip -- it *saturates* -- and
+## [constant SMELL_HALF] is the one line that changes, below.
+##
+## **Measured on the built code, 24 seeds, 90 s cap** (three-senses.md §7.5.2),
+## `--radius=30 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1 --sniff`:
+## the 0.22 tail behind a clamp fed 16 of 24 in a median 56.6 s; this pair
+## feeds **19 of 24 in a median 39.8 s**. More seeds eat and they eat sooner,
+## which is not the trade §7.5.1 expected to have to make.
+const SMELL_TAIL := 1.0
+## The concentration at which the nose is **half** saturated: the `K` in the
+## Langmuir isotherm `s / (s + K)`, which is also the Hill equation at n = 1
+## and the Michaelis-Menten curve receptor binding actually follows.
+##
+## This is the constant that replaces the clamp. `minf(s, 1.0)` is a cliff: at
+## and above 1.0 the derivative is zero, so two positions with different
+## amounts of food in front of them read identically and there is nothing to
+## climb. `s / (s + K)` is monotonically increasing for every s >= 0 and never
+## reaches 1, so **a gradient survives at any concentration** -- it only gets
+## shallower, which is what a nose in thick water is actually like.
+##
+## **K is chosen for the readout, and no navigation measurement constrains it.**
+## `s / (s + K)` is a monotonic transform of `s`, and `--sniff` only ever
+## compares one sample against the next, so the bot flies a byte-identical path
+## at any K -- measured at 0.5, 0.9, 1.2 and 2.0 over eight seeds: the same
+## raw sum and the same port/starboard decision at every one of the 1,728
+## samples, and the same meal on the same hundredth of a second. What K decides is the absolute
+## brightness of the ring on the membrane, and only a player reads that.
+## Anyone re-tuning this should not expect the bot to have an opinion.
+##
+## **So it was measured off the distribution of `s` instead.** 1,690 samples
+## over 8 seeded 90-second forages at `--radius=30` with a tier-1 nose:
+##
+##     p10  0.388     p50  0.887     p90  1.659     max  3.498
+##
+## K = 0.9 is that median, so **typical water half-saturates the nose** -- the
+## textbook meaning of a half-saturation constant, and here it is a measured
+## number rather than a borrowed one. The middle 80% of the water then reads
+## 0.301 to 0.648 and the richest instant ever seen reads 0.795: a third of a
+## unit of swing on the ring, nothing crushed at the bottom and nothing pinned
+## at the top. The band is stable across the ladder too -- a tier-2 nose reads
+## 0.350 / 0.516 / 0.614 and a tier-3 one 0.386 / 0.498 / 0.645 -- so one K
+## serves all three.
+##
+## three-senses.md §7.5.3 renders p10, median and p90 at both shapes.
+const SMELL_HALF := 0.9
 
 ## How a body fades out of the scent as it stops fitting in your mouth. §7.0 is
 ## explicit that this must not be a boolean: a body drifting across your gape
@@ -421,21 +524,41 @@ const SHADOW_MIN_RATIO := 0.8
 const SHADOW_FULL_RATIO := 1.05
 
 # --- The ping (`ampulla`) ---------------------------------------------------
-## How fast a return comes back, in world units per second. **This is the whole
-## reason the ping reads as a sweep rather than as a chord**: the nearest body
-## answers first and the farthest last, so one pulse arrives on the membrane as
-## a series of separate marks walking outward in time.
+## How fast the pulse travels, in world units per second -- **out and back**.
+## This is the whole reason the ping reads as a sweep rather than as a chord:
+## the nearest body answers first and the farthest last, so one pulse arrives on
+## the membrane as a series of separate marks walking outward in time.
 ##
-## **Slowed five-fold at the owner's word**, from 1250. A tier-1 return from the
-## edge of reach now lands 4.4s after the pulse left rather than 0.88s, so the
-## sweep is something you watch travel rather than something that has already
-## happened. Untested by instruction -- the change is one number and the owner
-## wanted it shipped rather than measured.
+## **Slowed five-fold at the owner's word**, from 1250. Untested by instruction
+## -- the change is one number and the owner wanted it shipped rather than
+## measured -- and then measured here, because the round trip doubled every
+## consequence of it. A tier-1 return from the edge of reach lands **8.8 s**
+## after the pulse left rather than 4.4, and ping-as-outline.md §7 is what that
+## costs.
 const PING_SPEED := 250.0
-## How many bodies one pulse may answer for, nearest first. A cap rather than a
-## rule: thirty-four bodies inside reach would be a strobe, and the far half of
-## them would be inaudible under the near half anyway.
-const PING_RETURNS := 5
+## How many bodies one pulse may answer for, nearest first, **by `ampulla`
+## tier**. A cap rather than a rule: thirty-four bodies inside reach would be a
+## strobe, and the far half of them would be inaudible under the near half
+## anyway. Was a flat five; the ladder is ping-as-outline.md §4, and how many
+## things one pulse can resolve at once is most of what a better organ is.
+const PING_RETURNS_BY_TIER: Array[int] = [0, 3, 4, 5]
+## **How much longer the organ rings than the echo takes to pass**, §3.2. The
+## bare geometry is 1.0; 2.0 is what shipped, because 0.104 s against 0.320 s is
+## a real ratio hiding inside two numbers that are both "a blink". Measured over
+## 60 s of foraging, holds land between 0.21 and 0.70 s.
+const PING_RING := 2.0
+## **The organ's own beamwidth**, in degrees: the finest extent it can report,
+## and the floor every reported extent sits on. Was `signal_bus.gd`'s
+## `PING_HALFWIDTH_DEG`, which was the whole of what a mark's width said; it is
+## now the bottom of a measurement rather than the measurement.
+const PING_WIDTH_FLOOR: Array[float] = [0.0, 17.0, 13.0, 10.0]
+## **How much of a body's true angular half-width reaches the readout**, on top
+## of that floor. A magnification, and §3.3 is why one is needed: at seeding
+## distance every body in this water subtends under three degrees, so a literal
+## width would report every one of them as the same hairline.
+const PING_WIDTH_GAIN: Array[float] = [0.0, 1.5, 3.5, 6.0]
+## Past this a lobe has stopped being a bearing and become a mood.
+const PING_WIDTH_MAX := 52.0
 ## How a return fades with range. **Deliberately not linear**, and measured: the
 ## water keeps most of its bodies between 900 and 1400 units out, so a linear
 ## fall put nearly every tier-1 return at strength 0.14 -- a mark too faint to
@@ -450,7 +573,11 @@ const PING_FALLOFF := 0.6
 ## mark. A return is pushed back to at least this far behind the one in front of
 ## it, so a pulse is always heard as a series. The fiction is the organ's, not
 ## the water's -- an ear resolves one thing at a time.
-const PING_MIN_GAP := 0.17
+##
+## **Raised from 0.17** with ping-as-outline.md §3.2: a mark now lives 0.36 to
+## 0.80 s instead of 0.19, and the membrane holds two of them at once rather
+## than one. Two arcs and a 0.30 gap is the pair that keeps a sweep a series.
+const PING_MIN_GAP := 0.30
 ## **The soft edge on the hull's own shadow, as a cosine.** A point source
 ## sitting on the skin radiates into half the plane and the rest goes into the
 ## body -- which is why a submarine has baffles, and why clearing them is done
@@ -464,11 +591,12 @@ const PING_MIN_GAP := 0.17
 ## shadow gets a 27-degree soft edge instead: `acos(0.24)` is 76.1 degrees, so
 ## the fade runs +-13.9 degrees either side of the hemisphere.
 const PING_GRAZE := 0.24
-## **A return below this is not worth one of the five slots.** [constant
-## PING_RETURNS] is applied *after* occlusion, so a return a shadow has silenced
-## stands aside for a fainter one in the lit half rather than spending a slot on
-## nothing. That is the whole of the compensation, and it is enough because the
-## cap was already discarding more than the shadow does.
+## **A return below this is not worth one of the three-to-five slots.**
+## [constant PING_RETURNS_BY_TIER] is applied *after* occlusion, so a return a
+## shadow has silenced stands aside for a fainter one in the lit half rather
+## than spending a slot on nothing. That is the whole of the compensation, and
+## it is enough because the cap was already discarding more than the shadow
+## does.
 const PING_SILENT := 0.03
 
 # --- The wake ---------------------------------------------------------------
@@ -617,9 +745,6 @@ class Body:
 ## beat mapping, and the reason the outer kilometre is hot-and-cold with no
 ## direction in it.
 var concentration := 0.0
-## Body-relative bearing of the summed gradient, radians clockwise from the
-## cell's front. Meaningless when [member concentration] is 0.
-var taste_bearing := 0.0
 ## What the membrane should be told, 0..1. No bearing, ever: a hunter's
 ## metabolites saturate the chemoreceptor, and a blocked receptor has no
 ## differential to read a direction from.
@@ -651,17 +776,36 @@ var beam_range := 0.0
 ## hit and `hit` is false then.
 var beams: Array = []
 ## `chemocyte`. How far this cell's chemoreceptors reach, written once a frame
-## by the run. 0 is a cell with no nose, and a cell with no nose gets no
-## bearing to anything edible at all.
+## by the run. 0 is a cell with no nose, and a cell with no nose smells nothing
+## edible at all.
 var smell_range := 0.0
-## **What the scent field is worth to this particular nose**: the same sum as
-## [member concentration], restricted to sources inside [member smell_range].
+## **Where the nose is on the membrane**, as a body-relative bearing, written
+## once a frame by the run exactly as [member ping_bearing] and [member
+## dart_bearing] are.
+##
+## Smell has no direction of its own any more (three-senses.md §2). What the
+## organ reports is a level, and how nearly a source lies along *this* arc is
+## the whole of how much of that source reaches the level. So the slot the gene
+## is worn in is the direction the player has to point to smell, and turning --
+## the one verb this game has -- is how they sweep for it.
+var smell_bearing := 0.0
+## **What the scent field is worth to this particular nose**, 0..1: every
+## source inside [member smell_range] weighted by facing and added up, then put
+## through the receptor's own saturation curve, `s / (s + `[constant
+## SMELL_HALF]`)`.
+##
+## **It approaches 1 and never arrives.** The old clamp could sit exactly at
+## 1.0 for half a run; this cannot reach it at any concentration, which is the
+## whole reason the gradient is still there to follow.
 ##
 ## Two numbers rather than one, and the split is the point. [member
 ## concentration] is what the *water* is like, and it drives the metabolic beat,
 ## which is a property of the body and not of its senses -- an eyeless, noseless
 ## cell still beats faster in rich water. This is what the *organ* picks up, and
 ## it is the only one of the two that reaches the membrane.
+##
+## **Nothing else leaves the nose.** There is no taste bearing any more: the
+## organ answers *how strong*, and the player answers *which way* by turning.
 var taste_level := 0.0
 ## `ampulla`. How far a pulse carries and how often one goes out, written once a
 ## frame by the run. Either at 0 is a cell with no electroreceptor.
@@ -677,20 +821,54 @@ var ping_bearing := 0.0
 ## [constant CellBody.PING_THROUGH_BY_TIER] for the tier this cell wears. 0 is a
 ## body nothing gets past.
 var ping_through := 0.0
-## Returns that became due **this frame**: `[bearing, strength]`, nearest first,
-## strength 1 against the skin and 0 at the edge of reach. Drained by the run,
-## which is the only thing allowed to post them. Bodies, not meals: a ping
-## answers off anything with a body in it, which is exactly what the scent field
-## can never do.
+## The `ampulla` tier, written once a frame by the run beside the three above.
+## It decides how many bodies one pulse answers for and how much of a body's
+## true angular extent survives into the readout. ping-as-outline.md §4.
+var ping_tier := 0
+## Returns that became due **this frame**: `[bearing, strength, halfwidth_deg,
+## hold]`, loudest first. Strength is 1 against the skin and 0 at the edge of
+## reach; `halfwidth_deg` is how wide the organ reports the body (§3.3) and
+## `hold` is how long the echo takes to pass (§3.2). Drained by the run, which
+## is the only thing allowed to post them.
+##
+## **Four scalars, and not one of them is a place.** The half-width conflates
+## size with distance on purpose, exactly as an ear does; you cannot recover a
+## position from the four of them. Bodies, not meals: a ping answers off
+## anything with a body in it, which is exactly what the scent field can never
+## do.
 var pings: Array = []
-## How far the newest wavefront has travelled, or -1 for nothing in flight.
-## Ground truth for the full-vision view, which draws the sweep; the organism
-## only ever gets [member pings].
-var ping_front := -1.0
-## `[seconds until due, world position, strength]` for returns still in flight.
-## The position stops here: [method _step_pings] turns it into a bearing at the
-## moment the return lands, exactly as [method _step_touch] does.
+## **Every outgoing wavefront still inside reach**, as radii from the organ,
+## oldest first. Ground truth for the two views, which draw the sweep; the
+## organism only ever gets [member pings].
+##
+## An array and not a scalar, and that is ping-as-outline.md §7 being fixed
+## rather than photographed. The slow wave puts up to eleven pulses in the water
+## at once at tier 3, and one `ping_front` drew the newest while the membrane
+## was still reporting the oldest -- one frame saying *the wave has just left*
+## over a skin saying *something is out there*.
+var ping_fronts: Array = []
+## **Every echo on its way home**, as `[radius, bearing, halfwidth_deg, level]`,
+## nearest first. The radius is how far the echo still has to travel, so it
+## collapses onto the organ at the instant the matching entry appears in
+## [member pings] -- the wave coming back is the same event the skin reports.
+##
+## Recomputed every frame from the stored world position, so an echo that is
+## eight seconds out still arrives on the bearing the body is on *now* rather
+## than the one it was on when the pulse left.
+var ping_echoes: Array = []
+## **How much of the newest pulse's round trip is still to come**, 1 at the
+## instant it leaves and 0 when it can no longer be answering. The organ's own
+## arc hums at this while it listens (§6.2); it is a level and a bearing like
+## everything else that reaches the membrane.
+var ping_listen := 0.0
+## `[seconds until due, world position, strength, halfwidth_deg, hold]` for
+## returns still in flight. The position stops here: [method _step_pings] turns
+## it into a bearing at the moment the return lands, exactly as [method
+## _step_touch] does -- and into a bearing every frame for the drawn echo, which
+## is the same conversion done twice and never handed on.
 var _echoes: Array = []
+## Ages of the outgoing fronts still inside reach, oldest first.
+var _pulses: Array = []
 var _ping_clock := 0.0
 var _ping_age := -1.0
 ## `palp`. Range in, bearing and strength out: the nearest body inside touch
@@ -743,7 +921,6 @@ func setup(cell: CellBody) -> void:
 	_first_pending = true
 	_first_hunt = FIRST_DELAY
 	concentration = 0.0
-	taste_bearing = 0.0
 	dread_level = 0.0
 	threat = 0.0
 	beams.clear()
@@ -751,9 +928,12 @@ func setup(cell: CellBody) -> void:
 	taste_level = 0.0
 	pings.clear()
 	_echoes.clear()
+	_pulses.clear()
 	_ping_clock = 0.0
 	_ping_age = -1.0
-	ping_front = -1.0
+	ping_fronts.clear()
+	ping_echoes.clear()
+	ping_listen = 0.0
 	_dart_clock = 0.0
 	_bite_clock = 0.0
 
@@ -1509,22 +1689,27 @@ func _step_recycle() -> void:
 
 
 # ---------------------------------------------------------------------------
-# What the cell can actually sense: a summed concentration, a summed bearing,
-# and a scalar with no bearing in it.
+# What the cell can actually sense: a summed concentration, a level with no
+# bearing in it at all, and a scalar with no bearing in it.
 # ---------------------------------------------------------------------------
 
 func _step_sense() -> void:
 	var total := 0.0
-	var pull := Vector2.ZERO
 	var dread := 0.0
 	var worst := 0.0
 	var gape := _cell.gape()
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
-	# The same sum again, over only what this cell's nose reaches. Kept apart
-	# from `total` on purpose: see [member taste_level].
-	var smelt := 0.0
-	var smelt_pull := Vector2.ZERO
+	# **What the nose picks up, which is not the same sum again.** Restricted to
+	# sources inside [member smell_range] and weighted by how nearly each one
+	# lies along the organ's own arc -- and then simply added up, because
+	# concentration fields superpose. The split into loudest and rest is all
+	# that survives of the tail: [constant SMELL_TAIL] is 1.0, so the two are
+	# added back together below at full weight. It is kept because the split
+	# costs nothing, needs no sort, and is the one line that would have to be
+	# rewritten if the owner ever wanted a tail again.
+	var smelt_top := 0.0
+	var smelt_rest := 0.0
 
 	for i in _cells.size():
 		var b := _cells[i]
@@ -1541,10 +1726,21 @@ func _step_sense() -> void:
 			var c := scent(d) * edible
 			if c > 0.0:
 				total += c
-				pull += offset / maxf(d, 0.001) * c
 				if d < smell_range:
-					smelt += c
-					smelt_pull += offset / maxf(d, 0.001) * c
+					# The whole of "orientation should count": a cosine lobe
+					# about the arc the organ is worn on, never falling below
+					# SMELL_BEHIND. A cone with a tier-scaled width was measured
+					# and buys under 2% of swing -- three-senses.md §7.4.
+					var lobe := 0.5 + 0.5 * cos(angle_difference(
+						smell_bearing, _cell.bearing_to(b.pos)))
+					var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
+					# Loudest and rest, in one pass and with no sort: the new
+					# maximum demotes the old one into the tail.
+					if w > smelt_top:
+						smelt_rest += smelt_top
+						smelt_top = w
+					else:
+						smelt_rest += w
 
 		# The shadow, over every body big enough to cast one. Summed and given a
 		# bearing exactly the way taste is, for the same reason: two bodies
@@ -1594,15 +1790,19 @@ func _step_sense() -> void:
 			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * _cell.wound)
 
 	concentration = minf(total, 1.0)
-	# **The bearing is the nose's, not the water's.** A cell with no chemocyte
-	# leaves here with taste_level 0 and taste_bearing 0, which is what makes
-	# "an organ you have not grown is silent" true at the source as well as at
-	# the two gates downstream of it.
-	taste_level = minf(smelt, 1.0)
-	if taste_level > 0.0 and smelt_pull.length_squared() > 0.0:
-		taste_bearing = _cell.bearing_to(_cell.position + smelt_pull)
-	else:
-		taste_bearing = 0.0
+	# **There is no bearing here any more, and that is the change.** A cell with
+	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
+	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
+	# you have not grown is silent" true at the source as well as at the two
+	# gates downstream of it. `s` is 0 there, and `0 / (0 + K)` is 0, so the
+	# saturation costs that guarantee nothing.
+	#
+	# **A receptor saturates; it does not clip.** The clamp that used to be on
+	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
+	# above 1.0 its slope is zero, and a readout with no slope in it is a
+	# readout a forager cannot climb. See [constant SMELL_HALF].
+	var s := smelt_top + SMELL_TAIL * smelt_rest
+	taste_level = s / (s + SMELL_HALF)
 	shadow = minf(shade, 1.0)
 	# Deliberately left where it was when the last shadow faded rather than
 	# snapped to dead ahead: the lobe is already dark at strength 0, and a
@@ -1655,52 +1855,113 @@ func _step_beams() -> void:
 ## `chemocyte` rather than a second skin on it: the scent field is a statement
 ## about food, and most of what is out there is not food.
 ##
-## Returns are staggered by their own flight time, which is what turns one pulse
-## into a sweep: the nearest body answers at `d / PING_SPEED` and the farthest
-## seconds later -- 4.4 s from the edge of tier-1 reach at 250. **That stagger is also what resolves the one
-## ambiguity occlusion creates**: a shadowed near body and a clear far body both
-## come back faint, but the near one still answers early. Nothing here posts and
-## nothing here keeps a position past the frame it becomes a bearing.
+## **It bounces.** The front travels out, reflects off the near edge of whatever
+## it meets, and the echo travels home; the organ hears it when it gets back, at
+## `2d / PING_SPEED`. That is the owner's word and it is also the only story
+## that makes the drawn picture and the felt one the same event -- you watch the
+## shout go out, you watch one piece of it come back, and the skin lights when
+## it lands. A bat is not a thing that shouts; it is a thing that listens.
+##
+## Returns are staggered by their own round trip, which is what turns one pulse
+## into a sweep: the nearest body answers at `2d / PING_SPEED` and the farthest
+## seconds later -- **8.8 s** from the edge of tier-1 reach at 250. **That
+## stagger is also what resolves the one ambiguity occlusion creates**: a
+## shadowed near body and a clear far body both come back faint, but the near
+## one still answers early. Nothing here posts and nothing here keeps a position
+## past the frame it becomes a bearing.
+##
+## **What the round trip does not double is the duration.** Only the near
+## hemisphere of a body answers -- the far side is in its own shadow -- so the
+## echo is spread over the depth from the near pole to the limb, which is `R`,
+## and arrives over `2R / PING_SPEED`. That is the same number the one-way front
+## took to cross the whole body, so ping-as-outline.md §3.2's table survives the
+## bounce untouched. Arrival time doubled; held time did not.
 func _step_pings(delta: float) -> void:
 	pings.clear()
+	ping_echoes.clear()
 	if _cell == null:
 		return
 	if ping_range <= 0.0 or ping_period <= 0.0:
 		# The organ was lost, or was never grown. Anything still in flight is
 		# dropped rather than delivered: it was never heard.
 		_echoes.clear()
+		_pulses.clear()
+		ping_fronts.clear()
+		ping_listen = 0.0
 		_ping_clock = 0.0
 		_ping_age = -1.0
-		ping_front = -1.0
 		return
 
 	_ping_clock -= delta
 	if _ping_clock <= 0.0:
 		_ping_clock = ping_period
 		_ping_age = 0.0
+		_pulses.append(0.0)
 		_cast_ping()
 	elif _ping_age >= 0.0:
 		_ping_age += delta
 
-	var front := _ping_age * PING_SPEED
-	ping_front = front if _ping_age >= 0.0 and front <= ping_range else -1.0
+	# Every front still inside reach, not just the newest. A front that has run
+	# out of range is dropped; the echoes it started are in `_echoes` and live
+	# their own lives from here. Aged in place and trimmed from the head, which
+	# is where they always expire -- they were appended in order and they all
+	# travel at the same speed, so the dead ones are always a prefix.
+	for i in _pulses.size():
+		_pulses[i] = float(_pulses[i]) + delta
+	while not _pulses.is_empty() and float(_pulses[0]) * PING_SPEED > ping_range:
+		_pulses.remove_at(0)
+	ping_fronts.clear()
+	for age: float in _pulses:
+		ping_fronts.append(age * PING_SPEED)
+
+	# The hum: how much of the newest pulse's **round trip** is still to come.
+	# It breathes at tier 1, where a 3.2 s period sits inside an 8.8 s trip, and
+	# it is nearly flat at tier 3, where the period is a tenth of the trip --
+	# which is honest, because a tier-3 organ really is always listening.
+	var trip := 2.0 * ping_range / PING_SPEED
+	ping_listen = 0.0
+	if _ping_age >= 0.0 and trip > 0.0:
+		ping_listen = 1.0 - clampf(_ping_age / trip, 0.0, 1.0)
 
 	# Backwards, so removing one does not skip the next.
 	for i in range(_echoes.size() - 1, -1, -1):
 		var echo: Array = _echoes[i]
 		echo[0] -= delta
 		if echo[0] > 0.0:
+			# Still coming. Where it is, for the two views: the radius is how
+			# far it still has to travel, so it walks in and lands on the organ
+			# at the instant the mark appears on the skin.
+			ping_echoes.append([float(echo[0]) * PING_SPEED,
+				_cell.bearing_to(echo[1]), float(echo[3]), float(echo[2])])
 			continue
-		pings.append([_cell.bearing_to(echo[1]), echo[2]])
+		pings.append([_cell.bearing_to(echo[1]), echo[2], echo[3], echo[4]])
 		_echoes.remove_at(i)
-	# Loudest first. The membrane has one envelope for this and it keeps the
-	# loudest mark, so the order only matters to a later subscriber -- but
-	# "nearest thing first" is the only order a radar return has.
+	# Nearest home first, so a view -- or the recorder, which has room for four
+	# -- keeps the ones about to land. `_echoes` is in no useful order once two
+	# pulses are overlapping in it, which at tier 3 is always.
+	ping_echoes.sort_custom(func(a: Array, b: Array) -> bool: return a[0] < b[0])
+	# Loudest first. The membrane has two arcs out of a pool of four and it keeps
+	# the two loudest, so the order decides which pair is drawn when three land
+	# inside one another's hold -- 23% of the time at tier 3, measured.
 	pings.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
 
 
 ## Everything inside reach the pulse can actually reach, nearest first, capped
-## at [constant PING_RETURNS] **after** the shadows have been taken off.
+## at [constant PING_RETURNS_BY_TIER] **after** the shadows have been taken off.
+##
+## Each one leaves with **two scalars beside its level**, both made out of
+## numbers this function already holds and both spent before it returns
+## (ping-as-outline.md §3):
+##
+## - `width`, how wide the organ reports it. The true angular half-width is
+##   `asin(R / D)`, and at seeding distance that is under three degrees for
+##   every body in this water -- invisible, and identical for a speck and a
+##   whale. So the organ's own beamwidth is a **floor** and the true extent is
+##   magnified on top of it. A transducer, not a camera; the mapping is monotone
+##   and the beam is the resolution limit, which is what the tier ladder lowers.
+## - `hold`, how long the echo takes to pass, which is `2R / PING_SPEED` and is
+##   **independent of distance**. This is the bat reading: echo duration is
+##   target depth.
 ##
 ## **The pulse leaves the skin, not the middle of the cell.** Its origin is the
 ## organ's own point on the membrane -- [member ping_bearing] out at the body's
@@ -1721,6 +1982,11 @@ func _step_pings(delta: float) -> void:
 ## through itself at 0.58 and never quite as well as around itself, which is the
 ## right direction for a build that has spent three tiers on one gene.
 func _cast_ping() -> void:
+	# Clamped here and not trusted: the run writes it every frame, and a headless
+	# boot casts a pulse before the first write lands.
+	var tier := clampi(ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
+	if PING_RETURNS_BY_TIER[tier] <= 0:
+		return
 	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
 	var origin := _cell.position + dir * _cell.radius
 	var found: Array = []
@@ -1791,15 +2057,26 @@ func _cast_ping() -> void:
 			level *= lerpf(ping_through, 1.0, clear)
 		if level <= PING_SILENT:
 			continue
-		heard.append([float(found[i][0]), at, level])
-		if heard.size() >= PING_RETURNS:
+		# The two readings beside the level, out of numbers this loop already
+		# has. `span` is organ-to-centre and is floored at the radius, so a body
+		# the organ is inside does not ask `asin` for more than 1.
+		var radius_i: float = found[i][2]
+		var span := maxf(reach, radius_i)
+		var alpha := rad_to_deg(asin(clampf(radius_i / span, 0.0, 1.0)))
+		var width := minf(PING_WIDTH_FLOOR[tier] + PING_WIDTH_GAIN[tier] * alpha,
+			PING_WIDTH_MAX)
+		var hold := PING_RING * 2.0 * radius_i / PING_SPEED
+		heard.append([float(found[i][0]), at, level, width, hold])
+		if heard.size() >= PING_RETURNS_BY_TIER[tier]:
 			break
 	var due := 0.0
 	for i in heard.size():
 		var d: float = heard[i][0]
-		var flight := d / PING_SPEED
+		# **Out and back.** The front reaches the near edge at `d / PING_SPEED`
+		# and the echo takes as long again to get home.
+		var flight := 2.0 * d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
-		_echoes.append([due, heard[i][1], heard[i][2]])
+		_echoes.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --

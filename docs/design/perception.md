@@ -253,7 +253,7 @@ Play is a continuous cut with no flash.
 | metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s → 0.55s as concentration rises |
 | thrust bloom | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.14 | 60° at bearing 0° | attack 60ms, decay 500ms, on each impulse |
 | turn shear | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.10 × `|ω|/ω_max` | 84° at ±90°, outside of the turn | no lag; decay 180ms |
-| nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `smoothstep(0.06,1,c) * 0.62` | `lerp(78°, 26°, c)` | bearing low-passed 0.6s; jitter `lerp(22°,4°,c)` resampled 1.5Hz; off below c = 0.06. **Phase 6: silent without `chemocyte`, and `c` is summed only inside that organ's reach** |
+| nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `pow(clamp((c-0.02)/(0.70-0.02)),0.8) * 0.62`, faded in over 0.02 and suppressed 60% by dread | **a full ring, not a lobe**: `z` solved so its dimmest point is 0.22 of its brightest | no lag and no jitter at all; off below c = 0.02. **The bearing is the organ's own arc on this body, not a direction to food** — it decides which side of the ring is bright and nothing else. Silent without `chemocyte`, and `c` is `s / (s + SMELL_HALF)` where `s` is the facing-weighted sum over **every** source inside that organ's reach — superposition, then a receptor that saturates rather than clips. three-senses.md §2 and §7.5.2 |
 | ping return | glow lobe 3, `Color(0.62,0.55,1.00,1)` | 0.55 × nearness **× what survived the shadows** | 17°/13°/10° by `ampulla` tier | attack 35ms, decay 260ms; one per body **that is not in a shadow** per pulse (three-senses.md §1), staggered by `distance / PING_SPEED` (250 -- a tier-1 edge return lands 4.4 s out) so a pulse reads as a sweep. The survival term is `ping_through + (1 - ping_through) × clear` once per body in the way, the cell's own hull included, so at tier 1 it is 1 or 0 and nothing else. **Shares lobe 3 with the `ocellus` beam, loudest wins** |
 | pressure wake | press lobe 0 | `smoothstep(3.5r, 0.8r, dist)`, cap 0.95 | 34°, no jitter | attack 70ms, decay 260ms — it is a shock, it must be sudden |
 | contact | `flash` | **0.80** | whole contour | attack 1 frame, decay 90ms; plus a 0.35 glow bruise at the contact bearing, decay 600ms |
@@ -282,7 +282,18 @@ black, measurably, and the predator makes it blacker.
 
 **Before you sample a frame of your own, read §4.1.** The bus jitters off its
 own generator, that generator was unseedable until recently, and two runs of one
-command were never the same picture.
+command were never the same picture. **One of the two draws that made it so is
+gone** — three-senses.md §2 deleted the taste jitter along with the bearing it
+was vague about — and §4.1 is unchanged by that: the beat still jitters on every
+frame of dread, so `--seed=` is still mandatory and three byte-identical renders
+are still the thing to check before measuring anything.
+
+The `nutrient near` and `nutrient far` rows in the table above were measured on
+a lobe that no longer exists. Re-measured on the ring, as `green - blue` along
+72 rays from the centre so the teal contour cancels: an r12 body at 300 units in
+front of the nose peaks at **64** on the organ's arc and falls to 25 opposite
+it; the same body behind the nose peaks at **37** and falls to 19. The ring does
+not move between the two frames — only its brightness does, by 73%.
 
 ### Both targets
 
@@ -355,9 +366,36 @@ else writes shader uniforms. This is what makes §5 cheap.
 
 The rule to hold: **Phase 1 owns the outer 104px. The interior is currency.**
 
-Phase 1 encodes only *bearing* (coarse, lagged, jittering) and *intensity*
-(scalar). It never encodes position, distance, shape, count or identity. Those
-are exactly what later genes sell, so the ladder has somewhere to go:
+Phase 1 encodes *bearing* and *intensity*, and the first sensory gene adds
+*extent* — how wide a thing is, and how long its echo takes to pass. **This is a
+stage, not a rule.** A cell this early cannot resolve a form; it can feel that
+something is wide and near, or narrow and far, and that is the whole of what a
+tier-1 organ has earned. What is still unspent is *place*: no signal is yet
+drawn at the position of the thing that caused it, and the interior is still
+black. That is what the gene after this one sells, and it should feel enormous.
+
+> **This paragraph used to be a prohibition** — *"it never encodes position,
+> distance, shape, count or identity"* — and was read as one for seven phases.
+> The owner said plainly it is a statement about how far the cell has developed,
+> and `ping-as-outline.md` §0 records that; the replacement above is that file's
+> §9, made here now that the outline has shipped. Two decisions were taken
+> against the old wording and both went the conservative way: the interior stays
+> black until the gene that is *about* seeing (§10 row 3 there), and the
+> twenty-beam outline is allowed at tier 3 for the `ocellus` alone
+> (`three-senses.md` §8 row 3) — allowed, and not yet built.
+>
+> **Distance is encoded now, twice, and both are honest.** A ping mark's level
+> falls with range, and its arrival time is the round trip — `2d / PING_SPEED`,
+> because the wave bounces. Neither is a *place*: a bearing with a distance on it
+> would be one, and the pair never reaches the bus together in a form that can be
+> recombined. `ping-as-outline.md` §0 is the four-scalar rule that keeps it so.
+>
+> One thing this paragraph said has gone the other way and is now simply true of
+> smell: **taste no longer encodes a bearing at all.** three-senses.md §2 made
+> it a level, and the direction it used to carry was the last thing on the
+> membrane that told a blind cell where something was without the player having
+> to turn to find out.
+
 
 - **First sensory gene (eyespot / photoreceptor):** a new glow lobe in slot 2,
   in a colour not yet used — light is not chemistry and must not look like it.
@@ -379,8 +417,10 @@ measurements in this repository for five phases and nobody noticed, because the
 failure is quiet: the numbers come out, they are just not the numbers of the
 thing being measured.
 
-`signal_bus.gd` draws its beat jitter and its taste jitter from a **private**
-`RandomNumberGenerator`, and that is deliberate and must stay — the bus is a
+`signal_bus.gd` draws its beat jitter from a **private**
+`RandomNumberGenerator` — it drew the taste jitter from the same stream until
+three-senses.md §2 deleted that jitter, and one draw is as unseedable as two —
+and that is deliberate and must stay — the bus is a
 view, `Membrane` is `process_mode = 3` so it keeps stepping through a pause, and
 a view drawing off the simulation's stream is what once made how long you left
 the pause screen open change where every cell in the water was.

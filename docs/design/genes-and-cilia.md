@@ -1366,7 +1366,7 @@ predator:
 | `predator.gd`'s aim state machine, `COMMIT_RANGE`, the lunge, the break-off | how **any** cell pursues something it can eat. Was always general; only the name was specific. |
 | `threat` — the `RADIUS / cell.radius` ratio | the **gape comparison** of §1.1, evaluated per cell and in both directions |
 | `dread_level` | still a scalar, now summed over cells that can eat *me*. Dread was always a property of the relationship, not of a species. **It must stay continuous — see below.** |
-| `food.gd`'s scent field, `concentration`, `taste_bearing` | unchanged in kind, but summed over everything **I** can eat rather than over a food species |
+| `food.gd`'s scent field, `concentration`, `taste_level` | unchanged in kind, but summed over everything **I** can eat rather than over a food species. (`taste_bearing` was the third of these and is gone — three-senses.md §2.) |
 | `FIRST_DELAY`, `SPAWN_MIN/MAX`, the authored first arrival | the seeding distribution of §1.3. The authored first encounter survives as an authored *opening*, not as a species spawn. |
 | `PREY_SPEED = 56.5`, hard-coded | dies. Every cell swims on its own `flagellum` tier. |
 | `RADIUS = 40` — the predator's fixed size | dies. Size is per-cell and grows. |
@@ -1654,18 +1654,27 @@ The tier buys **reach**, and nothing else:
 const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
 ```
 
-Sharpness is deliberately left alone: `rhabdom` / *focus* already owns the taste
-lobe's width and jitter, and a second gene doing the same thing would make one
-of them pointless. Tier 3 is `food.gd`'s `SCENT_RANGE`, so a saturated nose is
-exactly the always-on taste every build before this one shipped with.
+Sharpness is not a thing the nose has any more. This paragraph used to read
+*"deliberately left alone: `rhabdom` / focus already owns the taste lobe's width
+and jitter"* — and `three-senses.md` §2 deleted the width and the jitter, then
+§8 row 2 retired `rhabdom`. Reach is now the whole of what a `chemocyte` tier
+buys. Tier 3 is `food.gd`'s `SCENT_RANGE`, so a saturated nose is exactly the
+always-on taste every build before this one shipped with.
 
 Two numbers come out of the field where there was one. `concentration` is what
 the *water* is like and still drives the metabolic beat — a noseless cell
 still beats faster in rich water, because the beat is a property of the body and
 not of its senses. `taste_level` is what the *organ* picks up, summed only over
 sources inside `smell_range`, and it is the only one of the two that reaches the
-membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level`
-and `taste_bearing` both flat zero.
+membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level` at
+flat zero, because `smell_range` is zero and nothing is ever inside the nose.
+
+**There is no `taste_bearing` any more**, and that is `three-senses.md` §2: what
+the nose reports is a level, weighted by how nearly each source lies along the
+organ's own arc. The bearing posted beside it is `smell_bearing` — where the
+organ is worn on *this* body, written once a frame by `normal_mode.gd` exactly
+the way `ping_bearing` and `dart_bearing` are. It carries nothing about the
+water and is the same number every frame of a run.
 
 `dread` stays innate. Fear of being eaten is not a sense you grow.
 
@@ -1690,21 +1699,35 @@ organ returns nothing at all** until you turn.
 ```
 # cell.gd
 const PING_RANGE_BY_TIER:  Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
-const PING_PERIOD_BY_TIER: Array[float] = [0.0,    3.2,    2.2,    1.4]
+const PING_PERIOD_BY_TIER: Array[float] = [0.0,    8.8,   12.0,   15.2]
 ```
 
+**The period is the round trip, and that is the point of it.** Each entry is
+`2 x PING_RANGE_BY_TIER / PING_SPEED` exactly, so the organ does not call again
+until its own echo is home: one pulse in the water at every tier, and a mark
+that can only have come from it. A bat does not shout over its own returns
+without Doppler-shift compensation, and this cell has none.
+`docs/design/ping-as-outline.md` §10 row 1 is the decision and §7 is the bill —
+**rate stops climbing with tier**: about one mark every three seconds at all
+three, where the old 3.2 / 2.2 / 1.4 gave 55 / 104 / 168 a minute. What tier
+buys is reach, penetration, resolution and how many bodies one sweep answers
+for.
+
 **It reads as a sweep because the returns are staggered by their own flight
-time.** `food.gd` holds each echo for `distance / PING_SPEED` seconds before it
-becomes a bearing, so one pulse arrives on the membrane as a run of separate
+time.** `food.gd` holds each echo for `2 x distance / PING_SPEED` seconds before
+it becomes a bearing, so one pulse arrives on the membrane as a run of separate
 marks walking outward — nearest first, loudest first — over about a second. The
 scent field is a steady wide band that lags and jitters; the ping is a burst of
 tight marks that are exactly where they say they are and then gone. Nothing else
 in the game behaves like either.
 
-It shares `LOBE_BEAM` with the `ocellus`, which is not a compromise: there are
-four glow lobes in the shader, a fifth is a new uniform and a new binary, and
-both of these genes mean *a hard surface, that way, that far*. They compete
-rather than sum, exactly as the three self-signals do in lobe 0.
+It used to share `LOBE_BEAM` with the `ocellus`, on the argument that a fifth
+lobe meant a new uniform and therefore a new binary. **That argument was wrong
+and the sharing is gone.** The lobe count is a shader constant and a uniform
+array length, not an export setting, so it ships as content like anything else
+under `res://`; `ping-as-outline.md` §11 has the refutation. The ping now owns
+`LOBE_PING_A` and `LOBE_PING_B`, which is what lets one pulse hold two marks at
+once instead of making a crowd and a single body look identical.
 
 Full vision draws the wavefront as a ring expanding out of the cell, for the
 same reason it draws the beam's line: so that "the blips stopped because nothing

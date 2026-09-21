@@ -11,7 +11,7 @@ Two changes, both on surfaces that already exist. Nothing new to teach, no new
 screen, no new input, no new binary. Extends `genes-and-cilia.md` §5 (the genome
 strip) and takes the exemption `diegetic-hud.md` §3 did not have.
 
-## 1. The eighteen lines
+## 1. The seventeen lines
 
 Voice: lowercase, plain, no jargon — the register of `choose a view` and
 `a sense grew`. **Each line says what the gene does for the player, not what the
@@ -26,11 +26,10 @@ pips' job, and `+30%` is the classic HUD this game spent two phases not building
 | `flagellum` | *swim* | your tail beats harder, and more often |
 | `stigma` | *see* | feels the shadow of anything big, however dark |
 | `ocellus` | *beam* | a ray out of that side, marking whatever it strikes |
-| `chemocyte` | *smell* | smells food, and which way it is |
+| `chemocyte` | *smell* | smells food, strongest where your nose is pointed |
 | `ampulla` | *ping* | a pulse that answers off everything, not just food |
 | `axoneme` | *push* | holding on pushes you, instead of only steering |
 | `statocyst` | *level* | always knows which way is up, however you turn |
-| `rhabdom` | *focus* | sharpens where a smell is coming from |
 | `palp` | *touch* | feels what is against you, with no light at all |
 | `myoneme` | *dash* | tap for a burst of speed, paid for in hunger |
 | `trichocyst` | *sting* | a dart at whatever closes in on that side |
@@ -44,6 +43,21 @@ And one for a slot with nothing in it, because an empty slot still has the one
 thing the compass on its tile is drawing:
 
 > nothing here yet · an organ here would look this way
+
+**`rhabdom` / *focus* was the eighteenth and it is gone.** Its line —
+*sharpens where a smell is coming from* — described a width and a jitter on the
+taste lobe, and `three-senses.md` §2 deleted both when smell stopped being a
+direction. The owner retired the gene rather than re-aim it (`three-senses.md`
+§8 row 2), and the line went with it rather than being rewritten: a line that
+promises an effect the gene no longer has is the one failure this table exists
+to prevent. `three-senses.md` §8.1 is what a genome that still names it draws.
+
+**`chemocyte`'s line changed in the same breath**, from *smells food, and which
+way it is*. There is no which-way any more. What the new line has to teach in
+one clause is that the *slot* is now the direction — the glow is brightest when
+the organ's own arc is pointed at the food — which is why it says *where your
+nose is pointed* rather than *when you face it*: the nose is a place on the
+body, and moving it is a gesture the player already has.
 
 **`that side` in `ocellus` and `trichocyst` is deliberate.** Those are the two
 genes whose slot decides where they look, and the tile they sit on already draws
@@ -118,7 +132,7 @@ Three consequences worth writing down:
 
 **Desktop gets hover on top.** Pointing at a tile shows its line without
 selecting it; moving off restores the selected tile's. That is the cheapest
-possible way to read all eighteen, and it costs a touch player nothing because a
+possible way to read all seventeen, and it costs a touch player nothing because a
 thumb has no hover — which is exactly why the tap path is the one that is tested.
 Hover deliberately does not restyle the tile: a tile that lit under the cursor
 would be promising a second tap it has not been given, and the cursor is already
@@ -341,7 +355,7 @@ the frame.**
 4. **The strip now costs six to eight `Tab` stops.** Tiles come before the
    light slider in tree order, so tabbing forward from `leave` wraps onto the
    strip and walks it before reaching anything else. That is the price of making
-   eighteen lines reachable without a mouse, and it is paid only by a player who
+   seventeen lines reachable without a mouse, and it is paid only by a player who
    tabs; `Esc` and the buttons are where they were.
 5. **Tapping a gap between tiles does nothing**, because the 20px separation
    belongs to no tile. It is 1.5mm on a phone and a mis-tap costs nothing, so it

@@ -570,6 +570,11 @@ func _process(delta: float) -> void:
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.
 	_food.smell_range = _cell.smell_range()
+	# **Where the nose is**, resolved here for the same reason the pulse's arc
+	# below is: this file has both the genome and cilia.gd's arc table. Smell
+	# stopped being a bearing (three-senses.md §2) -- what the field answers is
+	# a level, and this is the arc that level is weighted about.
+	_food.smell_bearing = _slot_bearing_of(&"chemocyte")
 	_food.ping_range = _cell.ping_range()
 	_food.ping_period = _cell.ping_period()
 	# **Where the pulse leaves from**, resolved here for the same reason the
@@ -578,12 +583,23 @@ func _process(delta: float) -> void:
 	# into the one world position it needs and spends it inside `_cast_ping`.
 	_food.ping_bearing = _slot_bearing_of(&"ampulla")
 	_food.ping_through = _cell.ping_through()
+	# The organ's own resolution, beside its reach and its rate: how many bodies
+	# one pulse answers for and how much of each body's true angular extent
+	# survives into the readout. ping-as-outline.md §4.
+	_food.ping_tier = _cell.ping_tier()
 	# **`taste_level`, not `concentration`.** The first is what this nose picks
 	# up and the second is what the water is like; the beat above reads the
 	# water, the membrane reads the organ. A cell with no chemocyte hands over a
 	# flat zero and gets no green band at all -- which is the whole change, and
 	# is enforced again inside the bus.
-	_bus.taste(_food.taste_bearing, _food.taste_level)
+	#
+	# **The bearing is the organ's own arc and comes from this file, not from
+	# the field.** Nothing about the water reaches the membrane through this
+	# channel any more: the same number was written into `smell_bearing` above,
+	# and all it does downstream is tell the shader which side of the ring is
+	# the bright one. It is the same value every frame of a run unless the
+	# player moves the gene. three-senses.md §2.2.
+	_bus.taste(_food.smell_bearing, _food.taste_level)
 	_bus.dread(_food.dread_level)
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
 	# the beat, and it is what makes a tier change something point of view can
@@ -603,8 +619,7 @@ func _process(delta: float) -> void:
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"statocyst"),
-		_cell.extra(&"rhabdom"), _cell.extra(&"chemocyte"),
-		_cell.extra(&"ampulla"))
+		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
 	_post_beam()
 	_post_pings()
 	# `statocyst`: absolute up, as a bearing this body reads it -- which is
@@ -690,12 +705,24 @@ func _post_beam() -> void:
 ## **The ping's returns**, drained from the field and posted one at a time.
 ##
 ## Unlike the beam these do not compete before they reach the bus: each return
-## is a separate event at a separate bearing, and the membrane's envelope is
-## what resolves two that land in the same instant. Spacing them out in *time*
-## is the field's job, and it is what makes one pulse read as a sweep.
+## is a separate event at a separate bearing, and the membrane's arcs are what
+## resolve two that land in the same instant. Spacing them out in *time* is the
+## field's job, and it is what makes one pulse read as a sweep.
+##
+## **Four scalars, and still not one of them is a place.** A bearing, a level,
+## an angular half-width and a hold time: the width conflates size with distance
+## on purpose and the hold is a duration, so no arrangement of the four recovers
+## a position. ping-as-outline.md §0.
+##
+## Plus the organ's own arc, humming while its pulse is still in the water --
+## a bearing and a scalar, like everything else that reaches the bus. It is what
+## makes an eight-second wait read as *listening* rather than as nothing, and it
+## draws the blind arc for free: the hum is where the pulse went, so the half of
+## the water you are not asking is the half that is dark.
 func _post_pings() -> void:
 	for echo: Array in _food.pings:
-		_bus.ping(float(echo[0]), float(echo[1]))
+		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
+	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
 
 
 # ---------------------------------------------------------------------------
@@ -844,6 +871,7 @@ func _hush() -> void:
 	_bus.taste(0.0, 0.0)
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
+	_bus.ping_out(0.0, 0.0)
 	_bus.level(0.0, 0.0)
 	_bus.hold(0.0)
 	_bus.shear(0.0)
@@ -2628,14 +2656,14 @@ const WORD_UNEXPRESSED := 0.42
 const WORDS := {
 	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
-	&"statocyst": "level", &"rhabdom": "focus", &"palp": "touch",
+	&"statocyst": "level", &"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
 	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
 ## **One line per gene, and it says what the gene does to the player** -- not
-## what the organelle is. Eighteen tiles carrying one word each are enough to
+## what the organelle is. Seventeen tiles carrying one word each are enough to
 ## recognise a gene you already know and not enough to learn one, which is the
 ## whole of the owner's ask.
 ##
@@ -2665,11 +2693,10 @@ const EXPLAINS := {
 	&"flagellum": "your tail beats harder, and more often",
 	&"stigma": "feels the shadow of anything big, however dark",
 	&"ocellus": "a ray out of that side, marking whatever it strikes",
-	&"chemocyte": "smells food, and which way it is",
+	&"chemocyte": "smells food, strongest where your nose is pointed",
 	&"ampulla": "a pulse that answers off everything, not just food",
 	&"axoneme": "holding on pushes you, instead of only steering",
 	&"statocyst": "always knows which way is up, however you turn",
-	&"rhabdom": "sharpens where a smell is coming from",
 	&"palp": "feels what is against you, with no light at all",
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
@@ -2984,7 +3011,7 @@ func _movable(slot: int) -> bool:
 ##
 ## Hover wins over selection, and only on desktop: a mouse can ask about a locus
 ## without committing to it, which is the cheapest possible way to read all
-## eighteen. A thumb has no hover, so the tap path is the one that has to work,
+## seventeen. A thumb has no hover, so the tap path is the one that has to work,
 ## and it is the one that is tested.
 ##
 ## **An empty locus with a sample held explains the sample**, which is the one
@@ -3884,7 +3911,7 @@ const CHOOSE_DART_X := 66.0
 ## **The word budget, measured, because it is the number this block ran out of
 ## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
 ## [constant LABEL_SIZE] 13 in the fallback font the widest of
-## [constant WORDS]'s eighteen is `venom` at **44.00**. Three pixels of tail,
+## [constant WORDS]'s seventeen is `venom` at **44.00**. Three pixels of tail,
 ## and that is the whole of it: the next word to need more has nowhere to go
 ## and will run past the block's own edge, silently, because nothing clips it.
 ##
@@ -4119,7 +4146,7 @@ func _choose_at(side: int, slot: int) -> Array:
 
 
 ## **The two lines below, and they are shared rather than one per side.** The
-## eighteen gene lines are about the gene, and both strands carry the same gene
+## seventeen gene lines are about the gene, and both strands carry the same gene
 ## at five or six of seven loci, so a per-side line would be the same sentence
 ## twice in most frames -- and the longest of them is 519 px, which two of,
 ## centred under daughters 264 px apart, overlap by 255. Which strand is being

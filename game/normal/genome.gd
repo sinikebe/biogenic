@@ -67,10 +67,23 @@ const TIER_MAX := 3
 ## `chemocyte` and `ampulla` are inserted after `ocellus` rather than anywhere
 ## more natural, so that no tie between two genes that already existed changes
 ## which one a body is drawn as.
+##
+## **`rhabdom` was removed from this list and nothing closed over the gap**, for
+## the same reason: the order is a tie-break, so lifting one entry out of the
+## middle leaves every remaining pair in the order it was already in. This list
+## is also what [method _mutate_drift] draws a replacement gene from, so a gene
+## that is not on it can never re-enter a lineage. three-senses.md §8 row 2 is
+## the decision and food.gd's DRIFTER_GENES carries the reasoning.
+##
+## **A gene that is not on this list is still a gene.** [method dominant_of] has
+## an explicit second pass for exactly that case and [method tier_of] is a
+## `.get`, so a `{gene: tier}` map that names a retired organ keeps it, pays
+## upkeep on it and draws it in cilia.gd's reserved hue. Nothing is silently
+## dropped from a genome here.
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
 	&"ocellus", &"chemocyte", &"ampulla",
-	&"axoneme", &"statocyst", &"rhabdom", &"palp", &"myoneme",
+	&"axoneme", &"statocyst", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.

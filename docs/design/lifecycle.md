@@ -172,7 +172,8 @@ const ORGAN_UNEXPRESSED := 0.52
   fits**, rendered at 1280x720: the block runs x=168 to x=966, because the
   trailing spacer keeps the slots centred and hangs the sample off to the left.
   `genes-and-cilia.md` §5.3 says this state "cannot happen"; that was true of
-  four genes and has been false since the build shipped eighteen.
+  four genes and has been false since the build shipped eighteen — seventeen
+  now, since `rhabdom` was retired, which changes nothing about this.
 
 ## 4. The boundary
 

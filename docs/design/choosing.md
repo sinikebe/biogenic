@@ -196,7 +196,7 @@ budget).
 
 **The word budget, and it is 3 px.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**
 of room for the word. Measured with `Font.get_string_size` at `LABEL_SIZE` 13 in
-the fallback font, the widest of the eighteen in `WORDS` is `venom` at **44.00**.
+the fallback font, the widest of the seventeen in `WORDS` is `venom` at **44.00**.
 Letters are not the measure — the font is proportional, and `shield` is six
 letters at 38.00 against `poison`'s six at 43.00 — so what a new gene has to pass
 is `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. Nothing
@@ -586,7 +586,7 @@ The new clause is the one thing the copy count cannot say — **whether this
 daughter got it** — and it is the register the rung shape is drawing, in words,
 for the same reason the pause screen says the odds out loud.
 
-**One row, shared, not one per side.** The eighteen lines are about the gene, and
+**One row, shared, not one per side.** The seventeen lines are about the gene, and
 both strands carry the same gene at five or six of seven loci, so a per-side line
 would be the same sentence twice in most frames. The arithmetic agrees: the
 longest line, `toxicyst`, measures **519 px** with its organ; two of them
@@ -733,7 +733,7 @@ Hud  (CanvasLayer)
 it `Explain/Says`, inside a container also called `Says`, which is two different
 things with one name at two depths of the same path — `Hud/Choosing/Says/Explain/Says`.
 The container keeps the name (it is the pause screen's, and both rows under it
-are things the screen says); the label is `Line`, which is what the eighteen
+are things the screen says); the label is `Line`, which is what the seventeen
 authored strings are called everywhere else in this document.
 
 A locus target is **124 x 48 canvas px** = 186 x 72 device px at 2400x1080, and
@@ -898,11 +898,13 @@ above the signal, and two runs that differ can look identical in it.
    faithful is already random, so it carries no bias about the *choice* — but it
    does put one lit lens on one side from the first frame. Cheap to flip to
    "whichever side the mutation is louder on" if it ever reads as a nudge.
-5. **`rhabdom` (`focus`) and `cytostome` (`eat`) are close in hue**, and on a
-   dense strand they can sit at adjacent loci (`p3_dense_1280.png`). Both obey
-   §4.4's 30° rule and both carry a word, so nothing here fails — but it is the
-   tightest pair on the wheel and this is the first surface that ever puts them
-   48 px apart.
+5. **Closed, by retirement rather than by an answer.** This risk read:
+   *`rhabdom` (`focus`) and `cytostome` (`eat`) are close in hue, and on a dense
+   strand they can sit at adjacent loci (`p3_dense_1280.png`) — the tightest
+   pair on the wheel, 48 px apart.* `rhabdom` is retired
+   (`three-senses.md` §8 row 2), so the pair cannot occur. 72° of the wheel is
+   free again and `cilia.gd` records it; whatever is put there next inherits
+   this risk and should be checked against `cytostome`'s 95° before it ships.
 6. **On Android a thumb that is leaning re-labels the explanation row**, because
    Godot emulates a mouse from every touch and the emulated motion raises
    `mouse_entered` on whatever locus the thumb is over. The lens does not move
@@ -921,5 +923,5 @@ above the signal, and two runs that differ can look identical in it.
 | # | Question | Options | What it means |
 |---|---|---|---|
 | 1 | Should the screen say which daughter is the mutant? | **no — mark only the loci where the two disagree ✓ recommended** / name one of them the mutant / mark nothing at all | Recommended: the screen points at the rows that differ and lets you decide which you want. Naming one "the mutant" would tell you which is the safe one, and the safe one is not always the better one. Marking nothing means finding a one-copy difference by eye, among differences that look identical and mean something else. |
-| 2 | Should reading a locus be possible at all during the choice, or should the strands just be a picture? | **interactive — tap or hover a locus for its line ✓ recommended** / a picture only, no touch | Recommended: the eighteen gene lines already exist and this is the moment they are worth most. The cost is that about a tenth of each screen half stops being a place you can lean from — the outer third, where a thumb rests, is untouched. A picture-only strand keeps the whole screen leanable and makes a player who has forgotten what `ampulla` does guess. |
+| 2 | Should reading a locus be possible at all during the choice, or should the strands just be a picture? | **interactive — tap or hover a locus for its line ✓ recommended** / a picture only, no touch | Recommended: the seventeen gene lines already exist and this is the moment they are worth most. The cost is that about a tenth of each screen half stops being a place you can lean from — the outer third, where a thumb rests, is untouched. A picture-only strand keeps the whole screen leanable and makes a player who has forgotten what `ampulla` does guess. |
 | 3 | Should a division be replayable with its strands? | **no — leave the replay as it is ✓ recommended** / record both daughters' DNA so the replay matches | Recommended: watching a run back shows what you felt and what you did, and consulting a surface is neither — the replay already skips the pause screen for the same reason. The alternative makes the replay of a division match the division exactly, and costs the recorder two whole genomes at every split. |

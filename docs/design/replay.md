@@ -46,6 +46,13 @@ wounds, states, targets and genomes, and logs every sensation with a timestamp.
 | seed 999 against seed 12345 at 60 | 852 lines differ, so `seed()` is honoured and the test is not vacuous |
 | **`--mode=0` against `--mode=1`, same seed, 30 s** | **0 divergent simulation lines** |
 
+> **`--forage` no longer exists.** `three-senses.md` §2 took the bearing out of
+> smell, so a forager that steered onto it would steer onto its own organ;
+> `tools/drive.gd` carries `--sniff` in its place (§7.7 there). The two rows
+> above that used it were measuring determinism and the recorder's cost, not the
+> nose, so what they found still holds — but the commands as written will not
+> run, and re-taking them means substituting `--sniff`.
+
 So the simulation **is** bit-exactly reproducible across processes given a
 seeded global stream and a fixed timestep. Option A is reachable.
 
@@ -138,11 +145,20 @@ Per frame, as `float32`:
 | player: pos, heading, velocity, radius, wound, steer | 8 |
 | 34 field bodies x (pos, heading, radius, wound, gape) | 204 |
 | 14 motes x pos | 28 |
-| membrane uniforms | 37 |
+| membrane uniforms | 46 |
 | `beams` — 3 x (bearing, distance, hit) | 9 |
-| `ping_front`, `ping_range`, `held_remaining`, `division`, delta, beat | 9 |
+| the ping out and back — 2 front radii, 4 echoes x (radius, bearing, halfwidth, level) | 18 |
+| `ping_range`, `held_remaining`, `division`, delta, beat | 8 |
 | `hunter` — who was chasing you, as an index | 1 |
-| **total** | **296 floats = 1,184 B** |
+| **total** | **322 floats = 1,288 B** |
+
+The membrane row was 37 and the ping row was one float, `ping_front`, until the
+wave bounced (`ping-as-outline.md`). Two more glow lobes are eight floats and
+their hollowness is a ninth — hollowness has to be in the block because it
+rides in the palette, and a pane rebuilds a membrane out of uniforms with no
+organ to read a tier off. The ping is eighteen because a bouncing pulse is a
+set of fronts going out and a set of echoes coming back, and one scalar drew
+the newest front over the oldest one's returns.
 
 `recorder.gd`'s `STRIDE` is built out of the offsets above and has to equal this
 number exactly; an off-by-one there writes one frame's tail into the next
@@ -151,21 +167,21 @@ drifts. The last row is the one §4.8 added after the renders, and what it buys
 is in §4.8.8: a body's `state` is the one thing the replay deliberately does not
 write back, and `hunter()` is a question about exactly that.
 
-At 60 fps that is **69 KB/s**: a 400-second run is **27.1 MB**, 90 seconds is
-**6.1 MB**, 60 seconds is **4.1 MB**. Option A for comparison is under 150 KB —
-190x smaller, and still the wrong choice.
+At 60 fps that is **75 KB/s**: a 400-second run is **29.5 MB**, 90 seconds is
+**6.6 MB**, 60 seconds is **4.4 MB**. Option A for comparison is under 150 KB —
+200x smaller, and still the wrong choice.
 
 **The window is the design, not an optimisation.** Keep the **last 60 seconds**
-in a preallocated ring: 4.1 MB, allocated once in `_ready()`, never grown, never
+in a preallocated ring: 4.4 MB, allocated once in `_ready()`, never grown, never
 written to disk. Nobody rewatches seven minutes; the mistake that killed you is
 in the last twenty seconds. The constant is the knob and the arithmetic is
-69 KB per second bought.
+75 KB per second bought.
 
 ## 4. The spec
 
 ### 4.1 What is recorded
 
-One `PackedFloat32Array` ring of `60 x 60 x 296` floats, written by a `Recorder`
+One `PackedFloat32Array` ring of `60 x 60 x 322` floats, written by a `Recorder`
 node appended as the **last** child of `NormalMode`, so its `_process` runs
 after every other node's and it sees the finished frame. **Nothing is added to
 `normal_mode.gd`'s `_process`.**
@@ -195,7 +211,7 @@ uniform name: `capture_block()` and `write_block()`.
 
 `vision.gd`'s camera lag, trail and mark ages are **not** recorded. They are
 deterministic filters over positions and events that are, driven by the recorded
-per-frame delta, so they reconstruct themselves. That is why the trace is 296
+per-frame delta, so they reconstruct themselves. That is why the trace is 322
 floats and not 500.
 
 ### 4.2 Where it lives
@@ -342,7 +358,7 @@ rings, bruise rays, ghosts, meals and wake rays unchanged. Closing it is
 
 ### 4.6 What it costs in the hot loop
 
-About 296 indexed float writes into one preallocated array, about forty property
+About 322 indexed float writes into one preallocated array, about forty property
 reads and one call — `food.hunter()`, which §4.8.8 bought. No allocation, no
 dictionary, no signal.
 
@@ -355,6 +371,10 @@ measuring the other's CPU:
 --mode=1 --seed=4242 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1 \
     --forage --evade --capture-cost=50
 ```
+
+(`--forage` is gone; the flag to re-take this with is `--sniff`. The cost being
+measured is one `capture()` per frame and does not depend on which way the cell
+was steering, so the numbers below stand.)
 
 | over 400 s, 24,000 captures | without the hunter column | shipped |
 | --- | --- | --- |
@@ -724,7 +744,7 @@ in the last place it still reached.
 
 | # | Question | Options | What it means |
 |---|---|---|---|
-| 1 | How much of the run does the replay keep? | **60 seconds ✓ recommended** · 90 seconds · the whole run | 60 s costs 4 MB and covers the run-up to any death. 90 s is 6 MB. The whole run is 28 MB and mostly empty water. Each extra second costs 69 KB. |
+| 1 | How much of the run does the replay keep? | **60 seconds ✓ recommended** · 90 seconds · the whole run | 60 s costs 4 MB and covers the run-up to any death. 90 s is 6 MB. The whole run is 28 MB and mostly empty water. Each extra second costs 75 KB. |
 | 2 | Does the truth pane keep the membrane under the world? | **yes ✓ recommended** · no, the right pane is only the water | Keeping it lets the player see the lie and the truth in one glance — the green band pointing one way and the food sitting the other. Dropping it stops the replay being the two shipped modes side by side. |
 | 3 | How is the replay offered? | **one `watch` button, tap anywhere else still restarts ✓ recommended** · a gesture · automatically | The button changes nothing for a player who does not want it. A gesture is a thing nobody finds. Automatic makes every death longer. |
 | 4 | Every death, or only past generation 1? | **every death ✓ recommended** · from the second generation | Dying in the first thirty seconds is the death a new player most needs explained. |

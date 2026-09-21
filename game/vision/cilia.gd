@@ -67,7 +67,6 @@ const HUES := {
 	# magenta. Close on purpose -- these two are the same organ, twice.
 	&"axoneme": Color(0.98, 0.44, 0.90),     # push, 306 deg
 	&"statocyst": Color(0.38, 0.76, 1.00),   # level, 202 deg
-	&"rhabdom": Color(0.84, 0.98, 0.28),     # focus, 72 deg
 	&"palp": Color(1.00, 0.68, 0.48),        # touch, 23 deg
 	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
 	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
@@ -95,7 +94,6 @@ const EARNED_COUNT := {
 	&"ampulla": 6,
 	&"axoneme": 8,
 	&"statocyst": 2,
-	&"rhabdom": 6,
 	&"palp": 8,
 	&"myoneme": 5,
 	&"trichocyst": 3,
@@ -112,6 +110,17 @@ const EARNED_COUNT := {
 ## re-derive the separation rule. An unknown gene draws in the first of these
 ## rather than in nothing at all -- a body with an invisible organ would be a
 ## body the player cannot read, which is worse than a body in a strange colour.
+##
+## **That fallback is now load-bearing rather than defensive.** `rhabdom` was
+## retired (three-senses.md §8 row 2), so a `{gene: tier}` map that still names
+## it -- a dev harness's `--genome=`, a build older than this one -- reaches
+## [method hue_of] with no entry and draws indigo. It is the wrong colour for
+## a gene that no longer exists, and it is a visible organ on a readable body,
+## which is the trade this list was written for.
+##
+## **72 degrees is free again**, which is where `rhabdom`'s yellow-green sat.
+## It is not added below because these two are in wheel order and a third entry
+## would change which colour an unknown gene gets.
 const RESERVED_HUES: Array[Color] = [
 	Color(0.48, 0.42, 0.95),  # indigo, 250 deg
 	Color(0.94, 0.42, 0.68),  # rose, 333 deg
