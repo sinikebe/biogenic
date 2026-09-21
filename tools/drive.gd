@@ -963,10 +963,31 @@ func _step_sniff(delta: float) -> void:
 		_sniff_key = want
 	# Printed every tick, not only on a reversal: the level is the measurement
 	# and a trace that showed only the decisions could not be checked against
-	# the field it was made from.
-	print("[sniff] %6.2f  level %.4f  %s%s" % [
-		_clock, level, "port " if want == KEY_A else "stbd ",
+	# the field it was made from. `raw` is the summed concentration behind it --
+	# see [method _smell_sum], and three-senses.md §7.5.3 for what it is for.
+	print("[sniff] %6.2f  level %.4f  raw %7.3f  %s%s" % [
+		_clock, level, _smell_sum(), "port " if want == KEY_A else "stbd ",
 		"  <- reversed" if turned else ""])
+
+
+## **The raw summed concentration the nose saw**, recovered exactly rather than
+## estimated. `food.gd` reports `taste_level = s / (s + SMELL_HALF)`, which is
+## invertible, so `s = K L / (1 - L)` and no new member has to be added to a
+## shipped file to read it.
+##
+## It exists because `SMELL_HALF` is the one constant in this change that no
+## navigation measurement can choose: the curve is monotonic, so every K flies
+## the same path. K has to be picked off the distribution of `s`, and that
+## distribution is what this prints.
+func _smell_sum() -> float:
+	if _food == null:
+		return 0.0
+	var level: float = _food.taste_level
+	# It cannot actually reach 1.0 -- that is the point of the curve -- but a
+	# float divided by (1 - 1) would be the one way to find out otherwise.
+	if level >= 0.999999:
+		return 1.0e9
+	return FoodField.SMELL_HALF * level / (1.0 - level)
 
 
 ## Commit away from the wake and stay committed. Turns until the threat is 130
@@ -1038,11 +1059,11 @@ func _membrane_text() -> String:
 	# whole of three-senses.md §2 is that those two are one channel.
 	var far := smoothstep(taste.z, 1.0, -1.0) if taste.z < 1.0 else 0.0
 	return ("membrane: organs cyt%d cir%d fla%d sti%d  self lobe %.3f at %4.0f deg wide"
-		+ "  taste %.3f ring far/near %.2f from level %.3f"
+		+ "  taste %.3f ring far/near %.2f from level %.3f (raw %.3f)"
 		+ "  light %.3f at %4.0f deg wide  flood decay %.1fs") % [
 		organs[0], organs[1], organs[2], organs[3],
 		me.w, rad_to_deg(acos(clampf(me.z, -1.0, 1.0))),
-		taste.w, far, _food.taste_level if _food != null else 0.0,
+		taste.w, far, _food.taste_level if _food != null else 0.0, _smell_sum(),
 		light.w, rad_to_deg(acos(clampf(light.z, -1.0, 1.0))),
 		_bus.INGEST_DECAY_BY_TIER[organs[0]]]
 

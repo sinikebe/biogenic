@@ -119,15 +119,53 @@ const TASTE_PEAK := 0.62
 ## Where the readout starts, and where it fades in from. Both moved down with
 ## the channel: the old 0.06 was `scent(680)`, a number off the plain summed
 ## field this replaces, and the weighted level lives a whole band lower.
+##
+## **Re-checked against the saturating nose and left alone.** `food.gd` now
+## reports `s / (s + SMELL_HALF)`, which is 0 only when `s` is 0 -- a cell with
+## no `chemocyte`, or one with nothing edible inside its reach at all. Over
+## 1,690 samples of a tier-1 forage the fifth percentile of the level is 0.249,
+## a dozen times clear of this floor, so the band still cannot go dark
+## while the organ has anything to report. That is the whole of what this
+## number and food.gd's SMELL_BEHIND exist to guarantee.
 const TASTE_FLOOR := 0.02
 const TASTE_FADE := 0.02
-## Where the readout saturates. Pinned deliberately below 1.0: above 0.45 the
-## cell is inside food.gd's CORE_RANGE of something edible and about to eat it,
-## and a readout still climbing while the mouth is closing is spending range on
-## a decision that has already been made. §2.3.
-const TASTE_FULL := 0.45
+## Where the readout saturates. Pinned deliberately below 1.0, and the reason
+## is unchanged: above this the cell is on top of something edible and about to
+## eat it, and a readout still climbing while the mouth is closing is spending
+## range on a decision that has already been made. §2.3.
+##
+## **0.70 and not 0.45, because the input distribution moved and this number is
+## a fact about that distribution.** 0.45 was fitted against a level that came
+## out of `minf(smelt_top + 0.22 * smelt_rest, 1.0)`; the level is now
+## `s / (s + SMELL_HALF)` over the full superposed sum, which lives a band
+## higher. Left at 0.45 it would have re-created the exact fault the clamp was
+## removed to cure -- **63.4% of a measured forage pinned at TASTE_PEAK**, one
+## saturation stacked on another, and the whole top of the range doing nothing.
+##
+## **Measured, not moved by eye.** The raw sum at the sample immediately before
+## each of 25 meals ran 1.14 to 2.83 with a median of 1.71, which at
+## `SMELL_HALF` 0.9 is a level of 0.56 to 0.76, median 0.655. So *the mouth is
+## closing* really does land near 0.70, and the sentence above is true again
+## for the first time since the channel changed. Over the same 1,690 samples it
+## pins **1.9%** rather than 63.4%, and the middle 80% of the water spends
+## 0.306 to 0.582 of the band instead of 0.441 to pinned.
+const TASTE_FULL := 0.70
 ## The shape between the two. Slightly concave, so the bottom of the band --
 ## where a forager actually lives -- gets more of the curve than the top.
+##
+## **Re-checked against the new input and kept at 0.8.** At the tenth, fiftieth
+## and ninetieth percentiles of a measured forage the four candidates give:
+##
+##     0.8 -> 0.306 / 0.466 / 0.582      1.0 -> 0.256 / 0.434 / 0.573
+##     1.3 -> 0.197 / 0.390 / 0.559      1.4 -> 0.180 / 0.376 / 0.555
+##
+## Every steeper curve buys its extra separation at the bottom, not the top --
+## and the bottom is the one place §2.3 will not spend. 1.3 was rendered as
+## well as arithmetic: at p10 the ring drops to a thin grey-green outline that
+## reads as *the gene has stopped working* rather than as *there is not much
+## food here*, which is the same failure SMELL_BEHIND 0.22 exists to prevent.
+## 0.8 keeps p10 a lit green band and still separates the three
+## (three-senses.md §7.5.3 has the frames).
 const TASTE_CURVE := 0.8
 ## What the drawn ring's dimmest point is worth against its brightest, which is
 ## what [method _ring_edge] solves the lobe's `z` for.

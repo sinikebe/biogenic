@@ -19,7 +19,8 @@ owner has since said plainly that it bounces, so §2 is rewritten rather than
 extended and every section that rested on the one-way reading has been brought
 into line. What that cost is not cosmetic: a return now arrives at `2d /
 PING_SPEED`, so every flight time in this document doubled and §7's overlap
-doubled with it.
+doubled with it. **§10 row 1 has since closed that overlap**, by setting the
+period to the round trip — §7 and §10 carry the before and after.
 
 The speed is shipped (`PING_SPEED` 1250 → 250, commit `962cea0`) and this build
 did **not** re-open it, on instruction, so that §7 could be stated honestly
@@ -132,7 +133,9 @@ still a bearing.
 
 Everything made of *distance* doubles: flight time, the number of pulses in the
 water at once, and — the expensive one — the reach a given period can answer
-from without ambiguity, which **halves**. §7 is that bill.
+from without ambiguity, which **halves**. §7 is that bill, and §10 row 1 is the
+owner paying it: the period is now the round trip itself, so one pulse is in the
+water at a time and the unambiguous reach is the whole reach again.
 
 **The held time does not double**, and that is not a convenience. Only the near
 hemisphere of a body answers; the far side is in its own shadow. The reflecting
@@ -147,35 +150,41 @@ double. It does not: the arrival time doubled and the duration did not.
 
 A body of radius `R` whose centre is `D` from the organ reflects between
 `2(D − R) / c` and `2D / c` — near pole to limb, out and back. Four independent
-facts fall out; none is a position, and §7 taxes exactly one of them.
+facts fall out; none is a position. §7 used to tax exactly one of them, and
+§10 row 1 has now bought that one back.
 
-### 3.1 *When it comes back* — distance, and the reading the overlap taxes
+### 3.1 *When it comes back* — distance, and the reading that was taxed
 
 `flight = 2d / PING_SPEED`, `d` the surface distance. The slowdown and the
 bounce together made this the longest channel the sense has: **0 to 8.8 s** of
 dynamic range at tier 1, against 4.4 one-way and 0.88 before the slowdown.
 
-**Read §7 before selling it.** Under a round trip the unambiguous reach — how
-far a pulse can answer from before the next one leaves — is `period × speed / 2`,
-which is **400 / 275 / 175** units against reaches of 1100 / 1500 / 1900. Past
-that, a mark cannot be timed back to the pulse that caused it, and arrival time
-stops being distance.
+**The overlap this used to be taxed by is gone.** Unambiguous reach is
+`period × speed / 2`, and the owner has set the period to the round trip
+(§10 row 1, option (c)), so `period × speed / 2` is exactly the reach at every
+tier: **1100 / 1500 / 1900 of 1100 / 1500 / 1900 — 100%**. Counted rather than
+argued: `--pings=` puts the peak number of outgoing fronts at **1 at all three
+tiers**, against 2 / 3 / 6 under the ladder this replaces. There is one pulse in
+the water and a mark can only have come from it, so arrival time is distance
+again over the whole of the organ's reach.
 
-Three things keep that from taking a third of this spec with it, and all three
-are measured:
+The three things that used to be the consolation for the overlap are all still
+true, and they are now redundancy rather than defence:
 
 - **The other two readings do not care.** Width (§3.3) and held time (§3.2) are
   properties of the body and of the organ, not of which pulse answered. So is
-  the bearing. Overlap taxes exactly one of the four channels a mark carries.
+  the bearing.
 - **Distance is already carried twice.** `PING_FALLOFF` puts it in the mark's
   *level*: measured over a 60 s tier-3 run the levels that land run 0.24 to
-  0.97, and a near body is always louder than a far one. Overlap costs the fine
-  distance channel, not distance.
+  0.97, and a near body is always louder than a far one.
 - **The echo is watched rather than timed.** It is drawn walking home for the
   last ~430 world units of its journey — 1.7 s at 250 — and it is the brightest
   violet on the screen while it does. A mark arrives attached to something the
   player has been looking at, which is a different act from counting seconds
   since a wavefront left.
+
+**What it cost is in §7**, and it is refresh: 21 / 20 / 19 marks a minute
+instead of 55 / 104 / 168.
 
 ### 3.2 *How long it lasts* — size, and the number the bounce left alone
 
@@ -363,8 +372,9 @@ promise to the player:
 
 Measured on the built ladder, one pose, in §3.4: the two edges of one body part
 by 24°, then 57°, then 68°, and the bridge between them falls 78% → 65% → 39%.
-The skin is silent 64% of the time at tier 1 and 9% at tier 3 (§7.1). That is
-the ladder in three numbers each.
+The skin is silent about seven seconds in eight at **every** tier now (§7.1.1),
+which is the one rung the ladder lost when the period became the round trip:
+tier buys resolution, reach and penetration, and no longer buys refresh.
 
 **The interior is still not spent.** The wave is drawn there, out and back — the
 cell emitted the pulse and knows where its own front and its own echo have got
@@ -421,8 +431,13 @@ hold]`. **The position still dies on the line it died on.**
 ### 5.1.1 One pulse is not enough state
 
 `_ping_age` was a single scalar and `ping_front` a single radius, which is what
-§7 photographed: the newest front drawn over the oldest pulse's returns. The
-field now keeps
+§7.0 photographed: the newest front drawn over the oldest pulse's returns. **The
+period §10 row 1 chose means there is only ever one front to draw**, so
+`_pulses` and `ping_fronts` now hold one entry where they used to hold six, and
+`ping_echoes` at most five where it used to hold thirty-one. They are kept as
+arrays anyway: the ambiguity they fixed was real, a scalar is exactly the shape
+that hid it, and nothing about the period is load-bearing here. The field
+keeps
 
 ```gdscript
 var _pulses: Array = []      # ages of every outgoing front still inside reach
@@ -530,9 +545,11 @@ a tier-1 bump on the one screen built to check what the player actually felt.
 
 `recorder.gd` replaces the single `ping_front` float with eighteen: two front
 radii and four echoes of four scalars each. Both counts were measured rather than
-chosen — a front leaves the frame in under a second against a 1.4 s period, so at
-most two are ever inside it, and four echoes covers every instant of the tier-3
-pose. `STRIDE` 296 → **322**, 69 → **75 KB/s**, a 60 s window 4.1 → **4.4 MB**.
+chosen — a front leaves the frame in under a second, so at most two are ever
+inside it, and four echoes covers every instant of the tier-3 pose. Both are now
+slack rather than tight: under the period §10 row 1 chose there is one front in
+the water at a time and five echoes at the very most, so the two front slots and
+four echo slots are a ceiling the field can no longer reach. `STRIDE` 296 → **322**, 69 → **75 KB/s**, a 60 s window 4.1 → **4.4 MB**.
 Measured on the new stride, one `capture()` costs **186 µs** at its worst and
 **104 µs** on average.
 
@@ -575,19 +592,26 @@ screen, which is **1.7 s of watching it arrive** at 250 u/s, and it is the
 brightest violet in the picture while it does.
 
 It is capped at six drawn at once (`ECHO_DRAWN`), off screen ones excluded first.
-There is no cap in the field — at tier 3 the water holds up to **30** returning
-echoes (§8.3, measured) — and fifty contracting arcs is not a sense, it is
-weather.
+There is no cap in the field, and that cap mattered when the water held up to
+**31** returning echoes at tier 3 (§7.0, measured); under the period §10 row 1
+chose it holds at most **5**, so the cap is now slack it will never take up.
 
 **And every live front is drawn, not just the newest**, which is the half of
-§7's fix that lives in a view. At most one or two are inside the frame at a time.
+§7's fix that lives in a view. There is now only ever one.
 
 **The organ hums while it listens.** 54° half-width, peak 0.08, at
 `ping_bearing`, fading as the newest pulse's **round trip** runs out — the
 one-way version of this faded over half as long. It costs no slot, because it
-only takes a ping slot that is idle. It makes an eight-second wait read as
+only takes a ping slot that is idle. It makes a wait of 8.8 to 15.2 s read as
 *listening*, and it draws the blind arc for free: the hum is where the pulse
 went, so the half of the water you are not asking is the half that is dark.
+
+**It got better when the period did.** `ping_listen` is `1 - age / trip`, and
+the period is now exactly `trip`, so the hum breathes from full to empty once
+per call at **every** tier. Under the old ladder a tier-3 period was a tenth of
+its own round trip and the hum sat nearly flat — a readout that was honest
+(*a tier-3 organ really is always listening*) and said nothing. It is now the
+thing that fills the seven seconds in eight that §7.1.1 measures as silence.
 
 **Measured on this build**: with nothing arriving, the hum reads `B − G` = **5**
 at the nose and **0** dead astern, against 46–69 for a mark at its peak and about
@@ -607,7 +631,9 @@ This is not decoration. Full vision exists to check that point of view is tellin
 the truth, and this is the check: **the skin lights at the same instant, at the
 same bearing, over the same span, that an echo lands on the organ.** Both are
 drawn off the same four numbers, so a disagreement is visible in one frame rather
-than inferred. `vis_t3_echo_1280.png` is the frame.
+than inferred. Checked again on this tree the way §8.2 asks: 60 s at seed 7 with
+the view forced each way produced **0 divergent sensation lines** out of 152 and
+the same 20 ping marks.
 
 Full vision draws no outline of its own — it already draws the bodies.
 
@@ -627,65 +653,116 @@ Full vision draws no outline of its own — it already draws the bodies.
 
 ---
 
-## 7. What the bounce cost: eleven pulses, and one reading taxed
+## 7. What the bounce cost, what the owner paid, and what one pulse costs
 
-**Not a design choice — arithmetic off the shipped constants, and then counted.**
-A pulse is answering for `2 x PING_RANGE / PING_SPEED`; the organ fires again
-after `PING_PERIOD`:
+**This section used to be a bill. §10 row 1 has now settled it, and the price is
+printed at the bottom.**
 
-| tier | reach | round trip | period | pulses answering at once | unambiguous reach |
+### 7.0 What the bounce cost, before the period moved
+
+A pulse answers for `2 x PING_RANGE / PING_SPEED`; the organ fired again after
+`PING_PERIOD`, and under the old 3.2 / 2.2 / 1.4 ladder those two did not fit
+inside one another:
+
+| tier | reach | round trip | old period | pulses answering at once | unambiguous reach |
 | --- | --- | --- | --- | --- | --- |
 | 1 | 1100 | **8.80 s** | 3.20 s | 2.8 | 400 — **36%** |
 | 2 | 1500 | **12.0 s** | 2.20 s | 5.5 | 275 — **18%** |
 | 3 | 1900 | **15.2 s** | 1.40 s | **10.9** | 175 — **9%** |
 
-Every number in that table is double the one-way version. Unambiguous reach is
-`period × speed / 2` and it **halved**.
+Counted on the build rather than left as arithmetic, `--pings=` over 60 s at
+seed 7, `--radius=30`, as maxima — the worst instant is what decides whether a
+mark is ambiguous:
 
-**Counted on the build**, `--pings=` over 40 s at seed 7, as maxima rather than
-means — the worst instant is what decides whether a mark is ambiguous:
+| tier | outgoing fronts, peak | returning echoes, peak | marks in 60 s |
+| --- | --- | --- | --- |
+| 1 | 2 | 9 | 55 |
+| 2 | 3 | 16 | 104 |
+| 3 | **6** | **31** | 168 |
 
-| tier | outgoing fronts, peak | returning echoes, peak |
-| --- | --- | --- |
-| 1 | 2 | 9 |
-| 2 | 3 | 16 |
-| 3 | **6** | **30** |
+Thirty-one echoes in the water at one instant at tier 3. A mark that landed could
+not be timed back to the pulse that started it, so **§3.1 was the one reading
+this taxed**.
 
-At tier 3 there are thirty echoes in the water at one instant. A mark that lands
-cannot be timed back to the pulse that started it, so **§3.1 is the one reading
-this taxes** — and §3.1 now says so, with the three things that keep it from
-taking a third of the spec with it.
+### 7.1 What one pulse at a time costs instead
 
-### 7.1 What it does to the skin
+`PING_PERIOD_BY_TIER` is now `2 × PING_RANGE_BY_TIER / PING_SPEED` exactly —
+8.8 / 12.0 / 15.2 s. Same command, same seed, same radius:
 
-The membrane has two ping arcs. Over 60 s at seed 7, with the mark rate and the
-hold times both measured:
+| tier | outgoing fronts, peak | returning echoes, peak | marks in 60 s | unambiguous reach |
+| --- | --- | --- | --- | --- |
+| 1 | **1** | 3 | 21 | 1100 — **100%** |
+| 2 | **1** | 4 | 20 | 1500 — **100%** |
+| 3 | **1** | 5 | 19 | 1900 — **100%** |
+
+**One front, at every tier, always.** That is the whole of what was bought, and
+it is the thing the arithmetic promised — the peak was not assumed, it was
+counted.
+
+**Two things were paid for it, and both are measured.**
+
+**Refresh stops climbing with tier.** 21 / 20 / 19 marks a minute against
+55 / 104 / 168. Upgrading the `ampulla` now buys reach and resolution — how far
+it hears and how many bodies one sweep answers for — and not frequency. A player
+who eats their way from tier 1 to tier 3 gets a sense that reaches nearly twice
+as far and resolves five bodies instead of three, at the same rate of about one
+mark every three seconds.
+
+**The water is no longer always ringing.** A front or an echo is somewhere in
+the water 70% / 54% / 64% of the time, against 100% at every tier before. The
+gap is *not* the period: the last possible echo lands exactly as the next call
+goes out. It is that the front is culled at its own reach — half a round trip in
+— and the bodies it actually found are far nearer than the reach, so their
+echoes are all home early. Between the last echo landing and the next call the
+water is empty.
+
+### 7.1.1 What it does to the skin
+
+The membrane has two ping arcs. Over 60 s at seed 7, `--radius=30`, marks
+occupying an arc for their own hold plus `PING_RELEASE`:
 
 | tier | marks | per second | mean hold | skin silent | one mark | two marks | a third competing |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 52 | 0.87 | 0.28 s | 64.1% | 32.3% | 3.6% | **0.0%** |
-| 2 | 107 | 1.78 | 0.36 s | 28.9% | 50.1% | 18.2% | **2.8%** |
-| 3 | 203 | 3.38 | 0.34 s | 9.4% | 31.2% | 36.3% | **23.0%** |
+| **old** 1 | 55 | 0.92 | 0.34 s | 62.7% | 33.2% | 4.1% | **0.0%** |
+| **old** 2 | 104 | 1.73 | 0.34 s | 40.1% | 42.6% | 14.6% | **2.6%** |
+| **old** 3 | 168 | 2.80 | 0.31 s | 36.3% | 23.1% | 27.8% | **12.8%** |
+| **now** 1 | 21 | 0.35 | 0.34 s | **85.5%** | 12.9% | 1.6% | **0.0%** |
+| **now** 2 | 20 | 0.33 | 0.34 s | **86.4%** | 12.0% | 1.4% | **0.1%** |
+| **now** 3 | 19 | 0.32 | 0.30 s | **88.3%** | 10.2% | 1.6% | **0.0%** |
 
-Two arcs are enough at tiers 1 and 2. At tier 3 a third return is competing for a
-slot about a quarter of the time and the quietest of the three loses — the same
-"loudest wins" the three self-signals have shared in lobe 0 since Phase 1, and
-the honest failure of buying an organ that answers for five bodies at once.
+Read it both ways and neither reading is dishonest. The two arcs are never
+fought over now — a third mark competes for a slot 0.1% of the time at worst,
+against 12.8% at tier 3 before — so the "loudest wins" eviction that used to
+lose a quarter of tier 3's marks effectively never fires. And the skin is quiet
+about seven seconds in eight at every tier, where a tier-3 skin used to be quiet
+only a third of the time.
 
-Read the silence column as the ladder: a tier-1 skin says nothing two thirds of
-the time, which is what the hum is for, and a tier-3 skin is quiet for one second
-in ten.
+**What fills that silence is the hum**, and it got better rather than worse.
+`ping_listen` is `1 - age / trip`; under the old ladder a tier-3 period was a
+tenth of its own round trip, so the hum sat nearly flat and said nothing. Now
+the period *is* the trip at every tier, so the hum breathes from full to empty
+exactly once per call — a reading that says *the answer is still coming* over
+the whole of the wait, at all three tiers, for the first time.
 
 ### 7.2 The frame
 
-`vis_t3_echo_1280.png` — full vision, tier 3, t = 8.05, five fronts and
-twenty-seven echoes on one screen. This is the replacement for
-`outline_t3_ambiguity_720.png`, and **it is no longer a contradiction**: the old
-frame showed a wavefront 30 units out over a skin reporting a body at 220,
-because one scalar drew the newest pulse. Every live front and every travelling
-echo is drawn now, so the picture and the skin agree. What the frame shows
-instead is the real problem — a water full of concentric rings, and no way to
-tell by eye which ring an arriving arc left from.
+`vis_t3_echo_1280.png` was full vision, tier 3, t = 8.05: five fronts and
+twenty-seven echoes on one screen, a water full of concentric rings with no way
+to tell by eye which ring an arriving arc left from. **It cannot be taken any
+more, and that is the change.** At any instant there is one front and a handful
+of echoes belonging to it.
+
+`ping_t1_1.20_1280x720.png` / `ping_t3_1.20_1280x720.png` and their 2400x1080
+pairs replace it: point of view, 1.2 s after the call, one front going out and
+one echo walking home. Tier 1 draws the forward hemisphere only —
+`PING_THROUGH_BY_TIER[1]` is a hard zero, so the cell's own body is in the way —
+and tier 3 carries the front all the way round at 0.58 of its level. Nothing is
+concentric with anything, because there is nothing else in the water.
+
+`ping_t1_2.00_1280x720.png` / `ping_t3_2.00_1280x720.png` are the same run
+0.8 s later, once the 80-unit body at 300 units has answered: the tier-1 mark is
+a solid band 42° wide, the tier-3 mark is 52° wide and hollow — two limbs with a
+dim bridge, which is §3.4's outline. Same pair at 2400x1080.
 
 ---
 
@@ -703,6 +780,11 @@ Three byte-identical runs of
 differed by **0 pixels, 0 pixels, 0 pixels** on this build, and the same was true
 of the old command on the build before it. `--seed=` reaches the bus, so
 everything below is a measurement and not weather (`perception.md` §4.1).
+
+Re-proved on the tree that moved the period, before any A/B was measured on it,
+and re-proved again afterwards: three renders of `--freeze-at=1.20` at tier 3
+and three of the smell frame that shipped alongside it — **0 differing pixels**
+in all four comparisons.
 
 ### 8.1 The mark, per degree of bearing
 
@@ -722,11 +804,17 @@ the ladder saying *resolution* rather than *volume*.
 each, 0 divergent.** The only differing line in the whole log is the harness's
 own `mode forced to N` banner. 98 of those lines are pings.
 
+Re-run on the tree that moved the period, 60 s at seed 7 with a tier-3
+`ampulla` and a tier-2 `chemocyte`: **152 sensation lines each, 0 divergent**,
+and 0 divergent `[sniff]` samples. 20 of those lines are pings, which is the
+new rate rather than a quieter log — §7.1.
+
 ### 8.3 What is in the water
 
 `--pings=`, the trace this build added, because §7 was arithmetic off three
-constants until something counted it. Peaks over 40 s at seed 7 are in §7; the
-mark rate, the hold distribution and the two-arc saturation are in §7.1.
+constants until something counted it. Peaks over 60 s at seed 7 are in §7.0
+(the old period) and §7.1 (this one); the mark rate, the hold distribution and
+the two-arc occupancy are in §7.1.1.
 
 ### 8.4 The recorder
 
@@ -777,60 +865,86 @@ marks on the contour" stays true and is now the point rather than a restriction.
 
 ---
 
-## 10. To the owner: the ladder, with the numbers that were missing
+## 10. To the owner: the ladder — row 1 answered
 
 Rows 1 and 2 were deferred *specifically until the wave bounced*, because every
 number in them was expected to double. **Row 1's did. Row 2's did not** — §2.1 —
-so row 2 comes back answered rather than asked.
+so row 2 came back answered rather than asked.
 
-**No ping constant moved in this build.** The measurements below are taken on
-today's shipped values so the problem is stated honestly; every alternative was
-patched in, measured, rendered and reverted.
+**Row 1 is now answered too: option (c), a rarer ping, one sweep every
+8.8 / 12.0 / 15.2 s.** That is the round trip at each tier exactly, so the organ
+does not call again until its own echo is home. `PING_SPEED` and
+`PING_RANGE_BY_TIER` did not move; `PING_PERIOD_BY_TIER` is the only constant
+that changed.
 
 | # | Question | Options | What it means |
 | --- | --- | --- | --- |
-| 1 | The pulse now answers for twice as long, so up to eleven of them are in the water at once at tier 3 and a mark cannot be timed back to the pulse that made it. Pay to close that, or keep it? | **(a) keep it ✓ recommended** · (b) a faster wave, 690 / 1360 / 2710 by tier · (c) a rarer ping, one sweep every 8.8 / 12.0 / 15.2 s · (d) a shorter reach, 400 / 275 / 175 units | (a) the sense keeps saying something 52 / 107 / 203 times a minute and you read distance off how loud a mark is instead of how long you waited. (b) the wave stops being visible: at the top tier it crosses the whole screen in a sixth of a second, which undoes the slowdown you asked for. (c) the top tier answers once every fifteen seconds instead of every 1.4 — 20 marks a minute instead of 203. (d) the best organ can only find things 175 units away, and nothing is ever seeded closer than 920. |
+| 1 | The pulse answers for twice as long, so up to eleven of them were in the water at once at tier 3 and a mark could not be timed back to the pulse that made it. Pay to close that, or keep it? | (a) keep it · (b) a faster wave, 690 / 1360 / 2710 by tier · **(c) a rarer ping, one sweep every 8.8 / 12.0 / 15.2 s — CHOSEN** · (d) a shorter reach, 400 / 275 / 175 units | **(c)** the organ waits for its own echo before it calls again, so there is one pulse in the water and *when it came back* means *how far away it is* over the whole reach. It costs frequency: about one mark every three seconds at every tier, instead of one a second at tier 1 rising to three a second at tier 3. |
 | 2 | How much does the organ exaggerate a body's size? `PING_RING` and the `WIDTH_GAIN` column. | **(a) leave them where they are ✓ recommended** · (b) re-tune | Nothing changes. These were deferred because the bounce was expected to double them and it does not — only the *wait* doubled, not how long a mark is held or how wide it is drawn. Built and photographed at 2.0 and 1.5 / 3.5 / 6.0, and the ladder reads correctly at all three tiers. |
 | 3 | Does a tier-3 ping draw its outline **inside** the membrane, at the place it actually is? | **(a) no — the interior stays black until the next gene.** Confirms current behaviour. | You said the cell must one day see. This keeps that moment for the gene that is *about* seeing, so it lands as an event. The echo now drawn walking home is not that: it collapses onto your own skin and carries no shape. |
 | 4 | Two bodies inside one beamwidth merge into one wider, longer mark. Bug or ladder? | **(a) merge — it is the ladder.** Confirms current behaviour. | A crowd feels like one big thing until your radar gets better, which is how a real one behaves and what makes the next tier worth eating for. |
 
-### 10.1 Why (a), with the arithmetic that makes it a real choice
+### 10.1 Why (c), and why the other three were not it
 
-Unambiguous reach is `period × speed / 2`. The ladder wants reach to **rise**
-with tier and period to **fall**, and those two fight: so
+The reasoning the owner gave is physical, and it is the same reasoning a bat
+uses. **You do not call again until the echo is home.** The animals that do —
+the high-duty-cycle horseshoe bats — get away with it only because they carry
+Doppler-shift compensation to separate the call from the returns. This cell has
+no such machinery, so a second pulse in the water is not a harder problem for
+it; it is an unanswerable one. Period equal to round trip means there is exactly
+one pulse out there, always, and every mark belongs to it.
 
-> with the reach and the period this game ships, **only a per-tier speed can
-> close the overlap at every tier**, and the tier-3 speed it needs is 2714 —
-> more than double the 1250 the owner asked to slow fivefold.
+That is also why **(a), keep the overlap, was not it**: (a) is the option that
+requires the Doppler compensation the cell does not have. Its defence was that
+distance is carried twice — in the mark's level as well as its timing — which is
+true, and is still true, and is now redundancy rather than a substitute.
 
-Put another way: *a wave slow enough to watch* and *a mark you can time back to a
-pulse* are the same quantity pulling in opposite directions. Unambiguous means
-the whole sweep fits inside one period, which means the wave cannot be slower
-than the beat.
+**(b), a faster wave, needs the medium's wave speed to change with the genome.**
+The number it needs at tier 3 is 2710 units per second. Nothing in the water is
+different when a different cell pings it: sound speed is a property of the
+medium, and making it a function of which organ fired would be the one place in
+this design where the physics reads the player's inventory. It also undoes the
+thing the owner asked for by name — at 2710 the front crosses the visible 430
+units in 0.16 s and there is no wave on screen at all (`cand_A_m1.png`).
+
+**(d), a shorter reach, only closes below 175 units at tier 3, against a seeding
+floor of 920.** Nothing is ever seeded closer than 920 units, so a 175-unit
+reach is an organ that answers about one call in seven and mostly reports
+nothing (`cand_C_m1.png` is an empty screen). Buying the top tier of a gene to
+see *less far* than the tier below is a ladder that goes down.
 
 ### 10.2 What each option costs, measured
 
-Marks heard in 60 s at seed 7, and what the picture looks like:
+Marks heard in 60 s at seed 7, `--radius=30`, and what the picture looks like.
+Rows (a), (b) and (d) were each patched in, measured, rendered and reverted;
+(c) is what shipped and its numbers are re-measured on the built tree:
 
 | ladder | tier 1 | tier 2 | tier 3 | unambiguous | the frame |
 | --- | --- | --- | --- | --- | --- |
-| **shipped** 250 / 1100-1900 / 3.2-1.4 | **52** | **107** | **203** | 36 / 18 / 9% | rings going out, arcs coming home — it reads as sonar |
+| (a) keep it — 250 / 1100-1900 / 3.2-1.4 | 55 | 104 | 168 | 36 / 18 / 9% | rings going out, arcs coming home — it reads as sonar, and no arc can be traced to a ring |
 | (b) speed 690 / 1360 / 2710 | 56 | 108 | 214 | 100% | `cand_A_m1.png`: **no wave on screen at all.** At 2710 the front crosses the visible 430 units in 0.16 s |
-| (c) period 8.8 / 12.0 / 15.2 s | 21 | 20 | 20 | 100% | `cand_B_m1.png`: one front, one echo. The ladder's refresh flattens — tier 3 is no more responsive than tier 1 |
+| **(c) period 8.8 / 12.0 / 15.2 s — CHOSEN** | **21** | **20** | **19** | **100%** | one front, one echo, at every tier. §7.2's frames |
 | (d) reach 400 / 275 / 175 | 20 | 20 | **6** | 100% | `cand_C_m1.png`: nothing. At tier 3 one pulse in seven finds anything |
 
-Option (b) costs almost nothing in mark rate and everything in the picture, which
-is the one thing the owner asked for by name. Options (c) and (d) cut the sense
-by 60–97%. The overlap is cheaper than all three.
+**The refresh cost is the honest headline and it is not small: ten times fewer
+marks at tier 3, and the ladder's refresh flattens — tier 3 is no more
+responsive than tier 1.** What tier still buys is reach (1100 → 1900), how many
+bodies one sweep answers for (3 → 5), penetration (0 → 0.58 through a body) and
+resolution (a 17° beamwidth floor → 10°). §7.1 is the full bill, including the
+silence: a front or an echo is in the water 70 / 54 / 64% of the time instead of
+100%, and the skin is quiet about seven seconds in eight.
 
-**And §10.2's old correction still stands, doubled.** An earlier draft of row 1
-recommended *250 / 400 / 600 u/s* and claimed it closed the overlap. Under a
-round trip it covers 400 / 440 / 420 units of 1100 / 1500 / 1900 — **36 / 29 /
-22%**, worse at every tier than the table above because the bar moved. And
-option (a) as it was described then — *"eight seconds of silence between
-sweeps"* — was wrong about silence and is now wrong about eight: at tier 3 a
-15.2 s period holds a pulse in the water 100% of the time. Its real cost is
-refresh, and §10.2 measures it: ten times fewer marks.
+**Two old corrections, now closed.** An earlier draft of row 1 recommended
+*250 / 400 / 600 u/s* and claimed it closed the overlap; under a round trip it
+covers 36 / 29 / 22% and closes nothing. And option (a) as first described —
+*"eight seconds of silence between sweeps"* — was wrong about silence, then
+over-corrected: a later draft of this section said a 15.2 s period *"holds a
+pulse in the water 100% of the time"*, and **that was wrong too**. Measured, it
+is 64% at tier 3. The last possible echo does land exactly as the next call goes
+out, but the front is culled at its own reach half a trip in, and the bodies it
+found are nearer than the reach, so their echoes are home early and the water
+empties. The arithmetic bound is not the measurement, which is why §7.1 counts
+it.
 
 ## 11. A wrong comment, now deleted
 

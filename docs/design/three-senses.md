@@ -39,7 +39,13 @@ sense a blind player leans on**; it was put to the owner in §8 and it shipped.
 does not reproduce.** The direction of every finding holds — the new nose is far
 more navigable by level alone than the field it replaces — and the absolute
 numbers are worse than the prototype's. §7.5.1 is the re-measurement, and it
-raises one number the owner may want back: `SMELL_TAIL`.
+raised one number to the owner: `SMELL_TAIL`.
+
+**The owner answered, and the answer was none of the three options offered.**
+`SMELL_TAIL` is 1.0 — true superposition, every source counts in full — and the
+clamp it used to end in is replaced by a receptor that saturates,
+`s / (s + SMELL_HALF)`. §7.5.2 is the change and its measurements; §7.5.3 is how
+`SMELL_HALF` was chosen, which was off the render and not off the bot.
 
 ---
 
@@ -283,23 +289,32 @@ table, and `genes-and-cilia.md` §11.1 already decided that `chemocyte` buys
 reach and `rhabdom` buys sharpness. Measured, the cone's extra parameter buys
 almost nothing anyway — §7.4.
 
-**And the sum has to stop being a plain sum.** This is not part of the owner's
-request; it is what §7.5 measured as the difference between a sense that works
-and one that does not. The nose reports **the loudest thing it can smell, plus a
-tail of everything else**:
+**And what the sum ends in has to stop being a clamp.** This is not part of the
+owner's request; it is what §7.5 measured as the difference between a sense that
+works and one that does not — though §7.5 blamed the wrong half of the line, and
+§7.5.2 is the correction. The sum itself is a plain superposed total, because
+that is what a concentration is:
 
 ```gdscript
-## How much of everything-but-the-loudest reaches the readout. Not a taste
-## number -- 0.0 and 0.22 were both measured and 0.22 is nearly three times
-## better at finding food. §7.5.
-const SMELL_TAIL := 0.22
+## How much of everything-but-the-loudest reaches the readout, and it is 1.0:
+## every source counts, in full. Odour superposes; a nose reads the local
+## total. §7.5.2.
+const SMELL_TAIL := 1.0
+## The concentration at which the nose is half saturated -- the K in the
+## Langmuir isotherm, the Hill equation at n = 1, Michaelis-Menten. §7.5.3.
+const SMELL_HALF := 0.9
 ...
-taste_level = minf(smelt_top + SMELL_TAIL * smelt_rest, 1.0)
+var s := smelt_top + SMELL_TAIL * smelt_rest
+taste_level = s / (s + SMELL_HALF)
 ```
 
-Thirteen to nineteen sources inside a tier-1 reach sum to something that barely
-moves with position or facing and clamps at 1.0 for much of a run. A gradient
-the player is asked to follow has to exist, and with a plain sum it does not.
+Thirteen to nineteen sources inside a tier-1 reach sum to something that pinned
+at 1.0 for much of a run under `minf(..., 1.0)`, and a clamped readout has zero
+slope above the clamp: two positions with different amounts of food in front of
+them read identically. A gradient the player is asked to follow has to exist,
+and behind a clamp it does not. `s / (s + K)` is monotonic for every `s >= 0`
+and never reaches 1, so the gradient survives at any concentration — it only
+gets shallower, which is what a nose in thick water is actually like.
 
 ### 2.2 The readout: a ring, not a lobe
 
@@ -381,7 +396,7 @@ straddling today's floor. Both ends of the curve move:
 
 ```gdscript
 const TASTE_FLOOR := 0.02   # was 0.06 -- scent(680), a number from the old sum
-const TASTE_FULL  := 0.45   # where it saturates: a cell already on the food
+const TASTE_FULL  := 0.70   # was 0.45; refitted in §7.5.2 when the input moved
 const TASTE_CURVE := 0.8
 const TASTE_FADE  := 0.02
 
@@ -402,10 +417,21 @@ absolute numbers from the prototype's pair and the same direction and roughly
 the same size of step. The claim that holds is the one that matters: the sense
 that lost its bearing did not get dimmer.
 
-`TASTE_FULL` pins the top deliberately: above 0.45 the cell is inside
+`TASTE_FULL` pins the top deliberately: above it the cell is inside
 `CORE_RANGE` of something edible and about to eat it, and a readout that keeps
 climbing while the mouth is closing is spending range on a decision that has
 already been made.
+
+**It moved from 0.45 to 0.70 when `SMELL_TAIL` and the clamp changed, and that
+is arithmetic about the input rather than a change of mind.** 0.45 was fitted
+against `minf(smelt_top + 0.22 * smelt_rest, 1.0)`; the level is now
+`s / (s + SMELL_HALF)` over the full superposed sum and lives a band higher.
+Left at 0.45 it would have stacked a second saturation on the first and pinned
+**63.4%** of a measured forage at `TASTE_PEAK` — the exact fault the clamp was
+removed to cure, re-created one file downstream. At 0.70 it pins 1.9%, and 0.70
+is where *the mouth is closing* actually lands: measured, the raw sum at the
+sample immediately before each of 25 meals is 1.14 to 2.83, which is a level of
+0.56 to 0.76. §7.5.2.
 
 **`SMELL_BEHIND` is 0.22 and not lower for one reason: the band must never go
 out.** At 0.22 the dimmest facing in every instrumented sample stays above
@@ -595,17 +621,20 @@ because this container is not that phone.
 | `game/normal/cell.gd` | `BEAM_COUNT_BY_TIER = [0,1,5,20]` | **not built** — §8 row 3 |
 | `game/normal/food.gd` | `ping_bearing` / `ping_through`; `PING_GRAZE`, `PING_SILENT`; occlusion in `_cast_ping`, cap applied after it | **shipped** |
 | `game/normal/food.gd` | `SMELL_BEHIND` and `SMELL_TAIL`; the cosine weight and the loudest-plus-tail level in `_step_sense`; `smell_bearing` in, `taste_bearing` and `smelt_pull` gone | **shipped** |
+| `game/normal/food.gd` | `SMELL_TAIL` 0.22 -> **1.0**, new `SMELL_HALF`, and the clamp replaced by `s / (s + SMELL_HALF)` | **shipped** — §7.5.2 |
 | `game/normal/food.gd` | `rhabdom` out of `GENE_WEIGHTS` and `DRIFTER_GENES` | **shipped** |
 | `game/normal/genome.gd` | `rhabdom` out of `GENE_ORDER`, which is also what `_mutate_drift` draws from | **shipped** |
 | `game/normal/normal_mode.gd` | write `ping_bearing` and `ping_through` from `slot_of` + tier | **shipped** |
 | `game/normal/normal_mode.gd` | write `smell_bearing`; post the organ's arc to `taste()`; `rhabdom` out of `sense_organs`, `WORDS` and `EXPLAINS`; the `chemocyte` line rewritten | **shipped** |
 | `game/perception/signal_bus.gd` | `SMELL_RING_FLOOR`, `TASTE_FULL`, `TASTE_CURVE`, `TASTE_FADE`, `TASTE_FLOOR` 0.06 -> 0.02, `_ring_edge()`; taste lobe becomes a ring; taste jitter and bearing low-pass deleted; `FOCUS_BY_TIER`, `SENSE_RHABDOM` and the fifth `_senses` slot gone | **shipped** |
+| `game/perception/signal_bus.gd` | `TASTE_FULL` 0.45 -> **0.70**, refitted to the saturating input; `TASTE_FLOOR` and `TASTE_CURVE` re-checked against it and kept | **shipped** — §7.5.2 |
 | `game/vision/cilia.gd` | `rhabdom` out of `HUES` and `EARNED_COUNT` | **shipped** |
 | `game/perception/returns.gd` | wave becomes an arc from the organ, `_wave_arc()` helper | **shipped** |
 | `game/vision/vision.gd` | the same arc in world space | **shipped** |
 | `game/replay/recorder.gd` | the PLAYER delta carries the body's layout (§1.4) | **shipped** |
 | `game/replay/recorder.gd` | `BEAMS` 3 -> 20, and the `STRIDE` arithmetic in §3.3 | **not built** — §8 row 3 |
 | `tools/drive.gd` | `--forage` replaced by `--sniff` (§7.7); the trace line carries the taste ring and the raw level | **shipped** |
+| `tools/drive.gd` | `_smell_sum()`: the raw sum `s` recovered by inverting the saturation, printed on the `[sniff]` and `[trace]` lines. It is how `SMELL_HALF` was chosen | **shipped** — §7.5.3 |
 
 No shader change. No new uniform. No `class_name`. Nothing outside `game/`.
 It ships as a content pack.
@@ -976,6 +1005,11 @@ const SMELL_TAIL := 0.22
 taste_level = minf(smelt_top + SMELL_TAIL * smelt_rest, 1.0)
 ```
 
+> **This block is history. §7.5.2 replaces it**, and its diagnosis below —
+> *"the plain sum was never navigable"* — is half right: the sum was fine and
+> the `minf(..., 1.0)` on the end of it was the fault. Read on for what was
+> measured; read §7.5.2 for what shipped.
+
 **A tail of 0.22 is measured, not chosen.** Pure loudest-source (tail 0.00) is
 *worse* than the sum: when the nose turns away from its loudest source the
 maximum jumps to a different body, so the level steps discontinuously and a
@@ -1060,12 +1094,14 @@ flagged for the owner in this file's own table rather than moved here.
 
 | # | Question | Options | What it means |
 | --- | --- | --- | --- |
-| 1 | `SMELL_TAIL` is 0.22. Measured on the built code over 24 seeds it is the thing making the first meal slow: 16 of 24 fed against 19, and a median 64.5 s against 36.8 s. Lower it? | A — leave it at 0.22 · **B — take it to about 0.06, so the tail is a tenth of the reading rather than 40% of it ✓ recommended** · C — take it to 0.00, pure loudest-source | **A**: the opening stays as it is now — slow, and about one run in three does not find a first meal in ninety seconds. **B**: the glow still rises when there is more food around you, but the thing your nose is actually pointed at dominates it, so turning tells you more. **C**: the glow stops saying how much food is near at all and only ever reports the single loudest thing; fastest to hunt with, and it drops half of what the owner asked smell to say. |
+| 1 | `SMELL_TAIL` is 0.22. Measured on the built code over 24 seeds it is the thing making the first meal slow: 16 of 24 fed against 19, and a median 64.5 s against 36.8 s. Lower it? | A — leave it at 0.22 · B — take it to about 0.06 · C — take it to 0.00, pure loudest-source · **ANSWERED: none of the three. `SMELL_TAIL` 1.0 and a receptor that saturates instead of clipping** | The glow reads the total amount of food around you, every source counted, and it never pins — so turning always tells you something, in thin water and in thick. §7.5.2. |
 
 0.06 rather than 0.00 because 0.06 x 15 is 0.9 — the crowd and the loudest
 source weigh about the same — which keeps *more food reads as more smell* true
-while leaving the facing term in charge. It is an estimate from the arithmetic
-above and **has not been measured**; it is a row for the owner, not a change.
+while leaving the facing term in charge. It was an estimate from the arithmetic
+above and was never measured, because the owner's answer made all three rows
+moot: **every one of them asked how much information to throw away, and the
+answer was none.**
 
 **One property of the field that neither table shows and a player will meet.**
 `scent()` saturates inside `CORE_RANGE`, 130 units, so the last 130 units to a
@@ -1074,6 +1110,158 @@ three times on seed 12345 and ate nothing, because the mouth needs contact and
 the nose stopped saying which way. That is not new — it is the shape of the
 scent field, unchanged since Phase 4 — but taking the bearing away is what makes
 it visible. A player has the same problem and two more instruments.
+
+#### 7.5.2 The owner's answer: superposition, and a receptor that saturates
+
+**None of the three options.** Every row of that table asked how much of the
+scent field to throw away, and the answer is that a nose does not throw any of
+it away.
+
+**Odour concentration from several sources adds.** Each body's plume is a
+diffusion field, the fields superpose, and what exists at the cell's position is
+one number: the local total. A nose reads that total. It cannot pick a favourite
+source out of a mixture it never resolved in the first place, so *the loudest
+plus a fraction of the rest* was never a model of a nose — it was a repair for
+something else. `SMELL_TAIL` is 1.0.
+
+**The something else was the clamp, and that is the correction §7.5 needs.**
+§7.5 measured a plain sum ending in `minf(..., 1.0)`, watched it pin at 1.0 with
+13–19 sources in reach, and concluded that the plain sum had no gradient in it.
+The sum was fine. `minf` has **zero slope above the clamp**: two positions with
+different amounts of food in front of them produce an identical reading, and a
+run-and-tumble forager reading an identical sample twice has nothing to climb.
+The tail was a way of keeping the sum small enough to stay off the clamp most of
+the time, which is why lowering it kept helping.
+
+A real receptor does not clip. It **saturates**:
+
+```gdscript
+# food.gd, replacing the clamp
+var s := smelt_top + SMELL_TAIL * smelt_rest
+taste_level = s / (s + SMELL_HALF)
+```
+
+`s / (s + K)` is the Langmuir isotherm, the Hill equation at `n = 1`, and the
+Michaelis–Menten curve that receptor binding actually follows. It is strictly
+increasing for every `s >= 0` and it never reaches 1, so **a gradient survives
+at any concentration** — it only gets shallower, which is what a nose in thick
+water is like. Under the old clamp, `min(s, 1)` would have pinned **37.7%** of
+the samples in the runs below at exactly 1.0.
+
+**Measured on the built tree, 24 seeds, 90 s cap**, headless at `--fixed-fps 60`,
+`--radius=30 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1 --sniff`.
+One command per arm, differing only in which tree it was pointed at:
+
+| what the nose is | seeds | ate inside 90 s | median of those that ate |
+| --- | --- | --- | --- |
+| `SMELL_TAIL` 0.22 + `minf(..., 1.0)` — the shipped nose | 24 | 16 of 24 | 56.6 s |
+| **`SMELL_TAIL` 1.0 + `s / (s + 0.9)`** | 24 | **19 of 24** | **39.8 s** |
+
+(0.22 + clamp: 24.8 / 26.6 / 30.4 / 33.8 / 34.9 / 41.8 / 54.2 / 55.2 / 58.0 /
+ 59.5 / 63.5 / 65.9 / 69.0 / 73.2 / 75.3 / 75.6, and eight that did not eat.
+ 1.0 + saturation: 16.8 / 22.9 / 25.5 / 27.7 / 30.6 / 30.6 / 34.3 / 35.7 /
+ 39.0 / 39.8 / 42.1 / 44.0 / 47.6 / 49.6 / 55.3 / 58.3 / 59.5 / 61.0 / 71.2,
+ and five that did not.)
+
+**Better on both axes, which §7.5.1 did not think was available.** Three more
+seeds eat, *and* the median first meal drops 30%. §7.5.1's whole framing was
+that the tail trades meal speed for *"more food reads as more smell"*; removing
+the clamp means there is no trade — the reading rises with every source in
+reach, in full, and it is easier to follow than either tail was.
+
+> **The eight-seed figure quoted when this work was commissioned does not
+> reproduce, and these numbers are the ones to trust.** The brief said the old
+> nose fed 5 of 8 at a median 47.0 s and the new one 7 of 8 at 57.9 s — a trade
+> of speed for reliability. On seeds 1–8 here both arms feed **6 of 8**, with
+> medians of 67.5 s old against 41.0 s new. Eight seeds is too few to separate
+> them; at 24 the new nose is ahead on both counts. The seed set was almost
+> certainly different, and the direction of the result is the same either way.
+
+**`TASTE_FULL` had to be refitted, and that is part of this change, not a
+follow-up.** It was 0.45, fitted against the clamped input; the new input lives
+a band higher and 0.45 pinned 63.4% of a measured forage at `TASTE_PEAK` — the
+same fault, one file downstream. It is now 0.70, which is where a meal at the
+mouth actually reads (§2.3 has the measurement). `TASTE_FLOOR` and `TASTE_CURVE`
+were re-checked against the new distribution and **kept**: the fifth percentile
+of the level is 0.249, a dozen times clear of the 0.02 floor, so the band still
+cannot go dark while the organ has anything to report; and every curve steeper
+than 0.8 buys its extra separation at the dim end, which §2.3 will not spend.
+
+**One property of the field this does not fix.** `scent()` still saturates
+inside `CORE_RANGE`, so the last 130 units to a meal have little gradient in
+them. That is the shape of the scent field, not of the readout, and it is
+unchanged.
+
+#### 7.5.3 Choosing `SMELL_HALF` — off the render, because nothing else can
+
+**No navigation measurement constrains `K`, and it would be dishonest to
+present one.** `s / (s + K)` is a monotonic transform of `s`; `--sniff` only
+ever compares one sample against the next; so the comparison — and therefore
+the whole trajectory — is identical at every `K`. Measured at **0.5, 0.9, 1.2
+and 2.0 over eight seeds**: the raw sum and the port/starboard decision agree at
+every one of the 1,728 samples, and the meals land on the same hundredth of a
+second. The bot
+has no opinion about `K` and cannot be made to have one.
+
+What `K` decides is the **absolute brightness of the ring**, which only a player
+reads. So it was chosen off the distribution of `s`.
+
+**`tools/drive.gd` prints `s` directly.** `_smell_sum()` inverts the saturation —
+`s = K L / (1 - L)`, exact, not estimated — so nothing had to be added to a
+shipped file to read it. It lands on the `[sniff]` and `[trace]` lines.
+
+Over 1,690 samples from eight 90-second forages at `--radius=30` with a tier-1
+nose (samples after a division that cost the cell its `chemocyte` are dropped —
+a noseless cell reads a true zero and is not water):
+
+| | p5 | p10 | p25 | **p50** | p75 | **p90** | p99 | max |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| raw sum `s` | 0.298 | **0.388** | 0.615 | **0.887** | 1.262 | **1.659** | 2.323 | 3.498 |
+| level at K = 0.9 | 0.249 | **0.301** | 0.406 | **0.496** | 0.584 | **0.648** | 0.721 | 0.795 |
+
+**`SMELL_HALF` is 0.9 because that is the measured median**, so typical water
+half-saturates the nose — which is the textbook meaning of a half-saturation
+constant, arrived at by measurement rather than borrowed. The middle 80% of the
+water then spends 0.301 to 0.648 of the readout's range, and the richest instant
+ever recorded reads 0.795: nothing crushed at the bottom, nothing pinned at the
+top.
+
+**It holds across the ladder**, which matters because a tier-3 nose reaches 45%
+further and sees more sources. Four seeds each, same protocol:
+
+| nose | s p10 / p50 / p90 | level p10 / p50 / p90 |
+| --- | --- | --- |
+| tier 1, r30 (8 seeds) | 0.388 / 0.887 / 1.659 | 0.301 / 0.496 / 0.648 |
+| tier 2, r30 | 0.486 / 0.959 / 1.432 | 0.350 / 0.516 / 0.614 |
+| tier 3, r30 | 0.565 / 0.893 / 1.638 | 0.386 / 0.498 / 0.645 |
+| tier 2, r45, `cytostome:2` | 0.454 / 0.723 / 1.394 | 0.335 / 0.445 / 0.608 |
+
+One `K` serves all of them.
+
+**The acceptance test is the render, and it is three frames.** Seed 1,
+`--radius=30`, tier-1 nose, point of view, frozen at the three moments in one
+real forage whose raw sum is nearest p10, the median and p90 — and chosen with
+`dread` under 0.05 at all three, so the only thing differing between them is
+smell:
+
+| frame | t | raw `s` | level | ring lobe | at 1280x720 and 2400x1080 |
+| --- | --- | --- | --- | --- | --- |
+| p10 | 10.83 s | 0.381 | 0.297 | **0.301** | `smell_p10_*.png` |
+| median | 82.92 s | 0.894 | 0.498 | **0.454** | `smell_p50_*.png` |
+| p90 | 65.00 s | 1.624 | 0.643 | **0.565** | `smell_p90_*.png` |
+
+The three are visibly different at both shapes, and the ordering is in the
+pixels as well as the eye: lit area (green > 40) runs **16.1% / 19.6% / 21.1%**
+of the frame at 1280x720 and **15.1% / 18.6% / 20.0%** at 2400x1080, and peak
+green on the band runs 108 / 168 / 169. p10 is a dim but unmistakably green
+band; p90 is a bright ring all the way round, brightest at the nose. The field
+values are identical at both shapes, so the phone-shaped frame is the same
+instant seen wider and not a different run.
+
+`TASTE_CURVE` 1.3 was rendered at p10 for comparison and rejected: the ring
+drops to a thin grey-green outline that reads as *the gene has stopped working*
+rather than as *there is not much food here* — the same failure `SMELL_BEHIND`
+0.22 exists to prevent (§2.3).
 
 ### 7.6 The `ocellus`
 
@@ -1260,10 +1448,22 @@ a lovely argument. Measured, it pushed 5 of 12 samples into the clamp at 1.000
 where the swing is exactly zero (§7.4). The realism was right about physics and
 wrong about this field, which has no headroom. Dropped.
 
-**A soft compressor (`S / (S + H)`) in place of the hard clamp.** Fixes
+**A soft compressor (`S / (S + H)`) in place of the hard clamp.** ~~Fixes
 saturation at the cost of squashing contrast everywhere else: at H = 0.7 the
 best sample's 3.33x became 1.83x. The weighting de-saturates on its own, so the
-compressor was solving a problem that had already gone.
+compressor was solving a problem that had already gone.~~
+
+**This rejection was wrong, and it is the one this file got most wrong.** The
+owner has since shipped exactly this — `s / (s + SMELL_HALF)`, §7.5.2 — and it
+is not a compressor, it is what a receptor does. Two errors in four lines.
+*"The weighting de-saturates on its own"* was measured against a 0.22 tail,
+which is a sum kept small by discarding three quarters of the field; with the
+full superposed sum it does not, and `min(s, 1)` would pin 37.7% of samples.
+And *"squashing contrast everywhere else"* compares the wrong thing: the clamp's
+contrast above 1.0 is exactly **zero**, so a curve that squashes contrast
+everywhere and keeps it nonzero everywhere beats it wherever the clamp bites. A
+gradient that is smaller than it was is still a gradient; a gradient that is
+zero is not.
 
 **`rhabdom` sharpening the cosine's exponent.** Measured at under 2% of swing
 across three exponents (§7.4). The water is too evenly spread for a narrower
@@ -1375,8 +1575,14 @@ is more than twice as navigable as the thing it replaces — and still much slow
 than the autopilot it takes away, which fed on **8 of 8** in a median 20.8 s.
 The sense that comes out the far side is more interesting to use than the one
 that goes in, it never goes dark, and turning is now the thing that answers it.
-The one number worth revisiting is `SMELL_TAIL`, which at 0.22 is 40% of the
-whole reading and is measurably what makes the opening slow (§7.5.1).
+The one number worth revisiting was `SMELL_TAIL`, which at 0.22 was 40% of the
+whole reading and measurably what made the opening slow (§7.5.1).
+
+**That has now been answered and the summary improves again.** With
+`SMELL_TAIL` 1.0 and the clamp replaced by `s / (s + 0.9)`, the same forager
+feeds on **19 of 24** seeds in a median 39.8 s, against 16 of 24 at 56.6 s
+(§7.5.2). The gap to the autopilot it replaced — 8 of 8 at 20.8 s — is still
+real and still the honest cost of taking the bearing away.
 
 ## 11.1 The paragraph this replaced, kept because it was the warning
 

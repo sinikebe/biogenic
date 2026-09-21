@@ -1699,12 +1699,23 @@ organ returns nothing at all** until you turn.
 ```
 # cell.gd
 const PING_RANGE_BY_TIER:  Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
-const PING_PERIOD_BY_TIER: Array[float] = [0.0,    3.2,    2.2,    1.4]
+const PING_PERIOD_BY_TIER: Array[float] = [0.0,    8.8,   12.0,   15.2]
 ```
 
+**The period is the round trip, and that is the point of it.** Each entry is
+`2 x PING_RANGE_BY_TIER / PING_SPEED` exactly, so the organ does not call again
+until its own echo is home: one pulse in the water at every tier, and a mark
+that can only have come from it. A bat does not shout over its own returns
+without Doppler-shift compensation, and this cell has none.
+`docs/design/ping-as-outline.md` §10 row 1 is the decision and §7 is the bill —
+**rate stops climbing with tier**: about one mark every three seconds at all
+three, where the old 3.2 / 2.2 / 1.4 gave 55 / 104 / 168 a minute. What tier
+buys is reach, penetration, resolution and how many bodies one sweep answers
+for.
+
 **It reads as a sweep because the returns are staggered by their own flight
-time.** `food.gd` holds each echo for `distance / PING_SPEED` seconds before it
-becomes a bearing, so one pulse arrives on the membrane as a run of separate
+time.** `food.gd` holds each echo for `2 x distance / PING_SPEED` seconds before
+it becomes a bearing, so one pulse arrives on the membrane as a run of separate
 marks walking outward — nearest first, loudest first — over about a second. The
 scent field is a steady wide band that lags and jitters; the ping is a burst of
 tight marks that are exactly where they say they are and then gone. Nothing else

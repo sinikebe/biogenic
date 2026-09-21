@@ -264,32 +264,65 @@ const BEARING_RANGE := 680.0
 ## draws this curve on the skin and may not preload this one. The comment there
 ## says what breaks if the two drift.
 const SMELL_BEHIND := 0.22
-## How much of everything-but-the-loudest reaches the readout. The nose reports
-## the strongest thing it can smell, plus a tail of the rest -- so the reading
-## still rises in richer water, but one source can dominate it and a gradient
-## therefore exists.
+## How much of everything-but-the-loudest reaches the readout, and it is
+## **1.0: every source counts, in full**.
 ##
-## **Measured** (three-senses.md §7.5). Thirteen to nineteen sources inside a
-## tier-1 reach sum to something that barely moves with position or facing and
-## clamps at 1.0 for much of a run, so the plain sum this replaces was never
-## navigable at all. The tail keeps the owner's *"whether the smell is strong or
-## not"* literally true on top of that: more food still reads as more smell,
-## which a bare maximum cannot say.
+## Odour from several sources *adds*. Each body's plume is a diffusion field
+## and the fields superpose, so the water at one point has one concentration in
+## it and a nose reads that total -- it cannot pick a favourite source out of a
+## mixture it never resolved in the first place. Any tail below 1.0 is the
+## readout throwing away information a real nose has, and the two tails this
+## file has shipped (0.00 and 0.22) were both doing exactly that.
 ##
-## **0.22 is the number the owner approved and it is under review, with the
-## reasons written down.** §7.5 chose it because a bare maximum jumps between
-## bodies as the nose turns, which steps the level and tumbles a gradient
-## follower at random. Re-measured on the built code over 24 seeds
-## (three-senses.md §7.5.1), that damping is real and small -- the worst 1% of
-## sample-to-sample steps shrink from 0.256 to 0.193 -- and its cost is not:
-## with fifteen sources in reach, `0.22 x 15` means the tail is a mean **40%**
-## of the whole reading, so most of what the nose says is a slow position term
-## that carries nothing about facing. A level-only forager fed on 19 of 24 seeds
-## at 0.00 and 16 of 24 here, in a median 36.8 s against 64.5 s.
+## **What made the full sum unnavigable was never the sum. It was the clamp.**
+## three-senses.md §7.5 measured a plain sum that ended in `minf(..., 1.0)`,
+## found that 13-19 sources in reach pinned it at 1.0 for much of a run, and
+## concluded that the sum had no gradient in it. The gradient was there; the
+## clamp was eating it. A receptor does not clip -- it *saturates* -- and
+## [constant SMELL_HALF] is the one line that changes, below.
 ##
-## Do not move it without the owner: it is balance, and only playing can judge
-## it. §7.5.1 puts the question with a recommendation.
-const SMELL_TAIL := 0.22
+## **Measured on the built code, 24 seeds, 90 s cap** (three-senses.md §7.5.2),
+## `--radius=30 --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1 --sniff`:
+## the 0.22 tail behind a clamp fed 16 of 24 in a median 56.6 s; this pair
+## feeds **19 of 24 in a median 39.8 s**. More seeds eat and they eat sooner,
+## which is not the trade §7.5.1 expected to have to make.
+const SMELL_TAIL := 1.0
+## The concentration at which the nose is **half** saturated: the `K` in the
+## Langmuir isotherm `s / (s + K)`, which is also the Hill equation at n = 1
+## and the Michaelis-Menten curve receptor binding actually follows.
+##
+## This is the constant that replaces the clamp. `minf(s, 1.0)` is a cliff: at
+## and above 1.0 the derivative is zero, so two positions with different
+## amounts of food in front of them read identically and there is nothing to
+## climb. `s / (s + K)` is monotonically increasing for every s >= 0 and never
+## reaches 1, so **a gradient survives at any concentration** -- it only gets
+## shallower, which is what a nose in thick water is actually like.
+##
+## **K is chosen for the readout, and no navigation measurement constrains it.**
+## `s / (s + K)` is a monotonic transform of `s`, and `--sniff` only ever
+## compares one sample against the next, so the bot flies a byte-identical path
+## at any K -- measured at 0.5, 0.9, 1.2 and 2.0 over eight seeds: the same
+## raw sum and the same port/starboard decision at every one of the 1,728
+## samples, and the same meal on the same hundredth of a second. What K decides is the absolute
+## brightness of the ring on the membrane, and only a player reads that.
+## Anyone re-tuning this should not expect the bot to have an opinion.
+##
+## **So it was measured off the distribution of `s` instead.** 1,690 samples
+## over 8 seeded 90-second forages at `--radius=30` with a tier-1 nose:
+##
+##     p10  0.388     p50  0.887     p90  1.659     max  3.498
+##
+## K = 0.9 is that median, so **typical water half-saturates the nose** -- the
+## textbook meaning of a half-saturation constant, and here it is a measured
+## number rather than a borrowed one. The middle 80% of the water then reads
+## 0.301 to 0.648 and the richest instant ever seen reads 0.795: a third of a
+## unit of swing on the ring, nothing crushed at the bottom and nothing pinned
+## at the top. The band is stable across the ladder too -- a tier-2 nose reads
+## 0.350 / 0.516 / 0.614 and a tier-3 one 0.386 / 0.498 / 0.645 -- so one K
+## serves all three.
+##
+## three-senses.md §7.5.3 renders p10, median and p90 at both shapes.
+const SMELL_HALF := 0.9
 
 ## How a body fades out of the scent as it stops fitting in your mouth. §7.0 is
 ## explicit that this must not be a boolean: a body drifting across your gape
@@ -756,9 +789,14 @@ var smell_range := 0.0
 ## is worn in is the direction the player has to point to smell, and turning --
 ## the one verb this game has -- is how they sweep for it.
 var smell_bearing := 0.0
-## **What the scent field is worth to this particular nose**, 0..1: the loudest
-## source inside [member smell_range], weighted by facing, plus [constant
-## SMELL_TAIL] of everything else.
+## **What the scent field is worth to this particular nose**, 0..1: every
+## source inside [member smell_range] weighted by facing and added up, then put
+## through the receptor's own saturation curve, `s / (s + `[constant
+## SMELL_HALF]`)`.
+##
+## **It approaches 1 and never arrives.** The old clamp could sit exactly at
+## 1.0 for half a run; this cannot reach it at any concentration, which is the
+## whole reason the gradient is still there to follow.
 ##
 ## Two numbers rather than one, and the split is the point. [member
 ## concentration] is what the *water* is like, and it drives the metabolic beat,
@@ -1663,9 +1701,13 @@ func _step_sense() -> void:
 	var shade := 0.0
 	var shade_pull := Vector2.ZERO
 	# **What the nose picks up, which is not the same sum again.** Restricted to
-	# sources inside [member smell_range], weighted by how nearly each one lies
-	# along the organ's own arc, and reported as *the loudest of them plus a
-	# tail of the rest* rather than as a total. [constant SMELL_TAIL] is why.
+	# sources inside [member smell_range] and weighted by how nearly each one
+	# lies along the organ's own arc -- and then simply added up, because
+	# concentration fields superpose. The split into loudest and rest is all
+	# that survives of the tail: [constant SMELL_TAIL] is 1.0, so the two are
+	# added back together below at full weight. It is kept because the split
+	# costs nothing, needs no sort, and is the one line that would have to be
+	# rewritten if the owner ever wanted a tail again.
 	var smelt_top := 0.0
 	var smelt_rest := 0.0
 
@@ -1752,8 +1794,15 @@ func _step_sense() -> void:
 	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
 	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
 	# you have not grown is silent" true at the source as well as at the two
-	# gates downstream of it.
-	taste_level = minf(smelt_top + SMELL_TAIL * smelt_rest, 1.0)
+	# gates downstream of it. `s` is 0 there, and `0 / (0 + K)` is 0, so the
+	# saturation costs that guarantee nothing.
+	#
+	# **A receptor saturates; it does not clip.** The clamp that used to be on
+	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
+	# above 1.0 its slope is zero, and a readout with no slope in it is a
+	# readout a forager cannot climb. See [constant SMELL_HALF].
+	var s := smelt_top + SMELL_TAIL * smelt_rest
+	taste_level = s / (s + SMELL_HALF)
 	shadow = minf(shade, 1.0)
 	# Deliberately left where it was when the last shadow faded rather than
 	# snapped to dead ahead: the lobe is already dark at strength 0, and a
