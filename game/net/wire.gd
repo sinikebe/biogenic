@@ -34,7 +34,15 @@ extends RefCounted
 ## Never derived from `content_version`, which is `git rev-list --count HEAD`
 ## and moves on a docs-only merge -- two identical builds would refuse each
 ## other. multiplayer.md §8 names this specifically.
-const PROTOCOL := 1
+##
+## **2: the state frame carries a body.** Protocol 1's state frame was six
+## bytes of heartbeat; this one carries where the sender is, which way it
+## points and how big it is, so the other screen can draw it. That is a change
+## in the meaning of a byte, so the number moves -- a protocol-1 peer reads
+## byte 6 of this frame as the start of nothing it knows and would have to
+## guess. It never gets the chance: [method protocol_of] runs first and the
+## handshake refuses it with a sentence.
+const PROTOCOL := 2
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
@@ -87,8 +95,22 @@ const HELLO_SIZE := 3
 ## WebSocket or relay transport is under no obligation to repeat.
 const WELCOME_SIZE := 7
 const REFUSE_SIZE := 4
-## `kind | seq(u32) | flags`.
-const STATE_SIZE := 6
+## `kind | seq(u32) | flags | x(f32) | y(f32) | radius(f32) | heading(u8)`.
+##
+## **Nineteen bytes at 2 Hz is 38 B/s**, against §5.3's 20 B/s for the entire
+## sensation stream and 5.4 kB/s for a quantized full-vision world at 20 Hz.
+## There is nothing here worth saving either, and the two encodings below were
+## chosen on that basis rather than on size:
+##
+##   - **the place and the radius are float32**, the same three floats the
+##     shout already sends and for the reason written on [constant
+##     SHOUT_SIZE]: a world position has no bounds to quantize against, and a
+##     fixed-point scale chosen today is a wire break the day the water gets
+##     bigger. The radius rides in the same register because one quantity with
+##     two encodings on one wire is a bug waiting for a rounding difference.
+##   - **the heading is one byte**, which is the caller the note at the bottom
+##     of this file was holding [constant BEARING_STEPS] for.
+const STATE_SIZE := 19
 ## `kind | seq(u32) | type`, before the type's own payload.
 const EVENT_HEADER := 6
 ## Four little-endian float32s after the header: x, y, radius, reach.
@@ -100,8 +122,9 @@ const EVENT_HEADER := 6
 ## origin -- and a fixed-point scale chosen today is a wire break the day the
 ## water gets bigger. The organ fires **once** per `ping_period` -- 8.8 s at
 ## tier 1, 15.2 s at tier 3 -- so 22 bytes is **2.5 B/s at its loudest**, and
-## the 6-byte heartbeat at 2 Hz costs five times as much. Both together sit
-## under the ~20 B/s §5.3 budgets for the entire sensation stream. There is
+## the state frame at 2 Hz costs fifteen times as much. Both together sit at
+## about **40 B/s**, twice §5.3's budget for the entire sensation stream and a
+## hundred and thirty times under its quantized full-vision world. There is
 ## nothing here worth saving. (§5.3's "5 per 15.2 s" counts *returns*, which
 ## are what one pulse hears back; it is not the rate pulses leave at.)
 const SHOUT_SIZE := EVENT_HEADER + 16
@@ -110,21 +133,26 @@ const SHOUT_SIZE := EVENT_HEADER + 16
 ## reserved and must be written zero and ignored on read, which is what lets a
 ## later protocol add a bit without moving a byte.
 ##
-## The state frame is deliberately this thin. It is the slot the peer's body
-## goes in when the water is genuinely shared -- position, heading, radius at
-## 20 Hz, §5.3's 14 B/frame -- and that is the next task, not this one. Today it
-## is a heartbeat, and its whole job is to be the thing the drain-to-newest rule
-## is actually exercised against.
+## **It is now load-bearing rather than decorative.** Clear, the three floats
+## and the bearing byte after it are meaningless and [method state_body]
+## refuses to read them -- which is the state a session on the join screen is
+## in, before there is a run and therefore before there is a body. The bit was
+## already spelled "the sender still has a body"; this is that sentence being
+## taken literally.
 const STATE_ALIVE := 1 << 0
 
-# --- Quantization, and why there is none in here yet -------------------------
-# multiplayer.md §5.2 settles it for a *bearing*: `signal_bus.gd`'s
-# POST_ANGLE_EPSILON is 0.05 rad, one byte over a full turn is 0.0245 rad, so a
-# byte per bearing discards nothing the bus does not already discard (slither.io
-# ships the identical `value * TAU / 256`). No bearing crosses this wire -- the
-# receiver computes its own, in its own frame, from a place -- so that byte has
-# no caller yet. It gets one the day the state frame carries a peer's heading,
-# and the constant belongs next to that caller rather than a task ahead of it.
+# --- Quantization ------------------------------------------------------------
+## **One byte per bearing**, and this is the caller the note that used to sit
+## at the bottom of this file was holding it for.
+##
+## multiplayer.md §5.2 settles it: `signal_bus.gd`'s POST_ANGLE_EPSILON is
+## 0.05 rad, one byte over a full turn is 0.0245 rad, so a byte per bearing
+## discards nothing the bus does not already discard, and slither.io ships the
+## identical `value * TAU / 256`. A heading is the first bearing to cross this
+## wire -- the shout still carries none, because its receiver computes its own
+## from a place -- and 0.0245 rad is about a degree and a half of nose on a
+## body drawn 50 pixels across, which is under a pixel of the thing it turns.
+const BEARING_STEPS := 256
 
 # ---------------------------------------------------------------------------
 # Writing.
@@ -156,12 +184,29 @@ static func refuse(protocol: int, reason: int) -> PackedByteArray:
 	return out
 
 
-static func state(seq: int, alive: bool) -> PackedByteArray:
+## **The heartbeat, carrying a body.** Where the sender is, which way it is
+## pointing and how big it is -- and nothing else, because nothing else is
+## needed to put a cell on a screen. No velocity: the receiver has two of these
+## and a clock, which is a better velocity than a sender's guess at one.
+##
+## [param alive] false is the join screen and the death screen: there is a
+## session but no cell, so the bytes after the flag are written zero and
+## [method state_body] returns nothing for them.
+static func state(seq: int, alive: bool, at: Vector2 = Vector2.ZERO,
+		heading: float = 0.0, radius: float = 0.0) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(STATE_SIZE)
 	out[0] = KIND_STATE
 	_put_u32(out, 1, seq)
-	out[5] = STATE_ALIVE if alive else 0
+	var bodied := alive and radius > 0.0 and is_finite(radius) \
+		and is_finite(at.x) and is_finite(at.y) and is_finite(heading)
+	out[5] = STATE_ALIVE if bodied else 0
+	if not bodied:
+		return out
+	out.encode_float(6, at.x)
+	out.encode_float(10, at.y)
+	out.encode_float(14, radius)
+	_put_bearing(out, 18, heading)
 	return out
 
 
@@ -239,6 +284,32 @@ static func state_alive(frame: PackedByteArray) -> bool:
 	return (frame[5] & STATE_ALIVE) != 0
 
 
+## `[at, heading, radius]` out of a state frame, or an empty array when there is
+## no body in it -- a short frame, a frame from something that is not a state
+## frame, a sender with [constant STATE_ALIVE] clear, or numbers no body could
+## have. Callers check `is_empty()`.
+##
+## The same refusal the shout decoder makes, for the same reason: a non-finite
+## float off the wire is refused here rather than turned into a `NaN` position
+## that draws a cell at no coordinate at all, on a canvas, three files away. A
+## radius at or below zero goes with it -- it is the one value that would put a
+## body on screen with no size, and it is also what an all-zero frame from a
+## sender with no cell looks like.
+static func state_body(frame: PackedByteArray) -> Array:
+	if frame.size() < STATE_SIZE or frame[0] != KIND_STATE:
+		return []
+	if (frame[5] & STATE_ALIVE) == 0:
+		return []
+	var x := frame.decode_float(6)
+	var y := frame.decode_float(10)
+	var radius := frame.decode_float(14)
+	if not (is_finite(x) and is_finite(y) and is_finite(radius)):
+		return []
+	if radius <= 0.0:
+		return []
+	return [Vector2(x, y), _take_bearing(frame, 18), radius]
+
+
 static func event_type(frame: PackedByteArray) -> int:
 	if frame.size() < EVENT_HEADER or frame[0] != KIND_EVENT:
 		return 0
@@ -300,3 +371,19 @@ static func _put_u32(into: PackedByteArray, at: int, value: int) -> void:
 static func _take_u32(from: PackedByteArray, at: int) -> int:
 	return from[at] | (from[at + 1] << 8) | (from[at + 2] << 16) \
 		| (from[at + 3] << 24)
+
+
+## A bearing into one byte. Wrapped into a single turn first, so a heading that
+## has been accumulating for a quarter of an hour still lands on a mark --
+## `fposmod` rather than `fmod` because a negative heading is an ordinary
+## heading here and `fmod` keeps the sign.
+##
+## The round can reach [constant BEARING_STEPS] exactly, at a hair under a full
+## turn; the modulo folds it back onto zero, which is the same angle.
+static func _put_bearing(into: PackedByteArray, at: int, radians: float) -> void:
+	var turns := fposmod(radians, TAU) / TAU
+	into[at] = int(roundf(turns * float(BEARING_STEPS))) % BEARING_STEPS
+
+
+static func _take_bearing(from: PackedByteArray, at: int) -> float:
+	return float(from[at]) * TAU / float(BEARING_STEPS)

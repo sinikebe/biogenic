@@ -61,9 +61,17 @@ const HELLO_GRACE := 3.0
 ## own give-up: an unanswered address must become a sentence on screen, not a
 ## spinner. multiplayer.md §4.2 budgets the reply wait at ~2 s; this is double.
 const REACH_TIMEOUT := 4.0
-## The heartbeat. 2 Hz, six bytes, and it exists to give the drain-to-newest
-## rule something to actually drain -- plus it is the only defence against
+## The heartbeat. 2 Hz, nineteen bytes, and it carries the sender's body -- so
+## it is what gives the drain-to-newest rule something to drain, what tells the
+## other screen where to draw a friend, and the only defence against
 ## `godotengine/godot#37186`, where a force-closed client is never noticed.
+##
+## **It stays at 2 Hz now that a position rides on it.** 2 Hz is four times the
+## rate a drawn marker needs to be believable once it is interpolated, and the
+## rate is not what decides whether a marker reads as truthful -- how honest it
+## is about its own age is, which is [method quiet_for]'s job and not this
+## constant's. Raising it would buy smoothness the interpolation already has
+## and spend the one budget a phone actually feels, which is radio wakeups.
 const HEARTBEAT := 0.5
 ## After this long with nothing heard, a peer is reported quiet. **Not
 ## disconnected**: a phone that went into a pocket for eight seconds is still
@@ -77,6 +85,19 @@ const MAX_PEERS := 4
 ## Shouts waiting for the run to drain them. Capped because nothing drains while
 ## the player is still on the session screen.
 const HEARD_MAX := 8
+## **How many of the other cell's places are kept: two.** One is a step every
+## half second; two and a clock are a line, which is what a drawn marker needs
+## and the whole reason the state frame grew. A third would be a smoother
+## curve and a longer lie -- there is nothing between two samples that a third
+## one makes truer.
+const TRACK_MAX := 2
+## **When the older of the two stops being worth drawing a line to.** Four beats
+## of silence, and the sample before the gap is not a place the other cell was
+## on its way from -- it is where it was before it went in a pocket. Sliding a
+## marker across that gap would animate a journey nobody made, so the track is
+## dropped and the next frame lands as a step. The *marker* is still theirs and
+## still drawn; see [method quiet_for] for what says how old it is.
+const TRACK_GAP := HEARTBEAT * 4.0
 ## **How long a refusal is given to get out before the line is cut.**
 ##
 ## Measured, and it is the difference between a sentence and a shrug: sending a
@@ -127,6 +148,14 @@ var _heartbeat_at := 0.0
 var _reach_at := 0.0
 ## Peer id -> when to actually cut the line. See [constant REFUSE_LINGER].
 var _hanging_up: Dictionary = {}
+## **This cell, as the run last described it**, and the only thing in this file
+## that is not a fact about a network. Written by [method report_body] and read
+## once per beat; `_body` false is a session with no run behind it, which is
+## every session on the join screen and every session whose cell has died.
+var _body := false
+var _body_at := Vector2.ZERO
+var _body_heading := 0.0
+var _body_radius := 0.0
 
 
 func _ready() -> void:
@@ -185,7 +214,8 @@ func _process(_delta: float) -> void:
 		if now - _heartbeat_at >= HEARTBEAT:
 			_heartbeat_at = now
 			_out_state_seq += 1
-			_to_everyone(Wire.state(_out_state_seq, true))
+			_to_everyone(Wire.state(_out_state_seq, _body, _body_at,
+				_body_heading, _body_radius))
 
 
 # ---------------------------------------------------------------------------
@@ -277,6 +307,30 @@ func shout(at: Vector2, radius: float, reach: float) -> void:
 	_to_everyone(Wire.shout(_out_event_seq, at, radius, reach))
 
 
+## **Where this cell is, for the next beat to carry.** Called by the run once a
+## frame; the beat is 2 Hz, so all but one call in thirty is overwritten before
+## anything reads it, and that is the right way round -- the alternative is the
+## session reaching into a scene for a position at a moment of its own choosing,
+## and it has no business knowing there is a scene.
+##
+## Free with nobody on the wire, the same way [method shout] is: three
+## assignments, and the beat that would carry them is not running.
+func report_body(at: Vector2, heading: float, radius: float) -> void:
+	_body_at = at
+	_body_heading = heading
+	_body_radius = radius
+	_body = radius > 0.0
+
+
+## **There is no longer a cell here.** The death of a run, and the state every
+## session starts in. The beat keeps going -- the link is fine, the person is
+## fine, there is just nothing to draw -- and [method Wire.state_body] on the
+## far side returns nothing, so the marker goes out rather than freezing on a
+## corpse.
+func forget_body() -> void:
+	_body = false
+
+
 ## Everything heard since the last drain, oldest first. Empties the queue, so
 ## the run can call it once a frame and never hear a shout twice.
 func drain_heard() -> Array:
@@ -326,6 +380,33 @@ func heartbeats_heard() -> int:
 	return 0
 
 
+## **Where the other cell is, as its last two state frames said so.** Oldest
+## first, each entry `[when, at, heading, radius]`, and `when` is on this
+## device's own [method clock] -- so a reader ages a sample against exactly the
+## clock it was stamped with.
+##
+## Empty when there is nobody on the wire, when the other cell has no body yet,
+## and when it has just lost one. **Read-only**: the array is the session's own,
+## handed over rather than copied, the same way `food.gd` hands over its points.
+##
+## Nothing in this file interpolates it. Two places and two times is the whole
+## of what arrived; what to draw between them is a question for whoever is
+## drawing, and the answer is different for a marker and for a simulation.
+func peer_track() -> Array:
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers[id]
+		if bool(peer["greeted"]):
+			return peer["track"]
+	return []
+
+
+## The clock every stamp in this file is on: wall seconds, monotonic, and
+## deliberately not frame time. Public so that a reader of [method peer_track]
+## cannot accidentally age a sample against a different one.
+func clock() -> float:
+	return _now()
+
+
 ## What the screen says about the other cell: whether anything has come from
 ## them lately.
 func peers_say() -> String:
@@ -350,6 +431,7 @@ func _on_peer_connected(id: int) -> void:
 		"in_state": -1,
 		"in_event": -1,
 		"alive": true,
+		"track": [],
 	}
 	if hosting:
 		# The host says nothing first. It waits to be greeted, so the first
@@ -534,6 +616,30 @@ func _take_state(peer: Dictionary, frame: PackedByteArray) -> void:
 		return
 	peer["in_state"] = seq
 	peer["alive"] = Wire.state_alive(frame)
+	_track(peer, Wire.state_body(frame))
+
+
+## **Two places and the times they landed.** Stamped on arrival rather than by
+## the sender, because the two devices have no common clock and this one needs
+## no more than the interval between two frames it received -- which is a thing
+## it can measure for itself, and the only thing a drawn marker wants.
+##
+## Wall time, like every other clock in this file, for the reason on
+## [member _heartbeat_at]: a phone in a pocket stops the main loop, and a frame
+## accumulator would call a sample from two minutes ago fresh.
+func _track(peer: Dictionary, body: Array) -> void:
+	var track: Array = peer["track"]
+	if body.is_empty():
+		# The far cell died, or was never born. Not a gap in the stream -- an
+		# answer -- so the track goes rather than ages.
+		track.clear()
+		return
+	var now := _now()
+	if not track.is_empty() and now - float(track[track.size() - 1][0]) > TRACK_GAP:
+		track.clear()
+	track.append([now, body[0], float(body[1]), float(body[2])])
+	while track.size() > TRACK_MAX:
+		track.remove_at(0)
 
 
 ## **In order, once each.** An event is not idempotent -- a shout heard twice is
@@ -629,6 +735,7 @@ func _drop_link() -> void:
 
 func _reset_socket() -> void:
 	_drop_link()
+	_body = false
 	_out_state_seq = 0
 	_out_event_seq = 0
 	_heartbeat_at = _now()

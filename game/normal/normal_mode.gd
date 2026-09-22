@@ -423,6 +423,12 @@ func _ready() -> void:
 	_net = NetSession.current
 	if _net != null and not is_instance_valid(_net):
 		_net = null
+	# **The one thing the world view is told about the wire**, and it is a read
+	# handle: full vision draws the other player where they are, and point of
+	# view does not and must not. `panes.gd` builds its own copy of that view
+	# for a recording and deliberately never calls this -- a replay has no peer
+	# in it. See vision.gd's `set_session`.
+	_vision.set_session(_net)
 	# The two halves of one cell, introduced here and nowhere else: the body
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
@@ -641,6 +647,7 @@ func _process(delta: float) -> void:
 		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
 	_post_beam()
 	_post_pings()
+	_tell_others()
 	# `statocyst`: absolute up, as a bearing this body reads it -- which is
 	# minus the heading, and the one bearing on the membrane that moves when the
 	# cell turns rather than when the water does.
@@ -804,6 +811,28 @@ func _on_pulsed() -> void:
 	if _net == null or not is_instance_valid(_net):
 		return
 	_net.shout(_cell.position, _cell.radius, _cell.ping_range())
+
+
+## **Where this cell is, for the other player's screen.** Handed to the session
+## once a frame and sent on its own 2 Hz beat, so this is thirty cheap writes
+## for one packet -- which is the right way round, because the alternative is a
+## session reaching into a scene at a moment of its own choosing.
+##
+## **This changes nothing about what anybody feels.** It is the same seam
+## `_on_pulsed` already crosses: a place goes on the wire, because one water
+## means one frame of reference and neither a bearing nor a marker can be had
+## without an origin. Nothing comes back through `_bus` because of it -- what a
+## remote position reaches is `vision.gd`, which draws, and the rule that no
+## position reaches the signal bus is exactly as intact as it was. The other
+## player is still only *heard* in point of view, and only when their `ampulla`
+## fires.
+##
+## Free in single player, like the shout: the session is null and this is one
+## comparison.
+func _tell_others() -> void:
+	if _net == null or not is_instance_valid(_net):
+		return
+	_net.report_body(_cell.position, _cell.heading, _cell.radius)
 
 
 # ---------------------------------------------------------------------------
@@ -1251,6 +1280,12 @@ func _die(loud: bool, bearing: float) -> void:
 	if _life != Life.ALIVE:
 		return
 	_life = Life.DYING
+	# **The marker on the other screen goes out here.** Not a disconnection --
+	# the link is fine and so is the person -- but there is no longer a cell to
+	# draw, and a marker left pointing at a corpse is the exact failure the
+	# quiet decay exists to avoid, with none of the honesty.
+	if _net != null and is_instance_valid(_net):
+		_net.forget_body()
 	_death_loud = loud
 	_death_clock = 0.0
 	_vision_cut = false

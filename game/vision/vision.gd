@@ -13,6 +13,15 @@ extends CanvasLayer
 ## by anything except what is drawn -- otherwise full vision stops being
 ## evidence about point of view and there is no reason to have it.
 ##
+## **The other player is drawn here and only here**, which is the one place the
+## two views are *supposed* to differ. Point of view is unchanged and must stay
+## unchanged: there a friend is heard when their `ampulla` fires and not
+## otherwise, and that is the game. Full vision already draws every body in the
+## water from ground truth, so adding one more body to that list is a drawing
+## difference and nothing else -- the simulation is not told, the bus is not
+## told, and [method set_session] is a read handle on a socket, never a write
+## one. See [method _step_peer].
+##
 ## Additive, not underneath. The membrane's ColorRect is opaque and belongs to
 ## game/perception/, which this file may not restructure. But the membrane is
 ## already a near-black base (5,13,12) with every signal added on top of it, so
@@ -104,6 +113,91 @@ const PING_STEPS := Cilia.WAVE_STEPS
 ## by two draw calls composites twice; measured in point of view, the ring's
 ## 257 and 150 summed sRGB above base met in a 407 bead at each seam.
 const PING_SEAM := Cilia.WAVE_SEAM
+
+# --- The other player -------------------------------------------------------
+## **How far behind the newest frame the friend is drawn: one beat.**
+##
+## The position arrives at 2 Hz. Drawn as it lands it is a marker that jumps
+## half a metre of screen twice a second, which reads as a fault rather than as
+## a friend. Held one beat back there is always a sample on either side of the
+## moment being drawn, so the marker slides between two things that actually
+## happened and never guesses at a third.
+##
+## **This is the case multiplayer.md §4.10 does not cover, and the difference
+## is the quantity.** §4.10's measurement -- buffered lerp doubled the mean
+## error on every water-derived channel -- is about the *sensation* stream,
+## whose maxima are steps: a body reseeded across the water, a hunter
+## committing. Interpolating a step invents a body sliding through water it was
+## never in. A swimming cell's position is the opposite: it is continuous by
+## construction, it has a bounded speed, and the straight line between two of
+## its places half a second apart is very nearly where it was. Sample-and-hold
+## on *this* quantity is the thing that would be wrong.
+const PEER_DELAY := 0.5
+## Below this much silence the marker is at full confidence -- three beats,
+## which is two missed ones plus the delay above. Everything after it is
+## [method _step_peer]'s decay.
+const PEER_FRESH := 1.2
+## Where the decay bottoms out. Not disconnection and not disappearance: the
+## session deliberately keeps a quiet peer (net_session.gd's SILENCE note), and
+## a mark that vanished would say *they left*, which is a different and usually
+## false statement.
+const PEER_LOST := 9.0
+## **What the marker never fades below**, so that "I do not know where they
+## are" is still drawn as something rather than as nothing -- they have not
+## left, and a mark that vanished would say they had.
+##
+## **Measured, not chosen.** At 0.16, which is where this was first written,
+## the ghost's brightest rim pixel came out **34 of 255 green** against water
+## whose own organic wash reaches 39 at the 95th percentile of the frame -- so
+## the floor was under the texture it was drawn on, and a marker nobody can
+## find is a marker that is not there. At 0.30 the same rim measures 65, which
+## is a little under twice the wash's peak: quiet, unmistakably faded against
+## the 1.0 it starts at, and findable.
+const PEER_FLOOR := 0.30
+## How wide the circle of *could be anywhere in here by now* is allowed to get.
+##
+## **A drawing limit, not a claim about the water.** The circle keeps being
+## honest as it grows and stops being *legible* the moment it is larger than
+## the frame -- at which point it is an arc crossing the screen rather than a
+## circle round a place, and the thing carrying the message is the fade. 560 is
+## a little over three quarters of the 720-unit canvas, so it still reads as a
+## ring at the base shape. Past it the mark goes on fading and the ring holds.
+const PEER_DOUBT_MAX := 560.0
+## **The magnification on the edge mark.** The mark is the angular size the
+## friend's body actually subtends from this cell -- `asin(r / d)`, which is
+## the same arithmetic `normal_mode.gd`'s `_hear_others` runs to decide how
+## wide a heard pulse lands -- and at 2000 units that is 0.8 of a degree, which
+## is not a mark. Multiplied it runs from a broad cup a body-length off the
+## frame to a short tick a long way out, which is the reading the mark is for.
+const PEER_MARK_GAIN := 6.0
+## Floor and ceiling on that, in radians of arc. The floor keeps somebody four
+## thousand units away visible at all; the ceiling stops somebody just past the
+## corner from wrapping a third of the frame.
+const PEER_MARK_MIN := 0.028
+const PEER_MARK_MAX := 0.62
+## **How far inside the frame the edge mark sits, in canvas pixels.**
+##
+## 64 rather than something tighter, and it was rendered: the membrane's own
+## contour is a rounded rectangle in the same self teal a few tens of pixels in
+## from the edge, and it is *on top* of this view by construction. At 26 the
+## mark sat inside it and the two read as one wobbling line. At 64 the mark is
+## clearly a separate object inside the ring, which is also the truer picture --
+## the friend is in the water, not on the skin.
+const PEER_MARK_INSET := 64.0
+## How many points across the arc are tested for fit. See [method
+## _draw_peer_mark]: the arc is centred on the body and its ends can stand
+## further out than its middle, so the middle alone is not the constraint.
+const PEER_MARK_FITS := 5
+## The band, in canvas pixels, over which the edge mark fades up as the friend
+## leaves the frame. Without it the mark pops on the pixel they cross.
+const PEER_MARK_BAND := 90.0
+## Trail cadence and length for the friend. Shorter and fainter than the
+## player's own: it is the same instrument saying the same thing, and the path
+## that has to stay primary is the one the player is steering.
+const PEER_TRAIL_MAX := 64
+const PEER_TRAIL_ALPHA := 0.13
+## Stable breath offset, so the friend and the player do not inhale in unison.
+const PEER_PHASE := 5.3
 
 # --- Body ------------------------------------------------------------------
 ## Decay of the beat echo, matching the membrane's own pulse decay.
@@ -198,6 +292,24 @@ var _beat := 0.0
 
 var _trail := PackedVector2Array()
 var _trail_clock := 0.0
+
+## **The live session, or null in every single-player run.** Untyped on purpose,
+## exactly like `normal_mode.gd`'s own handle: net_session.gd carries no
+## class_name, so there is no type to declare.
+##
+## Read-only, always. This view reads the simulation and never writes it, and a
+## socket is held to the same rule -- nothing in this file calls anything on
+## the session but [code]peer_track()[/code], [code]quiet_for()[/code] and
+## [code]clock()[/code].
+var _session: Node = null
+## What to draw for the friend this frame, or empty. Written by
+## [method _step_peer] and read by the two draw routines, so that everything
+## with arithmetic in it happens somewhere a headless probe can see it --
+## nothing is rendered under `--headless` and a bug that lived inside `_draw`
+## would boot green forever. `{at, heading, radius, confidence, doubt}`.
+var _peer: Dictionary = {}
+var _peer_trail := PackedVector2Array()
+var _peer_trail_clock := 0.0
 ## [[world position, strength, age], ...]
 var _kicks: Array[Array] = []
 ## [[world position, world direction, strength, age], ...]
@@ -254,6 +366,25 @@ func bind(cell: CellBody, motes: MotesField, food: FoodField,
 	_bus = bus
 
 
+## **The socket the other player is on the far end of**, handed over by the run
+## rather than looked up, and that is deliberate on two counts.
+##
+## `net_session.gd` has a static `current`, so this file could find one for
+## itself -- and then the two-pane replay screen, which instances a second copy
+## of this view and binds it to a recording, would draw a live friend swimming
+## through last week's water. A recording has no peer in it. So the handle
+## arrives from the one node that knows whether what it is showing is happening
+## now, and `panes.gd` simply never calls this.
+##
+## The second count is the direction of the arrow. Nothing here writes to the
+## session and nothing here can: it is read three times a frame for a track, a
+## silence and a clock. The run still owns every byte that leaves.
+func set_session(session: Node) -> void:
+	_session = session if (session != null and is_instance_valid(session)) else null
+	_peer = {}
+	_peer_trail.clear()
+
+
 ## **Which part of the screen this view occupies.** The whole viewport in normal
 ## mode, where nothing calls this; half of it, less the transport band, on the
 ## two-pane replay screen.
@@ -284,6 +415,9 @@ func set_active(on: bool) -> void:
 			_camera = _cell.position
 		_trail.clear()
 		_trail_clock = 0.0
+		_peer_trail.clear()
+		_peer_trail_clock = 0.0
+		_peer = {}
 		_kicks.clear()
 		_hits.clear()
 		_ghosts.clear()
@@ -339,6 +473,7 @@ func _process(delta: float) -> void:
 		_view = _water.size
 	_step_camera(delta)
 	_step_trail(delta)
+	_step_peer(delta)
 
 	# The world-to-screen transform, in one place. Unlocked it is a translation
 	# and nothing else, exactly as it has always been; locked, the whole world
@@ -386,6 +521,114 @@ func _step_trail(delta: float) -> void:
 	_trail.push_back(_cell.position)
 	if _trail.size() > TRAIL_MAX:
 		_trail = _trail.slice(_trail.size() - TRAIL_MAX)
+
+
+## **Where the friend is this frame, and how much of that is still true.**
+##
+## Every number the two draw routines below use is worked out here, and that is
+## not tidiness: nothing renders under `--headless`, so arithmetic that lived
+## inside a `_draw` would boot green in CI forever however wrong it was. Here it
+## is in a `_process`, where `tools/net_probe.gd` can read it off a real run.
+##
+## **Nothing in this function touches the simulation.** It reads a track, a
+## silence and a clock off the session, and writes one dictionary of its own.
+func _step_peer(delta: float) -> void:
+	if _cell == null or _session == null or not is_instance_valid(_session):
+		_forget_peer()
+		return
+	var track: Array = _session.peer_track()
+	if track.is_empty():
+		_forget_peer()
+		return
+	var body := body_at(track, float(_session.clock()) - PEER_DELAY)
+	if body.is_empty():
+		_forget_peer()
+		return
+	var at: Vector2 = body[0]
+	# **How old this is, on the wire's terms and not the tree's.**
+	# `quiet_for()` counts every byte that has arrived, not only state frames,
+	# so a peer that is saying anything at all reads as present -- and it is
+	# wall time, so a phone that stopped the main loop is aged honestly.
+	var quiet: float = float(_session.quiet_for())
+	var doubt := maxf(quiet - PEER_FRESH, 0.0)
+	# **Squared, because what is growing is an area.** The circle they could be
+	# anywhere in widens with the silence, so how much of a *place* this mark is
+	# still describing falls with that circle's area rather than with its
+	# radius. Straight, the mark was still at four fifths brightness after two
+	# and a half seconds of nothing, which is a confident-looking marker saying
+	# something it no longer knows. This is a curve judged against the renders
+	# and not a measurement -- there is nothing here to measure it against.
+	var slip := 1.0 - clampf(doubt / maxf(PEER_LOST - PEER_FRESH, 0.001), 0.0, 1.0)
+	slip *= slip
+	# **How far they could have got since, at the fastest a cell swims.** Read
+	# off the ladder rather than written down, so a tuning pass on the drive
+	# cannot leave a circle here claiming a speed the game no longer has.
+	var ladder := CellBody.IMPULSE_SPEED_BY_TIER
+	var top: float = ladder[ladder.size() - 1]
+	_peer = {
+		"at": at,
+		"heading": float(body[1]),
+		"radius": float(body[2]),
+		"confidence": PEER_FLOOR + (1.0 - PEER_FLOOR) * slip,
+		"doubt": minf(doubt * top, PEER_DOUBT_MAX),
+	}
+	_step_peer_trail(delta, at, doubt)
+
+
+func _forget_peer() -> void:
+	if not _peer.is_empty():
+		_peer = {}
+	if not _peer_trail.is_empty():
+		_peer_trail.clear()
+
+
+## **One place out of two and a clock.** Static and dependency-free on purpose:
+## this is the only arithmetic in the feature that can be wrong in a way a
+## render would not show, so `tools/net_probe.gd` checks it against tracks it
+## makes up rather than against a screen nobody can see.
+##
+## [param track] is `net_session.gd`'s, oldest first, each entry
+## `[when, at, heading, radius]`. Returns `[at, heading, radius]`, or an empty
+## array when there is nothing in the track to return.
+##
+## Between the two samples this is a straight line. Past the newest it **holds,
+## and never extrapolates**: a cell that has stopped sending is a cell that may
+## equally have stopped swimming, turned, or been eaten, and a marker carried on
+## by an old velocity is confidently wrong in a brand new place every frame.
+## Holding is wrong in one place and says so -- that is what [member _peer]'s
+## `doubt` is drawn as.
+static func body_at(track: Array, when: float) -> Array:
+	if track.is_empty():
+		return []
+	var newest: Array = track[track.size() - 1]
+	if track.size() < 2 or when >= float(newest[0]):
+		return [newest[1], float(newest[2]), float(newest[3])]
+	var older: Array = track[track.size() - 2]
+	var span := float(newest[0]) - float(older[0])
+	if span <= 0.0 or when <= float(older[0]):
+		return [older[1], float(older[2]), float(older[3])]
+	var t := (when - float(older[0])) / span
+	return [
+		(older[1] as Vector2).lerp(newest[1] as Vector2, t),
+		lerp_angle(float(older[2]), float(newest[2]), t),
+		lerpf(float(older[3]), float(newest[3]), t),
+	]
+
+
+## Their path, on the same cadence as the player's own. **It stops the instant
+## the stream does**: past that the drawn position is a held sample, and a trail
+## that kept sampling it would draw a cell standing still in open water -- which
+## is a claim, and a false one.
+func _step_peer_trail(delta: float, at: Vector2, doubt: float) -> void:
+	if doubt > 0.0:
+		return
+	_peer_trail_clock += delta
+	if _peer_trail_clock < TRAIL_STEP and not _peer_trail.is_empty():
+		return
+	_peer_trail_clock = 0.0
+	_peer_trail.push_back(at)
+	if _peer_trail.size() > PEER_TRAIL_MAX:
+		_peer_trail = _peer_trail.slice(_peer_trail.size() - PEER_TRAIL_MAX)
 
 
 func _push_shader() -> void:
@@ -507,6 +750,7 @@ func _on_world_draw() -> void:
 	_draw_kicks(a)
 	_draw_motes(a)
 	_draw_cells(a)
+	_draw_peer(a)
 	_draw_ghosts(a)
 	_draw_meals(a)
 	_draw_hits(a)
@@ -514,6 +758,7 @@ func _on_world_draw() -> void:
 	_draw_beams(a)
 	_draw_ping(a)
 	_draw_cell(a)
+	_draw_peer_mark(a)
 
 
 ## Why motes vanish: past this radius the field recycles them to the far edge.
@@ -1061,6 +1306,221 @@ func _draw_velocity(p: Vector2, r: float, a: float) -> void:
 	# A head, not a chevron. Shape alone separates velocity from heading even
 	# where the two point the same way.
 	_world.draw_circle(tip, 3.2, Color(MOTION_TINT, (0.20 + 0.16 * norm) * a), true, -1.0, true)
+
+
+## **The other player, where they actually are.**
+##
+## Three marks, and all three are borrowed rather than invented -- every one of
+## them is something this view already draws for exactly one cell in the water,
+## which is the player's own:
+##
+## - **the halo**, the soft swell of self teal that [method _draw_cell] puts
+##   under the player and under nothing else;
+## - **the body in pure `SELF_TINT`**, which is `is_self` in cilia.gd and is
+##   described there as *"you are the one cell in the water whose identity you
+##   do not have to read"*. There are now two of those, and that is the whole
+##   statement. It is also true rather than convenient: every seeded cell in
+##   this water carries at least one gene (`food.gd`'s `_seed_drifter` gives a
+##   drifter one at tier 1), so `body_tint` pulls every one of them 55% toward
+##   a gene hue and **no cell the water makes is ever pure self teal**. An
+##   untinted body is a person, by construction;
+## - **the trail**, which is the other player-only instrument.
+##
+## What is deliberately *not* drawn is a fringe, a mouth, a heading needle or a
+## velocity plume. The first two because no genome crosses the wire and a drawn
+## organ would be an invented one; the last two because they are measurements of
+## a cell you are steering, and nobody is steering this one from here.
+##
+## **`is_self` also suppresses the threat bow**, which is right for a reason
+## worth writing down rather than inheriting: their mouth cannot reach you.
+## The waters are not shared yet -- what crosses is a place and a pulse -- so
+## drawing a friend in predator red would be the one colour in this game whose
+## meaning is a relationship, asserting a relationship that does not exist.
+func _draw_peer(a: float) -> void:
+	if _peer.is_empty() or _cell == null:
+		return
+	var at: Vector2 = _peer["at"]
+	var r: float = float(_peer["radius"])
+	var sure: float = float(_peer["confidence"])
+	var fade := sure * a
+	if fade <= 0.0 or r <= 0.0:
+		return
+
+	_draw_peer_trail(fade)
+
+	# **The circle of "somewhere in here by now".** Drawn instead of pretending,
+	# and it is the honest half of a marker that has stopped being fed: the body
+	# below is the last place they were seen and this is how far they could have
+	# swum since. It is not modulated by `sure` as hard as the body is -- the
+	# body's confidence is falling, which is exactly when the circle is the part
+	# worth reading.
+	var doubt: float = float(_peer["doubt"])
+	if doubt > 1.0:
+		# **Drawn while it is still a circle, and not one second longer.**
+		# Rendered at 400 units of doubt and the ring is wider than half the
+		# frame: what is on screen is four unrelated arcs in four corners, which
+		# reads as clutter rather than as a bound. Past that the honest picture
+		# is the faded body on its own -- *I do not know where they are* -- and
+		# off the frame the same doubt goes on working, as the width of the edge
+		# mark, where a large number is still legible.
+		_draw_doubt(at, doubt, 0.30 * (0.45 + 0.55 * sure) * a
+			* (1.0 - smoothstep(DOUBT_READABLE, DOUBT_UNREADABLE, doubt)))
+
+	for i in HALO_STEPS:
+		var k := 1.0 - float(i) / float(HALO_STEPS)
+		_world.draw_circle(at, r * (1.05 + 1.75 * k),
+			Color(SELF_TINT, 0.013 * (1.0 - k) * 0.6 * fade), true, -1.0, true)
+
+	# Empty tiers and a zero gape: cilia.gd draws no fringe for the first and
+	# returns before the lip bow for the second, so this is a body and nothing
+	# claimed about what is on it.
+	Cilia.draw_cell(_world, at, float(_peer["heading"]), r, {}, 0.0,
+		_cell.radius, true, _clock, fade, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM)
+
+
+## **Broken, and that is the whole of what it says.** Every other ring in this
+## view is solid and every one of them is a measurement -- a threshold, a cull
+## boundary, a shock front -- and this is the opposite of a measurement. A solid
+## circle here would be read as a boundary something is inside, which is the
+## same mistake `_draw_scent` was written to avoid one function up; a broken one
+## cannot be read as a boundary at all.
+##
+## A fixed number of dashes rather than a fixed dash length, so it stays one
+## object as it grows instead of turning into a dotted line.
+const DOUBT_DASHES := 20
+const DOUBT_DUTY := 0.55
+## Where it starts fading out and where it is gone, in world units of radius.
+## The canvas is 720 units tall, so a 300-unit radius is a ring most of the
+## frame high and still obviously a ring; by 460 its nearest arc and its
+## farthest are on opposite sides of the screen.
+const DOUBT_READABLE := 300.0
+const DOUBT_UNREADABLE := 460.0
+
+
+func _draw_doubt(at: Vector2, radius: float, alpha: float) -> void:
+	if alpha <= 0.0:
+		return
+	var tone := Color(SELF_TINT, alpha)
+	var step := TAU / float(DOUBT_DASHES)
+	for i in DOUBT_DASHES:
+		var from := float(i) * step
+		_world.draw_arc(at, radius, from, from + step * DOUBT_DUTY, 6,
+			tone, 1.6 / ZOOM, true)
+
+
+func _draw_peer_trail(fade: float) -> void:
+	if _peer_trail.size() < 2:
+		return
+	var colors := PackedColorArray()
+	colors.resize(_peer_trail.size())
+	var last := float(_peer_trail.size() - 1)
+	for i in _peer_trail.size():
+		var t := float(i) / maxf(last, 1.0)
+		colors[i] = Color(MOTION_TINT, PEER_TRAIL_ALPHA * t * fade)
+	_world.draw_polyline_colors(_peer_trail, colors, TRAIL_WIDTH / ZOOM, true)
+
+
+## **The half of this that is actually a locator.** The camera lags and leads
+## around your own cell, so a friend swimming anywhere but alongside you is off
+## the frame most of the time, and a marker you can only read when you can
+## already see them is not a marker.
+##
+## **Bearing** is the place on the frame edge: the mark is an arc of a circle
+## centred on your own body, cut where the ray to them leaves the frame, so it
+## sits on the true bearing and runs *through* them the moment they come back
+## into view. That is the same construction [method _draw_thresholds] uses and
+## for the same reason -- only the arc near the thing being measured is worth
+## drawing.
+##
+## **Range** is the arc's angular width, and this is the one encoding decision
+## in the feature. It is not invented: it is `asin(r / d)`, the angle their body
+## actually subtends from here, which is the identical arithmetic
+## `normal_mode.gd`'s `_hear_others` runs to decide how wide a heard pulse lands
+## on the membrane. So near is a broad cup and far is a short tick, for the same
+## reason a near thing looks big -- and the two views are once again one
+## picture in two registers. The only liberty is [constant PEER_MARK_GAIN],
+## which is a magnification and nothing else: eight tenths of a degree is the
+## truth at 2000 units and it is also not a mark.
+##
+## **Staleness** widens it as well as fading it, which is the part that keeps
+## it from lying. The bearing to a place you last saw them five seconds ago is
+## not a bearing to them, it is a bearing to the middle of a circle they could
+## be anywhere in, and `atan(doubt / d)` is exactly how wide that circle looks
+## from here. A quiet friend's mark goes broad, soft and vague, which is a
+## sentence a player can read without being taught it.
+func _draw_peer_mark(a: float) -> void:
+	if _peer.is_empty() or _cell == null or _view.x <= 1.0:
+		return
+	var at: Vector2 = _peer["at"]
+	var inset := Vector2(PEER_MARK_INSET, PEER_MARK_INSET)
+	var box := Rect2(inset, (_view - inset * 2.0).max(Vector2.ONE))
+	# `$World` carries the camera, the zoom and the north-up spin together, so
+	# asking it is the only way to be right in all three at once.
+	var to_frame := _world.transform
+	var seen := to_frame * at
+	var outside := seen.distance_to(seen.clamp(box.position, box.end))
+	var show := smoothstep(0.0, PEER_MARK_BAND, outside)
+	if show <= 0.01:
+		return
+
+	var toward := at - _cell.position
+	if toward.length_squared() < 1.0:
+		return
+	var apart := maxf(toward.length(), float(_peer["radius"]))
+	var span := clampf(
+		asin(clampf(float(_peer["radius"]) / apart, 0.0, 1.0)) * PEER_MARK_GAIN
+			+ atan(float(_peer["doubt"]) / apart),
+		PEER_MARK_MIN, PEER_MARK_MAX)
+
+	# **How far out to draw it, and it is the whole arc that has to fit.**
+	# The arc is centred on the body, not on the frame, so its far end is not
+	# its nearest point to the edge: on an oblique bearing the end nearer the
+	# top of the circle stands higher than the middle does, and taking the
+	# exit distance along the middle alone ran the mark off the top of a
+	# 2400x1080 frame -- rendered, and that is the only way it was going to be
+	# found. So the radius is the *smallest* exit over the span.
+	var home := to_frame * _cell.position
+	var mid_seen := to_frame.basis_xform(toward).angle()
+	var reach_seen := INF
+	for k in PEER_MARK_FITS:
+		var off := span * (2.0 * float(k) / float(PEER_MARK_FITS - 1) - 1.0)
+		reach_seen = minf(reach_seen, _exit_at(box, home, mid_seen + off))
+	if not is_finite(reach_seen) or reach_seen <= 1.0:
+		return
+	var reach := reach_seen / ZOOM
+	var mid := toward.angle()
+	var fade := show * a * float(_peer["confidence"])
+	var tone := Color(SELF_TINT, 0.78 * fade)
+	# Thickness is the same quantity said twice, so the reading survives a
+	# colour-blindness simulation and a phone in sunlight.
+	var heft := lerpf(1.4, 3.4, clampf(span / PEER_MARK_MAX, 0.0, 1.0))
+	_world.draw_arc(_cell.position, reach, mid - span, mid + span, 40,
+		tone, heft / ZOOM, true)
+	# A filled barb sitting outside the arc, pointing the way they are. Filled
+	# rather than open on purpose: the open chevron is the heading needle's and
+	# means *this is where I point*, which is a different sentence.
+	var out := Vector2(cos(mid), sin(mid))
+	var side := Vector2(-out.y, out.x)
+	var root := _cell.position + out * reach
+	_world.draw_colored_polygon(PackedVector2Array([
+		root + out * (13.0 / ZOOM),
+		root + side * (5.0 / ZOOM),
+		root - side * (5.0 / ZOOM)]), Color(SELF_TINT, 0.85 * fade))
+
+
+## How far the ray from [param from] on [param angle] runs before it leaves
+## [param box], in the frame's own coordinates. Zero for an origin the box does
+## not contain, which the camera lag cannot produce and a half-width pane could:
+## a mark of no length draws nothing, which is the right answer to a question
+## with no answer.
+static func _exit_at(box: Rect2, from: Vector2, angle: float) -> float:
+	var d := Vector2(cos(angle), sin(angle))
+	var t := INF
+	if absf(d.x) > 0.0001:
+		t = minf(t, ((box.position.x if d.x < 0.0 else box.end.x) - from.x) / d.x)
+	if absf(d.y) > 0.0001:
+		t = minf(t, ((box.position.y if d.y < 0.0 else box.end.y) - from.y) / d.y)
+	return 0.0 if not is_finite(t) else maxf(t, 0.0)
 
 
 ## Deterministic 0..1 hash. Appearance that has to stay put between frames
