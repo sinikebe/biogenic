@@ -81,12 +81,13 @@ const HEARTBEAT := 0.5
 ## forward between frames along the velocity each frame brings, and at 50 ms
 ## apart that carry is off by a few hundredths of a unit on a cell coasting at
 ## cruising speed, a fifth of one at the top impulse speed -- the error is drag,
-## `v * 0.74 * dt^2 / 2`. So faster buys nothing a player can see. It does cost: every packet is air time on a Wi-Fi channel two phones
-## share, and more packets on a shared channel is more contention, which is
-## jitter bought for no picture. Slower is the other way wrong: at 10 Hz, two
-## frames lost in a row leave a 300 ms hole, and `vision.gd` carries a body at
-## most 200 ms before it freezes -- 20 Hz rides over two lost frames and still
-## lands the third inside that reach.
+## `v * 0.74 * dt^2 / 2`. So faster buys nothing a player can see. It does
+## cost: every packet is air time on a Wi-Fi channel two phones share, and more
+## packets on a shared channel is more contention, which is jitter bought for no
+## picture. Slower is the other way wrong: at 10 Hz, two frames lost in a row
+## leave a 300 ms hole, and `vision.gd` carries a body at most 200 ms before it
+## freezes -- 20 Hz rides over two lost frames and still lands the third inside
+## that reach.
 ##
 ## **And the jumps do not wait for it.** [method report_body] sends at once
 ## whenever waiting for this beat would let the far end's picture stray -- see
