@@ -276,6 +276,35 @@ extends Node
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
+##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
+##                           **a second player**, on a real loopback session --
+##                           two `net_session.gd` nodes in this process, a real
+##                           ENet handshake, real protocol-2 state frames at the
+##                           real 2 Hz beat. Nothing is faked and nothing is
+##                           written into the view: the only way to put a friend
+##                           on screen is to be one, which is also the only way
+##                           a render is evidence about the wire. `dist` and
+##                           `bearing` are body-relative, the same convention as
+##                           `--cell=`, and are re-applied every frame so the
+##                           friend stays framed while the player swims.
+##                           `facing` is degrees away from facing the player,
+##                           default 0. Distances past about 700 units put them
+##                           off the frame, which is the state the edge mark is
+##                           for
+##   --peer-trace=<seconds>  print what the world view worked out about the
+##                           friend on that interval: where it is drawing them,
+##                           how far that is, how old the newest frame is, how
+##                           much confidence is left in it and how wide the
+##                           circle of doubt has grown. A marker is a pile of
+##                           arithmetic and a screenshot shows one frame of it,
+##                           so this is how the decay gets read as numbers
+##   --peer-quiet=<seconds>  stop that far session's `_process` at that time and
+##                           never start it again -- which is exactly what
+##                           Android's `onActivityStopped` does to a phone that
+##                           goes in a pocket: the whole main loop stops, the
+##                           heartbeat with it, and the link stays up. The only
+##                           way to photograph a marker going stale, and the
+##                           only honest one: nothing here writes a fake age
 ##   --seed=<int>            deterministic drift and impulses -- **and the
 ##                           membrane's own jitter**, which for five phases it
 ##                           did not cover. `seed()` sets the global stream;
@@ -312,6 +341,10 @@ const Cilia := preload("res://game/vision/cilia.gd")
 ## The two-pane screen, raised over a live run by --panes. Nothing else in the
 ## game instances it this way; the replay screen owns it in a real run.
 const PanesScreen := preload("res://game/replay/panes.gd")
+## The second player, for --peer=. A real session on loopback rather than a
+## value poked into the view: the marker is drawn off bytes that crossed a
+## socket, or the render is not evidence about anything.
+const NetSession := preload("res://game/net/net_session.gd")
 
 var _clock := 0.0
 ## Where each finger was last put, so a slide can carry the `relative` the
@@ -335,6 +368,21 @@ var _genome: Node = null
 var _food: Node = null
 var _hunger := -1.0
 var _starve := -1.0
+## --peer=: body-relative range and bearing, the radius to claim, and which way
+## to point. Negative range is "no second player", which is every other render.
+var _peer_dist := -1.0
+var _peer_at := 0.0
+var _peer_radius := 28.0
+var _peer_face := 0.0
+var _peer_quiet := -1.0
+var _peer_trace := -1.0
+var _peer_trace_clock := 0.0
+var _peer_gone := false
+## The far end of --peer=, and this end. Held only so the harness can stop the
+## far one; the game reaches `NetSession.current`, which is the near one.
+var _peer_far: Node = null
+var _peer_near: Node = null
+
 var _stalk := -1.0
 var _stalk_at := 40.0
 ## Degrees away from facing the player, or NAN to leave its heading alone.
@@ -514,6 +562,16 @@ func _ready() -> void:
 			_hunger = float(text.trim_prefix("--hunger="))
 		elif text.begins_with("--starve="):
 			_starve = float(text.trim_prefix("--starve="))
+		elif text.begins_with("--peer-trace="):
+			_peer_trace = float(text.trim_prefix("--peer-trace="))
+		elif text.begins_with("--peer-quiet="):
+			_peer_quiet = float(text.trim_prefix("--peer-quiet="))
+		elif text.begins_with("--peer="):
+			var peer := text.trim_prefix("--peer=").split(",", false)
+			_peer_dist = float(peer[0]) if peer.size() > 0 else 400.0
+			_peer_at = float(peer[1]) if peer.size() > 1 else 0.0
+			_peer_radius = float(peer[2]) if peer.size() > 2 else 28.0
+			_peer_face = float(peer[3]) if peer.size() > 3 else 0.0
 		elif text.begins_with("--stalk="):
 			_stalk = float(text.trim_prefix("--stalk="))
 		elif text.begins_with("--stalk-at="):
@@ -650,6 +708,12 @@ func _ready() -> void:
 		push_error("[drive] no scene at %s" % scene_path)
 		get_tree().quit(1)
 		return
+	# **Before the run is built**, because `normal_mode.gd` reads
+	# `NetSession.current` in its own `_ready` and a session opened afterwards
+	# would be a session the run never sees.
+	if _peer_dist >= 0.0:
+		_open_peer()
+
 	var scene: PackedScene = load(scene_path)
 	var run := scene.instantiate()
 	if _mode >= 0:
@@ -766,6 +830,100 @@ func _ready() -> void:
 		print("[drive] holding ", hold.to_upper())
 
 
+## **Two sessions, one process, over ENet on loopback** -- the same recipe
+## `tools/net_probe.gd` uses, for the same reason: there is no way to photograph
+## a second player that does not involve being one, and a value poked into the
+## view would photograph the drawing code rather than the feature.
+##
+## The far one is made first and the near one second, because `current` is
+## whichever readied last and the run has to pick up *this* end of the wire.
+## Both hang off this node rather than off `root`: `set_multiplayer` binds an
+## API to a subtree, and two siblings under the harness are two subtrees.
+func _open_peer() -> void:
+	_peer_far = NetSession.new()
+	_peer_far.name = "PeerFar"
+	add_child(_peer_far)
+	_peer_near = NetSession.new()
+	_peer_near.name = "PeerNear"
+	add_child(_peer_near)
+	if not _peer_far.host():
+		print("[peer] could not host: %s" % _peer_far.trouble)
+		return
+	if not _peer_near.join("127.0.0.1"):
+		print("[peer] could not reach: %s" % _peer_near.trouble)
+		return
+	print("[peer] a second player at %.0f units, bearing %+.0f deg, r%.1f,"
+		% [_peer_dist, _peer_at, _peer_radius]
+		+ " facing %+.0f deg off you -- protocol %d on %s"
+		% [_peer_face, NetSession.Wire.PROTOCOL, _peer_far.address])
+
+
+## Held every frame, exactly like the posed field cells: the friend stays at a
+## fixed range and bearing off the player's own body, so a shot frames the same
+## geometry however far the player has swum. The place goes into the session and
+## nowhere else -- what reaches the screen has been through `Wire.state()`, a
+## socket, `Wire.state_body()` and `vision.gd`'s interpolator, like anybody's.
+func _hold_peer() -> void:
+	if _peer_far == null or not is_instance_valid(_peer_far):
+		return
+	if _peer_gone:
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		return
+	var at := _hold_point(_peer_dist, _peer_at)
+	# Degrees away from facing the player, the same convention --cell= uses.
+	var toward: Vector2 = cell.position - at
+	var facing := atan2(toward.x, -toward.y) + deg_to_rad(_peer_face)
+	_peer_far.report_body(at, facing, _peer_radius)
+
+
+## **The phone going in a pocket.** `onActivityStopped` calls `pauseGLThread()`
+## and the whole main loop stops, heartbeat included, with the socket still
+## open -- so stopping this node's `_process` is not an approximation of it, it
+## is the same thing. Nothing writes a fake age anywhere: the marker goes stale
+## because nothing is arriving, which is the only way it ever does.
+func _step_peer_quiet() -> void:
+	if _peer_quiet < 0.0 or _peer_gone or _clock < _peer_quiet:
+		return
+	_peer_gone = true
+	if _peer_far != null and is_instance_valid(_peer_far):
+		_peer_far.set_process(false)
+	print("[peer]  %5.2f  the far end stopped sending -- still connected,"
+		% _clock + " still theirs, just not saying anything")
+
+
+## **What the world view worked out, as numbers.** A decay is a curve and a
+## screenshot is one point on it, so the render and this are two halves of the
+## same measurement. Reaching for a private member is a thing only tools/ may
+## do -- and it is the same member `tools/net_probe.gd` asserts against, which
+## is why the arithmetic lives in a `_process` rather than inside a `_draw`.
+func _step_peer_trace(delta: float) -> void:
+	if _peer_trace <= 0.0 or _run == null:
+		return
+	_peer_trace_clock += delta
+	if _peer_trace_clock < _peer_trace:
+		return
+	_peer_trace_clock = 0.0
+	var view := _find_script(_run, "res://game/vision/vision.gd")
+	if view == null:
+		print("[peer]  %5.2f  no world view in this scene" % _clock)
+		return
+	var mark: Dictionary = view.get("_peer")
+	if mark.is_empty():
+		print("[peer]  %5.2f  nothing drawn -- no track" % _clock)
+		return
+	var cell := _find_node_with(_run, &"bearing_to")
+	var at: Vector2 = mark["at"]
+	var quiet: float = _peer_near.quiet_for() if _peer_near != null else -1.0
+	print(("[peer]  %5.2f  drawn at (%.0f, %.0f) r%.1f -- %.0f units off,"
+		+ " bearing %+.0f deg; quiet %.2f s, confidence %.2f, doubt %.0f units")
+		% [_clock, at.x, at.y, float(mark["radius"]),
+			cell.position.distance_to(at) if cell != null else -1.0,
+			rad_to_deg(cell.bearing_to(at)) if cell != null else 0.0,
+			quiet, float(mark["confidence"]), float(mark["doubt"])])
+
+
 ## Ground truth about a meal, straight off the field: what it weighed against
 ## this body, which gene came out of it, and what that did to the genome. The
 ## bus is deliberately not told the first two, so this is the only place they
@@ -784,6 +942,9 @@ func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 func _process(delta: float) -> void:
 	_clock += delta
 	_hold_world()
+	_hold_peer()
+	_step_peer_quiet()
+	_step_peer_trace(delta)
 	_watch_field(delta)
 	_step_sniff(delta)
 	_step_evade()
