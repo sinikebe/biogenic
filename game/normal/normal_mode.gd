@@ -41,6 +41,10 @@ const REPLAY_SCENE := "res://game/replay/replay.tscn"
 ## One vocabulary: §2.4's promise is that a point-of-view player who looks in
 ## the mirror already speaks the language if they ever switch views.
 const Cilia := preload("res://game/vision/cilia.gd")
+## **The other cell, if there is one.** Preloaded for one static lookup: the
+## session is a node under `/root` that the earshot screen left there, and a run
+## reached any other way finds nothing and is the game that already shipped.
+const NetSession := preload("res://game/net/net_session.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -334,6 +338,14 @@ var _onboard_steer := false
 var _sense_clock := 0.0
 var _sensed := false
 
+## The live session, or null in every single-player run. **Untyped on purpose**,
+## like `cell.gd`'s `controls`: net_session.gd carries no class_name, so there
+## is no type to declare, and a run that never had a session must not care.
+##
+## Read once in [method _ready] and never again: a run either began inside a
+## session or it did not, and nothing about it changes mid-run.
+var _net: Node = null
+
 ## **Forward is always up.** The world turns instead of the cell, which is the
 ## other way of reading a heading and the one a player who has been staring at
 ## a body-relative membrane already has. Full vision only -- point of view is
@@ -404,6 +416,13 @@ func _ready() -> void:
 	_food.stung.connect(_on_stung)
 	_food.darted.connect(_on_darted)
 	_cell.dashed.connect(_on_dashed)
+	# **The one wire out of this water.** Connected unconditionally: an emit
+	# with nothing on the far end is free, and a branch here would be a branch
+	# in the frame loop of a game that is single-player almost all the time.
+	_food.pulsed.connect(_on_pulsed)
+	_net = NetSession.current
+	if _net != null and not is_instance_valid(_net):
+		_net = null
 	# The two halves of one cell, introduced here and nowhere else: the body
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
@@ -722,7 +741,69 @@ func _post_beam() -> void:
 func _post_pings() -> void:
 	for echo: Array in _food.pings:
 		_bus.ping(float(echo[0]), float(echo[1]), float(echo[2]), float(echo[3]))
+	_hear_others()
 	_bus.ping_out(_food.ping_bearing, _food.ping_listen)
+
+
+## **Somebody else's pulse, arriving.** Drained here rather than handled on the
+## signal, so a shout off the network reaches the membrane through exactly the
+## door every other mark does -- the same loop, the same frame, the same four
+## scalars.
+##
+## **This is where a place stops being a place.** The wire carries where the
+## other cell was, because one water means one frame of reference and a bearing
+## cannot be computed without an origin; `bearing_to` turns it into an angle off
+## this body's own nose and nothing downstream ever sees the Vector2. That is
+## the identical conversion `food.gd` does to every body in the water at
+## `_step_pings`, done on the same side of the same seam.
+##
+## Every scalar below comes out of `food.gd`'s own tables, and that is the
+## point: a shout is heard exactly as a return off a body that size at that
+## distance would be heard. There is not one tuning number in this function.
+func _hear_others() -> void:
+	if _net == null or not is_instance_valid(_net):
+		return
+	for said: Array in _net.drain_heard():
+		var at: Vector2 = said[0]
+		var radius := float(said[1])
+		var reach := float(said[2])
+		# A bodiless or organless shouter is not a thing a cell can hear, and
+		# it is also the one input that would divide by zero below. Both
+		# answered by not hearing it.
+		if radius <= 0.0 or reach <= 0.0:
+			continue
+		var apart := _cell.position.distance_to(at)
+		# Surface to surface, the way `_cast_ping` measures everything.
+		var gap := maxf(apart - radius, 0.0)
+		if gap >= reach:
+			# Out of earshot. Her organ's reach, not this cell's: it is her
+			# pulse, and it runs out of water where her organ stops.
+			continue
+		var level := pow(clampf(1.0 - gap / reach, 0.0, 1.0),
+			FoodField.PING_FALLOFF)
+		var tier := clampi(_food.ping_tier, 0,
+			FoodField.PING_WIDTH_FLOOR.size() - 1)
+		# `span` floored at the radius so `asin` is never asked for more than 1
+		# -- the same guard, for the same reason, as the field's own.
+		var alpha := rad_to_deg(asin(clampf(radius / maxf(apart, radius), 0.0,
+			1.0)))
+		var width := minf(FoodField.PING_WIDTH_FLOOR[tier]
+			+ FoodField.PING_WIDTH_GAIN[tier] * alpha, FoodField.PING_WIDTH_MAX)
+		var hold := FoodField.PING_RING * 2.0 * radius / FoodField.PING_SPEED
+		_bus.ping(_cell.bearing_to(at), level, width, hold)
+
+
+## **This cell's `ampulla` fired.** The other player hears it, and what crosses
+## is three facts about this body: where the pulse left from, how big it is, how
+## far its organ carries. No heading, no velocity, no genome, no name.
+##
+## Free in single player: `shout()` returns on its first line when there is
+## nobody on the wire, and there is no session at all in a run reached any way
+## but through the earshot screen.
+func _on_pulsed() -> void:
+	if _net == null or not is_instance_valid(_net):
+		return
+	_net.shout(_cell.position, _cell.radius, _cell.ping_range())
 
 
 # ---------------------------------------------------------------------------

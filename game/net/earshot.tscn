@@ -1,0 +1,109 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/net/earshot.gd" id="1_earshot"]
+[ext_resource type="Theme" path="res://addons/launcher/theme/launcher_theme.tres" id="2_theme"]
+[ext_resource type="Shader" path="res://addons/launcher/shaders/organic_background.gdshader" id="3_wash"]
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_wash"]
+shader = ExtResource("3_wash")
+shader_parameter/drift_speed = 0.022
+shader_parameter/intensity = 0.5
+
+[node name="Earshot" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_earshot")
+
+[node name="Background" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+color = Color(0.023, 0.055, 0.05, 1)
+
+[node name="Wash" type="ColorRect" parent="."]
+material = SubResource("ShaderMaterial_wash")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Heading" type="Label" parent="."]
+anchor_right = 1.0
+offset_top = 44.0
+offset_bottom = 78.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
+theme_override_font_sizes/font_size = 22
+text = "within earshot"
+horizontal_alignment = 1
+
+[node name="Ring" type="Control" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -280.0
+offset_top = 80.0
+offset_right = 280.0
+offset_bottom = 520.0
+grow_horizontal = 2
+
+[node name="Line" type="Label" parent="."]
+anchor_right = 1.0
+offset_top = 540.0
+offset_bottom = 568.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 17
+horizontal_alignment = 1
+
+[node name="Receipt" type="Label" parent="."]
+anchor_right = 1.0
+offset_top = 572.0
+offset_bottom = 592.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
+theme_override_font_sizes/font_size = 13
+horizontal_alignment = 1
+
+[node name="Buttons" type="HBoxContainer" parent="."]
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -282.0
+offset_top = 602.0
+offset_right = 282.0
+offset_bottom = 658.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 24
+alignment = 1
+
+[node name="First" type="Button" parent="Buttons"]
+text = "call"
+
+[node name="Second" type="Button" parent="Buttons"]
+text = "answer"
+
+[node name="Hint" type="Label" parent="."]
+anchor_top = 1.0
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_top = -48.0
+offset_bottom = -24.0
+grow_horizontal = 2
+grow_vertical = 0
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
+theme_override_font_sizes/font_size = 14
+text = "esc leaves"
+horizontal_alignment = 1

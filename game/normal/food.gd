@@ -71,6 +71,17 @@ signal bitten(bearing: float, strength: float)
 signal stung(bearing: float)
 ## `trichocyst`: the dart went off and something hunting you broke away.
 signal darted(bearing: float)
+## **The `ampulla` just fired.** Not a sensation and not for the membrane: a
+## pulse in the water is an event in the world, and this is the only moment the
+## field knows about it. The run listens so it can tell another player, which is
+## the one thing in this game that reaches past the edge of this water. It
+## carries nothing, because everything a listener needs -- where the cell is,
+## how big it is, how far the organ carries -- the run already has.
+##
+## Emitted once per pulse, every `ping_period` seconds: 8.8 at tier 1, 15.2 at
+## tier 3, never at tier 0. Nothing is connected to it in single player and an
+## unconnected emit is free.
+signal pulsed
 
 const COUNT := 34
 
@@ -1898,6 +1909,7 @@ func _step_pings(delta: float) -> void:
 		_ping_age = 0.0
 		_pulses.append(0.0)
 		_cast_ping()
+		pulsed.emit()
 	elif _ping_age >= 0.0:
 		_ping_age += delta
 
