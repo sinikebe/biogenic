@@ -10,6 +10,11 @@ extends Node
 ##
 ## Pages: `choose`, `calling`, `answering`, `together`, `refused`.
 ##
+## `--their=<protocol>` is the protocol the other end speaks on `refused`,
+## default one newer than this build. Pass one *older* to photograph the case
+## that actually happens after a protocol bump: this phone took the update and
+## the friend's did not.
+##
 ## `together` and `refused` need somebody on the other end, so this opens a
 ## second session of its own on the same machine and lets the screen's own tap
 ## code find it -- which makes those two shots an end-to-end test of the join
@@ -45,6 +50,7 @@ func _overran() -> void:
 
 func _ready() -> void:
 	var page := "choose"
+	var their := Wire.PROTOCOL + 1
 	var out_path := "user://earshot.png"
 	var wait := 1.0
 	var size := Vector2i.ZERO
@@ -52,6 +58,8 @@ func _ready() -> void:
 		var text := str(arg)
 		if text.begins_with("--page="):
 			page = text.trim_prefix("--page=")
+		elif text.begins_with("--their="):
+			their = int(text.trim_prefix("--their="))
 		elif text.begins_with("--out="):
 			out_path = text.trim_prefix("--out=")
 		elif text.begins_with("--wait="):
@@ -80,7 +88,7 @@ func _ready() -> void:
 		"together":
 			await _together(Wire.PROTOCOL)
 		"refused":
-			await _together(Wire.PROTOCOL + 1)
+			await _together(their)
 		_:
 			pass
 

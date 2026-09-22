@@ -813,10 +813,17 @@ func _on_pulsed() -> void:
 	_net.shout(_cell.position, _cell.radius, _cell.ping_range())
 
 
-## **Where this cell is, for the other player's screen.** Handed to the session
-## once a frame and sent on its own 2 Hz beat, so this is thirty cheap writes
-## for one packet -- which is the right way round, because the alternative is a
-## session reaching into a scene at a moment of its own choosing.
+## **Where this cell is and how it is moving, for the other player's screen.**
+## Handed to the session once a frame -- and once more from [method
+## _on_impulsed] the instant the body jumps -- and the session decides what
+## leaves: twenty frames a second, and one at once whenever the other screen's
+## picture would otherwise be wrong. That is the right way round, because the
+## alternative is a session reaching into a scene at a moment of its own
+## choosing.
+##
+## The velocity and the turn rate are the body's own, straight off `cell.gd`,
+## so the other screen can draw the body where it is rather than where it last
+## was. They are motion, not sensation: nothing here reaches `_bus`.
 ##
 ## **This changes nothing about what anybody feels.** It is the same seam
 ## `_on_pulsed` already crosses: a place goes on the wire, because one water
@@ -832,7 +839,8 @@ func _on_pulsed() -> void:
 func _tell_others() -> void:
 	if _net == null or not is_instance_valid(_net):
 		return
-	_net.report_body(_cell.position, _cell.heading, _cell.radius)
+	_net.report_body(_cell.position, _cell.heading, _cell.radius,
+		_cell.velocity, _cell.heading_rate())
 
 
 # ---------------------------------------------------------------------------
@@ -1172,6 +1180,13 @@ func _be_born() -> void:
 
 func _on_impulsed(strength: float) -> void:
 	_bus.thrust(strength)
+	# **The jump leaves in the frame it happens.** The once-a-frame report below
+	# runs before the body steps, so without this the other screen would hear
+	# of an impulse a frame late -- and a jump is precisely the moment the owner
+	# said arrived late. The session decides whether it is worth a frame; an
+	# impulse always is.
+	if _life == Life.ALIVE:
+		_tell_others()
 
 
 ## `myoneme`. The cell asked for the burst and cannot spend hunger itself.

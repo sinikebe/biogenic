@@ -22,13 +22,18 @@ extends Node
 ##
 ## What it *can* see is the whole of the local contract: that the handshake
 ## completes, that a shout crosses and decodes to the numbers that went in, that
-## the heartbeat keeps arriving **carrying the sender's body**, that the newest
-## state frame wins and the ones behind it are dropped, that the marker the
-## world view draws off all that lands where the other cell said it was -- and
-## the highest-value assertion in the file, that a peer on a different protocol
-## is refused with a sentence instead of hanging. Protocol 1 is now one of the
-## two that gets refused by name, because it is not a hypothetical: it is the
-## build that shipped before this one.
+## state frames keep arriving **carrying the sender's body and its motion**, at
+## twenty a second and at once when the body jumps, that the newest state frame
+## wins and the ones behind it are dropped, that the marker the world view draws
+## off all that lands where the other cell said it was -- **on time, which is
+## locked here** -- and the highest-value assertion in the file, that a peer on a
+## different protocol is refused with a sentence instead of hanging. Protocols 1
+## and 2 are both refused by name, because neither is a hypothetical: they are
+## the two builds that shipped before this one.
+##
+## **How late the marker is, as a distribution, is `tools/net_lag.gd`'s job**,
+## not this file's -- it takes minutes. What this file keeps is the one number
+## that would move if anybody put a buffer back: how long a dash takes to show.
 ##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: `--headless` draws nothing, so
@@ -41,26 +46,53 @@ extends Node
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const NetSession := preload("res://game/net/net_session.gd")
-## Only for [method VisionLayer.body_at], which is the one piece of arithmetic
-## in the peer marker that a render could not catch: nothing is drawn under
-## `--headless`, so an interpolator checked only by looking at a screenshot is
-## an interpolator nothing in CI has ever executed.
+## Only for [method VisionLayer.carry] and its two constants, which are the
+## arithmetic in the peer marker that a render could not catch: nothing is drawn
+## under `--headless`, so a carry checked only by looking at a screenshot is a
+## carry nothing in CI has ever executed.
 const VisionLayer := preload("res://game/vision/vision.gd")
+const CellBody := preload("res://game/normal/cell.gd")
 
 ## Long enough for a loopback handshake by a wide margin; short enough that a
 ## hang is a failure rather than a job timeout.
 const SETTLE := 6.0
+## **The lag, locked.** How long a dash on one screen may take to be drawn on
+## the other, on loopback, at both levels `tools/net_lag.gd` times: 2 units --
+## the first thing an eye could catch -- and 20, most of a body radius, where
+## nobody could miss it. Measured by `tools/net_lag.gd` on loopback at 60 fps
+## over forty jumps: the new wire drew the first 2 units 15-34 ms after the far
+## body moved them and 20 units 31-46 ms after; the old one took 199-554 ms and
+## 465-573 ms. 200 ms leaves a CI runner room to stall and still fails the day
+## anybody puts a buffer of a fifth of a second or more back in -- and it was
+## tried: the old 2 Hz beat with no carry, put back by hand, failed both.
+const DASH_ONSET_MAX := 0.2
 
 var _failed := 0
 
 
 func _ready() -> void:
+	# **A ceiling on the frame rate, for CI's backstop and for nothing else.**
+	# The step runs this uncapped under `--quit-after 20000`, which counts
+	# frames, and every wait in here is wall time -- so on a fast enough runner
+	# twenty thousand frames arrive before the last check does, and the probe
+	# is cut off one line short of `ALL PASS`. At 500 a second twenty thousand
+	# frames is forty seconds, twice what this takes. Nothing here depends on a
+	# frame rate above that: every clock in `game/net/` is wall time, and the
+	# dash is timed in microseconds either way.
+	Engine.max_fps = 500
 	_check_code()
 	_check_wire()
-	_check_interpolation()
+	_check_carry()
 	await _check_link()
 	await _check_skew()
 	await _check_run()
+	# **The margin on CI's backstop, printed.** The step runs this with no
+	# frame cap and `--quit-after 20000`, which is a count of frames, not of
+	# seconds -- so a faster runner reaches it sooner, and a probe that grew
+	# past it would be cut off before `ALL PASS` and read as a failure.
+	print("[net-probe] NOTE finished in %d frames and %.1f s -- CI stops at"
+		% [Engine.get_process_frames(), float(Time.get_ticks_msec()) / 1000.0]
+		+ " 20000, and at most %d a second can arrive" % Engine.max_fps)
 	if _failed == 0:
 		print("[net-probe] ALL PASS")
 	else:
@@ -187,7 +219,8 @@ func _check_wire() -> void:
 			and Wire.refuse_reason(refuse) == Wire.REFUSE_PROTOCOL,
 		"a refusal carries the refuser's protocol and its reason")
 
-	var alive := Wire.state(70000, true, Vector2(-1806.5, 942.25), 2.25, 33.5)
+	var alive := Wire.state(70000, true, Vector2(-1806.5, 942.25), 2.25, 33.5,
+		Vector2(-121.5, 64.25), -0.625)
 	var dead := Wire.state(70001, false)
 	_says(Wire.seq_of(alive) == 70000 and Wire.state_alive(alive)
 			and Wire.seq_of(dead) == 70001 and not Wire.state_alive(dead),
@@ -200,13 +233,24 @@ func _check_wire() -> void:
 	# multiplayer.md §5.2 makes for spending the byte.
 	var body := Wire.state_body(alive)
 	var step := TAU / float(Wire.BEARING_STEPS)
-	var carried := body.size() == 3 \
+	var carried := body.size() == 5 \
 		and (body[0] as Vector2).is_equal_approx(Vector2(-1806.5, 942.25)) \
 		and is_equal_approx(float(body[2]), 33.5) \
 		and absf(angle_difference(float(body[1]), 2.25)) <= step * 0.5
 	_says(carried, "a state frame round-trips a place, a radius and a heading"
 		+ " (heading off by %.4f rad of a %.4f rad step)"
 		% [absf(angle_difference(float(body[1]), 2.25)), step])
+	# **And protocol 3's.** The motion the far screen carries the body forward
+	# by: float32, so it comes back exactly -- a velocity that drifted in the
+	# encoding would walk the marker off the body it belongs to.
+	_says(body.size() == 5
+			and (body[3] as Vector2).is_equal_approx(Vector2(-121.5, 64.25))
+			and is_equal_approx(float(body[4]), -0.625),
+		"and the velocity and turn rate it is moving with, exactly")
+	var still := Wire.state_body(Wire.state(4, true, Vector2(1.0, 1.0), 0.0, 20.0))
+	_says(still.size() == 5 and (still[3] as Vector2) == Vector2.ZERO
+			and float(still[4]) == 0.0,
+		"a body reported with no motion is a body held still, not a guess")
 
 	# Every bearing a cell can hold, including the negative ones `heading` is
 	# full of and the wound-up ones a quarter of an hour of turning produces.
@@ -237,6 +281,26 @@ func _check_wire() -> void:
 	rotten.encode_float(10, INF)
 	_says(Wire.state_body(rotten).is_empty(),
 		"a non-finite place in a state frame is refused at the decoder")
+
+	# A motion is carried forward by the far screen, so a poisoned one is worse
+	# than a poisoned place: it moves the marker every frame. Refused whole.
+	var flung := Wire.state(5, true, Vector2(1.0, 2.0), 0.5, 18.0,
+		Vector2(10.0, 0.0), 0.1)
+	flung.encode_float(23, NAN)
+	var spun := Wire.state(6, true, Vector2(1.0, 2.0), 0.5, 18.0)
+	spun.encode_float(27, Wire.TURNING_MAX * 2.0)
+	var fast := Wire.state(7, true, Vector2(1.0, 2.0), 0.5, 18.0)
+	fast.encode_float(19, Wire.MOTION_MAX * 2.0)
+	_says(Wire.state_body(flung).is_empty() and Wire.state_body(spun).is_empty()
+			and Wire.state_body(fast).is_empty(),
+		"a non-finite or impossible motion is refused at the decoder")
+	# And this end never writes one it would refuse: a bad motion goes out as
+	# none, and the body with it still arrives.
+	var sane := Wire.state_body(Wire.state(8, true, Vector2(3.0, 4.0), 0.0,
+		18.0, Vector2(NAN, 1.0), INF))
+	_says(sane.size() == 5 and (sane[0] as Vector2).is_equal_approx(Vector2(3.0, 4.0))
+			and (sane[3] as Vector2) == Vector2.ZERO and float(sane[4]) == 0.0,
+		"a motion no body could have is sent as none, and the body still crosses")
 
 	var at := Vector2(-4213.75, 917.5)
 	var frame := Wire.shout(5, at, 34.25, 1500.0)
@@ -284,66 +348,70 @@ func _check_wire() -> void:
 
 
 # ---------------------------------------------------------------------------
-# The interpolator. Pure arithmetic against tracks made up on the spot, and the
-# only part of the peer marker that a screenshot cannot judge: `--headless`
-# draws nothing, so anything that lived inside a `_draw` would boot green in CI
+# The carry. Pure arithmetic against frames made up on the spot, and the only
+# part of the peer marker that a screenshot cannot judge: `--headless` draws
+# nothing, so anything that lived inside a `_draw` would boot green in CI
 # forever however wrong it was.
 #
-# **This is deliberately interpolated, against multiplayer.md §4.10's measured
-# rule, and the two are not in conflict.** §4.10 is about the *sensation*
-# stream, whose maxima are steps -- a body reseeded across the water, a hunter
-# committing -- and buffered lerp doubled the mean error on every one of those
-# channels. A swimming cell's position is a different quantity: continuous,
-# speed-bounded, and very nearly on the straight line between two places half a
-# second apart. Sample-and-hold is what would be wrong here.
+# **This reverses #50's "never extrapolates" for a live peer, and keeps it for
+# a silent one.** #50 drew the friend half a second behind the newest frame so
+# it never had to guess; the owner played it and the friend was late. So the
+# newest frame is now carried forward along its own velocity -- for at most
+# PEER_REACH, after which it freezes, and silence is handled exactly as #50
+# handled it. The third and fourth checks below are that boundary.
 # ---------------------------------------------------------------------------
 
-func _check_interpolation() -> void:
-	var track := [
-		[10.0, Vector2(0.0, 0.0), 0.0, 20.0],
-		[10.5, Vector2(100.0, 40.0), PI * 0.5, 30.0],
-	]
+func _check_carry() -> void:
+	var frame := [10.0, Vector2(100.0, 40.0), 0.5, 30.0, Vector2(50.0, -20.0), 0.4]
 
-	var mid := VisionLayer.body_at(track, 10.25)
-	_says(mid.size() == 3 and (mid[0] as Vector2).is_equal_approx(Vector2(50.0, 20.0))
-			and is_equal_approx(float(mid[2]), 25.0),
-		"halfway between two frames is halfway between two places")
+	var landed := VisionLayer.carry(frame, 10.0)
+	_says(landed.size() == 3
+			and (landed[0] as Vector2).is_equal_approx(Vector2(100.0, 40.0))
+			and is_equal_approx(float(landed[1]), 0.5)
+			and is_equal_approx(float(landed[2]), 30.0),
+		"a frame the moment it lands is drawn exactly where it says")
 
-	var early := VisionLayer.body_at(track, 9.0)
-	var late := VisionLayer.body_at(track, 40.0)
-	_says((early[0] as Vector2).is_equal_approx(Vector2.ZERO)
-			and (late[0] as Vector2).is_equal_approx(Vector2(100.0, 40.0)),
-		"before the older sample and after the newer one it holds, both ends")
+	var tenth := VisionLayer.carry(frame, 10.1)
+	_says((tenth[0] as Vector2).is_equal_approx(Vector2(105.0, 38.0))
+			and is_equal_approx(float(tenth[1]), 0.54),
+		"a tenth of a second on it has moved a tenth of its velocity and turned"
+		+ " a tenth of its rate")
 
-	# **The one that matters when a phone goes in a pocket.** Thirty seconds
-	# after the last frame the marker is still exactly where the last frame put
-	# it -- not somewhere an old velocity would have carried it, which would be
+	# **The one that matters when a phone goes in a pocket.** Five minutes after
+	# the last frame the marker is where a fifth of a second of carry left it --
+	# not somewhere an old velocity would have taken it since, which would be
 	# confidently wrong in a brand new place every frame.
-	var much_later := VisionLayer.body_at(track, 300.0)
-	_says((much_later[0] as Vector2).is_equal_approx(Vector2(100.0, 40.0)),
-		"five minutes on it has not extrapolated a single unit")
+	var reach := VisionLayer.PEER_REACH
+	var capped := VisionLayer.carry(frame, 10.0 + reach)
+	var much_later := VisionLayer.carry(frame, 310.0)
+	_says((much_later[0] as Vector2).is_equal_approx(capped[0])
+			and is_equal_approx(float(much_later[1]), float(capped[1]))
+			and (capped[0] as Vector2).is_equal_approx(
+				Vector2(100.0, 40.0) + Vector2(50.0, -20.0) * reach),
+		"five minutes on it has been carried %.2f s and not a unit further" % reach)
 
-	# The short way round, which is the whole reason this is lerp_angle and not
-	# lerpf: a cell that crosses north goes from 3.0 rad to -3.0 rad in one
-	# frame, and the long way is a 170-degree spin the cell never did.
-	var wrap := VisionLayer.body_at([
-		[0.0, Vector2.ZERO, 3.0, 20.0],
-		[1.0, Vector2.ZERO, -3.0, 20.0]], 0.5)
-	_says(absf(angle_difference(float(wrap[1]), PI)) < 0.01,
-		"a heading that crosses north turns the short way (%.3f rad)"
-		% float(wrap[1]))
+	# And the carry is over long before the fade starts, so the two policies
+	# never overlap: a silent peer is never extrapolated, it is only faded.
+	_says(VisionLayer.PEER_REACH < VisionLayer.PEER_FRESH,
+		"the carry (%.2f s) ends long before the quiet fade begins (%.1f s)"
+		% [VisionLayer.PEER_REACH, VisionLayer.PEER_FRESH])
 
-	_says(VisionLayer.body_at([], 1.0).is_empty(),
-		"an empty track draws nothing at all")
-	var one := VisionLayer.body_at([[5.0, Vector2(7.0, 8.0), 1.0, 22.0]], 99.0)
-	_says(one.size() == 3 and (one[0] as Vector2).is_equal_approx(Vector2(7.0, 8.0)),
-		"a track with one frame in it holds that frame")
-	# Two frames stamped the same instant is a divide by zero waiting to happen.
-	var same := VisionLayer.body_at([
-		[4.0, Vector2(1.0, 1.0), 0.0, 20.0],
-		[4.0, Vector2(9.0, 9.0), 0.0, 20.0]], 4.0)
-	_says(same.size() == 3 and is_finite((same[0] as Vector2).x),
-		"two frames on one timestamp resolve to a place rather than to NaN")
+	var held := VisionLayer.carry([4.0, Vector2(7.0, 8.0), 1.0, 22.0,
+		Vector2.ZERO, 0.0], 4.15)
+	var old_shape := VisionLayer.carry([4.0, Vector2(7.0, 8.0), 1.0, 22.0], 99.0)
+	_says((held[0] as Vector2).is_equal_approx(Vector2(7.0, 8.0))
+			and is_equal_approx(float(held[1]), 1.0)
+			and (old_shape[0] as Vector2).is_equal_approx(Vector2(7.0, 8.0)),
+		"a frame with no motion in it is drawn exactly where it says, at any age")
+
+	# A clock read before the stamp -- which one clock cannot produce, and a
+	# refactor that mixed two could -- carries nothing rather than backwards.
+	var early := VisionLayer.carry(frame, 9.0)
+	_says((early[0] as Vector2).is_equal_approx(Vector2(100.0, 40.0)),
+		"a clock behind the frame's own stamp carries it nowhere, not backwards")
+
+	_says(VisionLayer.carry([], 1.0).is_empty(),
+		"no frame draws nothing at all")
 
 
 # ---------------------------------------------------------------------------
@@ -401,20 +469,23 @@ func _check_link() -> void:
 	_says(ordered, "three events arrived in the order they were sent")
 
 	# The heartbeat, which is the only thing that notices a peer that has gone
-	# quiet without hanging up.
+	# quiet without hanging up. **2 Hz here, because there is no body yet**: a
+	# session with nothing moving to draw beats slowly, and twenty a second is
+	# for a body in motion.
 	var before: int = host.heartbeats_heard()
 	await _wait(1.6)
 	var after: int = host.heartbeats_heard()
-	_says(after >= before + 2,
-		"state frames keep arriving (%d then %d, 2 Hz)" % [before, after])
+	_says(after >= before + 2 and after <= before + 6,
+		"state frames keep arriving (%d then %d -- the 2 Hz beat of a session"
+		% [before, after] + " with no body in it)")
 	_says(host.quiet_for() >= 0.0 and host.quiet_for() < 1.0
 			and host.peers_say() == "within earshot",
 		"and the other cell reads as present, not quiet")
 
 	# ----------------------------------------------------------------------
-	# **The body, crossing on the heartbeat.** Protocol 2's whole point: a
-	# shout is one frame every nine to fifteen seconds and a marker drawn off
-	# it would teleport, so the place rides the beat that was already running.
+	# **The body, crossing on the state frames.** Protocol 2 put the place on
+	# the beat; protocol 3 puts the motion beside it and sends it twenty times a
+	# second, and at once when the body jumps.
 	# ----------------------------------------------------------------------
 	_says(host.peer_track().is_empty(),
 		"a session with no run behind it reports no body at all")
@@ -425,21 +496,28 @@ func _check_link() -> void:
 	var first := not track.is_empty()
 	if first:
 		var newest: Array = track[track.size() - 1]
-		first = (newest[1] as Vector2).is_equal_approx(Vector2(320.0, -180.0)) \
+		first = newest.size() == 6 \
+			and (newest[1] as Vector2).is_equal_approx(Vector2(320.0, -180.0)) \
 			and is_equal_approx(float(newest[3]), 31.0) \
 			and absf(angle_difference(float(newest[2]), 1.25)) \
-				<= TAU / float(Wire.BEARING_STEPS)
-	_says(first, "the other cell's place, heading and radius crossed the wire")
+				<= TAU / float(Wire.BEARING_STEPS) \
+			and (newest[4] as Vector2) == Vector2.ZERO and float(newest[5]) == 0.0
+	_says(first, "the other cell's place, heading, radius and stillness crossed"
+		+ " the wire")
 
-	# At the heartbeat rate, which is the claim: two samples in a second and a
-	# bit, and the track is capped at the two the interpolator needs.
-	var walk := Vector2(320.0, -180.0)
+	# **At the body rate, which is the claim.** A body moving exactly as it says
+	# it is moving -- reported with the velocity it really has -- goes out twenty
+	# times a second: not at this probe's frame rate, which is thousands, and
+	# not at the old 2 Hz. And nothing goes early, because the far end's guess
+	# is never wrong.
+	var start := Vector2(320.0, -180.0)
+	var speed := Vector2(40.0, 0.0)
+	var from := _now()
 	var rate := 0
-	var until := _now() + 2.2
 	var seen: Array = []
-	while _now() < until:
-		walk += Vector2(4.0, 0.0)
-		guest.report_body(walk, 0.0, 31.0)
+	var sent_before: int = guest._out_state_seq
+	while _now() < from + 2.2:
+		guest.report_body(start + speed * (_now() - from), 0.0, 31.0, speed, 0.0)
 		var now_track: Array = host.peer_track()
 		if not now_track.is_empty():
 			var x: float = (now_track[now_track.size() - 1][1] as Vector2).x
@@ -447,12 +525,14 @@ func _check_link() -> void:
 				seen.append(x)
 				rate += 1
 		await get_tree().process_frame
-	_says(rate >= 3 and rate <= 8,
-		"%d distinct places landed in 2.2 s -- the 2 Hz beat, not the frame rate"
-		% rate)
+	var sent: int = guest._out_state_seq - sent_before
+	_says(rate >= 30 and rate <= 60,
+		"%d distinct places landed in 2.2 s -- 20 a second, not the frame rate"
+		% rate + " and not the old 2 Hz")
+	_says(sent <= 2 + int(ceilf(2.2 / NetSession.STATE_PERIOD)),
+		"and a body moving just as it said sent nothing early (%d frames)" % sent)
 	_says(host.peer_track().size() == NetSession.TRACK_MAX,
-		"and the track holds exactly the %d the interpolator needs"
-		% NetSession.TRACK_MAX)
+		"and the track holds exactly the %d a view needs" % NetSession.TRACK_MAX)
 	var climbs := true
 	var climbing: Array = host.peer_track()
 	for i in range(1, climbing.size()):
@@ -462,10 +542,66 @@ func _check_link() -> void:
 			climbs = false
 	_says(climbs, "oldest first, and the newest place is the newest one sent")
 
-	# **Drain to newest, put to the one test a reliable ordered stream cannot
-	# stage.** ENet cannot deliver these out of order, which is exactly why the
-	# sequence is in the frame -- so the frames go straight into the decoder.
-	# Reaching for a private member is a thing only tools/ may do.
+	# **A jump leaves in the call that reports it.** Deterministic, so it is
+	# asserted on the sender rather than timed across a socket: a frame has
+	# just gone, the next is not due for most of a period, a report that says
+	# nothing new sends nothing -- and a report with a new velocity in it sends
+	# one there and then, carrying that velocity. That is the whole of "send
+	# immediately on an impulse", and the difference between a jump drawn in
+	# the frame it lands and one drawn up to a period later.
+	#
+	# **Reported every frame throughout, as a run reports.** A frame with no
+	# report in it is a body the run has stopped simulating, and the session
+	# says so at once with a frame of no motion -- so a probe that paused its
+	# reports to wait would be testing a pause, not a jump.
+	var quiet_ok := false
+	var jumped := false
+	var jump := Vector2(40.0 + 150.0, 0.0)
+	var jumped_at := Vector2.ZERO
+	var jumped_when := 0.0
+	for attempt in 20:
+		var went: int = guest._out_state_seq
+		while guest._out_state_seq == went:
+			guest.report_body(start + speed * (_now() - from), 0.0, 31.0, speed, 0.0)
+			await get_tree().process_frame
+		var left := _now()
+		while _now() - left < 0.02:
+			guest.report_body(start + speed * (_now() - from), 0.0, 31.0, speed, 0.0)
+			await get_tree().process_frame
+		if _now() - left > NetSession.STATE_PERIOD * 0.6 \
+				or guest._out_state_seq != went + 1:
+			continue
+		var calm: int = guest._out_state_seq
+		jumped_at = start + speed * (_now() - from)
+		jumped_when = _now()
+		guest.report_body(jumped_at, 0.0, 31.0, speed, 0.0)
+		quiet_ok = guest._out_state_seq == calm
+		guest.report_body(jumped_at, 0.0, 31.0, jump, 0.0)
+		jumped = guest._out_state_seq == calm + 1 \
+			and (guest._told[4] as Vector2).is_equal_approx(jump)
+		break
+	_says(quiet_ok, "a report with nothing new in it between two beats sends nothing")
+	_says(jumped, "a report with a jump in it sends a frame at once, carrying"
+		+ " the jump")
+	var landed_jump := false
+	var until_jump := _now() + SETTLE
+	while _now() < until_jump:
+		guest.report_body(jumped_at + jump * (_now() - jumped_when), 0.0, 31.0,
+			jump, 0.0)
+		var jump_track: Array = host.peer_track()
+		if not jump_track.is_empty() \
+				and (jump_track[jump_track.size() - 1][4] as Vector2).is_equal_approx(jump):
+			landed_jump = true
+			break
+		await get_tree().process_frame
+	_says(landed_jump, "and the far end has the jump's velocity to carry the"
+		+ " body forward by")
+
+	# **Drain to newest, and it is not hypothetical any more.** State frames go
+	# out unreliable now, and ENet hands an unreliable frame over whenever it
+	# lands -- a late one after its successor. Loopback will not reorder on
+	# demand, so the frames go straight into the decoder. Reaching for a
+	# private member is a thing only tools/ may do.
 	var bench := {"greeted": true, "alive": true, "in_state": -1,
 		"in_event": -1, "track": []}
 	host._take_state(bench, Wire.state(9, true, Vector2(9.0, 0.0), 0.0, 20.0))
@@ -479,10 +615,16 @@ func _check_link() -> void:
 		and int(bench["in_state"]) == 10
 	_says(newest_wins,
 		"a sequence behind the newest is dropped, and so is a repeat of it")
+	host._take_state(bench, Wire.state(12, true, Vector2(12.0, 0.0), 0.0, 20.0,
+		Vector2(30.0, -40.0), 0.5))
+	var moving: Array = (bench["track"] as Array).back()
+	_says(moving.size() == 6 and (moving[4] as Vector2).is_equal_approx(Vector2(30.0, -40.0))
+			and is_equal_approx(float(moving[5]), 0.5),
+		"and a frame's motion is kept with its place, for the view to carry")
 
 	# The far cell died. Not a gap in the stream -- an answer -- so the marker
 	# goes out rather than ageing.
-	host._take_state(bench, Wire.state(11, false))
+	host._take_state(bench, Wire.state(13, false))
 	_says((bench["track"] as Array).is_empty(),
 		"a frame with no body in it clears the track rather than holding one")
 
@@ -501,12 +643,13 @@ func _check_link() -> void:
 # ---------------------------------------------------------------------------
 
 func _check_skew() -> void:
-	# **Protocol 1 is not a hypothetical any more.** It is the LAN build that
-	# shipped before this one, running on somebody's phone right now, and it
-	# reads byte 6 of a protocol-2 state frame as the start of nothing it knows.
-	# The one from the future is still worth its two seconds: the host cannot
-	# tell which side is behind, and does not need to.
-	for theirs: int in [Wire.PROTOCOL - 1, Wire.PROTOCOL + 1]:
+	# **Neither older protocol is a hypothetical.** 1 is the LAN build that
+	# first shipped and 2 is the one that drew the friend half a second late;
+	# both are on somebody's phone right now, because updates are opt-in, and a
+	# 2 reads a protocol-3 state frame's motion as nothing it knows. The one
+	# from the future is still worth its two seconds: the host cannot tell which
+	# side is behind, and does not need to.
+	for theirs: int in [Wire.PROTOCOL - 2, Wire.PROTOCOL - 1, Wire.PROTOCOL + 1]:
 		await _one_skew(theirs)
 
 
@@ -666,6 +809,133 @@ func _check_run() -> void:
 				and float(mark["doubt"]) <= 0.0,
 			"at their real radius, at full confidence, with no doubt circle yet")
 
+	# ----------------------------------------------------------------------
+	# **The lag, locked.** The owner's report as an assertion: a friend's dash
+	# has to be drawn on this screen within DASH_ONSET_MAX of starting on
+	# theirs. The far end is played the way the run plays it -- a body at
+	# rest, then a tier-1 dash's 190 units a second along its nose, reported
+	# every frame with the water's drag on it -- and the time is read off
+	# `_peer`, which is what the draw routines use, against when the far body
+	# itself had moved as far. Three dashes; the worst one counts.
+	# ----------------------------------------------------------------------
+	var worst_first := 0.0
+	var worst_plain := 0.0
+	for trial in 3:
+		var onset: Array = await _dash_onset(other, view, cell, Vector2(0.0, -260.0))
+		worst_first = maxf(worst_first, float(onset[0]))
+		worst_plain = maxf(worst_plain, float(onset[1]))
+	_says(worst_first < DASH_ONSET_MAX,
+		"a friend's dash is drawn here within %.0f ms of starting"
+		% (DASH_ONSET_MAX * 1000.0)
+		+ " (first 2 units: worst of 3 %.1f ms)" % (worst_first * 1000.0))
+	_says(worst_plain < DASH_ONSET_MAX,
+		"and is unmistakable inside the same bound (20 units: worst of 3"
+		+ " %.1f ms) -- half a second of buffer fails this" % (worst_plain * 1000.0))
+
+	# ----------------------------------------------------------------------
+	# **#50's reason, kept.** The far body is still coasting out of that last
+	# dash when its phone goes in a pocket: the far session stops dead, which
+	# is what `onActivityStopped` does to a main loop, and nothing more is
+	# sent. The marker is carried PEER_REACH along the last velocity it had and
+	# then held -- and past PEER_FRESH the fade and the doubt ring take over at
+	# #50's own moments and rates, around a marker that does not move.
+	# ----------------------------------------------------------------------
+	#
+	# Measured against the last frame this end *received*, not the last one
+	# the far end sent: state frames are unreliable now, so the two need not be
+	# the same frame, and a lost one is the design working -- not what this
+	# check is about.
+	other.set_process(false)
+	await _hold(cell, Vector2.ZERO, 0.0, 0.5)
+	var last: Array = mine.peer_track().back() if not mine.peer_track().is_empty() else []
+	var last_at: Vector2 = last[1] if last.size() == 6 else Vector2(NAN, NAN)
+	var last_speed: float = (last[4] as Vector2).length() if last.size() == 6 else 0.0
+	var frozen: Vector2 = view._peer["at"]
+	await _hold(cell, Vector2.ZERO, 0.0, 0.2)
+	var carried_by := frozen.distance_to(last_at)
+	var reach_by := last_speed * VisionLayer.PEER_REACH
+	_says(last_speed > 50.0 and absf(carried_by - reach_by) < 1.5
+			and (view._peer["at"] as Vector2).is_equal_approx(frozen),
+		"a friend who goes silent mid-dash is carried %.1f units -- %.2f s of"
+		% [carried_by, VisionLayer.PEER_REACH]
+		+ " their last %.0f units a second -- and then held still" % last_speed)
+	# Long enough past PEER_FRESH for the fade to be under way, and past
+	# TRACK_GAP -- two seconds from the last frame -- for the step below.
+	await _hold(cell, Vector2.ZERO, 0.0, 1.45)
+	var ghost: Dictionary = view._peer
+	var ladder := CellBody.IMPULSE_SPEED_BY_TIER
+	var top: float = ladder[ladder.size() - 1]
+	var silent: float = mine.quiet_for()
+	var doubt: float = float(ghost["doubt"])
+	var lost := clampf((doubt / top) / (VisionLayer.PEER_LOST - VisionLayer.PEER_FRESH),
+		0.0, 1.0)
+	var fade := VisionLayer.PEER_FLOOR + (1.0 - VisionLayer.PEER_FLOOR) \
+		* (1.0 - lost) * (1.0 - lost)
+	_says(silent > VisionLayer.PEER_FRESH + 0.5
+			and absf(doubt - (silent - VisionLayer.PEER_FRESH) * top) < 5.0
+			and is_equal_approx(float(ghost["confidence"]), fade)
+			and float(ghost["confidence"]) < 1.0
+			and (ghost["at"] as Vector2).is_equal_approx(frozen),
+		("and the quiet state is #50's: %.1f s of silence, a doubt ring of %.0f"
+			+ " units at %.0f a second, confidence %.2f on the squared curve,"
+			+ " and the marker has not moved")
+			% [silent, doubt, top, float(ghost["confidence"])])
+
+	# **Past TRACK_GAP of silence, the next frame lands as a step**, as it did
+	# in #50: blending across a pocket would animate a journey nobody made.
+	# Re-enabled and reported in one breath, so the first frame after the gap
+	# is this one and not a held frame from the far session's own beat -- and
+	# a second frame goes straight after it, because a phone out of a pocket
+	# can land two in one poll, and then the track holds two frames that
+	# continue *each other* while the marker is still on one from before the
+	# silence. A view that trusted the track's length would slide.
+	other.set_process(true)
+	var back_at := Vector2(180.0, -300.0)
+	other.report_body(back_at, 0.0, 29.0)
+	other._beat(other.clock())
+	var stepped := false
+	var until_step := _now() + SETTLE
+	while _now() < until_step:
+		_pin(cell)
+		await get_tree().process_frame
+		var now_drawn: Vector2 = view._peer["at"]
+		if now_drawn.distance_to(back_at) < 0.01:
+			stepped = true
+			break
+		if now_drawn.distance_to(frozen) > 0.01:
+			break
+	_says(stepped, "after %.0f s of silence the next frame lands as a step,"
+		% NetSession.TRACK_GAP + " not a slide across the gap")
+
+	# **A correction is blended, never snapped.** The far body turns up thirty
+	# units from where the marker is -- a badly mispredicted jump -- and in the
+	# frame that says so the marker stays exactly where it was, the whole
+	# difference held as an offset to be bled out. Asserted on that one frame
+	# rather than timed, so it holds at any frame rate a CI runner produces.
+	await _hold(cell, Vector2.ZERO, 0.0, 0.3)
+	var before_fix: Vector2 = view._peer["at"]
+	var shifted := back_at + Vector2(30.0, 0.0)
+	var old_basis: Array = view._peer_basis
+	other.report_body(shifted, 0.0, 29.0)
+	var arrived := Vector2(NAN, NAN)
+	var in_flight := Vector2(NAN, NAN)
+	var until_fix := _now() + SETTLE
+	while _now() < until_fix:
+		_pin(cell)
+		await get_tree().process_frame
+		if not is_same(view._peer_basis, old_basis):
+			arrived = view._peer["at"]
+			in_flight = view._peer_offset
+			break
+	_says(arrived.is_finite() and arrived.distance_to(before_fix) < 0.5
+			and in_flight.distance_to(before_fix - shifted) < 0.5,
+		"a 30-unit correction is not taken in the frame it lands: the marker"
+		+ " stays put, holding (%.1f, %.1f) to bleed out" % [in_flight.x, in_flight.y])
+	await _hold(cell, Vector2.ZERO, 0.0, 0.5)
+	_says((view._peer["at"] as Vector2).distance_to(shifted) < 0.1,
+		"and all of it is taken back out within half a second (%.3f units left)"
+		% (view._peer["at"] as Vector2).distance_to(shifted))
+
 	# **And the whole point of "full vision only".** A second run in point of
 	# view, on the same wire, with the same body reported on it: the view never
 	# comes on and the marker is never worked out, because there a friend is
@@ -741,6 +1011,52 @@ func _until_tracked(session: Node, count: int) -> void:
 		await get_tree().process_frame
 
 
+## **One dash, timed from the far body to this screen's drawing of it.** The
+## body rests long enough for the marker to settle, then leaves at a tier-1
+## dash's speed along its nose with the water's drag on it -- reported every
+## frame, as the run reports its own cell. Returns how much later than the body
+## itself the drawn marker reached 2 and 20 units from where it rested, in
+## seconds; INF for a level the marker never reached.
+func _dash_onset(other: Node, view: Node, cell: Node, rest: Vector2) -> Array:
+	var settle_until := _now() + 0.5
+	while _now() < settle_until:
+		other.report_body(rest, 0.0, 29.0)
+		_pin(cell)
+		await get_tree().process_frame
+	var drawn_rest: Vector2 = view._peer["at"]
+	var burst := Vector2(0.0, -1.0) * CellBody.DASH_SPEED_BY_TIER[1]
+	var levels: Array[float] = [2.0, 20.0]
+	var body_at: Array[float] = [INF, INF]
+	var drawn_at: Array[float] = [INF, INF]
+	var from := _clock()
+	while _clock() - from < 1.0 and drawn_at[1] == INF:
+		var t := _clock() - from
+		var fade := exp(-CellBody.DRAG * t)
+		var at := rest + burst * (1.0 - fade) / CellBody.DRAG
+		other.report_body(at, 0.0, 29.0, burst * fade, 0.0)
+		var mark: Dictionary = view._peer
+		var seen := 0.0 if mark.is_empty() \
+			else (mark["at"] as Vector2).distance_to(drawn_rest)
+		for k in levels.size():
+			if body_at[k] == INF and at.distance_to(rest) >= levels[k]:
+				body_at[k] = t
+			if drawn_at[k] == INF and seen >= levels[k]:
+				drawn_at[k] = t
+		_pin(cell)
+		await get_tree().process_frame
+	var out: Array = []
+	for k in levels.size():
+		out.append(INF if body_at[k] == INF or drawn_at[k] == INF
+			else drawn_at[k] - body_at[k])
+	return out
+
+
+func _pin(cell: Node) -> void:
+	cell.position = Vector2.ZERO
+	cell.heading = 0.0
+	cell.velocity = Vector2.ZERO
+
+
 ## **The same wait, with the cell pinned where the pose put it.**
 ##
 ## The assertions around it are about a *geometry* -- the other cell is due
@@ -777,3 +1093,8 @@ func _wait(seconds: float) -> void:
 
 func _now() -> float:
 	return float(Time.get_ticks_msec()) / 1000.0
+
+
+## Microseconds, for the one measurement here that is shorter than a frame.
+func _clock() -> float:
+	return float(Time.get_ticks_usec()) / 1e6

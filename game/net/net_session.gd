@@ -61,18 +61,69 @@ const HELLO_GRACE := 3.0
 ## own give-up: an unanswered address must become a sentence on screen, not a
 ## spinner. multiplayer.md §4.2 budgets the reply wait at ~2 s; this is double.
 const REACH_TIMEOUT := 4.0
-## The heartbeat. 2 Hz, nineteen bytes, and it carries the sender's body -- so
-## it is what gives the drain-to-newest rule something to drain, what tells the
-## other screen where to draw a friend, and the only defence against
-## `godotengine/godot#37186`, where a force-closed client is never noticed.
-##
-## **It stays at 2 Hz now that a position rides on it.** 2 Hz is four times the
-## rate a drawn marker needs to be believable once it is interpolated, and the
-## rate is not what decides whether a marker reads as truthful -- how honest it
-## is about its own age is, which is [method quiet_for]'s job and not this
-## constant's. Raising it would buy smoothness the interpolation already has
-## and spend the one budget a phone actually feels, which is radio wakeups.
+## **The beat when there is nothing moving to draw**: 2 Hz, thirty-one bytes.
+## The join screen, a cell that has died, a run that is paused or dividing. It
+## is still the only defence against `godotengine/godot#37186`, where a
+## force-closed client is never noticed, and still what keeps [method
+## quiet_for] small -- it just no longer paces a swimming body. See [constant
+## STATE_PERIOD] for that, and for why this used to be the whole story.
 const HEARTBEAT := 0.5
+## **Twenty state frames a second while a body is being reported.**
+##
+## This was 2 Hz, and the owner felt it on two phones: a friend's cell that
+## jumped or turned showed it late enough to be called a second. Measured on
+## loopback with `tools/net_lag.gd` -- no network in it at all -- the old
+## pairing of this beat with `vision.gd`'s half-second draw delay put the drawn
+## friend about 0.55 s behind the real one. The radio budget it was protecting
+## is not one a home LAN has: thirty-one bytes twenty times a second is 620 B/s.
+##
+## **Why twenty and not more or fewer.** The far screen now carries the body
+## forward between frames along the velocity each frame brings, and at 50 ms
+## apart that carry is off by a few hundredths of a unit on a cell coasting at
+## cruising speed, a fifth of one at the top impulse speed -- the error is drag,
+## `v * 0.74 * dt^2 / 2`. So faster buys nothing a player can see. It does cost: every packet is air time on a Wi-Fi channel two phones
+## share, and more packets on a shared channel is more contention, which is
+## jitter bought for no picture. Slower is the other way wrong: at 10 Hz, two
+## frames lost in a row leave a 300 ms hole, and `vision.gd` carries a body at
+## most 200 ms before it freezes -- 20 Hz rides over two lost frames and still
+## lands the third inside that reach.
+##
+## **And the jumps do not wait for it.** [method report_body] sends at once
+## whenever waiting for this beat would let the far end's picture stray -- see
+## [constant STRAY_PLACE] -- so this constant paces the smooth part of the
+## motion and nothing else.
+const STATE_PERIOD := 0.05
+## **Send now rather than on the beat, if waiting would let the far end's guess
+## drift this far**, in world units. The far end carries the last frame along
+## its velocity; this end runs the same arithmetic against the truth, one beat
+## ahead. 1.5 units is a pixel and a half at the base shape.
+##
+## A coasting body never comes near it -- the carry is exact but for drag. A
+## flagellar impulse is 97-190 units a second of new velocity, five to ten units
+## of drift over one beat, so it goes the moment it fires: that is the whole of
+## "send immediately on a jump", and it also catches the jumps nothing
+## announces -- a bump off a mote, a shove -- because it tests the picture and
+## not a list of events.
+const STRAY_PLACE := 1.5
+## The same for the heading, in radians: two degrees, a little over one step of
+## the wire's heading byte (0.0245 rad), so rounding alone can never trip it.
+## An impulse's kick is up to 0.16 rad and goes at once.
+##
+## **A steering change never trips it, and that is the physics, not the
+## threshold.** Steering sets a demand and `cell.gd` turns the heading toward
+## it over 0.65-1.43 s by `cirrus` tier, so fifty milliseconds after a hard-over
+## the heading has moved about a thousandth of a radian and the turn rate a few
+## hundredths. There is nothing in a turn's first frame worth sending early:
+## the beat carries the turn as it builds, with the rate that is building it.
+const STRAY_TURN := 0.035
+## The least two state frames are ever apart. A game reports once a frame
+## anyway; a headless run does thousands of frames a second, and a caller that
+## reports a moving body with no velocity would otherwise be sent at that rate.
+## **A little under one 60 Hz frame, and the "under" matters**: the clock here
+## counts whole milliseconds, so two frames of a 60 fps game are 16 or 17 ms
+## apart, and a gap of exactly 1/60 s would hold a jump back a frame whenever it
+## landed in the frame just after a scheduled send and that frame came 16 ms on.
+const EARLY_GAP := 0.012
 ## After this long with nothing heard, a peer is reported quiet. **Not
 ## disconnected**: a phone that went into a pocket for eight seconds is still
 ## the person you are playing with, and dropping them is a worse answer than
@@ -85,19 +136,29 @@ const MAX_PEERS := 4
 ## Shouts waiting for the run to drain them. Capped because nothing drains while
 ## the player is still on the session screen.
 const HEARD_MAX := 8
-## **How many of the other cell's places are kept: two.** One is a step every
-## half second; two and a clock are a line, which is what a drawn marker needs
-## and the whole reason the state frame grew. A third would be a smoother
-## curve and a longer lie -- there is nothing between two samples that a third
-## one makes truer.
+## **How many of the other cell's frames are kept: two.** The newest is the one
+## a view draws from -- it carries a place and the motion to carry it forward
+## by. The one before it is there to be read: it is the interval the stream is
+## actually arriving at, and a track of one is a first frame, or the first
+## after a gap. **No buffer is kept to draw between frames**, and that was
+## measured rather than assumed: under `tools/net_lag.gd`'s simulated Wi-Fi --
+## 10-50 ms of jitter, 2% loss -- the largest single-frame leap the drawn
+## friend took beyond the real one's own step was 1.2 units over a minute of
+## free swimming, where the half-second buffer this replaces leapt 9.2 under
+## the same jitter. A buffer would buy latency back for smoothness the marker
+## already has.
 const TRACK_MAX := 2
-## **When the older of the two stops being worth drawing a line to.** Four beats
-## of silence, and the sample before the gap is not a place the other cell was
-## on its way from -- it is where it was before it went in a pocket. Sliding a
-## marker across that gap would animate a journey nobody made, so the track is
-## dropped and the next frame lands as a step. The *marker* is still theirs and
-## still drawn; see [method quiet_for] for what says how old it is.
-const TRACK_GAP := HEARTBEAT * 4.0
+## **When the frame before a silence stops being worth blending from.** Two
+## seconds, and it is not a place the other cell was on its way from -- it is
+## where it was before it went in a pocket. Sliding a marker across that gap
+## would animate a journey nobody made, so the track is dropped here and
+## `vision.gd` lands the next frame as a step, measuring the gap from the frame
+## it was drawing. The *marker* is still theirs and still drawn; see [method
+## quiet_for] for what says how old it is.
+##
+## Two seconds is what this was when it was written as four 2 Hz beats. It is
+## a length of silence, not a count of frames, so it did not move with the rate.
+const TRACK_GAP := 2.0
 ## **How long a refusal is given to get out before the line is cut.**
 ##
 ## Measured, and it is the difference between a sentence and a shrug: sending a
@@ -145,6 +206,9 @@ var _out_event_seq := 0
 ## minutes as perfectly fresh. `Time.get_ticks_msec()` keeps counting through
 ## it, which is the answer the player would give.
 var _heartbeat_at := 0.0
+## When the next state frame is due while a body is being reported. See
+## [method _beat] for why it is not simply [member _heartbeat_at] plus a period.
+var _beat_due := 0.0
 var _reach_at := 0.0
 ## Peer id -> when to actually cut the line. See [constant REFUSE_LINGER].
 var _hanging_up: Dictionary = {}
@@ -156,6 +220,30 @@ var _body := false
 var _body_at := Vector2.ZERO
 var _body_heading := 0.0
 var _body_radius := 0.0
+var _body_velocity := Vector2.ZERO
+var _body_turning := 0.0
+## **Whether the run has stopped reporting the body.** It reports once a frame
+## while its cell is simulated and stops while it is paused, dividing or dying:
+## the body is *held*, and a held body has no velocity whatever its last report
+## said. So a held body's frames carry no motion -- one goes at once to say so
+## -- and the beat drops back to [constant HEARTBEAT].
+##
+## **Counted in frames, not seconds, and that was found by rendering.** The
+## first version called a body held after 0.1 s without a report. At 2400x1080
+## under software GL a frame took longer than that, so every frame this node --
+## which processes before the run -- sent a stopped body, and the real report
+## that followed was held back by [constant EARLY_GAP]: the friend on the other
+## screen stalled, lunged and slid backwards. A phone that hitches past a tenth
+## of a second would have done the same. Now it is one question: did a whole
+## frame go by with no report in it? [member _reported] is the answer.
+var _held := true
+var _reported := false
+## **What the far end was last told**, as `[when, at, heading, radius,
+## velocity, turning]`, or empty for *no body*. Decoded back out of the frame
+## that told it rather than remembered from the arguments, so the stray test
+## runs against the one-byte heading and the float32 place the far end really
+## has, and not against something a little truer that it never received.
+var _told: Array = []
 
 
 func _ready() -> void:
@@ -210,12 +298,19 @@ func _process(_delta: float) -> void:
 			_hanging_up.erase(id)
 			if _peer != null:
 				_peer.disconnect_peer(id, false)
-	if link == Link.TOGETHER:
-		if now - _heartbeat_at >= HEARTBEAT:
-			_heartbeat_at = now
-			_out_state_seq += 1
-			_to_everyone(Wire.state(_out_state_seq, _body, _body_at,
-				_body_heading, _body_radius))
+	# **A frame with no report in it is a held body.** Before anything that
+	# sends, so the frame that says so is this one.
+	_held = not _reported
+	_reported = false
+	if link == Link.TOGETHER and not _moving():
+		# **A swimming body is sent from [method report_body]**, the moment it
+		# is reported, so the frame carries this frame's truth and not the last
+		# one's -- this node processes before the run does. What is left for
+		# here is the beat with nothing moving in it, and the one frame that
+		# says a body has just stopped: the far end is still carrying it along
+		# its last velocity, and should not be left to.
+		if _told_moving() or now - _heartbeat_at >= HEARTBEAT:
+			_beat(now)
 
 
 # ---------------------------------------------------------------------------
@@ -307,28 +402,55 @@ func shout(at: Vector2, radius: float, reach: float) -> void:
 	_to_everyone(Wire.shout(_out_event_seq, at, radius, reach))
 
 
-## **Where this cell is, for the next beat to carry.** Called by the run once a
-## frame; the beat is 2 Hz, so all but one call in thirty is overwritten before
-## anything reads it, and that is the right way round -- the alternative is the
-## session reaching into a scene for a position at a moment of its own choosing,
-## and it has no business knowing there is a scene.
+## **Where this cell is and how it is moving, sent now if it is time or if
+## waiting would leave the far end wrong.** Called by the run once a frame, and
+## once more the instant an impulse fires; the session still never reaches into
+## a scene for a position at a moment of its own choosing, and has no business
+## knowing there is a scene.
 ##
-## Free with nobody on the wire, the same way [method shout] is: three
-## assignments, and the beat that would carry them is not running.
-func report_body(at: Vector2, heading: float, radius: float) -> void:
+## Two reasons to send, and nothing else is one:
+##
+## - **the beat is due**, every [constant STATE_PERIOD];
+## - **the far end's picture would stray** before the next one -- see
+##   [method _strays]. That is an impulse, a dash, a bump or a meal, in the frame
+##   it happens, and it is what the owner meant by a cell that jumps.
+##
+## [param velocity] is in world units a second and [param turning] in radians a
+## second, both straight off `cell.gd`. Left at their defaults they say *not
+## moving*, which is true of a body held in place and makes the far end draw it
+## where it was put.
+##
+## Free with nobody on the wire, the same way [method shout] is: six
+## assignments and a comparison, and nothing leaves.
+func report_body(at: Vector2, heading: float, radius: float,
+		velocity: Vector2 = Vector2.ZERO, turning: float = 0.0) -> void:
 	_body_at = at
 	_body_heading = heading
 	_body_radius = radius
+	_body_velocity = velocity
+	_body_turning = turning
 	_body = radius > 0.0
+	_reported = true
+	_held = false
+	if link != Link.TOGETHER:
+		return
+	var now := _now()
+	if now >= _beat_due:
+		_beat(now, true)
+	elif now - _heartbeat_at >= EARLY_GAP and _strays(now):
+		_beat(now)
 
 
 ## **There is no longer a cell here.** The death of a run, and the state every
 ## session starts in. The beat keeps going -- the link is fine, the person is
 ## fine, there is just nothing to draw -- and [method Wire.state_body] on the
 ## far side returns nothing, so the marker goes out rather than freezing on a
-## corpse.
+## corpse. Said at once rather than on the next beat: a death is the most
+## discrete event there is.
 func forget_body() -> void:
 	_body = false
+	if link == Link.TOGETHER and not _told.is_empty():
+		_beat(_now())
 
 
 ## Everything heard since the last drain, oldest first. Empties the queue, so
@@ -369,9 +491,10 @@ func quiet_for() -> float:
 	return -1.0
 
 
-## How many of the other cell's state frames have been applied -- their newest
-## sequence, which is also a count because the sender only ever increments. 0
-## before the first one lands.
+## The newest sequence of the other cell's state frames applied here, 0 before
+## the first one lands. The sender only ever increments, so it counts frames
+## *sent*: state frames go out unreliable, and one lost on the way still moves
+## it.
 func heartbeats_heard() -> int:
 	for id: int in _peers.keys():
 		var peer: Dictionary = _peers[id]
@@ -380,17 +503,20 @@ func heartbeats_heard() -> int:
 	return 0
 
 
-## **Where the other cell is, as its last two state frames said so.** Oldest
-## first, each entry `[when, at, heading, radius]`, and `when` is on this
-## device's own [method clock] -- so a reader ages a sample against exactly the
-## clock it was stamped with.
+## **Where the other cell is and how it is moving, as its last two state frames
+## said so.** Oldest first, each entry `[when, at, heading, radius, velocity,
+## turning]`, and `when` is on this device's own [method clock] -- so a reader
+## ages a frame against exactly the clock it was stamped with. A track of one
+## is a first frame, or the first after [constant TRACK_GAP] of silence.
 ##
 ## Empty when there is nobody on the wire, when the other cell has no body yet,
 ## and when it has just lost one. **Read-only**: the array is the session's own,
-## handed over rather than copied, the same way `food.gd` hands over its points.
+## handed over rather than copied, the same way `food.gd` hands over its points
+## -- and each entry is a new array, so a reader may hold on to one and ask
+## later whether it is still the newest.
 ##
-## Nothing in this file interpolates it. Two places and two times is the whole
-## of what arrived; what to draw between them is a question for whoever is
+## Nothing in this file carries it forward. A place, a motion and a time is the
+## whole of what arrived; what to draw from them is a question for whoever is
 ## drawing, and the answer is different for a marker and for a simulation.
 func peer_track() -> Array:
 	for id: int in _peers.keys():
@@ -446,6 +572,8 @@ func _on_peer_connected(id: int) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	_peers.erase(id)
+	if _greeted_count() == 0:
+		_told = []
 	if hosting:
 		if _peers.is_empty() and link == Link.TOGETHER:
 			_say("they left", "the other cell went. show the code again.")
@@ -530,6 +658,8 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		return
 	peer["greeted"] = true
 	_to(id, Wire.welcome(_speaks(), _api.get_unique_id()))
+	# A new listener has been told nothing, so the next report goes at once.
+	_told = []
 	_say("", "")
 	_set_link(Link.TOGETHER)
 
@@ -556,6 +686,7 @@ func _take_welcome(id: int, frame: PackedByteArray) -> void:
 	if not peer.is_empty():
 		peer["greeted"] = true
 		peer["protocol"] = theirs
+	_told = []
 	_say("", "")
 	_set_link(Link.TOGETHER)
 
@@ -604,10 +735,11 @@ func _refuse(id: int, reason: int) -> void:
 
 ## **Idempotent, drained to newest.** Applying the newest state frame and
 ## dropping everything behind it is the same as applying them all, which is
-## what makes a burst of forty queued frames cost one apply. On a reliable
-## ordered stream the sequence can only go up, so the test is a formality here
-## -- and it is not a formality over a transport that can reorder, which is the
-## whole reason the sequence is in the frame.
+## what makes a burst of forty queued frames cost one apply. **The sequence test
+## is no longer a formality**: state frames now go out unreliable, and ENet
+## delivers an unreliable frame whenever it lands, so a late one can arrive
+## after its successor. It is dropped here, which is the whole reason the
+## sequence was put in the frame when every frame was still reliable.
 func _take_state(peer: Dictionary, frame: PackedByteArray) -> void:
 	if peer.is_empty():
 		return
@@ -619,10 +751,13 @@ func _take_state(peer: Dictionary, frame: PackedByteArray) -> void:
 	_track(peer, Wire.state_body(frame))
 
 
-## **Two places and the times they landed.** Stamped on arrival rather than by
+## **Two frames and the times they landed.** Stamped on arrival rather than by
 ## the sender, because the two devices have no common clock and this one needs
-## no more than the interval between two frames it received -- which is a thing
-## it can measure for itself, and the only thing a drawn marker wants.
+## no more than how long ago a frame arrived -- which is a thing it can measure
+## for itself, and the only thing a view carrying it forward wants. The price is
+## that a frame is treated as new when it lands: the far body is drawn one
+## flight time behind, which on a home LAN is a few tens of milliseconds and on
+## loopback is a frame.
 ##
 ## Wall time, like every other clock in this file, for the reason on
 ## [member _heartbeat_at]: a phone in a pocket stops the main loop, and a frame
@@ -637,7 +772,8 @@ func _track(peer: Dictionary, body: Array) -> void:
 	var now := _now()
 	if not track.is_empty() and now - float(track[track.size() - 1][0]) > TRACK_GAP:
 		track.clear()
-	track.append([now, body[0], float(body[1]), float(body[2])])
+	track.append([now, body[0], float(body[1]), float(body[2]), body[3],
+		float(body[4])])
 	while track.size() > TRACK_MAX:
 		track.remove_at(0)
 
@@ -677,13 +813,111 @@ func _speaks() -> int:
 func _to(id: int, frame: PackedByteArray) -> void:
 	if _api == null or _api.multiplayer_peer == null:
 		return
-	# Reliable, channel zero, always. Nothing here asks for a transfer mode a
-	# WebSocket peer would silently ignore.
-	var err := _api.send_bytes(frame, id,
-		MultiplayerPeer.TRANSFER_MODE_RELIABLE, 0)
+	var err := _api.send_bytes(frame, id, _mode_for(frame), 0)
 	if err != OK:
 		push_warning("[net] could not send %d bytes to %d (error %d)"
 			% [frame.size(), id, err])
+
+
+## **How a frame is delivered, chosen by what kind of frame it is and by
+## nothing in its bytes.** The one place in this project that knows ENet has
+## more than one way to send.
+##
+## - **A state frame goes unreliable.** It is idempotent and drained to newest
+##   (wire.gd), so a lost one is superseded fifty milliseconds later -- and on
+##   ENet a *reliable* one that is lost holds every reliable frame behind it
+##   until it has been resent. Measured with `tools/net_lag.gd --reliable` on
+##   a simulated Wi-Fi losing one frame in fifty: the worst of forty jumps
+##   reached the far screen in 173 ms instead of 84, and the worst correction
+##   the view had to bleed out was 17.5 units instead of 4.8. The medians
+##   barely moved; the tail is what a lost reliable frame costs, and the tail
+##   is what a player notices. (The resend timeout in that model, 150 ms, is
+##   an estimate of ENet's own on such a link, not a reading of it.) Channel
+##   zero, unreliable, is a different ENet channel from channel zero reliable
+##   -- `enet_multiplayer_peer.cpp` puts them on separate system channels,
+##   read in the 4.7 source -- so a stalled handshake or shout can never hold
+##   a state frame up either.
+## - **Everything else stays reliable**: the handshake, the refusal and the
+##   shout. A shout heard twice is two shouts and a shout lost is a pulse the
+##   other cell never felt; neither is superseded by anything.
+##
+## A WebSocket transport has no modes -- `set_transfer_mode()` is silently
+## ignored there -- so it sends everything reliable-ordered, and the frames are
+## exactly as correct on it: that is what designing the format for the
+## WebSocket shape bought. Porting means deleting this function, not rewriting
+## the wire.
+static func _mode_for(frame: PackedByteArray) -> int:
+	if Wire.kind(frame) == Wire.KIND_STATE:
+		return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
+	return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+
+
+## **One state frame, now.** What the far end is told is decoded back out of the
+## very bytes that tell it, and kept -- that is the far end's picture, and
+## [method _strays] measures the truth against it.
+##
+## [param on_time] is a frame sent because one was due. The next is then due a
+## period after this one *was due*, not after it went: a report only comes once
+## a display frame, so measuring from the send would stretch every period to the
+## next frame boundary -- 15 to 20 a second at 60 fps instead of 20. Any other
+## frame restarts the schedule, because it is as fresh as a scheduled one.
+func _beat(now: float, on_time: bool = false) -> void:
+	_heartbeat_at = now
+	var next := _beat_due + STATE_PERIOD
+	_beat_due = next if on_time and next > now else now + STATE_PERIOD
+	_out_state_seq += 1
+	var moving := _moving()
+	var frame := Wire.state(_out_state_seq, _body, _body_at, _body_heading,
+		_body_radius, _body_velocity if moving else Vector2.ZERO,
+		_body_turning if moving else 0.0)
+	var told := Wire.state_body(frame)
+	_told = [] if told.is_empty() \
+		else [now, told[0], told[1], told[2], told[3], told[4]]
+	_to_everyone(frame)
+
+
+## **Would the far end be wrong by the next beat?** It carries the last frame
+## it was told along that frame's velocity and turning; this runs the same
+## straight-line arithmetic against the body as it really is, and looks one
+## [constant STATE_PERIOD] ahead -- so a new velocity counts at the instant it
+## appears, before it has moved the body a single unit, which is what makes an
+## impulse leave in the frame it fires.
+##
+## The body appearing or going, or changing size -- a meal is four units of
+## radius at once -- counts as well; none of those is anything the far end
+## could have guessed.
+func _strays(now: float) -> bool:
+	if _told.is_empty():
+		return _body
+	if not _body:
+		return true
+	if absf(_body_radius - float(_told[3])) > 0.5:
+		return true
+	var ahead := now - float(_told[0])
+	var told_velocity: Vector2 = _told[4]
+	var told_turning := float(_told[5])
+	var guess: Vector2 = (_told[1] as Vector2) + told_velocity * ahead
+	var drift := (_body_at - guess) \
+		+ (_body_velocity - told_velocity) * STATE_PERIOD
+	if drift.length() > STRAY_PLACE:
+		return true
+	var twist := angle_difference(float(_told[2]) + told_turning * ahead,
+		_body_heading) + (_body_turning - told_turning) * STATE_PERIOD
+	return absf(twist) > STRAY_TURN
+
+
+## True while the run is reporting a body: it is being simulated, so it has a
+## motion worth sending. See [member _held].
+func _moving() -> bool:
+	return _body and not _held
+
+
+## True when the far end was last told a body that is moving -- and is still
+## carrying it along that motion.
+func _told_moving() -> bool:
+	if _told.is_empty():
+		return false
+	return (_told[4] as Vector2) != Vector2.ZERO or float(_told[5]) != 0.0
 
 
 func _to_everyone(frame: PackedByteArray) -> void:
@@ -736,6 +970,12 @@ func _drop_link() -> void:
 func _reset_socket() -> void:
 	_drop_link()
 	_body = false
+	_body_velocity = Vector2.ZERO
+	_body_turning = 0.0
+	_held = true
+	_reported = false
+	_told = []
+	_beat_due = 0.0
 	_out_state_seq = 0
 	_out_event_seq = 0
 	_heartbeat_at = _now()
