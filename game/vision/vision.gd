@@ -44,6 +44,12 @@ const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+## **For one constant, and never for a session.** TRACK_GAP is the length of
+## silence after which a friend's next frame lands as a step; the view decides
+## that for itself and must agree with the session on the number. It still
+## never looks a session up: see [method set_session] for why the handle is
+## handed in rather than found.
+const NetSession := preload("res://game/net/net_session.gd")
 
 ## Master switch. False takes the world view out everywhere, including from
 ## full-vision mode, which then renders as point of view. For when something in
@@ -115,27 +121,58 @@ const PING_STEPS := Cilia.WAVE_STEPS
 const PING_SEAM := Cilia.WAVE_SEAM
 
 # --- The other player -------------------------------------------------------
-## **How far behind the newest frame the friend is drawn: one beat.**
+## **How far past the newest frame the friend is carried: a fifth of a second,
+## and never further.** Drawn where the newest frame says the body is *now* --
+## its place carried forward along the velocity and turn rate that came with it.
 ##
-## The position arrives at 2 Hz. Drawn as it lands it is a marker that jumps
-## half a metre of screen twice a second, which reads as a fault rather than as
-## a friend. Held one beat back there is always a sample on either side of the
-## moment being drawn, so the marker slides between two things that actually
-## happened and never guesses at a third.
+## **This reverses #50, on evidence, and only for a peer that is still
+## talking.** #50 drew the friend half a second behind the newest frame, so
+## that there was always a real sample on either side of the moment drawn and
+## the marker never guessed. That was careful and it was slow: the owner played
+## it on two phones and said a friend who jumped or turned showed it late
+## enough to be called a second. `tools/net_lag.gd` put a number on it with no
+## network in the way at all -- loopback, one process -- and the drawn friend
+## ran about 0.55 s behind the real one on every jump and every turn, all of it
+## this delay and the 2 Hz beat it was paired with. Now frames come twenty
+## times a second carrying the body's own motion, and the marker is drawn on
+## time; the price is that it is sometimes wrong for a moment, which
+## [constant PEER_BLEND] takes back out without a jump.
 ##
-## **This is the case multiplayer.md §4.10 does not cover, and the difference
-## is the quantity.** §4.10's measurement -- buffered lerp doubled the mean
-## error on every water-derived channel -- is about the *sensation* stream,
-## whose maxima are steps: a body reseeded across the water, a hunter
-## committing. Interpolating a step invents a body sliding through water it was
-## never in. A swimming cell's position is the opposite: it is continuous by
-## construction, it has a bounded speed, and the straight line between two of
-## its places half a second apart is very nearly where it was. Sample-and-hold
-## on *this* quantity is the thing that would be wrong.
-const PEER_DELAY := 0.5
-## Below this much silence the marker is at full confidence -- three beats,
-## which is two missed ones plus the delay above. Everything after it is
-## [method _step_peer]'s decay.
+## **#50's reason still holds, and this is where.** A cell that has *stopped*
+## sending may equally have stopped swimming, turned, or been eaten, and a
+## marker carried on by an old velocity is confidently wrong in a brand new
+## place every frame. So the carry is capped here, and past the cap the marker
+## freezes where the carry left it: four frame intervals, enough to ride over
+## two lost frames and still land the third, and 38 units of travel at the top
+## impulse speed -- the same 190 units a second the doubt ring below calls the
+## fastest a cell swims. **Silence is still #50's to handle, and
+## handles it unchanged**: [constant PEER_FRESH] still starts the squared fade
+## and the dashed ring, at the same moment, at the same rates. Both policies
+## live in one marker and they do not overlap -- a peer is carried for 0.2 s
+## after each frame, and nothing about the fade starts before 1.2 s of quiet.
+##
+## **multiplayer.md §4.10 is still not contradicted.** Its measured rule --
+## never interpolate the sensation stream -- is about a stream whose maxima are
+## steps; this is a swimming body's place, which is continuous by construction
+## and has a bounded speed. Nothing here touches the sensation stream.
+const PEER_REACH := 0.2
+## **How fast a correction is taken back out**: the time constant, in seconds,
+## of the exponential a correction decays on -- 86% of it gone in 100 ms. When a
+## new frame disagrees with where the marker is (a jump landed between two
+## frames, a frame came late), the marker does not jump to the new answer: the
+## difference is kept as an offset and bled away, so the body slides the last
+## few units over a few frames instead of teleporting them in one.
+##
+## A time constant rather than a fixed-length slide, because frames arrive every
+## 50 ms and a new correction lands before an old one has finished: an
+## exponential restarted from wherever the marker is has no seam, and a fixed
+## ramp restarted halfway has one.
+const PEER_BLEND := 0.05
+## Below this much silence the marker is at full confidence. **Unchanged from
+## #50, and on purpose**: the quiet state has to look exactly as it did, and 1.2
+## s is still the right length -- two dozen lost frames at 20 Hz, or two missed
+## beats of the 2 Hz a paused run sends, is not a phone in a pocket yet.
+## Everything after it is [method _step_peer]'s decay.
 const PEER_FRESH := 1.2
 ## Where the decay bottoms out. Not disconnection and not disappearance: the
 ## session deliberately keeps a quiet peer (net_session.gd's SILENCE note), and
@@ -310,6 +347,15 @@ var _session: Node = null
 var _peer: Dictionary = {}
 var _peer_trail := PackedVector2Array()
 var _peer_trail_clock := 0.0
+## **The frame the marker is being carried from**, one of the session's track
+## entries, held so the next frame can be told apart from it -- by identity,
+## because two frames can land inside one millisecond of the session's clock.
+var _peer_basis: Array = []
+## The correction still being bled out, in world units and radians. See
+## [constant PEER_BLEND]. `tools/net_lag.gd` reads both, which is how the size
+## of every correction a real run asks for gets measured rather than guessed.
+var _peer_offset := Vector2.ZERO
+var _peer_twist := 0.0
 ## [[world position, strength, age], ...]
 var _kicks: Array[Array] = []
 ## [[world position, world direction, strength, age], ...]
@@ -381,8 +427,7 @@ func bind(cell: CellBody, motes: MotesField, food: FoodField,
 ## silence and a clock. The run still owns every byte that leaves.
 func set_session(session: Node) -> void:
 	_session = session if (session != null and is_instance_valid(session)) else null
-	_peer = {}
-	_peer_trail.clear()
+	_forget_peer()
 
 
 ## **Which part of the screen this view occupies.** The whole viewport in normal
@@ -415,9 +460,8 @@ func set_active(on: bool) -> void:
 			_camera = _cell.position
 		_trail.clear()
 		_trail_clock = 0.0
-		_peer_trail.clear()
+		_forget_peer()
 		_peer_trail_clock = 0.0
-		_peer = {}
 		_kicks.clear()
 		_hits.clear()
 		_ghosts.clear()
@@ -540,11 +584,13 @@ func _step_peer(delta: float) -> void:
 	if track.is_empty():
 		_forget_peer()
 		return
-	var body := body_at(track, float(_session.clock()) - PEER_DELAY)
+	var now := float(_session.clock())
+	_follow(track, now, delta)
+	var body := carry(_peer_basis, now)
 	if body.is_empty():
 		_forget_peer()
 		return
-	var at: Vector2 = body[0]
+	var at: Vector2 = body[0] + _peer_offset
 	# **How old this is, on the wire's terms and not the tree's.**
 	# `quiet_for()` counts every byte that has arrived, not only state frames,
 	# so a peer that is saying anything at all reads as present -- and it is
@@ -567,12 +613,52 @@ func _step_peer(delta: float) -> void:
 	var top: float = ladder[ladder.size() - 1]
 	_peer = {
 		"at": at,
-		"heading": float(body[1]),
+		"heading": wrapf(float(body[1]) + _peer_twist, -PI, PI),
 		"radius": float(body[2]),
 		"confidence": PEER_FLOOR + (1.0 - PEER_FLOOR) * slip,
 		"doubt": minf(doubt * top, PEER_DOUBT_MAX),
 	}
-	_step_peer_trail(delta, at, doubt)
+	_step_peer_trail(delta, at,
+		doubt <= 0.0 and now - float(_peer_basis[0]) <= PEER_REACH)
+
+
+## **Which frame the marker is carried from, and what to do when a new one
+## lands.** Three cases, and the middle one is the feature:
+##
+## - **nothing new**: the correction in flight decays a little, and that is all;
+## - **a new frame continuing the stream**: the marker stays exactly where it
+##   is drawn this frame -- the difference between the old frame's carry and
+##   the new one's becomes the offset, and [constant PEER_BLEND] takes it out
+##   over the next few frames. That is the whole of "blend, do not snap";
+## - **a new frame that continues nothing** -- the first one, or one landing
+##   more than `net_session.gd`'s TRACK_GAP after the frame the marker was
+##   carried from: it lands as a step, as it did in #50. Blending across a
+##   pocket would animate a journey nobody made.
+##
+## The gap is measured from the marker's own frame and not read off the
+## track's length, and the difference is a real case: a phone coming out of a
+## pocket can find two or more frames waiting in one poll, and the track then
+## holds two entries that continue *each other* while the marker is still on a
+## frame from before the silence.
+func _follow(track: Array, now: float, delta: float) -> void:
+	var keep := exp(-maxf(delta, 0.0) / PEER_BLEND)
+	_peer_offset *= keep
+	_peer_twist *= keep
+	var newest: Array = track[track.size() - 1]
+	if is_same(newest, _peer_basis):
+		return
+	var was := carry(_peer_basis, now)
+	var fresh := carry(newest, now)
+	var bridged := not was.is_empty() and not fresh.is_empty() \
+		and float(newest[0]) - float(_peer_basis[0]) <= NetSession.TRACK_GAP
+	_peer_basis = newest
+	if not bridged:
+		_peer_offset = Vector2.ZERO
+		_peer_twist = 0.0
+		return
+	_peer_offset = ((was[0] as Vector2) + _peer_offset) - (fresh[0] as Vector2)
+	_peer_twist = angle_difference(float(fresh[1]),
+		float(was[1]) + _peer_twist)
 
 
 func _forget_peer() -> void:
@@ -580,47 +666,48 @@ func _forget_peer() -> void:
 		_peer = {}
 	if not _peer_trail.is_empty():
 		_peer_trail.clear()
+	_peer_basis = []
+	_peer_offset = Vector2.ZERO
+	_peer_twist = 0.0
 
 
-## **One place out of two and a clock.** Static and dependency-free on purpose:
-## this is the only arithmetic in the feature that can be wrong in a way a
-## render would not show, so `tools/net_probe.gd` checks it against tracks it
-## makes up rather than against a screen nobody can see.
+## **One frame, carried forward to now, and no further than [constant
+## PEER_REACH].** Static and dependency-free on purpose: this is the only
+## arithmetic in the feature that can be wrong in a way a render would not
+## show, so `tools/net_probe.gd` checks it against frames it makes up rather
+## than against a screen nobody can see.
 ##
-## [param track] is `net_session.gd`'s, oldest first, each entry
-## `[when, at, heading, radius]`. Returns `[at, heading, radius]`, or an empty
-## array when there is nothing in the track to return.
+## [param frame] is one of `net_session.gd`'s track entries, `[when, at,
+## heading, radius, velocity, turning]`. Returns `[at, heading, radius]`, or an
+## empty array when there is no frame. A frame with no motion in it -- or an
+## old four-entry one -- is drawn exactly where it says, which is what a held
+## body is.
 ##
-## Between the two samples this is a straight line. Past the newest it **holds,
-## and never extrapolates**: a cell that has stopped sending is a cell that may
-## equally have stopped swimming, turned, or been eaten, and a marker carried on
-## by an old velocity is confidently wrong in a brand new place every frame.
-## Holding is wrong in one place and says so -- that is what [member _peer]'s
-## `doubt` is drawn as.
-static func body_at(track: Array, when: float) -> Array:
-	if track.is_empty():
+## **A straight line, and that is enough.** The velocity decays with the
+## water's drag and the turn rate eases toward the steering, and neither is
+## modelled: over the 50 ms between two frames the drag is a few hundredths of a
+## unit and the easing a thousandth of a radian, and the next frame corrects
+## both. Running `cell.gd`'s own motion model here would need the sender's genes
+## and its inputs, and the corrections `tools/net_lag.gd` measures are what
+## says whether that is ever worth it.
+static func carry(frame: Array, now: float) -> Array:
+	if frame.size() < 4:
 		return []
-	var newest: Array = track[track.size() - 1]
-	if track.size() < 2 or when >= float(newest[0]):
-		return [newest[1], float(newest[2]), float(newest[3])]
-	var older: Array = track[track.size() - 2]
-	var span := float(newest[0]) - float(older[0])
-	if span <= 0.0 or when <= float(older[0]):
-		return [older[1], float(older[2]), float(older[3])]
-	var t := (when - float(older[0])) / span
-	return [
-		(older[1] as Vector2).lerp(newest[1] as Vector2, t),
-		lerp_angle(float(older[2]), float(newest[2]), t),
-		lerpf(float(older[3]), float(newest[3]), t),
-	]
+	var at: Vector2 = frame[1]
+	var heading := float(frame[2])
+	if frame.size() >= 6:
+		var ahead := clampf(now - float(frame[0]), 0.0, PEER_REACH)
+		at += (frame[4] as Vector2) * ahead
+		heading += float(frame[5]) * ahead
+	return [at, heading, float(frame[3])]
 
 
-## Their path, on the same cadence as the player's own. **It stops the instant
-## the stream does**: past that the drawn position is a held sample, and a trail
-## that kept sampling it would draw a cell standing still in open water -- which
-## is a claim, and a false one.
-func _step_peer_trail(delta: float, at: Vector2, doubt: float) -> void:
-	if doubt > 0.0:
+## Their path, on the same cadence as the player's own. **It stops the moment
+## the marker stops being carried on live frames**: past that the drawn position
+## is a held one, and a trail that kept sampling it would draw a cell standing
+## still in open water -- which is a claim, and a false one.
+func _step_peer_trail(delta: float, at: Vector2, live: bool) -> void:
+	if not live:
 		return
 	_peer_trail_clock += delta
 	if _peer_trail_clock < TRAIL_STEP and not _peer_trail.is_empty():

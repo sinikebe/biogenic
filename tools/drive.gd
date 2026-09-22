@@ -279,18 +279,49 @@ extends Node
 ##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
 ##                           **a second player**, on a real loopback session --
 ##                           two `net_session.gd` nodes in this process, a real
-##                           ENet handshake, real protocol-2 state frames at the
-##                           real 2 Hz beat. Nothing is faked and nothing is
-##                           written into the view: the only way to put a friend
-##                           on screen is to be one, which is also the only way
-##                           a render is evidence about the wire. `dist` and
-##                           `bearing` are body-relative, the same convention as
-##                           `--cell=`, and are re-applied every frame so the
-##                           friend stays framed while the player swims.
+##                           ENet handshake, real state frames at the real rate
+##                           the session sends them. Nothing is faked and
+##                           nothing is written into the view: the only way to
+##                           put a friend on screen is to be one, which is also
+##                           the only way a render is evidence about the wire.
+##                           `dist` and `bearing` are body-relative, the same
+##                           convention as `--cell=`, and are re-applied every
+##                           frame so the friend stays framed while the player
+##                           swims -- and reported with the motion that takes,
+##                           because a place that moves under a claimed velocity
+##                           of zero is corrected every frame on the far side.
 ##                           `facing` is degrees away from facing the player,
 ##                           default 0. Distances past about 700 units put them
 ##                           off the frame, which is the state the edge mark is
 ##                           for
+##   --peer-dash=<seconds>   the friend **dashes** at that time: 190 units a
+##                           second along its nose, a tier-1 `myoneme`'s burst,
+##                           reported the frame it fires, the way the run
+##                           reports an impulse. Repeatable. The first
+##                           --peer-dash or --peer-steer lets go of the hold:
+##                           from then on the friend swims on its own from where
+##                           it was, so a shot a few frames later is the friend
+##                           mid-dash -- drawn where the far body really is, or
+##                           not, which is what --peer-trace prints
+##   --peer-steer=<seconds>:<demand>
+##                           the friend's steering demand from that time, -1
+##                           hard to port to +1 hard to starboard; repeatable.
+##                           Turned the way `cell.gd` turns a born cell -- the
+##                           turn rate eases toward the demand over the tier-1
+##                           `cirrus` response -- so a shot part-way through is
+##                           a friend mid-turn. The free friend is `cell.gd`'s
+##                           motion with the dice taken out: drag and the tier-1
+##                           turn, no drift and no involuntary impulses, so a
+##                           shot repeats under --seed and the friend never
+##                           draws on the global stream the player is seeded
+##                           from
+##   --peer-truth            draw a thin white ring where the friend's body
+##                           really is, with a tick the way it truly points,
+##                           over everything, through the same world
+##                           transform the view draws with. **A harness overlay,
+##                           never the game**: it is the only way a still frame
+##                           can show how far the drawn friend is from the real
+##                           one, which is the whole question a lag fix answers
 ##   --peer-trace=<seconds>  print what the world view worked out about the
 ##                           friend on that interval: where it is drawing them,
 ##                           how far that is, how old the newest frame is, how
@@ -382,6 +413,23 @@ var _peer_gone := false
 ## far one; the game reaches `NetSession.current`, which is the near one.
 var _peer_far: Node = null
 var _peer_near: Node = null
+## --peer-dash= and --peer-steer=, as `[seconds]` and `[[seconds, demand]]`.
+var _peer_dashes: Array[float] = []
+var _peer_steers: Array = []
+## The friend's body as the far end knows it: held, or swimming free once the
+## first dash or steer has let go of it.
+var _peer_free := false
+var _peer_pos := Vector2(NAN, NAN)
+var _peer_vel := Vector2.ZERO
+var _peer_heading := 0.0
+var _peer_omega := 0.0
+var _peer_demand := 0.0
+## True when the session takes a motion with the place -- protocol 3 and on --
+## so the same harness photographs the build before it too.
+var _peer_rich := false
+## --peer-truth: the overlay that marks where the far body really is.
+var _peer_truth := false
+var _truth_mark: Node2D = null
 
 var _stalk := -1.0
 var _stalk_at := 40.0
@@ -566,6 +614,14 @@ func _ready() -> void:
 			_peer_trace = float(text.trim_prefix("--peer-trace="))
 		elif text.begins_with("--peer-quiet="):
 			_peer_quiet = float(text.trim_prefix("--peer-quiet="))
+		elif text == "--peer-truth":
+			_peer_truth = true
+		elif text.begins_with("--peer-dash="):
+			_peer_dashes.append(float(text.trim_prefix("--peer-dash=")))
+		elif text.begins_with("--peer-steer="):
+			var steer := text.trim_prefix("--peer-steer=").split(":", false)
+			if steer.size() == 2:
+				_peer_steers.append([float(steer[0]), float(steer[1])])
 		elif text.begins_with("--peer="):
 			var peer := text.trim_prefix("--peer=").split(",", false)
 			_peer_dist = float(peer[0]) if peer.size() > 0 else 400.0
@@ -852,6 +908,7 @@ func _open_peer() -> void:
 	if not _peer_near.join("127.0.0.1"):
 		print("[peer] could not reach: %s" % _peer_near.trouble)
 		return
+	_peer_rich = _peer_far.get_method_argument_count(&"report_body") >= 5
 	print("[peer] a second player at %.0f units, bearing %+.0f deg, r%.1f,"
 		% [_peer_dist, _peer_at, _peer_radius]
 		+ " facing %+.0f deg off you -- protocol %d on %s"
@@ -862,20 +919,141 @@ func _open_peer() -> void:
 ## fixed range and bearing off the player's own body, so a shot frames the same
 ## geometry however far the player has swum. The place goes into the session and
 ## nowhere else -- what reaches the screen has been through `Wire.state()`, a
-## socket, `Wire.state_body()` and `vision.gd`'s interpolator, like anybody's.
-func _hold_peer() -> void:
+## socket, `Wire.state_body()` and `vision.gd`'s own arithmetic, like anybody's.
+##
+## Once --peer-dash or --peer-steer has let go, the friend swims instead: see
+## [method _swim_peer].
+func _hold_peer(delta: float) -> void:
 	if _peer_far == null or not is_instance_valid(_peer_far):
 		return
 	if _peer_gone:
 		return
+	# **The friend's water stops with everybody else's.** This node runs through
+	# a pause so that scripted input still arrives, and a free friend swimming on
+	# through a --freeze-at would put --peer-truth's ring a second of swimming
+	# away from a view that stopped drawing at the freeze.
+	if get_tree().paused:
+		return
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
+		return
+	_step_peer_events()
+	if _peer_free:
+		_swim_peer(delta)
+		_report_peer(_peer_omega)
 		return
 	var at := _hold_point(_peer_dist, _peer_at)
 	# Degrees away from facing the player, the same convention --cell= uses.
 	var toward: Vector2 = cell.position - at
 	var facing := atan2(toward.x, -toward.y) + deg_to_rad(_peer_face)
-	_peer_far.report_body(at, facing, _peer_radius)
+	# **The held place moves with the player's body, so it has a motion**: the
+	# difference of this frame's place and the last one's. Reported as that,
+	# because a place that moves while claiming a velocity of zero is a place
+	# the far screen is told is standing still -- and then corrected, every
+	# frame, which is not a picture of anything.
+	var turning := 0.0
+	_peer_vel = Vector2.ZERO
+	if delta > 0.0 and _peer_pos.is_finite():
+		_peer_vel = (at - _peer_pos) / delta
+		turning = angle_difference(_peer_heading, facing) / delta
+	_peer_pos = at
+	_peer_heading = facing
+	_report_peer(turning)
+
+
+## --peer-truth. Its own canvas layer above every layer the run has, redrawn
+## every frame the harness runs -- so a freeze keeps the ring and the view's
+## drawing from the same frame, because both stop together.
+func _step_peer_truth() -> void:
+	if not _peer_truth or _run == null or not _peer_pos.is_finite():
+		return
+	if get_tree().paused:
+		return
+	if _truth_mark == null:
+		var layer := CanvasLayer.new()
+		layer.layer = 64
+		add_child(layer)
+		_truth_mark = Node2D.new()
+		layer.add_child(_truth_mark)
+		_truth_mark.draw.connect(_draw_peer_truth)
+	_truth_mark.queue_redraw()
+
+
+## Through `$Frame/World`'s own transform, the one `vision.gd` uses for the edge
+## mark, so the ring lands where the view would draw a body at the true place.
+func _draw_peer_truth() -> void:
+	var view := _find_script(_run, "res://game/vision/vision.gd")
+	if view == null or not view.has_node(^"Frame/World"):
+		return
+	var world: Node2D = view.get_node(^"Frame/World")
+	var at: Vector2 = world.transform * _peer_pos
+	var reach := _peer_radius * world.scale.x
+	_truth_mark.draw_arc(at, reach, 0.0, TAU, 48, Color(1.0, 1.0, 1.0, 0.85),
+		1.5, true)
+	_truth_mark.draw_line(at - Vector2(5.0, 0.0), at + Vector2(5.0, 0.0),
+		Color(1.0, 1.0, 1.0, 0.85), 1.5, true)
+	_truth_mark.draw_line(at - Vector2(0.0, 5.0), at + Vector2(0.0, 5.0),
+		Color(1.0, 1.0, 1.0, 0.85), 1.5, true)
+	# And the way it truly points, as a tick out past the rim, so a turn that
+	# is drawn late shows as a body whose nose is not under the tick.
+	var nose := world.transform.basis_xform(
+		Vector2(sin(_peer_heading), -cos(_peer_heading))).normalized()
+	_truth_mark.draw_line(at + nose * reach, at + nose * (reach + 16.0),
+		Color(1.0, 1.0, 1.0, 0.85), 1.5, true)
+
+
+func _report_peer(turning: float) -> void:
+	if _peer_rich:
+		_peer_far.report_body(_peer_pos, _peer_heading, _peer_radius, _peer_vel,
+			turning)
+	else:
+		_peer_far.report_body(_peer_pos, _peer_heading, _peer_radius)
+
+
+## --peer-steer= and --peer-dash=, each at its time. A dash is reported the
+## frame it fires, before the body has moved a unit, which is what the run does
+## for an impulse through `_on_impulsed`.
+func _step_peer_events() -> void:
+	for i in range(_peer_steers.size() - 1, -1, -1):
+		if _clock < float(_peer_steers[i][0]):
+			continue
+		_free_peer()
+		_peer_demand = clampf(float(_peer_steers[i][1]), -1.0, 1.0)
+		print("[peer]  %5.2f  the friend steers %+.2f" % [_clock, _peer_demand])
+		_peer_steers.remove_at(i)
+	for i in range(_peer_dashes.size() - 1, -1, -1):
+		if _clock < _peer_dashes[i]:
+			continue
+		_free_peer()
+		var nose := Vector2(sin(_peer_heading), -cos(_peer_heading))
+		_peer_vel += nose * CellBody.DASH_SPEED_BY_TIER[1]
+		print("[peer]  %5.2f  the friend dashes from (%.0f, %.0f)"
+			% [_clock, _peer_pos.x, _peer_pos.y])
+		_peer_dashes.remove_at(i)
+		_report_peer(_peer_omega)
+
+
+func _free_peer() -> void:
+	if _peer_free or not _peer_pos.is_finite():
+		return
+	_peer_free = true
+	print("[peer]  %5.2f  the friend swims free from (%.0f, %.0f)"
+		% [_clock, _peer_pos.x, _peer_pos.y])
+
+
+## **`cell.gd`'s motion with the dice taken out**, in `cell.gd`'s own order:
+## the turn rate eases toward the demand over the tier-1 response, the heading
+## follows it, the water drags the velocity and the place follows that. No
+## drift and no involuntary impulse, so a shot repeats -- and so nothing here
+## draws on the global random stream the player's own cell is seeded from.
+func _swim_peer(delta: float) -> void:
+	var rate: float = CellBody.TURN_RATE_BY_TIER[1]
+	var response: float = CellBody.TURN_RESPONSE_BY_TIER[1]
+	_peer_omega = lerpf(_peer_omega, _peer_demand * rate,
+		1.0 - exp(-delta / response))
+	_peer_heading = wrapf(_peer_heading + _peer_omega * delta, -PI, PI)
+	_peer_vel *= exp(-CellBody.DRAG * delta)
+	_peer_pos += _peer_vel * delta
 
 
 ## **The phone going in a pocket.** `onActivityStopped` calls `pauseGLThread()`
@@ -922,6 +1100,19 @@ func _step_peer_trace(delta: float) -> void:
 			cell.position.distance_to(at) if cell != null else -1.0,
 			rad_to_deg(cell.bearing_to(at)) if cell != null else 0.0,
 			quiet, float(mark["confidence"]), float(mark["doubt"])])
+	# **And where the far body really is**, which is the half of the picture a
+	# screenshot cannot show: the distance between the two is how late, or how
+	# wrong, the marker is in that frame.
+	if _peer_pos.is_finite():
+		var offset: Variant = view.get("_peer_offset")
+		print(("[peer]  %5.2f  truly at (%.0f, %.0f) heading %+.0f deg, drawn"
+			+ " %.1f units and %.1f deg from it%s")
+			% [_clock, _peer_pos.x, _peer_pos.y, rad_to_deg(_peer_heading),
+				_peer_pos.distance_to(at),
+				absf(rad_to_deg(angle_difference(_peer_heading,
+					float(mark["heading"])))),
+				"" if not offset is Vector2
+					else "; correction in flight %.2f units" % (offset as Vector2).length()])
 
 
 ## Ground truth about a meal, straight off the field: what it weighed against
@@ -942,7 +1133,8 @@ func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 func _process(delta: float) -> void:
 	_clock += delta
 	_hold_world()
-	_hold_peer()
+	_hold_peer(delta)
+	_step_peer_truth()
 	_step_peer_quiet()
 	_step_peer_trace(delta)
 	_watch_field(delta)

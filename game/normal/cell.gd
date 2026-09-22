@@ -662,6 +662,15 @@ static func _tier_index(value: int) -> int:
 	return clampi(value, 0, GAPE_BY_TIER.size() - 1)
 
 
+## **How fast the heading is turning right now**, in radians a second: the
+## steering and the drift, which is everything that turns this body smoothly.
+## An impulse's kick is not in it -- that is a step, not a rate, and it is sent
+## as the step it is. What the other player's screen carries this heading
+## forward by, for the fraction of a second between two frames.
+func heading_rate() -> float:
+	return _omega + _wander
+
+
 ## World direction the cell is facing.
 func forward() -> Vector2:
 	return Vector2(sin(heading), -cos(heading))

@@ -249,9 +249,12 @@ jobs:
         # game/net/net_session.gd is wall time -- Android stops the main loop
         # when the app leaves the foreground, so a frame accumulator would
         # report a peer that has been gone two minutes as fresh -- and a
-        # headless build at several thousand frames a second would outrun a
-        # 2 Hz heartbeat in simulated time. --quit-after is a backstop only; the
-        # probe quits itself in about three seconds.
+        # headless build at several thousand frames a second would outrun the
+        # session's clocks in simulated time: twenty state frames a second
+        # while a body swims, the 2 Hz beat while nothing does. --quit-after is
+        # a backstop only. The probe caps itself at 500 frames a second, quits
+        # itself in under twenty seconds, and prints its own frame count so
+        # the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
