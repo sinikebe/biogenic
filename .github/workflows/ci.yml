@@ -106,12 +106,17 @@ jobs:
         #    all three of the other scenes with zero error lines. The player
         #    would have found it by pressing `watch`.
         #
+        #    earshot.tscn is in the same position for the same reason:
+        #    mode_select.gd reaches it by STRING, so nothing preloads
+        #    earshot.gd and no other scene here would ever compile it.
+        #
         # Seconds, against an export measured in minutes.
         run: |
           set -uo pipefail
           fail=0
           for scene in "" \
                        "res://game/mode_select.tscn" \
+                       "res://game/net/earshot.tscn" \
                        "res://game/normal/normal_mode.tscn" \
                        "res://game/replay/replay.tscn"; do
             name="${scene:-main scene (launcher)}"
@@ -226,6 +231,42 @@ jobs:
           if ! printf '%s\n' "$out" | grep -q "^\[back-probe\] ALL PASS$"; then
             printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
             echo "::error::Back did not walk back out of the game cleanly -- see the probe lines above"
+            exit 1
+          fi
+
+      - name: Check the LAN session
+        # Two SceneMultiplayer instances in ONE headless process, each bound to
+        # its own subtree with SceneTree.set_multiplayer(api, path), talking
+        # ENet over loopback. Full handshake, raw frames both ways, and the
+        # version-skew refusal.
+        #
+        # Grepped for a POSITIVE line, for the reason the two steps above spell
+        # out twice: Godot exits 0 through script errors, so a network step that
+        # only ran would go green with the socket never opened. The probe prints
+        # `[net-probe] PASS <what>` per check and `ALL PASS` only if none failed.
+        #
+        # NO --fixed-fps here, unlike the input step. Every clock in
+        # game/net/net_session.gd is wall time -- Android stops the main loop
+        # when the app leaves the foreground, so a frame accumulator would
+        # report a peer that has been gone two minutes as fresh -- and a
+        # headless build at several thousand frames a second would outrun a
+        # 2 Hz heartbeat in simulated time. --quit-after is a backstop only; the
+        # probe quits itself in about three seconds.
+        #
+        # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
+        # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
+        # `onActivityStopped`, and `godotengine/godot#105726` -- ENet clients
+        # disconnecting at random over a LAN, which is documented NOT to
+        # reproduce on localhost, which is exactly this recipe. Two phones on
+        # real Wi-Fi for half an hour is the test this is not.
+        run: |
+          set -uo pipefail
+          out=$(~/godot/godot --headless --path . --quit-after 20000 \
+                  res://tools/net_probe.tscn 2>&1) || true
+          printf '%s\n' "$out" | grep -E "^\[net-probe\]" || true
+          if ! printf '%s\n' "$out" | grep -q "^\[net-probe\] ALL PASS$"; then
+            printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
+            echo "::error::the LAN session did not come up -- see the probe lines above"
             exit 1
           fi
 
