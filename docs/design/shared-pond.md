@@ -118,6 +118,21 @@ The mirror emits the shipped signals (`waked`, `bitten`, `stung`, `darted`,
 `eaten`, `killed`) from these events, so `normal_mode.gd`'s handlers, `vision.gd`
 and the recorder all run unchanged.
 
+**Built in Phase 1, and three things the table left unsaid.** (1) The two
+players' contact is resolved on the host from its own cell's side, exactly as a
+water cell's contact with that cell is, with the person in the water cell's
+place: so a pair that could each swallow the other goes to the one whose mouth
+is asked first, which is the guest's -- the shipped pass asks a water cell's
+mouth before the host's. (2) A swallow is today's rule entire, venom included:
+a player who swallows a venomous friend is poisoned, as a water cell is. The
+friend is `STUNG` and the swallower dies, and that death is a fourth cause,
+`POISONED`, which DIED (§2) has to carry. (3) Each chewing direction keeps its
+own shipped order: a mouth on the host is `_bitten_by`'s (the victim's death
+first), the host's mouth on the friend is `_bite_from`'s (the eater's first;
+it was `_bite_from_me` until it had to bite for either player). The host's own
+contacts reach its run through the same `hear_contact()` the mirror uses, so
+its handlers cannot tell a pond from single player.
+
 ### 1.4 The water is tuned to each cell
 
 An **anchor** is a player with a body: in the water, out of it dividing, or
@@ -148,6 +163,17 @@ quota is met by the other's cells, and the water holds about 34, not 68 (§6 row
 by side meet a mix of both waters (§6 row 2). Apart, each player has its own 34.
 While they converge the density briefly doubles, and step 3 relaxes it.
 
+**Built in Phase 1.** The four steps run once a frame after the contacts and the
+pushing and before the organs, so a slot a meal emptied is refilled in the frame
+it emptied and no sense ever reads the hole. A retired slot takes a new serial,
+so a chase of the body that was there ends rather than carrying on against the
+next one. Step 3 never retires a cell on a run at a player -- a hunt must not
+vanish from under the dread it raised -- nor the last drifter of any disc. Step
+4 with every slot taken replaces the farthest of that anchor's own cells that no
+other disc counts and that is not on a run at a player; the quota itself never
+needs to, because two separate discs hold exactly 68 and overlapping ones share.
+Each body records which player's water it was made for (`Body.tuned`).
+
 ### 1.5 Leaving the water does not stop it
 
 In a pond, `_set_simulating(false)` stops Cell, Metabolism, Motes and Genome,
@@ -158,6 +184,17 @@ anchor, so what a daughter comes back to is still there (`shared-pond-ux.md` §2
 a dead player is not. `_be_born` resets only the local organ state that `setup()`
 resets today: clocks, pulses, echoes and `first_hunt`. `put_sister` takes a free
 slot rather than slot 1 (`:2358`), and a guest's sister comes by SISTER.
+
+**Built in Phase 1.** Dead and dividing need telling apart, so the field has
+two flags: `in_water`, and `anchored` for "has a body". The run's calls are
+`leave_water(dead)` and `enter_water()`, the second being exactly the organ
+reset above; `place_sister()` is the free-slot sister for either player. A kill
+the field makes itself in a pond -- the host's cell swallowed, chewed or
+poisoned -- clears both flags in the frame it happens, and that frame goes on
+for everybody else: nothing below the kill touches a cell that is out of the
+water, because everything that would asks `in_water` first. The person out of
+the water is simply unseeded, which is how every sense, mouth and push skips
+them without a second test.
 
 ### 1.6 Arriving
 
@@ -189,6 +226,13 @@ also move menu focus. `_step_arming` runs from the live branch, the strip
 rebuilds on `eaten`, and a division or a death closes the menu. Hunger keeps
 burning, and a held sample's 45 s clock keeps running.
 
+**`steering_off` does not stop `_unhandled_input` claiming a pointer** (found in
+the Phase 0 review; the docstring now says so). A finger that goes down on the
+water while the menu is up is still claimed, by the floating stick or through
+`controls.press()`, and steers the moment the flag clears. So Phase 2 calls
+`cell.release()` and `controls.let_go()` every time it flips the flag, both
+ways -- the pair the pause screen and a lost focus already call.
+
 ### 1.8 Quiet and gone
 
 | | host's screen | guest's screen |
@@ -196,6 +240,12 @@ burning, and a held sample's 45 s clock keeps running.
 | guest quiet (STATE stops) | its body coasts under `DRAG` along `p₀ + v₀(1−e^(−0.74t))/0.74` (`multiplayer.md` §5.4) and stops; still edible, still biting | — |
 | host quiet for `PEER_FRESH` (1.2 s) | — | held: `_set_simulating(false)`, `_hush()`, dim 0.22, steering dead; resumes on the next snapshot |
 | link gone | the person is removed | takeover: `leave_mirror()` is `setup()` behind the §0.5 beat, keeping body, genome, generation and hunger |
+
+The host's coast is the field's own, built in Phase 1: `place_person()` takes
+the reported velocity and turn rate, and between reports the field carries the
+body on the closed form -- the place to rest, the heading for at most 0.2 s. A
+mirror carries every body, the person included, for at most 0.2 s past its
+snapshot and then holds it.
 
 Measured on loopback: a clean close reaches the far end in 6-7 ms, so a host
 pressing Leave releases the guest at once. A host whose main loop stops is dropped
@@ -231,6 +281,12 @@ These are exactly the fields the guest reads:
 **The send set** is every body whose surface lies within 1,900 of the guest, the
 reach of a tier-3 ampulla measured to the target's surface (`food.gd:2013`).
 Scent (1,600), dread (1,400), beams (1,240) and the frame all lie inside it.
+**Plus every body hunting the guest, wherever it is** (Phase 1): a hunt
+acquired from 1,900 can fall behind a fast guest, and without it the mirror's
+`hunter()` would read -1 where the host's reads a body. `food.gd`'s
+`pond_entries()` builds the set and `apply_pond()` reads it. The one field the
+mirror does not reproduce is `threat`, a maximum taken over every body at any
+distance; only the dev harness reads it.
 
 **The budget.** At most 68 cells plus the host is ≤ 1,262 B: one ENet datagram
 under the 1,392-byte MTU, never fragmented. With the players together, about 45
@@ -246,7 +302,7 @@ bodies make ≈ 850 B. At 20 Hz that is ≤ 25 KB/s (≈ 207 kbit/s) worst case 
 | `PERSON 0x04` | both | new-body u8, worn tiers, worn order | ~100 | arrival, birth, any change of the worn signature |
 | `GENOME 0x05` | host → guest | slot u8, serial u16, meals u8, tiers | ~60 | once per body version entering the send set |
 | `CONTACT 0x06` | host → guest | what u8, x, y f32, level f32, by u8 (water or friend), gene if `ATE` | 20-37 | `WAKED`, `BITTEN`, `STUNG`, `DARTED`, `ATE`, `KILLED` |
-| `DIED 0x07` | both | cause u8 (swallowed, chewed, starved), by u8, x, y f32 | 16 | the sender's own death, for the friend's lines and drawing |
+| `DIED 0x07` | both | cause u8 (swallowed, chewed, starved, poisoned), by u8, x, y f32 | 16 | the sender's own death, for the friend's lines and drawing |
 | `SISTER 0x08` | guest → host | x, y f32, heading u8, radius f32, tiers | ~70 | the guest's commit |
 
 **Genomes go by name, never index-packed** (`multiplayer.md` §4.7). Tiers are
@@ -265,28 +321,46 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 ## 3. The changes, by file
 
 **`food.gd`**
-- [ ] `PERSON_SLOT`, `POND_SLOTS := 2 * COUNT + 1`, inner `Person`; `Body` gains
-  `person`, `speed` (written where bodies move) and `order`.
-- [ ] `open_pond()` (grows `_cells` unseeded; never called solo),
-  `place_person()`, `remove_person()`, `set_person_genome()`, `in_water`.
-- [ ] §1.2-§1.3, one function per rule. Outcomes leave as signals:
-  `person_touched(what, at, level, by, gene)`, `person_died(cause, by, at)`.
-- [ ] §1.4's recycle: `_retire`, `_seed_for(i, anchor)`, and `put_sister` into a
+- [x] `PERSON_SLOT`, `POND_SLOTS := 2 * COUNT + 1`, inner `Person`; `Body` gains
+  `person`, `speed` (written where bodies move) and `order` -- and `tuned`,
+  which player's water a cell was made for.
+- [x] `open_pond()` (grows `_cells` unseeded; never called solo),
+  `place_person()`, `remove_person()`, `set_person_genome()`, `in_water` -- and
+  `anchored`, `leave_water()`, `enter_water()`, `set_person_in_water()`,
+  `set_person_quiet()` and `place_sister()` (§1.5). Every loop over the water
+  runs `range(_water)`, which is every slot solo and all but slot 68 in a pond.
+- [x] §1.2-§1.3, one function per rule: `_look_for_prey`, `_predict` (through
+  `_lead`), `_reference_speed`, `_target_present` and `_target_edible` ask a
+  person what they ask this cell; `_felt_hunting` is the wake and the dart for
+  either; `_contacts_with(p)`, `_bitten_by` and `_bite_from` are one pass and two
+  chews for either player; `_players_meet` is the last row. Outcomes leave as
+  signals: `person_touched(what, at, level, by, gene)`, `person_died(cause, by,
+  at)`, with `Contact`, `Cause` and `By` numbered for the wire.
+- [x] §1.4's recycle: `_retire`, `_seed_for(i, anchor)`, and `put_sister` into a
   free slot.
-- [ ] Mirror mode: `become_mirror()`/`leave_mirror()`; `apply_pond()` carries
+- [x] Mirror mode: `become_mirror()`/`leave_mirror()`; `apply_pond()` carries
   each body by `speed` along its heading (≤ 0.2 s) and the person by the closed
   form; `apply_genome()`; `hear_contact()` emits the shipped signals with
   `_cell.bearing_to(at)`; the stalking bit sets STALK and `TARGET_PLAYER`;
   `_process` skips `_step_body`, the recycle and contacts, and runs the local
-  half of `_step_separate` and the four organ steps.
+  half of `_step_separate` and the four organ steps. The host's side of it is
+  `pond_entries(for_person)`, which builds the snapshot. A slot a snapshot
+  leaves out leaves the mirror's water and its hunt with it, so the mirror's
+  `hunter()` never names a body the host has retired.
 - [x] Phase 0 pre-checks, each skipping only pairs the full test rejects:
   `_look_for_prey` tests distance, and `d < best`, before `_worth_committing_to`,
   written as the negation of the acceptance it replaces; the contact pass tests
   the squared `(mouth_reach + gape·MOUTH_BITE + widest radius)·1.001 + 0.01`
-  before `_mouth_reaches`, and grows `widest` and the bound after every meal or
-  reseed inside the pass; `_step_separate` skips
+  before `_mouth_reaches`; `_step_separate` skips
   `distance_squared_to() > ((r + widest)·1.001+0.01)²`, one bound per body rather
   than `(r₁+r₂)` per pair. A NaN radius makes every bound NaN, which skips nothing.
+- [x] Phase 1: **the contact bound is structural.** Every seed, retirement and
+  meal bumps `_changes`, and after any contact that moved it the pass finds the
+  widest body again by a whole scan and rebuilds its bound, so no rule added
+  later can leave a stale one behind. The players' contact pass got the same
+  kind of pre-check -- the larger of the player's own bound and the widest
+  body's at the widest gape any tier opens -- re-made whenever the player's
+  radius or `_changes` moves.
 
 **`normal_mode.gd`**
 - [ ] Build `_pond` in `_ready` when there is a session, and call `_pond.step()`
@@ -331,12 +405,52 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 - [ ] Presence fades with `quiet_for()`; no doubt ring; the ghost at 0.34
   (UX §0.1-0.3). `peer_track()` is not drawn in a pond.
 
+**What Phase 1 found that Phase 2 has to do**
+- `vision.gd`'s `_draw_thresholds` rings the nearest body in `points()`, and a
+  retired slot keeps its last place: skip unseeded bodies there. (`_draw_cells`
+  draws nothing at radius 0, and a mirror's unsent slot now has radius 0 too:
+  the Phase 1 review found `apply_pond` left a dropped body's radius behind, a
+  ghost in the guest's full vision, and `pond-field` now checks it.)
+- `returns.gd` hides its marks while `_food.is_processing()` is false; in a pond
+  the field keeps processing through a death and a division.
+- `_die` calls `_food.leave_water(true)` instead of stopping Food. For the kills
+  the field makes itself it has already done so, in the same frame.
+- DIED carries a fourth cause, `POISONED`.
+- Flipping `cell.steering_off` calls `release()` and `controls.let_go()` (§1.7).
+- **The host cannot learn its own cause of death.** `signal killed` carries
+  only a bearing, and `hear_contact(KILLED, ...)` is how the field kills the
+  host; DIED needs swallowed, chewed or poisoned, and only the person gets a
+  cause today, through `person_died`. Give the local cell one.
+- **Probe the deviations before DIED is wired to them.** `_pond_friends` does
+  not exercise §1.3's venomous friend or chewing to death between players; the
+  Phase 1 review ran six such cases by hand, all correct (a host swallowing a
+  venomous friend dies and stings it; the reverse poisons the friend; either
+  chews the other to death with the meal and cause right; the eater's death is
+  checked first). Make them checks.
+- **Decide the `bitten` bearing's order.** `_bite_from` now works out BITTEN's
+  bearing after the run's `eaten` handler, where main worked it out before. It
+  is identical today because no `eaten` listener moves or turns the cell, and
+  the gate is blind to it (`field_diff`'s `growing` handler never moves the
+  cell; a variant that turns it 0.05 rad fails 269 checks, all this bearing).
+  Capture the bearing before the ATE event when there is no person, or say on
+  `signal eaten` that listeners must not move or turn the cell.
+- **From Phase 1 on, each tree runs its own `tools/` in the gate.** The branch's
+  `drive.gd` references `FoodField.PERSON_SLOT` and no longer parses over main's
+  `food.gd`; Phase 0's "branch tools over main's game" recipe hangs there.
+
 **Elsewhere**
-- [x] `cell.gd`: `swim_speed_of` and `steering_off`.
+- [x] `cell.gd`: `swim_speed_of` and `steering_off`; Phase 1 corrected the
+  latter's docstring, which claimed it silenced every input.
 - [x] `cilia.gd`: a trailing `untinted := false` (UX §8).
+- [x] Phase 1, tools: `net_probe.gd`'s socket-free `pond-field` section;
+  `drive.gd --pond=` (a held person and two rings, for `--field-cost`); and
+  `tools/field_diff.gd`, the differential half of the identity gate, against
+  `main`'s `food.gd` on adversarial water.
 - [ ] Phase 3, `recorder.gd`: `BODIES := FoodField.POND_SLOTS` (+3.0 MB on a
   4.6 MB ring) and `AT_PERSON`.
-- [ ] Phase 3, `replay.gd`: private nodes in a pond.
+- [ ] Phase 3, `replay.gd`: private nodes in a pond. `restore_body` writes a
+  radius without bumping `_changes`, which is safe only because the replay
+  calls it with the field stopped; the sandbox must keep that true, or bump.
 
 ## 4. Host cost, measured
 
@@ -401,6 +515,15 @@ identity gate**, which is the method #50 and #51 used, with no session:
    committed.
 4. **The probe.** `net_probe` reports `ALL PASS`. Its 95 existing checks are
    superseded only by name, and only in the same PR.
+5. **The differential test** (from Phase 1). `git show
+   main:game/normal/food.gd > /tmp/food_main.gd`, then `godot --headless --path
+   . -s res://tools/field_diff.gd -- --old=/tmp/food_main.gd`: `main`'s field and
+   the branch's, side by side on adversarial water -- NaN and infinite radii, a
+   NaN place, a whale, a wounded pack, a cell its own `eaten` handler grows
+   mid-pass -- compared after every call on every member both have, and it
+   prints `ALL EQUAL`. The fingerprint holds whole runs to the bit; this holds
+   every function to it on water no run would make, which is where a bound that
+   skips one real contact in ten thousand pairs shows up.
 
 **Phase 0 — cheaper frames.** No wire and no behaviour change.
 
@@ -436,6 +559,25 @@ identity gate**, which is the method #50 and #51 used, with no session:
   bitten; the mirror returns the same `taste_level`, `dread_level`, `shadow`,
   `touch_level`, beams, ping returns and `hunter()` as the field, within 1e-6;
   and `--field-cost` with a person and two rings is ≤ 2.3 ms.
+- *Built, and measured here:* all six gate fingerprints are identical to
+  `main`'s; `tools/field_diff.gd` made 1,677,704 checks over 32,002 adversarial
+  trials and 270 runs of 600 frames with 0 mismatches (the last 320,580 on the
+  final file), and it fails the two mutants that break the new bounds (the
+  water pass without its rebuild, 5 of 45,858 checks; the players' bound
+  without the water's mouth, 818 of 5,497). Main's three renders diff to 0
+  pixels at each shape and view, and the branch to 0 against them in all four;
+  every bus sensation is identical at full precision, in the 9 s run above and
+  in 120 s of the sighted forager at seeds 12345 and 2026 (1,008 and 1,383
+  sensations, a death in each). `net_probe` passes 118 checks, 23 of them
+  `pond-field`: 2,234-2,239 frames and 24.0-24.7 s against `main`'s 2,237 and
+  16.2 s, the section spending 7.8-8.4 s and no frames. The section also passes
+  whole with every seed in it shifted, forty shifts over, which is the nearest
+  this container comes to another machine's arithmetic. The mirror agreed with
+  the field to 0.0, not merely 1e-6, over 600 frames with a hunter on it
+  throughout, in all forty-one. `--field-cost=3600 --pond=4000` at
+  `--radius=30`, tier 1 with a nose and an ampulla, three seeds twice: p50
+  1,674-1,884 µs and p90 1,846-2,136 µs. One ring got cheaper, p50 571-589 on
+  `main` to 533-558 µs, from the new pre-check on the player's own contacts.
 
 **Phase 2 — one water on the wire.** PROTOCOL 4, and the playable pond.
 
@@ -540,4 +682,7 @@ heals that.
   mirror-error check exist to catch.
 - **CI's frame budget.** `net_probe` runs under `--quit-after 20000` at 500 fps.
   If the pond sections push it past about 35 s, `ci.yml` has to change in the
-  same PR, and that is the lead's call.
+  same PR, and that is the lead's call. Phase 1's `pond-field` spends none of
+  it: the section never awaits, so its 7.8-8.4 s pass inside a single frame, and
+  the probe still ends near 2,237 frames, now in 24.0-24.7 s. A Phase 2 section
+  that waits on frames is the one that will spend the budget.

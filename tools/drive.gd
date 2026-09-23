@@ -374,7 +374,32 @@ extends Node
 ##                           so none of its printing lands inside the window. A
 ##                           frame in which the field is stopped, after a death,
 ##                           is not timed, so the line says how many were.
-##                           Headless at `--fixed-fps 60`, like the fingerprint
+##                           Headless at `--fixed-fps 60`, like the fingerprint.
+##                           **Four other flags go quiet under it**: to keep its
+##                           own printing out of the window this harness never
+##                           connects `_on_meal` or `_on_sensation` when it
+##                           times, and those two are what `--evade` steers by,
+##                           what `--freeze-on` waits for and what lets go of
+##                           `--food-at` and `--cell=` after the first meal. A
+##                           timed run with any of them is a run without it
+##   --pond=<dist>[,<bearing>[,<radius>]]
+##                           open a shared pond in the field and put **a second
+##                           player** in it, held `dist` units from this cell
+##                           along a *world* bearing in degrees (clockwise from
+##                           north, default 90), at `radius` (default this
+##                           cell's), wearing this cell's own genome. Held
+##                           frame by frame the way `--peer=` holds a friend,
+##                           but in world space, so its ring travels with this
+##                           one instead of sweeping round it as the cell turns;
+##                           a death is an arrival again in the same place, as
+##                           the owner's row A has it. No socket and no second
+##                           run: this is `food.gd` alone (shared-pond.md §5
+##                           Phase 1), and it is what `--field-cost` times two
+##                           rings and a person with. **The run does not know
+##                           about it** until Phase 2: this cell's death still
+##                           stops the field and a birth's `setup()` closes the
+##                           pond, as in single player, and the view draws the
+##                           person as a water cell
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -614,6 +639,13 @@ var _cost_samples := PackedInt64Array()
 ## Frames in which no body in the water moved between the two clocks. Should
 ## stay 0: it is the check that the tree really did run the field between them.
 var _cost_still := 0
+## --pond=: how far off, along which world bearing (radians), and how big the
+## second player is; negative distance is no pond.
+var _pond_dist := -1.0
+var _pond_bearing := PI * 0.5
+var _pond_radius := -1.0
+## How many times the held person died and arrived again.
+var _pond_deaths := 0
 
 ## What the fingerprint reads off every body. **A fixed list, on purpose**: a
 ## later phase adds members to `Body` and the gate still has to compare its
@@ -860,6 +892,13 @@ func _ready() -> void:
 			_fingerprint = int(text.trim_prefix("--fingerprint="))
 		elif text.begins_with("--field-cost="):
 			_field_cost = int(text.trim_prefix("--field-cost="))
+		elif text.begins_with("--pond="):
+			var pond := text.trim_prefix("--pond=").split(",", false)
+			_pond_dist = float(pond[0]) if pond.size() > 0 else 4000.0
+			if pond.size() > 1:
+				_pond_bearing = deg_to_rad(float(pond[1]))
+			if pond.size() > 2:
+				_pond_radius = float(pond[2])
 		elif text == "--locked":
 			_locked = true
 		elif text == "--evade":
@@ -931,6 +970,8 @@ func _ready() -> void:
 		print("[drive] holding a sample of ", _sample)
 	if _sister_distance > 0.0 and _food != null:
 		_put_sister()
+	if _pond_dist >= 0.0 and _food != null:
+		_open_pond()
 
 	if _check_seeding > 0:
 		_run_seeding_check(_check_seeding)
@@ -1100,6 +1141,42 @@ func _hold_peer(delta: float) -> void:
 	_peer_pos = at
 	_peer_heading = facing
 	_report_peer(turning)
+
+
+## --pond=. The field opens its pond and the person arrives, wearing this cell's
+## own genome in this cell's own layout; [method _hold_pond] keeps them there.
+## Straight into `food.gd`'s pond API, which in Phase 1 only tools call.
+func _open_pond() -> void:
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		print("[pond] no player cell to open a pond round")
+		_pond_dist = -1.0
+		return
+	if _pond_radius <= 0.0:
+		_pond_radius = cell.radius
+	_food.open_pond()
+	var tiers: Dictionary = _genome.tiers().duplicate() if _genome != null else {}
+	var order: Array = _genome.body_layout() if _genome != null else []
+	_food.set_person_genome(tiers, order)
+	_food.person_died.connect(func(_cause: int, _by: int, _at: Vector2) -> void:
+		_pond_deaths += 1)
+	_hold_pond()
+	print("[pond] a second player %.0f units off along %.0f deg, r%.1f, wearing %s"
+		% [_pond_dist, rad_to_deg(_pond_bearing), _pond_radius, _genome_text(tiers)])
+
+
+## Every frame, after the field's: the person put back where `--pond=` holds
+## them, moving with this cell so the two rings travel together -- and, after a
+## death, arriving there again. Stops with everything else under a freeze.
+func _hold_pond() -> void:
+	if _pond_dist < 0.0 or _food == null or get_tree().paused:
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	if cell == null:
+		return
+	var at: Vector2 = cell.position \
+		+ Vector2(sin(_pond_bearing), -cos(_pond_bearing)) * _pond_dist
+	_food.place_person(at, cell.heading, _pond_radius, cell.velocity, 0.0)
 
 
 ## --peer-truth. Its own canvas layer above every layer the run has, redrawn
@@ -1276,6 +1353,7 @@ func _process(delta: float) -> void:
 	_clock += delta
 	_hold_world()
 	_hold_peer(delta)
+	_hold_pond()
 	_step_peer_truth()
 	_step_peer_quiet()
 	_step_peer_trace(delta)
@@ -1521,6 +1599,14 @@ func _step_field_cost() -> void:
 		count, sorted[0], sorted[int(0.5 * float(count - 1))],
 		sorted[int(0.9 * float(count - 1))], float(total) / float(count),
 		sorted[count - 1], str(_seed) if _seeded else "none", _cost_still])
+	if _pond_dist >= 0.0:
+		var active := 0
+		var bodies: Array = _food.get("_cells")
+		for i in FoodField.PERSON_SLOT:
+			if i < bodies.size() and bodies[i].get("seeded"):
+				active += 1
+		print("[pond] %d water cells in it at the end, the person arrived %d times"
+			% [active, 1 + _pond_deaths])
 	get_tree().quit(0)
 
 

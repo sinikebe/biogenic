@@ -35,6 +35,11 @@ extends Node
 ## not this file's -- it takes minutes. What this file keeps is the one number
 ## that would move if anybody put a buffer back: how long a dash takes to show.
 ##
+## **And one section has no socket at all**: `pond-field`, the water learning a
+## second player before any wire carries one (shared-pond.md §5, Phase 1) --
+## `food.gd` stepped by hand, a host field with a person in it and a mirror fed
+## that field's own snapshots. It spends no frames, only a few seconds.
+##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
 ## does fire under `--headless` -- 1,920 `draw` signals in 1,920 frames of a
@@ -54,6 +59,11 @@ const NetSession := preload("res://game/net/net_session.gd")
 ## checked only by looking at a screenshot is a carry CI has never checked.
 const VisionLayer := preload("res://game/vision/vision.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## The water, for the `pond-field` section: driven by hand, with no socket and
+## no tree, so a minute of it costs its arithmetic and not a minute of waiting.
+const FoodField := preload("res://game/normal/food.gd")
+const Cilia := preload("res://game/vision/cilia.gd")
+const Genome := preload("res://game/normal/genome.gd")
 
 ## Long enough for a loopback handshake by a wide margin; short enough that a
 ## hang is a failure rather than a job timeout.
@@ -78,13 +88,16 @@ func _ready() -> void:
 	# frames, and every wait in here is wall time -- so on a fast enough runner
 	# twenty thousand frames arrive before the last check does, and the probe
 	# is cut off one line short of `ALL PASS`. At 500 a second twenty thousand
-	# frames is forty seconds, twice what this takes. Nothing here depends on a
-	# frame rate above that: every clock in `game/net/` is wall time, and the
-	# dash is timed in microseconds either way.
+	# frames is forty seconds, twice what the socket sections take. The
+	# `pond-field` section's seconds do not count against it: it runs to the end
+	# inside this one call, so all of it is spent within a single frame. Nothing
+	# here depends on a frame rate above that: every clock in `game/net/` is
+	# wall time, and the dash is timed in microseconds either way.
 	Engine.max_fps = 500
 	_check_code()
 	_check_wire()
 	_check_carry()
+	_check_pond_field()
 	await _check_link()
 	await _check_skew()
 	await _check_run()
@@ -959,6 +972,816 @@ func _check_run() -> void:
 	other.close()
 	mine.close()
 	await _wait(0.4)
+
+
+# ---------------------------------------------------------------------------
+# **pond-field: the water learns a second player, with no wire**
+# (shared-pond.md §5, Phase 1). One host field with a person this probe drives,
+# and one mirror fed that field's own snapshots.
+#
+# No socket and no tree: every frame here is `_process(1/60)` called by hand, so
+# a minute of water costs its arithmetic -- seconds -- and not a minute of wall
+# time, and no frame of CI's 20000 is spent on it. The global stream is seeded
+# before every field, so a failure here is the same failure on every machine.
+#
+# Every field is a [WatchedFood], which counts any seed, retirement or meal
+# that touches the person's slot -- the one thing §1.2 says can never happen to
+# a person -- and the last check below is that nothing did, across everything
+# the section put the water through.
+# ---------------------------------------------------------------------------
+
+const POND_STEP := 1.0 / 60.0
+## Tier 2 of the four senses and a palp, so that every organ the mirror is held
+## to has something to report.
+const POND_SENSES := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+	&"chemocyte": 2, &"ampulla": 2, &"ocellus": 2, &"stigma": 1, &"palp": 2}
+
+
+## The tiers a genome node would answer, for a cell this probe builds by hand.
+class StubGenome extends Node:
+	var body := {}
+
+	func tier(gene: StringName) -> int:
+		return int(body.get(gene, 0))
+
+	func tiers() -> Dictionary:
+		return body
+
+
+## **The field, watched.** A seed, a seed-for, a retirement on the person's
+## slot, or a meal with a person on either side, is counted -- and must never
+## be, however the water got there.
+class WatchedFood extends "res://game/normal/food.gd":
+	var touched_person := 0
+
+	func _seed(index: int) -> void:
+		if index == PERSON_SLOT:
+			touched_person += 1
+		super._seed(index)
+
+	func _seed_for(index: int, anchor: int, drifter: bool = false) -> void:
+		if index == PERSON_SLOT:
+			touched_person += 1
+		super._seed_for(index, anchor, drifter)
+
+	func _retire(index: int) -> void:
+		if index == PERSON_SLOT:
+			touched_person += 1
+		super._retire(index)
+
+	func _devour(b: Body, prey: Body) -> void:
+		var slot: Body = _cells[PERSON_SLOT] if _cells.size() > PERSON_SLOT else null
+		if b.person != null or prey.person != null or b == slot or prey == slot:
+			touched_person += 1
+		super._devour(b, prey)
+
+
+var _pond_nodes: Array[Node] = []
+var _pond_fields: Array = []
+
+
+func _check_pond_field() -> void:
+	var from := _clock()
+	_pond_swallow_rule()
+	_pond_friends()
+	_pond_rings()
+	_pond_ties()
+	_pond_out_of_water()
+	_pond_mirror()
+	_pond_housekeeping()
+	var touched := 0
+	for field: Node in _pond_fields:
+		touched += int(field.get("touched_person"))
+	_says(touched == 0 and _pond_fields.size() >= 10,
+		"pond-field: slot 68 never reached _seed, _seed_for, _retire or _devour"
+		+ " in %d fields (%d times)" % [_pond_fields.size(), touched])
+	for node: Node in _pond_nodes:
+		if is_instance_valid(node):
+			node.free()
+	_pond_nodes.clear()
+	_pond_fields.clear()
+	print("[net-probe] NOTE pond-field took %.1f s of wall time and no frames"
+		% (_clock() - from))
+
+
+## A field about a cell of [param radius] wearing [param tiers] at [param at],
+## seeded from [param from_seed] -- the whole of what the run hands it, done by
+## hand. The organs are set as the run sets them every frame.
+func _pond_rig(from_seed: int, radius: float, tiers: Dictionary,
+		at: Vector2 = Vector2.ZERO, heading: float = 0.0) -> Node:
+	seed(from_seed)
+	var genome := StubGenome.new()
+	genome.body = tiers.duplicate()
+	var cell: Node = CellBody.new()
+	cell.genome = genome
+	cell.radius = radius
+	cell.position = at
+	cell.heading = heading
+	var field: Node = WatchedFood.new()
+	field.setup(cell)
+	field.smell_range = cell.smell_range()
+	field.smell_bearing = 0.0
+	field.beam_range = cell.beam_range()
+	field.beam_bearings = PackedFloat32Array([-0.2, 0.2]) \
+		if cell.beam_range() > 0.0 else PackedFloat32Array()
+	field.ping_range = cell.ping_range()
+	field.ping_period = cell.ping_period()
+	field.ping_bearing = 0.0
+	field.ping_through = cell.ping_through()
+	field.ping_tier = cell.ping_tier()
+	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[mini(cell.extra(&"palp"), 3)]
+	_pond_nodes.append_array([genome, cell, field])
+	_pond_fields.append(field)
+	return field
+
+
+## Everything the field says, in order.
+func _pond_listen(field: Node) -> Array:
+	var said: Array = []
+	field.person_touched.connect(func(what: int, at: Vector2, level: float,
+			by: int, gene: StringName) -> void:
+		said.append(["touched", what, at, level, by, gene]))
+	field.person_died.connect(func(cause: int, by: int, at: Vector2) -> void:
+		said.append(["died", cause, by, at]))
+	field.eaten.connect(func(n: float, gene: StringName, at: Vector2) -> void:
+		said.append(["eaten", n, gene, at]))
+	field.bitten.connect(func(b: float, strength: float) -> void:
+		said.append(["bitten", b, strength]))
+	field.killed.connect(func(b: float) -> void: said.append(["killed", b]))
+	field.stung.connect(func(b: float) -> void: said.append(["stung", b]))
+	return said
+
+
+func _pond_said(said: Array, kind: String, what: int = -1) -> Array:
+	for entry: Array in said:
+		if entry[0] == kind and (what < 0 or int(entry[1]) == what):
+			return entry
+	return []
+
+
+## The heading that points a body at [param from] toward [param to].
+func _pond_face(from: Vector2, to: Vector2) -> float:
+	var v := to - from
+	return atan2(v.x, -v.y)
+
+
+## `food.gd`'s own flank angle, worked out here from the outside.
+func _pond_flank(heading: float, target: Vector2, mouth: Vector2) -> float:
+	var v := mouth - target
+	return absf(angle_difference(heading, atan2(v.x, -v.y)))
+
+
+## Water slot [param i], made into a calm body of [param radius] wearing
+## [param tiers] at [param at], facing [param heading].
+func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
+		at: Vector2, heading: float) -> Object:
+	var b: Object = field.bodies()[i]
+	b.radius = radius
+	b.genome = tiers.duplicate()
+	b.drifter = tiers.is_empty()
+	b.seeded = true
+	b.pos = at
+	b.heading = heading
+	b.state = FoodField.State.DRIFT
+	b.target = FoodField.TARGET_NONE
+	b.calm = 999.0
+	b.wound = 0.0
+	b.bite = 0.0
+	b.aim = at
+	b.flee_from = at
+	return b
+
+
+## ...on a run at the person, committed.
+func _pond_hunt(field: Node, b: Object) -> void:
+	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+	b.state = FoodField.State.STALK
+	b.target = FoodField.PERSON_SLOT
+	b.target_serial = pb.serial
+	b.aim = pb.pos
+	b.aim_clock = 0.0
+	b.lunging = false
+	b.best = INF
+	b.lost = 0.0
+	b.rush = 0.0
+	b.stale = 0.0
+	b.stroke = 5.0
+
+
+func _pond_person(field: Node, at: Vector2, radius: float, tiers: Dictionary,
+		heading: float = 0.0) -> void:
+	var order: Array = []
+	for gene: StringName in tiers:
+		order.append(gene)
+	field.set_person_genome(tiers, order)
+	field.place_person(at, heading, radius)
+
+
+# --- §1.3, rows one and two: a water cell's mouth on the person -------------
+
+func _pond_swallow_rule() -> void:
+	var at := Vector2(3000.0, 0.0)
+	var hunter_genes := {&"cytostome": 3, &"flagellum": 1}
+	var gape := CellBody.gape_of(3, 30.0)
+	# Committed, and they fit: gone, in the frame it happens.
+	var field := _pond_rig(11, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var said := _pond_listen(field)
+	var from := at + Vector2(0.0, -54.0)
+	var b := _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
+	_pond_hunt(field, b)
+	var reaches := Cilia.mouth_touches(b.pos, b.heading, 30.0, gape, at, 28.0)
+	field._process(POND_STEP)
+	var died := _pond_said(said, "died")
+	_says(reaches and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.WATER
+			and not _pond_said(said, "touched", FoodField.Contact.KILLED).is_empty()
+			and field.person() == null
+			and not field.bodies()[FoodField.PERSON_SLOT].seeded,
+		"pond-field: a committed cell whose gape fits the person swallows them,"
+		+ " and slot 68 is empty that frame")
+
+	# The same mouth, not committed -- they have just arrived, so nothing may
+	# commit to them yet -- only bites. Astern, through two tiers of pellicle
+	# and into two of toxicyst, so every term of the bite is in the number.
+	field = _pond_rig(12, 30.0, POND_SENSES)
+	field.open_pond()
+	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 2, &"toxicyst": 2}
+	_pond_person(field, at, 28.0, armoured)
+	said = _pond_listen(field)
+	from = at + Vector2(0.0, 54.0)
+	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
+	field._process(POND_STEP)
+	var bit := _pond_said(said, "touched", FoodField.Contact.BITTEN)
+	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var expected := 0.0
+	var back := 0.0
+	if not bit.is_empty():
+		expected = CellBody.bite_damage(3, gape, 28.0, 2,
+			_pond_flank(0.0, at, bit[2] as Vector2))
+		back = CellBody.venom_back(2, expected)
+	_says(field.person() != null and _pond_said(said, "died").is_empty()
+			and not bit.is_empty() and 28.0 * CellBody.ARMOR_BY_TIER[2] < gape,
+		"pond-field: an uncommitted cell whose gape fits them only bites")
+	_says(not bit.is_empty() and absf(float(person.wound) - expected) < 1e-9
+			and absf(float(b.wound) - back) < 1e-9 and expected > 0.0
+			and is_equal_approx(float(bit[3]), clampf(expected
+				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)),
+		"pond-field: the chew is bite_damage for that gape, pellicle and flank"
+		+ " (%.5f, astern), with %.5f of venom back on the biter"
+		% [float(person.wound), float(b.wound)])
+
+	# Committed, and they carry venom: spat out, and the cell is gone.
+	field = _pond_rig(13, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1,
+		&"toxicyst": 1})
+	said = _pond_listen(field)
+	from = at + Vector2(0.0, -54.0)
+	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
+	_pond_hunt(field, b)
+	var serial := int(b.serial)
+	field._process(POND_STEP)
+	_says(field.person() != null and _pond_said(said, "died").is_empty()
+			and not _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
+			and int(b.serial) != serial,
+		"pond-field: a committed cell that swallows a venomous person is retired,"
+		+ " and they are stung, not killed")
+
+
+# --- §1.3, the last row: one player's mouth on the other ---------------------
+
+func _pond_friends() -> void:
+	# This cell, a tier-3 mouth (gape 42), nose to the person's tail.
+	var gape := CellBody.gape_of(3, 30.0)
+	var mouth := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	var field := _pond_rig(21, 30.0, mouth)
+	field.open_pond()
+	var at := Vector2(0.0, -54.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var said := _pond_listen(field)
+	var reaches := Cilia.mouth_touches(Vector2.ZERO, 0.0, 30.0, gape, at, 28.0)
+	field._process(POND_STEP)
+	var ate := _pond_said(said, "eaten")
+	var died := _pond_said(said, "died")
+	_says(reaches and not ate.is_empty() and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.FRIEND
+			and is_equal_approx(float(ate[1]), 28.0 / 30.0)
+			and field.person() == null,
+		"pond-field: a friend whose armoured radius fits this mouth is swallowed"
+		+ " with no commitment, and fed %.3f of a meal" % (float(ate[1]) if ate else 0.0))
+
+	# The same friend armoured past the gape: chewed instead, from astern.
+	field = _pond_rig(22, 30.0, mouth)
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 3})
+	said = _pond_listen(field)
+	field._process(POND_STEP)
+	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var expected := CellBody.bite_damage(3, gape, 28.0, 3,
+		_pond_flank(0.0, at, Vector2.ZERO))
+	var felt := _pond_said(said, "bitten")
+	var chewed := _pond_said(said, "touched", FoodField.Contact.BITTEN)
+	_says(field.person() != null and 28.0 * CellBody.ARMOR_BY_TIER[3] > gape
+			and absf(float(person.wound) - expected) < 1e-9 and not felt.is_empty()
+			and not chewed.is_empty() and int(chewed[4]) == FoodField.By.FRIEND,
+		"pond-field: armoured past this gape, the friend is chewed instead"
+		+ " (%.5f from astern) and this cell feels its own bite" % float(person.wound))
+
+	# And the other way: their mouth on this cell, which is too big for it.
+	var field2 := _pond_rig(23, 30.0, mouth, Vector2.ZERO, PI)
+	field2.open_pond()
+	_pond_person(field2, at, 28.0, {&"cytostome": 1, &"cirrus": 1,
+		&"flagellum": 1}, PI)
+	said = _pond_listen(field2)
+	field2._process(POND_STEP)
+	var cell: Object = field2.get("_cell")
+	var their_gape := CellBody.gape_of(1, 28.0)
+	var theirs := CellBody.bite_damage(1, their_gape, 30.0, 0,
+		absf(cell.bearing_to(at)))
+	var hit := _pond_said(said, "bitten")
+	var told := _pond_said(said, "touched", FoodField.Contact.BITTEN)
+	_says(field2.person() != null and 30.0 > their_gape
+			and absf(float(cell.wound) - theirs) < 1e-9 and not hit.is_empty()
+			and not told.is_empty()
+			and is_equal_approx(float(told[3]), clampf(theirs
+				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)
+				* FoodField.BITE_FELT_SHARE),
+		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
+		% float(cell.wound) + " each side feeling its own share")
+
+
+# --- §1.4: the water is tuned to each cell -----------------------------------
+
+func _pond_rings() -> void:
+	# Apart: each of you has your own 34.
+	var field := _pond_rig(31, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, Vector2(4000.0, 0.0), 28.0, POND_SENSES)
+	var apart := _pond_run(field, 600)
+	var counts: Array = apart[0]
+	_says(counts.size() == 2 and int(counts[0]) >= FoodField.COUNT
+			and int(counts[1]) >= FoodField.COUNT,
+		"pond-field: anchors 4,000 apart each hold >= 34 after 10 s (%s)" % str(counts))
+
+	# Together: one disc, and about one water's worth in it.
+	field = _pond_rig(32, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, Vector2(300.0, 0.0), 28.0, POND_SENSES)
+	var together := _pond_run(field, 3600)
+	_says(int(together[1]) <= 40,
+		"pond-field: anchors 300 apart hold <= 40 active after 60 s together"
+		+ " (%d; at most %d over the last 50 s)" % [int(together[1]), int(together[2])])
+	# The other side of the same bound, so an empty water cannot pass it: the
+	# quota still holds for each of you, only now it is met by shared cells.
+	var shared: Array = together[0]
+	_says(shared.size() == 2 and int(shared[0]) >= FoodField.COUNT
+			and int(shared[1]) >= FoodField.COUNT,
+		"pond-field: together, each anchor still has >= 34 within reach after"
+		+ " 60 s (%s)" % str(shared))
+	_says(int(apart[3]) == 0 and int(together[3]) == 0,
+		"pond-field: every disc kept a drifter every frame, over 4,200 frames"
+		+ " (%d misses)" % (int(apart[3]) + int(together[3])))
+	_says(int(apart[4]) == 0 and int(together[4]) == 0
+			and int(apart[5]) + int(together[5]) > 60,
+		"pond-field: no seed landed within RING_MIN of an anchor"
+		+ " (%d seeds, %d inside)" % [int(apart[5]) + int(together[5]),
+			int(apart[4]) + int(together[4])])
+
+
+## [param frames] of water, with the two players kept in it -- a death is a tap
+## straight back in, where they were, as §6's row A has it -- and every frame
+## checked. Returns `[disc counts, active, most active after the first 10 s,
+## frames a disc had no drifter, seeds inside RING_MIN, seeds]`.
+func _pond_run(field: Node, frames: int) -> Array:
+	var person_at: Vector2 = field.bodies()[FoodField.PERSON_SLOT].pos
+	var person_radius: float = field.bodies()[FoodField.PERSON_SLOT].radius
+	var dead := [false]
+	field.killed.connect(func(_b: float) -> void: dead[0] = true)
+	# Taken before the first frame, so the ring the person's arrival seeds at
+	# the end of it is checked with everything after.
+	var serials := PackedInt64Array()
+	for body: Object in field.bodies():
+		serials.append(int(body.serial))
+	var misses := 0
+	var inside := 0
+	var seeds := 0
+	var most := 0
+	var reach := FoodField.CULL * FoodField.CULL
+	var ring := FoodField.RING_MIN * FoodField.RING_MIN
+	for frame in frames:
+		if dead[0]:
+			dead[0] = false
+			field.enter_water()
+		if field.person() == null:
+			field.place_person(person_at, 0.0, person_radius)
+		field._process(POND_STEP)
+		var bodies: Array = field.bodies()
+		var anchors: Array[Vector2] = []
+		var cell: Object = field.get("_cell")
+		if field.anchored:
+			anchors.append(cell.position)
+		if field.person() != null:
+			anchors.append(bodies[FoodField.PERSON_SLOT].pos)
+		var drifting := PackedInt32Array()
+		drifting.resize(anchors.size())
+		var active := 0
+		for i in FoodField.PERSON_SLOT:
+			var b: Object = bodies[i]
+			if not b.seeded:
+				serials[i] = int(b.serial)
+				continue
+			active += 1
+			if int(b.serial) != serials[i]:
+				serials[i] = int(b.serial)
+				seeds += 1
+				for a: Vector2 in anchors:
+					if (b.pos as Vector2).distance_squared_to(a) < ring:
+						inside += 1
+			if b.drifter:
+				for k in anchors.size():
+					if (b.pos as Vector2).distance_squared_to(anchors[k]) <= reach:
+						drifting[k] += 1
+		for k in anchors.size():
+			if drifting[k] == 0:
+				misses += 1
+		if frame >= 600:
+			most = maxi(most, active)
+	var counts: Array = []
+	var last: Array = field.bodies()
+	for a: Vector2 in [field.get("_cell").position, last[FoodField.PERSON_SLOT].pos]:
+		var n := 0
+		for i in FoodField.PERSON_SLOT:
+			if last[i].seeded and (last[i].pos as Vector2).distance_squared_to(a) <= reach:
+				n += 1
+		counts.append(n)
+	var active_now := 0
+	for i in FoodField.PERSON_SLOT:
+		if last[i].seeded:
+			active_now += 1
+	return [counts, active_now, most, misses, inside, seeds]
+
+
+## **Ties take turns** (§6 row 2). Two anchors at one point share every cell,
+## so their deficits are equal every time; empty six slots and the six seeds
+## that refill them must alternate between the two players' water, starting
+## with the one seeded for least recently.
+func _pond_ties() -> void:
+	var field := _pond_rig(41, 30.0, POND_SENSES)
+	field.open_pond()
+	# Out of the water, so nothing pushes the two anchors apart: still an
+	# anchor, which is all this needs.
+	_pond_person(field, Vector2.ZERO, 26.0, {&"cytostome": 1, &"flagellum": 1})
+	field.set_person_in_water(false)
+	field._process(POND_STEP)
+	var emptied := 0
+	for i in FoodField.PERSON_SLOT:
+		if field.bodies()[i].seeded and emptied < 6:
+			emptied += 1
+			field.call("_retire", i)
+	# Whoever was seeded for least recently goes first; an exact tie is this
+	# cell's, the anchor asked first.
+	var stamps: PackedInt64Array = field.get("_seeded_for")
+	var first := FoodField.Anchor.PERSON \
+		if stamps[FoodField.Anchor.PERSON] < stamps[FoodField.Anchor.LOCAL] \
+		else FoodField.Anchor.LOCAL
+	var before: Array[int] = []
+	for body: Object in field.bodies():
+		before.append(int(body.serial))
+	field._process(POND_STEP)
+	# Every seed of that frame, in the order it was made -- serials only climb --
+	# so a meal the water happened to make in the same frame is one more turn in
+	# the sequence rather than a gap in it.
+	var seeded: Array = []
+	for i in FoodField.PERSON_SLOT:
+		var body: Object = field.bodies()[i]
+		if body.seeded and int(body.serial) != before[i]:
+			seeded.append([int(body.serial), int(body.tuned)])
+	seeded.sort()
+	var turns: Array[int] = []
+	for pair: Array in seeded:
+		turns.append(int(pair[1]))
+	var alternate := turns.size() >= 6
+	for i in range(1, turns.size()):
+		if turns[i] == turns[i - 1]:
+			alternate = false
+	_says(alternate and turns[0] == first,
+		"pond-field: tied anchors take turns, one cell each, the one seeded for"
+		+ " least recently first (%s)" % str(turns))
+
+
+# --- §1.5: leaving the water does not stop it --------------------------------
+
+func _pond_out_of_water() -> void:
+	# This cell out of the water: a run at it ends a frame later, and the water
+	# goes on moving.
+	var field := _pond_rig(51, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, Vector2(3000.0, 0.0), 28.0, POND_SENSES)
+	var from := Vector2(0.0, -400.0)
+	var b := _pond_pose(field, 5, 30.0, {&"cytostome": 3, &"flagellum": 1}, from,
+		_pond_face(from, Vector2.ZERO))
+	b.state = FoodField.State.STALK
+	b.target = FoodField.TARGET_PLAYER
+	b.stroke = 5.0
+	field._process(POND_STEP)
+	var stalked_before: bool = field.hunter() == 5
+	var moved_from: Array[Vector2] = []
+	for body: Object in field.bodies():
+		moved_from.append(body.pos)
+	field.leave_water(false)
+	field._process(POND_STEP)
+	var chasing := 0
+	var moved := 0
+	for i in field.bodies().size():
+		var body: Object = field.bodies()[i]
+		if body.state == FoodField.State.STALK and body.target == FoodField.TARGET_PLAYER:
+			chasing += 1
+		if body.seeded and (body.pos as Vector2) != moved_from[i]:
+			moved += 1
+	_says(stalked_before and chasing == 0 and field.hunter() == -1 and moved > 30,
+		"pond-field: out of the water, no stalker targets this cell a frame later"
+		+ " (%d bodies moved meanwhile)" % moved)
+
+	# The person out of the water: a committed mouth on them does nothing.
+	field = _pond_rig(52, 30.0, POND_SENSES)
+	field.open_pond()
+	var at := Vector2(3000.0, 0.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1})
+	var said := _pond_listen(field)
+	from = at + Vector2(0.0, -54.0)
+	b = _pond_pose(field, 5, 30.0, {&"cytostome": 3, &"flagellum": 1}, from,
+		_pond_face(from, at))
+	_pond_hunt(field, b)
+	field.set_person_in_water(false)
+	field._process(POND_STEP)
+	_says(said.is_empty() and field.person() != null
+			and float(field.bodies()[FoodField.PERSON_SLOT].wound) == 0.0
+			and int(b.target) != FoodField.PERSON_SLOT,
+		"pond-field: a person out of the water is not bitten, and the run at them ends")
+
+	# ...and not perceived: 200 units off this cell's nose, every sense it has
+	# reads exactly what it reads with nobody there at all. One water at one
+	# instant, the organs worked out three times -- the person out of it, gone
+	# from it, and back in it -- because only perception may differ between the
+	# first two: stepping two waters instead would let a meal's refill, which
+	# must stay clear of a dividing player as of anyone, part them. And the
+	# person in the water has to be felt, or this proves nothing.
+	field = _pond_rig(53, 30.0, POND_SENSES)
+	field.open_pond()
+	_pond_person(field, Vector2(0.0, -200.0), 30.0, {&"cytostome": 3,
+		&"flagellum": 1})
+	field._process(POND_STEP)
+	var readings: Array = []
+	for pose in ["out", "absent", "in"]:
+		match pose:
+			"out":
+				field.set_person_in_water(false)
+			"absent":
+				field.remove_person()
+			"in":
+				field.place_person(Vector2(0.0, -200.0), 0.0, 30.0)
+		field.call("_step_sense")
+		field.call("_step_beams")
+		field.call("_step_touch")
+		(field.get("_echoes") as Array).clear()
+		field.call("_cast_ping")
+		readings.append([field.taste_level, field.dread_level, field.shadow,
+			field.touch_level, field.beams.duplicate(true),
+			(field.get("_echoes") as Array).duplicate(true)])
+	_says(var_to_bytes(readings[0]) == var_to_bytes(readings[1]),
+		"pond-field: a person out of the water is not perceived -- taste, dread,"
+		+ " shadow, touch, beams and the ping read exactly as with nobody there")
+	_says(float(readings[2][3]) > float(readings[1][3])
+			and float(readings[2][2]) > float(readings[1][2]),
+		"pond-field: and the same person in the water is felt (touch %.2f,"
+		% float(readings[2][3]) + " shadow %.2f)" % float(readings[2][2]))
+
+
+# --- The mirror: the same senses from the host's snapshots -------------------
+
+func _pond_mirror() -> void:
+	var host := _pond_rig(61, 30.0, POND_SENSES)
+	host.open_pond()
+	var person_genes := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 1}
+	_pond_person(host, Vector2(380.0, -260.0), 32.0, person_genes, 1.0)
+	# Something hunting this cell, far enough off not to arrive in ten seconds
+	# -- and wider than any mouth the water seeds (ARRIVAL_GAPE_MAX), so that
+	# nothing out there swallows it before the ten seconds are up.
+	var from := Vector2(-1250.0, 300.0)
+	var b := _pond_pose(host, 7, 45.0, {&"cytostome": 3, &"flagellum": 1}, from,
+		_pond_face(from, Vector2.ZERO))
+	b.state = FoodField.State.STALK
+	b.target = FoodField.TARGET_PLAYER
+	b.calm = 0.0
+	var mirror := _pond_rig(61, 30.0, POND_SENSES)
+	mirror.become_mirror()
+	var order: Array = []
+	for gene: StringName in person_genes:
+		order.append(gene)
+	mirror.set_person_genome(person_genes, order)
+	var host_cell: Object = host.get("_cell")
+	var mirror_cell: Object = mirror.get("_cell")
+	var versions := {}
+	var worst := 0.0
+	var frames := 0
+	var hunted := 0
+	var returns := 0
+	var sent_max := 0
+	var mismatch := ""
+	var hunter_serial := int(b.serial)
+	for frame in 600:
+		# Held on its run, as `drive.gd --stalk` holds one: a hunter that
+		# swallows a drifter on the way in ends its run, and then there is no
+		# `hunter()` left to compare. One the water takes anyway is replaced in
+		# its slot where it was, so the hunt is compared for the whole run.
+		if int(b.serial) != hunter_serial:
+			_pond_pose(host, 7, 45.0, {&"cytostome": 3, &"flagellum": 1}, b.pos,
+				_pond_face(b.pos, Vector2.ZERO))
+			hunter_serial = int(b.serial)
+		b.state = FoodField.State.STALK
+		b.target = FoodField.TARGET_PLAYER
+		host._process(POND_STEP)
+		mirror_cell.position = host_cell.position
+		mirror_cell.heading = host_cell.heading
+		mirror_cell.velocity = host_cell.velocity
+		mirror_cell.radius = host_cell.radius
+		var entries: Array = host.pond_entries(false)
+		sent_max = maxi(sent_max, entries.size())
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.Entry.SLOT])
+			if slot == FoodField.PERSON_SLOT:
+				continue
+			var sig := int(entry[FoodField.Entry.SERIAL]) * 1000 \
+				+ int(entry[FoodField.Entry.MEALS])
+			if versions.get(slot, -1) != sig:
+				versions[slot] = sig
+				mirror.apply_genome(slot, int(entry[FoodField.Entry.SERIAL]),
+					int(entry[FoodField.Entry.MEALS]),
+					(host.bodies()[slot].genome as Dictionary).duplicate())
+		mirror.apply_pond(host_cell.wound, entries)
+		# The organs alone: this cell's own push-out was the host's to make,
+		# and a mirror of the same cell would make it a second time.
+		mirror.call("_step_organs", POND_STEP)
+		frames += 1
+		var off := _pond_differ(host, mirror)
+		worst = maxf(worst, off)
+		if off > 1e-6 and mismatch.is_empty():
+			mismatch = "-- frame %d off by %s" % [frame, str(off)]
+		if host.hunter() >= 0:
+			hunted += 1
+		returns += (host.pings as Array).size()
+		if host.hunter() != mirror.hunter() and mismatch.is_empty():
+			mismatch = "-- frame %d hunter %d against %d" % [frame, host.hunter(),
+				mirror.hunter()]
+	_says(mismatch.is_empty() and worst <= 1e-6 and hunted > 500 and returns > 0,
+		("pond-field: the mirror returns the host's taste, dread, shadow, touch,"
+		+ " beams, ping returns and hunter() within 1e-6 for %d frames (worst %s;"
+		+ " %d frames hunted, %d returns, at most %d of %d bodies sent) %s")
+		% [frames, str(worst), hunted, returns, sent_max, FoodField.POND_SLOTS,
+			mismatch])
+
+	# A hunter the host loses leaves the mirror's hunt in the same snapshot: a
+	# retired body is not sent, and a mirror that kept its last STALK would go
+	# on answering hunter() for nothing.
+	var was_hunted: bool = host.hunter() == 7 and mirror.hunter() == 7
+	host.call("_retire", 7)
+	mirror.apply_pond(host_cell.wound, host.pond_entries(false))
+	_says(was_hunted and host.hunter() == mirror.hunter()
+			and mirror.hunter() != 7,
+		"pond-field: a hunter the host retires leaves the mirror's hunter() with"
+		+ " the next snapshot (%d on both)" % mirror.hunter())
+	# And it is drawn as nothing there, as on the host: the view reads points()
+	# and radii() and never `seeded`, so a radius left behind is a ghost.
+	_says(not bool(mirror.bodies()[7].seeded) and float(mirror.radii()[7]) == 0.0
+			and float(host.radii()[7]) == 0.0,
+		"pond-field: a body the host stops sending has radius 0 on the mirror,"
+		+ " as on the host (%s against %s)" % [str(mirror.radii()[7]),
+			str(host.radii()[7])])
+
+	# And between snapshots it carries: a water body on along its heading at
+	# its own speed, the person on the closed form of the drag -- each for no
+	# more than CARRY_MAX, and then it holds.
+	var carried := true
+	var held_at: Array = []
+	var snap: Array = []
+	for body: Object in mirror.bodies():
+		snap.append([body.pos, body.heading, body.speed, body.seeded])
+	var person_rec: Object = mirror.person()
+	for step in 30:
+		mirror._process(POND_STEP)
+	var ahead := minf(29.0 * POND_STEP, FoodField.CARRY_MAX)
+	for i in FoodField.PERSON_SLOT:
+		var body: Object = mirror.bodies()[i]
+		if not bool(snap[i][3]):
+			continue
+		var want: Vector2 = (snap[i][0] as Vector2) + Vector2(sin(float(snap[i][1])),
+			-cos(float(snap[i][1]))) * (float(snap[i][2]) * ahead)
+		if (body.pos as Vector2).distance_to(want) > 1e-3:
+			carried = false
+	var k := CellBody.DRAG
+	var person_want: Vector2 = person_rec.at \
+		+ person_rec.launch * ((1.0 - exp(-k * ahead)) / k)
+	var person_now: Vector2 = mirror.bodies()[FoodField.PERSON_SLOT].pos
+	_says(carried and person_now.distance_to(person_want) < 1e-3,
+		"pond-field: between snapshots the mirror carries every body %.2f s and"
+		% ahead + " no further, the person on the drag's closed form")
+
+
+# --- The rest of the field's own contract -------------------------------------
+
+func _pond_housekeeping() -> void:
+	# §1.8: a quiet guest coasts on under the water's drag, and stops.
+	var field := _pond_rig(71, 30.0, POND_SENSES)
+	field.open_pond()
+	var at := Vector2(2500.0, 0.0)
+	var v := Vector2(60.0, -20.0)
+	field.set_person_genome({&"cytostome": 1, &"flagellum": 1}, [])
+	field.place_person(at, 0.0, 28.0, v, 0.3)
+	for frame in 121:
+		field._process(POND_STEP)
+	var k := CellBody.DRAG
+	var t := 120.0 * POND_STEP
+	var want := at + v * ((1.0 - exp(-k * t)) / k)
+	var coast: Vector2 = field.bodies()[FoodField.PERSON_SLOT].pos
+	# The rest of the way on the person's own step alone: the carry is all
+	# that moves them, and thirty seconds of two rings would only cost time.
+	for frame in 1800:
+		field.call("_step_person", POND_STEP)
+	var rest: Vector2 = field.bodies()[FoodField.PERSON_SLOT].pos
+	_says(coast.distance_to(want) < 1e-3 and rest.distance_to(at + v / k) < 0.5,
+		"pond-field: a person nobody reports coasts on under the drag (%.1f"
+		% at.distance_to(coast) + " units in 2 s) and stops %.1f units on"
+		% at.distance_to(rest))
+
+	# §1.5: in a pond a sister takes a free slot, not slot 1.
+	field = _pond_rig(72, 30.0, POND_SENSES)
+	field.open_pond()
+	var one := int(field.bodies()[1].serial)
+	field.put_sister(PI * 0.5, 560.0, 28.28, {&"cytostome": 1, &"flagellum": 1})
+	var slot := -1
+	for i in FoodField.PERSON_SLOT:
+		if field.bodies()[i].seeded and is_equal_approx(float(field.bodies()[i].radius), 28.28):
+			slot = i
+	_says(slot >= FoodField.COUNT and int(field.bodies()[1].serial) == one,
+		"pond-field: in a pond the sister takes a free slot (%d), and slot 1 is"
+		% slot + " left alone")
+
+	# A mirror is a water of nobody until it is sent one, and leaving it is a
+	# fresh single-player water round this cell.
+	field = _pond_rig(73, 30.0, POND_SENSES)
+	field.become_mirror()
+	var empty: bool = field.bodies().size() == FoodField.POND_SLOTS
+	for body: Object in field.bodies():
+		if body.seeded:
+			empty = false
+	field._process(POND_STEP)
+	field.leave_mirror()
+	var solo: bool = field.bodies().size() == FoodField.COUNT and not field.pond_open() \
+		and not field.mirroring()
+	for body: Object in field.bodies():
+		if not body.seeded:
+			solo = false
+	_says(empty and solo,
+		"pond-field: a mirror starts empty, and leaving it is 34 fresh cells alone")
+
+
+## The largest difference between what the two fields report this frame, over
+## every sense the mirror is held to; INF for a shape that differs at all.
+func _pond_differ(a: Node, b: Node) -> float:
+	var off := 0.0
+	for key: String in ["taste_level", "dread_level", "shadow", "touch_level",
+			"concentration"]:
+		off = maxf(off, absf(float(a.get(key)) - float(b.get(key))))
+	if float(a.shadow) > 0.0:
+		off = maxf(off, absf(angle_difference(float(a.shadow_bearing),
+			float(b.shadow_bearing))))
+	if float(a.touch_level) > 0.0:
+		off = maxf(off, absf(angle_difference(float(a.touch_bearing),
+			float(b.touch_bearing))))
+	var beams_a: Array = a.beams
+	var beams_b: Array = b.beams
+	if beams_a.size() != beams_b.size():
+		return INF
+	for i in beams_a.size():
+		if bool(beams_a[i][2]) != bool(beams_b[i][2]):
+			return INF
+		off = maxf(off, absf(float(beams_a[i][0]) - float(beams_b[i][0])))
+		off = maxf(off, absf(float(beams_a[i][1]) - float(beams_b[i][1])))
+	var pings_a: Array = a.pings
+	var pings_b: Array = b.pings
+	if pings_a.size() != pings_b.size():
+		return INF
+	for i in pings_a.size():
+		for j in 4:
+			off = maxf(off, absf(float(pings_a[i][j]) - float(pings_b[i][j])))
+	return off
 
 
 # ---------------------------------------------------------------------------

@@ -233,12 +233,24 @@ jobs:
             echo "::error::Back did not walk back out of the game cleanly -- see the probe lines above"
             exit 1
           fi
+          # A clean run prints no script error at all. One that does has lost
+          # the rest of whatever function it was in -- a Godot runtime error
+          # aborts only that function, and its caller goes on to print ALL PASS
+          # over the checks it skipped.
+          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+            echo "::error::the Back probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
 
       - name: Check the LAN session
         # Two SceneMultiplayer instances in ONE headless process, each bound to
         # its own subtree with SceneTree.set_multiplayer(api, path), talking
         # ENet over loopback. Full handshake, raw frames both ways, and the
-        # version-skew refusal.
+        # version-skew refusal. Then, with no socket at all, the shared pond's
+        # field rules (`pond-field`): two players in one food.gd, the eating
+        # rule both ways, the per-player water, and a mirror that must perceive
+        # exactly what the field does.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -253,8 +265,10 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second, quits
-        # itself in under twenty seconds, and prints its own frame count so
-        # the margin on 20000 is visible in the log.
+        # itself in about twenty-five seconds -- eight of them the socket-free
+        # pond-field section, which runs inside one frame and so spends none
+        # of the budget -- and prints its own frame count so the margin on
+        # 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
@@ -270,6 +284,15 @@ jobs:
           if ! printf '%s\n' "$out" | grep -q "^\[net-probe\] ALL PASS$"; then
             printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
             echo "::error::the LAN session did not come up -- see the probe lines above"
+            exit 1
+          fi
+          # The same guard as the Back step's, and it matters more here: the
+          # pond-field section reaches food.gd's own functions by name, so a
+          # rename there is a runtime error that skips the rest of a section
+          # while the probe still prints ALL PASS. A clean run prints none.
+          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+            echo "::error::the LAN probe hit a script error -- checks after it did not run"
             exit 1
           fi
 
