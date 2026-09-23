@@ -238,7 +238,10 @@ jobs:
         # Two SceneMultiplayer instances in ONE headless process, each bound to
         # its own subtree with SceneTree.set_multiplayer(api, path), talking
         # ENet over loopback. Full handshake, raw frames both ways, and the
-        # version-skew refusal.
+        # version-skew refusal. Then, with no socket at all, the shared pond's
+        # field rules (`pond-field`): two players in one food.gd, the eating
+        # rule both ways, the per-player water, and a mirror that must perceive
+        # exactly what the field does.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -253,8 +256,10 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second, quits
-        # itself in under twenty seconds, and prints its own frame count so
-        # the margin on 20000 is visible in the log.
+        # itself in about twenty-five seconds -- eight of them the socket-free
+        # pond-field section, which runs inside one frame and so spends none
+        # of the budget -- and prints its own frame count so the margin on
+        # 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or

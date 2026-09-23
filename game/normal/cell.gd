@@ -408,13 +408,21 @@ var _pointer_x := 0.0
 ## would be a cycle GDScript will not resolve.
 var controls: Node = null
 
-## **Deaf to the player's steering, while the body goes on.** True silences
-## [method _read_steer], [method _pushing] and the dash -- every input this
-## file reads, the keys it polls directly included -- and nothing else: the
+## **Deaf to the player's steering, while the body goes on.** True makes
+## [method _read_steer] answer nothing and silences [method _pushing] and the
+## dash, the keys this file polls directly included -- and nothing else: the
 ## drift, the impulses and the drag carry on, so the cell is let go rather than
 ## stopped. For a menu open over water that does not stop (shared-pond.md
 ## §1.7), where the arrows are moving menu focus and must not also turn the
 ## cell. False by default, and nothing sets it yet.
+##
+## **It silences what the cell does with a pointer, not whether it takes one.**
+## [method _unhandled_input] goes on running, so a finger that goes down on the
+## water while this is true is still claimed -- by the floating stick here, or
+## by a drawn control through `controls.press()` -- and is still held, and
+## steering, the moment it clears. So whoever flips it calls [method release]
+## and `controls.let_go()` at the same moment, both ways round: exactly the
+## pair the pause screen and a lost focus already call.
 var steering_off := false
 
 
