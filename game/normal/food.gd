@@ -55,7 +55,9 @@ signal eaten(nutrition: float, gene: StringName, at: Vector2)
 ## [param strength] is 0..1; the cap lives in the signal bus, which owns every
 ## envelope. The only directional information a hunter ever gives.
 signal waked(bearing: float, strength: float)
-## The membrane closes and you are gone. [param bearing] is where it came from.
+## The membrane closes and you are gone. [param bearing] is where it came from;
+## [member died_of] and [member died_by], written just before this goes, are
+## how and by whose mouth.
 signal killed(bearing: float)
 ## A mouth closed on something and could not swallow it. [param bearing] is
 ## where it happened -- a mouth on your skin, or your own mouth on a body it is
@@ -89,8 +91,8 @@ signal pulsed
 ## §0.2: the far device turns it into one with its own heading), [param level]
 ## is the strength or the nutrition, [param by] is a [enum By] and [param gene]
 ## is the meal's gene for `ATE`. Only a field with a pond open emits it, and
-## nothing in the shipped run is connected to it yet (Phase 2's `pond.gd` sends
-## it as CONTACT).
+## `pond.gd` sends it to the other player as CONTACT. A `KILLED` is always
+## followed at once by [signal person_died], which carries the cause.
 signal person_touched(what: int, at: Vector2, level: float, by: int, gene: StringName)
 ## **The other player died in this water**: swallowed, chewed apart, or
 ## poisoned by what it bit or swallowed -- a [enum Cause], by a [enum By], at
@@ -123,6 +125,9 @@ const CARRY_MAX := 0.2
 ## [method _cast_ping] measures it. Scent, dread, beams and the frame all lie
 ## inside it, so nothing outside it can change a sense.
 const SEND_REACH := 1900.0
+## How far clear of a player a sister is put, surface to surface, when the
+## place she was meant for is on them: pond.gd's own ARRIVAL_CLEAR.
+const SISTER_CLEAR := 20.0
 ## How many angles [method _seed_for] draws before it gives up looking for a
 ## point clear of every anchor and takes the one straight away from the other.
 const SEED_TRIES := 8
@@ -1057,6 +1062,14 @@ var in_water := true
 ## still there; a dead one does not. The field clears both of these itself when
 ## it kills this cell in a pond; the run owns every other change.
 var anchored := true
+## **How this cell last died, and by whose mouth**: a [enum Cause] and a
+## [enum By], written in the instant before [signal killed] is emitted, so a
+## listener reads them inside its handler. [signal killed] carries only a
+## bearing, because the membrane needs nothing more; the pond's DIED needs the
+## rest (shared-pond.md §2), and only the field knows it. Nothing in single
+## player reads them.
+var died_of := 0
+var died_by := 0
 var _pond := false
 ## A mirror simulates nothing but its own cell's senses: the host's water
 ## arrives by [method apply_pond] and every contact by [method hear_contact].
@@ -1751,7 +1764,7 @@ func _contacts_with(p: Person) -> bool:
 				_tell(p, Contact.STUNG, b.pos, 0.0, By.WATER, &"")
 				_consume(i)
 				continue
-			_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"")
+			_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
 			_break_off(b)
 			if p != null:
 				_person_gone(Cause.SWALLOWED, By.WATER)
@@ -1959,7 +1972,7 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 	if hurt >= 1.0:
 		# Chewed through rather than swallowed, and it ends the same way. The
 		# player has felt every one of the bites that got here, at this bearing.
-		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"")
+		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
 		if b.state == State.STALK:
 			_break_off(b)
 		if p != null:
@@ -2001,6 +2014,14 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	else:
 		pb.bite = CellBody.BITE_GAP
 	var at := b.pos
+	# **The bearing the bite is felt at, taken before anything is said**, which
+	# is where the shipped `_bite_from_me` took it. The ATE below runs the
+	# run's `eaten` handler before the BITTEN goes, and a handler that moved or
+	# turned this cell would otherwise move this bite with it -- none does today,
+	# and the gate cannot see the difference, so the order is held here rather
+	# than left to be true (shared-pond.md §3). A person's bearing is worked out
+	# on their own device, from the place.
+	var felt_at := _cell.bearing_to(at) if p == null else 0.0
 	b.wound = clampf(b.wound + damage, 0.0, 1.0)
 	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"toxicyst"), damage)
 	var hurt := 0.0
@@ -2013,7 +2034,7 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# The death is checked before the meal, and in that order on purpose:
 	# `eaten` is not idempotent and feeding a corpse would be silent.
 	if hurt >= 1.0:
-		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"")
+		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.POISONED)
 		if p != null:
 			_person_gone(Cause.POISONED, By.WATER)
 		return true
@@ -2022,8 +2043,11 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 			_meal_value_for(b.radius, _cell.radius if p == null else pb.radius),
 			By.WATER, Genome.dominant_of(b.genome))
 		_consume(index)
-	_tell(p, Contact.BITTEN, at,
-		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.WATER, &"")
+	var level := maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back))
+	if p == null:
+		bitten.emit(felt_at, level)
+	else:
+		_tell(p, Contact.BITTEN, at, level, By.WATER, &"")
 	return false
 
 
@@ -2061,10 +2085,10 @@ func _players_meet(p: Person) -> void:
 		if venom_cost >= 0.0:
 			# Spat out starving, and they die of it.
 			hear_contact(Contact.STUNG, there, 0.0, By.FRIEND)
-			_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"")
+			_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
 			_person_gone(Cause.POISONED, By.FRIEND)
 			return
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND)
+		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
 		_tell(p, Contact.ATE, here, _meal_value_for(_cell.radius, pb.radius),
 			By.FRIEND, _local_dominant())
 		_lose_local()
@@ -2072,12 +2096,12 @@ func _players_meet(p: Person) -> void:
 	if my_mouth and pb.radius * p.armour < my_gape:
 		if p.venom_cost >= 0.0:
 			_tell(p, Contact.STUNG, here, 0.0, By.FRIEND, &"")
-			hear_contact(Contact.KILLED, there, 0.0, By.FRIEND)
+			hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
 			_lose_local()
 			return
 		hear_contact(Contact.ATE, there, _meal_value_for(pb.radius, _cell.radius),
 			By.FRIEND, Genome.dominant_of(pb.genome))
-		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"")
+		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
 		_person_gone(Cause.SWALLOWED, By.FRIEND)
 		return
 	if their_mouth and _chewed_by_friend(p):
@@ -2102,7 +2126,7 @@ func _chewed_by_friend(p: Person) -> bool:
 	pb.bite = CellBody.BITE_GAP
 	_cell.wound = clampf(_cell.wound + damage, 0.0, 1.0)
 	if _cell.wound >= 1.0:
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND)
+		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.CHEWED)
 		_tell(p, Contact.ATE, here, _meal_value_for(_cell.radius, pb.radius),
 			By.FRIEND, _local_dominant())
 		_lose_local()
@@ -2111,7 +2135,7 @@ func _chewed_by_friend(p: Person) -> bool:
 	pb.wound = clampf(pb.wound + back, 0.0, 1.0)
 	hear_contact(Contact.BITTEN, there, _felt(damage), By.FRIEND)
 	if pb.wound >= 1.0:
-		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"")
+		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
 		_person_gone(Cause.POISONED, By.FRIEND)
 		return false
 	_tell(p, Contact.BITTEN, here,
@@ -2137,14 +2161,14 @@ func _chew_friend(p: Person) -> void:
 	var back := CellBody.venom_back(Genome.tier_of(pb.genome, &"toxicyst"), damage)
 	_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
 	if _cell.wound >= 1.0:
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND)
+		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
 		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
 		_lose_local()
 		return
 	if pb.wound >= 1.0:
 		hear_contact(Contact.ATE, there, _meal_value_for(pb.radius, _cell.radius),
 			By.FRIEND, Genome.dominant_of(pb.genome))
-		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"")
+		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.CHEWED)
 		_person_gone(Cause.CHEWED, By.FRIEND)
 	else:
 		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
@@ -3316,16 +3340,17 @@ func enter_water() -> void:
 ## [param at] with [param heading], in the first free slot -- or, with none free,
 ## in place of the body farthest from every anchor that is neither a drifter nor
 ## hunting a player. For this cell's own birth through [method put_sister], and
-## for the other player's through SISTER.
+## for the other player's through SISTER. Returns the slot she took, or -1.
 func place_sister(at: Vector2, heading: float, body_radius: float,
-		tiers: Dictionary) -> void:
+		tiers: Dictionary) -> int:
 	if not _pond or _mirror or _cell == null:
-		return
+		return -1
+	at = _clear_of_players(at, body_radius)
 	var slot := _free_slot()
 	if slot < 0:
 		slot = _farthest_spare()
 	if slot < 0:
-		return
+		return -1
 	# Made for whichever player she lies nearer: her own body replaces what is
 	# drawn, but the slot's clocks, serial and turn are that water's.
 	_find_anchors()
@@ -3345,6 +3370,55 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	b.heading = heading
 	b.aim = at
 	b.flee_from = at
+	_changes += 1
+	return slot
+
+
+## **A sister never lands on a player.** She goes SISTER_DISTANCE to her side,
+## wherever that is, and the other player can be standing there: found by
+## `net_probe`, when an arrival still landed at the same 560 along the world
+## horizontal and she landed on the host, shoving it 14 units in its own
+## daughter's first frame. She is moved straight out from any player she would
+## overlap until the two are [constant SISTER_CLEAR] apart, and no further, so
+## she stays on her side.
+func _clear_of_players(at: Vector2, body_radius: float) -> Vector2:
+	var players: Array = []
+	if anchored:
+		players.append([_cell.position, _cell.radius])
+	var pb := _cells[PERSON_SLOT]
+	if pb.person != null:
+		players.append([pb.pos, pb.radius])
+	for each: Array in players:
+		var centre: Vector2 = each[0]
+		var reach := float(each[1]) + body_radius + SISTER_CLEAR
+		var away := at - centre
+		if away.length() >= reach:
+			continue
+		at = centre + (away.normalized() if away.length() > 0.001 else Vector2.RIGHT) \
+			* reach
+	return at
+
+
+## **The other player's new body**, where the old one divided (shared-pond.md
+## §1.5): a new serial -- so nothing that was chasing the mother carries on
+## against the daughter -- no wound, a reloaded mouth and dart, and a new
+## cell's grace, which is what [method enter_water] gives this cell at its own
+## birth. Their place and what they wear arrive as ever, by [method
+## place_person] and [method set_person_genome]. Host only.
+func renew_person() -> void:
+	if _mirror:
+		return
+	var p := person()
+	if p == null:
+		return
+	var pb := _cells[PERSON_SLOT]
+	_serial += 1
+	pb.serial = _serial
+	pb.meals = 0
+	pb.wound = 0.0
+	pb.bite = 0.0
+	p.first_hunt = FIRST_DELAY
+	p.dart_clock = 0.0
 	_changes += 1
 
 
@@ -3567,10 +3641,12 @@ func apply_genome(slot: int, serial: int, meals: int, tiers: Dictionary) -> void
 ## never does (§0.2), because only this device knows which way its cell is
 ## facing now. The field's own contacts with this cell are told through here as
 ## well, so the run's handlers cannot tell a pond from single player.
-## [param level] is the strength, or the nutrition for `ATE`; [param _by] is
-## carried for the run and changes nothing here.
+## [param level] is the strength, or the nutrition for `ATE`. For `KILLED`,
+## [param by] and [param cause] become [member died_by] and [member died_of]
+## before [signal killed] goes, which is how the run learns its own cause of
+## death (shared-pond.md §3); for anything else they change nothing here.
 func hear_contact(what: int, at: Vector2, level: float = 0.0,
-		_by: int = By.WATER, gene: StringName = &"") -> void:
+		by: int = By.WATER, gene: StringName = &"", cause: int = 0) -> void:
 	match what:
 		Contact.WAKED:
 			waked.emit(_cell.bearing_to(at), level)
@@ -3583,15 +3659,18 @@ func hear_contact(what: int, at: Vector2, level: float = 0.0,
 		Contact.ATE:
 			eaten.emit(level, gene, at)
 		Contact.KILLED:
+			died_of = cause
+			died_by = by
 			killed.emit(_cell.bearing_to(at))
 
 
 ## One contact, to whichever player it happened to: this cell through the
-## shipped signals, the person through [signal person_touched].
+## shipped signals, the person through [signal person_touched]. [param cause]
+## is a `KILLED`'s [enum Cause]; the person's goes out on [signal person_died].
 func _tell(p: Person, what: int, at: Vector2, level: float, by: int,
-		gene: StringName) -> void:
+		gene: StringName, cause: int = 0) -> void:
 	if p == null:
-		hear_contact(what, at, level, by, gene)
+		hear_contact(what, at, level, by, gene, cause)
 	else:
 		person_touched.emit(what, at, level, by, gene)
 
@@ -3683,6 +3762,14 @@ func _carry_person(pb: Body, t: float) -> void:
 ## sense it. Nothing here steps a body, seeds one or eats one -- all of that is
 ## the host's, and arrives.
 func _step_mirror(delta: float) -> void:
+	# **Carried to the end of this frame, not to its start.** A snapshot is the
+	# host's water as the host's last frame ended, and it is applied before this
+	# node runs; by the time this frame ends the host's water has run on by one
+	# more frame, and so does this. Carried to the start instead, the mirror
+	# stood a whole frame behind the water it mirrors -- 1.6 units on a lunging
+	# hunter at 60 frames a second -- in every frame, on a link with no latency
+	# at all.
+	_snap_age += delta
 	var ahead := minf(_snap_age, CARRY_MAX)
 	for i in _water:
 		var b := _cells[i]
@@ -3691,7 +3778,6 @@ func _step_mirror(delta: float) -> void:
 	var pb := _cells[PERSON_SLOT]
 	if pb.person != null:
 		_carry_person(pb, ahead)
-	_snap_age += delta
 	if not in_water:
 		return
 	for b in _cells:

@@ -136,7 +136,8 @@ extends Node
 ##                           three times. Default is the whole SAMPLE_SECONDS.
 ##   --wound=<0..1>          hold the player's body at that much damage. Bodies
 ##                           knit up every frame, so a wound cannot be posed by
-##                           setting it once.
+##                           setting it once. A pond guest's wound is the host's,
+##                           and is held there as well
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -150,7 +151,10 @@ extends Node
 ##                           the forty-second grace can be reached in one frame
 ##   --stalk=<units>         park a hunting cell this far off the cell's front
 ##                           quarter and hold it there, so dread, a wake and a
-##                           lunge can each be photographed at a known range
+##                           lunge can each be photographed at a known range. In
+##                           a pond guest's run it is posed in the host's water,
+##                           on the guest, as --cell=, --hunt and --food-at are:
+##                           a mirror's bodies are rewritten by every snapshot
 ##   --stalk-at=<deg>        the body-relative bearing --stalk and --hunt park
 ##                           it on, default 40. 180 is directly astern, which is
 ##                           where "it ate me with its tail" used to happen
@@ -254,6 +258,9 @@ extends Node
 ##                           screen, the `watch` offer and the replay itself can
 ##                           each be photographed without waiting seven minutes
 ##                           for hunger or gambling on a hunter
+##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
+##                           at a known time -- in a pond, after the guest has
+##                           arrived
 ##   --panes=<seconds>       raise the two-pane replay screen over the live run
 ##                           at that time, mirroring it frame for frame. The
 ##                           split screen is the part of docs/design/replay.md
@@ -396,10 +403,51 @@ extends Node
 ##                           run: this is `food.gd` alone (shared-pond.md §5
 ##                           Phase 1), and it is what `--field-cost` times two
 ##                           rings and a person with. **The run does not know
-##                           about it** until Phase 2: this cell's death still
-##                           stops the field and a birth's `setup()` closes the
-##                           pond, as in single player, and the view draws the
-##                           person as a water cell
+##                           about it**: this cell's death still stops the field
+##                           and a birth's `setup()` closes the pond, as in single
+##                           player, and the view draws the person as a water
+##                           cell. For the real pond, `--pond=host|guest` below
+##   --pond=host|guest       **the shared pond, played** (shared-pond.md §5,
+##                           Phase 2): two sessions on loopback and **two real
+##                           runs** -- this one, which is drawn, in the seat
+##                           named, and the other seat as a second
+##                           `normal_mode.tscn` in a SubViewport that is never
+##                           drawn and hears no input. Every byte between them
+##                           crosses a socket, as in a game. The far seat is in
+##                           point of view, which costs it no drawing, and its
+##                           cell's steering is off so this run's keys steer
+##                           only this cell
+##   --enter-at=<seconds>    the guest reaches for the host only then, so the
+##                           guest's entry -- its swap into the host's water and
+##                           the beat that says so -- lands at a known time.
+##                           Default 0: the two find each other at once
+##   --friend=<dist>,<bearing>[,<radius>[,<facing>]]
+##                           hold the far seat's cell this far off this cell,
+##                           along a body-relative bearing in degrees, the
+##                           convention of `--peer=` and `--cell=`; `radius`
+##                           forces its body and `facing` is degrees away from
+##                           facing this cell. Unset, the friend swims where the
+##                           pond put it
+##   --friend-genome=<g:t,...>
+##                           what the far seat's cell wears, expressed whole
+##   --friend-state=<state>[:<seconds>]
+##                           put the far seat in a state at that time (default
+##                           0.5): `out`, its body at DIVIDE_RADIUS so it divides
+##                           and waits choosing -- a ghost from its pinch; `dead`,
+##                           starved; `quiet`, its run and session stopped the way
+##                           `onActivityStopped` stops a phone, with its transport
+##                           still answering so the link stays up; `held`, the
+##                           same for a host seen from a guest, which is what
+##                           holds the guest's pond; `gone`, its session closed,
+##                           which is the host pressing leave -- a guest takes
+##                           over
+##   --pond-trace=<seconds>  print both seats' pond state on that interval: the
+##                           link, who is in whose water, held, the beat, and
+##                           the friend as each view is drawing them
+##   --freeze-quiet=<seconds>
+##                           freeze once this seat has heard nothing from the
+##                           other for that long, on the session's wall clock --
+##                           the one the held pond and the quiet line keep
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -428,6 +476,9 @@ const PanesScreen := preload("res://game/replay/panes.gd")
 ## value poked into the view: the marker is drawn off bytes that crossed a
 ## socket, or the render is not evidence about anything.
 const NetSession := preload("res://game/net/net_session.gd")
+## For its Life and Split numbering only, which --pond-trace prints and
+## --friend= reads.
+const NormalMode := preload("res://game/normal/normal_mode.gd")
 
 var _clock := 0.0
 ## Where each finger was last put, so a slide can carry the `relative` the
@@ -485,6 +536,9 @@ var _truth_mark: Node2D = null
 
 var _stalk := -1.0
 var _stalk_at := 40.0
+## The body --stalk made a hunter of, by serial, so one the water takes is
+## noticed and made again.
+var _stalk_serial := -1
 ## Degrees away from facing the player, or NAN to leave its heading alone.
 var _stalk_face := NAN
 var _food_at := -1.0
@@ -646,6 +700,28 @@ var _pond_bearing := PI * 0.5
 var _pond_radius := -1.0
 ## How many times the held person died and arrived again.
 var _pond_deaths := 0
+## --pond=host|guest: which seat this run is, and the other seat.
+var _seat := ""
+var _seat_host: Node = null
+var _seat_guest: Node = null
+var _far_run: Node = null
+var _far_view: SubViewport = null
+var _enter_at := 0.0
+var _joined := false
+var _friend_dist := -1.0
+var _friend_at_deg := 0.0
+var _friend_radius := -1.0
+var _friend_face := 0.0
+var _friend_genome := ""
+var _friend_state := ""
+var _friend_state_at := 0.5
+var _friend_state_done := false
+var _pond_trace := -1.0
+var _pond_trace_clock := 0.0
+## --divide-at=: when to grow this cell to DIVIDE_RADIUS, or -1 for never.
+var _divide_at := -1.0
+## --freeze-quiet=: freeze once this seat has heard nothing for this long.
+var _freeze_quiet := -1.0
 
 ## What the fingerprint reads off every body. **A fixed list, on purpose**: a
 ## later phase adds members to `Body` and the gate still has to compare its
@@ -884,6 +960,8 @@ func _ready() -> void:
 			_mouse_lifts.append(float(text.trim_prefix("--mouse-lift=")))
 		elif text.begins_with("--kill-at="):
 			_kill_at = float(text.trim_prefix("--kill-at="))
+		elif text.begins_with("--divide-at="):
+			_divide_at = float(text.trim_prefix("--divide-at="))
 		elif text.begins_with("--panes="):
 			_panes_at = float(text.trim_prefix("--panes="))
 		elif text.begins_with("--capture-cost="):
@@ -892,6 +970,8 @@ func _ready() -> void:
 			_fingerprint = int(text.trim_prefix("--fingerprint="))
 		elif text.begins_with("--field-cost="):
 			_field_cost = int(text.trim_prefix("--field-cost="))
+		elif text == "--pond=host" or text == "--pond=guest":
+			_seat = text.trim_prefix("--pond=")
 		elif text.begins_with("--pond="):
 			var pond := text.trim_prefix("--pond=").split(",", false)
 			_pond_dist = float(pond[0]) if pond.size() > 0 else 4000.0
@@ -899,6 +979,25 @@ func _ready() -> void:
 				_pond_bearing = deg_to_rad(float(pond[1]))
 			if pond.size() > 2:
 				_pond_radius = float(pond[2])
+		elif text.begins_with("--enter-at="):
+			_enter_at = float(text.trim_prefix("--enter-at="))
+		elif text.begins_with("--friend-genome="):
+			_friend_genome = text.trim_prefix("--friend-genome=")
+		elif text.begins_with("--friend-state="):
+			var state := text.trim_prefix("--friend-state=").split(":")
+			_friend_state = state[0]
+			if state.size() > 1:
+				_friend_state_at = float(state[1])
+		elif text.begins_with("--friend="):
+			var friend := text.trim_prefix("--friend=").split(",", false)
+			_friend_dist = float(friend[0]) if friend.size() > 0 else 300.0
+			_friend_at_deg = float(friend[1]) if friend.size() > 1 else 90.0
+			_friend_radius = float(friend[2]) if friend.size() > 2 else -1.0
+			_friend_face = float(friend[3]) if friend.size() > 3 else 0.0
+		elif text.begins_with("--pond-trace="):
+			_pond_trace = float(text.trim_prefix("--pond-trace="))
+		elif text.begins_with("--freeze-quiet="):
+			_freeze_quiet = float(text.trim_prefix("--freeze-quiet="))
 		elif text == "--locked":
 			_locked = true
 		elif text == "--evade":
@@ -930,7 +1029,21 @@ func _ready() -> void:
 	# **Before the run is built**, because `normal_mode.gd` reads
 	# `NetSession.current` in its own `_ready` and a session opened afterwards
 	# would be a session the run never sees.
-	if _peer_dist >= 0.0:
+	if _seat != "":
+		# **Game time kept to wall time.** Every clock in `net_session.gd` is
+		# wall time on purpose, and a headless run at `--fixed-fps 60` steps
+		# frames several times faster than that: a phone quiet for 1.2 s would
+		# be held six seconds of game late, and twenty state frames a second
+		# would arrive four to the game second. Capped, the two agree whenever
+		# the machine keeps up -- which a software-GL render may not, so the
+		# trace prints the session's own `quiet` beside the game clock.
+		Engine.max_fps = 60
+		if _peer_dist >= 0.0:
+			print("[seat] --peer= is ignored with --pond=%s: the friend is a real run" % _seat)
+			_peer_dist = -1.0
+		_open_seats()
+		NetSession.current = _seat_session(_seat)
+	elif _peer_dist >= 0.0:
 		_open_peer()
 
 	var scene: PackedScene = load(scene_path)
@@ -955,9 +1068,12 @@ func _ready() -> void:
 		if body != null:
 			body.radius = _radius
 			# The water is seeded around the player's radius, so it has to be
-			# seeded again once that has been forced.
+			# seeded again once that has been forced -- and a pond host's water
+			# opened again, because `setup()` is a single-player water.
 			if _food != null:
 				_food.setup(body)
+				if _seat == "host":
+					_food.open_pond()
 			print("[drive] radius forced to %.1f -> %d slots" % [
 				_radius, body.slots()])
 	if _genome_spec != "" and _genome != null:
@@ -972,6 +1088,11 @@ func _ready() -> void:
 		_put_sister()
 	if _pond_dist >= 0.0 and _food != null:
 		_open_pond()
+	# **After this run, so every search from this node finds this run first**:
+	# `_find_script(self, ...)` walks depth first, and the far seat hangs off a
+	# viewport added after it.
+	if _seat != "":
+		_open_far_seat(scene)
 
 	if _check_seeding > 0:
 		_run_seeding_check(_check_seeding)
@@ -1027,8 +1148,9 @@ func _ready() -> void:
 		print("[drive] hunger forced to %.2f -> beat %.2fs at %.2f strength" % [
 			_hunger, _metabolism.beat_period(), _metabolism.beat_amplitude()])
 
-	if _stalk >= 0.0 and _food != null:
+	if _stalk >= 0.0 and _water_food() != null:
 		_make_hunter(0, _hold_point(_stalk, _stalk_at))
+		_stalk_serial = int((_water_food().get("_cells") as Array)[0].get("serial"))
 		# Before the first frame, not after it: _make_hunter points the mouth at
 		# the player, and the game's own _process runs ahead of this node's, so
 		# a hunter turned away only in _hold_world has already had one frame
@@ -1037,18 +1159,18 @@ func _ready() -> void:
 		print("[drive] hunter parked at %.0f units, bearing %+.0f deg, facing %s" % [
 			_stalk, _stalk_at,
 			"as it likes" if is_nan(_stalk_face) else "%+.0f deg off you" % _stalk_face])
-	if _hunt >= 0.0 and _food != null:
+	if _hunt >= 0.0 and _water_food() != null:
 		_make_hunter(0, _hold_point(_hunt, _stalk_at))
 		_face(0, _stalk_face)
 		print("[drive] hunter released from %.0f units" % _hunt)
-	if _prey_radius > 0.0 and _food != null:
-		var bodies: Array = _food.get("_cells")
+	if _prey_radius > 0.0 and _water_food() != null:
+		var bodies: Array = _water_food().get("_cells")
 		if bodies.size() > 1:
 			bodies[1].set("radius", _prey_radius)
 			bodies[1].set("drifter", false)
 			bodies[1].set("genome", {&"cytostome": 1, &"cirrus": 2})
 			print("[drive] field cell 1 forced to r%.1f gape %.1f" % [
-				_prey_radius, _food.gape_at(1)])
+				_prey_radius, _water_food().gape_at(1)])
 	if _food_at >= 0.0 and _food != null:
 		print("[drive] field cell 1 parked at %.0f units" % _food_at)
 	_apply_poses(true)
@@ -1177,6 +1299,269 @@ func _hold_pond() -> void:
 	var at: Vector2 = cell.position \
 		+ Vector2(sin(_pond_bearing), -cos(_pond_bearing)) * _pond_dist
 	_food.place_person(at, cell.heading, _pond_radius, cell.velocity, 0.0)
+
+
+# ---------------------------------------------------------------------------
+# --pond=host|guest: the shared pond, played by two real runs (shared-pond.md
+# §5, Phase 2). Nothing here pokes the pond: the far run is the whole game on
+# the other session, and every byte between the two crosses a socket.
+# ---------------------------------------------------------------------------
+
+## **Two sessions on loopback, before either run exists**, because each run
+## reads `NetSession.current` in its own `_ready` and a pond host's run opens
+## its pond there. The host takes calls at once; the guest reaches for it at
+## --enter-at, which at 0 is now.
+func _open_seats() -> void:
+	_seat_host = NetSession.new()
+	_seat_host.name = "SeatHost"
+	add_child(_seat_host)
+	_seat_guest = NetSession.new()
+	_seat_guest.name = "SeatGuest"
+	add_child(_seat_guest)
+	if not _seat_host.host():
+		print("[seat] could not host: %s" % _seat_host.trouble)
+		return
+	print("[seat] this run is the %s; the %s is a second run nobody sees"
+		% [_seat, _far_seat_name()]
+		+ " -- protocol %d on %s" % [NetSession.Wire.PROTOCOL, _seat_host.address])
+	if _enter_at <= 0.0:
+		_join_seat()
+
+
+func _join_seat() -> void:
+	_joined = true
+	if _seat_guest == null or not is_instance_valid(_seat_guest):
+		return
+	if not _seat_guest.join("127.0.0.1"):
+		print("[seat] could not reach: %s" % _seat_guest.trouble)
+		return
+	print("[seat]  %5.2f  the guest reaches for the host" % _clock)
+
+
+## **The other seat: `normal_mode.tscn` again**, inside a viewport that never
+## renders and is fed no input, on the other session. In point of view, which
+## draws no water, and with its cell's steering off -- `cell.gd` polls the
+## keyboard directly, and this run's keys belong to this run's cell. What the
+## flags pose on it (--friend-genome, the radius of --friend) is posed before
+## its first frame, as `--genome=` and `--radius=` are on this one.
+func _open_far_seat(scene: PackedScene) -> void:
+	var far_seat := _far_seat_name()
+	_far_view = SubViewport.new()
+	_far_view.name = "FarSeat"
+	_far_view.size = Vector2i(1280, 720)
+	_far_view.disable_3d = true
+	_far_view.gui_disable_input = true
+	_far_view.render_target_update_mode = SubViewport.UPDATE_DISABLED
+	var far := scene.instantiate()
+	far.set("mode", 0)
+	far.set("scheme", 0)
+	_far_view.add_child(far)
+	NetSession.current = _seat_session(far_seat)
+	add_child(_far_view)
+	NetSession.current = _seat_session(_seat)
+	_far_run = far
+	var cell := _far_cell()
+	var food := _find_script(far, "res://game/normal/food.gd")
+	var genome := _find_script(far, "res://game/normal/genome.gd")
+	if cell != null:
+		cell.set("steering_off", true)
+	if _friend_radius > 0.0 and cell != null and food != null:
+		cell.radius = _friend_radius
+		food.setup(cell)
+		if far_seat == "host":
+			food.open_pond()
+	if _friend_genome != "" and genome != null:
+		var made := _parse_genes(_friend_genome, genome)
+		genome.express(made[0], made[1])
+	var bus := _find_bus(far)
+	if bus != null and _seeded:
+		bus.seed_rng(_seed + 1)
+	print("[seat] the %s: r%.1f wearing %s%s" % [far_seat,
+		cell.radius if cell != null else 0.0,
+		_genome_text(genome.tiers()) if genome != null else "?",
+		"" if _friend_dist < 0.0 else ", held %.0f units off you at %+.0f deg, facing %+.0f deg off you"
+			% [_friend_dist, _friend_at_deg, _friend_face]])
+
+
+func _far_seat_name() -> String:
+	return "guest" if _seat == "host" else "host"
+
+
+func _seat_session(seat: String) -> Node:
+	var net: Node = _seat_host if seat == "host" else _seat_guest
+	return net if net != null and is_instance_valid(net) else null
+
+
+func _seat_run(seat: String) -> Node:
+	var run: Node = _run if seat == _seat else _far_run
+	return run if run != null and is_instance_valid(run) else null
+
+
+func _far_cell() -> Node:
+	var run := _seat_run(_far_seat_name())
+	return _find_node_with(run, &"bearing_to") if run != null else null
+
+
+## Every frame the harness runs, which is after both runs': the join at its
+## time, the friend held, the friend's state at its time, and the trace. Stops
+## under a freeze with everything else.
+func _step_seats(delta: float) -> void:
+	if _seat == "" or get_tree().paused:
+		return
+	if not _joined and _clock >= _enter_at:
+		_join_seat()
+	_hold_friend()
+	_step_friend_state()
+	_step_pond_trace(delta)
+	# **Frozen on the session's own clock.** How long a phone has been quiet
+	# is wall time, and a software-GL render runs slower than that -- measured,
+	# 2.4 wall seconds of quiet to one of game at 1280x720 -- so a freeze on
+	# the game clock photographs a different moment at every shape.
+	var net := _seat_session(_seat)
+	if _freeze_quiet > 0.0 and net != null and float(net.quiet_for()) >= _freeze_quiet:
+		print("[seat]  %5.2f  quiet for %.2f s" % [_clock, float(net.quiet_for())])
+		_freeze_quiet = -1.0
+		_freeze()
+
+
+## --friend=: the far seat's cell put back where the flag holds it, off this
+## cell's body, moving with it -- so a shot frames the same geometry however far
+## this cell has swum, and the far run reports that place over the wire like
+## any other. Only while it is alive: a friend on the black is where it died.
+func _hold_friend() -> void:
+	if _friend_dist < 0.0:
+		return
+	var far_run := _seat_run(_far_seat_name())
+	var near := _find_node_with(_run, &"bearing_to") if _run != null else null
+	var far := _far_cell()
+	if far_run == null or near == null or far == null:
+		return
+	if int(far_run.get("_life")) != NormalMode.Life.ALIVE:
+		return
+	var at := _hold_point(_friend_dist, _friend_at_deg)
+	var toward: Vector2 = near.position - at
+	far.position = at
+	far.heading = atan2(toward.x, -toward.y) + deg_to_rad(_friend_face)
+	far.velocity = near.velocity
+	far.set("_omega", 0.0)
+
+
+## --friend-state=, once, at its time.
+func _step_friend_state() -> void:
+	if _friend_state == "" or _friend_state_done or _clock < _friend_state_at:
+		return
+	_friend_state_done = true
+	var far_seat := _far_seat_name()
+	var far_run := _seat_run(far_seat)
+	var net := _seat_session(far_seat)
+	if far_run == null:
+		return
+	match _friend_state:
+		"out":
+			# DIVIDE_RADIUS is where every division begins: 2.4 s of quickening
+			# in the water, then the pinch, where it leaves it.
+			var cell := _far_cell()
+			if cell != null:
+				cell.radius = CellBody.DIVIDE_RADIUS
+			print("[seat]  %5.2f  the %s reaches r%.0f and divides -- out of the water from its pinch"
+				% [_clock, far_seat, CellBody.DIVIDE_RADIUS])
+		"dead":
+			var metabolism := _find_script(far_run, "res://game/normal/metabolism.gd")
+			if metabolism != null:
+				metabolism.set_hunger(1.0)
+				metabolism.starve_seconds = metabolism.STARVE_GRACE + 1.0
+			print("[seat]  %5.2f  the %s starves" % [_clock, far_seat])
+		"quiet", "held":
+			# **A phone in a pocket**: its whole main loop stops, heartbeat and
+			# reports included. Its transport is still polled, which a stopped
+			# phone's is not -- so the link stays up and the pose holds for as
+			# long as the shot needs, where ENet would drop it after ~5.7 s.
+			_stop_all(_far_view)
+			if net != null:
+				net.set_process(false)
+			print("[seat]  %5.2f  the %s's phone stops -- still connected, saying nothing"
+				% [_clock, far_seat])
+		"gone":
+			if net != null:
+				net.close()
+			print("[seat]  %5.2f  the %s's session closes" % [_clock, far_seat])
+		_:
+			print("[seat] no friend state called '%s'" % _friend_state)
+
+
+func _stop_all(node: Node) -> void:
+	node.process_mode = Node.PROCESS_MODE_DISABLED
+	for child in node.get_children():
+		_stop_all(child)
+
+
+## --pond-trace=: both seats, as numbers, on one line each.
+func _step_pond_trace(delta: float) -> void:
+	if _pond_trace <= 0.0:
+		return
+	_pond_trace_clock += delta
+	if _pond_trace_clock < _pond_trace:
+		return
+	_pond_trace_clock = 0.0
+	for seat: String in ["host", "guest"]:
+		print(_seat_text(seat))
+
+
+func _seat_text(seat: String) -> String:
+	var head := "[pond]  %5.2f  %-5s" % [_clock, seat]
+	var run := _seat_run(seat)
+	if run == null:
+		return head + "  no run"
+	var net := _seat_session(seat)
+	var food := _find_script(run, "res://game/normal/food.gd")
+	var cell := _find_node_with(run, &"bearing_to")
+	var view := _find_script(run, "res://game/vision/vision.gd")
+	var pond: Object = run.get("_pond")
+	var link := "closed" if net == null else str(NetSession.Link.keys()[int(net.link)])
+	if net != null and float(net.quiet_for()) >= 0.0:
+		link += " quiet %.2f" % float(net.quiet_for())
+	var water := "alone"
+	if food != null and food.mirroring():
+		water = "in their water" if pond != null and bool(pond.get("in_pond")) \
+			else "mirroring, not placed"
+	elif food != null and food.pond_open():
+		var p: Object = food.person()
+		water = "hosting, nobody in" if p == null \
+			else ("hosting, friend in the water" if bool(p.get("in_water"))
+				else "hosting, friend out of the water")
+	if pond != null and bool(pond.get("entering")):
+		water += ", entering"
+	var life: int = run.get("_life")
+	var split: int = run.get("_split")
+	var bits: PackedStringArray = []
+	bits.append(NormalMode.Life.keys()[life].to_lower())
+	if split != NormalMode.Split.NONE:
+		bits.append(NormalMode.Split.keys()[split].to_lower())
+	if bool(run.get("_held")):
+		bits.append("HELD")
+	if float(run.get("_water_beat")) >= 0.0:
+		bits.append("beat %.2f" % float(run.get("_water_beat")))
+	if bool(run.get("_menu_open")):
+		bits.append("menu")
+	if get_tree().paused:
+		bits.append("TREE PAUSED")
+	var me := "" if cell == null else " me (%.0f, %.0f) r%.1f" % [
+		cell.position.x, cell.position.y, cell.radius]
+	var friend := "  friend not drawn"
+	if view != null:
+		var mark: Dictionary = view.get("_peer")
+		if mark.has("tiers"):
+			var at: Vector2 = mark["at"]
+			friend = "  friend drawn at (%.0f, %.0f) r%.1f alpha %.2f presence %.2f%s%s" % [
+				at.x, at.y, float(mark["radius"]), float(mark["alpha"]),
+				float(mark["confidence"]) / maxf(float(mark["alpha"]), 0.0001),
+				" GHOST" if bool(mark["ghost"]) else "",
+				"" if cell == null else " -- %.0f units off" % cell.position.distance_to(at)]
+	var line: Label = run.get_node_or_null(^"Hud/Onboarding")
+	var said := ""
+	if line != null and line.visible and line.modulate.a > 0.01:
+		said = "  says \"%s\" (%.2f)" % [line.text, line.modulate.a]
+	return "%s  %s  %s  %s%s%s%s" % [head, link, water, ", ".join(bits), me, friend, said]
 
 
 ## --peer-truth. Its own canvas layer above every layer the run has, redrawn
@@ -1354,6 +1739,7 @@ func _process(delta: float) -> void:
 	_hold_world()
 	_hold_peer(delta)
 	_hold_pond()
+	_step_seats(delta)
 	_step_peer_truth()
 	_step_peer_quiet()
 	_step_peer_trace(delta)
@@ -1365,6 +1751,7 @@ func _process(delta: float) -> void:
 	_step_controls(delta)
 	_step_rects()
 	_step_kill()
+	_step_divide()
 	_step_panes()
 	_step_capture_cost(delta)
 
@@ -1607,10 +1994,33 @@ func _step_field_cost() -> void:
 				active += 1
 		print("[pond] %d water cells in it at the end, the person arrived %d times"
 			% [active, 1 + _pond_deaths])
+	if _seat != "":
+		var in_water := 0
+		var bodies: Array = _food.get("_cells")
+		for i in mini(FoodField.PERSON_SLOT, bodies.size()):
+			if bodies[i].get("seeded"):
+				in_water += 1
+		var p: Object = _food.person() if _food.pond_open() else null
+		print("[seat] %d water cells at the end; the other player %s" % [in_water,
+			"is in the water" if p != null and bool(p.get("in_water"))
+				else ("is here, out of the water" if p != null else "is not here")])
 	get_tree().quit(0)
 
 
 ## Straight to the end of the forty-second grace, which is a death this frame.
+## --divide-at=: this cell reaches DIVIDE_RADIUS, and the run divides it --
+## at a known time, so a division can be photographed where it happens: in a
+## pond, after the guest has arrived rather than in the water it swam in alone.
+func _step_divide() -> void:
+	if _divide_at < 0.0 or _clock < _divide_at or _run == null:
+		return
+	_divide_at = -1.0
+	var cell := _find_node_with(_run, &"bearing_to")
+	if cell != null:
+		cell.radius = CellBody.DIVIDE_RADIUS
+		print("[drive] %5.2f  grown to r%.0f -- dividing" % [_clock, cell.radius])
+
+
 func _step_kill() -> void:
 	if _kill_at < 0.0 or _clock < _kill_at or _metabolism == null:
 		return
@@ -2027,7 +2437,9 @@ func _watch_field(delta: float) -> void:
 			continue
 		_after_meal.remove_at(k)
 		var index: int = mark[0]
-		if bodies[index].get("serial") != mark[1]:
+		# A water that shrank -- a pond's 69 slots handed back as a takeover's
+		# fresh 34 -- has no slot there any more.
+		if index >= bodies.size() or bodies[index].get("serial") != mark[1]:
 			continue
 		# Its own displacement, not the gap to a player swimming at 56 u/s.
 		# A break-off runs at lunge speed, so fleeing shows up as 570-1100
@@ -2063,7 +2475,18 @@ func _hold_world() -> void:
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
 		return
-	if _stalk >= 0.0 and _food != null:
+	var water := _water_food()
+	if _stalk >= 0.0 and water != null:
+		# **A hunter the water took is made again in its slot.** Eaten -- a
+		# pond guest's own mouth found it for one frame of its swap, when the
+		# host still had the guest where it had been -- or recycled, the slot
+		# holds a different body, and holding *that* one in place poses
+		# nothing. Solo it runs only when a player's mouth takes its own
+		# stalker, and the pose survives that too.
+		var slot0: Array = water.get("_cells")
+		if not slot0.is_empty() and int(slot0[0].get("serial")) != _stalk_serial:
+			_make_hunter(0, _hold_point(_stalk, _stalk_at))
+			_stalk_serial = int(slot0[0].get("serial"))
 		_place(0, _hold_point(_stalk, _stalk_at))
 		_face(0, _stalk_face)
 		# **Held committed as well as held in place.** A parked hunter's aim
@@ -2071,12 +2494,12 @@ func _hold_world() -> void:
 		# and the pose stops being the thing it claims to be -- and the kill
 		# branch is gated on STALK, so a test of *why* a kill did or did not
 		# land has to keep the state constant and vary only the geometry.
-		var bodies: Array = _food.get("_cells")
+		var bodies: Array = water.get("_cells")
 		if not bodies.is_empty():
 			bodies[0].set("state", FoodField.State.STALK)
-			bodies[0].set("target", FoodField.TARGET_PLAYER)
+			_aim_at_me(bodies[0])
 			bodies[0].set("stale", 0.0)
-	if _food_at >= 0.0 and _food != null:
+	if _food_at >= 0.0 and water != null:
 		# Reaching for a private member is a thing only tools/ is allowed to do.
 		# The bodies are objects rather than packed arrays now, so this writes
 		# through instead of handing a whole array back.
@@ -2085,6 +2508,12 @@ func _hold_world() -> void:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
 	if _wound >= 0.0:
 		cell.wound = _wound
+		# A guest's wound is the host's (shared-pond.md §0.1), and the host's
+		# is the one a kill is decided on: held there as well.
+		if water != null and water != _food:
+			var held: Array = water.get("_cells")
+			if held.size() > FoodField.PERSON_SLOT:
+				held[FoodField.PERSON_SLOT].set("wound", _wound)
 	# A held sample runs down whether or not anything is watching, so a posed
 	# one has to be put back every frame to stay where it was posed.
 	if _sample != &"" and _sample_left >= 0.0 and _genome != null:
@@ -2116,12 +2545,13 @@ func _parse_pose(spec: String) -> Array:
 ## Held every frame, because the field keeps swimming and recycling underneath.
 ## Reaching for a private member is a thing only tools/ is allowed to do.
 func _apply_poses(announce: bool) -> void:
-	if _posed.is_empty() or _food == null:
+	var water := _water_food()
+	if _posed.is_empty() or water == null:
 		return
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
 		return
-	var bodies: Array = _food.get("_cells")
+	var bodies: Array = water.get("_cells")
 	for pose: Array in _posed:
 		var index: int = pose[0]
 		if index < 0 or index >= bodies.size():
@@ -2142,7 +2572,7 @@ func _apply_poses(announce: bool) -> void:
 		_face(index, float(pose[5]))
 		if announce:
 			print("[drive] cell %d posed: r%.1f gape %.1f at %.0f units, facing %+.0f deg off you, %s" % [
-				index, float(pose[3]), _food.gape_at(index), float(pose[1]),
+				index, float(pose[3]), water.gape_at(index), float(pose[1]),
 				float(pose[5]), _genome_text(pose[4])])
 
 
@@ -2185,6 +2615,9 @@ func _freeze() -> void:
 	# still waiting.
 	if _run != null:
 		_make_pausable(_run)
+	# The far seat too: its water is the near seat's water, on a shared pond.
+	if _far_view != null and is_instance_valid(_far_view):
+		_make_pausable(_far_view)
 	if _bus != null:
 		_bus.process_mode = Node.PROCESS_MODE_PAUSABLE
 	get_tree().paused = true
@@ -2442,9 +2875,10 @@ func _find_node_with(node: Node, method: StringName) -> Node:
 ## barely registers, and at 0.80 it cannot.
 func _make_hunter(index: int, at: Vector2) -> void:
 	var cell := _find_node_with(_run, &"bearing_to")
-	if cell == null or _food == null:
+	var water := _water_food()
+	if cell == null or water == null:
 		return
-	var bodies: Array = _food.get("_cells")
+	var bodies: Array = water.get("_cells")
 	if index >= bodies.size():
 		return
 	var b: Object = bodies[index]
@@ -2456,7 +2890,7 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	b.set("genome", {&"cytostome": 3, &"flagellum": 2})
 	b.set("pos", at)
 	b.set("state", FoodField.State.STALK)
-	b.set("target", FoodField.TARGET_PLAYER)
+	_aim_at_me(b)
 	b.set("aim", cell.position)
 	b.set("aim_clock", 0.0)
 	b.set("lost", 0.0)
@@ -2469,11 +2903,34 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
 	b.set("radius", cell.radius * _hunter_gape / tier_gape)
 	print("[drive] hunter %d: r%.1f gape %.1f against your r%.1f" % [
-		index, b.get("radius"), _food.gape_at(index), cell.radius])
+		index, b.get("radius"), water.gape_at(index), cell.radius])
+
+
+## **The field whose water this run swims in**: its own -- or, for a guest
+## seat, the host's. A mirror's bodies are rewritten by every snapshot, so a
+## pose made there would last one frame; made in the host's water, it crosses
+## the wire like every other body. The world is one coordinate system on both.
+func _water_food() -> Node:
+	if _seat == "guest" and _far_run != null and is_instance_valid(_far_run):
+		return _find_script(_far_run, "res://game/normal/food.gd")
+	return _food
+
+
+## A posed hunter's prey is this run's cell: `TARGET_PLAYER` in its own water,
+## the person in slot 68 of a host's.
+func _aim_at_me(b: Object) -> void:
+	var water := _water_food()
+	if water == _food:
+		b.set("target", FoodField.TARGET_PLAYER)
+		return
+	var bodies: Array = water.get("_cells")
+	b.set("target", FoodField.PERSON_SLOT)
+	b.set("target_serial", bodies[FoodField.PERSON_SLOT].get("serial")
+		if bodies.size() > FoodField.PERSON_SLOT else 0)
 
 
 func _place(index: int, at: Vector2) -> void:
-	var bodies: Array = _food.get("_cells")
+	var bodies: Array = _water_food().get("_cells")
 	if index < bodies.size():
 		bodies[index].set("pos", at)
 
@@ -2485,10 +2942,11 @@ func _place(index: int, at: Vector2) -> void:
 ## pointed at you to reach you cannot be tested by waiting for the water to
 ## point one the wrong way.
 func _face(index: int, away: float) -> void:
-	if is_nan(away) or _food == null:
+	var water := _water_food()
+	if is_nan(away) or water == null:
 		return
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
-	var bodies: Array = _food.get("_cells")
+	var bodies: Array = water.get("_cells")
 	if cell == null or index >= bodies.size():
 		return
 	var to_player: Vector2 = cell.position - bodies[index].get("pos")
@@ -2551,7 +3009,8 @@ func _force_dna(spec: String) -> void:
 ## and `gene:tier:slot` to say **which slot**, which is which arc, which is which
 ## way a directional gene looks. Without the third field the genes land in the
 ## order they are written, in the first slots that will take them.
-func _parse_genes(spec: String) -> Array:
+func _parse_genes(spec: String, genome: Node = null) -> Array:
+	var slots_of: Node = genome if genome != null else _genome
 	var tiers := {}
 	var placed := {}
 	for pair in spec.split(",", false):
@@ -2563,7 +3022,7 @@ func _parse_genes(spec: String) -> Array:
 		if bits.size() >= 3:
 			placed[gene] = int(bits[2])
 	var layout: Array[StringName] = []
-	for i in maxi(_genome.slots(), tiers.size()):
+	for i in maxi(slots_of.slots(), tiers.size()):
 		layout.append(&"")
 	for gene: StringName in placed:
 		var slot := int(placed[gene])

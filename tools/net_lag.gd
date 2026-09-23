@@ -68,6 +68,17 @@ extends Node
 ##                           cannot be, so two runs agree as distributions, not
 ##                           frame for frame
 ##   --each                  print every trial's numbers as well
+##   --pond                  **the shared pond** (shared-pond.md §5, Phase 2):
+##                           two real runs of `normal_mode.tscn`, the host's and
+##                           the guest's, and the friend timed is the host's own
+##                           cell as the guest's screen draws it -- off the
+##                           mirror's slot 68, which POND carries, not off the
+##                           state track. `--link` models the guest's intake.
+##                           Adds `bite` to `--events` (a chewer posed on the
+##                           guest, timed from the host's bite to the guest's
+##                           `hit`), and samples every frame how far each water
+##                           body in the guest's water is from the host's, and
+##                           the largest POND frame sent
 ##
 ## Prints `[net-lag]` lines. Excluded from export (`tools/*`), so none of it
 ## ships.
@@ -76,6 +87,8 @@ const NetSession := preload("res://game/net/net_session.gd")
 const Wire := preload("res://game/net/wire.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const VISION := "res://game/vision/vision.tscn"
+const RUN := "res://game/normal/normal_mode.tscn"
+const FoodField := preload("res://game/normal/food.gd")
 
 ## Where the far cell rests between trials, off the near cell's nose. Where it
 ## is does not matter to a latency; that it is the same place every time does.
@@ -213,6 +226,70 @@ class Link extends Node:
 			target.call(&"_on_peer_packet", int(due[2]), due[3])
 
 
+## **--pond: the two players kept safe and still, and the water watched.**
+## First in every frame. The guest's cell is held where it was put, so the
+## camera the timed view draws from does not wander; nothing is allowed to hunt
+## or starve either player, and the guest's wound is the host's to reset, so a
+## ten-minute measurement is not ended by the water. And every frame, while
+## sampling: how far each water body in the guest's water is from where the
+## host's water has it -- bodies well inside the send set, the version the
+## mirror has, so a body not yet sent is not counted as a place error.
+class Keeper extends Node:
+	var guest_cell: Node = null
+	var guest_at := Vector2.ZERO
+	var host_cell: Node = null
+	var host_food: Node = null
+	var guest_food: Node = null
+	var host_metabolism: Node = null
+	var guest_metabolism: Node = null
+	var sampling := true
+	var keep_wound := true
+	var errors := PackedFloat32Array()
+	## Both bodies' sizes, held: a meal grows a cell, and four of them divide
+	## it, which takes it out of the water and ends every trial after.
+	var guest_radius := 0.0
+	var host_radius := 0.0
+
+	func _init() -> void:
+		process_priority = -500
+
+	func _process(_delta: float) -> void:
+		guest_cell.position = guest_at
+		guest_cell.heading = 0.0
+		guest_cell.velocity = Vector2.ZERO
+		guest_cell.radius = guest_radius
+		host_cell.radius = host_radius
+		host_food.set(&"_first_hunt", FoodField.FIRST_DELAY)
+		var p: Object = host_food.person()
+		if p != null:
+			p.set(&"first_hunt", FoodField.FIRST_DELAY)
+			if keep_wound:
+				host_food.bodies()[FoodField.PERSON_SLOT].wound = 0.0
+		host_cell.wound = 0.0
+		host_metabolism.set_hunger(0.0)
+		guest_metabolism.set_hunger(0.0)
+		if sampling:
+			_sample()
+
+	func _sample() -> void:
+		var hosts: Array = host_food.bodies()
+		var mirror: Array = guest_food.bodies()
+		if mirror.size() < hosts.size() or hosts.size() <= FoodField.PERSON_SLOT:
+			return
+		var guest: Vector2 = hosts[FoodField.PERSON_SLOT].pos
+		for i in FoodField.PERSON_SLOT:
+			var h: Object = hosts[i]
+			if not h.seeded:
+				continue
+			if (h.pos as Vector2).distance_to(guest) - float(h.radius) \
+					> FoodField.SEND_REACH - 50.0:
+				continue
+			var m: Object = mirror[i]
+			if not m.seeded or int(m.serial) != int(h.serial) & 0xFFFF:
+				continue
+			errors.append((m.pos as Vector2).distance_to(h.pos))
+
+
 var _rng := RandomNumberGenerator.new()
 var _far: Node = null
 var _near: Node = null
@@ -224,12 +301,18 @@ var _view: Node = null
 var _link: Link = null
 var _each := false
 var _rich := false
+## --pond: the two runs, and what keeps them measurable.
+var _pond := false
+var _host_run: Node = null
+var _guest_run: Node = null
+var _keeper: Keeper = null
 
 
 func _ready() -> void:
 	var link := "loopback"
 	var trials := 40
 	var events := PackedStringArray(["impulse", "turn"])
+	var events_given := false
 	var swim := 0.0
 	var fps := 60
 	var seed_value := 1
@@ -243,6 +326,7 @@ func _ready() -> void:
 			trials = int(text.trim_prefix("--trials="))
 		elif text.begins_with("--events="):
 			events = text.trim_prefix("--events=").split(",", false)
+			events_given = true
 		elif text.begins_with("--swim="):
 			swim = float(text.trim_prefix("--swim="))
 		elif text.begins_with("--fps="):
@@ -255,6 +339,8 @@ func _ready() -> void:
 			reliable = true
 		elif text == "--each":
 			_each = true
+		elif text == "--pond":
+			_pond = true
 	Engine.max_fps = fps
 	seed(seed_value)
 	_rng.seed = seed_value
@@ -264,17 +350,39 @@ func _ready() -> void:
 		get_tree().quit(1)
 		return
 	_rich = _far.get_method_argument_count(&"report_body") >= 5
-	print("[net-lag] protocol %d, %s wire, link %s%s, %d fps cap, seed %d"
+	print("[net-lag] protocol %d, %s wire, link %s%s, %d fps cap, seed %d%s"
 		% [Wire.PROTOCOL, "motion-carrying" if _rich else "place-only", link,
-			" (every frame reliable)" if reliable else "", fps, seed_value])
-	_build(link, reliable, rto / 1000.0)
+			" (every frame reliable)" if reliable else "", fps, seed_value,
+			" -- the shared pond, two real runs" if _pond else ""])
+	if _pond:
+		if not await _build_pond(link, reliable, rto / 1000.0):
+			print("[net-lag] FAILED to put the guest in the pond")
+			get_tree().quit(1)
+			return
+		if not events_given:
+			events.append("bite")
+	else:
+		_build(link, reliable, rto / 1000.0)
 
 	if events.has("impulse"):
 		await _time_impulses(trials)
 	if events.has("turn"):
 		await _time_turns(trials)
+	if _pond and events.has("bite"):
+		await _time_bites(trials)
 	if swim > 0.0:
 		await _swim(swim)
+	if _pond:
+		_summary("water, guest's body to host's", Array(_keeper.errors), "u")
+		var sorted := Array(_keeper.errors)
+		sorted.sort()
+		if not sorted.is_empty():
+			print("[net-lag] water p99 %.3f u, p99.9 %.3f u over %d body-frames"
+				% [_pick(sorted, 0.99), _pick(sorted, 0.999), sorted.size()])
+		var pond: Object = _host_run.get("_pond")
+		print("[net-lag] POND: largest %d bytes of %d allowed, %d sent, %d genomes"
+			% [int(pond.get("pond_bytes_max")), Wire.POND_MAX, int(pond.get("ponds_sent")),
+				int(pond.get("genomes_sent"))])
 	if _link != null:
 		print("[net-lag] link: %d frames delivered, %d lost, %d resent"
 			% [_link.passed, _link.lost, _link.resent])
@@ -336,7 +444,12 @@ func _build(link: String, reliable: bool, rto: float) -> void:
 	add_child(_view)
 	_view.set_session(_near)
 	_view.set_active(true)
+	_install_link(link, reliable, rto)
 
+
+## The near session's intake, through the model -- or straight off ENet for
+## plain loopback.
+func _install_link(link: String, reliable: bool, rto: float) -> void:
 	if link == "loopback" and not reliable:
 		return
 	_link = Link.new()
@@ -359,11 +472,69 @@ func _build(link: String, reliable: bool, rto: float) -> void:
 	api.connect(&"peer_packet", _link.take)
 
 
+## **--pond: two real runs, one water.** The host's run first, on the far
+## session, whose water becomes the pond; then the guest's on the near one,
+## which opens inside it, held for the round trip. The link is in place before
+## either, so every byte the guest takes in -- ARRIVE, the genomes, every POND
+## and CONTACT -- crosses it. The host's run is in point of view, which costs no
+## drawing; the guest's is in full vision, because its `_peer` is what is timed.
+## The friend timed is the host's own cell, steered by the stick like the
+## plain mode's far body.
+func _build_pond(link: String, reliable: bool, rto: float) -> bool:
+	_install_link(link, reliable, rto)
+	NetSession.current = _far
+	_host_run = (load(RUN) as PackedScene).instantiate()
+	_host_run.set("mode", 0)
+	_host_run.set("scheme", 0)
+	add_child(_host_run)
+	var until := _now() + 4.0
+	while _now() < until and not bool(_near.peer_pond_open()):
+		await get_tree().process_frame
+	NetSession.current = _near
+	_guest_run = (load(RUN) as PackedScene).instantiate()
+	_guest_run.set("mode", 1)
+	_guest_run.set("scheme", 0)
+	add_child(_guest_run)
+	var guest_pond: Object = _guest_run.get("_pond")
+	until = _now() + 6.0
+	while _now() < until and not bool(guest_pond.get("in_pond")):
+		await get_tree().process_frame
+	if not bool(guest_pond.get("in_pond")):
+		return false
+	_body = _host_run.get_node(^"Cell")
+	_me = _guest_run.get_node(^"Cell")
+	_view = _guest_run.get_node(^"Vision")
+	_stick = Stick.new()
+	_stick.name = "Stick"
+	add_child(_stick)
+	_body.controls = _stick
+	_keeper = Keeper.new()
+	_keeper.name = "Keeper"
+	_keeper.guest_cell = _me
+	_keeper.guest_at = _me.position
+	_keeper.guest_radius = _me.radius
+	_keeper.host_radius = _body.radius
+	_keeper.host_cell = _body
+	_keeper.host_food = _host_run.get_node(^"Food")
+	_keeper.guest_food = _guest_run.get_node(^"Food")
+	_keeper.host_metabolism = _host_run.get_node(^"Metabolism")
+	_keeper.guest_metabolism = _guest_run.get_node(^"Metabolism")
+	add_child(_keeper)
+	_rest()
+	return true
+
+
 ## The far body at rest, pointing somewhere new, with its own impulses held
-## off so the only thing it does is the thing being timed.
+## off so the only thing it does is the thing being timed. In a pond the rest
+## is off the guest's nose, and the water is cleared round both players so a
+## body drifting into either does not move the thing being timed.
 func _rest() -> void:
 	_stick.demand = 0.0
-	_body.position = REST
+	if _pond:
+		_body.position = _keeper.guest_at + REST
+		_clear_round([_keeper.guest_at, _keeper.guest_at + REST], 150.0)
+	else:
+		_body.position = REST
 	_body.velocity = Vector2.ZERO
 	_body.heading = _rng.randf_range(-PI, PI)
 	_body.set(&"_omega", 0.0)
@@ -508,6 +679,92 @@ func _swim(seconds: float) -> void:
 	if not twist.is_empty():
 		_summary("swim, heading correction", twist, "rad")
 	_summary("swim, leap per frame", surge, "u")
+
+
+## **Bite to `hit`** (--pond): a chewer posed on the guest's flank in the
+## host's water, at a random bearing and a random phase of every clock. Timed
+## from the host's field deciding the bite -- `person_touched` -- to the guest's
+## own field saying it, `bitten`, which is the call that raises the `hit`. The
+## CONTACT is a reliable event, so on a lossy link a lost one waits out a
+## resend, and that tail is the number to read.
+func _time_bites(trials: int) -> void:
+	var host_food: Node = _keeper.host_food
+	var guest_food: Node = _keeper.guest_food
+	var bit := [-1.0]
+	var felt := [-1.0]
+	var on_touch := func(what: int, _at: Vector2, _level: float, _by: int,
+			_gene: StringName) -> void:
+		if what == FoodField.Contact.BITTEN and bit[0] < 0.0:
+			bit[0] = _now()
+	var on_bitten := func(_bearing: float, _strength: float) -> void:
+		if felt[0] < 0.0:
+			felt[0] = _now()
+	host_food.person_touched.connect(on_touch)
+	guest_food.bitten.connect(on_bitten)
+	_keeper.sampling = false
+	var lags := []
+	var slot := 3
+	for trial in trials:
+		_rest()
+		await _wait(_rng.randf_range(0.25, 0.6))
+		bit[0] = -1.0
+		felt[0] = -1.0
+		var side := 1.0 if _rng.randf() < 0.5 else -1.0
+		var bearing := side * _rng.randf_range(deg_to_rad(60.0), deg_to_rad(150.0))
+		var guest: Vector2 = _keeper.guest_at
+		# **Too big for the guest's mouth, which is wider than a drifter**: a
+		# chewer the guest could swallow is a meal and not a bite -- and four
+		# meals are a division.
+		var at := guest + Vector2(sin(bearing), -cos(bearing)) * (float(_me.radius) + 27.0)
+		var face := atan2((guest - at).x, -(guest - at).y)
+		slot = 3 + trial % 20
+		var b: Object = host_food.bodies()[slot]
+		var until := _now() + 1.0
+		while _now() < until and felt[0] < 0.0:
+			b.radius = 30.0
+			b.genome = {&"cytostome": 1, &"flagellum": 1}
+			b.drifter = false
+			b.seeded = true
+			b.pos = at
+			b.heading = face
+			b.state = FoodField.State.DRIFT
+			b.target = FoodField.TARGET_NONE
+			b.calm = 999.0
+			await get_tree().process_frame
+		lags.append((felt[0] - bit[0]) * 1000.0 if bit[0] > 0.0 and felt[0] > 0.0 else INF)
+		if _each or not is_finite(float(lags.back())):
+			var pb: Object = host_food.bodies()[FoodField.PERSON_SLOT]
+			print("[net-lag]   bite %2d  %4.0f ms%s" % [trial, float(lags.back()),
+				"" if is_finite(float(lags.back())) else (
+					"  -- no bite: host said %s, guest %s; guest life %d split %d;"
+					% [bit[0] > 0.0, felt[0] > 0.0, int(_guest_run.get("_life")),
+						int(_guest_run.get("_split"))]
+					+ " person %s in water %s at %.0f from the chewer, chewer bite %.2f"
+					% [host_food.person() != null, bool(pb.seeded),
+						(pb.pos as Vector2).distance_to(b.pos), float(b.bite)])])
+		host_food.call(&"_retire", slot)
+	host_food.person_touched.disconnect(on_touch)
+	guest_food.bitten.disconnect(on_bitten)
+	_keeper.sampling = true
+	_summary("bite to hit", lags, "ms")
+	var sorted: Array = lags.filter(func(v: float) -> bool: return is_finite(v))
+	sorted.sort()
+	if not sorted.is_empty():
+		print("[net-lag] bite to hit p99 %.0f ms" % _pick(sorted, 0.99))
+
+
+## Retires every water body within [param reach] of any of [param points], in
+## the host's water -- the only water there is.
+func _clear_round(points: Array, reach: float) -> void:
+	var bodies: Array = _keeper.host_food.bodies()
+	for i in FoodField.PERSON_SLOT:
+		var b: Object = bodies[i]
+		if not b.seeded:
+			continue
+		for point: Vector2 in points:
+			if (b.pos as Vector2).distance_to(point) < reach + float(b.radius):
+				_keeper.host_food.call(&"_retire", i)
+				break
 
 
 # ---------------------------------------------------------------------------

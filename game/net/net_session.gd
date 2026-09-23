@@ -137,6 +137,12 @@ const MAX_PEERS := 4
 ## Shouts waiting for the run to drain them. Capped because nothing drains while
 ## the player is still on the session screen.
 const HEARD_MAX := 8
+## **The shared pond's events waiting for the run** (shared-pond.md §2), capped
+## for the same reason as [constant HEARD_MAX] and far higher, because these
+## are not sensations: an arrival bursts one GENOME per body in the send set,
+## sixty-eight at most, and the run drains every frame it exists. A cap reached
+## is a run that is not there, and dropping the oldest is then harmless.
+const POND_EVENTS_MAX := 512
 ## **How many of the other cell's frames are kept: two.** The newest is the one
 ## a view draws from -- it carries a place and the motion to carry it forward
 ## by. The one before it is there to be read: it is the interval the stream is
@@ -186,6 +192,11 @@ var address := ""
 ## What the last shout heard on the wire was, as `[at, radius, reach]` each.
 ## Drained by the run, exactly the way `food.gd`'s own `pings` are.
 var heard: Array = []
+## **Every other event the far end sent**, as raw frames in the order they
+## arrived: the shared pond's ENTER, ARRIVE, PERSON, GENOME, CONTACT, DIED and
+## SISTER. Decoded by `pond.gd`, which is the only thing that knows what they
+## mean; this file only guarantees the order and that each arrives once.
+var pond_events: Array = []
 
 ## **A test seam, and the only one.** 0 means "speak [constant Wire.PROTOCOL]".
 ## tools/net_probe.gd sets it to something else to prove the refusal path, which
@@ -245,6 +256,16 @@ var _reported := false
 ## runs against the one-byte heading and the float32 place the far end really
 ## has, and not against something a little truer that it never received.
 var _told: Array = []
+## **The shared pond's two bits on every state frame** (shared-pond.md §2):
+## this run is in the pond -- the host's is open, or the guest is swimming in
+## it -- and this cell is alive but out of the water, dividing. Written by the
+## run through [method set_pond]; a change goes at once, like any other thing
+## the far end could not have guessed.
+var _in_pond := false
+var _out_of_water := false
+## The POND snapshots this end has sent. Their own sequence: a snapshot is
+## drained to the newest by it, independently of the state frames.
+var _out_pond_seq := 0
 
 
 func _ready() -> void:
@@ -454,6 +475,98 @@ func forget_body() -> void:
 		_beat(_now())
 
 
+## **Where this run stands in the shared pond**, for the far end: [param
+## in_pond] is the host's pond open, or the guest swimming in it; [param out]
+## is this cell alive but out of the water. Kept, and written into every state
+## frame from here on; a change is told at once, because a friend who has just
+## left the water must be gone from the far end's senses now and not at the
+## next beat. shared-pond.md §2.
+func set_pond(in_pond: bool, out: bool) -> void:
+	if in_pond == _in_pond and out == _out_of_water:
+		return
+	_in_pond = in_pond
+	_out_of_water = out
+	if link == Link.TOGETHER:
+		_beat(_now())
+
+
+## **A shared-pond event, sent now**: reliable and in order, on the same
+## sequence as the shout, because the far end applies every event once and in
+## the order it was said. [param type] is one of wire.gd's `EVENT_*` and
+## [param payload] the matching `*_payload`. Silently nothing with nobody on the
+## wire, like [method shout].
+func send_event(type: int, payload: PackedByteArray) -> void:
+	if link != Link.TOGETHER:
+		return
+	_out_event_seq += 1
+	_to_everyone(Wire.event(_out_event_seq, type, payload))
+
+
+## **One snapshot of the host's water, sent now**, unreliable (see
+## [method _mode_for]) and on its own sequence. Returns the size it went out
+## at, 0 when nothing went, so the size budget can be measured rather than
+## argued. shared-pond.md §2.
+func send_pond(your_wound: float, bodies: Array) -> int:
+	if link != Link.TOGETHER:
+		return 0
+	_out_pond_seq += 1
+	var frame := Wire.pond(_out_pond_seq, your_wound, bodies)
+	_to_everyone(frame)
+	return frame.size()
+
+
+## Every shared-pond event heard since the last drain, as raw frames, oldest
+## first. Empties the queue.
+func drain_pond_events() -> Array:
+	if pond_events.is_empty():
+		return []
+	var out := pond_events
+	pond_events = []
+	return out
+
+
+## **The newest POND snapshot the far end sent**, as the raw frame, or an empty
+## one. Drained to the newest by sequence on arrival, exactly as the state
+## frames are; the reader applies it if its sequence is newer than the last it
+## applied, and a frame read twice changes nothing.
+func peer_pond() -> PackedByteArray:
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers[id]
+		if bool(peer["greeted"]):
+			return peer["pond"]
+	return PackedByteArray()
+
+
+## The flag byte of the far end's newest state frame -- wire.gd's `STATE_*` --
+## or 0 with nobody there.
+func peer_flags() -> int:
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers[id]
+		if bool(peer["greeted"]):
+			return int(peer["flags"])
+	return 0
+
+
+## True when the far end's run is in the pond: the host's is open, or the guest
+## is swimming in it.
+func peer_pond_open() -> bool:
+	return (peer_flags() & Wire.STATE_POND) != 0
+
+
+## True when the far end has a body and it is in the water -- not dead, and
+## not dividing.
+func peer_in_water() -> bool:
+	var flags := peer_flags()
+	return (flags & Wire.STATE_ALIVE) != 0 and (flags & Wire.STATE_OUT) == 0
+
+
+## How many state frames this end has sent. The host's snapshot goes with
+## every one of them, so a jump the state frame carries at once is in the water
+## the guest sees at once as well.
+func states_sent() -> int:
+	return _out_state_seq
+
+
 ## Everything heard since the last drain, oldest first. Empties the queue, so
 ## the run can call it once a frame and never hear a shout twice.
 func drain_heard() -> Array:
@@ -559,6 +672,9 @@ func _on_peer_connected(id: int) -> void:
 		"in_event": -1,
 		"alive": true,
 		"track": [],
+		"flags": 0,
+		"in_pond": -1,
+		"pond": PackedByteArray(),
 	}
 	if hosting:
 		# The host says nothing first. It waits to be greeted, so the first
@@ -626,6 +742,9 @@ func _on_peer_packet(id: int, frame: PackedByteArray) -> void:
 		Wire.KIND_EVENT:
 			if bool(peer.get("greeted", false)):
 				_take_event(peer, frame)
+		Wire.KIND_POND:
+			if bool(peer.get("greeted", false)):
+				_take_pond(peer, frame)
 		_:
 			# A kind from a build that does not exist yet. Ignored rather than
 			# refused: the protocol gate has already run, so this cannot be
@@ -749,7 +868,22 @@ func _take_state(peer: Dictionary, frame: PackedByteArray) -> void:
 		return
 	peer["in_state"] = seq
 	peer["alive"] = Wire.state_alive(frame)
+	peer["flags"] = Wire.state_flags(frame)
 	_track(peer, Wire.state_body(frame))
+
+
+## **The host's water, drained to the newest** (shared-pond.md §2): a snapshot
+## behind the newest one is dropped by its sequence, exactly as a state frame
+## is, and it goes out unreliable for the same reason. Kept raw: decoding it is
+## `pond.gd`'s, once a frame, and only the newest is ever worth decoding.
+func _take_pond(peer: Dictionary, frame: PackedByteArray) -> void:
+	if peer.is_empty():
+		return
+	var seq := Wire.seq_of(frame)
+	if seq < 0 or seq <= int(peer["in_pond"]):
+		return
+	peer["in_pond"] = seq
+	peer["pond"] = frame
 
 
 ## **Two frames and the times they landed.** Stamped on arrival rather than by
@@ -794,6 +928,12 @@ func _take_event(peer: Dictionary, frame: PackedByteArray) -> void:
 		push_warning("[net] event gap: %d after %d" % [seq, peer["in_event"]])
 	peer["in_event"] = seq
 	if Wire.event_type(frame) != Wire.EVENT_SHOUT:
+		# A shared-pond event, kept whole for the run, in order. An unknown type
+		# is kept as well and ignored there: it is the reader that knows what
+		# it cannot read, and the order of the ones it can is what matters.
+		pond_events.append(frame)
+		while pond_events.size() > POND_EVENTS_MAX:
+			pond_events.remove_at(0)
 		return
 	var said := Wire.take_shout(frame)
 	if said.is_empty():
@@ -838,9 +978,14 @@ func _to(id: int, frame: PackedByteArray) -> void:
 ##   -- `enet_multiplayer_peer.cpp` puts them on separate system channels,
 ##   read in the 4.7 source -- so a stalled handshake or shout can never hold
 ##   a state frame up either.
-## - **Everything else stays reliable**: the handshake, the refusal and the
-##   shout. A shout heard twice is two shouts and a shout lost is a pulse the
-##   other cell never felt; neither is superseded by anything.
+## - **So does a POND snapshot** (shared-pond.md §2), for the same two reasons:
+##   drained to the newest by its own sequence, and never able to hold up an
+##   event behind it.
+## - **Everything else stays reliable**: the handshake, the refusal, the shout
+##   and the shared pond's events. A shout heard twice is two shouts and a shout
+##   lost is a pulse the other cell never felt; a bite, a death or an arrival
+##   told twice or not at all is a water the two screens disagree about.
+##   None of them is superseded by anything.
 ##
 ## A WebSocket transport has no modes -- `set_transfer_mode()` is silently
 ## ignored there -- so it sends everything reliable-ordered, and the frames are
@@ -848,7 +993,13 @@ func _to(id: int, frame: PackedByteArray) -> void:
 ## WebSocket shape bought. Porting means deleting this function, not rewriting
 ## the wire.
 static func _mode_for(frame: PackedByteArray) -> int:
-	if Wire.kind(frame) == Wire.KIND_STATE:
+	var kind := Wire.kind(frame)
+	# **A POND snapshot too** (shared-pond.md §2), for the state frame's own two
+	# reasons: it is idempotent and drained to the newest, so a lost one is
+	# superseded fifty milliseconds later -- and a reliable one lost on a lossy
+	# link would hold every event behind it, a bite and a death included, for a
+	# resend timeout.
+	if kind == Wire.KIND_STATE or kind == Wire.KIND_POND:
 		return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 	return MultiplayerPeer.TRANSFER_MODE_RELIABLE
 
@@ -868,9 +1019,11 @@ func _beat(now: float, on_time: bool = false) -> void:
 	_beat_due = next if on_time and next > now else now + STATE_PERIOD
 	_out_state_seq += 1
 	var moving := _moving()
+	var flags := (Wire.STATE_POND if _in_pond else 0) \
+		| (Wire.STATE_OUT if _out_of_water else 0)
 	var frame := Wire.state(_out_state_seq, _body, _body_at, _body_heading,
 		_body_radius, _body_velocity if moving else Vector2.ZERO,
-		_body_turning if moving else 0.0)
+		_body_turning if moving else 0.0, flags)
 	var told := Wire.state_body(frame)
 	_told = [] if told.is_empty() \
 		else [now, told[0], told[1], told[2], told[3], told[4]]
@@ -979,9 +1132,13 @@ func _reset_socket() -> void:
 	_beat_due = 0.0
 	_out_state_seq = 0
 	_out_event_seq = 0
+	_out_pond_seq = 0
+	_in_pond = false
+	_out_of_water = false
 	_heartbeat_at = _now()
 	_reach_at = _now()
 	heard.clear()
+	pond_events.clear()
 	trouble = ""
 	because = ""
 

@@ -155,9 +155,10 @@ const ECHO_STEPS := 18
 const ECHO_DRAWN := 6
 
 ## **Whether something other than the field is stepping the water.** Left false
-## by the run, where [method FoodField.is_processing] is the whole answer -- a
-## division and a death both stop the field, and a stopped field's beams and
-## wavefront are last frame's claims about a place that is no longer true.
+## by the run, where [method FoodField.is_processing] and the cell being in the
+## water are the whole answer -- a division and a death both stop the field or,
+## in a pond, take the cell out of it, and then its beams and wavefront are last
+## frame's claims about a place that is no longer true.
 ##
 ## The replay screen sets it, because there the field is stepped from a
 ## recording instead of from its own `_process`: the beams and the front are as
@@ -219,7 +220,13 @@ func _draw_marks() -> void:
 	# frozen pointer sitting over the division beat, claiming a place that is no
 	# longer true. This is the same silence `normal_mode._hush()` puts on the
 	# bus, said in the one register that does not go through the bus.
-	if not (driven or _food.is_processing()):
+	#
+	# **And only while this cell is in it** (shared-pond.md §3). In a pond the
+	# field goes on stepping through a death and a division, for the other
+	# player, while this cell's organs stop with it out of the water -- so the
+	# field running is no longer the answer; this cell being in it is. Always
+	# in the water in single player.
+	if not (driven or (_food.is_processing() and _food.in_water)):
 		return
 	var centre := _marks.size * 0.5
 	_draw_wave(centre)
