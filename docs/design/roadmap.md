@@ -121,6 +121,29 @@ for the genes to synthesise from and on 8 for a reason — a colony needs a
 pressure that a single cell cannot meet, and a second environment is the natural
 place to put one.
 
+**Later — genes decide one bite or chewing, for every cell.** The owner's rule
+for the shared pond (`shared-pond.md`, `multiplayer.md` §10 row 6) is that every
+cell obeys one eating rule, players included. *Which* genes decide whether a
+mouth swallows a body whole or has to chew it apart is left to this phase:
+
+- the membrane genes (`pellicle`);
+- the eating gene (`cytostome`);
+- perhaps acid, or a gene not yet named.
+
+It is decided once, for every cell equally.
+
+Its first work is the two places where today's rule is not yet the same for
+every cell:
+
+- a water cell swallows a player only from a committed run
+  (`food.gd:1409-1436`);
+- `pellicle` armours a player against a swallow but not a water cell
+  (`food.gd:1467` against `cell.gd:508-509`).
+
+It depends on the pond only in that the pond must not special-case players, so
+that this rule lands on every cell at once. It is also Phase 6's kind of number:
+a human has to play it.
+
 ## Standing rules the order obeys
 
 - **Nothing is built before the thing it is evidence about.** Full vision exists
