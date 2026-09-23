@@ -1386,10 +1386,18 @@ nothing).
 | 2 | Before anything is built, is the game readable with two cells in it? | **photograph it first, this week ✓ recommended** / decide the shape first and photograph later | Nothing anywhere in this study answers whether the membrane can show you that a second person is there. The code to place a second cell already exists and the camera to photograph it already exists. If the answer is no, none of the rest of this matters. |
 | 3 | What does "multiplayer" mean for the first version? | **another player's declined daughter arriving in your water, with no live connection ✓ recommended** / two people in one body of water at the same time | The first ships in about a week, cannot break the solo game, and makes the choosing screen a harder decision — which one do I keep, and which one do I release. The second is weeks to months and forces every hard question below. Your cell is blind either way and cannot tell the difference; you will know. |
 | 4 | Do the two players share one body of water, or one water each? | **one water each, with the other person heard rather than met ✓ recommended** / one water both swim in | Sharing means rewriting how the water is built. Today every rule about where food appears is written around one cell, and that relationship *is* the difficulty curve. Hearing each other means your friend's ping reaches you, their discarded daughter swims into your water, and their growth makes yours harder — but you never bump into them. |
-| 5 | In shared water, what happens while you are dividing? | **you leave the water for the few seconds it takes ✓ recommended** / you are frozen where you are and can be eaten / you are frozen and untouchable | Dividing stops the world for two and a half seconds and then waits for you to choose, with no clock, on purpose. Leaving the water keeps all of that exactly as it is and nobody can eat a body that is not there. Frozen-and-edible means dividing next to someone is suicide, so nobody will. Frozen-and-untouchable makes the division screen a place to hide. |
-| 6 | Can two players eat each other? | **yes, but only by chewing — never in one swallow ✓ recommended** / yes, by the ordinary rule / no, you pass through each other | The ordinary rule means the bigger cell wins in one touch, with no warning and no fight, and the smaller player loses minutes to something they never perceived. Chewing turns it into a thirteen-to-thirty-second struggle decided by who gets behind whom, which arrives on channels the defender actually has. Passing through makes the other person scenery. |
+| 5 | In shared water, what happens while you are dividing? | **Answered, as recommended: "The dividing player leaves the water for the few seconds it takes, and comes back as the chosen daughter where they left. Nobody can eat a body that is not there."** / you are frozen where you are and can be eaten / you are frozen and untouchable | Dividing stops the world for two and a half seconds and then waits for you to choose, with no clock, on purpose. Leaving the water keeps all of that exactly as it is and nobody can eat a body that is not there. Frozen-and-edible means dividing next to someone is suicide, so nobody will. Frozen-and-untouchable makes the division screen a place to hide. |
+| 6 | Can two players eat each other? | **Answered: "All cells obey the same eating rule. No player special case."** Which genes decide one bite or chewing (the membrane genes, the eating gene, perhaps acid) is a later phase, for every cell. / *yes, but only by chewing, which was the recommendation* / no, you pass through each other | Two players swallow or chew each other exactly as any two cells do. A body that fits the mouth goes down whole; one that does not is chewed, by the same cytostome, pellicle, flank and venom arithmetic. Water cells treat players by the rules they treat anything by. What decides a swallow against a chew is settled later, once, for every cell. |
 | 7 | Can other cells hear your ping? | **yes ✓ recommended** / no | A ping is a shout. It is how you find things, and making it audible means it is also how things find you. It gives two blind players the only way to say *here* that the fiction allows, and it gives solo play a decision it does not currently have: look, and be seen. |
 | 8 | Who runs the server, if there is one? | **a player does, from a release you publish ✓ recommended** / you rent a box / nobody, it is same-room only | A server you publish costs nothing to run, cannot be down, and is always the same version as the client that downloaded it. A rented box costs about five euros a month forever, has to be patched, and turns every release from one act into two — the second of which can fail. |
+| 9 | In shared water, what happens when you die? *(asked after this study, as A)* | **Answered: you tap from the black as today and come back as a new generation-1 cell in the same pond, near your friend; your friend keeps playing** / the pond ends for both / you watch until both of you are dead | Your death is yours alone. The water is never reset by one player dying, the host's death included: the host's water keeps running for the guest while the host sits on the black. |
+| 10 | In shared water, what does pause do? *(asked after this study, as B)* | **Answered: nothing stops — the menu opens, your cell keeps drifting and can be eaten** / pause takes your cell out of the water, like dividing / pause stops the pond for both | In a shared session the game is never frozen, on either phone. Opening the menu is a choice to stop steering, not to stop the water. |
+
+**Answered since.** The owner has settled rows 1 (a friend you text), 4 (one
+water both swim in, against this study's recommendation), 5, 6 and 7 (yes, which
+shipped in #49), and the two questions that shared water raised afterwards, 9 and
+10. `docs/design/shared-pond.md` is the build spec that follows from them, and
+`shared-pond-ux.md` is what each player sees.
 
 ### The nuance under the table
 
@@ -1415,14 +1423,23 @@ thirty seconds once the water is shared. The single-player note is correct and
 multiplayer cannot honour it. Removing the dividing player from the water is the
 only option that leaves that note untouched.
 
-**Row 6's recommendation is one conditional in `_step_contacts`.** The gape rule
-is already symmetric and `put_sister` already establishes that a player-genome
-body in the field works, so "yes" needs no new code at all. What needs the code
-is "yes, but not the swallow" — and the reason is `edibility.md` §2, which says
-in as many words that reading a body's facing is a full-vision fact. In the mode
-shared water must be played in, the defender has none of the tools the attack
-model assumes, so the swallow reinstates exactly the size veto that spec was
-written to overturn.
+**Row 6 was answered the other way, on a principle this study had not weighed:
+one rule for every cell.** The recommendation was a player-only exemption: two
+players could chew each other but never swallow. The owner chose the ordinary
+rule for every pair in the water, players included, and water cells treat
+players as they treat anything.
+
+The concern behind the recommendation still stands. A one-touch swallow is a size
+veto that a blind defender cannot read coming, because reading a body's facing is
+a full-vision fact (`edibility.md` §2). But the answer to it is not an exemption
+for players. It is the later phase in which genes decide whether a mouth swallows
+whole or has to chew: the membrane genes, the eating gene, perhaps acid, applied
+to every cell at once.
+
+Until then, today's rule is not yet quite the same for every cell, in two places.
+`shared-pond.md` §0.5 records them: a water cell swallows a player only from a
+committed run, and `pellicle` armours a player against a swallow but not a water
+cell.
 
 **Row 8's recommendation carries one flaw worth knowing.** A Windows player
 hosting on an unknown network meets the Windows Defender first-listen prompt, and
