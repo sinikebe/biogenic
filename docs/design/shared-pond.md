@@ -408,13 +408,35 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 **What Phase 1 found that Phase 2 has to do**
 - `vision.gd`'s `_draw_thresholds` rings the nearest body in `points()`, and a
   retired slot keeps its last place: skip unseeded bodies there. (`_draw_cells`
-  already draws nothing at radius 0.)
+  draws nothing at radius 0, and a mirror's unsent slot now has radius 0 too:
+  the Phase 1 review found `apply_pond` left a dropped body's radius behind, a
+  ghost in the guest's full vision, and `pond-field` now checks it.)
 - `returns.gd` hides its marks while `_food.is_processing()` is false; in a pond
   the field keeps processing through a death and a division.
 - `_die` calls `_food.leave_water(true)` instead of stopping Food. For the kills
   the field makes itself it has already done so, in the same frame.
 - DIED carries a fourth cause, `POISONED`.
 - Flipping `cell.steering_off` calls `release()` and `controls.let_go()` (§1.7).
+- **The host cannot learn its own cause of death.** `signal killed` carries
+  only a bearing, and `hear_contact(KILLED, ...)` is how the field kills the
+  host; DIED needs swallowed, chewed or poisoned, and only the person gets a
+  cause today, through `person_died`. Give the local cell one.
+- **Probe the deviations before DIED is wired to them.** `_pond_friends` does
+  not exercise §1.3's venomous friend or chewing to death between players; the
+  Phase 1 review ran six such cases by hand, all correct (a host swallowing a
+  venomous friend dies and stings it; the reverse poisons the friend; either
+  chews the other to death with the meal and cause right; the eater's death is
+  checked first). Make them checks.
+- **Decide the `bitten` bearing's order.** `_bite_from` now works out BITTEN's
+  bearing after the run's `eaten` handler, where main worked it out before. It
+  is identical today because no `eaten` listener moves or turns the cell, and
+  the gate is blind to it (`field_diff`'s `growing` handler never moves the
+  cell; a variant that turns it 0.05 rad fails 269 checks, all this bearing).
+  Capture the bearing before the ATE event when there is no person, or say on
+  `signal eaten` that listeners must not move or turn the cell.
+- **From Phase 1 on, each tree runs its own `tools/` in the gate.** The branch's
+  `drive.gd` references `FoodField.PERSON_SLOT` and no longer parses over main's
+  `food.gd`; Phase 0's "branch tools over main's game" recipe hangs there.
 
 **Elsewhere**
 - [x] `cell.gd`: `swim_speed_of` and `steering_off`; Phase 1 corrected the
@@ -426,7 +448,9 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
   `main`'s `food.gd` on adversarial water.
 - [ ] Phase 3, `recorder.gd`: `BODIES := FoodField.POND_SLOTS` (+3.0 MB on a
   4.6 MB ring) and `AT_PERSON`.
-- [ ] Phase 3, `replay.gd`: private nodes in a pond.
+- [ ] Phase 3, `replay.gd`: private nodes in a pond. `restore_body` writes a
+  radius without bumping `_changes`, which is safe only because the replay
+  calls it with the field stopped; the sandbox must keep that true, or bump.
 
 ## 4. Host cost, measured
 

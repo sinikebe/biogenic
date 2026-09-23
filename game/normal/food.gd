@@ -3504,10 +3504,18 @@ func apply_pond(your_wound: float, entries: Array) -> void:
 	# Out of the snapshot is out of this water, and out of every hunt too: a
 	# body the host retired stops being sent, and one left in STALK here would
 	# go on answering [method hunter] for a hunter that no longer exists.
+	#
+	# **And it is drawn as nothing: radius 0, as the host's [method _retire]
+	# leaves it.** `vision.gd` reads `points()` and `radii()` and never
+	# `seeded`, so a body eaten near the guest and refilled on the host beyond
+	# the send reach would otherwise stay drawn where it died, a ghost in full
+	# vision. The next snapshot that carries the slot writes its radius back.
 	for slot in POND_SLOTS:
 		if sent[slot] == 0:
 			var b := _cells[slot]
 			b.seeded = false
+			b.radius = 0.0
+			b.speed = 0.0
 			b.state = State.DRIFT
 			b.target = TARGET_NONE
 			if slot == PERSON_SLOT:

@@ -233,6 +233,15 @@ jobs:
             echo "::error::Back did not walk back out of the game cleanly -- see the probe lines above"
             exit 1
           fi
+          # A clean run prints no script error at all. One that does has lost
+          # the rest of whatever function it was in -- a Godot runtime error
+          # aborts only that function, and its caller goes on to print ALL PASS
+          # over the checks it skipped.
+          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+            echo "::error::the Back probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
 
       - name: Check the LAN session
         # Two SceneMultiplayer instances in ONE headless process, each bound to
@@ -275,6 +284,15 @@ jobs:
           if ! printf '%s\n' "$out" | grep -q "^\[net-probe\] ALL PASS$"; then
             printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
             echo "::error::the LAN session did not come up -- see the probe lines above"
+            exit 1
+          fi
+          # The same guard as the Back step's, and it matters more here: the
+          # pond-field section reaches food.gd's own functions by name, so a
+          # rename there is a runtime error that skips the rest of a section
+          # while the probe still prints ALL PASS. A clean run prints none.
+          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+            echo "::error::the LAN probe hit a script error -- checks after it did not run"
             exit 1
           fi
 

@@ -1337,6 +1337,13 @@ func _pond_rings() -> void:
 	_says(int(together[1]) <= 40,
 		"pond-field: anchors 300 apart hold <= 40 active after 60 s together"
 		+ " (%d; at most %d over the last 50 s)" % [int(together[1]), int(together[2])])
+	# The other side of the same bound, so an empty water cannot pass it: the
+	# quota still holds for each of you, only now it is met by shared cells.
+	var shared: Array = together[0]
+	_says(shared.size() == 2 and int(shared[0]) >= FoodField.COUNT
+			and int(shared[1]) >= FoodField.COUNT,
+		"pond-field: together, each anchor still has >= 34 within reach after"
+		+ " 60 s (%s)" % str(shared))
 	_says(int(apart[3]) == 0 and int(together[3]) == 0,
 		"pond-field: every disc kept a drifter every frame, over 4,200 frames"
 		+ " (%d misses)" % (int(apart[3]) + int(together[3])))
@@ -1650,6 +1657,13 @@ func _pond_mirror() -> void:
 			and mirror.hunter() != 7,
 		"pond-field: a hunter the host retires leaves the mirror's hunter() with"
 		+ " the next snapshot (%d on both)" % mirror.hunter())
+	# And it is drawn as nothing there, as on the host: the view reads points()
+	# and radii() and never `seeded`, so a radius left behind is a ghost.
+	_says(not bool(mirror.bodies()[7].seeded) and float(mirror.radii()[7]) == 0.0
+			and float(host.radii()[7]) == 0.0,
+		"pond-field: a body the host stops sending has radius 0 on the mirror,"
+		+ " as on the host (%s against %s)" % [str(mirror.radii()[7]),
+			str(host.radii()[7])])
 
 	# And between snapshots it carries: a water body on along its heading at
 	# its own speed, the person on the closed form of the drag -- each for no
