@@ -341,9 +341,11 @@ var _trail_clock := 0.0
 var _session: Node = null
 ## What to draw for the friend this frame, or empty. Written by
 ## [method _step_peer] and read by the two draw routines, so that everything
-## with arithmetic in it happens somewhere a headless probe can see it --
-## nothing is rendered under `--headless` and a bug that lived inside `_draw`
-## would boot green forever. `{at, heading, radius, confidence, doubt}`.
+## with arithmetic in it happens somewhere a headless probe can read it. A
+## `_draw` does run under `--headless`, but what it draws goes to a renderer
+## that keeps no pixels: a number worked out inside one is checked by nothing,
+## and only a script error there would ever show in CI.
+## `{at, heading, radius, confidence, doubt}`.
 var _peer: Dictionary = {}
 var _peer_trail := PackedVector2Array()
 var _peer_trail_clock := 0.0
@@ -570,9 +572,12 @@ func _step_trail(delta: float) -> void:
 ## **Where the friend is this frame, and how much of that is still true.**
 ##
 ## Every number the two draw routines below use is worked out here, and that is
-## not tidiness: nothing renders under `--headless`, so arithmetic that lived
-## inside a `_draw` would boot green in CI forever however wrong it was. Here it
-## is in a `_process`, where `tools/net_probe.gd` can read it off a real run.
+## not tidiness. **`_draw` does run under `--headless`** -- measured on a
+## full-vision run, 1,920 `draw` signals from `$Frame/World` in 1,920 frames --
+## but into a renderer that keeps no pixels, so arithmetic that lived inside one
+## would execute in CI and be checked by nothing: a script error there shows,
+## a wrong number never does. Here it is in a `_process`, where
+## `tools/net_probe.gd` can read it off a real run and assert on it.
 ##
 ## **Nothing in this function touches the simulation.** It reads a track, a
 ## silence and a clock off the session, and writes one dictionary of its own.
@@ -953,6 +958,22 @@ func _draw_hits(a: float) -> void:
 			Color(IMPACT_TINT, 0.42 * fade * strength), 1.6 / ZOOM, true)
 
 
+## **How far from its centre a body can draw anything**, as a multiple of its
+## radius, and the margin on top in canvas pixels. [method _draw_cells] skips a
+## body only when that far from it is still off the frame.
+##
+## Measured off the drawing rather than chosen. The widest thing a body draws
+## is its scent haze, a [constant HAZE_OUTER] `3 r` bloom whose texture corners
+## are transparent -- `3.05 r` counting the filter's last texel. Everything
+## cilia.gd draws lies inside `mouth_reach` at the widest gape in the game,
+## `1.24 r + 1.3 x 1.40 r = 3.06 r`; searched over every tier-3 organ, clock
+## and steer, the lip tips reach `1.87 r`, the flagellum `2.18 r` and the oral
+## mat `1.66 r`. Four radii clears all of them by most of a radius, and 32
+## pixels covers the widest stroke and its antialiasing many times over.
+const CULL_REACH := 4.0
+const CULL_MARGIN := 32.0
+
+
 ## Every cell in the water, drawn by exactly the routine that draws the player
 ## (§4.5). There is no species branch here and there must never be one: two
 ## drawing paths would drift, and the thing the player reads off a body would
@@ -962,6 +983,9 @@ func _draw_hits(a: float) -> void:
 ## property of the cell -- it is the drawn form of the scent field the
 ## membrane's green band is reading, and it is therefore a property of the
 ## relationship between that cell and this one.
+##
+## Only bodies that can reach the frame are drawn: see [constant CULL_REACH].
+## The rings, wakes, meals and ghosts are other functions and are not culled.
 func _draw_cells(a: float) -> void:
 	if _food_node == null:
 		return
@@ -970,9 +994,29 @@ func _draw_cells(a: float) -> void:
 	var headings := _food_node.headings()
 	var genomes := _food_node.genomes()
 	var wounds := _food_node.wounds()
+	# **The cull** (shared-pond.md §3, Phase 0). Every body in the water used to
+	# be drawn every frame, on screen or not, and that drawing -- not the
+	# simulation -- was the largest cost a second ring of bodies would add.
+	# A body is skipped only when nothing it draws can reach the frame: the
+	# test is against the circle round the whole frame, so it holds at any
+	# camera spin, and against the body's drawn extent rather than its centre,
+	# so a haze or a mouth hanging into the frame from a body just outside it
+	# is still drawn. The circle is found through `$World`'s own transform, the
+	# one these draws are about to be placed by, rather than off `_camera`.
+	var frame := _frame.size
+	var culling := frame.x > 1.0 and frame.y > 1.0
+	var middle := Vector2.ZERO
+	var half := 0.0
+	if culling:
+		middle = _world.transform.affine_inverse() * (frame * 0.5)
+		half = frame.length() * 0.5 / ZOOM
 	for i in points.size():
 		var p: Vector2 = points[i]
 		var r: float = float(radii[i]) if i < radii.size() else FoodField.DRIFTER_MAX
+		if culling:
+			var reach := half + r * CULL_REACH + CULL_MARGIN / ZOOM
+			if p.distance_squared_to(middle) > reach * reach:
+				continue
 		# The scent as a soft haze rather than a ring: a ring here would be a
 		# boundary, and the cell cannot perceive a boundary.
 		#

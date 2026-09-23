@@ -470,17 +470,23 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## [param shed] is 0..1 and is **how far this body has stopped being you**: the
 ## daughter you did not choose takes her own dominant gene's tint on the way
 ## out, and the moment she stops being you is the moment she gets a colour.
+##
+## [param untinted] keeps the body pure `SELF_TINT` **without** [param is_self]'s
+## other half, so the threat bow can still show. It is for another player in the
+## same water: a person, so never a gene tint -- no cell the water makes is
+## untinted -- but a mouth that can reach you, so a threat when their gape
+## exceeds your radius. shared-pond-ux.md §0.1 and §8.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
-		pinch: float = 0.0, shed: float = 0.0) -> void:
+		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
 	var stb := Vector2(cos(heading), sin(heading))
-	var tint := body_tint(tiers, is_self)
+	var tint := body_tint(tiers, is_self or untinted)
 	if shed > 0.0:
 		tint = tint.lerp(body_tint(tiers, false), clampf(shed, 0.0, 1.0))
 

@@ -408,6 +408,15 @@ var _pointer_x := 0.0
 ## would be a cycle GDScript will not resolve.
 var controls: Node = null
 
+## **Deaf to the player's steering, while the body goes on.** True silences
+## [method _read_steer], [method _pushing] and the dash -- every input this
+## file reads, the keys it polls directly included -- and nothing else: the
+## drift, the impulses and the drag carry on, so the cell is let go rather than
+## stopped. For a menu open over water that does not stop (shared-pond.md
+## §1.7), where the arrows are moving menu focus and must not also turn the
+## cell. False by default, and nothing sets it yet.
+var steering_off := false
+
 
 func _ready() -> void:
 	_impulse_timer = randf_range(0.6, 1.4)
@@ -578,8 +587,17 @@ func turn_response() -> float:
 ## has to lead. §7.1: this replaces Phase 4's hard-coded 56.5, so the chase
 ## stays a chase at every tier and only `cirrus` improves the dodge.
 func swim_speed() -> float:
-	return speed_for(tier(&"flagellum")) + PUSH_CHASE_SHARE \
-		* PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))] / DRAG
+	return swim_speed_of(tier(&"flagellum"), extra(&"axoneme"))
+
+
+## [method swim_speed] for a body that is not this node: the same arithmetic,
+## fed two tiers instead of a genome. **One definition with two callers** --
+## a player in a shared pond is a body in the field, not a node here, and the
+## water has to lead that chase exactly as it leads this one
+## (shared-pond.md §1.2).
+static func swim_speed_of(flagellum: int, axoneme: int) -> float:
+	return speed_for(flagellum) + PUSH_CHASE_SHARE \
+		* PUSH_ACCEL_BY_TIER[_tier_index(axoneme)] / DRAG
 
 
 # --- The same, for a cell that is not this one -----------------------------
@@ -846,6 +864,8 @@ func _let_go() -> void:
 ## screen. Deliberately the same gesture that steers -- pushing and turning are
 ## things you do at the same time.
 func _pushing() -> bool:
+	if steering_off:
+		return false
 	if Input.is_action_pressed(&"ui_up") or Input.is_key_pressed(KEY_W):
 		return true
 	if controls != null and not controls.floating():
@@ -857,6 +877,8 @@ func _pushing() -> bool:
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on
 ## a signal and the run pays it.
 func _dash() -> void:
+	if steering_off:
+		return
 	var tier := _tier_index(extra(&"myoneme"))
 	var speed := DASH_SPEED_BY_TIER[tier]
 	if speed <= 0.0 or _dash_timer > 0.0:
@@ -868,6 +890,8 @@ func _dash() -> void:
 
 
 func _read_steer() -> float:
+	if steering_off:
+		return 0.0
 	var keys := 0.0
 	if Input.is_action_pressed(&"ui_left") or Input.is_key_pressed(KEY_A):
 		keys -= 1.0

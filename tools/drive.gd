@@ -348,6 +348,33 @@ extends Node
 ##                           byte-identical runs of one `--freeze-at` command
 ##                           differed by a third of the screen. See
 ##                           docs/design/perception.md §4.1
+##   --fingerprint=<frames>  after that many frames, print **one line** --
+##                           `[fingerprint] frames N seed S sha256 <hex> | ...`
+##                           -- and quit. The hash is over every field of every
+##                           body in the water, the field's own clocks, echoes
+##                           and senses, the cell's body and drive, the genome,
+##                           the hunger, the grit and the next number the global
+##                           stream would have drawn. Run headless at
+##                           `--fixed-fps 60` with `--seed=`: two builds print
+##                           the same hash only if the simulation did not move by
+##                           one bit, which is how a change that calls itself a
+##                           refactor is held to it (shared-pond.md §5). After
+##                           the `|` the line counts what the run exercised --
+##                           meals, hunts, bites, chews, overlaps -- so a match
+##                           cannot be two runs in which nothing happened
+##   --field-cost=<frames>   time `food.gd`'s `_process` for that many frames
+##                           after a 240-frame warm-up, print min / p50 / p90 in
+##                           microseconds a frame, and quit. Two nodes that do
+##                           nothing but read the clock are seated either side
+##                           of the field, so the tree's own order puts the
+##                           field's whole frame between them and nothing about
+##                           the run changes -- including the run's handlers for
+##                           the signals the field emits, which are part of its
+##                           cost. This harness's own log is off while it times,
+##                           so none of its printing lands inside the window. A
+##                           frame in which the field is stopped, after a death,
+##                           is not timed, so the line says how many were.
+##                           Headless at `--fixed-fps 60`, like the fingerprint
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -557,6 +584,99 @@ var _panes: Node = null
 var _capture_cost := -1.0
 var _capture_clock := 0.0
 var _recorder: Node = null
+## Frames this harness has finished. Counted at the end of its own `_process`,
+## which runs after the whole game's (`process_priority` 1000), so at N the
+## game has stepped N frames.
+var _frames := 0
+## --fingerprint=: the frame to hash the run at, or -1 for never.
+var _fingerprint := -1
+## What the fingerprinted run exercised, watched from outside the field every
+## frame: acquisitions of the player and of other bodies, wounds going up (a
+## mouth closed on something it could not swallow), pairs of bodies still
+## overlapping after the field's own separation pass, and the field's signals.
+var _fp_was: Array = []
+var _fp_hunts := 0
+var _fp_chases := 0
+var _fp_chews := 0
+var _fp_overlaps := 0
+var _fp_meals := 0
+var _fp_bites := 0
+var _fp_wakes := 0
+var _fp_stings := 0
+var _fp_darts := 0
+var _fp_died_at := -1.0
+## --field-cost=: how many frames to time, after [constant FIELD_COST_WARMUP].
+var _field_cost := -1
+## The opening's water is laid out by `setup()` and the first body is placed
+## once the cell moves; neither is the frame a player pays for.
+const FIELD_COST_WARMUP := 240
+var _cost_samples := PackedInt64Array()
+## Frames in which no body in the water moved between the two clocks. Should
+## stay 0: it is the check that the tree really did run the field between them.
+var _cost_still := 0
+
+## What the fingerprint reads off every body. **A fixed list, on purpose**: a
+## later phase adds members to `Body` and the gate still has to compare its
+## build against `main` on the members both of them have. A member this build
+## does not have hashes as null on both sides.
+const FINGERPRINT_BODY: Array[StringName] = [
+	&"pos", &"heading", &"radius", &"genome", &"drifter", &"seeded", &"serial",
+	&"meals", &"wound", &"bite", &"state", &"target", &"target_serial",
+	&"calm", &"stale", &"flee_from", &"aim", &"aim_clock", &"lost", &"rush",
+	&"best", &"lunging", &"break_clock", &"stroke", &"wander"]
+## The field's own state, outside the bodies: everything it has worked out for
+## the cell this frame, and every clock and echo it carries into the next one.
+const FINGERPRINT_FIELD: Array[StringName] = [
+	&"concentration", &"dread_level", &"threat", &"shadow", &"shadow_bearing",
+	&"taste_level", &"touch_level", &"touch_bearing", &"beams", &"pings",
+	&"ping_fronts", &"ping_echoes", &"ping_listen", &"_echoes", &"_pulses",
+	&"_ping_clock", &"_ping_age", &"_dart_clock", &"_bite_clock",
+	&"_first_pending", &"_first_hunt", &"_serial"]
+## The cell: its body, its motion, and every clock its drive runs on.
+const FINGERPRINT_CELL: Array[StringName] = [
+	&"position", &"heading", &"velocity", &"radius", &"wound", &"steer",
+	&"_omega", &"_wander", &"_impulse_timer", &"_dash_timer"]
+
+
+## **One hand of the stopwatch round `food.gd`'s `_process`**, for
+## --field-cost=. Two of these sit either side of the field in the tree, with
+## the field's own process mode and priority, so the engine runs them in the
+## order opening hand, field, closing hand -- and nothing is called on the
+## field and nothing about when it runs changes. The opening hand reads the
+## clock as its last act and the closing hand as its first, so almost nothing
+## but the field lies between the two readings.
+class FieldClock extends Node:
+	var food: Node = null
+	## Set on the closing hand only: the opening one, and the harness to report to.
+	var opening: Node = null
+	var drive: Node = null
+	var armed := false
+	var at := 0
+	var mark := Vector2.ZERO
+
+	func _process(_delta: float) -> void:
+		if opening == null:
+			armed = food.is_processing()
+			if armed:
+				mark = _all_bodies()
+				at = Time.get_ticks_usec()
+			return
+		var now := Time.get_ticks_usec()
+		if not opening.armed:
+			return
+		opening.armed = false
+		drive.call(&"_field_clock", now - int(opening.at),
+			_all_bodies() != (opening.mark as Vector2))
+
+	## Every body's place, summed. **All of them, not one**: a body that breaks
+	## off a chase stands still for the frame it does it in, so a single body
+	## is not proof the field ran -- the whole water standing still is.
+	func _all_bodies() -> Vector2:
+		var sum := Vector2.ZERO
+		var bodies: Array = food.get("_cells")
+		for b: Object in bodies:
+			sum += b.get("pos") as Vector2
+		return sum
 
 
 func _ready() -> void:
@@ -736,6 +856,10 @@ func _ready() -> void:
 			_panes_at = float(text.trim_prefix("--panes="))
 		elif text.begins_with("--capture-cost="):
 			_capture_cost = float(text.trim_prefix("--capture-cost="))
+		elif text.begins_with("--fingerprint="):
+			_fingerprint = int(text.trim_prefix("--fingerprint="))
+		elif text.begins_with("--field-cost="):
+			_field_cost = int(text.trim_prefix("--field-cost="))
 		elif text == "--locked":
 			_locked = true
 		elif text == "--evade":
@@ -813,12 +937,29 @@ func _ready() -> void:
 		get_tree().quit(0)
 		return
 
+	# **Nothing of this harness's own inside a timed frame.** The field emits
+	# its signals from inside its `_process`, so a handler here that prints --
+	# a meal, a sensation -- would be timed as the field's cost. The run's own
+	# handlers stay connected, because those are part of what a frame costs.
+	var timing := _field_cost > 0
 	if _food != null:
-		_food.eaten.connect(_on_meal)
+		if not timing:
+			_food.eaten.connect(_on_meal)
+		if _fingerprint > 0:
+			# Counted, never acted on: a handler that only adds one changes
+			# nothing about the run it is watching.
+			_food.bitten.connect(func(_b: float, _s: float) -> void: _fp_bites += 1)
+			_food.waked.connect(func(_b: float, _s: float) -> void: _fp_wakes += 1)
+			_food.stung.connect(func(_b: float) -> void: _fp_stings += 1)
+			_food.darted.connect(func(_b: float) -> void: _fp_darts += 1)
+			_food.killed.connect(_fp_on_killed)
+		if _field_cost > 0:
+			_open_field_clock()
 
 	_bus = _find_bus(self)
 	if _bus != null:
-		_bus.sensation.connect(_on_sensation)
+		if not timing:
+			_bus.sensation.connect(_on_sensation)
 		# **`--seed=` has to reach the membrane too, and until now it did not.**
 		# `seed()` sets the global stream; signal_bus.gd draws its beat and
 		# taste jitter from a private generator, deliberately, so that the view
@@ -1120,6 +1261,7 @@ func _step_peer_trace(delta: float) -> void:
 ## bus is deliberately not told the first two, so this is the only place they
 ## can be checked.
 func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
+	_fp_meals += 1
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	# **The DNA, not the body.** A meal writes what your daughters will be and
 	# leaves the organism it went into alone (lifecycle.md §1), so printing the
@@ -1224,6 +1366,162 @@ func _process(delta: float) -> void:
 	if _freeze_at >= 0.0 and _clock >= _freeze_at:
 		_freeze_at = -1.0
 		_freeze()
+
+	# Last, so frame N is the whole tree's Nth frame, this harness's included.
+	if _fingerprint > 0:
+		_fp_observe()
+	_frames += 1
+	_step_fingerprint()
+	_step_field_cost()
+
+
+## **The identity gate's one line** (shared-pond.md §5). Everything the
+## simulation carries from one frame into the next, hashed, so that two builds
+## which print the same line for the same seed stepped the same water to the
+## bit -- and the counts after the `|` say how much water that was.
+func _step_fingerprint() -> void:
+	if _fingerprint <= 0 or _frames < _fingerprint:
+		return
+	_fingerprint = -1
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	hashing.update(var_to_bytes(_fingerprint_state()))
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	print(("[fingerprint] frames %d  seed %s  sha256 %s  |  t %.2f  %s  me r%.2f"
+		+ "  meals %d  field meals %d  hunts %d  chases %d  wakes %d  bites %d"
+		+ "  chews %d  overlaps %d  stung %d  darted %d") % [
+		_frames, str(_seed) if _seeded else "none",
+		hashing.finish().hex_encode(), _clock,
+		"alive" if _fp_died_at < 0.0 else "died %.2f" % _fp_died_at,
+		cell.radius if cell != null else 0.0, _fp_meals, _field_meals,
+		_fp_hunts, _fp_chases, _fp_wakes, _fp_bites, _fp_chews, _fp_overlaps,
+		_fp_stings, _fp_darts])
+	get_tree().quit(0)
+
+
+## Values only, never an object: `var_to_bytes` encodes every float at full
+## width and every dictionary in its own order, so equal bytes are equal state.
+## Reaching for private members is a thing only tools/ is allowed to do.
+func _fingerprint_state() -> Array:
+	var out: Array = []
+	var bodies: Array = _food.get("_cells") if _food != null else []
+	for b: Object in bodies:
+		var row: Array = []
+		for key: StringName in FINGERPRINT_BODY:
+			row.append(b.get(key))
+		out.append(row)
+	for key: StringName in FINGERPRINT_FIELD:
+		out.append(_food.get(key) if _food != null else null)
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	for key: StringName in FINGERPRINT_CELL:
+		out.append(cell.get(key) if cell != null else null)
+	if _genome != null:
+		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout(),
+			_genome.held_sample, _genome.held_remaining])
+	if _metabolism != null:
+		out.append_array([_metabolism.hunger, _metabolism.starve_seconds])
+	var motes := _find_script(self, "res://game/normal/motes.gd")
+	if motes != null:
+		out.append(motes.points())
+	# **The stream itself.** A build that drew one number more or fewer and
+	# happened to land every body in the same place would still be caught here.
+	out.append(randi())
+	return out
+
+
+func _fp_on_killed(_bearing: float) -> void:
+	if _fp_died_at < 0.0:
+		_fp_died_at = _clock
+
+
+## One frame of what the fingerprinted run did, read off the field from outside.
+func _fp_observe() -> void:
+	if _food == null:
+		return
+	var bodies: Array = _food.get("_cells")
+	_fp_was.resize(bodies.size())
+	for i in bodies.size():
+		var b: Object = bodies[i]
+		var now := [int(b.get("serial")), int(b.get("state")), int(b.get("target")),
+			float(b.get("wound"))]
+		var was: Variant = _fp_was[i]
+		_fp_was[i] = now
+		if was == null or int(was[0]) != int(now[0]):
+			continue
+		if int(now[1]) == FoodField.State.STALK \
+				and (int(was[1]) != FoodField.State.STALK or int(was[2]) != int(now[2])):
+			if int(now[2]) == FoodField.TARGET_PLAYER:
+				_fp_hunts += 1
+			elif int(now[2]) >= 0:
+				_fp_chases += 1
+		if float(now[3]) > float(was[3]):
+			_fp_chews += 1
+	for i in bodies.size():
+		var a: Object = bodies[i]
+		if not a.get("seeded"):
+			continue
+		for j in range(i + 1, bodies.size()):
+			var other: Object = bodies[j]
+			if other.get("seeded") and (a.get("pos") as Vector2).distance_to(
+					other.get("pos")) < float(a.get("radius")) + float(other.get("radius")):
+				_fp_overlaps += 1
+
+
+## Seats the two hands of the stopwatch either side of the field. See
+## [FieldClock].
+func _open_field_clock() -> void:
+	var parent := _food.get_parent()
+	var opening := FieldClock.new()
+	opening.name = "FieldClockOpen"
+	opening.food = _food
+	var closing := FieldClock.new()
+	closing.name = "FieldClockClose"
+	closing.food = _food
+	closing.opening = opening
+	closing.drive = self
+	for hand: Node in [opening, closing]:
+		hand.process_mode = _food.process_mode
+		hand.process_priority = _food.process_priority
+	parent.add_child(opening)
+	parent.move_child(opening, _food.get_index())
+	parent.add_child(closing)
+	parent.move_child(closing, _food.get_index() + 1)
+	print("[field-cost] timing %s's _process for %d frames after %d of warm-up" % [
+		_food.name, _field_cost, FIELD_COST_WARMUP])
+
+
+## Called by the closing hand, with how long the field took this frame.
+func _field_clock(usec: int, moved: bool) -> void:
+	if _frames < FIELD_COST_WARMUP or _frames >= FIELD_COST_WARMUP + _field_cost:
+		return
+	_cost_samples.append(usec)
+	if not moved:
+		_cost_still += 1
+
+
+func _step_field_cost() -> void:
+	if _field_cost <= 0 or _frames < FIELD_COST_WARMUP + _field_cost:
+		return
+	_field_cost = -1
+	var sorted := _cost_samples.duplicate()
+	sorted.sort()
+	var count := sorted.size()
+	if count == 0:
+		print("[field-cost] no samples: the field never ran between the clocks")
+		get_tree().quit(1)
+		return
+	var total := 0
+	for usec in sorted:
+		total += usec
+	# Nearest rank. `still` is the order check and must read 0: a frame in which
+	# nothing in the water had moved by the closing hand is a frame the field
+	# did not run between the two readings.
+	print(("[field-cost] %d frames timed  min %d us  p50 %d us  p90 %d us"
+		+ "  mean %.1f us  max %d us  seed %s  still %d") % [
+		count, sorted[0], sorted[int(0.5 * float(count - 1))],
+		sorted[int(0.9 * float(count - 1))], float(total) / float(count),
+		sorted[count - 1], str(_seed) if _seeded else "none", _cost_still])
+	get_tree().quit(0)
 
 
 ## Straight to the end of the forty-second grace, which is a death this frame.
