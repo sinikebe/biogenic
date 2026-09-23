@@ -206,6 +206,16 @@ every tier's ping range (1,100 at tier 1). The arrival gets
 `first_hunt := FIRST_DELAY`, as every `setup()` grants in single player, and
 nothing is reseeded.
 
+**Built in Phase 2: 480, not 560.** UX §9.3 failed at 1280x720, as the rule
+anticipated. The frame is 640 units either side of the camera there, and the
+rendered arrival at 560 put the friend 45-52 px from the frame's edge in both
+seats, under the membrane's outer band; the camera's lead, up to
+`CAM_MAX_OFFSET` 72 units, puts the body on the edge when the one being
+arrived at is swimming away. At 480 it lands 160 px in with no lead and 88 at
+the full lead (`pond.gd`'s `ARRIVAL`). The sister still goes 560, so the two
+are no longer the same distance -- which also stopped making a sister land on
+a friend who had just arrived; `SISTER_CLEAR` covers the rest (§3).
+
 The exchange: the guest sends PERSON and then ENTER(radius); the host adds the
 person and replies ARRIVE(position, heading). If the pond is already open when
 the guest's run starts, the run begins held (no simulation, no seeding) for that
@@ -301,7 +311,7 @@ bodies make ≈ 850 B. At 20 Hz that is ≤ 25 KB/s (≈ 207 kbit/s) worst case 
 | `ARRIVE 0x03` | host → guest | x, y f32, heading u8 | 15 | the reply to ENTER |
 | `PERSON 0x04` | both | new-body u8, worn tiers, worn order | ~100 | arrival, birth, any change of the worn signature |
 | `GENOME 0x05` | host → guest | slot u8, serial u16, meals u8, tiers | ~60 | once per body version entering the send set |
-| `CONTACT 0x06` | host → guest | what u8, x, y f32, level f32, by u8 (water or friend), gene if `ATE` | 20-37 | `WAKED`, `BITTEN`, `STUNG`, `DARTED`, `ATE`, `KILLED` |
+| `CONTACT 0x06` | host → guest | what u8, x, y f32, level f32, by u8 (water or friend); then the gene by name for `ATE`, the cause u8 for `KILLED` | 20-37 | `WAKED`, `BITTEN`, `STUNG`, `DARTED`, `ATE`, `KILLED` |
 | `DIED 0x07` | both | cause u8 (swallowed, chewed, starved, poisoned), by u8, x, y f32 | 16 | the sender's own death, for the friend's lines and drawing |
 | `SISTER 0x08` | guest → host | x, y f32, heading u8, radius f32, tiers | ~70 | the guest's commit |
 
@@ -317,6 +327,23 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 **An old peer** on protocol 3 is refused at HELLO or WELCOME, by both sides, with
 "different versions" and `_skew_says` (`net_session.gd:641-719`), exactly as 1 and
 2 are. The three-byte prefix is untouched.
+
+**Built in Phase 2, and what the table left unsaid.** (1) `CONTACT KILLED`
+carries the cause, one byte after `by`, because the guest's own DIED has to say
+how it died and only the host's field knows. (2) **Every contact death is the
+host's**: its field kills the guest, removes the person and says `KILLED` with
+the cause in the same frame; the DIED the guest then sends for that death finds
+no person and is ignored. The one death a guest decides is starving, and its
+DIED is what takes the person out of the host's water. The host's own death
+goes the other way as DIED, with the cause its field wrote into `died_of` and
+`died_by` just before `killed`. (3) POND goes with every state frame the host
+sends, built at the end of the host's frame, so a jump's snapshot leaves with
+the jump's state frame, and otherwise every `STATE_PERIOD`; the mirror carries
+it to the end of its own frame (`food.gd`'s `_step_mirror`, Phase 2), so that
+on a link with no latency it stands where the host's water does rather than a
+frame behind it. (4) Unreliable and reliable sends ride different ENet system
+channels (`net_session.gd`'s `_mode_for`), so a lost event never holds a
+snapshot up, nor a lost snapshot an event.
 
 ## 3. The changes, by file
 
@@ -363,36 +390,38 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
   radius or `_changes` moves.
 
 **`normal_mode.gd`**
-- [ ] Build `_pond` in `_ready` when there is a session, and call `_pond.step()`
+- [x] Build `_pond` in `_ready` when there is a session, and call `_pond.step()`
   before the early returns: intake runs while dead, dividing or held.
-- [ ] `_set_simulating` per §1.5; `_die` sends DIED; `_on_pulsed` is gated on
+- [x] `_set_simulating` per §1.5; `_die` sends DIED; `_on_pulsed` is gated on
   `in_water`.
-- [ ] `_wake_up` and `_be_born` skip `setup()`. A return goes through §1.6; a
+- [x] `_wake_up` and `_be_born` skip `setup()`. A return goes through §1.6; a
   birth sends the sister (locally, or by SISTER) and PERSON.
-- [ ] Pause per §1.7, with UX §6's `SCRIM_POND` and `Warn`.
-- [ ] The held pond, takeover, swap and lines (UX §0.4, §0.5, §1, §5).
-- [ ] The division dims from the pinch (UX §2).
-- [ ] `_offer_replay` is off while a pond is up, until Phase 3.
+- [x] Pause per §1.7, with UX §6's `SCRIM_POND` and `Warn`.
+- [x] The held pond, takeover, swap and lines (UX §0.4, §0.5, §1, §5).
+- [x] The division dims from the pinch (UX §2).
+- [x] `_offer_replay` is off while a pond is up, until Phase 3.
 
 **`game/net/pond.gd`** (new; RefCounted, preloaded, no `class_name`, no node)
-- [ ] Host: carry the guest's newest STATE into the person; every
+- [x] Host: carry the guest's newest STATE into the person; every
   `STATE_PERIOD`, pick the send set, build POND and send GENOME by version;
   forward `person_touched` as CONTACT and `person_died` as DIED; handle ENTER,
   PERSON, SISTER and DIED.
-- [ ] Guest: apply the newest POND; drain GENOME and CONTACT into the mirror;
+- [x] Guest: apply the newest POND; drain GENOME and CONTACT into the mirror;
   send PERSON on a signature change; hold at `quiet_for() ≥ PEER_FRESH`; take
   over when the link goes.
 
 **`net_session.gd`**
-- [ ] `KIND_POND` intake, newest by sequence, via `peer_pond()`.
-- [ ] `drain_pond_events()`, `send_pond()` and a generic `send_event()`.
-- [ ] `OUT`/`POND` in `report_body()`, plus `peer_pond_open()` and
-  `peer_in_water()`.
-- [ ] POND unreliable in `_mode_for`.
+- [x] `KIND_POND` intake, newest by sequence, via `peer_pond()`.
+- [x] `drain_pond_events()`, `send_pond()` and a generic `send_event()`.
+- [x] `OUT`/`POND` on every state frame -- through `set_pond()`, which the run
+  calls once a frame, rather than as arguments to `report_body()`, because a
+  dead or dividing cell reports no body and still has to say where it stands
+  -- plus `peer_pond_open()` and `peer_in_water()`.
+- [x] POND unreliable in `_mode_for`.
 
 **`wire.gd`**
-- [ ] `PROTOCOL := 4`, with a paragraph in the style of 2 and 3.
-- [ ] Encoders and refusing decoders for POND, the seven events and both codecs.
+- [x] `PROTOCOL := 4`, with a paragraph in the style of 2 and 3.
+- [x] Encoders and refusing decoders for POND, the seven events and both codecs.
 
 **`vision.gd`**
 - [x] Phase 0: `_draw_cells` skips bodies farther than `½·diagonal + 4r + 32`
@@ -400,9 +429,9 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
   the camera whenever the two agree. The haze reaches 3.05 r counting the
   filter's last texel, and `mouth_reach` bounds the lip bow at 3.06 r; searched
   over every tier-3 organ, the lip tips reach 1.87 r and the flagellum 2.18 r.
-- [ ] In a pond, `_draw_cells` skips slot 68. `_draw_peer` draws it with real
+- [x] In a pond, `_draw_cells` skips slot 68. `_draw_peer` draws it with real
   tiers, order, gape, wound and `double`, `is_self` false and `untinted` true.
-- [ ] Presence fades with `quiet_for()`; no doubt ring; the ghost at 0.34
+- [x] Presence fades with `quiet_for()`; no doubt ring; the ghost at 0.34
   (UX §0.1-0.3). `peer_track()` is not drawn in a pond.
 
 **What Phase 1 found that Phase 2 has to do**
@@ -437,6 +466,48 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 - **From Phase 1 on, each tree runs its own `tools/` in the gate.** The branch's
   `drive.gd` references `FoodField.PERSON_SLOT` and no longer parses over main's
   `food.gd`; Phase 0's "branch tools over main's game" recipe hangs there.
+
+**Done in Phase 2, item by item.** `_draw_thresholds` skips unseeded bodies.
+`returns.gd` draws while the field steps *and* this cell is in the water.
+`_die` calls `leave_water(true)` and sends DIED. DIED carries `POISONED`. Every
+flip of `steering_off` goes through `_set_menu()`, which calls `release()` and
+`let_go()` both ways. **The host learns its own cause** through the one door
+every contact of its own already comes in by: `hear_contact(KILLED, ...)` now
+takes the cause and `by`, and writes them to `died_of` and `died_by` before
+`killed` goes -- so every KILLED site in `food.gd` names its cause. The six hand
+cases are `pond-field` checks now, with the water's three causes as a seventh.
+**The `bitten` bearing is taken before the ATE**, where `_bite_from_me` took it
+(option one: nothing is asked of `eaten`'s listeners). And the gate below ran
+each tree's own `tools/`.
+
+**Found in Phase 2, and changed.** (1) **A returning cell in a pond is in the
+water from the tap** (owner's row A), so it obeys the host's water there:
+`_die` and `_on_eaten` take a kill or a meal in `RETURNING` when a pond is
+open, where they took them only in `ALIVE` -- otherwise a guest killed in its
+first 0.9 s back would live on its own screen and be gone from the host's.
+Solo it is the shipped test exactly. (2) **A sister never lands on a player**
+(`food.gd`'s `SISTER_CLEAR`, 20). She goes SISTER_DISTANCE to her side, and
+while an arrival also landed 560 along the world horizontal, a cell facing
+north that declined to starboard put her exactly on a friend who had arrived
+east of it: `net_probe` found the host shoved 14 units in its own daughter's
+first frame. 480 ended the coincidence and not the case -- a player can stand
+anywhere -- so she is moved straight out from any player she would overlap
+until the two are 20 apart, and no further, which keeps her on her side. (3) **The
+newest line wins on the label too** (UX §0.4): a pond line waiting behind a
+pond line still up fades that one out early, the way an untrue one goes;
+anything else on the label -- the steering line, a sense arriving -- is waited
+out. Before, `they died` waited out the whole 7 s of `you are in their water`.
+(4) **A guest swimming alone whose link goes with the menu open** keeps the
+menu, and the tree stops under it (`_step_guest_pond`): nothing takes over a
+cell that is not in the pond, so nothing closed the menu, and the water ran on
+under a menu the run no longer stepped. (5) **An ARRIVE that finds the cell
+dead or dividing drops the swap** (`_on_pond_arrived`): the cell can die or
+reach the divide radius in its own water inside the round trip, and the beat
+would have stopped and restarted the simulation under a death or a division.
+The host lets the body it placed go after `REACH_TIMEOUT`, and the swap is
+asked again at the next ordinary frame or by the tap on the black. Both were
+found by re-reading, and each has a `net_probe` check that fails with its fix
+taken out.
 
 **Elsewhere**
 - [x] `cell.gd`: `swim_speed_of` and `steering_off`; Phase 1 corrected the
@@ -587,20 +658,20 @@ identity gate**, which is the method #50 and #51 used, with no session:
   hidden canvas layers. `net_lag` gains `--pond`. The replay stays withheld.
 - *Accepted when* the gate passes and `net_probe`, with two sessions and two real
   runs, shows: PROTOCOL 4 completes and 1, 2 and 3 are refused by name; the guest
-  arrives 560 ± 1 from the host; every host body within 1,900 (surface) is
-  mirrored within 1 unit, none farther, each with its (serial, meals) genome; a
-  posed committed hunter swallows the guest (DYING within 0.2 s, slot 68 empty on
-  the host that frame); a posed chewer's `hit` lands at the true bearing
-  ± 0.05 rad and the wounds agree within 1/255; a guest meal shows +4 on the host
-  within 0.2 s, and either player can eat the other; snapshots advance through
-  3 s of the host's black (A) and its return lands 560 from the guest; from both
-  seats a divider is gone from every sense from the pinch, the water advances
-  through 5 s of choosing, and the divider returns where it left at r28.28, the
-  sister in a free slot and no other serial changed; `paused` stays false on both
-  seats (B), KEY_D with the menu up leaves `steer` at 0, and a posed hunter still
-  eats that cell; host polling stopped 3 s holds the guest from 1.2 s, then it
-  resumes; and a closed host means takeover within 0.1 s, keeping radius, genome,
-  generation and hunger, in 34 fresh cells.
+  arrives 560 ± 1 from the host (480 as built, §1.6); every host body within
+  1,900 (surface) is mirrored within 1 unit, none farther, each with its (serial,
+  meals) genome; a posed committed hunter swallows the guest (DYING within 0.2 s,
+  slot 68 empty on the host that frame); a posed chewer's `hit` lands at the true
+  bearing ± 0.05 rad and the wounds agree within 1/255; a guest meal shows +4 on
+  the host within 0.2 s, and either player can eat the other; snapshots advance
+  through 3 s of the host's black (A) and its return lands 560 (480) from the
+  guest; from both seats a divider is gone from every sense from the pinch, the
+  water advances through 5 s of choosing, and the divider returns where it left
+  at r28.28, the sister in a free slot and no other serial changed; `paused`
+  stays false on both seats (B), KEY_D with the menu up leaves `steer` at 0, and
+  a posed hunter still eats that cell; host polling stopped 3 s holds the guest
+  from 1.2 s, then it resumes; and a closed host means takeover within 0.1 s,
+  keeping radius, genome, generation and hunger, in 34 fresh cells.
 - *Renders:* UX §9 items 1-6, both seats, both views, both shapes, judged rather
   than diffed (loopback timing is not reproducible).
 - *Timing,* `net_lag --pond` on loopback and simulated Wi-Fi (10-50 ms jitter,
@@ -609,6 +680,86 @@ identity gate**, which is the method #50 and #51 used, with no session:
   ≤ 1,262 B; the host's `--field-cost` with a guest in.
 - *Then* two phones for thirty minutes, the host on a phone, watching for dropped
   frames and for `godotengine/godot#105726`.
+- *Built, and measured here.* **The far seat is a second real run in a
+  `SubViewport` that never renders and is fed no input**, rather than a run with
+  hidden canvas layers: in point of view, with its cell's steering off because
+  `cell.gd` polls the keyboard. `drive.gd` also gained `--enter-at=`,
+  `--friend-genome=`, `--friend-state=gone` (the far session closed),
+  `--divide-at=`, `--pond-trace=` and `--freeze-quiet=` (a freeze on the
+  session's own wall clock), and poses (`--stalk`, `--cell=`, `--wound=`)
+  reach the host's water from a guest seat. A pond seat caps the frame rate at
+  60, because the session's clocks are wall time.
+- **The gate:** the six fingerprints are `main`'s, each tree running its own
+  `tools/`; `field_diff` against `main`'s `food.gd` is ALL EQUAL over 284,450
+  checks; `main`'s three renders diff to 0 px at each shape and view and the
+  branch to 0 px against them in all four; the drive log, every sensation in it,
+  is byte-identical in both views and in 120 s of the sighted forager at seeds
+  12345 and 2026 -- all of it run again on the final tree. Every CI step
+  passes here with no SCRIPT ERROR or Parse Error.
+- **`net_probe`:** ALL PASS, 170 checks -- 52 more than `main`'s 118: 25 in
+  the new `pond` section, 11 in `pond wire`, 8 more in `pond-field`, and 8 for
+  refusing protocol 1 by name beside 2, 3 and 5. With two sessions and two real
+  runs, the guest opens inside the pond, is held for the round trip and lands
+  480.00 from the host with no beat, 11 ms after opening; 34 host bodies within
+  1,900 are mirrored within 0.008 units (39-41 within 0.166 when the arrival
+  was 560), none farther, every (serial, meals) genome right; a chewer's `hit`
+  lands at the true bearing to the milliradian and the wounds agree to 0.0001;
+  a guest meal is +4 on the host in 13 ms; with both menus open the tree never
+  pauses, KEY_D leaves both `steer` at 0, and a committed hunter swallows the
+  guest with its menu up -- DYING 13 ms after the host's swallow, slot 68 empty
+  that frame; each player swallows the other, and the host is told its own
+  cause; 3 s of the host's black carries 59 snapshots and 31 moving bodies, and
+  its tap lands 480.0 from the guest; both players divide at once -- out of the
+  water on both seats within 14 ms of the pinch, 33 bodies moving and 97
+  snapshots through 5 s of choosing, each born exactly where it pinched at
+  r28.28, each sister in a free slot with nothing else renumbered and clear of
+  both players (one moved 76.6 units off the host); a host stopped for 3 s
+  holds the guest from 1.21 s and releases it 14 ms after it resumes; a closed
+  host is a takeover 12 ms later into 34 fresh cells, keeping r28.28, the
+  genome, generation 2 and the hunger; a guest alone whose link goes under its
+  open menu keeps the menu and the tree stops 7 ms later; and an ARRIVE landing
+  mid-division drops the swap. `pond-field` gained the venomous friend both
+  ways, chewing to the end both ways, the eater's death first, and the water's
+  three causes. **NOTE: 5,027 frames and 43.7 s** -- past §7's 35 s; the pond
+  section is 19.0 s and 2,731 frames at its own 250 fps cap.
+- **Renders:** UX §9 items 1-6, 76 frames, judged there item by item. Item 3
+  failed at 560 and is why the arrival is 480 (§1.6); the rest passed.
+- **Timing,** `net_lag --pond --trials=40 --seed=7 --swim=30`, 60 fps, on the
+  final tree (earlier runs, at the 560 arrival, in brackets):
+
+  | | loopback | simulated Wi-Fi |
+  |---|---|---|
+  | host's cell, jump (best shift) | 0 ms, all 40 | 28-42 ms, p50 36 |
+  | host's cell, turn (best shift) | 0-10 ms, p50 1 | 24-44 ms, p50 33 |
+  | #51's marker, for comparison | jumps 34, turns 22-42 | jumps 31-84, turns 60-80 |
+  | bite to `hit` | 17-24 ms, p99 22 | p50 51, **p99 139 ms**, max 184 (p99 69 and 149; worst 201) |
+  | water bodies off the host's | p99 0.083 u, p99.9 0.57 | **p99 2.29 u** (2.26), p99.9 4.8 |
+  | host's cell off the truth, swimming | p50 0.010, max 2.2 u | p50 1.5, p90 3.9, max 9.0 u |
+  | largest POND | 740 B | 776 B (884) |
+
+  **Two numbers are not what was asked, or only just.** The water on Wi-Fi is
+  2.29 units at p99 against 2: the mirror carries each snapshot from when it
+  *arrives*, so a body is late by its flight time -- 10-50 ms in the model,
+  times up to 200 u/s on a lunge. Closing it needs the snapshot's age: ENet's
+  own round trip, halved, on a real link (the model cannot show it: its delay
+  is above ENet), or a host time on POND, which is a wire change. And the bite
+  on Wi-Fi has a resend tail: a lost CONTACT waits out the modelled 150 ms RTO,
+  2 % of the time, so the p99 sits on it -- 139 ms in this run of 40, 69 and
+  149 in two earlier ones, 201 at worst. The largest single errors -- 15.8
+  units once on loopback and 18.0 on Wi-Fi, against p99.9s of 0.57 and 4.8 --
+  are most likely dead reckoning between snapshots rather than lateness (not
+  traced body by body): a mirror carries a body straight along its heading, so
+  a hunter that turns in the middle of a lunge is off by up to its speed times
+  the 50 ms between snapshots, 16 units at 322 u/s. The host's cell as drawn on the guest's
+  screen takes no blending, so where #51's marker bled a correction out, a late
+  snapshot shows as a leap -- 4.2 units at worst in a frame on Wi-Fi, 0.10 at
+  p90.
+- **Host cost,** `--field-cost=3600 --pond=host --friend=300,90` at `--radius=30`,
+  the tier-1 nose and ampulla, seeds 7, 12345 and 2026: p50 1,051-1,184 µs,
+  p90 1,339-1,456 µs, with the guest together in the water (it was eaten in
+  12345's last minute). The same hour, solo, one ring: p50 778-837 µs -- this
+  container ran slower than Phase 1's hour, so the ratio is the number: a guest
+  costs the host's field about 1.4 times what it costs alone.
 
 **Phase 3 — the replay in a pond.** No wire.
 
@@ -685,4 +836,11 @@ heals that.
   same PR, and that is the lead's call. Phase 1's `pond-field` spends none of
   it: the section never awaits, so its 7.8-8.4 s pass inside a single frame, and
   the probe still ends near 2,237 frames, now in 24.0-24.7 s. A Phase 2 section
-  that waits on frames is the one that will spend the budget.
+  that waits on frames is the one that will spend the budget. **Phase 2's
+  does, and it passes 35 s** (§5, Phase 2): 19 s of two real runs going
+  through every lifecycle, 11 s of it three waits the acceptance names (3 s of
+  the host's black, 5 s of choosing, 3 s of a quiet host). The whole probe is
+  43.7 s and 5,027 frames. The section caps itself at 250 frames a second, so
+  the frames stay far inside the backstop -- but the seconds are the lead's to
+  weigh, and `ci.yml`'s "about twenty-five seconds" is out of date. `ci.yml`
+  was not touched.

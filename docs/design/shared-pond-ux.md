@@ -8,11 +8,13 @@ returns as the chosen daughter where they left; one eating rule for every cell;
 friend, and nobody's death resets the pond, the host's included; **B**, pause
 stops nothing.
 
-**Status: specified and mocked, not built.** A scratch harness, not committed,
-drew the unbuilt marks with the shipped routines over a real `drive.tscn` run at
-1280x720 and 2400x1080: pause under B at scrim 0.5, 0.70 and 0.86, the ghost, a
-friend wearing a threat bow, the held pond, and the notices. **Not seen:** any
-fade in motion, the §0.5 beat, anything on a device.
+**Status: built in Phase 2** (`shared-pond.md` §5), and rendered from two real
+runs -- `drive.gd --pond=host|guest`, the other seat a second game on the other
+end of a loopback socket -- at 1280x720 and 2400x1080 in both views: §9 items 1-6,
+listed with what was judged in §9. Before that, a scratch harness drew the marks
+with the shipped routines over a real run: pause under B at scrim 0.5, 0.70 and
+0.86, the ghost, a friend wearing a threat bow, the held pond, and the notices.
+**Not seen:** anything on a device, and anything in motion but as frames.
 
 ## 0. Five rules every state shares
 
@@ -48,8 +50,12 @@ with the sense line's timing: in over `ONBOARD_FADE_IN` 1.1 s, held
 `SENSE_LINE_HOLD` 7.0 s, out over `ONBOARD_FADE_OUT` 0.8 s. A line never covers
 the steering onboarding line, a division, the black, the replay or the open
 menu. It waits in a one-slot queue where the newest wins, and it is dropped, or
-faded out early, the moment what it reports stops being true. Each carries a
-fact about another person that no sense can, as the earshot screen already does:
+faded out early, the moment what it reports stops being true. **The newest wins
+on the label too** (built): a line waiting behind one of these still up fades
+that one out early, the way an untrue one goes -- otherwise `they died` would
+wait out the whole 7 s of `you are in their water`. The steering line and a
+sense arriving are not pond lines, and are waited out. Each carries a fact
+about another person that no sense can, as the earshot screen already does:
 
 | when | the line | seat |
 |---|---|---|
@@ -75,7 +81,7 @@ beat. It never closes the aperture first, because closing means death.
 
 | seat | full vision | point of view |
 |---|---|---|
-| **guest** | The §0.5 beat. You arrive `SISTER_DISTANCE` 560 units from the host along the world horizontal, so in north-up (the default) they are in your first frame. After the beat: `you are in their water`. | The same beat on the membrane, then the line. From here the host is a body your senses find like any other, plus their shouts. |
+| **guest** | The §0.5 beat. You arrive 480 units from the host along the world horizontal (§9.3 moved it from 560), so in north-up (the default) they are in your first frame. After the beat: `you are in their water`. | The same beat on the membrane, then the line. From here the host is a body your senses find like any other, plus their shouts. |
 | **host** | The guest's body fades in from 0 to 1 over `DEATH_RETURN` 0.9 s where it lands: body, halo and edge mark together, trail empty. At the end: `they are in your water`. | The line only. |
 
 If the pond already exists when the guest's run starts, there is no swap: the
@@ -110,7 +116,7 @@ There is no field reseed.
 | eaten by you | Nothing is added. Your own meal ring and ingest flood, in their gene's hue, already fire. | the ingest flood |
 | any of the three | The halo, trail and edge mark go with the body. `they died · …` or `you ate them · …` | the same line |
 | they sit on their black | nothing: they are in no water | nothing |
-| they tap | They arrive 560 units from you along the world horizontal, with the 0.9 s arrival fade (if you have no body, where yours last was). A line still waiting is dropped. | nothing; they are a small new body |
+| they tap | They arrive 480 units from you along the world horizontal, with the 0.9 s arrival fade (if you have no body, where yours last was). A line still waiting is dropped. | nothing; they are a small new body |
 
 ## 4. You die while your friend plays on
 
@@ -149,10 +155,25 @@ it stops:
 | gone (owner row 1) | The §0.5 beat, onto a fresh water seeded round your cell, which keeps its body, genome, generation and hunger. `their water is gone · this one is yours`, said once. Pause is ordinary again. | the same |
 
 Mocked at 2400x1080: the dimmed world reads as *stopped*, not *broken*, because
-the membrane and its beat stay lit. If the host's water comes back after the
-guest has swum on alone (owner row 2), the guest gets §1's beat and line again.
-A guest whose own phone was the quiet one tries the host first (earshot's
-`REACH_TIMEOUT` 4 s) before swimming on alone, so waking is one beat, not two.
+the membrane and its beat stay lit.
+
+**Under Phase 2's link, `their phone went quiet` is seldom reached** (found in
+building it). A phone whose main loop stops also stops answering ENet, and ENet
+drops it after about 5.7 s on a warm LAN (`shared-pond.md` §1.8) -- before
+`SILENCE`'s 6.0. So a guest whose host's phone stops sees the held pond from
+1.2 s and the takeover at about 5.7 s, and a host whose guest's phone stops sees
+`they left` then; the line needs a silence the link survives. §10 row 1's
+answer, a timeout pinned at about 8 s, is Phase 4, and is what makes the line
+reachable. `drive.gd --friend-state=quiet|held` keeps the far transport
+answering, so the line can be photographed at all.
+
+If the host's water comes back after the guest has swum on alone (owner row
+2), the guest gets §1's beat and line again. A guest whose own phone was the
+quiet one tries the host first (earshot's `REACH_TIMEOUT` 4 s) before swimming
+on alone, so waking is one beat, not two. **Both are Phase 4's rejoin**: in
+Phase 2 a pond that has dropped stays dropped, and a guest whose phone slept
+past the link should wake held, and be taken over when its own end of the
+connection gives up -- reasoned from the code, not seen on a device.
 
 ## 6. Pause under B
 
@@ -179,7 +200,12 @@ the first two are new.
    gap, and the two-bar glyph still opens the menu.
 
 **Wiring.** The tree is never paused while a friend is in the pond, on either
-seat; with no friend in it, pause is today's pause. `Hud/Pause` keeps its
+seat; with no friend in it, pause is today's pause. (Built wider, as
+`shared-pond.md` §1.7 has it: never paused while a *session* is up, so a host's
+water keeps running for a friend on the black, and the warning shows whenever
+the menu is open over it -- except while the pond is held, when it is false. A
+guest swimming alone whose link goes with the menu open keeps the menu, and the
+tree stops under it: the shipped pause again.) `Hud/Pause` keeps its
 default `MOUSE_FILTER_STOP`, which becomes load-bearing: a press that misses
 every widget dies there instead of steering a live cell. The cell's input is off
 while the menu is up, including the keys `cell.gd` polls directly, because the
@@ -212,7 +238,13 @@ eaten player's black gets no text: `watch` answers *what was that*, which is why
 - **`normal_mode.tscn`:** the `Warn` label, a node rather than a resource, so
   `load_steps` is unchanged. **The replay:** the friend recorded as a body.
 - **`tools/drive.gd`:** needs flags to pose a friend who is out of the water,
-  dead, quiet or held. §9 cannot be shot without them.
+  dead, quiet or held. §9 cannot be shot without them. **Built:**
+  `--pond=host|guest` (this run's seat; the other is a second run, in a
+  viewport that never renders), `--enter-at=`, `--friend=dist,bearing[,radius
+  [,facing]]`, `--friend-genome=`, `--friend-state=out|dead|quiet|held|gone
+  [:seconds]`, `--divide-at=`, `--pond-trace=`, and `--freeze-quiet=`, which
+  freezes on the session's own wall clock: under xvfb a second of game time
+  takes 2.4-5 s of the wall's, so `--freeze-at=` cannot place a held pond.
 - **For `shared-pond.md`:** per friend, the wire carries worn tiers and order
   (not DNA), radius, heading, gape or cytostome tier, wound, and a state (in
   water; out of water since *t*; dead, eaten or starved and by whom), plus
@@ -237,6 +269,43 @@ Use `--seed=` for every shot, and zero-diff three runs before any A/B.
    behind the daughters.
 7. A death replay where the friend was the killer: the friend is drawn.
 
+**Rendered in Phase 2**, from two real runs on loopback (`drive.gd --pond=`):
+items 1-6, both seats where an item has two, both views, both shapes -- 76
+frames, judged and not diffed, because loopback timing does not repeat. Item 7
+is Phase 3's, with the replay.
+
+1. **Passed.** The friend wears its own tiers and fringe on a SELF_TINT body, so
+   the two read as the same kind of thing, and what sets the friend apart is
+   what should: halo and trail. A tier-3 friend's red toothed bow reads as a
+   threat from both seats at both shapes. Point of view draws no friend.
+2. **Passed.** The ghost -- 0.34, nucleus doubled, narrowed by the pinch, no bow
+   and no haze -- cannot be taken for the edible water cell beside it (green
+   haze, full alpha), nor for a quiet friend, whose body stays at full because
+   it can still bite; only its halo and trail thin.
+3. **Failed at 560, passed at 480**, as the item anticipated. At 560 the friend
+   landed 45-52 px from the edge of the 1280x720 frame, under the membrane band;
+   at 480 it lands 158-166 px in on both seats, and far inside 2400x1080. The
+   arrival moved (`pond.gd`'s `ARRIVAL`), not the frame.
+4. **Passed.** The entry beat at 0.45 s is the world coming back up round a cell
+   that did not die, the host already faint in its new place; after it the host
+   is in the first frame with `you are in their water`. Held at 3 s the world
+   sits at 0.22 behind a cell drawn at full, heading needle kept and no plume,
+   the membrane band still lit: it reads as stopped, not broken. At 7 s the
+   older line has made way and `their phone went quiet` is coming in -- shot
+   without `--fixed-fps`, because under it the label's clock is game time and
+   lags the session's wall clock 2.4-5 times. The takeover mid-beat is dark with
+   the old line fading through it; after it, fresh cells and `their water is
+   gone · this one is yours`.
+5. **Passed, as frames.** The warning sits in the gap above `resume`; the 0.70
+   scrim leaves the friend, the stalker astern and the water readable in full
+   vision; a bite landing with the menu open flashes the membrane behind the
+   column in both views. A sense arriving under the menu no longer shows
+   through it: the line waits, as every line a pause hid does. 0.70 still wants
+   judging in motion on a phone.
+6. **Passed.** From the pinch the world dims and the daughters and strands stay
+   at full, the friend moving on behind them, dimmed with the water. A pond
+   line already up stays through the division, as the shipped sense line does.
+
 ## 10. Left open: owner's call
 
 | # | Question | Options | What it means |
@@ -247,4 +316,4 @@ Use `--seed=` for every shot, and zero-diff three runs before any A/B.
 The rows lean on each other: a short wait is only kind because rejoining is
 automatic; if row 2 is *no*, row 1 should be 30 s, raising the connection's own
 give-up time. To watch in play, not decide: under A, a friend you just ate
-returns 560 units away, as a cell you can probably swallow.
+returns 480 units away, as a cell you can probably swallow.

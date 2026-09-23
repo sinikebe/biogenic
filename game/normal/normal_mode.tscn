@@ -285,6 +285,22 @@ text = "anywhere"
 size_flags_horizontal = 4
 text = "resume"
 
+[node name="Warn" type="Label" parent="Hud/Pause/Center/Buttons/Resume"]
+visible = false
+anchors_preset = -1
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -300.0
+offset_top = -35.0
+offset_right = 300.0
+offset_bottom = -13.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.82)
+theme_override_font_sizes/font_size = 15
+text = "the water is still moving · you can still be eaten"
+horizontal_alignment = 1
+
 [node name="Leave" type="Button" parent="Hud/Pause/Center/Buttons"]
 size_flags_horizontal = 4
 text = "leave"

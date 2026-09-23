@@ -236,6 +236,69 @@ const PEER_TRAIL_ALPHA := 0.13
 ## Stable breath offset, so the friend and the player do not inhale in unison.
 const PEER_PHASE := 5.3
 
+# --- The friend in one pond (shared-pond-ux.md §0-§3, §5) --------------------
+# **A friend in the same water is a body**, drawn by the routine that draws
+# every body, from the field's own slot 68 -- worn tiers, order, gape, wound,
+# the nucleus doubling -- untinted, because no cell the water makes is pure
+# self teal, and able to threaten, because their mouth can reach you now.
+# What fades is presence -- halo, trail, edge mark -- on #50's own curve; a body
+# in the water is always drawn at 1.0, because it can bite. No doubt ring: in
+# one pond every body is equally out of date, and a ring round one would claim
+# the rest are current.
+
+## How the friend left the water for good, as the run tells this view.
+enum Gone { LEFT, STARVED, EATEN, EATEN_BY_YOU }
+## What this view is doing with the friend: nobody; a body from the field; a
+## body the field has just stopped holding, waiting a moment for why; a
+## departure being drawn from the last pose.
+enum Friend { ABSENT, PRESENT, VANISHED, DEPARTING }
+## Out of the water is a ghost at the alpha the division gives the daughter you
+## decline -- normal_mode.gd's DIVIDE_FADE_DIM, written out because that file
+## preloads this one.
+const FRIEND_GHOST := 0.34
+## They leave the water over the division's pinch and come back over its
+## commit: normal_mode.gd's DIVIDE_PINCH and DIVIDE_COMMIT.
+const FRIEND_PINCH := 1.5
+const FRIEND_COMMIT := 0.9
+## How long a friend the field has stopped holding waits for the run to say
+## why, before it is faded out as a friend who left. The reason travels on the
+## reliable stream and the body on the unreliable one, so on a real link either
+## can arrive first.
+const FRIEND_PENDING := 0.3
+
+## **This cell drawn outside the dim**, at full, as the daughters are: the run
+## sets it while the pond is held and through its own pinch in a pond, when the
+## world behind it is at DIVIDE_WORLD_FADE and this cell is what is happening.
+var own_full := false
+## The pond is held: the velocity plume goes, because the cell is not going
+## anywhere and the plume would be a stale one.
+var _held := false
+var _fr := Friend.ABSENT
+var _fr_clock := 0.0
+## Seconds into the arrival fade, -1 when not arriving.
+var _fr_arrive := -1.0
+## Seen in the water since arriving: until then, out of it is arriving and not
+## dividing, and draws no ghost.
+var _fr_seen_in := false
+var _fr_in := true
+var _fr_out_clock := 0.0
+## Seconds into the commit, when they come back into the water; -1 otherwise.
+var _fr_back := -1.0
+var _fr_out_r := 0.0
+var _fr_gone := Gone.LEFT
+## The friend as last drawn, for a departure to be drawn from.
+var _fr_last: Dictionary = {}
+## After a departure the field has to be seen without them once before a body
+## there is an arrival: the body and the reason take different routes.
+var _fr_need_absence := false
+## Frames this view has run since it came on: a friend there on the first one
+## is in the first frame, not arriving.
+var _fr_frames := 0
+## A body that appears inside the frame fades in: a sister, left in the water.
+## Slot -> seconds, and the serials that say a slot has a new body.
+var _fade_in := {}
+var _slot_serials := PackedInt64Array()
+
 # --- Body ------------------------------------------------------------------
 ## Decay of the beat echo, matching the membrane's own pulse decay.
 const BEAT_DECAY := 0.42
@@ -464,6 +527,7 @@ func set_active(on: bool) -> void:
 		_trail_clock = 0.0
 		_forget_peer()
 		_peer_trail_clock = 0.0
+		_forget_friend()
 		_kicks.clear()
 		_hits.clear()
 		_ghosts.clear()
@@ -499,6 +563,29 @@ func set_camera_locked(on: bool) -> void:
 ## daughters are drawn over it, and puts it back afterwards.
 func set_dim(level: float) -> void:
 	_dim = clampf(level, 0.0, 1.0)
+
+
+## **The pond is held** (shared-pond-ux.md §5): the host's phone has gone
+## quiet and the water with it. The run dims the world; this cell is drawn
+## outside the dim through [member own_full], heading needle kept.
+func set_held(on: bool) -> void:
+	_held = on
+
+
+## **The friend left the water for good, and how** (shared-pond-ux.md §3, §5):
+## eaten by the water, a SELF_TINT meal ring where they were and the body gone
+## in that frame; starved, a fade over FAINT_COLLAPSE; eaten by you, nothing
+## added -- your own meal ring and flood are already firing; gone from the
+## wire, the arrival fade reversed. [param at] is where the body was.
+func friend_gone(how: int, at: Vector2) -> void:
+	_fr_need_absence = true
+	if not _active:
+		return
+	var r := float(_fr_last.get("radius", 0.0))
+	if how == Gone.EATEN:
+		_meals.append([at, r if r > 0.0 else FoodField.DRIFTER_MAX, 0.0, SELF_TINT])
+	if _fr == Friend.PRESENT or _fr == Friend.VANISHED:
+		_depart(how)
 
 
 func _process(delta: float) -> void:
@@ -582,6 +669,12 @@ func _step_trail(delta: float) -> void:
 ## **Nothing in this function touches the simulation.** It reads a track, a
 ## silence and a clock off the session, and writes one dictionary of its own.
 func _step_peer(delta: float) -> void:
+	# **In a pond the friend is the field's body in slot 68**, and the session's
+	# track is not drawn (shared-pond.md §3): the same place, but the field's is
+	# the one every sense and every mouth is using.
+	if _cell != null and _food_node != null and _food_node.pond_open():
+		_step_friend(delta)
+		return
 	if _cell == null or _session == null or not is_instance_valid(_session):
 		_forget_peer()
 		return
@@ -674,6 +767,209 @@ func _forget_peer() -> void:
 	_peer_basis = []
 	_peer_offset = Vector2.ZERO
 	_peer_twist = 0.0
+
+
+func _forget_friend() -> void:
+	_fr = Friend.ABSENT
+	_fr_frames = 0
+	_fr_arrive = -1.0
+	_fr_back = -1.0
+	_fr_need_absence = false
+	_fr_last = {}
+	_fade_in.clear()
+	_slot_serials.resize(0)
+
+
+## **The friend, this frame, in a pond** (shared-pond-ux.md §0-§3): the body
+## the field holds in slot 68, the arrival fade, the ghost of a friend out of
+## the water and the commit that brings them back, a departure drawn from the
+## last pose, and presence on #50's curve. Worked out here and not in a
+## `_draw`, for the reason [method _step_peer] gives: a headless probe can read
+## `_peer`, and nothing can read a draw.
+func _step_friend(delta: float) -> void:
+	_fr_frames += 1
+	_step_fade_ins(delta)
+	var bodies := _food_node.bodies()
+	var pb: Object = bodies[FoodField.PERSON_SLOT] \
+		if bodies.size() > FoodField.PERSON_SLOT else null
+	var person: Object = _food_node.person()
+	var here := person != null and pb != null and float(pb.radius) > 0.0
+	if not here:
+		_fr_need_absence = false
+	match _fr:
+		Friend.DEPARTING:
+			_fr_clock += delta
+			if _fr_clock < _departure_length(_fr_gone):
+				_peer = _departing_mark()
+				return
+			_fr = Friend.ABSENT
+			_peer = {}
+			_peer_trail.clear()
+			return
+		Friend.VANISHED:
+			_fr_clock += delta
+			if not here:
+				if _fr_clock >= FRIEND_PENDING:
+					_depart(Gone.LEFT)
+				else:
+					_peer = _fr_last
+				return
+			_fr = Friend.PRESENT
+		Friend.ABSENT:
+			if not here or _fr_need_absence:
+				if not _peer.is_empty():
+					_peer = {}
+				return
+			# **An arrival** (UX §1, §3): body, halo and edge mark fade in over
+			# the 0.9 s every return takes, the trail empty -- unless this is
+			# the view's first frame, and then they are simply in it.
+			_fr = Friend.PRESENT
+			_fr_arrive = 0.0 if _fr_frames > 1 else -1.0
+			_fr_seen_in = false
+			_fr_in = true
+			_fr_back = -1.0
+			_peer_trail.clear()
+			_peer_trail_clock = 0.0
+	if not here:
+		_fr = Friend.VANISHED
+		_fr_clock = 0.0
+		_peer = _fr_last
+		return
+
+	var r := float(pb.radius)
+	var wet := bool(person.in_water)
+	if _fr_arrive >= 0.0:
+		_fr_arrive += delta
+		if _fr_arrive >= SignalBus.DEATH_RETURN:
+			_fr_arrive = -1.0
+	# In and out of the water. Before they have been seen in it, out of it is a
+	# friend being placed rather than one dividing, and draws no ghost.
+	if wet:
+		if _fr_seen_in and not _fr_in:
+			_fr_back = 0.0
+		_fr_seen_in = true
+		_fr_in = true
+	elif _fr_seen_in:
+		if _fr_in:
+			_fr_out_clock = 0.0
+			_fr_back = -1.0
+		_fr_in = false
+		_fr_out_clock += delta
+		_fr_out_r = r
+	if _fr_back >= 0.0:
+		_fr_back += delta
+		if _fr_back >= FRIEND_COMMIT:
+			_fr_back = -1.0
+	var ghost := _fr_seen_in and not _fr_in
+	var alpha := 1.0
+	var pinch := 0.0
+	var drawn := r
+	if ghost:
+		# **The pinch** (UX §2): the body narrows and falls to the ghost's 0.34
+		# over the division's own 1.5 s, and holds there while they choose.
+		var t := clampf(_fr_out_clock / FRIEND_PINCH, 0.0, 1.0)
+		alpha = lerpf(1.0, FRIEND_GHOST, t)
+		pinch = t
+	elif _fr_back >= 0.0:
+		# **The commit**: the ghost becomes the daughter where it stood --
+		# 0.34 to 1, pinch 1 to 0, radius from the mother's to hers.
+		var t := clampf(_fr_back / FRIEND_COMMIT, 0.0, 1.0)
+		alpha = lerpf(FRIEND_GHOST, 1.0, t)
+		pinch = 1.0 - t
+		drawn = lerpf(_fr_out_r, r, t)
+	if _fr_arrive >= 0.0:
+		alpha *= clampf(_fr_arrive / SignalBus.DEATH_RETURN, 0.0, 1.0)
+	var at: Vector2 = pb.pos
+	_peer = {
+		"at": at,
+		"heading": float(pb.heading),
+		"radius": drawn,
+		"confidence": _presence() * alpha,
+		"doubt": 0.0,
+		"alpha": alpha,
+		"pinch": pinch,
+		"double": smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, drawn),
+		"tiers": pb.genome,
+		"order": pb.order,
+		"gape": _food_node.gape_at(FoodField.PERSON_SLOT),
+		"wound": float(pb.wound),
+		"ghost": ghost,
+	}
+	_fr_last = _peer
+	# No new trail points from a ghost (UX §0.3), nor while a friend is arriving.
+	_step_peer_trail(delta, at, not ghost and _fr_arrive < 0.0)
+
+
+## **Presence** (UX §0.2): #50's confidence curve on the silence, squared, down
+## to [constant PEER_FLOOR] -- for the halo, the trail and the edge mark, never
+## the body.
+func _presence() -> float:
+	if _session == null or not is_instance_valid(_session):
+		return 1.0
+	var quiet := float(_session.quiet_for())
+	var doubt := maxf(quiet - PEER_FRESH, 0.0)
+	var slip := 1.0 - clampf(doubt / maxf(PEER_LOST - PEER_FRESH, 0.001), 0.0, 1.0)
+	return PEER_FLOOR + (1.0 - PEER_FLOOR) * slip * slip
+
+
+func _depart(how: int) -> void:
+	_fr = Friend.DEPARTING
+	_fr_gone = how
+	_fr_clock = 0.0
+	_peer = _departing_mark()
+
+
+## How long a departure is drawn for: at once for a body eaten, the starving
+## faint's own tempo, and the arrival fade reversed for a friend who left.
+func _departure_length(how: int) -> float:
+	match how:
+		Gone.STARVED:
+			return SignalBus.FAINT_COLLAPSE
+		Gone.LEFT:
+			return SignalBus.DEATH_RETURN
+	return 0.0
+
+
+## The last pose, fading as the departure says. Empty for a body that goes at
+## once.
+func _departing_mark() -> Dictionary:
+	var length := _departure_length(_fr_gone)
+	if length <= 0.0 or _fr_last.is_empty():
+		return {}
+	var keep := 1.0 - clampf(_fr_clock / length, 0.0, 1.0)
+	var mark := _fr_last.duplicate()
+	mark["alpha"] = float(_fr_last.get("alpha", 1.0)) * keep
+	mark["confidence"] = float(_fr_last.get("confidence", 1.0)) * keep
+	return mark
+
+
+## **A new body inside the frame fades in** (UX §2's sister): the water seeds
+## nothing inside RING_MIN of anybody, and the mirror is sent nothing new from
+## that close, so a new serial in view is a placed body -- a sister, left in
+## the water -- and it arrives with the arrival's own fade. The first frame the
+## view is on sees the water as it is.
+func _step_fade_ins(delta: float) -> void:
+	for slot: int in _fade_in.keys():
+		var t := float(_fade_in[slot]) + delta
+		if t >= SignalBus.DEATH_RETURN:
+			_fade_in.erase(slot)
+		else:
+			_fade_in[slot] = t
+	var bodies := _food_node.bodies()
+	var fresh := _slot_serials.size() != bodies.size()
+	if fresh:
+		_slot_serials.resize(bodies.size())
+	var reach := _view.length() * 0.5 / ZOOM
+	for i in bodies.size():
+		var b: Object = bodies[i]
+		var serial := int(b.serial)
+		if not fresh and serial == _slot_serials[i]:
+			continue
+		_slot_serials[i] = serial
+		if fresh or _fr_frames <= 1 or i == FoodField.PERSON_SLOT or not bool(b.seeded):
+			continue
+		if (b.pos as Vector2).distance_to(_camera) <= reach + float(b.radius) * CULL_REACH:
+			_fade_in[i] = 0.0
 
 
 ## **One frame, carried forward to now, and no further than [constant
@@ -1010,13 +1306,25 @@ func _draw_cells(a: float) -> void:
 	if culling:
 		middle = _world.transform.affine_inverse() * (frame * 0.5)
 		half = frame.length() * 0.5 / ZOOM
+	# **In a pond the friend is drawn by [method _draw_peer]**, as a person and
+	# not as a water cell, and a slot nobody is in -- retired, or not sent -- is
+	# nothing at all (shared-pond.md §3).
+	var pond := _food_node.pond_open()
+	var bodies: Array = _food_node.bodies() if pond else []
 	for i in points.size():
+		if pond and (i == FoodField.PERSON_SLOT or not bool(bodies[i].seeded)):
+			continue
 		var p: Vector2 = points[i]
 		var r: float = float(radii[i]) if i < radii.size() else FoodField.DRIFTER_MAX
 		if culling:
 			var reach := half + r * CULL_REACH + CULL_MARGIN / ZOOM
 			if p.distance_squared_to(middle) > reach * reach:
 				continue
+		# A sister placed in view arrives with the arrival's fade (UX §2). Never
+		# set in single player, where every body is drawn at `a` exactly.
+		var ab := a
+		if _fade_in.has(i):
+			ab = a * clampf(float(_fade_in[i]) / SignalBus.DEATH_RETURN, 0.0, 1.0)
 		# The scent as a soft haze rather than a ring: a ring here would be a
 		# boundary, and the cell cannot perceive a boundary.
 		#
@@ -1029,7 +1337,7 @@ func _draw_cells(a: float) -> void:
 		# food.gd owns the curve; this reads it. §4.5, last paragraph.
 		var smell := smoothstep(FoodField.EDIBLE_FADE_OUT, FoodField.EDIBLE_FADE_IN,
 			r / maxf(_cell.gape(), 0.001))
-		_draw_scent(p, r, smell * a)
+		_draw_scent(p, r, smell * ab)
 
 		# The wound is drawn here and nowhere else in the game: full vision is
 		# entitled to ground truth, and point of view finds out by biting and
@@ -1037,7 +1345,7 @@ func _draw_cells(a: float) -> void:
 		Cilia.draw_cell(_world, p,
 			float(headings[i]) if i < headings.size() else 0.0, r,
 			genomes[i] if i < genomes.size() else {},
-			_food_node.gape_at(i), _cell.radius, false, _clock, a,
+			_food_node.gape_at(i), _cell.radius, false, _clock, ab,
 			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
 			float(wounds[i]) if i < wounds.size() else 0.0)
 
@@ -1274,9 +1582,15 @@ func _draw_ping(a: float) -> void:
 func _draw_thresholds(a: float) -> void:
 	if _food_node != null:
 		var points := _food_node.points()
+		# **Only bodies in the water** (shared-pond.md §3): a retired slot keeps
+		# its last place, and in a pond the nearest "body" was sometimes one that
+		# had been eaten. Every body is seeded in single player.
+		var bodies := _food_node.bodies()
 		var nearest := -1
 		var nearest_d := INF
 		for i in points.size():
+			if not bool(bodies[i].seeded):
+				continue
 			var d := points[i].distance_to(_cell.position)
 			if d < nearest_d:
 				nearest_d = d
@@ -1329,26 +1643,34 @@ func _draw_cell(a: float) -> void:
 		_draw_daughters(p, beat)
 		return
 
+	# **Outside the dim**, when the run asks (shared-pond-ux.md §2, §5): a held
+	# pond, and this cell's own pinch in a pond, dim the world behind a cell that
+	# is still the thing happening. Never asked in single player, where this is
+	# `a`, as it always was.
+	var ca := 1.0 if own_full else a
+
 	# Halo. Swells on the metabolic beat, which is the same beat the contour
 	# brightens on -- one organism, two ways of looking at it.
 	var lift := 0.6 + 0.9 * beat
 	for i in HALO_STEPS:
 		var k := 1.0 - float(i) / float(HALO_STEPS)
 		_world.draw_circle(p, r * (1.05 + 1.75 * k),
-			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * a), true, -1.0, true)
+			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * ca), true, -1.0, true)
 
 	var tiers := _genome_node.tiers() if _genome_node != null else GenomeNode.BORN
 	# `is_self` is what keeps the player's own body pure SELF_TINT and its own
 	# lip bow green: you are the one cell in the water whose identity you do not
 	# have to read, and your own mouth cannot swallow you.
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
-		r, true, _clock, a, _cell.steer, beat, 0.0, 1.0 / ZOOM,
+		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
-	_draw_held_sample(p, r, beat, a)
+	_draw_held_sample(p, r, beat, ca)
 
-	_draw_heading(p, fwd, stb, r, a)
-	_draw_velocity(p, r, a)
+	_draw_heading(p, fwd, stb, r, ca)
+	# Held, the cell is going nowhere, and a plume would be the last one it had.
+	if not _held:
+		_draw_velocity(p, r, ca)
 
 
 ## The two of them, at world scale and at their own brightness. Both are
@@ -1470,6 +1792,10 @@ func _draw_velocity(p: Vector2, r: float, a: float) -> void:
 func _draw_peer(a: float) -> void:
 	if _peer.is_empty() or _cell == null:
 		return
+	# In a pond the friend is a body, not a marker: see [method _draw_friend].
+	if _peer.has("tiers"):
+		_draw_friend(a)
+		return
 	var at: Vector2 = _peer["at"]
 	var r: float = float(_peer["radius"])
 	var sure: float = float(_peer["confidence"])
@@ -1507,6 +1833,41 @@ func _draw_peer(a: float) -> void:
 	# claimed about what is on it.
 	Cilia.draw_cell(_world, at, float(_peer["heading"]), r, {}, 0.0,
 		_cell.radius, true, _clock, fade, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM)
+
+
+## **The friend, in one pond** (shared-pond-ux.md §0.1-§0.3): drawn by
+## [method Cilia.draw_cell] like every body -- their worn tiers and order, their
+## gape, their wound, the nucleus doubling from r32 -- with `is_self` false, so
+## the red toothed bow shows whenever their gape exceeds your radius, and
+## `untinted` true, so the body stays SELF_TINT: no cell the water makes is.
+## The scent haze on the same curve as anything you could swallow. The person
+## marks stay as shipped -- halo, trail, edge mark -- and carry presence.
+##
+## **A ghost out of the water** (§0.3): body, halo and edge mark at 0.34, no
+## threat bow, no haze and no new trail points, because nothing can reach it.
+func _draw_friend(a: float) -> void:
+	var at: Vector2 = _peer["at"]
+	var r := float(_peer["radius"])
+	var alpha := float(_peer["alpha"])
+	var presence := float(_peer["confidence"])
+	if r <= 0.0 or alpha <= 0.0:
+		return
+	var ghost := bool(_peer["ghost"])
+	_draw_peer_trail(presence * a)
+	for i in HALO_STEPS:
+		var k := 1.0 - float(i) / float(HALO_STEPS)
+		_world.draw_circle(at, r * (1.05 + 1.75 * k),
+			Color(SELF_TINT, 0.013 * (1.0 - k) * 0.6 * presence * a), true, -1.0, true)
+	if not ghost:
+		_draw_scent(at, r, smoothstep(FoodField.EDIBLE_FADE_OUT,
+			FoodField.EDIBLE_FADE_IN, r / maxf(_cell.gape(), 0.001)) * alpha * a)
+	# The viewer's radius decides the threat bow; a ghost's mouth can reach
+	# nobody, so it is measured against a radius nothing exceeds.
+	Cilia.draw_cell(_world, at, float(_peer["heading"]), r, _peer["tiers"],
+		float(_peer["gape"]), INF if ghost else _cell.radius, false, _clock,
+		alpha * a, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM, _peer["order"],
+		float(_peer["wound"]), float(_peer["double"]), float(_peer["pinch"]), 0.0,
+		true)
 
 
 ## **Broken, and that is the whole of what it says.** Every other ring in this

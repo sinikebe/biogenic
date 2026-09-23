@@ -45,6 +45,9 @@ const Cilia := preload("res://game/vision/cilia.gd")
 ## session is a node under `/root` that the earshot screen left there, and a run
 ## reached any other way finds nothing and is the game that already shipped.
 const NetSession := preload("res://game/net/net_session.gd")
+## **The shared pond on the wire** (shared-pond.md §3). Built only by a run that
+## began inside a session; a solo run never makes one.
+const Pond := preload("res://game/net/pond.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -94,6 +97,11 @@ const FIRST_SENSES: Array[StringName] = [
 ## exactly where the centred pause column has to sit. See _toggle_pause.
 const SCRIM_POV := Color(0.023, 0.055, 0.05, 0.5)
 const SCRIM_FULL_VISION := Color(0.023, 0.055, 0.05, 0.86)
+## **Full vision's scrim while pause stops nothing** (shared-pond-ux.md §6).
+## 0.86 exists because *the water is not what they came to read*; under B it is
+## -- a hunter can reach you with the menu up -- so the water stays legible
+## behind the column. A mock's number; judge it in motion on a phone.
+const SCRIM_POND := Color(0.023, 0.055, 0.05, 0.70)
 
 ## **What "selected" means on the strand**, and it is three values rather than
 ## two because a held sample with no locus chosen yet is a real state: it waits
@@ -216,6 +224,10 @@ var scheme := -1
 @onready var _scrim: ColorRect = $Hud/Pause/Scrim
 @onready var _resume_button: Button = $Hud/Pause/Center/Buttons/Resume
 @onready var _leave_button: Button = $Hud/Pause/Center/Buttons/Leave
+## **What pause means in a pond, said once, where it cannot be missed**
+## (shared-pond-ux.md §6): a child of `resume` so the column never lays it out,
+## in the 48 px gap above it. Hidden everywhere else.
+@onready var _warn: Label = $Hud/Pause/Center/Buttons/Resume/Warn
 ## The two settings panels share a row now: the second strand and the `Act`
 ## line cost 94 px on a column that had 36 px of slack, and stacking two
 ## identical 232 x 101 panels was the only reason the column was as tall as it
@@ -346,6 +358,53 @@ var _sensed := false
 ## session or it did not, and nothing about it changes mid-run.
 var _net: Node = null
 
+# --- The shared pond (shared-pond.md, shared-pond-ux.md) -----------------------
+# **None of this is touched by a run with no session**: [member _pond] is null
+# there, every function below returns on its first line, and the four places
+# the pond changes a shipped path ask [method FoodField.pond_open] first, which
+# a solo field always answers false.
+
+## The wire's end of the pond, or null.
+var _pond: Pond = null
+## **The pause menu is open.** In single player this is exactly
+## `get_tree().paused`, which is what it replaced (§1.7); in a session the tree
+## is never paused and this is the only thing that says the menu is up.
+var _menu_open := false
+## The guest's pond is held: the host has gone quiet, so nothing here moves.
+var _held := false
+## **The water changes** (UX §0.5): seconds into the beat, or -1 for none. The
+## swap runs at [member _beat_swap_at] seconds, and [member _beat_line] is said
+## once the beat is over.
+var _water_beat := -1.0
+var _beat_swap := Callable()
+var _beat_swap_at := 0.0
+var _beat_swapped := false
+var _beat_line := ""
+## The guest's three ways of waiting for ARRIVE: a run that opened inside the
+## pond and is held for the round trip, a solo run swapping in, and a tap on the
+## black.
+var _entering_held := false
+var _swap_pending := false
+var _wake_pending := false
+## **The one-slot line queue** (UX §0.4): what waits, since when it may be said,
+## and which fact it reports -- so it is dropped the moment that stops being
+## true. [member _line_shown] is the pond line on the label now, or "".
+var _line_key := ""
+var _line_text := ""
+var _line_after := 0.0
+var _line_hold := SENSE_LINE_HOLD
+var _line_shown := ""
+## Seconds this run has lived, for the lines' not-before times.
+var _run_clock := 0.0
+## The friend died and has not come back yet; they have been in this water at
+## all this run; their phone's silence has been announced.
+var _friend_dead := false
+var _friend_ever := false
+var _quiet_said := false
+## This run's recording holds pond frames, so there is no replay to offer yet
+## (shared-pond.md §5, Phase 3).
+var _ponded := false
+
 ## **Forward is always up.** The world turns instead of the cell, which is the
 ## other way of reading a heading and the one a player who has been staring at
 ## a body-relative membrane already has. Full vision only -- point of view is
@@ -423,6 +482,15 @@ func _ready() -> void:
 	_net = NetSession.current
 	if _net != null and not is_instance_valid(_net):
 		_net = null
+	# **The shared pond, if this run began inside a session** (shared-pond.md
+	# §3). Built before anything is seeded; opened below, once the water is.
+	if _net != null:
+		_pond = Pond.new(_net, _food, _cell, _genome)
+		_pond.arrived.connect(_on_pond_arrived)
+		_pond.friend_entered.connect(_on_friend_entered)
+		_pond.friend_died.connect(_on_friend_died)
+		_pond.friend_left.connect(_on_friend_left)
+		_pond.friend_renewed.connect(_on_friend_renewed)
 	# **The one thing the world view is told about the wire**, and it is a read
 	# handle: full vision draws the other player where they are, and point of
 	# view does not and must not. `panes.gd` builds its own copy of that view
@@ -527,9 +595,23 @@ func _ready() -> void:
 
 	_begin_onboarding()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
+	if _pond != null:
+		_begin_pond()
+
+
+func _exit_tree() -> void:
+	# The session outlives the run by a frame on the way to the chooser, which
+	# closes it; until then it must not say this run's pond is still open.
+	if _net != null and is_instance_valid(_net):
+		_net.set_pond(false, false)
 
 
 func _process(delta: float) -> void:
+	# **The pond first, before every early return** (shared-pond.md §3): its
+	# intake goes on while this cell is dead, dividing or held, because the
+	# water it is part of does.
+	if _pond != null:
+		_step_pond(delta)
 	# Before every early return below, because the states those returns lead to
 	# -- dying, dividing, paused -- are exactly the ones with no button.
 	_update_pause_tap()
@@ -548,13 +630,24 @@ func _process(delta: float) -> void:
 	if _life != Life.ALIVE:
 		_step_death(delta)
 		return
-	if get_tree().paused:
+	if _menu_open and not _session_up():
 		# The genome strip is the one thing on screen that still has a clock
 		# running: a slot armed *over a held sample* lapses after four seconds
 		# whether or not the simulation is moving. §5.2. A selection with
 		# nothing to commit has no clock -- see [method _step_arming].
+		#
+		# **Single player only.** With a session up the tree is never paused
+		# (shared-pond.md §1.7, owner's B): the menu is open over a live water,
+		# and everything below still runs, the strip's clock included.
 		_step_arming()
 		return
+	# The pond's three still moments: held while the host is quiet, the beat of
+	# the water changing, and a run opening inside the pond waiting for its
+	# arrival. Nothing is simulated in any of them, so there is nothing to post.
+	if _held or _water_beat >= 0.0 or _entering_held:
+		return
+	if _menu_open:
+		_step_arming()
 	# The division. Its first phase leaves the simulation running -- steering
 	# still works and nothing is taken away -- and every phase after it has
 	# called _set_simulating(false), exactly as a death does, so there is
@@ -807,7 +900,13 @@ func _hear_others() -> void:
 ## Free in single player: `shout()` returns on its first line when there is
 ## nobody on the wire, and there is no session at all in a run reached any way
 ## but through the earshot screen.
+##
+## **Not from out of the water** (shared-pond.md §3): the field runs on through
+## a death or a division in a pond, and a cell that is not in it does not shout.
+## Always in the water in single player.
 func _on_pulsed() -> void:
+	if not _food.in_water:
+		return
 	if _net == null or not is_instance_valid(_net):
 		return
 	_net.shout(_cell.position, _cell.radius, _cell.ping_range())
@@ -897,6 +996,11 @@ func _step_sense_grant(delta: float) -> void:
 ## steers, and the player has 2.4 seconds of a body beating faster to read
 ## before anything stops.
 func _begin_split() -> void:
+	# **A division closes the menu** (shared-pond.md §1.7). Only reachable with
+	# a session up, where the menu no longer stops the water; in single player
+	# the menu pauses the tree and nothing here runs under it.
+	if _menu_open:
+		_set_menu(false)
 	_split = Split.QUICKEN
 	_split_clock = 0.0
 	_chosen = -1
@@ -950,6 +1054,12 @@ func _step_split(delta: float) -> void:
 				# The same call a death makes. The water stops, the body does
 				# not: what is left moving is the division itself.
 				_set_simulating(false)
+				# **In a pond the water does not stop** (shared-pond.md §1.5):
+				# this cell leaves it instead, still an anchor, so what the
+				# daughter comes back to is still there -- and from this frame
+				# nothing in it can see, touch or chase this cell.
+				if _food.pond_open():
+					_food.leave_water(false)
 				_cell.release()
 		Split.PINCH:
 			_hush()
@@ -1097,7 +1207,7 @@ func _push_division() -> void:
 func _hand_division() -> void:
 	_soma.division = _division
 	_vision.division = _division
-	_vision.set_dim(DIVIDE_WORLD_FADE if _division.has("bodies") else 1.0)
+	_update_dim()
 	# The strands are handed the same state at the same moment as the bodies,
 	# from the one place that hands it anywhere, so they cannot get out of step
 	# with the pair they belong to -- including the death that clears a division
@@ -1148,16 +1258,29 @@ func _be_born() -> void:
 	_genome.express(pick["tiers"], pick["order"], pick["body"])
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
-	# **The field is reseeded.** The water around you was sized to a 40-unit body
-	# and the newborn is 28; the field is a treadmill already, so this is that
-	# treadmill taking one large step. It re-fires the drifter-floor invariant,
-	# which is what guarantees the newborn a first meal she can certainly take.
-	_food.setup(_cell)
-	# And the one you did not take is left in it.
-	# The body she wears, again: a cell in the water is an organism, and what it
-	# is carrying and not wearing is not a thing anything out there can read.
-	_food.put_sister(-PI * 0.5 if _chosen == 1 else PI * 0.5, SISTER_DISTANCE,
-		_cell.radius, other["body"])
+	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
+	if _food.pond_open():
+		# **In a pond there is no reseed** (shared-pond.md §1.5, UX §2): the
+		# water this daughter comes back to is the one her mother left, still
+		# moving, and it is the other player's water as much as hers. She comes
+		# back into it with a new cell's organs and grace, and the sister goes
+		# into a free slot -- by SISTER, from a guest, because a guest's water
+		# is the host's.
+		_food.enter_water()
+		_leave_sister(side, other["body"])
+		_pond.person_changed(true)
+	else:
+		# **The field is reseeded.** The water around you was sized to a
+		# 40-unit body and the newborn is 28; the field is a treadmill already,
+		# so this is that treadmill taking one large step. It re-fires the
+		# drifter-floor invariant, which is what guarantees the newborn a first
+		# meal she can certainly take.
+		_food.setup(_cell)
+		# And the one you did not take is left in it.
+		# The body she wears, again: a cell in the water is an organism, and
+		# what it is carrying and not wearing is not a thing anything out there
+		# can read.
+		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"])
 	# A daughter is a birth, so the anti-blindness grant's clock starts again --
 	# but the grant itself now asks whether she can sense anything at all, and a
 	# daughter almost always can. §6.
@@ -1247,7 +1370,7 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# A meal cannot arrive for a cell that is already dying. Not reachable
 	# today -- the field stops the frame the kill lands -- but this signal is
 	# not idempotent, and feeding and growing a corpse would be silent.
-	if _life != Life.ALIVE:
+	if not _in_the_water():
 		return
 	# **Grow, then integrate, in that order.** The radius is the slot ladder, so
 	# taking the meal's gene against the pre-meal radius means the meal that
@@ -1274,6 +1397,11 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 		payload["color"] = Cilia.hue(gene)
 	_bus.ingest(payload)
 	_metabolism.feed(MetabolismNode.MEAL * nutrition)
+	# **The strip rebuilds on a meal** (shared-pond.md §1.7): with the menu open
+	# over a live pond the genome can change under it. Unreachable in single
+	# player, where the menu stops the water.
+	if _menu_open:
+		_build_genome_strip()
 
 
 func _on_waked(bearing: float, strength: float) -> void:
@@ -1284,6 +1412,17 @@ func _on_killed(bearing: float) -> void:
 	_die(true, bearing)
 
 
+## **Whether what the water does to this cell happens to it**: alive -- or, in a
+## pond, returning, because a returning cell is in the water from the tap
+## (owner's row A) and the host's water can feed it or kill it there. The host
+## is the authority on both, so a mirror that ignored them would leave a cell
+## alive on its own screen and gone from everybody else's. Solo, a returning
+## cell's water is freshly seeded and nothing in it can reach it, and this is
+## exactly the shipped `_life == Life.ALIVE`.
+func _in_the_water() -> bool:
+	return _life == Life.ALIVE or (_life == Life.RETURNING and _food.pond_open())
+
+
 # ---------------------------------------------------------------------------
 # Death. Two of them, and they feel opposite: predation slams the membrane shut
 # at a bearing, starvation lets it sink with no bearing at all. Both end at the
@@ -1292,8 +1431,13 @@ func _on_killed(bearing: float) -> void:
 # ---------------------------------------------------------------------------
 
 func _die(loud: bool, bearing: float) -> void:
-	if _life != Life.ALIVE:
+	if not _in_the_water():
 		return
+	# **A death closes the menu** (shared-pond.md §1.7): reachable only with a
+	# session up, where the menu no longer stops the water and a hunter can
+	# reach this cell under it.
+	if _menu_open:
+		_set_menu(false)
 	_life = Life.DYING
 	# **The marker on the other screen goes out here.** Not a disconnection --
 	# the link is fine and so is the person -- but there is no longer a cell to
@@ -1313,6 +1457,15 @@ func _die(loud: bool, bearing: float) -> void:
 	_division = {}
 	_hand_division()
 	_set_simulating(false)
+	# **In a pond the water runs on under the black** (owner's row A,
+	# shared-pond.md §1.5): only this cell stops, leaving the water and no
+	# longer an anchor -- for the kills the field makes itself it already has,
+	# in the same frame -- and the other player is told how. Loud is the field's
+	# own kill, and it has just said why; quiet is starving, which is this run's.
+	if _food.pond_open():
+		_food.leave_water(true)
+		_pond.died(_food.died_of if loud else FoodField.Cause.STARVED,
+			_food.died_by if loud else 0, _cell.position)
 	# **The ring is sealed here**, before the collapse writes a single frame of
 	# itself into it. What the player is offered is the run, not the dying.
 	_recorder.seal()
@@ -1346,6 +1499,11 @@ func _step_death(delta: float) -> void:
 					_offer_replay(true)
 		Life.RETURNING:
 			_bus.revive(_death_clock)
+			# **The new cell is in the water from the tap**, simulated and
+			# edible, so the other player is told where it is from the tap too:
+			# in a pond the host only puts a returning guest in the water once
+			# a state frame says where it is. Nothing is sent with no session.
+			_tell_others()
 			if _death_clock >= SignalBus.DEATH_RETURN:
 				_life = Life.ALIVE
 				# The body comes back with the light. _apply_mode() ran while
@@ -1371,7 +1529,13 @@ func _offer_replay(on: bool) -> void:
 	if on:
 		# A death inside the first breath has nothing to show, and an offer
 		# that opens on two frames of water is worse than no offer.
-		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS
+		#
+		# **Withheld while the recording holds a pond** (shared-pond.md §5):
+		# the ring records the first thirty-four slots and no person, and the
+		# replay would bind the live field, which in a pond is still running
+		# for the other player. Phase 3 gives it private nodes and 69 slots.
+		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS \
+			and not (_ponded or _food.pond_open())
 		return
 	_watch_ui.hide()
 	_close_replay()
@@ -1459,16 +1623,41 @@ func _close_replay(from: Node = null) -> void:
 ## A touch, a click or a key on the held black. Anything at all, because there
 ## is nothing on screen to aim at.
 func _wake_up() -> void:
+	# **A guest whose host has a pond open wakes into it** (owner's row A, UX
+	# §4): the tap asks the host where, and the black holds for the round trip.
+	if _pond != null and not _pond.hosting and _pond.together() \
+			and _net.peer_pond_open():
+		_enter_from_black()
+		return
+	_return(_home_after_black())
+
+
+## **The return itself**: a new cell at generation 1, at [param place] --
+## `[at, heading]`, or empty for wherever the run puts a new cell.
+##
+## In a pond there is **no reseed** (owner's row A): the pond was never this
+## cell's to reset, the other player may be in it, and a returning cell comes
+## back into it where the host says, near its friend. Otherwise every line is
+## the shipped return, in the shipped order.
+func _return(place: Array) -> void:
 	# Before anything is rebuilt: the screen is reading the nodes below, and
 	# **a run keeps nothing** -- the replay is the last thing this run has and
 	# it dies with it.
 	_offer_replay(false)
 	_life = Life.RETURNING
 	_death_clock = 0.0
-	_cell.reset()
+	var pond := _food.pond_open()
+	_cell.reset(pond)
+	if not place.is_empty():
+		_cell.position = place[0]
+		_cell.heading = float(place[1])
 	_metabolism.reset()
 	_motes.setup(_cell)
-	_food.setup(_cell)
+	if pond:
+		_food.enter_water()
+	else:
+		_food.setup(_cell)
+		_ponded = false
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
 	# A new cell is a born cell, and a born cell has no senses: the five-second
@@ -1480,13 +1669,25 @@ func _wake_up() -> void:
 	_said_divide = false
 	_set_simulating(true)
 	_apply_mode()
+	# The host tells a guest its new body here. A guest said so with its ENTER,
+	# before the host placed it, so its friend could meet what was arriving.
+	if pond and _pond.hosting:
+		_pond.person_changed(true)
 
 
 ## Stops the simulation without pausing the tree: the membrane layer and the
 ## world view both have to keep running through a death, one to draw it and one
 ## to fade out of it.
+##
+## **In a pond the water is not this cell's to stop** (shared-pond.md §1.5):
+## the field runs on for the other player, and this cell leaves it instead --
+## which the callers do, because only they know whether it left dead or
+## dividing. Everything that is this cell's own still stops.
 func _set_simulating(on: bool) -> void:
+	var pond := _food.pond_open()
 	for node: Node in [_cell, _metabolism, _motes, _food, _genome]:
+		if node == _food and pond:
+			continue
 		node.set_process(on)
 	_cell.set_process_unhandled_input(on)
 
@@ -1597,8 +1798,10 @@ func _floating() -> bool:
 ## 1.5 s later is a target the player has to find twice at the one beat in a run
 ## that cannot be replayed.
 func _update_controls() -> void:
+	# The pond's still moments behave as a pinch does (UX §0.5, §5): the
+	# steering control stays drawn and dead, and the action pads go.
 	_controls.update(not _floating() and _life == Life.ALIVE,
-		_split >= Split.PINCH,
+		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
 		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0)
 
 
@@ -1672,7 +1875,12 @@ func _say(text: String, hold: float) -> void:
 	_onboard_from = _onboarding.modulate.a
 	_onboard_hold = hold
 	_onboarding.text = text
-	_onboarding.show()
+	# **Not over the menu** (shared-pond.md §1.7): under B the run goes on with
+	# the menu open, and a sense can arrive under it -- rendered, the line stood
+	# through the scrim behind `resume`. It is still said, and the menu shows it
+	# on closing, as it shows every line a pause hid. Single player says nothing
+	# with the menu open, where the tree is paused, so this is `show()` there.
+	_onboarding.visible = not _menu_open
 	_onboard_clock = 0.0
 	_onboard = Onboard.FADE_IN
 
@@ -1796,7 +2004,7 @@ func _update_pause_tap() -> void:
 	# default) and a dead cell's Back is the exit rather than the pause, so
 	# neither state gets a button.
 	var wanted := _life == Life.ALIVE and _split == Split.NONE \
-		and not get_tree().paused
+		and not _menu_open
 	if _pause_tap.visible == wanted:
 		return
 	_pause_tap.visible = wanted
@@ -2010,7 +2218,7 @@ func _notification(what: int) -> void:
 ## screen whose own rule is that releasing early undoes it. Now the lift lands
 ## where the press does, and neither commits anything on its own.
 func _input(event: InputEvent) -> void:
-	if _replay != null or _split < Split.PINCH or get_tree().paused:
+	if _replay != null or _split < Split.PINCH or _menu_open:
 		return
 	var index := _pointer_index(event)
 	if index == POINTER_NONE:
@@ -2140,7 +2348,7 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	# V flips the view. Desktop only by nature -- it costs no pixel and there is
 	# no key on a phone, where the mode select is the way in.
-	if get_tree().paused or not (event is InputEventKey):
+	if _menu_open or not (event is InputEventKey):
 		return
 	var key := event as InputEventKey
 	if key.pressed and not key.echo \
@@ -2311,10 +2519,42 @@ func _toggle_pause() -> void:
 	if frame == _last_toggle_frame:
 		return
 	_last_toggle_frame = frame
+	_set_menu(not _menu_open)
 
-	var paused := not get_tree().paused
-	get_tree().paused = paused
+
+## **The menu, open or shut.** [method _toggle_pause] is the player's way here,
+## latched to one toggle a frame; a death, a division and a takeover close it
+## directly.
+##
+## **Owner's B: in a session the menu stops nothing** (shared-pond.md §1.7).
+## The tree is never paused while a session is up, on either seat -- the host's
+## water has to keep running to take a dead friend back, and a guest's paused
+## tree would stop its own reports -- so the menu opens over a live water: the
+## cell is let go and drifts, it can be eaten, hunger burns. What stops is the
+## cell's own steering, because the arrows are moving menu focus. With no
+## session up, this is the shipped pause exactly.
+func _set_menu(open: bool) -> void:
+	var paused := open
+	_menu_open = open
+	var live := _session_up()
+	var deaf := open and live
+	if deaf or _cell.steering_off:
+		# Flipped both ways, and let go both ways -- the pair the pause screen
+		# and a lost focus already call: `steering_off` silences what the cell
+		# does with a pointer, not whether it takes one (cell.gd), so a finger
+		# already down would steer the moment the flag cleared. Checked on the
+		# flag rather than on the session, so a menu opened in a pond and shut
+		# after the pond has gone still gives the cell its steering back.
+		_cell.steering_off = deaf
+		_cell.release()
+		_controls.let_go()
+	if live:
+		if get_tree().paused:
+			get_tree().paused = false
+	else:
+		get_tree().paused = paused
 	_pause_ui.visible = paused
+	_update_warn()
 	# **A gene in the air does not survive the screen closing.** Godot's drag
 	# preview is parented to the viewport and not to this column, so closing
 	# pause with a gene lifted would leave a base pair floating over open water
@@ -2372,7 +2612,11 @@ func _toggle_pause() -> void:
 		# below it -- and that costs nothing, because the membrane only ever
 		# draws in the outer ~150px of the viewport, which the column never
 		# reaches. Measured, at both shapes.
-		_scrim.color = SCRIM_FULL_VISION if _vision_active() else SCRIM_POV
+		#
+		# **Under B the water is what they came to read** (UX §6): a hunter can
+		# reach this cell with the menu up, so full vision keeps it legible.
+		_scrim.color = (SCRIM_POND if live else SCRIM_FULL_VISION) \
+			if _vision_active() else SCRIM_POV
 		# Built on opening rather than kept in step: the genome cannot change
 		# while the tree is paused except by the two taps below, and a strip
 		# rebuilt sixty times a second to say the same thing is five nodes of
@@ -2392,6 +2636,7 @@ func _toggle_pause() -> void:
 ## there, which keeps the whole stack reachable by the same gesture.
 func _leave() -> void:
 	get_tree().paused = false
+	_menu_open = false
 	RunState.save_gain(_bus.gain)
 	if not ResourceLoader.exists(MODE_SELECT_SCENE):
 		push_error("[NormalMode] No mode select at %s" % MODE_SELECT_SCENE)
@@ -4467,3 +4712,483 @@ func _on_choose_unhover(side: int, slot: int) -> void:
 	_choose_hot_side = -1
 	_choose_hot_slot = -1
 	_choose_say()
+
+
+# ---------------------------------------------------------------------------
+# **The shared pond** (shared-pond.md §1.5-§1.8, shared-pond-ux.md §0-§6).
+#
+# One water, two cells. The host's field is the water and a guest's field is a
+# mirror of it. What is here is the run's half: the lifecycle -- entering,
+# returning, dividing, dying, held and taken over -- the beat that says the
+# water changed, and the line of text. `pond.gd` is the wire's half and
+# `food.gd` owns every rule. A run with no session never reaches any of it:
+# every entry point below is behind [member _pond], which is null there.
+# ---------------------------------------------------------------------------
+
+## The seven lines (UX §0.4), each a fact about another person no sense can
+## carry.
+const LINE_THEIRS := "you are in their water"
+const LINE_YOURS := "they are in your water"
+const LINE_DIED := "they died · they come back near you"
+const LINE_ATE := "you ate them · they come back near you"
+const LINE_QUIET := "their phone went quiet"
+const LINE_GONE := "their water is gone · this one is yours"
+const LINE_LEFT := "they left"
+## A born cell's layout, for the body a guest asks to arrive as from the black:
+## genome.gd's own reset, written out because the body has not been reset yet.
+const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
+
+## The vision was switched back on half way through the beat.
+var _beat_in := false
+## The key of the line the beat says when it ends.
+var _beat_key := ""
+## What the pond line on the label says, so a line that replaced it is noticed.
+var _line_shown_text := ""
+
+
+## **Is a session up** (shared-pond.md §1.7): the link is together, or this is
+## a host still taking calls. Pause stops nothing while it is -- wider than
+## "while a friend is in the pond", on purpose: the host's water has to keep
+## running to take a dead friend back, and a guest's paused tree would stop its
+## own reports. A guest whose host has gone is alone again, and pauses as ever.
+func _session_up() -> bool:
+	if _net == null or not is_instance_valid(_net):
+		return false
+	var link := int(_net.link)
+	return link == NetSession.Link.TOGETHER \
+		or (bool(_net.hosting) and link == NetSession.Link.LISTENING)
+
+
+## **The run's first frame in a session.** A host's water becomes the pond. A
+## guest whose host's pond is already open opens inside it, held for the round
+## trip (§1.6) -- no swap and no beat: the run opens as today, and says so once
+## it has been placed. A guest whose host is not there yet swims alone and
+## swaps in when the pond opens.
+func _begin_pond() -> void:
+	if _pond.hosting:
+		_food.open_pond()
+		_ponded = true
+		return
+	if not _pond.together() or not _net.peer_pond_open():
+		return
+	_food.become_mirror()
+	_pond.mirror_began()
+	_ponded = true
+	_entering_held = true
+	_set_simulating(false)
+	_pond.enter(_cell.radius, _genome.tiers(), _genome.body_layout())
+
+
+## **Once a frame, before every early return.** The wire's intake, the two bits
+## the far end reads, and the lifecycle that runs whatever this cell is doing.
+func _step_pond(delta: float) -> void:
+	_run_clock += delta
+	_pond.step()
+	var member := _food.pond_open() if _pond.hosting \
+		else (_food.mirroring() and _pond.in_pond)
+	if is_instance_valid(_net):
+		_net.set_pond(member, member and not _food.in_water)
+	if not _pond.hosting:
+		_step_guest_pond()
+	_step_quiet()
+	_step_water_beat(delta)
+	if _held or _water_beat >= 0.0 or _entering_held:
+		# The live branch is not running in any of the pond's still moments,
+		# and the line is the one thing that still has something to do: a line
+		# that just stopped being true -- `you are in their water`, the moment
+		# that water goes -- fades out through the beat instead of standing on
+		# screen for the whole of it. Asked after the beat has stepped, which is
+		# the test the live branch asks, so no frame steps the label twice.
+		_step_onboarding(delta)
+	_step_lines()
+
+
+## The guest's side: the link going, an ENTER nobody answered, the swap into a
+## pond that has opened, and the pond held while the host is quiet.
+func _step_guest_pond() -> void:
+	var mirror := _food.mirroring()
+	if not _pond.together():
+		if mirror or _pond.entering or _swap_pending or _entering_held:
+			_take_over()
+		elif _menu_open and not get_tree().paused:
+			# **Swimming alone when the host went, with the menu open** (§1.7):
+			# nothing takes over, so nothing closes the menu -- and a menu that
+			# was open over a live session is the shipped pause again, so the
+			# tree stops under it, exactly as a menu opened now would. Left
+			# alone, the water ran on under a menu this run no longer steps.
+			_set_menu(true)
+		return
+	if _pond.entering and _pond.entering_for() >= NetSession.REACH_TIMEOUT:
+		_enter_timed_out()
+	# **A guest swimming alone when the pond opens swaps in** at the next
+	# ordinary frame -- not dead, dividing, mid-beat or in the menu (§1.6).
+	if not mirror and not _pond.entering and _net.peer_pond_open() \
+			and _life == Life.ALIVE and _split == Split.NONE and not _menu_open \
+			and _water_beat < 0.0:
+		_swap_pending = true
+		_pond.enter(_cell.radius, _genome.tiers(), _genome.body_layout())
+	# **Held** (UX §5): the pond lives on the host's phone, so when that phone
+	# goes quiet the pond stops. Only an ordinary frame is held -- a division
+	# or a death goes on as it would.
+	var hold := mirror and _pond.in_pond and _life == Life.ALIVE \
+		and _split == Split.NONE and _water_beat < 0.0 and not _entering_held \
+		and _pond.quiet_for() >= VisionLayer.PEER_FRESH
+	if hold != _held:
+		_set_held(hold)
+
+
+## An ENTER that has waited [constant NetSession.REACH_TIMEOUT] for its ARRIVE.
+func _enter_timed_out() -> void:
+	_pond.mirror_ended()
+	if _entering_held:
+		# No answer: the run opens alone (§1.6).
+		_entering_held = false
+		_food.leave_mirror()
+		_ponded = false
+		_set_simulating(true)
+	elif _wake_pending:
+		# A tap nobody answered swims on alone, as a solo return does.
+		_wake_pending = false
+		_food.leave_mirror()
+		_food.set_process(false)
+		_return([])
+	else:
+		# A swap nobody answered is tried again at the next ordinary frame.
+		_swap_pending = false
+
+
+## **The host put this cell in its water** (§1.6).
+func _on_pond_arrived(at: Vector2, heading: float) -> void:
+	if _wake_pending:
+		_wake_pending = false
+		_pond.in_pond = true
+		_return([at, heading])
+		return
+	if _entering_held:
+		_entering_held = false
+		_place_arrival(at, heading)
+		_motes.setup(_cell)
+		_set_simulating(true)
+		_pond_say("theirs", LINE_THEIRS, ONBOARD_DELAY)
+		return
+	if _swap_pending:
+		_swap_pending = false
+		if _life != Life.ALIVE or _split != Split.NONE:
+			# **Not an ordinary frame any more**: the cell died, or began to
+			# divide, in the round trip -- and the beat would stop and restart
+			# the simulation under a death or a division that own it. The swap
+			# is dropped. This run's POND bit never goes up, so the host lets
+			# the body it placed go after REACH_TIMEOUT, and the swap is asked
+			# again at the next ordinary frame, or by the tap on the black.
+			_pond.mirror_ended()
+			return
+		_begin_water_beat(_swap_in.bind(at, heading), VisionLayer.FADE_SECONDS,
+			"theirs", LINE_THEIRS)
+
+
+## **The swap, at the beat's dark middle** (§1.6, UX §1): this water becomes a
+## mirror of the host's and the cell is placed where the host put it, keeping
+## its body, its genome, its generation and its hunger.
+func _swap_in(at: Vector2, heading: float) -> void:
+	_food.become_mirror()
+	_pond.mirror_began()
+	_ponded = true
+	_place_arrival(at, heading)
+	_motes.setup(_cell)
+
+
+func _place_arrival(at: Vector2, heading: float) -> void:
+	_cell.position = at
+	_cell.heading = heading
+	_cell.velocity = Vector2.ZERO
+	_pond.in_pond = true
+	# Reported now, so the first state frame that says this cell is in the pond
+	# carries this place and not the one it left.
+	_tell_others()
+
+
+## **A guest wakes into the host's pond** (owner's row A, UX §4): the tap asks
+## where, as the born cell it is about to be, and the black holds for the
+## round trip. A guest that died swimming alone begins the mirror here.
+func _enter_from_black() -> void:
+	if _wake_pending:
+		return
+	if not _food.mirroring():
+		_food.become_mirror()
+		_pond.mirror_began()
+		_food.leave_water(true)
+		_food.set_process(true)
+		_ponded = true
+	_wake_pending = true
+	_pond.enter(CellBody.BASE_RADIUS, GenomeNode.BORN, BORN_ORDER)
+
+
+## **Where the host comes back from the black** (owner's row A): near its
+## friend -- alive, or where they last were -- by the arrival rule; with no
+## friend ever in the pond, where it died. Empty for anything but a pond host,
+## which is every other return, where a new cell goes where it always has.
+func _home_after_black() -> Array:
+	if _pond == null or not _pond.hosting or not _food.pond_open():
+		return []
+	var friend: Array = _pond.friend_place()
+	if not bool(friend[1]):
+		return []
+	return [_pond.arrival_point(friend[0], CellBody.BASE_RADIUS), 0.0]
+
+
+## **The declined daughter, in a pond** (§1.5): a host leaves her in its own
+## water, in a free slot; a guest's water is the host's, so it asks the host to.
+func _leave_sister(bearing: float, body: Dictionary) -> void:
+	if _pond.hosting:
+		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body)
+		return
+	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
+	_pond.sister(_cell.position + dir * SISTER_DISTANCE, atan2(dir.x, -dir.y),
+		_cell.radius, body)
+
+
+## **The host is gone, and this water is yours** (§1.8, UX §5): fresh water
+## round this cell, which keeps its body, its genome, its generation and its
+## hunger -- `leave_mirror()` is the same `setup()` every new water is. Said
+## once. Pause is ordinary again, so the menu closes if it was open.
+func _take_over() -> void:
+	var was_in := _food.mirroring()
+	_pond.mirror_ended()
+	_swap_pending = false
+	if _held:
+		_set_held(false)
+	if _menu_open:
+		_set_menu(false)
+	if _entering_held:
+		_entering_held = false
+		_food.leave_mirror()
+		_ponded = false
+		_set_simulating(true)
+		return
+	if _wake_pending:
+		_wake_pending = false
+		_food.leave_mirror()
+		_food.set_process(false)
+		_return([])
+		return
+	if not was_in:
+		return
+	if _life != Life.ALIVE or _split >= Split.PINCH:
+		# Nothing to watch the water change in: a cell on the black or between
+		# two daughters meets the fresh water when it comes back, and a solo
+		# water stands still under both, as it always has.
+		_food.leave_mirror()
+		_food.set_process(false)
+		_pond_say("gone", LINE_GONE)
+		return
+	_begin_water_beat(_food.leave_mirror, 0.0, "gone", LINE_GONE)
+
+
+## **Held, or heard again** (UX §5). Held, nothing of this cell moves --
+## simulation, water and every sensation stop, the beat goes on -- and the
+## world dims with the view's own fade while this cell is drawn outside it.
+func _set_held(on: bool) -> void:
+	_held = on
+	_set_simulating(not on)
+	_food.set_process(not on)
+	if on:
+		_cell.release()
+		_controls.let_go()
+		_hush()
+	_vision.set_held(on)
+	_update_dim()
+	_update_warn()
+
+
+## **How bright the world is allowed to be, from everything that dims it**:
+## two daughters on screen, as ever; in a pond, this cell's own division from
+## the pinch, where it leaves the water (UX §2); and a held pond. In single
+## player only the first is ever true, which is the shipped line exactly.
+func _update_dim() -> void:
+	var pond := _food.pond_open()
+	var out := pond and _split >= Split.PINCH
+	_vision.set_dim(DIVIDE_WORLD_FADE
+		if _division.has("bodies") or _held or out else 1.0)
+	_vision.own_full = _held or out
+
+
+## The warning over `resume` is true while the menu is open over a live pond,
+## and false while that pond is held (UX §6).
+func _update_warn() -> void:
+	_warn.visible = _menu_open and _session_up() and not _held
+
+
+# --- The water changes (UX §0.5) -----------------------------------------------
+
+## **One beat, for entering and for swimming on alone**: every sensation lets
+## go, the world goes out and back in through the view's own fade with the
+## camera snapped between, and the aperture opens over DEATH_RETURN as it does
+## on every new water. It never closes first, because closing means death.
+## [param swap] runs at [param swap_at] seconds: the dark middle for a swap,
+## at once for a takeover, which must not leave a cell in a water that has gone.
+func _begin_water_beat(swap: Callable, swap_at: float, key: String,
+		line: String) -> void:
+	_water_beat = 0.0
+	_beat_swap = swap
+	_beat_swap_at = swap_at
+	_beat_swapped = false
+	_beat_in = false
+	_beat_key = key
+	_beat_line = line
+	_set_simulating(false)
+	_cell.release()
+	_controls.let_go()
+	_hush()
+	_vision.set_active(false)
+	if swap_at <= 0.0:
+		_run_beat_swap()
+
+
+func _run_beat_swap() -> void:
+	_beat_swapped = true
+	if _beat_swap.is_valid():
+		_beat_swap.call()
+	# Whatever the water is now, it runs through the rest of the beat.
+	_food.set_process(true)
+
+
+func _step_water_beat(delta: float) -> void:
+	if _water_beat < 0.0:
+		return
+	_water_beat += delta
+	if not _beat_swapped and _water_beat >= _beat_swap_at:
+		_run_beat_swap()
+	if _beat_swapped and not _beat_in and _water_beat >= VisionLayer.FADE_SECONDS:
+		_beat_in = true
+		_vision.set_active(_vision_active())
+	_bus.revive(minf(_water_beat, SignalBus.DEATH_RETURN))
+	if _water_beat < SignalBus.DEATH_RETURN:
+		return
+	_water_beat = -1.0
+	if not _beat_in:
+		_vision.set_active(_vision_active())
+	_set_simulating(true)
+	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
+	_bus.pulse_now()
+	if not _beat_line.is_empty():
+		_pond_say(_beat_key, _beat_line)
+
+
+# --- The friend, and the line (UX §0.4, §1-§5) ----------------------------------
+
+## Host: a guest has just been put in this water. The line waits out the
+## arrival fade and is said the first time only: a friend coming back from the
+## black has already been told about.
+func _on_friend_entered() -> void:
+	_friend_dead = false
+	if not _friend_ever:
+		_friend_ever = true
+		_pond_say("yours", LINE_YOURS, SignalBus.DEATH_RETURN)
+
+
+## Either seat: the other player's cell died, and how decides what is drawn
+## (UX §3) and which line is said.
+func _on_friend_died(cause: int, _by: int, at: Vector2, eaten_by_me: bool) -> void:
+	_friend_dead = true
+	var how: int = VisionLayer.Gone.EATEN
+	if eaten_by_me:
+		how = VisionLayer.Gone.EATEN_BY_YOU
+	elif cause == FoodField.Cause.STARVED:
+		how = VisionLayer.Gone.STARVED
+	_vision.friend_gone(how, at)
+	_pond_say("dead", LINE_ATE if eaten_by_me else LINE_DIED)
+
+
+## Host: the guest is gone from this water.
+func _on_friend_left() -> void:
+	_friend_dead = false
+	_friend_ever = false
+	_vision.friend_gone(VisionLayer.Gone.LEFT, Vector2.ZERO)
+	_pond_say("left", LINE_LEFT)
+
+
+## Either seat: the other player has a new body -- back from the black, or born.
+func _on_friend_renewed() -> void:
+	_friend_dead = false
+
+
+## "their phone went quiet" at SILENCE, once for each silence (UX §0.4, §5).
+func _step_quiet() -> void:
+	var present := _pond.together() and (
+		(_pond.hosting and _food.person() != null)
+		or (not _pond.hosting and _pond.in_pond))
+	if present and _pond.quiet_for() >= NetSession.SILENCE:
+		if not _quiet_said:
+			_quiet_said = true
+			# No timer: it goes when they are heard.
+			_pond_say("quiet", LINE_QUIET, 0.0, 0.0)
+	else:
+		_quiet_said = false
+
+
+## **Into the one-slot queue**, where the newest wins (UX §0.4). [param key]
+## names the fact it reports; [param delay] is how long before it may be said
+## and [param hold] how long it stays, 0 for until it stops being true.
+func _pond_say(key: String, text: String, delay: float = 0.0,
+		hold: float = SENSE_LINE_HOLD) -> void:
+	_line_key = key
+	_line_text = text
+	_line_after = _run_clock + delay
+	_line_hold = hold
+
+
+## Is the fact a line reports still true.
+func _line_true(key: String) -> bool:
+	match key:
+		"theirs":
+			return _food.mirroring() and _pond.in_pond
+		"yours":
+			return _food.person() != null
+		"dead":
+			return _friend_dead
+		"quiet":
+			return _pond.together() and _pond.quiet_for() >= NetSession.SILENCE
+		"left":
+			return _food.person() == null
+	return true
+
+
+## **The line, when the label is free.** It never covers the steering line, a
+## division, the black, the replay, the open menu or the beat; it waits in one
+## slot, and it is dropped -- or faded out early -- the moment what it reports
+## stops being true.
+func _step_lines() -> void:
+	if not _line_shown.is_empty():
+		if _onboard == Onboard.OFF or _onboarding.text != _line_shown_text:
+			_line_shown = ""
+		elif not _line_true(_line_shown):
+			if _onboard != Onboard.FADE_OUT:
+				_onboard_from = _onboarding.modulate.a
+				_onboard_clock = 0.0
+				_onboard = Onboard.FADE_OUT
+			_line_shown = ""
+	if _line_key.is_empty():
+		return
+	if not _line_true(_line_key):
+		_line_key = ""
+		return
+	if _run_clock < _line_after:
+		return
+	if _menu_open or _split != Split.NONE or _life != Life.ALIVE \
+			or _replay != null or _water_beat >= 0.0:
+		return
+	if _onboard != Onboard.OFF:
+		# **The newest wins on the label too**: a pond line still up is an
+		# older fact about the same person, so it makes way early, the way an
+		# untrue one does. Anything else on the label -- the steering line, a
+		# sense arriving -- is waited out.
+		if not _line_shown.is_empty() and _onboard != Onboard.FADE_OUT:
+			_onboard_from = _onboarding.modulate.a
+			_onboard_clock = 0.0
+			_onboard = Onboard.FADE_OUT
+			_line_shown = ""
+		return
+	_say(_line_text, _line_hold)
+	_line_shown = _line_key
+	_line_shown_text = _line_text
+	_line_key = ""
