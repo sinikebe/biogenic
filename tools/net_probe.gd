@@ -36,10 +36,12 @@ extends Node
 ## that would move if anybody put a buffer back: how long a dash takes to show.
 ##
 ## **Two of these run against a scene rather than a socket**, and both are here
-## rather than in a render for the same reason: `--headless` draws nothing, so
-## a `_draw` never fires and anything computed inside one is code CI has never
-## executed. `game/vision/vision.gd` keeps every number the marker needs in a
-## `_process`, and this reads it.
+## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
+## does fire under `--headless` -- 1,920 `draw` signals in 1,920 frames of a
+## full-vision run, measured -- but into a renderer that keeps nothing, so
+## anything computed inside one runs in CI and is checked by nothing.
+## `game/vision/vision.gd` keeps every number the marker needs in a `_process`,
+## and this reads it.
 ##
 ## Excluded from export (`tools/*` on both presets), so none of it ships.
 
@@ -47,9 +49,9 @@ const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const NetSession := preload("res://game/net/net_session.gd")
 ## Only for [method VisionLayer.carry] and its two constants, which are the
-## arithmetic in the peer marker that a render could not catch: nothing is drawn
-## under `--headless`, so a carry checked only by looking at a screenshot is a
-## carry nothing in CI has ever executed.
+## arithmetic in the peer marker that a render could not catch: CI renders no
+## pixels -- its headless draws land in a renderer that keeps none -- so a carry
+## checked only by looking at a screenshot is a carry CI has never checked.
 const VisionLayer := preload("res://game/vision/vision.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 
@@ -349,9 +351,10 @@ func _check_wire() -> void:
 
 # ---------------------------------------------------------------------------
 # The carry. Pure arithmetic against frames made up on the spot, and the only
-# part of the peer marker that a screenshot cannot judge: `--headless` draws
-# nothing, so anything that lived inside a `_draw` would boot green in CI
-# forever however wrong it was.
+# part of the peer marker that a screenshot cannot judge. `--headless` still
+# calls every `_draw`, but into a renderer that keeps no pixels, so anything
+# that lived inside one would boot green in CI forever however wrong its
+# numbers were -- only a script error there would show.
 #
 # **This reverses #50's "never extrapolates" for a live peer, and keeps it for
 # a silent one.** #50 drew the friend half a second behind the newest frame so
@@ -787,11 +790,12 @@ func _check_run() -> void:
 	# last seam: a body reported on one session has to come out of the world
 	# view's own per-frame arithmetic as a place on this screen.
 	#
-	# It is asserted off `_peer` rather than off a render because **nothing is
-	# drawn under `--headless`** -- there is no window and no canvas, so a
-	# `_draw` never fires and a peer marker checked only by screenshot would be
-	# a feature CI has never once executed. That is why every number the draw
-	# routines use is computed in `_step_peer`.
+	# It is asserted off `_peer` rather than off a render because **CI has no
+	# pixels to look at**. Under `--headless` the draw routines do run -- 1,920
+	# `draw` signals in 1,920 frames, measured -- but into a renderer that keeps
+	# nothing, so a peer marker checked only by screenshot would be a feature CI
+	# executes and never once checks. That is why every number the draw
+	# routines use is computed in `_step_peer`, where this can read it.
 	# ----------------------------------------------------------------------
 	var view: Node = run.get_node(^"Vision")
 	_says(view.is_active(), "the run this probe built is in full vision")

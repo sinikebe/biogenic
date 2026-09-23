@@ -1047,14 +1047,21 @@ func _look_for_prey(index: int, b: Body, reach: float) -> void:
 		if j == index:
 			continue
 		var other := _cells[j]
-		if not other.seeded \
-				or not _worth_committing_to(b, gape, other.radius, other.wound):
+		if not other.seeded:
 			continue
+		# **Distance before appetite**, and it is the same test in a cheaper
+		# order: both halves are pure, so asking the one that rejects most pairs
+		# first changes which calls are made and never which body wins. Written
+		# as the negation of the acceptance it replaces, so even a NaN is
+		# refused exactly where it always was. shared-pond.md §3, Phase 0.
 		var d := b.pos.distance_to(other.pos)
-		if d <= maxf(reach, b.radius + other.radius) and d < best_d:
-			best = j
-			best_serial = other.serial
-			best_d = d
+		if not (d <= maxf(reach, b.radius + other.radius) and d < best_d):
+			continue
+		if not _worth_committing_to(b, gape, other.radius, other.wound):
+			continue
+		best = j
+		best_serial = other.serial
+		best_d = d
 
 	if best == TARGET_NONE:
 		return
@@ -1451,16 +1458,30 @@ func _step_contacts() -> bool:
 		if my_mouth and b.serial == serial and _bite_from_me(i, b):
 			return false
 
+	# **The pre-check, and it skips only pairs the full test rejects.**
+	# [method Cilia.mouth_touches] already refuses anything farther than its own
+	# bound -- the bow's reach, the teeth and the other body's radius -- but it
+	# is two calls deep to find that out, for every pair in the water. Here the
+	# same bound is taken once per mouth against the widest body there is, with
+	# a tenth of a percent on top so rounding cannot put a pair on the wrong
+	# side of it, and compared squared. A pair outside it is outside the real
+	# one too, so the answer never changes; only the calls that could not have
+	# said yes are gone. The widest radius and the bound grow whenever a meal
+	# or a reseed grows a body inside this loop. shared-pond.md §3, Phase 0.
+	var widest := _widest()
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded or b.drifter:
 			continue
 		var gape := _gape(b)
+		var near := _mouth_bound(b.radius, gape, widest)
 		for j in _cells.size():
 			if j == i:
 				continue
 			var other := _cells[j]
 			if not other.seeded:
+				continue
+			if b.pos.distance_squared_to(other.pos) > near:
 				continue
 			if not _mouth_reaches(b, gape, other.pos, other.radius):
 				continue
@@ -1470,13 +1491,19 @@ func _step_contacts() -> bool:
 				if _chew(b, other) >= 1.0:
 					_devour(b, other)
 					_seed(j)
+					# It grew, and the slot it emptied holds a new body: the
+					# loop goes on with this mouth, so its bound goes on too.
+					widest = _wider(widest, _wider(b.radius, other.radius))
+					near = _mouth_bound(b.radius, gape, widest)
 				if b.wound >= 1.0:
 					# Its own venom finished the biter. Nothing feeds on that.
 					_seed(i)
+					widest = _wider(widest, b.radius)
 					break
 				continue
 			_devour(b, other)
 			_seed(j)
+			widest = _wider(widest, _wider(b.radius, other.radius))
 			# It has just eaten, so the run is over -- ended here, as a meal,
 			# rather than left to unravel as a broken-off chase against a slot
 			# that has since been recycled into somebody else. That route took
@@ -1648,13 +1675,21 @@ func _step_separate() -> void:
 		# mote gives, softer, because a cell is not a grain of grit.
 		_cell.bump(normal, PUSH_RESTITUTION)
 
+	# The same kind of pre-check as the contact pass: two bodies farther apart
+	# than this one's radius plus the widest in the water, with the same
+	# rounding margin, cannot overlap, so the overlap is never worked out for
+	# them. Nothing here changes a radius, so the bound holds for the pass.
+	var widest := _widest()
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
+		var near := _pair_bound(b.radius + widest)
 		for j in range(i + 1, _cells.size()):
 			var other := _cells[j]
 			if not other.seeded:
+				continue
+			if b.pos.distance_squared_to(other.pos) > near:
 				continue
 			var offset := b.pos - other.pos
 			var d := offset.length()
@@ -1665,6 +1700,46 @@ func _step_separate() -> void:
 			var share := _give_way(other.radius, b.radius)
 			b.pos += normal * (overlap * share * PUSH_SHARE)
 			other.pos -= normal * (overlap * (1.0 - share) * PUSH_SHARE)
+
+
+## **The widest body in the water**, which is what lets each pair bound in the
+## all-pairs passes be worked out once per body instead of once per pair.
+## Every body counts, seeded or not: a bound only ever has to be too big.
+func _widest() -> float:
+	var widest := 0.0
+	for b in _cells:
+		var r := b.radius
+		# See [method _wider]: a NaN anywhere makes every bound NaN.
+		if is_nan(r):
+			return NAN
+		if r > widest:
+			widest = r
+	return widest
+
+
+## The larger of two radii -- **and NaN if either is.** `maxf` would quietly
+## drop a NaN, and a bound that dropped one could skip a pair the full test,
+## which propagates it, does not; a NaN bound skips nothing, so a broken body
+## is handled exactly as it was before the pre-checks existed.
+static func _wider(a: float, b: float) -> float:
+	return a if is_nan(a) or a >= b else b
+
+
+## A separation, squared, that no rounding can take back under [param reach]:
+## a tenth of a percent and a hundredth of a unit over it. `offset.length()`
+## is a single-precision square root and this is compared in double, so the
+## margin is ten thousand times what either can be out by.
+static func _pair_bound(reach: float) -> float:
+	var outer := reach * 1.001 + 0.01
+	return outer * outer
+
+
+## How far, squared, a body of radius [param r] and gape [param gape] can have
+## its mouth on anything no wider than [param widest]: exactly the bound
+## [method Cilia.mouth_touches] refuses beyond, taken for the widest body and
+## then made rounding-proof by [method _pair_bound].
+static func _mouth_bound(r: float, gape: float, widest: float) -> float:
+	return _pair_bound(Cilia.mouth_reach(r, gape) + gape * Cilia.MOUTH_BITE + widest)
 
 
 ## What share of an overlap the second body gives up, by area.

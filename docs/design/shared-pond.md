@@ -279,11 +279,14 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
   `_cell.bearing_to(at)`; the stalking bit sets STALK and `TARGET_PLAYER`;
   `_process` skips `_step_body`, the recycle and contacts, and runs the local
   half of `_step_separate` and the four organ steps.
-- [ ] Phase 0 pre-checks, each skipping only pairs the full test rejects:
-  `_look_for_prey` tests distance before `_worth_committing_to`; the contact pass
-  tests the squared `(mouth_reach + gape·MOUTH_BITE + widest radius)·1.001 + 0.01`
-  before `_mouth_reaches`; `_step_separate` skips
-  `length_squared() > ((r₁+r₂)·1.001+0.01)²`.
+- [x] Phase 0 pre-checks, each skipping only pairs the full test rejects:
+  `_look_for_prey` tests distance, and `d < best`, before `_worth_committing_to`,
+  written as the negation of the acceptance it replaces; the contact pass tests
+  the squared `(mouth_reach + gape·MOUTH_BITE + widest radius)·1.001 + 0.01`
+  before `_mouth_reaches`, and grows `widest` and the bound after every meal or
+  reseed inside the pass; `_step_separate` skips
+  `distance_squared_to() > ((r + widest)·1.001+0.01)²`, one bound per body rather
+  than `(r₁+r₂)` per pair. A NaN radius makes every bound NaN, which skips nothing.
 
 **`normal_mode.gd`**
 - [ ] Build `_pond` in `_ready` when there is a session, and call `_pond.step()`
@@ -318,16 +321,19 @@ recorder's signature, `serial*1000+meals`; an arrival bursts ≤ 68 × 60 B once
 - [ ] Encoders and refusing decoders for POND, the seven events and both codecs.
 
 **`vision.gd`**
-- [ ] Phase 0: `_draw_cells` skips bodies farther than `½·diagonal + 4r + 32`
-  from the camera. The haze reaches 3 r and the lip bow 3.06 r.
+- [x] Phase 0: `_draw_cells` skips bodies farther than `½·diagonal + 4r + 32`
+  from the middle of `$Frame`, found through `$World`'s own transform, which is
+  the camera whenever the two agree. The haze reaches 3.05 r counting the
+  filter's last texel, and `mouth_reach` bounds the lip bow at 3.06 r; searched
+  over every tier-3 organ, the lip tips reach 1.87 r and the flagellum 2.18 r.
 - [ ] In a pond, `_draw_cells` skips slot 68. `_draw_peer` draws it with real
   tiers, order, gape, wound and `double`, `is_self` false and `untinted` true.
 - [ ] Presence fades with `quiet_for()`; no doubt ring; the ghost at 0.34
   (UX §0.1-0.3). `peer_track()` is not drawn in a pond.
 
 **Elsewhere**
-- [ ] `cell.gd`: `swim_speed_of` and `steering_off`.
-- [ ] `cilia.gd`: a trailing `untinted := false` (UX §8).
+- [x] `cell.gd`: `swim_speed_of` and `steering_off`.
+- [x] `cilia.gd`: a trailing `untinted := false` (UX §8).
 - [ ] Phase 3, `recorder.gd`: `BODIES := FoodField.POND_SLOTS` (+3.0 MB on a
   4.6 MB ring) and `AT_PERSON`.
 - [ ] Phase 3, `replay.gd`: private nodes in a pond.
@@ -371,15 +377,28 @@ has been played with a phone as host.
 Each phase is one PR that ships playable. Each must also pass the **single-player
 identity gate**, which is the method #50 and #51 used, with no session:
 
-1. **Fingerprint.** `drive.gd --seed=S --fingerprint=60`, headless at
-   `--fixed-fps 60`, for S = 7, 12345 and 2026: the same hash on `main` and the
-   branch. Phase 0 adds the flag, so for that PR only, run the branch's `tools/`
-   over `main`'s `game/` in a worktree. `tools/` never ships.
-2. **Renders.** `shot.tscn` → `drive.tscn --seed=7 --freeze-at=9.0 --wait=10.5`,
-   in modes 1 and 0, at 1280x720 and 2400x1080. Three runs of `main` must first
-   diff to 0 pixels; then the branch against `main` must diff to 0 pixels.
+1. **Fingerprint.** `drive.gd --seed=S --mode=1 --scheme=0 --fingerprint=10800`,
+   and the same with `--radius=30
+   --genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:2,ampulla:2,stigma:1
+   --sniff --fingerprint=7200`, headless at `--fixed-fps 60`, for S = 7, 12345
+   and 2026: the same line on `main` and the branch. The flag counts frames, and
+   the line counts what was exercised. 10,800 is the first whole minute by which
+   every seed's plain run has eaten; nothing hunts the player before
+   `FIRST_DELAY` (42 s) and a born cell's water seldom seeds a mouth that fits it,
+   so the sighted forager is the run in which the player is hunted, bitten and
+   killed. `--mode` and `--scheme` are pinned because both are otherwise read
+   from `user://`, which every run on the machine shares. Phase 0 adds the flag,
+   so for that PR only, run the branch's `tools/` over `main`'s `game/` in a
+   worktree. `tools/` never ships.
+2. **Renders.** `shot.tscn` → `drive.tscn --seed=7 --freeze-at=9.0 --wait=10.5
+   --mode=M --scheme=0`, with `--fixed-fps 60` before the `--`, in modes 1 and 0,
+   at 1280x720 and 2400x1080. Three runs of `main` must first diff to 0 pixels;
+   then the branch against `main` must diff to 0 pixels.
 3. **Sensations.** The same drive run, headless, prints every bus sensation, and
-   the `diff` of the branch against `main` is empty.
+   the `diff` of the branch against `main` is empty. `drive.gd`'s own log leaves
+   out `taste` and `shear` and rounds to two places, so Phase 0 also diffed every
+   `sensation` the bus emitted, at full precision, through a listener that is not
+   committed.
 4. **The probe.** `net_probe` reports `ALL PASS`. Its 95 existing checks are
    superseded only by name, and only in the same PR.
 
@@ -390,6 +409,15 @@ identity gate**, which is the method #50 and #51 used, with no session:
 - *Accepted when:* the gate passes; the cull pair diffs to 0 pixels at both
   shapes, with bodies straddling the edge (§4); and one ring measures
   `--field-cost` ≤ 750 µs.
+- *Built, and measured here:* `--field-cost=3600` at `--radius=30`, tier 1
+  with a nose and an ampulla, three seeds twice over, went from p50 779-812 µs
+  and p90 914-1,049 µs on `main` to p50 569-593 µs and p90 663-714 µs. Full
+  vision draws 9 of the 34 bodies a frame at 1280x720 and 13 at 2400x1080, and
+  the whole run's `TIME_PROCESS` p50 in full vision fell from 8.5-10.0 ms to
+  4.9-6.4 ms, a noisy figure on this container. The cull pair parked twelve
+  edible bodies so that, at each shape, their hazes straddle all four edges and
+  two corners, a different two at each; culling by centre instead loses 6,885
+  and 29,265 pixels at the two shapes, and the built cull loses none.
 
 **Phase 1 — the field learns a second player.** No wire.
 
@@ -467,16 +495,20 @@ identity gate**, which is the method #50 and #51 used, with no session:
 
 ## 6. Owner decisions
 
-Rows 4 and 5 are `shared-pond-ux.md` §10's; this side's technical notes follow the
-table.
+**All five answered on 2026-09-23, each as recommended.** Together the water holds
+what one of you would meet alone; new cells take turns between the two tunings;
+the hunting-only swallow stays for both players until the gene phase; a quiet
+phone is waited for about 8 s, the same every time; and a dropped pond rejoins
+by itself. Rows 4 and 5 are `shared-pond-ux.md` §10's; this side's technical
+notes follow the table.
 
 | # | Question | Options | What it means |
 |---|---|---|---|
-| 1 | When you swim together, is the water twice as busy? | **no, the same number of cells one of you would meet alone ✓ recommended** / yes, each of you brings your own | No: together you share the food and the danger. Yes: twice the food and twice the hunters, and every sense reads busier than it was tuned for. |
-| 2 | Swimming together, whose difficulty is the water? | **each new cell is made for one of you, taking turns ✓ recommended** / always the newer cell's / always the stronger cell's | Turns: a veteran and a newcomer meet a mix. Newer: a veteran can shepherd a friend through easy water, and farm it. Stronger: a newcomer who sticks close meets water sized for the veteran. |
-| 3 | A water cell can swallow you only while it is hunting you, but can swallow another water cell by accident. That is the one exception to "the same rule". What happens to it? | **keep it for both of you until the gene phase, which makes one rule for every cell ✓ recommended** / fix it now for every cell: nothing swallows by accident / drop it now: you can be swallowed by accident too | Keep: something always came for you first, and you felt it; the exception is settled with the other gene-phase rules. Fix now: water cells stop swallowing each other by accident, which changes solo play a little. Drop: a big cell drifting into you can swallow you with no warning. Between the two of you there is no hunting either way: a friend's mouth on you is enough, and your only warning is dread. |
-| 4 | How long does the pond wait for a quiet phone? (UX row 1) | **about 8 seconds, the same every time ✓ recommended** / 30 seconds / 2 minutes | While the host's phone is quiet, the guest's water is held. While the guest's is quiet, their cell drifts and can be eaten. When the wait ends, the guest swims on alone. |
-| 5 | When a dropped friend's water comes back, swim together again? (UX row 2) | **yes, automatically ✓ recommended** / no, call again | Yes: the guest arrives in the host's water again, keeping their cell. No: a dropped pond is over. |
+| 1 | When you swim together, is the water twice as busy? | **no, the same number of cells one of you would meet alone ✓ answered** / yes, each of you brings your own | No: together you share the food and the danger. Yes: twice the food and twice the hunters, and every sense reads busier than it was tuned for. |
+| 2 | Swimming together, whose difficulty is the water? | **each new cell is made for one of you, taking turns ✓ answered** / always the newer cell's / always the stronger cell's | Turns: a veteran and a newcomer meet a mix. Newer: a veteran can shepherd a friend through easy water, and farm it. Stronger: a newcomer who sticks close meets water sized for the veteran. |
+| 3 | A water cell can swallow you only while it is hunting you, but can swallow another water cell by accident. That is the one exception to "the same rule". What happens to it? | **keep it for both of you until the gene phase, which makes one rule for every cell ✓ answered** / fix it now for every cell: nothing swallows by accident / drop it now: you can be swallowed by accident too | Keep: something always came for you first, and you felt it; the exception is settled with the other gene-phase rules. Fix now: water cells stop swallowing each other by accident, which changes solo play a little. Drop: a big cell drifting into you can swallow you with no warning. Between the two of you there is no hunting either way: a friend's mouth on you is enough, and your only warning is dread. |
+| 4 | How long does the pond wait for a quiet phone? (UX row 1) | **about 8 seconds, the same every time ✓ answered** / 30 seconds / 2 minutes | While the host's phone is quiet, the guest's water is held. While the guest's is quiet, their cell drifts and can be eaten. When the wait ends, the guest swims on alone. |
+| 5 | When a dropped friend's water comes back, swim together again? (UX row 2) | **yes, automatically ✓ answered** / no, call again | Yes: the guest arrives in the host's water again, keeping their cell. No: a dropped pond is over. |
 
 **Row 3** is the one player special case in today's rule (§0.5). "No player
 special case" cannot remove it without changing single player, so it is asked
