@@ -131,6 +131,13 @@ func _init(net: Node, food: FoodField, cell: CellBody, genome: Node) -> void:
 	_cell = cell
 	_genome = genome
 	hosting = bool(net.hosting)
+	# **Nothing said before this run is about this run.** The session queues
+	# events from the moment it is up and nothing drains them between runs, so
+	# a new run would open on an old one's news -- `they died` for a death on
+	# the chooser, or an ARRIVE answering an ENTER a run long gone had sent.
+	# Everything this run needs is said again once it is here: the host
+	# answers a new ENTER with ARRIVE, PERSON and every genome.
+	net.drain_pond_events()
 	if hosting:
 		_food.person_touched.connect(_on_person_touched)
 		_food.person_died.connect(_on_person_died)
@@ -263,10 +270,10 @@ func _host_enter(radius: float) -> void:
 func arrival_point(near: Vector2, radius: float) -> Vector2:
 	var angles: Array[float] = [0.0, PI]
 	var step := deg_to_rad(ARRIVAL_STEP_DEG)
-	var steps := int(roundf(TAU / step))
-	for k in range(1, steps):
-		if 2 * k == steps:
-			continue
+	# **Shallowest first** (shared-pond-ux.md §1): at 1280x720 an arrival more
+	# than 37 degrees off the horizontal lands off the frame, so every 30-degree
+	# spot either side of it is tried before anything steeper.
+	for k: int in [1, 5, 7, 11, 2, 4, 8, 10, 3, 9]:
 		angles.append(step * float(k))
 	for angle: float in angles:
 		var at := near + Vector2(cos(angle), sin(angle)) * ARRIVAL

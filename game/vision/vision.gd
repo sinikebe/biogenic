@@ -1424,6 +1424,39 @@ func _draw_scent(at: Vector2, r: float, strength: float) -> void:
 		Color(FOOD_TINT, HAZE_PEAK * strength))
 
 
+## **The friend's scent** (shared-pond-ux.md §0.1): the same bloom at the same
+## strength with its middle taken out to the rim, so the smell sits round a
+## person and never over one. Laid over the body, the haze tinted an edible
+## friend the green of an edible water cell -- rendered beside one of their size,
+## the two were the same object but for the trail -- and the untinted body is the
+## only person mark a still frame has.
+var _haze_ring: GradientTexture2D = null
+
+
+func _draw_scent_ring(at: Vector2, r: float, strength: float) -> void:
+	if strength <= 0.0:
+		return
+	if _haze_ring == null:
+		var rim := 1.0 / HAZE_OUTER
+		var ramp := Gradient.new()
+		ramp.offsets = PackedFloat32Array([0.0, rim * 0.92, rim * 1.12, 0.42, 0.62, 0.82, 1.0])
+		ramp.colors = PackedColorArray([
+			Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.0), Color(1, 1, 1, 0.90),
+			Color(1, 1, 1, 0.90), Color(1, 1, 1, 0.42), Color(1, 1, 1, 0.12),
+			Color(1, 1, 1, 0.0)])
+		_haze_ring = GradientTexture2D.new()
+		_haze_ring.gradient = ramp
+		_haze_ring.fill = GradientTexture2D.FILL_RADIAL
+		_haze_ring.fill_from = Vector2(0.5, 0.5)
+		_haze_ring.fill_to = Vector2(1.0, 0.5)
+		_haze_ring.width = HAZE_TEXTURE_SIZE
+		_haze_ring.height = HAZE_TEXTURE_SIZE
+	var reach := r * HAZE_OUTER
+	_world.draw_texture_rect(_haze_ring,
+		Rect2(at - Vector2(reach, reach), Vector2(reach, reach) * 2.0), false,
+		Color(FOOD_TINT, HAZE_PEAK * strength))
+
+
 ## A meal, held where it was long enough that the interior flood has something
 ## to be checked against.
 ##
@@ -1859,7 +1892,7 @@ func _draw_friend(a: float) -> void:
 		_world.draw_circle(at, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * 0.6 * presence * a), true, -1.0, true)
 	if not ghost:
-		_draw_scent(at, r, smoothstep(FoodField.EDIBLE_FADE_OUT,
+		_draw_scent_ring(at, r, smoothstep(FoodField.EDIBLE_FADE_OUT,
 			FoodField.EDIBLE_FADE_IN, r / maxf(_cell.gape(), 0.001)) * alpha * a)
 	# The viewer's radius decides the threat bow; a ghost's mouth can reach
 	# nobody, so it is measured against a radius nothing exceeds.

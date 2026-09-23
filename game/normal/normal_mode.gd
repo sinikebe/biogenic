@@ -612,6 +612,11 @@ func _process(delta: float) -> void:
 	# water it is part of does.
 	if _pond != null:
 		_step_pond(delta)
+	# **What is simulated is decided from state every frame**, as well as the
+	# moment any of it changes (_update_simulating): no frame can leave a body
+	# running that its state says is still. In single player every change is
+	# already made where it happens, so this one never changes anything there.
+	_update_simulating()
 	# Before every early return below, because the states those returns lead to
 	# -- dying, dividing, paused -- are exactly the ones with no button.
 	_update_pause_tap()
@@ -649,9 +654,9 @@ func _process(delta: float) -> void:
 	if _menu_open:
 		_step_arming()
 	# The division. Its first phase leaves the simulation running -- steering
-	# still works and nothing is taken away -- and every phase after it has
-	# called _set_simulating(false), exactly as a death does, so there is
-	# nothing below here left to post.
+	# still works and nothing is taken away -- and from the pinch on
+	# _update_simulating() stops it, exactly as it does for a death, so there
+	# is nothing below here left to post.
 	if _split != Split.NONE:
 		_step_split(delta)
 		if _split >= Split.PINCH:
@@ -1053,7 +1058,7 @@ func _step_split(delta: float) -> void:
 				_split_clock = 0.0
 				# The same call a death makes. The water stops, the body does
 				# not: what is left moving is the division itself.
-				_set_simulating(false)
+				_update_simulating()
 				# **In a pond the water does not stop** (shared-pond.md §1.5):
 				# this cell leaves it instead, still an anchor, so what the
 				# daughter comes back to is still there -- and from this frame
@@ -1296,7 +1301,7 @@ func _be_born() -> void:
 	_choose_gesture.clear()
 	_division = {}
 	_hand_division()
-	_set_simulating(true)
+	_update_simulating()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.pulse_now()
 
@@ -1439,6 +1444,15 @@ func _die(loud: bool, bearing: float) -> void:
 	if _menu_open:
 		_set_menu(false)
 	_life = Life.DYING
+	# **The black has no text** (shared-pond-ux.md §0.4, §4): whatever the line
+	# was saying goes with the light, stepped by _step_death -- the label is
+	# stepped only while alive, and rendered, a line up at the hit stood on the
+	# black beside `watch`, in single player as well as in a pond.
+	if _onboard != Onboard.OFF and _onboard != Onboard.FADE_OUT:
+		_onboard_from = _onboarding.modulate.a
+		_onboard_clock = 0.0
+		_onboard = Onboard.FADE_OUT
+	_line_shown = ""
 	# **The marker on the other screen goes out here.** Not a disconnection --
 	# the link is fine and so is the person -- but there is no longer a cell to
 	# draw, and a marker left pointing at a corpse is the exact failure the
@@ -1456,7 +1470,14 @@ func _die(loud: bool, bearing: float) -> void:
 	_daughters = []
 	_division = {}
 	_hand_division()
-	_set_simulating(false)
+	# **A death ends the water's beat** (shared-pond.md §3): the collapse owns
+	# the screen from here, and the beat's revive, its world coming back in and
+	# its first pulse would all fight it. Reachable in a pond only, where the
+	# host's water can kill a cell that is still in the second half of the beat
+	# that put it there.
+	if _water_beat >= 0.0:
+		_end_water_beat()
+	_update_simulating()
 	# **In a pond the water runs on under the black** (owner's row A,
 	# shared-pond.md §1.5): only this cell stops, leaving the water and no
 	# longer an anchor -- for the kills the field makes itself it already has,
@@ -1481,6 +1502,7 @@ func _die(loud: bool, bearing: float) -> void:
 
 func _step_death(delta: float) -> void:
 	_death_clock += delta
+	_step_onboarding(delta)
 	match _life:
 		Life.DYING, Life.WAITING:
 			_bus.collapse(_death_clock, _death_loud)
@@ -1667,29 +1689,52 @@ func _return(place: Array) -> void:
 	_sensed = false
 	_generation = 1
 	_said_divide = false
-	_set_simulating(true)
+	_update_simulating()
 	_apply_mode()
+	# **The steering line comes back with the next cell if it was never read.**
+	# A death fades whatever the line was saying (_die), and the steering line
+	# is armed once a run: a new player who died before ever turning -- or
+	# before the line had even faded in -- would swim the rest of the run
+	# untaught. Read once, it is marked seen and never armed again.
+	if not _seen_onboarding():
+		_begin_onboarding()
 	# The host tells a guest its new body here. A guest said so with its ENTER,
 	# before the host placed it, so its friend could meet what was arriving.
 	if pond and _pond.hosting:
 		_pond.person_changed(true)
 
 
-## Stops the simulation without pausing the tree: the membrane layer and the
+## **The one place that decides what is simulated**, and it decides from state
+## alone: whether this cell is alive, returning, past its pinch, held, inside
+## the water's beat or waiting to arrive. Every change to any of those calls
+## this, and so does every frame, so no caller turns the simulation on or off
+## by itself -- and a death, a hold and a beat can overlap in any order without
+## one of them restarting a body another has stopped (shared-pond.md §3). It
+## stops the simulation without pausing the tree: the membrane layer and the
 ## world view both have to keep running through a death, one to draw it and one
 ## to fade out of it.
 ##
-## **In a pond the water is not this cell's to stop** (shared-pond.md §1.5):
-## the field runs on for the other player, and this cell leaves it instead --
-## which the callers do, because only they know whether it left dead or
-## dividing. Everything that is this cell's own still stops.
-func _set_simulating(on: bool) -> void:
-	var pond := _food.pond_open()
-	for node: Node in [_cell, _metabolism, _motes, _food, _genome]:
-		if node == _food and pond:
-			continue
-		node.set_process(on)
-	_cell.set_process_unhandled_input(on)
+## **This cell's own nodes** run while it is alive and short of the pinch, or
+## returning -- a returning cell is simulated from the tap -- and never in the
+## pond's still moments. **The water** runs with them in single player, exactly
+## as it always has: a death or a division stops it and a return or a birth
+## starts it. In a pond it is not this cell's to stop (§1.5): it runs on for the
+## other player through a death or a division, and stops only while the pond is
+## held. Through the water's beat it runs from the swap on, whatever the water
+## is by then -- the host's, or the fresh one a takeover leaves.
+func _update_simulating() -> void:
+	var still := _held or _water_beat >= 0.0 or _entering_held
+	var cell_on := not still and (_life == Life.RETURNING
+		or (_life == Life.ALIVE and _split < Split.PINCH))
+	for node: Node in [_cell, _metabolism, _motes, _genome]:
+		node.set_process(cell_on)
+	_cell.set_process_unhandled_input(cell_on)
+	var water_on := cell_on
+	if _held:
+		water_on = false
+	elif _food.pond_open() or (_water_beat >= 0.0 and _beat_swapped):
+		water_on = true
+	_food.set_process(water_on)
 
 
 # ---------------------------------------------------------------------------
@@ -2194,7 +2239,7 @@ func _notification(what: int) -> void:
 ## costs nothing now and holds the invariant where it is used.
 ##
 ## **The gate opens at the pinch, not at PART, and that is the hole §6 left.**
-## The pinch is where `_set_simulating(false)` stops `cell.gd`'s own input, so
+## The pinch is where `_update_simulating()` stops `cell.gd`'s own input, so
 ## from there to PART -- `DIVIDE_PINCH`, a second and a half -- **no node in the
 ## tree consumed a pointer press at all.** Measured before the change, at
 ## `--fixed-fps 60`: `--scheme=2 --radius=40 --press=3.0:216,624,0` logged
@@ -4775,7 +4820,7 @@ func _begin_pond() -> void:
 	_pond.mirror_began()
 	_ponded = true
 	_entering_held = true
-	_set_simulating(false)
+	_update_simulating()
 	_pond.enter(_cell.radius, _genome.tiers(), _genome.body_layout())
 
 
@@ -4845,12 +4890,11 @@ func _enter_timed_out() -> void:
 		_entering_held = false
 		_food.leave_mirror()
 		_ponded = false
-		_set_simulating(true)
+		_update_simulating()
 	elif _wake_pending:
 		# A tap nobody answered swims on alone, as a solo return does.
 		_wake_pending = false
 		_food.leave_mirror()
-		_food.set_process(false)
 		_return([])
 	else:
 		# A swap nobody answered is tried again at the next ordinary frame.
@@ -4868,18 +4912,20 @@ func _on_pond_arrived(at: Vector2, heading: float) -> void:
 		_entering_held = false
 		_place_arrival(at, heading)
 		_motes.setup(_cell)
-		_set_simulating(true)
+		_update_simulating()
 		_pond_say("theirs", LINE_THEIRS, ONBOARD_DELAY)
 		return
 	if _swap_pending:
 		_swap_pending = false
-		if _life != Life.ALIVE or _split != Split.NONE:
-			# **Not an ordinary frame any more**: the cell died, or began to
-			# divide, in the round trip -- and the beat would stop and restart
-			# the simulation under a death or a division that own it. The swap
-			# is dropped. This run's POND bit never goes up, so the host lets
-			# the body it placed go after REACH_TIMEOUT, and the swap is asked
-			# again at the next ordinary frame, or by the tap on the black.
+		if _life != Life.ALIVE or _split != Split.NONE or _menu_open:
+			# **Not an ordinary frame any more** (UX §1: never dead, dividing
+			# or in the menu): the cell died, began to divide or opened the
+			# menu in the round trip -- and the beat would stop the water under
+			# a death or a division that own it, or change the water under a
+			# menu that is up. The swap is dropped. This run's POND bit never
+			# goes up, so the host lets the body it placed go after
+			# REACH_TIMEOUT, and the swap is asked again at the next ordinary
+			# frame, or by the tap on the black.
 			_pond.mirror_ended()
 			return
 		_begin_water_beat(_swap_in.bind(at, heading), VisionLayer.FADE_SECONDS,
@@ -4917,8 +4963,9 @@ func _enter_from_black() -> void:
 		_food.become_mirror()
 		_pond.mirror_began()
 		_food.leave_water(true)
-		_food.set_process(true)
 		_ponded = true
+		# A mirror's water runs under the black, as the host's does.
+		_update_simulating()
 	_wake_pending = true
 	_pond.enter(CellBody.BASE_RADIUS, GenomeNode.BORN, BORN_ORDER)
 
@@ -4963,22 +5010,26 @@ func _take_over() -> void:
 		_entering_held = false
 		_food.leave_mirror()
 		_ponded = false
-		_set_simulating(true)
+		_update_simulating()
 		return
 	if _wake_pending:
 		_wake_pending = false
 		_food.leave_mirror()
-		_food.set_process(false)
 		_return([])
 		return
 	if not was_in:
 		return
 	if _life != Life.ALIVE or _split >= Split.PINCH:
-		# Nothing to watch the water change in: a cell on the black or between
-		# two daughters meets the fresh water when it comes back, and a solo
-		# water stands still under both, as it always has.
+		# No beat for a cell that is not swimming: on the black or between two
+		# daughters it meets the fresh water when it comes back, and a solo
+		# water stands still under both, as it always has -- and a cell still
+		# RETURNING is in it already, simulated from its tap, with the aperture
+		# opening round it as it would on any new water. Which of those this
+		# is, _update_simulating() reads off the cell: before, this stopped the
+		# water outright and left a returning cell alive in a water that never
+		# moved again.
 		_food.leave_mirror()
-		_food.set_process(false)
+		_update_simulating()
 		_pond_say("gone", LINE_GONE)
 		return
 	_begin_water_beat(_food.leave_mirror, 0.0, "gone", LINE_GONE)
@@ -4989,8 +5040,7 @@ func _take_over() -> void:
 ## world dims with the view's own fade while this cell is drawn outside it.
 func _set_held(on: bool) -> void:
 	_held = on
-	_set_simulating(not on)
-	_food.set_process(not on)
+	_update_simulating()
 	if on:
 		_cell.release()
 		_controls.let_go()
@@ -5035,7 +5085,7 @@ func _begin_water_beat(swap: Callable, swap_at: float, key: String,
 	_beat_in = false
 	_beat_key = key
 	_beat_line = line
-	_set_simulating(false)
+	_update_simulating()
 	_cell.release()
 	_controls.let_go()
 	_hush()
@@ -5048,8 +5098,25 @@ func _run_beat_swap() -> void:
 	_beat_swapped = true
 	if _beat_swap.is_valid():
 		_beat_swap.call()
-	# Whatever the water is now, it runs through the rest of the beat.
-	_food.set_process(true)
+	# Whatever the water is now, it runs through the rest of the beat:
+	# _update_simulating() reads `_beat_swapped`.
+	_update_simulating()
+
+
+## **The beat, cut short by a death** (from [method _die], and only from
+## there): the swap happens if it has not, so the cell dies in the water it was
+## being put in; the world comes back so the collapse can take it the way it
+## takes every death; and the beat's line goes into the queue, where the black
+## holds it until the next cell. Nothing is restarted -- the caller's
+## [method _update_simulating] sees a dead cell.
+func _end_water_beat() -> void:
+	if not _beat_swapped:
+		_run_beat_swap()
+	_water_beat = -1.0
+	if not _beat_in:
+		_vision.set_active(_vision_active())
+	if not _beat_line.is_empty():
+		_pond_say(_beat_key, _beat_line)
 
 
 func _step_water_beat(delta: float) -> void:
@@ -5064,10 +5131,13 @@ func _step_water_beat(delta: float) -> void:
 	_bus.revive(minf(_water_beat, SignalBus.DEATH_RETURN))
 	if _water_beat < SignalBus.DEATH_RETURN:
 		return
+	# Only a living cell reaches this line: a death inside the beat ends it
+	# (_end_water_beat), and a division cannot begin inside one -- the live
+	# branch that starts them does not run while it does.
 	_water_beat = -1.0
 	if not _beat_in:
 		_vision.set_active(_vision_active())
-	_set_simulating(true)
+	_update_simulating()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.pulse_now()
 	if not _beat_line.is_empty():
@@ -5174,7 +5244,9 @@ func _step_lines() -> void:
 		return
 	if _run_clock < _line_after:
 		return
-	if _menu_open or _split != Split.NONE or _life != Life.ALIVE \
+	# A division from its pinch (UX §0.4): the quicken still swims, and a meal
+	# big enough to start one is when `you ate them` is due.
+	if _menu_open or _split >= Split.PINCH or _life != Life.ALIVE \
 			or _replay != null or _water_beat >= 0.0:
 		return
 	if _onboard != Onboard.OFF:

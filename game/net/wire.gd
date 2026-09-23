@@ -70,6 +70,12 @@ extends RefCounted
 ## zero and ignores: a 3 would read a friend dividing as a friend swimming, and
 ## would never answer an ENTER at all. So the number moves, and 1, 2 and 3 are
 ## all refused by name, with the sentence that names the update.
+##
+## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
+## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER` or the bite tables (`BITE_BY_TIER`,
+## `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`, `VENOM_COST_BY_TIER`, `bite_damage`,
+## `venom_back`) must bump this number**, or a host on one pack and a guest on
+## another share a pond whose contacts one of them misjudges.
 const PROTOCOL := 4
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
@@ -427,6 +433,14 @@ static func shout(seq: int, at: Vector2, radius: float,
 ## rather than sent, and a motion no body could have goes as none -- the state
 ## frame's own rule. Past [constant POND_BODIES_MAX] bodies the rest are left
 ## out; the send set is built to fit, so that is a guard and not a policy.
+##
+## **And never past [constant POND_MAX] bytes, whatever it is handed.** The
+## budget is one datagram: an unreliable packet over ENet's MTU does not fail,
+## it goes out as fragments, and a lost fragment loses the whole snapshot. The
+## send set holds one person at most, so it always fits; a body that would take
+## the frame past the budget -- sixty-nine bodies all flagged as people, say,
+## which would be 2,078 bytes -- is left out instead, like any other body this
+## end will not send, and the reader refuses a longer frame outright.
 static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 	var keep: Array = []
 	var size := POND_HEADER
@@ -445,9 +459,12 @@ static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 		var slot := int(entry[Entry.SLOT])
 		if slot < 0 or slot >= POND_BODIES_MAX:
 			continue
-		keep.append(entry)
-		size += POND_PERSON if (int(entry[Entry.FLAGS]) & POND_IS_PERSON) != 0 \
+		var takes := POND_PERSON if (int(entry[Entry.FLAGS]) & POND_IS_PERSON) != 0 \
 			else POND_BODY
+		if size + takes > POND_MAX:
+			continue
+		keep.append(entry)
+		size += takes
 	var out := PackedByteArray()
 	out.resize(size)
 	out[0] = KIND_POND
@@ -723,12 +740,14 @@ static func take_shout(frame: PackedByteArray) -> Array:
 
 ## `[seq, your_wound, bodies]` out of a POND frame, each body an Array indexed
 ## by [enum Entry] -- or an empty array, and the whole frame refused, for a
-## short or overlong frame, a count past [constant POND_BODIES_MAX], a slot
+## short or overlong frame, one past [constant POND_MAX] bytes whatever it
+## holds, a count past [constant POND_BODIES_MAX], a slot
 ## that is not one, a non-finite float, or a motion no body could have. A
 ## snapshot is superseded fifty milliseconds later, so refusing one costs one
 ## frame of a stream that sends twenty.
 static func take_pond(frame: PackedByteArray) -> Array:
-	if frame.size() < POND_HEADER or frame[0] != KIND_POND:
+	if frame.size() < POND_HEADER or frame.size() > POND_MAX \
+			or frame[0] != KIND_POND:
 		return []
 	var count: int = frame[6]
 	if count > POND_BODIES_MAX:

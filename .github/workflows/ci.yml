@@ -265,11 +265,13 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second and
-        # quits itself in about forty-five seconds: some eight in the socket-
-        # free pond-field section, which runs inside one frame and spends none
-        # of the budget, and about twenty in the pond section, two real runs
-        # over loopback at up to 250 frames a second. It prints its own frame
-        # count -- about 5,000 -- so the margin on 20000 is visible in the log.
+        # quits itself in about fifty seconds: some eight in the socket-free
+        # pond-field section, which runs inside one frame and spends none of
+        # the budget, and about twenty-three in the pond section, two real runs
+        # over loopback at up to 250 frames a second. Its pond timings are
+        # counted in frames, not wall milliseconds, so a loaded runner slows
+        # the step without failing it. It prints its own frame count -- about
+        # 5,600 -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or

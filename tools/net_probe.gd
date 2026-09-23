@@ -492,6 +492,28 @@ func _check_pond_wire() -> void:
 			and (cleaned[2][2][Wire.Entry.VELOCITY] as Vector2) == Vector2.ZERO,
 		"pond wire: a body the reader would refuse is never written, and an"
 		+ " impossible motion goes as none")
+	# **Never past the budget, whatever the writer is handed** (review): sixty-
+	# nine bodies all flagged as people were 2,078 bytes, which ENet sends as
+	# fragments -- one lost, the whole snapshot lost. The writer leaves out what
+	# would not fit, and the reader refuses a longer frame outright, however
+	# well formed.
+	var people: Array = []
+	for i in Wire.POND_BODIES_MAX:
+		var one: Array = (bodies[bodies.size() - 1] as Array).duplicate()
+		one[Wire.Entry.SLOT] = i
+		people.append(one)
+	var capped := Wire.pond(7, 0.0, people)
+	var capped_said := Wire.take_pond(capped)
+	var fits := floori(float(Wire.POND_MAX - Wire.POND_HEADER) / float(Wire.POND_PERSON))
+	var over := capped.duplicate()
+	over.append_array(capped.slice(capped.size() - Wire.POND_PERSON))
+	over[6] = int(over[6]) + 1
+	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 3
+			and (capped_said[2] as Array).size() == fits
+			and over.size() > Wire.POND_MAX and Wire.take_pond(over).is_empty(),
+		"pond wire: sixty-nine people are written as the %d that fit, %d bytes of"
+		% [fits, capped.size()] + " %d; one more, well formed at %d bytes, is"
+		% [Wire.POND_MAX, over.size()] + " refused")
 
 	# The seven events, each against its decoder.
 	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"toxicyst": 1,
@@ -2204,6 +2226,28 @@ func _pond_differ(a: Node, b: Node) -> float:
 ## itself, not off a frame in which the water's own meals and seeds also land.
 class PondWatchedFood extends "res://game/normal/food.gd":
 	var sisters: Array = []
+	## **Every snapshot this water built for the guest**, newest last and the
+	## last 64 kept: `[count, entries, water, the guest's place, its serial]`,
+	## where `water` is each body as it stood at that instant -- `[seeded, place,
+	## radius, serial, meals, genome, state, target, target serial]`. The mirror
+	## check finds the one the guest applied by its sequence, and so never
+	## compares a mirror with water a frame later than the water it was sent.
+	var built: Array = []
+	var built_count := 0
+
+	func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
+		var out: Array = super.pond_entries(for_person, reach)
+		if for_person:
+			var water: Array = []
+			for b in _cells:
+				water.append([b.seeded, b.pos, b.radius, b.serial, b.meals,
+					b.genome.duplicate(), b.state, b.target, b.target_serial])
+			built_count += 1
+			built.append([built_count, out, water, _cells[PERSON_SLOT].pos,
+				_cells[PERSON_SLOT].serial])
+			if built.size() > 64:
+				built.pop_front()
+		return out
 
 	func place_sister(at: Vector2, heading: float, body_radius: float,
 			tiers: Dictionary) -> int:
@@ -2237,8 +2281,25 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 
 
 const POND_ARRIVAL_TOLERANCE := 1.0
-const POND_MIRROR_TOLERANCE := 1.0
 const POND_BEARING_TOLERANCE := 0.05
+## **Latency in `pond` is counted in frames, and a claim made in seconds is held
+## at the game's own 60 frames a second**: "within 0.2 s" is within 12 frames,
+## "within 0.1 s" within 6. Every hop here is loopback, taken at a poll, so a
+## chain of them costs frames; a loaded runner stretches the frames and not the
+## chain. Wall-clock bounds are what failed in review -- 119 ms against 100
+## with the CPU saturated -- and could only be widened into saying nothing. The one
+## wall-clock wait inside a chain, the state frame's 12 ms EARLY_GAP, is three
+## frames at this section's 250 and under one at 60, so counting here only
+## ever overstates what a phone would take.
+const POND_FPS := 60.0
+
+## Frames the last [method _pond_until] waited, and the longest single frame in
+## it -- the unit a latency is held to, and what a wall-clock window is widened
+## by when a claim can only be made in seconds.
+var _pond_frames := 0
+var _pond_frame_max := 0.0
+## The longest frame anywhere in the section so far.
+var _pond_frame_worst := 0.0
 
 
 func _check_pond() -> void:
@@ -2250,6 +2311,7 @@ func _check_pond() -> void:
 	# Nothing here is finer than a 4 ms frame -- the tightest bound is 0.1 s.
 	var ceiling := Engine.max_fps
 	Engine.max_fps = 250
+	_pond_frame_worst = 0.0
 	var host_net: Node = await _session("PondHost")
 	var guest_net: Node = await _session("PondGuest")
 	host_net.host()
@@ -2302,15 +2364,40 @@ func _check_pond() -> void:
 	# **The mirror** (§2's send set): every host body within 1,900 of the
 	# guest, surface to centre, is in the guest's water within a unit of where
 	# the host has it, with the genome of its (serial, meals); none farther.
+	#
+	# **Held exactly, so a loaded runner cannot fail it and a broken mirror
+	# cannot pass it**: against the snapshot the guest applied, found by its
+	# sequence among the ones the host recorded building. The send set is the
+	# host's own bodies at the instant it was built; each body sent is in the
+	# mirror at the place sent, carried by the snapshot's age along its
+	# heading, with the genome of its (serial, meals); nothing else is there.
+	# Put the carry back at the frame's start, or halve the send reach, and
+	# this fails.
+	#
+	# **The live distance is reported, not held.** How far the mirror stands
+	# from the host's water *now* is how far that water moved off a straight
+	# line since the snapshot -- a lunge that starts inside the snapshot's
+	# age is off by its speed times that age -- which is latency, and
+	# `net_lag --pond` measures it as a distribution: p99 0.083 units on
+	# loopback. Here it was a tenth of a unit on an idle runner and 9.4 on a
+	# saturated one, with the exact half passing both times.
 	# ----------------------------------------------------------------------
+	# The first snapshot is two hops after the arrival -- this POND bit out,
+	# the host's water back -- so it is waited for, and then a third of a
+	# second of them: a fixed wait was not two frames on a saturated runner.
+	await _pond_until(func() -> bool: return int(guest_pond.get("_applied")) >= 0,
+		3.0, pins)
 	await _pond_until(func() -> bool: return false, 0.35, pins)
+	var exact: Array = _pond_mirror_exact(host_food, guest_food, guest_pond, host_net)
 	var mirror: Array = _pond_mirror_error(host_food, guest_food, host_cell)
-	_says(int(mirror[0]) > 5 and float(mirror[1]) <= POND_MIRROR_TOLERANCE
-			and int(mirror[2]) == 0 and int(mirror[3]) == 0 and int(mirror[4]) == 0,
-		"pond: %d host bodies within 1,900 of the guest are mirrored, worst %.3f"
-		% [int(mirror[0]), float(mirror[1])] + " units off; %d farther sent, %d"
-		% [int(mirror[2]), int(mirror[3])] + " genomes wrong, %d missing; the host"
-		% int(mirror[4]) + " itself %.3f units off in slot 68" % float(mirror[5]))
+	_says(int(exact[0]) > 5 and (exact[1] as Array).is_empty(),
+		"pond: %d host bodies within 1,900 of the guest are mirrored exactly as"
+		% int(exact[0]) + " the snapshot it applied said, carried by its age,"
+		+ " with (serial, meals) genomes and nothing else%s; live, %.3f units"
+		% ["" if (exact[1] as Array).is_empty() else " -- NOT: " + ", ".join(
+			exact[1] as Array), float(mirror[1])]
+		+ " off the host's water now (latency: net_lag's), the host itself"
+		+ " %.3f in slot 68" % float(mirror[5]))
 
 	# ----------------------------------------------------------------------
 	# **A chewer's bite, felt where it is** (§0.2): the host bites, the guest
@@ -2343,24 +2430,38 @@ func _check_pond() -> void:
 	var felt := await _pond_until(func() -> bool:
 		chew_pin.call()
 		return not hits.is_empty(), 1.0, pins)
-	await _pond_until(func() -> bool:
-		chew_pin.call()
-		return false, 0.12, pins)
 	host_food.call("_retire", 3)
+	# **The wound rides the next snapshot's header**, a frame or more behind
+	# the bite on the reliable channel: waited for, not slept past -- 0.12 s
+	# was not one snapshot on a saturated runner. Both ends mend by the same
+	# 1/75 a second, so a guest that never heard it cannot catch up: its own
+	# cell starts at 0, and the host's copy stays above 0.02 for the two
+	# seconds this waits, and more.
+	var wounds := [0.0, 0.0]
+	var applied_from := int(guest_pond.get("_applied"))
+	var agreed := await _pond_until(func() -> bool:
+		wounds[0] = float(person_now.wound)
+		wounds[1] = float(guest_cell.wound)
+		return float(wounds[0]) > 0.02 \
+			and absf(float(wounds[0]) - float(wounds[1])) <= 1.0 / 255.0, 2.0, pins)
 	var felt_at := float(hits[0][1]) if not hits.is_empty() else NAN
 	var on_bus := false
 	for said: float in bus_hits:
 		if absf(said - felt_at) < 1e-6:
 			on_bus = true
-	var host_wound := float(person_now.wound)
-	var guest_wound := float(guest_cell.wound)
+	var host_wound := float(wounds[0])
+	var guest_wound := float(wounds[1])
 	_says(felt >= 0.0 and on_bus
 			and absf(angle_difference(felt_at, bearing)) <= POND_BEARING_TOLERANCE,
 		"pond: a chewer's bite on the guest is a `hit` at %.3f rad, the true"
 		% felt_at + " bearing %.3f +- %.2f" % [bearing, POND_BEARING_TOLERANCE])
-	_says(host_wound > 0.0 and absf(host_wound - guest_wound) <= 1.0 / 255.0,
+	var wound_frames := _pond_frames
+	_says(agreed >= 0.0 and host_wound > 0.02
+			and absf(host_wound - guest_wound) <= 1.0 / 255.0,
 		"pond: and the wound the host owns (%.4f) is the guest's own (%.4f),"
-		% [host_wound, guest_wound] + " within 1/255")
+		% [host_wound, guest_wound] + " within 1/255, %d frames after the bite"
+		% wound_frames + " was felt (snapshots %d to %d applied meanwhile)"
+		% [applied_from, int(guest_pond.get("_applied"))])
 
 	# ----------------------------------------------------------------------
 	# **A meal on the guest's side, on the host's screen**: the host swallows
@@ -2377,9 +2478,11 @@ func _check_pond() -> void:
 	var grew := await _pond_until(func() -> bool:
 		return (float(host_food.bodies()[FoodField.PERSON_SLOT].radius)
 			>= before_r + CellBody.GROWTH_PER_MEAL - 0.01), 1.0, pins)
-	_says(swallowed >= 0.0 and grew >= 0.0 and grew <= 0.2,
-		"pond: a guest's meal shows on the host +%.0f within 0.2 s (%.0f ms)"
-		% [CellBody.GROWTH_PER_MEAL, grew * 1000.0])
+	var grew_frames := _pond_frames
+	_says(swallowed >= 0.0 and grew >= 0.0 and grew_frames <= _pond_budget(0.2),
+		"pond: a guest's meal shows on the host +%.0f within 0.2 s at 60 fps --"
+		% CellBody.GROWTH_PER_MEAL + " %d frames of %d (%.0f ms here)"
+		% [grew_frames, _pond_budget(0.2), grew * 1000.0])
 
 	# ----------------------------------------------------------------------
 	# **Pause stops nothing (B)**, on both seats at once: the tree never
@@ -2408,10 +2511,11 @@ func _check_pond() -> void:
 		+ " the warning is up on both")
 	_says(steer_host == 0.0 and steer_guest == 0.0,
 		"pond: KEY_D held with the menu up leaves both cells' steer at 0")
-	var died_at := [-1.0, false]
+	var died_at := [-1.0, false, 0]
 	var on_died := func(_cause: int, _by: int, _at: Vector2) -> void:
 		died_at[0] = _now()
 		died_at[1] = host_food.person() == null
+		died_at[2] = Engine.get_process_frames()
 	host_food.person_died.connect(on_died)
 	var hunter_at: Vector2 = guest_cell.position + Vector2(0.0, -56.0)
 	var hunter := _pond_pose(host_food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
@@ -2420,14 +2524,16 @@ func _check_pond() -> void:
 	var dying := await _pond_until(func() -> bool:
 		return int(guest_run.get("_life")) != NormalMode.Life.ALIVE, 1.0, [host_pin])
 	var dying_after := _now() - float(died_at[0])
+	var dying_frames := Engine.get_process_frames() - int(died_at[2])
 	host_food.person_died.disconnect(on_died)
 	_says(dying >= 0.0 and float(died_at[0]) > 0.0 and bool(died_at[1])
-			and dying_after <= 0.2
+			and dying_frames <= _pond_budget(0.2)
 			and int(guest_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(guest_food.died_by) == FoodField.By.WATER,
 		"pond: with its menu open, the guest is swallowed by a committed hunter"
-		+ " -- DYING %.0f ms after the host's swallow, slot 68 empty on the host"
-		% (dying_after * 1000.0) + " that frame, told SWALLOWED by the water")
+		+ " -- DYING %d frames after the host's swallow (0.2 s at 60 fps is %d;"
+		% [dying_frames, _pond_budget(0.2)] + " %.0f ms here), slot 68 empty on"
+		% (dying_after * 1000.0) + " the host that frame, told SWALLOWED by the water")
 	host_run.call("_toggle_pause")
 	_says(not bool(guest_run.get("_menu_open")) and not get_tree().paused,
 		"pond: the death closed the guest's menu, and nothing ever paused")
@@ -2517,10 +2623,11 @@ func _check_pond() -> void:
 	var seq_from := Wire.seq_of(guest_net.peer_pond())
 	var water_from: Array = _pond_places(guest_food)
 	await _pond_until(func() -> bool: return false, 3.0, [guest_pin])
+	var black_frames := _pond_frames
 	var seq_to := Wire.seq_of(guest_net.peer_pond())
 	var moved := _pond_moved(water_from, _pond_places(guest_food))
 	_says(int(host_run.get("_life")) == NormalMode.Life.WAITING
-			and seq_to - seq_from >= 40 and moved > 10
+			and seq_to - seq_from >= _pond_snapshots(3.0, black_frames) and moved > 10
 			and not bool((host_run.get("_watch_ui") as Control).visible),
 		"pond: through %.1f s of the host's black the guest took %d snapshots"
 		% [_now() - host_died_at, seq_to - seq_from] + " and %d bodies moved;"
@@ -2577,10 +2684,12 @@ func _check_pond() -> void:
 			and not bool(guest_food.bodies()[FoodField.PERSON_SLOT].seeded)
 			and not bool(host_food.in_water) and not bool(guest_food.in_water)),
 		1.0, [])
-	_says(gone >= 0.0 and gone <= 0.1,
+	var gone_frames := _pond_frames
+	_says(gone >= 0.0 and gone_frames <= _pond_budget(0.1),
 		"pond: from the pinch each divider is out of the water on both seats --"
-		+ " unseeded, so no sense, mouth or push finds it -- within %.0f ms"
-		% (gone * 1000.0))
+		+ " unseeded, so no sense, mouth or push finds it -- within %d frames"
+		% gone_frames + " (0.1 s at 60 fps is %d; %.0f ms here)"
+		% [_pond_budget(0.1), gone * 1000.0])
 	# The parting is a drawing, and nothing here is about it either.
 	await _pond_until(func() -> bool:
 		for run: Node in [host_run, guest_run]:
@@ -2610,11 +2719,12 @@ func _check_pond() -> void:
 	await _pond_until(func() -> bool:
 		keep_clear.call()
 		return false, 5.0, [])
+	var chose_frames := _pond_frames
 	var chose_moved := _pond_moved(choose_from, _pond_places(host_food))
 	var seq_chose := Wire.seq_of(guest_net.peer_pond()) - seq_choose
 	_says(int(host_run.get("_split")) == NormalMode.Split.CHOOSING
 			and int(guest_run.get("_split")) == NormalMode.Split.CHOOSING
-			and chose_moved > 10 and seq_chose >= 60,
+			and chose_moved > 10 and seq_chose >= _pond_snapshots(5.0, chose_frames),
 		"pond: through 5 s of both choosing, %d bodies moved and the guest took"
 		% chose_moved + " %d snapshots" % seq_chose)
 	# Both lean the same way, as `_step_choosing` would after CHOOSE_HOLD.
@@ -2686,12 +2796,22 @@ func _check_pond() -> void:
 	# **A quiet host holds the guest** (UX §5): its whole main loop stopped,
 	# as `onActivityStopped` stops a phone -- the guest's pond held from 1.2 s,
 	# and back on the next snapshot.
+	#
+	# **Held to the guest's own clock, not to this one.** The guest holds on
+	# the first frame its own silence reaches PEER_FRESH, and the probe looks
+	# at the start of the frame after: so the silence it reads at the first
+	# held frame is at least PEER_FRESH and less than two frames past it, on
+	# any runner. And the silence began at the stop -- the host was heard
+	# every STATE_PERIOD, or every frame where frames are slower than that.
 	# ----------------------------------------------------------------------
 	var modes := _pond_stop(host_run)
 	host_net.set_process(false)
 	var quiet_from := _now()
-	var held := await _pond_until(func() -> bool: return bool(guest_run.get("_held")),
-		2.5, [guest_pin])
+	var quiet_seen := [0.0]
+	var held := await _pond_until(func() -> bool:
+		quiet_seen[0] = float(guest_net.quiet_for())
+		return bool(guest_run.get("_held")), 2.5, [guest_pin])
+	var hold_frame := _pond_frame_max
 	await _pond_until(func() -> bool: return false, 3.0 - (_now() - quiet_from),
 		[guest_pin])
 	var still_held := bool(guest_run.get("_held")) and not guest_food.is_processing() \
@@ -2700,11 +2820,130 @@ func _check_pond() -> void:
 	host_net.set_process(true)
 	var resumed := await _pond_until(func() -> bool:
 		return not bool(guest_run.get("_held")), 1.0, pins)
-	_says(held >= VisionLayer.PEER_FRESH - 0.1 and held <= VisionLayer.PEER_FRESH + 0.15
-			and still_held and resumed >= 0.0 and resumed <= 0.2,
-		"pond: a host stopped for 3 s holds the guest from %.2f s (PEER_FRESH"
-		% held + " %.1f), and it resumes %.0f ms after the host does"
-		% [VisionLayer.PEER_FRESH, resumed * 1000.0])
+	var resumed_frames := _pond_frames
+	var silence := float(quiet_seen[0])
+	# The host's last word before the stop left at most a STATE_PERIOD before
+	# it, or one of its frames where those run longer -- and no frame in this
+	# section has run longer than the worst one seen.
+	var on_time: bool = silence >= VisionLayer.PEER_FRESH \
+		and silence < VisionLayer.PEER_FRESH + 2.0 * hold_frame + 0.01 \
+		and held >= VisionLayer.PEER_FRESH \
+			- maxf(NetSession.STATE_PERIOD, _pond_frame_worst) - 0.02
+	_says(held >= 0.0 and on_time and still_held and resumed >= 0.0
+			and resumed_frames <= _pond_budget(0.2),
+		"pond: a host stopped for 3 s holds the guest %.2f s after it stops, at"
+		% held + " %.3f s of its own silence (PEER_FRESH %.1f, frames up to %.0f"
+		% [silence, VisionLayer.PEER_FRESH, hold_frame * 1000.0] + " ms), and it"
+		+ " resumes %d frames after the host does (0.2 s at 60 fps is %d; %.0f ms"
+		% [resumed_frames, _pond_budget(0.2), resumed * 1000.0] + " here)")
+
+	# ----------------------------------------------------------------------
+	# **A kill is the first thing heard after a hold** (review, trigger B):
+	# the host's water took the guest while its packets were stuck, and the
+	# KILLED is the first of them to land. The run dies inside `_pond.step()`
+	# and lets the hold go in the same frame -- which used to restart the
+	# simulation under the corpse, and it swam on, dead. Posed as it lands: the
+	# host stopped again, the guest held, the KILLED put in the guest's queue.
+	# ----------------------------------------------------------------------
+	await _pond_until(func() -> bool: return false, 0.2, pins)
+	modes = _pond_stop(host_run)
+	host_net.set_process(false)
+	await _pond_until(func() -> bool: return bool(guest_run.get("_held")), 2.5,
+		[guest_pin])
+	var was_held := bool(guest_run.get("_held"))
+	(guest_net.pond_events as Array).append(Wire.event(0, Wire.EVENT_CONTACT,
+		Wire.contact_payload(FoodField.Contact.KILLED,
+			guest_cell.position + Vector2(0.0, -40.0), 0.0, FoodField.By.WATER, &"",
+			FoodField.Cause.SWALLOWED)))
+	await _pond_until(func() -> bool:
+		return int(guest_run.get("_life")) != NormalMode.Life.ALIVE, 0.5, [])
+	var corpse_at: Vector2 = guest_cell.position
+	var metabolism: Node = guest_run.get_node(^"Metabolism")
+	var corpse_on := [guest_cell.is_processing() or metabolism.is_processing()]
+	# The tap is taken now and honoured at the black, for the next check.
+	guest_run.set("_tap_pending", true)
+	await _pond_until(func() -> bool:
+		if guest_cell.is_processing() or metabolism.is_processing():
+			corpse_on[0] = true
+		return false, 0.3, [])
+	var corpse_moved := (guest_cell.position as Vector2).distance_to(corpse_at)
+	_says(was_held and int(guest_run.get("_life")) != NormalMode.Life.ALIVE
+			and not bool(guest_run.get("_held")) and not bool(corpse_on[0])
+			and corpse_moved < 0.01 and guest_food.is_processing(),
+		"pond: a KILLED heard first after a hold kills the guest and lets the"
+		+ " hold go in one frame, and the corpse is %s -- moved %.2f units in"
+		% ["simulated" if bool(corpse_on[0]) else "never simulated", corpse_moved]
+		+ " 0.3 s -- while the water it died in runs on")
+
+	# ----------------------------------------------------------------------
+	# **The link goes while the guest is coming back** (review, the first
+	# finding): a takeover inside the 0.9 s of RETURNING. It used to stop the
+	# fresh water outright, as for a cell on the black, and nothing started it
+	# again -- the guest came back alive into water where nothing moved and
+	# nothing could be smelt. The host is let go, answers the tap taken above,
+	# and the guest's own link is cut the moment it is returning.
+	# ----------------------------------------------------------------------
+	_pond_start(host_run, modes)
+	host_net.set_process(true)
+	var returning := await _pond_until(func() -> bool:
+		return int(guest_run.get("_life")) == NormalMode.Life.RETURNING, 3.0, [])
+	guest_net.close()
+	var took_back := await _pond_until(func() -> bool: return not guest_food.mirroring(),
+		1.0, [])
+	var in_return := int(guest_run.get("_life")) == NormalMode.Life.RETURNING
+	var water_on := guest_food.is_processing()
+	var fresh_from: Array = _pond_places(guest_food)
+	await _pond_until(func() -> bool:
+		return int(guest_run.get("_life")) == NormalMode.Life.ALIVE, 1.5, [])
+	await _pond_until(func() -> bool: return false, 0.3, [])
+	var fresh_moved := _pond_moved(fresh_from, _pond_places(guest_food))
+	_says(returning >= 0.0 and took_back >= 0.0 and in_return and water_on
+			and int(guest_run.get("_life")) == NormalMode.Life.ALIVE
+			and guest_food.is_processing() and fresh_moved > 10,
+		"pond: the link lost while the guest is returning is a takeover into"
+		+ " water that runs -- %d of %d fresh cells moved by the time it was back"
+		% [fresh_moved, guest_food.bodies().size()])
+
+	# ----------------------------------------------------------------------
+	# **A new run hears nothing said before it** (review): a session queues
+	# events from the moment it is up, and nothing drained them between runs
+	# -- so a guest run opened on `they died` for a death it never saw, and
+	# never drew the host it had just been put beside, which the stale death
+	# said had gone. A second guest calls; the host says a death to it before
+	# its run exists; then the run opens inside the pond.
+	# ----------------------------------------------------------------------
+	guest_run.queue_free()
+	guest_net = await _session("PondGuest2")
+	guest_net.join("127.0.0.1")
+	await _until_link(guest_net, NetSession.Link.TOGETHER)
+	await _until_link(host_net, NetSession.Link.TOGETHER)
+	host_net.send_event(Wire.EVENT_DIED, Wire.died_payload(FoodField.Cause.CHEWED,
+		FoodField.By.WATER, host_cell.position))
+	await _pond_until(func() -> bool:
+		return not (guest_net.pond_events as Array).is_empty(), 1.0, [host_pin])
+	var stale := (guest_net.pond_events as Array).size()
+	guest_run = _pond_run_scene(guest_net, false)
+	get_tree().root.add_child.call_deferred(guest_run)
+	await guest_run.ready
+	guest_cell = guest_run.get_node(^"Cell")
+	guest_food = guest_run.get_node(^"Food")
+	guest_pond = guest_run.get("_pond")
+	# Watched every frame from its first: the stale death, heard, would set
+	# `_friend_dead` in the first step and keep the host undrawn for good, so
+	# waiting up to two seconds for the drawing cannot pass a run that heard it.
+	var second_view: Node = guest_run.get_node(^"Vision")
+	var ever_dead := [false]
+	var second := await _pond_until(func() -> bool:
+		if bool(guest_run.get("_friend_dead")) or str(guest_run.get("_line_key")) == "dead":
+			ever_dead[0] = true
+		return bool(guest_pond.in_pond) \
+			and (second_view.get("_peer") as Dictionary).has("tiers"), 3.0, [host_pin])
+	_says(stale >= 1 and second >= 0.0 and not bool(ever_dead[0]),
+		"pond: a guest run opening after its session heard a death hears none of"
+		+ " it -- %d stale event%s dropped, no `they died`, and the host it"
+		% [stale, "" if stale == 1 else "s"] + " arrives beside is drawn")
+	guest_pin = [guest_cell, guest_cell.position, 0.0]
+	pins = [host_pin, guest_pin]
 
 	# ----------------------------------------------------------------------
 	# **A closed host is a takeover** (§1.8): within 0.1 s the guest swims in
@@ -2719,6 +2958,7 @@ func _check_pond() -> void:
 	host_net.close()
 	var took := await _pond_until(func() -> bool: return not guest_food.mirroring(),
 		1.0, [guest_pin])
+	var took_frames := _pond_frames
 	var fresh: bool = guest_food.bodies().size() == FoodField.COUNT
 	for body: Object in guest_food.bodies():
 		if not body.seeded:
@@ -2726,14 +2966,15 @@ func _check_pond() -> void:
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
 		int(guest_run.get("_generation")),
 		float((guest_run.get_node(^"Metabolism")).hunger)]
-	_says(took >= 0.0 and took <= 0.1 and fresh
+	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh
 			and is_equal_approx(float(kept[0]), float(now_kept[0]))
 			and kept[1] == now_kept[1] and int(kept[2]) == int(now_kept[2])
 			and absf(float(kept[3]) - float(now_kept[3])) < 0.01,
-		"pond: the host closes and the guest takes over %.0f ms later in %d fresh"
-		% [(took if took >= 0.0 else _now() - closed_at) * 1000.0,
+		"pond: the host closes and the guest takes over %d frames later (0.1 s"
+		% took_frames + " at 60 fps is %d; %.0f ms here) in %d fresh cells,"
+		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0,
 			guest_food.bodies().size()]
-		+ " cells, keeping r%.2f, its genome, generation %d and hunger %.2f"
+		+ " keeping r%.2f, its genome, generation %d and hunger %.2f"
 		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3])])
 
 	# **Alone when the link goes, with the menu open** (§1.7): a guest that is
@@ -2753,21 +2994,25 @@ func _check_pond() -> void:
 		and bool((guest_run.get("_warn") as Label).visible)
 	guest_net.set("link", link_was)
 	var stopped := await _pond_until(func() -> bool: return get_tree().paused, 0.5, [])
+	var stopped_frames := _pond_frames
 	var solo_menu := bool(guest_run.get("_menu_open")) \
 		and not bool((guest_run.get("_warn") as Label).visible) \
 		and not bool((guest_run.get_node(^"Cell")).steering_off)
 	guest_run.call("_toggle_pause")
 	var shut := not bool(guest_run.get("_menu_open")) and not get_tree().paused
 	get_tree().paused = false
-	_says(open_live and stopped >= 0.0 and stopped <= 0.1 and solo_menu and shut,
+	_says(open_live and stopped >= 0.0 and stopped_frames <= 2 and solo_menu and shut,
 		"pond: a guest alone whose link goes under its open menu keeps the menu,"
-		+ " and the tree stops under it %.0f ms later -- the shipped pause; shut,"
-		% (stopped * 1000.0) + " the water runs again")
+		+ " and the tree stops under it %d frame%s later -- the shipped pause;"
+		% [stopped_frames, "" if stopped_frames == 1 else "s"]
+		+ " shut, the water runs again")
 
 	# **An ARRIVE that finds the cell no longer ordinary** -- it began to
-	# divide, or died, in the swap's round trip -- drops the swap, rather than
-	# run a beat that stops and restarts the simulation under the division.
-	# Called straight, inside one frame, on the run swimming alone.
+	# divide, or opened the menu, in the swap's round trip (UX §1: never dead,
+	# dividing or in the menu) -- drops the swap, rather than run a beat that
+	# stops and restarts the simulation under the division, or changes the
+	# water under the menu. Called straight, inside one frame, on the run
+	# swimming alone.
 	guest_run.set("_swap_pending", true)
 	guest_run.set("_split", NormalMode.Split.QUICKEN)
 	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
@@ -2777,6 +3022,37 @@ func _check_pond() -> void:
 	guest_run.set("_split", NormalMode.Split.NONE)
 	_says(dropped, "pond: an ARRIVE that lands mid-division drops the swap -- no"
 		+ " beat, no mirror, not in the pond")
+	guest_run.set("_swap_pending", true)
+	guest_run.set("_menu_open", true)
+	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
+	var dropped_menu: bool = float(guest_run.get("_water_beat")) < 0.0 \
+		and not bool(guest_run.get("_swap_pending")) and not guest_food.mirroring() \
+		and not bool(guest_pond.in_pond)
+	guest_run.set("_menu_open", false)
+	_says(dropped_menu, "pond: and so does one that lands with the menu open --"
+		+ " the water never changes under it")
+
+	# **A death inside the water's beat ends the beat** (review, trigger G):
+	# the host's water can take a guest in the second half of the beat that put
+	# it there, and the beat's end used to restart the simulation under the
+	# corpse, bring the world back and pulse. Posed on the run alone: a beat
+	# whose swap is done, run on to a tenth of a second from its end, and a
+	# death -- then watched past where that end was.
+	guest_run.call("_begin_water_beat", Callable(), 0.0, "", "")
+	guest_run.set("_water_beat", NormalMode.SignalBus.DEATH_RETURN - 0.1)
+	guest_run.call("_die", true, 0.0)
+	var beat_over := float(guest_run.get("_water_beat")) < 0.0
+	var dead_at: Vector2 = guest_cell.position
+	var dead_on := [guest_cell.is_processing()]
+	await _pond_until(func() -> bool:
+		if guest_cell.is_processing():
+			dead_on[0] = true
+		return false, 0.25, [])
+	_says(beat_over and not bool(dead_on[0])
+			and (guest_cell.position as Vector2).distance_to(dead_at) < 0.01
+			and int(guest_run.get("_life")) != NormalMode.Life.ALIVE,
+		"pond: a death inside the water's beat ends the beat, and the corpse is"
+		+ " not simulated through where the beat's end was")
 
 	guest_run.queue_free()
 	host_run.queue_free()
@@ -2804,6 +3080,9 @@ func _pond_run_scene(net: Node, watched: bool) -> Node:
 ## Returns the seconds it took, or -1 for never.
 func _pond_until(done: Callable, seconds: float, pins: Array) -> float:
 	var from := _now()
+	var last := from
+	_pond_frames = 0
+	_pond_frame_max = 0.0
 	while true:
 		for pin: Array in pins:
 			var cell: Node = pin[0]
@@ -2815,7 +3094,25 @@ func _pond_until(done: Callable, seconds: float, pins: Array) -> float:
 		if _now() - from >= seconds:
 			return -1.0
 		await get_tree().process_frame
+		var now := _now()
+		_pond_frames += 1
+		_pond_frame_max = maxf(_pond_frame_max, now - last)
+		_pond_frame_worst = maxf(_pond_frame_worst, now - last)
+		last = now
 	return -1.0
+
+
+## Frames a claim of [param seconds] allows at the game's own frame rate.
+func _pond_budget(seconds: float) -> int:
+	return int(roundf(seconds * POND_FPS))
+
+
+## **How many snapshots [param seconds] of waiting must bring**, at least: the
+## host sends one with every state frame and otherwise every STATE_PERIOD, and
+## never more than one a frame -- so on a runner that drew [param frames] in
+## that time, two thirds of the fewer of the two.
+func _pond_snapshots(seconds: float, frames: int) -> int:
+	return int(floorf(minf(seconds / NetSession.STATE_PERIOD, float(frames)) * 0.66))
 
 
 ## `[sent, worst, sent too far, genomes wrong, missing, slot 68 off]`: the
@@ -2859,6 +3156,81 @@ func _pond_mirror_error(host_food: Node, guest_food: Node, host_cell: Node) -> A
 		host_cell.position)
 	worst = maxf(worst, self_off)
 	return [sent, worst, too_far, wrong, missing, self_off]
+
+
+## **The guest's water against the snapshot it applied**, exactly: `[bodies
+## checked, problems]`, no problems meaning all of it held. The host's watched
+## field recorded that snapshot and the water it was built from, found here by
+## the sequence the guest applied. The send set is worked out again from that
+## water -- every seeded body within SEND_REACH of the guest, surface to
+## centre, or hunting it, and nothing else -- and each body sent must be in the
+## mirror under its (serial, meals), at the place sent (float32 both ways, so
+## exact), heading and speed to half a wire step, carried from there by the
+## snapshot's age along that heading, with the genome that body wore. A slot
+## not sent must be empty.
+func _pond_mirror_exact(host_food: Node, guest_food: Node, guest_pond: Object,
+		host_net: Node) -> Array:
+	var problems: Array[String] = []
+	var applied := int(guest_pond.get("_applied"))
+	var records: Array = host_food.get("built")
+	var offset := int(host_net.get("_out_pond_seq")) - int(host_food.get("built_count"))
+	var record: Array = []
+	for each: Array in records:
+		if int(each[0]) + offset == applied:
+			record = each
+	if record.is_empty():
+		return [0, ["snapshot %d is not among the host's last %d" % [applied,
+			records.size()]]]
+	var entries: Array = record[1]
+	var water: Array = record[2]
+	var you: Vector2 = record[3]
+	var person_serial := int(record[4])
+	var sent := {}
+	for entry: Array in entries:
+		sent[int(entry[FoodField.Entry.SLOT])] = entry
+	for i in FoodField.PERSON_SLOT:
+		var w: Array = water[i]
+		var should := false
+		if bool(w[0]):
+			var hunting := int(w[6]) == FoodField.State.STALK \
+				and int(w[7]) == FoodField.PERSON_SLOT and int(w[8]) == person_serial
+			should = hunting \
+				or (w[1] as Vector2).distance_to(you) - float(w[2]) <= FoodField.SEND_REACH
+		if should != sent.has(i):
+			problems.append("slot %d %s" % [i, "left out" if should else "sent"])
+	var mirror: Array = guest_food.bodies()
+	var snap_at: PackedVector2Array = guest_food.get("_snap_at")
+	var ahead := minf(float(guest_food.get("_snap_age")), FoodField.CARRY_MAX)
+	var step := TAU / float(Wire.BEARING_STEPS)
+	var checked := 0
+	for i in FoodField.PERSON_SLOT:
+		var mb: Object = mirror[i]
+		if not sent.has(i):
+			if bool(mb.seeded):
+				problems.append("slot %d in the mirror, not sent" % i)
+			continue
+		var entry: Array = sent[i]
+		checked += 1
+		if not bool(mb.seeded) \
+				or int(mb.serial) != int(entry[FoodField.Entry.SERIAL]) & 0xFFFF \
+				or int(mb.meals) != int(entry[FoodField.Entry.MEALS]):
+			problems.append("slot %d not the body sent" % i)
+			continue
+		var heading := float(mb.heading)
+		var speed := float(mb.speed)
+		if not snap_at[i].is_equal_approx(entry[FoodField.Entry.AT]) \
+				or absf(angle_difference(heading, float(entry[FoodField.Entry.HEADING]))) \
+					> step * 0.5 + 1e-4 \
+				or absf(speed - float(entry[FoodField.Entry.SPEED])) \
+					> Wire.POND_SPEED_STEP * 0.5 + 1e-3:
+			problems.append("slot %d not where it was sent" % i)
+		var carried: Vector2 = snap_at[i] + Vector2(sin(heading), -cos(heading)) \
+			* (speed * ahead)
+		if (mb.pos as Vector2).distance_to(carried) > 1e-3:
+			problems.append("slot %d not carried by its age" % i)
+		if mb.genome != (water[i] as Array)[5]:
+			problems.append("slot %d wears another genome" % i)
+	return [checked, problems]
 
 
 func _pond_places(food: Node) -> Array:

@@ -509,6 +509,33 @@ asked again at the next ordinary frame or by the tap on the black. Both were
 found by re-reading, and each has a `net_probe` check that fails with its fix
 taken out.
 
+**Fixed in review.** (6) **One place decides what is simulated**:
+`normal_mode.gd`'s `_update_simulating()` reads life, division, hold, beat and
+the held opening, and sets this cell's nodes and the water from them. It is
+called wherever any of those changes and once a frame besides, and nothing else
+in the run turns the simulation on or off, so a death, a hold and a beat can
+overlap in any order. It closed three findings: a takeover inside the 0.9 s of
+RETURNING stopped the fresh water for good, and the guest came back alive into
+water where nothing moved; a KILLED heard first after a hold let the hold go
+onto the corpse and simulated it (the review measured it 57 units along in 2 s);
+and the end of a water beat restarted a cell killed inside it. A death now also
+ends a running beat (`_end_water_beat()`), so the beat's revive, returning world
+and pulse cannot fight the collapse. Put the old direct toggles back under it
+and the checks still pass: the next derivation overrides them before any node
+steps. (7) **A
+swap is dropped if the menu opened in its round trip**, as for a death or a
+division (UX §1). (8) **A new run hears nothing its session heard before it**:
+`pond.gd` discards the queue when it is built. A guest run opened on `they
+died` for an old death, and never drew the host it arrived beside, whom the
+stale death had marked as gone. (9) **`Wire.pond()` never writes past
+`POND_MAX`**, whatever it is handed -- sixty-nine bodies flagged as people were
+2,078 bytes, which ENet sends as fragments -- and `take_pond()` refuses a longer
+frame. (10) The UX review's four: the friend's scent as a ring outside the rim,
+the black with no text (the steering line armed again on return until it has
+been read), `you ate them` shown through the quicken, and arrivals searched
+shallowest first. Each of (6)-(9) has a `net_probe` check that fails with its fix
+taken out.
+
 **Elsewhere**
 - [x] `cell.gd`: `swim_speed_of` and `steering_off`; Phase 1 corrected the
   latter's docstring, which claimed it silenced every input.
@@ -694,36 +721,68 @@ identity gate**, which is the method #50 and #51 used, with no session:
   checks; `main`'s three renders diff to 0 px at each shape and view and the
   branch to 0 px against them in all four; the drive log, every sensation in it,
   is byte-identical in both views and in 120 s of the sighted forager at seeds
-  12345 and 2026 -- all of it run again on the final tree. Every CI step
-  passes here with no SCRIPT ERROR or Parse Error.
-- **`net_probe`:** ALL PASS, 170 checks -- 52 more than `main`'s 118: 25 in
-  the new `pond` section, 11 in `pond wire`, 8 more in `pond-field`, and 8 for
+  12345 and 2026 -- all of it run again on the final tree of the review's fix
+  round, `main`'s side rebuilt from scratch in its own worktree: six
+  fingerprints identical, `field_diff` ALL EQUAL over 284,450 checks, `main`'s
+  three renders 0 px apart and the branch 0 px from them at each shape and
+  view, and all four sensation logs byte-identical (49, 49, 894 and 1,244 drive
+  lines). Every CI step passes here with no SCRIPT ERROR or Parse Error.
+- **`net_probe`:** ALL PASS, 176 checks -- 58 more than `main`'s 118: 30 in
+  the new `pond` section, 12 in `pond wire`, 8 more in `pond-field`, and 8 for
   refusing protocol 1 by name beside 2, 3 and 5. With two sessions and two real
   runs, the guest opens inside the pond, is held for the round trip and lands
-  480.00 from the host with no beat, 11 ms after opening; 34 host bodies within
-  1,900 are mirrored within 0.008 units (39-41 within 0.166 when the arrival
-  was 560), none farther, every (serial, meals) genome right; a chewer's `hit`
-  lands at the true bearing to the milliradian and the wounds agree to 0.0001;
-  a guest meal is +4 on the host in 13 ms; with both menus open the tree never
+  480.00 from the host with no beat; 36 host bodies within 1,900 are mirrored
+  exactly as the snapshot the guest applied said -- the send set, the places,
+  the carry by the snapshot's age, the (serial, meals) genomes, and nothing
+  else -- and stand 0.035 units off the host's water; a chewer's `hit` lands at
+  the true bearing to the milliradian and the wounds agree to 1/255; a guest
+  meal is +4 on the host 2 frames later; with both menus open the tree never
   pauses, KEY_D leaves both `steer` at 0, and a committed hunter swallows the
-  guest with its menu up -- DYING 13 ms after the host's swallow, slot 68 empty
-  that frame; each player swallows the other, and the host is told its own
-  cause; 3 s of the host's black carries 59 snapshots and 31 moving bodies, and
-  its tap lands 480.0 from the guest; both players divide at once -- out of the
-  water on both seats within 14 ms of the pinch, 33 bodies moving and 97
+  guest with its menu up -- DYING 2 frames after the host's swallow, slot 68
+  empty that frame; each player swallows the other, and the host is told its
+  own cause; 3 s of the host's black carries 60 snapshots and 31 moving bodies,
+  and its tap lands 480.0 from the guest; both players divide at once -- out of
+  the water on both seats 2 frames after the pinch, 35 bodies moving and 98
   snapshots through 5 s of choosing, each born exactly where it pinched at
   r28.28, each sister in a free slot with nothing else renumbered and clear of
-  both players (one moved 76.6 units off the host); a host stopped for 3 s
-  holds the guest from 1.21 s and releases it 14 ms after it resumes; a closed
-  host is a takeover 12 ms later into 34 fresh cells, keeping r28.28, the
-  genome, generation 2 and the hunger; a guest alone whose link goes under its
-  open menu keeps the menu and the tree stops 7 ms later; and an ARRIVE landing
-  mid-division drops the swap. `pond-field` gained the venomous friend both
+  both players; a host stopped for 3 s holds the guest at 1.208 s of the
+  guest's own silence and releases it 2 frames after it resumes; a KILLED heard
+  first after a hold kills the guest and the corpse is never simulated; the
+  link lost while the guest is returning is a takeover into water that runs,
+  34 of 34 cells moving; a guest run that opens after its session heard a death
+  hears none of it and draws the host it arrives beside; a closed host is a
+  takeover 2 frames later into 34 fresh cells, keeping the body, genome,
+  generation and hunger; a guest alone whose link goes under its open menu
+  keeps the menu and the tree stops 1 frame later; an ARRIVE landing
+  mid-division or with the menu open drops the swap; and a death inside the
+  water's beat ends the beat. `pond-field` gained the venomous friend both
   ways, chewing to the end both ways, the eater's death first, and the water's
-  three causes. **NOTE: 5,027 frames and 43.7 s** -- past §7's 35 s; the pond
-  section is 19.0 s and 2,731 frames at its own 250 fps cap.
+  three causes; `pond wire`, the byte budget held against sixty-nine people.
+  **Latency is held in frames**, a claim of 0.2 s as 12 frames and 0.1 s as 6
+  at the game's own 60, because a review saw a wall-clock bound fail at 119 ms
+  against 100 on a saturated runner: every chain held that way is 1-2 frames,
+  idle or loaded. Four full runs on the final tree: 176 PASS, no SCRIPT ERROR
+  or Parse Error, **NOTE 5,565-5,572 frames and 47.4-47.8 s** idle (the pond
+  section 22.8 s), 5,045 frames and 50.1 s under a render loop and two busy loops
+  (load 2.7-4.9 on four cores), and 3,335 frames and 69.1 s under the render
+  loop and eight (load 7.6-10.9) -- ALL PASS each time. Every new check fails
+  with its fix taken out: the pre-fix `normal_mode.gd` fails the KILLED after a
+  hold, the takeover while returning, the swap under the menu and the death in
+  the beat; the swap's menu guard alone, the beat's end alone, the stale-event
+  drain and the byte cap each fail their own; and the carry moved back to the
+  frame's start, or the send reach halved, fail the mirror. Put the old direct
+  simulation toggles back under `_update_simulating()` and every check still
+  passes.
 - **Renders:** UX §9 items 1-6, 76 frames, judged there item by item. Item 3
-  failed at 560 and is why the arrival is 480 (§1.6); the rest passed.
+  failed at 560 and is why the arrival is 480 (§1.6); the rest passed. The
+  review's fixes, rendered on the final tree at both shapes: the edible friend
+  wears the ring, its body fill (9,45,40) beside your own (11,50,44) where it
+  was (30,96,64) beside a water cell's (42,100,57); `you ate them · they come
+  back near you` shows through the quicken; a solo death with the sense line up
+  leaves the black with only `watch` in both views, where before the line
+  stood under it; and for a player who never turned, `A · D to turn` is up
+  before the death, gone on the black, and back with the next cell -- without
+  the re-arm it never came back.
 - **Timing,** `net_lag --pond --trials=40 --seed=7 --swim=30`, 60 fps, on the
   final tree (earlier runs, at the 560 arrival, in brackets):
 
@@ -782,6 +841,21 @@ identity gate**, which is the method #50 and #51 used, with no session:
   guest back within 5 s keeping its cell; Leave, takeover in < 0.2 s and no
   re-dial; a tokenless HELLO while the guest is quiet gets "already two"; and
   protocols 1-4 are refused by name.
+- *Also, from Phase 2's review* (found, not fixed):
+  - **A dropped swap is two lines on the host.** The host places a guest the
+    moment ENTER arrives (`pond.gd`'s `_host_enter`) and says `they are in
+    your water`; when the guest drops the swap -- dead, dividing or in the
+    menu by the time ARRIVE lands -- its POND bit never goes up, the host lets
+    the body go after `REACH_TIMEOUT` (`_carry_guest`) and says `they left`.
+    The fix is a word on the wire for "not now", which is PROTOCOL 5's.
+  - **A takeover during the pinch un-dims the world until the part**:
+    `_update_dim()` reads `pond_open()`, which `leave_mirror()` has just
+    cleared, so a guest between pinch and part sees the fresh water at full
+    until the daughters are drawn.
+  - **A link lost early in the swap beat runs a second beat**: before the dark
+    middle the guest is not yet a mirror, so the takeover does nothing, the
+    swap then makes it a mirror of a host that has gone, and the next frame's
+    takeover beats again.
 
 **Later, the owner's phase:** genes decide one bite or chewing, for every cell
 (`roadmap.md`).
@@ -825,6 +899,11 @@ heals that.
   `ARMOR_BY_TIER` without a bump makes the guest's membrane misjudge danger.
   Phase 2 should refuse on a hash of the ladders the contact rules read, sent on
   the HELLO and WELCOME tails, so that skew becomes a sentence and not a lie.
+  **Deferred: Phase 2 did not build it.** Until it lands, the rule is written on
+  `wire.gd`'s `PROTOCOL`: any content change to `GAPE_BY_TIER`, `ARMOR_BY_TIER`
+  or the bite tables (`BITE_BY_TIER`, `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`,
+  `VENOM_COST_BY_TIER`, `bite_damage`, `venom_back`) bumps the protocol, which
+  turns the same skew into the refusal it would have been.
 - **Android backgrounding stops the pond** for both players. Nothing in content
   fixes it (`multiplayer.md` §3; a foreground service is a binary change), so
   the held pond and the takeover are the whole mitigation.
@@ -837,10 +916,11 @@ heals that.
   it: the section never awaits, so its 7.8-8.4 s pass inside a single frame, and
   the probe still ends near 2,237 frames, now in 24.0-24.7 s. A Phase 2 section
   that waits on frames is the one that will spend the budget. **Phase 2's
-  does, and it passes 35 s** (§5, Phase 2): 19 s of two real runs going
+  does, and it passes 35 s** (§5, Phase 2): 23 s of two real runs going
   through every lifecycle, 11 s of it three waits the acceptance names (3 s of
-  the host's black, 5 s of choosing, 3 s of a quiet host). The whole probe is
-  43.7 s and 5,027 frames. The section caps itself at 250 frames a second, so
-  the frames stay far inside the backstop -- but the seconds are the lead's to
-  weigh, and `ci.yml`'s "about twenty-five seconds" is out of date. `ci.yml`
-  was not touched.
+  the host's black, 5 s of choosing, 3 s of a quiet host), and 4 s more since
+  the review's fix round -- the second hold, the return and the second guest
+  its new checks need. The whole probe is 47.4-47.8 s and about 5,570 frames
+  idle, 50.1 s under a render loop, and 69.1 s with the CPU saturated, where
+  the frames fall to 3,335. The section caps itself at 250 frames a second, so
+  the frames stay far inside the backstop.

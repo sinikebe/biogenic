@@ -23,12 +23,19 @@ tiers and zero gape and passes `is_self`, which hides the threat bow, on purpose
 *"their mouth cannot reach you"*. In one pond it can. So the friend is drawn by
 `Cilia.draw_cell` like every body: worn tiers, order, gape, wound, and
 `double = smoothstep(32, 40, r)` so the nucleus warns of a division. They get the
-scent haze on the same curve as anything you could swallow. They stay
+scent haze on the same curve as anything you could swallow, **as a ring round
+the body, never over it**: the same `FOOD_TINT` bloom at `HAZE_PEAK` 0.24 out to
+`HAZE_OUTER` 3 r, clear inside 0.92 r and at 0.90 by 1.12 r (a second
+`GradientTexture2D`; water cells keep theirs). Laid over the body it tinted an
+edible friend the green of an edible water cell, and rendered beside one of their
+size they were the same object but for the trail (§9, review). They stay
 **untinted**, because `SELF_TINT` is still the one colour no water cell wears,
 but they **can threaten**: the red toothed bow shows whenever their gape exceeds
 your radius. The person marks stay as shipped: the halo (`HALO_STEPS` 7,
-`0.013·(1−k)·0.6`), the trail (`MOTION_TINT`, `PEER_TRAIL_ALPHA` 0.13), and the
-off-frame edge mark (`SELF_TINT` arc 0.78, barb 0.85, `PEER_MARK_INSET` 64).
+`0.013·(1−k)·0.6`, which measures +3/255 and says nothing by itself -- the body
+and the trail carry *person*), the trail (`MOTION_TINT`, `PEER_TRAIL_ALPHA`
+0.13), and the off-frame edge mark (`SELF_TINT` arc 0.78, barb 0.85,
+`PEER_MARK_INSET` 64).
 
 **0.2 Presence fades; the body does not.** In one pond no single body can be out
 of date on its own. The host simulates the guest, so the guest's place is exact
@@ -48,14 +55,24 @@ decline. No threat bow, no new trail points, and nothing collides with it.
 (18 px, `Color(0.855, 0.953, 0.933, 0.55)`, `anchor_top` 0.72) through `_say()`,
 with the sense line's timing: in over `ONBOARD_FADE_IN` 1.1 s, held
 `SENSE_LINE_HOLD` 7.0 s, out over `ONBOARD_FADE_OUT` 0.8 s. A line never covers
-the steering onboarding line, a division, the black, the replay or the open
-menu. It waits in a one-slot queue where the newest wins, and it is dropped, or
-faded out early, the moment what it reports stops being true. **The newest wins
-on the label too** (built): a line waiting behind one of these still up fades
-that one out early, the way an untrue one goes -- otherwise `they died` would
-wait out the whole 7 s of `you are in their water`. The steering line and a
-sense arriving are not pond lines, and are waited out. Each carries a fact
-about another person that no sense can, as the earshot screen already does:
+the steering onboarding line, a division **from its pinch**, the black, the
+replay or the open menu. The quicken still swims and shows nothing but a doubled
+nucleus, and a meal big enough to start a division -- a friend, usually -- is
+exactly when `you ate them` is due: waiting from the quicken, it waited out the
+choosing and was dropped when they came back (rendered). **A line already up
+when this cell dies fades out from the hit** over `ONBOARD_FADE_OUT`, stepped by
+`_step_death`: the label is stepped only while alive, and rendered it stood on
+the black beside `watch` -- in single player too, with the sense line. The
+steering line, `drag to turn`, fades with the rest, and because it is armed once
+a run, **it is armed again with the next cell for as long as it has never been
+read**: a new player who dies before ever turning is still taught to (built,
+`_return()`). A pond line waits in a one-slot queue where the newest wins, and
+it is dropped, or faded out early, the moment what it reports stops being true.
+**The newest wins on the label too** (built): a line waiting behind one of these
+still up fades that one out early, the way an untrue one goes -- otherwise `they
+died` would wait out the whole 7 s of `you are in their water`. The steering
+line and a sense arriving are not pond lines, and are waited out. Each carries a
+fact about another person that no sense can, as the earshot screen already does:
 
 | when | the line | seat |
 |---|---|---|
@@ -87,7 +104,15 @@ beat. It never closes the aperture first, because closing means death.
 If the pond already exists when the guest's run starts, there is no swap: the
 run opens as today and the line waits `ONBOARD_DELAY` 2.2 s. The swap waits for
 an ordinary frame. It never happens while the guest is dead (the tap on the
-black wakes straight into the pond), dividing, or in the menu.
+black wakes straight into the pond), dividing, or in the menu -- and that is
+asked twice (built): when the guest asks, and again when ARRIVE lands, because
+any of the three can begin in the round trip. Then the swap is dropped, and
+asked for again at the next ordinary frame.
+
+**When both sides of the horizontal are taken**, `arrival_point` searches the
+circle shallowest first: 30°, 150°, 210°, 330°, then 60°, 120°, 240°, 300°, then
+90° and 270°. At 1280x720 a 480-unit arrival more than 37° off the horizontal
+lands off the frame, and the built order tried 60°, 90° and 120° before 150°.
 
 ## 2. Your friend divides
 
@@ -305,6 +330,29 @@ is Phase 3's, with the replay.
 6. **Passed.** From the pinch the world dims and the daughters and strands stay
    at full, the friend moving on behind them, dimmed with the water. A pond
    line already up stays through the division, as the shipped sense line does.
+
+**UX review of the build**, from those 76 frames and 26 of its own (18 of the
+build, 8 mocking the fixes): items 2-6 pass as built. Held, your own cell
+measures at full (179-203 against 186-203 swimming) while the friend drops from
+180 to 48; the warning's ink sits
+at canvas y 484-499 at both shapes, 18 px under the settings row and 15 over
+`resume`, and hides over a held pond. Item 1 passes for a friend who can eat you
+and **failed for one you can eat**, a case the item never posed: §0.1's ring,
+mocked, takes the friend's body fill from (31,97,65) to (10,45,40), where your
+own is (10,44,39). The line failed twice, both now in §0.4 and both mocked
+clean: a line up at death stood on the black, and `you ate them` never showed
+when the meal started a division. All seven strings are seen at full alpha, and
+read.
+
+**Built as mocked**, rendered on the final tree at both shapes. The edible
+friend's body fill is (9,45,40) beside your own (11,50,44), where it was
+(30,96,64) beside an edible water cell's (42,100,57); the ring reads as a smell
+round a person. `you ate them · they come back near you` shows through the
+quicken. A solo death with `a sense grew · esc to place it` up leaves the black
+with `watch` alone in both views -- the label band measured 129 at its
+brightest before and 0 after. And for a player who has never turned, `A · D to
+turn` is up before a death at 3 s, gone on the black, and back with the next
+cell; rendered without the re-arm in `_return()`, it never came back.
 
 ## 10. Left open: owner's call
 
