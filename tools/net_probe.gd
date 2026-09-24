@@ -1065,6 +1065,14 @@ func _check_run() -> void:
 			"with a level, a width and a hold off food.gd's own tables"
 			+ " (%.2f / %.1f deg / %.2f s)" % [float(mark["strength"]),
 				float(mark["halfwidth"]), float(mark["hold"])])
+		# **The law it is heard by**, which is the echo's own over the path the
+		# call actually crossed: one way, 366 units of water surface to surface
+		# (issue #45). An echo off a body there would have gone out and back.
+		# The tolerance is a few units of the cell's drift inside one frame.
+		var want := FoodField.ping_level(SHOUT_FROM.length() - 34.0, 1100.0)
+		_says(absf(float(mark["strength"]) - want) < 0.005,
+			"and its level is food.gd's ping_level over the one-way path"
+			+ " (%.3f, law %.3f)" % [float(mark["strength"]), want])
 
 	# Turn the cell a quarter turn to starboard and the same shout must move a
 	# quarter turn to port on the membrane. This is the whole of "one water, one
@@ -1080,12 +1088,34 @@ func _check_run() -> void:
 		turned = absf(angle_difference(bearing, -PI * 0.5)) < 0.01
 	_says(turned, "turning the cell 90 degrees moves the mark 90 the other way")
 
-	# Out of earshot: past the shouter's own reach, nothing is heard at all.
+	# **One way, so twice as far** (issue #45). A call crosses the water once
+	# where her echoes cross it twice, so it carries to twice the reach her own
+	# echoes come home from: 1,766 units is past a tier-1 echo's 1,100 and well
+	# inside the call's 2,200, where it lands at about 0.35.
+	marks.clear()
+	other.shout(Vector2(0.0, -1800.0), 34.0, 1100.0)
+	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
+	# On the shout's own bearing, so none of this cell's echoes can pass it.
+	var far := not marks.is_empty() \
+		and absf(angle_difference(float(marks[0]["bearing"]), -PI * 0.5)) < 0.01
+	_says(far, "a shout from past the shouter's echo reach but inside twice it"
+		+ " is heard (%.3f)" % (float(marks[0]["strength"]) if far else 0.0))
+
+	# Even inside that, a call the water has taken down to `PING_SILENT` is not
+	# played, which is the rule `_cast_ping` keeps for an echo. One unit short
+	# of 2,200 it would land at 0.009; it turns audible about six units nearer.
+	marks.clear()
+	other.shout(Vector2(0.0, -2233.0), 34.0, 1100.0)
+	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
+	_says(marks.is_empty(),
+		"a shout the water has taken to PING_SILENT or below is not played")
+
+	# Out of earshot: past twice the shouter's reach, nothing is heard at all.
 	marks.clear()
 	other.shout(Vector2(0.0, -4000.0), 34.0, 1100.0)
 	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
 	_says(marks.is_empty(),
-		"a shout from beyond the shouter's own reach is not heard")
+		"a shout from beyond twice the shouter's reach is not heard")
 
 	# ----------------------------------------------------------------------
 	# **The marker, all the way to the thing that draws it.** Everything above

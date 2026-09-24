@@ -648,7 +648,30 @@ const PING_WIDTH_MAX := 52.0
 ## be a mark, for the one gene whose whole promise is *there is something over
 ## there*. At 0.6 the same return reads 0.30 and a body at half reach reads
 ## 0.66, so distance is still legible and nothing is silent.
+##
+## **Counted on the path the wave travels, not on the range** (issue #45): see
+## [method ping_level]. An echo's path is out and back, so the fade is exactly
+## what it was; [constant PING_ATTENUATION] takes the water's share on top of
+## it, and at tier 1 that 0.30 lands at 0.29 and the 0.66 at 0.63.
 const PING_FALLOFF := 0.6
+## **What the water itself takes out of the wave, per unit of path.**
+## Beer-Lambert: a wave crossing an absorbing medium keeps `exp(-k * path)` of
+## itself, and the path is the distance the wave actually covers -- out and
+## back for an echo, one way for a friend's call. It multiplies into
+## [constant PING_FALLOFF]'s fade and into every occluder's bite rather than
+## replacing either, so each of the three keeps meaning one thing: how far the
+## wave went, what the water took, and what was in the way.
+##
+## **Gentle, by the owner's bound, and measured against it**: no echo off a body
+## at the distances this water keeps them, 900 to 1400 units out, may come home
+## more than 10% fainter than it did. 1400 is a 2800-unit round trip and
+## `exp(-3.75e-5 * 2800)` is 0.900, so this is the bound and not a guess near
+## it; the edge of tier-3 reach keeps 0.867. **Measured** over 300 s of the
+## sighted forager at six seeds and every tier, 1,089 echoes heard: each kept
+## 0.922 to 0.998 of its old level, and not one left or joined the heard set --
+## the echo that lands is nearer than the seeding band, median 426 to 493 units.
+## ping-as-outline.md §2.2 has the tables, a friend's call by distance included.
+const PING_ATTENUATION := 3.75e-5
 ## **The smallest gap between two returns of one pulse.** Flight time alone does
 ## not carry the sweep, and that was measured rather than assumed: the water
 ## keeps its bodies in a band, so four of them routinely answered within 30ms of
@@ -2838,6 +2861,28 @@ func _step_pings(delta: float) -> void:
 	pings.sort_custom(func(a: Array, b: Array) -> bool: return a[1] > b[1])
 
 
+## **How loud a pulse is once its wave has travelled [param path] units**, from
+## an organ whose echoes carry [param reach]: 1 at the skin, 0 when the path is
+## `2 * reach`. The one law every ping is heard by -- this cell's echoes in
+## [method _cast_ping], and a friend's call in `normal_mode.gd`'s
+## `_hear_others` -- so the two cannot drift apart. [param reach] must be above
+## zero, which both callers already see to.
+##
+## Two terms, both about the path and nothing else:
+##
+## - [constant PING_FALLOFF]'s fade. An echo's path is out and back, `2d`, so
+##   `1 - 2d / (2 * reach)` is the `1 - d / reach` it always was and no echo
+##   moves by it. A friend's call comes one way, `d`, so the same law hears it
+##   louder and to twice the reach her own echoes come home from.
+## - [constant PING_ATTENUATION], the water's own absorption.
+##
+## Occlusion is not in here. It is about what is in the way, not how far the
+## wave went, and it multiplies on at the call site.
+static func ping_level(path: float, reach: float) -> float:
+	return pow(clampf(1.0 - path / (2.0 * reach), 0.0, 1.0), PING_FALLOFF) \
+		* exp(-PING_ATTENUATION * path)
+
+
 ## Everything inside reach the pulse can actually reach, nearest first, capped
 ## at [constant PING_RETURNS_BY_TIER] **after** the shadows have been taken off.
 ##
@@ -2873,6 +2918,9 @@ func _step_pings(delta: float) -> void:
 ## tier-1 cell hears nothing at all behind its own organ, and a tier-3 one hears
 ## through itself at 0.58 and never quite as well as around itself, which is the
 ## right direction for a build that has spent three tiers on one gene.
+##
+## What they multiply into is [method ping_level] over the echo's whole path,
+## out and back.
 func _cast_ping() -> void:
 	# Clamped here and not trusted: the run writes it every frame, and a headless
 	# boot casts a pulse before the first write lands.
@@ -2900,8 +2948,9 @@ func _cast_ping() -> void:
 	var heard: Array = []
 	for i in found.size():
 		var at: Vector2 = found[i][1]
-		var level: float = pow(clampf(1.0 - float(found[i][0]) / ping_range, 0.0, 1.0),
-			PING_FALLOFF)
+		# **Out and back**: to the near edge and home again, so the wave has
+		# travelled `2d` by the time the organ hears it.
+		var level := ping_level(2.0 * float(found[i][0]), ping_range)
 		var path := at - origin
 		var reach := path.length()
 		# The hull. A body touching the organ has no direction to be on either

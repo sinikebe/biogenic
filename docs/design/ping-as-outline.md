@@ -146,6 +146,49 @@ the *whole* body, so §3.2's table survives the bounce untouched — and so does
 §10 row 2, which was deferred on the assumption that every number in it would
 double. It does not: the arrival time doubled and the duration did not.
 
+### 2.2 The fade is counted on the path, and the water takes its share (#45)
+
+One law for every ping, `food.gd`'s static `ping_level(path, reach)`, times the
+hull and the occluders as before:
+
+```
+level = (1 − path / (2 × reach)) ^ PING_FALLOFF × exp(−PING_ATTENUATION × path)
+```
+
+**An echo's path is `2d`**, so its fade is the `(1 − d / reach)^0.6` it always
+was — proved with `PING_ATTENUATION` at 0: all six identity-gate fingerprints
+(`shared-pond.md` §5) are `main`'s, and `field_diff` is ALL EQUAL over 284,450
+checks. **The water takes 3.75e-5 per unit of path** (Beer–Lambert), set to
+the owner's bound: an echo off a body 900–1,400 units out comes home at most 10%
+fainter, 0.900 at 1,400 and 0.867 at the edge of tier-3 reach. Measured over
+300 s of the sighted forager at six seeds per tier, 293 pulses and 1,089 echoes
+heard, before → after:
+
+| tier | heard | median | p10 | p90 | lit bodies in reach at or under `PING_SILENT` |
+|---|---|---|---|---|---|
+| 1 | 480 | 0.636 → 0.609 | 0.222 → 0.210 | 0.853 → 0.837 | 7.05% → 7.23% |
+| 2 | 284 | 0.474 → 0.453 | 0.257 → 0.246 | 0.879 → 0.861 | 1.00% → 1.14% |
+| 3 | 325 | 0.572 → 0.566 | 0.433 → 0.411 | 0.902 → 0.882 | 0% → 0% |
+
+Every heard echo kept 0.922–0.998 of its level, and not one left or joined the
+heard set: the six bodies the water newly silenced were already past the cap.
+The echo that lands in foraging is nearer than the seeding band (median 426–493
+units, never past 1,081), so the loss is under the bound, not at it. Rendered in
+point of view at both shapes, `main`'s frame three times to 0 px first, a mark
+loses 7–9% of its violet and no pixel moves by more than 9/255: the faintest
+tier-1 mark reads as it did.
+
+**A friend's call crosses once, path `d`.** So it is louder than the echo off
+the same body, carries to twice the reach of the organ that made it, still
+arrives at once (the owner's call), and is not played at or under
+`PING_SILENT`, which it used to be. Level by distance, before → after:
+
+| units of water | 500 | 1,000 | 1,500 | 2,000 | 3,000 | heard to |
+|---|---|---|---|---|---|---|
+| tier 1 | 0.695 → 0.841 | 0.237 → 0.670 | — → 0.476 | — → 0.220 | — | 1,100 → 2,193 |
+| tier 2 | 0.784 → 0.880 | 0.517 → 0.755 | — → 0.624 | — → 0.480 | — | 1,500 → 2,990 |
+| tier 3 | 0.833 → 0.902 | 0.639 → 0.802 | 0.393 → 0.699 | — → 0.593 | — → 0.351 | 1,900 → 3,786 |
+
 ## 3. The four readings one return now carries
 
 A body of radius `R` whose centre is `D` from the organ reflects between

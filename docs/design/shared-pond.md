@@ -89,6 +89,14 @@ speed, from a new `cell.gd` static `swim_speed_of(flagellum, axoneme)` that
 `trichocyst` and its bearing from the worn order via `Cilia.slot_bearing`; venom
 cost from `toxicyst`; and `first_hunt`, `dart_clock`, `in_water` and `quiet`.
 
+**Heard two ways, by one law** (#45, `ping-as-outline.md` §2.2). Your own pulse
+comes back off their body, out and back, like any body's. Their *call* crosses
+once, so `_hear_others` hears it by the same `food.gd` `ping_level` over the
+one-way path: louder than the echo off them, and audible to twice the reach of
+the organ that made it (2,193 / 2,990 / 3,786 units by tier), still at once. A
+call is sent to everyone and needs no mirrored body, so `SEND_REACH` does not
+bound it.
+
 Wherever the AI asks something of *the* player, it asks the same of a person, with
 the same arithmetic. Each rule becomes one function with two callers, and the
 identity gate (§5) proves that refactor changed nothing.

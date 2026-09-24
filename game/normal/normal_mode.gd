@@ -863,8 +863,12 @@ func _post_pings() -> void:
 ## `_step_pings`, done on the same side of the same seam.
 ##
 ## Every scalar below comes out of `food.gd`'s own tables, and that is the
-## point: a shout is heard exactly as a return off a body that size at that
-## distance would be heard. There is not one tuning number in this function.
+## point: a shout is heard by the law an echo is, [method FoodField.ping_level],
+## over the path it actually travelled -- **one way**, where an echo's is out
+## and back. So a friend's call is louder than an echo off a body that size at
+## that distance, and carries to twice the reach her own echoes come home from,
+## and it arrives at once rather than after its flight (the owner's call, issue
+## #45). There is not one tuning number in this function.
 func _hear_others() -> void:
 	if _net == null or not is_instance_valid(_net):
 		return
@@ -880,12 +884,13 @@ func _hear_others() -> void:
 		var apart := _cell.position.distance_to(at)
 		# Surface to surface, the way `_cast_ping` measures everything.
 		var gap := maxf(apart - radius, 0.0)
-		if gap >= reach:
-			# Out of earshot. Her organ's reach, not this cell's: it is her
-			# pulse, and it runs out of water where her organ stops.
+		# Her organ's reach, not this cell's: it is her pulse. One way, so it
+		# runs out of water at twice that -- and a call the water has taken
+		# down to what `_cast_ping` would not spend a slot on is not played
+		# either. Written so a NaN is refused rather than posted.
+		var level := FoodField.ping_level(gap, reach)
+		if not (level > FoodField.PING_SILENT):
 			continue
-		var level := pow(clampf(1.0 - gap / reach, 0.0, 1.0),
-			FoodField.PING_FALLOFF)
 		var tier := clampi(_food.ping_tier, 0,
 			FoodField.PING_WIDTH_FLOOR.size() - 1)
 		# `span` floored at the radius so `asin` is never asked for more than 1
