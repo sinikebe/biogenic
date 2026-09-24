@@ -252,7 +252,8 @@ func _check_code() -> void:
 ## **Which adapter is the LAN** (`Lan.pick_address`), on adapter lists shaped as
 ## `IP.get_local_interfaces()` returns them. Every address here is a
 ## placeholder: RFC 5737's 192.0.2.x, and round values -- 192.168.0.10,
-## 10.0.0.10, 172.16.0.10 -- standing in for the private ranges being ranked.
+## 10.0.0.10, 172.16.0.10 -- standing in for the private ranges being ranked,
+## and Android's stock tether addresses, which are the same on every phone.
 func _check_adapters() -> void:
 	var ranked := Lan.pick_address([
 		{"name": "eth1", "friendly": "eth1", "addresses": ["172.16.0.10"]},
@@ -295,6 +296,30 @@ func _check_adapters() -> void:
 	_says(only_virtual == "192.0.2.30" and none.is_empty(),
 		"adapters: a machine on a VPN alone still answers with it, and loopback"
 		+ " and link-local are never an answer")
+	# **A phone's own tethers.** Android hands its hotspot, USB and Bluetooth
+	# tethers the same stock addresses on every phone -- 192.168.43.1,
+	# 192.168.42.129, 192.168.44.1, nobody's network in particular -- so all
+	# three outrank a 10.x Wi-Fi on range alone. On the Wi-Fi, the Wi-Fi is the
+	# LAN; a phone that IS the hotspot, with only its cellular data besides,
+	# answers with the tether, which is the LAN its friend joins.
+	var joined: PackedStringArray = []
+	var hosting: PackedStringArray = []
+	for tether: Array in [["swlan0", "192.168.43.1"], ["rndis0", "192.168.42.129"],
+			["bt-pan", "192.168.44.1"]]:
+		joined.append(Lan.pick_address([
+			{"name": tether[0], "friendly": tether[0], "addresses": [tether[1]]},
+			{"name": "wlan0", "friendly": "wlan0", "addresses": ["10.0.0.10"]}]))
+		hosting.append(Lan.pick_address([
+			{"name": "rmnet_data0", "friendly": "rmnet_data0",
+				"addresses": ["10.0.0.10"]},
+			{"name": tether[0], "friendly": tether[0], "addresses": [tether[1]]}]))
+	_says(joined == PackedStringArray(["10.0.0.10", "10.0.0.10", "10.0.0.10"])
+			and hosting == PackedStringArray(["192.168.43.1", "192.168.42.129",
+				"192.168.44.1"]),
+		"adapters: a phone on a 10.x Wi-Fi with a hotspot, USB or Bluetooth"
+		+ " tether up answers with the Wi-Fi (%s); a phone that is the tether,"
+		% ", ".join(joined) + " with only cellular besides, answers with the"
+		+ " tether (%s)" % ", ".join(hosting))
 
 
 # ---------------------------------------------------------------------------
@@ -3930,11 +3955,12 @@ func _server_until(done: Callable, pins: Array) -> float:
 
 
 ## **An update service that answers what it is told to**: the launcher's two
-## coroutines' shape, with no network behind them.
+## coroutines' shape, with no network behind them. Made by [method _fake], whose
+## manifest is built for the binary this process is.
 class FakeService extends RefCounted:
 	var state := 0
 	var last_error := ""
-	var manifest := {"version_name": "9.9.9"}
+	var manifest := {"version_name": "9.9.9", "binary_version": 0}
 	var pending_kind := ""
 	var pending_artifact := {}
 	var pending_version := 0
@@ -4000,16 +4026,13 @@ func _check_server_updates() -> void:
 	DirAccess.make_dir_recursive_absolute(scratch)
 	var exe := scratch.path_join("biogenic-server.x86_64")
 	var note := scratch.path_join("note.json")
-	for leftover: String in [exe, exe + ".previous", exe + ".previous.part", note,
-			scratch.path_join(".biogenic-server.x86_64.download")]:
+	var part := scratch.path_join(".biogenic-server.x86_64.download")
+	var leftovers := [exe, exe + ".previous", exe + ".previous.part", note, part]
+	for leftover: String in leftovers:
 		DirAccess.remove_absolute(leftover)
 
 	# **Content newer**: staged, held while a guest is in, done once it is not.
-	var content := FakeService.new()
-	content.answer = ServiceScript.State.CONTENT_READY
-	content.applied_as = ServiceScript.State.RESTART_REQUIRED
-	content.pending_kind = "content"
-	content.pending_version = 1_000_000
+	var content := _fake(ServiceScript.State.CONTENT_READY, 1_000_000)
 	var up := _updater(content, exe, note, 0.25)
 	var restarts: Array = []
 	up.restart_wanted.connect(func(why: String) -> void: restarts.append(why))
@@ -4038,10 +4061,7 @@ func _check_server_updates() -> void:
 
 	# **A pack that did not mount is not taken again**: the note says content
 	# 1,000,000, this build runs less, so the next start refuses it.
-	var after := FakeService.new()
-	after.answer = ServiceScript.State.CONTENT_READY
-	after.applied_as = ServiceScript.State.RESTART_REQUIRED
-	after.pending_version = 1_000_000
+	var after := _fake(ServiceScript.State.CONTENT_READY, 1_000_000)
 	var next := _updater(after, exe, note, 0.25)
 	await next.check()
 	_says(after.applies == 0 and str(next.staged).is_empty()
@@ -4050,65 +4070,143 @@ func _check_server_updates() -> void:
 		+ " not downloaded again")
 	next.queue_free()
 
-	# **Binary newer**: downloaded from a loopback HTTP server, hashed, and
-	# swapped over the running build -- which is kept beside it.
+	# **Content built for another binary is not this one's**: the launcher
+	# offers it whenever the binary number has not gone up, down included.
+	var running := int(content.manifest["binary_version"])
+	var passed_over := 0
+	for other: int in [running - 1, running + 1]:
+		var elsewhere := _fake(ServiceScript.State.CONTENT_READY, 1_000_004)
+		elsewhere.manifest["binary_version"] = other
+		var picky := _updater(elsewhere, exe, note, 60.0)
+		var picky_lines := _lines_of(picky)
+		await picky.check()
+		if elsewhere.applies == 0 and str(picky.staged).is_empty() \
+				and _said(picky_lines, "published for binary %d" % other):
+			passed_over += 1
+		picky.queue_free()
+	_says(passed_over == 2,
+		"server updates: content published for binary %d or %d is not taken by"
+		% [running - 1, running + 1] + " binary %d" % running)
+
+	# **Binary newer**: downloaded from a loopback HTTP server, hashed, asked
+	# for its version, and swapped over the running build -- which is kept
+	# beside it. The build is a shell script that answers `--version` as an
+	# exported server does, padded past a megabyte so that its hashing takes
+	# more than one of its megabyte-a-frame steps.
 	var http := TinyHttp.new()
 	add_child(http)
 	var listening := http.start()
 	var old_build := "the build that is running".to_utf8_buffer()
-	var new_build := PackedByteArray()
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	new_build.resize(1_500_000)
-	for i in new_build.size():
-		new_build[i] = rng.randi() & 0xFF
+	var new_build := _fake_build("4.7.stable.probe", 0, 1_500_000)
+	var new_sum := _sha(new_build)
 	http.body = new_build
-	var hashing := HashingContext.new()
-	hashing.start(HashingContext.HASH_SHA256)
-	hashing.update(new_build)
-	var new_sum := hashing.finish().hex_encode()
 	_write(exe, old_build)
-	var binary := FakeService.new()
-	binary.answer = ServiceScript.State.BINARY_READY
-	binary.pending_kind = "binary"
-	binary.pending_version = 1_000_001
-	binary.pending_artifact = {"url": "http://127.0.0.1:%d/biogenic-server.x86_64"
-		% http.port, "sha256": new_sum, "size": new_build.size()}
+	var binary := _fake(ServiceScript.State.BINARY_READY, 1_000_001)
+	binary.pending_artifact = {"url": _served(http), "sha256": new_sum,
+		"size": new_build.size()}
 	var swap := _updater(binary, exe, note, 60.0)
+	var swap_lines := _lines_of(swap)
 	await swap.check()
 	var mode := FileAccess.get_unix_permissions(exe)
 	_says(listening and http.served == 1 and _read(exe) == new_build
 			and _read(exe + ".previous") == old_build
 			and (mode & FileAccess.UNIX_EXECUTE_OWNER) != 0
-			and not FileAccess.file_exists(scratch.path_join(".biogenic-server.x86_64.download"))
+			and not FileAccess.file_exists(part)
 			and not FileAccess.file_exists(exe + ".previous.part")
-			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_001,
+			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_001
+			and _said(swap_lines, "starts here (4.7.stable.probe)"),
 		"server updates: binary newer is fetched over HTTP, its SHA-256 checked"
-		+ " (%s...), and swapped over the running build, executable, the old one"
-		% new_sum.left(12) + " kept as .previous")
+		+ " (%s...), asked for its version, and swapped over the running build,"
+		% new_sum.left(12) + " executable, the old one kept as .previous")
+
+	# **A second build while the first still waits** replaces that one, which
+	# never ran -- and `.previous` stays the build that did.
+	var second_build := _fake_build("4.7.stable.probe2", 0)
+	http.body = second_build
+	binary.pending_version = 1_000_002
+	binary.pending_artifact = {"url": _served(http), "sha256": _sha(second_build),
+		"size": second_build.size()}
+	await swap.check()
+	_says(http.served == 2 and _read(exe) == second_build
+			and _read(exe + ".previous") == old_build
+			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_002,
+		"server updates: a second binary while the first is staged replaces it,"
+		+ " and .previous stays the build that ran")
 	swap.queue_free()
 
-	# **A bad checksum is refused**: nothing moves, and nothing is left.
-	var before := _read(exe)
-	var bad := FakeService.new()
-	bad.answer = ServiceScript.State.BINARY_READY
-	bad.pending_kind = "binary"
-	bad.pending_version = 1_000_002
-	bad.pending_artifact = {"url": "http://127.0.0.1:%d/biogenic-server.x86_64"
-		% http.port, "sha256": "00".repeat(32), "size": new_build.size()}
-	var refuse := _updater(bad, exe, note, 60.0)
+	# **A build that does not start here is refused**, and not fetched again
+	# until the manifest's checksum for it changes.
+	var previous := "the build before that".to_utf8_buffer()
+	_write(exe, old_build)
+	_write(exe + ".previous", previous)
+	var broken_build := _fake_build("cannot start on this machine", 1)
+	http.body = broken_build
+	var broken := _fake(ServiceScript.State.BINARY_READY, 1_000_003)
+	broken.pending_artifact = {"url": _served(http), "sha256": _sha(broken_build),
+		"size": broken_build.size()}
+	var refuse := _updater(broken, exe, note, 60.0)
+	var refuse_lines := _lines_of(refuse)
+	var served := http.served
 	await refuse.check()
-	_says(http.served == 2 and _read(exe) == before and str(refuse.staged).is_empty()
-			and not FileAccess.file_exists(
-				scratch.path_join(".biogenic-server.x86_64.download")),
-		"server updates: a download whose SHA-256 does not match the manifest is"
-		+ " refused -- the running build untouched, the download deleted")
+	_says(http.served == served + 1 and _read(exe) == old_build
+			and _read(exe + ".previous") == previous and not FileAccess.file_exists(part)
+			and str(refuse.staged).is_empty()
+			and _said(refuse_lines, "does not start on this machine"),
+		"server updates: a new binary that exits 1 on --version is refused -- the"
+		+ " running build and .previous untouched, the download deleted")
+	await refuse.check()
+	await refuse.check()
+	var skipped_downloads := http.served - served - 1
+	var skips_said := _count(refuse_lines, "not downloading it again")
+	var fixed_build := _fake_build("4.7.stable.fixed", 0)
+	http.body = fixed_build
+	broken.pending_artifact = {"url": _served(http), "sha256": _sha(fixed_build),
+		"size": fixed_build.size()}
+	await refuse.check()
+	_says(skipped_downloads == 0 and skips_said == 1 and http.served == served + 2
+			and _read(exe) == fixed_build and str(refuse.staged) == "binary",
+		"server updates: a refused build is not downloaded again while the"
+		+ " manifest gives it the same checksum -- %d downloads in 2 checks,"
+		% skipped_downloads + " said %d time(s) -- and is, once it gives another"
+		% skips_said)
+
+	# **What the pre-flight takes for a version**: any `N.M...`, so the first
+	# Godot 5 build is not refused for its number by every server already out
+	# there -- and never an empty answer with exit 0, which is what a build
+	# killed on its way out can give.
+	var asked := scratch.path_join("preflight.sh")
+	leftovers.append(asked)
+	var verdicts: PackedStringArray = []
+	for case: Array in [["", false], ["5.0.stable.official", true], ["hello", false]]:
+		_write(asked, _fake_build(str(case[0]), 0))
+		FileAccess.set_unix_permissions(asked, FileAccess.UNIX_READ_OWNER
+			| FileAccess.UNIX_WRITE_OWNER | FileAccess.UNIX_EXECUTE_OWNER)
+		if bool(refuse.preflight(asked)["ok"]) == bool(case[1]):
+			verdicts.append(str(case[0]))
+	_says(verdicts.size() == 3,
+		"server updates: the pre-flight refuses an empty answer and a non-version"
+		+ " with exit 0, and takes a Godot 5 version (%d of 3 right)" % verdicts.size())
 	refuse.queue_free()
 
+	# **A bad checksum is refused**: nothing moves, nothing is left, and it is
+	# not fetched again at the next check.
+	var before := _read(exe)
+	var bad := _fake(ServiceScript.State.BINARY_READY, 1_000_005)
+	bad.pending_artifact = {"url": _served(http), "sha256": "00".repeat(32),
+		"size": fixed_build.size()}
+	var mismatch := _updater(bad, exe, note, 60.0)
+	served = http.served
+	await mismatch.check()
+	await mismatch.check()
+	_says(http.served == served + 1 and _read(exe) == before
+			and str(mismatch.staged).is_empty() and not FileAccess.file_exists(part),
+		"server updates: a download whose SHA-256 does not match the manifest is"
+		+ " refused -- the running build untouched, the download deleted -- and"
+		+ " not fetched again at the next check")
+	mismatch.queue_free()
+
 	# **Nothing is applied from the editor**: the same news, and no download.
-	var editor := FakeService.new()
-	editor.answer = ServiceScript.State.CONTENT_READY
-	editor.pending_version = 1_000_003
+	var editor := _fake(ServiceScript.State.CONTENT_READY, 1_000_006)
 	var dry := _updater(editor, exe, note, 60.0)
 	dry.can_apply = false
 	await dry.check()
@@ -4117,11 +4215,80 @@ func _check_server_updates() -> void:
 		+ " take, and takes nothing")
 	dry.queue_free()
 
+	# **What a stop in the middle of an update leaves is gone at the next
+	# start** -- and the rollback copy is not.
+	var way_back := "the way back".to_utf8_buffer()
+	_write(part, "half a download".to_utf8_buffer())
+	_write(exe + ".previous.part", "half a copy".to_utf8_buffer())
+	_write(exe + ".previous", way_back)
+	var fresh := _updater(_fake(ServiceScript.State.UP_TO_DATE, 0), exe, note, 60.0)
+	_says(not FileAccess.file_exists(part)
+			and not FileAccess.file_exists(exe + ".previous.part")
+			and _read(exe + ".previous") == way_back,
+		"server updates: a download and a half-made copy left by a stop"
+		+ " mid-update are removed at the next start, and .previous is kept")
+	fresh.queue_free()
+
 	http.stop()
 	http.queue_free()
-	for leftover: String in [exe, exe + ".previous", exe + ".previous.part", note]:
+	for leftover: String in leftovers:
 		DirAccess.remove_absolute(leftover)
 	DirAccess.remove_absolute(scratch)
+
+
+## A fake update service answering [param answer] about [param version], its
+## manifest built for the binary this process is.
+func _fake(answer: int, version: int) -> FakeService:
+	var service := FakeService.new()
+	service.answer = answer
+	service.pending_version = version
+	service.pending_kind = "binary" if answer == ServiceScript.State.BINARY_READY \
+		else "content"
+	service.applied_as = ServiceScript.State.RESTART_REQUIRED
+	var info := get_node_or_null(^"/root/BuildInfo")
+	service.manifest["binary_version"] = int(info.binary_version) if info != null else 0
+	return service
+
+
+## **A server build, as far as the pre-flight can tell**: a shell script that
+## answers `--version` with [param says] and exits [param code] -- padded to
+## [param size] bytes past its `exit`, where the shell never reads.
+static func _fake_build(says: String, code: int, size: int = 0) -> PackedByteArray:
+	var bytes := ("#!/bin/sh\necho '%s'\nexit %d\n" % [says, code]).to_utf8_buffer()
+	var line := ("#" + "=".repeat(62) + "\n").to_utf8_buffer()
+	while bytes.size() + line.size() <= size:
+		bytes.append_array(line)
+	return bytes
+
+
+static func _sha(bytes: PackedByteArray) -> String:
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	hashing.update(bytes)
+	return hashing.finish().hex_encode()
+
+
+func _served(http: Node) -> String:
+	return "http://127.0.0.1:%d/biogenic-server.x86_64" % int(http.port)
+
+
+## Every line [param up] says from now on, as it says it.
+func _lines_of(up: Node) -> Array:
+	var lines: Array = []
+	up.said.connect(func(line: String) -> void: lines.append(line))
+	return lines
+
+
+func _said(lines: Array, part: String) -> bool:
+	return _count(lines, part) > 0
+
+
+func _count(lines: Array, part: String) -> int:
+	var count := 0
+	for line: String in lines:
+		if line.contains(part):
+			count += 1
+	return count
 
 
 ## An updater on a fake service, in the tree, that checks only when told.

@@ -76,16 +76,23 @@ const CHECK_WEIGHTS: Array[int] = [1, 5, 7]
 const LOOPBACK := "127."
 const LINK_LOCAL := "169.254."
 
-## **Adapters that are never the LAN two cells share**, matched against the
-## start of an interface's name and friendly name, lowercased: container and
-## VM bridges and their cables (docker, veth, libvirt, LXC/LXD, CNI, podman,
-## VirtualBox, VMware), VPN and overlay tunnels (tun, tap, WireGuard,
-## Tailscale, ZeroTier, macOS `utun`) and a phone's cellular data (`rmnet`,
-## `ccmni`), which no friend is on. A docker *user* bridge is `br-<id>`; a
-## bare `br0` or Proxmox's `vmbr0` is the machine's real LAN and is not here.
+## **Adapters that are hardly ever the LAN two cells share**, and so rank below
+## every real one: matched against the start of an interface's name and
+## friendly name, lowercased. Container and VM bridges and their cables
+## (docker, veth, libvirt, LXC/LXD, CNI, podman, VirtualBox, VMware), VPN and
+## overlay tunnels (tun, tap, WireGuard, Tailscale, ZeroTier, macOS `utun`), a
+## phone's cellular data (`rmnet`, `ccmni`), which no friend is on, and a
+## phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
+## which Android puts in 192.168/16, where they would outrank a 10.x Wi-Fi on
+## range alone. A phone that *is* the hotspot still answers with it: tether and
+## cellular are both down here, and then range decides. Not `ap`: that would
+## take Windows' "Apple Mobile Device Ethernet" with it. A docker *user* bridge
+## is `br-<id>`; a bare `br0` or Proxmox's `vmbr0` is the machine's real LAN
+## and is not here.
 const VIRTUAL_PREFIXES: Array[String] = ["docker", "veth", "br-", "virbr",
 	"lxcbr", "lxdbr", "cni", "flannel", "podman", "vboxnet", "vmnet", "tun",
-	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "rmnet", "ccmni"]
+	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "rmnet", "ccmni",
+	"swlan", "rndis", "bt-pan"]
 ## The same, found anywhere in the name -- which is how Windows names them:
 ## `vEthernet (WSL)`, `vEthernet (Default Switch)` for Hyper-V, `VirtualBox
 ## Host-Only Network`, `VMware Network Adapter VMnet8`, `TAP-Windows Adapter`,
@@ -249,7 +256,8 @@ static func _range_rank(address: String) -> int:
 	return 3
 
 
-## A container, VM, VPN or cellular adapter, by its name or friendly name.
+## A container, VM, VPN, cellular or tether adapter, by its name or friendly
+## name.
 static func _is_virtual(name: String, friendly: String) -> bool:
 	for each: String in [name.to_lower(), friendly.to_lower()]:
 		if each.is_empty():

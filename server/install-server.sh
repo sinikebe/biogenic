@@ -11,8 +11,9 @@
 #   2. creates the system user `biogenic` (no login shell, home /var/lib/biogenic,
 #      which is where Godot keeps the server's user:// -- staged content packs,
 #      update state, its own log files);
-#   3. downloads the latest server build, its unit file and SHA256SUMS from the
-#      latest release, and installs nothing unless both files match;
+#   3. downloads the server build, its unit file and SHA256SUMS, all three from
+#      the one release that is the latest when it starts, and installs nothing
+#      unless both files match;
 #   4. puts the build in /opt/biogenic, owned by `biogenic`, because the server
 #      replaces its own binary when a new one is published;
 #   5. installs biogenic-server.service, enables it, and starts or restarts it;
@@ -22,12 +23,11 @@
 # home LAN only; docs/server.md says why, and what internet play would take.
 #
 # BIOGENIC_REPO=owner/name installs from another fork's releases, and
-# BIOGENIC_RELEASE_URL from anywhere curl can read a release's assets from --
-# a mirror, or file:///some/dir holding them.
+# BIOGENIC_RELEASE_URL, used as it is, from anywhere curl can read one
+# release's assets from -- a mirror, or file:///some/dir holding them.
 set -euo pipefail
 
 REPO="${BIOGENIC_REPO:-sinikebe/biogenic}"
-BASE="${BIOGENIC_RELEASE_URL:-https://github.com/${REPO}/releases/latest/download}"
 PREFIX="/opt/biogenic"
 STATE="/var/lib/biogenic"
 ACCOUNT="biogenic"
@@ -41,6 +41,9 @@ die() { printf 'install-server: %s\n' "$*" >&2; exit 1; }
 [[ ${EUID} -eq 0 ]] || die "run it as root: sudo bash $0"
 [[ "$(uname -m)" == "x86_64" ]] || die "the server is built for x86_64, and this is $(uname -m)"
 command -v systemctl >/dev/null 2>&1 || die "this needs systemd, and there is no systemctl here"
+# systemctl alone proves nothing: a Docker container has it and no systemd.
+[[ -d /run/systemd/system ]] \
+	|| die "this needs systemd running as the service manager, and it is not running here"
 
 # 1. What the rest needs. coreutils (sha256sum, install, timeout, tail) and
 #    passwd (useradd) are in every Debian and Ubuntu base system.
@@ -60,7 +63,23 @@ install -d -m 0755 "$PREFIX" "$STATE"
 chown "$ACCOUNT:$ACCOUNT" "$PREFIX" "$STATE"
 
 # 3. The latest release's build and unit, checked against its SHA256SUMS, which
-#    CI writes over every asset it publishes.
+#    CI writes over every asset it publishes -- all three from one release.
+#    releases/latest/download/ is looked up again for every file, so a release
+#    published in the middle of an install could hand over a build from one and
+#    SHA256SUMS from the other, and a checksum "mismatch" for nothing. The tag
+#    `latest` points at is read once, and everything is fetched from that tag.
+if [[ -n "${BIOGENIC_RELEASE_URL:-}" ]]; then
+	BASE="$BIOGENIC_RELEASE_URL"
+else
+	latest="$(curl -fsS --retry 3 -o /dev/null -w '%{redirect_url}' \
+		"https://github.com/${REPO}/releases/latest")" \
+		|| die "could not reach https://github.com/${REPO}/releases/latest"
+	tag="${latest##*/releases/tag/}"
+	[[ "$latest" == */releases/tag/* && -n "$tag" && "$tag" != */* ]] \
+		|| die "https://github.com/${REPO}/releases/latest names no release -- is one published?"
+	BASE="https://github.com/${REPO}/releases/download/${tag}"
+	say "the latest release is ${tag}"
+fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 say "downloading the latest server from ${BASE}/"

@@ -53,9 +53,14 @@ const FPS := 60
 ## How often the address and the code are said again: often enough that the
 ## last screenful of the journal always has them.
 const ANNOUNCE_EVERY := 300.0
-## How long to wait before trying to listen again: the network may not be up
-## yet at boot, or the port may be held by a server that is still going down.
+## How long to wait before trying to listen again, at first: the network may
+## not be up yet at boot, or the port may be held by a server that is still
+## going down. Doubled at every failure after that, up to
+## [constant LISTEN_RETRY_MAX], so a port that stays taken costs the journal a
+## line every five minutes and not every five seconds; back to the start once
+## it listens.
 const LISTEN_RETRY := 5.0
+const LISTEN_RETRY_MAX := 300.0
 ## How often the stop file is looked for, and how long the goodbyes get to
 ## leave before the process does.
 const STOP_POLL := 0.25
@@ -76,6 +81,7 @@ var _pond: Pond = null
 var _updater: Node = null
 var _listening := false
 var _next_listen := 0.0
+var _listen_retry := LISTEN_RETRY
 var _next_announce := 0.0
 var _next_stop_poll := 0.0
 var _stopping := false
@@ -194,6 +200,7 @@ func updater() -> Node:
 func _listen() -> void:
 	if _net.host(FoodField.GUESTS_MAX):
 		_listening = true
+		_listen_retry = LISTEN_RETRY
 		# Built once the session is hosting: the pond reads which side it is on
 		# from the session, and a dedicated host from being given no cell.
 		if _pond == null:
@@ -201,9 +208,10 @@ func _listen() -> void:
 			_pond.noted.connect(func(line: String) -> void: print("[server] " + line))
 		_announce(true)
 		return
-	_next_listen = _now() + LISTEN_RETRY
+	_next_listen = _now() + _listen_retry
 	print("[server] could not listen: %s -- %s Trying again in %d s."
-		% [str(_net.trouble), str(_net.because), roundi(LISTEN_RETRY)])
+		% [str(_net.trouble), str(_net.because), roundi(_listen_retry)])
+	_listen_retry = minf(_listen_retry * 2.0, LISTEN_RETRY_MAX)
 
 
 ## **The address and the code**, first as READY and then every

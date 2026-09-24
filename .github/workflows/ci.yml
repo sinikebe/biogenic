@@ -350,6 +350,12 @@ jobs:
         #
         # Grepped for SCRIPT ERROR and Parse Error as well, for the reason the
         # scene step above spells out: Godot exits 0 straight through them.
+        #
+        # **And it answers the pre-flight**: every installed server asks a new
+        # build `--headless --version` before swapping it in, and refuses one
+        # that does not exit 0 naming a version (game/server/updater.gd,
+        # `preflight()`). A template that answered any other way would be
+        # refused by every server there is, so it is refused here first.
         run: |
           set -uo pipefail
           stop="$RUNNER_TEMP/biogenic-server.stop"
@@ -379,6 +385,14 @@ jobs:
           fi
           if grep -E "SCRIPT ERROR|Parse Error" "$log"; then
             echo "::error::the exported server reported script errors"
+            fail=1
+          fi
+          # The updater's pre-flight, as it asks it: exit 0, and a version (N.M...).
+          asked=0
+          said=$(build/linux/biogenic-server.x86_64 --headless --version 2>/dev/null) || asked=$?
+          echo "pre-flight: --version exited $asked and said '$said'"
+          if [ "$asked" -ne 0 ] || ! [[ "$said" =~ ^[1-9][0-9]*\.[0-9] ]]; then
+            echo "::error::the exported server fails the pre-flight every installed server puts a new build through"
             fail=1
           fi
           exit "$fail"

@@ -67,9 +67,10 @@ pull the newest build by hand. In order, it:
    `/var/lib/biogenic` -- where Godot keeps the server's `user://`: staged
    content packs, the update state, and its own log files, all kept across
    restarts, reboots and reinstalls;
-3. downloads the latest `biogenic-server.x86_64`, `biogenic-server.service` and
-   `SHA256SUMS` from the latest release, and installs nothing unless both files
-   match their checksums;
+3. downloads `biogenic-server.x86_64`, `biogenic-server.service` and
+   `SHA256SUMS`, all three from the release that is the latest when it starts
+   -- looked up once, so a release published halfway through cannot mix two --
+   and installs nothing unless both files match their checksums;
 4. puts the build in `/opt/biogenic`, owned by `biogenic`, because the server
    replaces its own binary when a new one is published;
 5. installs the unit into `/etc/systemd/system/`, enables it and starts it (or
@@ -114,20 +115,36 @@ one `[server] update:` line in its log.
 
 - **A newer content pack** -- most releases -- is downloaded, checked against
   the manifest's SHA-256 and staged; it takes effect when the server restarts.
+  A pack published for another binary than the one running is not taken.
 - **A newer binary** -- an engine upgrade, and the like -- is downloaded next to
-  the running build, its SHA-256 checked, and renamed over it in one step: the
-  running server carries on from the file it started from, and the next start
-  is the new build. The build it replaced is kept as
-  `/opt/biogenic/biogenic-server.x86_64.previous`. A download whose checksum
-  does not match is deleted and the running build is left alone.
+  the running build, its SHA-256 checked, and then **asked for its version**,
+  the pre-flight: a build that does not start on this machine -- one that needs
+  a newer glibc or a newer CPU than the container has -- is refused there,
+  before it replaces anything. A build that answers is renamed over the running
+  one in one step: the running server carries on from the file it started
+  from, and the next start is the new build. The build it replaced is kept as
+  `/opt/biogenic/biogenic-server.x86_64.previous`; if a newer one arrives
+  before the server has restarted onto the last, `.previous` stays the build
+  that actually ran.
+- **A refused build** -- its checksum wrong, or not starting here -- is deleted
+  and the running build left alone, and it is not downloaded again while the
+  manifest gives it the same checksum; the log says so once. The server
+  remembers that for as long as it runs; after a restart it tries such a build
+  once more.
 - **The restart waits for an empty pond**: nobody connected, and nobody
   connecting, for thirty seconds. Then the server exits and systemd starts it
   again (`Restart=always`). **It never restarts with a player connected**, so an
   update can wait for as long as somebody is swimming.
 - A check or download that fails changes nothing, and is tried again ten
-  minutes later. A pack or build that was applied and did not take on the
-  restart is not tried again until something newer is published, so a bad
-  release cannot keep the server restarting.
+  minutes later.
+- **What a restart does not fix.** A content pack that does not mount leaves
+  the server on the content it had, and it does not try that pack again for as
+  long as it runs -- but it remembers that only in memory: after a reboot or a
+  crash it downloads the pack once more, restarts once more when the pond is
+  empty, and gives it up again, one wasted download and restart for every
+  start. A build that passes its version check and still cannot run is worse:
+  it fails at every start, and systemd starts it again every five seconds, for
+  good. Only going back to the previous build brings the server back (§6).
 
 Phones take updates when their players accept them, and the server takes them
 within ten minutes of a release. A phone on an older protocol is told
@@ -163,17 +180,30 @@ server tells its guests it is going -- each phone takes over its own water at
 once, rather than after a connection timeout -- and exits. SIGTERM is only the
 backstop.
 
-**Going back to the previous build**, if a new one misbehaves:
+**Going back to the previous build**, if a new one misbehaves or will not
+start -- `systemctl status biogenic-server` showing it starting over and over,
+every five seconds:
 
 ```sh
 systemctl stop biogenic-server
 cd /opt/biogenic
 mv biogenic-server.x86_64.previous biogenic-server.x86_64
-systemctl start biogenic-server
 ```
 
-It will update itself again at its next check if the release is still newer;
-run `systemctl stop` and fix the release instead, or keep the service stopped.
+The build you left is still the latest release, and the server would take it
+again at its first check. So before starting it, tell it not to update until a
+fixed release is out: `systemctl edit biogenic-server`, and in the editor that
+opens,
+
+```ini
+[Service]
+ExecStart=
+ExecStart=/opt/biogenic/biogenic-server.x86_64 --headless -- --stop-file=/run/biogenic/stop --no-update
+```
+
+and then `systemctl start biogenic-server`. Once the fix is published,
+`systemctl revert biogenic-server` and `systemctl restart biogenic-server` turn
+updates back on, and the server takes the fix at its first check, as it starts.
 
 **Uninstalling:**
 
@@ -195,10 +225,16 @@ userdel biogenic
   launcher; if the phone is newer, the server catches up within ten minutes of
   the release.
 - **"already two"** -- two phones are in already. A phone that has just left
-  holds its place until its connection times out, a few seconds.
-- **The server keeps restarting** -- `journalctl -u biogenic-server -e` says
-  why. `could not listen` means something else holds UDP 45771, or the network
-  was not up yet; it tries again every five seconds.
+  holds its place until its connection times out: ENet holds a vanished peer
+  for 5 to 30 seconds.
+- **The server keeps restarting** -- `systemctl status biogenic-server` shows it
+  starting again every five seconds, and `journalctl -u biogenic-server -e`
+  shows how each start ends. After an update, that is the new build failing on
+  this machine in a way its version check could not see: go back to the
+  previous build (§6). `could not listen` is not this -- the server stays up
+  and tries again by itself, after five seconds and then twice as long each
+  time, up to every five minutes. It means something else holds UDP 45771, or
+  the network was not up yet.
 
 ## 8. What is inside
 
@@ -221,6 +257,7 @@ userdel biogenic
   buffer filled, and a kill lost it all.
 - CI exports it on every pull request and boots the exported binary headless:
   it has to say `[server] READY` and stop cleanly on its stop file, with no
-  script errors (`.github/workflows/ci.yml`). `tools/net_probe.gd` runs a
-  server with two real guests over loopback, and its update decisions against
-  a fake release feed.
+  script errors, and answer `--version` as the pre-flight wants every new build
+  to (`.github/workflows/ci.yml`; `release.yml` does the same before it
+  publishes). `tools/net_probe.gd` runs a server with two real guests over
+  loopback, and its update decisions against a fake release feed.

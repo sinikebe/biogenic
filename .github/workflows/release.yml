@@ -151,8 +151,9 @@ jobs:
         # Before anything is published, because every installed server takes
         # what this job publishes by itself, ten minutes later: a build that
         # does not come up would come up nowhere. The same check as ci.yml's --
-        # READY from the exported binary, a clean stop on its stop file, and no
-        # script errors -- with the network kept out of it.
+        # READY from the exported binary, a clean stop on its stop file, no
+        # script errors -- with the network kept out of it -- and an answer to
+        # the pre-flight every installed server puts a new build through.
         run: |
           set -uo pipefail
           stop="$RUNNER_TEMP/biogenic-server.stop"
@@ -182,6 +183,14 @@ jobs:
           fi
           if grep -E "SCRIPT ERROR|Parse Error" "$log"; then
             echo "::error::the exported server reported script errors"
+            fail=1
+          fi
+          # The updater's pre-flight, as it asks it: exit 0, and a version (N.M...).
+          asked=0
+          said=$(build/linux/biogenic-server.x86_64 --headless --version 2>/dev/null) || asked=$?
+          echo "pre-flight: --version exited $asked and said '$said'"
+          if [ "$asked" -ne 0 ] || ! [[ "$said" =~ ^[1-9][0-9]*\.[0-9] ]]; then
+            echo "::error::the exported server fails the pre-flight every installed server puts a new build through"
             fail=1
           fi
           exit "$fail"
