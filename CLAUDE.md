@@ -41,6 +41,16 @@ ship as a content pack: an engine upgrade, a new permission, a native plugin, a
 new icon, or a launcher sync that moves `build_info.gd` (see below). Everything
 else goes out as content.
 
+## Nothing personal in the repo
+
+The repository and its releases are public. No real IP address, hostname,
+domain, username, email, key, or anything else that identifies the owner, their
+network or their machines goes into code, docs, scripts, tests or comments.
+Examples use placeholder addresses and say so. Anything a device has to know
+about the owner's setup -- a server's address, a key -- is entered on that
+device at runtime and kept in `user://`, never committed. A server may print
+its own address in its log; the log is not the repo.
+
 ## The launcher is not ours
 
 `addons/launcher/` and `ci/` are synced wholesale from
