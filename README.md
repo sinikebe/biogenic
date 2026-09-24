@@ -12,6 +12,7 @@ pack plus a restart when the change doesn't need a new binary.
 |---|---|---|
 | Android | [**biogenic.apk**](https://github.com/sinikebe/biogenic/releases/latest/download/biogenic.apk) | Updates itself in place after the first install |
 | Windows | [**Biogenic.exe**](https://github.com/sinikebe/biogenic/releases/latest/download/Biogenic.exe) | One self-contained file, nothing to unpack |
+| Linux server | [**install-server.sh**](https://github.com/sinikebe/biogenic/releases/latest/download/install-server.sh) | Hosts the shared pond on your home Wi-Fi, headless, and updates itself: [docs/server.md](docs/server.md) |
 
 All builds live on the [releases page](https://github.com/sinikebe/biogenic/releases/latest),
 with `SHA256SUMS` alongside them if you want to verify a download.

@@ -1,0 +1,42 @@
+# Biogenic's dedicated server: the shared pond, on the home LAN.
+#
+# Installed to /etc/systemd/system/ by install-server.sh, from the same release
+# as the build it runs. See docs/server.md.
+#
+# The build updates itself (every ten minutes, never with anyone connected), so
+# /opt/biogenic belongs to the service user: a new build is written next to the
+# running one and renamed over it. An update ends with the process exiting on
+# its own, and Restart=always is what starts the new build.
+
+[Unit]
+Description=Biogenic dedicated server (shared pond, LAN only)
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=biogenic
+Group=biogenic
+# Godot keeps user:// -- the staged content packs, the update state, its own
+# logs -- under $HOME/.local/share/godot/app_userdata/Biogenic. StateDirectory
+# makes /var/lib/biogenic, owned by the user, and keeps it across restarts,
+# reboots and reinstalls.
+StateDirectory=biogenic
+WorkingDirectory=/var/lib/biogenic
+Environment=HOME=/var/lib/biogenic
+# /run/biogenic, for the stop file below; systemd empties it at every stop.
+RuntimeDirectory=biogenic
+ExecStart=/opt/biogenic/biogenic-server.x86_64 --headless -- --stop-file=/run/biogenic/stop
+# Godot does not catch SIGTERM: killed, the guests would only notice when their
+# connections time out. So a stop asks first -- the server polls for this file,
+# tells its guests, and exits 0 -- and SIGTERM stays the backstop. $MAINPID is
+# unset when the process has already gone (an update's restart), and then
+# there is nothing to ask.
+ExecStop=/bin/sh -c 'if [ -n "$$MAINPID" ]; then touch /run/biogenic/stop; timeout 10 tail --pid="$$MAINPID" -s 0.2 -f /dev/null; fi; exit 0'
+Restart=always
+RestartSec=5
+TimeoutStopSec=20
+NoNewPrivileges=yes
+
+[Install]
+WantedBy=multi-user.target

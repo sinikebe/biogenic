@@ -110,6 +110,10 @@ jobs:
         #    mode_select.gd reaches it by STRING, so nothing preloads
         #    earshot.gd and no other scene here would ever compile it.
         #
+        #    server.tscn is reached by neither route: only the Linux Server
+        #    export boots it, through `run/main_scene.server`. It is booted here
+        #    with `--no-update`, so this step never reaches the network.
+        #
         # Seconds, against an export measured in minutes.
         run: |
           set -uo pipefail
@@ -118,7 +122,8 @@ jobs:
                        "res://game/mode_select.tscn" \
                        "res://game/net/earshot.tscn" \
                        "res://game/normal/normal_mode.tscn" \
-                       "res://game/replay/replay.tscn"; do
+                       "res://game/replay/replay.tscn" \
+                       "res://game/server/server.tscn -- --no-update"; do
             name="${scene:-main scene (launcher)}"
             echo "--- booting $name"
             # shellcheck disable=SC2086
@@ -165,7 +170,7 @@ jobs:
         # pixels, every press lands on nothing, and the check passes while
         # testing nothing at all.
         #
-        # `tools/` is excluded from export on both presets, so none of this
+        # `tools/` is excluded from export on every preset, so none of this
         # reaches a player. About fifteen seconds for all three schemes.
         run: |
           set -uo pipefail
@@ -250,7 +255,10 @@ jobs:
         # version-skew refusal. Then, with no socket at all, the shared pond's
         # field rules (`pond-field`): two players in one food.gd, the eating
         # rule both ways, the per-player water, and a mirror that must perceive
-        # exactly what the field does.
+        # exactly what the field does. Then the dedicated server
+        # (`game/server/`) with two real guests on this build's own PROTOCOL 4
+        # guest code, and its update decisions against a fake release feed and
+        # a loopback HTTP server -- no network.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -265,13 +273,14 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second and
-        # quits itself in about fifty seconds: some eight in the socket-free
-        # pond-field section, which runs inside one frame and spends none of
-        # the budget, and about twenty-three in the pond section, two real runs
-        # over loopback at up to 250 frames a second. Its pond timings are
-        # counted in frames, not wall milliseconds, so a loaded runner slows
-        # the step without failing it. It prints its own frame count -- about
-        # 5,600 -- so the margin on 20000 is visible in the log.
+        # quits itself in about fifty-five seconds: some eight in the
+        # socket-free pond-field section, which runs inside one frame and
+        # spends none of the budget, about twenty-three in the pond section,
+        # two real runs over loopback at up to 250 frames a second, and about
+        # six in the server's. Its pond timings are counted in frames, not wall
+        # milliseconds, so a loaded runner slows the step without failing it.
+        # It prints its own frame count -- about 6,700 -- so the margin on
+        # 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
@@ -313,16 +322,85 @@ jobs:
           mkdir -p build/windows
           ~/godot/godot --headless --path . --export-release "Windows Desktop" build/windows/${{ steps.version.outputs.exe_name }}
 
+      - name: Export the Linux server
+        run: |
+          mkdir -p build/linux
+          ~/godot/godot --headless --path . --export-release "Linux Server" build/linux/biogenic-server.x86_64
+
       - name: Export content packs
         run: |
           mkdir -p build/content
           ~/godot/godot --headless --path . --export-pack "Android" build/content/content-android.pck
           ~/godot/godot --headless --path . --export-pack "Windows Desktop" build/content/content-windows.pck
+          ~/godot/godot --headless --path . --export-pack "Linux Server" build/content/content-linux.pck
+
+      - name: Smoke-boot the Linux server
+        # **The exported binary, not the editor**, because the thing that makes
+        # it a server is only true of an export: an official 4.7 release
+        # template cannot be told which scene to run, so it boots
+        # `run/main_scene.server` through the preset's `server` feature, and a
+        # preset or override that went wrong boots the launcher instead -- and
+        # waits for a Play press forever, printing nothing wrong. So this greps
+        # for the server's own positive line, READY, and for nothing else.
+        #
+        # **And it stops the way systemd stops it**: by the stop file its unit's
+        # ExecStop touches, because Godot does not catch SIGTERM (measured: the
+        # process dies at once, status 143). A clean stop prints `[server]
+        # stopped` and exits 0. `--no-update` keeps the network out of it.
+        #
+        # Grepped for SCRIPT ERROR and Parse Error as well, for the reason the
+        # scene step above spells out: Godot exits 0 straight through them.
+        #
+        # **And it answers the pre-flight**: every installed server asks a new
+        # build `--headless --version` before swapping it in, and refuses one
+        # that does not exit 0 naming a version (game/server/updater.gd,
+        # `preflight()`). A template that answered any other way would be
+        # refused by every server there is, so it is refused here first.
+        run: |
+          set -uo pipefail
+          stop="$RUNNER_TEMP/biogenic-server.stop"
+          log="$RUNNER_TEMP/biogenic-server.log"
+          rm -f "$stop"
+          timeout 90 build/linux/biogenic-server.x86_64 --headless -- \
+            --no-update --stop-file="$stop" > "$log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 150); do
+            grep -q '^\[server\] READY' "$log" && break
+            sleep 0.2
+          done
+          touch "$stop"
+          # `|| code=$?`, not `code=$?` after it: the step shell is `bash -e`,
+          # which would leave on a failed wait before the log is printed.
+          code=0
+          wait "$pid" || code=$?
+          cat "$log"
+          fail=0
+          if ! grep -q '^\[server\] READY' "$log"; then
+            echo "::error::the exported server never said READY -- did it boot the launcher instead?"
+            fail=1
+          fi
+          if ! grep -q '^\[server\] stopped' "$log" || [ "$code" -ne 0 ]; then
+            echo "::error::the exported server did not stop cleanly on its stop file (exit $code)"
+            fail=1
+          fi
+          if grep -E "SCRIPT ERROR|Parse Error" "$log"; then
+            echo "::error::the exported server reported script errors"
+            fail=1
+          fi
+          # The updater's pre-flight, as it asks it: exit 0, and a version (N.M...).
+          asked=0
+          said=$(build/linux/biogenic-server.x86_64 --headless --version 2>/dev/null) || asked=$?
+          echo "pre-flight: --version exited $asked and said '$said'"
+          if [ "$asked" -ne 0 ] || ! [[ "$said" =~ ^[1-9][0-9]*\.[0-9] ]]; then
+            echo "::error::the exported server fails the pre-flight every installed server puts a new build through"
+            fail=1
+          fi
+          exit "$fail"
 
       - name: Check the shell scripts
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
-          shellcheck --severity=warning ci/*.sh
+          shellcheck --severity=warning ci/*.sh server/*.sh
 
       - name: Upload build for inspection
         uses: actions/upload-artifact@v7
@@ -331,6 +409,7 @@ jobs:
           path: |
             build/android/${{ steps.version.outputs.apk_name }}
             build/windows/${{ steps.version.outputs.exe_name }}
+            build/linux/biogenic-server.x86_64
             build/content/*.pck
           if-no-files-found: error
           retention-days: 7

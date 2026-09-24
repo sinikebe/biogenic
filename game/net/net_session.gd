@@ -132,8 +132,13 @@ const EARLY_GAP := 0.012
 const SILENCE := 6.0
 ## More than one guest is refused with a sentence rather than by the transport,
 ## so the extra device learns why. Four slots because a half-dead peer holds one
-## until ENet times it out, and a retry has to be able to get in past it.
+## until ENet times it out, and a retry has to be able to get in past it. A
+## host that takes more than one guest ([member guests_max]) gets one slot more
+## for each.
 const MAX_PEERS := 4
+## **The most guests any host takes: two**, a dedicated host's (`game/server/`),
+## each of whom sees the other as the friend. A phone takes one.
+const GUESTS_MAX := 2
 ## Shouts waiting for the run to drain them. Capped because nothing drains while
 ## the player is still on the session screen.
 const HEARD_MAX := 8
@@ -185,6 +190,11 @@ var trouble := ""
 var because := ""
 ## Set once, at host()/join(), and never derived from a peer id.
 var hosting := false
+## **How many guests this host greets** before it says "already two": one for
+## a phone's pond, [constant GUESTS_MAX] for a dedicated host. Set by
+## [method host]. A host of more than one keeps every guest's events apart --
+## see [member inbox] -- and speaks to each through the `*_to` sends.
+var guests_max := 1
 ## The address this session is on (hosting) or reaching for (guesting). Shown on
 ## screen as a receipt, never typed into.
 var address := ""
@@ -197,6 +207,13 @@ var heard: Array = []
 ## SISTER. Decoded by `pond.gd`, which is the only thing that knows what they
 ## mean; this file only guarantees the order and that each arrives once.
 var pond_events: Array = []
+## **A host of more than one guest hears each of them apart**: every event --
+## shouts and the pond's alike -- as `[peer id, raw frame]`, in the order they
+## arrived, instead of in [member heard] and [member pond_events], which cannot
+## say who spoke. Filled by the same one intake as those two ([method
+## _take_event]), after the same duplicate and order checks. Drained by
+## [method drain_inbox]; never touched by a phone's session.
+var inbox: Array = []
 
 ## **A test seam, and the only one.** 0 means "speak [constant Wire.PROTOCOL]".
 ## tools/net_probe.gd sets it to something else to prove the refusal path, which
@@ -340,19 +357,21 @@ func _process(_delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 ## Take the calls. Returns false, with [member trouble] set, if this device has
-## no address to be found at or the port is already taken.
-func host() -> bool:
+## no address to be found at or the port is already taken. [param guests] is
+## how many to greet: one, as every phone does, or a dedicated host's two.
+func host(guests: int = 1) -> bool:
 	if _api == null:
 		return false
 	_reset_socket()
 	hosting = true
+	guests_max = clampi(guests, 1, GUESTS_MAX)
 	address = Lan.local_address()
 	if address.is_empty() or Lan.octet_of(address) < 0:
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
 		return false
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(Lan.PORT, MAX_PEERS)
+	var err := peer.create_server(Lan.PORT, MAX_PEERS + guests_max - 1)
 	if err != OK:
 		_give_up(Link.FAILED, "could not listen",
 			"something else on this device is already using the water.")
@@ -371,6 +390,7 @@ func join(at: String) -> bool:
 		return false
 	_reset_socket()
 	hosting = false
+	guests_max = 1
 	address = at
 	if at.is_empty():
 		_give_up(Link.FAILED, "no wi-fi here",
@@ -525,6 +545,73 @@ func drain_pond_events() -> Array:
 	return out
 
 
+## A host of more than one guest: every event heard since the last drain, as
+## `[peer id, raw frame]`, oldest first. Empties [member inbox].
+func drain_inbox() -> Array:
+	if inbox.is_empty():
+		return []
+	var out := inbox
+	inbox = []
+	return out
+
+
+# ---------------------------------------------------------------------------
+# **One guest of several** (a dedicated host). Everything above that says "the
+# far end" means the one greeted peer a phone has; these say which.
+# ---------------------------------------------------------------------------
+
+## Every greeted guest's id, in the order they arrived.
+func guests() -> Array:
+	var out: Array = []
+	for id: int in _peers.keys():
+		if bool(_peers[id]["greeted"]):
+			out.append(id)
+	return out
+
+
+## [method peer_flags], for guest [param id]: 0 for nobody greeted by that id.
+func flags_of(id: int) -> int:
+	var peer: Dictionary = _peers.get(id, {})
+	return int(peer["flags"]) if bool(peer.get("greeted", false)) else 0
+
+
+## [method peer_track], for guest [param id]. Read-only, as that one is.
+func track_of(id: int) -> Array:
+	var peer: Dictionary = _peers.get(id, {})
+	return peer["track"] if bool(peer.get("greeted", false)) else []
+
+
+## [method quiet_for], for guest [param id]: -1 for nobody greeted by that id.
+func quiet_for_of(id: int) -> float:
+	var peer: Dictionary = _peers.get(id, {})
+	if not bool(peer.get("greeted", false)):
+		return -1.0
+	return _now() - float(peer["heard"])
+
+
+## [method send_event], to guest [param id] alone, **on that guest's own
+## sequence** -- so each guest reads an unbroken run of events however many
+## the others are sent, and its gap check stays a check.
+func send_event_to(id: int, type: int, payload: PackedByteArray) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if link != Link.TOGETHER or not bool(peer.get("greeted", false)):
+		return
+	peer["out_event"] = int(peer["out_event"]) + 1
+	_to(id, Wire.event(int(peer["out_event"]), type, payload))
+
+
+## [method send_pond], to guest [param id] alone: its own water, on its own
+## sequence. Returns the size it went out at, 0 when nothing went.
+func send_pond_to(id: int, your_wound: float, bodies: Array) -> int:
+	var peer: Dictionary = _peers.get(id, {})
+	if link != Link.TOGETHER or not bool(peer.get("greeted", false)):
+		return 0
+	peer["out_pond"] = int(peer["out_pond"]) + 1
+	var frame := Wire.pond(int(peer["out_pond"]), your_wound, bodies)
+	_to(id, frame)
+	return frame.size()
+
+
 ## **The newest POND snapshot the far end sent**, as the raw frame, or an empty
 ## one. Drained to the newest by sequence on arrival, exactly as the state
 ## frames are; the reader applies it if its sequence is newer than the last it
@@ -664,6 +751,7 @@ func peers_say() -> String:
 
 func _on_peer_connected(id: int) -> void:
 	_peers[id] = {
+		"id": id,
 		"protocol": 0,
 		"greeted": false,
 		"since": _now(),
@@ -675,6 +763,10 @@ func _on_peer_connected(id: int) -> void:
 		"flags": 0,
 		"in_pond": -1,
 		"pond": PackedByteArray(),
+		# What this end has sent this peer alone: a host of several guests
+		# numbers each one's events and snapshots apart.
+		"out_event": 0,
+		"out_pond": 0,
 	}
 	if hosting:
 		# The host says nothing first. It waits to be greeted, so the first
@@ -689,6 +781,10 @@ func _on_peer_connected(id: int) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	_peers.erase(id)
+	# Gone already, so there is nothing left to hang up on: a refused guest
+	# usually drops the line itself inside REFUSE_LINGER, and cutting it again
+	# afterwards is an ENet error in the log and nothing else.
+	_hanging_up.erase(id)
 	if _greeted_count() == 0:
 		_told = []
 	if hosting:
@@ -773,7 +869,7 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		_refuse(id, Wire.REFUSE_PROTOCOL)
 		_say("different versions", _skew_says(theirs))
 		return
-	if _greeted_count() >= 1:
+	if _greeted_count() >= guests_max:
 		_refuse(id, Wire.REFUSE_FULL)
 		return
 	peer["greeted"] = true
@@ -927,6 +1023,14 @@ func _take_event(peer: Dictionary, frame: PackedByteArray) -> void:
 	if seq > int(peer["in_event"]) + 1 and int(peer["in_event"]) >= 0:
 		push_warning("[net] event gap: %d after %d" % [seq, peer["in_event"]])
 	peer["in_event"] = seq
+	if guests_max > 1:
+		# **A host of several**: who said it matters -- a shout is passed on to
+		# the other guest, an ENTER is answered to the one who sent it -- so
+		# every event goes into one queue with its sender, in arrival order.
+		inbox.append([int(peer["id"]), frame])
+		while inbox.size() > POND_EVENTS_MAX:
+			inbox.remove_at(0)
+		return
 	if Wire.event_type(frame) != Wire.EVENT_SHOUT:
 		# A shared-pond event, kept whole for the run, in order. An unknown type
 		# is kept as well and ignored there: it is the reader that knows what
@@ -1139,6 +1243,7 @@ func _reset_socket() -> void:
 	_reach_at = _now()
 	heard.clear()
 	pond_events.clear()
+	inbox.clear()
 	trouble = ""
 	because = ""
 

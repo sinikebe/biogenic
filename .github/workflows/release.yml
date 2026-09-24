@@ -129,6 +129,15 @@ jobs:
           mkdir -p build/windows
           ~/godot/godot --headless --path . --export-release "Windows Desktop" build/windows/${{ steps.version.outputs.exe_name }}
 
+      - name: Export the Linux server
+        # The dedicated server (game/server/, docs/server.md): the same game,
+        # exported with the `server` feature, which boots it straight into the
+        # pond instead of the launcher. It rides the same manifest as the phones
+        # and PCs, as binary:linux and content:linux.
+        run: |
+          mkdir -p build/linux
+          ~/godot/godot --headless --path . --export-release "Linux Server" build/linux/biogenic-server.x86_64
+
       - name: Export content packs
         # One pack per platform: texture compression differs between mobile and
         # desktop, so a single shared pack would ship the wrong format to one of them.
@@ -136,14 +145,69 @@ jobs:
           mkdir -p build/content
           ~/godot/godot --headless --path . --export-pack "Android" build/content/content-android.pck
           ~/godot/godot --headless --path . --export-pack "Windows Desktop" build/content/content-windows.pck
+          ~/godot/godot --headless --path . --export-pack "Linux Server" build/content/content-linux.pck
+
+      - name: Smoke-boot the Linux server
+        # Before anything is published, because every installed server takes
+        # what this job publishes by itself, ten minutes later: a build that
+        # does not come up would come up nowhere. The same check as ci.yml's --
+        # READY from the exported binary, a clean stop on its stop file, no
+        # script errors -- with the network kept out of it -- and an answer to
+        # the pre-flight every installed server puts a new build through.
+        run: |
+          set -uo pipefail
+          stop="$RUNNER_TEMP/biogenic-server.stop"
+          log="$RUNNER_TEMP/biogenic-server.log"
+          rm -f "$stop"
+          timeout 90 build/linux/biogenic-server.x86_64 --headless -- \
+            --no-update --stop-file="$stop" > "$log" 2>&1 &
+          pid=$!
+          for _ in $(seq 1 150); do
+            grep -q '^\[server\] READY' "$log" && break
+            sleep 0.2
+          done
+          touch "$stop"
+          # `|| code=$?`, not `code=$?` after it: the step shell is `bash -e`,
+          # which would leave on a failed wait before the log is printed.
+          code=0
+          wait "$pid" || code=$?
+          cat "$log"
+          fail=0
+          if ! grep -q '^\[server\] READY' "$log"; then
+            echo "::error::the exported server never said READY -- did it boot the launcher instead?"
+            fail=1
+          fi
+          if ! grep -q '^\[server\] stopped' "$log" || [ "$code" -ne 0 ]; then
+            echo "::error::the exported server did not stop cleanly on its stop file (exit $code)"
+            fail=1
+          fi
+          if grep -E "SCRIPT ERROR|Parse Error" "$log"; then
+            echo "::error::the exported server reported script errors"
+            fail=1
+          fi
+          # The updater's pre-flight, as it asks it: exit 0, and a version (N.M...).
+          asked=0
+          said=$(build/linux/biogenic-server.x86_64 --headless --version 2>/dev/null) || asked=$?
+          echo "pre-flight: --version exited $asked and said '$said'"
+          if [ "$asked" -ne 0 ] || ! [[ "$said" =~ ^[1-9][0-9]*\.[0-9] ]]; then
+            echo "::error::the exported server fails the pre-flight every installed server puts a new build through"
+            fail=1
+          fi
+          exit "$fail"
 
       - name: Assemble release directory
+        # The server's install kit goes up beside it, so install-server.sh can
+        # fetch the unit from releases/latest/download/ and check both against
+        # the SHA256SUMS that publish_release.sh writes over every asset.
         run: |
           mkdir -p build/release
           cp build/android/${{ steps.version.outputs.apk_name }} build/release/
           cp build/windows/${{ steps.version.outputs.exe_name }} build/release/
+          cp build/linux/biogenic-server.x86_64 build/release/
           cp build/content/content-android.pck build/release/
           cp build/content/content-windows.pck build/release/
+          cp build/content/content-linux.pck build/release/
+          cp server/install-server.sh server/biogenic-server.service build/release/
 
       - name: Build update manifest
         run: |
@@ -158,8 +222,10 @@ jobs:
             --tag "${{ steps.version.outputs.tag }}" \
             --artifact "binary:android:build/release/${{ steps.version.outputs.apk_name }}" \
             --artifact "binary:windows:build/release/${{ steps.version.outputs.exe_name }}" \
+            --artifact "binary:linux:build/release/biogenic-server.x86_64" \
             --artifact "content:android:build/release/content-android.pck" \
             --artifact "content:windows:build/release/content-windows.pck" \
+            --artifact "content:linux:build/release/content-linux.pck" \
             --out build/release/manifest.json
 
       - name: Publish release

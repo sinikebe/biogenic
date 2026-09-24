@@ -76,34 +76,80 @@ const CHECK_WEIGHTS: Array[int] = [1, 5, 7]
 const LOOPBACK := "127."
 const LINK_LOCAL := "169.254."
 
+## **Adapters that are hardly ever the LAN two cells share**, and so rank below
+## every real one: matched against the start of an interface's name and
+## friendly name, lowercased. Container and VM bridges and their cables
+## (docker, veth, libvirt, LXC/LXD, CNI, podman, VirtualBox, VMware), VPN and
+## overlay tunnels (tun, tap, WireGuard, Tailscale, ZeroTier, macOS `utun`), a
+## phone's cellular data (`rmnet`, `ccmni`), which no friend is on, and a
+## phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
+## which Android puts in 192.168/16, where they would outrank a 10.x Wi-Fi on
+## range alone. A phone that *is* the hotspot still answers with it: tether and
+## cellular are both down here, and then range decides. Not `ap`: that would
+## take Windows' "Apple Mobile Device Ethernet" with it. A docker *user* bridge
+## is `br-<id>`; a bare `br0` or Proxmox's `vmbr0` is the machine's real LAN
+## and is not here.
+const VIRTUAL_PREFIXES: Array[String] = ["docker", "veth", "br-", "virbr",
+	"lxcbr", "lxdbr", "cni", "flannel", "podman", "vboxnet", "vmnet", "tun",
+	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "rmnet", "ccmni",
+	"swlan", "rndis", "bt-pan"]
+## The same, found anywhere in the name -- which is how Windows names them:
+## `vEthernet (WSL)`, `vEthernet (Default Switch)` for Hyper-V, `VirtualBox
+## Host-Only Network`, `VMware Network Adapter VMnet8`, `TAP-Windows Adapter`,
+## and the tunnels every VPN client installs.
+const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
+	"virtualbox", "vmware", "docker", "tailscale", "zerotier", "wireguard",
+	"openvpn", "tap-windows", "wintun", "vpn", "npcap"]
+
 
 ## This device's own address on whatever it is attached to, or "" if it is not
-## attached to anything.
+## attached to anything. [method pick_address] over the adapters Godot sees.
+static func local_address() -> String:
+	return pick_address(IP.get_local_interfaces())
+
+
+## **Which of these adapters' addresses is the LAN**, from a list shaped like
+## `IP.get_local_interfaces()` -- `{name, friendly, addresses}` each -- or "".
 ##
 ## **Permissive on purpose.** The obvious filter is "RFC 1918 only", and it is
 ## wrong twice: a carrier-grade-NAT Wi-Fi (100.64/10) is a real home network,
 ## and this very container answers 192.0.2.2, which is documentation space. The
 ## two addresses that are never a shared LAN are loopback and link-local, so
-## those are the two that are excluded. Private ranges are still *preferred*,
-## because a phone with a VPN up has two and the Wi-Fi one is the right answer.
-static func local_address() -> String:
+## those are the two that are excluded outright.
+##
+## **Everything else is ranked, not filtered.** A real adapter beats a virtual
+## one -- a Windows PC with WSL or Hyper-V up has a `vEthernet` on 172.x beside
+## its Wi-Fi, and a LAN server in a container host has `docker0` -- and then
+## 192.168/16 beats 10/8 beats 172.16/12 beats anything else, because that is
+## how likely each is to be the home network: routers hand out the first,
+## VPNs and some routers the second, and container and WSL networks the third.
+## Ties go to the adapter listed first. A machine whose only address is on a
+## virtual adapter still answers with it rather than "", because a wrong guess
+## on screen is something a player can see, and nothing is not.
+static func pick_address(interfaces: Array) -> String:
 	var best := ""
-	for iface: Dictionary in IP.get_local_interfaces():
+	var best_rank := 1 << 30
+	for iface: Variant in interfaces:
+		if not iface is Dictionary:
+			continue
+		var virtual := _is_virtual(str(iface.get("name", "")),
+			str(iface.get("friendly", "")))
 		for address: String in PackedStringArray(iface.get("addresses",
 				PackedStringArray())):
 			if not _is_ipv4(address):
 				continue
 			if address.begins_with(LOOPBACK) or address.begins_with(LINK_LOCAL):
 				continue
-			if _is_private(address):
-				return address
-			if best.is_empty():
+			var rank := _range_rank(address) + (10 if virtual else 0)
+			if rank < best_rank:
+				best_rank = rank
 				best = address
 	return best
 
 
-## Everything before the final octet, with the dot: "192.168.1." from
-## "192.168.1.37". "" if that is not an address.
+## Everything before the final octet, with the dot: "192.0.2." from
+## "192.0.2.37" (RFC 5737 documentation addresses, standing in for a real
+## one). "" if that is not an address.
 static func prefix_of(address: String) -> String:
 	if not _is_ipv4(address):
 		return ""
@@ -194,13 +240,32 @@ static func _is_ipv4(address: String) -> bool:
 	return address.count(".") == 3 and not address.contains(":")
 
 
-static func _is_private(address: String) -> bool:
-	if address.begins_with("192.168.") or address.begins_with("10."):
-		return true
-	if not address.begins_with("172."):
-		return false
-	var parts := address.split(".")
-	if parts.size() < 2 or not parts[1].is_valid_int():
-		return false
-	var second := int(parts[1])
-	return second >= 16 and second <= 31
+## 0 for 192.168/16, 1 for 10/8, 2 for 172.16/12 and 3 for anything else: the
+## order [method pick_address] prefers them in.
+static func _range_rank(address: String) -> int:
+	if address.begins_with("192.168."):
+		return 0
+	if address.begins_with("10."):
+		return 1
+	if address.begins_with("172."):
+		var parts := address.split(".")
+		if parts.size() >= 2 and parts[1].is_valid_int():
+			var second := int(parts[1])
+			if second >= 16 and second <= 31:
+				return 2
+	return 3
+
+
+## A container, VM, VPN, cellular or tether adapter, by its name or friendly
+## name.
+static func _is_virtual(name: String, friendly: String) -> bool:
+	for each: String in [name.to_lower(), friendly.to_lower()]:
+		if each.is_empty():
+			continue
+		for prefix: String in VIRTUAL_PREFIXES:
+			if each.begins_with(prefix):
+				return true
+		for word: String in VIRTUAL_WORDS:
+			if each.contains(word):
+				return true
+	return false

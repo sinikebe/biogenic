@@ -45,6 +45,14 @@ extends Node
 ## `food.gd` stepped by hand, a host field with a person in it and a mirror fed
 ## that field's own snapshots. It spends no frames, only a few seconds.
 ##
+## **And the dedicated server** (`game/server/`, docs/server.md): the real
+## server scene with two guests, each a real run of the game on this build's
+## own guest code -- which is exactly the PROTOCOL 4 guest a phone that has
+## never heard of a server runs -- arriving, mirroring each other as the friend,
+## eating each other, being eaten by the water, leaving, and being told when
+## the server stops. Then its update loop's decisions, against a fake release
+## feed and a loopback HTTP server, with no network.
+##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
 ## does fire under `--headless` -- 1,920 `draw` signals in 1,920 frames of a
@@ -53,7 +61,7 @@ extends Node
 ## `game/vision/vision.gd` keeps every number the marker needs in a `_process`,
 ## and this reads it.
 ##
-## Excluded from export (`tools/*` on both presets), so none of it ships.
+## Excluded from export (`tools/*` on every preset), so none of it ships.
 
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
@@ -105,6 +113,14 @@ func _ready() -> void:
 	# `--pond-only` is for working on the pond sections: the rest is skipped,
 	# so an answer comes in seconds. CI never passes it, and it never prints
 	# ALL PASS -- a partial run must not read as a whole one.
+	# `--server-only` is the same for the dedicated host's section.
+	if OS.get_cmdline_user_args().has("--server-only"):
+		_check_code()
+		await _check_server()
+		await _check_server_updates()
+		print("[net-probe] NOTE --server-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	var only_pond := OS.get_cmdline_user_args().has("--pond-only")
 	if only_pond:
 		_check_pond_wire()
@@ -122,6 +138,8 @@ func _ready() -> void:
 	await _check_skew()
 	await _check_run()
 	await _check_pond()
+	await _check_server()
+	await _check_server_updates()
 	# **The margin on CI's backstop, printed.** The step runs this with no
 	# frame cap and `--quit-after 20000`, which is a count of frames, not of
 	# seconds -- so a faster runner reaches it sooner, and a probe that grew
@@ -222,10 +240,86 @@ func _check_code() -> void:
 	var address := Lan.local_address()
 	_says(not address.is_empty() and Lan.octet_of(address) > 0,
 		"this machine has a LAN address to be found at (%s)" % address)
-	_says(Lan.host_address("192.168.4.9", 37) == "192.168.4.37"
+	# RFC 5737 documentation addresses: the derivation is prefix arithmetic, so
+	# any IPv4 shows it.
+	_says(Lan.host_address("192.0.2.9", 37) == "192.0.2.37"
 			and Lan.host_address("", 37).is_empty()
-			and Lan.host_address("192.168.4.9", 0).is_empty(),
+			and Lan.host_address("192.0.2.9", 0).is_empty(),
 		"the /24 derivation puts a tapped octet on this device's own prefix")
+	_check_adapters()
+
+
+## **Which adapter is the LAN** (`Lan.pick_address`), on adapter lists shaped as
+## `IP.get_local_interfaces()` returns them. Every address here is a
+## placeholder: RFC 5737's 192.0.2.x, and round values -- 192.168.0.10,
+## 10.0.0.10, 172.16.0.10 -- standing in for the private ranges being ranked,
+## and Android's stock tether addresses, which are the same on every phone.
+func _check_adapters() -> void:
+	var ranked := Lan.pick_address([
+		{"name": "eth1", "friendly": "eth1", "addresses": ["172.16.0.10"]},
+		{"name": "eth2", "friendly": "eth2", "addresses": ["10.0.0.10"]},
+		{"name": "wlan0", "friendly": "wlan0", "addresses": ["192.168.0.10"]}])
+	var ten := Lan.pick_address([
+		{"name": "eth1", "friendly": "eth1", "addresses": ["172.16.0.10"]},
+		{"name": "eth2", "friendly": "eth2", "addresses": ["10.0.0.10"]}])
+	_says(ranked == "192.168.0.10" and ten == "10.0.0.10",
+		"adapters: 192.168/16 beats 10/8 beats 172.16/12, whatever order they"
+		+ " are listed in")
+	# A Windows PC with WSL, Hyper-V and a VPN up, and its Wi-Fi last.
+	var windows := Lan.pick_address([
+		{"name": "{0}", "friendly": "vEthernet (WSL)", "addresses": ["192.168.0.10"]},
+		{"name": "{1}", "friendly": "vEthernet (Default Switch)",
+			"addresses": ["172.16.0.10"]},
+		{"name": "{2}", "friendly": "OpenVPN Wintun", "addresses": ["10.0.0.10"]},
+		{"name": "{3}", "friendly": "Wi-Fi", "addresses": ["fe80::1", "192.0.2.10"]}])
+	# A Linux server with docker and a tailnet, and its real NIC on 10/8.
+	var linux := Lan.pick_address([
+		{"name": "docker0", "friendly": "docker0", "addresses": ["192.168.0.10"]},
+		{"name": "br-0a1b2c", "friendly": "br-0a1b2c", "addresses": ["172.16.0.10"]},
+		{"name": "veth1f2e", "friendly": "veth1f2e", "addresses": ["192.168.0.11"]},
+		{"name": "tailscale0", "friendly": "tailscale0", "addresses": ["192.0.2.20"]},
+		{"name": "eth0", "friendly": "eth0", "addresses": ["10.0.0.10"]}])
+	# Proxmox's own LAN bridge is a real adapter, not a docker one.
+	var bridge := Lan.pick_address([
+		{"name": "veth100i0", "friendly": "veth100i0", "addresses": ["192.168.0.12"]},
+		{"name": "vmbr0", "friendly": "vmbr0", "addresses": ["10.0.0.10"]}])
+	_says(windows == "192.0.2.10" and linux == "10.0.0.10" and bridge == "10.0.0.10",
+		"adapters: a real one beats every virtual and VPN one, even in a better"
+		+ " range -- Windows %s, Linux %s, a Proxmox bridge %s"
+		% [windows, linux, bridge])
+	var only_virtual := Lan.pick_address([
+		{"name": "lo", "friendly": "lo", "addresses": ["127.0.0.1"]},
+		{"name": "wg0", "friendly": "wg0", "addresses": ["192.0.2.30"]}])
+	var none := Lan.pick_address([
+		{"name": "lo", "friendly": "lo", "addresses": ["127.0.0.1", "::1"]},
+		{"name": "eth0", "friendly": "eth0", "addresses": ["169.254.3.4"]}])
+	_says(only_virtual == "192.0.2.30" and none.is_empty(),
+		"adapters: a machine on a VPN alone still answers with it, and loopback"
+		+ " and link-local are never an answer")
+	# **A phone's own tethers.** Android hands its hotspot, USB and Bluetooth
+	# tethers the same stock addresses on every phone -- 192.168.43.1,
+	# 192.168.42.129, 192.168.44.1, nobody's network in particular -- so all
+	# three outrank a 10.x Wi-Fi on range alone. On the Wi-Fi, the Wi-Fi is the
+	# LAN; a phone that IS the hotspot, with only its cellular data besides,
+	# answers with the tether, which is the LAN its friend joins.
+	var joined: PackedStringArray = []
+	var hosting: PackedStringArray = []
+	for tether: Array in [["swlan0", "192.168.43.1"], ["rndis0", "192.168.42.129"],
+			["bt-pan", "192.168.44.1"]]:
+		joined.append(Lan.pick_address([
+			{"name": tether[0], "friendly": tether[0], "addresses": [tether[1]]},
+			{"name": "wlan0", "friendly": "wlan0", "addresses": ["10.0.0.10"]}]))
+		hosting.append(Lan.pick_address([
+			{"name": "rmnet_data0", "friendly": "rmnet_data0",
+				"addresses": ["10.0.0.10"]},
+			{"name": tether[0], "friendly": tether[0], "addresses": [tether[1]]}]))
+	_says(joined == PackedStringArray(["10.0.0.10", "10.0.0.10", "10.0.0.10"])
+			and hosting == PackedStringArray(["192.168.43.1", "192.168.42.129",
+				"192.168.44.1"]),
+		"adapters: a phone on a 10.x Wi-Fi with a hotspot, USB or Bluetooth"
+		+ " tether up answers with the Wi-Fi (%s); a phone that is the tether,"
+		% ", ".join(joined) + " with only cellular besides, answers with the"
+		+ " tether (%s)" % ", ".join(hosting))
 
 
 # ---------------------------------------------------------------------------
@@ -1473,11 +1567,13 @@ func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 	return b
 
 
-## ...on a run at the person, committed.
-func _pond_hunt(field: Node, b: Object) -> void:
-	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+## ...on a run at the person, committed -- the one in [param slot], on a
+## dedicated host that has two -- and with nothing of the chase the slot last
+## ran carried into this one.
+func _pond_hunt(field: Node, b: Object, slot: int = FoodField.PERSON_SLOT) -> void:
+	var pb: Object = field.bodies()[slot]
 	b.state = FoodField.State.STALK
-	b.target = FoodField.PERSON_SLOT
+	b.target = slot
 	b.target_serial = pb.serial
 	b.aim = pb.pos
 	b.aim_clock = 0.0
@@ -3439,3 +3535,782 @@ func _now() -> float:
 ## Microseconds, for the one measurement here that is shorter than a frame.
 func _clock() -> float:
 	return float(Time.get_ticks_usec()) / 1e6
+
+
+# ---------------------------------------------------------------------------
+# **The dedicated host** (`game/server/`): the pond with no cell of its own and
+# two guests, each of whom is told the other is the friend. The guests are two
+# real runs of the game on this build's own guest code -- which is PROTOCOL 4's
+# guest code, unchanged, exactly what a phone that has never heard of a server
+# runs -- so everything here is a phone joining a server.
+#
+# Then the server's update loop, with no network: a fake update service for the
+# decisions, and a loopback HTTP server for the one download it does itself.
+# ---------------------------------------------------------------------------
+
+const SERVER_SCENE := "res://game/server/server.tscn"
+## **How long a wait here gives anything an unreliable frame carries** -- a
+## snapshot, or a guest's state frame. ENet throttles unreliable packets when a
+## peer's round trip jitters, dropping them at the sender, and three hosts
+## serviced once a frame in one process jitter: measured, the server's peer for
+## one guest at a throttle of 6 in 32, and four snapshots in a row that never
+## arrived. Waiting on one particular snapshot is then waiting on the one in
+## five that goes. Every wait returns the moment its answer is in, so the margin
+## costs a run in which nothing is dropped nothing.
+const SERVER_UNRELIABLE := 5.0
+## The longest any of those waits has taken, for the section's NOTE.
+var _server_waited := 0.0
+const Updater := preload("res://game/server/updater.gd")
+## For its `State` values only, which the fake service below answers in.
+const ServiceScript := preload("res://addons/launcher/update_service.gd")
+
+
+func _check_server() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var ceiling := Engine.max_fps
+	Engine.max_fps = 250
+	var server: Node = load(SERVER_SCENE).instantiate()
+	server.set("check_updates", false)
+	server.set("own_frame_rate", false)
+	server.set("quits", false)
+	get_tree().root.add_child.call_deferred(server)
+	await server.ready
+	var net: Node = server.session()
+	var food: Node = server.food()
+	var pond: Object = server.pond()
+	_says(int(net.link) == NetSession.Link.LISTENING and food.pond_open()
+			and not bool(food.in_water) and not bool(food.anchored)
+			and (food.bodies() as Array).size()
+				== FoodField.PERSON_SLOT + FoodField.GUESTS_MAX,
+		"server: listening, its water open with %d slots and no cell of its own"
+		% (food.bodies() as Array).size() + " in it")
+
+	var a_net: Node = await _session("ServerGuestA")
+	var b_net: Node = await _session("ServerGuestB")
+	a_net.join("127.0.0.1")
+	await _until_link(a_net, NetSession.Link.TOGETHER)
+	b_net.join("127.0.0.1")
+	await _until_link(b_net, NetSession.Link.TOGETHER)
+	await _pond_until(func() -> bool:
+		return ((net.guests() as Array).size() == 2 and bool(a_net.peer_pond_open())
+			and bool(b_net.peer_pond_open())), 2.0, [])
+	_says(int(a_net.link) == NetSession.Link.TOGETHER
+			and int(b_net.link) == NetSession.Link.TOGETHER
+			and (net.guests() as Array).size() == 2
+			and bool(a_net.peer_pond_open()) and bool(b_net.peer_pond_open()),
+		"server: two guests are greeted on protocol %d, and both read its pond"
+		% Wire.PROTOCOL + " as open")
+	var c_net: Node = await _session("ServerGuestC")
+	c_net.join("127.0.0.1")
+	await _until_link(c_net, NetSession.Link.REFUSED)
+	_says(int(c_net.link) == NetSession.Link.REFUSED
+			and str(c_net.trouble) == "already two"
+			and (net.guests() as Array).size() == 2,
+		"server: a third is refused with '%s', and the two stay" % c_net.trouble)
+	c_net.close()
+
+	# **A call crosses to the other guest**, as the numbers sent, and never
+	# back to the one who made it. Before the runs exist, which drain it.
+	var shout_at := Vector2(321.5, -77.25)
+	a_net.shout(shout_at, 33.5, 1500.0)
+	await _until_heard(b_net, 1)
+	await _wait(0.1)
+	var heard: Array = b_net.drain_heard()
+	var echoed: Array = a_net.drain_heard()
+	_says(heard.size() == 1 and (heard[0][0] as Vector2).is_equal_approx(shout_at)
+			and is_equal_approx(float(heard[0][1]), 33.5)
+			and is_equal_approx(float(heard[0][2]), 1500.0) and echoed.is_empty(),
+		"server: a guest's shout reaches the other guest as the numbers sent,"
+		+ " and not the guest who made it")
+
+	# **Both runs open inside the pond.** The first has nobody to arrive
+	# beside; the second arrives ARRIVAL from the first.
+	var a_run := _pond_run_scene(a_net, false)
+	get_tree().root.add_child.call_deferred(a_run)
+	await a_run.ready
+	var a_cell: Node = a_run.get_node(^"Cell")
+	var a_food: Node = a_run.get_node(^"Food")
+	var a_pond: Object = a_run.get("_pond")
+	var a_in := await _pond_until(func() -> bool: return bool(a_pond.in_pond), 3.0, [])
+	var a_home: Vector2 = a_cell.position
+	var a_pin := [a_cell, a_home, 0.0]
+	var b_run := _pond_run_scene(b_net, false)
+	get_tree().root.add_child.call_deferred(b_run)
+	await b_run.ready
+	var b_cell: Node = b_run.get_node(^"Cell")
+	var b_food: Node = b_run.get_node(^"Food")
+	var b_pond: Object = b_run.get("_pond")
+	var b_in := await _pond_until(func() -> bool: return bool(b_pond.in_pond), 3.0,
+		[a_pin])
+	var b_home: Vector2 = b_cell.position
+	var b_pin := [b_cell, b_home, 0.0]
+	var pins := [a_pin, b_pin]
+	var slot_a := int((pond.call("_guest_by_id", int(a_net.my_id())) as Object).slot)
+	var slot_b := int((pond.call("_guest_by_id", int(b_net.my_id())) as Object).slot)
+	var apart := b_home.distance_to(a_home)
+	_says(a_in >= 0.0 and b_in >= 0.0 and a_food.mirroring() and b_food.mirroring()
+			and slot_a != slot_b and absf(apart - float(pond.ARRIVAL))
+				<= POND_ARRIVAL_TOLERANCE,
+		"server: both guests' runs open inside the pond, in slots %d and %d, and"
+		% [slot_a, slot_b] + " the second lands %.2f units from the first (%.0f +-"
+		% [apart, float(pond.ARRIVAL)] + " %.0f)" % POND_ARRIVAL_TOLERANCE)
+
+	# **Each mirrors the other as the friend, in slot 68** -- where a guest of a
+	# phone has always found the host -- wearing what the other wears. The
+	# second guest grows a palp first, so the genome checked is one it chose.
+	var b_genome: Node = b_run.get_node(^"Genome")
+	b_genome.express({&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"palp": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"palp"])
+	var mirrored := await _server_until(func() -> bool:
+		var fa: Object = a_food.person()
+		var fb: Object = b_food.person()
+		return fa != null and fb != null and bool(fa.in_water) and bool(fb.in_water) \
+			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers(), pins)
+	await _pond_until(func() -> bool: return false, 0.3, pins)
+	var a_sees: Vector2 = a_food.bodies()[FoodField.PERSON_SLOT].pos
+	var b_sees: Vector2 = b_food.bodies()[FoodField.PERSON_SLOT].pos
+	var water_a := 0
+	var water_b := 0
+	for i in FoodField.PERSON_SLOT:
+		water_a += 1 if bool(a_food.bodies()[i].seeded) else 0
+		water_b += 1 if bool(b_food.bodies()[i].seeded) else 0
+	_says(mirrored >= 0.0 and a_sees.distance_to(b_home) < 1.0
+			and b_sees.distance_to(a_home) < 1.0
+			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers()
+			and water_a > 10 and water_b > 10
+			and int(pond.pond_bytes_max) <= Wire.POND_MAX,
+		"server: each guest mirrors the other as the friend in slot 68 -- %.3f and"
+		% a_sees.distance_to(b_home) + " %.3f units off where they are, the"
+		% b_sees.distance_to(a_home) + " first wearing the palp the second grew"
+		+ " -- in water of %d and %d cells; largest snapshot %d B"
+		% [water_a, water_b, int(pond.pond_bytes_max)])
+
+	# **The server decides a meeting of the two, and both hear it.** The guest
+	# in slot 68 is this cell's side of the players' rule on a dedicated host,
+	# so it is tested eating and being eaten.
+	var a_genome: Node = a_run.get_node(^"Genome")
+	a_genome.express({&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
+		[&"cytostome", &"cirrus", &"flagellum"])
+	await _pond_until(func() -> bool:
+		return Genome.tier_of(food.bodies()[slot_a].genome, &"cytostome") == 3,
+		1.0, pins)
+	var a_ate := [false]
+	var on_a_eaten := func(_n: float, _g: StringName, _at: Vector2) -> void:
+		a_ate[0] = true
+	a_food.eaten.connect(on_a_eaten)
+	# Both facing north, so only the first one's mouth is on a body.
+	var in_a_mouth: Vector2 = a_home + Vector2(0.0, -(float(a_cell.radius) + 18.0))
+	var b_down := await _server_until(func() -> bool:
+		return int(b_run.get("_life")) == NormalMode.Life.DYING,
+		[a_pin, [b_cell, in_a_mouth, 0.0]])
+	var b_slot_empty: bool = food.person(slot_b) == null
+	await _pond_until(func() -> bool:
+		return (bool(a_ate[0])
+			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [a_pin])
+	a_food.eaten.disconnect(on_a_eaten)
+	_says(b_down >= 0.0 and bool(a_ate[0]) and b_slot_empty
+			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
+			and int(b_food.died_by) == FoodField.By.FRIEND
+			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE,
+		"server: the first guest swallows the second -- a meal for the first and"
+		+ " '%s' said to it; SWALLOWED by the friend for the second, and its"
+		% str(a_run.get("_line_text")) + " slot empty on the server")
+
+	b_run.set("_tap_pending", true)
+	var b_back := await _pond_until(func() -> bool:
+		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
+	var back_apart := b_home.distance_to(a_cell.position)
+	_says(b_back >= 0.0 and absf(back_apart - float(pond.ARRIVAL))
+			<= POND_ARRIVAL_TOLERANCE and b_food.mirroring()
+			and int(b_run.get("_generation")) == 1,
+		"server: the second taps from the black and comes back %.1f units from"
+		% back_apart + " the first, in the same water")
+
+	b_genome.express({&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
+		[&"cytostome", &"cirrus", &"flagellum"])
+	await _pond_until(func() -> bool:
+		return Genome.tier_of(food.bodies()[slot_b].genome, &"cytostome") == 3,
+		1.0, pins)
+	var b_ate := [false]
+	var on_b_eaten := func(_n: float, _g: StringName, _at: Vector2) -> void:
+		b_ate[0] = true
+	b_food.eaten.connect(on_b_eaten)
+	var in_b_mouth: Vector2 = b_home + Vector2(0.0, -(float(b_cell.radius) + 18.0))
+	var a_down := await _server_until(func() -> bool:
+		return int(a_run.get("_life")) == NormalMode.Life.DYING,
+		[b_pin, [a_cell, in_b_mouth, 0.0]])
+	var a_slot_empty: bool = food.person(slot_a) == null
+	await _pond_until(func() -> bool:
+		return (bool(b_ate[0])
+			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [b_pin])
+	b_food.eaten.disconnect(on_b_eaten)
+	_says(a_down >= 0.0 and bool(b_ate[0]) and a_slot_empty
+			and int(a_food.died_of) == FoodField.Cause.SWALLOWED
+			and int(a_food.died_by) == FoodField.By.FRIEND
+			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE,
+		"server: and the second swallows the first, with the same outcome on"
+		+ " both, the other way round")
+
+	a_run.set("_tap_pending", true)
+	await _pond_until(func() -> bool:
+		return int(a_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [b_pin])
+	a_home = a_cell.position
+	a_pin = [a_cell, a_home, 0.0]
+	pins = [a_pin, b_pin]
+	await _server_until(func() -> bool: return a_food.person() != null, pins)
+
+	# **The water, on the guest in the second slot.** A chewer's bite is felt
+	# at its true bearing, and that guest's snapshots carry its own wound --
+	# the other's stays whole: each header is written for the one it goes to.
+	var b_bites: Array = []
+	var on_b_bitten := func(bearing: float, _s: float) -> void: b_bites.append(bearing)
+	b_food.bitten.connect(on_b_bitten)
+	# On its starboard quarter: this guest wears the wide mouth it swallowed the
+	# other with, and at 70 degrees off its nose that mouth reaches a chewer
+	# and eats it first.
+	var chew_bearing := deg_to_rad(120.0)
+	var chewer_at: Vector2 = b_home + Vector2(sin(chew_bearing), -cos(chew_bearing)) \
+		* (float(b_cell.radius) + 20.0 - 3.0)
+	var chewer := _pond_pose(food, 3, 20.0, {&"cytostome": 1, &"flagellum": 1},
+		chewer_at, _pond_face(chewer_at, b_home))
+	var chewer_serial := int(chewer.serial)
+	var chewed := await _pond_until(func() -> bool:
+		if int(chewer.serial) == chewer_serial:
+			chewer.pos = chewer_at
+			chewer.heading = _pond_face(chewer_at, b_home)
+		return not b_bites.is_empty(), 1.5, pins)
+	food.call("_retire", 3)
+	b_food.bitten.disconnect(on_b_bitten)
+	var wounds := [0.0, 0.0]
+	var agreed := await _server_until(func() -> bool:
+		wounds[0] = float(food.bodies()[slot_b].wound)
+		wounds[1] = float(b_cell.wound)
+		return (float(wounds[0]) > 0.02
+			and absf(float(wounds[0]) - float(wounds[1])) <= 1.0 / 255.0), pins)
+	var felt_at := float(b_bites[0]) if not b_bites.is_empty() else NAN
+	_says(chewed >= 0.0 and agreed >= 0.0
+			and absf(angle_difference(felt_at, chew_bearing)) <= POND_BEARING_TOLERANCE
+			and float(food.bodies()[slot_a].wound) == 0.0 and float(a_cell.wound) == 0.0,
+		"server: a chewer's bite on the guest in slot %d is felt at %.3f rad, the"
+		% [slot_b, felt_at] + " true bearing %.3f; its wound is its own -- %.4f"
+		% [chew_bearing, float(wounds[0])] + " on the server, %.4f on its cell --"
+		% float(wounds[1]) + " and the other guest's is 0")
+
+	# A committed hunter swallows that guest: told by the water, and the other
+	# guest told that its friend died, not that it ate them.
+	# Held off first, on its run: "stalking you" is written per snapshot, so the
+	# guest it hunts has a hunter and the other guest, sent the same body, has
+	# none. Held outside COMMIT_RANGE, and on a run with nothing in it of the
+	# chase its slot last ran (`_pond_hunt`): a closest approach left over from
+	# that one ends this run on its first step, and so can a lunge whose aim it
+	# has passed -- measured: held at 300 with a `best` of 137.5 left in it.
+	var held_at: Vector2 = b_home + Vector2(0.0, -(FoodField.COMMIT_RANGE + 90.0))
+	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
+		held_at, _pond_face(held_at, b_home))
+	_pond_hunt(food, hunter, slot_b)
+	var flagged := await _server_until(func() -> bool:
+		hunter.pos = held_at
+		hunter.heading = _pond_face(held_at, b_home)
+		return int(b_food.hunter()) == 5, pins)
+	var a_sees_hunter := int(a_food.hunter())
+	var a_has_it: bool = bool(a_food.bodies()[5].seeded)
+	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
+		"server: a hunter on the guest in slot %d is that guest's hunter, and the"
+		% slot_b + " other guest, who is sent the same body, sees no hunter")
+	# Then let in: already on the lunge, and aimed at the guest.
+	var hunter_at: Vector2 = b_home + Vector2(0.0, -56.0)
+	hunter.pos = hunter_at
+	hunter.heading = _pond_face(hunter_at, b_home)
+	hunter.aim = b_home
+	hunter.lunging = true
+	var hunted := await _server_until(func() -> bool:
+		return (int(b_run.get("_life")) != NormalMode.Life.ALIVE
+			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED), [a_pin])
+	_says(hunted >= 0.0 and food.person(slot_b) == null
+			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
+			and int(b_food.died_by) == FoodField.By.WATER
+			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED,
+		"server: a committed hunter swallows the guest in slot %d -- SWALLOWED by"
+		% slot_b + " the water -- and the other guest is told '%s'"
+		% str(a_run.get("_line_text")))
+	b_run.set("_tap_pending", true)
+	await _pond_until(func() -> bool:
+		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
+	await _server_until(func() -> bool: return a_food.person() != null, pins)
+
+	# **A guest leaving frees its slot**: the server forgets it and takes it
+	# out of the water, the other guest's friend goes, and the slot takes the
+	# next guest, who arrives beside the one still swimming.
+	var b_id := int(b_net.my_id())
+	b_net.close()
+	var freed := await _pond_until(func() -> bool:
+		return (net.guests() as Array).size() == 1 and food.person(slot_b) == null \
+			and pond.call("_guest_by_id", b_id) == null, 2.0, [a_pin])
+	var friend_gone := await _server_until(func() -> bool:
+		return a_food.person() == null, [a_pin])
+	_says(freed >= 0.0 and friend_gone >= 0.0,
+		"server: a guest leaving frees its slot -- forgotten by the server, out of"
+		+ " its water, and gone from the other guest's %.0f ms later"
+		% (friend_gone * 1000.0))
+	b_run.queue_free()
+	var d_net: Node = await _session("ServerGuestD")
+	d_net.join("127.0.0.1")
+	await _until_link(d_net, NetSession.Link.TOGETHER)
+	var d_run := _pond_run_scene(d_net, false)
+	get_tree().root.add_child.call_deferred(d_run)
+	await d_run.ready
+	var d_cell: Node = d_run.get_node(^"Cell")
+	var d_pond: Object = d_run.get("_pond")
+	var d_in := await _pond_until(func() -> bool: return bool(d_pond.in_pond), 3.0,
+		[a_pin])
+	var d_guest: Object = pond.call("_guest_by_id", int(d_net.my_id()))
+	var d_apart: float = (d_cell.position as Vector2).distance_to(a_home)
+	var met := await _server_until(func() -> bool: return a_food.person() != null,
+		[a_pin, [d_cell, d_cell.position, 0.0]])
+	_says(d_in >= 0.0 and d_guest != null and int(d_guest.slot) == slot_b
+			and absf(d_apart - float(pond.ARRIVAL)) <= POND_ARRIVAL_TOLERANCE
+			and met >= 0.0,
+		"server: the freed slot %d takes the next guest, who lands %.1f units"
+		% [slot_b, d_apart] + " from the one still swimming, and is its friend")
+
+	# **With nobody left, the water goes with them**: every cell retired, so an
+	# empty server simulates nothing -- where a guest who is only dead keeps
+	# theirs, because they are coming back to it.
+	a_net.close()
+	d_net.close()
+	var emptied := await _pond_until(func() -> bool:
+		if not (net.guests() as Array).is_empty() or food.person(slot_a) != null \
+				or food.person(slot_b) != null:
+			return false
+		for i in FoodField.PERSON_SLOT:
+			if bool(food.bodies()[i].seeded):
+				return false
+		return true, 2.0, [])
+	_says(emptied >= 0.0,
+		"server: when the last guest leaves, the water goes with them -- no cell"
+		+ " is left to simulate on an empty server")
+	a_run.queue_free()
+	d_run.queue_free()
+
+	# **The server stops cleanly**: two new guests arrive in water made for
+	# them, and when it stops each is told at once and swims on alone in fresh
+	# water, rather than waiting out a timeout.
+	var e_net: Node = await _session("ServerGuestE")
+	var f_net: Node = await _session("ServerGuestF")
+	e_net.join("127.0.0.1")
+	f_net.join("127.0.0.1")
+	await _until_link(e_net, NetSession.Link.TOGETHER)
+	await _until_link(f_net, NetSession.Link.TOGETHER)
+	var e_run := _pond_run_scene(e_net, false)
+	get_tree().root.add_child.call_deferred(e_run)
+	await e_run.ready
+	var f_run := _pond_run_scene(f_net, false)
+	get_tree().root.add_child.call_deferred(f_run)
+	await f_run.ready
+	var e_food: Node = e_run.get_node(^"Food")
+	var f_food: Node = f_run.get_node(^"Food")
+	await _pond_until(func() -> bool:
+		return (bool((e_run.get("_pond") as Object).in_pond)
+			and bool((f_run.get("_pond") as Object).in_pond)), 3.0, [])
+	var fresh := 0
+	for i in FoodField.PERSON_SLOT:
+		fresh += 1 if bool(food.bodies()[i].seeded) else 0
+	server.shut_down()
+	var taken := await _pond_until(func() -> bool:
+		return not e_food.mirroring() and not f_food.mirroring(), 1.5, [])
+	var taken_frames := _pond_frames
+	_says(fresh >= FoodField.COUNT and taken >= 0.0
+			and taken_frames <= _pond_budget(0.2),
+		"server: the next two arrive in %d fresh cells; stopped, both take over" % fresh
+		+ " their own water %d frames later (%.0f ms here) -- told, not timed out"
+		% [taken_frames, taken * 1000.0])
+
+	e_run.queue_free()
+	f_run.queue_free()
+	e_net.close()
+	f_net.close()
+	server.queue_free()
+	await _wait(0.3)
+	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second;"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps]
+		+ " its longest wait on an unreliable frame %.2f s, of %.0f"
+		% [_server_waited, SERVER_UNRELIABLE])
+	Engine.max_fps = ceiling
+
+
+## [method _pond_until] for anything an unreliable frame carries: given
+## [constant SERVER_UNRELIABLE], and the longest it took kept for the NOTE, so
+## the margin is read in the log before a slower runner uses it up.
+func _server_until(done: Callable, pins: Array) -> float:
+	var took: float = await _pond_until(done, SERVER_UNRELIABLE, pins)
+	_server_waited = maxf(_server_waited, took if took >= 0.0 else SERVER_UNRELIABLE)
+	return took
+
+
+## **An update service that answers what it is told to**: the launcher's two
+## coroutines' shape, with no network behind them. Made by [method _fake], whose
+## manifest is built for the binary this process is.
+class FakeService extends RefCounted:
+	var state := 0
+	var last_error := ""
+	var manifest := {"version_name": "9.9.9", "binary_version": 0}
+	var pending_kind := ""
+	var pending_artifact := {}
+	var pending_version := 0
+	var answer := 0
+	var applied_as := 0
+	var applies := 0
+
+	func check_for_updates() -> int:
+		state = answer
+		return state
+
+	func apply_pending_update() -> int:
+		applies += 1
+		state = applied_as
+		return state
+
+
+## **Enough of an HTTP server to serve one file to `HTTPRequest`**, on
+## loopback: whatever is asked for, [member body] comes back, whole, and the
+## connection closes. Polled a frame at a time, so a download on
+## `HTTPRequest`'s own thread is served while the probe awaits it.
+class TinyHttp extends Node:
+	var body := PackedByteArray()
+	var port := 0
+	var served := 0
+	var _server := TCPServer.new()
+	var _open: Array = []
+
+	func start() -> bool:
+		for candidate in range(47110, 47190):
+			if _server.listen(candidate, "127.0.0.1") == OK:
+				port = candidate
+				return true
+		return false
+
+	func _process(_delta: float) -> void:
+		while _server.is_connection_available():
+			_open.append([_server.take_connection(), PackedByteArray()])
+		for each: Array in _open.duplicate():
+			var peer: StreamPeerTCP = each[0]
+			peer.poll()
+			var waiting := peer.get_available_bytes()
+			var asked: PackedByteArray = each[1]
+			if waiting > 0:
+				asked.append_array(peer.get_data(waiting)[1])
+				each[1] = asked
+			if not asked.get_string_from_ascii().contains("\r\n\r\n"):
+				continue
+			var head := ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream"
+				+ "\r\nContent-Length: %d\r\nConnection: close\r\n\r\n") % body.size()
+			peer.put_data(head.to_ascii_buffer())
+			peer.put_data(body)
+			peer.disconnect_from_host()
+			_open.erase(each)
+			served += 1
+
+	func stop() -> void:
+		_server.stop()
+
+
+func _check_server_updates() -> void:
+	var scratch := ProjectSettings.globalize_path("user://net_probe_server")
+	DirAccess.make_dir_recursive_absolute(scratch)
+	var exe := scratch.path_join("biogenic-server.x86_64")
+	var note := scratch.path_join("note.json")
+	var part := scratch.path_join(".biogenic-server.x86_64.download")
+	var leftovers := [exe, exe + ".previous", exe + ".previous.part", note, part]
+	for leftover: String in leftovers:
+		DirAccess.remove_absolute(leftover)
+
+	# **Content newer**: staged, held while a guest is in, done once it is not.
+	var content := _fake(ServiceScript.State.CONTENT_READY, 1_000_000)
+	var up := _updater(content, exe, note, 0.25)
+	var restarts: Array = []
+	up.restart_wanted.connect(func(why: String) -> void: restarts.append(why))
+	await up.check()
+	var staged_first := str(up.staged) == "content" \
+		and int(up.staged_version) == 1_000_000 and content.applies == 1
+	var until := _now() + 0.6
+	while _now() < until:
+		up.tick(1)
+		await get_tree().process_frame
+	await up.check()
+	var held := restarts.is_empty()
+	var applies_held := content.applies
+	var empty_from := _now()
+	until = _now() + 2.0
+	while _now() < until and restarts.is_empty():
+		up.tick(0)
+		await get_tree().process_frame
+	var waited := _now() - empty_from
+	_says(staged_first and held and applies_held == 1 and restarts.size() == 1
+			and waited >= 0.25 and FileAccess.file_exists(note),
+		"server updates: content newer is staged once, held through 0.6 s with a"
+		+ " guest in and a second check, and restarts %.2f s after the pond"
+		% waited + " empties (asked for 0.25), leaving a note for the next start")
+	up.queue_free()
+
+	# **A pack that did not mount is not taken again**: the note says content
+	# 1,000,000, this build runs less, so the next start refuses it.
+	var after := _fake(ServiceScript.State.CONTENT_READY, 1_000_000)
+	var next := _updater(after, exe, note, 0.25)
+	await next.check()
+	_says(after.applies == 0 and str(next.staged).is_empty()
+			and not FileAccess.file_exists(note),
+		"server updates: after a restart that did not take, the same content is"
+		+ " not downloaded again")
+	next.queue_free()
+
+	# **Content built for another binary is not this one's**: the launcher
+	# offers it whenever the binary number has not gone up, down included.
+	var running := int(content.manifest["binary_version"])
+	var passed_over := 0
+	for other: int in [running - 1, running + 1]:
+		var elsewhere := _fake(ServiceScript.State.CONTENT_READY, 1_000_004)
+		elsewhere.manifest["binary_version"] = other
+		var picky := _updater(elsewhere, exe, note, 60.0)
+		var picky_lines := _lines_of(picky)
+		await picky.check()
+		if elsewhere.applies == 0 and str(picky.staged).is_empty() \
+				and _said(picky_lines, "published for binary %d" % other):
+			passed_over += 1
+		picky.queue_free()
+	_says(passed_over == 2,
+		"server updates: content published for binary %d or %d is not taken by"
+		% [running - 1, running + 1] + " binary %d" % running)
+
+	# **Binary newer**: downloaded from a loopback HTTP server, hashed, asked
+	# for its version, and swapped over the running build -- which is kept
+	# beside it. The build is a shell script that answers `--version` as an
+	# exported server does, padded past a megabyte so that its hashing takes
+	# more than one of its megabyte-a-frame steps.
+	var http := TinyHttp.new()
+	add_child(http)
+	var listening := http.start()
+	var old_build := "the build that is running".to_utf8_buffer()
+	var new_build := _fake_build("4.7.stable.probe", 0, 1_500_000)
+	var new_sum := _sha(new_build)
+	http.body = new_build
+	_write(exe, old_build)
+	var binary := _fake(ServiceScript.State.BINARY_READY, 1_000_001)
+	binary.pending_artifact = {"url": _served(http), "sha256": new_sum,
+		"size": new_build.size()}
+	var swap := _updater(binary, exe, note, 60.0)
+	var swap_lines := _lines_of(swap)
+	await swap.check()
+	var mode := FileAccess.get_unix_permissions(exe)
+	_says(listening and http.served == 1 and _read(exe) == new_build
+			and _read(exe + ".previous") == old_build
+			and (mode & FileAccess.UNIX_EXECUTE_OWNER) != 0
+			and not FileAccess.file_exists(part)
+			and not FileAccess.file_exists(exe + ".previous.part")
+			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_001
+			and _said(swap_lines, "starts here (4.7.stable.probe)"),
+		"server updates: binary newer is fetched over HTTP, its SHA-256 checked"
+		+ " (%s...), asked for its version, and swapped over the running build,"
+		% new_sum.left(12) + " executable, the old one kept as .previous")
+
+	# **A second build while the first still waits** replaces that one, which
+	# never ran -- and `.previous` stays the build that did.
+	var second_build := _fake_build("4.7.stable.probe2", 0)
+	http.body = second_build
+	binary.pending_version = 1_000_002
+	binary.pending_artifact = {"url": _served(http), "sha256": _sha(second_build),
+		"size": second_build.size()}
+	await swap.check()
+	_says(http.served == 2 and _read(exe) == second_build
+			and _read(exe + ".previous") == old_build
+			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_002,
+		"server updates: a second binary while the first is staged replaces it,"
+		+ " and .previous stays the build that ran")
+	swap.queue_free()
+
+	# **A build that does not start here is refused**, and not fetched again
+	# until the manifest's checksum for it changes.
+	var previous := "the build before that".to_utf8_buffer()
+	_write(exe, old_build)
+	_write(exe + ".previous", previous)
+	var broken_build := _fake_build("cannot start on this machine", 1)
+	http.body = broken_build
+	var broken := _fake(ServiceScript.State.BINARY_READY, 1_000_003)
+	broken.pending_artifact = {"url": _served(http), "sha256": _sha(broken_build),
+		"size": broken_build.size()}
+	var refuse := _updater(broken, exe, note, 60.0)
+	var refuse_lines := _lines_of(refuse)
+	var served := http.served
+	await refuse.check()
+	_says(http.served == served + 1 and _read(exe) == old_build
+			and _read(exe + ".previous") == previous and not FileAccess.file_exists(part)
+			and str(refuse.staged).is_empty()
+			and _said(refuse_lines, "does not start on this machine"),
+		"server updates: a new binary that exits 1 on --version is refused -- the"
+		+ " running build and .previous untouched, the download deleted")
+	await refuse.check()
+	await refuse.check()
+	var skipped_downloads := http.served - served - 1
+	var skips_said := _count(refuse_lines, "not downloading it again")
+	var fixed_build := _fake_build("4.7.stable.fixed", 0)
+	http.body = fixed_build
+	broken.pending_artifact = {"url": _served(http), "sha256": _sha(fixed_build),
+		"size": fixed_build.size()}
+	await refuse.check()
+	_says(skipped_downloads == 0 and skips_said == 1 and http.served == served + 2
+			and _read(exe) == fixed_build and str(refuse.staged) == "binary",
+		"server updates: a refused build is not downloaded again while the"
+		+ " manifest gives it the same checksum -- %d downloads in 2 checks,"
+		% skipped_downloads + " said %d time(s) -- and is, once it gives another"
+		% skips_said)
+
+	# **What the pre-flight takes for a version**: any `N.M...`, so the first
+	# Godot 5 build is not refused for its number by every server already out
+	# there -- and never an empty answer with exit 0, which is what a build
+	# killed on its way out can give.
+	var asked := scratch.path_join("preflight.sh")
+	leftovers.append(asked)
+	var verdicts: PackedStringArray = []
+	for case: Array in [["", false], ["5.0.stable.official", true], ["hello", false]]:
+		_write(asked, _fake_build(str(case[0]), 0))
+		FileAccess.set_unix_permissions(asked, FileAccess.UNIX_READ_OWNER
+			| FileAccess.UNIX_WRITE_OWNER | FileAccess.UNIX_EXECUTE_OWNER)
+		if bool(refuse.preflight(asked)["ok"]) == bool(case[1]):
+			verdicts.append(str(case[0]))
+	_says(verdicts.size() == 3,
+		"server updates: the pre-flight refuses an empty answer and a non-version"
+		+ " with exit 0, and takes a Godot 5 version (%d of 3 right)" % verdicts.size())
+	refuse.queue_free()
+
+	# **A bad checksum is refused**: nothing moves, nothing is left, and it is
+	# not fetched again at the next check.
+	var before := _read(exe)
+	var bad := _fake(ServiceScript.State.BINARY_READY, 1_000_005)
+	bad.pending_artifact = {"url": _served(http), "sha256": "00".repeat(32),
+		"size": fixed_build.size()}
+	var mismatch := _updater(bad, exe, note, 60.0)
+	served = http.served
+	await mismatch.check()
+	await mismatch.check()
+	_says(http.served == served + 1 and _read(exe) == before
+			and str(mismatch.staged).is_empty() and not FileAccess.file_exists(part),
+		"server updates: a download whose SHA-256 does not match the manifest is"
+		+ " refused -- the running build untouched, the download deleted -- and"
+		+ " not fetched again at the next check")
+	mismatch.queue_free()
+
+	# **Nothing is applied from the editor**: the same news, and no download.
+	var editor := _fake(ServiceScript.State.CONTENT_READY, 1_000_006)
+	var dry := _updater(editor, exe, note, 60.0)
+	dry.can_apply = false
+	await dry.check()
+	_says(editor.applies == 0 and str(dry.staged).is_empty(),
+		"server updates: outside an exported server build it says what it would"
+		+ " take, and takes nothing")
+	dry.queue_free()
+
+	# **What a stop in the middle of an update leaves is gone at the next
+	# start** -- and the rollback copy is not.
+	var way_back := "the way back".to_utf8_buffer()
+	_write(part, "half a download".to_utf8_buffer())
+	_write(exe + ".previous.part", "half a copy".to_utf8_buffer())
+	_write(exe + ".previous", way_back)
+	var fresh := _updater(_fake(ServiceScript.State.UP_TO_DATE, 0), exe, note, 60.0)
+	_says(not FileAccess.file_exists(part)
+			and not FileAccess.file_exists(exe + ".previous.part")
+			and _read(exe + ".previous") == way_back,
+		"server updates: a download and a half-made copy left by a stop"
+		+ " mid-update are removed at the next start, and .previous is kept")
+	fresh.queue_free()
+
+	http.stop()
+	http.queue_free()
+	for leftover: String in leftovers:
+		DirAccess.remove_absolute(leftover)
+	DirAccess.remove_absolute(scratch)
+
+
+## A fake update service answering [param answer] about [param version], its
+## manifest built for the binary this process is.
+func _fake(answer: int, version: int) -> FakeService:
+	var service := FakeService.new()
+	service.answer = answer
+	service.pending_version = version
+	service.pending_kind = "binary" if answer == ServiceScript.State.BINARY_READY \
+		else "content"
+	service.applied_as = ServiceScript.State.RESTART_REQUIRED
+	var info := get_node_or_null(^"/root/BuildInfo")
+	service.manifest["binary_version"] = int(info.binary_version) if info != null else 0
+	return service
+
+
+## **A server build, as far as the pre-flight can tell**: a shell script that
+## answers `--version` with [param says] and exits [param code] -- padded to
+## [param size] bytes past its `exit`, where the shell never reads.
+static func _fake_build(says: String, code: int, size: int = 0) -> PackedByteArray:
+	var bytes := ("#!/bin/sh\necho '%s'\nexit %d\n" % [says, code]).to_utf8_buffer()
+	var line := ("#" + "=".repeat(62) + "\n").to_utf8_buffer()
+	while bytes.size() + line.size() <= size:
+		bytes.append_array(line)
+	return bytes
+
+
+static func _sha(bytes: PackedByteArray) -> String:
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	hashing.update(bytes)
+	return hashing.finish().hex_encode()
+
+
+func _served(http: Node) -> String:
+	return "http://127.0.0.1:%d/biogenic-server.x86_64" % int(http.port)
+
+
+## Every line [param up] says from now on, as it says it.
+func _lines_of(up: Node) -> Array:
+	var lines: Array = []
+	up.said.connect(func(line: String) -> void: lines.append(line))
+	return lines
+
+
+func _said(lines: Array, part: String) -> bool:
+	return _count(lines, part) > 0
+
+
+func _count(lines: Array, part: String) -> int:
+	var count := 0
+	for line: String in lines:
+		if line.contains(part):
+			count += 1
+	return count
+
+
+## An updater on a fake service, in the tree, that checks only when told.
+func _updater(service: Object, exe: String, note: String, grace: float) -> Node:
+	var up: Node = Updater.new()
+	up.service = service
+	up.exe_path = exe
+	up.note_path = note
+	up.can_apply = true
+	up.restart_after = grace
+	up.check_every = 1e9
+	add_child(up)
+	up.set("_next_check", INF)
+	return up
+
+
+func _write(path: String, bytes: PackedByteArray) -> void:
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	file.store_buffer(bytes)
+	file.close()
+
+
+func _read(path: String) -> PackedByteArray:
+	return FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) \
+		else PackedByteArray()

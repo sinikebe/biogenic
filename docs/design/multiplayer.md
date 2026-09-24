@@ -702,6 +702,25 @@ its best case); it fragments into private friend-groups rather than a public
 pool, which at N=2 is a **feature**; and it needs a plainly written README rather
 than a UI.
 
+**Built, for the home LAN: the dedicated server** (`game/server/`,
+`docs/server.md`). A headless Linux build hosts the shared pond for two
+guests, joined with the tap code on PROTOCOL 4, and updates itself from the
+release manifest every ten minutes. Two of §4.4's claims were settled against
+the real thing rather than the editor. **The feature-tag override works in an
+exported 4.7 release template**: the "Linux Server" preset carries the custom
+feature `server`, and `run/main_scene.server` boots the server scene --
+measured on `linux_release.x86_64`, where it also turned out that Godot does
+not catch SIGTERM (status 143, nothing reaches a script) and that a release
+build's stdout is block-buffered into a pipe, so `run/flush_stdout_on_print.server`
+is what gets its log to the journal at all. **And the artifact rides as
+`binary:linux` and `content:linux`, not `linux-server`**: `UpdateService`
+looks an artifact up by `BuildInfo.platform_key()`, which is `linux` on Linux,
+so a `linux-server` artifact would be invisible to the one updater the server
+reuses. The cost is the one §4.4 named: **a Linux desktop client, if one is
+ever shipped, cannot share the `linux` key** -- it would be offered the
+server as its update -- and needs a platform key of its own. Internet play
+stays out of it until #56-#59 are fixed.
+
 ### 4.6 Relay
 
 A relay is the only remaining shape for "phone-hosted, playable anywhere",

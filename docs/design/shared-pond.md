@@ -558,6 +558,22 @@ taken out.
   radius without bumping `_changes`, which is safe only because the replay
   calls it with the field stopped; the sandbox must keep that true, or bump.
 
+**A dedicated host, later** (`game/server/`, `docs/server.md`). The same
+host side, with no cell and two guests: `food.gd`'s `open_dedicated()` keeps a
+person in slot 68 *and* 69, its own cell out of the water and no anchor for
+good, and every person rule reaches the body through `Person.slot`, so each is
+still written once. The two guests meet by `_players_meet` with the slot-68
+guest on the "this cell" side (so the slot-69 guest's mouth is asked first),
+and `touched_slot` says which person `person_touched` and `person_died` were
+about, leaving both signals as they were. On the wire nothing moved: each guest
+is sent the other **as slot 68**, with serial and meals 0, exactly the entry a
+phone host writes for itself (`pond_entries_for()`), and the host passes on
+what a phone host would say about its own cell -- the other guest's PERSON, its
+DIED and its shouts -- on each guest's own event sequence. So PROTOCOL 4 guests
+join it unchanged. The phone's one-guest pond is held to the bit by
+`tools/field_diff.gd`'s pond mode: `main`'s field and this one, opened as a
+pond with one person, compared on every call and every frame.
+
 ## 4. Host cost, measured
 
 **Method.** A scratch harness, not committed, drove `food.gd` directly. The cell
