@@ -407,8 +407,10 @@ static func state(seq: int, alive: bool, at: Vector2 = Vector2.ZERO,
 ## them is needed to hear somebody.
 ##
 ## [param reach] is the shouter's own `ping_range`, and it is what makes this
-## a *local* signal: past it the pulse has run out of water and the listener
-## hears nothing. That is the screen's name, made mechanical.
+## a *local* signal: the call crosses the water once where her echoes cross it
+## twice, so at twice this reach it has run out of water and the listener
+## hears nothing (`food.gd`'s `ping_level`). That is the screen's name, made
+## mechanical.
 static func shout(seq: int, at: Vector2, radius: float,
 		reach: float) -> PackedByteArray:
 	var out := PackedByteArray()

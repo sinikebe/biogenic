@@ -157,7 +157,8 @@ Three candidate shapes were considered and two rejected (§9):
 
   **It does not silence itself, and the spec used to say it did.** 0.11 is not
   under `PING_SILENT`'s 0.03 — it only crosses it once the range term has fallen
-  below 0.265, which at `PING_FALLOFF` 0.6 means a body past 89% of the reach.
+  below 0.265, which at `PING_FALLOFF` 0.6 means a body past 89% of the reach
+  (87% since the water absorbs the wave, #45).
   What keeps the fourth rank off the membrane is the cap: `PING_RETURNS` is five
   and the loop stops at five *audible* returns, so a fifth body four deep is
   competing for a slot with four nearer ones that are louder. `cell.gd`'s note
