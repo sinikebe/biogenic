@@ -253,9 +253,9 @@ func _step_host() -> void:
 
 
 ## **A dedicated host's frame**: the same intake, carry and snapshot as a
-## phone's, once for each guest -- and the two things a phone host does with
-## its own cell done for each guest's friend instead: what the other one
-## wears, how it died, and every shout it makes are passed on.
+## phone's, once for each guest -- and what a phone host says about its own
+## cell said about each guest's friend instead: what the other one wears, how
+## it died, and every call it makes are passed on.
 func _step_dedicated() -> void:
 	# Its pond is open for good and it has no body: what a phone host's state
 	# frames say while it is on the black.
@@ -291,6 +291,9 @@ func _meet_guests() -> void:
 		_guests.erase(g)
 		noted.emit("guest %d left -- %d of %d here" % [g.id, _guests.size(),
 			FoodField.GUESTS_MAX])
+		if _guests.is_empty():
+			_food.empty_water()
+			noted.emit("nobody is left, so the water goes with them")
 	for id: int in ids:
 		if _guest_by_id(id) != null:
 			continue
@@ -577,8 +580,10 @@ func _on_person_died(cause: int, by: int, at: Vector2) -> void:
 ## mouth in a pond of two is the one being told, so "by the friend" says "by
 ## you" to it, and its "you ate them" is right.
 func _tell_friend_died(g: Guest, cause: int, by: int, at: Vector2) -> void:
-	noted.emit("guest %d died (%s, by %s)" % [g.id, _cause_name(cause),
-		"the other guest" if by == FoodField.By.FRIEND else "the water"])
+	var how := _cause_name(cause)
+	if cause != FoodField.Cause.STARVED:
+		how += ", by " + ("the other guest" if by == FoodField.By.FRIEND else "the water")
+	noted.emit("guest %d died (%s)" % [g.id, how])
 	var other := _other(g)
 	if other != null:
 		_send(other, Wire.EVENT_DIED, Wire.died_payload(cause, by, at))

@@ -45,6 +45,14 @@ extends Node
 ## `food.gd` stepped by hand, a host field with a person in it and a mirror fed
 ## that field's own snapshots. It spends no frames, only a few seconds.
 ##
+## **And the dedicated server** (`game/server/`, docs/server.md): the real
+## server scene with two guests, each a real run of the game on this build's
+## own guest code -- which is exactly the PROTOCOL 4 guest a phone that has
+## never heard of a server runs -- arriving, mirroring each other as the friend,
+## eating each other, being eaten by the water, leaving, and being told when
+## the server stops. Then its update loop's decisions, against a fake release
+## feed and a loopback HTTP server, with no network.
+##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
 ## does fire under `--headless` -- 1,920 `draw` signals in 1,920 frames of a
@@ -53,7 +61,7 @@ extends Node
 ## `game/vision/vision.gd` keeps every number the marker needs in a `_process`,
 ## and this reads it.
 ##
-## Excluded from export (`tools/*` on both presets), so none of it ships.
+## Excluded from export (`tools/*` on every preset), so none of it ships.
 
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
@@ -1534,11 +1542,13 @@ func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 	return b
 
 
-## ...on a run at the person, committed.
-func _pond_hunt(field: Node, b: Object) -> void:
-	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+## ...on a run at the person, committed -- the one in [param slot], on a
+## dedicated host that has two -- and with nothing of the chase the slot last
+## ran carried into this one.
+func _pond_hunt(field: Node, b: Object, slot: int = FoodField.PERSON_SLOT) -> void:
+	var pb: Object = field.bodies()[slot]
 	b.state = FoodField.State.STALK
-	b.target = FoodField.PERSON_SLOT
+	b.target = slot
 	b.target_serial = pb.serial
 	b.aim = pb.pos
 	b.aim_clock = 0.0
@@ -3514,6 +3524,17 @@ func _clock() -> float:
 # ---------------------------------------------------------------------------
 
 const SERVER_SCENE := "res://game/server/server.tscn"
+## **How long a wait here gives anything an unreliable frame carries** -- a
+## snapshot, or a guest's state frame. ENet throttles unreliable packets when a
+## peer's round trip jitters, dropping them at the sender, and three hosts
+## serviced once a frame in one process jitter: measured, the server's peer for
+## one guest at a throttle of 6 in 32, and four snapshots in a row that never
+## arrived. Waiting on one particular snapshot is then waiting on the one in
+## five that goes. Every wait returns the moment its answer is in, so the margin
+## costs a run in which nothing is dropped nothing.
+const SERVER_UNRELIABLE := 5.0
+## The longest any of those waits has taken, for the section's NOTE.
+var _server_waited := 0.0
 const Updater := preload("res://game/server/updater.gd")
 ## For its `State` values only, which the fake service below answers in.
 const ServiceScript := preload("res://addons/launcher/update_service.gd")
@@ -3547,8 +3568,8 @@ func _check_server() -> void:
 	b_net.join("127.0.0.1")
 	await _until_link(b_net, NetSession.Link.TOGETHER)
 	await _pond_until(func() -> bool:
-		return (net.guests() as Array).size() == 2 and bool(a_net.peer_pond_open())
-			and bool(b_net.peer_pond_open()), 2.0, [])
+		return ((net.guests() as Array).size() == 2 and bool(a_net.peer_pond_open())
+			and bool(b_net.peer_pond_open())), 2.0, [])
 	_says(int(a_net.link) == NetSession.Link.TOGETHER
 			and int(b_net.link) == NetSession.Link.TOGETHER
 			and (net.guests() as Array).size() == 2
@@ -3616,12 +3637,11 @@ func _check_server() -> void:
 	var b_genome: Node = b_run.get_node(^"Genome")
 	b_genome.express({&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"palp": 1},
 		[&"cytostome", &"cirrus", &"flagellum", &"palp"])
-	var mirrored := await _pond_until(func() -> bool:
+	var mirrored := await _server_until(func() -> bool:
 		var fa: Object = a_food.person()
 		var fb: Object = b_food.person()
 		return fa != null and fb != null and bool(fa.in_water) and bool(fb.in_water) \
-			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers(),
-		3.0, pins)
+			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers(), pins)
 	await _pond_until(func() -> bool: return false, 0.3, pins)
 	var a_sees: Vector2 = a_food.bodies()[FoodField.PERSON_SLOT].pos
 	var b_sees: Vector2 = b_food.bodies()[FoodField.PERSON_SLOT].pos
@@ -3656,13 +3676,13 @@ func _check_server() -> void:
 	a_food.eaten.connect(on_a_eaten)
 	# Both facing north, so only the first one's mouth is on a body.
 	var in_a_mouth: Vector2 = a_home + Vector2(0.0, -(float(a_cell.radius) + 18.0))
-	var b_down := await _pond_until(func() -> bool:
-		return int(b_run.get("_life")) == NormalMode.Life.DYING, 1.5,
+	var b_down := await _server_until(func() -> bool:
+		return int(b_run.get("_life")) == NormalMode.Life.DYING,
 		[a_pin, [b_cell, in_a_mouth, 0.0]])
 	var b_slot_empty: bool = food.person(slot_b) == null
 	await _pond_until(func() -> bool:
-		return bool(a_ate[0]) and str(a_run.get("_line_text")) == NormalMode.LINE_ATE,
-		1.0, [a_pin])
+		return (bool(a_ate[0])
+			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [a_pin])
 	a_food.eaten.disconnect(on_a_eaten)
 	_says(b_down >= 0.0 and bool(a_ate[0]) and b_slot_empty
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
@@ -3695,13 +3715,13 @@ func _check_server() -> void:
 		b_ate[0] = true
 	b_food.eaten.connect(on_b_eaten)
 	var in_b_mouth: Vector2 = b_home + Vector2(0.0, -(float(b_cell.radius) + 18.0))
-	var a_down := await _pond_until(func() -> bool:
-		return int(a_run.get("_life")) == NormalMode.Life.DYING, 1.5,
+	var a_down := await _server_until(func() -> bool:
+		return int(a_run.get("_life")) == NormalMode.Life.DYING,
 		[b_pin, [a_cell, in_b_mouth, 0.0]])
 	var a_slot_empty: bool = food.person(slot_a) == null
 	await _pond_until(func() -> bool:
-		return bool(b_ate[0]) and str(b_run.get("_line_text")) == NormalMode.LINE_ATE,
-		1.0, [b_pin])
+		return (bool(b_ate[0])
+			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [b_pin])
 	b_food.eaten.disconnect(on_b_eaten)
 	_says(a_down >= 0.0 and bool(b_ate[0]) and a_slot_empty
 			and int(a_food.died_of) == FoodField.Cause.SWALLOWED
@@ -3715,7 +3735,90 @@ func _check_server() -> void:
 		return int(a_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [b_pin])
 	a_home = a_cell.position
 	a_pin = [a_cell, a_home, 0.0]
-	await _pond_until(func() -> bool: return a_food.person() != null, 1.0, [a_pin, b_pin])
+	pins = [a_pin, b_pin]
+	await _server_until(func() -> bool: return a_food.person() != null, pins)
+
+	# **The water, on the guest in the second slot.** A chewer's bite is felt
+	# at its true bearing, and that guest's snapshots carry its own wound --
+	# the other's stays whole: each header is written for the one it goes to.
+	var b_bites: Array = []
+	var on_b_bitten := func(bearing: float, _s: float) -> void: b_bites.append(bearing)
+	b_food.bitten.connect(on_b_bitten)
+	# On its starboard quarter: this guest wears the wide mouth it swallowed the
+	# other with, and at 70 degrees off its nose that mouth reaches a chewer
+	# and eats it first.
+	var chew_bearing := deg_to_rad(120.0)
+	var chewer_at: Vector2 = b_home + Vector2(sin(chew_bearing), -cos(chew_bearing)) \
+		* (float(b_cell.radius) + 20.0 - 3.0)
+	var chewer := _pond_pose(food, 3, 20.0, {&"cytostome": 1, &"flagellum": 1},
+		chewer_at, _pond_face(chewer_at, b_home))
+	var chewer_serial := int(chewer.serial)
+	var chewed := await _pond_until(func() -> bool:
+		if int(chewer.serial) == chewer_serial:
+			chewer.pos = chewer_at
+			chewer.heading = _pond_face(chewer_at, b_home)
+		return not b_bites.is_empty(), 1.5, pins)
+	food.call("_retire", 3)
+	b_food.bitten.disconnect(on_b_bitten)
+	var wounds := [0.0, 0.0]
+	var agreed := await _server_until(func() -> bool:
+		wounds[0] = float(food.bodies()[slot_b].wound)
+		wounds[1] = float(b_cell.wound)
+		return (float(wounds[0]) > 0.02
+			and absf(float(wounds[0]) - float(wounds[1])) <= 1.0 / 255.0), pins)
+	var felt_at := float(b_bites[0]) if not b_bites.is_empty() else NAN
+	_says(chewed >= 0.0 and agreed >= 0.0
+			and absf(angle_difference(felt_at, chew_bearing)) <= POND_BEARING_TOLERANCE
+			and float(food.bodies()[slot_a].wound) == 0.0 and float(a_cell.wound) == 0.0,
+		"server: a chewer's bite on the guest in slot %d is felt at %.3f rad, the"
+		% [slot_b, felt_at] + " true bearing %.3f; its wound is its own -- %.4f"
+		% [chew_bearing, float(wounds[0])] + " on the server, %.4f on its cell --"
+		% float(wounds[1]) + " and the other guest's is 0")
+
+	# A committed hunter swallows that guest: told by the water, and the other
+	# guest told that its friend died, not that it ate them.
+	# Held off first, on its run: "stalking you" is written per snapshot, so the
+	# guest it hunts has a hunter and the other guest, sent the same body, has
+	# none. Held outside COMMIT_RANGE, and on a run with nothing in it of the
+	# chase its slot last ran (`_pond_hunt`): a closest approach left over from
+	# that one ends this run on its first step, and so can a lunge whose aim it
+	# has passed -- measured: held at 300 with a `best` of 137.5 left in it.
+	var held_at: Vector2 = b_home + Vector2(0.0, -(FoodField.COMMIT_RANGE + 90.0))
+	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
+		held_at, _pond_face(held_at, b_home))
+	_pond_hunt(food, hunter, slot_b)
+	var flagged := await _server_until(func() -> bool:
+		hunter.pos = held_at
+		hunter.heading = _pond_face(held_at, b_home)
+		return int(b_food.hunter()) == 5, pins)
+	var a_sees_hunter := int(a_food.hunter())
+	var a_has_it: bool = bool(a_food.bodies()[5].seeded)
+	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
+		"server: a hunter on the guest in slot %d is that guest's hunter, and the"
+		% slot_b + " other guest, who is sent the same body, sees no hunter")
+	# Then let in: already on the lunge, and aimed at the guest.
+	var hunter_at: Vector2 = b_home + Vector2(0.0, -56.0)
+	hunter.pos = hunter_at
+	hunter.heading = _pond_face(hunter_at, b_home)
+	hunter.aim = b_home
+	hunter.lunging = true
+	var hunted := await _server_until(func() -> bool:
+		return (int(b_run.get("_life")) != NormalMode.Life.ALIVE
+			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED), [a_pin])
+	_says(hunted >= 0.0 and food.person(slot_b) == null
+			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
+			and int(b_food.died_by) == FoodField.By.WATER
+			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED,
+		"server: a committed hunter swallows the guest in slot %d -- SWALLOWED by"
+		% slot_b + " the water -- and the other guest is told '%s'"
+		% str(a_run.get("_line_text")))
+	b_run.set("_tap_pending", true)
+	await _pond_until(func() -> bool:
+		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
+	await _server_until(func() -> bool: return a_food.person() != null, pins)
 
 	# **A guest leaving frees its slot**: the server forgets it and takes it
 	# out of the water, the other guest's friend goes, and the slot takes the
@@ -3725,8 +3828,8 @@ func _check_server() -> void:
 	var freed := await _pond_until(func() -> bool:
 		return (net.guests() as Array).size() == 1 and food.person(slot_b) == null \
 			and pond.call("_guest_by_id", b_id) == null, 2.0, [a_pin])
-	var friend_gone := await _pond_until(func() -> bool: return a_food.person() == null,
-		1.0, [a_pin])
+	var friend_gone := await _server_until(func() -> bool:
+		return a_food.person() == null, [a_pin])
 	_says(freed >= 0.0 and friend_gone >= 0.0,
 		"server: a guest leaving frees its slot -- forgotten by the server, out of"
 		+ " its water, and gone from the other guest's %.0f ms later"
@@ -3744,7 +3847,7 @@ func _check_server() -> void:
 		[a_pin])
 	var d_guest: Object = pond.call("_guest_by_id", int(d_net.my_id()))
 	var d_apart: float = (d_cell.position as Vector2).distance_to(a_home)
-	var met := await _pond_until(func() -> bool: return a_food.person() != null, 2.0,
+	var met := await _server_until(func() -> bool: return a_food.person() != null,
 		[a_pin, [d_cell, d_cell.position, 0.0]])
 	_says(d_in >= 0.0 and d_guest != null and int(d_guest.slot) == slot_b
 			and absf(d_apart - float(pond.ARRIVAL)) <= POND_ARRIVAL_TOLERANCE
@@ -3752,26 +3855,78 @@ func _check_server() -> void:
 		"server: the freed slot %d takes the next guest, who lands %.1f units"
 		% [slot_b, d_apart] + " from the one still swimming, and is its friend")
 
-	# **The server stops cleanly**: its guests are told at once, and each
-	# swims on alone in fresh water rather than waiting out a timeout.
-	server.shut_down()
-	var taken := await _pond_until(func() -> bool:
-		return not a_food.mirroring() and not (d_run.get_node(^"Food")).mirroring(),
-		1.5, [])
-	var taken_frames := _pond_frames
-	_says(taken >= 0.0 and taken_frames <= _pond_budget(0.2),
-		"server: stopped, both guests take over their own water %d frames later"
-		% taken_frames + " (%.0f ms here) -- told, not timed out" % (taken * 1000.0))
-
-	a_run.queue_free()
-	d_run.queue_free()
+	# **With nobody left, the water goes with them**: every cell retired, so an
+	# empty server simulates nothing -- where a guest who is only dead keeps
+	# theirs, because they are coming back to it.
 	a_net.close()
 	d_net.close()
+	var emptied := await _pond_until(func() -> bool:
+		if not (net.guests() as Array).is_empty() or food.person(slot_a) != null \
+				or food.person(slot_b) != null:
+			return false
+		for i in FoodField.PERSON_SLOT:
+			if bool(food.bodies()[i].seeded):
+				return false
+		return true, 2.0, [])
+	_says(emptied >= 0.0,
+		"server: when the last guest leaves, the water goes with them -- no cell"
+		+ " is left to simulate on an empty server")
+	a_run.queue_free()
+	d_run.queue_free()
+
+	# **The server stops cleanly**: two new guests arrive in water made for
+	# them, and when it stops each is told at once and swims on alone in fresh
+	# water, rather than waiting out a timeout.
+	var e_net: Node = await _session("ServerGuestE")
+	var f_net: Node = await _session("ServerGuestF")
+	e_net.join("127.0.0.1")
+	f_net.join("127.0.0.1")
+	await _until_link(e_net, NetSession.Link.TOGETHER)
+	await _until_link(f_net, NetSession.Link.TOGETHER)
+	var e_run := _pond_run_scene(e_net, false)
+	get_tree().root.add_child.call_deferred(e_run)
+	await e_run.ready
+	var f_run := _pond_run_scene(f_net, false)
+	get_tree().root.add_child.call_deferred(f_run)
+	await f_run.ready
+	var e_food: Node = e_run.get_node(^"Food")
+	var f_food: Node = f_run.get_node(^"Food")
+	await _pond_until(func() -> bool:
+		return (bool((e_run.get("_pond") as Object).in_pond)
+			and bool((f_run.get("_pond") as Object).in_pond)), 3.0, [])
+	var fresh := 0
+	for i in FoodField.PERSON_SLOT:
+		fresh += 1 if bool(food.bodies()[i].seeded) else 0
+	server.shut_down()
+	var taken := await _pond_until(func() -> bool:
+		return not e_food.mirroring() and not f_food.mirroring(), 1.5, [])
+	var taken_frames := _pond_frames
+	_says(fresh >= FoodField.COUNT and taken >= 0.0
+			and taken_frames <= _pond_budget(0.2),
+		"server: the next two arrive in %d fresh cells; stopped, both take over" % fresh
+		+ " their own water %d frames later (%.0f ms here) -- told, not timed out"
+		% [taken_frames, taken * 1000.0])
+
+	e_run.queue_free()
+	f_run.queue_free()
+	e_net.close()
+	f_net.close()
 	server.queue_free()
 	await _wait(0.3)
-	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second"
-		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second;"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps]
+		+ " its longest wait on an unreliable frame %.2f s, of %.0f"
+		% [_server_waited, SERVER_UNRELIABLE])
 	Engine.max_fps = ceiling
+
+
+## [method _pond_until] for anything an unreliable frame carries: given
+## [constant SERVER_UNRELIABLE], and the longest it took kept for the NOTE, so
+## the margin is read in the log before a slower runner uses it up.
+func _server_until(done: Callable, pins: Array) -> float:
+	var took: float = await _pond_until(done, SERVER_UNRELIABLE, pins)
+	_server_waited = maxf(_server_waited, took if took >= 0.0 else SERVER_UNRELIABLE)
+	return took
 
 
 ## **An update service that answers what it is told to**: the launcher's two
@@ -3845,7 +4000,7 @@ func _check_server_updates() -> void:
 	DirAccess.make_dir_recursive_absolute(scratch)
 	var exe := scratch.path_join("biogenic-server.x86_64")
 	var note := scratch.path_join("note.json")
-	for leftover: String in [exe, exe + ".previous", note,
+	for leftover: String in [exe, exe + ".previous", exe + ".previous.part", note,
 			scratch.path_join(".biogenic-server.x86_64.download")]:
 		DirAccess.remove_absolute(leftover)
 
@@ -3926,6 +4081,7 @@ func _check_server_updates() -> void:
 			and _read(exe + ".previous") == old_build
 			and (mode & FileAccess.UNIX_EXECUTE_OWNER) != 0
 			and not FileAccess.file_exists(scratch.path_join(".biogenic-server.x86_64.download"))
+			and not FileAccess.file_exists(exe + ".previous.part")
 			and str(swap.staged) == "binary" and int(swap.staged_version) == 1_000_001,
 		"server updates: binary newer is fetched over HTTP, its SHA-256 checked"
 		+ " (%s...), and swapped over the running build, executable, the old one"
@@ -3943,7 +4099,8 @@ func _check_server_updates() -> void:
 	var refuse := _updater(bad, exe, note, 60.0)
 	await refuse.check()
 	_says(http.served == 2 and _read(exe) == before and str(refuse.staged).is_empty()
-			and not FileAccess.file_exists(scratch.path_join(".biogenic-server.x86_64.download")),
+			and not FileAccess.file_exists(
+				scratch.path_join(".biogenic-server.x86_64.download")),
 		"server updates: a download whose SHA-256 does not match the manifest is"
 		+ " refused -- the running build untouched, the download deleted")
 	refuse.queue_free()
@@ -3962,7 +4119,7 @@ func _check_server_updates() -> void:
 
 	http.stop()
 	http.queue_free()
-	for leftover: String in [exe, exe + ".previous", note]:
+	for leftover: String in [exe, exe + ".previous", exe + ".previous.part", note]:
 		DirAccess.remove_absolute(leftover)
 	DirAccess.remove_absolute(scratch)
 

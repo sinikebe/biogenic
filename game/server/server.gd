@@ -116,8 +116,6 @@ func _ready() -> void:
 	_net = NetSession.new()
 	_net.name = "NetSession"
 	add_child(_net)
-	_pond = Pond.new(_net, _food, null, null)
-	_pond.noted.connect(func(line: String) -> void: print("[server] " + line))
 
 	if check_updates:
 		_updater = Updater.new()
@@ -196,6 +194,11 @@ func updater() -> Node:
 func _listen() -> void:
 	if _net.host(FoodField.GUESTS_MAX):
 		_listening = true
+		# Built once the session is hosting: the pond reads which side it is on
+		# from the session, and a dedicated host from being given no cell.
+		if _pond == null:
+			_pond = Pond.new(_net, _food, null, null)
+			_pond.noted.connect(func(line: String) -> void: print("[server] " + line))
 		_announce(true)
 		return
 	_next_listen = _now() + LISTEN_RETRY

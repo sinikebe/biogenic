@@ -781,6 +781,10 @@ func _on_peer_connected(id: int) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	_peers.erase(id)
+	# Gone already, so there is nothing left to hang up on: a refused guest
+	# usually drops the line itself inside REFUSE_LINGER, and cutting it again
+	# afterwards is an ENet error in the log and nothing else.
+	_hanging_up.erase(id)
 	if _greeted_count() == 0:
 		_told = []
 	if hosting:

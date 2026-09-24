@@ -3356,7 +3356,8 @@ func open_pond() -> void:
 ## no anchor for good -- every rule that asks about "this cell" asks
 ## [member in_water] or [member anchored] first -- so the water is its guests'
 ## alone. Nothing is seeded until one arrives (§1.4 with no anchor: the water
-## waits), and nothing is simulated while it is empty.
+## waits), and when the last guest leaves the host lets it go
+## ([method empty_water]), so an empty server simulates nothing.
 func open_dedicated(cell: CellBody) -> void:
 	_cell = cell
 	_pond = true
@@ -3378,6 +3379,18 @@ func open_dedicated(cell: CellBody) -> void:
 	_stamp = 0
 	_fresh_senses()
 	_changes += 1
+
+
+## **A dedicated host with nobody left on it** lets its water go: every cell
+## retired, so an empty server simulates nothing and the next guest meets water
+## made for them. A guest who is only dead keeps theirs -- they are coming back
+## to it -- so this is for the last one leaving, and never for a phone's pond.
+func empty_water() -> void:
+	if not _pond or _mirror:
+		return
+	for i in _water:
+		if _cells[i].seeded:
+			_retire(i)
 
 
 func pond_open() -> bool:

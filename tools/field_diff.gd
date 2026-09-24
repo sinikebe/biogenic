@@ -23,7 +23,7 @@ extends SceneTree
 ## untouched water, the prey search of every body at five reaches, one reseed,
 ## the solo sister, and whole frames. Prints `[field-diff] ALL EQUAL` or
 ## `[field-diff] MISMATCH` with the first differing entry. Excluded from export
-## (`tools/*` on both presets), so none of it ships.
+## (`tools/*` on every preset), so none of it ships.
 ##
 ## **And a phone's pond, the same way** (`--pond=`, `--pond-long=`): the two
 ## fields opened as a pond with **one person** in it -- a phone host and its

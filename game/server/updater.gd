@@ -102,7 +102,9 @@ func tick(peers: int) -> void:
 					% [staged, staged_version, peers])
 		elif _empty_since < 0.0:
 			_empty_since = now
-		elif now - _empty_since >= restart_after:
+		elif now - _empty_since >= restart_after and not busy:
+			# Not in the middle of a check: a newer download may be on its way,
+			# and it is worth the restart it would otherwise cost.
 			_restart()
 			return
 	if not busy and now >= _next_check:
@@ -170,7 +172,7 @@ func _take_content() -> void:
 	_waiting_said = false
 	_empty_since = -1.0
 	_say("content %d verified and staged; restarting once the pond has been"
-		% version + " empty for %d s" % roundi(restart_after))
+		% version + " empty for %s s" % str(snappedf(restart_after, 0.01)))
 
 
 func _take_binary() -> void:
@@ -197,8 +199,8 @@ func _take_binary() -> void:
 	staged_version = version
 	_waiting_said = false
 	_empty_since = -1.0
-	_say("binary %d is in place; restarting once the pond has been empty for %d s"
-		% [version, roundi(restart_after)])
+	_say("binary %d is in place; restarting once the pond has been empty for %s s"
+		% [version, str(snappedf(restart_after, 0.01))])
 
 
 ## **Download [param artifact] next to [member exe_path], verify it, and swap
@@ -210,6 +212,10 @@ func _take_binary() -> void:
 ## replaced is kept as `.previous`, for a rollback by hand. Refused, with the
 ## running build untouched and the download deleted, on a missing checksum or
 ## a checksum that does not match.
+##
+## Guests may be swimming through all of it, so nothing here takes a frame's
+## worth at once: the download is on `HTTPRequest`'s thread, and the hashing
+## and the copy go a megabyte a frame ([method sha256_of]).
 func swap_binary(artifact: Dictionary, version: int) -> bool:
 	var url := str(artifact.get("url", ""))
 	var expected := str(artifact.get("sha256", "")).strip_edges().to_lower()
@@ -222,7 +228,7 @@ func swap_binary(artifact: Dictionary, version: int) -> bool:
 	if not await _download(url, part, version):
 		DirAccess.remove_absolute(part)
 		return false
-	var actual := sha256_of(part)
+	var actual: String = await sha256_of(part)
 	if actual != expected:
 		DirAccess.remove_absolute(part)
 		_say("binary %d refused: checksum mismatch -- the manifest says %s, the"
@@ -235,7 +241,7 @@ func swap_binary(artifact: Dictionary, version: int) -> bool:
 		| FileAccess.UNIX_EXECUTE_OTHER
 	FileAccess.set_unix_permissions(part, mode)
 	if FileAccess.file_exists(exe_path):
-		if DirAccess.copy_absolute(exe_path, exe_path + ".previous") == OK:
+		if await _copy_paced(exe_path, exe_path + ".previous"):
 			FileAccess.set_unix_permissions(exe_path + ".previous", mode)
 		else:
 			_say("could not keep a copy of the running build as %s.previous;"
@@ -251,17 +257,48 @@ func swap_binary(artifact: Dictionary, version: int) -> bool:
 	return true
 
 
-## SHA-256 of a file, as lowercase hex, streamed a megabyte at a time: a
-## server build is tens of megabytes. "" if it cannot be read.
-static func sha256_of(path: String) -> String:
+## **SHA-256 of a file**, as lowercase hex, or "" if it cannot be read.
+## Awaitable, and paced at a megabyte a frame while in the tree: a server build
+## is some 74 MB, and hashing all of it at once stops the pond for about a
+## quarter of a second (measured: 230 ms) under whoever is swimming in it.
+func sha256_of(path: String) -> String:
 	var file := FileAccess.open(path, FileAccess.READ)
 	if file == null:
 		return ""
 	var hashing := HashingContext.new()
 	hashing.start(HashingContext.HASH_SHA256)
 	while file.get_position() < file.get_length():
-		hashing.update(file.get_buffer(1 << 20))
+		var chunk := file.get_buffer(1 << 20)
+		if chunk.is_empty():
+			return ""
+		hashing.update(chunk)
+		await _next_frame()
 	return hashing.finish().hex_encode()
+
+
+## [param from] copied to [param to], paced like [method sha256_of], and
+## through `to.part` and a rename, so a stop that lands halfway leaves the last
+## whole copy where it was. False if anything fails, with the part removed.
+func _copy_paced(from: String, to: String) -> bool:
+	var part := to + ".part"
+	var source := FileAccess.open(from, FileAccess.READ)
+	var target := FileAccess.open(part, FileAccess.WRITE)
+	var ok := source != null and target != null
+	while ok and source.get_position() < source.get_length():
+		var chunk := source.get_buffer(1 << 20)
+		ok = not chunk.is_empty() and target.store_buffer(chunk)
+		await _next_frame()
+	if target != null:
+		target.close()
+	ok = ok and DirAccess.rename_absolute(part, to) == OK
+	if not ok:
+		DirAccess.remove_absolute(part)
+	return ok
+
+
+func _next_frame() -> void:
+	if is_inside_tree():
+		await get_tree().process_frame
 
 
 func _download(url: String, dest: String, version: int) -> bool:
@@ -302,8 +339,8 @@ func _restart() -> void:
 	if file != null:
 		file.store_string(JSON.stringify({"kind": staged, "version": staged_version}))
 		file.close()
-	var why := "%s %d, with the pond empty for %d s" % [staged, staged_version,
-		roundi(restart_after)]
+	var why := "%s %d, with the pond empty for %s s" % [staged, staged_version,
+		str(snappedf(restart_after, 0.01))]
 	staged = ""
 	_say("restarting to finish %s" % why)
 	restart_wanted.emit(why)

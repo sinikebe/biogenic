@@ -21,11 +21,13 @@
 # Nothing here touches your router or your firewall. The server is for your
 # home LAN only; docs/server.md says why, and what internet play would take.
 #
-# BIOGENIC_REPO=owner/name installs from another fork's releases.
+# BIOGENIC_REPO=owner/name installs from another fork's releases, and
+# BIOGENIC_RELEASE_URL from anywhere curl can read a release's assets from --
+# a mirror, or file:///some/dir holding them.
 set -euo pipefail
 
 REPO="${BIOGENIC_REPO:-sinikebe/biogenic}"
-BASE="https://github.com/${REPO}/releases/latest/download"
+BASE="${BIOGENIC_RELEASE_URL:-https://github.com/${REPO}/releases/latest/download}"
 PREFIX="/opt/biogenic"
 STATE="/var/lib/biogenic"
 ACCOUNT="biogenic"
