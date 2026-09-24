@@ -2,7 +2,7 @@
 
 This plan covers issues #56, #57, #58 and #59. It has three parts:
 
-- **A** is one PR for #58 and #56 (frames, budgets, admission). **Built.** This part now describes what was built on `main` at `956d586`, the measurements it rests on, and each place the build differs from the plan and why.
+- **A** is one PR for #58 and #56 (frames, budgets, admission). **Built, and reviewed.** This part now describes what was built on `main` at `956d586`, what its review found and how each was fixed (marked "after review"), the measurements it rests on, and each place the build differs from the plan and why. The budgets ship watched rather than enforced (A.4).
 - **B** is one PR for #57 (the host checks what a guest says). Still a plan.
 - **C** sets out the options for #59 and builds none of them. Still a plan.
 
@@ -40,7 +40,7 @@ So the real boundary was layer 4, and three layers ran before it. Layer 1's cost
 
 There is no client change a player can see. A hardened host and an unhardened protocol-4 guest play exactly as before, and so does the reverse pairing (A.7, measured). There is no PROTOCOL bump.
 
-The files: `game/net/net_session.gd` (the boundary, the gate, the budgets, the door, the log), `game/net/wire.gd` (sizes and `REFUSE_BROKEN`), `game/net/lan.gd` (the LAN-only guard), and `tools/net_probe.gd` (the `limits` section, and one assertion each at the end of the pond and server sections). `game/normal/` is untouched.
+The files: `game/net/net_session.gd` (the boundary, the gate, the budgets, the door, the log), `game/net/wire.gd` (sizes and `REFUSE_BROKEN`), `game/net/lan.gd` (the LAN-only guard), and `tools/net_probe.gd` (the `limits` section, one assertion each at the end of the pond and server sections, and, after review, the wait in the server section's hunter check). `game/normal/` is untouched.
 
 ### A.1 The host takes over the boundary
 
@@ -72,10 +72,12 @@ What changed, in `net_session.gd`:
 4. **Kind and direction.** An event shorter than its six-byte header is malformed. A kind or event type this protocol knows, arriving from the side that never sends it, is malformed: a guest's POND, GENOME, CONTACT, ARRIVE, WELCOME or REFUSE; a host's HELLO, ENTER or SISTER.
 5. **Size** for the kind and type (A.3). Outside it, malformed.
    - **Added: a second HELLO** from a guest already greeted is malformed. Before, `_take_hello` would have answered it with "already two" and refused a guest that was already playing.
-6. **Budgets**, per peer (A.4): frames, then bytes, then, for an event, events. Every frame that got this far is charged, a later build's unknown one included; a malformed frame was struck at step 4 or 5 and is not.
+6. **Budgets**, per peer (A.4): frames, then bytes, then, for an event, events. Every frame that got this far is charged, a later build's unknown one included; a malformed frame was struck at step 4 or 5 and is not. **Watched, not enforced, as this ships** (A.4, "Watch mode"): an overrun is counted and logged as what it would have done, and the frame goes on to step 7.
 7. **Unknown kind or event type** (the plan's step 8, moved ahead of parsing because an unknown frame cannot be parsed): a later build's extension, which the wire promises to ignore. Dropped after the budgets have paid for it, with no strike. **Added:** an unknown *event* still moves the peer's event sequence on, so the next known event is not reported as a gap.
 8. **Parse or reject (host only),** with the readers pond.gd uses: `take_shout`, `take_enter`, `take_person`, `take_died`, `take_sister`. A STATE with `STATE_ALIVE` set must decode through `state_body`; before, one carrying a NaN cleared the friend's track as if they had died. Reserved flag bits stay ignored. A guest does not parse here: pond.gd already does, and a guest punishes nothing.
 9. **Accept.** `heard` is stamped now, and only now, so junk cannot keep a peer looking fresh. The existing `_take_*` then run unchanged, and `_take_event` only ever queues a frame that is known, sized and, on a host, parsed.
+
+The step comments in `_admit_frame` carry these numbers.
 
 ### A.3 Frame sizes, derived from wire.gd
 
@@ -114,14 +116,31 @@ Sizes are the frame as `_on_peer_packet` sees it; ENet carries one more byte, th
 
 **What the host accepts from each guest** (`FRAMES_*`, `EVENTS_*`, `BYTES_*`, `QUEUE_*` in `net_session.gd`):
 
-| Budget | Refill | Burst | Legitimate worst case | When exceeded |
+| Budget | Refill | Burst | Legitimate worst case | When exceeded, once enforced (watched until then: see below) |
 |---|---|---|---|---|
 | frames | 120/s | 240 | 83/s | Frame dropped; a STATE is superseded 50 ms later anyway. Every 120 dropped inside one second is a flood strike (6 points). |
 | events | 5/s | 20 | about 1/s, bursts of 4 | Dropped, 2 points. Dropping a reliable event causes a desync, which is acceptable only for a peer about to be cut. |
 | bytes | 16 KB/s | 32 KB | about 3.5 KB/s (83 × 32 B + events) | Dropped, 6 points |
-| queued events | n/a | 64 frames and 16 KB | a few frames per host frame | Oldest dropped, as the old cap did: a full queue means no run is draining it. Per guest: a phone host's `pond_events`, and a dedicated host's `inbox` counted by sender, so one guest over its share loses its own oldest event and never the other guest's. |
+| queued events | n/a | 64 frames and 16 KB | a few frames per host frame | Oldest dropped, as the old cap did: a full queue means no run is draining it. Per guest: a phone host's `pond_events`, and a dedicated host's `inbox` counted by sender, so one guest over its share loses its own oldest event and never the other guest's. Enforced always. |
 
-**What a guest accepts from its host.** Sanity limits only; a guest never cuts its host. Frames 600/s with a burst of 1,200; events 200/s with a burst of 400; bytes 256 KB/s with a burst of 512 KB. All sit above POND's worst case (1,262 B × 83/s) and the 70-frame burst that follows an ENTER.
+**Watch mode: the budgets are counted, not enforced, until a playtest says otherwise.** The frame, byte and event budgets and the flood rule are the only limits in A that timing alone can trip, and the relay runs in A.7 stand in for two phones on real Wi-Fi without being them. So `enforce_budgets` in `net_session.gd` is `false`, on both ends of the wire, and an overrun is:
+
+- **counted**, beside the enforced counts in `gate_counts`: `would_drop` (split into `would_drop_frames`, `_bytes` and `_events`), `would_strikes`, `would_points` and `would_cuts`;
+- **struck on a watch ledger of its own**, which decays like the real one. Reaching 10 there, with the peer's real points counted in, is a cut that would have happened: counted, logged, and the watch ledger emptied, as the cut would have ended it;
+- **logged** through `_note` as what it would have done, and rate-limited like every other line (A.6):
+  ```
+  [net] would drop a frame from 694971552 (192.0.2.41): over its frame budget (120 a second, 240 at once) -- watching the budgets, not enforcing them
+  [net] would cut 694971552 (192.0.2.41): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- watching the budgets, not enforcing them
+  ```
+- **and taken.** Nothing is dropped, and no real point comes from a budget.
+
+The first budget a frame cannot pay is its overrun, and the rest are not charged for that frame, as they would not be for a frame the gate drops. So watch mode counts exactly what enforcing would have done, and a run that shows none of it is a run enforcing would not have touched.
+
+Everything else in A stays enforced, because no honest build can trip it: the size caps, the wrong direction, malformed and unparseable frames, the rules before the handshake, the door (the LAN guard, the slots, the pending cap, both call rates, the bars), and the queue caps.
+
+Turning the budgets on is one line, `var enforce_budgets := true`, and it waits on the owner's playtest: **two phones on real Wi-Fi for 30 minutes, and the dedicated server with two, must show no `[net] would` line, and every `done after` line (A.6) must end `over budget 0`.** The probe's T7 runs its flood with the budgets enforced, then again watched, and checks the watched flood is counted and logged while the guest keeps every frame and its link.
+
+**What a guest accepts from its host.** Sanity limits only; a guest never cuts its host, and while the budgets are watched it drops nothing for them either, logging `would drop a frame from the host` instead. Frames 600/s with a burst of 1,200; events 200/s with a burst of 400; bytes 256 KB/s with a burst of 512 KB. All sit above POND's worst case (1,262 B × 83/s) and the 70-frame burst that follows an ENTER.
 
 - **Changed: a guest's own event queue keeps 512 frames, and gains a 128 KB weight cap** (`POND_EVENTS_MAX`, `POND_EVENTS_BYTES`). The plan's 64 frames and 16 KB are what a host accepts from a guest; applied to what a guest queues from its host, they would drop the ARRIVE out of the front of the seventy events that answer every ENTER, and the guest would never arrive.
 
@@ -131,7 +150,7 @@ Sizes are the frame as `_on_peer_packet` sees it; ENet carries one more byte, th
 - When the session's own frame gap exceeds 0.25 s (`STALL_GAP`), every bucket of every peer is topped up once in that frame: `tokens = max(tokens, rate × gap)`, uncapped by the burst.
 - **Added:** the gap counted is at most 10 s (`STALL_CREDIT`). A peer silent for longer than that is past ENet's own timeout, and an unbounded credit would be one a flood could spend for as long as it lasted.
 - An overfull bucket is spent down, not trimmed back, so the backlog the stall delivered is what the credit pays for.
-- The reverse direction does not pile up. Once the host has been quiet for `PEER_FRESH` (1.2 s), the guest's run is held (shared-pond.md §1.8), and a held body beats at 2 Hz.
+- **Only a guest swimming in the host's pond is held.** Once the host has been quiet for `PEER_FRESH` (1.2 s), that guest's run is held (shared-pond.md §1.8) and its held body beats at 2 Hz, so its side of a stall does not pile up. A guest that is connected but not in the pond keeps playing, and sending at its usual rate; what it sent during the stall arrives at once when the host resumes, which is exactly the backlog the top-up pays for. The review froze a phone host (SIGSTOP) for 1, 2, 3, 4 and 4.8 s with a guest in its pond: nothing was dropped or struck, and the deepest draw on the frame burst was 71 of 240.
 
 **The strike ledger, per peer** (`Guard`). Points decay at 1 a second, and a peer is cut at 10.
 
@@ -140,8 +159,8 @@ Sizes are the frame as `_on_peer_packet` sees it; ENet carries one more byte, th
 | frame over the direction cap (A.2, step 2) | cut at once and barred, bypassing the ledger: this is how memory gets allocated |
 | anything other than a well-formed HELLO before the handshake | cut at once, **not** barred (A.5) |
 | non-RAW first byte (A.1), known kind in the wrong direction, size out of range, a second HELLO, parse refused | 4 points, counted on every frame |
-| flood (every 120 frames over the frame budget inside one second), byte budget | 6 points |
-| event budget | 2 points |
+| flood (every 120 frames over the frame budget inside one second), byte budget | 6 points once the budgets are enforced; on the watch ledger until then |
+| event budget | 2 points, the same way |
 | unknown kind or type | 0 points (counts against the budgets only) |
 | referee violations from part B | 1-4 points, each rule counted at most once per 0.5 s (B.2) |
 
@@ -155,9 +174,11 @@ In practice, two malformed frames leave a peer connected, and three within two s
 
 `peer_disconnect_now` replaces the old `disconnect_peer(id, false)`. That call is graceful: it waits for an acknowledgement a hostile peer never sends, and holds the ENet slot until ENet times it out. `peer_disconnect_now` frees the slot at once, and the next poll emits `peer_disconnected`.
 
-Oversize and pre-handshake cuts skip the refusal. The handshake's own refusals (`REFUSE_PROTOCOL`, `REFUSE_FULL`, and `REFUSE_SILENT` at `HELLO_GRACE`) keep their sentences and linger, and end with the same hard cut. A protocol-4 guest from before this shows reason 0x04 as "refused / the other end hung up"; a new one reads "cut off: the other end could not read what this game sent. take the update from the launcher on both, and call again."
+Oversize and pre-handshake cuts skip the refusal. The handshake's own refusals (`REFUSE_PROTOCOL`, `REFUSE_FULL`, and `REFUSE_SILENT` at `HELLO_GRACE`) keep their sentences and linger, and end with the same hard cut. A protocol-4 guest from before this shows reason 0x04 as "refused / the other end hung up"; a new one reads "cut off: the other end would not take what this game sent. update both from the launcher, then call again in a minute." **Changed after review:** the first build's "could not read" was wrong for a cut made for flooding or for bytes or events, and its "call again" was wrong for a minute: a ledger cut also bars the address for 60 s (A.5), so a call straight back is hung up on at the door as "they hung up". The sentence is one line at 1280x720 and at 2400x1080, rendered from a real join and cut.
 
 A host whose last greeted guest is cut, or leaves, goes back to listening. **Changed:** that now counts greeted guests, not transports, so a caller still saying hello cannot keep a host reading TOGETHER after its guest has gone.
+
+**Added after review: nothing a guest said outlives it.** A phone host's run stops draining `pond_events` the moment the link drops (pond.gd `_step_host` returns first), so whatever was still queued -- an ENTER, a PERSON -- used to wait there and reach the next guest's run as an arrival that guest never made, and a cut guest's events with it. The queue and `heard` are now cleared when the last greeted guest goes, however it goes, and a dedicated host drops a departing or cut guest's entries from `inbox` and keeps the other guest's (`_lost_guest`, `_forget_said_by`; T12).
 
 ### A.5 Admission
 
@@ -170,7 +191,7 @@ A host whose last greeted guest is cut, or leaves, goes back to listening. **Cha
   - `MultiplayerPeer.refuse_new_connections` resets every new peer after ENet's handshake, all or nothing.
 - **So the earliest per-address decision is inside `peer_connected`**, and the refusal is `peer_disconnect_now()` within that same poll. It was **measured** safe with packets already queued (A.9), and T6 keeps it as a regression check.
 
-**The limits** (`_admit`), checked in `_on_peer_connected` before any bookkeeping is created, in an order chosen so that a caller who is barred or not on this network spends nobody else's budget:
+**The limits** (`_admit`), checked in `_on_peer_connected` before any bookkeeping is created, in an order chosen so that a caller who is barred or not on this network spends nobody else's budget, and **a call its own address's bucket turns away never spends the bucket every address shares** -- nor does a call the shared bucket turns away cost its address anything. **Fixed after review:** the first build spent the shared bucket first, so one device calling more than ten times a second locked every other device out. The review reproduced it -- twelve calls from one address, then a first-ever call from another, refused as busy -- and T8 now checks exactly that.
 
 | Limit | Phone host | Server | Why |
 |---|---|---|---|
@@ -183,7 +204,7 @@ A host whose last greeted guest is cut, or leaves, goes back to listening. **Cha
 | transports per address | 3 | 3 | Two friends on one NAT, plus a retry (`LIVE_PER_ADDRESS`) |
 | new connections, all addresses | 10/s | 10/s | Bounds the cost of a storm from many addresses |
 | bars | 60 s after an abuse cut; 10 min for a second one within 10 min | same | Silence, protocol refusals and "already two" are not abuse. Nor, **changed**, is speaking before the handshake (below). |
-| address book | 1,024 entries; idle entries dropped after 10 min | same | The limiter's own memory is bounded. A full book forgets an idle caller, then the one heard from longest ago, and a barred one only if every entry is barred. |
+| address book | 1,024 entries | same | The limiter's own memory is bounded. Nothing is forgotten until the book is full; then a caller idle for 10 min (`BOOK_IDLE`) goes first, then the one heard from longest ago, and a barred one only if every entry is barred. |
 
 IPv6 callers are keyed by their /64 (`Lan.source_key`). The address book, the buckets, the bars and the log limiter belong to each `host()` call and are cleared by `_reset_socket`. That is also what keeps net_probe's many loopback hosts independent of each other.
 
@@ -195,23 +216,27 @@ IPv6 callers are keyed by their /64 (`Lan.source_key`). The address book, the bu
 
 ### A.6 Telemetry
 
-All of it goes through one helper, `_note(what, key, line)`. It prints at most one line per (what, address) every 10 s (`NOTE_EVERY`), and the next line says how many like it were held back. **Added:** a refusal that is about everybody -- a caller from outside the network, or the door taking no calls from anywhere -- is keyed by its reason instead of its address, so a storm from a thousand addresses is one line every 10 s, and the helper only ever remembers callers the door let near it. Its own memory is bounded.
+All of it goes through one helper, `_note(what, key, line)`. It prints at most one line per (what, address) every 10 s (`NOTE_EVERY`), and the next line says how many like it were held back. **Added:** a refusal that is about everybody -- a caller from outside the network, or the door taking no calls from anywhere -- is keyed by its reason instead of its address, so a storm from a thousand addresses is one line every 10 s, and the helper only ever remembers callers the door let near it. Its own memory is bounded by `NOTES_MAX`, 256 kinds-and-keys: when it is full, every hold that has ended goes, and if none has, the one that ends soonest. With the door letting at most ten callers a second near it, that last never happens in practice, but the bound no longer depends on it.
 
 - **The existing warnings go through it too:** the event gap, a failed send and a mismatched host id. Each was otherwise one line per frame, at a rate an attacker chooses. They stay warnings.
 - **Lines, all starting `[net]`:**
   - a refused connection, with its reason: not on this network, barred, too many calls from everywhere, calling too often, too many transports from there, too many callers saying hello;
-  - a cut: oversize, before its hello, malformed, flood, bytes, events, with the points and how long the address is barred;
+  - a cut: oversize, before its hello, malformed, and -- once the budgets are enforced -- flood, bytes, events, with the points and how long the address is barred;
   - a strike that crosses half the threshold;
   - **added:** the handshake's own refusals (different versions, already two, no greeting), because a server's operator wants to see those as much as the rest;
+  - **added:** watch mode's "would drop" and "would cut" (A.4);
+  - **added: one line for every greeted guest as it goes** -- it left, was cut, or the host closed -- with how long it stayed, the frames and events taken from it, how many times it went over its budgets (dropped, or would have been), and its points: `[net] 694971552 (192.0.2.41) done after 1800 s -- frames 51234, events 312, over budget 0, points 0`. It is printed unconditionally, because a playtest has to say "over budget 0" in so many words rather than by staying silent;
   - **saturation.** Once a second the host reads `HOST_TOTAL_RECEIVED_DATA` and `HOST_TOTAL_RECEIVED_PACKETS` from its `ENetConnection` (`pop_statistic`). These count everything ENet read, including what never reached the gate. A line is printed above 64 KB/s or 2,000 datagrams/s; two real guests send about 7 KB/s and 170 datagrams/s.
-- **Counts for tools**: `gate_counts` on the session holds every refusal by reason, every cut, bar, strike and drop, the strays, and the busiest second's arrivals. It is reset by `host()` and `join()` and kept after `close()`, so a tool can read a session's last word; `points_of(id)` reads a peer's ledger.
+- **Counts for tools**: `gate_counts` on the session holds every refusal by reason, every cut, bar, strike and drop, the strays, the busiest second's arrivals, and watch mode's `would_*` counts. It is reset by `host()` and `join()` and kept after `close()`, so a tool can read a session's last word; `points_of(id)` reads a peer's ledger.
 
 Examples, using documentation addresses:
 
 ```
 [net] refused 203.0.113.9: not on this network (LAN-only until #59)
 [net] hung up on 1587052382 (192.0.2.40): different versions
-[net] cut 694971552 (192.0.2.10): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- barred 60 s
+[net] cut 694971552 (192.0.2.10): malformed: an event of type 4 that does not read -- 12 points -- barred 60 s
+[net] 694971552 (192.0.2.10) done after 3 s -- frames 12, events 2, over budget 0, points 12
+[net] would drop a frame from 1945108233 (192.0.2.11): over its frame budget (120 a second, 240 at once) -- watching the budgets, not enforcing them (+2614 like it held back)
 [net] saturated: 1843.2 KB a second in 21400 datagrams arriving at the socket (+37 like it held back)
 ```
 
@@ -221,21 +246,21 @@ A peer's address may appear in the server's log: the log is not the repo.
 
 **A phone-hosted pond and the dedicated server: nothing, measured.**
 
-The relay harness from #61 (`relay2.py`) sits between each guest and its host and holds every datagram for 5-40 ms, one in twenty for 150-250 ms more, in order, so a spike holds everything behind it the way Wi-Fi does; with `--loss 0.02` it drops one in fifty. Each run is real ENet on real sockets, two or three processes, real runs of the game with bodies swimming on their own impulses, 100 s requested (about 110 s measured). A scratch harness samples every peer's buckets, counters and ledger every frame. In **every run, every process's gate stayed at zero**: no strike, no dropped frame, no cut, no refusal, no queue overflow, not one stray.
+The relay harness from #61 (`relay2.py`) sits between each guest and its host and holds every datagram for 5-40 ms, one in twenty for 150-250 ms more, in order, so a spike holds everything behind it the way Wi-Fi does; with `--loss 0.02` it drops one in fifty. Each run is real ENet on real sockets, two or three processes, real runs of the game with bodies swimming on their own impulses, 100 s requested (about 110 s measured). A scratch harness samples every peer's buckets, counters and ledger every frame. These are the build as it stands, with the budgets watched as they ship (A.4). In **every run, every process's gate stayed at zero**: no strike, no dropped frame, no cut, no refusal, no queue overflow, not one stray -- and not one `would drop` or `would cut`, so enforcing the budgets would not have touched any of it either. Every guest's `done after` line said `over budget 0, points 0`.
 
 | Run | Link | Frames from each guest: peak in 1 s (share of 120/s), in 0.1 s, deepest draw on the burst of 240 | Bytes: peak in 1 s (share of 16 KB/s), deepest draw | Events: peak in 1 s, deepest draw on the burst of 20 |
 |---|---|---|---|---|
-| phone host and guest | jitter | 27 (23%), 8, 6 (2.5%) | 890 B (5.4%), 0.6% | 2, 2 (10%) |
-| phone host and guest | jitter, 2% loss (63 up, 99 down lost) | 26 (22%), 7, 6 (2.5%) | 812 B (5.0%), 0.6% | 2, 2 (10%) |
-| server and two guests | jitter | 27 and 26 (23%), 8, 7 (2.9%) | 888 B (5.4%), 0.7% | 2, 2 (10%) |
-| server and two guests | jitter, 2% loss (113 up, 110 down lost) | 26 and 26 (22%), 8, 6 (2.5%) | 859 B (5.2%), 0.6% | 2, 2 (10%) |
-| phone host and guest, the guest at 120 fps and knocked every frame | jitter, 2% loss | 64 (53%), 20, 16 (6.6%) | 1,984 B (12.1%), 1.5% | 2, 2 (10%) |
-| server and two guests, both at 120 fps and knocked every frame; one died and came back | jitter, 2% loss | 68 and 68 (57%), 21, 15 (6.2%) | 2,108 B (12.9%), 1.4% | **4** and 2, 3 (15%) |
-| phone host and guest, the guest at 80 fps with its velocity thrown every frame: the ceiling, 57-80 state frames sent a second | jitter, 2% loss | **96** (80%), 26, 22 (9.2%) | 2,976 B (18.2%), 2.1% | 2, 2 (10%) |
+| phone host and guest | jitter | 26 (22%), 8, 6 (2.5%) | 842 B (5.1%), 0.7% | 2, 2 (10%) |
+| phone host and guest | jitter, 2% loss (70 up, 92 down lost) | 26 (22%), 8, 7 (2.9%) | 862 B (5.3%), 0.7% | 2, 2 (10%) |
+| server and two guests | jitter | 27 and 26 (23%), 8, 7 (2.9%) | 880 B (5.4%), 0.7% | 2, 2 (10%) |
+| server and two guests | jitter, 2% loss (111 up, 116 down lost) | 26 and 26 (22%), 8, 6 (2.5%) | 842 B (5.1%), 0.7% | 2, 2 (10%) |
+| phone host and guest, the guest at 120 fps and knocked every frame (at most 55 sent a second) | jitter, 2% loss | 65 (54%), 19, 16 (6.7%) | 2,006 B (12.2%), 1.5% | 2, 2 (10%) |
+| server and two guests, both at 120 fps and knocked every frame | jitter, 2% loss | 65 and 64 (54%), 19, 17 (7.1%) | 2,015 B (12.3%), 1.6% | 2, 2 (10%) |
+| phone host and guest, the guest at 80 fps with its velocity thrown every frame: the ceiling, 56-80 state frames sent a second | jitter, 2% loss | **95** (79%), 27, 21 (8.8%) | 2,945 B (18.0%), 2.0% | 2, 2 (10%) |
 
-What a guest takes from its host peaked at 87 frames a second (15% of 600), 42 events in the second after an arrival (21% of 200) and 28,210 bytes a second (11% of 256 KB), and no guest dropped anything either.
+What a guest takes from its host peaked at 87 frames a second (15% of 600), 41 events in the second after an arrival (21% of 200) and 25,354 bytes a second (10% of 256 KB), and no guest dropped anything, or would have, either.
 
-**The margins.** The most any guest sent was 80 state frames in a second, at the ceiling; the frame budget's refill of 120 is 50% above that, and 45% above the arithmetic ceiling of 83. Arriving through the relay's spikes, the busiest second held 96 -- 80% of the refill -- because a spike releases everything it held at once, in order; that is what the burst is for, and the deepest any run drew it was 22 of 240 (9.2%). The byte budget is five and a half times the most measured, and its burst was never drawn past 2.1%. The event budget is the one that comes closest: the guest that died and came back sent four events inside one second (80% of the refill), around its death and its return from the black -- the harness taps to come back at once, which packs them closer than a player would -- and drew the burst to 3 of 20. A run of the earlier version of this change, whose guest side is the same, caught a death and return sending five in one second, the refill rate exactly, again drawing the burst to 3. The bucket allows 25 in any one second, five times the most seen; five a second over any longer window never happened.
+**The margins.** The most any guest sent was 80 state frames in a second, at the ceiling; the frame budget's refill of 120 is 50% above that, and 45% above the arithmetic ceiling of 83. Arriving through the relay's spikes, the busiest second held 95 -- 79% of the refill -- because a spike releases everything it held at once, in order; that is what the burst is for, and the deepest any run drew it was 21 of 240 (8.8%). The byte budget is five and a half times the most measured, and its burst was never drawn past 2.0%. Events never came near: every run above peaked at two in a second. Earlier rounds, with this same guest code, caught a guest that died and came back from the black sending four, and once five, inside one second -- the harness taps to come back at once, which packs them closer than a player would. Those are clusters, and what they draw on is the burst, not the refill: 3 of its 20. The refill of five a second is what puts them back, and no window longer than a second ever came near it.
 
 **Old and new builds together.** "Old" is main at `956d586` (+107), the newest protocol-4 release, run from a scratch copy.
 
@@ -243,25 +268,25 @@ Each through the same relay (default jitter), real runs in the pond:
 
 | Pairing | Joined, in the pond | Frames delivered | The new build's gate |
 |---|---|---|---|
-| old guest, new phone host (90 s) | 0.15 s, 0.40 s | the guest got every state frame and snapshot the host sent (1,993 and 2,007) | host: clean for 102 s |
-| new guest, old phone host (90 s) | 0.17 s, 0.43 s | every one, both ways | guest: clean for 98 s |
-| two old guests, new dedicated server (90 s) | 0.17 and 0.32 s, 0.47 and 0.86 s | every one | server: clean for 104 s, both guests |
-| a +104 guest, the oldest protocol-4 release, new phone host (60 s) | 0.15 s, 0.41 s | every one (1,380 and 1,389) | host: clean for 72 s |
+| old guest, new phone host (90 s) | 0.15 s, 0.39 s | the guest got every state frame and snapshot the host sent (1,987 and 2,015) | host: clean for 101 s, `over budget 0` |
+| a +104 guest, the oldest protocol-4 release, new phone host (60 s) | 0.17 s, 0.41 s | every one (1,374 and 1,375) | host: clean for 71 s, `over budget 0` |
+| new guest, old phone host (90 s) | 0.15 s, 0.40 s | every one, both ways (the host got 1,999 of 1,999) | guest: clean for 99 s |
+| two old guests, new dedicated server (90 s) | 0.17 and 0.15 s, 0.50 and 0.48 s | every one | server: clean for 104 s, both guests `over budget 0` |
 
 And **an old guest cut with `REFUSE_BROKEN`**: +107 and +104 guests joined a hardened host on loopback and sent three nine-gene PERSONs. Each was cut at the third (12 points), went to `REFUSED` reading "refused" over "the other end hung up.", kept running, and closed cleanly. A reason it does not know is a sentence it already has, as every protocol-4 build's `_take_refuse` promised.
 
-And **the exported server**: this tree's Linux Server export, the binary CI builds, took two new guests through the relay for 60 s -- every frame delivered, both guests' gates clean, not one `[net]` line -- and then cut a +107 guest the same way, saying so in two `[net]` lines: one as it crossed 8 of 10 points, one for the cut.
+And **the exported server**: this tree's Linux Server export, the binary CI builds, took two new guests through the relay for 60 s -- every frame delivered, both guests' gates clean, and no `[net]` line but each guest's `done after ... over budget 0, points 0` -- and then cut a +107 guest the same way, saying so in two `[net]` lines: one as it crossed 8 of 10 points, one for the cut.
 
-**Existing net_probe checks: none changed, and all pass.** The pond section and the server section each gained one assertion at their end: across every session in them, the gate struck nothing, dropped nothing, cut nothing and refused nobody at the door.
+**Existing net_probe checks: one changed, after review, and all pass.** The pond section and the server section each gained one assertion at their end: across every session in them, the gate struck nothing, dropped nothing, cut nothing and refused nobody at the door, and the budgets it watches would have done none of it either.
 
 - `_check_link` sends four shouts in bursts; they fit the event budget, and the gate checks sizes and finiteness, not radii.
 - `_check_skew`: every HELLO is 3 bytes; protocols 1, 2, 3 and 5 are still refused with the sentence; `peer_count() == 0` still holds, because `_refuse` removes the peer at once.
 - The hand-made `bench` dictionaries still work, because the accounting is outside `_take_state`.
 - `_check_run` sends shouts from host to guest, into a run on the guest, which exercises the guest-side budget.
 - `_check_pond`: the genome burst after ENTER reaches the guest. Both "host stopped" stages pass unchanged.
-- **`_check_server`'s hunter check has a race of its own, on `956d586` as well.** "A hunter on the guest in slot 69 is that guest's hunter, and the other guest, who is sent the same body, sees no hunter" reads the first guest's water in the frame the second guest sees the hunter. But each guest gets its snapshot on its own 50 ms schedule (`_flush_guest`), so after a guest returns from the black the first can be a snapshot behind the second, and the check then fails with the body not yet sent. Only the server's heartbeat, every 0.5 s, puts the two schedules back in step, and the check passes when the hunter is posed just before one. Instrumented, 956d586 posed it with the first guest's snapshot due later than the second's in 4 of 63 runs, every time just before a heartbeat. The earlier version's pump moved the pose off the heartbeat in most runs (A.1), and one full probe run failed on it; the build as it stands poses it where 956d586 does. The check is left as it is, because this change touches no existing check; waiting until both guests have the body before comparing them would close the race.
+- **`_check_server`'s hunter check had a race of its own, on `956d586` as well -- fixed after review, and the one existing check this changes.** "A hunter on the guest in slot 69 is that guest's hunter, and the other guest, who is sent the same body, sees no hunter" read the first guest's water in the frame the second guest saw the hunter. But each guest gets its snapshot on its own 50 ms schedule (`_flush_guest`), so after a guest returns from the black the first can be a snapshot behind the second, and the check then failed with the body not yet sent -- or passed on an older body in slot 5, somewhere else. Only the server's heartbeat, every 0.5 s, puts the two schedules back in step. Instrumented, 956d586 posed the hunter with the first guest's snapshot due later than the second's in 4 of 63 runs, every time saved by an imminent heartbeat; an earlier version of this change moved the pose off the heartbeat in most runs (A.1), and one full probe run failed on it. **The wait now waits for both**: the hunted guest's hunter, and the posed body, within 30 units of where it was posed, in the other guest's water. The review's deterministic repro (hold the first guest's next snapshot 0.25 s and clear its old body 5 at the pose) failed 2 of 2 before the fix and passes after it, the wait returning about 0.27 s later, when the held snapshot lands.
 
-**CI's frame budget.** The whole probe now finishes in 8,275-8,600 frames and 69-72 s (six runs of the build as it stands), against 6,643 frames and 53.6 s on `956d586`. The `limits` section is 1,592-1,897 frames and 16-19 s of that, at 100 frames a second; what varies is how long ENet keeps retrying the callers T8 turns away. The backstop is 20,000 frames, so the margin is still better than two to one. The comment on ci.yml's LAN step still says "about fifty-five seconds", "about 6,700" frames and "two SceneMultiplayer instances"; `.github/workflows/` is not this change's to edit, so those three are left for whoever next touches the workflow.
+**CI's frame budget.** The whole probe now finishes in 8,480-8,837 frames and 71-75 s (four runs of the build as it stands, one of them CI's own step), against 6,643 frames and 53.6 s on `956d586`. The `limits` section is 1,825-2,143 frames and 18-21 s of that, at 100 frames a second; what varies is how long ENet keeps retrying the callers T8 turns away. The backstop is 20,000 frames, so the margin is still better than two to one. The comment on ci.yml's LAN step says so, and says the host reads its own socket.
 
 ### A.8 net_probe: the `limits` section
 
@@ -275,16 +300,19 @@ And **the exported server**: this tree's Linux Server export, the binary CI buil
 | T4 | **Wrong direction:** a POND and a GENOME from a guest | Both dropped, 4 points each. The host's `peer["pond"]` stays empty. |
 | T5 | **Non-RAW command:** SIMPLIFY_PATH bytes (first byte 1) from a greeted Rogue | One malformed strike, and nothing else: every packet back starts with RAW, none is a CONFIRM_PATH. |
 | T6 | **Before the handshake:** a Rogue whose first frame is a STATE; a caller that sends forty packets in the datagram that finishes its handshake, first at an open door and then at a full one; two silent Rogues | The STATE-first caller is cut in the frame it spoke, with no strike and no bar. At an open door the forty are delivered with the connection (30 besides the one that got it cut; ENet puts at most 32 commands in a datagram, so the acknowledgement and 31 packets ride together). At a full door the same caller is cut inside `peer_connected`, the host stays up, and none of the forty is delivered. The silent two get `REFUSE_SILENT` at 3 s and are cut 1.0 s later, at the end of the linger. A real guest joins straight after. |
-| T7 | **Flood:** 3,000 valid STATEs in one second from a greeted guest; then a control run at 100/s for 3 s | Cut with `REFUSE_BROKEN` after about 0.2 s, with no more frames taken than 240 + 120 × t. The host's worst frame time is printed. The control run is all taken, with no strike and nothing dropped. |
-| T8 | **Connect storm:** 12 silent Rogues from 127.0.0.1 in four consecutive frames; then the transport cap, on a two-guest host | Never more than 2 waiting at once. Every call is either let in to wait or cut on arrival, and the two counts add up to twelve; no more pass the address's bucket than its burst and its refill allow; both the bucket and the waiting room turn calls away (a recorded run: 2 let in, 6 cut for the waiting room, 4 for calling too often, over 1.6 s of ENet's own retries). The bucket is empty after the storm, and a real guest from the same address joins once it holds a call again. With two guests and a caller open from one address, a fourth transport from it is refused. |
+| T7 | **Flood, enforced and watched:** 3,000 valid STATEs in one second from a greeted guest, to a host with `enforce_budgets` on; the same flood to a host as it ships, watching; then a control run at 100/s for 3 s, enforced | Enforced: cut with `REFUSE_BROKEN` after about 0.2 s, with no more frames taken than 240 + 120 × t; the host's worst frame time is printed. Watched: every frame taken (a recorded run: 2,972, the 2,970 sent and the guest's own beat), about 2,600 counted as would-drops and about ten as would-cuts, both logged, and the guest never struck or cut. The control run is all taken, with nothing dropped, struck or even watched. |
+| T8 | **Connect storm:** 12 silent Rogues from 127.0.0.1 in four consecutive frames; the review's lockout, at the door itself; then the transport cap, on a two-guest host | Never more than 2 waiting at once. Every call is either let in to wait or cut on arrival, and the two counts add up to twelve; no more pass the address's bucket than its burst and its refill allow; both the bucket and the waiting room turn calls away (a recorded run: 2 let in, 6 cut for the waiting room, 4 for calling too often, over 1.6 s of ENet's own retries, which the wait allows 16 s for). The bucket is empty after the storm, and a real guest from the same address joins once it holds a call again. **The lockout:** twelve calls at once from one address are 8 answered and 4 refused for calling too often, and a first call from a second address is answered, not refused as busy; ten first calls from ten more addresses then find the 1 call left in the shared bucket, and 9 are busy. With two guests and a caller open from one address, a fourth transport from it is refused. |
 | T9 | **Queue weight**, driven straight into `_take_event` so no frame is spent | A phone host keeps 60 of 100 longest PERSONs (16,320 bytes of 16,384), the newest last, and 64 of 100 ENTERs. A dedicated host holds one flooding guest to 60 and keeps both of the other guest's events, the first still first. A guest keeps 512 of 600 GENOMEs from its host. |
 | T10 | **Unknown kind:** ten frames of kind 0x7E and one event of type 0x7F | Dropped, no strike, still TOGETHER, and the shout sent after them is heard. |
 | T11 | **LAN-only guard:** a table of addresses, with documentation ranges standing in for public ones and a placeholder 10.0.0.5 as the host | Loopback, RFC 1918, 100.64/10, 169.254/16, the host's own /24, and IPv6 loopback, ULA and link-local are answered; public stand-ins and junk are not; an IPv6 caller is its /64. |
+| T12 | **Leftovers:** a phone host's guest leaves with an ENTER, a PERSON and a shout still waiting; a second is cut with an ENTER waiting; a third joins. Then a dedicated host holding three events from two guests, one of whom leaves | Both departures take what they said with them, and the third guest finds nothing waiting. The dedicated host forgets the two events from the guest that left and keeps the other guest's. |
 
 **Where the section differs from the plan, and why:**
 
 - **T6 gained a control.** "None of the forty delivered" only means something next to the same caller at an open door, where they are.
-- **T8 gained the per-address transport cap**, which the storm never reaches: the pending cap refuses first.
+- **T8 gained the per-address transport cap**, which the storm never reaches: the pending cap refuses first. **After review** it gained the lockout check, and its wait grew from 8 s to 16 s, twice the last of ENet's retries (0.5, 1.5, 3.5 and 7.5 s after a call).
+- **T7 runs its flood twice after review**: enforced, as the plan tested it, and watched, as the budgets ship (A.4).
+- **T12 is new after review**, for the leftovers the review found (A.4).
 - **T9 is socket-free.** The plan's 40 largest PERSONs over 10 s cannot reach either cap within the event budget (40 × 272 = 10,880 bytes, under 16,384; 40 frames, under 64), and a run that pushes past both would take 10 s of frames. Driven straight into `_take_event`, it pushes each queue past its caps in no frames at all.
 
 Every test prints `PASS` or `FAIL` in the house form and none causes a `SCRIPT ERROR`: the gate never reads past a size it has already checked, and ci.yml fails the step on any `SCRIPT ERROR`.
@@ -295,12 +323,16 @@ Every test prints `PASS` or `FAIL` in the house form and none causes a `SCRIPT E
 - **Spoofed CONNECTs hold slots** for 5-30 s without GDScript ever seeing them. Nobody spoofs on a LAN. On the internet, DTLS cookies are the fix (C).
 - **ENet reads at most 256 datagrams per poll.** Anything beyond that waits in the kernel's 256 KiB buffer and is dropped there. This puts an implicit ceiling on CPU, but it also adds latency for honest frames during a flood.
 - **Engine error prints** cannot be rate-limited from GDScript. This covers a failed DTLS handshake, and on guests, the SceneMultiplayer commands a hostile host could send.
+- **The lockout, fixed.** The first build's door spent the bucket every address shares before the caller's own, so one device making more than ten handshakes a second locked every new caller out. The review reproduced it, the order is swapped (A.5), and T8 checks the review's own scenario.
+- **A barred address can still knock.** The door judges a caller only once ENet has finished its handshake, and the bar is checked before the call buckets, so a barred address can complete handshake after handshake -- each refused at once, the line printed once every 10 s -- and, by never finishing one, can hold every one of the 4 or 6 ENet slots until ENet gives up on it (5-30 s), which keeps every new caller out for as long as it keeps at it. A guest already playing keeps its slot. Only something below GDScript refuses before the handshake: on the server box, a firewall rate limit per source (C.3); on a phone, nothing.
+- **An ENTER is answered with about seventy reliable events.** A.4 lets a guest send five events a second, and every ENTER makes the host queue an ARRIVE, a PERSON and up to 68 GENOMEs (about 10 KB) back to it, all reliable, so a guest that acknowledges slowly grows ENet's send queue for as long as it keeps asking. While the budgets are watched, not even the five a second bounds it: only the host's own frame rate does. B's ENTER limit (one every 3 s, B.2) closes it either way.
+- **Watched budgets take a flood whole** (A.4). Memory stays bounded -- the queue caps are enforced, and ENet reads at most 256 datagrams a poll -- and the lines are rate-limited, but every frame of a flood is read, parsed and taken until the budgets are turned on.
 - **The server's updater waits for an empty pond**, and a caller still saying hello counts (docs/server.md: "nobody connected, and nobody connecting"). A hostile device on the LAN that keeps calling can therefore hold an update back, one call every 3 s after its burst. That is the updater's definition of empty, and it is left as it is.
 - **IPv6 could not be run here.** This container has no IPv6 at all, so the guard's IPv6 rules are checked on a table (T11) and against Godot's `IPAddress` string form, but no IPv6 caller has reached a host.
 - **Measured on 4.7-stable in this container, 2026-09-24:**
   1. **Cutting a peer inside `peer_connected` with packets already queued is safe.** Four hostile raw `ENetConnection` clients sent 40 packets each in the same datagram as the ACK that completes the handshake. In a control run with no cut, they arrived in the same frame as the connection. With `get_peer(id).peer_disconnect_now()` inside the handler, none were delivered, `peer_disconnected` fired on the next frame, and each hostile client saw its disconnect. The server stayed up, and an ordinary client joined afterwards and exchanged 209 packets, with no error lines, through SceneMultiplayer and through the `ENetMultiplayerPeer` read directly alike. T6 keeps this as a regression check, with its own control.
   2. **`_check_link`'s timing checks with the host reading its own socket:** unchanged, three runs of three, for the route alone (A.1) and again for the build as it stands: 45 places in 2.2 s, 44 frames, a beat of 0 then 3, a dash drawn 13.8-13.9 ms after it started; the pond's quiet host held the guest at 1.207-1.216 s of silence and let it go 2 frames after it resumed.
-  3. **Budgets on a real link.** Two phones on real Wi-Fi for 30 minutes remain to be run before the merge. Until then, the relay runs in A.7 stand in for them: real ENet over real sockets, through 5-40 ms of flight with 5% spikes of 150-250 ms, with and without 2% loss.
+  3. **Budgets on a real link.** Two phones on real Wi-Fi for 30 minutes remain to be run, and the budgets stay watched, not enforced, until they have been (A.4). Until then, the relay runs in A.7 stand in for them: real ENet over real sockets, through 5-40 ms of flight with 5% spikes of 150-250 ms, with and without 2% loss.
 
 ## B. #57 in one PR: the host checks what the guest says
 
@@ -508,10 +540,10 @@ If the owner wants internet play before #59 lands, **C1 is the interim.** It nee
 
 On row 3: the LAN path's security is the room itself; the tap code is the invitation (net_session.gd:4-9). multiplayer.md §0.2 is still right that, with two players who know each other, most of this defends against nobody. #56-#59 are the gate for opening the port, not a verdict on the LAN.
 
-**Before each merge** (merging publishes a release): net_probe prints `ALL PASS`; two phones on real Wi-Fi for 30 minutes show zero strikes and zero drops in the host's log; and there is no pending launcher sync. The A PR carries `Closes #58` and `Closes #56`, the B PR carries `Closes #57`, and #59 stays open until C2 lands.
+**Before each merge** (merging publishes a release): net_probe prints `ALL PASS`, and there is no pending launcher sync. **Two phones on real Wi-Fi for 30 minutes** -- zero strikes and zero drops in the host's log, no `[net] would` line, and `over budget 0` on every `done after` line -- is the gate for anything that enforces a limit only timing can trip: A ships with its budgets watched rather than enforced (A.4) so that it need not wait for the owner to play, and turning them on waits for that playtest instead. The A PR carries `Closes #58` and `Closes #56`, the B PR carries `Closes #57`, and #59 stays open until C2 lands.
 
 ### Files
 
-- **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, and this document.
+- **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part B:** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/normal/normal_mode.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`.
 - **Part C:** to be decided by the table in C.3.

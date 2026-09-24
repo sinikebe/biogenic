@@ -13,9 +13,10 @@ any x86_64 Debian or Ubuntu machine with systemd.
 > only from an address on a local network -- loopback, the private ranges
 > (10/8, 172.16/12, 192.168/16), 100.64/10, link-local, its own /24, and IPv6
 > loopback, unique-local and link-local -- and hangs up on anything else with
-> one line in its log. It also sizes and checks every frame, limits how often
-> and how much each guest may send, and cuts a guest that keeps breaking the
-> rules (issues #56 and #58; `docs/design/net-hardening.md`, part A). Internet
+> one line in its log. It also sizes and checks every frame, cuts a guest that
+> keeps sending what no Biogenic build sends, and watches how often and how
+> much each guest sends, counting for now rather than cutting (§3): issues #56
+> and #58, `docs/design/net-hardening.md` part A. Internet
 > play still needs the rest: the server checking what a guest *says* (#57) and
 > an authenticated, encrypted handshake (#59), then a forwarded UDP port and a
 > way for a phone to enter an address rather than tap a code. None of that is
@@ -122,15 +123,35 @@ the port than two phones could send. Each kind of line is printed at most once
 every ten seconds for each address -- calls from outside the network, and calls
 turned away because too many came from everywhere at once, once every ten
 seconds for all of them together -- and the next one says how many like it were
-held back, so a noisy device cannot fill the journal. These lines name the
-caller's address; the journal is on your machine, not in the repository. For
-example, with placeholder addresses:
+held back, so a noisy device cannot fill the journal. And every guest gets one
+line as it goes, however it goes, saying how long it stayed, what it sent, and
+how many times it went over its budgets. These lines name the caller's address;
+the journal is on your machine, not in the repository. For example, with
+placeholder addresses:
 
 ```
 [net] refused 203.0.113.9: not on this network (LAN-only until #59)
 [net] hung up on 1587052382 (192.0.2.40): different versions
-[net] cut 694971552 (192.0.2.41): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- barred 60 s
+[net] cut 694971552 (192.0.2.41): malformed: an event of type 4 that does not read -- 12 points -- barred 60 s
+[net] 1945108233 (192.0.2.42) done after 1800 s -- frames 51234, events 312, over budget 0, points 0
 ```
+
+**The rate limits are watched, not enforced, for now.** How many frames, bytes
+and events a guest may send each second are the only limits a slow or bursty
+Wi-Fi could trip on an honest phone, and they have not yet been measured on
+one. So the server does not drop or cut for them: it counts and logs what it
+*would* have done, in lines like these --
+
+```
+[net] would drop a frame from 1945108233 (192.0.2.42): over its frame budget (120 a second, 240 at once) -- watching the budgets, not enforcing them
+[net] would cut 1945108233 (192.0.2.42): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- watching the budgets, not enforcing them
+```
+
+-- and takes the frames all the same. Everything else is enforced already.
+**A playtest that is to turn them on must show none of these lines, and every
+`done after` line must say `over budget 0`**: two phones on real Wi-Fi for half
+an hour, and the server with two. A `would` line from an honest phone means the
+limits are too tight for real Wi-Fi, not that the phone is misbehaving.
 
 ## 4. How it updates
 
@@ -259,7 +280,10 @@ userdel biogenic
   public address -- which can only reach the server through a forwarded port,
   or over IPv6 -- is refused as not on this network. **"cut off"** (or
   "refused", on an older build) is a phone the server cut for sending frames no
-  Biogenic build sends: update both from the launcher.
+  Biogenic build sends. Its screen says "the other end would not take what this
+  game sent. update both from the launcher, then call again in a minute": the
+  server bars its address for a minute after a cut, so a call straight back is
+  the "they hung up" above.
 - **The server keeps restarting** -- `systemctl status biogenic-server` shows it
   starting again every five seconds, and `journalctl -u biogenic-server -e`
   shows how each start ends. After an update, that is the new build failing on

@@ -32,9 +32,11 @@ extends Node
 ## the host polls its ENet peer itself ([method _pump]) and nothing but a RAW
 ## frame goes further; every frame from either end then passes one gate
 ## ([method _admit_frame]) that checks its size, its kind and what it parses
-## to, and charges the sender's budgets. Who may connect at all is decided in
-## [method _on_peer_connected], before any bookkeeping exists for them. None of
-## it changes a byte on the wire: a protocol-4 build on either end cannot tell.
+## to, and charges the sender's budgets -- which, until
+## [member enforce_budgets] is on, are watched rather than enforced. Who may
+## connect at all is decided in [method _on_peer_connected], before any
+## bookkeeping exists for them. None of it changes a byte on the wire: a
+## protocol-4 build on either end cannot tell.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -275,8 +277,10 @@ const LIVE_PER_ADDRESS := 3
 ## minutes. Silence, an old protocol and "already two" are not abuse.
 const BAR_FIRST := 60.0
 const BAR_AGAIN := 600.0
-## The addresses a host remembers, and how long one it has not heard from is
-## kept: the limiter's own memory is bounded too.
+## **The addresses a host remembers: at most this many**, so the limiter's own
+## memory is bounded too. A full book forgets a caller it has not heard from
+## for [constant BOOK_IDLE] first, then the one heard from longest ago -- and
+## only when it is full: until then an idle caller's entry stays.
 const BOOK_MAX := 1024
 const BOOK_IDLE := 600.0
 ## **What a host takes from each guest, a second and at once** (A.4). The
@@ -285,7 +289,9 @@ const BOOK_IDLE := 600.0
 ## [constant EARLY_GAP] -- about one event a second in bursts of two to four,
 ## and about 3.5 KB a second. Each limit is at least 40% over that, and the
 ## bursts cover what a spike on the link delivers at once: the relay runs in
-## net-hardening.md A.7 measured both.
+## net-hardening.md A.7 measured both. **Watched, not enforced, until
+## [member enforce_budgets] is on** -- and so are the flood rule and the
+## guest's own limits on its host below.
 const FRAMES_RATE := 120.0
 const FRAMES_BURST := 240.0
 const EVENTS_RATE := 5.0
@@ -332,7 +338,9 @@ const STALL_GAP := 0.25
 ## timeout, and gone.
 const STALL_CREDIT := 10.0
 ## **Telemetry, rate-limited**: one line per kind and address this often, and
-## the next says how many like it were held back.
+## the next says how many like it were held back -- with at most this many
+## kinds-and-addresses remembered: past it, the one whose hold ends soonest is
+## forgotten first.
 const NOTE_EVERY := 10.0
 const NOTES_MAX := 256
 ## **Saturation**: a line when a second brings more than this to the socket.
@@ -442,10 +450,22 @@ var _out_of_water := false
 ## drained to the newest by it, independently of the state frames.
 var _out_pond_seq := 0
 
+## **The budgets are watched, not enforced -- until this says so** (A.4). The
+## frame, byte and event budgets and the flood rule are the only limits timing
+## alone can trip: everything else the gate refuses is a frame no honest build
+## writes, or a caller the door turns away, and all of that is enforced always.
+## The budgets' numbers were measured through a relay, not on two phones on
+## real Wi-Fi, so until that playtest has shown none, an overrun is counted
+## (`would_*` in [member gate_counts]) and logged as what it would have done --
+## "would drop", "would cut" -- and the frame is taken, with no points for it.
+## Turning them on is this one line; the probe's budget tests set it per
+## session.
+var enforce_budgets := false
 ## **What the door and the gate have done** since this end last hosted or
-## joined -- callers refused, frames dropped, points struck, peers cut -- for
-## tools and for the log. Kept after [method close], so a tool can read a
-## session's last word. Reset by [method host] and [method join].
+## joined -- callers refused, frames dropped, points struck, peers cut, and in
+## watch mode what the budgets would have done -- for tools and for the log.
+## Kept after [method close], so a tool can read a session's last word. Reset
+## by [method host] and [method join].
 var gate_counts: Dictionary = {}
 ## **The host's address book** (A.5): one entry per caller, by
 ## [method Lan.source_key] -- its connection bucket and whether it is barred.
@@ -530,6 +550,13 @@ class Guard extends RefCounted:
 	var taken_bytes := 0
 	var taken_events := 0
 	var dropped := 0
+	## **Watch mode's ledger** ([member NetSession.enforce_budgets] off): the
+	## points the budgets would have struck, decaying like the real ones, and
+	## what they would have done. Never read by anything that decides.
+	var would_points := 0.0
+	var would_points_at := 0.0
+	var would_dropped := 0
+	var would_cuts := 0
 
 	func _init(strict: bool, now: float) -> void:
 		frames = Bucket.new(FRAMES_RATE if strict else HOST_FRAMES_RATE,
@@ -539,6 +566,7 @@ class Guard extends RefCounted:
 		bytes = Bucket.new(BYTES_RATE if strict else HOST_BYTES_RATE,
 			BYTES_BURST if strict else HOST_BYTES_BURST, now)
 		points_at = now
+		would_points_at = now
 
 	## The points on the ledger now, after their decay.
 	func points_now(now: float) -> float:
@@ -549,6 +577,14 @@ class Guard extends RefCounted:
 		points = points_now(now) + weight
 		points_at = now
 		return points
+
+	## Watch mode's [method strike]: returns what the whole ledger would hold,
+	## the real points and the budgets' together.
+	func would_strike(weight: float, now: float) -> float:
+		would_points = maxf(0.0, would_points
+			- STRIKE_DECAY * maxf(now - would_points_at, 0.0)) + weight
+		would_points_at = now
+		return points_now(now) + would_points
 
 
 func _ready() -> void:
@@ -579,9 +615,13 @@ func _ready() -> void:
 	get_tree().set_multiplayer(_api, get_path())
 
 
-## Back in a tree while hosting -- moved, not closed -- and the socket is read
-## again: a host whose pump was left behind would hear nothing and say nothing.
+## **Back in a tree -- moved, not closed.** It is the session the game reaches
+## again, if nothing took its place while it was out, and a host reads its
+## socket again: one whose pump was left behind would hear nothing and say
+## nothing.
 func _enter_tree() -> void:
+	if current == null:
+		current = self
 	if hosting and _peer != null \
 			and not get_tree().process_frame.is_connected(_on_tree_frame):
 		get_tree().process_frame.connect(_on_tree_frame)
@@ -1130,6 +1170,7 @@ func _on_peer_connected(id: int) -> void:
 
 
 func _on_peer_disconnected(id: int) -> void:
+	var peer: Dictionary = _peers.get(id, {})
 	_peers.erase(id)
 	_addresses.erase(id)
 	# Gone already, so there is nothing left to hang up on: a refused guest
@@ -1139,6 +1180,8 @@ func _on_peer_disconnected(id: int) -> void:
 	if _greeted_count() == 0:
 		_told = []
 	if hosting:
+		_farewell(id, peer)
+		_forget_said_by(id)
 		_lost_guest()
 		return
 	if id == _host_id:
@@ -1277,13 +1320,17 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		_give_up(Link.REFUSED, "already two",
 			"that cell is already swimming with somebody.")
 	elif reason == Wire.REFUSE_BROKEN:
-		# **Cut for sending what the host cannot read** (net-hardening.md A.4).
-		# Two honest builds on one protocol never get here, so for a player it
-		# means one of the two is broken, and an update is the only fix there
-		# is. A build that predates this reason reads the line below instead.
+		# **Cut for sending what the host would not take** (net-hardening.md
+		# A.4): frames it could not read, or far more of them than any body
+		# sends. Two honest builds on one protocol never get here, so for a
+		# player it means one of the two is broken, and an update is the only
+		# fix there is. The host also bars this address for a minute (A.5), so
+		# a call straight back would only be hung up on at the door: the
+		# sentence says when. A build that predates this reason reads the line
+		# below instead.
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
-			"the other end could not read what this game sent. take the update"
-			+ " from the launcher on both, and call again.")
+			"the other end would not take what this game sent. update both from"
+			+ " the launcher, then call again in a minute.")
 	else:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end hung up.")
@@ -1525,24 +1572,13 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 			size, "guest" if hosting else "host"])
 	if hosting and kind == Wire.KIND_HELLO:
 		return _malformed(id, "a second hello")
-	# 6. The budgets: every frame, known or not, and every event.
+	# 6. The budgets: every frame, known or not, and every event -- enforced
+	# only when [member enforce_budgets] says so. Watched, an overrun is counted
+	# and logged as what it would have done, and the frame goes on.
 	var guard: Guard = peer["guard"]
-	var now := _now()
-	_top_up(guard, now)
-	if not guard.frames.take(1.0, now):
-		_over_frames(id, guard, now)
+	if not _within_budgets(id, guard, kind, size) and enforce_budgets:
 		return false
-	if not guard.bytes.take(float(size), now):
-		_over_budget(id, guard, STRIKE_BYTES, "bytes", "over its byte budget"
-			+ " (%d a second, %d at once)" % [roundi(guard.bytes.rate),
-				roundi(guard.bytes.burst)])
-		return false
-	if kind == Wire.KIND_EVENT and not guard.events.take(1.0, now):
-		_over_budget(id, guard, STRIKE_EVENTS, "events", "over its event budget"
-			+ " (%d a second, %d at once)" % [roundi(guard.events.rate),
-				roundi(guard.events.burst)])
-		return false
-	# 8. **A kind or type from a later build**, which the wire promises to
+	# 7. **A kind or type from a later build**, which the wire promises to
 	# ignore: dropped, with no strike, once the budgets have paid for it. An
 	# event keeps its place in the order, so the next one is not a gap.
 	if not known:
@@ -1550,7 +1586,7 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 		if kind == Wire.KIND_EVENT:
 			peer["in_event"] = maxi(int(peer["in_event"]), Wire.seq_of(frame))
 		return false
-	# 7. **Parse or reject**, on a host, with the readers pond.gd uses: nothing
+	# 8. **Parse or reject**, on a host, with the readers pond.gd uses: nothing
 	# reaches a queue that the run would refuse a frame later.
 	if hosting and not _parses(kind, type, frame):
 		return _malformed(id, "%s that does not read" % _kind_says(kind, type))
@@ -1610,16 +1646,39 @@ func _top_up(guard: Guard, now: float) -> void:
 	guard.events.top_up(credit)
 
 
-## A frame over the frame budget, dropped -- a state frame is superseded fifty
-## milliseconds later anyway. On a host, every [constant FLOOD_DROPS] of them
-## inside a [constant FLOOD_WINDOW] is a flood strike.
+## **Charge a frame to its sender's budgets** (A.4): frames, then bytes, then,
+## for an event, events. The first that cannot pay is the overrun, and the
+## rest are not charged for that frame, as they would not be for a frame the
+## gate drops -- so watch mode counts exactly what enforcing would have done.
+## False on an overrun, in either mode: [member enforce_budgets] is the
+## caller's to read.
+func _within_budgets(id: int, guard: Guard, kind: int, size: int) -> bool:
+	var now := _now()
+	_top_up(guard, now)
+	if not guard.frames.take(1.0, now):
+		_over_frames(id, guard, now)
+		return false
+	if not guard.bytes.take(float(size), now):
+		_over_budget(id, guard, STRIKE_BYTES, "bytes", "over its byte budget"
+			+ " (%d a second, %d at once)" % [roundi(guard.bytes.rate),
+				roundi(guard.bytes.burst)])
+		return false
+	if kind == Wire.KIND_EVENT and not guard.events.take(1.0, now):
+		_over_budget(id, guard, STRIKE_EVENTS, "events", "over its event budget"
+			+ " (%d a second, %d at once)" % [roundi(guard.events.rate),
+				roundi(guard.events.burst)])
+		return false
+	return true
+
+
+## A frame over the frame budget: dropped -- a state frame is superseded fifty
+## milliseconds later anyway -- or, watched, counted as one that would have
+## been. On a host, every [constant FLOOD_DROPS] of them inside a
+## [constant FLOOD_WINDOW] is a flood strike, real or watched.
 func _over_frames(id: int, guard: Guard, now: float) -> void:
-	guard.dropped += 1
-	gate_counts["dropped"] += 1
-	gate_counts["dropped_frames"] += 1
+	_overrun(id, guard, "frames", "over its frame budget (%d a second, %d at once)"
+		% [roundi(guard.frames.rate), roundi(guard.frames.burst)])
 	if not hosting:
-		_note("over", "frames", "[net] dropped frames from the host: more than %d a"
-			% roundi(guard.frames.rate) + " second")
 		return
 	if now - guard.flood_at >= FLOOD_WINDOW:
 		guard.flood_at = now
@@ -1628,21 +1687,70 @@ func _over_frames(id: int, guard: Guard, now: float) -> void:
 	guard.flood_drops += 1
 	if guard.flood_drops > FLOOD_DROPS * (guard.flood_struck + 1):
 		guard.flood_struck += 1
-		_strike(id, STRIKE_FLOOD, "flooding: %d frames over its budget in a second"
-			% guard.flood_drops + " (%d a second, %d at once)"
+		_budget_strike(id, guard, STRIKE_FLOOD, "flooding: %d frames over its budget"
+			% guard.flood_drops + " in a second (%d a second, %d at once)"
 			% [roundi(guard.frames.rate), roundi(guard.frames.burst)])
 
 
-## A frame over the byte or event budget, dropped; a strike on a host.
+## A frame over the byte or event budget: dropped and struck on a host, or,
+## watched, counted and struck on watch mode's ledger alone.
 func _over_budget(id: int, guard: Guard, weight: float, what: String,
 		why: String) -> void:
-	guard.dropped += 1
-	gate_counts["dropped"] += 1
-	gate_counts["dropped_" + what] += 1
+	_overrun(id, guard, what, why)
 	if hosting:
+		_budget_strike(id, guard, weight, why)
+
+
+## **The count and the line for one frame over a budget.** Enforced, it is a
+## drop: a line on a guest, and on a host the strike that follows says it.
+## Watched, it is a frame that would have been dropped, taken all the same, and
+## the line says so on either side.
+func _overrun(id: int, guard: Guard, what: String, why: String) -> void:
+	if enforce_budgets:
+		guard.dropped += 1
+		gate_counts["dropped"] += 1
+		gate_counts["dropped_" + what] += 1
+		if not hosting:
+			_note("over", what, "[net] dropped a frame from the host: " + why)
+		return
+	guard.would_dropped += 1
+	gate_counts["would_drop"] += 1
+	gate_counts["would_drop_" + what] += 1
+	if not hosting:
+		_note("would drop", "host", "[net] would drop a frame from the host: %s"
+			% why + " -- watching the budgets, not enforcing them")
+		return
+	var from := _from(id)
+	_note("would drop", Lan.source_key(from), "[net] would drop a frame from %d"
+		% id + " (%s): %s -- watching the budgets, not enforcing them" % [from, why])
+
+
+## **A budget's strike** (A.4). Enforced, it goes on the ledger like any other.
+## Watched, it goes on watch mode's own, and reaching [constant STRIKE_CUT]
+## there -- with the real points counted in -- is a cut that would have
+## happened: counted, logged, and the watch ledger emptied, as the cut would
+## have ended that peer's.
+func _budget_strike(id: int, guard: Guard, weight: float, why: String) -> void:
+	if enforce_budgets:
 		_strike(id, weight, why)
-	else:
-		_note("over", what, "[net] dropped a frame from the host: " + why)
+		return
+	var total := guard.would_strike(weight, _now())
+	gate_counts["would_strikes"] += 1
+	gate_counts["would_points"] += weight
+	if total < STRIKE_CUT:
+		return
+	guard.would_cuts += 1
+	guard.would_points = 0.0
+	gate_counts["would_cuts"] += 1
+	var from := _from(id)
+	_note("would cut", Lan.source_key(from), "[net] would cut %d (%s): %s -- %.0f"
+		% [id, from, why, total] + " points -- watching the budgets, not enforcing them")
+
+
+## Where peer [param id] calls from, as the door saw it: "" for a guest's
+## host, and for anybody this end no longer has.
+func _from(id: int) -> String:
+	return str((_peers.get(id, {}) as Dictionary).get("address", ""))
 
 
 ## A frame no writer produces: 4 points on a host, and dropped either way.
@@ -1713,6 +1821,8 @@ func _cut(id: int, why: String, tell: bool, abuse: bool) -> void:
 	_note("cut", Lan.source_key(from), "[net] cut %d (%s): %s%s" % [id, from, why,
 		" -- barred %d s" % roundi(barred) if barred > 0.0 else ""])
 	if greeted:
+		_farewell(id, peer)
+		_forget_said_by(id)
 		_lost_guest()
 
 
@@ -1748,18 +1858,62 @@ func _bar(from: String) -> float:
 
 
 ## A host whose last greeted guest has gone -- it left, or it was cut -- is
-## listening again. A caller still saying hello is not company.
+## listening again, and **nothing that guest said is left waiting**: a phone
+## host's run stops draining [member pond_events] the moment the link drops, so
+## an ENTER still queued would reach the next guest as an arrival it never
+## made, and a shout as a call from nobody. A caller still saying hello is not
+## company.
 func _lost_guest() -> void:
-	if hosting and link == Link.TOGETHER and _greeted_count() == 0:
+	if not hosting or _greeted_count() > 0:
+		return
+	pond_events.clear()
+	_pond_bytes = 0
+	heard.clear()
+	if link == Link.TOGETHER:
 		_say("they left", "the other cell went. show the code again.")
 		_set_link(Link.LISTENING)
+
+
+## **A dedicated host forgets what one guest said** when it leaves or is cut:
+## its events still in [member inbox] are about a body that is gone, and are
+## nobody else's to hear.
+func _forget_said_by(id: int) -> void:
+	_inbox_load.erase(id)
+	if inbox.is_empty():
+		return
+	var kept: Array = []
+	for said: Array in inbox:
+		if int(said[0]) != id:
+			kept.append(said)
+	inbox = kept
+
+
+## **One line for every guest a host had, as it goes** (A.6): how long, what
+## it sent, how often it went over its budgets -- enforced or only watched --
+## and the points it left with. So a playtest's log says the budgets never bit
+## in so many words, rather than by saying nothing. The address goes to the log
+## and nowhere else.
+func _farewell(id: int, peer: Dictionary) -> void:
+	if not hosting or not bool(peer.get("greeted", false)):
+		return
+	var guard: Guard = peer["guard"]
+	var now := _now()
+	print("[net] %d (%s) done after %d s -- frames %d, events %d, over budget %d,"
+		% [id, str(peer["address"]), roundi(now - float(peer["since"])), guard.taken,
+			guard.taken_events, guard.dropped + guard.would_dropped]
+		+ " points %.0f" % guard.points_now(now))
 
 
 ## **Whether to answer a caller at all** (A.5), in `peer_connected` -- the
 ## earliest place 4.7 lets GDScript say no to an address -- and before any
 ## bookkeeping exists for it. `[]` answers it; otherwise `[reason, sentence]`
 ## for the counts and the log. The order is the cost: an address that is
-## barred or not on this network spends no one else's budget.
+## barred or not on this network spends no one else's budget, and **a call its
+## own address's bucket turns away never touches the bucket every address
+## shares** -- or one device calling fast would lock every other one out (the
+## review measured it: twelve calls from one address, and a first call from
+## another was refused as busy). Nor does a call the shared bucket turns away
+## cost its address anything.
 func _admit(from: String) -> Array:
 	var now := _now()
 	if not Lan.is_local_source(from, address):
@@ -1768,12 +1922,14 @@ func _admit(from: String) -> Array:
 	var entry := _book_entry(key, now)
 	if now < float(entry["barred_until"]):
 		return ["barred", "barred for %d s more" % ceili(float(entry["barred_until"]) - now)]
+	var own: Bucket = entry["calls"]
+	if own.level(now) < 1.0:
+		return ["calls", "calling too often -- %d at once, then one every %d s"
+			% [roundi(CALLS_BURST), roundi(1.0 / CALLS_RATE)]]
 	if not _calls_all.take(1.0, now):
 		return ["busy", "more than %d calls a second, from everywhere"
 			% roundi(CALLS_ALL_RATE)]
-	if not (entry["calls"] as Bucket).take(1.0, now):
-		return ["calls", "calling too often -- %d at once, then one every %d s"
-			% [roundi(CALLS_BURST), roundi(1.0 / CALLS_RATE)]]
+	own.take(1.0, now)
 	var live := 0
 	for other: int in _addresses:
 		if str(_addresses[other]) == key:
@@ -1912,9 +2068,16 @@ func _note(what: String, key: String, line: String, warn: bool = false) -> void:
 	if int(seen[1]) > 0:
 		line += " (+%d like it held back)" % int(seen[1])
 	if _notes.size() >= NOTES_MAX and not _notes.has(slot):
+		# Full: every hold that has ended goes, and if none has, the one that
+		# ends soonest -- so [constant NOTES_MAX] is a bound, not a hope.
+		var soonest := ""
 		for old: String in _notes.keys():
 			if now >= float(_notes[old][0]):
 				_notes.erase(old)
+			elif soonest.is_empty() or float(_notes[old][0]) < float(_notes[soonest][0]):
+				soonest = old
+		if _notes.size() >= NOTES_MAX and not soonest.is_empty():
+			_notes.erase(soonest)
 	_notes[slot] = [now + NOTE_EVERY, 0]
 	if warn:
 		push_warning(line)
@@ -1931,6 +2094,11 @@ func _zero_counts() -> void:
 		"dropped": 0, "dropped_frames": 0, "dropped_bytes": 0, "dropped_events": 0,
 		"queue_dropped": 0, "strays": 0, "saturated": 0, "peak_bytes": 0.0,
 		"peak_datagrams": 0.0,
+		# Watch mode's (see [member enforce_budgets]): what the budgets would
+		# have done. A playtest that is to turn them on must show every one 0.
+		"would_drop": 0, "would_drop_frames": 0, "would_drop_bytes": 0,
+		"would_drop_events": 0, "would_strikes": 0, "would_points": 0.0,
+		"would_cuts": 0,
 	}
 
 
@@ -2144,6 +2312,9 @@ func _give_up(to: int, headline: String, detail: String) -> void:
 func _drop_link() -> void:
 	if is_inside_tree() and get_tree().process_frame.is_connected(_on_tree_frame):
 		get_tree().process_frame.disconnect(_on_tree_frame)
+	# A guest still here when its host closes gets its line too.
+	for id: int in _peers.keys():
+		_farewell(id, _peers[id])
 	if _peer != null:
 		_peer.close()
 		_peer = null

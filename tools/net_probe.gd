@@ -57,10 +57,13 @@ extends Node
 ## hostile peers against a host of their own each -- every frame at and past
 ## its size bound, malformed and wrong-way frames, a command that is not a
 ## frame, callers that speak before their hello or never, a caller cut with
-## packets already queued, a flood and its control, a storm of calls, the
-## queues by weight, a later build's frames, and the LAN-only guard. The pond
-## and server sections then hold the other half: over every stage of two real
-## runs, and a server with six guests, the gate never touched an honest peer.
+## packets already queued, a flood with the budgets enforced and with them
+## only watched, as they ship, and its control, a storm of calls and one
+## address's storm beside another's first call, the queues by weight, a later
+## build's frames, the LAN-only guard, and what a guest said outliving it. The
+## pond and server sections then hold the other half: over every stage of two
+## real runs, and a server with six guests, the gate never touched an honest
+## peer, and the budgets it watches would not have either.
 ##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
@@ -1267,6 +1270,7 @@ func _check_limits() -> void:
 	await _limits_queues()
 	await _limits_unknown()
 	_limits_lan()
+	await _limits_leftovers()
 	print("[net-probe] NOTE limits took %.1f s and %d frames, at most %d a second"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
 	Engine.max_fps = ceiling
@@ -1670,13 +1674,17 @@ func _limits_squat(id: int) -> Array:
 	return seen
 
 
-## **T7: a flood, and the control.** Three thousand valid state frames in a
-## second from a greeted guest: no more are taken than the frame budget's
-## burst and refill, and flood strikes cut it inside two seconds. Then a guest
-## sending a hundred a second for three seconds -- over any honest peak -- is
-## never struck.
+## **T7: a flood, and the control -- the budgets enforced, and watched.** Three
+## thousand valid state frames in a second from a greeted guest. With
+## [member NetSession.enforce_budgets] on, no more are taken than the frame
+## budget's burst and refill, and flood strikes cut it inside two seconds.
+## Watched, as the budgets ship, the same flood is counted and logged as the
+## drops and the cut it would have been, and the guest loses neither a frame
+## nor its link. Then a guest sending a hundred a second for three seconds --
+## over any honest peak -- is never struck, and the budgets never even note it.
 func _limits_flood() -> void:
 	var host: Node = await _limits_host("LimitsFloodHost")
+	host.enforce_budgets = true
 	var guest: Node = await _limits_guest("LimitsFloodGuest")
 	var gid: int = guest.my_id()
 	var guard: RefCounted = (host.get("_peers") as Dictionary)[gid]["guard"]
@@ -1702,14 +1710,48 @@ func _limits_flood() -> void:
 	var allowed := NetSession.FRAMES_BURST + NetSession.FRAMES_RATE * maxf(cut_at, 0.0) + 4.0
 	_says(cut_at >= 0.0 and cut_at < 2.0 and taken <= int(allowed)
 			and int(host.gate_counts["cuts"]) == 1 and int(host.gate_counts["strikes"]) >= 2
+			and int(host.gate_counts["would_drop"]) == 0
 			and str(guest.trouble) == Wire.reason_says(Wire.REFUSE_BROKEN),
-		"limits T7: a flood of %d state frames is cut after %.2f s with" % [sent, cut_at]
-		+ " REFUSE_BROKEN, %d frames taken of the %d the budget allows by then, %d"
-		% [taken, int(allowed), int(host.gate_counts["dropped"])] + " dropped; the"
-		+ " host's worst frame %.1f ms" % (worst * 1000.0))
+		"limits T7: enforced, a flood of %d state frames is cut after %.2f s with"
+		% [sent, cut_at] + " REFUSE_BROKEN, %d frames taken of the %d the budget allows"
+		% [taken, int(allowed)] + " by then, %d dropped; the host's worst frame %.1f ms"
+		% [int(host.gate_counts["dropped"]), worst * 1000.0])
+	await _limits_close([host, guest])
+	# Watched, as they ship: the same flood, and nothing is taken away.
+	host = await _limits_host("LimitsWatchHost")
+	guest = await _limits_guest("LimitsWatchGuest")
+	gid = guest.my_id()
+	guard = (host.get("_peers") as Dictionary)[gid]["guard"]
+	to = guest.get("_host_id")
+	from = _now()
+	sent = 0
+	while _now() - from < 1.0:
+		var due := mini(3000, int(3000.0 * (_now() - from)))
+		while sent < due:
+			sent += 1
+			guest._to(to, Wire.state(1000000 + sent, true, Vector2(float(sent), 0.0), 0.0,
+				26.0))
+		await get_tree().process_frame
+	var took := await _limits_until(func() -> bool: return int(guard.get("taken")) >= sent)
+	var counts: Dictionary = host.gate_counts
+	var notes: Dictionary = host.get("_notes")
+	_says(not bool(host.enforce_budgets) and took >= 0.0
+			and int(guest.link) == NetSession.Link.TOGETHER and int(host.peer_count()) == 1
+			and int(counts["would_drop"]) > 0
+			and int(counts["would_drop"]) == int(counts["would_drop_frames"])
+			and int(counts["would_cuts"]) >= 1 and int(counts["would_strikes"]) >= 2
+			and int(counts["dropped"]) == 0 and int(counts["strikes"]) == 0
+			and int(counts["cuts"]) == 0 and float(host.points_of(gid)) == 0.0
+			and notes.has("would drop|127.0.0.1") and notes.has("would cut|127.0.0.1"),
+		"limits T7: watched, as the budgets ship, the same flood is taken whole -- %d"
+		% int(guard.get("taken")) + " frames of the %d sent, with its own beat -- and"
+		% sent + " logged and counted as %d frames it would have dropped and %d cuts"
+		% [int(counts["would_drop"]), int(counts["would_cuts"])] + " it would have"
+		+ " made; the guest is never struck or cut")
 	await _limits_close([host, guest])
 	# The control: a hundred a second is more than any honest guest sends.
 	host = await _limits_host("LimitsControlHost")
+	host.enforce_budgets = true
 	guest = await _limits_guest("LimitsControlGuest")
 	gid = guest.my_id()
 	guard = (host.get("_peers") as Dictionary)[gid]["guard"]
@@ -1737,8 +1779,11 @@ func _limits_flood() -> void:
 ## second, none of which ever says hello: never more than two wait at once,
 ## the address's bucket stops the rest after its burst, and every one of them
 ## is cut on arrival -- and a real guest from the same address gets in as soon
-## as the bucket has a call in it again. Then the other per-address limit: the
-## fourth transport from one address is refused while three are open.
+## as the bucket has a call in it again. One address's storm is its own: the
+## review's lockout, twelve calls at once from one address and then a first
+## call from another, has the second answered. Then the other per-address
+## limit: the fourth transport from one address is refused while three are
+## open.
 func _limits_storm() -> void:
 	var host: Node = await _limits_host("LimitsStormHost")
 	var callers: Array[Rogue] = []
@@ -1758,7 +1803,8 @@ func _limits_storm() -> void:
 	var calling := _now() - from
 	# Every caller cut at the door, waiting, or already told it said nothing: a
 	# caller ENet had no slot for tries again by itself, so this is ENet's pace,
-	# not the host's.
+	# not the host's -- and ENet's retries come 0.5, 1.5, 3.5 and 7.5 s after a
+	# call, so the wait allows twice the last of them.
 	var admitted := func() -> int:
 		var n := 0
 		for rogue: Rogue in callers:
@@ -1772,7 +1818,7 @@ func _limits_storm() -> void:
 			if not rogue.down() and not (host.get("_peers") as Dictionary).has(rogue.id) \
 					and rogue.refused_for() < 0:
 				return false
-		return true, 8.0)
+		return true, 16.0)
 	var storm := _now() - from
 	var counts: Dictionary = host.gate_counts
 	var through := callers.size() - int(counts["refused_calls"]) - int(counts["refused_busy"])
@@ -1801,6 +1847,45 @@ func _limits_storm() -> void:
 		"limits T8: the bucket was empty after the storm, and a real guest from the"
 		+ " same address joins once it holds a call again, %.1f s on" % waited)
 	await _limits_close([host, guest] + callers)
+	# **One address's storm is its own** -- the review's lockout, exactly, at the
+	# door itself and in one instant: twelve calls from one address, then a
+	# first call from another. The first address's own bucket answers eight and
+	# turns four away, and only the eight spend the bucket every address
+	# shares, so the other address is answered; spending the shared one first,
+	# the twelve had emptied it, and the stranger was refused as busy. Ten more
+	# first calls from ten more addresses then find what is left of the shared
+	# bucket, and the rest are busy: it still does its job. Allowed whatever the
+	# buckets could refill if the runner stalls in the middle.
+	var door: Node = await _session("LimitsDoor")
+	door._reset_socket()
+	door.hosting = true
+	door.address = "192.168.1.10"
+	var began := _now()
+	var first: Array = []
+	for i in 12:
+		var said: Array = door._admit("192.168.1.66")
+		first.append("ok" if said.is_empty() else str(said[0]))
+	var second: Array = door._admit("192.168.1.77")
+	var rest: Array = []
+	for i in 10:
+		var said: Array = door._admit("192.168.1.%d" % (100 + i))
+		rest.append("ok" if said.is_empty() else str(said[0]))
+	var spent := _now() - began
+	var own_more := int(spent * NetSession.CALLS_RATE)
+	var all_more := int(spent * NetSession.CALLS_ALL_RATE)
+	var left := int(NetSession.CALLS_ALL_BURST) - int(NetSession.CALLS_BURST) - 1
+	_says(first.count("ok") >= int(NetSession.CALLS_BURST)
+			and first.count("ok") <= int(NetSession.CALLS_BURST) + own_more
+			and first.count("ok") + first.count("calls") == 12 and second.is_empty()
+			and rest.count("ok") >= left and rest.count("ok") <= left + all_more
+			and rest.count("ok") + rest.count("busy") == 10,
+		"limits T8: and one address's storm is its own -- twelve calls at once from"
+		+ " one address are %d answered and %d refused for calling too often, a first"
+		% [first.count("ok"), first.count("calls")] + " call from another is %s, and"
+		% ("answered" if second.is_empty() else "refused as " + str(second[0]))
+		+ " ten more from ten more addresses find %d left in the bucket every address"
+		% rest.count("ok") + " shares; %d are busy" % rest.count("busy"))
+	door.close()
 	# Three transports from one address are all it may hold.
 	host = await _limits_host("LimitsLiveHost", NetSession.GUESTS_MAX)
 	var a: Node = await _limits_guest("LimitsLiveA")
@@ -1940,6 +2025,73 @@ func _limits_lan() -> void:
 		% ("" if wrong.is_empty() else " -- NOT: " + ", ".join(wrong)))
 
 
+## **T12: nothing a guest said outlives it.** A phone host's run stops draining
+## its guest's events the moment the link drops, so whatever was still queued
+## -- an ENTER, a PERSON, a shout -- used to wait for the next guest, and reach
+## its run as an arrival that guest never made. Now it goes with the guest,
+## whether it left or was cut, and the next guest finds nothing. A dedicated
+## host forgets what one guest said and keeps the other's.
+func _limits_leftovers() -> void:
+	var host: Node = await _limits_host("LimitsLeftoversHost")
+	var person := Wire.person_payload(true, {&"cytostome": 1, &"flagellum": 1},
+		[&"cytostome", &"flagellum"])
+	# One that leaves with an ENTER, a PERSON and a shout still waiting.
+	var gone: Node = await _limits_guest("LimitsLeftoversLeaves")
+	gone.send_event(Wire.EVENT_PERSON, person)
+	gone.send_event(Wire.EVENT_ENTER, Wire.enter_payload(26.0))
+	gone.shout(Vector2(1.0, 2.0), 26.0, 1100.0)
+	await _limits_until(func() -> bool:
+		return (host.pond_events as Array).size() >= 2 and (host.heard as Array).size() >= 1)
+	var queued := (host.pond_events as Array).size() + (host.heard as Array).size()
+	gone.close()
+	await _limits_until(func() -> bool: return int(host.link) == NetSession.Link.LISTENING)
+	var after_leave := (host.pond_events as Array).size() + (host.heard as Array).size()
+	# One that is cut with an ENTER waiting: a frame over the cap.
+	var cut: Node = await _limits_guest("LimitsLeftoversCut")
+	cut.send_event(Wire.EVENT_ENTER, Wire.enter_payload(26.0))
+	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
+	var over := Wire.event(9, Wire.EVENT_PERSON, PackedByteArray())
+	over.resize(Wire.GUEST_FRAME_MAX + 1)
+	cut._to(int(cut.get("_host_id")), over)
+	await _limits_until(func() -> bool: return int(host.gate_counts["cuts"]) >= 1)
+	var after_cut := (host.pond_events as Array).size() + (host.heard as Array).size()
+	# Its minute served, by hand, and the next guest finds nothing waiting.
+	(host.get("_book") as Dictionary)["127.0.0.1"]["barred_until"] = 0.0
+	var next: Node = await _limits_guest("LimitsLeftoversNext")
+	var joined := int(next.link) == NetSession.Link.TOGETHER
+	await _wait(0.2)
+	var for_next := (host.pond_events as Array).size() + (host.heard as Array).size()
+	_says(queued == 3 and after_leave == 0 and after_cut == 0 and joined and for_next == 0,
+		"limits T12: a phone host's guest leaves with %d things it said still waiting,"
+		% queued + " and another is cut with an ENTER waiting; both go with them, and"
+		+ " the next guest finds %d" % for_next)
+	await _limits_close([host, gone, cut, next])
+	# A dedicated host: one guest leaves, and only what it said goes.
+	host = await _limits_host("LimitsLeftoversServer", NetSession.GUESTS_MAX)
+	var a: Node = await _limits_guest("LimitsLeftoversA")
+	var b: Node = await _limits_guest("LimitsLeftoversB")
+	var a_id: int = a.my_id()
+	var b_id: int = b.my_id()
+	a.send_event(Wire.EVENT_ENTER, Wire.enter_payload(26.0))
+	a.shout(Vector2(3.0, 4.0), 26.0, 1100.0)
+	b.send_event(Wire.EVENT_ENTER, Wire.enter_payload(28.0))
+	await _limits_until(func() -> bool: return (host.inbox as Array).size() >= 3)
+	var before := (host.inbox as Array).size()
+	a.close()
+	await _limits_until(func() -> bool: return int(host.peer_count()) == 1)
+	var from_a := 0
+	var from_b := 0
+	for said: Array in host.inbox:
+		from_a += 1 if int(said[0]) == a_id else 0
+		from_b += 1 if int(said[0]) == b_id else 0
+	var load: Dictionary = host.get("_inbox_load")
+	_says(before == 3 and from_a == 0 and from_b == 1 and not load.has(a_id)
+			and int(b.link) == NetSession.Link.TOGETHER,
+		"limits T12: a dedicated host holding %d events from two guests forgets the" % before
+		+ " two from the one that left (%d left) and keeps the other's (%d)" % [from_a, from_b])
+	await _limits_close([host, a, b])
+
+
 ## A host of its own, for one test: its own socket, so its own door.
 func _limits_host(named: String, guests: int = 1) -> Node:
 	var host: Node = await _session(named)
@@ -1975,16 +2127,21 @@ func _limits_until(done: Callable, seconds: float = SETTLE) -> float:
 	return _now() - from
 
 
+## Closes every session and hangs up every Rogue in [param nodes] that is still
+## there -- a test may have closed some itself.
 func _limits_close(nodes: Array) -> void:
 	for node: Variant in nodes:
+		if not is_instance_valid(node):
+			continue
 		if node is Rogue:
 			(node as Rogue).hang_up()
-		elif node is Node and is_instance_valid(node):
+		elif node is Node:
 			(node as Node).close()
 	await _wait(0.3)
 
 
-## True when a session's counts show nothing refused, struck, cut or dropped.
+## True when a session's counts show nothing refused, struck, cut or dropped --
+## and, in watch mode, nothing the budgets would have dropped or cut either.
 func _limits_clean(counts: Dictionary) -> bool:
 	return _limits_unclean([counts]).is_empty()
 
@@ -1994,7 +2151,8 @@ func _limits_unclean(all: Array) -> String:
 	var bad: Array[String] = []
 	for counts: Dictionary in all:
 		for key: String in ["refused", "cuts", "bars", "strikes", "oversize", "malformed",
-				"unknown", "dropped", "queue_dropped", "strays"]:
+				"unknown", "dropped", "queue_dropped", "strays", "would_drop",
+				"would_strikes", "would_cuts"]:
 			if float(counts.get(key, 0)) != 0.0:
 				bad.append("%s %s" % [key, str(counts[key])])
 	return "" if bad.is_empty() else " -- NOT: " + ", ".join(bad)
@@ -4110,7 +4268,8 @@ func _check_pond() -> void:
 	var tally: Array = _tally_end()
 	_says(_limits_clean(tally[0]) and int(tally[1]) == 3,
 		"pond: across %d sessions the gate struck nothing, dropped nothing, cut" % int(tally[1])
-		+ " nothing and refused nobody -- the host's socket took %.1f KB and %d"
+		+ " nothing and refused nobody, and the budgets it watches would have done"
+		+ " none of it either -- the host's socket took %.1f KB and %d"
 		% [float(tally[0]["peak_bytes"]) / 1024.0, roundi(float(tally[0]["peak_datagrams"]))]
 		+ " datagrams in its busiest second%s" % _limits_unclean([tally[0]]))
 	print("[net-probe] NOTE pond took %.1f s and %d frames, at most %d a second"
@@ -4855,10 +5014,16 @@ func _check_server() -> void:
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
+	# **Until both have it**: each guest's snapshots run on a 50 ms schedule of
+	# its own (pond.gd `_flush_guest`), so the other guest can be a snapshot
+	# behind the one hunted -- and its mirror can hold an older body in slot 5
+	# somewhere else. So the wait is for the hunted guest's hunter and for the
+	# posed body, where it was posed, in the other guest's water.
 	var flagged := await _server_until(func() -> bool:
 		hunter.pos = held_at
 		hunter.heading = _pond_face(held_at, b_home)
-		return int(b_food.hunter()) == 5, pins)
+		return int(b_food.hunter()) == 5 and bool(a_food.bodies()[5].seeded) \
+			and (a_food.bodies()[5].pos as Vector2).distance_to(held_at) < 30.0, pins)
 	var a_sees_hunter := int(a_food.hunter())
 	var a_has_it: bool = bool(a_food.bodies()[5].seeded)
 	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
@@ -4992,7 +5157,8 @@ func _check_server() -> void:
 	var tally: Array = _tally_end()
 	_says(_limits_clean(tally[0]) and int(tally[1]) == 7,
 		"server: across the server and all six guests the gate struck nothing,"
-		+ " dropped nothing, cut nothing and refused nobody at the door -- its"
+		+ " dropped nothing, cut nothing and refused nobody at the door, and the"
+		+ " budgets it watches would have done none of it either -- its"
 		+ " socket took %.1f KB and %d datagrams in its busiest second%s"
 		% [float(tally[0]["peak_bytes"]) / 1024.0, roundi(float(tally[0]["peak_datagrams"])),
 			_limits_unclean([tally[0]])])

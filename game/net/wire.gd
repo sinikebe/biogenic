@@ -145,10 +145,11 @@ const REFUSE_FULL := 0x02
 ## The guest connected and then said nothing we understood.
 const REFUSE_SILENT := 0x03
 ## **The guest broke the protocol, again and again**: frames no writer in this
-## file produces, or far more of them than any body sends (net-hardening.md
-## A.4). New in the life of protocol 4, and it needed no bump: every protocol-4
-## build reads a reason it does not know as [method reason_says]'s "refused",
-## over "the other end hung up".
+## file produces, or -- once a host enforces its budgets -- far more of them
+## than any body sends (net-hardening.md A.4). The host also bars the address
+## for a minute. New in the life of protocol 4, and it needed no bump: every
+## protocol-4 build reads a reason it does not know as [method reason_says]'s
+## "refused", over "the other end hung up".
 const REFUSE_BROKEN := 0x04
 
 const HELLO_SIZE := 3
@@ -339,6 +340,12 @@ const CONTACT_KILLED := 6
 ## the HELLO and WELCOME tails -- so a reader takes anything up to this and
 ## reads the prefix, which is what lets it refuse that protocol with the
 ## sentence instead of a shrug.
+##
+## **So a later protocol's HELLO must stay within these 64 bytes** to be told
+## why a host of this build refuses it. Longer, and the host hangs up before
+## the handshake with no sentence at all; longer than [constant GUEST_FRAME_MAX]
+## (272), and it is the oversize cut, which bars the caller's address for a
+## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
 ## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
 ## `len | a name of NAME_MAX letters | tier`. 145 bytes. An unknown name is
