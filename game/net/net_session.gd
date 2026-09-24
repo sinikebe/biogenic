@@ -24,6 +24,18 @@ extends Node
 ## and addresses every later frame to that. `send_bytes`'s broadcast id 0 is
 ## never used either: every send names a peer out of the bookkeeping below.
 ##
+## **A host reads its own socket, and a stranger is judged at the door**
+## (docs/design/net-hardening.md, part A). A guest keeps SceneMultiplayer: it
+## only ever calls out, to one host. A host no longer hands it the socket,
+## because it ran every command a datagram named -- a path, an RPC, a spawn, a
+## relay -- in C++, for anybody, before a line of this file saw the bytes. So
+## the host polls its ENet peer itself ([method _pump]) and nothing but a RAW
+## frame goes further; every frame from either end then passes one gate
+## ([method _admit_frame]) that checks its size, its kind and what it parses
+## to, and charges the sender's budgets. Who may connect at all is decided in
+## [method _on_peer_connected], before any bookkeeping exists for them. None of
+## it changes a byte on the wire: a protocol-4 build on either end cannot tell.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
@@ -130,12 +142,13 @@ const EARLY_GAP := 0.012
 ## the person you are playing with, and dropping them is a worse answer than
 ## saying so.
 const SILENCE := 6.0
-## More than one guest is refused with a sentence rather than by the transport,
-## so the extra device learns why. Four slots because a half-dead peer holds one
-## until ENet times it out, and a retry has to be able to get in past it. A
-## host that takes more than one guest ([member guests_max]) gets one slot more
-## for each.
-const MAX_PEERS := 4
+## **Callers still to say hello, at once: two.** A third is cut on arrival. A
+## real guest says hello the moment its transport connects, so a caller left
+## waiting is one in the middle of saying it -- or one that never will, which
+## [constant HELLO_GRACE] hangs up on. More than one guest is still refused
+## with a sentence rather than by the transport, so the extra device learns
+## why; see [method _slots] for how many transports a host holds at all.
+const PENDING_MAX := 2
 ## **The most guests any host takes: two**, a dedicated host's (`game/server/`),
 ## each of whom sees the other as the friend. A phone takes one.
 const GUESTS_MAX := 2
@@ -146,8 +159,13 @@ const HEARD_MAX := 8
 ## for the same reason as [constant HEARD_MAX] and far higher, because these
 ## are not sensations: an arrival bursts one GENOME per body in the send set,
 ## sixty-eight at most, and the run drains every frame it exists. A cap reached
-## is a run that is not there, and dropping the oldest is then harmless.
+## is a run that is not there, and dropping the oldest is then harmless. **A
+## guest's cap**, on what its host sends: a host holds each of its guests to
+## [constant QUEUE_FRAMES] and [constant QUEUE_BYTES].
 const POND_EVENTS_MAX := 512
+## The same queue by weight: 128 KB, twelve times the largest arrival burst --
+## sixty-eight GENOMEs of 155 bytes and an ARRIVE and a PERSON.
+const POND_EVENTS_BYTES := 131072
 ## **How many of the other cell's frames are kept: two.** The newest is the one
 ## a view draws from -- it carries a place and the motion to carry it forward
 ## by. The one before it is there to be read: it is the interval the stream is
@@ -231,6 +249,96 @@ const REFUSE_LINGER := 1.0
 const THROTTLE_INTERVAL := 5000
 const THROTTLE_ACCELERATION := 2
 const THROTTLE_DECELERATION := 0
+
+# --- The door and the budgets (net-hardening.md A.2-A.6; #56, #58) -----------
+## SceneMultiplayer's `NETWORK_COMMAND_RAW`, with no flag bits: the byte a
+## guest's `send_bytes` puts in front of every frame (`scene_multiplayer.cpp`
+## in 4.7-stable). A host reads its own socket and takes it off. Anything else
+## in that byte is a command this game never sends.
+const RAW := 3
+## **New connections from one address: eight at once, then one every three
+## seconds.** A dropped guest rejoining, a friend retrying after "already two",
+## a phone that backed out of the join screen and came back. The plan said four
+## at once; `tools/net_probe.gd`'s server section calls six times from one
+## loopback address in about six seconds, and four would have made it pass or
+## fail on the runner's speed.
+const CALLS_BURST := 8.0
+const CALLS_RATE := 1.0 / 3.0
+## New connections from every address together: ten a second. What a storm
+## from many addresses can cost.
+const CALLS_ALL_BURST := 10.0
+const CALLS_ALL_RATE := 10.0
+## Transports one address may hold at once: two friends behind one NAT, and a
+## retry.
+const LIVE_PER_ADDRESS := 3
+## **Barred after an abuse cut**: a minute, and ten for a second one inside ten
+## minutes. Silence, an old protocol and "already two" are not abuse.
+const BAR_FIRST := 60.0
+const BAR_AGAIN := 600.0
+## The addresses a host remembers, and how long one it has not heard from is
+## kept: the limiter's own memory is bounded too.
+const BOOK_MAX := 1024
+const BOOK_IDLE := 600.0
+## **What a host takes from each guest, a second and at once** (A.4). The
+## worst an honest guest sends is 83 state frames a second -- a body knocked
+## every frame, at about 80 frames a second, never closer than
+## [constant EARLY_GAP] -- about one event a second in bursts of two to four,
+## and about 3.5 KB a second. Each limit is at least 40% over that, and the
+## bursts cover what a spike on the link delivers at once: the relay runs in
+## net-hardening.md A.7 measured both.
+const FRAMES_RATE := 120.0
+const FRAMES_BURST := 240.0
+const EVENTS_RATE := 5.0
+const EVENTS_BURST := 20.0
+const BYTES_RATE := 16384.0
+const BYTES_BURST := 32768.0
+## **What a guest takes from its host: sanity, not policy.** A guest never
+## cuts its host; these only bound what a broken one can make it do. Over a
+## POND with every one of 83 state frames a second, and over the seventy
+## events that answer an ENTER.
+const HOST_FRAMES_RATE := 600.0
+const HOST_FRAMES_BURST := 1200.0
+const HOST_EVENTS_RATE := 200.0
+const HOST_EVENTS_BURST := 400.0
+const HOST_BYTES_RATE := 262144.0
+const HOST_BYTES_BURST := 524288.0
+## **One guest's events waiting for the host's run: 64 frames and 16 KB**, the
+## oldest dropped past either, as the old cap did. The run drains them every
+## frame, so a full queue is a run that is not there. Kept per guest, so one
+## guest of a dedicated host's two cannot push out the other's.
+const QUEUE_FRAMES := 64
+const QUEUE_BYTES := 16384
+## **The ledger** (A.4): points for each offence, decaying at one a second;
+## ten is a cut. Two malformed frames leave a guest connected and three inside
+## two seconds do not -- and a guest on this protocol never sends one, because
+## the writers never write what the readers refuse (wire.gd).
+const STRIKE_CUT := 10.0
+const STRIKE_DECAY := 1.0
+const STRIKE_MALFORMED := 4.0
+const STRIKE_FLOOD := 6.0
+const STRIKE_BYTES := 6.0
+const STRIKE_EVENTS := 2.0
+## **A flood**: every 120 frames dropped over the frame budget inside one
+## second is a flood strike -- so a burst of them cuts at once, and a steady
+## overrun of 130 a second in about two.
+const FLOOD_DROPS := 120
+const FLOOD_WINDOW := 1.0
+## **A host stall is not a flood.** A phone host that stalls gets the whole
+## stall's frames at once -- software GL at 2400x1080 has taken over 100 ms a
+## frame -- so a frame that comes more than this after the one before hands
+## every budget the gap's whole refill, uncapped by the burst...
+const STALL_GAP := 0.25
+## ...counted up to this long: a peer silent for longer is past ENet's own
+## timeout, and gone.
+const STALL_CREDIT := 10.0
+## **Telemetry, rate-limited**: one line per kind and address this often, and
+## the next says how many like it were held back.
+const NOTE_EVERY := 10.0
+const NOTES_MAX := 256
+## **Saturation**: a line when a second brings more than this to the socket.
+## Two real guests send about 7 KB and 170 datagrams a second.
+const SATURATED_BYTES := 65536.0
+const SATURATED_DATAGRAMS := 2000.0
 
 var link := Link.OFF
 ## The heading a screen puts on the current state of the link, when that state
@@ -334,15 +442,125 @@ var _out_of_water := false
 ## drained to the newest by it, independently of the state frames.
 var _out_pond_seq := 0
 
+## **What the door and the gate have done** since this end last hosted or
+## joined -- callers refused, frames dropped, points struck, peers cut -- for
+## tools and for the log. Kept after [method close], so a tool can read a
+## session's last word. Reset by [method host] and [method join].
+var gate_counts: Dictionary = {}
+## **The host's address book** (A.5): one entry per caller, by
+## [method Lan.source_key] -- its connection bucket and whether it is barred.
+## Bounded by [constant BOOK_MAX]; cleared with the socket.
+var _book: Dictionary = {}
+## Peer id -> caller key, for every transport the host admitted, until ENet
+## says it has gone: what [constant LIVE_PER_ADDRESS] counts.
+var _addresses: Dictionary = {}
+## New connections from every address together.
+var _calls_all: Bucket = null
+## `kind|key` -> `[next line allowed, lines held back]`. See [method _note].
+var _notes: Dictionary = {}
+## When this node's last frame began: the gap a stall is measured by.
+var _frame_at := 0.0
+## When the socket's arrivals were last counted, for the saturation line.
+var _saturation_from := 0.0
+## [member pond_events] by weight, and a dedicated host's [member inbox] by
+## guest: peer id -> `[frames, bytes]`.
+var _pond_bytes := 0
+var _inbox_load: Dictionary = {}
+
+
+## **A token bucket, on wall time** (A.4). [member tokens] refill at
+## [member rate] a second up to [member burst]; a take that finds too few takes
+## nothing and says no.
+class Bucket extends RefCounted:
+	var rate := 0.0
+	var burst := 0.0
+	var tokens := 0.0
+	var at := 0.0
+	## The fewest tokens a take has ever left: how deep traffic drew it.
+	var low := 0.0
+
+	func _init(per_second: float, most: float, now: float) -> void:
+		rate = per_second
+		burst = most
+		tokens = most
+		low = most
+		at = now
+
+	func take(cost: float, now: float) -> bool:
+		# An overfull bucket -- a stall's refill, see [method top_up] -- is
+		# spent down, not trimmed back.
+		if tokens < burst:
+			tokens = minf(burst, tokens + rate * maxf(now - at, 0.0))
+		at = now
+		if tokens < cost:
+			return false
+		tokens -= cost
+		low = minf(low, tokens)
+		return true
+
+	## A stall of [param seconds]: the whole gap's refill at once, however
+	## far past the burst that is.
+	func top_up(seconds: float) -> void:
+		tokens = maxf(tokens, rate * seconds)
+
+	## What a take could spend now, without taking.
+	func level(now: float) -> float:
+		if tokens >= burst:
+			return tokens
+		return minf(burst, tokens + rate * maxf(now - at, 0.0))
+
+
+## **One peer's budgets and its ledger** (A.4). A host holds each guest to
+## the strict numbers and strikes it; a guest holds its host to the lenient
+## ones, and never strikes anything.
+class Guard extends RefCounted:
+	var frames: Bucket = null
+	var events: Bucket = null
+	var bytes: Bucket = null
+	var points := 0.0
+	var points_at := 0.0
+	## The flood window: when it began, frames dropped in it, strikes given.
+	var flood_at := -INF
+	var flood_drops := 0
+	var flood_struck := 0
+	## The frame a stall's refill was last handed out in.
+	var topped := -1
+	## What was taken and what was dropped, for tools and the log.
+	var taken := 0
+	var taken_bytes := 0
+	var taken_events := 0
+	var dropped := 0
+
+	func _init(strict: bool, now: float) -> void:
+		frames = Bucket.new(FRAMES_RATE if strict else HOST_FRAMES_RATE,
+			FRAMES_BURST if strict else HOST_FRAMES_BURST, now)
+		events = Bucket.new(EVENTS_RATE if strict else HOST_EVENTS_RATE,
+			EVENTS_BURST if strict else HOST_EVENTS_BURST, now)
+		bytes = Bucket.new(BYTES_RATE if strict else HOST_BYTES_RATE,
+			BYTES_BURST if strict else HOST_BYTES_BURST, now)
+		points_at = now
+
+	## The points on the ledger now, after their decay.
+	func points_now(now: float) -> float:
+		return maxf(0.0, points - STRIKE_DECAY * maxf(now - points_at, 0.0))
+
+	## Adds [param weight] and returns the total.
+	func strike(weight: float, now: float) -> float:
+		points = points_now(now) + weight
+		points_at = now
+		return points
+
 
 func _ready() -> void:
 	# Beats and timeouts have to keep running while the game is paused, and they
 	# can: SceneTree polls every registered MultiplayerAPI regardless of
 	# `paused`, measured in this container by sending a packet across a paused
-	# tree and watching it land.
+	# tree and watching it land. A host reads its own socket at that same
+	# moment ([method _on_tree_frame]).
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	set_process(false)
 	current = self
+	_zero_counts()
 	_api = SceneMultiplayer.new()
 	# No peer ever talks to another peer, so there is nothing to relay. Off, it
 	# also guarantees a guest is told about exactly one other id -- the host's --
@@ -361,13 +579,27 @@ func _ready() -> void:
 	get_tree().set_multiplayer(_api, get_path())
 
 
+## Back in a tree while hosting -- moved, not closed -- and the socket is read
+## again: a host whose pump was left behind would hear nothing and say nothing.
+func _enter_tree() -> void:
+	if hosting and _peer != null \
+			and not get_tree().process_frame.is_connected(_on_tree_frame):
+		get_tree().process_frame.connect(_on_tree_frame)
+
+
 func _exit_tree() -> void:
 	if current == self:
 		current = null
+	if get_tree().process_frame.is_connected(_on_tree_frame):
+		get_tree().process_frame.disconnect(_on_tree_frame)
 
 
 func _process(_delta: float) -> void:
 	var now := _now()
+	if not hosting:
+		# A guest's frames came in with SceneMultiplayer's poll, before this, so
+		# the next frame's stall gap is measured from here: see [method _top_up].
+		_frame_at = now
 	if link == Link.REACHING:
 		if now - _reach_at >= REACH_TIMEOUT:
 			_give_up(Link.FAILED, "no answer",
@@ -385,8 +617,7 @@ func _process(_delta: float) -> void:
 	for id: int in _hanging_up.keys():
 		if now >= float(_hanging_up[id]):
 			_hanging_up.erase(id)
-			if _peer != null:
-				_peer.disconnect_peer(id, false)
+			_drop_now(id)
 	# **A frame with no report in it is a held body.** Before anything that
 	# sends, so the frame that says so is this one.
 	_held = not _reported
@@ -413,6 +644,7 @@ func host(guests: int = 1) -> bool:
 	if _api == null:
 		return false
 	_reset_socket()
+	_zero_counts()
 	hosting = true
 	guests_max = clampi(guests, 1, GUESTS_MAX)
 	address = Lan.local_address()
@@ -421,16 +653,33 @@ func host(guests: int = 1) -> bool:
 			"this device is not on a network two cells could share.")
 		return false
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(Lan.PORT, MAX_PEERS + guests_max - 1)
+	var err := peer.create_server(Lan.PORT, _slots())
 	if err != OK:
 		_give_up(Link.FAILED, "could not listen",
 			"something else on this device is already using the water.")
 		return false
+	# **Read here, and not by SceneMultiplayer**: `_api` is never handed this
+	# peer, or SceneTree would poll it at the top of every frame and run every
+	# command it carries before the gate saw a byte. See [method _pump].
 	_peer = peer
-	_api.multiplayer_peer = peer
+	peer.peer_connected.connect(_on_peer_connected)
+	peer.peer_disconnected.connect(_on_peer_disconnected)
+	if is_inside_tree() and not get_tree().process_frame.is_connected(_on_tree_frame):
+		get_tree().process_frame.connect(_on_tree_frame)
 	set_process(true)
 	_set_link(Link.LISTENING)
 	return true
+
+
+## **How many transports a host holds at once: a guest's, a caller's still
+## saying hello, and a half-dead predecessor for each guest** -- ENet keeps a
+## vanished peer's slot until it times out, and a retry has to get in past it.
+## Four for a phone, six for the dedicated server's two guests. No more,
+## because ENet will buffer up to 32 MiB in each for a peer that sends it
+## fragments (multiplayer.md §3, point 6), and the count is the one lever
+## GDScript has on that.
+func _slots() -> int:
+	return 2 * guests_max + PENDING_MAX
 
 
 ## Reach for a host. [param at] is a dotted IPv4 the tap code produced; this
@@ -439,6 +688,7 @@ func join(at: String) -> bool:
 	if _api == null:
 		return false
 	_reset_socket()
+	_zero_counts()
 	hosting = false
 	guests_max = 1
 	address = at
@@ -588,6 +838,7 @@ func send_pond(your_wound: float, bodies: Array) -> int:
 ## Every shared-pond event heard since the last drain, as raw frames, oldest
 ## first. Empties the queue.
 func drain_pond_events() -> Array:
+	_pond_bytes = 0
 	if pond_events.is_empty():
 		return []
 	var out := pond_events
@@ -598,6 +849,7 @@ func drain_pond_events() -> Array:
 ## A host of more than one guest: every event heard since the last drain, as
 ## `[peer id, raw frame]`, oldest first. Empties [member inbox].
 func drain_inbox() -> Array:
+	_inbox_load.clear()
 	if inbox.is_empty():
 		return []
 	var out := inbox
@@ -637,6 +889,17 @@ func quiet_for_of(id: int) -> float:
 	if not bool(peer.get("greeted", false)):
 		return -1.0
 	return _now() - float(peer["heard"])
+
+
+## **The points on peer [param id]'s ledger now**, after their decay: 0 for a
+## peer in good standing or one this end does not have. A host cuts at
+## [constant STRIKE_CUT]; a guest never strikes its host, so it always reads 0
+## there. For tools and the log.
+func points_of(id: int) -> float:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		return 0.0
+	return (peer["guard"] as Guard).points_now(_now())
 
 
 ## [method send_event], to guest [param id] alone, **on that guest's own
@@ -721,6 +984,13 @@ func peer_count() -> int:
 ## This session's own peer id, as the transport assigned it. Never compared
 ## against a constant anywhere; it exists to be printed.
 func my_id() -> int:
+	if hosting:
+		# A host's SceneMultiplayer never holds the socket (A.1), so it is asked
+		# of the transport.
+		if _peer == null \
+				or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+			return 0
+		return _peer.get_unique_id()
 	return 0 if _api == null else _api.get_unique_id()
 
 
@@ -800,7 +1070,31 @@ func peers_say() -> String:
 # ---------------------------------------------------------------------------
 
 func _on_peer_connected(id: int) -> void:
+	# **Every peer, before anything else** -- one this host is about to refuse
+	# included: it is ENet's setting and costs nothing (issue #61).
 	_steady_throttle(id)
+	var from := ""
+	if hosting:
+		# **The door** (A.5), before any bookkeeping exists for the caller. ENet
+		# offers no earlier place to say no to an address, and a cut inside this
+		# signal is safe with the caller's packets already queued -- measured
+		# on 4.7-stable, and held by the probe's `limits` section (T6).
+		from = _address_of(id)
+		var no := _admit(from)
+		if not no.is_empty():
+			gate_counts["refused"] += 1
+			gate_counts["refused_" + str(no[0])] += 1
+			# A line per caller -- but a refusal that is about everybody, a
+			# caller from outside or a door taking no calls at all, is one line
+			# for all of them. A storm from a thousand addresses is then a line
+			# every ten seconds, and the limiter only ever remembers callers
+			# the door let near it.
+			var about_all: bool = no[0] == "lan" or no[0] == "busy"
+			_note("refused", str(no[0]) if about_all else Lan.source_key(from),
+				"[net] refused %s: %s" % [from, no[1]])
+			_drop_now(id)
+			return
+		_addresses[id] = Lan.source_key(from)
 	_peers[id] = {
 		"id": id,
 		"protocol": 0,
@@ -818,6 +1112,11 @@ func _on_peer_connected(id: int) -> void:
 		# numbers each one's events and snapshots apart.
 		"out_event": 0,
 		"out_pond": 0,
+		# Where it calls from -- only a host asks -- and what it may still
+		# send (A.4). Never read by `_take_state` or `_take_event`, which tools
+		# drive with a dictionary of their own.
+		"address": from,
+		"guard": Guard.new(hosting, _now()),
 	}
 	if hosting:
 		# The host says nothing first. It waits to be greeted, so the first
@@ -832,6 +1131,7 @@ func _on_peer_connected(id: int) -> void:
 
 func _on_peer_disconnected(id: int) -> void:
 	_peers.erase(id)
+	_addresses.erase(id)
 	# Gone already, so there is nothing left to hang up on: a refused guest
 	# usually drops the line itself inside REFUSE_LINGER, and cutting it again
 	# afterwards is an ENet error in the log and nothing else.
@@ -839,9 +1139,7 @@ func _on_peer_disconnected(id: int) -> void:
 	if _greeted_count() == 0:
 		_told = []
 	if hosting:
-		if _peers.is_empty() and link == Link.TOGETHER:
-			_say("they left", "the other cell went. show the code again.")
-			_set_link(Link.LISTENING)
+		_lost_guest()
 		return
 	if id == _host_id:
 		_host_id = 0
@@ -870,9 +1168,16 @@ func _on_server_disconnected() -> void:
 
 
 func _on_peer_packet(id: int, frame: PackedByteArray) -> void:
-	var peer: Dictionary = _peers.get(id, {})
-	if not peer.is_empty():
-		peer["heard"] = _now()
+	# **The gate, first** (A.2). Everything the far end sends comes through
+	# here -- off a host's own socket, off a guest's SceneMultiplayer, and out
+	# of `tools/net_lag.gd`'s link model, which calls this directly -- so all of
+	# it is gated, and nothing below ever reads a frame the gate has not sized.
+	if not _admit_frame(id, frame):
+		return
+	var peer: Dictionary = _peers[id]
+	# Stamped only on a frame the gate took, so junk cannot keep a peer looking
+	# fresh.
+	peer["heard"] = _now()
 	match Wire.kind(frame):
 		Wire.KIND_HELLO:
 			_take_hello(id, frame)
@@ -924,7 +1229,7 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		_refuse(id, Wire.REFUSE_FULL)
 		return
 	peer["greeted"] = true
-	_to(id, Wire.welcome(_speaks(), _api.get_unique_id()))
+	_to(id, Wire.welcome(_speaks(), my_id()))
 	# A new listener has been told nothing, so the next report goes at once.
 	_told = []
 	_say("", "")
@@ -947,7 +1252,8 @@ func _take_welcome(id: int, frame: PackedByteArray) -> void:
 	# transport is the authority, because it is what `send_bytes` addresses.
 	var claimed := Wire.welcome_host_id(frame)
 	if claimed != id:
-		push_warning("[net] host calls itself %d, transport says %d" % [claimed, id])
+		_note("host id", str(id), "[net] host calls itself %d, transport says %d"
+			% [claimed, id], true)
 	_host_id = id
 	var peer: Dictionary = _peers.get(id, {})
 	if not peer.is_empty():
@@ -970,6 +1276,14 @@ func _take_refuse(frame: PackedByteArray) -> void:
 	elif reason == Wire.REFUSE_FULL:
 		_give_up(Link.REFUSED, "already two",
 			"that cell is already swimming with somebody.")
+	elif reason == Wire.REFUSE_BROKEN:
+		# **Cut for sending what the host cannot read** (net-hardening.md A.4).
+		# Two honest builds on one protocol never get here, so for a player it
+		# means one of the two is broken, and an update is the only fix there
+		# is. A build that predates this reason reads the line below instead.
+		_give_up(Link.REFUSED, Wire.reason_says(reason),
+			"the other end could not read what this game sent. take the update"
+			+ " from the launcher on both, and call again.")
 	else:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end hung up.")
@@ -991,9 +1305,12 @@ func _skew_says(theirs: int) -> String:
 ## kept in [member _hanging_up] so the line still gets cut if the other end
 ## decides to stay.
 func _refuse(id: int, reason: int) -> void:
+	var from := str((_peers.get(id, {}) as Dictionary).get("address", ""))
 	_to(id, Wire.refuse(_speaks(), reason))
 	_peers.erase(id)
 	_hanging_up[id] = _now() + REFUSE_LINGER
+	_note("hung up", Lan.source_key(from), "[net] hung up on %d (%s): %s"
+		% [id, from, Wire.reason_says(reason)])
 
 
 # ---------------------------------------------------------------------------
@@ -1072,23 +1389,23 @@ func _take_event(peer: Dictionary, frame: PackedByteArray) -> void:
 	if seq < 0 or seq <= int(peer["in_event"]):
 		return
 	if seq > int(peer["in_event"]) + 1 and int(peer["in_event"]) >= 0:
-		push_warning("[net] event gap: %d after %d" % [seq, peer["in_event"]])
+		_note("event gap", str(peer.get("id", 0)), "[net] event gap: %d after %d"
+			% [seq, peer["in_event"]], true)
 	peer["in_event"] = seq
 	if guests_max > 1:
 		# **A host of several**: who said it matters -- a shout is passed on to
 		# the other guest, an ENTER is answered to the one who sent it -- so
 		# every event goes into one queue with its sender, in arrival order.
 		inbox.append([int(peer["id"]), frame])
-		while inbox.size() > POND_EVENTS_MAX:
-			inbox.remove_at(0)
+		_queue_inbox(int(peer["id"]), frame.size())
 		return
 	if Wire.event_type(frame) != Wire.EVENT_SHOUT:
-		# A shared-pond event, kept whole for the run, in order. An unknown type
-		# is kept as well and ignored there: it is the reader that knows what
-		# it cannot read, and the order of the ones it can is what matters.
+		# A shared-pond event, kept whole for the run, in order. The gate only
+		# lets through a type this protocol knows, and on a host only one that
+		# parses -- so what waits here is what the run can read.
 		pond_events.append(frame)
-		while pond_events.size() > POND_EVENTS_MAX:
-			pond_events.remove_at(0)
+		_pond_bytes += frame.size()
+		_queue_pond_events()
 		return
 	var said := Wire.take_shout(frame)
 	if said.is_empty():
@@ -1096,6 +1413,525 @@ func _take_event(peer: Dictionary, frame: PackedByteArray) -> void:
 	heard.append(said)
 	while heard.size() > HEARD_MAX:
 		heard.remove_at(0)
+
+
+# ---------------------------------------------------------------------------
+# **The boundary** (docs/design/net-hardening.md, part A): the host's socket,
+# the gate every frame passes, the ledger, the door, and what the log is told.
+# ---------------------------------------------------------------------------
+
+## **When a host reads its socket: where SceneTree used to poll it for us.**
+## SceneTree emits `process_frame` straight after polling every MultiplayerAPI
+## and before any node processes, paused or not -- so a guest's frames land
+## when they did before A, wherever this node is parented and whatever its
+## priority: before the run reads them, and before the dedicated server's
+## node, this one's parent, steps the pond. Connected by [method host], so it
+## runs ahead of any `await` on the same signal made after it.
+func _on_tree_frame() -> void:
+	if not hosting:
+		return
+	var now := _now()
+	_pump()
+	_count_arrivals(now)
+	# After the pump, so a stall's gap is measured from the last frame, not
+	# this one: see [method _top_up].
+	_frame_at = now
+
+
+## **The host's socket, read by the host and by nothing else** (A.1). Every
+## datagram that arrived since the last frame, oldest first, into
+## [method _take_datagram], once a frame from [method _on_tree_frame].
+##
+## A handler below may close the session mid-way (a screen answering
+## `link_changed`); the loop stops the moment [member _peer] is not the peer it
+## began with.
+func _pump() -> void:
+	var enet := _peer
+	if enet == null \
+			or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		return
+	enet.poll()
+	while _peer == enet and enet.get_available_packet_count() > 0:
+		var from := enet.get_packet_peer()
+		_take_datagram(from, enet.get_packet())
+
+
+## **One datagram, as ENet delivered it.** Oversize is judged before anything
+## is copied out of it. Then the RAW byte a protocol-4 guest's `send_bytes`
+## puts in front of every frame is checked and taken off; any other command
+## byte -- a path to cache, an RPC, a spawn -- is one this game never sends,
+## and it is never run.
+func _take_datagram(id: int, bytes: PackedByteArray) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		# Somebody refused, or cut, whose datagrams were already in: counted,
+		# and never read.
+		gate_counts["strays"] += 1
+		return
+	if bytes.size() - 1 > Wire.GUEST_FRAME_MAX:
+		_oversize(id, bytes.size() - 1)
+		return
+	if bytes.size() < 2 or bytes[0] != RAW:
+		if not bool(peer["greeted"]):
+			_cut(id, "spoke before its hello", false, false)
+		else:
+			_malformed(id, "a command byte %d, where a frame starts with %d"
+				% [bytes[0] if not bytes.is_empty() else -1, RAW])
+		return
+	_on_peer_packet(id, bytes.slice(1))
+
+
+## **The gate** (A.2): true to take [param frame] from peer [param id], false
+## to drop it. The first step that fails ends it, and no byte past a size
+## already checked is ever read.
+##
+## A host is strict with its guests -- a frame no writer produces is a strike,
+## and a cut ends the worst -- and a guest is lenient with its host: it drops
+## what it cannot use and never punishes, because a host is not somebody a
+## guest can refuse.
+func _admit_frame(id: int, frame: PackedByteArray) -> bool:
+	# 1. Somebody this end is talking to: not refused, not cut, not unknown.
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		return false
+	# 2. The direction's cap, before any byte past the first is read. Over it
+	# is the one offence that bypasses the ledger: it is how memory gets taken.
+	var size := frame.size()
+	if size > (Wire.GUEST_FRAME_MAX if hosting else Wire.HOST_FRAME_MAX):
+		_oversize(id, size)
+		return false
+	if size == 0:
+		return _malformed(id, "an empty frame")
+	var kind := Wire.kind(frame)
+	# 3. **Before the handshake, a host hears one thing: a HELLO.** A guest
+	# says it the moment its transport connects, so anything else first is not
+	# a guest. A guest is lenient here on purpose: the host's first STATE can
+	# overtake its WELCOME on another channel, and is simply not read yet.
+	if hosting and not bool(peer["greeted"]):
+		if kind == Wire.KIND_HELLO and Wire.size_ok(kind, 0, size, false):
+			return true
+		_cut(id, "spoke before its hello", false, false)
+		return false
+	# 4-5. A kind this protocol knows must come from the side that sends it, at
+	# a size its writer produces.
+	var type := 0
+	if kind == Wire.KIND_EVENT:
+		if size < Wire.EVENT_HEADER:
+			return _malformed(id, "an event too short to say what it is")
+		type = frame[5]
+	var known := Wire.known(kind, type)
+	if known and not Wire.size_ok(kind, type, size, not hosting):
+		return _malformed(id, "%s of %d bytes from the %s" % [_kind_says(kind, type),
+			size, "guest" if hosting else "host"])
+	if hosting and kind == Wire.KIND_HELLO:
+		return _malformed(id, "a second hello")
+	# 6. The budgets: every frame, known or not, and every event.
+	var guard: Guard = peer["guard"]
+	var now := _now()
+	_top_up(guard, now)
+	if not guard.frames.take(1.0, now):
+		_over_frames(id, guard, now)
+		return false
+	if not guard.bytes.take(float(size), now):
+		_over_budget(id, guard, STRIKE_BYTES, "bytes", "over its byte budget"
+			+ " (%d a second, %d at once)" % [roundi(guard.bytes.rate),
+				roundi(guard.bytes.burst)])
+		return false
+	if kind == Wire.KIND_EVENT and not guard.events.take(1.0, now):
+		_over_budget(id, guard, STRIKE_EVENTS, "events", "over its event budget"
+			+ " (%d a second, %d at once)" % [roundi(guard.events.rate),
+				roundi(guard.events.burst)])
+		return false
+	# 8. **A kind or type from a later build**, which the wire promises to
+	# ignore: dropped, with no strike, once the budgets have paid for it. An
+	# event keeps its place in the order, so the next one is not a gap.
+	if not known:
+		gate_counts["unknown"] += 1
+		if kind == Wire.KIND_EVENT:
+			peer["in_event"] = maxi(int(peer["in_event"]), Wire.seq_of(frame))
+		return false
+	# 7. **Parse or reject**, on a host, with the readers pond.gd uses: nothing
+	# reaches a queue that the run would refuse a frame later.
+	if hosting and not _parses(kind, type, frame):
+		return _malformed(id, "%s that does not read" % _kind_says(kind, type))
+	# 9. Taken.
+	guard.taken += 1
+	guard.taken_bytes += size
+	if kind == Wire.KIND_EVENT:
+		guard.taken_events += 1
+	return true
+
+
+## **What a guest's frame reads to, on a host**: every event through the
+## `Wire.take_*` that pond.gd uses for it, and a state frame that says it has
+## a body through [method Wire.state_body] -- one carrying a NaN used to clear
+## the friend's track as if they had died. Reserved flag bits are not judged:
+## the wire promises to ignore them.
+static func _parses(kind: int, type: int, frame: PackedByteArray) -> bool:
+	if kind == Wire.KIND_STATE:
+		return (frame[5] & Wire.STATE_ALIVE) == 0 or not Wire.state_body(frame).is_empty()
+	if kind != Wire.KIND_EVENT:
+		return true
+	match type:
+		Wire.EVENT_SHOUT:
+			return not Wire.take_shout(frame).is_empty()
+		Wire.EVENT_ENTER:
+			return not Wire.take_enter(frame).is_empty()
+		Wire.EVENT_PERSON:
+			return not Wire.take_person(frame).is_empty()
+		Wire.EVENT_DIED:
+			return not Wire.take_died(frame).is_empty()
+		Wire.EVENT_SISTER:
+			return not Wire.take_sister(frame).is_empty()
+	return true
+
+
+static func _kind_says(kind: int, type: int) -> String:
+	if kind == Wire.KIND_EVENT:
+		return "an event of type %d" % type
+	return "a frame of kind %d" % kind
+
+
+## **A host stall hands every budget the whole gap at once** (A.4), once a
+## frame per peer: a frame that began more than [constant STALL_GAP] after the
+## last is the host catching up, and what arrives in it is the stall's backlog,
+## not a flood. [member _frame_at] is still the last frame's start here: a
+## host reads its socket before moving it on, and a guest's SceneMultiplayer
+## reads before this node processes at all.
+func _top_up(guard: Guard, now: float) -> void:
+	var gap := now - _frame_at
+	var frame := Engine.get_process_frames()
+	if gap <= STALL_GAP or guard.topped == frame:
+		return
+	guard.topped = frame
+	var credit := minf(gap, STALL_CREDIT)
+	guard.frames.top_up(credit)
+	guard.bytes.top_up(credit)
+	guard.events.top_up(credit)
+
+
+## A frame over the frame budget, dropped -- a state frame is superseded fifty
+## milliseconds later anyway. On a host, every [constant FLOOD_DROPS] of them
+## inside a [constant FLOOD_WINDOW] is a flood strike.
+func _over_frames(id: int, guard: Guard, now: float) -> void:
+	guard.dropped += 1
+	gate_counts["dropped"] += 1
+	gate_counts["dropped_frames"] += 1
+	if not hosting:
+		_note("over", "frames", "[net] dropped frames from the host: more than %d a"
+			% roundi(guard.frames.rate) + " second")
+		return
+	if now - guard.flood_at >= FLOOD_WINDOW:
+		guard.flood_at = now
+		guard.flood_drops = 0
+		guard.flood_struck = 0
+	guard.flood_drops += 1
+	if guard.flood_drops > FLOOD_DROPS * (guard.flood_struck + 1):
+		guard.flood_struck += 1
+		_strike(id, STRIKE_FLOOD, "flooding: %d frames over its budget in a second"
+			% guard.flood_drops + " (%d a second, %d at once)"
+			% [roundi(guard.frames.rate), roundi(guard.frames.burst)])
+
+
+## A frame over the byte or event budget, dropped; a strike on a host.
+func _over_budget(id: int, guard: Guard, weight: float, what: String,
+		why: String) -> void:
+	guard.dropped += 1
+	gate_counts["dropped"] += 1
+	gate_counts["dropped_" + what] += 1
+	if hosting:
+		_strike(id, weight, why)
+	else:
+		_note("over", what, "[net] dropped a frame from the host: " + why)
+
+
+## A frame no writer produces: 4 points on a host, and dropped either way.
+## Returns false, for the gate to return.
+func _malformed(id: int, why: String) -> bool:
+	gate_counts["malformed"] += 1
+	if hosting:
+		_strike(id, STRIKE_MALFORMED, "malformed: " + why)
+	else:
+		_note("malformed", "host", "[net] dropped a frame from the host: " + why)
+	return false
+
+
+## A frame over the direction's cap. A host cuts the guest on the spot and
+## bars its address; a guest drops it.
+func _oversize(id: int, size: int) -> void:
+	gate_counts["oversize"] += 1
+	if hosting:
+		_cut(id, "a %d-byte frame, where a guest writes %d at most"
+			% [size, Wire.GUEST_FRAME_MAX], false, true)
+	else:
+		_note("oversize", "host", "[net] dropped a %d-byte frame from the host,"
+			% size + " where a host writes %d at most" % Wire.HOST_FRAME_MAX)
+
+
+## **A strike on peer [param id]'s ledger** (A.4). At [constant STRIKE_CUT]
+## the peer is cut, told why and barred; crossing half of it is one line in the
+## log, so a peer that is close is visible before it is gone.
+func _strike(id: int, weight: float, why: String) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		return
+	var guard: Guard = peer["guard"]
+	var now := _now()
+	var before := guard.points_now(now)
+	var after := guard.strike(weight, now)
+	gate_counts["strikes"] += 1
+	gate_counts["points"] += weight
+	if after >= STRIKE_CUT:
+		_cut(id, "%s -- %.0f points" % [why, after], true, true)
+		return
+	if before < STRIKE_CUT * 0.5 and after >= STRIKE_CUT * 0.5:
+		var from := str(peer["address"])
+		_note("strike", Lan.source_key(from), "[net] %d (%s) is at %.0f of %.0f"
+			% [id, from, after, STRIKE_CUT] + " points: %s" % why)
+
+
+## **Hang up on a peer that broke the rules** (A.4). Out of the bookkeeping at
+## once, so none of its frames already waiting is read. A greeted guest cut by
+## its ledger ([param tell]) is told why first -- REFUSE_BROKEN, and
+## [constant REFUSE_LINGER] for it to arrive -- and anything else is cut on the
+## spot: an oversize frame, or anything but a HELLO before the handshake, is
+## not worth a sentence. [param abuse] bars the address.
+func _cut(id: int, why: String, tell: bool, abuse: bool) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		return
+	var greeted := bool(peer["greeted"])
+	var from := str(peer["address"])
+	_peers.erase(id)
+	if tell and greeted:
+		_to(id, Wire.refuse(_speaks(), Wire.REFUSE_BROKEN))
+		_hanging_up[id] = _now() + REFUSE_LINGER
+	else:
+		_drop_now(id)
+	gate_counts["cuts"] += 1
+	var barred := _bar(from) if abuse else 0.0
+	_note("cut", Lan.source_key(from), "[net] cut %d (%s): %s%s" % [id, from, why,
+		" -- barred %d s" % roundi(barred) if barred > 0.0 else ""])
+	if greeted:
+		_lost_guest()
+
+
+## **Cut [param id]'s transport now.** ENet frees the slot at once and says
+## `peer_disconnected` on the next poll. `disconnect_peer()` would wait for an
+## acknowledgement a hostile peer never sends, and hold the slot until ENet
+## timed it out. A host's alone: a guest never cuts its host.
+func _drop_now(id: int) -> void:
+	if not hosting or _peer == null \
+			or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		return
+	# In ENet's own bookkeeping until it says `peer_disconnected`, which is
+	# also what takes the id out of [member _hanging_up]; so asking is safe.
+	var enet_peer := _peer.get_peer(id)
+	if enet_peer != null and enet_peer.is_active():
+		enet_peer.peer_disconnect_now()
+
+
+## Bars [param from] for [constant BAR_FIRST], or [constant BAR_AGAIN] when it
+## was barred inside the last [constant BAR_AGAIN] already. Returns how long.
+func _bar(from: String) -> float:
+	if from.is_empty():
+		return 0.0
+	var now := _now()
+	var entry := _book_entry(Lan.source_key(from), now)
+	var again := int(entry["bars"]) > 0 and now - float(entry["barred_at"]) < BAR_AGAIN
+	var hold := BAR_AGAIN if again else BAR_FIRST
+	entry["bars"] = int(entry["bars"]) + 1 if again else 1
+	entry["barred_at"] = now
+	entry["barred_until"] = now + hold
+	gate_counts["bars"] += 1
+	return hold
+
+
+## A host whose last greeted guest has gone -- it left, or it was cut -- is
+## listening again. A caller still saying hello is not company.
+func _lost_guest() -> void:
+	if hosting and link == Link.TOGETHER and _greeted_count() == 0:
+		_say("they left", "the other cell went. show the code again.")
+		_set_link(Link.LISTENING)
+
+
+## **Whether to answer a caller at all** (A.5), in `peer_connected` -- the
+## earliest place 4.7 lets GDScript say no to an address -- and before any
+## bookkeeping exists for it. `[]` answers it; otherwise `[reason, sentence]`
+## for the counts and the log. The order is the cost: an address that is
+## barred or not on this network spends no one else's budget.
+func _admit(from: String) -> Array:
+	var now := _now()
+	if not Lan.is_local_source(from, address):
+		return ["lan", "not on this network (LAN-only until #59)"]
+	var key := Lan.source_key(from)
+	var entry := _book_entry(key, now)
+	if now < float(entry["barred_until"]):
+		return ["barred", "barred for %d s more" % ceili(float(entry["barred_until"]) - now)]
+	if not _calls_all.take(1.0, now):
+		return ["busy", "more than %d calls a second, from everywhere"
+			% roundi(CALLS_ALL_RATE)]
+	if not (entry["calls"] as Bucket).take(1.0, now):
+		return ["calls", "calling too often -- %d at once, then one every %d s"
+			% [roundi(CALLS_BURST), roundi(1.0 / CALLS_RATE)]]
+	var live := 0
+	for other: int in _addresses:
+		if str(_addresses[other]) == key:
+			live += 1
+	if live >= LIVE_PER_ADDRESS:
+		return ["live", "%d connections from there already" % live]
+	var pending := 0
+	for other: int in _peers:
+		if not bool(_peers[other]["greeted"]):
+			pending += 1
+	if pending >= PENDING_MAX:
+		return ["pending", "%d callers are already saying hello" % pending]
+	return []
+
+
+## The address book's entry for [param key], made if there is none. A full
+## book forgets an idle caller first, then the one heard from longest ago, and
+## a barred one only when every caller in it is barred.
+func _book_entry(key: String, now: float) -> Dictionary:
+	var entry: Dictionary = _book.get(key, {})
+	if entry.is_empty():
+		if _book.size() >= BOOK_MAX:
+			_forget_a_caller(now)
+		entry = {"calls": Bucket.new(CALLS_RATE, CALLS_BURST, now),
+			"barred_until": 0.0, "barred_at": -BAR_AGAIN, "bars": 0, "seen": now}
+		_book[key] = entry
+	entry["seen"] = now
+	return entry
+
+
+func _forget_a_caller(now: float) -> void:
+	var oldest := ""
+	var oldest_seen := INF
+	for key: String in _book.keys():
+		var entry: Dictionary = _book[key]
+		if now < float(entry["barred_until"]):
+			continue
+		if now - float(entry["seen"]) > BOOK_IDLE:
+			_book.erase(key)
+			continue
+		if float(entry["seen"]) < oldest_seen:
+			oldest_seen = float(entry["seen"])
+			oldest = key
+	if _book.size() < BOOK_MAX:
+		return
+	if oldest.is_empty():
+		oldest = str(_book.keys()[0])
+	_book.erase(oldest)
+
+
+## The caller's address, as ENet has it: dotted for IPv4, eight groups for
+## IPv6. "" if the transport has no peer by that id.
+func _address_of(id: int) -> String:
+	if _peer == null:
+		return ""
+	var enet_peer := _peer.get_peer(id)
+	if enet_peer == null or not enet_peer.is_active():
+		return ""
+	return str(enet_peer.get_remote_address())
+
+
+## **A guest's events waiting for a phone host's run, or a host's for a
+## guest's**: capped by count and by weight, the oldest dropped first. A host
+## holds its guest to [constant QUEUE_FRAMES] and [constant QUEUE_BYTES]; a
+## guest holds its host to [constant POND_EVENTS_MAX] and
+## [constant POND_EVENTS_BYTES], because one ENTER is answered with seventy.
+func _queue_pond_events() -> void:
+	var frames_max := QUEUE_FRAMES if hosting else POND_EVENTS_MAX
+	var bytes_max := QUEUE_BYTES if hosting else POND_EVENTS_BYTES
+	while not pond_events.is_empty() \
+			and (pond_events.size() > frames_max or _pond_bytes > bytes_max):
+		_pond_bytes -= (pond_events[0] as PackedByteArray).size()
+		pond_events.remove_at(0)
+		gate_counts["queue_dropped"] += 1
+	_pond_bytes = maxi(_pond_bytes, 0)
+
+
+## **A dedicated host's queue, capped per guest**: a guest over its share
+## loses its own oldest event, never the other guest's.
+func _queue_inbox(from: int, size: int) -> void:
+	var load: Array = _inbox_load.get(from, [0, 0])
+	load[0] = int(load[0]) + 1
+	load[1] = int(load[1]) + size
+	_inbox_load[from] = load
+	var at := 0
+	while (int(load[0]) > QUEUE_FRAMES or int(load[1]) > QUEUE_BYTES) \
+			and at < inbox.size():
+		if int(inbox[at][0]) != from:
+			at += 1
+			continue
+		load[0] = int(load[0]) - 1
+		load[1] = int(load[1]) - (inbox[at][1] as PackedByteArray).size()
+		inbox.remove_at(at)
+		gate_counts["queue_dropped"] += 1
+
+
+## **What arrived at the host's socket, once a second** (A.6) -- everything
+## ENet read, the datagrams no gate ever saw included -- and a line when it is
+## more than any two real guests send: about 7 KB and 170 datagrams a second.
+## The peaks are kept in [member gate_counts] for tools.
+func _count_arrivals(now: float) -> void:
+	var span := now - _saturation_from
+	if span < 1.0 or _peer == null \
+			or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		return
+	_saturation_from = now
+	var socket: ENetConnection = _peer.host
+	if socket == null:
+		return
+	var data := socket.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA) / span
+	var datagrams := socket.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_PACKETS) \
+		/ span
+	gate_counts["peak_bytes"] = maxf(float(gate_counts["peak_bytes"]), data)
+	gate_counts["peak_datagrams"] = maxf(float(gate_counts["peak_datagrams"]), datagrams)
+	if data > SATURATED_BYTES or datagrams > SATURATED_DATAGRAMS:
+		gate_counts["saturated"] += 1
+		_note("saturated", "", "[net] saturated: %.1f KB a second in %d datagrams"
+			% [data / 1024.0, roundi(datagrams)] + " arriving at the socket")
+
+
+## **One line for the log, at most once per [param what] and [param key] every
+## [constant NOTE_EVERY]** (A.6), and the next says how many like it were held
+## back -- so a peer that sends a thousand bad frames a second costs the log a
+## line every ten seconds, not a thousand. [param key] is an address, a peer, or
+## the reason for a refusal that is about everybody; an address goes to the log
+## and nowhere else. [param warn] makes it a warning rather than a plain line:
+## the three the session always warned about.
+func _note(what: String, key: String, line: String, warn: bool = false) -> void:
+	var now := _now()
+	var slot := what + "|" + key
+	var seen: Array = _notes.get(slot, [0.0, 0])
+	if now < float(seen[0]):
+		seen[1] = int(seen[1]) + 1
+		_notes[slot] = seen
+		return
+	if int(seen[1]) > 0:
+		line += " (+%d like it held back)" % int(seen[1])
+	if _notes.size() >= NOTES_MAX and not _notes.has(slot):
+		for old: String in _notes.keys():
+			if now >= float(_notes[old][0]):
+				_notes.erase(old)
+	_notes[slot] = [now + NOTE_EVERY, 0]
+	if warn:
+		push_warning(line)
+	else:
+		print(line)
+
+
+func _zero_counts() -> void:
+	gate_counts = {
+		"refused": 0, "refused_lan": 0, "refused_barred": 0, "refused_busy": 0,
+		"refused_calls": 0, "refused_live": 0, "refused_pending": 0,
+		"cuts": 0, "bars": 0, "strikes": 0, "points": 0.0,
+		"oversize": 0, "malformed": 0, "unknown": 0,
+		"dropped": 0, "dropped_frames": 0, "dropped_bytes": 0, "dropped_events": 0,
+		"queue_dropped": 0, "strays": 0, "saturated": 0, "peak_bytes": 0.0,
+		"peak_datagrams": 0.0,
+	}
 
 
 # ---------------------------------------------------------------------------
@@ -1107,12 +1943,28 @@ func _speaks() -> int:
 
 
 func _to(id: int, frame: PackedByteArray) -> void:
-	if _api == null or _api.multiplayer_peer == null:
-		return
-	var err := _api.send_bytes(frame, id, _mode_for(frame), 0)
+	var err := OK
+	if hosting:
+		# **The bytes `send_bytes` wrote**, written by hand, because a host's
+		# SceneMultiplayer no longer holds the socket (A.1): the RAW byte, the
+		# frame, channel 0, the frame's own mode -- so a guest on any protocol-4
+		# build cannot tell the difference.
+		if _peer == null \
+				or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+			return
+		_peer.set_target_peer(id)
+		_peer.transfer_channel = 0
+		_peer.transfer_mode = _mode_for(frame)
+		var raw := PackedByteArray([RAW])
+		raw.append_array(frame)
+		err = _peer.put_packet(raw)
+	else:
+		if _api == null or _api.multiplayer_peer == null:
+			return
+		err = _api.send_bytes(frame, id, _mode_for(frame), 0)
 	if err != OK:
-		push_warning("[net] could not send %d bytes to %d (error %d)"
-			% [frame.size(), id, err])
+		_note("send", str(id), "[net] could not send %d bytes to %d (error %d)"
+			% [frame.size(), id, err], true)
 
 
 ## **How a frame is delivered, chosen by what kind of frame it is and by
@@ -1290,12 +2142,15 @@ func _give_up(to: int, headline: String, detail: String) -> void:
 ## Put the socket down but keep the node and the bound API, so a refusal can be
 ## read on screen and the player can try again without a new session.
 func _drop_link() -> void:
+	if is_inside_tree() and get_tree().process_frame.is_connected(_on_tree_frame):
+		get_tree().process_frame.disconnect(_on_tree_frame)
 	if _peer != null:
 		_peer.close()
 		_peer = null
 	if _api != null:
 		_api.multiplayer_peer = null
 	_peers.clear()
+	_addresses.clear()
 	_hanging_up.clear()
 	_host_id = 0
 	set_process(false)
@@ -1320,6 +2175,17 @@ func _reset_socket() -> void:
 	heard.clear()
 	pond_events.clear()
 	inbox.clear()
+	_pond_bytes = 0
+	_inbox_load.clear()
+	# **The door's memory belongs to one socket** (A.5): every address, bucket,
+	# bar and held-back line, gone with it -- which is also what keeps the many
+	# hosts `tools/net_probe.gd` opens on one loopback address independent.
+	_book.clear()
+	_addresses.clear()
+	_notes.clear()
+	_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
+	_frame_at = _now()
+	_saturation_from = _now()
 	trouble = ""
 	because = ""
 

@@ -9,12 +9,19 @@ phones and the PC build, every ten minutes, and never while anyone is in it.
 It is written for a small Proxmox LXC container with no desktop, and runs on
 any x86_64 Debian or Ubuntu machine with systemd.
 
-> **Home Wi-Fi only, for now.** Internet play is a later step and none of it is
-> built. It needs the server hardened first -- rate limits, validating what a
-> guest sends, refusing oversized frames, and an authenticated, encrypted
-> handshake (issues #56-#59) -- then a forwarded UDP port, and a way for a phone
-> to enter an address rather than tap a code. Until all of that exists, **do not
-> forward the server's port on your router.**
+> **Home Wi-Fi only, for now -- and the server enforces it.** It answers a call
+> only from an address on a local network -- loopback, the private ranges
+> (10/8, 172.16/12, 192.168/16), 100.64/10, link-local, its own /24, and IPv6
+> loopback, unique-local and link-local -- and hangs up on anything else with
+> one line in its log. It also sizes and checks every frame, limits how often
+> and how much each guest may send, and cuts a guest that keeps breaking the
+> rules (issues #56 and #58; `docs/design/net-hardening.md`, part A). Internet
+> play still needs the rest: the server checking what a guest *says* (#57) and
+> an authenticated, encrypted handshake (#59), then a forwarded UDP port and a
+> way for a phone to enter an address rather than tap a code. None of that is
+> built, and the guard stays on until it is. **Do not forward the server's port
+> on your router**: a forwarded port only lets strangers knock on a door that
+> does not open for them.
 
 Every address below is a placeholder from RFC 5737's documentation range,
 `192.0.2.0/24`. Put your own network's numbers in their place.
@@ -106,6 +113,24 @@ server's. A third phone is told "already two".
 
 `journalctl -u biogenic-server -f` follows everything it says: guests joining,
 arriving, dying and leaving, and every update decision.
+
+It also says, in lines that start `[net]`, whenever it turns a caller away or
+hangs up on one: a call from outside the local network, an address calling too
+often, a caller that never said hello or runs another version, a guest cut for
+sending what no Biogenic build sends, and a second in which far more arrived at
+the port than two phones could send. Each kind of line is printed at most once
+every ten seconds for each address -- calls from outside the network, and calls
+turned away because too many came from everywhere at once, once every ten
+seconds for all of them together -- and the next one says how many like it were
+held back, so a noisy device cannot fill the journal. These lines name the
+caller's address; the journal is on your machine, not in the repository. For
+example, with placeholder addresses:
+
+```
+[net] refused 203.0.113.9: not on this network (LAN-only until #59)
+[net] hung up on 1587052382 (192.0.2.40): different versions
+[net] cut 694971552 (192.0.2.41): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- barred 60 s
+```
 
 ## 4. How it updates
 
@@ -227,6 +252,14 @@ userdel biogenic
 - **"already two"** -- two phones are in already. A phone that has just left
   holds its place until its connection times out: ENet holds a vanished peer
   for 5 to 30 seconds.
+- **"they hung up" the moment it connects** -- the server turned it away at the
+  door, and the journal says why in a `[net] refused` line: most often a phone
+  that called again and again within a few seconds (it can call again a few
+  seconds later), or one barred for a minute after it was cut. A caller from a
+  public address -- which can only reach the server through a forwarded port,
+  or over IPv6 -- is refused as not on this network. **"cut off"** (or
+  "refused", on an older build) is a phone the server cut for sending frames no
+  Biogenic build sends: update both from the launcher.
 - **The server keeps restarting** -- `systemctl status biogenic-server` shows it
   starting again every five seconds, and `journalctl -u biogenic-server -e`
   shows how each start ends. After an update, that is the new build failing on

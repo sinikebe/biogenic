@@ -256,6 +256,156 @@ static func _range_rank(address: String) -> int:
 	return 3
 
 
+## **Whether a caller at [param address] is on a network this host may answer,
+## while play is LAN-only** -- which every host is, a phone's and the dedicated
+## server's alike, until issue #59's listener exists (net-hardening.md A.5).
+## [param own] is this host's own address.
+##
+## Yes for everything a home network is: loopback; RFC 1918's 10/8, 172.16/12
+## and 192.168/16; carrier-grade NAT's 100.64/10, which a Wi-Fi can hand out and
+## [method pick_address] already counts as a LAN (it is Tailscale's range too);
+## IPv4 link-local, 169.254/16; **this host's own /24**, because the tap code
+## assumes one and a network is not always in a private range -- this
+## container's is 192.0.2.0/24, documentation space; and IPv6 loopback,
+## unique-local fc00::/7 and link-local fe80::/10.
+##
+## No for everything else, and for anything that does not parse: that is a
+## port a router forwards, or a public IPv6 address the router lets through --
+## the host binds every address it has, so without this such a caller would be
+## answered.
+##
+## The other place this file draws a line between networks, [method
+## _range_rank], ranks and never refuses; this refuses and never ranks.
+static func is_local_source(address: String, own: String) -> bool:
+	var v4 := _ipv4_octets(address)
+	if v4.is_empty():
+		var v6 := _ipv6_groups(address)
+		if v6.is_empty():
+			return false
+		if not _v4_mapped(v6):
+			return _v6_local(v6)
+		v4 = PackedInt32Array([v6[6] >> 8, v6[6] & 0xFF, v6[7] >> 8, v6[7] & 0xFF])
+	var mine := _ipv4_octets(own)
+	if v4[0] == 127 or v4[0] == 10:
+		return true
+	if v4[0] == 172 and v4[1] >= 16 and v4[1] <= 31:
+		return true
+	if v4[0] == 192 and v4[1] == 168:
+		return true
+	if v4[0] == 100 and v4[1] >= 64 and v4[1] <= 127:
+		return true
+	if v4[0] == 169 and v4[1] == 254:
+		return true
+	return mine.size() == 4 and v4[0] == mine[0] and v4[1] == mine[1] \
+		and v4[2] == mine[2]
+
+
+## **One key per caller, for counting what it does**: an IPv4 address as it is,
+## and an IPv6 one by its /64 -- a home is handed a whole /64, and a device
+## makes up new addresses inside it at will, so the /64 is the caller. An
+## address that does not parse is its own key.
+static func source_key(address: String) -> String:
+	if not _ipv4_octets(address).is_empty():
+		return address
+	var g := _ipv6_groups(address)
+	if g.is_empty():
+		return address
+	if _v4_mapped(g):
+		return "%d.%d.%d.%d" % [g[6] >> 8, g[6] & 0xFF, g[7] >> 8, g[7] & 0xFF]
+	return "%x:%x:%x:%x::/64" % [g[0], g[1], g[2], g[3]]
+
+
+## Four octets out of a dotted IPv4, or empty. Digits only, 0 to 255 each.
+static func _ipv4_octets(address: String) -> PackedInt32Array:
+	var parts := address.strip_edges().split(".")
+	if parts.size() != 4:
+		return PackedInt32Array()
+	var out := PackedInt32Array()
+	for part: String in parts:
+		if part.is_empty() or part.length() > 3 or not part.is_valid_int() \
+				or part.begins_with("+") or part.begins_with("-"):
+			return PackedInt32Array()
+		var value := int(part)
+		if value > 255:
+			return PackedInt32Array()
+		out.append(value)
+	return out
+
+
+## Eight 16-bit groups out of an IPv6 address, or empty: compressed (`::1`) or
+## written out the way Godot prints one (`fe80:0:0:0:1:2:3:4`), with a zone
+## (`%wlan0`) or a dotted IPv4 tail (`::ffff:192.0.2.1`).
+static func _ipv6_groups(address: String) -> PackedInt32Array:
+	var none := PackedInt32Array()
+	var text := address.strip_edges()
+	var zone := text.find("%")
+	if zone >= 0:
+		text = text.substr(0, zone)
+	if not text.contains(":"):
+		return none
+	var tail := PackedInt32Array()
+	var cut := text.rfind(":")
+	if text.substr(cut + 1).contains("."):
+		var v4 := _ipv4_octets(text.substr(cut + 1))
+		if v4.is_empty():
+			return none
+		tail.append((v4[0] << 8) | v4[1])
+		tail.append((v4[2] << 8) | v4[3])
+		text = text.substr(0, cut + 1)
+		if not text.ends_with("::"):
+			text = text.substr(0, text.length() - 1)
+	var halves := text.split("::")
+	if halves.size() > 2:
+		return none
+	var head := _hextets(halves[0])
+	var rest := _hextets(halves[1]) if halves.size() == 2 else PackedInt32Array()
+	if (not head.is_empty() and head[0] < 0) or (not rest.is_empty() and rest[0] < 0):
+		return none
+	var want := 8 - tail.size()
+	var have := head.size() + rest.size()
+	if halves.size() == 1 and have != want:
+		return none
+	if halves.size() == 2 and have >= want:
+		return none
+	var out := head
+	for _i in want - have:
+		out.append(0)
+	out.append_array(rest)
+	out.append_array(tail)
+	return out
+
+
+## Colon-separated groups of one to four hex digits; `[-1]` for anything else,
+## and empty for an empty string -- one side of a `::`.
+static func _hextets(text: String) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	if text.is_empty():
+		return out
+	for part: String in text.split(":"):
+		if part.is_empty() or part.length() > 4 or not part.is_valid_hex_number() \
+				or part.begins_with("+") or part.begins_with("-"):
+			return PackedInt32Array([-1])
+		out.append(part.hex_to_int())
+	return out
+
+
+## `::ffff:a.b.c.d`: an IPv4 address in an IPv6 socket's clothes.
+static func _v4_mapped(g: PackedInt32Array) -> bool:
+	for i in 5:
+		if g[i] != 0:
+			return false
+	return g[5] == 0xFFFF
+
+
+static func _v6_local(g: PackedInt32Array) -> bool:
+	var loopback := g[7] == 1
+	for i in 7:
+		if g[i] != 0:
+			loopback = false
+	# fc00::/7 unique-local, and fe80::/10 link-local.
+	return loopback or (g[0] & 0xFE00) == 0xFC00 or (g[0] & 0xFFC0) == 0xFE80
+
+
 ## A container, VM, VPN, cellular or tether adapter, by its name or friendly
 ## name.
 static func _is_virtual(name: String, friendly: String) -> bool:
