@@ -181,6 +181,56 @@ const TRACK_GAP := 2.0
 ## second on a screen nobody is playing on, and buys the one message a player
 ## cannot work out for themselves.
 const REFUSE_LINGER := 1.0
+## **ENet may not throttle a single state frame or snapshot away: deceleration
+## 0**, on every peer, from the moment the transport connects (issue #61).
+##
+## Both kinds go out unreliable ([method _mode_for]), and ENet discards
+## unreliable packets **at the sender**, before any socket, by a per-peer
+## throttle of 0-32: each one adds 7 to a counter mod 32 and is freed unsent if
+## the counter is above the throttle (`thirdparty/enet/protocol.c:1520-1545` in
+## 4.7-stable), so at 6 only 7 frames in 32 leave. Every acknowledgement after
+## the first is judged (`peer.c:62-92`): a round trip longer than the previous
+## five seconds' lowest by more than twice their variance lowers the throttle
+## by the deceleration, and one no longer than that lowest raises it by the
+## acceleration.
+##
+## **Measured through a relay** holding every datagram 5-40 ms, one in twenty
+## 150-250 ms longer, in order, and losing none: at the join, the arrival's burst
+## of reliable GENOME events brings a burst of acknowledgements, all judged
+## against a window taken from the connection's *first* round trip alone
+## (`protocol.c:903-911`). In five runs of six the host's throttle went from 32
+## to 0 inside a second and stayed at 0-4 for 4.4 to 5.3 s, and in one run of
+## three a dedicated host's did it to both its guests at once. In one of those
+## seconds the guest got 2 of 23 state frames and 1 of 66 snapshots, while the
+## relay delivered every datagram it was given. With no relay at all, the
+## loopback server section of `tools/net_probe.gd` sank one guest's to 0 in one
+## run of three.
+##
+## **Deceleration 0 makes the fall subtract nothing** (`peer.c:81-84`), so the
+## throttle stays at the 32 every ENet peer starts at (`peer.c:406`). The brake
+## it gives up protects nothing here: the unreliable traffic is set by the game,
+## about twenty state frames and twenty snapshots a second to a peer, and a
+## frame ENet discards is a frame the far screen needed, not load the link was
+## spared.
+##
+## **Interval and acceleration stay ENet's defaults** (`enet.h:230, 232`),
+## because with no fall they have nothing to act on. The interval only says how
+## often that window is taken again, and the acceleration only climbs back from
+## a fall. There is none to climb from. Each end pins its own peer at
+## `peer_connected`, and neither has judged an acknowledgement by then: ENet
+## judges none until one has been received (`protocol.c:872`), the host's
+## connect event is raised by the first it receives, and a guest's by
+## VERIFY_CONNECT, which is not one. The only other thing that lowers a throttle
+## is the bandwidth limiter (`host.c:400-407, 436-439`), and it never engages:
+## no host here is created with a bandwidth. **Keep it that way**, and mind that
+## 4.7's `create_server` passes a channel count on as its *incoming bandwidth*
+## (`modules/enet/enet_multiplayer_peer.cpp:67`): given one, the host would
+## advertise a few bytes a second and every guest's limiter would cap its
+## throttle toward the host, pinned or not. Left as they were, the one number
+## the far end is told that it did not already have is this one.
+const THROTTLE_INTERVAL := 5000
+const THROTTLE_ACCELERATION := 2
+const THROTTLE_DECELERATION := 0
 
 var link := Link.OFF
 ## The heading a screen puts on the current state of the link, when that state
@@ -750,6 +800,7 @@ func peers_say() -> String:
 # ---------------------------------------------------------------------------
 
 func _on_peer_connected(id: int) -> void:
+	_steady_throttle(id)
 	_peers[id] = {
 		"id": id,
 		"protocol": 0,
@@ -1106,6 +1157,31 @@ static func _mode_for(frame: PackedByteArray) -> int:
 	if kind == Wire.KIND_STATE or kind == Wire.KIND_POND:
 		return MultiplayerPeer.TRANSFER_MODE_UNRELIABLE
 	return MultiplayerPeer.TRANSFER_MODE_RELIABLE
+
+
+## **The peer the transport just connected, pinned at a throttle of 32** -- see
+## [constant THROTTLE_DECELERATION]. The host's peer for every guest, both of a
+## dedicated host's included, and a guest's for its host. Before the handshake,
+## because this is ENet's setting and not the game's: a peer refused a moment
+## later has cost nothing.
+##
+## **One end is enough, and that is what lets it ship as content.** ENet tells
+## the far end the same three numbers in a THROTTLE_CONFIGURE command
+## (`peer.c:43-58`), and the far end's ENet -- compiled into its binary,
+## whatever content pack it runs -- writes them into its own peer for this one
+## (`protocol.c:809-819`). So a device on this content steadies both directions
+## with one still on an older pack, whichever of the two is hosting. The command
+## reaches the far end with the first acknowledgement it receives, before it
+## has judged any; if a lost datagram delays it past a judgement and the
+## throttle dips a step first, ENet's own acceleration brings it back.
+func _steady_throttle(id: int) -> void:
+	if _peer == null:
+		return
+	var enet_peer := _peer.get_peer(id)
+	if enet_peer == null:
+		return
+	enet_peer.throttle_configure(THROTTLE_INTERVAL, THROTTLE_ACCELERATION,
+		THROTTLE_DECELERATION)
 
 
 ## **One state frame, now.** What the far end is told is decoded back out of the

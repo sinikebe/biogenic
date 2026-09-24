@@ -835,6 +835,21 @@ func _check_link() -> void:
 			and guest.peer_ids() == [host.my_id()],
 		"each end's bookkeeping holds exactly the other end's id")
 
+	# **ENet's packet throttle, pinned where it starts** (issue #61). ENet
+	# discards unreliable frames at the sender in proportion to it, and a jittery
+	# round trip lowers it; every state frame and snapshot is unreliable. Each
+	# end sets its own peer's deceleration to 0 the moment the transport
+	# connects, before either goes TOGETHER -- so this is read, not waited for,
+	# and it is exact on any runner.
+	var host_throttle := _enet_peer(host, guest.my_id())
+	var guest_throttle := _enet_peer(guest, host.my_id())
+	_says(_pinned(host_throttle) and _pinned(guest_throttle),
+		"both ends' ENet peers are pinned -- [interval, acceleration, deceleration,"
+		+ " throttle] %s on the host and %s on the guest, deceleration 0 and"
+		% [str(_throttle_knobs(host_throttle)), str(_throttle_knobs(guest_throttle))]
+		+ " throttle %d of %d" % [ENetPacketPeer.PACKET_THROTTLE_SCALE,
+			ENetPacketPeer.PACKET_THROTTLE_SCALE])
+
 	# The ping, crossing. The numbers are arbitrary and that is the point: what
 	# comes out the far side has to be them.
 	var at := Vector2(612.5, -248.25)
@@ -1030,6 +1045,46 @@ func _check_link() -> void:
 	await _until_tracked(host, 0)
 	_says(host.peer_track().is_empty(),
 		"and a run that ends stops the marker across the wire")
+
+	# **One end is enough to pin both directions**, which is what lets the fix
+	# ship as content: a phone still on an older pack runs the same ENet in its
+	# binary, and ENet takes the three numbers the far end sends it in a
+	# THROTTLE_CONFIGURE command. A bare ENet client stands in for that phone:
+	# it pins nothing itself, so its deceleration can only reach 0 by the host's
+	# command. Waited for, since the command crosses the socket -- reliably, on
+	# loopback, so in a frame or two. Only the three numbers are asserted, not
+	# the client's throttle: until the command lands its own round trips could
+	# move that, and no verdict here hangs on a round trip.
+	var older := ENetConnection.new()
+	var older_peer: ENetPacketPeer = null
+	if older.create_host(1) == OK:
+		# The id a client offers ENet's server: 2 or more, and nobody else's.
+		older_peer = older.connect_to_host("127.0.0.1", Lan.PORT, 0,
+			3 if guest.my_id() == 2 else 2)
+	var older_knobs: Array = []
+	var older_until := _now() + SETTLE
+	# Until the host hangs up, too: it does, on a peer that never says hello,
+	# after HELLO_GRACE -- which this wait, against a pinned host, never nears.
+	while older_peer != null and older_peer.is_active() and _now() < older_until:
+		var event: Array = older.service()
+		while int(event[0]) > ENetConnection.EVENT_NONE:
+			event = older.service()
+		if not older_peer.is_active():
+			break
+		older_knobs = _throttle_knobs(older_peer).slice(0, 3)
+		if older_peer.get_state() == ENetPacketPeer.STATE_CONNECTED \
+				and older_knobs == [NetSession.THROTTLE_INTERVAL,
+					NetSession.THROTTLE_ACCELERATION, 0]:
+			break
+		await get_tree().process_frame
+	_says(older_knobs == [NetSession.THROTTLE_INTERVAL,
+			NetSession.THROTTLE_ACCELERATION, 0],
+		"and one end pins both: a bare ENet client, an older pack that pins"
+		+ " nothing, is told [interval, acceleration, deceleration] %s by the host"
+		% str(older_knobs))
+	if older_peer != null and older_peer.is_active():
+		older_peer.peer_disconnect_now()
+	older.destroy()
 
 	host.close()
 	guest.close()
@@ -2447,6 +2502,7 @@ func _check_pond() -> void:
 	_says(int(host_net.link) == NetSession.Link.TOGETHER
 			and int(guest_net.link) == NetSession.Link.TOGETHER,
 		"pond: two sessions on protocol %d completed the handshake" % Wire.PROTOCOL)
+	_watch_throttle(true)
 
 	# **The host's run first, and its water is the pond.**
 	var host_run := _pond_run_scene(host_net, true)
@@ -3184,6 +3240,12 @@ func _check_pond() -> void:
 	host_run.queue_free()
 	guest_net.close()
 	await _wait(0.4)
+	_watch_throttle(false)
+	_says(_throttle_reads > 0
+			and _throttle_lowest == ENetPacketPeer.PACKET_THROTTLE_SCALE,
+		"pond: no ENet peer's packet throttle fell under the section's load --"
+		+ " lowest %d of %d over %d readings" % [_throttle_lowest,
+			ENetPacketPeer.PACKET_THROTTLE_SCALE, _throttle_reads])
 	print("[net-probe] NOTE pond took %.1f s and %d frames, at most %d a second"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
 	Engine.max_fps = ceiling
@@ -3537,6 +3599,76 @@ func _clock() -> float:
 	return float(Time.get_ticks_usec()) / 1e6
 
 
+## The ENet peer [param session] reaches [param id] through, or null. Reaching
+## for a private member is a thing only tools/ may do.
+func _enet_peer(session: Node, id: int) -> ENetPacketPeer:
+	var enet: ENetMultiplayerPeer = session.get("_peer")
+	return enet.get_peer(id) if enet != null else null
+
+
+## `[interval, acceleration, deceleration, throttle]` as [param peer] holds
+## them -- empty for no peer, or one the far end has already hung up on, whose
+## statistics ENet answers with an error line apiece.
+func _throttle_knobs(peer: ENetPacketPeer) -> Array:
+	if peer == null or not peer.is_active():
+		return []
+	return [int(peer.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE_INTERVAL)),
+		int(peer.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE_ACCELERATION)),
+		int(peer.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE_DECELERATION)),
+		int(peer.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE))]
+
+
+## **Pinned as net_session.gd pins every peer**: its interval and acceleration,
+## a full throttle, and a deceleration of 0 -- written as the literal, so that
+## a constant put back to ENet's 2 fails here rather than agreeing with itself.
+func _pinned(peer: ENetPacketPeer) -> bool:
+	return _throttle_knobs(peer) == [NetSession.THROTTLE_INTERVAL,
+		NetSession.THROTTLE_ACCELERATION, 0, ENetPacketPeer.PACKET_THROTTLE_SCALE]
+
+
+## **Every ENet peer's packet throttle, read every frame** while
+## [method _watch_throttle] is on: the lowest any of them showed, and how many
+## readings that is. A section that runs load asserts the lowest is still 32.
+##
+## Not a timing check. Pinned, a throttle cannot fall at all: the fall
+## subtracts the deceleration, which is 0, and the one other thing that lowers
+## it is ENet's bandwidth limiter, which no host here switches on -- so any
+## runner, however loaded, reads 32 every frame, and a reading below it is the
+## pin gone. Unpinned, it is issue #61: the server section sank one guest's
+## throttle to 0 in one run of three on an idle machine, and the probe passed
+## all three without a word.
+var _throttle_lowest := 0
+var _throttle_reads := 0
+
+
+func _watch_throttle(on: bool) -> void:
+	var frame := get_tree().process_frame
+	if on:
+		_throttle_lowest = ENetPacketPeer.PACKET_THROTTLE_SCALE
+		_throttle_reads = 0
+		if not frame.is_connected(_read_throttles):
+			frame.connect(_read_throttles)
+	elif frame.is_connected(_read_throttles):
+		frame.disconnect(_read_throttles)
+
+
+## Every session in the tree -- the probe's own, under the root, and a server's,
+## one below -- and every peer in its bookkeeping, which it enters only after
+## pinning it.
+func _read_throttles() -> void:
+	for top: Node in get_tree().root.get_children():
+		for node: Node in [top] + top.get_children():
+			if node.get_script() != NetSession:
+				continue
+			for id: int in node.peer_ids():
+				var peer := _enet_peer(node, id)
+				if peer == null or not peer.is_active():
+					continue
+				_throttle_lowest = mini(_throttle_lowest,
+					int(peer.get_statistic(ENetPacketPeer.PEER_PACKET_THROTTLE)))
+				_throttle_reads += 1
+
+
 # ---------------------------------------------------------------------------
 # **The dedicated host** (`game/server/`): the pond with no cell of its own and
 # two guests, each of whom is told the other is the friend. The guests are two
@@ -3550,13 +3682,15 @@ func _clock() -> float:
 
 const SERVER_SCENE := "res://game/server/server.tscn"
 ## **How long a wait here gives anything an unreliable frame carries** -- a
-## snapshot, or a guest's state frame. ENet throttles unreliable packets when a
-## peer's round trip jitters, dropping them at the sender, and three hosts
-## serviced once a frame in one process jitter: measured, the server's peer for
-## one guest at a throttle of 6 in 32, and four snapshots in a row that never
-## arrived. Waiting on one particular snapshot is then waiting on the one in
-## five that goes. Every wait returns the moment its answer is in, so the margin
-## costs a run in which nothing is dropped nothing.
+## snapshot, or a guest's state frame. It was made this long for ENet's packet
+## throttle, which discards unreliable packets at the sender when a peer's
+## round trip jitters -- and three hosts serviced once a frame in one process
+## jitter: the server's peer for one guest was measured at 6 in 32, with four
+## snapshots in a row that never arrived. net_session.gd now pins every peer's
+## throttle at 32 (issue #61) and this section asserts that it never falls, so
+## nothing on this loopback throws a frame away any more. The margin stays
+## because it is free: every wait returns the moment its answer is in, and the
+## NOTE prints the longest one.
 const SERVER_UNRELIABLE := 5.0
 ## The longest any of those waits has taken, for the section's NOTE.
 var _server_waited := 0.0
@@ -3585,6 +3719,7 @@ func _check_server() -> void:
 				== FoodField.PERSON_SLOT + FoodField.GUESTS_MAX,
 		"server: listening, its water open with %d slots and no cell of its own"
 		% (food.bodies() as Array).size() + " in it")
+	_watch_throttle(true)
 
 	var a_net: Node = await _session("ServerGuestA")
 	var b_net: Node = await _session("ServerGuestB")
@@ -3938,6 +4073,12 @@ func _check_server() -> void:
 	f_net.close()
 	server.queue_free()
 	await _wait(0.3)
+	_watch_throttle(false)
+	_says(_throttle_reads > 0
+			and _throttle_lowest == ENetPacketPeer.PACKET_THROTTLE_SCALE,
+		"server: no ENet peer's packet throttle fell under the section's load --"
+		+ " lowest %d of %d over %d readings, the server's and every guest's"
+		% [_throttle_lowest, ENetPacketPeer.PACKET_THROTTLE_SCALE, _throttle_reads])
 	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second;"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps]
 		+ " its longest wait on an unreliable frame %.2f s, of %.0f"
