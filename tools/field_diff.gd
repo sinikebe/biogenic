@@ -24,6 +24,19 @@ extends SceneTree
 ## the solo sister, and whole frames. Prints `[field-diff] ALL EQUAL` or
 ## `[field-diff] MISMATCH` with the first differing entry. Excluded from export
 ## (`tools/*` on both presets), so none of it ships.
+##
+## **And a phone's pond, the same way** (`--pond=`, `--pond-long=`): the two
+## fields opened as a pond with **one person** in it -- a phone host and its
+## guest -- on two waters' worth of adversarial bodies, the person posed,
+## armed, venomous or not and often within a mouth of this cell, and then the
+## contact pass, separation, every prey search, the recycle, both snapshots,
+## both sisters, the person's lifecycle calls and whole frames with the person
+## re-reported every third one, as a guest's state frames do; then a mirror of
+## that water on each side, fed the same snapshots. Compared on everything
+## above plus the pond's own members, every person's record and both person
+## signals. This is what holds a change that teaches the field a *second*
+## person (the dedicated host, `game/server/`) to leaving the one-person pond
+## exactly as it was: the same calls, the same bits, the same draws.
 
 var NewFood: GDScript = null
 var OldFood: GDScript = null
@@ -67,6 +80,21 @@ var old_log: Array = []
 var new_log: Array = []
 ## The run's _on_eaten, on both sides, only in "growing" trials.
 var growing := false
+## True while the pond trials run: [method _snap] reads the pond's members too.
+var pond_mode := false
+
+## What the pond adds to a body, and to the field, and what a person is.
+const POND_BODY_KEYS: Array[StringName] = [&"speed", &"order", &"tuned"]
+const PERSON_KEYS: Array[StringName] = [&"at", &"facing", &"launch", &"turning",
+	&"age", &"velocity", &"swim_speed", &"armour", &"dart_range", &"dart_cooldown",
+	&"dart_bearing", &"dart_clock", &"venom_cost", &"first_hunt", &"in_water",
+	&"quiet"]
+const POND_FIELD_KEYS: Array[StringName] = [&"in_water", &"anchored", &"died_of",
+	&"died_by", &"_pond", &"_mirror", &"_water", &"_changes", &"_seeded_for",
+	&"_stamp", &"_anchor_ids", &"_anchor_at", &"_snap_at", &"_snap_age", &"_book",
+	&"smell_bearing", &"ping_bearing", &"dart_bearing", &"dart_range"]
+const PERSON_GENES: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum",
+	&"pellicle", &"toxicyst", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
 
 
 func _initialize() -> void:
@@ -76,6 +104,8 @@ func _initialize() -> void:
 	var long_trials := 150
 	var long_frames := 600
 	var first := 0
+	var pond_trials := 1500
+	var pond_long := 60
 	for arg in OS.get_cmdline_user_args():
 		var s := str(arg)
 		if s.begins_with("--trials="):
@@ -90,6 +120,10 @@ func _initialize() -> void:
 			long_frames = int(s.trim_prefix("--frames="))
 		elif s.begins_with("--first="):
 			first = int(s.trim_prefix("--first="))
+		elif s.begins_with("--pond="):
+			pond_trials = int(s.trim_prefix("--pond="))
+		elif s.begins_with("--pond-long="):
+			pond_long = int(s.trim_prefix("--pond-long="))
 	if old_path.is_empty() or (not FileAccess.file_exists(old_path)
 			and not ResourceLoader.exists(old_path)):
 		print("[field-diff] no reference: pass --old=<main's food.gd>")
@@ -110,6 +144,15 @@ func _initialize() -> void:
 		_trial(trial, 4)
 	for trial in long_trials:
 		_trial(100000 + first + trial, long_frames)
+	var solo_checks := checks
+	pond_mode = true
+	for trial in range(first, first + pond_trials):
+		_pond_trial(trial, 4)
+	for trial in pond_long:
+		_pond_trial(100000 + first + trial, long_frames)
+	pond_mode = false
+	print("[field-diff] solo checks %d, pond checks %d (%d trials, %d of %d frames)"
+		% [solo_checks, checks - solo_checks, pond_trials, pond_long, long_frames])
 	print("[field-diff] checks %d  fails %d  events %s" % [checks, fails, str(events)])
 	print("[field-diff] %s" % ("ALL EQUAL" if fails == 0 else "MISMATCH"))
 	for node: Node in [old_food, new_food, old_cell.genome, new_cell.genome,
@@ -135,6 +178,13 @@ func _wire(food: Node, log: Array, cell: Node) -> void:
 	food.stung.connect(func(b: float) -> void: log.append(["stung", b]))
 	food.darted.connect(func(b: float) -> void: log.append(["darted", b]))
 	food.pulsed.connect(func() -> void: log.append(["pulsed"]))
+	# The person's two, which only a pond emits: a single-player trial never
+	# hears them, so wiring them here changes nothing there.
+	food.person_touched.connect(func(what: int, at: Vector2, level: float, by: int,
+			gene: StringName) -> void:
+		log.append(["person_touched", what, at, level, by, gene]))
+	food.person_died.connect(func(cause: int, by: int, at: Vector2) -> void:
+		log.append(["person_died", cause, by, at]))
 
 
 
@@ -259,7 +309,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 
 func _apply(food: Node, cell: Node, st: Dictionary) -> void:
 	var cells: Array = food.get("_cells")
-	for i in cells.size():
+	for i in mini(cells.size(), (st[&"bodies"] as Array).size()):
 		var b: Object = cells[i]
 		var d: Dictionary = st[&"bodies"][i]
 		for k: StringName in BODY_KEYS:
@@ -313,6 +363,21 @@ func _snap(food: Node, cell: Node) -> Array:
 	for k: StringName in CELL_KEYS:
 		out.append(cell.get(k))
 	out.append((cell.get("genome").t as Dictionary).duplicate())
+	if not pond_mode:
+		return out
+	for b: Object in food.get("_cells"):
+		var row := []
+		for k: StringName in POND_BODY_KEYS:
+			row.append(b.get(k))
+		var person: Object = b.get("person")
+		if person == null:
+			row.append(null)
+		else:
+			for k: StringName in PERSON_KEYS:
+				row.append(person.get(k))
+		out.append(row)
+	for k: StringName in POND_FIELD_KEYS:
+		out.append(food.get(k))
 	return out
 
 
@@ -372,6 +437,11 @@ func _tally(kind: String) -> void:
 	for entry: Array in new_log:
 		var key: String = entry[0]
 		events[key] = int(events.get(key, 0)) + 1
+		# The players' own rules, mouth to mouth: every one of them says so
+		# with By.FRIEND (2), so this is the count that shows they ran.
+		if (key == "person_touched" and int(entry[4]) == 2) \
+				or (key == "person_died" and int(entry[2]) == 2):
+			events[key + "_by_friend"] = int(events.get(key + "_by_friend", 0)) + 1
 	events["reseeds"] = int(events.get("reseeds", 0)) + int(new_food.get("_serial")) - 100
 	events[kind] = int(events.get(kind, 0)) + 1
 
@@ -452,3 +522,271 @@ func _trial(trial: int, frames: int) -> void:
 		if not _compare("_process frame %d" % f, trial, kind, xo, xn):
 			return
 	_tally(kind + "_frames")
+
+
+# ---------------------------------------------------------------------------
+# A phone's pond: one person, both fields, the same calls.
+# ---------------------------------------------------------------------------
+
+## The second water's bodies -- `_make_state`'s, shifted up 34 slots, round a
+## second centre, some of them hunting the person -- and the person: a pose
+## near this cell or not, a genome, a worn order and the clocks a guest's body
+## carries, all drawn from [param rng].
+func _make_pond(rng: RandomNumberGenerator, st: Dictionary, kind: String) -> Dictionary:
+	var extra := _make_state(rng, kind)
+	var player: Vector2 = st[&"player"]
+	var shift := Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(0.0, 900.0)
+	var bodies: Array = extra[&"bodies"]
+	for d: Dictionary in bodies:
+		d[&"pos"] = (d[&"pos"] as Vector2) + shift
+		d[&"flee_from"] = (d[&"flee_from"] as Vector2) + shift
+		d[&"aim"] = (d[&"aim"] as Vector2) + shift
+		d[&"serial"] = int(d[&"serial"]) + 34
+		var target := int(d[&"target"])
+		if target >= 0:
+			d[&"target"] = target + (34 if rng.randf() < 0.5 else 0)
+			d[&"target_serial"] = int(d[&"target"]) + 1 if rng.randf() < 0.85 \
+				else rng.randi_range(0, 80)
+	# Some of both waters hunt the person, in slot 68: `place_person` gives
+	# them serial 101 on water whose `_serial` `_apply` has set to 100.
+	for d: Dictionary in (st[&"bodies"] as Array) + bodies:
+		if rng.randf() < 0.12:
+			d[&"state"] = 1
+			d[&"target"] = 68
+			d[&"target_serial"] = 101 if rng.randf() < 0.85 else rng.randi_range(0, 120)
+	var pond := {}
+	pond[&"bodies"] = bodies
+	pond[&"tuned"] = []
+	for i in 68:
+		(pond[&"tuned"] as Array).append(rng.randi_range(-1, 1))
+	# The person: a mouth's length from this cell a third of the time, so the
+	# players' own rules -- swallow, poison, chew both ways -- are reached.
+	var near := rng.randf() < 0.35 or kind == "growing"
+	var person_at := player + Vector2.from_angle(rng.randf() * TAU) \
+		* (rng.randf_range(0.0, 90.0) if near else rng.randf_range(60.0, 1500.0))
+	pond[&"at"] = person_at
+	pond[&"heading"] = rng.randf_range(-PI, PI) if not near \
+		else (player - person_at).angle() + PI * 0.5 + rng.randf_range(-0.6, 0.6)
+	pond[&"radius"] = rng.randf_range(14.0, 48.0)
+	pond[&"velocity"] = Vector2.from_angle(rng.randf() * TAU) * rng.randf_range(0.0, 150.0)
+	pond[&"turning"] = rng.randf_range(-1.2, 1.2)
+	var tiers := {}
+	for gene: StringName in PERSON_GENES:
+		if gene == &"cytostome" or rng.randf() < 0.45:
+			tiers[gene] = rng.randi_range(0, 3) if gene == &"cytostome" \
+				else rng.randi_range(1, 3)
+	pond[&"tiers"] = tiers
+	var order: Array = []
+	for gene: StringName in tiers:
+		if rng.randf() < 0.8:
+			order.append(gene)
+	# Fisher-Yates on this trial's own stream: `shuffle()` draws from the
+	# global one, which would make a mismatch impossible to reproduce alone.
+	for i in range(order.size() - 1, 0, -1):
+		var j := rng.randi_range(0, i)
+		var held: Variant = order[i]
+		order[i] = order[j]
+		order[j] = held
+	if not order.is_empty() and rng.randf() < 0.3:
+		order.insert(rng.randi_range(0, order.size()), &"")
+	pond[&"order"] = order
+	pond[&"wound"] = 0.0 if rng.randf() < 0.5 else rng.randf_range(0.0, 0.99)
+	pond[&"bite"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.0, 1.0)
+	pond[&"first_hunt"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.0, 42.0)
+	pond[&"dart_clock"] = 0.0 if rng.randf() < 0.7 else rng.randf_range(0.0, 20.0)
+	pond[&"wet"] = rng.randf() < 0.85
+	pond[&"quiet"] = rng.randf() < 0.1
+	# This cell: in the water, dividing, or dead.
+	var roll := rng.randf()
+	pond[&"local"] = 0 if roll < 0.8 else (1 if roll < 0.9 else 2)
+	pond[&"place"] = [player + Vector2.from_angle(rng.randf() * TAU) * 480.0,
+		rng.randf_range(-PI, PI), rng.randf_range(14.0, 40.0)]
+	pond[&"sister"] = [player + Vector2.from_angle(rng.randf() * TAU)
+		* rng.randf_range(0.0, 700.0), rng.randf_range(-PI, PI),
+		rng.randf_range(14.0, 40.0)]
+	pond[&"mirror_wound"] = rng.randf_range(0.0, 1.0)
+	return pond
+
+
+func _pond_apply(food: Node, cell: Node, st: Dictionary, pond: Dictionary) -> void:
+	_apply(food, cell, st)
+	var cells: Array = food.get("_cells")
+	var extra: Array = pond[&"bodies"]
+	for i in extra.size():
+		var b: Object = cells[34 + i]
+		var d: Dictionary = extra[i]
+		for k: StringName in BODY_KEYS:
+			var v: Variant = d[k]
+			if v is Dictionary:
+				v = (v as Dictionary).duplicate(true)
+			b.set(k, v)
+	for i in 68:
+		(cells[i] as Object).set(&"tuned", int((pond[&"tuned"] as Array)[i]))
+	food.place_person(pond[&"at"], float(pond[&"heading"]), float(pond[&"radius"]),
+		pond[&"velocity"], float(pond[&"turning"]))
+	food.set_person_genome((pond[&"tiers"] as Dictionary).duplicate(),
+		(pond[&"order"] as Array).duplicate())
+	var pb: Object = cells[68]
+	pb.set(&"wound", float(pond[&"wound"]))
+	pb.set(&"bite", float(pond[&"bite"]))
+	var person: Object = pb.get("person")
+	person.set(&"first_hunt", float(pond[&"first_hunt"]))
+	person.set(&"dart_clock", float(pond[&"dart_clock"]))
+	food.set_person_in_water(bool(pond[&"wet"]))
+	food.set_person_quiet(bool(pond[&"quiet"]))
+	match int(pond[&"local"]):
+		1:
+			food.leave_water(false)
+		2:
+			food.leave_water(true)
+
+
+## Both fields set up from one stream on one cell, opened as a pond, and given
+## the same two waters and person. False if they already differ.
+func _pond_fresh(trial: int, st: Dictionary, pond: Dictionary, kind: String) -> bool:
+	growing = false
+	for cell: Node in [old_cell, new_cell]:
+		cell.set("position", st[&"player"])
+		cell.set("radius", st[&"cell_radius"])
+		cell.get("genome").t = (st[&"cell_tiers"] as Dictionary).duplicate()
+	seed(trial)
+	old_food.setup(old_cell)
+	old_food.open_pond()
+	var xo := randi()
+	seed(trial)
+	new_food.setup(new_cell)
+	new_food.open_pond()
+	var xn := randi()
+	old_log.clear()
+	new_log.clear()
+	var same := _compare("pond setup", trial, kind, xo, xn)
+	_pond_apply(old_food, old_cell, st, pond)
+	_pond_apply(new_food, new_cell, st, pond)
+	old_log.clear()
+	new_log.clear()
+	growing = kind == "growing"
+	return same
+
+
+## One call on both fields from one stream, compared with its result.
+func _both(what: String, trial: int, kind: String, stream: int, call: Callable) -> bool:
+	seed(stream)
+	var ro: Variant = call.call(old_food)
+	var xo := randi()
+	seed(stream)
+	var rn: Variant = call.call(new_food)
+	var xn := randi()
+	return _compare(what, trial, kind, [ro, xo], [rn, xn])
+
+
+func _pond_trial(trial: int, frames: int) -> void:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = trial * 6007 + 29
+	var kind: String = KINDS[trial % KINDS.size()] if trial < 100000 \
+		else (["plain", "growing"][trial % 2])
+	var st := _make_state(rng, kind)
+	var pond := _make_pond(rng, st, kind)
+	var dt := 1.0 / 60.0
+
+	# The contact pass -- the water on this cell and on the person, and the two
+	# players on each other -- and separation, on the untouched water.
+	if not _pond_fresh(trial, st, pond, kind):
+		return
+	if not _compare("pond apply", trial, kind):
+		return
+	_both("pond _step_contacts", trial, kind, trial * 31 + 11,
+		func(f: Node) -> Variant: return f._step_contacts())
+	_both("pond _step_separate", trial, kind, trial * 31 + 12,
+		func(f: Node) -> Variant: f._step_separate(); return null)
+	_tally("pond_" + kind)
+
+	# Every prey search, the person in reach of every mouth.
+	_pond_fresh(trial, st, pond, kind)
+	var reaches := [0.0, 50.0, 300.0, 1900.0, INF]
+	for i in 68:
+		var reach: float = reaches[(i + trial) % reaches.size()]
+		if not _both("pond _look_for_prey %d" % i, trial, kind, trial * 131 + i,
+				func(f: Node) -> Variant:
+					f._look_for_prey(i, (f.get("_cells") as Array)[i], reach)
+					return null):
+			return
+
+	# The recycle, and the two snapshots it is read by.
+	_pond_fresh(trial, st, pond, kind)
+	_both("pond _step_pond", trial, kind, trial * 17 + 7,
+		func(f: Node) -> Variant: f._step_pond(); return null)
+	_both("pond_entries(true)", trial, kind, trial * 17 + 8,
+		func(f: Node) -> Variant: return f.pond_entries(true))
+	_both("pond_entries(false)", trial, kind, trial * 17 + 9,
+		func(f: Node) -> Variant: return f.pond_entries(false))
+
+	# Both sisters: the guest's, by SISTER, and this cell's own.
+	_pond_fresh(trial, st, pond, kind)
+	var sister: Array = pond[&"sister"]
+	var tiers := {&"cytostome": 2, &"pellicle": 1}
+	_both("pond place_sister", trial, kind, trial * 17 + 10,
+		func(f: Node) -> Variant:
+			return f.place_sister(sister[0], float(sister[1]), float(sister[2]), tiers))
+	var solo: Array = st[&"sister"]
+	_both("pond put_sister", trial, kind, trial * 17 + 11,
+		func(f: Node) -> Variant:
+			f.put_sister(float(solo[0]), float(solo[1]), float(solo[2]), tiers)
+			return null)
+
+	# The person's lifecycle, as the wire drives it.
+	_pond_fresh(trial, st, pond, kind)
+	var place: Array = pond[&"place"]
+	_both("pond renew_person", trial, kind, trial * 17 + 12,
+		func(f: Node) -> Variant: f.renew_person(); return f.person() != null)
+	_both("pond set_person_in_water", trial, kind, trial * 17 + 13,
+		func(f: Node) -> Variant: f.set_person_in_water(false); return null)
+	_both("pond remove_person", trial, kind, trial * 17 + 14,
+		func(f: Node) -> Variant: f.remove_person(); return f.person() == null)
+	_both("pond arrival", trial, kind, trial * 17 + 15,
+		func(f: Node) -> Variant:
+			f.place_person(place[0], float(place[1]), float(place[2]))
+			f.set_person_in_water(true)
+			return f.person() != null)
+	_both("pond enter_water", trial, kind, trial * 17 + 16,
+		func(f: Node) -> Variant: f.enter_water(); return null)
+
+	# Whole frames, the person re-reported every third one as a guest's state
+	# frames would put it, and now and then leaving the water or going quiet.
+	_pond_fresh(trial, st, pond, kind)
+	var from: Vector2 = pond[&"at"]
+	var velocity: Vector2 = pond[&"velocity"]
+	var heading := float(pond[&"heading"])
+	for f in frames:
+		if f % 3 == 2:
+			var at := from + velocity * (float(f) * dt)
+			var wet := (f / 90) % 5 != 3
+			var report := func(field: Node) -> Variant:
+				if field.person() == null:
+					return null
+				field.set_person_in_water(wet)
+				field.place_person(at, heading + 0.01 * float(f),
+					float(pond[&"radius"]), velocity, 0.3)
+				field.set_person_quiet((f / 60) % 7 == 5)
+				return null
+			if not _both("pond report %d" % f, trial, kind, trial * 7 + f * 1013,
+					report):
+				return
+		if not _both("pond _process frame %d" % f, trial, kind, trial * 7 + f * 1009,
+				func(field: Node) -> Variant: field._process(dt); return null):
+			return
+	_tally("pond_" + kind + "_frames")
+
+	# A mirror of that water on each side, fed the same snapshot.
+	var entries: Array = old_food.pond_entries(false)
+	var wound := float(pond[&"mirror_wound"])
+	_both("mirror become", trial, kind, trial * 17 + 20,
+		func(f: Node) -> Variant:
+			f.become_mirror()
+			f.apply_pond(wound, entries)
+			f.set_person_genome((pond[&"tiers"] as Dictionary).duplicate(),
+				(pond[&"order"] as Array).duplicate())
+			return f.person() != null)
+	for f in mini(frames, 60):
+		if not _both("mirror _process frame %d" % f, trial, kind, trial * 3 + f * 1019,
+				func(field: Node) -> Variant: field._process(dt); return null):
+			return

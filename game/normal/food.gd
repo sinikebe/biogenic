@@ -92,13 +92,14 @@ signal pulsed
 ## is the strength or the nutrition, [param by] is a [enum By] and [param gene]
 ## is the meal's gene for `ATE`. Only a field with a pond open emits it, and
 ## `pond.gd` sends it to the other player as CONTACT. A `KILLED` is always
-## followed at once by [signal person_died], which carries the cause.
+## followed at once by [signal person_died], which carries the cause. On a
+## dedicated host, which has two people, [member touched_slot] says which.
 signal person_touched(what: int, at: Vector2, level: float, by: int, gene: StringName)
 ## **The other player died in this water**: swallowed, chewed apart, or
 ## poisoned by what it bit or swallowed -- a [enum Cause], by a [enum By], at
 ## the place it was. Emitted after [signal person_touched] has said `KILLED` and
-## after the person has left [constant PERSON_SLOT], so a listener that puts
-## them straight back finds the slot empty.
+## after the person has left their slot, so a listener that puts them straight
+## back finds it empty -- and after [member touched_slot] names it.
 signal person_died(cause: int, by: int, at: Vector2)
 
 const COUNT := 34
@@ -116,6 +117,12 @@ const PERSON_SLOT := 2 * COUNT
 ## Every slot a pond has: two waters' worth of cells -- one for each of you, when
 ## you are apart -- and the person.
 const POND_SLOTS := 2 * COUNT + 1
+## **The most people one field holds**: a dedicated host's two guests
+## (`game/server/`), in [constant PERSON_SLOT] and the slot after it. A phone's
+## pond and every mirror hold one. The wire never carries a slot past
+## [constant PERSON_SLOT]: each guest is sent the other one *as* slot 68, the
+## place a phone host puts itself, so a guest cannot tell the two hosts apart.
+const GUESTS_MAX := 2
 ## How far past a snapshot the mirror carries anything, in seconds: the view's
 ## own `PEER_REACH`, for the same reason. A body carried further than this on
 ## an old heading is a guess, and the mirror holds rather than guesses.
@@ -144,7 +151,9 @@ enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6
 enum Cause { SWALLOWED = 1, CHEWED = 2, STARVED = 3, POISONED = 4 }
 ## Whose mouth it was.
 enum By { WATER = 1, FRIEND = 2 }
-## The two anchors a pond can have (§1.4): this device's own cell and the person.
+## The anchors a pond can have (§1.4): this device's own cell and the person --
+## and on a dedicated host, which has no cell, the person in each of its slots:
+## `PERSON + k` is the person in `PERSON_SLOT + k`.
 enum Anchor { LOCAL = 0, PERSON = 1 }
 
 ## One body in a snapshot, as [method pond_entries] builds it and
@@ -905,6 +914,11 @@ class Person:
 	## body still drifts, bites and can be eaten (§1.8) -- it is kept for the
 	## view, which fades their presence.
 	var quiet := false
+	## **Which slot their body is in**: [constant PERSON_SLOT] on a phone's
+	## pond and in every mirror; a dedicated host's second guest is in the one
+	## after it. Every rule that reaches for a person's body reaches through
+	## this, so a rule is written once for however many people there are.
+	var slot := PERSON_SLOT
 
 
 ## Total scent concentration at the cell, 0..1. The other half of metabolism's
@@ -1093,7 +1107,16 @@ var anchored := true
 ## player reads them.
 var died_of := 0
 var died_by := 0
+## **Which person the last [signal person_touched] or [signal person_died] was
+## about** -- the slot, written in the instant before either is emitted, so a
+## listener reads it inside its handler the way the run reads [member died_of].
+## Always [constant PERSON_SLOT] on a phone's pond; a dedicated host has two
+## people and asks. The signals themselves are unchanged.
+var touched_slot := PERSON_SLOT
 var _pond := false
+## How many people this pond holds, in [constant PERSON_SLOT] onwards: one,
+## except on a dedicated host ([method open_dedicated]).
+var _guests := 1
 ## A mirror simulates nothing but its own cell's senses: the host's water
 ## arrives by [method apply_pond] and every contact by [method hear_contact].
 var _mirror := false
@@ -1129,6 +1152,7 @@ func setup(cell: CellBody) -> void:
 	_cell = cell
 	_pond = false
 	_mirror = false
+	_guests = 1
 	_water = COUNT
 	in_water = true
 	anchored = true
@@ -1189,7 +1213,8 @@ func _process(delta: float) -> void:
 	# The person first, so that every chase this frame leads the place they are
 	# now -- as the local cell has already moved by the time this node runs.
 	if _pond:
-		_step_person(delta)
+		for k in _guests:
+			_step_person(delta, PERSON_SLOT + k)
 	for i in _water:
 		_step_body(i, delta)
 	# In a pond the water is kept at the end of the frame instead, where the
@@ -1694,15 +1719,21 @@ func _step_contacts() -> bool:
 			return false
 		_lose_local()
 	if _pond:
-		_contacts_person()
+		for k in _guests:
+			_contacts_person(PERSON_SLOT + k)
+		# **A dedicated host's two guests, on each other**: the last row of
+		# §1.3, after both have met the water -- as a phone host's own cell
+		# meets the water before its guest does.
+		if _guests > 1:
+			_guests_meet()
 	_contacts_water()
 	return true
 
 
 ## **A player's mouth, and the water's mouths, on each other** -- one rule with
 ## two callers (shared-pond.md §1.3). [param p] null is the cell on this device,
-## told through the shipped signals; a person is the other player in
-## [constant PERSON_SLOT], told through [signal person_touched]. Returns true
+## told through the shipped signals; a person is another player, in
+## [member Person.slot], told through [signal person_touched]. Returns true
 ## when that player has just died here.
 ##
 ## For the local cell this is the shipped pass, in the shipped order, with the
@@ -1712,7 +1743,7 @@ func _step_contacts() -> bool:
 ## next contact meets the bigger body -- while `my_gape` stays the one it had
 ## when the pass began, exactly as it always has.
 func _contacts_with(p: Person) -> bool:
-	var pb: Body = null if p == null else _cells[PERSON_SLOT]
+	var pb: Body = null if p == null else _cells[p.slot]
 	var my_gape := _cell.gape() if p == null else _gape(pb)
 	# **The pre-check, and it skips only bodies the full test rejects** -- the
 	# water's own kind, below, asked of a player. Neither mouth can be on the
@@ -1790,7 +1821,7 @@ func _contacts_with(p: Person) -> bool:
 			_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
 			_break_off(b)
 			if p != null:
-				_person_gone(Cause.SWALLOWED, By.WATER)
+				_person_gone(Cause.SWALLOWED, By.WATER, p)
 			return true
 		if my_mouth and b.radius < my_gape:
 			# Emit where it was before recycling it, so a listener never has to
@@ -1815,8 +1846,9 @@ func _contacts_with(p: Person) -> bool:
 
 ## **The other player, in this water**: against the cells, then against the
 ## cell on this device. Host only; the mirror's contacts are the host's, heard.
-func _contacts_person() -> void:
-	var pb := _cells[PERSON_SLOT]
+## [param slot] is which person, on a dedicated host that has two.
+func _contacts_person(slot: int = PERSON_SLOT) -> void:
+	var pb := _cells[slot]
 	var p := pb.person
 	if p == null or not pb.seeded:
 		return
@@ -1968,7 +2000,7 @@ func _flank_theta(target_heading: float, target_pos: Vector2,
 func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 	if b.bite > 0.0:
 		return false
-	var pb: Body = null if p == null else _cells[PERSON_SLOT]
+	var pb: Body = null if p == null else _cells[p.slot]
 	# Where the mouth was when it closed: every event below is told from here,
 	# even after the venom has taken that body somewhere else.
 	var at := b.pos
@@ -1999,7 +2031,7 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		if b.state == State.STALK:
 			_break_off(b)
 		if p != null:
-			_person_gone(Cause.CHEWED, By.WATER)
+			_person_gone(Cause.CHEWED, By.WATER, p)
 		return true
 	# `toxicyst` from the other end: biting a venomous body costs the mouth a
 	# share of what it just did, and enough of them kill it.
@@ -2019,7 +2051,7 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 ## cell -- and its order is the one every contact in a pond keeps: the eater's
 ## death before the meal (shared-pond.md §1.3).
 func _bite_from(index: int, b: Body, p: Person = null) -> bool:
-	var pb: Body = null if p == null else _cells[PERSON_SLOT]
+	var pb: Body = null if p == null else _cells[p.slot]
 	if (_bite_clock if p == null else pb.bite) > 0.0:
 		return false
 	# Measured at the body being chewed: its own heading against the direction
@@ -2059,7 +2091,7 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	if hurt >= 1.0:
 		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.POISONED)
 		if p != null:
-			_person_gone(Cause.POISONED, By.WATER)
+			_person_gone(Cause.POISONED, By.WATER, p)
 		return true
 	if b.wound >= 1.0:
 		_tell(p, Contact.ATE, at,
@@ -2090,76 +2122,99 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 #
 # So a pair that could each swallow the other is decided the way the shipped
 # pass decides a water cell against this cell: the other mouth is asked first.
+#
+# **A dedicated host has no cell of its own and two guests** (`game/server/`),
+# so the same three functions take the "me" side as a person too: [param me]
+# null is this device's cell, exactly as it always was, and a person is the
+# guest in [constant PERSON_SLOT], meeting the one after it -- whose mouth is
+# therefore the one asked first. Everything "me" is read through the helpers
+# below at the moment the shipped code read it, so this cell's path makes the
+# same calls in the same order: `hear_contact()` is `_tell(null)`, and
+# `_lose_local()` is `_lose(null)`.
 # ---------------------------------------------------------------------------
 
-func _players_meet(p: Person) -> void:
-	var pb := _cells[PERSON_SLOT]
+func _players_meet(p: Person, me: Person = null) -> void:
+	var pb := _cells[p.slot]
+	var mb: Body = null if me == null else _cells[me.slot]
 	var their_gape := _gape(pb)
-	var my_gape := _cell.gape()
+	var my_gape := _cell.gape() if me == null else _gape(mb)
 	var their_mouth := Cilia.mouth_touches(pb.pos, pb.heading, pb.radius,
-		their_gape, _cell.position, _cell.radius)
-	var my_mouth := Cilia.mouth_touches(_cell.position, _cell.heading,
-		_cell.radius, my_gape, pb.pos, pb.radius)
+		their_gape, _my_pos(me), _my_radius(me))
+	var my_mouth := Cilia.mouth_touches(_my_pos(me),
+		_cell.heading if me == null else mb.heading,
+		_my_radius(me), my_gape, pb.pos, pb.radius)
 	if not (their_mouth or my_mouth):
 		return
-	var here := _cell.position
+	var here := _my_pos(me)
 	var there := pb.pos
-	if their_mouth and _cell.swallow_radius() < their_gape:
-		if venom_cost >= 0.0:
+	if their_mouth and _armoured(me) < their_gape:
+		if (venom_cost if me == null else me.venom_cost) >= 0.0:
 			# Spat out starving, and they die of it.
-			hear_contact(Contact.STUNG, there, 0.0, By.FRIEND)
+			_tell(me, Contact.STUNG, there, 0.0, By.FRIEND, &"")
 			_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
-			_person_gone(Cause.POISONED, By.FRIEND)
+			_person_gone(Cause.POISONED, By.FRIEND, p)
 			return
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
-		_tell(p, Contact.ATE, here, _meal_value_for(_cell.radius, pb.radius),
-			By.FRIEND, _local_dominant())
-		_lose_local()
+		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
+		_tell(p, Contact.ATE, here, _meal_value_for(_my_radius(me), pb.radius),
+			By.FRIEND, _my_dominant(me))
+		_lose(me, Cause.SWALLOWED, By.FRIEND)
 		return
 	if my_mouth and pb.radius * p.armour < my_gape:
 		if p.venom_cost >= 0.0:
 			_tell(p, Contact.STUNG, here, 0.0, By.FRIEND, &"")
-			hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
-			_lose_local()
+			_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
+			_lose(me, Cause.POISONED, By.FRIEND)
 			return
-		hear_contact(Contact.ATE, there, _meal_value_for(pb.radius, _cell.radius),
+		_tell(me, Contact.ATE, there, _meal_value_for(pb.radius, _my_radius(me)),
 			By.FRIEND, Genome.dominant_of(pb.genome))
 		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
-		_person_gone(Cause.SWALLOWED, By.FRIEND)
+		_person_gone(Cause.SWALLOWED, By.FRIEND, p)
 		return
-	if their_mouth and _chewed_by_friend(p):
+	if their_mouth and _chewed_by_friend(p, me):
 		return
 	if my_mouth and pb.person == p and pb.seeded:
-		_chew_friend(p)
+		_chew_friend(p, me)
 
 
 ## Their mouth on this cell, and it cannot swallow it: [method _bitten_by]'s
 ## order, the victim's death first. Returns true when this cell died.
-func _chewed_by_friend(p: Person) -> bool:
-	var pb := _cells[PERSON_SLOT]
+func _chewed_by_friend(p: Person, me: Person = null) -> bool:
+	var pb := _cells[p.slot]
+	var mb: Body = null if me == null else _cells[me.slot]
 	if pb.bite > 0.0:
 		return false
 	var there := pb.pos
-	var here := _cell.position
+	var here := _my_pos(me)
+	# The flank at this cell, as the water measures it at a person.
 	var damage := CellBody.bite_damage(Genome.tier_of(pb.genome, &"cytostome"),
-		_gape(pb), _cell.radius, _cell.extra(&"pellicle"),
-		absf(_cell.bearing_to(there)))
+		_gape(pb), _my_radius(me),
+		_cell.extra(&"pellicle") if me == null else Genome.tier_of(mb.genome, &"pellicle"),
+		absf(_cell.bearing_to(there)) if me == null
+			else _flank_theta(mb.heading, mb.pos, there))
 	if damage <= 0.0:
 		return false
 	pb.bite = CellBody.BITE_GAP
-	_cell.wound = clampf(_cell.wound + damage, 0.0, 1.0)
-	if _cell.wound >= 1.0:
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.CHEWED)
-		_tell(p, Contact.ATE, here, _meal_value_for(_cell.radius, pb.radius),
-			By.FRIEND, _local_dominant())
-		_lose_local()
+	var hurt := 0.0
+	if me == null:
+		_cell.wound = clampf(_cell.wound + damage, 0.0, 1.0)
+		hurt = _cell.wound
+	else:
+		mb.wound = clampf(mb.wound + damage, 0.0, 1.0)
+		hurt = mb.wound
+	if hurt >= 1.0:
+		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.CHEWED)
+		_tell(p, Contact.ATE, here, _meal_value_for(_my_radius(me), pb.radius),
+			By.FRIEND, _my_dominant(me))
+		_lose(me, Cause.CHEWED, By.FRIEND)
 		return true
-	var back := CellBody.venom_back(_cell.extra(&"toxicyst"), damage)
+	var back := CellBody.venom_back(
+		_cell.extra(&"toxicyst") if me == null else Genome.tier_of(mb.genome, &"toxicyst"),
+		damage)
 	pb.wound = clampf(pb.wound + back, 0.0, 1.0)
-	hear_contact(Contact.BITTEN, there, _felt(damage), By.FRIEND)
+	_tell(me, Contact.BITTEN, there, _felt(damage), By.FRIEND, &"")
 	if pb.wound >= 1.0:
 		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
-		_person_gone(Cause.POISONED, By.FRIEND)
+		_person_gone(Cause.POISONED, By.FRIEND, p)
 		return false
 	_tell(p, Contact.BITTEN, here,
 		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.FRIEND, &"")
@@ -2168,35 +2223,83 @@ func _chewed_by_friend(p: Person) -> bool:
 
 ## This cell's mouth on them, and they are too big to swallow:
 ## [method _bite_from]'s order, the eater's death first.
-func _chew_friend(p: Person) -> void:
-	if _bite_clock > 0.0:
+func _chew_friend(p: Person, me: Person = null) -> void:
+	var mb: Body = null if me == null else _cells[me.slot]
+	if (_bite_clock if me == null else mb.bite) > 0.0:
 		return
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[p.slot]
 	var there := pb.pos
-	var here := _cell.position
-	var damage := CellBody.bite_damage(_cell.tier(&"cytostome"), _cell.gape(),
+	var here := _my_pos(me)
+	var damage := CellBody.bite_damage(
+		_cell.tier(&"cytostome") if me == null else Genome.tier_of(mb.genome, &"cytostome"),
+		_cell.gape() if me == null else _gape(mb),
 		pb.radius, Genome.tier_of(pb.genome, &"pellicle"),
 		_flank_theta(pb.heading, there, here))
 	if damage <= 0.0:
 		return
-	_bite_clock = CellBody.BITE_GAP
+	if me == null:
+		_bite_clock = CellBody.BITE_GAP
+	else:
+		mb.bite = CellBody.BITE_GAP
 	pb.wound = clampf(pb.wound + damage, 0.0, 1.0)
 	var back := CellBody.venom_back(Genome.tier_of(pb.genome, &"toxicyst"), damage)
-	_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
-	if _cell.wound >= 1.0:
-		hear_contact(Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
+	var hurt := 0.0
+	if me == null:
+		_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
+		hurt = _cell.wound
+	else:
+		mb.wound = clampf(mb.wound + back, 0.0, 1.0)
+		hurt = mb.wound
+	if hurt >= 1.0:
+		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
 		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
-		_lose_local()
+		_lose(me, Cause.POISONED, By.FRIEND)
 		return
 	if pb.wound >= 1.0:
-		hear_contact(Contact.ATE, there, _meal_value_for(pb.radius, _cell.radius),
+		_tell(me, Contact.ATE, there, _meal_value_for(pb.radius, _my_radius(me)),
 			By.FRIEND, Genome.dominant_of(pb.genome))
 		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.CHEWED)
-		_person_gone(Cause.CHEWED, By.FRIEND)
+		_person_gone(Cause.CHEWED, By.FRIEND, p)
 	else:
 		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
-	hear_contact(Contact.BITTEN, there,
-		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.FRIEND)
+	_tell(me, Contact.BITTEN, there,
+		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.FRIEND, &"")
+
+
+## **A dedicated host's two guests, mouth to mouth** -- [method _players_meet]
+## with the guest in [constant PERSON_SLOT] on this cell's side of it, both
+## told through [signal person_touched]. Nothing here if either is out of the
+## water, dead, or not there at all.
+func _guests_meet() -> void:
+	var ab := _cells[PERSON_SLOT]
+	var bb := _cells[PERSON_SLOT + 1]
+	if ab.person == null or bb.person == null or not ab.seeded or not bb.seeded:
+		return
+	_players_meet(bb.person, ab.person)
+
+
+## Where "me" is in the three functions above: this cell, or that person.
+func _my_pos(me: Person) -> Vector2:
+	return _cell.position if me == null else _cells[me.slot].pos
+
+
+func _my_radius(me: Person) -> float:
+	return _cell.radius if me == null else _cells[me.slot].radius
+
+
+## What "me" was most made of, for the friend who ate it.
+func _my_dominant(me: Person) -> StringName:
+	return _local_dominant() if me == null \
+		else Genome.dominant_of(_cells[me.slot].genome)
+
+
+## "Me" died here, this frame: this cell leaves the water, a person leaves
+## their slot and is said to have gone.
+func _lose(me: Person, cause: int, by: int) -> void:
+	if me == null:
+		_lose_local()
+	else:
+		_person_gone(cause, by, me)
 
 
 ## How loud a wound of [param damage] is on the skin, 0..1, against the worst
@@ -2240,10 +2343,13 @@ func _step_separate() -> void:
 		# **Each device moves only what it owns** (shared-pond.md §1.2). The
 		# other player gives way on their own device, by the same area share;
 		# here only this cell gives way to them.
-		if _pond and _cells[PERSON_SLOT].seeded:
-			_push_local(_cells[PERSON_SLOT], false)
+		if _pond:
+			for k in _guests:
+				if _cells[PERSON_SLOT + k].seeded:
+					_push_local(_cells[PERSON_SLOT + k], false)
 	if _pond:
-		_push_person()
+		for k in _guests:
+			_push_person(PERSON_SLOT + k)
 
 	# The same kind of pre-check as the contact pass: two bodies farther apart
 	# than this one's radius plus the widest in the water, with the same
@@ -2296,9 +2402,10 @@ func _push_local(b: Body, owns: bool) -> void:
 
 
 ## The water giving way to the other player: its half of every overlap with
-## them. Their own half, and their knock, happen on their device.
-func _push_person() -> void:
-	var pb := _cells[PERSON_SLOT]
+## them. Their own half, and their knock, happen on their device -- and so do
+## two guests' halves of their overlap with each other, on a dedicated host.
+func _push_person(slot: int = PERSON_SLOT) -> void:
+	var pb := _cells[slot]
 	if pb.person == null or not pb.seeded:
 		return
 	for i in _water:
@@ -2503,9 +2610,13 @@ func _find_anchors() -> void:
 	if anchored and _cell != null:
 		_anchor_ids.append(Anchor.LOCAL)
 		_anchor_at.append(_cell.position)
-	if _pond and _cells.size() > PERSON_SLOT and _cells[PERSON_SLOT].person != null:
-		_anchor_ids.append(Anchor.PERSON)
-		_anchor_at.append(_cells[PERSON_SLOT].pos)
+	if not _pond:
+		return
+	for k in _guests:
+		var slot := PERSON_SLOT + k
+		if _cells.size() > slot and _cells[slot].person != null:
+			_anchor_ids.append(Anchor.PERSON + k)
+			_anchor_at.append(_cells[slot].pos)
 
 
 ## Adds body [param b] to every disc it lies in.
@@ -2580,7 +2691,12 @@ func _room_in(k: int, reach: float) -> int:
 
 func _hunting_a_player(b: Body) -> bool:
 	return b.state == State.STALK \
-		and (b.target == TARGET_PLAYER or b.target == PERSON_SLOT)
+		and (b.target == TARGET_PLAYER or _is_person_slot(b.target))
+
+
+## Is [param index] a slot this pond keeps a person in.
+func _is_person_slot(index: int) -> bool:
+	return index >= PERSON_SLOT and index < PERSON_SLOT + _guests
 
 
 ## **A slot empties** (§1.4): nobody is in it until the quota fills it again.
@@ -3234,6 +3350,36 @@ func open_pond() -> void:
 	_changes += 1
 
 
+## **A dedicated host's water** (`game/server/`): an empty pond with a slot for
+## each of [constant GUESTS_MAX] guests and no body of its own. [param cell]
+## stands in for the cell every rule here reads, and it is out of the water and
+## no anchor for good -- every rule that asks about "this cell" asks
+## [member in_water] or [member anchored] first -- so the water is its guests'
+## alone. Nothing is seeded until one arrives (§1.4 with no anchor: the water
+## waits), and nothing is simulated while it is empty.
+func open_dedicated(cell: CellBody) -> void:
+	_cell = cell
+	_pond = true
+	_mirror = false
+	_guests = GUESTS_MAX
+	in_water = false
+	anchored = false
+	_first_pending = false
+	_first_hunt = FIRST_DELAY
+	_snap_at = PackedVector2Array()
+	_snap_age = 0.0
+	_book.clear()
+	_cells.clear()
+	for i in PERSON_SLOT + GUESTS_MAX:
+		_cells.append(Body.new())
+	_water = PERSON_SLOT
+	_seeded_for = PackedInt64Array()
+	_seeded_for.resize(Anchor.PERSON + GUESTS_MAX)
+	_stamp = 0
+	_fresh_senses()
+	_changes += 1
+
+
 func pond_open() -> bool:
 	return _pond
 
@@ -3243,10 +3389,13 @@ func mirroring() -> bool:
 
 
 ## The other player's record, or null when nobody else is in this water.
-func person() -> Person:
-	if not _pond or _cells.size() <= PERSON_SLOT:
+## [param slot] is which person, on a dedicated host that has two; every call
+## below takes it the same way, last and defaulted, so a phone's pond reads
+## exactly as it always has.
+func person(slot: int = PERSON_SLOT) -> Person:
+	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return null
-	return _cells[PERSON_SLOT].person
+	return _cells[slot].person
 
 
 ## **Where the other player is**, as they last reported it: place, heading,
@@ -3258,8 +3407,11 @@ func person() -> Person:
 ## [constant FIRST_DELAY] of grace, which is what every [method setup] grants
 ## this cell. Anything not finite is refused whole, as the wire refuses it.
 func place_person(at: Vector2, heading: float, body_radius: float,
-		velocity: Vector2 = Vector2.ZERO, turning: float = 0.0) -> void:
+		velocity: Vector2 = Vector2.ZERO, turning: float = 0.0,
+		slot: int = PERSON_SLOT) -> void:
 	if not _pond or _mirror:
+		return
+	if not _is_person_slot(slot) or _cells.size() <= slot:
 		return
 	if not at.is_finite() or not is_finite(heading) or not is_finite(body_radius) \
 			or body_radius <= 0.0:
@@ -3268,9 +3420,10 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 		velocity = Vector2.ZERO
 	if not is_finite(turning):
 		turning = 0.0
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[slot]
 	if pb.person == null:
 		pb.person = Person.new()
+		pb.person.slot = slot
 		pb.person.first_hunt = FIRST_DELAY
 		_serial += 1
 		pb.serial = _serial
@@ -3300,10 +3453,11 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 ## organs buy is worked out here, once, with the tables this cell's own nodes
 ## read -- so their dart looks along the arc it is worn on and their mouth is
 ## the width it is drawn.
-func set_person_genome(tiers: Dictionary, order: Array) -> void:
-	if not _pond or _cells.size() <= PERSON_SLOT:
+func set_person_genome(tiers: Dictionary, order: Array,
+		slot: int = PERSON_SLOT) -> void:
+	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[slot]
 	pb.genome = tiers.duplicate()
 	pb.order = order.duplicate()
 	if pb.person != null:
@@ -3332,18 +3486,18 @@ func _derive_person(pb: Body) -> void:
 ## The other player has left the water, dividing, or come back into it. Out
 ## of it they are still an anchor, and nothing in the water can see them, touch
 ## them or go on chasing them (§1.5).
-func set_person_in_water(on: bool) -> void:
-	var p := person()
+func set_person_in_water(on: bool, slot: int = PERSON_SLOT) -> void:
+	var p := person(slot)
 	if p == null:
 		return
 	p.in_water = on
-	_cells[PERSON_SLOT].seeded = on
+	_cells[slot].seeded = on
 
 
 ## Their phone has gone quiet, or been heard again. Nothing here changes: see
 ## [member Person.quiet].
-func set_person_quiet(on: bool) -> void:
-	var p := person()
+func set_person_quiet(on: bool, slot: int = PERSON_SLOT) -> void:
+	var p := person(slot)
 	if p != null:
 		p.quiet = on
 
@@ -3352,10 +3506,10 @@ func set_person_quiet(on: bool) -> void:
 ## wire. The slot empties and takes a new serial, so nothing still chasing them
 ## can carry on against whoever arrives next. Their genome is kept for the next
 ## arrival, which a new PERSON replaces.
-func remove_person() -> void:
-	if not _pond or _cells.size() <= PERSON_SLOT:
+func remove_person(slot: int = PERSON_SLOT) -> void:
+	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[slot]
 	pb.person = null
 	pb.seeded = false
 	pb.radius = 0.0
@@ -3434,9 +3588,10 @@ func _clear_of_players(at: Vector2, body_radius: float) -> Vector2:
 	var players: Array = []
 	if anchored:
 		players.append([_cell.position, _cell.radius])
-	var pb := _cells[PERSON_SLOT]
-	if pb.person != null:
-		players.append([pb.pos, pb.radius])
+	for k in _guests:
+		var pb := _cells[PERSON_SLOT + k]
+		if pb.person != null:
+			players.append([pb.pos, pb.radius])
 	for each: Array in players:
 		var centre: Vector2 = each[0]
 		var reach := float(each[1]) + body_radius + SISTER_CLEAR
@@ -3454,13 +3609,13 @@ func _clear_of_players(at: Vector2, body_radius: float) -> Vector2:
 ## cell's grace, which is what [method enter_water] gives this cell at its own
 ## birth. Their place and what they wear arrive as ever, by [method
 ## place_person] and [method set_person_genome]. Host only.
-func renew_person() -> void:
+func renew_person(slot: int = PERSON_SLOT) -> void:
 	if _mirror:
 		return
-	var p := person()
+	var p := person(slot)
 	if p == null:
 		return
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[slot]
 	_serial += 1
 	pb.serial = _serial
 	pb.meals = 0
@@ -3502,6 +3657,7 @@ func become_mirror() -> void:
 		return
 	_mirror = true
 	_pond = true
+	_guests = 1
 	_first_pending = false
 	in_water = true
 	anchored = true
@@ -3567,6 +3723,43 @@ func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 			FLAG_PERSON | (FLAG_IN_WATER if pb.person.in_water else 0),
 			pb.pos, pb.heading, pb.radius, pb.wound, pb.person.velocity.length(),
 			pb.person.velocity, pb.person.turning])
+	return out
+
+
+## **A dedicated host's snapshot for the guest in [param slot]** -- the same
+## send set, measured from them, and "stalking you" meaning stalking them; and
+## the other guest, if there is one with a body, **as the person, in
+## [constant PERSON_SLOT]** whichever slot they have here, with serial and meals
+## 0 -- exactly the entry a phone host writes for its own cell. So a guest of a
+## dedicated host mirrors its friend where a guest of a phone mirrors the host,
+## and PROTOCOL 4 clients need nothing new (`game/server/`).
+func pond_entries_for(slot: int, reach: float = SEND_REACH) -> Array:
+	var out: Array = []
+	if not _pond or _mirror or not _is_person_slot(slot) or _cells.size() <= slot:
+		return out
+	var pb := _cells[slot]
+	if pb.person == null:
+		return out
+	var you := pb.pos
+	for i in _water:
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var stalking := b.state == State.STALK and b.target == slot \
+			and b.target_serial == pb.serial
+		if not stalking and b.pos.distance_to(you) - b.radius > reach:
+			continue
+		out.append([i, b.serial, b.meals, FLAG_STALKING if stalking else 0,
+			b.pos, b.heading, b.radius, b.wound, b.speed, Vector2.ZERO, 0.0])
+	for k in _guests:
+		var ob := _cells[PERSON_SLOT + k]
+		if PERSON_SLOT + k == slot or ob.person == null:
+			continue
+		out.append([PERSON_SLOT, 0, 0,
+			FLAG_PERSON | (FLAG_IN_WATER if ob.person.in_water else 0),
+			ob.pos, ob.heading, ob.radius, ob.wound, ob.person.velocity.length(),
+			ob.person.velocity, ob.person.turning])
+		break
 	return out
 
 
@@ -3721,6 +3914,7 @@ func _tell(p: Person, what: int, at: Vector2, level: float, by: int,
 	if p == null:
 		hear_contact(what, at, level, by, gene, cause)
 	else:
+		touched_slot = p.slot
 		person_touched.emit(what, at, level, by, gene)
 
 
@@ -3728,20 +3922,20 @@ func _tell(p: Person, what: int, at: Vector2, level: float, by: int,
 func _hunts(b: Body, p: Person) -> bool:
 	if p == null:
 		return b.target == TARGET_PLAYER
-	return b.target == PERSON_SLOT and b.target_serial == _cells[PERSON_SLOT].serial
+	return b.target == p.slot and b.target_serial == _cells[p.slot].serial
 
 
 ## A player's body as a mouth measures it, `pellicle` and all.
 func _armoured(p: Person) -> float:
 	return _cell.swallow_radius() if p == null \
-		else _cells[PERSON_SLOT].radius * p.armour
+		else _cells[p.slot].radius * p.armour
 
 
 ## [method CellBody.bearing_to], asked of either player.
 func _bearing_for(p: Person, point: Vector2) -> float:
 	if p == null:
 		return _cell.bearing_to(point)
-	var pb := _cells[PERSON_SLOT]
+	var pb := _cells[p.slot]
 	var offset := point - pb.pos
 	return atan2(offset.dot(Vector2(cos(pb.heading), sin(pb.heading))),
 		offset.dot(_forward(pb.heading)))
@@ -3749,17 +3943,18 @@ func _bearing_for(p: Person, point: Vector2) -> float:
 
 ## The person [param b] is on a run at, or null.
 func _hunted_person(b: Body) -> Person:
-	if b.target != PERSON_SLOT:
+	if not _is_person_slot(b.target):
 		return null
 	var prey := _target_body(b)
 	return prey.person if prey != null else null
 
 
 ## The other player died here: out of the slot, then said -- so a listener that
-## brings them straight back finds it empty.
-func _person_gone(cause: int, by: int) -> void:
-	var at := _cells[PERSON_SLOT].pos
-	remove_person()
+## brings them straight back finds it empty. [param p] is which of them.
+func _person_gone(cause: int, by: int, p: Person) -> void:
+	var at := _cells[p.slot].pos
+	remove_person(p.slot)
+	touched_slot = p.slot
 	person_died.emit(cause, by, at)
 
 
@@ -3780,8 +3975,8 @@ func _local_dominant() -> StringName:
 ## reloads exactly as a water cell's do -- §1.2's only rule for a person in
 ## `_step_body` -- its grace and its dart run down, and it is carried on from
 ## where it said it was.
-func _step_person(delta: float) -> void:
-	var pb := _cells[PERSON_SLOT]
+func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
+	var pb := _cells[slot]
 	var p := pb.person
 	if p == null:
 		return
@@ -3975,8 +4170,14 @@ func _clear_of_anchors(point: Vector2) -> bool:
 	var ring := RING_MIN * RING_MIN
 	if anchored and _cell != null and point.distance_squared_to(_cell.position) < ring:
 		return false
-	var pb := _cells[PERSON_SLOT] if _cells.size() > PERSON_SLOT else null
-	return pb == null or pb.person == null or point.distance_squared_to(pb.pos) >= ring
+	# Written as the negation of the clear test it replaces, so a NaN place is
+	# refused exactly where it always was.
+	for k in _guests:
+		var pb := _cells[PERSON_SLOT + k] if _cells.size() > PERSON_SLOT + k else null
+		if pb != null and pb.person != null \
+				and not (point.distance_squared_to(pb.pos) >= ring):
+			return false
+	return true
 
 
 ## Is there a drifter other than [param index] in the disc round [param origin].
@@ -3991,19 +4192,27 @@ func _disc_drifter(index: int, origin: Vector2) -> bool:
 
 
 func _anchor_pos(anchor: int) -> Vector2:
-	return _cells[PERSON_SLOT].pos if anchor == Anchor.PERSON else _cell.position
+	return _cells[_anchor_slot(anchor)].pos if anchor >= Anchor.PERSON \
+		else _cell.position
 
 
 func _anchor_radius(anchor: int) -> float:
-	return _cells[PERSON_SLOT].radius if anchor == Anchor.PERSON else _cell.radius
+	return _cells[_anchor_slot(anchor)].radius if anchor >= Anchor.PERSON \
+		else _cell.radius
+
+
+## The slot of the person anchor [param anchor] is: [enum Anchor]'s `PERSON`
+## is [constant PERSON_SLOT], and a dedicated host's second guest the next.
+static func _anchor_slot(anchor: int) -> int:
+	return PERSON_SLOT + anchor - Anchor.PERSON
 
 
 ## [method _sensed], for either player: the person's is read off the tiers they
 ## wear, exactly as this cell's is read off its genome.
 func _anchor_sensed(anchor: int) -> float:
-	if anchor != Anchor.PERSON:
+	if anchor < Anchor.PERSON:
 		return _sensed()
-	var tiers := _cells[PERSON_SLOT].genome
+	var tiers := _cells[_anchor_slot(anchor)].genome
 	var sum := 0.0
 	for gene: StringName in SENSE_GENES:
 		sum += float(Genome.tier_of(tiers, gene))

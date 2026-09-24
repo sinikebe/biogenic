@@ -17,6 +17,15 @@ extends RefCounted
 ## the contacts into it, and speaks for the guest's own cell: ENTER, PERSON,
 ## SISTER and DIED.
 ##
+## **A dedicated host is the same host with two guests and no cell**
+## (`game/server/`). Each guest gets the host side above to itself -- its own
+## person slot, its own snapshots and genomes, its own contacts -- and where a
+## phone host would speak for its own cell, it speaks for the *other guest*: a
+## guest's snapshot carries the other one as the person in slot 68, and its
+## PERSON, its DIED and its shouts are passed on as the host's own would be.
+## So a PROTOCOL 4 guest joins either kind of host with the same code, and
+## meets its friend in the place it always has.
+##
 ## **Nothing here decides what anything looks like or says.** Every moment the
 ## run has to act on -- an arrival, a death, a friend leaving -- leaves as a
 ## signal, and the run owns the beat, the fades and the lines
@@ -66,7 +75,16 @@ signal sister_placed(slot: int)
 ## Either seat: the other player has a new body -- back from the black, or born.
 signal friend_renewed
 
+## Dedicated host: one plain line about a guest -- joined, arrived, died, left
+## -- for the server's log. A phone's pond never says anything here.
+signal noted(line: String)
+
 var hosting := false
+## **A dedicated host** (`game/server/`): a host with no cell of its own and a
+## guest for every one the session greets, up to two, each of whom is told the
+## other is the friend. Built by passing no cell; a phone's run always passes
+## one.
+var dedicated := false
 
 var _net: Node = null
 var _food: FoodField = null
@@ -76,25 +94,42 @@ var _cell: CellBody = null
 var _genome: Node = null
 
 # --- Host ---------------------------------------------------------------------
-## Body version last sent as GENOME, by slot: `serial * 1000 + meals`, the
-## mirror's own book key.
-var _sent := {}
-## When the next snapshot is due if no state frame goes first, and how many
-## state frames had gone when the last one went.
-var _pond_due := 0.0
-var _states_seen := -1
+## **Everything the host keeps about one guest.** A phone's pond has exactly one,
+## made with the run and never replaced: id 0, which means "the session's only
+## peer" and speaks through the session's one-peer calls, in the person slot.
+## A dedicated host has one per greeted guest, by peer id, each in a person slot
+## of its own, spoken to through the session's `*_to` calls.
+class Guest:
+	## The guest's peer id, or 0 for a phone's one guest.
+	var id := 0
+	## Its body's slot in the host's field.
+	var slot := FoodField.PERSON_SLOT
+	## Body version last sent as GENOME, by slot: `serial * 1000 + meals`, the
+	## mirror's own book key.
+	var sent := {}
+	## When the next snapshot is due if no state frame goes first, and how many
+	## state frames had gone when the last one went.
+	var pond_due := 0.0
+	var states_seen := -1
+	## The guest's track entry last carried into the person, by identity.
+	var basis: Array = []
+	## True from ENTER until the guest's state frames say it is swimming here:
+	## the person waits at the arrival, out of the water, and nothing is sent to
+	## a mirror that is not there yet.
+	var awaiting := false
+	var awaiting_since := 0.0
+	## The KILLED the field just said, waiting for the person_died that follows
+	## it in the same call with the cause.
+	var killed_at := Vector2.ZERO
+	var killed_pending := false
+	## Dedicated only: what this guest last said it wears, `[tiers, order]`,
+	## for the other guest; and where its body last was.
+	var worn: Array = []
+	var last_at := Vector2.ZERO
+	var known := false
+
+var _guests: Array = []
 var _flush_queued := false
-## The guest's track entry last carried into the person, by identity.
-var _basis: Array = []
-## True from ENTER until the guest's state frames say it is swimming here: the
-## person waits at the arrival, out of the water, and nothing is sent to a
-## mirror that is not there yet.
-var _awaiting := false
-var _awaiting_since := 0.0
-## The KILLED the field just said, waiting for the person_died that follows it
-## in the same call with the cause.
-var _killed_at := Vector2.ZERO
-var _killed_pending := false
 ## **For tools**: where the last arrival was measured from and where it landed,
 ## the largest snapshot sent and how many went.
 var arrival_from := Vector2.ZERO
@@ -102,7 +137,8 @@ var arrival_at := Vector2.ZERO
 var pond_bytes_max := 0
 var ponds_sent := 0
 var genomes_sent := 0
-## Where the other player's body last was, and whether there has been one.
+## Where the other player's body last was, and whether there has been one: a
+## phone host's guest, for its own return from the black.
 var _friend_at := Vector2.ZERO
 var _friend_known := false
 
@@ -125,12 +161,15 @@ var _host_worn: Array = []
 var _worn := ""
 
 
+## A phone's run passes its own [param cell] and [param genome]; a dedicated
+## host passes neither, and is one (`game/server/`).
 func _init(net: Node, food: FoodField, cell: CellBody, genome: Node) -> void:
 	_net = net
 	_food = food
 	_cell = cell
 	_genome = genome
 	hosting = bool(net.hosting)
+	dedicated = hosting and cell == null
 	# **Nothing said before this run is about this run.** The session queues
 	# events from the moment it is up and nothing drains them between runs, so
 	# a new run would open on an old one's news -- `they died` for a death on
@@ -138,6 +177,10 @@ func _init(net: Node, food: FoodField, cell: CellBody, genome: Node) -> void:
 	# Everything this run needs is said again once it is here: the host
 	# answers a new ENTER with ARRIVE, PERSON and every genome.
 	net.drain_pond_events()
+	if dedicated:
+		net.drain_inbox()
+	elif hosting:
+		_guests.append(Guest.new())
 	if hosting:
 		_food.person_touched.connect(_on_person_touched)
 		_food.person_died.connect(_on_person_died)
@@ -167,25 +210,39 @@ func quiet_for() -> float:
 	return float(_net.quiet_for())
 
 
+## How many guests have a body in this water right now: on the water's slots,
+## not the wire -- a guest who is connected but has not arrived has none.
+func guests_in_water() -> int:
+	var count := 0
+	for g: Guest in _guests:
+		if _food.person(g.slot) != null:
+			count += 1
+	return count
+
+
 # ---------------------------------------------------------------------------
 # The host.
 # ---------------------------------------------------------------------------
 
 func _step_host() -> void:
+	if dedicated:
+		_step_dedicated()
+		return
+	var g: Guest = _guests[0]
 	if not together():
-		if _food.person() != null:
-			_drop_person()
-		_awaiting = false
+		if _food.person(g.slot) != null:
+			_drop_person(g)
+		g.awaiting = false
 		return
 	for frame: PackedByteArray in _net.drain_pond_events():
-		_host_hears(frame)
-	_carry_guest()
-	var pb: Object = _person_body()
-	if _food.person() != null and pb != null:
+		_host_hears(g, frame)
+	_carry_guest(g)
+	var pb: Object = _person_body(g.slot)
+	if _food.person(g.slot) != null and pb != null:
 		_friend_at = pb.pos
 		_friend_known = true
 		_watch_worn()
-	if _food.person() != null and not _flush_queued:
+	if _food.person(g.slot) != null and not _flush_queued:
 		# **At the end of this frame**, after the field has stepped: the
 		# snapshot is then the water as this frame leaves it, and the guest's
 		# mirror, which carries it on by one frame of its own, stands where the
@@ -195,20 +252,81 @@ func _step_host() -> void:
 		_flush.call_deferred()
 
 
-func _host_hears(frame: PackedByteArray) -> void:
+## **A dedicated host's frame**: the same intake, carry and snapshot as a
+## phone's, once for each guest -- and the two things a phone host does with
+## its own cell done for each guest's friend instead: what the other one
+## wears, how it died, and every shout it makes are passed on.
+func _step_dedicated() -> void:
+	# Its pond is open for good and it has no body: what a phone host's state
+	# frames say while it is on the black.
+	_net.set_pond(_food.pond_open(), _food.pond_open() and not _food.in_water)
+	_meet_guests()
+	for said: Array in _net.drain_inbox():
+		var from := _guest_by_id(int(said[0]))
+		if from != null:
+			_host_hears(from, said[1])
+	var any := false
+	for g: Guest in _guests:
+		_carry_guest(g)
+		var pb: Object = _person_body(g.slot)
+		if _food.person(g.slot) != null and pb != null:
+			g.last_at = pb.pos
+			g.known = true
+			any = true
+	if any and not _flush_queued:
+		_flush_queued = true
+		_flush.call_deferred()
+
+
+## A record for every guest the session has greeted, in a person slot of its
+## own; a guest the session no longer has is taken out of the water and
+## forgotten, which frees its slot.
+func _meet_guests() -> void:
+	var ids: Array = _net.guests() if together() else []
+	for g: Guest in _guests.duplicate():
+		if ids.has(g.id):
+			continue
+		if _food.person(g.slot) != null:
+			_drop_person(g)
+		_guests.erase(g)
+		noted.emit("guest %d left -- %d of %d here" % [g.id, _guests.size(),
+			FoodField.GUESTS_MAX])
+	for id: int in ids:
+		if _guest_by_id(id) != null:
+			continue
+		var slot := _free_person_slot()
+		if slot < 0:
+			continue
+		var g := Guest.new()
+		g.id = id
+		g.slot = slot
+		_guests.append(g)
+		noted.emit("guest %d joined -- %d of %d here" % [id, _guests.size(),
+			FoodField.GUESTS_MAX])
+
+
+func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 	match Wire.event_type(frame):
 		Wire.EVENT_PERSON:
 			var said := Wire.take_person(frame)
 			if said.is_empty():
 				return
-			_food.set_person_genome(said[1], said[2])
+			_food.set_person_genome(said[1], said[2], g.slot)
 			if bool(said[0]):
-				_food.renew_person()
+				_food.renew_person(g.slot)
 				friend_renewed.emit()
+			if dedicated:
+				# What this guest wears is what its friend is told it wears --
+				# now, if the friend is in the water, and on arriving if not.
+				g.worn = [said[1], said[2]]
+				var other := _other(g)
+				if other != null and _food.person(other.slot) != null:
+					_send(other, Wire.EVENT_PERSON,
+						Wire.person_payload(bool(said[0]), said[1], said[2]))
 		Wire.EVENT_ENTER:
 			var said := Wire.take_enter(frame)
 			if not said.is_empty():
-				_host_enter(float(said[0]))
+				_host_enter(g, float(said[0]))
 		Wire.EVENT_SISTER:
 			var said := Wire.take_sister(frame)
 			if said.is_empty():
@@ -222,44 +340,84 @@ func _host_hears(frame: PackedByteArray) -> void:
 			# starving. A death this field made has already taken the person
 			# out, and its DIED is the same death said twice.
 			var said := Wire.take_died(frame)
-			if said.is_empty() or _food.person() == null:
+			if said.is_empty() or _food.person(g.slot) == null:
 				return
-			var at: Vector2 = _person_body().pos
-			_food.remove_person()
-			_awaiting = false
+			var at: Vector2 = _person_body(g.slot).pos
+			_food.remove_person(g.slot)
+			g.awaiting = false
 			friend_died.emit(int(said[0]), int(said[1]), at, false)
+			if dedicated:
+				_tell_friend_died(g, int(said[0]), int(said[1]), at)
+		Wire.EVENT_SHOUT:
+			# Only a dedicated host hears a shout here -- a phone's session
+			# keeps them for the run -- and it has no ear: it passes the call
+			# on to the other guest, as the numbers that came in.
+			var said := Wire.take_shout(frame)
+			var other := _other(g)
+			if dedicated and not said.is_empty() and other != null:
+				_send(other, Wire.EVENT_SHOUT, Wire.shout(0, said[0], float(said[1]),
+					float(said[2])).slice(Wire.EVENT_HEADER))
 		_:
 			pass
 
 
 ## **A guest's cell asks to come into this water** (§1.6): put it
-## [constant ARRIVAL] along the world horizontal from this cell -- alive, or
-## where it last was -- and say where. A guest already in here is taken out
-## first: an ENTER is always a new arrival.
+## [constant ARRIVAL] along the world horizontal from the friend -- a phone
+## host's own cell, alive or where it last was -- and say where. A guest already
+## in here is taken out first: an ENTER is always a new arrival.
 ##
 ## It waits out of the water until the guest's state frames say it is swimming
 ## here, which is the length of the guest's own beat: nothing can bite a body
 ## the other screen has not put in the water yet.
-func _host_enter(radius: float) -> void:
-	if _food.person() != null:
-		_food.remove_person()
-	var from := _cell.position
+func _host_enter(g: Guest, radius: float) -> void:
+	if _food.person(g.slot) != null:
+		_food.remove_person(g.slot)
+	var from := _arrival_origin(g)
 	var at := arrival_point(from, radius)
 	arrival_from = from
 	arrival_at = at
-	_food.place_person(at, 0.0, radius)
-	_food.set_person_in_water(false)
-	var track: Array = _net.peer_track()
-	_basis = track[track.size() - 1] if not track.is_empty() else []
-	_awaiting = true
-	_awaiting_since = _now()
+	_food.place_person(at, 0.0, radius, Vector2.ZERO, 0.0, g.slot)
+	_food.set_person_in_water(false, g.slot)
+	var track: Array = _track_of(g)
+	g.basis = track[track.size() - 1] if not track.is_empty() else []
+	g.awaiting = true
+	g.awaiting_since = _now()
 	# A new mirror knows none of this water yet: every genome goes again.
-	_sent.clear()
-	_friend_at = at
-	_friend_known = true
-	_net.send_event(Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 0.0))
-	_send_person(false)
+	g.sent.clear()
+	g.last_at = at
+	g.known = true
+	if not dedicated:
+		_friend_at = at
+		_friend_known = true
+	_send(g, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 0.0))
+	if dedicated:
+		# The friend's PERSON, as a phone host sends its own: what the other
+		# guest wears, if it has ever said.
+		var other := _other(g)
+		if other != null and not other.worn.is_empty():
+			_send(g, Wire.EVENT_PERSON,
+				Wire.person_payload(false, other.worn[0], other.worn[1]))
+		noted.emit("guest %d arrived at (%.0f, %.0f)" % [g.id, at.x, at.y])
+	else:
+		_send_person(false)
 	friend_entered.emit()
+
+
+## **Where an arrival is measured from.** A phone host: its own cell, alive or
+## where it last was. A dedicated host has none, so the other guest takes its
+## place -- alive, or where they last were -- and with no other guest, where
+## this one last was; and the middle of the water for a first arrival alone.
+func _arrival_origin(g: Guest) -> Vector2:
+	if not dedicated:
+		return _cell.position
+	var other := _other(g)
+	if other != null:
+		var ob: Object = _person_body(other.slot)
+		if _food.person(other.slot) != null and ob != null:
+			return ob.pos
+		if other.known:
+			return other.last_at
+	return g.last_at if g.known else Vector2.ZERO
 
 
 ## **Where a cell arriving near [param near] goes** (§1.6): [constant ARRIVAL]
@@ -288,7 +446,7 @@ func _clear(at: Vector2, radius: float) -> bool:
 			continue
 		if at.distance_to(b.pos) < radius + float(b.radius) + ARRIVAL_CLEAR:
 			return false
-	if _food.anchored and at.distance_to(_cell.position) \
+	if _food.anchored and _cell != null and at.distance_to(_cell.position) \
 			< radius + _cell.radius + ARRIVAL_CLEAR:
 		return false
 	return true
@@ -307,58 +465,67 @@ func friend_place() -> Array:
 ## are swimming here. Before their `POND` bit is set the person waits where it
 ## was put; after it clears the guest has left this water without leaving the
 ## wire, and goes.
-func _carry_guest() -> void:
-	if _food.person() == null:
+func _carry_guest(g: Guest) -> void:
+	if _food.person(g.slot) == null:
 		return
-	var flags: int = _net.peer_flags()
+	var flags: int = _flags_of(g)
 	if (flags & Wire.STATE_POND) == 0:
-		if _awaiting and _now() - _awaiting_since < NetSession.REACH_TIMEOUT:
+		if g.awaiting and _now() - g.awaiting_since < NetSession.REACH_TIMEOUT:
 			return
-		_drop_person()
+		_drop_person(g)
 		return
-	_awaiting = false
-	var track: Array = _net.peer_track()
+	g.awaiting = false
+	var track: Array = _track_of(g)
 	if not track.is_empty():
 		var newest: Array = track[track.size() - 1]
-		if not is_same(newest, _basis):
-			_basis = newest
-			_food.set_person_in_water((flags & Wire.STATE_OUT) == 0)
+		if not is_same(newest, g.basis):
+			g.basis = newest
+			_food.set_person_in_water((flags & Wire.STATE_OUT) == 0, g.slot)
 			_food.place_person(newest[1], float(newest[2]), float(newest[3]),
-				newest[4], float(newest[5]))
-	_food.set_person_quiet(quiet_for() >= VisionLayer.PEER_FRESH)
+				newest[4], float(newest[5]), g.slot)
+	_food.set_person_quiet(_quiet_of(g) >= VisionLayer.PEER_FRESH, g.slot)
 
 
-func _drop_person() -> void:
-	_food.remove_person()
-	_awaiting = false
+func _drop_person(g: Guest) -> void:
+	_food.remove_person(g.slot)
+	g.awaiting = false
 	friend_left.emit()
 
 
-## **The snapshot, at the end of the frame.** With every state frame this end
-## has sent since the last one -- so a jump the state frame carries at once is
-## in the guest's water at once too -- and otherwise every STATE_PERIOD, which
-## keeps the water moving on the guest's screen while this cell is dead and its
-## own state frames beat at two a second.
+## **The snapshots, at the end of the frame**: one for each guest in the water.
 func _flush() -> void:
 	_flush_queued = false
-	if not together() or _food.person() == null or _awaiting:
+	for g: Guest in _guests:
+		_flush_guest(g)
+
+
+## **One guest's snapshot.** With every state frame this end has sent since the
+## last one -- so a jump the state frame carries at once is in the guest's
+## water at once too -- and otherwise every STATE_PERIOD, which keeps the water
+## moving on the guest's screen while this cell is dead and its own state
+## frames beat at two a second.
+func _flush_guest(g: Guest) -> void:
+	if not together() or _food.person(g.slot) == null or g.awaiting:
 		return
 	var now := _now()
 	var states: int = _net.states_sent()
-	if states == _states_seen and now < _pond_due:
+	if states == g.states_seen and now < g.pond_due:
 		return
-	_states_seen = states
-	_pond_due = now + NetSession.STATE_PERIOD
-	var bodies := _food.pond_entries(true)
-	_send_genomes(bodies)
-	var pb: Object = _person_body()
-	var size: int = _net.send_pond(float(pb.wound) if pb != null else 0.0, bodies)
+	g.states_seen = states
+	g.pond_due = now + NetSession.STATE_PERIOD
+	var bodies := _food.pond_entries(true) if g.id == 0 \
+		else _food.pond_entries_for(g.slot)
+	_send_genomes(g, bodies)
+	var pb: Object = _person_body(g.slot)
+	var wound := float(pb.wound) if pb != null else 0.0
+	var size: int = _net.send_pond(wound, bodies) if g.id == 0 \
+		else _net.send_pond_to(g.id, wound, bodies)
 	pond_bytes_max = maxi(pond_bytes_max, size)
 	ponds_sent += 1
 
 
 ## Every body in the send set whose version the guest has not been sent.
-func _send_genomes(bodies: Array) -> void:
+func _send_genomes(g: Guest, bodies: Array) -> void:
 	var cells := _food.bodies()
 	for entry: Array in bodies:
 		var slot := int(entry[FoodField.Entry.SLOT])
@@ -367,34 +534,120 @@ func _send_genomes(bodies: Array) -> void:
 		var serial := int(entry[FoodField.Entry.SERIAL])
 		var meals := int(entry[FoodField.Entry.MEALS])
 		var version := (serial & 0xFFFF) * 1000 + meals
-		if int(_sent.get(slot, -1)) == version:
+		if int(g.sent.get(slot, -1)) == version:
 			continue
-		_sent[slot] = version
+		g.sent[slot] = version
 		genomes_sent += 1
-		_net.send_event(Wire.EVENT_GENOME, Wire.genome_payload(slot, serial, meals,
+		_send(g, Wire.EVENT_GENOME, Wire.genome_payload(slot, serial, meals,
 			cells[slot].genome))
 
 
-## **What the field did to the guest, told to the guest.** Every contact but a
+## **What the field did to a guest, told to that guest.** Every contact but a
 ## death goes as it is said; a death waits the moment it takes the field to say
 ## why, which is the next signal in the same call.
 func _on_person_touched(what: int, at: Vector2, level: float, by: int,
 		gene: StringName) -> void:
-	if what == FoodField.Contact.KILLED:
-		_killed_at = at
-		_killed_pending = true
+	var g := _guest_in(_food.touched_slot)
+	if g == null:
 		return
-	_net.send_event(Wire.EVENT_CONTACT,
-		Wire.contact_payload(what, at, level, by, gene))
+	if what == FoodField.Contact.KILLED:
+		g.killed_at = at
+		g.killed_pending = true
+		return
+	_send(g, Wire.EVENT_CONTACT, Wire.contact_payload(what, at, level, by, gene))
 
 
 func _on_person_died(cause: int, by: int, at: Vector2) -> void:
-	var hit := _killed_at if _killed_pending else at
-	_killed_pending = false
-	_awaiting = false
-	_net.send_event(Wire.EVENT_CONTACT,
+	var g := _guest_in(_food.touched_slot)
+	if g == null:
+		return
+	var hit := g.killed_at if g.killed_pending else at
+	g.killed_pending = false
+	g.awaiting = false
+	_send(g, Wire.EVENT_CONTACT,
 		Wire.contact_payload(FoodField.Contact.KILLED, hit, 0.0, by, &"", cause))
 	friend_died.emit(cause, by, at, _eaten_by_friend(cause, by))
+	if dedicated:
+		g.last_at = at
+		_tell_friend_died(g, cause, by, at)
+
+
+## **A guest died, told to the other one** -- as a phone host tells its guest
+## its own death, with DIED. [param by] needs no turning round: the only other
+## mouth in a pond of two is the one being told, so "by the friend" says "by
+## you" to it, and its "you ate them" is right.
+func _tell_friend_died(g: Guest, cause: int, by: int, at: Vector2) -> void:
+	noted.emit("guest %d died (%s, by %s)" % [g.id, _cause_name(cause),
+		"the other guest" if by == FoodField.By.FRIEND else "the water"])
+	var other := _other(g)
+	if other != null:
+		_send(other, Wire.EVENT_DIED, Wire.died_payload(cause, by, at))
+
+
+# --- The guest records, and speaking to one ------------------------------------
+
+func _guest_by_id(id: int) -> Guest:
+	for g: Guest in _guests:
+		if g.id == id:
+			return g
+	return null
+
+
+func _guest_in(slot: int) -> Guest:
+	for g: Guest in _guests:
+		if g.slot == slot:
+			return g
+	return null
+
+
+## The other guest of a dedicated host's two, or null.
+func _other(g: Guest) -> Guest:
+	for o: Guest in _guests:
+		if o != g:
+			return o
+	return null
+
+
+## The first person slot no guest has, or -1.
+func _free_person_slot() -> int:
+	for k in FoodField.GUESTS_MAX:
+		if _guest_in(FoodField.PERSON_SLOT + k) == null:
+			return FoodField.PERSON_SLOT + k
+	return -1
+
+
+## The session's one-peer calls for a phone's guest, and the per-guest ones for
+## a dedicated host's -- so a phone's pond sends and reads exactly what it did.
+func _send(g: Guest, type: int, payload: PackedByteArray) -> void:
+	if g.id == 0:
+		_net.send_event(type, payload)
+	else:
+		_net.send_event_to(g.id, type, payload)
+
+
+func _flags_of(g: Guest) -> int:
+	return int(_net.peer_flags()) if g.id == 0 else int(_net.flags_of(g.id))
+
+
+func _track_of(g: Guest) -> Array:
+	return _net.peer_track() if g.id == 0 else _net.track_of(g.id)
+
+
+func _quiet_of(g: Guest) -> float:
+	return quiet_for() if g.id == 0 else float(_net.quiet_for_of(g.id))
+
+
+static func _cause_name(cause: int) -> String:
+	match cause:
+		FoodField.Cause.SWALLOWED:
+			return "swallowed"
+		FoodField.Cause.CHEWED:
+			return "chewed"
+		FoodField.Cause.STARVED:
+			return "starved"
+		FoodField.Cause.POISONED:
+			return "poisoned"
+	return "cause %d" % cause
 
 
 # ---------------------------------------------------------------------------
@@ -555,10 +808,9 @@ static func _eaten_by_friend(cause: int, by: int) -> bool:
 		or cause == FoodField.Cause.CHEWED)
 
 
-func _person_body() -> Object:
+func _person_body(slot: int = FoodField.PERSON_SLOT) -> Object:
 	var bodies := _food.bodies()
-	return bodies[FoodField.PERSON_SLOT] if bodies.size() > FoodField.PERSON_SLOT \
-		else null
+	return bodies[slot] if bodies.size() > slot else null
 
 
 func _now() -> float:
