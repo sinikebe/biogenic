@@ -6446,6 +6446,17 @@ func _check_server() -> void:
 		return fa != null and fb != null and bool(fa.in_water) and bool(fb.in_water) \
 			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers(), pins)
 	await _pond_until(func() -> bool: return false, 0.3, pins)
+	# **Settled, not sampled.** Each guest carries the other on by the velocity
+	# it last heard until the next report lands (`food.gd`'s `_carry_person`),
+	# so one frame is a race: in about fifty full runs this check read 0.834
+	# and 1.803 units off once each, at a single frame, and 0.000 in every
+	# other. A mirror that is right comes back within a report or two; one
+	# that is wrong never does, so the check waits up to a second for both.
+	await _pond_until(func() -> bool:
+		return (a_food.bodies()[FoodField.PERSON_SLOT].pos as Vector2).distance_to(b_home) \
+				< 1.0 \
+			and (b_food.bodies()[FoodField.PERSON_SLOT].pos as Vector2).distance_to(a_home) \
+				< 1.0, 1.0, pins)
 	var a_sees: Vector2 = a_food.bodies()[FoodField.PERSON_SLOT].pos
 	var b_sees: Vector2 = b_food.bodies()[FoodField.PERSON_SLOT].pos
 	var water_a := 0

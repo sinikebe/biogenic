@@ -1171,8 +1171,14 @@ func _diagnose() -> void:
 	_diag_udp = PacketPeerUDP.new()
 	_diag = PacketPeerDTLS.new()
 	_diag_at = _now()
-	if _dialed.is_empty() or _diag_udp.connect_to_host(_dialed, int(_invite["port"])) != OK \
-			or _diag.connect_to_peer(_diag_udp, Invite.NAME, TLSOptions.client_unsafe()) != OK:
+	if _dialed.is_empty() or _diag_udp.connect_to_host(_dialed, int(_invite["port"])) != OK:
+		# **This device could not even aim a socket there** -- an IPv6 invite on
+		# a network with no IPv6, measured: the call failed for the same reason,
+		# at once, and nothing was asked of any server.
+		_end_diagnosis()
+		_invite_gives_up(Link.FAILED, &"could_not_call")
+		return
+	if _diag.connect_to_peer(_diag_udp, Invite.NAME, TLSOptions.client_unsafe()) != OK:
 		# Refused before a packet came back: nothing is listening there.
 		_end_diagnosis()
 		_invite_gives_up(Link.FAILED, &"not_running")
