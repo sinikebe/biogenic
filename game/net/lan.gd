@@ -256,10 +256,11 @@ static func _range_rank(address: String) -> int:
 	return 3
 
 
-## **Whether a caller at [param address] is on a network this host may answer,
-## while play is LAN-only** -- which every host is, a phone's and the dedicated
-## server's alike, until issue #59's listener exists (net-hardening.md A.5).
-## [param own] is this host's own address.
+## **Whether a caller at [param address] is on a network this host's LAN
+## listener may answer** -- a phone host's only listener, and the dedicated
+## server's on `PORT` (net-hardening.md A.5). The server's internet listener
+## (part C) is the one door that does not ask: a caller there has to prove an
+## invite instead. [param own] is this host's own address.
 ##
 ## Yes for everything a home network is: loopback; RFC 1918's 10/8, 172.16/12
 ## and 192.168/16; carrier-grade NAT's 100.64/10, which a Wi-Fi can hand out and
@@ -298,6 +299,25 @@ static func is_local_source(address: String, own: String) -> bool:
 		return true
 	return mine.size() == 4 and v4[0] == mine[0] and v4[1] == mine[1] \
 		and v4[2] == mine[2]
+
+
+## True for this machine's own loopback -- 127/8, `::1`, and an IPv4 one in
+## IPv6 clothes -- in any of the forms [method is_local_source] reads. A test
+## seam's question (`net_session.gd`'s `loopback_is_local`): every caller in
+## `tools/net_probe.gd` comes from loopback.
+static func is_loopback(address: String) -> bool:
+	var v4 := _ipv4_octets(address)
+	if v4.is_empty():
+		var v6 := _ipv6_groups(address)
+		if v6.is_empty():
+			return false
+		if not _v4_mapped(v6):
+			var loop := v6[7] == 1
+			for i in 7:
+				loop = loop and v6[i] == 0
+			return loop
+		return (v6[6] >> 8) == 127
+	return v4[0] == 127
 
 
 ## **One key per caller, for counting what it does**: an IPv4 address as it is,

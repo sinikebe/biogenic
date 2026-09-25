@@ -43,10 +43,24 @@ extends Node
 ## a rule broken lands on the same ledger through [method strike] -- enforced,
 ## or only watched while [member enforce_referee] is off.
 ##
+## **A friend outside the house comes in by invite** (part C, issue #59), and
+## only to the dedicated server. Beside its LAN listener on `Lan.PORT` it can
+## hold a second, on `Invite.PORT`, that speaks DTLS with the server's own
+## certificate ([method listen_internet]), which the invite pins. That door
+## skips the LAN-only guard and nothing else, and before a caller is welcomed
+## it must prove an invite's secret: HELLO -- the frozen compatibility check,
+## refused with its sentence as ever -- then CHALLENGE, a fresh nonce, then
+## PROOF, an HMAC over both nonces keyed with the secret. Both listeners feed one
+## set of peers, one pond and one limit of two guests; each keeps its own
+## waiting room and call buckets, so nothing that arrives over the internet can
+## ever turn a LAN caller away. A phone host never opens it. A guest calls one
+## with [method call_invite].
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
+const Invite := preload("res://game/net/invite.gd")
 
 ## Where the link is. The screen reads this and nothing else to decide what to
 ## draw; the run reads [constant Link.TOGETHER] to decide whether to shout.
@@ -67,10 +81,26 @@ enum Link {
 }
 
 signal link_changed(link: int)
+## **A caller on the internet listener proved an invite** -- by its owner's
+## [param label], and the invite's [param key_id] in hex. The server keeps when
+## each invite last came in (`--invites`); nothing a secret is made of rides
+## on it.
+signal invite_proved(label: String, key_id: String)
 
 ## The live session, or null. Set in [method _ready] and cleared in
 ## [method _exit_tree], so it is never a reference to a freed node.
 static var current: Node = null
+
+## **Which listener a peer came in on** -- a dedicated host has two -- and so
+## which transport every send, cut, address and throttle for it goes through.
+## A guest's one socket, and a phone host's, are the LAN's.
+const VIA_LAN := 0
+const VIA_NET := 1
+## **Where a caller on the internet listener is in its handshake**: its HELLO
+## is still owed, or its PROOF is, after the CHALLENGE went out. A LAN caller
+## is only ever owed a HELLO.
+const STAGE_HELLO := 0
+const STAGE_PROOF := 1
 
 ## How long the host waits for a guest's greeting before hanging up on it. A
 ## transport connection that never says hello is a port scanner, a crash, or a
@@ -80,6 +110,27 @@ const HELLO_GRACE := 3.0
 ## own give-up: an unanswered address must become a sentence on screen, not a
 ## spinner. multiplayer.md §4.2 budgets the reply wait at ~2 s; this is double.
 const REACH_TIMEOUT := 4.0
+## **How long a call by invite waits, for the transport and again for the
+## handshake**: DTLS first, whose handshake retransmits a lost flight after 1 s
+## and then 2 s (mbedTLS's default), then ENet's CONNECT, which goes out
+## before DTLS is up and is resent 0.5, 1.5, 3.5 and 7.5 s after the call --
+## so on loopback a call connects at the first resend, 0.5 s in. Measured
+## through the relay of net-hardening.md C.6: see [constant REACH_TIMEOUT]'s
+## reasoning, with a link that crosses the internet.
+const INVITE_REACH_TIMEOUT := 8.0
+## **How long an invite's host name may take to resolve** before the call says
+## so. The lookup runs on the engine's resolver thread
+## (`IP.resolve_hostname_queue_item`): `create_client` given a name resolves it
+## on the calling thread, blocking the frame for as long as DNS takes --
+## measured, and read in `enet_connection.cpp`.
+const RESOLVE_TIMEOUT := 6.0
+## **How long the second look after a fast failure may take.** A call whose
+## DTLS handshake fails at once met either a certificate that is not the one
+## the invite pins, or a port where nothing listens -- a connected UDP socket
+## hears the ICMP refusal, and ENet fails the same way for both, measured. So
+## the guest asks again without the pin ([method _diagnose]): a pond answers
+## that one -- somebody else's -- and a closed port refuses it at once.
+const DIAGNOSE_TIMEOUT := 3.0
 ## **The beat when there is nothing moving to draw**: 2 Hz, thirty-one bytes.
 ## The join screen, a cell that has died, a run that is paused or dividing. It
 ## is still the only defence against `godotengine/godot#37186`, where a
@@ -389,15 +440,62 @@ var pond_events: Array = []
 ## [method drain_inbox]; never touched by a phone's session.
 var inbox: Array = []
 
-## **A test seam, and the only one.** 0 means "speak [constant Wire.PROTOCOL]".
+## **A test seam.** 0 means "speak [constant Wire.PROTOCOL]".
 ## tools/net_probe.gd sets it to something else to prove the refusal path, which
 ## is the single highest-value assertion CI can make about this file.
 var protocol_override := 0
+## **The other test seam: loopback counts as local on the LAN listener.** Every
+## caller in `tools/net_probe.gd` comes from loopback, so its check that the
+## internet listener skips the LAN-only guard -- and the LAN listener does not
+## -- turns this off, and a loopback caller is then a stranger to the LAN door.
+var loopback_is_local := true
 
 var _api: SceneMultiplayer = null
+## A guest's socket, or a host's LAN listener.
 var _peer: ENetMultiplayerPeer = null
-## Peer id -> bookkeeping. Every send addresses a key of this dictionary.
+## **A dedicated host's internet listener**, or null: DTLS on
+## [constant Invite.PORT], opened by [method listen_internet] while there are
+## invites and closed when none remain.
+var _net_peer: ENetMultiplayerPeer = null
+## When a closing internet listener is put down: its refusals get
+## [constant REFUSE_LINGER] to leave first. 0 while none is closing.
+var _net_closing_at := 0.0
+## Peer id -> bookkeeping. Every send addresses a key of this dictionary. **One
+## set for both listeners**: the pond, the two-guest limit and the updater's
+## "nobody here" all count them together.
 var _peers: Dictionary = {}
+## **Peer id -> the listener it came in on** ([constant VIA_LAN] or
+## [constant VIA_NET]), for every transport a host admitted, until that
+## transport says it has gone. ENet peer ids are random per listener, so two
+## listeners can hand out one id: the second is refused, never merged
+## ([method _on_peer_connected]), and a listener's news about an id it does not
+## hold here is not news about this peer.
+var _via: Dictionary = {}
+## **The invites this host takes on its internet listener**: key id in hex ->
+## `[label, secret]`, from the server's book ([method set_invites]).
+var _invites: Dictionary = {}
+## What a PROOF naming no key id this host has is checked against: an HMAC is
+## computed and compared either way, so an unknown key id and a wrong secret
+## cost the same and answer the same.
+var _decoy_secret := PackedByteArray()
+var _crypto := Crypto.new()
+## **A guest's call by invite**: what [method Invite.parse] made of it, or
+## empty for a LAN call. Its secret is only ever handed to [method
+## Invite.proof_mac].
+var _invite: Dictionary = {}
+## The guest has answered its host's CHALLENGE; a second is dropped.
+var _proved := false
+## The invite's host name, being resolved on the engine's resolver thread: its
+## query id, and when it was asked. -1 for none.
+var _resolving := -1
+var _resolve_at := 0.0
+## The address the call went to, once resolved: what [method _diagnose] asks.
+var _dialed := ""
+## **The second look after a fast failure** ([method _diagnose]): a DTLS
+## handshake with no pin, and when it began.
+var _diag: PacketPeerDTLS = null
+var _diag_udp: PacketPeerUDP = null
+var _diag_at := 0.0
 ## The host's id, as learned from the transport. Only a guest has one.
 var _host_id := 0
 var _out_state_seq := 0
@@ -487,13 +585,19 @@ var enforce_referee := true
 var gate_counts: Dictionary = {}
 ## **The host's address book** (A.5): one entry per caller, by
 ## [method Lan.source_key] -- its connection bucket and whether it is barred.
-## Bounded by [constant BOOK_MAX]; cleared with the socket.
+## Bounded by [constant BOOK_MAX]; cleared with the socket. **The LAN
+## listener's**: the internet listener keeps one of its own, [member
+## _net_book], and its own [member _net_calls_all], so no storm of calls from
+## outside can spend what a caller in the house needs.
 var _book: Dictionary = {}
 ## Peer id -> caller key, for every transport the host admitted, until ENet
-## says it has gone: what [constant LIVE_PER_ADDRESS] counts.
+## says it has gone: what [constant LIVE_PER_ADDRESS] counts, per listener.
 var _addresses: Dictionary = {}
-## New connections from every address together.
+## New connections from every address together, on the LAN listener.
 var _calls_all: Bucket = null
+## The internet listener's own address book and all-callers bucket.
+var _net_book: Dictionary = {}
+var _net_calls_all: Bucket = null
 ## `kind|key` -> `[next line allowed, lines held back]`. See [method _note].
 var _notes: Dictionary = {}
 ## When this node's last frame began: the gap a stall is measured by.
@@ -662,19 +766,30 @@ func _process(_delta: float) -> void:
 		# the next frame's stall gap is measured from here: see [method _top_up].
 		_frame_at = now
 	if link == Link.REACHING:
-		if now - _reach_at >= REACH_TIMEOUT:
+		# A call by invite may still be resolving its address, or taking its
+		# second look after a fast failure; either has the frame to itself.
+		if not _invite.is_empty() and _reaching_by_invite(now):
+			return
+		if _invite.is_empty() and now - _reach_at >= REACH_TIMEOUT:
 			_give_up(Link.FAILED, "no answer",
 				"both of you have to be on the same wi-fi -- and on some"
 				+ " networks that is still not enough to reach across.")
 			return
+		if not _invite.is_empty() and now - _reach_at >= INVITE_REACH_TIMEOUT:
+			_invite_gives_up(Link.FAILED, &"no_answer")
+			return
 	if hosting:
-		# A transport connection that never greets is hung up on, with a reason.
+		# A transport connection that never greets is hung up on, with a reason
+		# -- and on the internet listener that greeting is the whole handshake,
+		# its proof included.
 		for id: int in _peers.keys():
 			var peer: Dictionary = _peers[id]
 			if bool(peer["greeted"]):
 				continue
 			if now - float(peer["since"]) >= HELLO_GRACE:
 				_refuse(id, Wire.REFUSE_SILENT)
+		if _net_closing_at > 0.0 and now >= _net_closing_at:
+			_finish_closing_internet()
 	for id: int in _hanging_up.keys():
 		if now >= float(_hanging_up[id]):
 			_hanging_up.erase(id)
@@ -736,13 +851,140 @@ func host(guests: int = 1) -> bool:
 	# peer, or SceneTree would poll it at the top of every frame and run every
 	# command it carries before the gate saw a byte. See [method _pump].
 	_peer = peer
-	peer.peer_connected.connect(_on_peer_connected)
-	peer.peer_disconnected.connect(_on_peer_disconnected)
+	peer.peer_connected.connect(_on_peer_connected.bind(VIA_LAN))
+	peer.peer_disconnected.connect(_on_peer_disconnected.bind(VIA_LAN))
 	if is_inside_tree() and not get_tree().process_frame.is_connected(_on_tree_frame):
 		get_tree().process_frame.connect(_on_tree_frame)
 	set_process(true)
 	_set_link(Link.LISTENING)
 	return true
+
+
+## **Open the internet listener** (net-hardening.md C): DTLS on
+## [constant Invite.PORT], answering with [param certificate] and its
+## [param key], beside the LAN listener [method host] opened. A dedicated
+## host's alone -- one that greets more than one guest; a phone host never
+## opens it. Callers there must prove an invite of [method set_invites]'s.
+## True if it is listening; false, with nothing opened, if the port is taken or
+## this is not a dedicated host.
+##
+## `dtls_server_setup` goes on the fresh `ENetConnection` straight after
+## `create_server` and before anything polls it: it swaps ENet's socket for a
+## DTLS one, which only a socket nothing has read from allows
+## (`enet_godot.cpp`). mbedTLS answers a first ClientHello with a stateless
+## cookie, so a spoofed address never holds a slot.
+func listen_internet(key: CryptoKey, certificate: X509Certificate) -> bool:
+	if not hosting or guests_max < 2 or _peer == null or key == null \
+			or certificate == null:
+		return false
+	if _net_peer != null:
+		if _net_closing_at <= 0.0:
+			return true
+		_finish_closing_internet()
+	var peer := ENetMultiplayerPeer.new()
+	if peer.create_server(Invite.PORT, _slots()) != OK:
+		return false
+	if peer.host.dtls_server_setup(TLSOptions.server(key, certificate)) != OK:
+		peer.close()
+		return false
+	_net_peer = peer
+	_net_closing_at = 0.0
+	_net_book.clear()
+	_net_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
+	peer.peer_connected.connect(_on_peer_connected.bind(VIA_NET))
+	peer.peer_disconnected.connect(_on_peer_disconnected.bind(VIA_NET))
+	return true
+
+
+## **The invites this host takes**: key id in hex -> `[label, secret]`, the
+## server's book as it stands. A guest on the internet listener whose invite is
+## no longer in it -- revoked, or replaced, which gives the label a new key id
+## -- is cut at once, told `REFUSE_INVITE`, and not barred: the owner decided,
+## not the guest. **None left closes the internet listener**: nothing listens
+## for the internet without an invite to answer.
+func set_invites(table: Dictionary) -> void:
+	_invites = table.duplicate()
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers.get(id, {})
+		if peer.is_empty() or int(peer.get("via", VIA_LAN)) != VIA_NET or not bool(peer["greeted"]):
+			continue
+		var entry: Array = _invites.get(str(peer.get("key_id", "")), [])
+		if entry.is_empty() or entry[1] != peer.get("secret"):
+			gate_counts["invite_cuts"] += 1
+			_cut(id, "its invite (%s) was revoked or replaced" % str(peer.get("label", "")),
+				true, false, Wire.REFUSE_INVITE)
+	if _invites.is_empty():
+		close_internet()
+
+
+## **Put the internet listener down.** Every caller on it goes: a guest is
+## told `REFUSE_INVITE`, since its invite no longer opens anything, and a
+## caller still in its handshake is cut. New calls are refused from now on,
+## and the socket itself closes once the refusals have had
+## [constant REFUSE_LINGER] to leave -- or at once, with [param now].
+func close_internet(now: bool = false) -> void:
+	if _net_peer == null:
+		return
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers.get(id, {})
+		if peer.is_empty() or int(peer.get("via", VIA_LAN)) != VIA_NET:
+			continue
+		if bool(peer["greeted"]):
+			gate_counts["invite_cuts"] += 1
+			_cut(id, "the internet listener closed", true, false, Wire.REFUSE_INVITE)
+		else:
+			_cut(id, "the internet listener closed", false, false)
+	_net_peer.refuse_new_connections = true
+	if now:
+		_finish_closing_internet()
+	elif _net_closing_at <= 0.0:
+		_net_closing_at = _now() + REFUSE_LINGER + 0.1
+
+
+## True while the internet listener takes calls.
+func internet_listening() -> bool:
+	return _net_peer != null and _net_closing_at <= 0.0
+
+
+## **Which listener peer [param id] came in on**, [constant VIA_LAN] or
+## [constant VIA_NET]; -1 for an id this host does not hold.
+func via_of(id: int) -> int:
+	return int(_via.get(id, -1))
+
+
+## **The label of the invite guest [param id] proved**, or "" for a LAN guest
+## and anybody not greeted.
+func label_of(id: int) -> String:
+	return str((_peers.get(id, {}) as Dictionary).get("label", ""))
+
+
+## **The ENet peer for [param id] on whichever transport holds it**, or null.
+## For tools: asking the wrong listener for an id is an engine error line.
+func enet_peer_of(id: int) -> ENetPacketPeer:
+	var enet := _transport_of(id) if hosting else _peer
+	if enet == null or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		return null
+	if not hosting:
+		return enet.get_peer(id) if id == _host_id and id != 0 else null
+	return enet.get_peer(id)
+
+
+func _finish_closing_internet() -> void:
+	_net_closing_at = 0.0
+	if _net_peer == null:
+		return
+	var enet := _net_peer
+	_net_peer = null
+	for id: int in _via.keys():
+		if int(_via[id]) != VIA_NET:
+			continue
+		_via.erase(id)
+		_addresses.erase(id)
+		_hanging_up.erase(id)
+		if _peers.has(id):
+			_peers.erase(id)
+	enet.close()
+	_net_book.clear()
 
 
 ## **How many transports a host holds at once: a guest's, a caller's still
@@ -782,6 +1024,144 @@ func join(at: String) -> bool:
 	_reach_at = _now()
 	_set_link(Link.REACHING)
 	return true
+
+
+## **Call a dedicated server outside the house, by invite** (net-hardening.md
+## C). [param invite] is what [method Invite.parse] -- or [method Invite.kept]
+## -- returned. It ends in the same [enum Link] states a LAN call does, with
+## [member trouble] and [member because] saying why when it is not TOGETHER;
+## every one of those sentences is in [constant Invite.SAYS].
+##
+## - **REACHING** while the invite's address resolves (on the engine's resolver
+##   thread, never this one), while DTLS and ENet come up -- pinned to the
+##   invite's certificate and its name -- and while the handshake runs: HELLO,
+##   then the server's CHALLENGE, answered with a PROOF.
+## - **TOGETHER** once welcomed, exactly as on the LAN from there on.
+## - **FAILED**: `no_invite` (nothing that reads), `no_such_place` (the name
+##   did not resolve), `could_not_call` (no socket), `no_answer` (nothing within
+##   [constant INVITE_REACH_TIMEOUT]), `not_this_pond` (another pond's
+##   certificate answered, or the right one under another name), `not_running`
+##   (the address refused the call: nothing listens on that port).
+## - **REFUSED**: `invite_refused` (REFUSE_INVITE: the invite was revoked or
+##   replaced, or never proved), and the LAN's own "different versions",
+##   "already two" and "cut off" -- the compatibility check comes before the
+##   invite, so an old build is told to update rather than to ask again.
+##
+## False when it failed at once, with [member trouble] set; true while it is
+## on its way.
+func call_invite(invite: Dictionary) -> bool:
+	if _api == null:
+		return false
+	_reset_socket()
+	_zero_counts()
+	hosting = false
+	guests_max = 1
+	if int(invite.get("read", -1)) != Invite.Read.OK or invite.get("certificate") == null:
+		address = ""
+		_invite_gives_up(Link.FAILED, &"no_invite")
+		return false
+	_invite = invite
+	address = str(invite["address"])
+	set_process(true)
+	_reach_at = _now()
+	_set_link(Link.REACHING)
+	if address.is_valid_ip_address():
+		return _dial(address)
+	_resolving = IP.resolve_hostname_queue_item(address, IP.TYPE_ANY)
+	if _resolving == IP.RESOLVER_INVALID_ID:
+		_resolving = -1
+		_invite_gives_up(Link.FAILED, &"no_such_place")
+		return false
+	_resolve_at = _now()
+	return true
+
+
+## **The call itself, to [param ip]**: ENet's client with DTLS set up on its
+## fresh socket before the first poll, pinned to the invite's certificate and
+## checked against [constant Invite.NAME].
+func _dial(ip: String) -> bool:
+	_dialed = ip
+	var peer := ENetMultiplayerPeer.new()
+	if peer.create_client(ip, int(_invite["port"])) != OK:
+		_invite_gives_up(Link.FAILED, &"could_not_call")
+		return false
+	var pinned: X509Certificate = _invite["certificate"]
+	if peer.host.dtls_client_setup(Invite.NAME, TLSOptions.client(pinned, Invite.NAME)) != OK:
+		peer.close()
+		_invite_gives_up(Link.FAILED, &"could_not_call")
+		return false
+	_peer = peer
+	_api.multiplayer_peer = peer
+	_reach_at = _now()
+	return true
+
+
+## **A call by invite that is not yet a transport**: its name resolving, or its
+## second look after a fast failure. True when it had this frame.
+func _reaching_by_invite(now: float) -> bool:
+	if _resolving >= 0:
+		var status := IP.get_resolve_item_status(_resolving)
+		if status == IP.RESOLVER_STATUS_WAITING:
+			if now - _resolve_at >= RESOLVE_TIMEOUT:
+				IP.erase_resolve_item(_resolving)
+				_resolving = -1
+				_invite_gives_up(Link.FAILED, &"no_such_place")
+			return true
+		var ip := IP.get_resolve_item_address(_resolving) \
+			if status == IP.RESOLVER_STATUS_DONE else ""
+		IP.erase_resolve_item(_resolving)
+		_resolving = -1
+		if ip.is_empty():
+			_invite_gives_up(Link.FAILED, &"no_such_place")
+		else:
+			_dial(ip)
+		return true
+	if _diag == null:
+		return false
+	_diag.poll()
+	match _diag.get_status():
+		PacketPeerDTLS.STATUS_HANDSHAKING:
+			if now - _diag_at >= DIAGNOSE_TIMEOUT:
+				_end_diagnosis()
+				_invite_gives_up(Link.FAILED, &"no_answer")
+		PacketPeerDTLS.STATUS_CONNECTED:
+			# A pond answered without the pin: not the one this invite is for.
+			_end_diagnosis()
+			_invite_gives_up(Link.FAILED, &"not_this_pond")
+		_:
+			_end_diagnosis()
+			_invite_gives_up(Link.FAILED, &"not_running")
+	return true
+
+
+## **The second look** (see [constant DIAGNOSE_TIMEOUT]): a DTLS handshake to
+## the same address with no pin and no name, which any pond completes. It
+## costs a server one handshake, on a call that has already failed, and says
+## goodbye at once when it connects.
+func _diagnose() -> void:
+	_diag_udp = PacketPeerUDP.new()
+	_diag = PacketPeerDTLS.new()
+	_diag_at = _now()
+	if _dialed.is_empty() or _diag_udp.connect_to_host(_dialed, int(_invite["port"])) != OK \
+			or _diag.connect_to_peer(_diag_udp, Invite.NAME, TLSOptions.client_unsafe()) != OK:
+		# Refused before a packet came back: nothing is listening there.
+		_end_diagnosis()
+		_invite_gives_up(Link.FAILED, &"not_running")
+
+
+func _end_diagnosis() -> void:
+	if _diag != null:
+		_diag.disconnect_from_peer()
+	if _diag_udp != null:
+		_diag_udp.close()
+	_diag = null
+	_diag_udp = null
+
+
+## [method _give_up] with the invite call's own sentence for [param key].
+func _invite_gives_up(to: int, key: StringName) -> void:
+	var said := Invite.says(key)
+	_give_up(to, str(said[0]), str(said[1]))
 
 
 ## Put the socket down and take this node out of the tree. Safe to call on a
@@ -1182,32 +1562,55 @@ func peers_say() -> String:
 # The transport's own lifecycle.
 # ---------------------------------------------------------------------------
 
-func _on_peer_connected(id: int) -> void:
+## [param via] is the listener a host heard this on; a guest's one transport
+## is SceneMultiplayer's, and passes none.
+func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 	# **Every peer, before anything else** -- one this host is about to refuse
 	# included: it is ENet's setting and costs nothing (issue #61).
-	_steady_throttle(id)
+	_steady_throttle(id, via)
 	var from := ""
 	if hosting:
+		# **One id, one peer.** ENet makes each listener's ids unique and no
+		# more, so the other listener may already hold this one -- or be
+		# hanging up on it. The newcomer is refused on its own transport, and
+		# the peer already here never hears of it.
+		if _peers.has(id) or _via.has(id) or _hanging_up.has(id):
+			gate_counts["refused"] += 1
+			gate_counts["refused_twin"] += 1
+			if via == VIA_NET:
+				gate_counts["net_refused"] += 1
+				gate_counts["net_refused_twin"] += 1
+			from = _address_of(id, via)
+			_note("refused twin", "", "[net] refused %s: its id %d is taken on the other"
+				% [from, id] + " listener, and one id is one peer")
+			_drop_on(via, id)
+			return
 		# **The door** (A.5), before any bookkeeping exists for the caller. ENet
 		# offers no earlier place to say no to an address, and a cut inside this
 		# signal is safe with the caller's packets already queued -- measured
 		# on 4.7-stable, and held by the probe's `limits` section (T6).
-		from = _address_of(id)
-		var no := _admit(from)
+		from = _address_of(id, via)
+		var no := _admit(from, via)
 		if not no.is_empty():
 			gate_counts["refused"] += 1
 			gate_counts["refused_" + str(no[0])] += 1
+			if via == VIA_NET:
+				gate_counts["net_refused"] += 1
+				gate_counts["net_refused_" + str(no[0])] += 1
 			# A line per caller -- but a refusal that is about everybody, a
 			# caller from outside or a door taking no calls at all, is one line
 			# for all of them. A storm from a thousand addresses is then a line
 			# every ten seconds, and the limiter only ever remembers callers
 			# the door let near it.
-			var about_all: bool = no[0] == "lan" or no[0] == "busy"
-			_note("refused", str(no[0]) if about_all else Lan.source_key(from),
-				"[net] refused %s: %s" % [from, no[1]])
-			_drop_now(id)
+			var about_all: bool = no[0] == "lan" or no[0] == "busy" or no[0] == "closed"
+			var key := str(no[0]) if about_all else Lan.source_key(from)
+			_note("refused", key if via == VIA_LAN else "internet " + key,
+				"[net] refused %s%s: %s" % [from, " on the internet listener"
+					if via == VIA_NET else "", no[1]])
+			_drop_on(via, id)
 			return
 		_addresses[id] = Lan.source_key(from)
+		_via[id] = via
 	_peers[id] = {
 		"id": id,
 		"protocol": 0,
@@ -1230,6 +1633,14 @@ func _on_peer_connected(id: int) -> void:
 		# drive with a dictionary of their own.
 		"address": from,
 		"guard": Guard.new(hosting, _now()),
+		# Which listener, and on the internet one how far through the
+		# handshake it is and which invite it proved (part C).
+		"via": via,
+		"stage": STAGE_HELLO,
+		"nonce": PackedByteArray(),
+		"label": "",
+		"key_id": "",
+		"secret": PackedByteArray(),
 	}
 	if hosting:
 		# The host says nothing first. It waits to be greeted, so the first
@@ -1242,10 +1653,15 @@ func _on_peer_connected(id: int) -> void:
 	_to(_host_id, Wire.hello(_speaks()))
 
 
-func _on_peer_disconnected(id: int) -> void:
+func _on_peer_disconnected(id: int, via: int = VIA_LAN) -> void:
+	# A listener's goodbye to an id it does not hold here -- the other
+	# listener's twin of it, refused -- is not news about this peer.
+	if hosting and int(_via.get(id, via)) != via:
+		return
 	var peer: Dictionary = _peers.get(id, {})
 	_peers.erase(id)
 	_addresses.erase(id)
+	_via.erase(id)
 	# Gone already, so there is nothing left to hang up on: a refused guest
 	# usually drops the line itself inside REFUSE_LINGER, and cutting it again
 	# afterwards is an ENet error in the log and nothing else.
@@ -1270,6 +1686,14 @@ func _on_connected_to_server() -> void:
 
 
 func _on_connection_failed() -> void:
+	if not _invite.is_empty():
+		# **A call by invite failing before it connected**, which DTLS does at
+		# once for a certificate that is not the pinned one and for a port that
+		# refuses: which of the two is the second look's to say. A failure after
+		# the call already gave up has been explained.
+		if link == Link.REACHING and _diag == null:
+			_diagnose()
+		return
 	_give_up(Link.FAILED, "no answer",
 		"nothing is listening at that code. check your friend is still"
 		+ " showing it.")
@@ -1313,6 +1737,10 @@ func _on_peer_packet(id: int, frame: PackedByteArray) -> void:
 		Wire.KIND_POND:
 			if bool(peer.get("greeted", false)):
 				_take_pond(peer, frame)
+		Wire.KIND_CHALLENGE:
+			_take_challenge(id, frame)
+		Wire.KIND_PROOF:
+			_take_proof(id, frame)
 		_:
 			# A kind from a build that does not exist yet. Ignored rather than
 			# refused: the protocol gate has already run, so this cannot be
@@ -1337,9 +1765,30 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		# **The refusal that matters.** Updates are opt-in (multiplayer.md
 		# §0.1), so the other device may be months behind and may stay there
 		# for good. Say so, in a sentence, before hanging up -- on both screens,
-		# because the host is the one who can go and fetch the update.
+		# because the host is the one who can go and fetch the update. On the
+		# internet listener too, and **before any invite is asked for**: the
+		# compatibility check and the proof are two questions, and an old
+		# build's answer to the first is "update", never "ask again".
 		_refuse(id, Wire.REFUSE_PROTOCOL)
 		_say("different versions", _skew_says(theirs))
+		return
+	if int(peer.get("via", VIA_LAN)) == VIA_NET:
+		# **Then who are you** (part C): a fresh nonce, and the one thing this
+		# caller may say next is the PROOF that answers it.
+		var nonce := _crypto.generate_random_bytes(Wire.NONCE_SIZE)
+		peer["nonce"] = nonce
+		peer["stage"] = STAGE_PROOF
+		_to(id, Wire.challenge(nonce))
+		return
+	_greet(id)
+
+
+## **Welcome [param id]** -- or say "already two". A LAN caller gets here on its
+## HELLO; one on the internet listener on its PROOF. The limit counts guests
+## from both.
+func _greet(id: int) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
 		return
 	if _greeted_count() >= guests_max:
 		_refuse(id, Wire.REFUSE_FULL)
@@ -1350,6 +1799,66 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 	_told = []
 	_say("", "")
 	_set_link(Link.TOGETHER)
+
+
+## **A guest's answer to its host's CHALLENGE** (part C): the invite's key id,
+## a nonce of its own, and the mac over both keyed with the invite's secret.
+## Only on a call made by invite, and once: a CHALLENGE anywhere else is
+## dropped -- a LAN host never sends one.
+func _take_challenge(id: int, frame: PackedByteArray) -> void:
+	if hosting:
+		return
+	if _invite.is_empty() or _proved or id != _host_id:
+		gate_counts["challenges_dropped"] += 1
+		return
+	var nonce := Wire.challenge_nonce(frame)
+	if nonce.is_empty():
+		return
+	var mine := _crypto.generate_random_bytes(Wire.NONCE_SIZE)
+	var key_id: PackedByteArray = _invite["key_id"]
+	_proved = true
+	_to(id, Wire.proof(key_id, mine, Invite.proof_mac(_invite["secret"], _speaks(),
+		nonce, mine, key_id)))
+
+
+## **A caller's PROOF, checked** (part C). The gate lets one through only from
+## a caller on the internet listener whose CHALLENGE has gone out, and only
+## once. The mac is computed and compared in constant time whether or not the
+## key id is one this host has -- against [member _decoy_secret] when it is
+## not -- and **an unknown key id and a wrong secret get the same answer**:
+## REFUSE_INVITE, the linger, and a bar. The log says which, and names the
+## label; nothing a secret is made of is ever written anywhere.
+func _take_proof(id: int, frame: PackedByteArray) -> void:
+	if not hosting:
+		return
+	var peer: Dictionary = _peers.get(id, {})
+	var parts := Wire.proof_parts(frame)
+	if peer.is_empty() or parts.is_empty() \
+			or int(peer.get("stage", STAGE_HELLO)) != STAGE_PROOF:
+		return
+	var key_id: PackedByteArray = parts[0]
+	var key_hex := key_id.hex_encode()
+	var entry: Array = _invites.get(key_hex, [])
+	var secret: PackedByteArray = entry[1] if not entry.is_empty() else _decoy_secret
+	var want := Invite.proof_mac(secret, _speaks(), peer["nonce"], parts[1], key_id)
+	var matches := _crypto.constant_time_compare(want, parts[2])
+	var from := str(peer["address"])
+	if entry.is_empty() or not matches:
+		gate_counts["proofs_refused"] += 1
+		var barred := _bar(from, VIA_NET)
+		_refuse(id, Wire.REFUSE_INVITE, " -- %s -- barred %d s" % ["a key id no invite has"
+			if entry.is_empty() else "the wrong secret for the invite for %s" % str(entry[0]),
+			roundi(barred)])
+		return
+	peer["label"] = str(entry[0])
+	peer["key_id"] = key_hex
+	peer["secret"] = secret
+	gate_counts["proofs"] += 1
+	# Printed whatever the limiter says, like the farewell: who came in from
+	# outside is the one line an owner reads the log for.
+	print("[net] %d (%s) proved the invite for %s" % [id, from, str(entry[0])])
+	invite_proved.emit(str(entry[0]), key_hex)
+	_greet(id)
 
 
 func _take_welcome(id: int, frame: PackedByteArray) -> void:
@@ -1405,6 +1914,11 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end would not take what this game sent. update both from"
 			+ " the launcher, then call again in a minute.")
+	elif reason == Wire.REFUSE_INVITE and not _invite.is_empty():
+		# **The invite, refused** (part C): revoked, replaced, or never proved --
+		# the server says the same for all three, and bars the address for a
+		# minute after a proof that fails.
+		_invite_gives_up(Link.REFUSED, &"invite_refused")
 	else:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end hung up.")
@@ -1425,13 +1939,13 @@ func _skew_says(theirs: int) -> String:
 ## bookkeeping at once so a refused peer can never be counted as company, and
 ## kept in [member _hanging_up] so the line still gets cut if the other end
 ## decides to stay.
-func _refuse(id: int, reason: int) -> void:
+func _refuse(id: int, reason: int, detail: String = "") -> void:
 	var from := str((_peers.get(id, {}) as Dictionary).get("address", ""))
 	_to(id, Wire.refuse(_speaks(), reason))
 	_peers.erase(id)
 	_hanging_up[id] = _now() + REFUSE_LINGER
-	_note("hung up", Lan.source_key(from), "[net] hung up on %d (%s): %s"
-		% [id, from, Wire.reason_says(reason)])
+	_note("hung up", Lan.source_key(from), "[net] hung up on %d (%s): %s%s"
+		% [id, from, Wire.reason_says(reason), detail])
 
 
 # ---------------------------------------------------------------------------
@@ -1565,26 +2079,50 @@ func _on_tree_frame() -> void:
 ##
 ## A handler below may close the session mid-way (a screen answering
 ## `link_changed`); the loop stops the moment [member _peer] is not the peer it
-## began with.
+## began with. **The LAN listener first, then the internet one**, each drained
+## the same way.
 func _pump() -> void:
-	var enet := _peer
+	_pump_one(_peer, VIA_LAN)
+	if _net_peer != null and _peer != null:
+		_pump_one(_net_peer, VIA_NET)
+
+
+func _pump_one(enet: ENetMultiplayerPeer, via: int) -> void:
 	if enet == null \
 			or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 		return
 	enet.poll()
-	while _peer == enet and enet.get_available_packet_count() > 0:
+	if via == VIA_NET and _net_peer == enet \
+			and enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		# ENet closes a listener whose service fails. Nothing a caller sends
+		# does that to a DTLS one (enet_godot.cpp swallows its send errors), but
+		# if it happens, its peers are gone with it, and the server's next look
+		# at its invites opens a new one.
+		_note("internet closed", "", "[net] the internet listener closed by itself")
+		for id: int in _via.keys():
+			if int(_via[id]) == VIA_NET and _peers.has(id):
+				var peer: Dictionary = _peers[id]
+				_peers.erase(id)
+				if bool(peer["greeted"]):
+					_farewell(id, peer)
+					_forget_said_by(id)
+		_finish_closing_internet()
+		_lost_guest()
+		return
+	while _transport(via) == enet and enet.get_available_packet_count() > 0:
 		var from := enet.get_packet_peer()
-		_take_datagram(from, enet.get_packet())
+		_take_datagram(from, enet.get_packet(), via)
 
 
 ## **One datagram, as ENet delivered it.** Oversize is judged before anything
 ## is copied out of it. Then the RAW byte a protocol-4 guest's `send_bytes`
 ## puts in front of every frame is checked and taken off; any other command
 ## byte -- a path to cache, an RPC, a spawn -- is one this game never sends,
-## and it is never run.
-func _take_datagram(id: int, bytes: PackedByteArray) -> void:
+## and it is never run. [param via] is the listener it came in on: a datagram
+## from an id that listener does not hold here is a stray.
+func _take_datagram(id: int, bytes: PackedByteArray, via: int = VIA_LAN) -> void:
 	var peer: Dictionary = _peers.get(id, {})
-	if peer.is_empty():
+	if peer.is_empty() or int(peer.get("via", VIA_LAN)) != via:
 		# Somebody refused, or cut, whose datagrams were already in: counted,
 		# and never read.
 		gate_counts["strays"] += 1
@@ -1594,7 +2132,7 @@ func _take_datagram(id: int, bytes: PackedByteArray) -> void:
 		return
 	if bytes.size() < 2 or bytes[0] != RAW:
 		if not bool(peer["greeted"]):
-			_cut(id, "spoke before its hello", false, false)
+			_cut(id, _too_soon(peer), false, false)
 		else:
 			_malformed(id, "a command byte %d, where a frame starts with %d"
 				% [bytes[0] if not bytes.is_empty() else -1, RAW])
@@ -1628,10 +2166,16 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 	# says it the moment its transport connects, so anything else first is not
 	# a guest. A guest is lenient here on purpose: the host's first STATE can
 	# overtake its WELCOME on another channel, and is simply not read yet.
+	# **On the internet listener, then one PROOF** (part C), once its CHALLENGE
+	# has gone out: exactly one HELLO, then exactly one PROOF, and anything
+	# else -- a second HELLO, a PROOF before the CHALLENGE, a STATE before the
+	# PROOF -- is a caller that is not a guest.
 	if hosting and not bool(peer["greeted"]):
-		if kind == Wire.KIND_HELLO and Wire.size_ok(kind, 0, size, false):
+		var wants := Wire.KIND_PROOF if int(peer.get("stage", STAGE_HELLO)) == STAGE_PROOF \
+			else Wire.KIND_HELLO
+		if kind == wants and Wire.size_ok(kind, 0, size, false):
 			return true
-		_cut(id, "spoke before its hello", false, false)
+		_cut(id, _too_soon(peer), false, false)
 		return false
 	# 4-5. A kind this protocol knows must come from the side that sends it, at
 	# a size its writer produces.
@@ -1646,6 +2190,15 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 			size, "guest" if hosting else "host"])
 	if hosting and kind == Wire.KIND_HELLO:
 		return _malformed(id, "a second hello")
+	if hosting and kind == Wire.KIND_PROOF:
+		# **A proof nobody asked for.** On the internet listener that is a
+		# second one, from a guest already welcomed: cut and barred, as the
+		# handshake's rules are. On the LAN, where no CHALLENGE is ever sent, it
+		# is a frame this protocol's LAN never carries.
+		if int(peer.get("via", VIA_LAN)) == VIA_NET:
+			_cut(id, "a second proof", true, true)
+			return false
+		return _malformed(id, "a proof it was never asked for")
 	# 6. The budgets: every frame, known or not, and every event -- enforced
 	# only when [member enforce_budgets] says so. Watched, an overrun is counted
 	# and logged as what it would have done, and the frame goes on.
@@ -1694,6 +2247,13 @@ static func _parses(kind: int, type: int, frame: PackedByteArray) -> bool:
 		Wire.EVENT_SISTER:
 			return not Wire.take_sister(frame).is_empty()
 	return true
+
+
+## What a caller that said the wrong thing before it was welcomed is cut for.
+static func _too_soon(peer: Dictionary) -> String:
+	if int(peer.get("stage", STAGE_HELLO)) == STAGE_PROOF:
+		return "spoke before its proof"
+	return "spoke before its hello"
 
 
 static func _kind_says(kind: int, type: int) -> String:
@@ -1877,8 +2437,11 @@ func _strike(id: int, weight: float, why: String) -> void:
 ## its ledger ([param tell]) is told why first -- REFUSE_BROKEN, and
 ## [constant REFUSE_LINGER] for it to arrive -- and anything else is cut on the
 ## spot: an oversize frame, or anything but a HELLO before the handshake, is
-## not worth a sentence. [param abuse] bars the address.
-func _cut(id: int, why: String, tell: bool, abuse: bool) -> void:
+## not worth a sentence. [param abuse] bars the address. [param reason] is what
+## a guest told is told: a guest whose invite was revoked hears
+## `REFUSE_INVITE`, and every other cut `REFUSE_BROKEN`.
+func _cut(id: int, why: String, tell: bool, abuse: bool,
+		reason: int = Wire.REFUSE_BROKEN) -> void:
 	var peer: Dictionary = _peers.get(id, {})
 	if peer.is_empty():
 		return
@@ -1886,13 +2449,13 @@ func _cut(id: int, why: String, tell: bool, abuse: bool) -> void:
 	var from := str(peer["address"])
 	_peers.erase(id)
 	if tell and greeted:
-		_to(id, Wire.refuse(_speaks(), Wire.REFUSE_BROKEN))
+		_to(id, Wire.refuse(_speaks(), reason))
 		_hanging_up[id] = _now() + REFUSE_LINGER
 	else:
 		_drop_now(id)
 	gate_counts["cuts"] += 1
-	var barred := _bar(from) if abuse else 0.0
-	_note("cut", Lan.source_key(from), "[net] cut %d (%s): %s%s" % [id, from, why,
+	var barred := _bar(from, int(peer.get("via", VIA_LAN))) if abuse else 0.0
+	_note("cut", Lan.source_key(from), "[net] cut %d (%s): %s%s" % [id, _who(peer), why,
 		" -- barred %d s" % roundi(barred) if barred > 0.0 else ""])
 	if greeted:
 		_farewell(id, peer)
@@ -1905,23 +2468,33 @@ func _cut(id: int, why: String, tell: bool, abuse: bool) -> void:
 ## acknowledgement a hostile peer never sends, and hold the slot until ENet
 ## timed it out. A host's alone: a guest never cuts its host.
 func _drop_now(id: int) -> void:
-	if not hosting or _peer == null \
-			or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+	if not hosting:
+		return
+	_drop_on(int(_via.get(id, VIA_LAN)), id)
+
+
+## [method _drop_now], on the listener [param via] -- for a caller refused
+## before this host kept any record of which listener it came in on.
+func _drop_on(via: int, id: int) -> void:
+	var enet := _transport(via)
+	if not hosting or enet == null \
+			or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 		return
 	# In ENet's own bookkeeping until it says `peer_disconnected`, which is
 	# also what takes the id out of [member _hanging_up]; so asking is safe.
-	var enet_peer := _peer.get_peer(id)
+	var enet_peer := enet.get_peer(id)
 	if enet_peer != null and enet_peer.is_active():
 		enet_peer.peer_disconnect_now()
 
 
 ## Bars [param from] for [constant BAR_FIRST], or [constant BAR_AGAIN] when it
-## was barred inside the last [constant BAR_AGAIN] already. Returns how long.
-func _bar(from: String) -> float:
+## was barred inside the last [constant BAR_AGAIN] already, at the door of the
+## listener [param via]. Returns how long.
+func _bar(from: String, via: int = VIA_LAN) -> float:
 	if from.is_empty():
 		return 0.0
 	var now := _now()
-	var entry := _book_entry(Lan.source_key(from), now)
+	var entry := _book_entry(Lan.source_key(from), now, _book_of(via))
 	var again := int(entry["bars"]) > 0 and now - float(entry["barred_at"]) < BAR_AGAIN
 	var hold := BAR_AGAIN if again else BAR_FIRST
 	entry["bars"] = int(entry["bars"]) + 1 if again else 1
@@ -1973,9 +2546,17 @@ func _farewell(id: int, peer: Dictionary) -> void:
 	var guard: Guard = peer["guard"]
 	var now := _now()
 	print("[net] %d (%s) done after %d s -- frames %d, events %d, over budget %d,"
-		% [id, str(peer["address"]), roundi(now - float(peer["since"])), guard.taken,
+		% [id, _who(peer), roundi(now - float(peer["since"])), guard.taken,
 			guard.taken_events, guard.dropped + guard.would_dropped]
 		+ " points %.0f, fouls %d" % [guard.points_now(now), guard.fouls])
+
+
+## **Who a peer is, for the log**: its address, and for a guest that came in by
+## invite, whose invite -- the label, never anything a secret is made of.
+static func _who(peer: Dictionary) -> String:
+	var label := str(peer.get("label", ""))
+	var from := str(peer.get("address", ""))
+	return from if label.is_empty() else "%s, invite %s" % [from, label]
 
 
 ## **Whether to answer a caller at all** (A.5), in `peer_connected` -- the
@@ -1988,78 +2569,109 @@ func _farewell(id: int, peer: Dictionary) -> void:
 ## review measured it: twelve calls from one address, and a first call from
 ## another was refused as busy). Nor does a call the shared bucket turns away
 ## cost its address anything.
-func _admit(from: String) -> Array:
+##
+## **[param via] is the listener, and each keeps its own door** (part C): its
+## own address book -- the call buckets and the bars -- its own bucket for every
+## address together, its own count of transports per address and its own
+## waiting room. So a storm on the internet listener fills the internet
+## listener's room and empties its buckets, and a LAN caller finds its own as
+## they were. The LAN-only guard is the LAN listener's alone; a caller on the
+## internet one proves an invite instead.
+func _admit(from: String, via: int = VIA_LAN) -> Array:
 	var now := _now()
-	if not Lan.is_local_source(from, address):
-		return ["lan", "not on this network (LAN-only until #59)"]
+	if via == VIA_LAN and (not Lan.is_local_source(from, address)
+			or (not loopback_is_local and Lan.is_loopback(from))):
+		return ["lan", "not on this network -- a call from outside needs an invite, on"
+			+ " port %d" % Invite.PORT]
+	if via == VIA_NET and not internet_listening():
+		return ["closed", "the internet listener is closing"]
 	var key := Lan.source_key(from)
-	var entry := _book_entry(key, now)
+	var entry := _book_entry(key, now, _book_of(via))
 	if now < float(entry["barred_until"]):
 		return ["barred", "barred for %d s more" % ceili(float(entry["barred_until"]) - now)]
 	var own: Bucket = entry["calls"]
 	if own.level(now) < 1.0:
 		return ["calls", "calling too often -- %d at once, then one every %d s"
 			% [roundi(CALLS_BURST), roundi(1.0 / CALLS_RATE)]]
-	if not _calls_all.take(1.0, now):
+	var everybody: Bucket = _calls_all if via == VIA_LAN else _net_calls_all
+	if not everybody.take(1.0, now):
 		return ["busy", "more than %d calls a second, from everywhere"
 			% roundi(CALLS_ALL_RATE)]
 	own.take(1.0, now)
 	var live := 0
 	for other: int in _addresses:
-		if str(_addresses[other]) == key:
+		if str(_addresses[other]) == key and int(_via.get(other, VIA_LAN)) == via:
 			live += 1
 	if live >= LIVE_PER_ADDRESS:
 		return ["live", "%d connections from there already" % live]
 	var pending := 0
 	for other: int in _peers:
-		if not bool(_peers[other]["greeted"]):
+		if not bool(_peers[other]["greeted"]) \
+				and int(_peers[other].get("via", VIA_LAN)) == via:
 			pending += 1
 	if pending >= PENDING_MAX:
 		return ["pending", "%d callers are already saying hello" % pending]
 	return []
 
 
-## The address book's entry for [param key], made if there is none. A full
-## book forgets an idle caller first, then the one heard from longest ago, and
-## a barred one only when every caller in it is barred.
-func _book_entry(key: String, now: float) -> Dictionary:
-	var entry: Dictionary = _book.get(key, {})
+## The address book's entry for [param key] in [param book], made if there is
+## none. A full book forgets an idle caller first, then the one heard from
+## longest ago, and a barred one only when every caller in it is barred.
+func _book_entry(key: String, now: float, book: Dictionary) -> Dictionary:
+	var entry: Dictionary = book.get(key, {})
 	if entry.is_empty():
-		if _book.size() >= BOOK_MAX:
-			_forget_a_caller(now)
+		if book.size() >= BOOK_MAX:
+			_forget_a_caller(now, book)
 		entry = {"calls": Bucket.new(CALLS_RATE, CALLS_BURST, now),
 			"barred_until": 0.0, "barred_at": -BAR_AGAIN, "bars": 0, "seen": now}
-		_book[key] = entry
+		book[key] = entry
 	entry["seen"] = now
 	return entry
 
 
-func _forget_a_caller(now: float) -> void:
+func _forget_a_caller(now: float, book: Dictionary) -> void:
 	var oldest := ""
 	var oldest_seen := INF
-	for key: String in _book.keys():
-		var entry: Dictionary = _book[key]
+	for key: String in book.keys():
+		var entry: Dictionary = book[key]
 		if now < float(entry["barred_until"]):
 			continue
 		if now - float(entry["seen"]) > BOOK_IDLE:
-			_book.erase(key)
+			book.erase(key)
 			continue
 		if float(entry["seen"]) < oldest_seen:
 			oldest_seen = float(entry["seen"])
 			oldest = key
-	if _book.size() < BOOK_MAX:
+	if book.size() < BOOK_MAX:
 		return
 	if oldest.is_empty():
-		oldest = str(_book.keys()[0])
-	_book.erase(oldest)
+		oldest = str(book.keys()[0])
+	book.erase(oldest)
+
+
+## The address book of the listener [param via].
+func _book_of(via: int) -> Dictionary:
+	return _net_book if via == VIA_NET else _book
+
+
+## **The transport of the listener [param via]**: a guest's socket or a host's
+## LAN listener, or a host's internet listener. Null if it is not open.
+func _transport(via: int) -> ENetMultiplayerPeer:
+	return _net_peer if via == VIA_NET else _peer
+
+
+## The transport peer [param id] came in on.
+func _transport_of(id: int) -> ENetMultiplayerPeer:
+	return _transport(int(_via.get(id, VIA_LAN)))
 
 
 ## The caller's address, as ENet has it: dotted for IPv4, eight groups for
-## IPv6. "" if the transport has no peer by that id.
-func _address_of(id: int) -> String:
-	if _peer == null:
+## IPv6. "" if the listener [param via] has no peer by that id.
+func _address_of(id: int, via: int = VIA_LAN) -> String:
+	var enet := _transport(via)
+	if enet == null:
 		return ""
-	var enet_peer := _peer.get_peer(id)
+	var enet_peer := enet.get_peer(id)
 	if enet_peer == null or not enet_peer.is_active():
 		return ""
 	return str(enet_peer.get_remote_address())
@@ -2110,12 +2722,18 @@ func _count_arrivals(now: float) -> void:
 			or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 		return
 	_saturation_from = now
-	var socket: ENetConnection = _peer.host
-	if socket == null:
-		return
-	var data := socket.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA) / span
-	var datagrams := socket.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_PACKETS) \
-		/ span
+	# Both listeners, the internet one's counted after DTLS has had its say:
+	# what ENet read, which is what the gate is asked to read.
+	var data := 0.0
+	var datagrams := 0.0
+	for enet: ENetMultiplayerPeer in [_peer, _net_peer]:
+		if enet == null \
+				or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED \
+				or enet.host == null:
+			continue
+		data += enet.host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_DATA) / span
+		datagrams += enet.host.pop_statistic(ENetConnection.HOST_TOTAL_RECEIVED_PACKETS) \
+			/ span
 	gate_counts["peak_bytes"] = maxf(float(gate_counts["peak_bytes"]), data)
 	gate_counts["peak_datagrams"] = maxf(float(gate_counts["peak_datagrams"]), datagrams)
 	if data > SATURATED_BYTES or datagrams > SATURATED_DATAGRAMS:
@@ -2178,6 +2796,15 @@ func _zero_counts() -> void:
 		"fouls": 0, "referee_strikes": 0, "referee_points": 0.0,
 		"referee_would_strikes": 0, "referee_would_points": 0.0,
 		"referee_would_cuts": 0,
+		# **The internet listener's** (part C): its door's refusals apart --
+		# they are in `refused` and `refused_*` as well -- a second peer under
+		# one id, invites proved and refused, guests cut when theirs was
+		# revoked, and a guest's CHALLENGEs it had no invite to answer.
+		"refused_twin": 0, "refused_closed": 0,
+		"net_refused": 0, "net_refused_barred": 0, "net_refused_busy": 0,
+		"net_refused_calls": 0, "net_refused_live": 0, "net_refused_pending": 0,
+		"net_refused_closed": 0, "net_refused_twin": 0,
+		"proofs": 0, "proofs_refused": 0, "invite_cuts": 0, "challenges_dropped": 0,
 	}
 
 
@@ -2195,16 +2822,18 @@ func _to(id: int, frame: PackedByteArray) -> void:
 		# **The bytes `send_bytes` wrote**, written by hand, because a host's
 		# SceneMultiplayer no longer holds the socket (A.1): the RAW byte, the
 		# frame, channel 0, the frame's own mode -- so a guest on any protocol-4
-		# build cannot tell the difference.
-		if _peer == null \
-				or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		# build cannot tell the difference. Through the listener the guest came
+		# in on.
+		var enet := _transport_of(id)
+		if enet == null \
+				or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 			return
-		_peer.set_target_peer(id)
-		_peer.transfer_channel = 0
-		_peer.transfer_mode = _mode_for(frame)
+		enet.set_target_peer(id)
+		enet.transfer_channel = 0
+		enet.transfer_mode = _mode_for(frame)
 		var raw := PackedByteArray([RAW])
 		raw.append_array(frame)
-		err = _peer.put_packet(raw)
+		err = enet.put_packet(raw)
 	else:
 		if _api == null or _api.multiplayer_peer == null:
 			return
@@ -2273,10 +2902,11 @@ static func _mode_for(frame: PackedByteArray) -> int:
 ## reaches the far end with the first acknowledgement it receives, before it
 ## has judged any; if a lost datagram delays it past a judgement and the
 ## throttle dips a step first, ENet's own acceleration brings it back.
-func _steady_throttle(id: int) -> void:
-	if _peer == null:
+func _steady_throttle(id: int, via: int = VIA_LAN) -> void:
+	var enet := _transport(via)
+	if enet == null:
 		return
-	var enet_peer := _peer.get_peer(id)
+	var enet_peer := enet.get_peer(id)
 	if enet_peer == null:
 		return
 	enet_peer.throttle_configure(THROTTLE_INTERVAL, THROTTLE_ACCELERATION,
@@ -2397,12 +3027,22 @@ func _drop_link() -> void:
 	if _peer != null:
 		_peer.close()
 		_peer = null
+	if _net_peer != null:
+		_net_peer.close()
+		_net_peer = null
+	_net_closing_at = 0.0
 	if _api != null:
 		_api.multiplayer_peer = null
 	_peers.clear()
 	_addresses.clear()
+	_via.clear()
 	_hanging_up.clear()
 	_host_id = 0
+	# A call by invite still resolving, or taking its second look, stops here.
+	if _resolving >= 0:
+		IP.erase_resolve_item(_resolving)
+		_resolving = -1
+	_end_diagnosis()
 	set_process(false)
 
 
@@ -2431,14 +3071,22 @@ func _reset_socket() -> void:
 	# bar and held-back line, gone with it -- which is also what keeps the many
 	# hosts `tools/net_probe.gd` opens on one loopback address independent.
 	_book.clear()
+	_net_book.clear()
 	_addresses.clear()
 	_notes.clear()
 	_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
+	_net_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
 	_frame_at = _now()
 	_saturation_from = _now()
 	trouble = ""
 	because = ""
 	refused_for = -1
+	# **Nothing of the last call's invite outlives it**, nor the last host's.
+	_invite = {}
+	_proved = false
+	_dialed = ""
+	_invites = {}
+	_decoy_secret = _crypto.generate_random_bytes(Invite.SECRET_SIZE)
 
 
 func _now() -> float:
