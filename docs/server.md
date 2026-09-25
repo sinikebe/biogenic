@@ -117,22 +117,23 @@ arriving, dying and leaving, and every update decision.
 It also says, in lines that start `[net]`, whenever it turns a caller away or
 hangs up on one: a call from outside the local network, an address calling too
 often, a caller that never said hello or runs another version, a guest cut for
-sending what no Biogenic build sends, and a second in which far more arrived at
-the port than two phones could send. Each kind of line is printed at most once
-every ten seconds for each address -- calls from outside the network, and calls
-turned away because too many came from everywhere at once, once every ten
-seconds for all of them together -- and the next one says how many like it were
-held back, so a noisy device cannot fill the journal. And every guest gets one
-line as it goes, however it goes, saying how long it stayed, what it sent, and
-how many times it went over its budgets. These lines name the caller's address;
-the journal is on your machine, not in the repository. For example, with
-placeholder addresses:
+sending what no Biogenic build sends or for saying what no honest game can, and
+a second in which far more arrived at the port than two phones could send. Each
+kind of line is printed at most once every ten seconds for each address -- calls
+from outside the network, and calls turned away because too many came from
+everywhere at once, once every ten seconds for all of them together -- and the
+next one says how many like it were held back, so a noisy device cannot fill
+the journal. And every guest gets one line as it goes, however it goes, saying
+how long it stayed, what it sent, how many times it went over its budgets, and
+how many fouls the referee called on it (below). These lines name the caller's
+address; the journal is on your machine, not in the repository. For example,
+with placeholder addresses:
 
 ```
 [net] refused 203.0.113.9: not on this network (LAN-only until #59)
 [net] hung up on 1587052382 (192.0.2.40): different versions
 [net] cut 694971552 (192.0.2.41): malformed: an event of type 4 that does not read -- 12 points -- barred 60 s
-[net] 1945108233 (192.0.2.42) done after 1800 s -- frames 51234, events 312, over budget 0, points 0
+[net] 1945108233 (192.0.2.42) done after 1800 s -- frames 51234, events 312, over budget 0, points 0, fouls 0
 ```
 
 **The rate limits are enforced.** How many frames, bytes and events a guest
@@ -152,6 +153,30 @@ Wi-Fi, not the phone misbehaving: file an issue with the log lines. Setting
 `enforce_budgets` to `false` in `game/net/net_session.gd` is the switch back to
 **watch mode**, in which the server takes every frame and only logs what it
 *would* have done (`[net] would drop ...`, `[net] would cut ...`).
+
+**What a guest says is checked too, and that is enforced as well.** The server
+knows how big each guest's cell can be -- it fed it every meal it ate in its
+water -- how fast any cell can swim, what a body wears, and when an arrival, a
+division or a death is due. A guest's word that breaks one of those rules is a
+*foul*: the server keeps its own answer instead (a body no bigger than it was
+fed, a place no further than it could swim, no arrival while one is already
+swimming), and the foul costs one to four points on the same ledger as the
+limits, each rule at most twice a second. Ten points cut the guest:
+
+```
+[net] 694971552 (192.0.2.41) fouled: radius: r40.00, where the host has fed it to r26.00 -- 4 points
+[net] 694971552 (192.0.2.41) is at 7 of 10 points: fouled: radius: r40.00, where the host has fed it to r26.00
+[net] cut 694971552 (192.0.2.41): fouled: radius: r40.00, where the host has fed it to r26.00 -- 11 points -- barred 60 s
+```
+
+A foul line names the rule first -- `movement`, `heading`, `radius`,
+`dividing`, `shout`, `arrival`, `body`, `sister` or `death` -- and then what
+broke it. **An honest phone never fouls**, so every `done after` line from one
+should also say `fouls 0`. If one does not, file an issue with the lines.
+Setting `enforce_referee` to `false` in `game/net/net_session.gd` is watch mode
+for the referee: the lines read `[net] would foul ...` and `[net] would cut
+... -- watching the referee, not enforcing it`, and no foul costs a point. The
+server keeps its own answers either way.
 
 ## 4. How it updates
 

@@ -33,11 +33,19 @@ extends RefCounted
 ## them and the socket, and it carries places and names, never a bearing and
 ## never a gene index (§0.2, §2).
 ##
+## **A host checks what its guests say** (net-hardening.md part B, #57). Every
+## word a guest sends -- where its cell is, how big, what it wears, an arrival,
+## a sister, a death, a shout -- goes through that guest's referee
+## (`referee.gd`) before it reaches the field, and the field is handed the
+## referee's answer: taken, clamped, or left. A broken rule is a foul on the
+## session's ledger. The field itself is unchanged and trusts what it is handed.
+##
 ## RefCounted and preloaded, no node and no class_name, like every other file in
 ## game/net/ -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
 const NetSession := preload("res://game/net/net_session.gd")
+const Referee := preload("res://game/net/referee.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 ## For [constant VisionLayer.PEER_FRESH] only: the silence after which a friend
@@ -59,6 +67,12 @@ const ARRIVAL := 480.0
 const ARRIVAL_CLEAR := 20.0
 ## Past the two sides of the horizontal, the circle is searched in these steps.
 const ARRIVAL_STEP_DEG := 30.0
+## **A host frame this long after the last is a stall**, and what arrives in it
+## is the stall's backlog: every referee is handed the gap (net_session.gd's
+## STALL_GAP, A.4, for the same reason).
+const STALL_GAP := 0.25
+## How many referees tools can still read after their guests have gone.
+const REFEREES_KEPT := 8
 
 ## Guest: the host put this cell at [param at], facing [param heading].
 signal arrived(at: Vector2, heading: float)
@@ -127,9 +141,22 @@ class Guest:
 	var worn: Array = []
 	var last_at := Vector2.ZERO
 	var known := false
+	## **What the host checks this guest's word against** (`referee.gd`): made
+	## with the record, and on a phone again with every connection -- so the
+	## connection's first arrival is its first.
+	var referee: Referee = null
 
 var _guests: Array = []
 var _flush_queued := false
+## When [method step] last ran, for a stall: see [constant STALL_GAP].
+var _stepped_at := 0.0
+## **A phone host's shouts, already judged**: the session keeps them for the
+## run, which drains them later in the frame, so each is judged once, the frame
+## it lands, and those left standing are known here by identity.
+var _shouts_judged: Array = []
+## **For tools**: the newest referees made, the last [constant REFEREES_KEPT],
+## so a probe can read one after its guest has gone.
+var referees_made: Array = []
 ## **For tools**: where the last arrival was measured from and where it landed,
 ## the largest snapshot sent and how many went.
 var arrival_from := Vector2.ZERO
@@ -177,9 +204,11 @@ func _init(net: Node, food: FoodField, cell: CellBody, genome: Node) -> void:
 	# Everything this run needs is said again once it is here: the host
 	# answers a new ENTER with ARRIVE, PERSON and every genome.
 	net.drain_pond_events()
+	_stepped_at = _now()
 	if dedicated:
 		net.drain_inbox()
 	elif hosting:
+		# Its referee comes with the first frame the link is up: see _step_host.
 		_guests.append(Guest.new())
 	if hosting:
 		_food.person_touched.connect(_on_person_touched)
@@ -225,6 +254,7 @@ func guests_in_water() -> int:
 # ---------------------------------------------------------------------------
 
 func _step_host() -> void:
+	_mind_stall()
 	if dedicated:
 		_step_dedicated()
 		return
@@ -233,10 +263,21 @@ func _step_host() -> void:
 		if _food.person(g.slot) != null:
 			_drop_person(g)
 		g.awaiting = false
+		# **The next connection is a new guest to the referee**: its first
+		# arrival is a first arrival, as A's ledger starts clean for it too.
+		g.referee = null
+		_shouts_judged.clear()
 		return
+	if g.referee == null:
+		g.referee = _new_referee()
 	for frame: PackedByteArray in _net.drain_pond_events():
 		_host_hears(g, frame)
+		if _gone(g):
+			return
 	_carry_guest(g)
+	if _gone(g):
+		return
+	_judge_heard(g)
 	var pb: Object = _person_body(g.slot)
 	if _food.person(g.slot) != null and pb != null:
 		_friend_at = pb.pos
@@ -263,10 +304,13 @@ func _step_dedicated() -> void:
 	_meet_guests()
 	for said: Array in _net.drain_inbox():
 		var from := _guest_by_id(int(said[0]))
-		if from != null:
+		# A guest a foul just cut is heard no further, however much it said.
+		if from != null and not _gone(from):
 			_host_hears(from, said[1])
 	var any := false
 	for g: Guest in _guests:
+		if _gone(g):
+			continue
 		_carry_guest(g)
 		var pb: Object = _person_body(g.slot)
 		if _food.person(g.slot) != null and pb != null:
@@ -300,7 +344,7 @@ func _meet_guests() -> void:
 		var slot := _free_person_slot()
 		if slot < 0:
 			continue
-		var g := Guest.new()
+		var g := _new_guest()
 		g.id = id
 		g.slot = slot
 		_guests.append(g)
@@ -308,14 +352,27 @@ func _meet_guests() -> void:
 			FoodField.GUESTS_MAX])
 
 
+## **One guest's event, through its referee, then into the water.** Each branch
+## asks first and acts on the answer; a foul goes to the ledger at once, and a
+## guest it cuts is heard no further.
 func _host_hears(g: Guest, frame: PackedByteArray) -> void:
+	var now := _now()
+	_settle(g)
 	match Wire.event_type(frame):
 		Wire.EVENT_PERSON:
 			var said := Wire.take_person(frame)
 			if said.is_empty():
 				return
+			# **A new body only when it can be one**, and the same tiers
+			# otherwise but for the gift (B.2): what is applied is the answer.
+			var take: Array = g.referee.judge_person(now, bool(said[0]), said[1], said[2],
+				_food.person(g.slot) != null)
+			_charge(g)
+			if take.is_empty() or _gone(g):
+				return
+			var new_body := bool(take[0])
 			_food.set_person_genome(said[1], said[2], g.slot)
-			if bool(said[0]):
+			if new_body:
 				_food.renew_person(g.slot)
 				friend_renewed.emit()
 			if dedicated:
@@ -325,39 +382,64 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 				var other := _other(g)
 				if other != null and _food.person(other.slot) != null:
 					_send(other, Wire.EVENT_PERSON,
-						Wire.person_payload(bool(said[0]), said[1], said[2]))
+						Wire.person_payload(new_body, said[1], said[2]))
 		Wire.EVENT_ENTER:
 			var said := Wire.take_enter(frame)
-			if not said.is_empty():
+			if said.is_empty():
+				return
+			# **Only with no body here, or one that has not arrived**, not too
+			# often, and as a born cell after a death. Refused, it is simply not
+			# answered: the guest asks again after REACH_TIMEOUT, as it does for
+			# an ENTER that was lost.
+			var take: bool = g.referee.judge_enter(now, float(said[0]),
+				_food.person(g.slot) != null)
+			_charge(g)
+			if take and not _gone(g):
 				_host_enter(g, float(said[0]))
 		Wire.EVENT_SISTER:
 			var said := Wire.take_sister(frame)
 			if said.is_empty():
 				return
-			var slot := _food.place_sister(said[0], float(said[1]), float(said[2]),
+			# **Once for each division**, on the ring round her mother, a
+			# daughter's size: otherwise nothing, or put there.
+			var take: Array = g.referee.judge_sister(now, said[0], float(said[2]))
+			_charge(g)
+			if take.is_empty() or _gone(g):
+				return
+			var slot := _food.place_sister(take[0], float(said[1]), float(take[1]),
 				said[3])
 			if slot >= 0:
 				sister_placed.emit(slot)
 		Wire.EVENT_DIED:
 			# The guest's own death, and only the one the guest decides:
 			# starving. A death this field made has already taken the person
-			# out, and its DIED is the same death said twice.
+			# out, and its DIED is the same death said twice. Any other cause
+			# said of a body still here takes it out all the same -- dying is
+			# the guest's right -- and is reported as starving.
 			var said := Wire.take_died(frame)
-			if said.is_empty() or _food.person(g.slot) == null:
+			if said.is_empty():
+				return
+			var take: Array = g.referee.judge_died(now, int(said[0]), int(said[1]),
+				_food.person(g.slot) != null)
+			_charge(g)
+			if take.is_empty():
 				return
 			var at: Vector2 = _person_body(g.slot).pos
 			_food.remove_person(g.slot)
 			g.awaiting = false
-			friend_died.emit(int(said[0]), int(said[1]), at, false)
+			friend_died.emit(int(take[0]), int(take[1]), at, false)
 			if dedicated:
-				_tell_friend_died(g, int(said[0]), int(said[1]), at)
+				_tell_friend_died(g, int(take[0]), int(take[1]), at)
 		Wire.EVENT_SHOUT:
 			# Only a dedicated host hears a shout here -- a phone's session
-			# keeps them for the run -- and it has no ear: it passes the call
-			# on to the other guest, as the numbers that came in.
+			# keeps them for the run, and [method _judge_heard] asks there --
+			# and it has no ear: it passes the call on to the other guest, as
+			# the numbers that came in, if the referee lets it be heard.
 			var said := Wire.take_shout(frame)
 			var other := _other(g)
-			if dedicated and not said.is_empty() and other != null:
+			if not dedicated or said.is_empty() or not _shout_heard(g, said) or _gone(g):
+				return
+			if other != null:
 				_send(other, Wire.EVENT_SHOUT, Wire.shout(0, said[0], float(said[1]),
 					float(said[2])).slice(Wire.EVENT_HEADER))
 		_:
@@ -372,8 +454,16 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 ## It waits out of the water until the guest's state frames say it is swimming
 ## here, which is the length of the guest's own beat: nothing can bite a body
 ## the other screen has not put in the water yet.
+##
+## **A re-entry is the old body, continued** (the referee's re-entry rule, the
+## owner's decision): the new body takes the wound and what was left of the
+## grace of the one that left, when the referee says so. The field grants every
+## new person a fresh wound and grace, so they are written over it here -- the
+## two numbers `_step_person` runs down, and nothing that sizes a body.
 func _host_enter(g: Guest, radius: float) -> void:
 	if _food.person(g.slot) != null:
+		# Legal only for a body that never arrived: the referee is told it left.
+		_leave(g)
 		_food.remove_person(g.slot)
 	var from := _arrival_origin(g)
 	var at := arrival_point(from, radius)
@@ -381,6 +471,12 @@ func _host_enter(g: Guest, radius: float) -> void:
 	arrival_at = at
 	_food.place_person(at, 0.0, radius, Vector2.ZERO, 0.0, g.slot)
 	_food.set_person_in_water(false, g.slot)
+	var kept: Array = g.referee.arrive(_now(), at, radius)
+	var p: Object = _food.person(g.slot)
+	var pb: Object = _person_body(g.slot)
+	if not kept.is_empty() and p != null and pb != null:
+		pb.wound = float(kept[0])
+		p.first_hunt = float(kept[1])
 	var track: Array = _track_of(g)
 	g.basis = track[track.size() - 1] if not track.is_empty() else []
 	g.awaiting = true
@@ -468,6 +564,11 @@ func friend_place() -> Array:
 ## are swimming here. Before their `POND` bit is set the person waits where it
 ## was put; after it clears the guest has left this water without leaving the
 ## wire, and goes.
+##
+## **What is carried is the referee's answer to the frame, not the frame**
+## (`referee.gd`'s `claim`): its place no further than the movement budget
+## allows, its heading likewise, its size no bigger than the host has fed it,
+## its motion under the cap, and out of the water only to divide.
 func _carry_guest(g: Guest) -> void:
 	if _food.person(g.slot) == null:
 		return
@@ -483,16 +584,50 @@ func _carry_guest(g: Guest) -> void:
 		var newest: Array = track[track.size() - 1]
 		if not is_same(newest, g.basis):
 			g.basis = newest
-			_food.set_person_in_water((flags & Wire.STATE_OUT) == 0, g.slot)
-			_food.place_person(newest[1], float(newest[2]), float(newest[3]),
-				newest[4], float(newest[5]), g.slot)
+			var put: Array = g.referee.claim(_now(), newest[1], float(newest[2]),
+				float(newest[3]), newest[4], float(newest[5]),
+				(flags & Wire.STATE_OUT) != 0)
+			_charge(g)
+			if _gone(g):
+				return
+			_food.set_person_in_water(bool(put[5]), g.slot)
+			_food.place_person(put[0], float(put[1]), float(put[2]), put[3],
+				float(put[4]), g.slot)
 	_food.set_person_quiet(_quiet_of(g) >= VisionLayer.PEER_FRESH, g.slot)
 
 
+## **What the guest's newest state frame already says, before its events are
+## judged.** A guest that leaves the pond and asks straight back in sends the
+## state frame that says it has gone first, and its PERSON and ENTER after it,
+## in the same frame -- but a host takes events before it carries state frames
+## ([method _step_host]), and would judge an arrival from a guest it still has
+## swimming here. So a body whose guest's POND bit has gone, and which is not
+## waiting to arrive, is let go now, as [method _carry_guest] would at the end
+## of this frame. Only a state frame that is lost on the way still makes one
+## honest arrival look early -- the one point the arrival rule allows for.
+func _settle(g: Guest) -> void:
+	if _food.person(g.slot) == null or (_flags_of(g) & Wire.STATE_POND) != 0:
+		return
+	if g.awaiting and _now() - g.awaiting_since < NetSession.REACH_TIMEOUT:
+		return
+	_drop_person(g)
+
+
 func _drop_person(g: Guest) -> void:
+	_leave(g)
 	_food.remove_person(g.slot)
 	g.awaiting = false
 	friend_left.emit()
+
+
+## **The body leaves without dying**, told to the referee with its wound and
+## grace as they stand: what a re-entry inside 30 s carries on with.
+func _leave(g: Guest) -> void:
+	var p: Object = _food.person(g.slot)
+	var pb: Object = _person_body(g.slot)
+	if g.referee == null or p == null or pb == null:
+		return
+	g.referee.left(_now(), float(pb.wound), maxf(float(p.first_hunt), 0.0))
 
 
 ## **The snapshots, at the end of the frame**: one for each guest in the water.
@@ -557,6 +692,10 @@ func _on_person_touched(what: int, at: Vector2, level: float, by: int,
 		g.killed_at = at
 		g.killed_pending = true
 		return
+	if what == FoodField.Contact.ATE and g.referee != null:
+		# **The meal the guest will grow by**, counted as it is sent: the
+		# guest's radius can only lag behind what the host expects of it.
+		g.referee.ate()
 	_send(g, Wire.EVENT_CONTACT, Wire.contact_payload(what, at, level, by, gene))
 
 
@@ -564,6 +703,8 @@ func _on_person_died(cause: int, by: int, at: Vector2) -> void:
 	var g := _guest_in(_food.touched_slot)
 	if g == null:
 		return
+	if g.referee != null:
+		g.referee.died(_now())
 	var hit := g.killed_at if g.killed_pending else at
 	g.killed_pending = false
 	g.awaiting = false
@@ -590,6 +731,116 @@ func _tell_friend_died(g: Guest, cause: int, by: int, at: Vector2) -> void:
 
 
 # --- The guest records, and speaking to one ------------------------------------
+
+func _new_guest() -> Guest:
+	var g := Guest.new()
+	g.referee = _new_referee()
+	return g
+
+
+func _new_referee() -> Referee:
+	var referee := Referee.new(_now())
+	referees_made.append(referee)
+	while referees_made.size() > REFEREES_KEPT:
+		referees_made.remove_at(0)
+	return referee
+
+
+## **The referee of guest [param id]** -- 0 for a phone's one guest -- or null.
+## For tools.
+func referee_of(id: int = 0) -> Referee:
+	var g := _guest_by_id(id)
+	return g.referee if g != null else null
+
+
+## **A host frame long after the last is a stall**: every referee is handed the
+## gap, as the session's budgets are (A.4), because what lands now is the
+## backlog of a host that could not listen, not a guest that swam too far.
+func _mind_stall() -> void:
+	var now := _now()
+	var gap := now - _stepped_at
+	_stepped_at = now
+	if gap <= STALL_GAP:
+		return
+	for g: Guest in _guests:
+		if g.referee != null:
+			g.referee.stalled(gap)
+
+
+## **Every foul the referee just called, on the guest's ledger** -- which may
+## cut it here and now. The session decides whether a foul is enforced or only
+## watched (`enforce_referee`).
+func _charge(g: Guest) -> void:
+	if g.referee == null:
+		return
+	var id := _peer_of(g)
+	for foul: Array in g.referee.take_fouls():
+		if id != 0:
+			_net.strike(id, float(foul[1]), str(foul[2]))
+
+
+## The session's peer id for [param g]: a dedicated host's guests carry theirs;
+## a phone's one guest is whoever the session has greeted.
+func _peer_of(g: Guest) -> int:
+	if g.id != 0:
+		return g.id
+	var ids: Array = _net.guests()
+	return int(ids[0]) if not ids.is_empty() else 0
+
+
+## True once [param g]'s link is gone -- a foul can cut it mid-frame, and
+## nothing it said after that is anybody's to act on.
+func _gone(g: Guest) -> bool:
+	if g.id == 0:
+		return not together()
+	return not (_net.guests() as Array).has(g.id)
+
+
+## **A phone host's shouts, judged the frame they land**, before the run hears
+## them: the session keeps a host's shouts for the run -- `normal_mode.gd`'s
+## `_hear_others` drains them later in this same frame, and not at all in one
+## where its cell is dead or held -- so each is judged once, here, and the ones
+## the referee refuses are taken out of the queue. Those it lets stand are
+## remembered by identity, so a shout the run has not drained yet is not
+## judged, or charged, twice.
+func _judge_heard(g: Guest) -> void:
+	var heard: Array = _net.heard
+	if heard.is_empty():
+		_shouts_judged.clear()
+		return
+	var kept: Array = []
+	for said: Array in heard.duplicate():
+		var known := false
+		for judged: Array in _shouts_judged:
+			if is_same(judged, said):
+				known = true
+				break
+		if known or _shout_heard(g, said):
+			kept.append(said)
+		if _gone(g):
+			# Cut by the shout just judged: the session has let go of everything
+			# it said, and none of it goes back.
+			_shouts_judged.clear()
+			return
+	_shouts_judged = kept.duplicate()
+	if kept.size() != heard.size():
+		heard.clear()
+		heard.append_array(kept)
+
+
+## **One shout, asked of the referee**: where it was made against where the
+## guest has been swimming, how big and how far it carries against what the
+## host knows of the body -- when that body is in the water here.
+func _shout_heard(g: Guest, said: Array) -> bool:
+	if g.referee == null:
+		return true
+	var p: Object = _food.person(g.slot)
+	var wet: bool = p != null and bool(p.in_water)
+	var heard: bool = g.referee.judge_shout(_now(), said[0], float(said[1]),
+		float(said[2]), wet)
+	_charge(g)
+	return heard
+
 
 func _guest_by_id(id: int) -> Guest:
 	for g: Guest in _guests:

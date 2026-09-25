@@ -79,6 +79,19 @@ extends Node
 ##                           `hit`), and samples every frame how far each water
 ##                           body in the guest's water is from the host's, and
 ##                           the largest POND frame sent
+##   --swimmer=host|guest    with --pond: whose cell swims. `host`, the default,
+##                           is all of the above. **`guest` turns it round for
+##                           the host's referee** (net-hardening.md part B): the
+##                           guest's cell swims for --swim seconds on its own
+##                           impulses and a steering demand that changes every
+##                           0.4-2.0 s, with its free sense an `ampulla` so it
+##                           calls, the host's cell is held still, and the link
+##                           model sits on the host's intake as well as the
+##                           guest's -- so every frame the referee judges has
+##                           crossed it. No events are timed unless --events
+##                           names them. Ends with every foul the referee
+##                           called, which an honest guest never earns, and the
+##                           closest call on each of its budgets
 ##
 ## Prints `[net-lag]` lines. Excluded from export (`tools/*`), so none of it
 ## ships.
@@ -226,6 +239,21 @@ class Link extends Node:
 			target.call(&"_on_peer_packet", int(due[2]), due[3])
 
 
+## **A host whose intake crosses the link model** (--swimmer=guest). A host
+## reads its own socket (net-hardening.md A.1), so there is no signal to put
+## the model on: each datagram it reads is handed to [member intake] instead,
+## RAW byte taken off as the host would, and the link hands the frame to
+## `_on_peer_packet` -- whose first statement is the gate -- when it lands.
+class LaggedHost extends "res://game/net/net_session.gd":
+	var intake: Node = null
+
+	func _take_datagram(id: int, bytes: PackedByteArray) -> void:
+		if intake == null or bytes.size() < 2 or bytes[0] != RAW:
+			super._take_datagram(id, bytes)
+			return
+		intake.take(id, bytes.slice(1))
+
+
 ## **--pond: the two players kept safe and still, and the water watched.**
 ## First in every frame. The guest's cell is held where it was put, so the
 ## camera the timed view draws from does not wander; nothing is allowed to hunt
@@ -234,9 +262,13 @@ class Link extends Node:
 ## sampling: how far each water body in the guest's water is from where the
 ## host's water has it -- bodies well inside the send set, the version the
 ## mirror has, so a body not yet sent is not counted as a place error.
+## **With --swimmer=guest it holds the host's cell instead**, and the guest's
+## swims.
 class Keeper extends Node:
 	var guest_cell: Node = null
 	var guest_at := Vector2.ZERO
+	var hold_host := false
+	var host_at := Vector2.ZERO
 	var host_cell: Node = null
 	var host_food: Node = null
 	var guest_food: Node = null
@@ -254,9 +286,10 @@ class Keeper extends Node:
 		process_priority = -500
 
 	func _process(_delta: float) -> void:
-		guest_cell.position = guest_at
-		guest_cell.heading = 0.0
-		guest_cell.velocity = Vector2.ZERO
+		var held: Node = host_cell if hold_host else guest_cell
+		held.position = host_at if hold_host else guest_at
+		held.heading = 0.0
+		held.velocity = Vector2.ZERO
 		guest_cell.radius = guest_radius
 		host_cell.radius = host_radius
 		host_food.set(&"_first_hunt", FoodField.FIRST_DELAY)
@@ -306,6 +339,9 @@ var _pond := false
 var _host_run: Node = null
 var _guest_run: Node = null
 var _keeper: Keeper = null
+## --swimmer=guest: the guest's cell swims, and the host's intake has a link.
+var _guest_swims := false
+var _host_link: Link = null
 
 
 func _ready() -> void:
@@ -341,6 +377,11 @@ func _ready() -> void:
 			_each = true
 		elif text == "--pond":
 			_pond = true
+		elif text == "--swimmer=guest":
+			_guest_swims = true
+		elif text == "--swimmer=host":
+			_guest_swims = false
+	_guest_swims = _guest_swims and _pond
 	Engine.max_fps = fps
 	seed(seed_value)
 	_rng.seed = seed_value
@@ -353,13 +394,18 @@ func _ready() -> void:
 	print("[net-lag] protocol %d, %s wire, link %s%s, %d fps cap, seed %d%s"
 		% [Wire.PROTOCOL, "motion-carrying" if _rich else "place-only", link,
 			" (every frame reliable)" if reliable else "", fps, seed_value,
-			" -- the shared pond, two real runs" if _pond else ""])
+			" -- the shared pond, two real runs" if _pond else ""]
+		+ (" -- the guest swims, and the host's intake crosses the link too"
+			if _guest_swims else ""))
 	if _pond:
 		if not await _build_pond(link, reliable, rto / 1000.0):
 			print("[net-lag] FAILED to put the guest in the pond")
 			get_tree().quit(1)
 			return
-		if not events_given:
+		if _guest_swims:
+			if not events_given:
+				events.clear()
+		elif not events_given:
 			events.append("bite")
 	else:
 		_build(link, reliable, rto / 1000.0)
@@ -370,7 +416,9 @@ func _ready() -> void:
 		await _time_turns(trials)
 	if _pond and events.has("bite"):
 		await _time_bites(trials)
-	if swim > 0.0:
+	if swim > 0.0 and _guest_swims:
+		await _swim_guest(swim)
+	elif swim > 0.0:
 		await _swim(swim)
 	if _pond:
 		_summary("water, guest's body to host's", Array(_keeper.errors), "u")
@@ -386,6 +434,9 @@ func _ready() -> void:
 	if _link != null:
 		print("[net-lag] link: %d frames delivered, %d lost, %d resent"
 			% [_link.passed, _link.lost, _link.resent])
+	if _host_link != null:
+		print("[net-lag] link into the host: %d frames delivered, %d lost, %d resent"
+			% [_host_link.passed, _host_link.lost, _host_link.resent])
 	print("[net-lag] done")
 	get_tree().quit(0)
 
@@ -395,7 +446,7 @@ func _ready() -> void:
 # ---------------------------------------------------------------------------
 
 func _open() -> bool:
-	_far = NetSession.new()
+	_far = LaggedHost.new() if _guest_swims else NetSession.new()
 	_far.name = "Far"
 	add_child(_far)
 	_near = NetSession.new()
@@ -482,6 +533,20 @@ func _install_link(link: String, reliable: bool, rto: float) -> void:
 ## plain mode's far body.
 func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	_install_link(link, reliable, rto)
+	if _guest_swims and link != "loopback":
+		# The same model, dice of its own, on what the host reads.
+		_host_link = Link.new()
+		_host_link.name = "HostLink"
+		_host_link.rng.seed = _rng.randi()
+		_host_link.target = _far
+		_host_link.sender = _near
+		_host_link.all_reliable = reliable
+		_host_link.rto = rto
+		if link == "rough":
+			_host_link.loss = 0.05
+			_host_link.spike_chance = 0.05
+		add_child(_host_link)
+		(_far as LaggedHost).intake = _host_link
 	NetSession.current = _far
 	_host_run = (load(RUN) as PackedScene).instantiate()
 	_host_run.set("mode", 0)
@@ -519,6 +584,14 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	_keeper.guest_food = _guest_run.get_node(^"Food")
 	_keeper.host_metabolism = _host_run.get_node(^"Metabolism")
 	_keeper.guest_metabolism = _guest_run.get_node(^"Metabolism")
+	if _guest_swims:
+		# The guest's cell is the one steered; the host's is held.
+		_keeper.hold_host = true
+		_keeper.host_at = _body.position
+		_body.controls = _host_run.get(&"_controls")
+		_me.controls = _stick
+		add_child(_keeper)
+		return true
 	add_child(_keeper)
 	_rest()
 	return true
@@ -679,6 +752,66 @@ func _swim(seconds: float) -> void:
 	if not twist.is_empty():
 		_summary("swim, heading correction", twist, "rad")
 	_summary("swim, leap per frame", surge, "u")
+
+
+## **--swimmer=guest: the guest swims, and the host's referee judges it**
+## through the link. Its free sense is handed to it as an `ampulla`, the way the
+## run's own grant would if it drew that one -- a held sample, placed -- so it
+## calls every 8.8 s and each call is judged too. Its own impulses on its own
+## clock, a steering demand that changes every 0.4-2.0 s. Then every foul the
+## referee called and the closest call on each budget it keeps.
+func _swim_guest(seconds: float) -> void:
+	var genome: Node = _guest_run.get_node(^"Genome")
+	_guest_run.set(&"_sensed", true)
+	if not (genome.layout() as Array).has(&""):
+		genome.bonus_slots += 1
+	genome.gift(&"ampulla")
+	genome.place((genome.layout() as Array).find(&""))
+	var until := _now() + seconds
+	var steer_at := _now()
+	var impulses := [0]
+	var count := func(_s: float) -> void: impulses[0] += 1
+	_me.impulsed.connect(count)
+	var from: Vector2 = _me.position
+	var travelled := 0.0
+	var last: Vector2 = _me.position
+	while _now() < until:
+		if _now() >= steer_at:
+			_stick.demand = [-1.0, -0.5, 0.0, 0.5, 1.0][_rng.randi_range(0, 4)]
+			steer_at = _now() + _rng.randf_range(0.4, 2.0)
+		await get_tree().process_frame
+		travelled += (_me.position as Vector2).distance_to(last)
+		last = _me.position
+	_me.impulsed.disconnect(count)
+	_stick.demand = 0.0
+	var pond: Object = _host_run.get("_pond")
+	var referee: Object = pond.call("referee_of", 0)
+	var counts: Dictionary = _far.gate_counts
+	print("[net-lag] swim: the guest, %.0f s, %d impulses, %.0f units swum, %.0f from"
+		% [seconds, int(impulses[0]), travelled, (_me.position as Vector2).distance_to(from)]
+		+ " where it began; it wears %s" % str(genome.tiers()))
+	if referee == null:
+		print("[net-lag] referee: none -- the guest was not in the host's water")
+		return
+	var judged: Dictionary = referee.get("judged")
+	print("[net-lag] referee: %d fouls (%d enforced, %d watched) over %d state frames,"
+		% [int(counts["fouls"]), int(counts["referee_strikes"]),
+			int(counts["referee_would_strikes"]), int(judged["state"])]
+		+ " %d calls, %d bodies, %d arrivals; ledger points %.0f; %s"
+		% [int(judged["shout"]), int(judged["person"]), int(judged["enter"]),
+			float(counts["points"]), str(referee.get("called"))])
+	for pair: Array in [["movement", referee.move, "u"], ["heading", referee.turn, "rad"],
+			["calls", referee.shouts, ""], ["arrivals", referee.enters, ""],
+			["bodies", referee.bodies, ""]]:
+		var budget: Object = pair[1]
+		print("[net-lag] referee budget %-9s closest call %5.1f%% -- %.2f a second, %.2f"
+			% [str(pair[0]), 100.0 * float(budget.closest), float(budget.rate),
+				float(budget.hold)] + " %s banked" % str(pair[2]))
+	print("[net-lag] referee: fastest claimed %.0f u/s of %.0f, sharpest turn %.2f rad/s"
+		% [float(referee.get("worst_speed")), float(referee.SPEED_MAX),
+			float(referee.get("worst_turning"))]
+		+ " of %.2f, radius at most %+.2f of what the host fed it"
+		% [float(referee.TURNING_MAX), float(referee.get("worst_radius"))])
 
 
 ## **Bite to `hit`** (--pond): a chewer posed on the guest's flank in the
