@@ -57,13 +57,13 @@ extends Node
 ## hostile peers against a host of their own each -- every frame at and past
 ## its size bound, malformed and wrong-way frames, a command that is not a
 ## frame, callers that speak before their hello or never, a caller cut with
-## packets already queued, a flood with the budgets enforced and with them
-## only watched, as they ship, and its control, a storm of calls and one
+## packets already queued, a flood with the budgets enforced, as they ship, and
+## with them only watched, and its control, a storm of calls and one
 ## address's storm beside another's first call, the queues by weight, a later
 ## build's frames, the LAN-only guard, and what a guest said outliving it. The
 ## pond and server sections then hold the other half: over every stage of two
 ## real runs, and a server with six guests, the gate never touched an honest
-## peer, and the budgets it watches would not have either.
+## peer: nothing dropped, struck or cut, and nothing even watched would have been.
 ##
 ## **Two of these run against a scene rather than a socket**, and both are here
 ## rather than in a render for the same reason: CI never sees a pixel. A `_draw`
@@ -1678,9 +1678,9 @@ func _limits_squat(id: int) -> Array:
 ## thousand valid state frames in a second from a greeted guest. With
 ## [member NetSession.enforce_budgets] on, no more are taken than the frame
 ## budget's burst and refill, and flood strikes cut it inside two seconds.
-## Watched, as the budgets ship, the same flood is counted and logged as the
-## drops and the cut it would have been, and the guest loses neither a frame
-## nor its link. Then a guest sending a hundred a second for three seconds --
+## Watched -- the budgets switched off, as they can be to diagnose a false
+## positive -- the same flood is counted and logged as the drops and the cut it
+## would have been, and the guest loses neither a frame nor its link. Then a guest sending a hundred a second for three seconds --
 ## over any honest peak -- is never struck, and the budgets never even note it.
 func _limits_flood() -> void:
 	var host: Node = await _limits_host("LimitsFloodHost")
@@ -1717,8 +1717,10 @@ func _limits_flood() -> void:
 		% [taken, int(allowed)] + " by then, %d dropped; the host's worst frame %.1f ms"
 		% [int(host.gate_counts["dropped"]), worst * 1000.0])
 	await _limits_close([host, guest])
-	# Watched, as they ship: the same flood, and nothing is taken away.
+	# Watched -- the switch for diagnosing a false positive in the field: the
+	# same flood, and nothing is taken away.
 	host = await _limits_host("LimitsWatchHost")
+	host.enforce_budgets = false
 	guest = await _limits_guest("LimitsWatchGuest")
 	gid = guest.my_id()
 	guard = (host.get("_peers") as Dictionary)[gid]["guard"]
@@ -1743,7 +1745,8 @@ func _limits_flood() -> void:
 			and int(counts["dropped"]) == 0 and int(counts["strikes"]) == 0
 			and int(counts["cuts"]) == 0 and float(host.points_of(gid)) == 0.0
 			and notes.has("would drop|127.0.0.1") and notes.has("would cut|127.0.0.1"),
-		"limits T7: watched, as the budgets ship, the same flood is taken whole -- %d"
+		"limits T7: watched, the budgets switched off, the same flood is taken"
+		+ " whole -- %d"
 		% int(guard.get("taken")) + " frames of the %d sent, with its own beat -- and"
 		% sent + " logged and counted as %d frames it would have dropped and %d cuts"
 		% [int(counts["would_drop"]), int(counts["would_cuts"])] + " it would have"

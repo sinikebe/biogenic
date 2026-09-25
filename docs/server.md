@@ -13,10 +13,9 @@ any x86_64 Debian or Ubuntu machine with systemd.
 > only from an address on a local network -- loopback, the private ranges
 > (10/8, 172.16/12, 192.168/16), 100.64/10, link-local, its own /24, and IPv6
 > loopback, unique-local and link-local -- and hangs up on anything else with
-> one line in its log. It also sizes and checks every frame, cuts a guest that
-> keeps sending what no Biogenic build sends, and watches how often and how
-> much each guest sends, counting for now rather than cutting (§3): issues #56
-> and #58, `docs/design/net-hardening.md` part A. Internet
+> one line in its log. It also sizes and checks every frame, and cuts a guest
+> that keeps sending what no Biogenic build sends, or far more than any phone
+> sends (§3): issues #56 and #58, `docs/design/net-hardening.md` part A. Internet
 > play still needs the rest: the server checking what a guest *says* (#57) and
 > an authenticated, encrypted handshake (#59), then a forwarded UDP port and a
 > way for a phone to enter an address rather than tap a code. None of that is
@@ -136,22 +135,23 @@ placeholder addresses:
 [net] 1945108233 (192.0.2.42) done after 1800 s -- frames 51234, events 312, over budget 0, points 0
 ```
 
-**The rate limits are watched, not enforced, for now.** How many frames, bytes
-and events a guest may send each second are the only limits a slow or bursty
-Wi-Fi could trip on an honest phone, and they have not yet been measured on
-one. So the server does not drop or cut for them: it counts and logs what it
-*would* have done, in lines like these --
+**The rate limits are enforced.** How many frames, bytes and events a guest
+may send each second are the only limits a slow or bursty Wi-Fi could trip on
+an honest phone. Measured through a jittery link, the busiest honest guest used
+about a quarter of them, and a synthetic worst case four fifths, but not yet on
+two real phones on real Wi-Fi. A guest over them loses the frames past its
+budget, and one that keeps flooding is cut:
 
 ```
-[net] would drop a frame from 1945108233 (192.0.2.42): over its frame budget (120 a second, 240 at once) -- watching the budgets, not enforcing them
-[net] would cut 1945108233 (192.0.2.42): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- watching the budgets, not enforcing them
+[net] cut 1945108233 (192.0.2.42): flooding: 241 frames over its budget in a second (120 a second, 240 at once) -- 12 points -- barred 60 s
 ```
 
--- and takes the frames all the same. Everything else is enforced already.
-**A playtest that is to turn them on must show none of these lines, and every
-`done after` line must say `over budget 0`**: two phones on real Wi-Fi for half
-an hour, and the server with two. A `would` line from an honest phone means the
-limits are too tight for real Wi-Fi, not that the phone is misbehaving.
+**Every `done after` line from an honest phone should say `over budget 0`.**
+If one does not, or an honest phone is cut, the limits are too tight for that
+Wi-Fi, not the phone misbehaving: file an issue with the log lines. Setting
+`enforce_budgets` to `false` in `game/net/net_session.gd` is the switch back to
+**watch mode**, in which the server takes every frame and only logs what it
+*would* have done (`[net] would drop ...`, `[net] would cut ...`).
 
 ## 4. How it updates
 
@@ -280,10 +280,10 @@ userdel biogenic
   public address -- which can only reach the server through a forwarded port,
   or over IPv6 -- is refused as not on this network. **"cut off"** (or
   "refused", on an older build) is a phone the server cut for sending frames no
-  Biogenic build sends. Its screen says "the other end would not take what this
-  game sent. update both from the launcher, then call again in a minute": the
-  server bars its address for a minute after a cut, so a call straight back is
-  the "they hung up" above.
+  Biogenic build sends, or far more of them than any phone sends. Its screen
+  says "the other end would not take what this game sent. update both from the
+  launcher, then call again in a minute": the server bars its address for a
+  minute after a cut, so a call straight back is the "they hung up" above.
 - **The server keeps restarting** -- `systemctl status biogenic-server` shows it
   starting again every five seconds, and `journalctl -u biogenic-server -e`
   shows how each start ends. After an update, that is the new build failing on

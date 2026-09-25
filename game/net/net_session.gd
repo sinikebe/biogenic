@@ -32,8 +32,8 @@ extends Node
 ## the host polls its ENet peer itself ([method _pump]) and nothing but a RAW
 ## frame goes further; every frame from either end then passes one gate
 ## ([method _admit_frame]) that checks its size, its kind and what it parses
-## to, and charges the sender's budgets -- which, until
-## [member enforce_budgets] is on, are watched rather than enforced. Who may
+## to, and charges the sender's budgets, which [member enforce_budgets] can
+## turn to watching only. Who may
 ## connect at all is decided in [method _on_peer_connected], before any
 ## bookkeeping exists for them. None of it changes a byte on the wire: a
 ## protocol-4 build on either end cannot tell.
@@ -289,9 +289,9 @@ const BOOK_IDLE := 600.0
 ## [constant EARLY_GAP] -- about one event a second in bursts of two to four,
 ## and about 3.5 KB a second. Each limit is at least 40% over that, and the
 ## bursts cover what a spike on the link delivers at once: the relay runs in
-## net-hardening.md A.7 measured both. **Watched, not enforced, until
-## [member enforce_budgets] is on** -- and so are the flood rule and the
-## guest's own limits on its host below.
+## net-hardening.md A.7 measured both. **Enforced while
+## [member enforce_budgets] is on, which it ships as** -- and so are the flood
+## rule and the guest's own limits on its host below.
 const FRAMES_RATE := 120.0
 const FRAMES_BURST := 240.0
 const EVENTS_RATE := 5.0
@@ -450,17 +450,17 @@ var _out_of_water := false
 ## drained to the newest by it, independently of the state frames.
 var _out_pond_seq := 0
 
-## **The budgets are watched, not enforced -- until this says so** (A.4). The
-## frame, byte and event budgets and the flood rule are the only limits timing
-## alone can trip: everything else the gate refuses is a frame no honest build
-## writes, or a caller the door turns away, and all of that is enforced always.
-## The budgets' numbers were measured through a relay, not on two phones on
-## real Wi-Fi, so until that playtest has shown none, an overrun is counted
-## (`would_*` in [member gate_counts]) and logged as what it would have done --
-## "would drop", "would cut" -- and the frame is taken, with no points for it.
-## Turning them on is this one line; the probe's budget tests set it per
-## session.
-var enforce_budgets := false
+## **The budgets are enforced** (A.4) -- the owner's call, taken before the
+## two-phone playtest: their numbers were measured through a relay, with every
+## limit at least 40% over the worst honest traffic seen there. The frame, byte
+## and event budgets and the flood rule are the only limits timing alone can
+## trip: everything else the gate refuses is a frame no honest build writes, or
+## a caller the door turns away, and all of that is enforced whatever this says.
+## **Off is watch mode**, for diagnosing a false positive in the field: an
+## overrun is then counted (`would_*` in [member gate_counts]) and logged as
+## what it would have done -- "would drop", "would cut" -- and the frame is
+## taken, with no points for it. The probe's budget tests set it per session.
+var enforce_budgets := true
 ## **What the door and the gate have done** since this end last hosted or
 ## joined -- callers refused, frames dropped, points struck, peers cut, and in
 ## watch mode what the budgets would have done -- for tools and for the log.
