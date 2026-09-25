@@ -139,10 +139,20 @@ func _ready() -> void:
 		print("[net-probe] NOTE --limits-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--referee-only` is the same for the referee (net-hardening.md part B):
+	# its socket-free checks and the pond's own, which include the real game.
+	if OS.get_cmdline_user_args().has("--referee-only"):
+		_check_referee()
+		Engine.max_fps = 250
+		await _check_pond_referee()
+		print("[net-probe] NOTE --referee-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	var only_pond := OS.get_cmdline_user_args().has("--pond-only")
 	if only_pond:
 		_check_pond_wire()
 		_check_pond_field()
+		_check_referee()
 		await _check_pond()
 		print("[net-probe] NOTE --pond-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
@@ -152,6 +162,7 @@ func _ready() -> void:
 	_check_pond_wire()
 	_check_carry()
 	_check_pond_field()
+	_check_referee()
 	await _check_link()
 	await _check_skew()
 	await _check_limits()
@@ -2155,10 +2166,1031 @@ func _limits_unclean(all: Array) -> String:
 	for counts: Dictionary in all:
 		for key: String in ["refused", "cuts", "bars", "strikes", "oversize", "malformed",
 				"unknown", "dropped", "queue_dropped", "strays", "would_drop",
-				"would_strikes", "would_cuts"]:
+				"would_strikes", "would_cuts", "fouls"]:
 			if float(counts.get(key, 0)) != 0.0:
 				bad.append("%s %s" % [key, str(counts[key])])
 	return "" if bad.is_empty() else " -- NOT: " + ", ".join(bad)
+
+
+# ---------------------------------------------------------------------------
+# **The referee, with no socket** (docs/design/net-hardening.md B.5): what a
+# host checks a guest's word against, driven by hand on a clock of its own --
+# every rule at its edge, a born body's honest life through a modelled rough
+# link, and a tier-3 body at the physical peak through the same. No frames,
+# only arithmetic, like `pond-field`. R1-R4 are here; R5-R11, which need a real
+# host's water, are `_check_pond_referee`'s.
+# ---------------------------------------------------------------------------
+
+const Referee := preload("res://game/net/referee.gd")
+## R2's and R3's link: `tools/net_lag.gd`'s `rough`, modelled here with no
+## socket -- 10-50 ms of flight, 5% of frames lost, a 5% chance of 100-250 ms
+## more, and a reliable frame resent after 150 ms, doubling, with every
+## reliable frame behind it waiting for it.
+const REF_FLIGHT_MIN := 0.010
+const REF_FLIGHT_MAX := 0.050
+const REF_LOSS := 0.05
+const REF_SPIKE := 0.05
+const REF_SPIKE_MIN := 0.100
+const REF_SPIKE_MAX := 0.250
+const REF_RTO := 0.150
+## The nodes the section builds by hand, freed at its end.
+var _ref_nodes: Array[Node] = []
+
+
+## **cell.gd's drawn controls, reduced to what R2 drives**: a push held, a
+## steering demand the probe sets. Never floating, so the body reads it. A Node
+## because that is what a body's `controls` holds.
+class RefStick extends Node:
+	const NONE := 0
+	const DASH := 1
+	var demand := 0.0
+
+	func floating() -> bool:
+		return false
+
+	func steer() -> float:
+		return demand
+
+	func pushing() -> bool:
+		return true
+
+	func press(_index: int, _at: Vector2) -> int:
+		return NONE
+
+	func move(_index: int, _at: Vector2) -> bool:
+		return false
+
+	func release(_index: int) -> int:
+		return NONE
+
+
+func _check_referee() -> void:
+	var from := _clock()
+	_referee_rules()
+	_referee_agrees()
+	_referee_teleport()
+	_referee_tier_three()
+	_referee_silence()
+	_referee_radius()
+	_referee_dividing()
+	_referee_unseen()
+	_referee_bodies()
+	_referee_arrivals()
+	_referee_deaths()
+	_referee_shouts()
+	_referee_reentry()
+	_referee_once()
+	for node: Node in _ref_nodes:
+		if is_instance_valid(node):
+			node.free()
+	_ref_nodes.clear()
+	print("[net-probe] NOTE referee took %.1f s of wall time and no frames"
+		% (_clock() - from))
+
+
+## A referee whose guest has just arrived at [param at] and been seen there:
+## PERSON with a new body, ENTER, the host's arrival, and a first state frame.
+func _ref_arrived(now: float, at: Vector2, radius: float = CellBody.BASE_RADIUS,
+		tiers: Dictionary = Genome.BORN) -> Referee:
+	var ref := Referee.new(now)
+	ref.judge_person(now, true, tiers, tiers.keys(), false)
+	ref.judge_enter(now, radius, false)
+	ref.arrive(now, at, radius)
+	ref.claim(now + 0.05, at, 0.0, radius, Vector2.ZERO, 0.0, false)
+	return ref
+
+
+## The rules of [param fouls] (from `take_fouls`), in order.
+static func _ref_rules(fouls: Array) -> Array:
+	return fouls.map(func(foul: Array) -> String: return str(foul[0]))
+
+
+## **The rules the referee judges by, held to `Wire.RULES`** (net-hardening.md
+## B.6). A host judges its guests by its own copy of them, so a guest on other
+## rules is fouled and then cut: the fingerprint moving is what says a PROTOCOL
+## has to move with it, before a release does it for us.
+func _referee_rules() -> void:
+	var text := _rules_text()
+	var now := text.sha256_text()
+	var ok := now == Wire.RULES
+	_says(ok, ("referee: the %d rules it judges a guest by fingerprint to Wire.RULES"
+		% text.split("\n").size() + " (%s)" % now.left(16)) if ok
+		else ("referee: a rule the referee judges by changed: bump Wire.PROTOCOL and"
+			+ " update Wire.RULES in the same commit -- they fingerprint to %s now, and"
+			% now + " Wire.RULES says %s. A host on the old rules fouls, then cuts, an"
+			% Wire.RULES + " honest guest on the new ones (wire.gd, RULES)"))
+
+
+## **Every value the referee judges a guest by or derives a limit from**, one per
+## line, where it is defined -- and the referee's own limits. `Wire.RULES` is its
+## SHA-256. A value added to the referee's judgement belongs here too.
+func _rules_text() -> String:
+	var lines: PackedStringArray = []
+	var put := func(name: String, value: Variant) -> void:
+		lines.append("%s=%s" % [name, _rule_value(value)])
+	# cell.gd: size, growth, division and mending.
+	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
+	put.call("cell.GROWTH_PER_MEAL", CellBody.GROWTH_PER_MEAL)
+	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
+	put.call("cell.DIVIDE_SPLIT", CellBody.DIVIDE_SPLIT)
+	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
+	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
+	# The calls: how far and how often.
+	put.call("cell.PING_RANGE_BY_TIER", CellBody.PING_RANGE_BY_TIER)
+	put.call("cell.PING_PERIOD_BY_TIER", CellBody.PING_PERIOD_BY_TIER)
+	# The speed and turn tables the caps sit over (`_referee_agrees`).
+	put.call("cell.IMPULSE_SPEED_BY_TIER", CellBody.IMPULSE_SPEED_BY_TIER)
+	put.call("cell.IMPULSE_GAP_MIN_BY_TIER", CellBody.IMPULSE_GAP_MIN_BY_TIER)
+	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
+	put.call("cell.DRAG", CellBody.DRAG)
+	put.call("cell.PUSH_ACCEL_BY_TIER", CellBody.PUSH_ACCEL_BY_TIER)
+	put.call("cell.DASH_SPEED_BY_TIER", CellBody.DASH_SPEED_BY_TIER)
+	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
+	put.call("cell.TURN_RATE_BY_TIER", CellBody.TURN_RATE_BY_TIER)
+	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
+	# food.gd: the grace, and what a contact and a death are called.
+	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
+	put.call("food.Contact", FoodField.Contact)
+	put.call("food.Cause", FoodField.Cause)
+	put.call("food.By", FoodField.By)
+	# normal_mode.gd: the sister's ring and the free senses.
+	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
+	put.call("run.FIRST_SENSES", NormalMode.FIRST_SENSES)
+	# genome.gd: the tiers, a born body, and the gift's tier -- a literal in
+	# `_express_gift`, so it is measured on a real genome.
+	put.call("genome.TIER_MAX", Genome.TIER_MAX)
+	put.call("genome.BORN", Genome.BORN)
+	var genome: Node = Genome.new()
+	genome.express(Genome.BORN.duplicate(), NormalMode.BORN_ORDER)
+	genome.gift(&"stigma")
+	genome.place(0)
+	put.call("genome.gift_tier", int((genome.tiers() as Dictionary).get(&"stigma", 0)))
+	genome.free()
+	# referee.gd: its own limits, and its copies of the run's numbers.
+	for name: String in ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
+			"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
+			"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
+			"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
+			"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "FIRST_SENSES", "STALE_FOR",
+			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
+		put.call("referee." + name, (Referee as Script).get_script_constant_map()[name])
+	return "\n".join(lines)
+
+
+## One value, written the same way on every machine: six places for a float, a
+## list comma-joined, a dictionary by its keys in order.
+static func _rule_value(value: Variant) -> String:
+	match typeof(value):
+		TYPE_FLOAT:
+			return "%.6f" % float(value)
+		TYPE_ARRAY:
+			var parts: PackedStringArray = []
+			for each: Variant in value:
+				parts.append(_rule_value(each))
+			return "[" + ",".join(parts) + "]"
+		TYPE_DICTIONARY:
+			var keys: Array = (value as Dictionary).keys()
+			keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+			var parts: PackedStringArray = []
+			for key: Variant in keys:
+				parts.append("%s:%s" % [str(key), _rule_value(value[key])])
+			return "{" + ",".join(parts) + "}"
+	return str(value)
+
+
+## **The numbers the referee writes out, held to where they come from**, and its
+## caps held over the fastest and the hardest-turning bodies the tables make.
+func _referee_agrees() -> void:
+	var senses: Array = []
+	for gene: StringName in NormalMode.FIRST_SENSES:
+		senses.append(gene)
+	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
+	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
+		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
+		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
+		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	# **The hardest turn**: a top-tier cirrus flat out, the drift at its most, and
+	# an impulse's kick to the nose as often as a top-tier flagellum beats.
+	var steer := CellBody.TURN_RATE_BY_TIER[CellBody.TURN_RATE_BY_TIER.size() - 1] \
+		+ CellBody.WANDER_RATE
+	var turn := steer + CellBody.IMPULSE_KICK / CellBody.IMPULSE_GAP_MIN_BY_TIER[top]
+	_says(is_equal_approx(Referee.SISTER_DISTANCE, NormalMode.SISTER_DISTANCE)
+			and is_equal_approx(Referee.DAUGHTER_RADIUS,
+				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+			and Array(Referee.FIRST_SENSES) == senses
+			and Referee.SPEED_MAX > peak and Referee.MOVE_RATE > peak
+			and Referee.TURN_RATE > turn and Referee.TURNING_MAX > steer,
+		"referee: its ring (%.0f), a daughter's r%.3f and the gift's four senses are"
+		% [Referee.SISTER_DISTANCE, Referee.DAUGHTER_RADIUS] + " the run's own; its"
+		+ " %.0f u/s is over every speed-up at the top tier, stacked (%.0f u/s), and"
+		% [Referee.MOVE_RATE, peak] + " its %.2f rad/s over the hardest turn the"
+		% Referee.TURN_RATE + " tables make (%.2f rad/s, %.2f of it steering)"
+		% [turn, steer])
+
+
+## **R1: a 5,000 unit teleport.** The host moves the body no further than the
+## budget and fouls it once, 2 points; the honest frames after it foul nothing,
+## and the host's place walks to them at the cap.
+func _referee_teleport() -> void:
+	var t := 0.0
+	var at := Vector2.ZERO
+	var ref := _ref_arrived(t, at)
+	for i in 40:
+		t += 0.05
+		at += Vector2(0.0, -2.5)
+		ref.claim(t, at, 0.0, 26.0, Vector2(0.0, -50.0), 0.0, false)
+	ref.take_fouls()
+	t += 0.05
+	var jumped := t
+	var there := at + Vector2(5000.0, 0.0)
+	var put: Array = ref.claim(t, there, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var moved: float = (put[0] as Vector2).distance_to(at)
+	var said := ref.take_fouls()
+	var converged := -1.0
+	for i in 200:
+		t += 0.05
+		there += Vector2(0.0, -2.5)
+		put = ref.claim(t, there, 0.0, 26.0, Vector2(0.0, -50.0), 0.0, false)
+		if converged < 0.0 and (put[0] as Vector2).distance_to(there) < 0.01:
+			converged = t - jumped
+	var after := ref.take_fouls()
+	_says(said.size() == 1 and str(said[0][0]) == Referee.MOVE
+			and float(said[0][1]) == Referee.WEIGHT_MOVE
+			and moved <= Referee.MOVE_HOLD + Referee.MOVE_SLACK + 0.01 and moved > 1000.0
+			and after.is_empty() and converged > 0.0,
+		"referee R1: a 5,000-unit teleport fouls once (%s, %.0f points) and the"
+		% [str(said[0][0]) if not said.is_empty() else "none",
+			float(said[0][1]) if not said.is_empty() else 0.0]
+		+ " host moves the body %.0f -- the budget and its slack; the honest" % moved
+		+ " frames after it foul nothing, and the host's place walks to them at the"
+		+ " cap, %.1f s later" % converged)
+
+
+## **R2: a cell with every organ at tier 3, driven by cell.gd's own physics
+## for 60 s through `rough`**: a held push, a dash every cooldown, a steering
+## demand that changes every 0.4-2.0 s, its own impulses, a call every 15.2 s.
+## Every state frame crosses the wire's own bytes; the host takes the newest
+## that has landed, once a frame at 60 frames a second. No foul; the closest
+## call printed.
+func _referee_tier_three() -> void:
+	var fouls := _ref_swim({&"cytostome": 3, &"cirrus": 3, &"flagellum": 3,
+		&"axoneme": 3, &"myoneme": 3, &"ampulla": 3}, 60.0, true, 0.0, 26925)
+	# **And at the bound itself.** cell.gd's own physics never lines every
+	# speed-up up at its peak at once, so the body above tops out short of it; a
+	# body held at the stacked peak the tables make, straight on, is the bound.
+	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
+	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
+		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
+		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
+		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	var held := _ref_straight(peak, 60.0, 26926)
+	_says(int(fouls[0]) == 0 and int(fouls[2]) > 1000 and int(fouls[3]) >= 3
+			and int(held[0]) == 0 and int(held[1]) > 900,
+		"referee R2: a tier-3 body swimming flat out for 60 s through a rough link"
+		+ " fouls %d times over %d state frames and %d calls -- fastest %.0f u/s;"
+		% [int(fouls[0]), int(fouls[2]), int(fouls[3]), float(fouls[4])]
+		+ " closest calls: movement %.0f%%, heading %.0f%%, calls %.0f%%"
+		% [100.0 * float(fouls[5]), 100.0 * float(fouls[6]), 100.0 * float(fouls[7])]
+		+ " (%d frames lost, %d spiked); and one held at the stacked peak, %.0f u/s,"
+		% [int(fouls[8]), int(fouls[9]), peak] + " through the same link, %d over %d"
+		% [int(held[0]), int(held[1])] + " frames, closest call %.0f%%"
+		% (100.0 * float(held[2])))
+
+
+## **A body held at [param speed], straight on, through the modelled `rough`
+## link** for [param seconds]: `[fouls, state frames judged, closest movement]`.
+func _ref_straight(speed: float, seconds: float, dice: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = dice
+	var ref := Referee.new(0.0)
+	ref.judge_person(0.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	ref.judge_enter(0.0, CellBody.BASE_RADIUS, false)
+	ref.arrive(0.0, Vector2.ZERO, CellBody.BASE_RADIUS)
+	var step := 1.0 / 60.0
+	var t := 0.0
+	var beat_at := 0.0
+	var seq := 0
+	var states: Array = []
+	var newest := -1
+	var judged := 0
+	while t < seconds:
+		t += step
+		if t >= beat_at:
+			beat_at = t + NetSession.STATE_PERIOD
+			seq += 1
+			var lands := _ref_lands(t, true, rng)
+			if lands >= 0.0:
+				states.append([lands, seq, Vector2(speed * t, 0.0)])
+		var best: Array = []
+		for each: Array in states:
+			if float(each[0]) <= t and int(each[1]) > newest \
+					and (best.is_empty() or int(each[1]) > int(best[1])):
+				best = each
+		states = states.filter(func(each: Array) -> bool: return float(each[0]) > t)
+		if not best.is_empty():
+			newest = int(best[1])
+			ref.claim(t, best[2], 0.0, CellBody.BASE_RADIUS, Vector2(speed, 0.0), 0.0, false)
+			judged += 1
+	return [ref.fouled(), judged, ref.move.closest]
+
+
+## **One body swimming through the modelled link**, for R2 and R3: `[fouls,
+## rules, state frames judged, calls, fastest speed, closest movement, heading,
+## calls, frames lost, frames spiked]`. [param rough] models `rough`, or no
+## network; [param silence] holds every frame back for that many seconds from
+## the fifth second, then lands them at once. Stepped on a clock of its own, 60
+## frames a second a side, so no frame of the probe is spent.
+func _ref_swim(tiers: Dictionary, seconds: float, rough: bool, silence: float,
+		dice: int) -> Array:
+	seed(dice)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = dice
+	var genome := StubGenome.new()
+	genome.body = tiers.duplicate()
+	var cell: Node = CellBody.new()
+	cell.genome = genome
+	cell.radius = CellBody.BASE_RADIUS
+	var stick := RefStick.new()
+	cell.controls = stick
+	_ref_nodes.append_array([genome, cell, stick])
+	# As every arrival starts a body: held, or reset, with its first impulse
+	# 0.6-1.4 s off -- never a kick in the first frame after the ARRIVE.
+	cell.reset(true)
+	var ref := Referee.new(0.0)
+	var order: Array = tiers.keys()
+	ref.judge_person(0.0, true, tiers, order, false)
+	ref.judge_enter(0.0, cell.radius, false)
+	ref.arrive(0.0, cell.position, cell.radius)
+	var reach: float = cell.ping_range()
+	var period: float = cell.ping_period()
+	var step := 1.0 / 60.0
+	var t := 0.0
+	var steer_at := 0.0
+	var beat_at := 0.0
+	var call_at := 0.0
+	var seq := 0
+	var lost := 0
+	var spiked := 0
+	var fastest := 0.0
+	var states: Array = []
+	var calls: Array = []
+	var reliable_free := 0.0
+	var newest := -1
+	var host_t := 0.0
+	var judged := 0
+	var called := 0
+	while t < seconds:
+		# The guest's frame: steer, dash when it can, step the body.
+		if t >= steer_at:
+			stick.demand = [-1.0, -0.5, 0.0, 0.5, 1.0][rng.randi_range(0, 4)]
+			steer_at = t + rng.randf_range(0.4, 2.0)
+		cell.call(&"_dash")
+		var before: Vector2 = cell.velocity
+		cell._process(step)
+		t += step
+		fastest = maxf(fastest, (cell.velocity as Vector2).length())
+		var jumped: bool = ((cell.velocity as Vector2) - before).length() > 20.0
+		if t >= beat_at or jumped:
+			beat_at = t + NetSession.STATE_PERIOD
+			seq += 1
+			var frame := Wire.state(seq, true, cell.position, cell.heading, cell.radius,
+				cell.velocity, cell.heading_rate(), Wire.STATE_POND)
+			var lands := _ref_lands(t, rough, rng)
+			if lands < 0.0:
+				lost += 1
+			else:
+				if lands - t > REF_FLIGHT_MAX + 0.001:
+					spiked += 1
+				if silence > 0.0 and t >= 5.0 and t < 5.0 + silence:
+					lands = maxf(lands, 5.0 + silence)
+				states.append([lands, seq, Wire.state_body(frame)])
+		if period > 0.0 and t >= call_at:
+			call_at = t + period
+			var lands := t + (_ref_flight(rng) if rough else 0.0)
+			var tries := 0
+			while rough and rng.randf() < REF_LOSS:
+				lands += REF_RTO * pow(2.0, float(tries))
+				tries += 1
+			lands = maxf(lands, reliable_free)
+			reliable_free = lands
+			calls.append([lands, cell.position, cell.radius, reach])
+		# The host's frames, up to now: the newest state frame that has landed,
+		# and every call, in order.
+		while host_t + step <= t:
+			host_t += step
+			var best: Array = []
+			for each: Array in states:
+				if float(each[0]) <= host_t and int(each[1]) > newest \
+						and (best.is_empty() or int(each[1]) > int(best[1])):
+					best = each
+			states = states.filter(func(s: Array) -> bool: return float(s[0]) > host_t)
+			if not best.is_empty() and not (best[2] as Array).is_empty():
+				newest = int(best[1])
+				var body: Array = best[2]
+				ref.claim(host_t, body[0], float(body[1]), float(body[2]), body[3],
+					float(body[4]), false)
+				judged += 1
+			while not calls.is_empty() and float(calls[0][0]) <= host_t:
+				var call: Array = calls.pop_front()
+				ref.judge_shout(host_t, call[1], float(call[2]), float(call[3]), true)
+				called += 1
+	var rules := _ref_rules(ref.take_fouls())
+	return [ref.fouled(), rules, judged, called, fastest, ref.move.closest,
+		ref.turn.closest, ref.shouts.closest, lost, spiked]
+
+
+## When a frame sent at [param t] lands, or -1 for lost: `rough`, or at once.
+func _ref_lands(t: float, rough: bool, rng: RandomNumberGenerator) -> float:
+	if not rough:
+		return t
+	if rng.randf() < REF_LOSS:
+		return -1.0
+	return t + _ref_flight(rng)
+
+
+func _ref_flight(rng: RandomNumberGenerator) -> float:
+	var d := rng.randf_range(REF_FLIGHT_MIN, REF_FLIGHT_MAX)
+	if rng.randf() < REF_SPIKE:
+		d += rng.randf_range(REF_SPIKE_MIN, REF_SPIKE_MAX)
+	return d
+
+
+## **R3: 3 s of silence, then sixty frames at once** -- a born body swimming
+## while nothing it sends lands, and then everything does: no foul. And a host
+## that stalls for 3 s, a tier-3 body held after 1.2 s of the quiet, as a
+## guest's run holds it: no foul either.
+func _referee_silence() -> void:
+	var quiet := _ref_swim_now(Genome.BORN, 12.0, 3.0)
+	var t := 0.0
+	var at := Vector2.ZERO
+	var ref := _ref_arrived(t, at)
+	var velocity := Vector2(0.0, -900.0)
+	# Swimming at 900 u/s -- near every tier-3 organ's peak together -- until
+	# the host stalls; then 1.2 s more before the guest holds; then held.
+	for i in 40:
+		t += 0.05
+		at += velocity * 0.05
+		ref.claim(t, at, 0.0, 26.0, velocity, 0.0, false)
+	at += velocity * 1.2
+	t += 3.0
+	ref.stalled(3.0)
+	ref.claim(t, at, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var stall := ref.fouled()
+	_says(int(quiet[0]) == 0 and int(quiet[2]) > 100 and stall == 0,
+		"referee R3: 3 s of silence and then %d frames at once fouls %d times %s;"
+		% [int(quiet[3]), int(quiet[0]), str(quiet[1])] + " a host that stalls 3 s while a body"
+		+ " swims 1,080 units at 900 u/s and then holds fouls %d" % stall)
+
+
+## [method _ref_swim] with no network, for R3: every frame of [param silence]
+## seconds from the fifth landing at once. `[fouls, rules, judged, frames
+## landed at once]`.
+func _ref_swim_now(tiers: Dictionary, seconds: float, silence: float) -> Array:
+	seed(3)
+	var genome := StubGenome.new()
+	genome.body = tiers.duplicate()
+	var cell: Node = CellBody.new()
+	cell.genome = genome
+	var stick := RefStick.new()
+	stick.demand = 0.5
+	cell.controls = stick
+	_ref_nodes.append_array([genome, cell, stick])
+	cell.reset(true)
+	var ref := Referee.new(0.0)
+	ref.judge_person(0.0, true, tiers, tiers.keys(), false)
+	ref.judge_enter(0.0, cell.radius, false)
+	ref.arrive(0.0, cell.position, cell.radius)
+	var step := 1.0 / 60.0
+	var t := 0.0
+	var beat_at := 0.0
+	var held: Array = []
+	var judged := 0
+	var burst := 0
+	while t < seconds:
+		cell._process(step)
+		t += step
+		if t < beat_at:
+			continue
+		beat_at = t + NetSession.STATE_PERIOD
+		var body := [cell.position, cell.heading, cell.radius, cell.velocity,
+			cell.heading_rate()]
+		if t >= 5.0 and t < 5.0 + silence:
+			held.append(body)
+			continue
+		if not held.is_empty():
+			burst = held.size() + 1
+			held.clear()
+		ref.claim(t, body[0], float(body[1]), float(body[2]), body[3], float(body[4]),
+			false)
+		judged += 1
+	return [ref.fouled(), _ref_rules(ref.take_fouls()), judged, burst]
+
+
+## **R4: a radius the host never fed.** r36 with no meal is clamped to r26 and
+## fouled, 4 points; after one ATE the host sent, r30 is taken.
+func _referee_radius() -> void:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	var over: Array = ref.claim(1.0, Vector2.ZERO, 0.0, 36.0, Vector2.ZERO, 0.0, false)
+	var said := ref.take_fouls()
+	ref.ate()
+	var fed: Array = ref.claim(2.0, Vector2.ZERO, 0.0, 30.0, Vector2.ZERO, 0.0, false)
+	var then := ref.take_fouls()
+	_says(is_equal_approx(float(over[2]), 26.0) and _ref_rules(said) == [Referee.SIZE]
+			and float(said[0][1]) == Referee.WEIGHT_SIZE
+			and is_equal_approx(float(fed[2]), 30.0) and then.is_empty(),
+		"referee R4: r36 with no meal is put at r%.0f and fouled (%.0f points);"
+		% [float(over[2]), float(said[0][1]) if not said.is_empty() else 0.0]
+		+ " after the one ATE the host sent, r30 is taken as it is")
+
+
+## **Dividing and the sister** (the socket-free halves of R5 and R6): an OUT
+## only at r40, frozen while it lasts, ending in a birth; a SISTER once for it,
+## on the ring at a daughter's size.
+func _referee_dividing() -> void:
+	# OUT at r30: kept in the water, fouled.
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.ate()
+	var early: Array = ref.claim(1.0, Vector2.ZERO, 0.0, 30.0, Vector2.ZERO, 0.0, true)
+	var early_said := _ref_rules(ref.take_fouls())
+	# A SISTER with no division: nothing placed, fouled.
+	var stray := ref.judge_sister(1.1, Vector2(560.0, 0.0), Referee.DAUGHTER_RADIUS, true)
+	var stray_said := ref.take_fouls()
+	# A real division: grown to r40, out and frozen, a sister on the ring, and a
+	# daughter's new body -- with her mother's last OUT frame landing after it.
+	ref.credit_meals(3)
+	var home := Vector2(10.0, 0.0)
+	ref.claim(2.0, home, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	var out: Array = ref.claim(2.5, home, 0.0, 40.0, Vector2(30.0, 0.0), 0.0, true)
+	var wandered: Array = ref.claim(3.0, home + Vector2(9.0, 0.0), 0.0, 40.0,
+		Vector2.ZERO, 0.0, true)
+	var wander_said := _ref_rules(ref.take_fouls())
+	var sister := ref.judge_sister(4.0, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
+	var tail: Array = ref.claim(4.02, home, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	var again := ref.judge_sister(4.05, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
+	var again_said := ref.take_fouls()
+	var born := ref.judge_person(4.1, true, Genome.BORN, Genome.BORN.keys(), true)
+	var twice := ref.judge_person(4.2, true, Genome.BORN, Genome.BORN.keys(), true)
+	var twice_said := _ref_rules(ref.take_fouls())
+	var daughter: Array = ref.claim(4.3, home, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO,
+		0.0, false)
+	var clean := ref.take_fouls().is_empty()
+	_says(bool(early[5]) and early_said == [Referee.OUT] and stray.is_empty()
+			and _ref_rules(stray_said) == [Referee.SISTER]
+			and float(stray_said[0][1]) == Referee.WEIGHT_SISTER,
+		"referee R5/R6: OUT at r30 is kept in the water and fouled; a SISTER with no"
+		+ " division places nothing and fouls %.0f points"
+		% (float(stray_said[0][1]) if not stray_said.is_empty() else 0.0))
+	_says(not bool(out[5]) and (out[3] as Vector2) == Vector2.ZERO
+			and (wandered[0] as Vector2).distance_to(home) < 0.01
+			and wander_said == [Referee.OUT] and sister.size() == 2
+			and not bool(tail[5]) and is_equal_approx(float(tail[2]), 40.0)
+			and again.is_empty()
+			and _ref_rules(again_said) == [Referee.SISTER] and born == [true]
+			and twice == [false] and twice_said == [Referee.BODY] and bool(daughter[5])
+			and is_equal_approx(float(ref.expected), Referee.DAUGHTER_RADIUS) and clean,
+		"referee: an OUT at r40 is out of the water and still, a move while out stays"
+		+ " put and fouls, a SISTER on the ring is taken, her mother's last OUT frame"
+		+ " landing after her is no foul, a second SISTER and a second new body are,"
+		+ " and the daughter is expected at r%.2f" % float(ref.expected))
+	# Off the ring and the wrong size: put right, 2 points.
+	var off := _ref_out_at_forty()
+	var put := off.judge_sister(3.0, Vector2(700.0, 0.0), 35.0, true)
+	var off_said := off.take_fouls()
+	# Back in at r40 undivided, and a daughter with no sister ever.
+	var undivided := _ref_out_at_forty()
+	undivided.claim(3.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	var undivided_said := _ref_rules(undivided.take_fouls())
+	var orphan := _ref_out_at_forty()
+	orphan.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	var waited := orphan.take_fouls().is_empty()
+	orphan.claim(3.0 + Referee.BIRTH_WAIT + 0.1, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS,
+		Vector2.ZERO, 0.0, false)
+	var orphan_said := _ref_rules(orphan.take_fouls())
+	# A daughter fed before her SISTER lands: expected at what she was fed.
+	var fed := _ref_out_at_forty()
+	fed.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	fed.ate()
+	fed.claim(3.1, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS + 4.0, Vector2.ZERO, 0.0,
+		false)
+	fed.judge_sister(3.2, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	fed.claim(3.3, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS + 4.0, Vector2.ZERO, 0.0,
+		false)
+	var fed_clean := fed.take_fouls().is_empty()
+	_says(put.size() == 2 and is_equal_approx((put[0] as Vector2).length(),
+				Referee.SISTER_DISTANCE)
+			and is_equal_approx(float(put[1]), Referee.DAUGHTER_RADIUS)
+			and _ref_rules(off_said) == [Referee.SISTER]
+			and float(off_said[0][1]) == Referee.WEIGHT_SISTER_OFF
+			and undivided_said == [Referee.OUT] and waited and orphan_said == [Referee.OUT]
+			and fed_clean,
+		"referee: a sister off the ring at r35 is put on it at r%.2f and fouls %.0f;"
+		% [float(put[1]) if put.size() == 2 else 0.0,
+			float(off_said[0][1]) if not off_said.is_empty() else 0.0]
+		+ " back in undivided fouls; a daughter's frame waits %.0f s for her sister"
+		% Referee.BIRTH_WAIT + " and fouls only then; one fed before her sister lands"
+		+ " is expected at what she was fed")
+
+
+## A referee whose guest is at r40 and out of the water at the origin, from 2.5 s.
+func _ref_out_at_forty() -> Referee:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.credit_meals(4)
+	ref.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	ref.claim(2.5, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	return ref
+
+
+## **A division the host never saw, and one whose daughter went before her
+## sister landed** (found in review). A phone host frozen through the whole of
+## a guest's out window -- an app switch, a call screen -- hears the division
+## all at once when it wakes: the OUT frames, the SISTER and the new body in
+## one frame, and a host takes events before state frames. And a SISTER lost on
+## the way lands a resend later, by when the daughter it left can have been
+## eaten. Neither is a foul, and each sister and daughter is taken.
+func _referee_unseen() -> void:
+	var born := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 1}
+	# Unseen: fed to r40 in the water, never seen out. On waking, the SISTER, her
+	# mother's new body, then the newest state frames: the mother's last OUT
+	# frames where she stopped -- 300 units on -- and the daughter's first.
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.credit_meals(4)
+	ref.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	ref.stalled(6.0)
+	var stopped := Vector2(300.0, 0.0)
+	var sister := ref.judge_sister(8.0, stopped + Vector2(0.0, 560.0),
+		Referee.DAUGHTER_RADIUS, true)
+	var renewed := ref.judge_person(8.0, true, born, born.keys(), true)
+	var tail: Array = ref.claim(8.0, stopped, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	var still: Array = ref.claim(8.05, stopped, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	var daughter: Array = ref.claim(8.1, stopped, 0.0, Referee.DAUGHTER_RADIUS,
+		Vector2.ZERO, 0.0, false)
+	var unseen_clean := ref.take_fouls().is_empty()
+	var unseen_expects := float(ref.expected)
+	# And the same with no OUT frame left to land: the daughter's first frame next.
+	var bare := _ref_arrived(0.0, Vector2.ZERO)
+	bare.credit_meals(4)
+	bare.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	bare.stalled(6.0)
+	var bare_sister := bare.judge_sister(8.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
+	var bare_renewed := bare.judge_person(8.0, true, born, born.keys(), true)
+	var bare_daughter: Array = bare.claim(8.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS,
+		Vector2.ZERO, 0.0, false)
+	var bare_clean := bare.take_fouls().is_empty()
+	# Still no SISTER below r40, or twice, or from a body not here.
+	var second := bare.judge_sister(8.2, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var young := _ref_arrived(0.0, Vector2.ZERO)
+	young.credit_meals(3)
+	young.claim(2.0, Vector2.ZERO, 0.0, 38.0, Vector2.ZERO, 0.0, false)
+	var at_38 := young.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var gone := _ref_arrived(0.0, Vector2.ZERO)
+	gone.credit_meals(4)
+	gone.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	var absent := gone.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var refused := _ref_rules(bare.take_fouls() + young.take_fouls() + gone.take_fouls())
+	_says(sister.size() == 2 and renewed == [true] and not bool(tail[5])
+			and (tail[0] as Vector2).distance_to(stopped) < 0.01
+			and (still[0] as Vector2).distance_to(stopped) < 0.01 and bool(daughter[5])
+			and is_equal_approx(unseen_expects, Referee.DAUGHTER_RADIUS) and unseen_clean
+			and bare_sister.size() == 2 and bare_renewed == [true] and bool(bare_daughter[5])
+			and bare_clean and second.is_empty() and at_38.is_empty() and absent.is_empty()
+			and refused == [Referee.SISTER, Referee.SISTER, Referee.SISTER],
+		"referee: a division the host never saw -- fed to r40, never seen out, its"
+		+ " SISTER and new body heard before its OUT frames -- is taken with no foul:"
+		+ " the sister placed, the daughter renewed and expected at r%.2f, and her"
+		% unseen_expects + " mother's last OUT frames out of the water where she"
+		+ " stopped; and with none left to land; but a second SISTER, one at r38, and"
+		+ " one from a body not here are each fouled")
+	# Owed: seen out, the daughter's first frame first -- her SISTER lost on the
+	# way -- then the daughter eaten, then the resend and her new body.
+	var owed := _ref_out_at_forty()
+	owed.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	owed.died(3.4)
+	var late := owed.judge_sister(3.9, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var late_born := owed.judge_person(3.9, true, born, born.keys(), false)
+	var owed_clean := owed.take_fouls().is_empty()
+	var twice := owed.judge_sister(4.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var twice_said := _ref_rules(owed.take_fouls())
+	var stale := _ref_out_at_forty()
+	stale.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	stale.died(3.4)
+	var too_late := stale.judge_sister(3.4 + Referee.BIRTH_WAIT + 0.1, Vector2(0.0, 560.0),
+		Referee.DAUGHTER_RADIUS, false)
+	var too_late_said := _ref_rules(stale.take_fouls())
+	_says(late.size() == 2 and (late[0] as Vector2).distance_to(Vector2(0.0, 560.0)) < 0.01
+			and late_born == [true] and owed_clean and twice.is_empty()
+			and twice_said == [Referee.SISTER] and too_late.is_empty()
+			and too_late_said == [Referee.SISTER],
+		"referee: a SISTER resent after her daughter was eaten is placed on the ring"
+		+ " where her mother stopped, with no foul, within %.0f s of the death; a"
+		% Referee.BIRTH_WAIT + " second one, or one later than that, is fouled")
+
+
+## **Bodies** (the socket-free half of R7): a new body only in turn, the same
+## tiers but for the gift, once, and every slot a gene it wears -- and the dead
+## body every build describes after a death, never fouled.
+func _referee_bodies() -> void:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	var early := ref.judge_person(1.0, true, Genome.BORN, Genome.BORN.keys(), true)
+	var early_said := ref.take_fouls()
+	var bigger := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	var escalated := ref.judge_person(2.0, false, bigger, bigger.keys(), true)
+	var escalated_said := _ref_rules(ref.take_fouls())
+	var gifted := Genome.BORN.duplicate()
+	gifted[&"ampulla"] = 1
+	var gift := ref.judge_person(3.0, false, gifted, gifted.keys(), true)
+	var gift_clean := ref.take_fouls().is_empty()
+	var twice_gifted := gifted.duplicate()
+	twice_gifted[&"stigma"] = 1
+	var second := ref.judge_person(4.0, false, twice_gifted, twice_gifted.keys(), true)
+	var second_said := _ref_rules(ref.take_fouls())
+	var stray_slot := ref.judge_person(5.0, false, gifted, [&"cytostome", &"palp"], true)
+	var twin_slot := ref.judge_person(6.0, false, gifted, [&"cytostome", &"cytostome"],
+		true)
+	var slots_said := _ref_rules(ref.take_fouls())
+	# A gift placed over a slot an organ is still worn in: worn, with no slot.
+	var over_slot := ref.judge_person(7.0, false, gifted,
+		[&"ampulla", &"cirrus", &"flagellum"], true)
+	var over_clean := ref.take_fouls().is_empty()
+	_says(early == [false] and _ref_rules(early_said) == [Referee.BODY]
+			and float(early_said[0][1]) == Referee.WEIGHT_BODY
+			and escalated.is_empty() and escalated_said == [Referee.BODY]
+			and gift == [false] and gift_clean and second.is_empty()
+			and second_said == [Referee.BODY] and stray_slot.is_empty()
+			and twin_slot.is_empty() and slots_said.size() >= 1 and over_slot == [false]
+			and over_clean and ref.worn == gifted,
+		"referee R7: a new body mid-life is taken as the old one and fouls %.0f points;"
+		% (float(early_said[0][1]) if not early_said.is_empty() else 0.0)
+		+ " a tier-3 mouth is refused; the gift is taken once and the second is"
+		+ " refused; a slot naming what it does not wear, or one gene twice, is"
+		+ " refused -- and a gift placed over a slot another organ is still worn in"
+		+ " is taken")
+	# **After a death, the dead body is described once more**: every protocol-4
+	# build (+104 to +108) sends it between its ENTER and its ARRIVE. Never a foul.
+	var dead_body := {&"cytostome": 3, &"cirrus": 2, &"flagellum": 1, &"palp": 1}
+	var quirk := _ref_quirk(dead_body, true)
+	# The same, when the dead body was a born one with its gift: it looks like a
+	# gift, and the born body said after it is still the body, and the real gift
+	# after that is still taken.
+	var lookalike := Genome.BORN.duplicate()
+	lookalike[&"stigma"] = 1
+	var alike := _ref_quirk(lookalike, true)
+	# And the stale body landing after the first frame, its resend late.
+	var late := _ref_quirk(dead_body, false)
+	_says(bool(quirk[0]) and bool(alike[0]) and bool(late[0]),
+		"referee: the dead body every build describes after a death is never fouled"
+		+ " -- %s; a dead body that looked like a gift: %s; landing late: %s"
+		% [str(quirk[1]), str(alike[1]), str(late[1])])
+	# More bodies than the budget, at once: the seventh is refused.
+	var rate := Referee.new(0.0)
+	var taken := 0
+	for i in 8:
+		if not rate.judge_person(0.0, true, Genome.BORN, Genome.BORN.keys(), false).is_empty():
+			taken += 1
+	var rate_said := _ref_rules(rate.take_fouls())
+	var refilled := rate.judge_person(1.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	_says(taken == int(Referee.PERSON_BANK) and rate_said == [Referee.BODY]
+			and refilled == [true],
+		"referee: of eight bodies said at once, %d are taken and the rest foul" % taken
+		+ " once; a second later the budget has room again")
+
+
+## **The dead body, described after a death**, as every build does it: `[true
+## if nothing fouled and the born body is what is worn, a note]`. [param early]
+## puts the stale PERSON before the first state frame, as it lands.
+func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.judge_died(5.0, FoodField.Cause.STARVED, 0, true)
+	ref.take_fouls()
+	ref.judge_person(6.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	ref.judge_enter(6.0, CellBody.BASE_RADIUS, false)
+	ref.arrive(6.0, Vector2(480.0, 0.0), CellBody.BASE_RADIUS)
+	if early:
+		ref.judge_person(6.02, false, dead_body, dead_body.keys(), true)
+	ref.claim(6.2, Vector2(480.0, 0.0), 0.0, CellBody.BASE_RADIUS, Vector2.ZERO, 0.0,
+		false)
+	if not early:
+		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true)
+	ref.judge_person(6.3, false, Genome.BORN, Genome.BORN.keys(), true)
+	var clean := ref.take_fouls().is_empty() and ref.worn == Genome.BORN
+	# Its real gift, later, is still taken.
+	var gifted := Genome.BORN.duplicate()
+	gifted[&"ocellus"] = 1
+	var gift := ref.judge_person(12.0, false, gifted, gifted.keys(), true)
+	clean = clean and gift == [false] and ref.take_fouls().is_empty()
+	return [clean, "no foul, worn %s" % str(ref.worn)]
+
+
+## **Arrivals** (the socket-free half of R8): only with no body swimming here,
+## at a body's size, as a born cell after a death, and not too often.
+func _referee_arrivals() -> void:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	var swimming := ref.judge_enter(1.0, 26.0, true)
+	var swimming_said := ref.take_fouls()
+	var ref2 := Referee.new(0.0)
+	var big := ref2.judge_enter(1.0, 45.0, false)
+	var small := ref2.judge_enter(1.6, 20.0, false)
+	var sizes_said := _ref_rules(ref2.take_fouls())
+	var waiting := ref2.judge_enter(2.0, 26.0, true)
+	var ref3 := _ref_arrived(0.0, Vector2.ZERO)
+	ref3.judge_died(1.0, FoodField.Cause.STARVED, 0, true)
+	var not_born := ref3.judge_enter(2.0, 40.0, false)
+	var not_born_said := _ref_rules(ref3.take_fouls())
+	var next := ref3.judge_enter(2.1, 40.0, false)
+	var ref4 := Referee.new(0.0)
+	var taken := 0
+	for i in 6:
+		if ref4.judge_enter(1.0, 26.0, false):
+			taken += 1
+	var rate_said := _ref_rules(ref4.take_fouls())
+	var later := ref4.judge_enter(1.0 + Referee.ENTER_EVERY, 26.0, false)
+	# Six arrivals asked for and never made: the newest two are anchors, and a
+	# first frame at the one before the newest is no foul.
+	var chain := Referee.new(0.0)
+	for i in 6:
+		chain.judge_enter(4.0 * i, 26.0, i > 0)
+		if i > 0:
+			# What `_host_enter` does with a body that never arrived.
+			chain.left(4.0 * i, 0.0, 0.0)
+		chain.arrive(4.0 * i, Vector2(480.0, 0.0).rotated(0.5 * i), 26.0)
+	var anchors: int = (chain.get("_anchors") as Array).size()
+	chain.claim(20.05, Vector2(480.0, 0.0).rotated(2.0), 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var chain_clean := chain.take_fouls().is_empty()
+	_says(anchors == 2 and chain_clean,
+		"referee: six arrivals asked for and never made keep %d anchors, the newest"
+		% anchors + " two, and a first frame at the one before the newest is no foul")
+	_says(not swimming and _ref_rules(swimming_said) == [Referee.ENTER]
+			and float(swimming_said[0][1]) == Referee.WEIGHT_ENTER
+			and not big and not small and sizes_said == [Referee.ENTER, Referee.ENTER]
+			and waiting and not not_born and not_born_said == [Referee.ENTER] and next
+			and taken == int(Referee.ENTER_BANK) and rate_said == [Referee.ENTER] and later,
+		"referee R8: an ENTER while swimming here is refused, %.0f point; r45 and"
+		% (float(swimming_said[0][1]) if not swimming_said.is_empty() else 0.0)
+		+ " r20 are refused; one while the last is still waiting is taken; after a"
+		+ " death the first must be r26, and the next is taken; %d at once are" % taken
+		+ " taken and the rest refused until the budget refills")
+
+
+## **Deaths** (the socket-free half of R9): only starving is the guest's own.
+func _referee_deaths() -> void:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	var starved := ref.judge_died(1.0, FoodField.Cause.STARVED, 0, true)
+	var starved_clean := ref.take_fouls().is_empty()
+	var ref2 := _ref_arrived(0.0, Vector2.ZERO)
+	var eaten := ref2.judge_died(1.0, FoodField.Cause.SWALLOWED, FoodField.By.FRIEND, true)
+	var eaten_said := ref2.take_fouls()
+	var again := ref2.judge_died(1.1, FoodField.Cause.SWALLOWED, FoodField.By.WATER, false)
+	_says(starved == [FoodField.Cause.STARVED, 0] and starved_clean
+			and eaten == [FoodField.Cause.STARVED, 0]
+			and _ref_rules(eaten_said) == [Referee.DIED]
+			and float(eaten_said[0][1]) == Referee.WEIGHT_DIED and again.is_empty()
+			and ref2.take_fouls().is_empty(),
+		"referee R9: starving is taken as said; swallowed by the friend, said of a"
+		+ " body still here, is reported as starving and fouls %.0f points; a death"
+		% (float(eaten_said[0][1]) if not eaten_said.is_empty() else 0.0)
+		+ " the host already made, said again, is nothing")
+
+
+## **Shouts** (the socket-free half of R10): from where it swims, at its size,
+## reaching what it wears, as often as that calls.
+func _referee_shouts() -> void:
+	var worn := Genome.BORN.duplicate()
+	worn[&"ampulla"] = 1
+	var ref := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var honest := ref.judge_shout(1.0, Vector2(0.0, -20.0), 26.0, 1100.0, true)
+	var far := ref.judge_shout(1.1, Vector2(3000.0, 0.0), 26.0, 1100.0, true)
+	var reach := ref.judge_shout(1.6, Vector2.ZERO, 26.0, 1500.0, true)
+	var shouts_said := _ref_rules(ref.take_fouls())
+	var ref2 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var big := ref2.judge_shout(1.0, Vector2.ZERO, 36.0, 1100.0, true)
+	var big_said := _ref_rules(ref2.take_fouls())
+	# Where it swam in the last seconds counts, not only where it is now: a call
+	# resent after a loss lands behind frames sent after it.
+	var ref3 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var at := Vector2.ZERO
+	for i in 30:
+		ref3.claim(0.1 + 0.05 * float(i), at, 0.0, 26.0, Vector2(900.0, 0.0), 0.0, false)
+		at += Vector2(45.0, 0.0)
+	var behind := ref3.judge_shout(1.6, Vector2(100.0, 0.0), 26.0, 1100.0, true)
+	var behind_clean := ref3.take_fouls().is_empty()
+	# As often as it calls: two banked and one for the arrival, then one each
+	# period less a second.
+	var ref4 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var heard := 0
+	for i in 5:
+		if ref4.judge_shout(1.0, Vector2.ZERO, 26.0, 1100.0, true):
+			heard += 1
+	var rate_said := _ref_rules(ref4.take_fouls())
+	var later := ref4.judge_shout(1.0 + CellBody.PING_PERIOD_BY_TIER[1], Vector2.ZERO, 26.0,
+		1100.0, true)
+	# Alone, not in the water here: only the rate.
+	var ref5 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var alone := ref5.judge_shout(1.0, Vector2(9000.0, 0.0), 33.0, 1900.0, false)
+	# **A call reaching nothing**, which every build sends on coming back from the
+	# black having worn an organ (its water pulses on the dead cell's period with
+	# the born body's reach): not heard, not charged, never a foul.
+	var ref6 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, Genome.BORN)
+	var bank := float(ref6.shouts.tokens)
+	var organless := ref6.judge_shout(1.0, Vector2.ZERO, 26.0, 0.0, true)
+	var organless_clean: bool = ref6.take_fouls().is_empty() \
+		and is_equal_approx(float(ref6.shouts.tokens), bank)
+	_says(honest and not far and not reach
+			and shouts_said == [Referee.SHOUT, Referee.SHOUT] and not big
+			and big_said == [Referee.SHOUT] and behind and behind_clean and heard == 3
+			and rate_said == [Referee.SHOUT] and later and alone and not organless
+			and organless_clean,
+		"referee R10: a call from where it swims is heard; one from 3,000 units off,"
+		+ " one reaching 1,500 with a tier-1 organ and one at r36 are not; a call from"
+		+ " 1,200 units back along the last second's path is; %d at once are heard" % heard
+		+ " and the rest refused until the organ's period; alone, only the rate; and a"
+		+ " call reaching nothing -- sent on every return from the black -- is dropped"
+		+ " uncharged and unfouled")
+
+
+## **The re-entry wound rule, both ways** (the owner's decision): on, a body
+## back inside 30 s is the old one continued; off, every arrival is fresh.
+func _referee_reentry() -> void:
+	var results := {}
+	for keeps: bool in [true, false]:
+		var ref := Referee.new(0.0)
+		ref.reentry_keeps_wound = keeps
+		var first := _ref_enter(ref, 0.0)
+		ref.claim(0.1, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+		ref.left(10.0, 0.5, 30.0)
+		var soon := _ref_enter(ref, 20.0)
+		ref.claim(20.1, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+		ref.left(30.0, 0.5, 30.0)
+		var late := _ref_enter(ref, 61.0)
+		ref.claim(61.1, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+		ref.died(70.0)
+		var reborn := _ref_enter(ref, 75.0)
+		# That one never arrives -- no frame put it in the water -- and is asked
+		# for again: it keeps what it was granted.
+		ref.left(76.0, 0.0, 41.0)
+		var asked_again := _ref_enter(ref, 78.0)
+		ref.claim(78.1, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+		ref.left(100.0, 0.4, 10.0)
+		var kept := _ref_enter(ref, 105.0)
+		ref.left(106.0, 0.4, 5.0)
+		var kept_again := _ref_enter(ref, 108.0)
+		results[keeps] = [first, soon, late, reborn, asked_again, kept, kept_again]
+	var on: Array = results[true]
+	var off: Array = results[false]
+	var mended := CellBody.mended(0.5, 10.0)
+	var ok_on: bool = (on[0] as Array).is_empty() and (on[1] as Array).size() == 2 \
+		and is_equal_approx(float(on[1][0]), mended) and is_equal_approx(float(on[1][1]), 20.0) \
+		and (on[2] as Array).is_empty() and (on[3] as Array).is_empty() \
+		and (on[4] as Array).is_empty() and (on[5] as Array).size() == 2 \
+		and is_equal_approx(float(on[5][1]), 5.0) and (on[6] as Array).size() == 2 \
+		and is_equal_approx(float(on[6][1]), 2.0) \
+		and is_equal_approx(float(on[6][0]), CellBody.mended(0.4, 8.0))
+	var ok_off := true
+	for each: Array in off:
+		if not each.is_empty():
+			ok_off = false
+	_says(ok_on and ok_off,
+		"referee: re-entry on -- back 10 s after leaving with wound 0.50 and 30 s of"
+		+ " grace, the body keeps wound %.3f and %.0f s of grace; fresh after"
+		% [float(on[1][0]) if (on[1] as Array).size() == 2 else -1.0,
+			float(on[1][1]) if (on[1] as Array).size() == 2 else -1.0]
+		+ " 31 s away, after a death, and for a connection's first; an arrival that"
+		+ " never happened, asked again, keeps its grant. Off -- every arrival fresh")
+
+
+## An ENTER at [param now], taken and put at the origin: what `arrive` said.
+func _ref_enter(ref: Referee, now: float) -> Array:
+	ref.judge_enter(now, CellBody.BASE_RADIUS, false)
+	return ref.arrive(now, Vector2.ZERO, CellBody.BASE_RADIUS)
+
+
+## **A rule fouls at most once each half second**, however many frames break
+## it; and a host stall hands every budget the gap.
+func _referee_once() -> void:
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	for i in 10:
+		ref.claim(1.0 + 0.03 * float(i), Vector2.ZERO, 0.0, 36.0, Vector2.ZERO, 0.0, false)
+	var burst := ref.take_fouls().size()
+	ref.claim(1.0 + Referee.FOUL_EVERY + 0.05, Vector2.ZERO, 0.0, 36.0, Vector2.ZERO, 0.0,
+		false)
+	var next := ref.take_fouls().size()
+	var called := int(ref.called[Referee.SIZE])
+	var stalled := _ref_arrived(0.0, Vector2.ZERO)
+	stalled.claim(3.0, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	stalled.stalled(3.0)
+	stalled.claim(3.05, Vector2(2000.0, 0.0), 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var stall_clean := stalled.take_fouls().is_empty()
+	var steady := _ref_arrived(0.0, Vector2.ZERO)
+	steady.claim(3.0, Vector2.ZERO, 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	steady.claim(3.05, Vector2(2000.0, 0.0), 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var steady_said := _ref_rules(steady.take_fouls())
+	_says(burst == 1 and next == 1 and called == 11 and stall_clean
+			and steady_said == [Referee.MOVE],
+		"referee: ten radius lies in 0.3 s are one foul and the next half second's"
+		+ " another (%d called); 2,000 units after a 3 s host stall is no foul, and"
+		% called + " without the stall it is")
 
 
 # ---------------------------------------------------------------------------
@@ -3482,6 +4514,10 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 
 const POND_ARRIVAL_TOLERANCE := 1.0
 const POND_BEARING_TOLERANCE := 0.05
+## **How fast a guest is moved across the water here**: 900 units a second, a
+## glide, where the referee allows 1,100 (B.5) -- so a tighter cap per genome,
+## the obvious next step (B.2), would still let every move in this file by.
+const POND_GLIDE := 900.0
 ## **Latency in `pond` is counted in frames, and a claim made in seconds is held
 ## at the game's own 60 frames a second**: "within 0.2 s" is within 12 frames,
 ## "within 0.1 s" within 6. Every hop here is loopback, taken at a poll, so a
@@ -3687,6 +4723,32 @@ func _check_pond() -> void:
 		% [grew_frames, _pond_budget(0.2), grew * 1000.0])
 
 	# ----------------------------------------------------------------------
+	# **The free sense, through the host's referee** (net-hardening.md B.2):
+	# the one change a worn body ever makes, handed to the guest's run the way
+	# the run hands it (`_step_sense_grant`: a sample held, a slot made if there
+	# is none) and placed as a player places it -- so what reaches the host is
+	# the real run's own PERSON, and the host must take it as the gift.
+	# ----------------------------------------------------------------------
+	var guest_genome: Node = guest_run.get_node(^"Genome")
+	guest_run.set("_sensed", true)
+	if not (guest_genome.layout() as Array).has(&""):
+		guest_genome.bonus_slots += 1
+	var sense := &"stigma"
+	var granted: int = guest_genome.gift(sense)
+	guest_genome.place((guest_genome.layout() as Array).find(&""))
+	var host_ref: Object = host_pond.call("referee_of", 0)
+	var fouls_were: int = int(host_ref.call("fouled")) if host_ref != null else -1
+	var gifted := await _pond_until(func() -> bool:
+		return Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome, sense) == 1,
+		1.0, pins)
+	_says(granted == Genome.Result.HELD and gifted >= 0.0 and host_ref != null
+			and int(host_ref.call("fouled")) == fouls_were
+			and int((host_ref.get("worn") as Dictionary).get(sense, 0)) == 1,
+		"pond: the guest's free sense, a %s, placed as a player places it, is on the"
+		% sense + " host's person %.2f s later -- its referee took the run's own PERSON"
+		% gifted + " as the gift, with no foul")
+
+	# ----------------------------------------------------------------------
 	# **Pause stops nothing (B)**, on both seats at once: the tree never
 	# pauses, the warning is up, KEY_D moves no cell, and a hunter still eats
 	# the cell whose menu is open.
@@ -3771,10 +4833,12 @@ func _check_pond() -> void:
 	var on_eaten := func(_n: float, _g: StringName, _a: Vector2) -> void:
 		host_ate[0] = true
 	host_food.eaten.connect(on_eaten)
-	# Each facing away from the other, so one mouth only is on a body.
+	# Each facing away from the other, so one mouth only is on a body -- and the
+	# guest glided there, as a body swims, with nothing on the way to eat.
+	_pond_clear_line(host_food, guest_home, in_mouth, 60.0)
 	var eaten := await _pond_until(func() -> bool:
-		return int(guest_run.get("_life")) == NormalMode.Life.DYING, 1.5,
-		[host_pin, [guest_cell, in_mouth, 0.0]])
+		return int(guest_run.get("_life")) == NormalMode.Life.DYING, 2.0,
+		[host_pin, [guest_cell, in_mouth, 0.0, POND_GLIDE]])
 	host_food.eaten.disconnect(on_eaten)
 	var said_ate: String = str(host_run.get("_line_text"))
 	_says(eaten >= 0.0 and bool(host_ate[0])
@@ -3791,13 +4855,23 @@ func _check_pond() -> void:
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
 
+	# **A stronger mouth, brought in the way a player brings one** (B.5): out of
+	# the pond, grown alone, and back in by an arrival. A worn body never
+	# changes mid-life, so the host's referee keeps the old one if a guest says
+	# otherwise -- which is what this used to do, and what R7 now holds it to.
 	var genome_guest: Node = guest_run.get_node(^"Genome")
-	genome_guest.express({&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
-		[&"cytostome", &"cirrus", &"flagellum"])
-	# The worn change crosses as PERSON before the mouth can be used.
-	await _pond_until(func() -> bool:
+	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
+		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [host_pin])
+	guest_home = guest_cell.position
+	guest_pin = [guest_cell, guest_home, 0.0]
+	pins = [host_pin, guest_pin]
+	# The body it arrived with is on the host before the mouth can be used.
+	var worn_three := await _pond_until(func() -> bool:
 		return (Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome,
 			&"cytostome") == 3), 1.0, pins)
+	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null,
+		"pond: the guest leaves the pond, grows a tier-3 mouth alone and swims back"
+		+ " in %.2f s, and the host takes the body it arrives with" % reentry)
 	var guest_ate := [false]
 	var on_guest_eaten := func(_n: float, _g: StringName, _a: Vector2) -> void:
 		guest_ate[0] = true
@@ -3866,8 +4940,14 @@ func _check_pond() -> void:
 	host_pin = [host_cell, home, 0.0]
 	pins = [host_pin, guest_pin]
 	await _pond_until(func() -> bool: return false, 0.1, pins)
-	for run: Node in [host_run, guest_run]:
-		(run.get_node(^"Cell")).radius = CellBody.DIVIDE_RADIUS
+	# **The guest grows to r40 on real meals** (B.5): its size is what the host
+	# fed it, so a radius set by hand would be clamped, and its OUT and its
+	# sister refused. The host is its own authority, and is set.
+	var fed := await _pond_feed(host_food, guest_cell, pins)
+	_says(fed >= 0 and is_equal_approx(float(guest_cell.radius), CellBody.DIVIDE_RADIUS),
+		"pond: the guest grows to r%.0f on %d meals the host's water fed it"
+		% [float(guest_cell.radius), fed])
+	host_cell.radius = CellBody.DIVIDE_RADIUS
 	await _pond_until(func() -> bool:
 		return (int(host_run.get("_split")) != NormalMode.Split.NONE
 			and int(guest_run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
@@ -4045,7 +5125,10 @@ func _check_pond() -> void:
 	# KILLED is the first of them to land. The run dies inside `_pond.step()`
 	# and lets the hold go in the same frame -- which used to restart the
 	# simulation under the corpse, and it swam on, dead. Posed as it lands: the
-	# host stopped again, the guest held, the KILLED put in the guest's queue.
+	# host stopped again, the guest held, and the host's own water taking the
+	# guest -- its KILLED the first word the guest hears. **The host makes the
+	# kill** (B.5): a KILLED put straight in the guest's queue would be a death
+	# the host never decided, and its DIED one the referee reports as starving.
 	# ----------------------------------------------------------------------
 	await _pond_until(func() -> bool: return false, 0.2, pins)
 	modes = _pond_stop(host_run)
@@ -4053,10 +5136,10 @@ func _check_pond() -> void:
 	await _pond_until(func() -> bool: return bool(guest_run.get("_held")), 2.5,
 		[guest_pin])
 	var was_held := bool(guest_run.get("_held"))
-	(guest_net.pond_events as Array).append(Wire.event(0, Wire.EVENT_CONTACT,
-		Wire.contact_payload(FoodField.Contact.KILLED,
-			guest_cell.position + Vector2(0.0, -40.0), 0.0, FoodField.By.WATER, &"",
-			FoodField.Cause.SWALLOWED)))
+	var victim: Object = host_food.person()
+	if victim != null:
+		host_food.call("_person_gone", FoodField.Cause.SWALLOWED, FoodField.By.WATER,
+			victim)
 	await _pond_until(func() -> bool:
 		return int(guest_run.get("_life")) != NormalMode.Life.ALIVE, 0.5, [])
 	var corpse_at: Vector2 = guest_cell.position
@@ -4275,9 +5358,332 @@ func _check_pond() -> void:
 		+ " none of it either -- the host's socket took %.1f KB and %d"
 		% [float(tally[0]["peak_bytes"]) / 1024.0, roundi(float(tally[0]["peak_datagrams"]))]
 		+ " datagrams in its busiest second%s" % _limits_unclean([tally[0]]))
+	# **And the referee never called a foul on either honest guest** (B.5): two
+	# real runs through every stage of a pond's life -- arriving, eating, being
+	# eaten, the black, a stronger body brought in, dividing, a quiet host -- is
+	# the strongest guard against a false one there is.
+	var pond_referees: Array = host_pond.get("referees_made")
+	var judged_states := 0
+	for referee: Object in pond_referees:
+		judged_states += int((referee.get("judged") as Dictionary)["state"])
+	_says(float(tally[0].get("fouls", 0.0)) == 0.0 and pond_referees.size() == 2
+			and judged_states > 100,
+		"pond: and the host's referee called no foul on either honest guest -- %s"
+		% _referee_said(pond_referees))
 	print("[net-probe] NOTE pond took %.1f s and %d frames, at most %d a second"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	await _check_pond_referee()
 	Engine.max_fps = ceiling
+
+
+# ---------------------------------------------------------------------------
+# **The referee on a real host** (net-hardening.md B.5, R5-R11): a host run
+# whose water is the pond, and a guest that is not a run -- a bare session
+# driven by hand, which is exactly what a modified client is: it sends
+# whatever it is told to. Watched for R5-R10, so one guest can break every rule
+# in a few seconds without being cut at the third: the verdicts stand the same
+# watched or enforced, and every foul is counted with its weight. Then enforced
+# for R11, which is the cut.
+# ---------------------------------------------------------------------------
+
+func _check_pond_referee() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var host_net: Node = await _session("RefereeHost")
+	host_net.host()
+	host_net.enforce_referee = false
+	var host_run := _pond_run_scene(host_net, true)
+	get_tree().root.add_child.call_deferred(host_run)
+	await host_run.ready
+	var host_cell: Node = host_run.get_node(^"Cell")
+	var host_food: Node = host_run.get_node(^"Food")
+	var host_pond: Object = host_run.get("_pond")
+	# An organ on the host's own cell, so its membrane can mark a friend's call.
+	(host_run.get_node(^"Genome")).express({&"cytostome": 1, &"cirrus": 1,
+		&"flagellum": 1, &"ampulla": 1}, [&"cytostome", &"cirrus", &"flagellum",
+		&"ampulla"])
+	var host_pin := [host_cell, host_cell.position, 0.0]
+	var marks: Array = []
+	var on_mark := func(kind: StringName, _info: Dictionary) -> void:
+		if kind == &"ping":
+			marks.append(kind)
+	host_run.get_node(^"Membrane").bus.sensation.connect(on_mark)
+	var guest: Node = await _session("RefereeGuest")
+	guest.join("127.0.0.1")
+	await _until_link(guest, NetSession.Link.TOGETHER)
+	var worn := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1}
+	var order: Array = [&"cytostome", &"cirrus", &"flagellum", &"ampulla"]
+	var body := [Vector2.ZERO, 0.0, CellBody.BASE_RADIUS, false]
+	var arrived := await _ref_by_hand(guest, worn, order, body, host_food, host_pin)
+	var ref: Referee = host_pond.call("referee_of", 0)
+	var at: Vector2 = body[0]
+	_says(arrived and ref != null and bool(ref.arrived),
+		"pond referee: a guest driven by hand -- a bare session, as a modified client"
+		+ " is -- arrives in a host's water and is judged, watched")
+
+	# **R5: OUT at r30**, after the one meal the host fed it: kept in the water,
+	# fouled, and bitten there all the same.
+	var tip := CellBody.BASE_RADIUS * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \
+		+ CellBody.gape_of(1, CellBody.BASE_RADIUS) * Cilia.GAPE_BULGE
+	var mouth_at: Vector2 = at + Vector2(0.0, -tip)
+	var morsel := _pond_pose(host_food, 4, 7.0, {}, mouth_at, 0.0)
+	var morsel_serial := int(morsel.serial)
+	var fed := await _ref_until(func() -> bool:
+		if int(morsel.serial) == morsel_serial:
+			morsel.pos = mouth_at
+		return is_equal_approx(float(ref.expected), 30.0), 1.0, guest, body, host_pin)
+	body[2] = 30.0
+	body[3] = true
+	var points := _ref_points(host_net)
+	var out_called := int(ref.called.get(Referee.OUT, 0))
+	await _ref_until(func() -> bool:
+		return int(ref.called.get(Referee.OUT, 0)) > out_called, 1.0, guest, body,
+		host_pin)
+	var out_points := _ref_points(host_net) - points
+	var person: Object = host_food.person()
+	var kept_in: bool = person != null and bool(person.in_water)
+	var bites := [0]
+	var on_touch := func(what: int, _a: Vector2, _l: float, _b: int, _g: StringName) -> void:
+		if what == FoodField.Contact.BITTEN:
+			bites[0] = int(bites[0]) + 1
+	host_food.person_touched.connect(on_touch)
+	var chewer_at: Vector2 = at + Vector2(47.0, 0.0)
+	var chewer := _pond_pose(host_food, 3, 20.0, {&"cytostome": 1, &"flagellum": 1},
+		chewer_at, _pond_face(chewer_at, at))
+	var chewer_serial := int(chewer.serial)
+	var bitten := await _ref_until(func() -> bool:
+		if int(chewer.serial) == chewer_serial:
+			chewer.pos = chewer_at
+			chewer.heading = _pond_face(chewer_at, at)
+		return int(bites[0]) > 0, 1.0, guest, body, host_pin)
+	host_food.person_touched.disconnect(on_touch)
+	host_food.call("_retire", 3)
+	body[3] = false
+	var pb: Object = host_food.bodies()[FoodField.PERSON_SLOT]
+	_says(fed >= 0.0 and kept_in and bitten >= 0.0 and float(pb.wound) > 0.0
+			and is_equal_approx(out_points, Referee.WEIGHT_OUT),
+		"pond referee R5: OUT at r30, after the one meal it was fed, keeps the guest in"
+		+ " the host's water, fouls %.0f points, and a chewer bites it there" % out_points
+		+ " (wound %.3f)" % float(pb.wound))
+
+	# **R6: a SISTER with no division**: nothing placed.
+	var sisters: Array = host_food.get("sisters")
+	var sisters_were := sisters.size()
+	points = _ref_points(host_net)
+	guest.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at + Vector2(560.0, 0.0),
+		0.0, Referee.DAUGHTER_RADIUS, {&"cytostome": 1}))
+	await _ref_until(func() -> bool: return int(ref.judged["sister"]) >= 1, 1.0, guest,
+		body, host_pin)
+	_says(sisters.size() == sisters_were
+			and is_equal_approx(_ref_points(host_net) - points, Referee.WEIGHT_SISTER),
+		"pond referee R6: a SISTER with no division places nothing and fouls %.0f"
+		% (_ref_points(host_net) - points) + " points")
+
+	# **R7: a new body mid-life after a bite, a tier-3 mouth, the gift twice.**
+	var wound_was := float(pb.wound)
+	var grace_was := float(person.first_hunt)
+	var serial_was := int(pb.serial)
+	var persons := int(ref.judged["person"])
+	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	points = _ref_points(host_net)
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(true, worn, order))
+	await _ref_until(func() -> bool: return int(ref.judged["person"]) > persons, 1.0,
+		guest, body, host_pin)
+	var renew_points := _ref_points(host_net) - points
+	var unrenewed: bool = int(pb.serial) == serial_was and float(pb.wound) <= wound_was \
+		and float(pb.wound) > wound_was - 0.05 and float(person.first_hunt) < grace_was
+	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	var bigger := worn.duplicate()
+	bigger[&"cytostome"] = 3
+	persons = int(ref.judged["person"])
+	points = _ref_points(host_net)
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(false, bigger, order))
+	await _ref_until(func() -> bool: return int(ref.judged["person"]) > persons, 1.0,
+		guest, body, host_pin)
+	var mouth_points := _ref_points(host_net) - points
+	var mouth := Genome.tier_of(pb.genome, &"cytostome")
+	var gifted := worn.duplicate()
+	gifted[&"stigma"] = 1
+	var gifted_order := order.duplicate()
+	gifted_order.append(&"stigma")
+	persons = int(ref.judged["person"])
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(false, gifted, gifted_order))
+	await _ref_until(func() -> bool: return int(ref.judged["person"]) > persons, 1.0,
+		guest, body, host_pin)
+	var took_gift := Genome.tier_of(pb.genome, &"stigma") == 1
+	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	var greedy := gifted.duplicate()
+	greedy[&"ocellus"] = 1
+	var greedy_order := gifted_order.duplicate()
+	greedy_order.append(&"ocellus")
+	persons = int(ref.judged["person"])
+	points = _ref_points(host_net)
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(false, greedy, greedy_order))
+	await _ref_until(func() -> bool: return int(ref.judged["person"]) > persons, 1.0,
+		guest, body, host_pin)
+	var greedy_points := _ref_points(host_net) - points
+	_says(unrenewed and is_equal_approx(renew_points, Referee.WEIGHT_BODY) and mouth == 1
+			and is_equal_approx(mouth_points, Referee.WEIGHT_BODY) and took_gift
+			and Genome.tier_of(pb.genome, &"ocellus") == 0
+			and is_equal_approx(greedy_points, Referee.WEIGHT_BODY),
+		"pond referee R7: a new body mid-life after a bite leaves the wound (%.3f) and"
+		% float(pb.wound) + " the grace (%.1f s) as they were and fouls %.0f;"
+		% [float(person.first_hunt), renew_points] + " a tier-3 mouth leaves it at"
+		+ " %d and fouls %.0f; the gift is taken and a second one refused, %.0f"
+		% [mouth, mouth_points, greedy_points])
+
+	# **R8: five ENTERs in one second while swimming here**: no arrival, no
+	# genome sent, the wound untouched.
+	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	var genomes_were := int(host_pond.genomes_sent)
+	wound_was = float(pb.wound)
+	var enters := int(ref.judged["enter"])
+	guest.pond_events.clear()
+	points = _ref_points(host_net)
+	for i in 5:
+		guest.send_event(Wire.EVENT_ENTER, Wire.enter_payload(CellBody.BASE_RADIUS))
+		await _ref_until(func() -> bool: return false, 0.2, guest, body, host_pin)
+	await _ref_until(func() -> bool: return int(ref.judged["enter"]) >= enters + 5, 1.0,
+		guest, body, host_pin)
+	var arrivals := 0
+	for frame: PackedByteArray in guest.pond_events:
+		if Wire.event_type(frame) == Wire.EVENT_ARRIVE:
+			arrivals += 1
+	var enter_points := _ref_points(host_net) - points
+	# **No genome resent**: an arrival resends every body in the send set --
+	# `genomes_were` of them, all it has ever sent this guest -- where the water
+	# going on sends one now and then, as a body eats and changes version.
+	var resent := int(host_pond.genomes_sent) - genomes_were
+	_says(arrivals == 0 and resent < 10 and resent < genomes_were / 2
+			and float(pb.wound) <= wound_was and float(pb.wound) > wound_was - 0.05
+			and enter_points >= Referee.WEIGHT_ENTER and enter_points <= 3.0
+			and host_food.person() == person,
+		"pond referee R8: five ENTERs in a second while swimming here bring no ARRIVE"
+		+ " and no arrival's genomes (%d sent by the water going on, where an arrival" % resent
+		+ " resends all %d), leave the wound as it was, and foul %.0f points -- once"
+		% [genomes_were, enter_points] + " each half second")
+
+	# **R9: DIED, swallowed by the friend, while alive**: taken out all the same,
+	# and reported as starving.
+	var died_as: Array = []
+	var on_died := func(cause: int, _by: int, _at: Vector2, _mine: bool) -> void:
+		died_as.append(cause)
+	host_pond.friend_died.connect(on_died)
+	points = _ref_points(host_net)
+	guest.send_event(Wire.EVENT_DIED, Wire.died_payload(FoodField.Cause.SWALLOWED,
+		FoodField.By.FRIEND, at))
+	var gone := await _ref_until(func() -> bool: return host_food.person() == null, 1.0,
+		guest, body, host_pin)
+	host_pond.friend_died.disconnect(on_died)
+	_says(gone >= 0.0 and died_as == [FoodField.Cause.STARVED]
+			and is_equal_approx(_ref_points(host_net) - points, Referee.WEIGHT_DIED),
+		"pond referee R9: DIED, swallowed by the friend, said of a body still alive"
+		+ " takes it out, is reported as %s, and fouls %.0f points"
+		% [str(died_as), _ref_points(host_net) - points])
+
+	# **R10: a call from 3,000 units off, and one with the wrong reach**: nothing
+	# on the host's membrane -- where an honest call, first, is marked. Back from
+	# that death first, as a born cell must come back.
+	body[2] = CellBody.BASE_RADIUS
+	var back := await _ref_by_hand(guest, worn, order, body, host_food, host_pin)
+	ref = host_pond.call("referee_of", 0)
+	marks.clear()
+	guest.shout(body[0], CellBody.BASE_RADIUS, 1100.0)
+	var heard := await _ref_until(func() -> bool: return not marks.is_empty(), 1.0, guest,
+		body, host_pin)
+	var shouts := int(ref.judged["shout"])
+	marks.clear()
+	points = _ref_points(host_net)
+	guest.shout((body[0] as Vector2) + Vector2(3000.0, 0.0), CellBody.BASE_RADIUS, 1100.0)
+	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts, 1.0, guest,
+		body, host_pin)
+	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	guest.shout(body[0], CellBody.BASE_RADIUS, 1500.0)
+	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts + 1, 1.0,
+		guest, body, host_pin)
+	await _ref_until(func() -> bool: return false, 0.2, guest, body, host_pin)
+	_says(back and heard >= 0.0 and marks.is_empty()
+			and is_equal_approx(_ref_points(host_net) - points, 2.0 * Referee.WEIGHT_SHOUT),
+		"pond referee R10: an honest call is marked on the host's membrane; one from"
+		+ " 3,000 units off and one reaching 1,500 with a tier-1 organ are not, and"
+		+ " foul %.0f points" % (_ref_points(host_net) - points))
+	var watched: Dictionary = host_net.gate_counts
+	_says(int(watched["referee_strikes"]) == 0 and float(watched["points"]) == 0.0
+			and int(watched["referee_would_strikes"]) > 0 and int(watched["cuts"]) == 0,
+		"pond referee: watched, %d fouls were counted and logged and none cost a"
+		% int(watched["referee_would_strikes"]) + " point -- while every verdict above"
+		+ " stood")
+
+	# **R11: a radius lie on every frame, enforced**: cut within 3 s, the guest
+	# told REFUSE_BROKEN.
+	guest.close()
+	await _pond_until(func() -> bool: return (host_net.guests() as Array).is_empty(), 2.0,
+		[host_pin])
+	host_net.enforce_referee = true
+	var cheat: Node = await _session("RefereeCheat")
+	cheat.join("127.0.0.1")
+	await _until_link(cheat, NetSession.Link.TOGETHER)
+	var lie := [Vector2.ZERO, 0.0, CellBody.BASE_RADIUS, false]
+	var in_water := await _ref_by_hand(cheat, Genome.BORN, Genome.BORN.keys(), lie,
+		host_food, host_pin)
+	lie[2] = 40.0
+	var cut := await _ref_until(func() -> bool:
+		return int(cheat.link) == NetSession.Link.REFUSED, 4.0, cheat, lie, host_pin)
+	_says(in_water and cut >= 0.0 and cut <= 3.0
+			and str(cheat.trouble) == Wire.reason_says(Wire.REFUSE_BROKEN)
+			and int(host_net.gate_counts["cuts"]) == 1,
+		"pond referee R11: a guest claiming r40 on every frame, fed nothing, is cut"
+		+ " %.2f s after its first lie and told '%s'" % [cut, str(cheat.trouble)])
+	host_run.get_node(^"Membrane").bus.sensation.disconnect(on_mark)
+	host_run.queue_free()
+	cheat.close()
+	host_net.close()
+	await _wait(0.3)
+	print("[net-probe] NOTE pond referee took %.1f s and %d frames, at most %d a second"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+
+
+## **A guest driven by hand arrives**: its body said, its ENTER, the host's
+## ARRIVE, and its state frames from there until the host has it in the water.
+## [param body] is `[place, heading, radius, out]`, reported every frame by
+## [method _ref_until]; the arrival is written into it.
+func _ref_by_hand(guest: Node, tiers: Dictionary, order: Array, body: Array,
+		host_food: Node, host_pin: Array) -> bool:
+	guest.pond_events.clear()
+	guest.set_pond(false, false)
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(true, tiers, order))
+	guest.send_event(Wire.EVENT_ENTER, Wire.enter_payload(float(body[2])))
+	var got: Array = []
+	await _pond_until(func() -> bool:
+		for frame: PackedByteArray in guest.pond_events:
+			if Wire.event_type(frame) == Wire.EVENT_ARRIVE and got.is_empty():
+				got.append_array(Wire.take_arrive(frame))
+		return not got.is_empty(), 1.0, [host_pin])
+	if got.is_empty():
+		return false
+	body[0] = got[0]
+	body[1] = float(got[1])
+	var placed := await _ref_until(func() -> bool:
+		var p: Object = host_food.person()
+		return p != null and bool(p.in_water), 1.0, guest, body, host_pin)
+	return placed >= 0.0
+
+
+## [method _pond_until] with a hand-driven guest reporting [param body] --
+## `[place, heading, radius, out]` -- every frame, in the pond.
+func _ref_until(done: Callable, seconds: float, guest: Node, body: Array,
+		host_pin: Array) -> float:
+	return await _pond_until(func() -> bool:
+		guest.report_body(body[0], float(body[1]), float(body[2]))
+		guest.set_pond(true, bool(body[3]))
+		return done.call(), seconds, [host_pin])
+
+
+## Every point the referee's fouls have put on a session's ledgers, enforced
+## and watched.
+func _ref_points(net: Node) -> float:
+	var counts: Dictionary = net.gate_counts
+	return float(counts["referee_points"]) + float(counts["referee_would_points"])
 
 
 ## A run of the game on [param net], in full vision so its view works the
@@ -4295,17 +5701,30 @@ func _pond_run_scene(net: Node, watched: bool) -> Node:
 ## Frames until [param done] says so or [param seconds] of wall time pass,
 ## holding every `[cell, at, heading]` in [param pins] still where it is put.
 ## Returns the seconds it took, or -1 for never.
+##
+## **A pin with a fourth number glides there instead**, at that many units a
+## second, and holds once it arrives. A guest is never teleported: the host's
+## referee holds its place to the path a body could swim (net-hardening.md
+## B.5), and a guest pinned 480 units away in one frame is a guest that did
+## not swim there. [constant POND_GLIDE] is well inside that budget.
 func _pond_until(done: Callable, seconds: float, pins: Array) -> float:
 	var from := _now()
 	var last := from
+	var pinned_at := _clock()
 	_pond_frames = 0
 	_pond_frame_max = 0.0
 	while true:
+		var clock := _clock()
 		for pin: Array in pins:
 			var cell: Node = pin[0]
-			cell.position = pin[1]
+			if pin.size() > 3:
+				cell.position = (cell.position as Vector2).move_toward(pin[1],
+					float(pin[3]) * (clock - pinned_at))
+			else:
+				cell.position = pin[1]
 			cell.heading = float(pin[2])
 			cell.velocity = Vector2.ZERO
+		pinned_at = clock
 		if done.call():
 			return _now() - from
 		if _now() - from >= seconds:
@@ -4322,6 +5741,100 @@ func _pond_until(done: Callable, seconds: float, pins: Array) -> float:
 ## Frames a claim of [param seconds] allows at the game's own frame rate.
 func _pond_budget(seconds: float) -> int:
 	return int(roundf(seconds * POND_FPS))
+
+
+## **A guest brings a new genome into the pond the way a player does** (B.5):
+## out of the pond -- the takeover's own two calls, without its beat -- the
+## body grown alone, here by [method Genome.express], and back in by the swap
+## the run asks for at its next ordinary frame: PERSON with a new body, ENTER,
+## the host's ARRIVE and the beat. Waits for the run to be swimming first, and
+## returns the seconds from leaving to being back in, or -1.
+func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array) -> float:
+	var pond: Object = run.get("_pond")
+	var food: Node = run.get_node(^"Food")
+	await _pond_until(func() -> bool:
+		return int(run.get("_life")) == NormalMode.Life.ALIVE \
+			and float(run.get("_water_beat")) < 0.0, 2.0, pins)
+	var from := _now()
+	pond.mirror_ended()
+	food.leave_mirror()
+	(run.get_node(^"Genome")).express(tiers, order)
+	var back := await _pond_until(func() -> bool:
+		return bool(pond.in_pond) and food.mirroring() \
+			and float(run.get("_water_beat")) < 0.0, 4.0, pins)
+	return _now() - from if back >= 0.0 else -1.0
+
+
+## **Feeds the guest [param cell] to r40 on real meals in the host's water**,
+## one morsel at a time on the lip of its mouth -- facing north, as pinned --
+## each one an ATE the host decides and the guest grows by. A wide mouth takes
+## a morsel in its hollow for no meal, so the morsel is put on the lip itself.
+## Returns the meals, or -1.
+func _pond_feed(host_food: Node, cell: Node, pins: Array) -> int:
+	var meals := 0
+	while float(cell.radius) < CellBody.DIVIDE_RADIUS - 0.01 and meals < 6:
+		var was := float(cell.radius)
+		# The tip of the lip bow, dead ahead: cilia.gd's `_lip` at its middle.
+		var tip := was * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \
+			+ float(cell.gape()) * Cilia.GAPE_BULGE
+		var at: Vector2 = (cell.position as Vector2) + Vector2(0.0, -tip)
+		var morsel := _pond_pose(host_food, 4, 7.0, {}, at, 0.0)
+		var serial := int(morsel.serial)
+		var grew := await _pond_until(func() -> bool:
+			if int(morsel.serial) == serial:
+				morsel.pos = at
+			return float(cell.radius) > was + 0.01, 1.0, pins)
+		if grew < 0.0:
+			return -1
+		meals += 1
+	return meals
+
+
+## Retires every water body within [param reach] of the segment from
+## [param from] to [param to], so a glide along it meets nothing.
+func _pond_clear_line(food: Node, from: Vector2, to: Vector2, reach: float) -> void:
+	var bodies: Array = food.bodies()
+	for i in FoodField.PERSON_SLOT:
+		var b: Object = bodies[i]
+		if not bool(b.seeded):
+			continue
+		var p: Vector2 = b.pos
+		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, from, to)) \
+				< reach + float(b.radius):
+			food.call("_retire", i)
+
+
+## **What the referees in [param referees] judged, and how near they came to a
+## foul**: every input by kind, and each budget's closest call -- the most any
+## one input used of what was left, where 100% is a foul.
+func _referee_said(referees: Array) -> String:
+	var judged := {}
+	var closest := {"movement": 0.0, "heading": 0.0, "shouts": 0.0, "arrivals": 0.0,
+		"bodies": 0.0}
+	var fouls := 0
+	var speed := 0.0
+	var over := -INF
+	for referee: Object in referees:
+		var said: Dictionary = referee.get("judged")
+		for kind: String in said:
+			judged[kind] = int(judged.get(kind, 0)) + int(said[kind])
+		closest["movement"] = maxf(closest["movement"], float(referee.move.closest))
+		closest["heading"] = maxf(closest["heading"], float(referee.turn.closest))
+		closest["shouts"] = maxf(closest["shouts"], float(referee.shouts.closest))
+		closest["arrivals"] = maxf(closest["arrivals"], float(referee.enters.closest))
+		closest["bodies"] = maxf(closest["bodies"], float(referee.bodies.closest))
+		fouls += int(referee.fouled())
+		speed = maxf(speed, float(referee.get("worst_speed")))
+		over = maxf(over, float(referee.get("worst_radius")))
+	var parts: Array[String] = []
+	for kind: String in ["state", "person", "enter", "sister", "died", "shout"]:
+		parts.append("%d %s" % [int(judged.get(kind, 0)), kind])
+	var calls: Array[String] = []
+	for budget: String in closest:
+		calls.append("%s %.0f%%" % [budget, 100.0 * float(closest[budget])])
+	return "%d fouls over %d referee%s; judged %s; closest calls %s; fastest %.0f u/s,"\
+		% [fouls, referees.size(), "" if referees.size() == 1 else "s", ", ".join(parts),
+			", ".join(calls), speed] + " radius at most %+.2f of what it was fed" % over
 
 
 ## **How many snapshots [param seconds] of waiting must bring**, at least: the
@@ -4863,10 +6376,21 @@ func _check_server() -> void:
 
 	# **Each mirrors the other as the friend, in slot 68** -- where a guest of a
 	# phone has always found the host -- wearing what the other wears. The
-	# second guest grows a palp first, so the genome checked is one it chose.
+	# second guest brings a palp in first, so the genome checked is one it
+	# chose: out of the pond, grown alone and back, as a player brings one
+	# (B.5) -- a worn body never changes mid-life, and the server's referee would
+	# keep the old one.
 	var b_genome: Node = b_run.get_node(^"Genome")
-	b_genome.express({&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"palp": 1},
-		[&"cytostome", &"cirrus", &"flagellum", &"palp"])
+	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
+		&"flagellum": 1, &"palp": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp"],
+		[a_pin])
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
+	_says(b_brought >= 0.0 and food.person(slot_b) != null,
+		"server: the second guest leaves the pond and swims back in with a palp in"
+		+ " %.2f s, in slot %d again" % [b_brought, int((pond.call("_guest_by_id",
+			int(b_net.my_id())) as Object).slot)])
 	var mirrored := await _server_until(func() -> bool:
 		var fa: Object = a_food.person()
 		var fb: Object = b_food.person()
@@ -4894,9 +6418,12 @@ func _check_server() -> void:
 	# **The server decides a meeting of the two, and both hear it.** The guest
 	# in slot 68 is this cell's side of the players' rule on a dedicated host,
 	# so it is tested eating and being eaten.
-	var a_genome: Node = a_run.get_node(^"Genome")
-	a_genome.express({&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
-		[&"cytostome", &"cirrus", &"flagellum"])
+	# The first brings a tier-3 mouth in the same way.
+	var a_brought := await _pond_reenter(a_run, {&"cytostome": 3, &"cirrus": 1,
+		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [b_pin])
+	a_home = a_cell.position
+	a_pin = [a_cell, a_home, 0.0]
+	pins = [a_pin, b_pin]
 	await _pond_until(func() -> bool:
 		return Genome.tier_of(food.bodies()[slot_a].genome, &"cytostome") == 3,
 		1.0, pins)
@@ -4904,11 +6431,13 @@ func _check_server() -> void:
 	var on_a_eaten := func(_n: float, _g: StringName, _at: Vector2) -> void:
 		a_ate[0] = true
 	a_food.eaten.connect(on_a_eaten)
-	# Both facing north, so only the first one's mouth is on a body.
+	# Both facing north, so only the first one's mouth is on a body -- the second
+	# glided there, as a body swims, with nothing on the way.
 	var in_a_mouth: Vector2 = a_home + Vector2(0.0, -(float(a_cell.radius) + 18.0))
+	_pond_clear_line(food, b_home, in_a_mouth, 60.0)
 	var b_down := await _server_until(func() -> bool:
 		return int(b_run.get("_life")) == NormalMode.Life.DYING,
-		[a_pin, [b_cell, in_a_mouth, 0.0]])
+		[a_pin, [b_cell, in_a_mouth, 0.0, POND_GLIDE]])
 	var b_slot_empty: bool = food.person(slot_b) == null
 	await _pond_until(func() -> bool:
 		return (bool(a_ate[0])
@@ -4935,8 +6464,13 @@ func _check_server() -> void:
 		"server: the second taps from the black and comes back %.1f units from"
 		% back_apart + " the first, in the same water")
 
-	b_genome.express({&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
-		[&"cytostome", &"cirrus", &"flagellum"])
+	# And brings a tier-3 mouth back in -- a re-entry inside 30 s of the one
+	# before, so it is the same body continued (the referee's re-entry rule).
+	await _pond_reenter(b_run, {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
+		[&"cytostome", &"cirrus", &"flagellum"], [a_pin])
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
 	await _pond_until(func() -> bool:
 		return Genome.tier_of(food.bodies()[slot_b].genome, &"cytostome") == 3,
 		1.0, pins)
@@ -4945,9 +6479,10 @@ func _check_server() -> void:
 		b_ate[0] = true
 	b_food.eaten.connect(on_b_eaten)
 	var in_b_mouth: Vector2 = b_home + Vector2(0.0, -(float(b_cell.radius) + 18.0))
+	_pond_clear_line(food, a_home, in_b_mouth, 60.0)
 	var a_down := await _server_until(func() -> bool:
 		return int(a_run.get("_life")) == NormalMode.Life.DYING,
-		[b_pin, [a_cell, in_b_mouth, 0.0]])
+		[b_pin, [a_cell, in_b_mouth, 0.0, POND_GLIDE]])
 	var a_slot_empty: bool = food.person(slot_a) == null
 	await _pond_until(func() -> bool:
 		return (bool(b_ate[0])
@@ -5165,6 +6700,13 @@ func _check_server() -> void:
 		+ " socket took %.1f KB and %d datagrams in its busiest second%s"
 		% [float(tally[0]["peak_bytes"]) / 1024.0, roundi(float(tally[0]["peak_datagrams"])),
 			_limits_unclean([tally[0]])])
+	# **And its referees called no foul on any of the five guests it took**:
+	# arriving, bringing new bodies in, eating each other, eaten by the water,
+	# back from the black, leaving (B.5).
+	var server_referees: Array = pond.get("referees_made")
+	_says(float(tally[0].get("fouls", 0.0)) == 0.0 and server_referees.size() == 5,
+		"server: and its referees called no foul on an honest guest -- %s"
+		% _referee_said(server_referees))
 	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second;"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps]
 		+ " its longest wait on an unreliable frame %.2f s, of %.0f"

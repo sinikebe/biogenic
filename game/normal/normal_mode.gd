@@ -87,6 +87,7 @@ const FIRST_SENSE_AT := 5.0
 ## weakest opening of the four -- a shadow is mass, and the authored first
 ## arrival is a drifter with almost none -- but it is a real sense, and what it
 ## does see is the half of the water that can eat you.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const FIRST_SENSES: Array[StringName] = [
 	&"ocellus", &"ampulla", &"chemocyte", &"stigma"]
 
@@ -179,6 +180,7 @@ const DIVIDE_FADE_DIM := 0.34
 ## How far off the sister is left, on the side she was drawn on. Far enough not
 ## to be a fight at birth, near enough to be met -- and inside the frame in full
 ## vision, so the answer to "what happened to the other one" is visible.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const SISTER_DISTANCE := 560.0
 ## The one line, at the first division of a run only.
 const DIVIDE_LINE := "lean into one of them"
@@ -4775,7 +4777,7 @@ func _on_choose_unhover(side: int, slot: int) -> void:
 # every entry point below is behind [member _pond], which is null there.
 # ---------------------------------------------------------------------------
 
-## The seven lines (UX §0.4), each a fact about another person no sense can
+## The eight lines (UX §0.4), each a fact about another person no sense can
 ## carry.
 const LINE_THEIRS := "you are in their water"
 const LINE_YOURS := "they are in your water"
@@ -4783,6 +4785,10 @@ const LINE_DIED := "they died · they come back near you"
 const LINE_ATE := "you ate them · they come back near you"
 const LINE_QUIET := "their phone went quiet"
 const LINE_GONE := "their water is gone · this one is yours"
+## The same moment when the host did not go but hung up on this game -- its gate
+## or its referee (net-hardening.md B), `REFUSE_BROKEN` -- so a player who was
+## cut is not told the host left.
+const LINE_CUT := "cut off from their water · this one is yours"
 const LINE_LEFT := "they left"
 ## A born cell's layout, for the body a guest asks to arrive as from the black:
 ## genome.gd's own reset, written out because the body has not been reset yet.
@@ -5005,6 +5011,7 @@ func _leave_sister(bearing: float, body: Dictionary) -> void:
 ## once. Pause is ordinary again, so the menu closes if it was open.
 func _take_over() -> void:
 	var was_in := _food.mirroring()
+	var gone_line := LINE_CUT if _pond.cut_off() else LINE_GONE
 	_pond.mirror_ended()
 	_swap_pending = false
 	if _held:
@@ -5035,9 +5042,9 @@ func _take_over() -> void:
 		# moved again.
 		_food.leave_mirror()
 		_update_simulating()
-		_pond_say("gone", LINE_GONE)
+		_pond_say("gone", gone_line)
 		return
-	_begin_water_beat(_food.leave_mirror, 0.0, "gone", LINE_GONE)
+	_begin_water_beat(_food.leave_mirror, 0.0, "gone", gone_line)
 
 
 ## **Held, or heard again** (UX §5). Held, nothing of this cell moves --

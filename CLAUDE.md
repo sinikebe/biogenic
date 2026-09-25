@@ -191,6 +191,34 @@ which flips between the two landscape directions and never reaches portrait (ful
 sensor is `6`). Do not build portrait-specific layout for a mode the app cannot
 enter. Touch targets stay at 48px minimum.
 
+## The host's referee copies the game's rules
+
+In a shared pond, `game/net/referee.gd` judges every guest by copies of the
+game's own rules and cuts one that keeps breaking them. The rules it copies are
+growth per meal and its cap, the division radius, the daughter's size and
+distance, the free senses and the gift, the speed and turn tables, ping reach
+and period by tier, the grace, the causes of death, and the order in which a
+guest announces a new body. A host judges by *its own* copy. So a phone that
+has already updated gets judged by the old rules. It is cut a second after its
+first meal and barred for a minute. A dedicated server is always the last to
+update, because it only restarts once its pond is empty.
+
+- **Changing a rule the referee copies changes the protocol.** Bump
+  `Wire.PROTOCOL` and update `Wire.RULES` in the same commit. Mismatched builds
+  then refuse each other at the handshake with the version sentence, instead of
+  one cutting the other mid-game.
+- **Changing only the referee's own limits** needs `Wire.RULES` updated and the
+  false-positive runs in `docs/design/net-hardening.md` repeated. It does not
+  need a protocol bump.
+
+CI holds this. `Wire.RULES` in `game/net/wire.gd` is a fingerprint of every
+value the referee judges by. net_probe's `referee` section recomputes it and
+fails until both are done.
+
+If an honest phone is ever cut, `enforce_referee` and `enforce_budgets` in
+`net_session.gd` are the switches to watch mode. It logs what it *would* have
+done instead of doing it, and it's the way to find the limit at fault.
+
 ## Putting a decision to the owner
 
 Some calls are not ours: names, balance numbers that can only be judged by

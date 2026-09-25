@@ -38,6 +38,11 @@ extends Node
 ## bookkeeping exists for them. None of it changes a byte on the wire: a
 ## protocol-4 build on either end cannot tell.
 ##
+## **And what a guest says is checked, not only how it is said** (part B): the
+## host's pond asks a referee (`referee.gd`) about every word a guest sends, and
+## a rule broken lands on the same ledger through [method strike] -- enforced,
+## or only watched while [member enforce_referee] is off.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
@@ -354,6 +359,9 @@ var link := Link.OFF
 var trouble := ""
 ## The sentence under it. Says what to *do*, wherever there is anything to do.
 var because := ""
+## **Why the host last refused this guest**, a `Wire.REFUSE_*`, or -1: so a run
+## can tell a cut (`REFUSE_BROKEN`) from a host that simply went.
+var refused_for := -1
 ## Set once, at host()/join(), and never derived from a peer id.
 var hosting := false
 ## **How many guests this host greets** before it says "already two": one for
@@ -461,6 +469,16 @@ var _out_pond_seq := 0
 ## what it would have done -- "would drop", "would cut" -- and the frame is
 ## taken, with no points for it. The probe's budget tests set it per session.
 var enforce_budgets := true
+## **The referee's fouls are enforced** (part B), the same shape as
+## [member enforce_budgets] and on by default for the same reason: the owner
+## chose to enforce A. A foul is what the host's pond calls when a guest's word
+## breaks a rule of the water -- a body bigger than it was fed, a place further
+## than it could swim -- and each goes on this ledger through [method strike].
+## **Off is watch mode**: a foul is counted (`referee_would_*` in
+## [member gate_counts]) and logged as what it would have done, and costs no
+## points. Either way the referee's verdicts stand -- a clamp or a refusal is
+## the host deciding about its own water, and never cuts anybody.
+var enforce_referee := true
 ## **What the door and the gate have done** since this end last hosted or
 ## joined -- callers refused, frames dropped, points struck, peers cut, and in
 ## watch mode what the budgets would have done -- for tools and for the log.
@@ -557,6 +575,9 @@ class Guard extends RefCounted:
 	var would_points_at := 0.0
 	var would_dropped := 0
 	var would_cuts := 0
+	## **The referee's fouls on this peer** (part B), enforced or watched: what
+	## its farewell line says, beside the budgets' overruns.
+	var fouls := 0
 
 	func _init(strict: bool, now: float) -> void:
 		frames = Bucket.new(FRAMES_RATE if strict else HOST_FRAMES_RATE,
@@ -942,6 +963,45 @@ func points_of(id: int) -> float:
 	return (peer["guard"] as Guard).points_now(_now())
 
 
+## **A foul the referee called on guest [param id]** (net-hardening.md B):
+## [param weight] points on the ledger A keeps, for [param why] -- which is the
+## rule and what broke it. Enforced, it is a strike like any other, and ten
+## points cut the guest with `REFUSE_BROKEN` and bar its address. Watched
+## ([member enforce_referee] off), it goes on the watch ledger instead, counted
+## and logged as what it would have done. One line per foul in the log, held to
+## one every ten seconds for each address like every other (A.6). A host's
+## alone: a guest never fouls its host.
+func strike(id: int, weight: float, why: String) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if not hosting or peer.is_empty() or not bool(peer.get("greeted", false)):
+		return
+	var guard: Guard = peer["guard"]
+	var from := str(peer["address"])
+	guard.fouls += 1
+	gate_counts["fouls"] += 1
+	if enforce_referee:
+		gate_counts["referee_strikes"] += 1
+		gate_counts["referee_points"] += weight
+		_note("foul", Lan.source_key(from), "[net] %d (%s) fouled: %s -- %.0f point%s"
+			% [id, from, why, weight, "" if weight == 1.0 else "s"])
+		_strike(id, weight, "fouled: " + why)
+		return
+	var total := guard.would_strike(weight, _now())
+	gate_counts["referee_would_strikes"] += 1
+	gate_counts["referee_would_points"] += weight
+	_note("would foul", Lan.source_key(from), "[net] would foul %d (%s): %s -- %.0f"
+		% [id, from, why, weight] + " point%s -- watching the referee, not enforcing it"
+		% ("" if weight == 1.0 else "s"))
+	if total < STRIKE_CUT:
+		return
+	guard.would_cuts += 1
+	guard.would_points = 0.0
+	gate_counts["referee_would_cuts"] += 1
+	_note("would cut foul", Lan.source_key(from), "[net] would cut %d (%s): fouled: %s"
+		% [id, from, why] + " -- %.0f points -- watching the referee, not enforcing it"
+		% total)
+
+
 ## [method send_event], to guest [param id] alone, **on that guest's own
 ## sequence** -- so each guest reads an unbroken run of events however many
 ## the others are sent, and its gap check stays a check.
@@ -1314,6 +1374,7 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		return
 	var reason := Wire.refuse_reason(frame)
 	var theirs := Wire.protocol_of(frame)
+	refused_for = reason
 	if reason == Wire.REFUSE_PROTOCOL:
 		_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
 	elif reason == Wire.REFUSE_FULL:
@@ -1901,7 +1962,7 @@ func _farewell(id: int, peer: Dictionary) -> void:
 	print("[net] %d (%s) done after %d s -- frames %d, events %d, over budget %d,"
 		% [id, str(peer["address"]), roundi(now - float(peer["since"])), guard.taken,
 			guard.taken_events, guard.dropped + guard.would_dropped]
-		+ " points %.0f" % guard.points_now(now))
+		+ " points %.0f, fouls %d" % [guard.points_now(now), guard.fouls])
 
 
 ## **Whether to answer a caller at all** (A.5), in `peer_connected` -- the
@@ -2099,6 +2160,11 @@ func _zero_counts() -> void:
 		"would_drop": 0, "would_drop_frames": 0, "would_drop_bytes": 0,
 		"would_drop_events": 0, "would_strikes": 0, "would_points": 0.0,
 		"would_cuts": 0,
+		# **The referee's** (part B, [method strike]): every foul, enforced or
+		# watched, and then the two apart. An honest guest makes none.
+		"fouls": 0, "referee_strikes": 0, "referee_points": 0.0,
+		"referee_would_strikes": 0, "referee_would_points": 0.0,
+		"referee_would_cuts": 0,
 	}
 
 
@@ -2359,6 +2425,7 @@ func _reset_socket() -> void:
 	_saturation_from = _now()
 	trouble = ""
 	because = ""
+	refused_for = -1
 
 
 func _now() -> float:
