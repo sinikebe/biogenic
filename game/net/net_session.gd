@@ -1203,6 +1203,13 @@ func by_invite() -> bool:
 	return not _invite.is_empty()
 
 
+## **Whether [param invite] was turned away by its server this run**, so
+## [method call_invite] will not dial it again. Read-only: for a screen that
+## says so before anybody presses call (docs/design/invites-ux.md §3).
+static func turned_away(invite: Dictionary) -> bool:
+	return not invite.is_empty() and _turned_away.has(_mark_of(invite))
+
+
 ## **Forget which invites were refused this run.** For tools; a player's way
 ## out of a refused invite is a new one.
 static func forget_refusals() -> void:

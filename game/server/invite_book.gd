@@ -223,14 +223,17 @@ static func mint(text: String, root: String = ROOT) -> Array:
 
 
 ## **A warning for an address only the house can reach**: loopback, private,
-## link-local or carrier-grade NAT. Friends outside would only ever hear "no
-## answer" (docs/design/invites-ux.md §11). "" for any other.
+## link-local or carrier-grade NAT -- `Lan.is_local_source` with no address of
+## its own, so it asks about the ranges alone. Said at minting as well as by
+## `--reach`, because an invite that calls one can only ever say "no answer"
+## to a friend outside (docs/design/invites-ux.md §9 and §11). "" for any
+## other, and for a name, which only its lookup could place.
 static func _near_warning(address: String) -> String:
 	if not Lan.is_local_source(address, ""):
 		return ""
-	return ("note: %s is an address inside your own network, which friends outside it"
-		% address + " cannot reach. Set --reach to your public address, or a name for"
-		+ " it, and mint again.")
+	return ("note: %s is a home-network address, so friends outside the house can never"
+		% address + " reach it. Use the address your router has on the internet, or a"
+		+ " name pointing at it: set --reach to that, and mint again.")
 
 
 ## **`--revoke=<label>`**: that invite stops working. A running server notices

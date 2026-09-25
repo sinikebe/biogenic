@@ -79,9 +79,9 @@ horizontal_alignment = 1
 [node name="Buttons" type="HBoxContainer" parent="."]
 anchor_left = 0.5
 anchor_right = 0.5
-offset_left = -282.0
+offset_left = -420.0
 offset_top = 602.0
-offset_right = 282.0
+offset_right = 420.0
 offset_bottom = 658.0
 grow_horizontal = 2
 mouse_filter = 2
@@ -93,6 +93,9 @@ text = "call"
 
 [node name="Second" type="Button" parent="Buttons"]
 text = "answer"
+
+[node name="Third" type="Button" parent="Buttons"]
+visible = false
 
 [node name="Hint" type="Label" parent="."]
 anchor_top = 1.0
