@@ -394,8 +394,7 @@ func _trouble_at_server(key: String) -> void:
 				get_tree().root.add_child(guest)
 				_extras.append(guest)
 				guest.join("127.0.0.1")
-			await _until(func() -> bool: return _extras.all(
-				func(g: Node) -> bool: return int(g.link) == NetSession.Link.TOGETHER), 6.0)
+			await _until(_extras_together, 6.0)
 			await _paste_by_key(_served)
 			await _click(_button("call"))
 		"cut_off", "hung_up":
@@ -522,8 +521,7 @@ func _own_identity() -> Array:
 
 ## Wait until the screen is on [param page], or [param seconds] of wall time.
 func _until_page(page: int, seconds: float) -> bool:
-	var got := await _until(func() -> bool: return is_instance_valid(_screen)
-		and int(_screen.get("_page")) == page, seconds)
+	var got := await _until(_on_page.bind(page), seconds)
 	if not got:
 		push_error("[earshot-shot] the screen never reached %s: it is on %s"
 			% [Earshot.Page.keys()[page], Earshot.Page.keys()[int(_screen.get("_page"))]])
@@ -531,11 +529,34 @@ func _until_page(page: int, seconds: float) -> bool:
 
 
 func _until_scene(path: String) -> bool:
-	var got := await _until(func() -> bool: return get_tree().current_scene != null
-		and get_tree().current_scene.scene_file_path == path, 3.0)
+	var got := await _until(_on_scene.bind(path), 3.0)
 	if not got:
 		push_error("[earshot-shot] %s never came up" % path)
 	return got
+
+
+func _on_page(page: int) -> bool:
+	return is_instance_valid(_screen) and int(_screen.get("_page")) == page
+
+
+func _on_scene(path: String) -> bool:
+	var scene := get_tree().current_scene
+	return scene != null and scene.scene_file_path == path
+
+
+func _extras_together() -> bool:
+	for guest: Node in _extras:
+		if int(guest.link) != NetSession.Link.TOGETHER:
+			return false
+	return true
+
+
+func _server_ready() -> bool:
+	return _server_said.contains("[server] READY")
+
+
+func _server_gone() -> bool:
+	return not OS.is_process_running(_server_pid)
 
 
 ## Wall time, not frames: every clock in a session is wall time.
@@ -640,8 +661,7 @@ func _server_up() -> bool:
 	_server_pid = int(got["pid"])
 	_server_io = got["stdio"]
 	_server_err = got["stderr"]
-	var ready := await _until(func() -> bool: return _server_said.contains("[server] READY"),
-		20.0)
+	var ready := await _until(_server_ready, 20.0)
 	if not ready:
 		push_error("[earshot-shot] the server never said READY")
 	return ready
@@ -660,7 +680,7 @@ func _server_down() -> void:
 	if _server_pid < 0:
 		return
 	_stop_server()
-	await _until(func() -> bool: return not OS.is_process_running(_server_pid), 5.0)
+	await _until(_server_gone, 5.0)
 	_drain_server()
 	_kill_server()
 
