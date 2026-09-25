@@ -317,6 +317,10 @@ userdel biogenic
   and tries again by itself, after five seconds and then twice as long each
   time, up to every five minutes. It means something else holds UDP 45771, or
   the network was not up yet.
+- **`no phone can join by code`** -- the server is listening, but its address
+  ends in .0 or .255 (which a network wider than a /24 can hand out), and a
+  code only carries a last number from 1 to 254. Give the container another
+  address -- a DHCP reservation or a static one -- and restart the service.
 
 ## 8. What is inside
 

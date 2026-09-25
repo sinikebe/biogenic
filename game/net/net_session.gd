@@ -698,6 +698,19 @@ func _process(_delta: float) -> void:
 # Opening and closing.
 # ---------------------------------------------------------------------------
 
+## **Whether a host can take calls at [param address]**, for [param guests]
+## guests. It needs an address. A phone host also needs one a code can carry --
+## a last number from 1 to 254 -- because the code is the only way a phone is
+## found. A dedicated host listens at any address, for its log to say what
+## the matter is ([code]game/server/server.gd[/code]): an address that ends in
+## .0 or .255 is a real device on a network wider than a /24, and a server that
+## would not listen there only says "no wi-fi here" forever.
+static func hostable(at: String, guests: int) -> bool:
+	if at.is_empty():
+		return false
+	return guests > 1 or Lan.octet_of(at) >= 0
+
+
 ## Take the calls. Returns false, with [member trouble] set, if this device has
 ## no address to be found at or the port is already taken. [param guests] is
 ## how many to greet: one, as every phone does, or a dedicated host's two.
@@ -709,7 +722,7 @@ func host(guests: int = 1) -> bool:
 	hosting = true
 	guests_max = clampi(guests, 1, GUESTS_MAX)
 	address = Lan.local_address()
-	if address.is_empty() or Lan.octet_of(address) < 0:
+	if not hostable(address, guests_max):
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
 		return false

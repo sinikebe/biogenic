@@ -326,6 +326,16 @@ func _check_adapters() -> void:
 	_says(only_virtual == "192.0.2.30" and none.is_empty(),
 		"adapters: a machine on a VPN alone still answers with it, and loopback"
 		+ " and link-local are never an answer")
+	# **An address no code can carry.** A code is the last number, 1 to 254; a
+	# machine on a network wider than a /24 can be x.x.x.0 or x.x.x.255 --
+	# a release runner once was, and its server never said READY.
+	_says(NetSession.hostable("192.0.2.0", 2) and NetSession.hostable("192.0.2.255", 2)
+			and not NetSession.hostable("192.0.2.0", 1)
+			and not NetSession.hostable("192.0.2.255", 1)
+			and NetSession.hostable("192.0.2.9", 1) and NetSession.hostable("192.0.2.9", 2)
+			and not NetSession.hostable("", 1) and not NetSession.hostable("", 2),
+		"a dedicated host listens at an address no code can carry (x.x.x.0,"
+		+ " x.x.x.255) and a phone host does not; nobody listens with no address")
 	# **A phone's own tethers.** Android hands its hotspot, USB and Bluetooth
 	# tethers the same stock addresses on every phone -- 192.168.43.1,
 	# 192.168.42.129, 192.168.44.1, nobody's network in particular -- so all
