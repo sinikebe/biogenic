@@ -84,7 +84,7 @@ const NOWHERE := "pond.example.invalid"
 const SILENT := "198.51.100.1"
 const V6 := "2001:db8::5"
 ## Sixty characters, for the receipt's ellipsis.
-const LONG_NAME := "biogenic-pond-at-home.dynamic-dns-provider.home.example.net"
+const LONG_NAME := "biogenic-pond-at-home.dynamic-dns-provider.house.example.net"
 
 var _screen: Control = null
 var _other: Node = null
@@ -194,7 +194,10 @@ func _ready() -> void:
 				await _finish(1)
 				return
 
-	await _settle(wait)
+	if _far_page:
+		await _pause(wait)
+	else:
+		await _settle(wait)
 	if _far_page and u >= 0.0:
 		await _pulse_at(u)
 	else:
@@ -296,7 +299,7 @@ func _far(page: String, address: String) -> bool:
 		"far-forgotten":
 			await _paste_by_key(_line_for(NAMED))
 			await _touch(_button("forget"))
-			await _settle(0.2)
+			await _pause(0.2)
 			await _touch(_button("forget"))
 		"far-calling":
 			await _paste_by_key(_line_for(SILENT))
@@ -319,6 +322,7 @@ func _far(page: String, address: String) -> bool:
 				return false
 			# Leave, and come back later the way a player does: the chooser's
 			# far button, with the same invite kept and the same game running.
+			await _pause(0.3)
 			await _touch(_button("leave"))
 			if not await _until_scene(MODE_SELECT) or not await _into_far():
 				return false
@@ -327,7 +331,7 @@ func _far(page: String, address: String) -> bool:
 				push_error("[earshot-shot] no page called %s" % page)
 				return false
 			return await _trouble(page.trim_prefix("far-trouble-"))
-	await _settle(0.3)
+	await _pause(0.3)
 	await _park_mouse()
 	return true
 
@@ -365,7 +369,7 @@ func _trouble(key: String) -> bool:
 	if not await _until_page(Earshot.Page.TROUBLE, NetSession.INVITE_REACH_TIMEOUT
 			+ NetSession.RESOLVE_TIMEOUT + 2.0):
 		return false
-	await _settle(0.3)
+	await _pause(0.3)
 	await _park_mouse()
 	return true
 
@@ -402,7 +406,7 @@ func _trouble_at_server(key: String) -> void:
 			await _click(_button("call"))
 			if not await _until_page(Earshot.Page.TOGETHER, 10.0):
 				return
-			await _settle(0.5)
+			await _pause(0.5)
 			if key == "hung_up":
 				_stop_server()
 				return
@@ -419,7 +423,7 @@ func _trouble_at_server(key: String) -> void:
 
 ## Out to the chooser with Esc, and back in by its far button, with a touch.
 func _come_back() -> bool:
-	await _settle(0.2)
+	await _pause(0.2)
 	await _key(KEY_ESCAPE)
 	if not await _until_scene(MODE_SELECT):
 		return false
@@ -428,13 +432,13 @@ func _come_back() -> bool:
 
 ## From the chooser, into the far screen by its button.
 func _into_far() -> bool:
-	await _settle(0.3)
+	await _pause(0.3)
 	var chooser := get_tree().current_scene
 	await _touch(chooser.get_node(^"Center/Column/Company/FarBlock/Far"))
 	if not await _until_scene(FAR_SCREEN):
 		return false
 	_screen = get_tree().current_scene as Control
-	await _settle(0.4)
+	await _pause(0.4)
 	await _park_mouse()
 	return true
 
@@ -446,14 +450,14 @@ func _paste_by_touch(text: String) -> void:
 		push_error("[earshot-shot] no paste button on this page")
 		return
 	await _touch(paste)
-	await _settle(0.2)
+	await _pause(0.2)
 
 
 func _paste_by_key(text: String) -> void:
 	DisplayServer.clipboard_set(text)
 	await _chord(KEY_V, true)
 	print("[earshot-shot] ctrl+v")
-	await _settle(0.2)
+	await _pause(0.2)
 
 
 ## The page's paste button: paste invite, or paste new.
@@ -522,6 +526,9 @@ func _own_identity() -> Array:
 ## Wait until the screen is on [param page], or [param seconds] of wall time.
 func _until_page(page: int, seconds: float) -> bool:
 	var got := await _until(_on_page.bind(page), seconds)
+	# A page's buttons are sorted into their row a frame after it changes.
+	await get_tree().process_frame
+	await get_tree().process_frame
 	if not got:
 		push_error("[earshot-shot] the screen never reached %s: it is on %s"
 			% [Earshot.Page.keys()[page], Earshot.Page.keys()[int(_screen.get("_page"))]])
@@ -533,6 +540,14 @@ func _until_scene(path: String) -> bool:
 	if not got:
 		push_error("[earshot-shot] %s never came up" % path)
 	return got
+
+
+## Wall time, where a far page waits: the frame rate under xvfb at 2400x1080 is
+## a fraction of 60, and a call's clocks are wall time.
+func _pause(seconds: float) -> void:
+	var until := Time.get_ticks_msec() + int(seconds * 1000.0)
+	while Time.get_ticks_msec() < until:
+		await get_tree().process_frame
 
 
 func _on_page(page: int) -> bool:
