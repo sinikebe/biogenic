@@ -117,6 +117,20 @@ const KIND_EVENT := 0x05
 ## sent unreliable for the same reason. Its own sequence, not the state frame's:
 ## the two streams are paced by different things. shared-pond.md §2.
 const KIND_POND := 0x06
+## **Host to guest, on the internet listener only: *prove it*** (net-hardening.md
+## C). A fresh nonce, sent once a caller's HELLO has passed the protocol check,
+## and never by a LAN host. `kind | nonce(16)`.
+##
+## **No protocol bump, and none of the three frozen bytes**, because no build
+## that does not know this kind can ever receive it: the internet listener
+## speaks DTLS, which no protocol-4 build has a client for, at an address no
+## protocol-4 build has a way to enter. On the LAN nothing changes.
+const KIND_CHALLENGE := 0x07
+## **Guest to host, the answer to CHALLENGE**: which invite, a nonce of the
+## guest's own, and HMAC-SHA256 over both nonces, the protocol and the key id,
+## keyed with the invite's secret (`invite.gd`'s `proof_mac`). The secret
+## itself never crosses. `kind | key id(8) | nonce(16) | mac(32)`.
+const KIND_PROOF := 0x08
 
 # --- Event types. Byte 5 of an event frame. ---------------------------------
 ## **The ping, crossing.** One pond, one coordinate frame, so what crosses is
@@ -168,6 +182,12 @@ const REFUSE_SILENT := 0x03
 ## protocol-4 build reads a reason it does not know as [method reason_says]'s
 ## "refused", over "the other end hung up".
 const REFUSE_BROKEN := 0x04
+## **No invite this host will take** (net-hardening.md C): a PROOF naming a key
+## id the host does not have, or one whose mac does not check out -- the same
+## reason for both, on purpose, so a caller learns nothing about which it got
+## wrong -- and a guest whose invite the owner has since revoked or replaced.
+## Only ever sent on the internet listener, which no protocol-4 build reaches.
+const REFUSE_INVITE := 0x05
 
 const HELLO_SIZE := 3
 ## `kind | protocol | host id`. The id is four bytes because peer ids are random
@@ -176,6 +196,15 @@ const HELLO_SIZE := 3
 ## WebSocket or relay transport is under no obligation to repeat.
 const WELCOME_SIZE := 7
 const REFUSE_SIZE := 4
+## The internet handshake's pieces (net-hardening.md C): a nonce each way, the
+## invite's key id, and an HMAC-SHA256.
+const NONCE_SIZE := 16
+const KEY_ID_SIZE := 8
+const MAC_SIZE := 32
+## CHALLENGE: `kind | nonce`. 17 bytes, exactly.
+const CHALLENGE_SIZE := 1 + NONCE_SIZE
+## PROOF: `kind | key id | nonce | mac`. 57 bytes, exactly.
+const PROOF_SIZE := 1 + KEY_ID_SIZE + NONCE_SIZE + MAC_SIZE
 ## `kind | seq(u32) | flags | x(f32) | y(f32) | radius(f32) | heading(u8)
 ##  | vx(f32) | vy(f32) | turning(f32)`.
 ##
@@ -418,6 +447,34 @@ static func refuse(protocol: int, reason: int) -> PackedByteArray:
 	_put_u16(out, 1, protocol)
 	out[3] = reason & 0xFF
 	return out
+
+
+## CHALLENGE: the host's fresh [param nonce], [constant NONCE_SIZE] bytes. A
+## nonce of another length is written as zeros rather than as a frame the
+## reader refuses.
+static func challenge(nonce: PackedByteArray) -> PackedByteArray:
+	var out := PackedByteArray([KIND_CHALLENGE])
+	out.append_array(_exactly(nonce, NONCE_SIZE))
+	return out
+
+
+## PROOF: which invite ([param key_id]), the guest's own [param nonce], and the
+## [param mac] over both nonces. Each piece is written at its exact size.
+static func proof(key_id: PackedByteArray, nonce: PackedByteArray,
+		mac: PackedByteArray) -> PackedByteArray:
+	var out := PackedByteArray([KIND_PROOF])
+	out.append_array(_exactly(key_id, KEY_ID_SIZE))
+	out.append_array(_exactly(nonce, NONCE_SIZE))
+	out.append_array(_exactly(mac, MAC_SIZE))
+	return out
+
+
+static func _exactly(bytes: PackedByteArray, size: int) -> PackedByteArray:
+	if bytes.size() == size:
+		return bytes
+	var zeros := PackedByteArray()
+	zeros.resize(size)
+	return zeros
 
 
 ## **The heartbeat, carrying a body and how it is moving.** Where the sender
@@ -713,6 +770,26 @@ static func refuse_reason(frame: PackedByteArray) -> int:
 	return frame[3]
 
 
+## The nonce out of a CHALLENGE, or empty for anything that is not exactly one.
+static func challenge_nonce(frame: PackedByteArray) -> PackedByteArray:
+	if frame.size() != CHALLENGE_SIZE or frame[0] != KIND_CHALLENGE:
+		return PackedByteArray()
+	return frame.slice(1)
+
+
+## `[key id, nonce, mac]` out of a PROOF, or empty for anything that is not
+## exactly one.
+static func proof_parts(frame: PackedByteArray) -> Array:
+	if frame.size() != PROOF_SIZE or frame[0] != KIND_PROOF:
+		return []
+	var at := 1
+	var key_id := frame.slice(at, at + KEY_ID_SIZE)
+	at += KEY_ID_SIZE
+	var nonce := frame.slice(at, at + NONCE_SIZE)
+	at += NONCE_SIZE
+	return [key_id, nonce, frame.slice(at, at + MAC_SIZE)]
+
+
 ## Sequence number of a state or event frame, or -1 if there is not one in
 ## there. -1 rather than 0 because 0 is a legitimate first sequence.
 static func seq_of(frame: PackedByteArray) -> int:
@@ -823,6 +900,10 @@ static func _span(kind: int, type: int, from_host: bool) -> Vector2i:
 			return Vector2i(STATE_SIZE, STATE_SIZE)
 		KIND_POND:
 			return Vector2i(POND_HEADER, POND_MAX) if from_host else never
+		KIND_CHALLENGE:
+			return Vector2i(CHALLENGE_SIZE, CHALLENGE_SIZE) if from_host else never
+		KIND_PROOF:
+			return never if from_host else Vector2i(PROOF_SIZE, PROOF_SIZE)
 		KIND_EVENT:
 			match type:
 				EVENT_SHOUT:
@@ -1035,6 +1116,8 @@ static func reason_says(reason: int) -> String:
 			return "no greeting"
 		REFUSE_BROKEN:
 			return "cut off"
+		REFUSE_INVITE:
+			return "no invite it could prove"
 	return "refused"
 
 

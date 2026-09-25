@@ -108,7 +108,10 @@ jobs:
         #
         #    earshot.tscn is in the same position for the same reason:
         #    mode_select.gd reaches it by STRING, so nothing preloads
-        #    earshot.gd and no other scene here would ever compile it.
+        #    earshot.gd and no other scene here would ever compile it. So is
+        #    far.tscn, the same screen opened far: an inherited scene that
+        #    sets one property, reached by its own string, and the only boot
+        #    that ever reads `far = true`.
         #
         #    server.tscn is reached by neither route: only the Linux Server
         #    export boots it, through `run/main_scene.server`. It is booted here
@@ -121,6 +124,7 @@ jobs:
           for scene in "" \
                        "res://game/mode_select.tscn" \
                        "res://game/net/earshot.tscn" \
+                       "res://game/net/far.tscn" \
                        "res://game/normal/normal_mode.tscn" \
                        "res://game/replay/replay.tscn" \
                        "res://game/server/server.tscn -- --no-update"; do
@@ -268,7 +272,11 @@ jobs:
         # host's water, breaking each rule and then cut. Then the dedicated
         # server (`game/server/`) with two real guests on this build's own
         # PROTOCOL 4 guest code, and its update decisions against a fake release
-        # feed and a loopback HTTP server -- no network.
+        # feed and a loopback HTTP server -- no network. Last, `invites`
+        # (net-hardening.md part C): the invite line and the kept invite, calls
+        # by invite over DTLS on loopback and each way one ends, hostile callers
+        # at the internet listener, the two doors, and the real server scene
+        # with a book of its own.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -282,17 +290,20 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe caps itself at 500 frames a second and
-        # quits itself in eighty-five to ninety seconds: some seven to nine in
+        # a backstop only. The probe makes 317 checks, caps itself at 500
+        # frames a second and quits itself in 137 to 140 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # eighteen to twenty-one in `limits`, at up to 100 frames a second,
         # about twenty-five in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
-        # and about ten in the server's. Its pond timings are counted in frames,
-        # not wall milliseconds, so a loaded runner slows the step without
-        # failing it. It prints its own frame count -- about 10,200 to 10,700
-        # -- so the margin on 20000 is visible in the log.
+        # about ten in the server's, and about fifty-two in `invites`, at up
+        # to 50 frames a second, most of it waiting out what a player would --
+        # the eight seconds of a call nothing answers, the three of a caller
+        # that never proves. Its pond timings are counted in frames, not wall
+        # milliseconds, so a loaded runner slows the step without failing it.
+        # It prints its own frame count -- 12,800 to 13,200, measured five
+        # times -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or

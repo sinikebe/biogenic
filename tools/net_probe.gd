@@ -78,6 +78,9 @@ extends Node
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const NetSession := preload("res://game/net/net_session.gd")
+## The invite line and the server's book, for the `invites` section.
+const Invite := preload("res://game/net/invite.gd")
+const InviteBook := preload("res://game/server/invite_book.gd")
 ## Only for [method VisionLayer.carry] and its two constants, which are the
 ## arithmetic in the peer marker that a render could not catch: CI renders no
 ## pixels -- its headless draws land in a renderer that keeps none -- so a carry
@@ -139,6 +142,13 @@ func _ready() -> void:
 		print("[net-probe] NOTE --limits-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--invites-only` is the same for the internet listener and its invites
+	# (net-hardening.md part C).
+	if OS.get_cmdline_user_args().has("--invites-only"):
+		await _check_invites()
+		print("[net-probe] NOTE --invites-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	# `--referee-only` is the same for the referee (net-hardening.md part B):
 	# its socket-free checks and the pond's own, which include the real game.
 	if OS.get_cmdline_user_args().has("--referee-only"):
@@ -170,6 +180,7 @@ func _ready() -> void:
 	await _check_pond()
 	await _check_server()
 	await _check_server_updates()
+	await _check_invites()
 	# **The margin on CI's backstop, printed.** The step runs this with no
 	# frame cap and `--quit-after 20000`, which is a count of frames, not of
 	# seconds -- so a faster runner reaches it sooner, and a probe that grew
@@ -1220,6 +1231,30 @@ class Rogue extends Node:
 			return false
 		id = peer.get_unique_id()
 		return true
+
+	## **The same caller at the internet listener** (net-hardening.md C): DTLS
+	## pinned to [param certificate] under the invite's name, from
+	## [param source] when it is given -- another loopback address, bound on
+	## [param local_port], so a storm can come from several addresses.
+	func call_internet(certificate: X509Certificate, source: String = "",
+			local_port: int = 0) -> bool:
+		if not source.is_empty():
+			peer.set_bind_ip(source)
+		if peer.create_client("127.0.0.1", Invite.PORT, 0, 0, 0, local_port) != OK:
+			return false
+		if peer.host.dtls_client_setup(Invite.NAME,
+				TLSOptions.client(certificate, Invite.NAME)) != OK:
+			return false
+		id = peer.get_unique_id()
+		return true
+
+	## The nonce of the CHALLENGE it was sent, or empty for none yet.
+	func challenge() -> PackedByteArray:
+		for packet: PackedByteArray in got:
+			if packet.size() == 1 + Wire.CHALLENGE_SIZE and packet[0] == NetSession.RAW \
+					and packet[1] == Wire.KIND_CHALLENGE:
+				return packet.slice(2)
+		return PackedByteArray()
 
 	func _process(_delta: float) -> void:
 		var now := float(Time.get_ticks_msec()) / 1000.0
@@ -6193,8 +6228,9 @@ func _clock() -> float:
 ## The ENet peer [param session] reaches [param id] through, or null. Reaching
 ## for a private member is a thing only tools/ may do.
 func _enet_peer(session: Node, id: int) -> ENetPacketPeer:
-	var enet: ENetMultiplayerPeer = session.get("_peer")
-	return enet.get_peer(id) if enet != null else null
+	# Through the session, which knows which of a server's two listeners holds
+	# the id: asking the other one is an engine error line.
+	return session.call("enet_peer_of", id)
 
 
 ## `[interval, acceleration, deceleration, throttle]` as [param peer] holds
@@ -6300,6 +6336,9 @@ func _check_server() -> void:
 	server.set("check_updates", false)
 	server.set("own_frame_rate", false)
 	server.set("quits", false)
+	# A book of its own, which stays empty: this section is the LAN's, and a
+	# real server's invites in this user:// must not open anything here.
+	server.set("pond_root", "user://net_probe_no_invites/")
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -6407,6 +6446,17 @@ func _check_server() -> void:
 		return fa != null and fb != null and bool(fa.in_water) and bool(fb.in_water) \
 			and a_food.bodies()[FoodField.PERSON_SLOT].genome == b_genome.tiers(), pins)
 	await _pond_until(func() -> bool: return false, 0.3, pins)
+	# **Settled, not sampled.** Each guest carries the other on by the velocity
+	# it last heard until the next report lands (`food.gd`'s `_carry_person`),
+	# so one frame is a race: in about fifty full runs this check read 0.834
+	# and 1.803 units off once each, at a single frame, and 0.000 in every
+	# other. A mirror that is right comes back within a report or two; one
+	# that is wrong never does, so the check waits up to a second for both.
+	await _pond_until(func() -> bool:
+		return (a_food.bodies()[FoodField.PERSON_SLOT].pos as Vector2).distance_to(b_home) \
+				< 1.0 \
+			and (b_food.bodies()[FoodField.PERSON_SLOT].pos as Vector2).distance_to(a_home) \
+				< 1.0, 1.0, pins)
 	var a_sees: Vector2 = a_food.bodies()[FoodField.PERSON_SLOT].pos
 	var b_sees: Vector2 = b_food.bodies()[FoodField.PERSON_SLOT].pos
 	var water_a := 0
@@ -7093,3 +7143,1106 @@ func _write(path: String, bytes: PackedByteArray) -> void:
 func _read(path: String) -> PackedByteArray:
 	return FileAccess.get_file_as_bytes(path) if FileAccess.file_exists(path) \
 		else PackedByteArray()
+
+
+# ---------------------------------------------------------------------------
+# **Invites** (docs/design/net-hardening.md C, issue #59): the dedicated
+# server's internet listener -- DTLS on its own port, the certificate the
+# invite pins, and the secret a caller proves before a single frame of play
+# is taken -- and the line a friend pastes to reach it. First the line itself,
+# with no socket; then real calls over DTLS on loopback to a host of their own
+# each: the good one, every wrong invite, every wrong server, and callers that
+# break the handshake; then the doors, which a storm on the internet listener
+# must never close to the LAN; then the real server scene, minting, revoking
+# and holding a LAN guest and an internet guest in one pond. Every line
+# printed while it runs is caught, and not one may hold a secret.
+# ---------------------------------------------------------------------------
+
+## Where this section keeps its books: never a real server's `user://pond`.
+const INVITES_ROOT := "user://net_probe_invites/"
+const INVITES_SERVER_ROOT := "user://net_probe_invites_server/"
+## **The server scene's look at its invites, as this section runs it**: every
+## half second, so a revocation's cut is asserted against it.
+const INVITES_POLL := 0.5
+## **Fifty frames a second.** Nothing here is finer than a few tenths of a
+## second -- a call connects at ENet's first resend, 0.5 s in, and every wait
+## ends the moment its answer is in -- and most of the section is waiting out
+## timeouts a player would: the 8 s of a call nothing answers, the 3 s of a
+## caller that never proves. At fifty a second its forty-odd seconds cost
+## CI's backstop about 2,100 frames.
+const INVITES_FPS := 50
+
+## **Every line printed while the section runs** -- the probe's, the
+## sessions', the server's and the engine's error lines alike -- for the one
+## check that none of them holds a secret. The engine may log from any
+## thread, so it takes a lock.
+class LineCatcher extends Logger:
+	var lines: PackedStringArray = []
+	var _lock := Mutex.new()
+
+	func _log_message(message: String, _error: bool) -> void:
+		_lock.lock()
+		lines.append(message)
+		_lock.unlock()
+
+	func _log_error(function: String, file: String, line: int, code: String,
+			rationale: String, _editor_notify: bool, _error_type: int,
+			_script_backtraces: Array[ScriptBacktrace]) -> void:
+		_lock.lock()
+		lines.append("%s %s (%s:%d %s)" % [code, rationale, file, line, function])
+		_lock.unlock()
+
+
+## **The server's updater, as far as the server can tell**: it only ever
+## calls `tick`, once a frame, with how many are there -- which this keeps.
+class TickTaker extends Node:
+	var told: Array[int] = []
+
+	func tick(peers: int) -> void:
+		told.append(peers)
+
+
+var _inv_catcher: LineCatcher = null
+## The server identity the socket tests share: made once, by a mint.
+var _inv_key: CryptoKey = null
+var _inv_cert: X509Certificate = null
+## Everything the log must never hold: secrets, invite lines, key text.
+var _inv_needles: PackedStringArray = []
+## **Every line an invite job gave back in this section.** A job prints them,
+## and this section calls the jobs' own code, which prints nothing -- so they
+## are checked for secrets here, as the printed ones are. And which jobs ran,
+## by flag, so the check can say it saw every kind.
+var _inv_job_lines: PackedStringArray = []
+var _inv_jobs_run: Dictionary = {}
+
+
+func _check_invites() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var ceiling := Engine.max_fps
+	Engine.max_fps = INVITES_FPS
+	NetSession.forget_refusals()
+	for root: String in [INVITES_ROOT, INVITES_SERVER_ROOT]:
+		_invites_wipe(root)
+	_inv_needles = PackedStringArray()
+	_inv_job_lines = PackedStringArray()
+	_inv_jobs_run = {}
+	_inv_catcher = LineCatcher.new()
+	OS.add_logger(_inv_catcher)
+	_invites_format()
+	await _invites_calls()
+	await _invites_strangers()
+	await _invites_doors()
+	await _invites_server()
+	OS.remove_logger(_inv_catcher)
+	_invites_no_secret()
+	_inv_catcher = null
+	_inv_key = null
+	_inv_cert = null
+	NetSession.forget_refusals()
+	for root: String in [INVITES_ROOT, INVITES_SERVER_ROOT]:
+		_invites_wipe(root)
+	print("[net-probe] NOTE invites took %.1f s and %d frames, at most %d a second"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	Engine.max_fps = ceiling
+
+
+## **F1-F5: the line, with no socket.** It reads back as written; a messaging
+## app's line breaks, spaces, invisible characters and the message around it
+## are read through; anything cut short or changed is damage, caught here and
+## never a refused proof; a newer version says so; `--reach` reads what an
+## owner types; and a guest keeps its invite where only it can read it.
+func _invites_format() -> void:
+	var crypto := Crypto.new()
+	var key := crypto.generate_rsa(InviteBook.KEY_BITS)
+	var cert := crypto.generate_self_signed_certificate(key, InviteBook.SUBJECT,
+		InviteBook.VALID_FROM, InviteBook.VALID_TO)
+	var scratch := INVITES_ROOT.path_join("format.pem")
+	DirAccess.make_dir_recursive_absolute(INVITES_ROOT)
+	cert.save(scratch)
+	var der := Invite.der_of_pem(FileAccess.get_file_as_string(scratch))
+	DirAccess.remove_absolute(scratch)
+	var key_id := crypto.generate_random_bytes(Invite.KEY_ID_SIZE)
+	var secret := crypto.generate_random_bytes(Invite.SECRET_SIZE)
+	_invites_hide(secret)
+	# F1: a round trip, to each kind of address.
+	var round_trips := true
+	var lengths: Array = []
+	for address: String in ["203.0.113.7", "2001:db8::7", "pond.example.net"]:
+		var line := Invite.format(address, 45999, key_id, secret, der)
+		var back := Invite.parse(line)
+		lengths.append(line.length())
+		round_trips = round_trips and int(back["read"]) == Invite.Read.OK \
+			and str(back["address"]) == address and int(back["port"]) == 45999 \
+			and back["key_id"] == key_id and back["secret"] == secret \
+			and back["der"] == der and str(back["line"]) == line \
+			and back["certificate"] is X509Certificate
+	_says(round_trips and der.size() > 600,
+		"invites F1: an invite reads back as written -- to an IPv4 address, an IPv6 one"
+		+ " and a name: %s characters, %d of them the certificate's %d bytes"
+		% [str(lengths), Marshalls.raw_to_base64(der).length(), der.size()])
+	# F2: what a messaging app does to a long line, and the message around it.
+	var line := Invite.format("203.0.113.7", Invite.PORT, key_id, secret, der)
+	var broken := ""
+	for i in line.length():
+		broken += line[i]
+		if i == 7:
+			broken += "\n"
+		elif i % 61 == 60:
+			broken += "\r\n"
+		elif i % 97 == 50:
+			broken += " "
+		elif i == 300:
+			broken += String.chr(0x200B)
+		elif i == 400:
+			broken += String.chr(0xA0)
+		elif i == 500:
+			broken += String.chr(0xAD) + "\t"
+	var pastes := {
+		"line breaks, spaces and invisible characters": broken,
+		"a message around it": "hi! here's the way into my pond:\n\n" + broken
+			+ "\n\nsee you in there :) -- 8:30?",
+		"glued to the words around it": "invite:" + line + "thanks",
+		"after a damaged one": line.substr(0, 400) + "\n...\n" + line,
+		"a capitalised prefix": "Biogenic-Invite:" + line.substr(Invite.PREFIX.length()),
+	}
+	var read_through: Array[String] = []
+	for what: String in pastes:
+		var back := Invite.parse(pastes[what])
+		if int(back["read"]) == Invite.Read.OK and str(back["line"]) == line \
+				and back["secret"] == secret:
+			read_through.append(what)
+	_says(read_through.size() == pastes.size(),
+		"invites F2: a paste is read through %d ways a chat app leaves it: %s"
+		% [read_through.size(), ", ".join(read_through)])
+	# F3: cut short, one character changed, a newer version, and none at all.
+	var damaged := 0
+	var tries := 0
+	for cut: int in [line.length() - 1, line.length() - 5, line.length() - 9,
+			line.length() / 2, Invite.PREFIX.length() + 3, Invite.PREFIX.length()]:
+		tries += 1
+		if int(Invite.parse(line.substr(0, cut))["read"]) == Invite.Read.DAMAGED:
+			damaged += 1
+	for at: int in [Invite.PREFIX.length(), Invite.PREFIX.length() + 2, 100, 500, 900,
+			line.length() - 12, line.length() - 3]:
+		tries += 1
+		# Another letter, not the same one in the other case: the check is hex
+		# and read case-blind, so an `a` made `A` there is not damage.
+		var changed := line.substr(0, at) + ("B" if line[at].to_lower() == "a" else "A") \
+			+ line.substr(at + 1)
+		if int(Invite.parse(changed)["read"]) == Invite.Read.DAMAGED:
+			damaged += 1
+	var inner := "2" + line.substr(Invite.PREFIX.length() + 1,
+		line.length() - Invite.PREFIX.length() - 1 - Invite.CHECK_CHARS - 1)
+	var newer := Invite.PREFIX + inner + "." + inner.sha256_text().substr(0, Invite.CHECK_CHARS)
+	var newer_read := int(Invite.parse("from a later build: " + newer)["read"])
+	var nothing := int(Invite.parse("hello")["read"])
+	var said := [Invite.says_read(Invite.Read.DAMAGED),
+		Invite.says_read(Invite.Read.UNKNOWN_VERSION), Invite.says_read(Invite.Read.NOT_FOUND)]
+	_says(damaged == tries and newer_read == Invite.Read.UNKNOWN_VERSION
+			and nothing == Invite.Read.NOT_FOUND and int(Invite.parse("")["read"])
+				== Invite.Read.NOT_FOUND
+			and said[0] != said[1] and said[1] != said[2] and said[0] != said[2],
+		"invites F3: %d of %d truncated or one-character-changed invites read as damaged,"
+		% [damaged, tries] + " a whole one of version 2 as newer ('%s'), and no invite at"
+		% str(said[1][0]) + " all as none -- three sentences, one for each")
+	# F4: what an owner types after --reach.
+	var reach_ok := true
+	for typed: String in ["203.0.113.7", "203.0.113.7:50000", "[2001:db8::7]:50000",
+			"2001:db8::7", "Pond.Example.NET.", "pond.example.net:45772"]:
+		reach_ok = reach_ok and not Invite.parse_reach(typed).has("error")
+	var reach_read := Invite.parse_reach("[2001:db8::7]:50000")
+	var name_read := Invite.parse_reach("Pond.Example.NET.")
+	var refused := 0
+	for typed: String in ["", "203.0.113.7:0", "203.0.113.7:70000", "[2001:db8::7",
+			"pond..example.net", "-pond.example.net", "fe80::1%eth0", "a b"]:
+		refused += 1 if Invite.parse_reach(typed).has("error") else 0
+	_says(reach_ok and str(reach_read["address"]) == "2001:db8::7"
+			and int(reach_read["port"]) == 50000 and str(name_read["address"]) == "pond.example.net"
+			and int(name_read["port"]) == Invite.PORT and refused == 8,
+		"invites F4: --reach takes an address, a name or [IPv6] with or without a port,"
+		+ " and refuses %d of 8 things that are none of them" % refused)
+	# F5: kept once pasted, where only this user reads it.
+	var kept_path := INVITES_ROOT.path_join("kept.txt")
+	var kept_ok := Invite.keep(pastes["a message around it"], kept_path)
+	var mode := FileAccess.get_unix_permissions(kept_path)
+	var again := Invite.kept(kept_path)
+	var refuses_junk := not Invite.keep("hello", kept_path) \
+		and str(Invite.kept(kept_path).get("line", "")) == line
+	Invite.forget(kept_path)
+	_says(kept_ok and mode == Invite.PRIVATE and str(again.get("line", "")) == line
+			and refuses_junk and Invite.kept(kept_path).is_empty(),
+		"invites F5: a guest keeps the invite it pasted, clean, rw------- (%o); a paste"
+		% mode + " that does not read leaves it as it was; forgotten, it is gone")
+	# F6: the two new frames, held to A.3's table as T1 holds the rest -- each
+	# exactly its size, from its own side alone, and read back as written.
+	var nonce := crypto.generate_random_bytes(Wire.NONCE_SIZE)
+	var mac := crypto.generate_random_bytes(Wire.MAC_SIZE)
+	var asked := Wire.challenge(nonce)
+	var answer := Wire.proof(key_id, nonce, mac)
+	var framed := asked.size() == Wire.CHALLENGE_SIZE and answer.size() == Wire.PROOF_SIZE \
+		and Wire.known(Wire.KIND_CHALLENGE, 0) and Wire.known(Wire.KIND_PROOF, 0) \
+		and Wire.challenge_nonce(asked) == nonce and Wire.proof_parts(answer) == [key_id, nonce, mac]
+	for edge: Array in [[Wire.KIND_CHALLENGE, Wire.CHALLENGE_SIZE, true],
+			[Wire.KIND_PROOF, Wire.PROOF_SIZE, false]]:
+		var kind: int = edge[0]
+		var size: int = edge[1]
+		var from_host: bool = edge[2]
+		framed = framed and Wire.size_ok(kind, 0, size, from_host) \
+			and not Wire.size_ok(kind, 0, size - 1, from_host) \
+			and not Wire.size_ok(kind, 0, size + 1, from_host) \
+			and not Wire.size_ok(kind, 0, size, not from_host)
+	_says(framed and Wire.reason_says(Wire.REFUSE_INVITE) != Wire.reason_says(0x7F),
+		"invites F6: CHALLENGE is %d bytes and PROOF %d, each exactly and from its own"
+		% [Wire.CHALLENGE_SIZE, Wire.PROOF_SIZE] + " side alone -- a byte either side, or"
+		+ " the other side, is refused -- and each reads back as written")
+
+
+## **C1-C8: calls by invite, to a host of their own each, over DTLS on
+## loopback.** The good invite in; a wrong secret and a key id nobody has out,
+## the same way, and barred; a revoked invite out, and not dialled twice; a
+## certificate that is not the pinned one, and the right one under another
+## name, failing fast; a port nothing listens on; and an invite by host name.
+func _invites_calls() -> void:
+	var minted: Array = _invites_job(["--reach=127.0.0.1", "--invite=alice", "--invite=bob"],
+		INVITES_ROOT)
+	var identity := InviteBook.load_identity(INVITES_ROOT)
+	_inv_key = identity[0]
+	_inv_cert = identity[1]
+	_invites_hide_book(INVITES_ROOT)
+	var alice := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("alice", INVITES_ROOT)))
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	_says(int(minted[0]) == 0 and int(alice["read"]) == Invite.Read.OK
+			and int(bob["read"]) == Invite.Read.OK and alice["key_id"] != bob["key_id"],
+		"invites C0: two invites minted from the command line's own code, each with its"
+		+ " own key id and secret, both calling 127.0.0.1:%d" % Invite.PORT)
+	# J1: a job root would run into another user's files is refused, with the
+	# command to run instead; root in its own, and anybody else, goes on. The
+	# rule is asked with the owners given, since this probe runs as root in one
+	# place and not in another -- and then of this machine, as it is.
+	var theirs := {"/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic": [998,
+		"biogenic"]}
+	var exe := "/opt/biogenic/biogenic-server.x86_64"
+	var job := PackedStringArray(["--revoke=sam"])
+	var refused := InviteBook.ownership_refusal(0, theirs, job, exe, "/var/lib/biogenic")
+	var roots_own := InviteBook.ownership_refusal(0, {"/root": [0, "root"]}, job, exe, "/root")
+	var not_root := InviteBook.ownership_refusal(998, theirs, job, exe, "/var/lib/biogenic")
+	var asked_at := Time.get_ticks_usec()
+	var found := InviteBook.owners(INVITES_ROOT)
+	var asked_ms := float(Time.get_ticks_usec() - asked_at) / 1000.0
+	var here := InviteBook.ownership_refusal(int(found["uid"]), found["owners"], job, exe,
+		OS.get_environment("HOME"))
+	_says(refused.begins_with("refused: this runs as root")
+			and refused.contains("runuser -u biogenic -- env HOME=/var/lib/biogenic"
+				+ " /opt/biogenic/biogenic-server.x86_64 --headless -- --revoke=sam")
+			and roots_own.is_empty() and not_root.is_empty() and here.is_empty(),
+		"invites J1: a job run as root into files another user owns is refused, naming the"
+		+ " command to run as that user; root in its own files, and any other user, goes on"
+		+ " -- as here, uid %d, where asking took %.1f ms" % [int(found["uid"]), asked_ms])
+	# C1: in.
+	var host: Node = await _invites_host("InvCallsHost")
+	var proved: Array = []
+	host.invite_proved.connect(func(label: String, _key: String) -> void: proved.append(label))
+	var guest: Node = await _session("InvCallsAlice")
+	var took := await _invites_call(guest, alice)
+	var gid: int = guest.my_id()
+	_says(int(guest.link) == NetSession.Link.TOGETHER and int(host.link) == NetSession.Link.TOGETHER
+			and int(host.via_of(gid)) == NetSession.VIA_NET and str(host.label_of(gid)) == "alice"
+			and proved == ["alice"] and int(host.gate_counts["proofs"]) == 1,
+		"invites C1: a good invite reaches TOGETHER over DTLS in %.2f s -- ENet's first" % took
+		+ " resend, as C.1 measured -- and the host holds it as alice's, on the internet"
+		+ " listener")
+	guest.close()
+	await _limits_until(func() -> bool: return int(host.peer_count()) == 0)
+	# C2 and C3: a wrong secret and an unknown key id, answered alike.
+	var wrong := alice.duplicate()
+	wrong["secret"] = Crypto.new().generate_random_bytes(Invite.SECRET_SIZE)
+	var unknown := alice.duplicate()
+	unknown["key_id"] = Crypto.new().generate_random_bytes(Invite.KEY_ID_SIZE)
+	var answers: Array = []
+	var bars: Array = []
+	for bad: Dictionary in [wrong, unknown]:
+		var caller: Node = await _session("InvCallsBad%d" % answers.size())
+		var spent := await _invites_call(caller, bad)
+		answers.append([int(caller.link), str(caller.trouble_key), str(caller.trouble),
+			str(caller.because)])
+		var book: Dictionary = host.get("_net_book")
+		bars.append(float(book.get("127.0.0.1", {}).get("barred_until", 0.0)) - _now())
+		print("[net-probe] NOTE invites: a %s refused after %.2f s"
+			% ["wrong secret" if bars.size() == 1 else "key id nobody has", spent])
+		caller.close()
+		# Its bar served, by hand, for the next call from the same address.
+		book["127.0.0.1"]["barred_until"] = 0.0
+	var lan_book: Dictionary = host.get("_book")
+	_says(answers[0] == answers[1] and int(answers[0][0]) == NetSession.Link.REFUSED
+			and str(answers[0][1]) == "invite_refused"
+			and int(host.gate_counts["proofs_refused"]) == 2
+			and float(bars[0]) > 0.0 and float(bars[1]) > 0.0
+			and not lan_book.has("127.0.0.1") and int(host.peer_count()) == 0,
+		"invites C2-C3: a wrong secret and a key id nobody has get the same answer --"
+		+ " '%s' -- and each bars the address at the internet door (%.0f s, then %.0f s),"
+		% [answers[0][2], bars[0], bars[1]] + " and not at the LAN's")
+	# C4: revoked before the call -- bob's stays, so the listener stays open.
+	_invites_job(["--revoke=alice"], INVITES_ROOT)
+	host.set_invites(InviteBook.table(INVITES_ROOT))
+	var revoked: Node = await _session("InvCallsRevoked")
+	await _invites_call(revoked, alice)
+	var first_key := str(revoked.trouble_key)
+	var calls_before := int(host.gate_counts["proofs_refused"])
+	var dialled_at := _now()
+	revoked.call_invite(alice)
+	var instant := _now() - dialled_at
+	await _wait(0.3)
+	_says(first_key == "invite_refused" and str(revoked.trouble_key) == "invite_refused"
+			and int(revoked.link) == NetSession.Link.REFUSED and instant < 0.05
+			and int(host.gate_counts["proofs_refused"]) == calls_before
+			and bool(host.internet_listening()),
+		"invites C4: an invite revoked before the call is refused the same way, and"
+		+ " calling it again is refused in %.0f ms without dialling -- the server bars"
+		% (instant * 1000.0) + " a second refused proof for ten minutes")
+	revoked.close()
+	(host.get("_net_book") as Dictionary).clear()
+	# C5: a certificate that is not the one pinned.
+	var crypto := Crypto.new()
+	var other_key := crypto.generate_rsa(InviteBook.KEY_BITS)
+	var other := bob.duplicate()
+	other["certificate"] = crypto.generate_self_signed_certificate(other_key,
+		InviteBook.SUBJECT, InviteBook.VALID_FROM, InviteBook.VALID_TO)
+	var stranger: Node = await _session("InvCallsOtherCert")
+	var other_took := await _invites_call(stranger, other)
+	var other_said := [int(stranger.link), str(stranger.trouble_key)]
+	stranger.close()
+	var still_up: bool = host.internet_listening() and int(host.peer_count()) == 0
+	await _limits_close([host])
+	# C6: the right certificate, under another name.
+	var renamed := crypto.generate_self_signed_certificate(_inv_key, "CN=someone-else",
+		InviteBook.VALID_FROM, InviteBook.VALID_TO)
+	var named_host: Node = await _session("InvCallsNamedHost")
+	named_host.host(NetSession.GUESTS_MAX)
+	named_host.listen_internet(_inv_key, renamed)
+	named_host.set_invites(InviteBook.table(INVITES_ROOT))
+	var named := bob.duplicate()
+	named["certificate"] = renamed
+	var misnamed: Node = await _session("InvCallsWrongName")
+	var named_took := await _invites_call(misnamed, named)
+	var named_said := [int(misnamed.link), str(misnamed.trouble_key)]
+	misnamed.close()
+	var named_up: bool = named_host.internet_listening()
+	_says(other_said == [NetSession.Link.FAILED, "not_this_pond"]
+			and named_said == [NetSession.Link.FAILED, "not_this_pond"]
+			and other_took < 1.0 and named_took < 1.0 and still_up and named_up,
+		"invites C5-C6: another server's certificate fails in %.0f ms, and the right one"
+		% (other_took * 1000.0) + " under another name in %.0f ms, both '%s', and"
+		% [named_took * 1000.0, Invite.says(&"not_this_pond")[0]] + " each server stays up")
+	# C7: a port nothing listens on refuses the call at once, and says so.
+	named_host.close_internet(true)
+	var closed: Node = await _session("InvCallsClosed")
+	var closed_took := await _invites_call(closed, bob)
+	_says(int(closed.link) == NetSession.Link.FAILED and str(closed.trouble_key) == "not_running"
+			and closed_took < 1.0,
+		"invites C7: a call to a port nothing listens on fails in %.0f ms as '%s', not as"
+		% [closed_took * 1000.0, closed.trouble] + " another server -- the second look,"
+		+ " with no pin, is refused too")
+	closed.close()
+	await _limits_close([named_host])
+	# C8: an invite by host name, resolved off the frame; and one that is not.
+	host = await _invites_host("InvCallsNameHost")
+	var by_name := bob.duplicate()
+	by_name["address"] = "localhost"
+	var named_guest: Node = await _session("InvCallsByName")
+	var name_took := await _invites_call(named_guest, by_name)
+	var nowhere := bob.duplicate()
+	nowhere["address"] = "nothing-here.invalid"
+	var lost: Node = await _session("InvCallsNowhere")
+	await _invites_call(lost, nowhere)
+	var asked_named := str(named_guest.looked_up)
+	var asked_lost := str(lost.looked_up)
+	_says(int(named_guest.link) == NetSession.Link.TOGETHER
+			and int(lost.link) == NetSession.Link.FAILED
+			and str(lost.trouble_key) == "no_such_place"
+			and asked_named == str([IP.TYPE_IPV4])
+			and asked_lost == str([IP.TYPE_IPV4, IP.TYPE_IPV6]),
+		"invites C8: an invite that names its host by name is resolved on the engine's"
+		+ " resolver thread, over IPv4 alone when it has an IPv4 address, and reaches"
+		+ " TOGETHER in %.2f s; one under .invalid, asked for IPv4 and then IPv6," % name_took
+		+ " ends as '%s'" % lost.trouble)
+	await _limits_close([host, named_guest, lost])
+
+
+## **S1-S10: callers that are not guests, at the internet listener.** A plain
+## ENet caller at the DTLS port, and a DTLS caller at the LAN's, both end as no
+## answer. Then DTLS [Rogue]s: two that never prove -- one says HELLO and
+## nothing more, one says nothing -- which are hung up on and barred, count for
+## nothing in what the updater waits for, and cannot hold the waiting room by
+## calling back; one that sends a STATE before its PROOF, a PROOF before its
+## CHALLENGE, a second HELLO, a second PROOF after a good one, and an old
+## protocol -- which is refused before it is ever challenged.
+func _invites_strangers() -> void:
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	var host: Node = await _invites_host("InvStrangersHost")
+	# S1 and S2 together: each waits out its own timeout.
+	var plain: Node = await _session("InvPlainAtInternet")
+	_invites_join_port(plain, Invite.PORT)
+	var crossed: Node = await _session("InvDtlsAtLan")
+	var at_lan := bob.duplicate()
+	at_lan["port"] = Lan.PORT
+	crossed.call_invite(at_lan)
+	var waited := await _limits_until(func() -> bool:
+		return int(plain.link) != NetSession.Link.REACHING \
+			and int(crossed.link) != NetSession.Link.REACHING,
+		NetSession.INVITE_REACH_TIMEOUT + 3.0)
+	_says(waited >= 0.0 and int(plain.link) == NetSession.Link.FAILED
+			and str(plain.trouble) == "no answer" and int(crossed.link) == NetSession.Link.FAILED
+			and str(crossed.trouble_key) == "no_answer" and int(host.peer_count()) == 0
+			and int(host.link) == NetSession.Link.LISTENING and bool(host.internet_listening())
+			and int(host.gate_counts["refused"]) == 0,
+		"invites S1-S2: a plain ENet caller at the internet port and a DTLS caller at the"
+		+ " LAN's both end as no answer, and the host is up, with nobody let near either door")
+	await _limits_close([plain, crossed])
+	# S3: two strangers that never prove -- one says HELLO and nothing after
+	# its CHALLENGE, one says nothing at all -- from 127.0.0.2 and .3, so the
+	# friend of S10 can call from .1.
+	var quiet := _invites_stranger("InvStrangerQuiet", "127.0.0.2", 47290)
+	var mute := _invites_stranger("InvStrangerMute", "127.0.0.3", 47291)
+	var connected_at := [-1.0]
+	await _limits_until(func() -> bool:
+		if quiet.connected() and float(connected_at[0]) < 0.0:
+			connected_at[0] = _now()
+		return quiet.connected() and mute.connected())
+	quiet.send(Wire.hello(Wire.PROTOCOL))
+	await _limits_until(func() -> bool: return not quiet.challenge().is_empty())
+	var challenged := quiet.challenge().size() == Wire.NONCE_SIZE
+	# S9, meanwhile: what the server's updater would wait for, beside what
+	# peer_count() says -- with a LAN caller saying nothing either, and then
+	# without it.
+	var hush := Rogue.new()
+	hush.name = "InvStrangerLanHush"
+	add_child(hush)
+	hush.call_host()
+	await _limits_until(func() -> bool: return hush.connected() and int(host.peer_count()) == 3)
+	var with_lan := [int(host.company()), int(host.peer_count())]
+	hush.hang_up()
+	await _limits_until(func() -> bool: return int(host.peer_count()) == 2)
+	var without_lan := [int(host.company()), int(host.peer_count())]
+	await _limits_until(func() -> bool: return quiet.down() and mute.down(),
+		NetSession.HELLO_GRACE + NetSession.REFUSE_LINGER + 2.0)
+	var told_after := quiet.refused_at - float(connected_at[0])
+	var net_book: Dictionary = host.get("_net_book")
+	var lan_book: Dictionary = host.get("_book")
+	var held: Array = []
+	for from: String in ["127.0.0.2", "127.0.0.3"]:
+		held.append(float(net_book.get(from, {}).get("barred_until", 0.0)) - _now())
+	_says(challenged and quiet.refused_for() == Wire.REFUSE_SILENT
+			and mute.refused_for() == Wire.REFUSE_SILENT and quiet.down() and mute.down()
+			and told_after >= NetSession.HELLO_GRACE - 0.5
+			and told_after < NetSession.HELLO_GRACE + 1.0
+			and float(held[0]) > NetSession.BAR_FIRST - 10.0
+			and float(held[1]) > NetSession.BAR_FIRST - 10.0
+			and not lan_book.has("127.0.0.2") and not lan_book.has("127.0.0.3")
+			and int(host.gate_counts["net_silent"]) == 2,
+		"invites S3: a stranger that says HELLO and nothing after its CHALLENGE, and one"
+		+ " that says nothing at all, are each told REFUSE_SILENT %.2f s after they"
+		% told_after + " connected, cut, and barred at the internet door for %.0f s -- not"
+		% float(held[0]) + " at the LAN's -- as a wrong proof is")
+	# S10: straight back, each -- refused at the door as barred, so neither
+	# takes a place in the waiting room -- and a friend with an invite is in.
+	var refused_barred := int(host.gate_counts["net_refused_barred"])
+	var again := [_invites_stranger("InvStrangerBack0", "127.0.0.2", 47292),
+		_invites_stranger("InvStrangerBack1", "127.0.0.3", 47293)]
+	await _limits_until(func() -> bool:
+		return (again[0] as Rogue).down() and (again[1] as Rogue).down(), 4.0)
+	var friend: Node = await _session("InvStrangerFriend")
+	await _invites_call(friend, bob)
+	var friend_counts := [int(host.company()), int(host.peer_count())]
+	_says(int(host.gate_counts["net_refused_barred"]) == refused_barred + 2
+			and int(friend.link) == NetSession.Link.TOGETHER,
+		"invites S10: both call straight back and are refused at the door as barred, taking"
+		+ " no place in the waiting room, and a friend calling by invite is in")
+	_says(with_lan == [1, 3] and without_lan == [0, 2] and friend_counts == [1, 1],
+		"invites S9: what the updater waits for is the pond's company, not every peer: two"
+		+ " strangers on the internet listener that have proved nothing and a LAN caller"
+		+ " saying hello are %d of %d peers, the strangers alone %d of %d, and a friend"
+		% [with_lan[0], with_lan[1], without_lan[0], without_lan[1]]
+		+ " who proved an invite %d of %d" % [friend_counts[0], friend_counts[1]])
+	await _limits_close([friend] + again)
+	# S4, S5 and S7: the wrong thing before the PROOF, each cut at once.
+	var proofs_before := int(host.gate_counts["proofs"])
+	var early: Array = []
+	for what: String in ["a STATE before its PROOF", "a PROOF before any CHALLENGE",
+			"a second HELLO"]:
+		var rogue := _invites_rogue("InvStranger%d" % early.size())
+		await _limits_until(func() -> bool: return rogue.connected())
+		var cuts := int(host.gate_counts["cuts"])
+		if what != "a PROOF before any CHALLENGE":
+			rogue.send(Wire.hello(Wire.PROTOCOL))
+			await _limits_until(func() -> bool: return not rogue.challenge().is_empty())
+		match what:
+			"a STATE before its PROOF":
+				rogue.send(Wire.state(1, true, Vector2.ZERO, 0.0, 26.0))
+			"a PROOF before any CHALLENGE":
+				rogue.send(Wire.proof(bob["key_id"], PackedByteArray(), PackedByteArray()))
+			"a second HELLO":
+				rogue.send(Wire.hello(Wire.PROTOCOL))
+		var gone := await _limits_until(func() -> bool: return rogue.down(), 2.0)
+		if gone >= 0.0 and int(host.gate_counts["cuts"]) == cuts + 1 and not rogue.welcomed():
+			early.append(what)
+	var barred := float(net_book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now()
+	_says(early.size() == 3 and int(host.gate_counts["strikes"]) == 0 and not barred
+			and int(host.gate_counts["proofs"]) == proofs_before,
+		"invites S4-S5, S7: %s -- each cut the moment it spoke, with no strike and no bar"
+		% ", ".join(early))
+	# S8: an old protocol is refused on the compatibility check, before any
+	# CHALLENGE; a real guest reads the far sentence for it.
+	var old := _invites_rogue("InvStrangerOld")
+	await _limits_until(func() -> bool: return old.connected())
+	old.send(Wire.hello(Wire.PROTOCOL - 1))
+	await _limits_until(func() -> bool: return old.refused_for() >= 0)
+	var old_guest: Node = await _session("InvStrangerOldGuest")
+	old_guest.protocol_override = Wire.PROTOCOL - 1
+	await _invites_call(old_guest, bob)
+	_says(old.refused_for() == Wire.REFUSE_PROTOCOL and old.challenge().is_empty()
+			and int(old_guest.link) == NetSession.Link.REFUSED
+			and str(old_guest.trouble_key) == "game_older",
+		"invites S8: a caller on protocol %d is refused on the compatibility"
+		% (Wire.PROTOCOL - 1) + " check"
+		+ " before it is ever challenged, and a guest reads '%s: %s'"
+		% [old_guest.trouble, old_guest.because])
+	# S6: a good PROOF, then another -- cut, told and barred.
+	var twice := _invites_rogue("InvStrangerTwice")
+	await _limits_until(func() -> bool: return twice.connected())
+	twice.send(Wire.hello(Wire.PROTOCOL))
+	await _limits_until(func() -> bool: return not twice.challenge().is_empty())
+	var mine := Crypto.new().generate_random_bytes(Wire.NONCE_SIZE)
+	var proof := Wire.proof(bob["key_id"], mine, Invite.proof_mac(bob["secret"], Wire.PROTOCOL,
+		twice.challenge(), mine, bob["key_id"]))
+	twice.send(proof)
+	await _limits_until(func() -> bool: return twice.welcomed())
+	var welcomed := twice.welcomed()
+	twice.send(proof)
+	await _limits_until(func() -> bool: return twice.down(), 3.0)
+	barred = float(net_book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now()
+	_says(welcomed and twice.refused_for() == Wire.REFUSE_BROKEN and twice.down() and barred
+			and int(host.gate_counts["proofs"]) == proofs_before + 1,
+		"invites S6: a caller that proves bob's invite and is welcomed, then sends a second"
+		+ " PROOF, is cut with REFUSE_BROKEN and barred")
+	await _limits_close([host, quiet, mute, old, old_guest, twice])
+
+
+## **D1-D3: the doors.** The LAN-only guard is the LAN listener's alone; a
+## storm of internet callers fills the internet side's waiting room and its
+## bucket for everybody, and a LAN caller is answered all the same; and one id
+## on both listeners is refused, never merged.
+func _invites_doors() -> void:
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	# D1: loopback made a stranger to the LAN door (the seam).
+	var host: Node = await _invites_host("InvGuardHost")
+	host.loopback_is_local = false
+	var lan_caller: Node = await _session("InvGuardLan")
+	lan_caller.join("127.0.0.1")
+	await _limits_until(func() -> bool:
+		return int(host.gate_counts["refused_lan"]) >= 1 \
+			and int(lan_caller.link) != NetSession.Link.REACHING)
+	var far: Node = await _session("InvGuardFar")
+	await _invites_call(far, bob)
+	_says(int(host.gate_counts["refused_lan"]) == 1
+			and int(lan_caller.link) != NetSession.Link.TOGETHER
+			and int(far.link) == NetSession.Link.TOGETHER
+			and int(host.via_of(far.my_id())) == NetSession.VIA_NET,
+		"invites D1: with loopback a stranger to the LAN door, a LAN call from 127.0.0.1 is"
+		+ " refused as not on this network, and an internet call from the same address"
+		+ " proves bob's invite and is in: the guard is the LAN listener's alone")
+	await _limits_close([host, lan_caller, far])
+	# D2: a storm on the internet listener, from three addresses, saying nothing.
+	host = await _invites_host("InvStormHost")
+	var storm: Array[Rogue] = []
+	var most := [0]
+	var watch := func() -> void:
+		var waiting := 0
+		for id: int in host.peer_ids():
+			var peer: Dictionary = (host.get("_peers") as Dictionary)[id]
+			if not bool(peer["greeted"]) and int(peer["via"]) == NetSession.VIA_NET:
+				waiting += 1
+		most[0] = maxi(int(most[0]), waiting)
+	for i in 15:
+		var rogue := Rogue.new()
+		rogue.name = "InvStorm%d" % i
+		add_child(rogue)
+		rogue.call_internet(_inv_cert, "127.0.0.%d" % (1 + i % 3), 47300 + i)
+		storm.append(rogue)
+	# A LAN guest in the middle of it.
+	await _limits_until(func() -> bool:
+		watch.call()
+		return int(host.gate_counts["net_refused"]) >= 3, 6.0)
+	var lan_guest: Node = await _session("InvStormLan")
+	lan_guest.join("127.0.0.1")
+	await _limits_until(func() -> bool:
+		watch.call()
+		return int(lan_guest.link) != NetSession.Link.REACHING)
+	await _limits_until(func() -> bool:
+		watch.call()
+		for rogue: Rogue in storm:
+			if not rogue.down() and not (host.get("_peers") as Dictionary).has(rogue.id):
+				return false
+		return true, 12.0)
+	var counts: Dictionary = host.gate_counts
+	_says(int(most[0]) <= NetSession.PENDING_MAX and int(counts["net_refused_pending"]) >= 1
+			and int(counts["refused"]) == int(counts["net_refused"])
+			and int(lan_guest.link) == NetSession.Link.TOGETHER,
+		"invites D2: fifteen silent internet callers from three addresses -- at most %d"
+		% int(most[0]) + " waiting at once, %d turned away at the internet door (%d for"
+		% [int(counts["net_refused"]), int(counts["net_refused_pending"])] + " its waiting"
+		+ " room, %d barred for their silence, %d for calling too often, %d as busy) --"
+		% [int(counts["net_refused_barred"]), int(counts["net_refused_calls"]),
+			int(counts["net_refused_busy"])]
+		+ " and a LAN caller in the middle of it is answered: the LAN door refused nobody")
+	await _limits_close([host, lan_guest] + storm)
+	# The same, at the doors themselves: the internet's bucket for everybody
+	# emptied by twelve first calls, and the LAN's untouched.
+	host = await _invites_host("InvStormDoor")
+	var net_said: Array = []
+	for i in 12:
+		var no: Array = host._admit("203.0.113.%d" % (10 + i), NetSession.VIA_NET)
+		net_said.append("ok" if no.is_empty() else str(no[0]))
+	var lan_said: Array = []
+	for i in 10:
+		var no: Array = host._admit("192.168.1.%d" % (10 + i), NetSession.VIA_LAN)
+		lan_said.append("ok" if no.is_empty() else str(no[0]))
+	_says(net_said.count("busy") >= 1
+			and net_said.count("ok") <= int(NetSession.CALLS_ALL_BURST) + 1
+			and lan_said.count("ok") == 10,
+		"invites D2: and at the doors themselves, twelve first calls from twelve addresses"
+		+ " on the internet are %d answered and %d busy, and ten LAN callers after them are"
+		% [net_said.count("ok"), net_said.count("busy")] + " all answered")
+	await _limits_close([host])
+	# D3: one id, both listeners -- the newcomer refused, the first untouched.
+	host = await _invites_host("InvTwinHost")
+	var lan: Node = await _limits_guest("InvTwinLan")
+	var lan_id: int = lan.my_id()
+	var over_net := await _invites_raw_call(true, lan_id)
+	var net_guest: Node = await _session("InvTwinFar")
+	await _invites_call(net_guest, bob)
+	var net_id: int = net_guest.my_id()
+	var over_lan := await _invites_raw_call(false, net_id)
+	await _wait(0.3)
+	_says(bool(over_net[0]) and bool(over_net[1]) and bool(over_lan[0]) and bool(over_lan[1])
+			and int(host.gate_counts["refused_twin"]) == 2
+			and int(host.via_of(lan_id)) == NetSession.VIA_LAN
+			and int(host.via_of(net_id)) == NetSession.VIA_NET
+			and int(lan.link) == NetSession.Link.TOGETHER
+			and int(net_guest.link) == NetSession.Link.TOGETHER
+			and (host.guests() as Array).size() == 2,
+		"invites D3: a caller on the internet listener with a LAN guest's id, and one on"
+		+ " the LAN with an internet guest's, are each refused on their own listener, and"
+		+ " both guests play on, each on the listener it came in by")
+	await _limits_close([host, lan, net_guest])
+
+
+## **L1-L11: the real server scene** (`game/server/`), with a book of its own
+## looked at every [constant INVITES_POLL]: no invites and no listener at the
+## start; a mint opens it without a restart, with every file rw-------; a LAN
+## guest and an internet guest share its pond and see each other, and a
+## stranger beside them is not what the updater waits for; another invite
+## coming and going leaves a guest be, and revoking its own cuts it within a
+## look and leaves the LAN guest swimming; with none left, the listener closes;
+## a book it cannot read fails closed; a new key tells its guest and comes back
+## with the new certificate; and a job run through the scene prints as the
+## command line's does.
+func _invites_server() -> void:
+	var root := INVITES_SERVER_ROOT
+	var server: Node = load(SERVER_SCENE).instantiate()
+	server.set("check_updates", false)
+	server.set("own_frame_rate", false)
+	server.set("quits", false)
+	server.set("pond_root", root)
+	server.set("invites_poll", INVITES_POLL)
+	get_tree().root.add_child.call_deferred(server)
+	await server.ready
+	var net: Node = server.session()
+	_says(int(net.link) == NetSession.Link.LISTENING and not bool(net.internet_listening())
+			and str(server.get("_internet_said")).begins_with("nothing listens"),
+		"invites L1: the server boots with no invites and nothing listening for the internet,"
+		+ " and its READY says so")
+	# L2: the address alone first -- `pond/` is made private by it, not left
+	# for the first mint -- then a mint, from the command line's own code, and
+	# no restart.
+	var reached: Array = _invites_job(["--reach=127.0.0.1"], root)
+	var pond_mode := FileAccess.get_unix_permissions(str(InviteBook.paths(root)["pond"]))
+	var minted: Array = _invites_job(["--invite=carol"], root)
+	_invites_hide_book(root)
+	var opened := await _limits_until(func() -> bool: return bool(net.internet_listening()),
+		INVITES_POLL * 4.0 + 1.0)
+	_says(int(reached[0]) == 0 and pond_mode == Invite.PRIVATE_DIR and int(minted[0]) == 0
+			and opened >= 0.0 and opened <= INVITES_POLL + 0.5,
+		"invites L2: --reach alone makes pond/ rwx------ (%o), and a mint then opens the"
+		% pond_mode + " internet listener %.2f s later, with no restart" % opened)
+	# L3: rw------- for everything a secret is in.
+	var where := InviteBook.paths(root)
+	var modes := {}
+	for what: String in ["key", "book", "reach"]:
+		modes[what] = FileAccess.get_unix_permissions(str(where[what]))
+	modes["invite line"] = FileAccess.get_unix_permissions(InviteBook.line_path("carol", root))
+	modes["pond/"] = FileAccess.get_unix_permissions(str(where["pond"]))
+	modes["invites/"] = FileAccess.get_unix_permissions(str(where["lines"]))
+	var private := true
+	for what: String in modes:
+		private = private and int(modes[what]) == (Invite.PRIVATE_DIR if what.ends_with("/")
+			else Invite.PRIVATE)
+	var shown: Array[String] = []
+	for what: String in modes:
+		shown.append("%s %o" % [what, int(modes[what])])
+	_says(private,
+		"invites L3: the key, the book, the address and the invite line are rw-------, in"
+		+ " directories that are rwx------: %s" % ", ".join(shown))
+	# L4: a LAN guest and an internet guest, one pond.
+	var carol := Invite.parse(FileAccess.get_file_as_string(InviteBook.line_path("carol", root)))
+	var lan: Node = await _session("InvPondLan")
+	lan.join("127.0.0.1")
+	await _until_link(lan, NetSession.Link.TOGETHER)
+	var far: Node = await _session("InvPondFar")
+	await _invites_call(far, carol)
+	var both := int(lan.link) == NetSession.Link.TOGETHER \
+		and int(far.link) == NetSession.Link.TOGETHER \
+		and (net.guests() as Array).size() == 2 and int(net.peer_count()) == 2 \
+		and int(net.via_of(lan.my_id())) == NetSession.VIA_LAN \
+		and int(net.via_of(far.my_id())) == NetSession.VIA_NET \
+		and str(net.label_of(far.my_id())) == "carol"
+	var lan_run := _pond_run_scene(lan, false)
+	get_tree().root.add_child.call_deferred(lan_run)
+	await lan_run.ready
+	await _pond_until(func() -> bool:
+		return bool((lan_run.get("_pond") as Object).in_pond), 3.0, [])
+	var far_run := _pond_run_scene(far, false)
+	get_tree().root.add_child.call_deferred(far_run)
+	await far_run.ready
+	var lan_food: Node = lan_run.get_node(^"Food")
+	var far_food: Node = far_run.get_node(^"Food")
+	var met := await _server_until(func() -> bool:
+		return bool((far_run.get("_pond") as Object).in_pond) and lan_food.person() != null \
+			and far_food.person() != null, [])
+	_says(both and met >= 0.0,
+		"invites L4: a LAN guest and an internet guest are the server's two -- one on each"
+		+ " listener, the internet one carol's -- and each sees the other in the water,"
+		+ " %.2f s after both were in; its updater would wait for %d" % [met,
+			int(net.company())])
+	# L5: what the server tells its updater, with a stranger on the internet
+	# listener beside the two guests: the guests, and not the stranger.
+	var ticks := TickTaker.new()
+	server.set("_updater", ticks)
+	var stranger := Rogue.new()
+	stranger.name = "InvPondStranger"
+	add_child(stranger)
+	stranger.call_internet(InviteBook.load_identity(root)[1], "127.0.0.2", 47295)
+	await _limits_until(func() -> bool: return int(net.peer_count()) == 3, 3.0)
+	await _wait(0.1)
+	var peers_then := int(net.peer_count())
+	var told: int = ticks.told.back() if not ticks.told.is_empty() else -1
+	server.set("_updater", null)
+	ticks.free()
+	stranger.hang_up()
+	await _limits_until(func() -> bool: return int(net.peer_count()) == 2, 3.0)
+	_says(peers_then == 3 and told == 2,
+		"invites L5: with a stranger on the internet listener that has proved nothing beside"
+		+ " the two guests, the server tells its updater %d are here -- not the %d that" % [told,
+			peers_then] + " peer_count() counts -- so no stranger holds an update off")
+	# L6: the book changing under a guest whose invite stays in it -- a friend
+	# minted, then revoked -- leaves her be. Only her own invite going cuts.
+	_invites_job(["--invite=dave"], root)
+	_invites_hide_book(root)
+	var labels_of := func() -> Dictionary: return server.get("_labels")
+	var added := await _limits_until(func() -> bool: return labels_of.call().has("dave"),
+		INVITES_POLL * 4.0 + 1.0)
+	var stayed := added >= 0.0 and int(far.link) == NetSession.Link.TOGETHER
+	_invites_job(["--revoke=dave"], root)
+	var gone := await _limits_until(func() -> bool: return not labels_of.call().has("dave"),
+		INVITES_POLL * 4.0 + 1.0)
+	_says(stayed and gone >= 0.0 and int(far.link) == NetSession.Link.TOGETHER
+			and str(net.label_of(far.my_id())) == "carol" and bool(net.internet_listening())
+			and int(net.gate_counts["invite_cuts"]) == 0 and (net.guests() as Array).size() == 2,
+		"invites L6: an invite minted for dave, then revoked, while carol swims -- each taken"
+		+ " within a look (%.2f s, %.2f s) -- leaves her in the water and the listener open"
+		% [added, gone])
+	# L7: carol's invite revoked while she swims.
+	var listing: Array = _invites_job(["--invites"], root)
+	var joined := false
+	for said: String in listing[1]:
+		joined = joined or (said.contains("carol") and not said.contains("never"))
+	_invites_job(["--revoke=carol"], root)
+	var cut := await _limits_until(func() -> bool:
+		return int(far.link) == NetSession.Link.REFUSED, INVITES_POLL * 4.0 + 1.0)
+	await _pond_until(func() -> bool: return bool((far_run.get("_pond") as Object).cut_off()),
+		1.0, [])
+	_says(joined and cut >= 0.0 and cut <= INVITES_POLL + 0.5
+			and str(far.trouble_key) == "invite_refused"
+			and bool((far_run.get("_pond") as Object).cut_off())
+			and int(lan.link) == NetSession.Link.TOGETHER and (net.guests() as Array).size() == 1,
+		"invites L7: --invites shows when carol last came in; revoked while she swims, she"
+		+ " is cut %.2f s later, within a look at the book, reading '%s', and her run" % [cut,
+			far.trouble] + " says cut off -- the LAN guest swims on")
+	# L8: none left, so nothing listens for the internet -- at once for new
+	# calls, and the socket itself once the refusal has had its linger.
+	var refusing := not bool(net.internet_listening())
+	var closed := await _limits_until(func() -> bool: return net.get("_net_peer") == null,
+		NetSession.REFUSE_LINGER + 1.0)
+	_says(refusing and closed >= 0.0 and int(net.link) == NetSession.Link.TOGETHER
+			and str(server.get("_internet_said")).begins_with("nothing listens"),
+		"invites L8: with no invite left the internet listener takes no call from the cut"
+		+ " on, and its socket is put down %.2f s later, when the refusal has had its" % closed
+		+ " linger -- and the server says nothing listens for the internet")
+	far_run.queue_free()
+	far.close()
+	# L9: a book the server cannot read fails closed. Root, which this probe
+	# may run as, reads a file whatever its mode, so the book is put out of
+	# reach as a directory where it was: `_bytes_of` finds the same thing
+	# either way -- something there that will not read -- and it is the same
+	# branch a book another user wrote goes down.
+	_invites_job(["--invite=erin"], root)
+	_invites_hide_book(root)
+	var erin := Invite.parse(FileAccess.get_file_as_string(InviteBook.line_path("erin", root)))
+	await _limits_until(func() -> bool: return bool(net.internet_listening()),
+		INVITES_POLL * 4.0 + 1.0)
+	var erin_at: Node = await _session("InvPondErin")
+	await _invites_call(erin_at, erin)
+	var erin_in := int(erin_at.link) == NetSession.Link.TOGETHER
+	var book_path := str(InviteBook.paths(root)["book"])
+	var book_kept := FileAccess.get_file_as_bytes(book_path)
+	DirAccess.remove_absolute(book_path)
+	DirAccess.make_dir_absolute(book_path)
+	var shut := await _limits_until(func() -> bool:
+		return int(erin_at.link) == NetSession.Link.REFUSED \
+			and not bool(net.internet_listening()), INVITES_POLL * 4.0 + 1.0)
+	var said_why := str(server.get("_internet_said"))
+	var still_shut := not bool(net.internet_listening())
+	await _wait(INVITES_POLL * 2.0 + 0.2)
+	still_shut = still_shut and not bool(net.internet_listening())
+	DirAccess.remove_absolute(book_path)
+	Invite.write_private(book_path, book_kept)
+	var reopened := await _limits_until(func() -> bool: return bool(net.internet_listening()),
+		INVITES_POLL * 4.0 + 2.0)
+	_says(erin_in and shut >= 0.0 and str(erin_at.trouble_key) == "invite_refused"
+			and still_shut and said_why.contains("cannot be read")
+			and reopened >= 0.0 and int(lan.link) == NetSession.Link.TOGETHER
+			and str(server.get("_internet_said")).begins_with("listening"),
+		"invites L9: a book the server cannot read fails closed -- erin, swimming on an"
+		+ " invite in it, is cut %.2f s later reading '%s', nothing listens while it" % [shut,
+			erin_at.trouble] + " stays unread and the log says why -- and %.2f s after it"
+		% reopened + " reads again, the listener is back")
+	# L10: a new key while a friend swims, and an invite minted with it in the
+	# same look: she is told, not hung up on, and the listener comes back with
+	# the new certificate.
+	NetSession.forget_refusals()
+	await _invites_call(erin_at, erin)
+	var back_in := int(erin_at.link) == NetSession.Link.TOGETHER
+	var rekeyed: Array = _invites_job(["--new-key", "--invite=erin"], root)
+	_invites_hide_book(root)
+	var fresh := Invite.parse(FileAccess.get_file_as_string(InviteBook.line_path("erin", root)))
+	var told_at := await _limits_until(func() -> bool:
+		return int(erin_at.link) != NetSession.Link.TOGETHER, INVITES_POLL * 4.0 + 2.0)
+	var back_up := await _limits_until(func() -> bool: return bool(net.internet_listening()),
+		INVITES_POLL * 4.0 + 3.0)
+	NetSession.forget_refusals()
+	var with_old: Node = await _session("InvPondErinOld")
+	await _invites_call(with_old, erin)
+	var with_new: Node = await _session("InvPondErinNew")
+	await _invites_call(with_new, fresh)
+	_says(back_in and int(rekeyed[0]) == 0 and told_at >= 0.0
+			and int(erin_at.link) == NetSession.Link.REFUSED
+			and str(erin_at.trouble_key) == "invite_refused" and back_up >= 0.0
+			and str(with_old.trouble_key) == "not_this_pond"
+			and int(with_new.link) == NetSession.Link.TOGETHER,
+		"invites L10: --new-key and a new invite for erin in one look while she swims: she"
+		+ " is told, %.2f s later, reading '%s' -- not hung up on -- and the" % [told_at,
+			erin_at.trouble] + " listener is back %.2f s after that with the new key: her"
+		% back_up + " old line meets '%s', her new one is in" % with_old.trouble)
+	await _limits_close([erin_at, with_old, with_new])
+	# L11: a job through the server scene itself, as the command line runs
+	# one: its lines printed as `[server]` lines, its exit code kept, and no
+	# session opened.
+	var printed_from := _inv_catcher.lines.size()
+	var job: Node = load(SERVER_SCENE).instantiate()
+	job.set("check_updates", false)
+	job.set("quits", false)
+	job.set("pond_root", root)
+	job.set("job_args", PackedStringArray(["--invite=frank", "--invites"]))
+	get_tree().root.add_child.call_deferred(job)
+	await job.ready
+	var job_code := int(job.get("_job_code"))
+	var refused_job: Node = load(SERVER_SCENE).instantiate()
+	refused_job.set("check_updates", false)
+	refused_job.set("quits", false)
+	refused_job.set("pond_root", root)
+	refused_job.set("job_args", PackedStringArray(["--revoke=nobody"]))
+	get_tree().root.add_child.call_deferred(refused_job)
+	await refused_job.ready
+	_invites_hide_book(root)
+	var printed := _inv_catcher.lines.slice(printed_from)
+	var wrote_frank := false
+	var listed_frank := false
+	var said_nobody := false
+	for line: String in printed:
+		wrote_frank = wrote_frank or line.begins_with("[server] invite for frank written to")
+		listed_frank = listed_frank or line.begins_with("[server]   frank -- made")
+		said_nobody = said_nobody or line.begins_with("[server] --revoke: there is no invite")
+	_says(job_code == 0 and wrote_frank and listed_frank and job.session() == null
+			and int(refused_job.get("_job_code")) == 1 and said_nobody,
+		"invites L11: jobs run through the server scene itself print their lines as the"
+		+ " command line does -- --invite=frank --invites exits 0, --revoke=nobody 1 -- and"
+		+ " open no session")
+	job.queue_free()
+	refused_job.queue_free()
+	lan_run.queue_free()
+	lan.close()
+	server.shut_down()
+	server.queue_free()
+	await _wait(0.4)
+
+
+## **The last check: nothing a secret is made of was printed** -- not by the
+## probe, the sessions, the server, its command line, or the engine -- while
+## the section ran, and nothing is in the lines any job gave back, which a job
+## run from the command line prints. Every kind of job ran.
+func _invites_no_secret() -> void:
+	var lines := _inv_catcher.lines
+	var hits: Array[String] = []
+	for line: String in lines + _inv_job_lines:
+		for needle: String in _inv_needles:
+			if not needle.is_empty() and line.contains(needle):
+				hits.append(line.substr(0, 60))
+	var kinds: Array[String] = []
+	for kind: String in ["--reach", "--invite", "--revoke", "--invites", "--new-key"]:
+		if _inv_jobs_run.has(kind):
+			kinds.append(kind)
+	_says(hits.is_empty() and lines.size() > 100 and _inv_needles.size() >= 8
+			and kinds.size() == 5 and _inv_job_lines.size() >= 10,
+		"invites: %d lines were printed while this section ran, and %d came back from its"
+		% [lines.size(), _inv_job_lines.size()] + " jobs (%s), and none holds any of the"
+		% " ".join(kinds) + " %d secrets, invite lines or key texts it made%s"
+		% [_inv_needles.size(), "" if hits.is_empty() else " -- NOT: " + ", ".join(hits)])
+
+
+## **An invite job, as the command line runs it**, its lines kept for the
+## check that none of them holds a secret ([method _invites_no_secret]).
+func _invites_job(args: Array, root: String) -> Array:
+	var done: Array = InviteBook.run(PackedStringArray(args), root)
+	for arg: String in args:
+		_inv_jobs_run[arg.get_slice("=", 0)] = true
+	_inv_job_lines.append_array(PackedStringArray(done[1]))
+	return done
+
+
+## A host of its own, with both listeners open and the probe's invites.
+func _invites_host(named: String) -> Node:
+	var host: Node = await _session(named)
+	host.host(NetSession.GUESTS_MAX)
+	host.listen_internet(_inv_key, _inv_cert)
+	host.set_invites(InviteBook.table(INVITES_ROOT))
+	return host
+
+
+## [param guest] calls by [param invite] and it is waited out: the seconds it
+## took to be anything but REACHING.
+func _invites_call(guest: Node, invite: Dictionary) -> float:
+	var from := _now()
+	guest.call_invite(invite)
+	await _limits_until(func() -> bool: return int(guest.link) != NetSession.Link.REACHING,
+		NetSession.INVITE_REACH_TIMEOUT + NetSession.RESOLVE_TIMEOUT + 2.0)
+	return _now() - from
+
+
+## A DTLS [Rogue] at the internet listener from [param source], another
+## loopback address, bound on [param port] -- so its bar is its own.
+func _invites_stranger(named: String, source: String, port: int) -> Rogue:
+	var rogue := Rogue.new()
+	rogue.name = named
+	add_child(rogue)
+	rogue.call_internet(_inv_cert, source, port)
+	return rogue
+
+
+## A DTLS [Rogue] at the internet listener, pinned to the probe's server.
+func _invites_rogue(named: String) -> Rogue:
+	var rogue := Rogue.new()
+	rogue.name = named
+	add_child(rogue)
+	rogue.call_internet(_inv_cert)
+	return rogue
+
+
+## `join()`, to a port that is not the LAN's: what a build with no DTLS would
+## do if it were ever pointed at the internet listener.
+func _invites_join_port(session: Node, port: int) -> void:
+	session._reset_socket()
+	session.hosting = false
+	session.address = "127.0.0.1"
+	var peer := ENetMultiplayerPeer.new()
+	peer.create_client("127.0.0.1", port)
+	session._peer = peer
+	(session.get("_api") as SceneMultiplayer).multiplayer_peer = peer
+	session.set_process(true)
+	session._reach_at = session._now()
+	session._set_link(NetSession.Link.REACHING)
+
+
+## **A bare ENet connection that offers [param id]**: over DTLS to the internet
+## listener, or plain to the LAN's. `[it connected, it was cut]`.
+func _invites_raw_call(internet: bool, id: int) -> Array:
+	var raw := ENetConnection.new()
+	var peer: ENetPacketPeer = null
+	if raw.create_host(1) == OK:
+		if internet:
+			raw.dtls_client_setup(Invite.NAME, TLSOptions.client(_inv_cert, Invite.NAME))
+		peer = raw.connect_to_host("127.0.0.1", Invite.PORT if internet else Lan.PORT, 0, id)
+	var seen := [false, false]
+	await _limits_until(func() -> bool:
+		if peer == null:
+			return true
+		var event: Array = raw.service()
+		while int(event[0]) > ENetConnection.EVENT_NONE:
+			if int(event[0]) == ENetConnection.EVENT_CONNECT:
+				seen[0] = true
+			elif int(event[0]) == ENetConnection.EVENT_DISCONNECT:
+				seen[1] = true
+			event = raw.service()
+		return bool(seen[1]), 4.0)
+	raw.destroy()
+	return seen
+
+
+## What the log must never hold, from one secret: its base64 and its hex.
+func _invites_hide(secret: PackedByteArray) -> void:
+	_invites_needle(Marshalls.raw_to_base64(secret))
+	_invites_needle(secret.hex_encode())
+
+
+## Every secret in [param root]'s book, every invite line written from it, and
+## the key's own text.
+func _invites_hide_book(root: String) -> void:
+	var book := InviteBook.entries(root)
+	for name: String in book:
+		_invites_hide((book[name] as Dictionary)["secret"])
+		var line := FileAccess.get_file_as_string(InviteBook.line_path(name, root)).strip_edges()
+		if line.length() > 90:
+			_invites_needle(line.substr(Invite.PREFIX.length() + 30, 60))
+	var key := FileAccess.get_file_as_string(str(InviteBook.paths(root)["key"]))
+	var body := key.get_slice("\n", 2).strip_edges()
+	if body.length() > 40:
+		_invites_needle(body)
+
+
+## One thing the log must never hold, counted once however often it is seen.
+func _invites_needle(text: String) -> void:
+	if not _inv_needles.has(text):
+		_inv_needles.append(text)
+
+
+## Everything a book under [param root] left, gone.
+func _invites_wipe(root: String) -> void:
+	for dir: String in [root.path_join("pond"), root.path_join("invites"), root]:
+		if not DirAccess.dir_exists_absolute(dir):
+			continue
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)

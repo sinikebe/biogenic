@@ -247,9 +247,11 @@ class Link extends Node:
 class LaggedHost extends "res://game/net/net_session.gd":
 	var intake: Node = null
 
-	func _take_datagram(id: int, bytes: PackedByteArray) -> void:
-		if intake == null or bytes.size() < 2 or bytes[0] != RAW:
-			super._take_datagram(id, bytes)
+	## [param via] is the listener it came in on (net-hardening.md C): this
+	## tool's host has the LAN's alone, and anything else goes straight on.
+	func _take_datagram(id: int, bytes: PackedByteArray, via: int = VIA_LAN) -> void:
+		if intake == null or via != VIA_LAN or bytes.size() < 2 or bytes[0] != RAW:
+			super._take_datagram(id, bytes, via)
 			return
 		intake.take(id, bytes.slice(1))
 

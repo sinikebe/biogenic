@@ -55,6 +55,7 @@ text = "choose a view"
 horizontal_alignment = 1
 
 [node name="FullBlock" type="VBoxContainer" parent="Center/Column"]
+size_flags_horizontal = 4
 theme_override_constants/separation = 10
 
 [node name="Full" type="Button" parent="Center/Column/FullBlock"]
@@ -68,6 +69,7 @@ text = "the water the cell is swimming in, and the membrane over it"
 horizontal_alignment = 1
 
 [node name="PovBlock" type="VBoxContainer" parent="Center/Column"]
+size_flags_horizontal = 4
 theme_override_constants/separation = 10
 
 [node name="Pov" type="Button" parent="Center/Column/PovBlock"]
@@ -80,18 +82,38 @@ theme_override_font_sizes/font_size = 15
 text = "only what the cell itself can feel"
 horizontal_alignment = 1
 
-[node name="NetBlock" type="VBoxContainer" parent="Center/Column"]
+[node name="Company" type="HBoxContainer" parent="Center/Column"]
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 64
+alignment = 1
+
+[node name="NetBlock" type="VBoxContainer" parent="Center/Column/Company"]
 theme_override_constants/separation = 10
 
-[node name="Net" type="Button" parent="Center/Column/NetBlock"]
+[node name="Net" type="Button" parent="Center/Column/Company/NetBlock"]
 size_flags_horizontal = 4
 text = "within earshot"
 
-[node name="NetNote" type="Label" parent="Center/Column/NetBlock"]
+[node name="NetNote" type="Label" parent="Center/Column/Company/NetBlock"]
+custom_minimum_size = Vector2(320, 0)
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
 theme_override_font_sizes/font_size = 15
-text = "a friend on the same wi-fi, heard through the water"
+text = "a friend on the same wi-fi"
+horizontal_alignment = 1
+
+[node name="FarBlock" type="VBoxContainer" parent="Center/Column/Company"]
+theme_override_constants/separation = 10
+
+[node name="Far" type="Button" parent="Center/Column/Company/FarBlock"]
+size_flags_horizontal = 4
+
+[node name="FarNote" type="Label" parent="Center/Column/Company/FarBlock"]
+custom_minimum_size = Vector2(320, 0)
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
 horizontal_alignment = 1
 
 [node name="Hint" type="Label" parent="."]

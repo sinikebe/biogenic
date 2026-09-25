@@ -232,12 +232,14 @@ func together() -> bool:
 		and int(_net.link) == NetSession.Link.TOGETHER
 
 
-## **The host cut this guest** -- its gate or its referee, `REFUSE_BROKEN` --
-## rather than going: what a guest's run says when its pond ends.
+## **The host cut this guest** -- its gate or its referee, `REFUSE_BROKEN`, or
+## the owner revoking the invite it came in by, `REFUSE_INVITE` -- rather than
+## going: what a guest's run says when its pond ends.
 func cut_off() -> bool:
 	return _net != null and is_instance_valid(_net) \
 		and int(_net.link) == NetSession.Link.REFUSED \
-		and int(_net.refused_for) == Wire.REFUSE_BROKEN
+		and (int(_net.refused_for) == Wire.REFUSE_BROKEN
+			or int(_net.refused_for) == Wire.REFUSE_INVITE)
 
 
 ## Seconds since anything arrived from the other player, or -1.
