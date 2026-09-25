@@ -226,6 +226,15 @@ func _announce(first: bool) -> void:
 	if first:
 		print("[server] READY -- listening on %s port %d/udp, code %s"
 			% [address, Lan.PORT, code])
+		if Lan.octet_of(address) < 0:
+			# Listening all the same (NetSession.hostable): the log is where the
+			# owner finds out, and a loop of "no wi-fi here" would not say why.
+			print("[server] no phone can join by code: a code carries the last number"
+				+ " of this machine's address, from 1 to 254, and %s ends in %s."
+				% [address, address.substr(address.rfind(".") + 1)]
+				+ " Give this machine another address (docs/server.md). LAN only:"
+				+ " do not forward this port.")
+			return
 		print("[server] to join: a phone on this wi-fi (%sx) opens within earshot,"
 			% Lan.prefix_of(address) + " taps answer, and taps the ring at %s, in"
 			% code + " that order. LAN only: do not forward this port.")
