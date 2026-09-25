@@ -108,6 +108,10 @@ const SAYS := {
 	&"unknown_version": ["your game is older",
 		"this invite needs the update. take it from the launcher, restart, and"
 			+ " paste again."],
+	# Keeping (§6.2, row 4): the paste read, and the device would not save it.
+	&"not_kept": ["invite not kept",
+		"this device would not save the invite. free up some space, then paste"
+			+ " again."],
 	# Calling (§6.3).
 	&"no_invite": ["no invite yet",
 		"paste the invite your friend sent you first."],
@@ -497,9 +501,19 @@ static func write_private(path: String, data: PackedByteArray) -> Error:
 		return mode
 	var file := FileAccess.open(fresh, FileAccess.READ_WRITE)
 	if file == null:
-		return FileAccess.get_open_error()
+		var err := FileAccess.get_open_error()
+		DirAccess.remove_absolute(fresh)
+		return err
 	file.store_buffer(data)
 	file.close()
+	# **Kept only once it reads back.** A write this small sits in the buffer
+	# until `close()`, and `close()` reports no failure: on a full disk --
+	# measured on a 16 KB tmpfs -- the write "succeeded" and the rename then put
+	# an empty file over a good one. A guest's kept invite, and the server's
+	# key and book, all come through here.
+	if FileAccess.get_file_as_bytes(fresh) != data:
+		DirAccess.remove_absolute(fresh)
+		return ERR_FILE_CANT_WRITE
 	return DirAccess.rename_absolute(fresh, path)
 
 

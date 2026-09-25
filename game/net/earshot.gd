@@ -79,12 +79,16 @@ const NUCLEUS_CALLING_ALPHA := 0.85
 ## **The call leaving the cell**: one pulse at a time, one every 1.6 s -- 1.2 s
 ## out and 0.4 s at rest -- from r 56 to r 212 on an ease-out, fading as it
 ## goes. At its widest it spans canvas y 88-512, clear of the Heading, which
-## ends at 78, and of the Line, which starts at 540.
+## ends at 78, and of the Line, which starts at 540. **It fades late, not
+## early**: violet laid thin over this teal wash reads blue, and keeps a hue of
+## 245 degrees or more only from about alpha 0.5 up -- so the ring holds its
+## colour through most of its flight (measured 261 degrees at u 0.16, 258 at
+## 0.6, 248 at 0.83) and thins out only in its last tenth.
 const PULSE_EVERY := 1.6
 const PULSE_TRAVEL := 1.2
 const PULSE_FROM := 56.0
 const PULSE_SPREAD := 156.0
-const PULSE_ALPHA := 0.75
+const PULSE_ALPHA := 0.8
 
 ## **The receipt keeps its port in view.** An address over this many characters
 ## -- a long dynamic-DNS name -- shows its first and last [constant RECEIPT_KEEP]
@@ -606,11 +610,12 @@ func _paste() -> void:
 		else:
 			_after = [Invite.DOOR_NAME, "new invite kept", _receipt_of(read), 1]
 	else:
-		# Not a case the spec words: `user://` would not take the file. The
-		# kept invite is as it was, and the press is the same to try again.
+		# `user://` would not take the file (invites-ux.md §6.2, row 4): the
+		# kept invite is as it was -- `Invite.write_private` replaces it only
+		# once the new one reads back -- and the press is the same to try again.
 		var kept := "" if before.is_empty() else "still kept: " + _receipt_of(before)
-		_after = ["could not keep it", "this device would not save the invite. paste it again.",
-			kept, 0 if before.is_empty() else 1]
+		var said := Invite.says(&"not_kept")
+		_after = [said[0], said[1], kept, 0 if before.is_empty() else 1]
 	_go_to(Page.FAR)
 
 
@@ -787,7 +792,8 @@ func _draw_cell() -> void:
 			var u := at / PULSE_TRAVEL
 			var radius := PULSE_FROM + PULSE_SPREAD * (1.0 - pow(1.0 - u, 2.0))
 			_ring.draw_arc(middle, radius, 0.0, TAU, 128,
-				Color(CODE_COLOR, PULSE_ALPHA * pow(1.0 - u, 1.5)), lerpf(4.0, 1.5, u), true)
+				Color(CODE_COLOR, PULSE_ALPHA * (1.0 - pow(u, 4.0))), lerpf(4.0, 1.5, u),
+				true)
 	var nucleus := Color(RING_COLOR, NUCLEUS_ALPHA * dim)
 	if _page == Page.FAR_CALLING or _page == Page.TOGETHER:
 		nucleus = Color(CODE_COLOR, NUCLEUS_CALLING_ALPHA)

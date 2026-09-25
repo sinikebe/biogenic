@@ -7,11 +7,13 @@ reads. Owner decisions already made: one invite per friend; the home Wi-Fi needs
 none and its join stays exactly as it is; only the dedicated server listens on
 the internet, never a phone; the owner can revoke one friend's invite.
 
-**Status: spec, not built.** Mocked by posing the real `earshot.tscn` and
-`mode_select.tscn` nodes with every string below (a scratch harness, not
-committed): 64 far-page frames and 6 chooser frames at 1280x720 and 2400x1080,
-judged, not diffed. Every Line was measured with the theme font. Not seen: a
-device, the Android clipboard toast, the pulse in motion.
+**Status: built, and judged** at 8660066 (§10.1). 71 frames were shot with real
+input at 1280x720 and 2400x1080: every far page, every trouble key, the chooser
+and the five LAN pages. Two changes came
+out of the judging and are written in below: the pulse's fade (§4), and a
+failed save that must not pass for a kept invite (§2, §6.2). Before the build,
+the pages were mocked on the real nodes. Not seen: a device, the Android
+clipboard toast, the pulse in motion.
 
 ## 0. The flow
 
@@ -78,7 +80,8 @@ Center (CenterContainer)
     Company      HBoxContainer: size_flags_horizontal 4, separation 64,
                  alignment 1, mouse_filter 2
       NetBlock   moved here, unchanged but for its note
-        Net      Button, COMPANION_SIZE 320x52, size_flags_horizontal 4
+        Net      Button, COMPANION_SIZE 320x52 (the theme's padding makes
+                 it 56 tall, as today), size_flags_horizontal 4
         NetNote  Label 15 px, Color(0.482, 0.686, 0.643, 1), centred,
                  custom_minimum_size (320, 0)
       FarBlock   VBoxContainer, separation 10
@@ -114,7 +117,11 @@ only the tie-break decides that. Left and right move between the two.
   slots mean a list and a choice before every call. With one slot the other
   server is a paste away, because its message is still in the chat.
 - **A paste replaces the kept invite only on success.** Anything that fails to
-  read leaves the kept one as it was, and the page says so (`still kept`).
+  read or to save leaves the kept one as it was, and the page says so
+  (`still kept`). A save has succeeded only once its bytes read back from the
+  disk, before the rename over the old file. Without that check, a full disk
+  returned OK and left a 0-byte invite in place of a good one: measured on a
+  full 16 KB tmpfs. Godot's `close()` does not report the write it loses.
 - **Say the result every time.** A re-minted invite at the same address looks
   identical on screen, so success says `new invite kept`, and pasting the same
   one says `that invite is already kept`.
@@ -186,6 +193,13 @@ leaving it. The ping is `ampulla` violet, like the code on the LAN pages,
 because it is the same act. An empty hairline alone was mocked first and read
 as an empty frame. The nucleus made it a cell.
 
+**Violet survives only at high alpha over this wash.** Blended thin over its
+teal, `ampulla` violet turns slate blue. The measured hue is 219° at alpha 0.19
+against the violet's own 263°. It keeps a hue of 245° or more over the wash's
+brightest patches only from about alpha 0.5 up. So the pulse holds its alpha
+and loses it late, rather than fading from the start. The first curve,
+0.75 × (1 − u)^1.5, was built, and read slate at u ≈ 0.6.
+
 All of it is drawn in the Ring's own space, centre (280, 220), antialiased:
 
 - **membrane**: `draw_arc` at r 160, 96 segments, 2 px,
@@ -195,10 +209,12 @@ All of it is drawn in the Ring's own space, centre (280, 220), antialiased:
   `Color(0.655, 0.44, 1.0, 0.85)`.
 - **pulse**, on FAR_CALLING only: one at a time, every 1.6 s, travelling 1.2 s
   and resting 0.4 s. With u = t / 1.2: radius 56 + 156 × (1 − (1 − u)²), alpha
-  0.75 × (1 − u)^1.5, width lerp(4, 1.5, u) px, 128 segments,
-  `Color(0.655, 0.44, 1.0, alpha)`. At its widest, r 212, it spans canvas
-  y 88-512, clear of the Heading (which ends at 78) and the Line (which starts
-  at 540).
+  0.8 × (1 − u⁴), width lerp(4, 1.5, u) px, 128 segments,
+  `Color(0.655, 0.44, 1.0, alpha)`. Rendered at both shapes, its pixels measure
+  hue 261° at u 0.16, 258° at u 0.6 and 248° at u 0.83. Only the thin tail
+  past u ≈ 0.9 goes slate, in the last 0.1 s before it vanishes. At its widest,
+  r 212, it spans canvas y 88-512, clear of the Heading (which ends at 78) and
+  the Line (which starts at 540).
 - `_process` redraws the ring every frame on FAR_CALLING, as it does on CALLING.
 
 ## 5. Layout: `game/net/earshot.tscn`
@@ -270,6 +286,11 @@ The paste button keeps focus, so trying again is the same press.
 | 1 | `not_found` | nothing was copied, or no invite is in it | `no invite copied` | `copy your friend's whole message, then paste again.` |
 | 2 | `damaged` | cut short or garbled (the check) | `invite damaged` | `some of it was lost or changed on the way. copy all of it, or ask your friend to send it again.` |
 | 3 | `unknown_version` | an invite format newer than this build reads | `your game is older` | `this invite needs the update. take it from the launcher, restart, and paste again.` |
+| 4 | `not_kept` (new) | it read, but `Invite.keep()` could not save it, which in practice means a full device | `invite not kept` | `this device would not save the invite. free up some space, then paste again.` |
+
+Row 4 mirrors `invite kept`. Its receipt says `still kept:` only when §2's
+read-back makes that true. It belongs in `Invite.SAYS` with the other three, not
+in the screen.
 
 ### 6.3 Call failures, on TROUBLE
 
@@ -282,7 +303,7 @@ updates by itself) and calls the server a cell.
 | # | key | when | headline | sentence | First |
 |---|---|---|---|---|---|
 | – | `no_invite` | nothing kept (these pages never offer call then) | `no invite yet` | `paste the invite your friend sent you first.` | paste invite |
-| – | `could_not_call` | no socket; and, if the session checks before dialling, no network address at all (an instant sentence instead of an 8 s wait) | `could not call` | `this device could not start the call. check it is online, then call again.` | again |
+| – | `could_not_call` | no socket; no network address at all (flight mode); or an IPv6 invite on a network with no IPv6 | `could not call` | `this device could not start the call. check it is online, then call again.` | again |
 | – | `no_such_place` | the host name does not resolve | `nowhere by that name` | `check this device is online. if it is, ask your friend to check the address in their invite.` | again |
 | 4, 10 | `no_answer` | nothing within 8 s: the server is down, the address is wrong, the port is closed, this network blocks it, or the door has barred this address | `no answer` | `nothing answered at the invite's address. ask your friend if their server is up, or try another network.` | again |
 | – | `not_running` | the address refused the call: nothing listens on that port | `no server there` | `the address answered, but no server is listening. ask your friend to check theirs is running, then call again.` | again |
@@ -331,9 +352,9 @@ The network is C2's. These are the player's requirements on it.
   progress already resolves with `IP.resolve_hostname_queue_item` and connects
   to the literal address. Keep it that way.
 - **Look the name up fresh on every call:** `IP.clear_cache(address)` before
-  queuing it. The resolver caches for the life of the process, so an owner's
-  home address that changes while the game is open stays wrong until a restart,
-  as `no answer`. The build did not do this when this spec was written.
+  queuing it, which the build does. The resolver caches for the life of the
+  process, so without it an owner's home address that changes while the game is
+  open would stay wrong until a restart, as `no answer`.
 - **Every call ends in a sentence**: 8 s for the call and 6 s for the name in
   the build. The pulse is the only sign of progress, with no counter and no
   second line.
@@ -370,10 +391,25 @@ Shoot with `tools/earshot_shot.gd` (loading `far.tscn`) and drive it with real
 input. Fill the clipboard with `DisplayServer.clipboard_set()`, which
 round-trips under xvfb (checked). Then press paste invite once by touch and once
 with a Ctrl+V key event. Pages: `far`, `far-kept`, `far-bad` (clipboard
-`hello`), `far-calling` (an invite for 192.0.2.1, which never answers),
+`hello`), `far-calling` (an invite for an address that never answers),
 `far-forget`, `far-together`, and one `far-trouble` per §6.3 row. Shoot the
 chooser with `tools/shot.gd`. `no_such_place` can use a name under `.invalid`,
 which RFC 2606 guarantees never resolves.
+
+Where the build's harness had to differ, and why:
+
+- **`far-calling` and `no_answer` call 198.51.100.1** (RFC 5737 TEST-NET-2).
+  The spec named 192.0.2.1, which is this container's own gateway: it answers
+  with ICMP port-unreachable, so the page left for `not_running` at once.
+- **`could_not_call` is shot under `unshare -n`**, which is flight mode: only a
+  device with no network gives it.
+- **An IPv6 invite on a network with no IPv6 reads `could_not_call`.** It used
+  to read `not_running`, which blamed the friend's server for this device's
+  network. Fixed in `net_session.gd`'s `_diagnose`.
+- **A call that must not reach the probes**, such as a re-shoot of the pulse, can
+  run in its own namespace with a default route into the loopback, so every
+  datagram to 198.51.100.1 vanishes:
+  `unshare -n -- bash -c 'ip link set lo up; ip addr add 192.0.2.50/32 dev lo; ip route add default dev lo; …'`.
 
 Check every frame for these:
 
@@ -381,9 +417,10 @@ Check every frame for these:
    Measure with the font (§5.2), not by eye.
 2. The row matches §5.1 to the pixel, 264x56 each. The focused button wears the
    theme's focus ring, and it is the one §3 names.
-3. No far page shows a bearing segment. At mid-flight the pulse is plainly
-   violet against the wash: inside the membrane at u ≈ 0.15, outside it at
-   u ≈ 0.6. It never touches the Heading or the Line.
+3. No far page shows a bearing segment. The pulse is violet, measured rather
+   than eyeballed, because a dim hue on a dark ground fools the eye: its
+   brightest pixels have hue ≥ 245° at u ≈ 0.15 (inside the membrane) and at
+   u ≈ 0.6 (outside it). It never touches the Heading or the Line.
 4. The Receipt shows address · port. A 60-character name comes out as 22 + `…`
    + 22.
 5. At 2400x1080 every node sits at the same canvas y as at 1280x720, centred in
@@ -396,6 +433,23 @@ Check every frame for these:
 
 Two things only a device shows: Android's toast over the button row after a
 paste (expected, and the system's), and the pulse in motion.
+
+### 10.1 Judged on the build (8660066), at both shapes
+
+| frames | verdict |
+|---|---|
+| chooser | **Passes.** Rects exactly as §1.1 at both shapes. The notes are 185 and 259 px inside 320, the boxes 64 px apart. On a real keyboard, Full → Down → Pov → Down → within earshot → Right → by invite → Up → Pov. |
+| `far`, `far-pasted`, `far-kept`, `far-long`, `far-v6`, `far-pasted-new`, `far-pasted-same` | **Pass.** Node for node as §5.1. The long name reads `biogenic-pond-at-home.…ider.house.example.net · 45772`: the cut falls after a dot, so it shows four dots, which is the rule working as written. |
+| `far-bad`, `far-bad-kept`, `far-damaged`, `far-newer` | **Pass.** Each headline and sentence is one line; `still kept:` shows only with a kept invite; the paste button keeps focus. |
+| `far-forget`, `far-forgotten`, `far-refused-back` | **Pass.** `keep` has focus. The refused invite is remembered across a trip through the chooser. |
+| `far-calling-u015` | **Passes.** Pulse hue 256°. |
+| `far-calling-u06` | **Failed, and the fault was the spec's curve.** The pulse read slate blue, hue 219°. Re-rendered with §4's new curve: 258° at 1280x720, 259° at 2400x1080. |
+| `far-together` | **Passes.** The nucleus is violet; the last view has focus. |
+| 12 `far-trouble-*` | **Pass.** One line each (the widest, `cut_off`, is 982 px), the right first button with focus, the membrane dimmed. |
+| 5 LAN pages | **Pass: 0 px differ from `main`** at both shapes, and `main`'s three runs are 0 px apart. The Ring's `FOCUS_NONE` (§11) is in, and an up-press on CHOOSE now leaves the focus on call, while ANSWERING still takes keyboard taps on the ring. |
+
+Not shot: `not_kept` (§6.2 row 4), which needs a full disk. Its sentence
+measures 617 px, and it lays out exactly as `far-bad-kept`.
 
 **Files the build touches**, all content, so no `binary_version` bump:
 `game/mode_select.tscn` and `.gd`, `game/net/far.tscn` (new),
@@ -419,10 +473,10 @@ sight.
 
 Noticed, and not in this spec's scope:
 
-- **The LAN pages lose keyboard focus.** One up-press moves focus onto the
-  Ring, which draws none. This was measured on CHOOSE and follows for every page
-  but ANSWERING. Making the Ring `FOCUS_NONE` except on ANSWERING fixes it
-  without touching the flow.
+- **The LAN pages lost keyboard focus** (fixed in the build). One up-press
+  moved focus onto the Ring, which draws none. The Ring is now `FOCUS_NONE`
+  except on ANSWERING, and the LAN frames are otherwise pixel-identical to
+  `main`.
 - **An invite minted with a home-network address** (192.168.x and the like)
   can only ever say no answer from outside. §9's line shows the address. A
   warning at minting would go further; that belongs on the server's side.
