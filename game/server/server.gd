@@ -90,13 +90,15 @@ const INVITES_POLL := 2.0
 ## **Seams, set before this node enters the tree.** A test runs the pond and
 ## not the update loop, not at this node's frame rate, and stops it without
 ## ending the process it shares -- and keeps its invites, and looks at them,
-## where and as often as it says.
+## where and as often as it says -- and hands an invite job its arguments in
+## [member job_args], in place of the command line's.
 var check_updates := true
 var stop_file := ""
 var own_frame_rate := true
 var quits := true
 var pond_root := InviteBook.ROOT
 var invites_poll := INVITES_POLL
+var job_args := PackedStringArray()
 
 var _net: Node = null
 var _food: FoodField = null
@@ -111,6 +113,8 @@ var _next_stop_poll := 0.0
 var _stopping := false
 ## The arguments after `--`, for the invite jobs.
 var _args := PackedStringArray()
+## What the invite job this scene ran exits with, or -1 for none.
+var _job_code := -1
 ## **What the last look at the invites saw**: the book's and the
 ## certificate's modification times, whether both were older than the second
 ## they were read in, and the bytes of each.
@@ -125,9 +129,15 @@ var _labels: Dictionary = {}
 ## The last thing said about the internet listener, so a state that does not
 ## change is not said again every look.
 var _internet_said := ""
-## Why there are invites and no internet listener, for [method
-## _internet_status].
+## Why nothing listens for the internet though it should, for [method
+## _internet_status]: "" when nothing is wrong.
 var _internet_trouble := ""
+## **The book or the certificate could not be read at the last look**, so the
+## next looks at it again whatever its time says: the `chown` that fixes it
+## changes no modification time.
+var _unreadable := false
+## This server's user's name, once asked ([method _user_name]).
+var _user := ""
 
 
 func _ready() -> void:
@@ -137,10 +147,11 @@ func _ready() -> void:
 		# session, an updater or a port exists.
 		set_process(false)
 		var done: Array = InviteBook.run(_args, pond_root)
+		_job_code = int(done[0])
 		for line: String in done[1]:
 			print("[server] " + line)
 		if quits:
-			get_tree().quit(int(done[0]))
+			get_tree().quit(_job_code)
 		return
 	if own_frame_rate:
 		Engine.max_fps = FPS
@@ -214,7 +225,10 @@ func _process(_delta: float) -> void:
 		if now >= _next_announce:
 			_announce(false)
 	if _updater != null:
-		_updater.tick(int(_net.peer_count()))
+		# **Who a restart would interrupt**: the guests, and a phone in the house
+		# still joining -- never a caller on the internet listener that has
+		# proved nothing, which could otherwise hold an update off for good.
+		_updater.tick(int(_net.company()))
 
 
 ## **Put the pond down and go**: the guests are told, then the process exits
@@ -311,8 +325,11 @@ func _announce(first: bool) -> void:
 
 
 ## **What listens for the internet, in a sentence** -- the READY line's, and
-## the line said whenever it changes.
+## the line said whenever it changes. Trouble first: whatever else is true, a
+## listener that should be up and is not says why.
 func _internet_status() -> String:
+	if not _internet_trouble.is_empty():
+		return "not listening for the internet: " + _internet_trouble
 	var names: Array = _labels.keys()
 	names.sort()
 	if _net.internet_listening():
@@ -327,7 +344,7 @@ func _internet_status() -> String:
 		return ("nothing listens for the internet: there are no invites. To let a"
 			+ " friend in from outside, set --reach, then --invite=<name>"
 			+ " (docs/server.md).")
-	return "not listening for the internet, though there are invites: %s" % _internet_trouble
+	return "not listening for the internet: reopening"
 
 
 ## **The book and the certificate, looked at** -- every [member invites_poll],
@@ -338,32 +355,53 @@ func _internet_status() -> String:
 ##
 ## Then: the first invite opens the internet listener, a revoked or replaced
 ## one cuts its guest, none left closes it, and a new certificate -- `--new-key`
-## -- puts the old listener down and opens one that answers with the new.
+## -- puts the old listener down, its guests told, and the next look opens one
+## that answers with the new. **A book or certificate this user cannot read
+## fails closed**: it may hold a revoke, so every guest on an invite is cut,
+## nothing listens, and the log says why until it reads again.
 func _watch_invites(first: bool) -> void:
 	_next_invites = _now() + invites_poll
+	if _net.internet_closing():
+		# Its refusals are still leaving: a new listener now would put the old
+		# one down under them. Looked at again the moment it has gone.
+		_next_invites = _now() + 0.1
+		return
 	var where := InviteBook.paths(pond_root)
 	var book_path := str(where["book"])
 	var cert_path := str(where["cert"])
 	var book_time := int(FileAccess.get_modified_time(book_path))
 	var cert_time := int(FileAccess.get_modified_time(cert_path))
-	# **Invites and nothing listening** -- a listener that could not open, or
-	# one ENet closed by itself -- is looked at again whatever the files say.
+	# **Invites and nothing listening** -- a listener that could not open, one
+	# ENet closed by itself, one put down for a new key -- and a file that could
+	# not be read are looked at again whatever the files' times say.
 	var down := not _labels.is_empty() and not bool(_net.internet_listening())
-	if not first and not down and _settled and book_time == _book_time \
-			and cert_time == _cert_time:
+	if not first and not down and not _unreadable and _settled \
+			and book_time == _book_time and cert_time == _cert_time:
 		return
 	_settled = maxi(book_time, cert_time) < int(Time.get_unix_time_from_system())
 	_book_time = book_time
 	_cert_time = cert_time
 	var book_bytes := _bytes_of(book_path)
 	var cert_bytes := _bytes_of(cert_path)
-	if book_bytes.size() == 1:
-		# Not readable by this user: an invite job run as somebody else wrote it.
-		_internet_trouble = ("the invite book at %s cannot be read by this user. Run"
-			% ProjectSettings.globalize_path(book_path) + " the invite jobs as the"
-			+ " service's own user (docs/server.md).")
+	var unread := book_path if book_bytes.size() == 1 \
+		else (cert_path if cert_bytes.size() == 1 else "")
+	if not unread.is_empty():
+		# **Fail closed.** Written by another user -- an invite job run as root
+		# -- it may hold a revoke this server cannot see, so no invite is taken
+		# until it reads: every guest on one is cut, and nothing listens.
+		_unreadable = true
+		_book_bytes = PackedByteArray()
+		_cert_bytes = PackedByteArray()
+		_net.set_invites({}, "%s cannot be read, so no invite is taken" % unread.get_file())
+		var user := _user_name()
+		_internet_trouble = ("%s cannot be read by %s, so no invite is taken until it can --"
+			% [ProjectSettings.globalize_path(unread), user] + " another user wrote it, an"
+			+ " invite job run as root most likely. Give the files back with chown -R %s: %s,"
+			% [user, ProjectSettings.globalize_path(pond_root).trim_suffix("/")]
+			+ " and run the jobs as %s (docs/server.md §9.1)." % user)
 		_say_internet(first)
 		return
+	_unreadable = false
 	var cert_changed := cert_bytes != _cert_bytes
 	if not first and not down and book_bytes == _book_bytes and not cert_changed:
 		return
@@ -378,23 +416,32 @@ func _watch_invites(first: bool) -> void:
 	_labels = labels
 	var table := InviteBook.table_of(book)
 	if table.is_empty():
+		_internet_trouble = ""
 		_net.set_invites({})
 		_say_internet(first)
 		return
 	if cert_changed and _net.internet_listening():
-		# Every invite that pinned the old certificate is void: its guests go.
-		_net.close_internet(true)
+		# **A new key.** Every invite that pinned the old certificate is void:
+		# its guests are told so, and the old socket goes once that has had
+		# REFUSE_LINGER to leave -- put down at once, it would drop the
+		# refusal, and they would read "they hung up". The next look, the
+		# moment it has gone, opens one that answers with the new.
+		print("[server] internet: the server's key changed -- every guest on an invite"
+			+ " made with the old one is cut, and the listener reopens with the new one")
+		_net.close_internet(false, "the server's key changed")
+		_next_invites = _now() + NetSession.REFUSE_LINGER + 0.15
+		return
 	if not _net.internet_listening():
 		var identity := InviteBook.load_identity(pond_root)
 		if identity.is_empty():
-			_internet_trouble = "the server's key or certificate is missing or does not" \
-				+ " read -- run --new-key, then mint every invite again."
+			_internet_trouble = "there are invites, but the server's key or certificate is" \
+				+ " missing or does not read -- run --new-key, then mint every invite again."
 			_book_bytes = PackedByteArray()
 			_say_internet(first)
 			return
 		if not _net.listen_internet(identity[0], identity[1]):
-			_internet_trouble = "port %d/udp is taken, or not free yet. Trying again" \
-				% Invite.PORT + " in %d s." % roundi(invites_poll)
+			_internet_trouble = "there are invites, but port %d/udp is taken, or not free" \
+				% Invite.PORT + " yet. Trying again in %d s." % roundi(invites_poll)
 			# Looked at again next time, whatever the files say.
 			_book_bytes = PackedByteArray()
 			_settled = false
@@ -405,15 +452,36 @@ func _watch_invites(first: bool) -> void:
 	_say_internet(first)
 
 
-## The whole file at [param path]: empty when there is none, and one zero byte
-## when it is there but this user cannot read it.
+## **Who this server runs as**, by name, for a sentence that tells the owner
+## what to `chown` to: `$USER`, which systemd sets from the unit's `User=`, and
+## `id -un` where it is not -- asked once.
+func _user_name() -> String:
+	if _user.is_empty():
+		_user = OS.get_environment("USER")
+	if _user.is_empty():
+		var said: Array = []
+		if OS.execute("id", ["-un"], said) == 0 and not said.is_empty():
+			_user = str(said[0]).strip_edges()
+	if _user.is_empty():
+		_user = "this server's user"
+	return _user
+
+
+## The whole file at [param path]: empty when nothing is there, and one zero
+## byte when something is that this user cannot read -- a file it may not
+## open, a directory where the file should be, or a directory it may not look
+## into, which hides whether there is one.
 static func _bytes_of(path: String) -> PackedByteArray:
-	if not FileAccess.file_exists(path):
-		return PackedByteArray()
-	var file := FileAccess.open(path, FileAccess.READ)
-	if file == null:
+	if FileAccess.file_exists(path):
+		var file := FileAccess.open(path, FileAccess.READ)
+		if file == null:
+			return PackedByteArray([0])
+		return file.get_buffer(file.get_length())
+	var dir := path.get_base_dir()
+	if DirAccess.dir_exists_absolute(path) \
+			or (DirAccess.dir_exists_absolute(dir) and DirAccess.open(dir) == null):
 		return PackedByteArray([0])
-	return file.get_buffer(file.get_length())
+	return PackedByteArray()
 
 
 ## One line for each invite added, revoked or replaced since the last look --
@@ -479,7 +547,7 @@ func _on_restart_wanted(why: String) -> void:
 
 
 func _read_args() -> void:
-	_args = OS.get_cmdline_user_args()
+	_args = job_args if not job_args.is_empty() else OS.get_cmdline_user_args()
 	for arg: String in _args:
 		if arg == "--no-update":
 			check_updates = false

@@ -197,18 +197,20 @@ one `[server] update:` line in its log.
   the pre-flight: a build that does not start on this machine -- one that needs
   a newer glibc or a newer CPU than the container has -- is refused there,
   before it replaces anything. A build that answers is renamed over the running
-  one in one step: the running server carries on from the file it started
-  from, and the next start is the new build. The build it replaced is kept as
-  `/opt/biogenic/biogenic-server.x86_64.previous`; if a newer one arrives
-  before the server has restarted onto the last, `.previous` stays the build
-  that actually ran.
+  one in one step (Linux's rename): the running server carries on from the
+  file it started from, and the next start is the new build. The build it
+  replaced is kept as `/opt/biogenic/biogenic-server.x86_64.previous`; if a
+  newer one arrives before the server has restarted onto the last, `.previous`
+  stays the build that actually ran.
 - **A refused build** -- its checksum wrong, or not starting here -- is deleted
   and the running build left alone, and it is not downloaded again while the
   manifest gives it the same checksum; the log says so once. The server
   remembers that for as long as it runs; after a restart it tries such a build
   once more.
-- **The restart waits for an empty pond**: nobody connected, and nobody
-  connecting, for thirty seconds. Then the server exits and systemd starts it
+- **The restart waits for an empty pond**: nobody connected, and no phone in
+  the house connecting, for thirty seconds. A caller from the internet counts
+  once it has proved its invite, and not before, so a stranger knocking on 45772
+  cannot hold an update off. Then the server exits and systemd starts it
   again (`Restart=always`). **It never restarts with a player connected**, so an
   update can wait for as long as somebody is swimming.
 - A check or download that fails changes nothing, and is tried again ten
@@ -382,22 +384,36 @@ documentation range, `pond.example.net` from RFC 2606's. Use your own.
 
 Every invite job is the server binary with one flag after `--`. It does its job
 and exits: it does not host, check for updates or open a port, so it is safe to
-run beside the service. Run it **as the service's own user, with its home**, or
-it writes a book the service never reads:
+run beside the service. Run it **as the service's own user, with its home** --
+from the root shell the install already needed, with `runuser`, which every
+Debian and Ubuntu has (it is util-linux, and a Proxmox container template may
+have no `sudo`):
 
 ```sh
-sudo -u biogenic HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless -- --invites
+runuser -u biogenic -- env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless -- --invites
+```
+
+With `sudo` instead, where it is installed:
+
+```sh
+sudo -u biogenic env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless -- --invites
 ```
 
 Below, `$BIOGENIC` stands for everything up to and including that `--`:
 
 ```sh
-BIOGENIC="sudo -u biogenic HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless --"
+BIOGENIC="runuser -u biogenic -- env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless --"
 ```
 
 Each job says what it did in lines starting `[server]` and exits 0. A job it
-refuses exits 1, with a sentence that names the fix. Run as root by mistake, it
-says so first.
+refuses exits 1, with a sentence that names the fix.
+
+**Run as root into the service's files, a job does nothing.** What root writes
+there is root's alone, and the service -- running as `biogenic` -- could not
+read it: a revoke it would never see. So a job run as root with `HOME` pointing
+at the service's directory refuses and exits 1, giving back the command above,
+with your job in it. Run as root with root's own home, it keeps a book of its
+own that the service never reads, and says so.
 
 ### 9.2 Tell it where friends call
 
@@ -414,6 +430,12 @@ a different outside port to 45772, say which: `--reach=pond.example.net:50000`.
 An IPv6 address goes in brackets: `--reach=[2001:db8::7]:45772`. An address
 inside your own network gets a warning, because friends outside can never
 reach it.
+
+**A name is dialled over IPv4 whenever it has an IPv4 address** (an A record),
+even when it has an IPv6 one too: a home router forwards a port over IPv4, and
+seldom opens one over IPv6. So IPv6 matters only for a name with no IPv4
+address at all -- and then UDP 45772 must be open over IPv6, to this machine,
+on your router's firewall.
 
 Every invite carries the address it was minted with, so after changing
 `--reach`, mint again for anybody who has one.
@@ -445,8 +467,10 @@ a phone whose clock is years out still accepts it. A label is 1 to 24 of `a-z`,
 file and into your messaging app:
 
 ```sh
-sudo cat /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/invites/sam.txt
+cat /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/invites/sam.txt
 ```
+
+(as root; `sudo cat` from another account).
 
 It is one line of about 1.1 KB, starting `biogenic-invite:`. It does not matter
 if the app wraps it, or if you write a sentence before or after it: the game
@@ -550,8 +574,10 @@ $BIOGENIC --new-key
 
 Every invite made with the old key stops working, because each carries the old
 certificate, and the book is emptied. Mint each friend again and send each the
-new line. A running server changes to the new key by itself, and a friend still
-swimming on an old invite is cut.
+new line. A running server changes to the new key by itself: a friend still
+swimming on an old invite reads "invite no longer works", and the listener
+comes back with the new key a moment later (`[server] internet: the server's
+key changed ...`).
 
 ### 9.9 When a friend cannot get in
 
@@ -565,7 +591,13 @@ What their phone says, and what to look for in `journalctl -u biogenic-server`:
 - **"no server there"** -- the address refused the call: nothing listens on
   that port. With no invites the internet listener is closed (`[server]
   internet: nothing listens for the internet`), or the router forwards to the
-  wrong port or machine.
+  wrong port or machine. It is also closed when the server cannot read its
+  invite book -- a job run as another user wrote it -- and says so until it
+  can:
+  ```
+  [server] internet: not listening for the internet: /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/pond/invites.cfg cannot be read by biogenic, so no invite is taken until it can -- another user wrote it, an invite job run as root most likely. Give the files back with chown -R biogenic: /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic, and run the jobs as biogenic (docs/server.md §9.1).
+  ```
+  Run that `chown`, and the listener is back within a couple of seconds.
 - **"a different server"** -- something answered with another certificate: the
   key was replaced (`--new-key`) after this invite was minted, or the address
   now leads somewhere else. Mint them a new one.
@@ -577,13 +609,33 @@ What their phone says, and what to look for in `journalctl -u biogenic-server`:
   ```
   A refused invite bars the address for a minute, and ten for a second one
   within ten minutes. The phone does not call on it again until a new one is
-  pasted.
+  pasted. A friend swimming when the server stops being able to read its book
+  reads this too, and needs the game restarted once it reads again.
 - **"nowhere by that name"** -- the name in the invite did not resolve: check
   your dynamic-DNS name.
 - **"different versions"** -- the phone or the server is older. The server
   updates itself once its water is empty (§4), the phone from its launcher.
 - **"already two"** -- two friends are in. The limit counts the home Wi-Fi and
   the internet together.
+- **"they hung up"** -- the server closed the call. Most often it proved nothing
+  within three seconds -- a link too poor, or not a Biogenic build at all --
+  which bars the address for a minute, as a refused invite does; or the address
+  was barred already, and the door cut the call the moment it connected:
+  ```
+  [net] hung up on 1587052382 (198.51.100.4): no greeting -- challenged, and no proof -- barred 60 s
+  [net] refused 198.51.100.4 on the internet listener: barred for 41 s more
+  ```
+  The phone says to call again in a minute, which is the bar; a second one
+  within ten minutes lasts ten. It is also what a friend swimming reads when
+  the server is stopped -- an update never restarts it with anyone in (§4).
+- **"cut off"** -- the server's gate or referee cut the friend for sending what
+  no Biogenic build sends, or far more than any phone sends (§3). The `[net]
+  cut` line names what, and the invite: `[net] cut 694971552 (203.0.113.9,
+  invite sam): ...`. It is almost always a build out of date: the phone takes
+  the update from its launcher, and the server takes its own (§4).
+- **"could not call"** -- the phone could not start the call: it has no
+  network at all, or the invite names an IPv6 address and the phone's network
+  has none. No `[net]` line: nothing reached the server. For a name, see §9.2.
 
 A friend who got in is one line as they arrive and one as they go, naming the
 invite:

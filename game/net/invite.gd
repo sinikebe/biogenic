@@ -481,9 +481,13 @@ static func forget(path: String = KEPT) -> void:
 ## Made empty first and closed, so what the permission is set on holds
 ## nothing yet -- `FileAccess` may write through a temporary file of its own,
 ## and it takes that file's mode from the one it replaces -- then filled in
-## place, which creates nothing, and renamed over [param path] in one step, so
-## a reader sees the old file or the new one and never half of either. Where
-## there are no Unix permissions (Windows), the rest still holds.
+## place, which creates nothing, read back, and renamed over [param path].
+## **On Linux and Android that rename is one step**, so a reader sees the old
+## file or the new one and never half of either. **On Windows it is two**:
+## Godot 4.7 deletes the old file and then moves the new one, so a reader in
+## between finds none, and a stop in between leaves only `<path>.new` -- a
+## guest's kept invite is then gone until it is pasted again. Windows has no
+## Unix permissions either; the rest holds there too.
 static func write_private(path: String, data: PackedByteArray) -> Error:
 	var dir := path.get_base_dir()
 	if not DirAccess.dir_exists_absolute(dir):

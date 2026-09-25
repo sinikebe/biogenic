@@ -77,15 +77,25 @@ static func is_job(args: PackedStringArray) -> bool:
 ## first, then a new key, then revoking, then minting, then the list -- as
 ## `[exit code, lines to print]`. 0 when every job did what it was asked, 1 when
 ## one was refused; each refusal is a sentence that names the fix.
+##
+## **Run as root into another user's files, none of them runs**
+## ([method ownership_refusal]): what root writes there is root's, `rw-------`,
+## and a server running as the service's user could not read it -- measured in
+## review, a revoke so written was never seen, and the friend swam on. Root's
+## own `user://` is its own business, and gets a note.
 static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	var lines: PackedStringArray = []
 	var code := 0
-	var user := OS.get_environment("USER")
-	if user == "root":
-		lines.append("note: this runs as root, so it writes root's own copy of the book."
-			+ " The service runs as biogenic and will not see it: run this as"
-			+ " sudo -u biogenic HOME=/var/lib/biogenic <server> --headless -- <job>"
-			+ " (docs/server.md)")
+	var whose := owners(root)
+	var refusal := ownership_refusal(int(whose["uid"]), whose["owners"], args,
+		OS.get_executable_path(), OS.get_environment("HOME"))
+	if not refusal.is_empty():
+		return [1, [refusal]]
+	if int(whose["uid"]) == 0 or (int(whose["uid"]) < 0 and OS.get_environment("USER") == "root"):
+		lines.append("note: this runs as root, so it keeps root's own book, in %s, which the"
+			% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
+			+ " job as its user: runuser -u biogenic -- env HOME=/var/lib/biogenic"
+			+ " /opt/biogenic/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)")
 	for job: String in JOBS:
 		for arg: String in args:
 			if not (arg == job or (job.ends_with("=") and arg.begins_with(job))):
@@ -112,6 +122,69 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	return [code, lines]
 
 
+## **Who runs this, and who owns what a job would write**: `{uid, owners}`,
+## `uid` from `id -u` (-1 where there is none to ask: not Linux, or it failed)
+## and `owners` each path that exists -- the book, `pond/`, `invites/`,
+## `user://`, the directory it sits in, and `$HOME` -- as `[uid, name]`, from
+## one `stat`, which only root is asked for. One process for anybody else, two
+## for root -- about 6-17 ms here -- once per job run, and never by a running
+## server.
+static func owners(root: String = ROOT) -> Dictionary:
+	var out := {"uid": -1, "owners": {}}
+	if OS.get_name() != "Linux":
+		return out
+	var said: Array = []
+	if OS.execute("id", ["-u"], said) != 0 or said.is_empty() \
+			or not str(said[0]).strip_edges().is_valid_int():
+		return out
+	out["uid"] = int(str(said[0]).strip_edges())
+	if int(out["uid"]) != 0:
+		return out
+	var where := paths(root)
+	var dir := _real(root).trim_suffix("/")
+	var looked: PackedStringArray = []
+	for each: String in [_real(str(where["book"])), _real(str(where["pond"])),
+			_real(str(where["lines"])), dir, dir.get_base_dir(), OS.get_environment("HOME")]:
+		if each.is_empty() or looked.has(each):
+			continue
+		if FileAccess.file_exists(each) or DirAccess.dir_exists_absolute(each):
+			looked.append(each)
+	said = []
+	if looked.is_empty():
+		return out
+	# Each line names its path, so one that went between the look and the
+	# `stat` -- which then exits 1 -- costs only its own line.
+	OS.execute("stat", PackedStringArray(["-c", "%u %U %n"]) + looked, said)
+	for row: String in (str(said[0]) if not said.is_empty() else "").split("\n", false):
+		var parts := row.split(" ", false, 2)
+		if parts.size() == 3 and parts[0].is_valid_int() and looked.has(parts[2]):
+			(out["owners"] as Dictionary)[parts[2]] = [int(parts[0]), parts[1]]
+	return out
+
+
+## **The refusal for a job root would run into another user's files**, or ""
+## to go on. [param uid] is who runs it (0 is root; -1 unknown), [param found]
+## what [method owners] found, and [param args], [param exe] and [param home]
+## what the sentence gives back as the command to run instead -- as the owner
+## of what it found, with the same home, which is how docs/server.md §9.1 says
+## to run every job.
+static func ownership_refusal(uid: int, found: Dictionary, args: PackedStringArray,
+		exe: String, home: String) -> String:
+	if uid != 0:
+		return ""
+	for path: String in found.keys():
+		var owner: Array = found[path]
+		if int(owner[0]) == 0:
+			continue
+		var name := str(owner[1])
+		return ("refused: this runs as root, but %s belongs to %s, and %s could not read"
+			% [path, name, name] + " what root wrote there -- a revoke the server would"
+			+ " never see. Run it as %s: runuser -u %s -- env HOME=%s %s --headless -- %s"
+			% [name, name, home, exe, " ".join(args)] + " (or sudo -u %s, the same way;"
+			% name + " docs/server.md §9.1)")
+	return ""
+
+
 # ---------------------------------------------------------------------------
 # The jobs. Each returns `[exit code, lines]`.
 # ---------------------------------------------------------------------------
@@ -125,6 +198,12 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 		return [1, ["--reach: %s. For example --reach=203.0.113.7 or" % said["error"]
 			+ " --reach=pond.example.net:45772 (both placeholders)."]]
 	var before := reach(root)
+	# `pond/` made `rwx------` now, when `--reach` is the first job: the key
+	# and the book will go in it, and a directory made in passing is `rwxr-xr-x`.
+	var made := Invite.make_private_dir(str(paths(root)["pond"]))
+	if made != OK:
+		return [1, ["--reach: could not make %s (error %d)" % [_real(str(paths(root)["pond"])),
+			made]]]
 	var file := ConfigFile.new()
 	file.set_value("reach", "address", said["address"])
 	file.set_value("reach", "port", said["port"])
@@ -202,11 +281,16 @@ static func mint(text: String, root: String = ROOT) -> Array:
 		return [1, out + PackedStringArray(["--invite: could not write the book at %s"
 			% _real(str(paths(root)["book"])) + " (error %d)" % err])]
 	var lines_dir := str(paths(root)["lines"])
-	Invite.make_private_dir(lines_dir)
+	err = Invite.make_private_dir(lines_dir)
+	if err != OK:
+		return [1, out + PackedStringArray(["--invite: could not make %s (error %d) -- the"
+			% [_real(lines_dir), err] + " book has the invite, so --revoke=%s takes it back"
+			% name])]
 	err = Invite.write_private(line_path(name, root), (line + "\n").to_utf8_buffer())
 	if err != OK:
 		return [1, out + PackedStringArray(["--invite: could not write the invite to %s"
-			% _real(line_path(name, root)) + " (error %d)" % err])]
+			% _real(line_path(name, root)) + " (error %d) -- the book has it, so" % err
+			+ " --revoke=%s takes it back" % name])]
 	if replaced:
 		out.append("replaced the invite for %s: the line sent before stops working." % name)
 	# docs/design/invites-ux.md §9: the path, never the line, and the address
@@ -382,7 +466,10 @@ static func load_identity(root: String = ROOT) -> Array:
 
 ## **A new key and certificate**, over any old ones. The key is written
 ## `rw-------` before a byte of it lands; the certificate is public -- every
-## invite carries it -- and is written the same way, whole or not at all.
+## invite carries it -- and is written the same way, whole or not at all: each
+## is renamed over the old in one step, which is Linux's rename, where the
+## server runs (on Windows, Godot 4.7 deletes the old file and then moves the
+## new one).
 static func make_identity(root: String = ROOT) -> Array:
 	var where := paths(root)
 	var made := Invite.make_private_dir(str(where["pond"]))
@@ -397,8 +484,8 @@ static func make_identity(root: String = ROOT) -> Array:
 	if key == null or certificate == null:
 		return [1, ["could not make a key and a certificate here"]]
 	# `save()` writes the PEM without the closing NUL that `save_to_string()`
-	# hands back (and warns about); it goes through a scratch file so the real
-	# one is replaced in one step.
+	# hands back (and warns about); it goes through a scratch file, and the
+	# real one is then written through `Invite.write_private`.
 	var scratch := str(where["cert"]) + ".tmp"
 	if certificate.save(scratch) != OK:
 		return [1, ["could not write the certificate to %s" % _real(scratch)]]

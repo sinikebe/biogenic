@@ -17,9 +17,10 @@ extends Node
 ##     to the running file: the running process keeps the old inode, and the
 ##     next start is the new build. And then it restarts --
 ##
-## -- **only once the pond has had nobody in it, connected or connecting, for
-## [member restart_after] seconds.** A restart is an exit; `systemd`'s
-## `Restart=always` starts the new build (`server/biogenic-server.service`).
+## -- **only once the pond has had nobody in it -- no guest, and no phone in the
+## house in the middle of joining -- for [member restart_after] seconds.** A
+## restart is an exit; `systemd`'s `Restart=always` starts the new build
+## (`server/biogenic-server.service`).
 ## Never [code]UpdateService.restart_app()[/code], which spawns a child the
 ## service manager does not know about.
 ##
@@ -120,8 +121,11 @@ func _sweep() -> void:
 			_say("removed %s, left by a stop in the middle of an update" % leftover)
 
 
-## **Once a frame, from the server**, with how many peers the session has --
-## greeted or still greeting. Restarts when that has been 0 for
+## **Once a frame, from the server**, with how many peers a restart would
+## interrupt -- `NetSession.company()`: every greeted guest, and every caller
+## on the LAN still greeting, but never a caller on the internet listener that
+## has proved nothing, or a stranger calling every few seconds could hold an
+## update off for good. Restarts when that has been 0 for
 ## [member restart_after] with something staged; starts a check when one is due.
 func tick(peers: int) -> void:
 	var now := _now()

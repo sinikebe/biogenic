@@ -94,7 +94,8 @@ static var current: Node = null
 ## one's key id and secret, never the secret. [method call_invite] does not dial
 ## one again -- the server bars an address for a minute after a refused proof,
 ## and ten for a second, so a retry could only earn the longer bar and then a
-## silent door (docs/design/invites-ux.md §3). A new paste is a new invite.
+## door that cuts each call as it connects, which reads "they hung up"
+## (docs/design/invites-ux.md §3). A new paste is a new invite.
 static var _turned_away: Dictionary = {}
 
 ## **Which listener a peer came in on** -- a dedicated host has two -- and so
@@ -110,7 +111,9 @@ const STAGE_PROOF := 1
 
 ## How long the host waits for a guest's greeting before hanging up on it. A
 ## transport connection that never says hello is a port scanner, a crash, or a
-## build so old it does not know it has to.
+## build so old it does not know it has to. On the internet listener the
+## greeting is the whole handshake, its PROOF included, and a caller hung up on
+## for missing it is barred as well (part C).
 const HELLO_GRACE := 3.0
 ## How long a guest waits for anything at all. Deliberately shorter than ENet's
 ## own give-up: an unanswered address must become a sentence on screen, not a
@@ -128,7 +131,8 @@ const REACH_TIMEOUT := 4.0
 ## asks for.
 const INVITE_REACH_TIMEOUT := 8.0
 ## **How long an invite's host name may take to resolve** before the call says
-## so. The lookup runs on the engine's resolver thread
+## so -- its IPv4 lookup and, when that finds nothing, its IPv6 one, together.
+## The lookups run on the engine's resolver thread
 ## (`IP.resolve_hostname_queue_item`): `create_client` given a name resolves it
 ## on the calling thread, blocking the frame for as long as DNS takes --
 ## measured, and read in `enet_connection.cpp`.
@@ -212,9 +216,11 @@ const SILENCE := 6.0
 ## **Callers still to say hello, at once: two.** A third is cut on arrival. A
 ## real guest says hello the moment its transport connects, so a caller left
 ## waiting is one in the middle of saying it -- or one that never will, which
-## [constant HELLO_GRACE] hangs up on. More than one guest is still refused
-## with a sentence rather than by the transport, so the extra device learns
-## why; see [method _slots] for how many transports a host holds at all.
+## [constant HELLO_GRACE] hangs up on (and, on the internet listener, bars, so
+## no address can hold a place here by calling back). Each listener has its own
+## two. More than one guest is still refused with a sentence rather than by the
+## transport, so the extra device learns why; see [method _slots] for how many
+## transports a host holds at all.
 const PENDING_MAX := 2
 ## **The most guests any host takes: two**, a dedicated host's (`game/server/`),
 ## each of whom sees the other as the friend. A phone takes one.
@@ -339,7 +345,9 @@ const CALLS_ALL_RATE := 10.0
 ## retry.
 const LIVE_PER_ADDRESS := 3
 ## **Barred after an abuse cut**: a minute, and ten for a second one inside ten
-## minutes. Silence, an old protocol and "already two" are not abuse.
+## minutes. An old protocol and "already two" are not abuse, and nor is silence
+## on the LAN; on the internet listener, a caller that has proved nothing
+## within [constant HELLO_GRACE] is barred like one whose proof was wrong.
 const BAR_FIRST := 60.0
 const BAR_AGAIN := 600.0
 ## **The addresses a host remembers: at most this many**, so the limiter's own
@@ -500,9 +508,13 @@ var _invite: Dictionary = {}
 ## The guest has answered its host's CHALLENGE; a second is dropped.
 var _proved := false
 ## The invite's host name, being resolved on the engine's resolver thread: its
-## query id, and when it was asked. -1 for none.
+## query id, and when the first lookup was asked. -1 for none.
 var _resolving := -1
 var _resolve_at := 0.0
+## **Which lookups this call asked for, in order** -- `IP.TYPE_IPV4`, then
+## `IP.TYPE_IPV6` only when that found nothing ([method call_invite]). Read by
+## `tools/net_probe.gd`; cleared with the call.
+var looked_up: Array[int] = []
 ## The address the call went to, once resolved: what [method _diagnose] asks.
 var _dialed := ""
 ## **The second look after a fast failure** ([method _diagnose]): a DTLS
@@ -800,8 +812,24 @@ func _process(_delta: float) -> void:
 			var peer: Dictionary = _peers[id]
 			if bool(peer["greeted"]):
 				continue
-			if now - float(peer["since"]) >= HELLO_GRACE:
+			if now - float(peer["since"]) < HELLO_GRACE:
+				continue
+			if int(peer.get("via", VIA_LAN)) != VIA_NET:
 				_refuse(id, Wire.REFUSE_SILENT)
+				continue
+			# **On the internet listener, silence is barred**, as a wrong proof
+			# is: a real guest speaks the moment its transport is up and
+			# proves within a few hundred milliseconds, so a caller that has
+			# not by now held one of the waiting room's two places for nothing
+			# -- and two of them calling back as each is hung up on would keep
+			# every invited friend out. A friend on a link too poor to prove in
+			# time hears "they hung up · call again in a minute", which is the
+			# bar. On the LAN, silence is a phone in the house, and is not.
+			gate_counts["net_silent"] += 1
+			var barred := _bar(str(peer["address"]), VIA_NET)
+			_refuse(id, Wire.REFUSE_SILENT, " -- %s -- barred %d s" % ["challenged, and no proof"
+				if int(peer.get("stage", STAGE_HELLO)) == STAGE_PROOF else "nothing said",
+				roundi(barred)])
 		if _net_closing_at > 0.0 and now >= _net_closing_at:
 			_finish_closing_internet()
 	for id: int in _hanging_up.keys():
@@ -915,8 +943,11 @@ func listen_internet(key: CryptoKey, certificate: X509Certificate) -> bool:
 ## no longer in it -- revoked, or replaced, which gives the label a new key id
 ## -- is cut at once, told `REFUSE_INVITE`, and not barred: the owner decided,
 ## not the guest. **None left closes the internet listener**: nothing listens
-## for the internet without an invite to answer.
-func set_invites(table: Dictionary) -> void:
+## for the internet without an invite to answer -- which is also how a server
+## that can no longer read its book fails closed. [param why] is what the log
+## says about each guest cut; by default, that its invite was revoked or
+## replaced.
+func set_invites(table: Dictionary, why: String = "") -> void:
 	_invites = table.duplicate()
 	for id: int in _peers.keys():
 		var peer: Dictionary = _peers.get(id, {})
@@ -926,8 +957,8 @@ func set_invites(table: Dictionary) -> void:
 		var entry: Array = _invites.get(str(peer.get("key_id", "")), [])
 		if entry.is_empty() or entry[1] != peer.get("secret"):
 			gate_counts["invite_cuts"] += 1
-			_cut(id, "its invite (%s) was revoked or replaced" % str(peer.get("label", "")),
-				true, false, Wire.REFUSE_INVITE)
+			_cut(id, why if not why.is_empty() else "its invite (%s) was revoked or replaced"
+				% str(peer.get("label", "")), true, false, Wire.REFUSE_INVITE)
 	if _invites.is_empty():
 		close_internet()
 
@@ -936,8 +967,10 @@ func set_invites(table: Dictionary) -> void:
 ## told `REFUSE_INVITE`, since its invite no longer opens anything, and a
 ## caller still in its handshake is cut. New calls are refused from now on,
 ## and the socket itself closes once the refusals have had
-## [constant REFUSE_LINGER] to leave -- or at once, with [param now].
-func close_internet(now: bool = false) -> void:
+## [constant REFUSE_LINGER] to leave -- or at once, with [param now], which
+## drops a refusal still queued: `peer_disconnect_now` sends nothing after it.
+## [param why] is what the log says about each one cut.
+func close_internet(now: bool = false, why: String = "the internet listener closed") -> void:
 	if _net_peer == null:
 		return
 	for id: int in _peers.keys():
@@ -946,9 +979,9 @@ func close_internet(now: bool = false) -> void:
 			continue
 		if bool(peer["greeted"]):
 			gate_counts["invite_cuts"] += 1
-			_cut(id, "the internet listener closed", true, false, Wire.REFUSE_INVITE)
+			_cut(id, why, true, false, Wire.REFUSE_INVITE)
 		else:
-			_cut(id, "the internet listener closed", false, false)
+			_cut(id, why, false, false)
 	_net_peer.refuse_new_connections = true
 	if now:
 		_finish_closing_internet()
@@ -959,6 +992,12 @@ func close_internet(now: bool = false) -> void:
 ## True while the internet listener takes calls.
 func internet_listening() -> bool:
 	return _net_peer != null and _net_closing_at <= 0.0
+
+
+## **True while it is being put down**: new calls refused, and the refusals
+## given to the guests on it still leaving ([method close_internet]).
+func internet_closing() -> bool:
+	return _net_peer != null and _net_closing_at > 0.0
 
 
 ## **Which listener peer [param id] came in on**, [constant VIA_LAN] or
@@ -1096,12 +1135,23 @@ func call_invite(invite: Dictionary) -> bool:
 	# the life of the process, and an owner's home address that changed while
 	# the game was open would stay wrong until a restart.
 	IP.clear_cache(address)
-	_resolving = IP.resolve_hostname_queue_item(address, IP.TYPE_ANY)
+	_resolve_at = _now()
+	return _look_up(IP.TYPE_IPV4)
+
+
+## **One lookup of the invite's name, of [param type]**, on the resolver
+## thread. **IPv4 first, and IPv6 only for a name with no IPv4 address at
+## all**: a home router forwards a port over IPv4 and seldom opens one over
+## IPv6, so a dynamic-DNS name that also carries an IPv6 address would
+## otherwise send a friend whose network has IPv6 to a door that is shut --
+## eight seconds of "no answer" -- while a friend without IPv6 got in.
+func _look_up(type: int) -> bool:
+	looked_up.append(type)
+	_resolving = IP.resolve_hostname_queue_item(str(_invite["address"]), type)
 	if _resolving == IP.RESOLVER_INVALID_ID:
 		_resolving = -1
 		_invite_gives_up(Link.FAILED, &"no_such_place")
 		return false
-	_resolve_at = _now()
 	return true
 
 
@@ -1140,10 +1190,13 @@ func _reaching_by_invite(now: float) -> bool:
 			if status == IP.RESOLVER_STATUS_DONE else ""
 		IP.erase_resolve_item(_resolving)
 		_resolving = -1
-		if ip.is_empty():
-			_invite_gives_up(Link.FAILED, &"no_such_place")
-		else:
+		if not ip.is_empty():
 			_dial(ip)
+		elif looked_up.back() == IP.TYPE_IPV4:
+			# No IPv4 address: the name's IPv6 one, in what is left of the time.
+			_look_up(IP.TYPE_IPV6)
+		else:
+			_invite_gives_up(Link.FAILED, &"no_such_place")
 		return true
 	if _diag == null:
 		return false
@@ -1553,6 +1606,24 @@ func drain_heard() -> Array:
 
 func peer_count() -> int:
 	return _peers.size()
+
+
+## **Who a dedicated host would be interrupting if it restarted now**, which is
+## what its updater waits for (`game/server/updater.gd`'s `tick`): every greeted
+## guest, and every caller on the LAN still saying hello -- a phone in the house
+## in the middle of joining. **A caller on the internet listener counts only
+## once it has proved an invite** and been greeted: before that it is a
+## stranger, and a stranger calling every few seconds must not hold an update
+## off for good -- measured in review, one silent DTLS caller every 4 s kept
+## [method peer_count] above 0 on 73% of frames. [method peer_count] counts
+## them all.
+func company() -> int:
+	var count := 0
+	for id: int in _peers.keys():
+		var peer: Dictionary = _peers[id]
+		if bool(peer["greeted"]) or int(peer.get("via", VIA_LAN)) == VIA_LAN:
+			count += 1
+	return count
 
 
 ## This session's own peer id, as the transport assigned it. Never compared
@@ -2905,12 +2976,14 @@ func _zero_counts() -> void:
 		# **The internet listener's** (part C): its door's refusals apart --
 		# they are in `refused` and `refused_*` as well -- a second peer under
 		# one id, invites proved and refused, guests cut when theirs was
-		# revoked, and a guest's CHALLENGEs it had no invite to answer.
+		# revoked, a guest's CHALLENGEs it had no invite to answer, and callers
+		# hung up on and barred for proving nothing in time.
 		"refused_twin": 0, "refused_closed": 0,
 		"net_refused": 0, "net_refused_barred": 0, "net_refused_busy": 0,
 		"net_refused_calls": 0, "net_refused_live": 0, "net_refused_pending": 0,
 		"net_refused_closed": 0, "net_refused_twin": 0,
 		"proofs": 0, "proofs_refused": 0, "invite_cuts": 0, "challenges_dropped": 0,
+		"net_silent": 0,
 	}
 
 
@@ -3194,6 +3267,7 @@ func _reset_socket() -> void:
 	_invite = {}
 	_proved = false
 	_dialed = ""
+	looked_up = []
 	_invites = {}
 	_decoy_secret = _crypto.generate_random_bytes(Invite.SECRET_SIZE)
 

@@ -164,8 +164,9 @@ changes the page:
 restarts. On that invite, call goes straight to the `invite_refused` page
 without dialling. The server bars an address for 60 s after a refused proof,
 and for 600 s after a second one within ten minutes (`BAR_FIRST`, `BAR_AGAIN`).
-So a retry can only earn the longer bar, and then a silent door that reads as
-`no answer`. A kept invite that no longer reads shows as nothing kept.
+So a retry can only earn the longer bar, and then a door that cuts each call
+the moment it connects, which reads as `they hung up`. A kept invite that no
+longer reads shows as nothing kept.
 
 Transitions:
 
@@ -305,7 +306,7 @@ updates by itself) and calls the server a cell.
 | – | `no_invite` | nothing kept (these pages never offer call then) | `no invite yet` | `paste the invite your friend sent you first.` | paste invite |
 | – | `could_not_call` | no socket; no network address at all (flight mode); or an IPv6 invite on a network with no IPv6 | `could not call` | `this device could not start the call. check it is online, then call again.` | again |
 | – | `no_such_place` | the host name does not resolve | `nowhere by that name` | `check this device is online. if it is, ask your friend to check the address in their invite.` | again |
-| 4, 10 | `no_answer` | nothing within 8 s: the server is down, the address is wrong, the port is closed, this network blocks it, or the door has barred this address | `no answer` | `nothing answered at the invite's address. ask your friend if their server is up, or try another network.` | again |
+| 4, 10 | `no_answer` | nothing within 8 s: the server is down, the address is wrong, the port is closed, or this network blocks it | `no answer` | `nothing answered at the invite's address. ask your friend if their server is up, or try another network.` | again |
 | – | `not_running` | the address refused the call: nothing listens on that port | `no server there` | `the address answered, but no server is listening. ask your friend to check theirs is running, then call again.` | again |
 | 5 | `not_this_pond` | another certificate, or the right one under another name | `a different server` | `something else answers at that address now. ask your friend for a new invite, then paste it.` | paste new |
 | 6 | `invite_refused` | revoked, replaced, or a proof that failed; the door bars the address for a minute | `invite no longer works` | `it was taken back or replaced. ask your friend for a new one, paste it, and call in a minute.` | paste new |
@@ -313,7 +314,7 @@ updates by itself) and calls the server a cell.
 | 7 | *new* | versions differ, and the server is older | `different versions` | `your friend's server is older, and updates itself once nobody is swimming there. call again in ten minutes.` | again |
 | 8 | *new* | the server already holds two guests | `already two` | `two cells are already in your friend's water. call again when one of them leaves.` | again |
 | 9 | *new* | cut for sending what it would not take | `cut off` | `your friend's server would not take what this game sent. take the update from the launcher, then call again in a minute.` | again |
-| – | *new* | any other hang-up, including a refusal this build does not know | `they hung up` | `your friend's server closed the call. call again in a minute.` | again |
+| – | *new* | any other hang-up, including a refusal this build does not know; a call that proved nothing within 3 s, which the door then bars for a minute; and a call from an address it has barred, which it cuts as it connects | `they hung up` | `your friend's server closed the call. call again in a minute.` | again |
 
 Every sentence names who acts: you, your friend, or nobody (wait). None of them
 says DTLS, certificate, HMAC or port forwarding, and none says "pond", which no

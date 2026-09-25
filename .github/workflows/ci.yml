@@ -290,19 +290,20 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes about 310 checks, caps itself at 500
-        # frames a second and quits itself in about 129 seconds: some seven in
+        # a backstop only. The probe makes 317 checks, caps itself at 500
+        # frames a second and quits itself in 137 to 140 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # eighteen to twenty-one in `limits`, at up to 100 frames a second,
         # about twenty-five in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
-        # about ten in the server's, and about forty-four in `invites`, at up
+        # about ten in the server's, and about fifty-two in `invites`, at up
         # to 50 frames a second, most of it waiting out what a player would --
-        # the eight seconds of a call nothing answers. Its pond timings are
-        # counted in frames, not wall milliseconds, so a loaded runner slows
-        # the step without failing it. It prints its own frame count -- about
-        # 12,400 to 12,500 -- so the margin on 20000 is visible in the log.
+        # the eight seconds of a call nothing answers, the three of a caller
+        # that never proves. Its pond timings are counted in frames, not wall
+        # milliseconds, so a loaded runner slows the step without failing it.
+        # It prints its own frame count -- 12,800 to 13,200, measured five
+        # times -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
