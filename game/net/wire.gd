@@ -144,6 +144,13 @@ const REFUSE_PROTOCOL := 0x01
 const REFUSE_FULL := 0x02
 ## The guest connected and then said nothing we understood.
 const REFUSE_SILENT := 0x03
+## **The guest broke the protocol, again and again**: frames no writer in this
+## file produces, or -- once a host enforces its budgets -- far more of them
+## than any body sends (net-hardening.md A.4). The host also bars the address
+## for a minute. New in the life of protocol 4, and it needed no bump: every
+## protocol-4 build reads a reason it does not know as [method reason_says]'s
+## "refused", over "the other end hung up".
+const REFUSE_BROKEN := 0x04
 
 const HELLO_SIZE := 3
 ## `kind | protocol | host id`. The id is four bytes because peer ids are random
@@ -321,6 +328,50 @@ const CONTACT_SIZE := EVENT_HEADER + 14
 ## Contact.KILLED, written out for the same reason as [enum Entry].
 const CONTACT_ATE := 5
 const CONTACT_KILLED := 6
+
+# --- What a frame may weigh (net-hardening.md A.3) ----------------------------
+## **Every size here is derived from the writers above**, and `tools/
+## net_probe.gd` holds each bound to a frame a writer really produces at it, so
+## the table in the plan and this code are one thing. A frame is measured as the
+## session sees it: ENet carries one byte more, the RAW command in front.
+##
+## **A handshake frame may carry a tail.** Its three-byte prefix is frozen, and
+## a later protocol may add to it -- shared-pond.md §7 plans the ladder hash on
+## the HELLO and WELCOME tails -- so a reader takes anything up to this and
+## reads the prefix, which is what lets it refuse that protocol with the
+## sentence instead of a shrug.
+##
+## **So a later protocol's HELLO must stay within these 64 bytes** to be told
+## why a host of this build refuses it. Longer, and the host hangs up before
+## the handshake with no sentence at all; longer than [constant GUEST_FRAME_MAX]
+## (272), and it is the oversize cut, which bars the caller's address for a
+## minute (net-hardening.md A.2).
+const HANDSHAKE_MAX := 64
+## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
+## `len | a name of NAME_MAX letters | tier`. 145 bytes. An unknown name is
+## legal and inert, so the bound follows the format and not today's longest
+## gene, which has ten letters.
+const TIERS_MAX := 1 + GENES_MAX * (1 + NAME_MAX + 1)
+## A slot order at its longest: the count, then [constant ORDER_MAX] slots of
+## `len | name`. 120 bytes.
+const ORDER_BYTES_MAX := 1 + ORDER_MAX * (1 + NAME_MAX)
+## PERSON: the header, the new-body byte, a genome and an order -- 9 bytes with
+## nothing worn, 272 at the most the format holds. A real one is at most 182.
+const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1
+const PERSON_MAX := EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
+## GENOME: slot, serial and meals, then a genome. 11 to 155.
+const GENOME_MIN := EVENT_HEADER + 4 + 1
+const GENOME_MAX := EVENT_HEADER + 4 + TIERS_MAX
+## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
+const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
+## SISTER: a place, a heading, a radius and a genome. 20 to 164.
+const SISTER_MIN := EVENT_HEADER + 13 + 1
+const SISTER_MAX := EVENT_HEADER + 13 + TIERS_MAX
+## **The most either side ever writes in one frame**: a guest's longest PERSON
+## and a host's POND. A receiver reads no byte past the first of anything
+## longer.
+const GUEST_FRAME_MAX := PERSON_MAX
+const HOST_FRAME_MAX := POND_MAX
 
 # ---------------------------------------------------------------------------
 # Writing.
@@ -721,6 +772,61 @@ static func event_type(frame: PackedByteArray) -> int:
 	return frame[5]
 
 
+## **Whether a frame of [param kind] -- and for an event, of event [param type]
+## -- may be [param size] bytes long, sent by a host ([param from_host]) or by a
+## guest.** False for a size no writer here produces, and for a kind or type
+## that side never sends: a guest's POND or GENOME, a host's ENTER or HELLO.
+## Nothing past the size is read, so it is safe on any frame. A kind or type
+## this protocol does not define is not judged here -- see [method known]: it
+## is a later build's, and is ignored rather than refused.
+static func size_ok(kind: int, type: int, size: int, from_host: bool) -> bool:
+	var span := _span(kind, type, from_host)
+	return span.x >= 0 and size >= span.x and size <= span.y
+
+
+## True for a frame kind this protocol defines -- and for an event, a type it
+## defines. Anything else is a later build's extension, which the reader
+## promises to ignore.
+static func known(kind: int, type: int) -> bool:
+	return _span(kind, type, true).x >= 0 or _span(kind, type, false).x >= 0
+
+
+## `[least, most]` bytes a frame may be, from the side [param from_host] says,
+## or `(-1, -1)` when that side never sends it. A.3's table, in code.
+static func _span(kind: int, type: int, from_host: bool) -> Vector2i:
+	var never := Vector2i(-1, -1)
+	match kind:
+		KIND_HELLO:
+			return never if from_host else Vector2i(HELLO_SIZE, HANDSHAKE_MAX)
+		KIND_WELCOME:
+			return Vector2i(WELCOME_SIZE, HANDSHAKE_MAX) if from_host else never
+		KIND_REFUSE:
+			return Vector2i(REFUSE_SIZE, HANDSHAKE_MAX) if from_host else never
+		KIND_STATE:
+			return Vector2i(STATE_SIZE, STATE_SIZE)
+		KIND_POND:
+			return Vector2i(POND_HEADER, POND_MAX) if from_host else never
+		KIND_EVENT:
+			match type:
+				EVENT_SHOUT:
+					return Vector2i(SHOUT_SIZE, SHOUT_SIZE)
+				EVENT_ENTER:
+					return never if from_host else Vector2i(ENTER_SIZE, ENTER_SIZE)
+				EVENT_ARRIVE:
+					return Vector2i(ARRIVE_SIZE, ARRIVE_SIZE) if from_host else never
+				EVENT_PERSON:
+					return Vector2i(PERSON_MIN, PERSON_MAX)
+				EVENT_GENOME:
+					return Vector2i(GENOME_MIN, GENOME_MAX) if from_host else never
+				EVENT_CONTACT:
+					return Vector2i(CONTACT_SIZE, CONTACT_MAX) if from_host else never
+				EVENT_DIED:
+					return Vector2i(DIED_SIZE, DIED_SIZE)
+				EVENT_SISTER:
+					return never if from_host else Vector2i(SISTER_MIN, SISTER_MAX)
+	return never
+
+
 ## `[at, radius, reach]`, or an empty array if this is not a readable shout.
 ## Callers check `is_empty()`; an unknown event type is silently nothing, which
 ## is the rule that lets a later protocol add an event without breaking this
@@ -910,6 +1016,8 @@ static func reason_says(reason: int) -> String:
 			return "already two"
 		REFUSE_SILENT:
 			return "no greeting"
+		REFUSE_BROKEN:
+			return "cut off"
 	return "refused"
 
 

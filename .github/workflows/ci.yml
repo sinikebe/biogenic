@@ -249,10 +249,14 @@ jobs:
           fi
 
       - name: Check the LAN session
-        # Two SceneMultiplayer instances in ONE headless process, each bound to
-        # its own subtree with SceneTree.set_multiplayer(api, path), talking
-        # ENet over loopback. Full handshake, raw frames both ways, and the
-        # version-skew refusal. Then, with no socket at all, the shared pond's
+        # Two sessions in ONE headless process, talking ENet over loopback: a
+        # guest through a SceneMultiplayer bound to its own subtree with
+        # SceneTree.set_multiplayer(api, path), and a host reading its own
+        # ENetMultiplayerPeer, every frame through one gate
+        # (docs/design/net-hardening.md, part A). Full handshake, raw frames
+        # both ways, and the version-skew refusal. Then the door and the gate
+        # (`limits`): hostile peers against a host of their own each. Then,
+        # with no socket at all, the shared pond's
         # field rules (`pond-field`): two players in one food.gd, the eating
         # rule both ways, the per-player water, and a mirror that must perceive
         # exactly what the field does. Then the dedicated server
@@ -273,14 +277,15 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second and
-        # quits itself in about fifty-five seconds: some eight in the
+        # quits itself in seventy to seventy-five seconds: some eight in the
         # socket-free pond-field section, which runs inside one frame and
-        # spends none of the budget, about twenty-three in the pond section,
-        # two real runs over loopback at up to 250 frames a second, and about
-        # six in the server's. Its pond timings are counted in frames, not wall
+        # spends none of the budget, eighteen to twenty-one in `limits`, at up
+        # to 100 frames a second, about twenty-three in the pond section, two
+        # real runs over loopback at up to 250 frames a second, and about six
+        # in the server's. Its pond timings are counted in frames, not wall
         # milliseconds, so a loaded runner slows the step without failing it.
-        # It prints its own frame count -- about 6,700 -- so the margin on
-        # 20000 is visible in the log.
+        # It prints its own frame count -- about 8,500 to 8,900 -- so the
+        # margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
