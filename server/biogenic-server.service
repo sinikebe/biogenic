@@ -1,4 +1,5 @@
-# Biogenic's dedicated server: the shared pond, on the home LAN.
+# Biogenic's dedicated server: the shared pond, on the home LAN -- and, for
+# friends outside the house, by invite on a second port (docs/server.md §9).
 #
 # Installed to /etc/systemd/system/ by install-server.sh, from the same release
 # as the build it runs. See docs/server.md.
@@ -9,7 +10,7 @@
 # its own, and Restart=always is what starts the new build.
 
 [Unit]
-Description=Biogenic dedicated server (shared pond, LAN only)
+Description=Biogenic dedicated server (shared pond: the LAN, and friends by invite)
 Wants=network-online.target
 After=network-online.target
 

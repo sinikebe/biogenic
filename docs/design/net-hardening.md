@@ -4,19 +4,19 @@ This plan covers issues #56, #57, #58 and #59. It has three parts:
 
 - **A** is one PR for #58 and #56 (frames, budgets, admission). **Built, and reviewed.** This part now describes what was built on `main` at `956d586`, what its review found and how each was fixed (marked "after review"), the measurements it rests on, and each place the build differs from the plan and why. The budgets ship enforced, the owner's call; watch mode stays as a switch (A.4).
 - **B** is one PR for #57 (the host checks what a guest says). **Built, and reviewed.** This part now describes what was built on top of `17e5f09` (`main` when B began), what its review found and how each was fixed (marked "after review"), the measurements it rests on, and each place the build differs from the plan and why. The fouls ship enforced, and `enforce_referee` is the watch switch (B.1). The re-entry wound rule is on, the owner's decision of 2026-09-25 (B.2). The rules the referee judges by are fingerprinted in `Wire.RULES` (B.2).
-- **C** sets out the options for #59 and builds none of them. Still a plan.
+- **C** is one PR for #59 (friends outside the house, by invite). **Built.** The owner chose C2 and all four rows of C.3 as recommended. This part keeps the options and the facts they were chosen on (C.1-C.3, with what building it found about them), then describes what was built on top of `4643520` (`main` when C began), the measurements it rests on, each place the build differs from the plan and why, and what it does not do (C.4-C.11). The screens that use it are specified in `docs/design/invites-ux.md` and built separately.
 
-Part C was written against `main` at `d84bfb6`, and its line numbers are that commit's. Parts A and B name functions instead, because they outlive a line number.
+Part C's plan was written against `main` at `d84bfb6`; as built, it names functions, as A and B do, because they outlive a line number.
 
-The order is A, then B, then C. A carries a guard that makes "LAN-only for now" true in the code.
+The order was A, then B, then C. A carried a guard that made "LAN-only for now" true in the code; C lifts it on one listener, the dedicated server's second, and nowhere else.
 
 ## 0. Rules this plan follows
 
 - **Content only.** Every change is GDScript, so no `binary_version` bump. The two ideas that would force one (scanning a code with the camera, a native crypto library) are rejected in C.2.
-- **No PROTOCOL bump in A or B.** The only new wire value is one refusal reason, `REFUSE_BROKEN`, and every protocol-4 build shows a reason it does not know generically, as "refused" over "the other end hung up" (`Wire.reason_says`, and `_take_refuse`'s last branch). That was checked in the code of all four protocol-4 releases, +104 to +107, and run against a hardened host (A.7).
+- **No PROTOCOL bump in A, B or C.** C's new kinds and reason exist only on a listener no protocol-4 build can reach (C.5). A's only new wire value is one refusal reason, `REFUSE_BROKEN`, and every protocol-4 build shows a reason it does not know generically, as "refused" over "the other end hung up" (`Wire.reason_says`, and `_take_refuse`'s last branch). That was checked in the code of all four protocol-4 releases, +104 to +107, and run against a hardened host (A.7).
 - **Nothing personal.** Addresses here are documentation ranges (RFC 5737: 192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24; RFC 3849 for IPv6: 2001:db8::/32). Keys, invites and server addresses live in `user://` on the device that needs them. A caller's real address appears only in a server's log, which is not the repository.
 - **The launcher is not ours.** Nothing here touches `addons/launcher/` or `ci/`.
-- **Run it, do not guess.** Every number is derived from a constant in main or a line in 4.7-stable. Where reading the source is not enough, the item is marked **measure first** (A.9, C.3).
+- **Run it, do not guess.** Every number is derived from a constant in main or a line in 4.7-stable. Where reading the source is not enough, the item is marked **measure first** (A.9), and C's were measured before it was built (C.1).
 - **Two guests.** Everything per guest is keyed by peer id, so the dedicated server's two guests are independent: each has its own budgets, its own ledger and its own share of the event queue.
 
 ## 1. How an inbound datagram reached our code before A
@@ -195,7 +195,7 @@ A host whose last greeted guest is cut, or leaves, goes back to listening. **Cha
 
 | Limit | Phone host | Server | Why |
 |---|---|---|---|
-| **LAN-only guard:** the source must be loopback, RFC 1918, 100.64/10, 169.254/16, the host's own /24, or IPv6 loopback, ULA or link-local | on | on, until #59's listener exists | Makes "LAN-only for now" true in code. A forwarded port, or a public IPv6 address the router lets through, hits the guard and is refused with one log line. The host binds the wildcard address, so IPv6 is otherwise open wherever a router allows inbound IPv6. 100.64/10 is allowed because lan.gd counts carrier-grade-NAT Wi-Fi as a home network, and it is also Tailscale's range (C1). The own-/24 rule is there because this container's own address is 192.0.2.2. `Lan.is_local_source(address, own)`. |
+| **LAN-only guard:** the source must be loopback, RFC 1918, 100.64/10, 169.254/16, the host's own /24, or IPv6 loopback, ULA or link-local | on | on for the LAN listener; the internet listener (C) asks for an invite instead | Makes "LAN-only for now" true in code. A forwarded port, or a public IPv6 address the router lets through, hits the guard and is refused with one log line. The host binds the wildcard address, so IPv6 is otherwise open wherever a router allows inbound IPv6. 100.64/10 is allowed because lan.gd counts carrier-grade-NAT Wi-Fi as a home network, and it is also Tailscale's range (C1). The own-/24 rule is there because this container's own address is 192.0.2.2. `Lan.is_local_source(address, own)`. |
 | ENet slots (`create_server`) | 4 | 6 | `_slots()` = one per guest, the two pending callers, and one half-dead predecessor per guest. Each slot can hold up to 32 MiB of ENet buffering, so no more than this. (The server had 5 before.) |
 | greeted guests | 1 | 2 | Beyond this, REFUSE_FULL with its sentence, as before |
 | pending (not greeted) | 2 | 2 | A third is cut on arrival (`PENDING_MAX`) |
@@ -232,7 +232,7 @@ All of it goes through one helper, `_note(what, key, line)`. It prints at most o
 Examples, using documentation addresses:
 
 ```
-[net] refused 203.0.113.9: not on this network (LAN-only until #59)
+[net] refused 203.0.113.9: not on this network -- a call from outside needs an invite, on port 45772
 [net] hung up on 1587052382 (192.0.2.40): different versions
 [net] cut 694971552 (192.0.2.10): malformed: an event of type 4 that does not read -- 12 points -- barred 60 s
 [net] 694971552 (192.0.2.10) done after 3 s -- frames 12, events 2, over budget 0, points 12
@@ -324,7 +324,7 @@ Every test prints `PASS` or `FAIL` in the house form and none causes a `SCRIPT E
 - **ENet reads at most 256 datagrams per poll.** Anything beyond that waits in the kernel's 256 KiB buffer and is dropped there. This puts an implicit ceiling on CPU, but it also adds latency for honest frames during a flood.
 - **Engine error prints** cannot be rate-limited from GDScript. This covers a failed DTLS handshake, and on guests, the SceneMultiplayer commands a hostile host could send.
 - **The lockout, fixed.** The first build's door spent the bucket every address shares before the caller's own, so one device making more than ten handshakes a second locked every new caller out. The review reproduced it, the order is swapped (A.5), and T8 checks the review's own scenario.
-- **A barred address can still knock.** The door judges a caller only once ENet has finished its handshake, and the bar is checked before the call buckets, so a barred address can complete handshake after handshake -- each refused at once, the line printed once every 10 s -- and, by never finishing one, can hold every one of the 4 or 6 ENet slots until ENet gives up on it (5-30 s), which keeps every new caller out for as long as it keeps at it. A guest already playing keeps its slot. Only something below GDScript refuses before the handshake: on the server box, a firewall rate limit per source (C.3); on a phone, nothing.
+- **A barred address can still knock.** The door judges a caller only once ENet has finished its handshake, and the bar is checked before the call buckets, so a barred address can complete handshake after handshake -- each refused at once, the line printed once every 10 s -- and, by never finishing one, can hold every one of the 4 or 6 ENet slots until ENet gives up on it (5-30 s), which keeps every new caller out for as long as it keeps at it. A guest already playing keeps its slot. Only something below GDScript refuses before the handshake: on the server box, a firewall rate limit per source (C.11, and docs/server.md §9.6); on a phone, nothing.
 - **An ENTER is answered with about seventy reliable events.** A.4 lets a guest send five events a second, and every ENTER makes the host queue an ARRIVE, a PERSON and up to 68 GENOMEs (about 10 KB) back to it, all reliable, so a guest that acknowledges slowly grows ENet's send queue for as long as it keeps asking. While the budgets are watched, not even the five a second bounds it: only the host's own frame rate does. B's ENTER limit (four at once, then one every 2 s, B.2) bounds it either way.
 - **Watched budgets take a flood whole** (A.4). Memory stays bounded -- the queue caps are enforced, and ENet reads at most 256 datagrams a poll -- and the lines are rate-limited, but every frame of a flood is read, parsed and taken until the budgets are turned on.
 - **The server's updater waits for an empty pond**, and a caller still saying hello counts (docs/server.md: "nobody connected, and nobody connecting"). A hostile device on the LAN that keeps calling can therefore hold an update back, one call every 3 s after its burst. That is the updater's definition of empty, and it is left as it is.
@@ -517,110 +517,287 @@ And these, found building it:
 - **After a death, for up to 10 s, a PERSON that is neither the born body nor the dead one is ignored without a foul** (the first quirk's window). Nothing ignored is applied, so it gains a cheat nothing.
 - **Real Wi-Fi.** As for A, two phones on real Wi-Fi for 30 minutes remain to be run. The referee's budgets are the only ones here timing can trip -- movement, heading, calls, arrivals and bodies -- and the relay runs above stand in for that playtest without being it. An honest guest fouled there is a bug in these numbers: set `enforce_referee` to `false` and read the `[net] would foul` lines.
 
-## C. #59: what opening a port needs (options only)
+## C. #59 in one PR: friends outside the house, by invite
 
-**Still the plan, as written against `d84bfb6`.** A's LAN-only guard (`Lan.is_local_source`, checked in `_admit`) is what C2 switches off for its DTLS listener, and nowhere else.
+**Built.** The owner chose C2 and all four rows of C.3 as recommended: a pasted invite with the server's certificate pinned and a secret for each friend; one invite per friend; the home Wi-Fi needs none; and a guest cut for cheating or garbage is told so in a sentence. This part describes what was built on top of `4643520` (`main` when C began), the measurements it rests on, each place the build differs from the plan and why (marked **changed from the plan**), and what it does not do.
 
-### C.1 What Godot 4.7 actually offers
+It is content only, like A and B. There is **no PROTOCOL bump and `Wire.RULES` is unchanged**: the two new kinds and the new refusal reason exist only on a listener no protocol-4 build can reach, since it has no DTLS client and no way to enter an address (C.5), and nothing the referee judges by moved (net_probe's `_referee_rules` still passes). The LAN, and every phone host, is exactly as it was: the four taps, the port, the door, the gate and the referee. The screens are specified in `docs/design/invites-ux.md` and built separately, on the API in C.7.
 
-All of this was read in 4.7-stable and the 4.7 class reference.
+### C.1 What Godot 4.7 offers, and what building it found
+
+All of this was read in 4.7-stable and measured in this container. Where the build found something C's first reading did not, it is marked **found**.
 
 - **ENet over DTLS: yes.**
-  - `ENetConnection.dtls_server_setup(TLSOptions)` and `dtls_client_setup(hostname, TLSOptions)` (enet_connection.cpp:277-304) exist.
-  - They are called on `ENetMultiplayerPeer.host` right after `create_server` or `create_client`, before the first poll. They swap ENet's socket for a DTLS one, which only a fresh UDP socket allows (enet_godot.cpp:536-556).
-  - It is DTLS 1.2 through mbedTLS, **with cookies**: a spoofed ClientHello gets one stateless reply and never gets a slot (dtls_server_mbedtls.cpp:37-57; tls_context_mbedtls.cpp:146-151; packet_peer_mbed_dtls.cpp:95-113).
-  - DTLS is in the official Android 4.7 template (measured in multiplayer.md §2).
-- **Its limits, in the engine's own comments:** "TODO limits? Maybe we can better enforce allowed connections!" and "TODO this needs to be fair!" (enet_godot.cpp:359, :377).
-  - A peer that is mid-handshake holds one of the host's slots for up to 8 s (`ENET_DTLS_TIMEOUT_MS`, :285, :366).
-  - At most 16 new sources can be pending (:317).
-  - `refuse_new_connections` does work here (:316-318).
-  - Every failed handshake prints an `ERR_PRINT` (packet_peer_mbed_dtls.cpp:100).
-- **Measured on 4.7-stable in this container, 2026-09-24** (loopback; RSA-2048 key and self-signed certificate made with `Crypto` at startup; `dtls_server_setup` on the server's `host` right after `create_server`, and `dtls_client_setup("biogenic-pond", TLSOptions.client(cert, "biogenic-pond"))` on the client):
+  - `ENetConnection.dtls_server_setup(TLSOptions)` and `dtls_client_setup(hostname, TLSOptions)`, on `ENetMultiplayerPeer.host`, straight after `create_server` or `create_client` and before the first poll: they swap ENet's socket for a DTLS one, which only a socket nothing has read from allows (`thirdparty/enet/enet_godot.cpp`).
+  - DTLS 1.2 through mbedTLS, **with cookies**: a spoofed ClientHello gets one stateless HelloVerifyRequest and never a slot. **Found:** the suite negotiated is `0xCCA8`, ECDHE-RSA with ChaCha20-Poly1305, read off the ServerHello by the relay (C.8) -- forward secrecy, and 29 bytes on every record (13 of header, 16 of tag).
+  - DTLS is in the official Android 4.7 template (multiplayer.md §2), and the exported Linux server's (C.8).
+- **The DTLS server's limits.**
+  - **Found: its slots are the ENet host's peer count** (`host->peerCount`, 6 here), and a peer that has finished DTLS and connected to ENet keeps its DTLS slot. So with two guests and two callers waiting, two are left for handshakes; a caller that finds none has its half-made handshake dropped and retries on mbedTLS's own timer. The check reads `peers.size() < max_clients && HANDSHAKING || CONNECTED` -- a precedence slip that changes nothing in practice.
+  - At most 16 new sources wait at once (`UDPServer`'s pending list). **Found:** `UDPServer.poll()` drains the whole socket every call -- not ENet's 256 datagrams -- into a 64 KiB queue per source, dropping past it, so a flood's memory is bounded by source.
+  - A mid-handshake peer holds its slot for up to 8 s (`ENET_DTLS_TIMEOUT_MS`), and `refuse_new_connections` does work here: the build uses it while the listener closes.
+  - Every handshake that fails prints an `ERR_PRINT` on the side that failed. **Found:** the server prints one for each datagram that is not a handshake (`-30464`, `-0x7700`, unexpected message) and for a handshake it had no slot for; the client prints one for a pin that does not match (`-9984`, X509 verify failed), and the server then another for the client's alert (`-30592`).
+  - **Found: closing a DTLS listener prints three `godot_mbedtls_mutex_free` error lines**, every time. `CookieContextMbedTLS::clear()` never resets `inited`, so the server's `stop()` and its destructor free the same three mutexes twice (`modules/mbedtls/tls_context_mbedtls.cpp`, `register_types.cpp`). Harmless, and GDScript cannot avoid it.
+- **What a DTLS client can observe** -- measured on loopback, 4.7-stable, in a scratch harness, three calls each, from the call to the status changing; `tools/net_probe.gd`'s C1-C8 hold the same, with the handshake or the second look on top (C.9):
 
-  | Case | Client | Server |
+  | Case | The client | Time |
   |---|---|---|
-  | pinned certificate, right name | connected after 513 ms. ENet's first CONNECT goes out before DTLS is up and waits for its resend, which is one `bio_send` error line | `peer_connected` at 520 ms; packets flow |
-  | a different self-signed certificate | refused in 16 ms (`X509 verify failed`, -0x2700), status DISCONNECTED | stays up; one handshake error line |
-  | right certificate, wrong name | refused in 18 ms, the same way | stays up; one handshake error line |
-  | a plain ENet client, no DTLS | stays CONNECTING until ENet gives up | stays up; one handshake error line per attempt (5 in 8 s) |
+  | the pinned certificate, the right name | connected: ENet's first CONNECT goes out before DTLS is up and waits for its resend | 508-515 ms |
+  | another certificate | `connection_failed`: status DISCONNECTED | 10 ms |
+  | the right certificate under another name | the same | 9-10 ms |
+  | **found:** a port nothing listens on | **the same** -- the DTLS client's UDP socket is *connected*, so it hears the ICMP port-unreachable, and the handshake fails at once | 2-3 ms |
+  | a plain ENet listener (the LAN port) | still CONNECTING: the listener reads the handshake as garbage and says nothing | until given up |
+  | a plain ENet client at the DTLS port | still CONNECTING, and one server error line per attempt: 5 in 8 s | until given up |
+  | a certificate valid from 2090, or one that expired in 2021 | fails as another certificate does | 9 ms |
 
-  So pinning works, a wrong server fails fast and cleanly, and a plain client costs the server only log lines. The 0.5 s connect delay is ENet's resend. The engine's error prints are what journald's rate limit is for (C.3).
-- **No client certificates.** The server side is `MBEDTLS_SSL_VERIFY_NONE // TODO client auth.` (tls_context_mbedtls.cpp:127). DTLS proves who the server is and encrypts the traffic; the client has to prove itself inside the encrypted channel.
-- **Pinning a self-signed certificate: yes.**
-  - `TLSOptions.client(trusted_chain, common_name_override)` verifies against exactly the chain given, and checks the certificate's name against the override (or the hostname if no override is given) (tls_context_mbedtls.cpp:173-228; core/crypto/crypto.cpp:70-99).
-  - `Crypto.generate_self_signed_certificate` marks the certificate CA:TRUE (crypto_mbedtls.cpp:419-420), so it can be its own trust anchor.
-  - `client_unsafe(chain)` checks the chain but skips the name, and the reference calls it testing-only.
-- **Pre-shared keys (PSK): no.** TLSOptions has only `client`, `client_unsafe` and `server`, and the mbedTLS context never sets a PSK.
-- **Crypto on the server at install time: yes, RSA only.**
-  - Available: `generate_rsa`, `generate_self_signed_certificate(key, "CN=…,O=…,C=…", not_before, not_after)`, `generate_random_bytes`, `hmac_digest` (SHA-256 or SHA-1) and `HMACContext`, `constant_time_compare`, and RSA `sign`, `verify`, `encrypt`, `decrypt`.
-  - `CryptoKey` and `X509Certificate` save and load PEM. `FileAccess.set_unix_permissions` sets 0600 on Linux. `AESContext` offers ECB and CBC only.
-  - **There is no ECDH, no X25519 and no big-number API, so no password-authenticated key exchange (SRP, SPAKE2, OPAQUE).** A human password proven over a channel that is not already authenticated can be guessed offline by anyone who relays a single handshake.
-- **SceneMultiplayer's own auth** (`auth_callback`, `send_auth`, `complete_auth`, `auth_timeout`). It holds a peer back until a callback approves it, and drops everything else that peer sends (scene_multiplayer.cpp:96-120, :144-158). That includes a protocol-4 build's RAW HELLO, which would lose that build its refusal sentence (`_check_skew`). So it is usable only on a listener no protocol-4 build can reach. If A moves the host off SceneMultiplayer, the same job is two frames in net_session's own handshake.
-- **WebSocket with TLS.** `WebSocketMultiplayerPeer.create_server(port, bind_address, tls_server_options)` and `create_client(url, tls_client_options)`, with the same TLSOptions. Per-peer buffers are bounded by `inbound_buffer_size` (65,535 by default) and `max_queued_packets`, with a 3 s `handshake_timeout`. ENet cannot bound its buffers like this.
-- **No text field is needed for any of this.** `DisplayServer.clipboard_get()` works on Android and Windows (FEATURE_CLIPBOARD). An invite can be **pasted** with one 48 px button, so lan.gd's reasons for having no text field still hold (lan.gd:5-12: the launcher theme styles no text field, and a soft keyboard would cover a landscape-locked screen).
+  **So "it failed fast" says a wrong server or a closed port, and ENet cannot tell which.** The guest takes a second look (C.7): a DTLS handshake with no pin, which any Biogenic server completes and a closed port refuses. **And mbedTLS checks both certificate dates** against the device's clock (`MBEDTLS_HAVE_TIME_DATE` is in Godot's configuration), which is why the server's certificate runs from 2020 to 2099.
+- **No client certificates.** The server side is `MBEDTLS_SSL_VERIFY_NONE // TODO client auth.` DTLS proves who the server is and encrypts; the client proves itself inside, with the PROOF (C.5).
+- **Pinning a self-signed certificate: yes.** `TLSOptions.client(chain, common_name_override)` verifies against exactly that chain and checks the name; `client_unsafe()` with no chain verifies nothing, which is what the second look uses. `Crypto.generate_self_signed_certificate` marks the certificate CA:TRUE, so it is its own anchor.
+- **Pre-shared keys: no**, and **no ECDH, X25519 or big numbers**, so no password-authenticated key exchange. A typed password could be guessed offline by anyone who relayed a handshake; the invite's secret is random and never typed.
+- **Crypto on the server: RSA only, and enough.** `generate_rsa` (16-290 ms for 2,048 bits here), `generate_self_signed_certificate`, `generate_random_bytes`, `hmac_digest` (8 µs for a proof), `constant_time_compare`. **Found:** `X509Certificate.save_to_string()` hands back its buffer's closing NUL and prints a Unicode warning every call; `save()` writes the same PEM without it, and the build uses that. `FileAccess.set_unix_permissions` sets 0600 on Linux and Android, and is a no-op on Windows.
+- **Found: `create_client` given a host name resolves it on the calling thread** -- `ENetConnection.connect_to_host` calls `IP.resolve_hostname` (`modules/enet/enet_connection.cpp`), and a name not yet cached blocked the frame for 16 ms here, and would for as long as a slow DNS takes. `IP.resolve_hostname_queue_item` returned in 0.02 ms and resolved on the resolver thread. The build resolves there, and dials the address it gets.
+- **SceneMultiplayer's own auth** is not used: the host reads its own socket since A, and the same job is two frames in net_session's handshake.
+- **WebSocket with TLS** and **the clipboard** are as C.1 first found them. An invite is pasted with one button; there is still no text field.
 
-### C.2 Four designs
+### C.2 Four designs, and the one chosen
 
-- **C1: a private network (WireGuard or Tailscale), with the game unchanged.** The server listens only inside the VPN (`ENetMultiplayerPeer.set_bind_ip`, enet_multiplayer_peer.cpp:477), and the only open port is WireGuard's.
-- **C2: ENet over DTLS, with the server's certificate pinned from a pasted invite, and a per-friend secret proven inside the encrypted channel.**
-  - On first boot the server generates an RSA-2048 key and a self-signed certificate with a fixed name (for example `biogenic-pond`), and keeps them in `user://` at 0600.
-  - Each invite gets its own 128-bit secret, minted when the owner asks (`-- --invite=<label>`) and written to a 0600 file. Only the path is logged, so the log never holds a secret.
-  - An invite is one line of about 1.3 KB of text: address, port, key id, secret and the certificate. The owner messages it to a friend, who pastes it once; it lives in `user://` from then on.
-  - A call goes: `create_client` + `dtls_client_setup` with `TLSOptions.client(pinned_cert, "biogenic-pond")`; then HELLO (the frozen compatibility check, refused with the usual sentence on a mismatch); then CHALLENGE (a server nonce); then PROOF (key id, a client nonce, and HMAC-SHA256 of both nonces and the protocol, keyed with the secret); then WELCOME.
-  - Before PROOF, the host accepts only HELLO and PROOF, and A's grace period covers both.
-- **C3: no DTLS.** The same proof, then a truncated HMAC on every frame, using a key derived from the secret and both nonces.
-- **C4: WSS.** C2's pinning and proof over `WebSocketMultiplayerPeer` with TLS. Alternatively, behind a reverse proxy with a CA-signed certificate for a domain name the owner enters at runtime.
+- **C1: a private network (WireGuard or Tailscale), with the game unchanged.**
+- **C2: ENet over DTLS, with the server's certificate pinned from a pasted invite, and a per-friend secret proven inside the encrypted channel.** **Chosen.**
+- **C3: no DTLS.** The same proof, then a truncated HMAC on every frame.
+- **C4: WSS.** C2's pinning and proof over `WebSocketMultiplayerPeer` with TLS.
 
 | | C1 VPN | C2 DTLS + pinned cert + invite | C3 HMAC only | C4 WSS |
 |---|---|---|---|---|
-| **Passive eavesdropper** | sees only WireGuard ciphertext | sees only DTLS ciphertext (ECDHE by mbedTLS's default preference; confirm the negotiated suite when measuring) | **reads everything**, which fails #59's encryption requirement | sees only TLS ciphertext |
-| **Active man-in-the-middle** | defeated: both ends hold keys set up in advance | defeated from the first packet: the pin comes in the invite, not from first contact | cannot forge or alter frames or impersonate either end if the secret is random; can still drop and delay | defeated (by the pin, or by a CA certificate) |
-| **Stranger who can reach the port** | WireGuard does not answer; the game port is not on the internet at all | passes the DTLS cookie, costs one RSA signature, then must prove a secret within the grace period or be cut. Can still make ENet buffer up to 32 MiB per slot for a few seconds (A.9). Handshake floods from real addresses need a firewall rate limit. | reaches ENet in plaintext; spoofed CONNECTs can hold every slot (A.9) | kernel SYN cookies, then TLS, then the proof; per-peer buffers bounded by configuration |
-| **What a player does** | installs WireGuard or Tailscale once, imports the owner's config (that app scans the QR code, not ours), and turns it on to play; adds the server in Biogenic once by pasting | pastes the invite once, then taps once to call | pastes the invite once | pastes the invite once |
-| **PROTOCOL bump** | no | not needed if CHALLENGE and PROOF exist only on the DTLS listener, which no protocol-4 build can reach (it has no DTLS client and no way to enter an address); needed if the LAN listener also requires the proof | yes if the LAN path carries MACs; otherwise as C2 | no: the frames are the ones wire.gd was designed for (:4-29); auth as C2 |
-| **binary_version bump** | no | no: ENet DTLS, mbedTLS, Crypto and the clipboard are all in the stock templates | no | no, but check that the WebSocket module is in the APK, the way multiplayer.md §2 checked DTLS |
-| **Costs** | a third-party app on every device; Android allows one VPN at a time | a few hundred lines; the engine's DTLS server has TODO-level limits; RSA-only keys; handshake errors print | its own crypto design, and no confidentiality | TCP head-of-line blocking brings back the delay net_session measured: worst jump 173 ms instead of 84 ms at 2% loss (net_session.gd:970-975) |
+| **Passive eavesdropper** | sees only WireGuard ciphertext | sees only DTLS ciphertext: ECDHE with ChaCha20-Poly1305, measured (C.1) | **reads everything**, which fails #59's encryption requirement | sees only TLS ciphertext |
+| **Active man-in-the-middle** | defeated: both ends hold keys set up in advance | defeated from the first packet: the pin comes in the invite, not from first contact | cannot forge or alter frames, can drop and delay | defeated |
+| **Stranger who can reach the port** | WireGuard does not answer | passes the cookie, costs one RSA signature, then must prove a secret within 3 s or be cut; floods from real addresses need a firewall limit (docs/server.md §9.6) | reaches ENet in plaintext | SYN cookies, TLS, then the proof |
+| **What a player does** | installs a VPN app and turns it on to play | pastes the invite once, then taps call | pastes once | pastes once |
+| **PROTOCOL bump** | no | no: the new frames exist only on the internet listener | yes, if the LAN carries MACs | no |
+| **binary_version bump** | no | no: ENet DTLS, mbedTLS, Crypto and the clipboard are in the stock templates | no | no |
+| **Costs** | a third-party app on every device | the engine's DTLS server has TODO-level limits and prints its errors; RSA only | its own crypto, no confidentiality | TCP head-of-line blocking: the 173 ms worst jump net_session measured |
 
-**Rejected outright:**
+**Rejected outright**, and still: scanning a code inside Biogenic (the CAMERA permission is a binary bump), a native crypto library (a GDExtension per architecture), and a typed password (a text field, and guessable offline).
 
-- **Scanning a code inside Biogenic.** It needs the CAMERA permission (a binary bump) and a QR decoder.
-- **A native crypto library for password-based key exchange.** That is a GDExtension, built per architecture.
-- **A typed password.** It needs a text field, and without such a key exchange it only protects against people who never saw a handshake.
-
-### C.3 Recommendation
-
-**Use C2 for the dedicated server's internet listener, after A and B have landed.**
-
-- It keeps the UDP responsiveness measured in #53-#55.
-- It asks the player for one paste and nothing else.
-- It pins the server without trusting first contact.
-- It needs neither a PROTOCOL nor a binary bump, and keeps secrets and addresses in `user://`.
-- The LAN listener and phone hosts stay exactly as they are. A's LAN-only guard is switched off only for the DTLS listener.
-- On the server box, outside the repo: an nftables rate limit per source address on the UDP port, and journald's rate limit for the engine's own error prints.
-
-If the owner wants internet play before #59 lands, **C1 is the interim.** It needs no game code beyond a way to paste an address, and it can stay in front of C2 afterwards.
-
-**Order of work:**
-
-1. A (the LAN-only guard ships with it).
-2. B.
-3. **Measure C2's DTLS on loopback** in this container: a pinned client, a wrong certificate and a wrong name, where each failure must end in a sentence, not a hang.
-4. C2.
-5. Only then open the port.
+### C.3 The owner's decisions
 
 | # | Question | Options | What it means |
 |---|---|---|---|
-| 1 | How do friends outside the house reach the server? | **a pasted invite, pinned and secret (C2) ✓** / a VPN app on every device (C1) / not yet: LAN only | Invite: each friend pastes one message once, then taps to play. VPN: everyone installs another app and switches it on to play. Not yet: only people in the house can play. |
-| 2 | One invite per friend, or one shared? | **one per friend ✓** / one shared | Per friend: you can shut one person out without re-inviting everyone, and the server log says who joined. Shared: simpler, but one leak means new invites for everybody. |
-| 3 | Does playing on the home Wi-Fi need the invite too? | **no, being in the house is enough ✓** / yes | No: LAN play works exactly as today, and older installs can still join at home. Yes: every device needs an invite, even at home. |
-| 4 | What does a guest the host catches cheating, or sending garbage, see? | **cut, with one line saying why ✓** / cut silently | The line helps an honest player whose install is broken; a cheater learns nothing they did not already know. |
+| 1 | How do friends outside the house reach the server? | **a pasted invite, pinned and secret (C2) ✓ chosen** / a VPN app on every device (C1) / not yet: LAN only | Each friend pastes one message once, then taps to play. |
+| 2 | One invite per friend, or one shared? | **one per friend ✓ chosen** / one shared | You can shut one person out without re-inviting everyone, and the log says who joined. |
+| 3 | Does playing on the home Wi-Fi need the invite too? | **no, being in the house is enough ✓ chosen** / yes | LAN play works exactly as before, and older installs still join at home. |
+| 4 | What does a guest the host catches cheating, or sending garbage, see? | **cut, with one line saying why ✓ chosen** / cut silently | The line helps an honest player whose install is broken. |
 
-On row 3: the LAN path's security is the room itself; the tap code is the invitation (net_session.gd:4-9). multiplayer.md §0.2 is still right that, with two players who know each other, most of this defends against nobody. #56-#59 are the gate for opening the port, not a verdict on the LAN.
+### C.4 The listener and its door
 
-**Before each merge** (merging publishes a release): net_probe prints `ALL PASS`, and there is no pending launcher sync. **Two phones on real Wi-Fi for 30 minutes** -- zero strikes and zero drops in the host's log, no `[net] would` line, and `over budget 0` on every `done after` line -- was the gate for anything that enforces a limit only timing can trip. For A the owner waived it and shipped the budgets enforced (A.4), and B's fouls ship enforced the same way (B.1); the playtest still decides whether their numbers stand, and watch mode is the switch if they do not. The A PR carries `Closes #58` and `Closes #56`, the B PR carries `Closes #57`, and #59 stays open until C2 lands.
+**One session, two transports, on the dedicated server only.**
+
+- **`listen_internet(key, certificate)`** opens a second `ENetMultiplayerPeer` on `Invite.PORT`, 45772 -- next to `Lan.PORT`, 45771 -- with `dtls_server_setup(TLSOptions.server(key, certificate))` straight after `create_server` and before anything polls it. Only a host that greets more than one guest opens it, so a phone host never does. The server opens it when its first invite exists and closes it when none remain (C.6): **with no invites, nothing listens for the internet at all.**
+- **Every peer records the listener it came in on** (`peer["via"]`, and `_via` for as long as ENet holds the id), and every send, cut, address lookup and throttle pin goes through that transport (`_to`, `_drop_now` and `_drop_on`, `_address_of`, `_steady_throttle`). `_pump` reads the LAN listener and then the internet one; a datagram from an id the listener does not hold here is a stray.
+- **One set of peers.** `_peers` holds both, so the pond, `FoodField.GUESTS_MAX` and the updater's "nobody here" all count both: one LAN guest and one internet guest is an ordinary pond (C.9, L4). `peer_count()` and `guests()` are unchanged.
+- **One id, one peer.** ENet makes each listener's ids unique and no more, so a newcomer whose id the other listener holds -- or is hanging up on -- is refused on its own transport, logged (`[net] refused <address>: its id <n> is taken on the other listener, and one id is one peer`) and counted (`refused_twin`), and the listener's later goodbye to that id is ignored. Never merged.
+
+**Each listener keeps its own door** (`_admit(from, via)`): its own address book -- per-address call buckets and bars -- its own bucket for every address together, its own count of transports per address and its own waiting room of two. **Changed from the plan**, which gave only the waiting room and the all-callers bucket to each transport: a hairpinning router can show a LAN phone's own address on the internet listener, and on loopback every caller is one address, so per-address state shared across listeners could still let something arriving over the internet refuse a LAN caller. Now nothing can. The LAN-only guard is the LAN door's alone. Refusals on the internet door are counted twice, in `refused_*` and in `net_refused_*`, and logged as `[net] refused <address> on the internet listener: <reason>`.
+
+**Closing it** (`close_internet`): every guest on it is cut with `REFUSE_INVITE` -- its invite opens nothing now -- and every caller still in its handshake is cut; `refuse_new_connections` goes on; the socket is closed `REFUSE_LINGER` later, so the refusals leave first, with the engine's three error lines (C.1).
+
+### C.5 The handshake on the internet listener
+
+**HELLO, then CHALLENGE, then PROOF, then WELCOME.**
+
+1. **HELLO**, the frozen compatibility check, exactly as on the LAN. A protocol mismatch gets `REFUSE_PROTOCOL` and its sentence **before any authentication**: an old build is told to update, never to ask for a new invite.
+2. **CHALLENGE** (kind `0x07`, host to guest, 17 bytes): a fresh 16-byte nonce from `Crypto.generate_random_bytes`. Never sent by a LAN host.
+3. **PROOF** (kind `0x08`, guest to host, 57 bytes): the invite's 8-byte key id, a 16-byte nonce of the guest's, and HMAC-SHA256 keyed with the invite's secret over `"biogenic proof 1"`, the protocol (two bytes, little-endian), the host's nonce, the guest's and the key id (`Invite.proof_mac`). Every piece is a fixed size. The secret never crosses the wire.
+4. The host checks it with `Crypto.constant_time_compare` and greets -- or says "already two", which only a caller that proved an invite ever learns.
+
+**The gate before the welcome** (A.2, step 3): a caller on the internet listener may send exactly one HELLO, then, once its CHALLENGE has gone out, exactly one PROOF of exactly 57 bytes. Anything else -- a STATE, an EVENT, a POND, a second HELLO, a PROOF before the CHALLENGE -- is a cut on the spot with no strike and no bar, as A cuts a caller that speaks before its hello. `HELLO_GRACE`, 3 s, covers the whole exchange: a caller that says HELLO and then nothing is told `REFUSE_SILENT` at 3 s (C.9, S3). Measured through the relay, the exchange takes about 0.3 s from the transport coming up (C.8). **After the welcome, a second PROOF** is a cut, told `REFUSE_BROKEN` and barred; on the LAN, where no CHALLENGE is ever sent, a PROOF is a malformed frame (4 points), like a second HELLO. `Wire.size_ok` and `Wire.known` carry both kinds, each from its own side only; a CHALLENGE from a guest is the wrong direction.
+
+**A wrong proof.** A PROOF naming a key id the host does not have, and one whose mac does not check out, get the same answer: `REFUSE_INVITE` (`0x05`, the next reason after `REFUSE_BROKEN`), the linger, the hard cut, and a bar at the internet door -- a minute, ten for a second within ten minutes. **They are indistinguishable to the caller**: an unknown key id is checked against a random decoy secret, so both paths compute one HMAC and one constant-time compare, and the two refusals took the same time -- 0.54 s each at 100 frames a second, 0.58 s each at 50 -- and read the same (C.9, C2-C3). The log says which, and names the label, never the secret:
+
+```
+[net] hung up on 1587052382 (198.51.100.4): no invite it could prove -- the wrong secret for the invite for sam -- barred 60 s
+[net] hung up on 1587052382 (198.51.100.4): no invite it could prove -- a key id no invite has -- barred 60 s
+[net] 694971552 (203.0.113.9) proved the invite for sam
+[net] 694971552 (203.0.113.9, invite sam) done after 1800 s -- frames 51234, events 312, over budget 0, points 0, fouls 0
+```
+
+"Proved" is printed whatever the limiter says, like the farewell; every other line through `_note`. A guest from the internet is then held to everything A and B hold a LAN guest to: the same budgets, ledger, referee and cuts.
+
+**The guest's side.** `_take_challenge` answers a CHALLENGE only on a call made by invite, only from its host, and only once; any other is dropped (`challenges_dropped`).
+
+### C.6 Invites on the server
+
+**The owner's jobs**, after `--`, in `game/server/invite_book.gd`: `--reach=<host>[:<port>]` (`[v6]:port` for IPv6), `--invite=<label>`, `--revoke=<label>`, `--invites`, and **`--new-key`** (changed from the plan: added, so replacing a leaked key is one job and not a file deletion by hand). Each does its job and exits -- 0 done, 1 refused with a sentence naming the fix -- without hosting, the updater or a port: traced on the exported binary, a job binds no UDP socket at all, where a server binds 45771 and 45772 (C.8). The owner runs them as the service's user (docs/server.md §9.1); run as root, a job says first that it is writing root's own book.
+
+**What they keep**, under `user://` -- for the service, `/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic` -- and nowhere else:
+
+| File | Holds | Mode | Written by |
+|---|---|---|---|
+| `pond/key.pem` | the RSA-2048 key | 0600 | the first mint, or `--new-key` |
+| `pond/cert.pem` | the self-signed certificate: `CN=biogenic-pond`, valid 2020-01-01 to 2099-12-31 | 0600 | the same |
+| `pond/invites.cfg` | the book: per label, a 64-bit key id, a 128-bit secret, when it was made | 0600 | the jobs only |
+| `pond/joined.cfg` | when each key id last came in | 0600 | the running server only |
+| `pond/reach.cfg` | the address friends dial | 0600 | `--reach` |
+| `invites/<label>.txt` | the line to send | 0600, in a 0700 directory | a mint |
+
+**Every file is written through `Invite.write_private`**: made empty, set to 0600 while it holds nothing, filled in place, and renamed over the old one in one step, so no secret is ever in a file anybody else could read, and a reader sees the old book or the new one and never half. **Changed from the plan: "last joined" is its own file**, written only by the server, so the server and a job never write one file and a mint is never lost to the server's older copy.
+
+**A mint** needs `--reach` first, and refuses with a sentence naming it until then. The first one makes the key and certificate; a label that exists gets a new key id and secret, so the line sent before stops working, and says so; a new key voids every invite made with the old one, and says which. A label is 1 to 24 of `a-z 0-9 - _` (an uppercase one is lowercased, with a line saying so). The line goes to `invites/<label>.txt`; **only its path is printed**, in the line `docs/design/invites-ux.md` §9 specifies, with the address it calls -- and a warning when that address is inside the house, which friends outside can never reach.
+
+**The running server notices by itself.** Every 2 s (`INVITES_POLL`) it takes the modification time of the book and of the certificate, and reads them only when one changed -- **or when it was changed in the second it was last read in**: a file's time is whole seconds, so a second write inside that second leaves it as it was, and only the bytes can tell. Then (`_watch_invites`): the first invite opens the internet listener; an invite revoked or replaced cuts its guest with `REFUSE_INVITE`, not barred, since the owner decided (`set_invites`); none left closes the listener; a new certificate puts the old listener down -- its guests go -- and opens one with the new key. A book it cannot read is one line, naming the fix. It logs by label: `[server] invites: sam added`, `revoked`, `replaced`.
+
+**The READY lines say what listens**, a third line after the LAN's two, and again whenever it changes:
+
+```
+[server] internet: nothing listens for the internet: there are no invites. To let a friend in from outside, set --reach, then --invite=<name> (docs/server.md).
+[server] internet: listening on port 45772/udp for 2 invites (kit, sam). Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+```
+
+The LAN's line still ends "LAN only: do not forward this port."; the five-minute line ends `-- internet: 2 invites` or `-- internet: off`.
+
+### C.7 The invite, and the call
+
+**The line** (`game/net/invite.gd`):
+
+```
+biogenic-invite:<version>.<payload in base64>.<check>
+```
+
+- **The payload**, format 1: key id (8), secret (16), port (2, little-endian), the address (a length byte and up to 253 ASCII characters: an IP literal or a host name), and the certificate in DER (a two-byte length and the bytes).
+- **The check**: eight hex characters of SHA-256 over `<version>.<payload>`, so a paste cut short or garbled is caught on the phone -- never a refused proof and a barred address -- and a garbled version digit is damage, not a newer build. **The envelope is frozen**: a later format changes the version and the payload, so this build can always tell a newer invite from a damaged one.
+- **Standard base64**, not base64url: `_` is italics in several messaging apps and would not survive being shown.
+- **1,055 characters** for an IPv4 address, 1,063 for a name -- 976 of them the certificate's 730 bytes. The plan's 1.3 KB was an estimate.
+- **The parser** (`Invite.parse`) takes out everything a messaging app may put inside a long line -- spaces, line breaks, tabs, no-break and zero-width characters, soft hyphens, bidirectional marks -- then tries every `biogenic-invite:` in what is left, case-blind, and the first that reads whole wins; a message before or after is never read. It answers `Read.OK`, `NOT_FOUND`, `DAMAGED` or `UNKNOWN_VERSION`, each with its own sentence.
+
+**The guest's session API**, for the screens (`docs/design/invites-ux.md`):
+
+| Call | What it does |
+|---|---|
+| `Invite.parse(text) -> Dictionary` | `read` (an `Invite.Read`); on `OK` also `address`, `port`, `key_id`, `secret`, `der`, `certificate` and `line`, the invite written out clean |
+| `Invite.keep(invite_or_text, path = Invite.KEPT) -> bool` / `Invite.kept(path) -> Dictionary` / `Invite.forget(path)` | the one kept invite, `user://invite.txt`, 0600; a paste that does not read leaves it as it was |
+| `Invite.says(key) -> [heading, sentence]`, `Invite.says_read(read)` | every sentence, from `Invite.SAYS`: the designer's §6.2 and §6.3, keyed |
+| `Invite.DOOR_NAME` | what the chooser calls the way in: `by invite`, until the owner names it (invites-ux.md §11) |
+| `NetSession.call_invite(invite) -> bool` | the call: the same `Link` states as a LAN call, `trouble` and `because` from `Invite.SAYS`, and **`trouble_key`** saying which key |
+| `NetSession.by_invite() -> bool` | whether a REACHING link is a far call (FAR_CALLING, not ANSWERING) |
+| `NetSession.address`, `Invite.kept()["port"]` | the receipt: `address · port` |
+| `NetSession.forget_refusals()` | for tools |
+
+**How a call ends, by what the guest can observe:**
+
+| Link | `trouble_key` | When |
+|---|---|---|
+| TOGETHER | `&""` | welcomed |
+| FAILED | `no_invite` | nothing that reads was handed over |
+| FAILED | `could_not_call` | at once: this device has no address but loopback and link-local (flight mode), or no socket |
+| FAILED | `no_such_place` | the host name did not resolve within 6 s (`RESOLVE_TIMEOUT`) |
+| FAILED | `no_answer` | nothing within 8 s (`INVITE_REACH_TIMEOUT`, C.8), or the second look heard nothing either |
+| FAILED | `not_running` | failed at once, and the second look was refused too: nothing listens on that port |
+| FAILED | `not_this_pond` | failed at once, and the second look connected: a server answered with another certificate, or the right one under another name |
+| REFUSED | `invite_refused` | `REFUSE_INVITE`: revoked, replaced or never proved -- and **not dialled again** this run (below) |
+| REFUSED | `game_older` / `server_older` | `REFUSE_PROTOCOL`, before any proof |
+| REFUSED | `already_two` | `REFUSE_FULL` |
+| REFUSED | `cut_off` | `REFUSE_BROKEN` |
+| REFUSED or FAILED | `hung_up` | any other refusal, or a hang-up |
+
+- **The name resolves off the frame**: `IP.clear_cache(address)` first -- the resolver keeps an answer for the life of the process, and an owner's address that changed while the game was open would stay wrong until a restart -- then `IP.resolve_hostname_queue_item`, polled from `_process`, and the call dials the address it gets.
+- **The call**: `create_client(address, port)`, then `peer.host.dtls_client_setup("biogenic-pond", TLSOptions.client(pinned, "biogenic-pond"))` before the first poll, then `_api.multiplayer_peer = peer`, as on the LAN.
+- **The second look** (`_diagnose`), after a failure that came before the transport did: a `PacketPeerDTLS` over a fresh `PacketPeerUDP` to the same address, with `TLSOptions.client_unsafe()` -- no pin, no name. Connected, it says goodbye at once (`close_notify`) and the call reads `not_this_pond`; refused, `not_running`; nothing in 3 s (`DIAGNOSE_TIMEOUT`), `no_answer`. It costs a server one handshake, on a call that has already failed.
+- **A refused invite is not dialled again** this run (`_turned_away`, a digest of its key id and secret, never the secret): the server bars an address for a minute after a refused proof and ten for a second, so a retry could only earn the longer bar. A new paste is a new invite.
+- **Changed from the plan: the LAN's refusals are worded for a server** on a call by invite -- a server updates itself and holds water, not a cell -- which is the designer's §6.3.
+- `pond.gd`'s `cut_off()` reads `REFUSE_INVITE` as a cut too, so a guest whose invite is revoked while it swims reads "cut off from their water", not "their water is gone".
+
+### C.8 Measured
+
+**A call's length, through the relay.** `relay2.py`'s harness from #61, adapted (a copy: it also records every datagram's size and reads the DTLS ServerHello): every datagram held 5-40 ms, one in twenty 150-250 ms more, in order. The real server scene, with a book of its own, behind the relay; a guest process calling by invite twenty times, 3.2 s apart, each timed from `call_invite` to TOGETHER and to the transport coming up -- twice, the second time on the tree as it is committed:
+
+| Link | Together | Median | Worst | Transport up: median, worst |
+|---|---|---|---|---|
+| jitter | 20 of 20, twice | 0.90 s | 1.15-1.20 s | 0.58 s; 0.75-0.82 s |
+| jitter, 2% loss | 20 of 20, twice | 0.90-0.92 s | 1.95-2.07 s | 0.60-0.62 s; 1.58-1.73 s |
+| jitter, 5% loss | 20 of 20, twice | 0.88-0.95 s | 3.85 s | 0.60 s; 3.73 s |
+
+**So the call waits 8 s, not 4** (`INVITE_REACH_TIMEOUT`, for the transport and again for the handshake). A lost DTLS flight is resent after 1 s and then 2 s (mbedTLS's defaults), and ENet resends a CONNECT that went out before DTLS was up at 0.5, 1.5, 3.5 and 7.5 s: the 5% run's worst landed on the 3.5 s resend, which a 4 s budget would barely have held, and the next is at 7.5 s. The handshake itself, HELLO to WELCOME, took about 0.3 s after the transport, well inside `HELLO_GRACE`.
+
+**The largest datagram, against a 1,400-byte path MTU.** ENet never sends a datagram over its MTU of 1,392 bytes, and DTLS adds 29 to each: the ceiling is 1,421 bytes of UDP payload, 1,449 as an IPv4 packet. Measured through the relays:
+
+| Run | Plain (LAN) | DTLS (internet) |
+|---|---|---|
+| the 60 s pond below, jitter | 922-927 B | 1,219 B |
+| the same, 2% loss | 859-869 B | 1,219 B |
+| the game's largest frame, a full POND of 1,262 bytes, with events queued behind it | 1,300 B | 1,329 B |
+
+No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): the most the game sends is 1,357 bytes as IPv4 and 1,377 as IPv6. Only ENet bundling acknowledgements and resends up to its whole MTU could pass 1,400, and none of these runs saw it (C.11).
+
+**Two guests, one by invite, 60 s through the relays** (the server, a LAN guest through one relay to 45771 and an internet guest through another to 45772; both guests wear an `ampulla` and call, starve every 13 s and are taken by the water every 17 s, and come back): with jitter, and again with 2% loss (142 datagrams lost), each run twice, **every guest's `done after` line reads `over budget 0, points 0, fouls 0`**, the server's gate struck, dropped, cut and refused nothing, its referees called no foul -- 798-859 state frames, 11 calls, 8 arrivals and 7-8 deaths each -- and every peer's throttle stayed at 32. The internet guest was together 0.85-0.87 s after its call and in the water 1.27-1.32 s after it, every time.
+
+**The exported server** (`--export-release "Linux Server"`, the binary CI builds, exported twice, the second time from the tree as it is committed): CI's smoke boot as ci.yml runs it -- READY with the internet line, a clean stop, exit 0, no script error, the pre-flight -- and the jobs on the binary itself: `--invite` before `--reach`, a bad label and revoking a label nobody has each exit 1 with their sentence, and the rest 0, the files 0600 in 0700 directories. A guest called it by invite and was together in 538-546 ms; `--revoke` run on the binary cut it within a look at the book -- 1.4 s after the job was started -- reading "invite no longer works", while the listener stayed up for the other invite. `--new-key` run on it while a guest swam: the guest was cut the same way, the listener closed with the emptied book, and after a new mint the old line read `not_this_pond` in 83 ms and the new one was together in 559 ms. `strace -e bind` on a job shows no UDP socket bound; on the server, 45771 once and 45772 twice (ENet's socket, then the DTLS one that replaces it).
+
+**Engine error lines.** The probe's `invites` section prints 92 and one warning, the same in each of three runs, and none is a script error: 54 of `-30464` (42 from the storm of D2, whose handshakes found no slot, 5 from the plain ENet caller, and the rest from the bare callers of S and D3); 27 of the mutex bug (nine listeners closed, three each); 4 from the pins that fail on purpose in C5 and C6 (`-9984` on the client, then `-30592` on the server); and 7 from sends with nowhere to go -- C7's call and its second look, against a closed port, each a `bio_send` line (`-0x6C00`) and then the handshake error with the same number in decimal (`-27648`), with one `Sending failed!` warning, and three more `bio_send` lines as sockets close. ci.yml's LAN step fails on `SCRIPT ERROR` and `Parse Error` only.
+
+### C.9 net_probe: the `invites` section
+
+`_check_invites()` runs last, at 50 frames a second (`INVITES_FPS`): nothing in it is finer than a few tenths of a second, and most of it waits out what a player would -- the 8 s of a call nothing answers, the 3 s of a caller that never proves. A `Logger` catches every line printed while it runs, and the last check reads them all. `--invites-only` runs it alone. Its books are its own (`user://net_probe_invites/`), and the server section now gives its server an empty one of its own too, so a real book in the same `user://` can open nothing there.
+
+| # | Test | Result |
+|---|---|---|
+| F1 | An invite to an IPv4 address, an IPv6 one and a name | Each reads back exactly as written: 1,055, 1,055 and 1,063 characters |
+| F2 | Line breaks every 61 characters, CRLF, spaces, a zero-width space, a no-break space, a soft hyphen and a tab inside it; a message around it; glued to the words on either side; a damaged invite before a whole one; a capitalised prefix | All five read through to the same invite |
+| F3 | Cut at six points, one character changed at seven, a whole version-2 invite, and none at all | 13 of 13 damaged; the newer one `UNKNOWN_VERSION`; none `NOT_FOUND`; three sentences |
+| F4 | `--reach` | An address, a name, `[v6]:port` and a bare IPv6 read; 8 of 8 junk refused |
+| F5 | The kept invite | Kept clean at 0600; a paste that does not read leaves it; forgotten, gone |
+| F6 | CHALLENGE and PROOF, held to A.3's table as T1 holds the rest | 17 and 57 bytes exactly, each from its own side alone; a byte either side, or the other side, refused; each reads back as written |
+| C0 | Two invites minted by the jobs' own code | Each its own key id and secret |
+| C1 | A good invite | TOGETHER over DTLS in 0.56 s, held as alice's, on the internet listener |
+| C2-C3 | A wrong secret; a key id nobody has | The same refusal and sentence, in the same time (0.58 s each); barred at the internet door (60 s, then 600 s) and not at the LAN's |
+| C4 | An invite revoked before the call | The same refusal; calling it again is refused in 0 ms, without dialling |
+| C5-C6 | Another certificate; the right one under another name | `not_this_pond` in 81 ms and 117-118 ms, the second look included; each server stays up |
+| C7 | A port nothing listens on | `not_running` in 19-20 ms, not `not_this_pond` |
+| C8 | An invite by host name; one under `.invalid` | TOGETHER in 0.60 s; `no_such_place` |
+| S1-S2 | A plain ENet caller at 45772; a DTLS caller at 45771 | Both `no answer`; the host up; nobody let near either door |
+| S3 | DTLS, a HELLO, a CHALLENGE, then nothing | `REFUSE_SILENT` 3.04 s after it connected, and cut |
+| S4, S5, S7 | A STATE before its PROOF; a PROOF before any CHALLENGE; a second HELLO | Each cut the moment it spoke, with no strike and no bar |
+| S8 | Protocol 3 over DTLS | `REFUSE_PROTOCOL` before any CHALLENGE; a guest reads `game_older`'s sentence |
+| S6 | A good PROOF, a WELCOME, then a second PROOF | Cut with `REFUSE_BROKEN`, barred |
+| D1 | Loopback made a stranger to the LAN door (`loopback_is_local`, the seam) | A LAN call from 127.0.0.1 refused as not on this network; an internet call from it proves bob's invite and is in |
+| D2 | Fifteen silent internet callers from 127.0.0.1, .2 and .3; a LAN guest in the middle | At most 2 waiting on the internet side, 4 turned away for its waiting room; the LAN guest answered, the LAN door refusing nobody. At the doors themselves: twelve first calls on the internet are 10 answered and 2 busy, then ten LAN callers are all answered |
+| D3 | A bare DTLS connection offering a LAN guest's id; a bare plain one offering an internet guest's | Each refused on its own listener; both guests play on, each on its own |
+| L1 | The real server scene, with an empty book | No internet listener, and its READY says so |
+| L2 | A mint by the jobs' own code | The listener open 0.40-0.44 s later, with no restart |
+| L3 | The files | Key, book, address and line 0600; `pond/` and `invites/` 0700 |
+| L4 | A LAN guest and an internet guest | The server's two, one on each listener; each sees the other in the water; the updater counts 2 |
+| L5 | Another friend's invite minted, then revoked, while the internet guest swims | Each taken within a look (0.10-0.12 s, then 0.50-0.52 s); the guest swims on, and the listener stays open |
+| L6 | `--revoke` of the internet guest's own invite while it swims | `--invites` showed when it last came in; cut 0.50 s after the revoke, within a look, reading "invite no longer works", its run saying cut off; the LAN guest swims on |
+| L7 | No invite left | The listener takes no call from the cut on, and its socket is put down 1.10 s later, after the linger |
+| -- | Every line printed in the section | None of 170 holds any of the 16 secrets, invite lines or key texts it made |
+
+**The whole probe, as CI runs it** (`--headless --quit-after 20000`), three times: 310 checks, all PASS, no script error; 12,464, 12,482 and 12,463 frames, in 129.1, 128.9 and 128.6 s -- of which the `invites` section's 30 checks took 2,160-2,164 frames and 43.4-43.6 s. CI's backstop is 20,000 frames. The timings in the table are from those runs, at 50 frames a second, so each is good to a frame, 20 ms.
+
+### C.10 Where the build differs from the plan, and why
+
+- **Each listener keeps a whole door**, not only its waiting room and busy bucket (C.4).
+- **The second look after a fast failure** is new: a closed port fails as fast as a wrong certificate (C.1), and a player's fix for the two is not the same.
+- **`--new-key`** is a job (C.6), and **"last joined" is its own file** (C.6).
+- **A second PROOF after the welcome is a cut and a bar**, told `REFUSE_BROKEN`; a PROOF on the LAN is malformed, as a second HELLO is (C.5).
+- **The invite is 1,055 characters**, not about 1.3 KB (C.7).
+- **The call waits 8 s**, measured (C.8); the name 6 s.
+- **The designer's API, taken while building** (`docs/design/invites-ux.md` §6.2, §6.3, §8, §9): the final strings, five more keys for a far call's refusals, `trouble_key`, `by_invite()`, a fresh lookup on every call, no dialling a refused invite, a sentence at once with no network, and the mint line.
+- **`tools/net_lag.gd`'s `LaggedHost`** overrides `_take_datagram`, which gained the listener as a third argument, and now matches it.
+- **The probe's frame budget.** The `invites` section runs at 50 frames a second, where `limits` runs at 100, to keep CI's backstop well clear.
+
+### C.11 What C does not do
+
+- **An invite is a bearer token.** Whoever holds the line gets in as that friend until it is revoked: there is no binding to a device. A leaked line is revoked, and the friend gets a new one.
+- **No client certificates**, as planned: DTLS proves the server, and the client proves a secret inside it.
+- **No NAT traversal.** The owner forwards one UDP port; there is no UPnP, no relay and no hole-punching. A LAN phone with an invite reaches the public address only through a router that loops it back; at home the four taps are the way in.
+- **Handshakes from real addresses still cost the server.** Cookies stop spoofed ones; a real address can complete DTLS again and again, each costing an RSA-2048 signature on the server's main thread -- 2.1 ms median here, 4.4 ms at worst over fifty, a frame is 16.7 ms -- and a caller that completes DTLS and ENet and never proves holds a slot for `HELLO_GRACE`. The door refuses a storm only after each handshake is paid for. The firewall rule in docs/server.md §9.6, ten new calls a minute from each address, is the lever below GDScript.
+- **ENet's 32 MiB per peer** (A.9) is unchanged, and applies to a guest that proved an invite as to any other.
+- **The engine's error lines** cannot be limited from GDScript: journald's rate limit (docs/server.md §9.7) is the lever.
+- **The datagram ceiling is 1,421 bytes** of UDP payload over DTLS. The game's own largest frame makes 1,329, measured; only ENet filling its whole MTU with acknowledgements and resends could pass a 1,400-byte path, and ENet's MTU cannot be set from GDScript. A path that drops fragments would lose those datagrams, reliable ones to be resent.
+- **The fast failures are Linux's and Android's.** A connected UDP socket there hears the ICMP refusal; Windows' own behaviour was not measured, and where a refusal is not heard a closed port reads `no_answer` instead of `not_running`.
+- **IPv6 was not run here**: the container has none. An IPv6 `--reach` round-trips in the invite and parses (F1, F4), and the listener is opened exactly as the LAN's is, on `*`, which Godot makes one dual-stack socket on a machine with IPv6 -- here, with none, it is IPv4 on `0.0.0.0`, traced. A name with both kinds of address is dialled at the first one the system's resolver gives; RFC 6724's ordering puts one this device has no route to last, but that was read, not measured.
+- **No expiry.** An invite works until it is revoked or replaced, or the key is.
+- **Two jobs at once** -- two owners minting in the same second -- can lose one mint: the last writer wins. The book is written in one step, so it is never torn.
 
 ### Files
 
 - **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part B (built):** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/net/wire.gd`, `game/normal/normal_mode.gd` (the cut line, and comments), comments in `game/normal/cell.gd`, `food.gd` and `genome.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md`, `docs/design/shared-pond-ux.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
-- **Part C:** to be decided by the table in C.3.
+- **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), and this document. The comment on ci.yml's LAN step still gives the probe's old frame count and length, and is the lead's to update: workflows are not this part's to edit.

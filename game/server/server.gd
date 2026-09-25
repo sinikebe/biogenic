@@ -330,7 +330,6 @@ func _internet_status() -> String:
 	return "not listening for the internet, though there are invites: %s" % _internet_trouble
 
 
-
 ## **The book and the certificate, looked at** -- every [member invites_poll],
 ## and at once with [param first]. A `stat` of each, and a read only when one
 ## changed, or was changed in the second it was last read in: a file's time is
@@ -347,7 +346,11 @@ func _watch_invites(first: bool) -> void:
 	var cert_path := str(where["cert"])
 	var book_time := int(FileAccess.get_modified_time(book_path))
 	var cert_time := int(FileAccess.get_modified_time(cert_path))
-	if not first and _settled and book_time == _book_time and cert_time == _cert_time:
+	# **Invites and nothing listening** -- a listener that could not open, or
+	# one ENet closed by itself -- is looked at again whatever the files say.
+	var down := not _labels.is_empty() and not bool(_net.internet_listening())
+	if not first and not down and _settled and book_time == _book_time \
+			and cert_time == _cert_time:
 		return
 	_settled = maxi(book_time, cert_time) < int(Time.get_unix_time_from_system())
 	_book_time = book_time
@@ -362,7 +365,7 @@ func _watch_invites(first: bool) -> void:
 		_say_internet(first)
 		return
 	var cert_changed := cert_bytes != _cert_bytes
-	if not first and book_bytes == _book_bytes and not cert_changed:
+	if not first and not down and book_bytes == _book_bytes and not cert_changed:
 		return
 	_book_bytes = book_bytes
 	_cert_bytes = cert_bytes

@@ -90,6 +90,12 @@ signal invite_proved(label: String, key_id: String)
 ## The live session, or null. Set in [method _ready] and cleared in
 ## [method _exit_tree], so it is never a reference to a freed node.
 static var current: Node = null
+## **Invites a server has refused, this run of the game**: a digest of each
+## one's key id and secret, never the secret. [method call_invite] does not dial
+## one again -- the server bars an address for a minute after a refused proof,
+## and ten for a second, so a retry could only earn the longer bar and then a
+## silent door (docs/design/invites-ux.md §3). A new paste is a new invite.
+static var _turned_away: Dictionary = {}
 
 ## **Which listener a peer came in on** -- a dedicated host has two -- and so
 ## which transport every send, cut, address and throttle for it goes through.
@@ -111,12 +117,15 @@ const HELLO_GRACE := 3.0
 ## spinner. multiplayer.md §4.2 budgets the reply wait at ~2 s; this is double.
 const REACH_TIMEOUT := 4.0
 ## **How long a call by invite waits, for the transport and again for the
-## handshake**: DTLS first, whose handshake retransmits a lost flight after 1 s
-## and then 2 s (mbedTLS's default), then ENet's CONNECT, which goes out
-## before DTLS is up and is resent 0.5, 1.5, 3.5 and 7.5 s after the call --
-## so on loopback a call connects at the first resend, 0.5 s in. Measured
-## through the relay of net-hardening.md C.6: see [constant REACH_TIMEOUT]'s
-## reasoning, with a link that crosses the internet.
+## handshake: 8 s, where the LAN waits 4.** DTLS comes up first, and mbedTLS
+## resends a lost flight after 1 s and then 2 s; ENet's CONNECT goes out before
+## DTLS is up and is resent 0.5, 1.5, 3.5 and 7.5 s after the call -- so on
+## loopback a call connects at the first resend, 0.5 s in. **Measured through
+## the relay** (net-hardening.md C.8), twice twenty calls each: with jitter
+## alone the worst was 1.2 s, with 2% loss 2.1 s, and with 5% loss 3.85 s both
+## times, which is the 3.5 s resend -- four seconds would barely have held it,
+## and the next resend is at 7.5. The same as `docs/design/invites-ux.md` §8
+## asks for.
 const INVITE_REACH_TIMEOUT := 8.0
 ## **How long an invite's host name may take to resolve** before the call says
 ## so. The lookup runs on the engine's resolver thread
@@ -410,6 +419,11 @@ var link := Link.OFF
 var trouble := ""
 ## The sentence under it. Says what to *do*, wherever there is anything to do.
 var because := ""
+## **Which of `Invite.SAYS` [member trouble] and [member because] are**, on a
+## call by invite -- `&"invite_refused"`, `&"no_answer"` and the rest -- so a
+## screen can pick what to offer next by it (docs/design/invites-ux.md §6.3).
+## `&""` on the LAN, and whenever there is nothing to say.
+var trouble_key: StringName = &""
 ## **Why the host last refused this guest**, a `Wire.REFUSE_*`, or -1: so a run
 ## can tell a cut (`REFUSE_BROKEN`) from a host that simply went.
 var refused_for := -1
@@ -906,7 +920,8 @@ func set_invites(table: Dictionary) -> void:
 	_invites = table.duplicate()
 	for id: int in _peers.keys():
 		var peer: Dictionary = _peers.get(id, {})
-		if peer.is_empty() or int(peer.get("via", VIA_LAN)) != VIA_NET or not bool(peer["greeted"]):
+		if peer.is_empty() or int(peer.get("via", VIA_LAN)) != VIA_NET \
+				or not bool(peer["greeted"]):
 			continue
 		var entry: Array = _invites.get(str(peer.get("key_id", "")), [])
 		if entry.is_empty() or entry[1] != peer.get("secret"):
@@ -1043,12 +1058,14 @@ func join(at: String) -> bool:
 ##   certificate answered, or the right one under another name), `not_running`
 ##   (the address refused the call: nothing listens on that port).
 ## - **REFUSED**: `invite_refused` (REFUSE_INVITE: the invite was revoked or
-##   replaced, or never proved), and the LAN's own "different versions",
-##   "already two" and "cut off" -- the compatibility check comes before the
-##   invite, so an old build is told to update rather than to ask again.
+##   replaced, or never proved -- and from then on this invite is not dialled
+##   again this run: see [member _turned_away]), `game_older` or
+##   `server_older` (the compatibility check comes before the invite, so an
+##   old build is told to update rather than to ask again), `already_two`,
+##   `cut_off`, and `hung_up` for any other refusal or a hang-up.
 ##
-## False when it failed at once, with [member trouble] set; true while it is
-## on its way.
+## [member trouble_key] names the one it ended in. False when it failed at
+## once, with [member trouble] set; true while it is on its way.
 func call_invite(invite: Dictionary) -> bool:
 	if _api == null:
 		return false
@@ -1062,11 +1079,23 @@ func call_invite(invite: Dictionary) -> bool:
 		return false
 	_invite = invite
 	address = str(invite["address"])
+	if _turned_away.has(_mark_of(invite)):
+		refused_for = Wire.REFUSE_INVITE
+		_invite_gives_up(Link.REFUSED, &"invite_refused")
+		return false
+	if not _online() and not Lan.is_loopback(address):
+		# No address of its own but loopback: an instant sentence, not 8 s.
+		_invite_gives_up(Link.FAILED, &"could_not_call")
+		return false
 	set_process(true)
 	_reach_at = _now()
 	_set_link(Link.REACHING)
 	if address.is_valid_ip_address():
 		return _dial(address)
+	# **Looked up fresh on every call**: the resolver keeps what it found for
+	# the life of the process, and an owner's home address that changed while
+	# the game was open would stay wrong until a restart.
+	IP.clear_cache(address)
 	_resolving = IP.resolve_hostname_queue_item(address, IP.TYPE_ANY)
 	if _resolving == IP.RESOLVER_INVALID_ID:
 		_resolving = -1
@@ -1158,10 +1187,49 @@ func _end_diagnosis() -> void:
 	_diag_udp = null
 
 
-## [method _give_up] with the invite call's own sentence for [param key].
+## [method _give_up] with the invite call's own sentence for [param key], and
+## the key itself in [member trouble_key] before anybody is told.
 func _invite_gives_up(to: int, key: StringName) -> void:
 	var said := Invite.says(key)
-	_give_up(to, str(said[0]), str(said[1]))
+	trouble_key = key
+	trouble = str(said[0])
+	because = str(said[1])
+	_set_link(to)
+
+
+## **Whether this session's call is by invite** -- for a screen deciding which
+## page a REACHING link is. False on the LAN, and on a host.
+func by_invite() -> bool:
+	return not _invite.is_empty()
+
+
+## **Forget which invites were refused this run.** For tools; a player's way
+## out of a refused invite is a new one.
+static func forget_refusals() -> void:
+	_turned_away.clear()
+
+
+## A digest of an invite's key id and secret: what [member _turned_away] keeps.
+static func _mark_of(invite: Dictionary) -> String:
+	var bytes := PackedByteArray()
+	bytes.append_array(invite.get("key_id", PackedByteArray()))
+	bytes.append_array(invite.get("secret", PackedByteArray()))
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	hashing.update(bytes)
+	return hashing.finish().hex_encode()
+
+
+## **Whether this device has an address to call from** -- any but loopback
+## and link-local, IPv4 or IPv6. A phone in flight mode has none.
+static func _online() -> bool:
+	for each: String in IP.get_local_addresses():
+		var lower := each.to_lower()
+		if Lan.is_loopback(each) or lower.begins_with("169.254.") \
+				or lower.begins_with("fe80:"):
+			continue
+		return true
+	return false
 
 
 ## Put the socket down and take this node out of the tree. Safe to call on a
@@ -1704,6 +1772,9 @@ func _on_server_disconnected() -> void:
 		# Already explained. The hang-up is the second half of the refusal, not
 		# a separate event.
 		return
+	if not _invite.is_empty():
+		_invite_gives_up(Link.FAILED, &"hung_up")
+		return
 	_give_up(Link.FAILED, "they hung up", "the other cell left the water.")
 
 
@@ -1869,7 +1940,10 @@ func _take_welcome(id: int, frame: PackedByteArray) -> void:
 		# Belt and braces. A host that welcomes us on a protocol we do not
 		# speak is a host whose refusal path is broken; refuse it from this end
 		# rather than play a game neither of us understands.
-		_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
+		if not _invite.is_empty():
+			_invite_gives_up(Link.REFUSED, _skew_key(theirs))
+		else:
+			_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
 		_drop_link()
 		return
 	# **The id, learned twice and never assumed.** `peer_connected` reported it
@@ -1897,6 +1971,24 @@ func _take_refuse(frame: PackedByteArray) -> void:
 	var reason := Wire.refuse_reason(frame)
 	var theirs := Wire.protocol_of(frame)
 	refused_for = reason
+	if not _invite.is_empty():
+		# **A server's refusal, in its own words** (docs/design/invites-ux.md
+		# §6.3): it updates itself and holds water, and a refused invite is
+		# remembered, so it is not dialled into a longer bar.
+		match reason:
+			Wire.REFUSE_INVITE:
+				_turned_away[_mark_of(_invite)] = true
+				_invite_gives_up(Link.REFUSED, &"invite_refused")
+			Wire.REFUSE_PROTOCOL:
+				_invite_gives_up(Link.REFUSED, _skew_key(theirs))
+			Wire.REFUSE_FULL:
+				_invite_gives_up(Link.REFUSED, &"already_two")
+			Wire.REFUSE_BROKEN:
+				_invite_gives_up(Link.REFUSED, &"cut_off")
+			_:
+				_invite_gives_up(Link.REFUSED, &"hung_up")
+		_drop_link()
+		return
 	if reason == Wire.REFUSE_PROTOCOL:
 		_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
 	elif reason == Wire.REFUSE_FULL:
@@ -1914,11 +2006,6 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end would not take what this game sent. update both from"
 			+ " the launcher, then call again in a minute.")
-	elif reason == Wire.REFUSE_INVITE and not _invite.is_empty():
-		# **The invite, refused** (part C): revoked, replaced, or never proved --
-		# the server says the same for all three, and bars the address for a
-		# minute after a proof that fails.
-		_invite_gives_up(Link.REFUSED, &"invite_refused")
 	else:
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
 			"the other end hung up.")
@@ -1932,6 +2019,12 @@ func _skew_says(theirs: int) -> String:
 	var who := "yours" if mine < theirs else "theirs"
 	return ("one of these games is older than the other -- %s. take the update"
 		+ " from the launcher, restart, and call again.") % who
+
+
+## The same question for a call by invite, as an `Invite.SAYS` key: this game
+## is older, or the server is -- which updates itself once its water is empty.
+func _skew_key(theirs: int) -> StringName:
+	return &"game_older" if _speaks() < theirs else &"server_older"
 
 
 ## Say no, then wait before hanging up. The waiting is not politeness -- see
@@ -3007,12 +3100,14 @@ func _set_link(to: int) -> void:
 func _say(headline: String, detail: String) -> void:
 	trouble = headline
 	because = detail
+	trouble_key = &""
 	link_changed.emit(link)
 
 
 func _give_up(to: int, headline: String, detail: String) -> void:
 	trouble = headline
 	because = detail
+	trouble_key = &""
 	_set_link(to)
 
 
@@ -3080,6 +3175,7 @@ func _reset_socket() -> void:
 	_saturation_from = _now()
 	trouble = ""
 	because = ""
+	trouble_key = &""
 	refused_for = -1
 	# **Nothing of the last call's invite outlives it**, nor the last host's.
 	_invite = {}

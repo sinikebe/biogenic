@@ -86,39 +86,65 @@ enum Read {
 	UNKNOWN_VERSION,
 }
 
+## **What the screens call the way in** -- the chooser's button and the far
+## page's heading (docs/design/invites-ux.md §11, row 1: the owner's to name).
+## The server's mint line tells the friend to tap it.
+const DOOR_NAME := "by invite"
+
 ## **Every sentence a player is shown about an invite or an internet call**:
-## `[heading, what to do]`, in the house style -- lowercase, the fix named, no
-## word a player would have to look up. Placeholders until the screens' spec
-## (docs/design/invites-ux.md) gives the final wording; nothing else holds one.
+## `[heading, what to do]`, as docs/design/invites-ux.md §6.2 and §6.3 word
+## them -- lowercase, the one who acts named, no word a player would have to
+## look up, and "server" and "water" where a phone's LAN wording says "cell".
+## A session calling by invite sets its `trouble` and `because` from here and
+## nowhere else, and says which key in `trouble_key`: the screen picks its
+## first button by it.
 const SAYS := {
-	# Pasting.
-	&"not_found": ["no invite there",
-		"copy the whole invite your friend sent, then paste it here."],
-	&"damaged": ["that invite is damaged",
-		"part of it went missing on the way. ask your friend to send it again,"
-			+ " and copy all of it."],
-	&"unknown_version": ["that invite is newer than this game",
-		"take the update from the launcher, restart, and paste it again."],
-	# Calling.
+	# Pasting (§6.2): shown on the far page, never by the session.
+	&"not_found": ["no invite copied",
+		"copy your friend's whole message, then paste again."],
+	&"damaged": ["invite damaged",
+		"some of it was lost or changed on the way. copy all of it, or ask your"
+			+ " friend to send it again."],
+	&"unknown_version": ["your game is older",
+		"this invite needs the update. take it from the launcher, restart, and"
+			+ " paste again."],
+	# Calling (§6.3).
 	&"no_invite": ["no invite yet",
-		"paste the invite your friend sent first."],
+		"paste the invite your friend sent you first."],
 	&"could_not_call": ["could not call",
-		"this device could not open a call. check it is online, then try again."],
+		"this device could not start the call. check it is online, then call"
+			+ " again."],
 	&"no_such_place": ["nowhere by that name",
-		"the address in that invite does not lead anywhere right now. check this"
-			+ " device is online, then call again."],
+		"check this device is online. if it is, ask your friend to check the"
+			+ " address in their invite."],
 	&"no_answer": ["no answer",
-		"their pond did not answer. check it is running and this device is"
-			+ " online, then call again."],
-	&"not_running": ["no pond there",
-		"their address answered, but no pond is listening. ask your friend to"
-			+ " check it is running, then call again."],
-	&"not_this_pond": ["not their pond",
-		"a different pond answered at that address. ask your friend for a new"
-			+ " invite."],
-	&"invite_refused": ["that invite no longer works",
-		"it was taken back or replaced. ask your friend for a new one, then call"
-			+ " again in a minute."],
+		"nothing answered at the invite's address. ask your friend if their server"
+			+ " is up, or try another network."],
+	&"not_running": ["no server there",
+		"the address answered, but no server is listening. ask your friend to check"
+			+ " theirs is running, then call again."],
+	&"not_this_pond": ["a different server",
+		"something else answers at that address now. ask your friend for a new"
+			+ " invite, then paste it."],
+	&"invite_refused": ["invite no longer works",
+		"it was taken back or replaced. ask your friend for a new one, paste it,"
+			+ " and call in a minute."],
+	# The LAN's refusals and hang-up, said to a call by invite (§6.3, rows 7-9
+	# and the last): a server updates itself, and holds water, not a cell.
+	&"game_older": ["different versions",
+		"your game is older than your friend's server. take the update from the"
+			+ " launcher, restart, and call again."],
+	&"server_older": ["different versions",
+		"your friend's server is older, and updates itself once nobody is"
+			+ " swimming there. call again in ten minutes."],
+	&"already_two": ["already two",
+		"two cells are already in your friend's water. call again when one of"
+			+ " them leaves."],
+	&"cut_off": ["cut off",
+		"your friend's server would not take what this game sent. take the update"
+			+ " from the launcher, then call again in a minute."],
+	&"hung_up": ["they hung up",
+		"your friend's server closed the call. call again in a minute."],
 }
 
 
@@ -375,6 +401,8 @@ static func address_ok(address: String) -> bool:
 ## `{"error": sentence}`.
 static func parse_reach(text: String) -> Dictionary:
 	var t := text.strip_edges()
+	if t.is_empty():
+		return {"error": "it needs the address friends dial"}
 	var host := t
 	var port := PORT
 	if t.begins_with("["):

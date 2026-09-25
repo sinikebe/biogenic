@@ -20,7 +20,8 @@
 #   6. prints the address and the join code the server logs.
 #
 # Nothing here touches your router or your firewall. The server is for your
-# home LAN only; docs/server.md says why, and what internet play would take.
+# home LAN until you mint an invite: friends outside the house come in on a
+# second port, by invite only, and docs/server.md §9 says how.
 #
 # BIOGENIC_REPO=owner/name installs from another fork's releases, and
 # BIOGENIC_RELEASE_URL, used as it is, from anywhere curl can read one
@@ -34,6 +35,7 @@ ACCOUNT="biogenic"
 BINARY="biogenic-server.x86_64"
 UNIT="biogenic-server.service"
 PORT="45771"
+NET_PORT="45772"
 
 say() { printf '==> %s\n' "$*"; }
 die() { printf 'install-server: %s\n' "$*" >&2; exit 1; }
@@ -118,7 +120,7 @@ fi
 ready=""
 for _ in $(seq 1 30); do
 	ready="$(journalctl -u "$UNIT" --since "$since" -o cat --no-pager 2>/dev/null \
-		| grep -E '^\[server\] (READY|to join|could not listen)' || true)"
+		| grep -E '^\[server\] (READY|to join|internet|could not listen)' || true)"
 	if grep -q '^\[server\] READY' <<<"$ready"; then
 		break
 	fi
@@ -138,8 +140,9 @@ The address and the code again, any time:
 Everything it says, as it says it:
   journalctl -u $UNIT -f
 
-It listens on UDP $PORT, for your home network only. Do not forward that port on
-your router: internet play is not built yet (docs/server.md).
+It listens on UDP $PORT, for your home network only: never forward that port on
+your router. Friends outside the house come in by invite, on UDP $NET_PORT, which
+listens only once you mint one (docs/server.md §9).
 EOF
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
 	echo

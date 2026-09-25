@@ -29,6 +29,7 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Invite := preload("res://game/net/invite.gd")
+const Lan := preload("res://game/net/lan.gd")
 
 const ROOT := "user://"
 ## **Valid from 2020 to 2099, whatever today is.** mbedTLS checks both dates
@@ -103,7 +104,11 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 					got = listing(root)
 			if int(got[0]) != 0:
 				code = 1
-			lines.append_array(PackedStringArray(got[1]))
+			for said: String in got[1]:
+				# Two jobs can warn the same thing -- a --reach inside the house,
+				# then the --invite that calls it -- and once is enough.
+				if not lines.has(said):
+					lines.append(said)
 	return [code, lines]
 
 
@@ -132,6 +137,9 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 	var out: PackedStringArray = ["friends will call %s. Forward UDP %d on your router to"
 		% [at, int(said["port"])] + " this machine's port %d/udp, and nothing else."
 		% Invite.PORT]
+	var near := _near_warning(str(said["address"]))
+	if not near.is_empty():
+		out.append(near)
 	if not before.is_empty() and not entries(root).is_empty() \
 			and (str(before["address"]) != str(said["address"])
 				or int(before["port"]) != int(said["port"])):
@@ -166,7 +174,8 @@ static func mint(text: String, root: String = ROOT) -> Array:
 		out.append_array(made[1])
 		identity = load_identity(root)
 		if identity.is_empty():
-			return [1, out + PackedStringArray(["--invite: the new key could not be read back"])]
+			return [1, out + PackedStringArray(["--invite: the new key could not be read"
+				+ " back"])]
 		# A new key voids every invite made with the old one: they pin a
 		# certificate that is gone.
 		if not book.is_empty():
@@ -200,11 +209,28 @@ static func mint(text: String, root: String = ROOT) -> Array:
 			% _real(line_path(name, root)) + " (error %d)" % err])]
 	if replaced:
 		out.append("replaced the invite for %s: the line sent before stops working." % name)
-	out.append("invite for %s: %s -- send the one line in it to %s, and nobody else. It"
-		% [name, _real(line_path(name, root)), name] + " calls %s. A running server"
-		% Invite.reach_text(str(where["address"]), int(where["port"]))
-		+ " takes it within seconds.")
+	# docs/design/invites-ux.md §9: the path, never the line, and the address
+	# it calls, so a wrong --reach shows now and not as a friend's "no answer".
+	out.append("invite for %s written to %s, calling %s -- send its one line to %s and"
+		% [name, _real(line_path(name, root)), Invite.reach_text(str(where["address"]),
+			int(where["port"])), name] + " nobody else, and in Biogenic they tap play,"
+		+ " then %s, then paste invite." % Invite.DOOR_NAME)
+	var near := _near_warning(str(where["address"]))
+	if not near.is_empty():
+		out.append(near)
+	out.append("a running server takes it within seconds.")
 	return [0, out]
+
+
+## **A warning for an address only the house can reach**: loopback, private,
+## link-local or carrier-grade NAT. Friends outside would only ever hear "no
+## answer" (docs/design/invites-ux.md §11). "" for any other.
+static func _near_warning(address: String) -> String:
+	if not Lan.is_local_source(address, ""):
+		return ""
+	return ("note: %s is an address inside your own network, which friends outside it"
+		% address + " cannot reach. Set --reach to your public address, or a name for"
+		+ " it, and mint again.")
 
 
 ## **`--revoke=<label>`**: that invite stops working. A running server notices
@@ -361,8 +387,10 @@ static func make_identity(root: String = ROOT) -> Array:
 		return [1, ["could not make %s (error %d)" % [_real(str(where["pond"])), made]]]
 	var crypto := Crypto.new()
 	var key := crypto.generate_rsa(KEY_BITS)
-	var certificate := crypto.generate_self_signed_certificate(key, SUBJECT, VALID_FROM,
-		VALID_TO)
+	var certificate: X509Certificate = null
+	if key != null:
+		certificate = crypto.generate_self_signed_certificate(key, SUBJECT, VALID_FROM,
+			VALID_TO)
 	if key == null or certificate == null:
 		return [1, ["could not make a key and a certificate here"]]
 	# `save()` writes the PEM without the closing NUL that `save_to_string()`
@@ -431,7 +459,8 @@ static func _write_book(book: Dictionary, root: String) -> Error:
 		file.set_value(name, "key_id", str(entry["key_id"]))
 		file.set_value(name, "secret", Marshalls.raw_to_base64(entry["secret"]))
 		file.set_value(name, "created", int(entry["created"]))
-	return Invite.write_private(str(paths(root)["book"]), file.encode_to_text().to_utf8_buffer())
+	return Invite.write_private(str(paths(root)["book"]),
+		file.encode_to_text().to_utf8_buffer())
 
 
 static func _joined(root: String) -> Dictionary:
