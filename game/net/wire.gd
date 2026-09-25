@@ -77,6 +77,23 @@ extends RefCounted
 ## `venom_back`) must bump this number**, or a host on one pack and a guest on
 ## another share a pond whose contacts one of them misjudges.
 const PROTOCOL := 4
+## **The rules a host's referee judges a guest by, fingerprinted**
+## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
+## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
+## growth per meal, mending, the grace, the causes of death, the ping tables,
+## the sister's ring, the free senses and their tier, the speed and turn tables
+## its caps sit over -- and of the referee's own limits.
+##
+## **A host judges its guests by its own copy of these.** A guest on other rules
+## is fouled, then cut and barred: a later content that grows five units a meal
+## instead of four is cut 1.05 s after its first meal by a host on this one,
+## measured. So **change any of them only with [constant PROTOCOL] bumped and
+## this updated, in the same commit**: two builds on different rules are then
+## refused at the handshake, with the sentence that names the update, instead
+## of cut in the middle of a game. `tools/net_probe.gd` recomputes this from the
+## real constants (`_rules_text`, run by `_referee_rules` in its `referee`
+## section) and fails until both are done.
+const RULES := "25e18f0962700b580703e27180776d95cbba1a80bc71f3baad6bed12f2d3dfbe"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I

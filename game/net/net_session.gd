@@ -359,6 +359,9 @@ var link := Link.OFF
 var trouble := ""
 ## The sentence under it. Says what to *do*, wherever there is anything to do.
 var because := ""
+## **Why the host last refused this guest**, a `Wire.REFUSE_*`, or -1: so a run
+## can tell a cut (`REFUSE_BROKEN`) from a host that simply went.
+var refused_for := -1
 ## Set once, at host()/join(), and never derived from a peer id.
 var hosting := false
 ## **How many guests this host greets** before it says "already two": one for
@@ -1371,6 +1374,7 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		return
 	var reason := Wire.refuse_reason(frame)
 	var theirs := Wire.protocol_of(frame)
+	refused_for = reason
 	if reason == Wire.REFUSE_PROTOCOL:
 		_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
 	elif reason == Wire.REFUSE_FULL:
@@ -2421,6 +2425,7 @@ func _reset_socket() -> void:
 	_saturation_from = _now()
 	trouble = ""
 	because = ""
+	refused_for = -1
 
 
 func _now() -> float:

@@ -145,11 +145,14 @@ const BOOK_MAX := 4 * POND_SLOTS
 ## What happened to a person, on [signal person_touched] and into
 ## [method hear_contact]. The numbers are the wire's (shared-pond.md §2's
 ## CONTACT), so they are written out rather than left to count.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6 }
 ## How a person died, on [signal person_died]. `POISONED` is the venom in
 ## something it swallowed or bit, which §2's three-cause DIED did not name.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 enum Cause { SWALLOWED = 1, CHEWED = 2, STARVED = 3, POISONED = 4 }
 ## Whose mouth it was.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 enum By { WATER = 1, FRIEND = 2 }
 ## The anchors a pond can have (§1.4): this device's own cell and the person --
 ## and on a dedicated host, which has no cell, the person in each of its slots:
@@ -788,6 +791,7 @@ const NOTICE_RANGE := 1900.0
 ## anything (see THREAT_LOW); what keeps the opening quiet instead is [method
 ## _seed]'s rule that **nothing seeded at setup that could eat you starts inside
 ## DREAD_RANGE**. Danger has to arrive, and arriving is continuous.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const FIRST_DELAY := 42.0
 ## How long a hunter keeps swimming at prey that has just outgrown its mouth.
 ##

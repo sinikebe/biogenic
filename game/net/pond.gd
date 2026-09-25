@@ -232,6 +232,14 @@ func together() -> bool:
 		and int(_net.link) == NetSession.Link.TOGETHER
 
 
+## **The host cut this guest** -- its gate or its referee, `REFUSE_BROKEN` --
+## rather than going: what a guest's run says when its pond ends.
+func cut_off() -> bool:
+	return _net != null and is_instance_valid(_net) \
+		and int(_net.link) == NetSession.Link.REFUSED \
+		and int(_net.refused_for) == Wire.REFUSE_BROKEN
+
+
 ## Seconds since anything arrived from the other player, or -1.
 func quiet_for() -> float:
 	if _net == null or not is_instance_valid(_net):
@@ -401,8 +409,12 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			if said.is_empty():
 				return
 			# **Once for each division**, on the ring round her mother, a
-			# daughter's size: otherwise nothing, or put there.
-			var take: Array = g.referee.judge_sister(now, said[0], float(said[2]))
+			# daughter's size: otherwise nothing, or put there. A division this
+			# host never saw begin -- its OUT frames landed in this same frame,
+			# behind its SISTER -- is proved by the body it knows: here, and fed
+			# to r40.
+			var take: Array = g.referee.judge_sister(now, said[0], float(said[2]),
+				_food.person(g.slot) != null)
 			_charge(g)
 			if take.is_empty() or _gone(g):
 				return

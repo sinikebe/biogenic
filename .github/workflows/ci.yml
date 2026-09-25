@@ -259,10 +259,16 @@ jobs:
         # with no socket at all, the shared pond's
         # field rules (`pond-field`): two players in one food.gd, the eating
         # rule both ways, the per-player water, and a mirror that must perceive
-        # exactly what the field does. Then the dedicated server
-        # (`game/server/`) with two real guests on this build's own PROTOCOL 4
-        # guest code, and its update decisions against a fake release feed and
-        # a loopback HTTP server -- no network.
+        # exactly what the field does. Then, also with no socket, the host's
+        # referee (`referee`, net-hardening.md part B): the fingerprint of every
+        # rule it judges a guest by against wire.gd's RULES -- a rule changed
+        # without PROTOCOL fails here -- and each of its rules at its edge.
+        # Then two real runs in one pond, and straight after them `pond
+        # referee`: a guest driven by hand, as a modified client is, in a real
+        # host's water, breaking each rule and then cut. Then the dedicated
+        # server (`game/server/`) with two real guests on this build's own
+        # PROTOCOL 4 guest code, and its update decisions against a fake release
+        # feed and a loopback HTTP server -- no network.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -277,15 +283,16 @@ jobs:
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
         # a backstop only. The probe caps itself at 500 frames a second and
-        # quits itself in seventy to seventy-five seconds: some eight in the
-        # socket-free pond-field section, which runs inside one frame and
-        # spends none of the budget, eighteen to twenty-one in `limits`, at up
-        # to 100 frames a second, about twenty-three in the pond section, two
-        # real runs over loopback at up to 250 frames a second, and about six
-        # in the server's. Its pond timings are counted in frames, not wall
-        # milliseconds, so a loaded runner slows the step without failing it.
-        # It prints its own frame count -- about 8,500 to 8,900 -- so the
-        # margin on 20000 is visible in the log.
+        # quits itself in eighty-five to ninety seconds: some seven to nine in
+        # the socket-free pond-field section and well under one in `referee`,
+        # which both run inside one frame and spend none of the budget,
+        # eighteen to twenty-one in `limits`, at up to 100 frames a second,
+        # about twenty-five in the pond section, two real runs over loopback,
+        # and about six in `pond referee`, both at up to 250 frames a second,
+        # and about ten in the server's. Its pond timings are counted in frames,
+        # not wall milliseconds, so a loaded runner slows the step without
+        # failing it. It prints its own frame count -- about 10,200 to 10,700
+        # -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or

@@ -77,12 +77,20 @@ const FOUL_EVERY := 0.5
 const MOVE_RATE := 1100.0
 const MOVE_HOLD := 1650.0
 const MOVE_SLACK := 100.0
-## **The heading, the same way: 1.35 radians a second, 1.5 held.** A tier-3
-## `cirrus` turns at 1.02 and the drift adds 0.13, and an impulse kicks the nose
-## by up to 0.16 at most once every 1.2 s: 1.28 a second, at the very worst. The
-## slack is two steps of the wire's one-byte heading, so rounding never fouls.
+## **The heading, the same way: 1.35 radians a second, half a turn held.** A
+## tier-3 `cirrus` turns at 1.02 and the drift adds 0.13, and an impulse kicks
+## the nose by up to 0.16 at most once every 1.2 s: 1.28 a second, at the very
+## worst. **Half a turn is the most any one frame can claim** -- a heading is
+## read as the shorter way round from the last -- so with the bank full, no
+## frame fouls however long the ones before it were held: a guest turning hard
+## through an uplink that stalled. Held at 1.5, the first build fouled a tier-3
+## cirrus at full steer after 1.5 s of one (27 of 40 seeds, found in review).
+## The heading the host applies follows through `_swing`, on the same numbers,
+## so an honest turn is applied as it is claimed: 1.35 a second, and from a full
+## bank up to half a turn at once. The slack is two steps of the wire's one-byte
+## heading, so rounding never fouls.
 const TURN_RATE := 1.35
-const TURN_HOLD := 1.5
+const TURN_HOLD := PI
 const TURN_SLACK := 0.05
 ## **The motion the host carries a person on is clamped, never fouled**: the
 ## field coasts a person by its velocity between frames (food.gd's
@@ -304,6 +312,17 @@ var _frozen := Vector2.ZERO
 var _division_open := false
 var _sister_taken := false
 var _born_by := -INF
+## **Where the mother stopped is not known yet**: a division the host heard of
+## only from its SISTER (see [method judge_sister]). Her first OUT frame to land
+## after it says where.
+var _frozen_unknown := false
+## **A division still owed its sister after its body went** -- eaten, starved
+## or gone from the water with the division open -- until this time, and where
+## the mother stopped. A SISTER is reliable and a daughter's state frame is not:
+## one SISTER lost on the way lands a resend later, and the daughter it left
+## can be eaten in the water in between.
+var _sister_owed_by := -INF
+var _owed_from := Vector2.ZERO
 ## `[when, where]` for every state frame of the last [constant SHOUT_PAST].
 var _history: Array = []
 ## The reach of the body before this one, for a shout that was sent before a
@@ -368,9 +387,10 @@ func credit_meals(meals: int) -> void:
 
 ## **The guest's body died** -- the host's field took it, or it starved and
 ## said so. Its next arrival is fresh, and must be a born cell's.
-func died(_now: float) -> void:
+func died(now: float) -> void:
 	_dead = true
 	_born_next = true
+	_owe_sister(now)
 	_end_body()
 
 
@@ -382,6 +402,7 @@ func left(now: float, wound: float, grace: float) -> void:
 	_left_wound = wound
 	_left_grace = grace
 	_left_arrived = arrived
+	_owe_sister(now)
 	_end_body()
 
 
@@ -444,7 +465,13 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 	# 1,100 a second since, of where the host put it -- or of the arrival before,
 	# if that one never happened: its ARRIVE may still be the one that lands.
 	_anchors = [at]
-	_anchors.append_array(old)
+	if not old.is_empty():
+		# The one before, and no further: a chain of arrivals that never happened
+		# keeps only the newest two, whichever ARRIVE lands.
+		_anchors.append(old[0])
+	# A SISTER owed to a body before this one would have landed ahead of this
+	# ENTER: every event a guest sends travels on one reliable, ordered channel.
+	_sister_owed_by = -INF
 	_claim_at = at
 	_claim_heading = 0.0
 	_applied_at = at
@@ -529,12 +556,39 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 
 ## **A SISTER**: `[]` to place nothing, or `[at, radius]` to place her with --
 ## put on the ring round her mother and made a daughter's size if she was not.
-## Legal once for each division the host has seen begin: an OUT at r40.
-func judge_sister(now: float, at: Vector2, radius: float) -> Array:
+## [param present] is whether the host has a body for this guest now.
+##
+## Legal once for each division, and a division is known three ways:
+## - **Seen**: an OUT frame at r40 began it.
+## - **Unseen**: its OUT frames and its SISTER all landed in one host frame -- a
+##   host frozen through the whole of the guest's out window, a phone switched
+##   away and back -- and a host takes events before it carries state frames,
+##   so the SISTER is heard first. Taken when the body is here, has arrived and
+##   has been fed to r40, which is everything one OUT frame would have proved.
+## - **Owed**: seen, and its body went before the SISTER landed (see
+##   [member _sister_owed_by]).
+func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Array:
 	judged["sister"] = int(judged["sister"]) + 1
+	if not _division_open and now <= _sister_owed_by:
+		# **Owed, and late.** She is still her mother's daughter, so she goes in
+		# the water where her mother left her -- but no birth opens, because the
+		# body she was born beside has gone. Its next body is an arrival's.
+		_sister_owed_by = -INF
+		return _sister_placed(now, at, radius, _owed_from, true)
+	var mother_seen := true
 	if not _division_open:
-		_foul(SISTER, WEIGHT_SISTER, "sister: with no division begun", now)
-		return []
+		if not (present and arrived
+				and expected >= CellBody.DIVIDE_RADIUS - RADIUS_SLACK):
+			_foul(SISTER, WEIGHT_SISTER, "sister: with no division begun", now)
+			return []
+		# **Unseen.** Where the mother stopped was never seen, so the ring is not
+		# checked: the place is hers to say, as it is for any body she could have
+		# swum to and divided at. Her OUT frames still to land are this
+		# division's own tail, and the first of them says where she stopped.
+		mother_seen = false
+		_out = true
+		_frozen_unknown = true
+		_meals_at_out = _meals
 	_division_open = false
 	_sister_taken = true
 	_birth_open = true
@@ -543,21 +597,32 @@ func judge_sister(now: float, at: Vector2, radius: float) -> Array:
 	# SISTER here: every meal sent since her mother was last seen out.
 	expected = minf(DAUGHTER_RADIUS + CellBody.GROWTH_PER_MEAL
 		* float(_meals - _meals_at_out), CellBody.DIVIDE_RADIUS)
+	return _sister_placed(now, at, radius, _frozen, mother_seen)
+
+
+## **Where a sister goes, and at what size**: a daughter's radius, and on the
+## ring of [constant SISTER_DISTANCE] round [param mother] when where her mother
+## stopped is known ([param ring]) -- put there, with a foul, when she was not.
+func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
+		ring: bool) -> Array:
 	var place := at
 	var size := radius
 	var off := false
 	if absf(radius - DAUGHTER_RADIUS) > RADIUS_SLACK:
 		size = DAUGHTER_RADIUS
 		off = true
-	var apart := at.distance_to(_frozen)
-	if absf(apart - SISTER_DISTANCE) > SISTER_RING:
-		var away := (at - _frozen) / apart if apart > 0.001 else Vector2.RIGHT
-		place = _frozen + away * SISTER_DISTANCE
+	var apart := at.distance_to(mother)
+	if ring and absf(apart - SISTER_DISTANCE) > SISTER_RING:
+		var away := (at - mother) / apart if apart > 0.001 else Vector2.RIGHT
+		place = mother + away * SISTER_DISTANCE
 		off = true
-	if off:
+	if off and ring:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f, %.0f units from her mother --"
 			% [radius, apart] + " put at r%.2f on the ring of %.0f" % [DAUGHTER_RADIUS,
 				SISTER_DISTANCE], now)
+	elif off:
+		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f -- made r%.2f" % [radius,
+			DAUGHTER_RADIUS], now)
 	return [place, size]
 
 
@@ -656,6 +721,11 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 	var began_out := false
 	if out and _out:
 		wet = false
+		if _frozen_unknown:
+			# The first OUT frame of a division heard of only from its SISTER:
+			# where the mother stopped, and so where she stays.
+			_frozen_unknown = false
+			_frozen = at
 		if not _sister_taken:
 			_meals_at_out = _meals
 	elif out:
@@ -671,6 +741,7 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 			_meals_at_out = _meals
 	elif _out:
 		_out = false
+		_frozen_unknown = false
 		if not _sister_taken:
 			if radius < CellBody.DIVIDE_RADIUS - 1.0:
 				_born_by = now + BIRTH_WAIT
@@ -741,11 +812,20 @@ func _foul(rule: String, weight: float, why: String, now: float) -> void:
 func _end_body() -> void:
 	arrived = false
 	_out = false
+	_frozen_unknown = false
 	_division_open = false
 	_sister_taken = false
 	_born_by = -INF
 	_birth_open = false
 	_reanchor = false
+
+
+## **A body going with a division open still owes it a sister**, for
+## [constant BIRTH_WAIT]: see [member _sister_owed_by].
+func _owe_sister(now: float) -> void:
+	if _division_open:
+		_sister_owed_by = now + BIRTH_WAIT
+		_owed_from = _frozen
 
 
 ## **A daughter's frame came with no SISTER**, and the SISTER never followed.

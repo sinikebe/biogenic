@@ -82,6 +82,7 @@ fact about another person that no sense can, as the earshot screen already does:
 | you ate them | `you ate them · they come back near you` | either |
 | `SILENCE` 6.0 s with nothing heard | `their phone went quiet`, no timer; it goes when they are heard | either |
 | the host's water is gone | `their water is gone · this one is yours` | guest |
+| the host cut this game -- its gate or its referee, net-hardening.md B.1 | `cut off from their water · this one is yours` | guest |
 | the guest is gone | `they left`, earshot's own string | host |
 
 **0.5 "The water changes" is one beat, used for entering (§1) and for swimming
@@ -177,7 +178,7 @@ it stops:
 | both views | The steering control stays drawn but does nothing, and the action pads go. The pause target stays, so leaving is always two taps away. | the same |
 | 6.0 s | `their phone went quiet` | the same |
 | heard again | The world returns to 1.0 over 0.22 s and the line fades out. | Sensations resume. |
-| gone (owner row 1) | The §0.5 beat, onto a fresh water seeded round your cell, which keeps its body, genome, generation and hunger. `their water is gone · this one is yours`, said once. Pause is ordinary again. | the same |
+| gone (owner row 1) | The §0.5 beat, onto a fresh water seeded round your cell, which keeps its body, genome, generation and hunger. `their water is gone · this one is yours`, said once -- or, when the host cut this game, `cut off from their water · this one is yours`. Pause is ordinary again. | the same |
 
 Mocked at 2400x1080: the dimmed world reads as *stopped*, not *broken*, because
 the membrane and its beat stay lit.

@@ -53,6 +53,7 @@ enum Result {
 ## Three organs, three tiers. Tier 0 is "does not have this organ at all", which
 ## is a real state: drifters have no cytostome (§1.3), and §9.7 lets the player
 ## put a fourth gene over their own mouth and live with the consequences.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const TIER_MAX := 3
 
 ## Arc order, from §4.1, and therefore the tie-break for [method dominant_of]:
@@ -88,6 +89,7 @@ const GENE_ORDER: Array[StringName] = [
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
 ## You are not an empty vessel; you are mediocre at three things. §1.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const BORN := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 
 ## The price of power, paid in the one channel the game already reads -- the
@@ -500,6 +502,8 @@ func _express_gift(gene: StringName, slot: int) -> void:
 	if gene == &"" or gene != _gift:
 		return
 	_gift = &""
+	# Tier 1: the host's referee judges by this -- change it with Wire.PROTOCOL
+	# and Wire.RULES (wire.gd).
 	_body[gene] = maxi(int(_body.get(gene, 0)), 1)
 	if slot >= 0:
 		_body_slots[gene] = slot

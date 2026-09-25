@@ -23,6 +23,7 @@ signal dashed(cost: float)
 ## number in the game that means three things at once: what can eat me, what I
 ## can eat, and how much genome I can carry.
 ## docs/design/genes-and-cilia.md §1.1 and §3.1.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const BASE_RADIUS := 26.0
 ## One meal, four units of radius. **A generation is three meals**, which is the
 ## owner's "divide the split requirements by four": a daughter is born at 28.28
@@ -38,6 +39,7 @@ const BASE_RADIUS := 26.0
 ## faster too -- docs/design/genes-and-cilia.md §1.2 gets louder rather than
 ## being switched off for everything except the player, which is the one thing
 ## §1.3 forbids.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const GROWTH_PER_MEAL := 4.0
 
 var radius := BASE_RADIUS
@@ -53,6 +55,7 @@ var radius := BASE_RADIUS
 ## bitten. Slow enough that a fight is not undone by swimming away for a moment,
 ## fast enough that surviving one means something. **The first number to move if
 ## biting feels wrong**, ahead of the bite table below.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const MEND_SECONDS := 75.0
 
 ## `cytostome` / bite. What one bite takes out of a body too big to swallow,
@@ -143,6 +146,7 @@ const SLOT_MAX := 7
 # argument stands on its own and is the only one left.
 
 ## Where a body divides, and where its radius stops.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DIVIDE_RADIUS := 40.0
 ## Two meals out, and where the nucleus starts to double.
 ##
@@ -156,6 +160,7 @@ const DIVIDE_WARN_RADIUS := 32.0
 ## slots_for(28.28) is 3, the same room to manoeuvre a run starts with. None of
 ## that was arranged; it falls out of conserving area on a ladder that was
 ## already there.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DIVIDE_SPLIT := 0.5
 
 
@@ -173,8 +178,10 @@ static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
 # ladder's own spacing, which is the least invented answer available.
 
 ## Speed added along the heading by one flagellar beat, by `flagellum` tier.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const IMPULSE_SPEED_BY_TIER: Array[float] = [118.0, 138.0, 162.0, 190.0]
 ## Seconds between impulses, resampled after each one, by `flagellum` tier.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const IMPULSE_GAP_MIN_BY_TIER: Array[float] = [2.00, 1.70, 1.45, 1.20]
 const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
 ## Mean of the per-impulse strength roll below, for [method speed_for].
@@ -189,8 +196,10 @@ const SPREAD_LOSS := 0.945
 ## The organelle does not aim well: each impulse strays this far off the heading
 ## and kicks the heading itself by about this much.
 const IMPULSE_SPREAD := 0.24
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const IMPULSE_KICK := 0.16
 ## Water is thick at this scale. Velocity loses 1/e of itself every 1/DRAG s.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DRAG := 0.74
 
 # --- What the earned genes buy ----------------------------------------------
@@ -266,6 +275,7 @@ const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
 ## the hum now breathes from full to empty exactly once per call at **every**
 ## tier. Under the old ladder a tier-3 period was a tenth of its trip and the
 ## hum sat nearly flat. ping-as-outline.md §10 row 1 is the table.
+## The host's referee judges by these: change them with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
 const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
 
@@ -299,6 +309,7 @@ const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.34, 0.58]
 ## its cruise off the prey's own speed, a hunter could not physically close on a
 ## pushing cell at any tier. Dread stopped meaning anything, which is most of
 ## the game.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const PUSH_ACCEL_BY_TIER: Array[float] = [0.0, 60.0, 85.0, 115.0]
 ## How much of that terminal speed the water assumes you are using when it leads
 ## a chase. **The other half of the same fix**: a hunter that scaled to your
@@ -310,8 +321,10 @@ const PUSH_CHASE_SHARE := 0.5
 
 ## `myoneme` / dash. A burst of speed for a tap, paid for in hunger -- a better
 ## myoneme is a cheaper dash, not a bigger one, so it stays a decision.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
 const DASH_COST_BY_TIER: Array[float] = [0.0, 0.060, 0.045, 0.032]
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_COOLDOWN := 1.4
 ## A press shorter than this, that moved less than this far, is a tap and not a
 ## steer. Both halves matter: a thumb that slid is steering.
@@ -359,12 +372,14 @@ const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
 ## Flat out, the cell turns this fast, by `cirrus` tier. Tier 1 is about
 ## 35 deg/s, so a half turn costs five seconds: slow on purpose. Tier 3 is
 ## 58 deg/s, and §7.1 gives the whole of the improved dodge to this one number.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const TURN_RATE_BY_TIER: Array[float] = [0.48, 0.62, 0.80, 1.02]
 ## Seconds for the turn to actually build. The lag is what makes steering feel
 ## like leaning on something rather than driving it; a better cirrus shortens it.
 const TURN_RESPONSE_BY_TIER: Array[float] = [1.43, 1.10, 0.85, 0.65]
 ## The water pushes back: a slow random walk on the heading the player never
 ## asked for and cannot switch off.
+## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const WANDER_RATE := 0.13
 const WANDER_TAU := 2.6
 

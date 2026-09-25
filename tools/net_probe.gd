@@ -2226,12 +2226,14 @@ class RefStick extends Node:
 
 func _check_referee() -> void:
 	var from := _clock()
+	_referee_rules()
 	_referee_agrees()
 	_referee_teleport()
 	_referee_tier_three()
 	_referee_silence()
 	_referee_radius()
 	_referee_dividing()
+	_referee_unseen()
 	_referee_bodies()
 	_referee_arrivals()
 	_referee_deaths()
@@ -2263,23 +2265,128 @@ static func _ref_rules(fouls: Array) -> Array:
 	return fouls.map(func(foul: Array) -> String: return str(foul[0]))
 
 
-## **The numbers the referee writes out, held to where they come from.**
+## **The rules the referee judges by, held to `Wire.RULES`** (net-hardening.md
+## B.6). A host judges its guests by its own copy of them, so a guest on other
+## rules is fouled and then cut: the fingerprint moving is what says a PROTOCOL
+## has to move with it, before a release does it for us.
+func _referee_rules() -> void:
+	var text := _rules_text()
+	var now := text.sha256_text()
+	var ok := now == Wire.RULES
+	_says(ok, ("referee: the %d rules it judges a guest by fingerprint to Wire.RULES"
+		% text.split("\n").size() + " (%s)" % now.left(16)) if ok
+		else ("referee: a rule the referee judges by changed: bump Wire.PROTOCOL and"
+			+ " update Wire.RULES in the same commit -- they fingerprint to %s now, and"
+			% now + " Wire.RULES says %s. A host on the old rules fouls, then cuts, an"
+			% Wire.RULES + " honest guest on the new ones (wire.gd, RULES)"))
+
+
+## **Every value the referee judges a guest by or derives a limit from**, one per
+## line, where it is defined -- and the referee's own limits. `Wire.RULES` is its
+## SHA-256. A value added to the referee's judgement belongs here too.
+func _rules_text() -> String:
+	var lines: PackedStringArray = []
+	var put := func(name: String, value: Variant) -> void:
+		lines.append("%s=%s" % [name, _rule_value(value)])
+	# cell.gd: size, growth, division and mending.
+	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
+	put.call("cell.GROWTH_PER_MEAL", CellBody.GROWTH_PER_MEAL)
+	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
+	put.call("cell.DIVIDE_SPLIT", CellBody.DIVIDE_SPLIT)
+	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
+	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
+	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
+	# The calls: how far and how often.
+	put.call("cell.PING_RANGE_BY_TIER", CellBody.PING_RANGE_BY_TIER)
+	put.call("cell.PING_PERIOD_BY_TIER", CellBody.PING_PERIOD_BY_TIER)
+	# The speed and turn tables the caps sit over (`_referee_agrees`).
+	put.call("cell.IMPULSE_SPEED_BY_TIER", CellBody.IMPULSE_SPEED_BY_TIER)
+	put.call("cell.IMPULSE_GAP_MIN_BY_TIER", CellBody.IMPULSE_GAP_MIN_BY_TIER)
+	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
+	put.call("cell.DRAG", CellBody.DRAG)
+	put.call("cell.PUSH_ACCEL_BY_TIER", CellBody.PUSH_ACCEL_BY_TIER)
+	put.call("cell.DASH_SPEED_BY_TIER", CellBody.DASH_SPEED_BY_TIER)
+	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
+	put.call("cell.TURN_RATE_BY_TIER", CellBody.TURN_RATE_BY_TIER)
+	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
+	# food.gd: the grace, and what a contact and a death are called.
+	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
+	put.call("food.Contact", FoodField.Contact)
+	put.call("food.Cause", FoodField.Cause)
+	put.call("food.By", FoodField.By)
+	# normal_mode.gd: the sister's ring and the free senses.
+	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
+	put.call("run.FIRST_SENSES", NormalMode.FIRST_SENSES)
+	# genome.gd: the tiers, a born body, and the gift's tier -- a literal in
+	# `_express_gift`, so it is measured on a real genome.
+	put.call("genome.TIER_MAX", Genome.TIER_MAX)
+	put.call("genome.BORN", Genome.BORN)
+	var genome: Node = Genome.new()
+	genome.express(Genome.BORN.duplicate(), NormalMode.BORN_ORDER)
+	genome.gift(&"stigma")
+	genome.place(0)
+	put.call("genome.gift_tier", int((genome.tiers() as Dictionary).get(&"stigma", 0)))
+	genome.free()
+	# referee.gd: its own limits, and its copies of the run's numbers.
+	for name: String in ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
+			"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
+			"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
+			"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
+			"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "FIRST_SENSES", "STALE_FOR",
+			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
+		put.call("referee." + name, (Referee as Script).get_script_constant_map()[name])
+	return "\n".join(lines)
+
+
+## One value, written the same way on every machine: six places for a float, a
+## list comma-joined, a dictionary by its keys in order.
+static func _rule_value(value: Variant) -> String:
+	match typeof(value):
+		TYPE_FLOAT:
+			return "%.6f" % float(value)
+		TYPE_ARRAY:
+			var parts: PackedStringArray = []
+			for each: Variant in value:
+				parts.append(_rule_value(each))
+			return "[" + ",".join(parts) + "]"
+		TYPE_DICTIONARY:
+			var keys: Array = (value as Dictionary).keys()
+			keys.sort_custom(func(a: Variant, b: Variant) -> bool: return str(a) < str(b))
+			var parts: PackedStringArray = []
+			for key: Variant in keys:
+				parts.append("%s:%s" % [str(key), _rule_value(value[key])])
+			return "{" + ",".join(parts) + "}"
+	return str(value)
+
+
+## **The numbers the referee writes out, held to where they come from**, and its
+## caps held over the fastest and the hardest-turning bodies the tables make.
 func _referee_agrees() -> void:
 	var senses: Array = []
 	for gene: StringName in NormalMode.FIRST_SENSES:
 		senses.append(gene)
-	var peak := CellBody.IMPULSE_SPEED_BY_TIER[3] \
-		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[3])) \
-		+ CellBody.PUSH_ACCEL_BY_TIER[3] / CellBody.DRAG \
-		+ CellBody.DASH_SPEED_BY_TIER[3] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
+	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
+		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
+		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
+		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	# **The hardest turn**: a top-tier cirrus flat out, the drift at its most, and
+	# an impulse's kick to the nose as often as a top-tier flagellum beats.
+	var steer := CellBody.TURN_RATE_BY_TIER[CellBody.TURN_RATE_BY_TIER.size() - 1] \
+		+ CellBody.WANDER_RATE
+	var turn := steer + CellBody.IMPULSE_KICK / CellBody.IMPULSE_GAP_MIN_BY_TIER[top]
 	_says(is_equal_approx(Referee.SISTER_DISTANCE, NormalMode.SISTER_DISTANCE)
 			and is_equal_approx(Referee.DAUGHTER_RADIUS,
 				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
 			and Array(Referee.FIRST_SENSES) == senses
-			and Referee.SPEED_MAX > peak and Referee.MOVE_RATE > peak,
+			and Referee.SPEED_MAX > peak and Referee.MOVE_RATE > peak
+			and Referee.TURN_RATE > turn and Referee.TURNING_MAX > steer,
 		"referee: its ring (%.0f), a daughter's r%.3f and the gift's four senses are"
 		% [Referee.SISTER_DISTANCE, Referee.DAUGHTER_RADIUS] + " the run's own; its"
-		+ " 1,100 u/s is over every speed-up at tier 3, stacked (%.0f u/s)" % peak)
+		+ " %.0f u/s is over every speed-up at the top tier, stacked (%.0f u/s), and"
+		% [Referee.MOVE_RATE, peak] + " its %.2f rad/s over the hardest turn the"
+		% Referee.TURN_RATE + " tables make (%.2f rad/s, %.2f of it steering)"
+		% [turn, steer])
 
 
 ## **R1: a 5,000 unit teleport.** The host moves the body no further than the
@@ -2329,13 +2436,63 @@ func _referee_teleport() -> void:
 func _referee_tier_three() -> void:
 	var fouls := _ref_swim({&"cytostome": 3, &"cirrus": 3, &"flagellum": 3,
 		&"axoneme": 3, &"myoneme": 3, &"ampulla": 3}, 60.0, true, 0.0, 26925)
-	_says(int(fouls[0]) == 0 and int(fouls[2]) > 1000 and int(fouls[3]) >= 3,
-		"referee R2: a tier-3 body at the physical peak for 60 s through a rough link"
+	# **And at the bound itself.** cell.gd's own physics never lines every
+	# speed-up up at its peak at once, so the body above tops out short of it; a
+	# body held at the stacked peak the tables make, straight on, is the bound.
+	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
+	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
+		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
+		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
+		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	var held := _ref_straight(peak, 60.0, 26926)
+	_says(int(fouls[0]) == 0 and int(fouls[2]) > 1000 and int(fouls[3]) >= 3
+			and int(held[0]) == 0 and int(held[1]) > 900,
+		"referee R2: a tier-3 body swimming flat out for 60 s through a rough link"
 		+ " fouls %d times over %d state frames and %d calls -- fastest %.0f u/s;"
 		% [int(fouls[0]), int(fouls[2]), int(fouls[3]), float(fouls[4])]
 		+ " closest calls: movement %.0f%%, heading %.0f%%, calls %.0f%%"
 		% [100.0 * float(fouls[5]), 100.0 * float(fouls[6]), 100.0 * float(fouls[7])]
-		+ " (%d frames lost, %d spiked)" % [int(fouls[8]), int(fouls[9])])
+		+ " (%d frames lost, %d spiked); and one held at the stacked peak, %.0f u/s,"
+		% [int(fouls[8]), int(fouls[9]), peak] + " through the same link, %d over %d"
+		% [int(held[0]), int(held[1])] + " frames, closest call %.0f%%"
+		% (100.0 * float(held[2])))
+
+
+## **A body held at [param speed], straight on, through the modelled `rough`
+## link** for [param seconds]: `[fouls, state frames judged, closest movement]`.
+func _ref_straight(speed: float, seconds: float, dice: int) -> Array:
+	var rng := RandomNumberGenerator.new()
+	rng.seed = dice
+	var ref := Referee.new(0.0)
+	ref.judge_person(0.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	ref.judge_enter(0.0, CellBody.BASE_RADIUS, false)
+	ref.arrive(0.0, Vector2.ZERO, CellBody.BASE_RADIUS)
+	var step := 1.0 / 60.0
+	var t := 0.0
+	var beat_at := 0.0
+	var seq := 0
+	var states: Array = []
+	var newest := -1
+	var judged := 0
+	while t < seconds:
+		t += step
+		if t >= beat_at:
+			beat_at = t + NetSession.STATE_PERIOD
+			seq += 1
+			var lands := _ref_lands(t, true, rng)
+			if lands >= 0.0:
+				states.append([lands, seq, Vector2(speed * t, 0.0)])
+		var best: Array = []
+		for each: Array in states:
+			if float(each[0]) <= t and int(each[1]) > newest \
+					and (best.is_empty() or int(each[1]) > int(best[1])):
+				best = each
+		states = states.filter(func(each: Array) -> bool: return float(each[0]) > t)
+		if not best.is_empty():
+			newest = int(best[1])
+			ref.claim(t, best[2], 0.0, CellBody.BASE_RADIUS, Vector2(speed, 0.0), 0.0, false)
+			judged += 1
+	return [ref.fouled(), judged, ref.move.closest]
 
 
 ## **One body swimming through the modelled link**, for R2 and R3: `[fouls,
@@ -2557,7 +2714,7 @@ func _referee_dividing() -> void:
 	var early: Array = ref.claim(1.0, Vector2.ZERO, 0.0, 30.0, Vector2.ZERO, 0.0, true)
 	var early_said := _ref_rules(ref.take_fouls())
 	# A SISTER with no division: nothing placed, fouled.
-	var stray := ref.judge_sister(1.1, Vector2(560.0, 0.0), Referee.DAUGHTER_RADIUS)
+	var stray := ref.judge_sister(1.1, Vector2(560.0, 0.0), Referee.DAUGHTER_RADIUS, true)
 	var stray_said := ref.take_fouls()
 	# A real division: grown to r40, out and frozen, a sister on the ring, and a
 	# daughter's new body -- with her mother's last OUT frame landing after it.
@@ -2568,9 +2725,11 @@ func _referee_dividing() -> void:
 	var wandered: Array = ref.claim(3.0, home + Vector2(9.0, 0.0), 0.0, 40.0,
 		Vector2.ZERO, 0.0, true)
 	var wander_said := _ref_rules(ref.take_fouls())
-	var sister := ref.judge_sister(4.0, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS)
+	var sister := ref.judge_sister(4.0, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
 	var tail: Array = ref.claim(4.02, home, 0.0, 40.0, Vector2.ZERO, 0.0, true)
-	var again := ref.judge_sister(4.05, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS)
+	var again := ref.judge_sister(4.05, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
 	var again_said := ref.take_fouls()
 	var born := ref.judge_person(4.1, true, Genome.BORN, Genome.BORN.keys(), true)
 	var twice := ref.judge_person(4.2, true, Genome.BORN, Genome.BORN.keys(), true)
@@ -2598,7 +2757,7 @@ func _referee_dividing() -> void:
 		+ " and the daughter is expected at r%.2f" % float(ref.expected))
 	# Off the ring and the wrong size: put right, 2 points.
 	var off := _ref_out_at_forty()
-	var put := off.judge_sister(3.0, Vector2(700.0, 0.0), 35.0)
+	var put := off.judge_sister(3.0, Vector2(700.0, 0.0), 35.0, true)
 	var off_said := off.take_fouls()
 	# Back in at r40 undivided, and a daughter with no sister ever.
 	var undivided := _ref_out_at_forty()
@@ -2616,7 +2775,7 @@ func _referee_dividing() -> void:
 	fed.ate()
 	fed.claim(3.1, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS + 4.0, Vector2.ZERO, 0.0,
 		false)
-	fed.judge_sister(3.2, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS)
+	fed.judge_sister(3.2, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
 	fed.claim(3.3, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS + 4.0, Vector2.ZERO, 0.0,
 		false)
 	var fed_clean := fed.take_fouls().is_empty()
@@ -2642,6 +2801,92 @@ func _ref_out_at_forty() -> Referee:
 	ref.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
 	ref.claim(2.5, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, true)
 	return ref
+
+
+## **A division the host never saw, and one whose daughter went before her
+## sister landed** (found in review). A phone host frozen through the whole of
+## a guest's out window -- an app switch, a call screen -- hears the division
+## all at once when it wakes: the OUT frames, the SISTER and the new body in
+## one frame, and a host takes events before state frames. And a SISTER lost on
+## the way lands a resend later, by when the daughter it left can have been
+## eaten. Neither is a foul, and each sister and daughter is taken.
+func _referee_unseen() -> void:
+	var born := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 1}
+	# Unseen: fed to r40 in the water, never seen out. On waking, the SISTER, her
+	# mother's new body, then the newest state frames: the mother's last OUT
+	# frames where she stopped -- 300 units on -- and the daughter's first.
+	var ref := _ref_arrived(0.0, Vector2.ZERO)
+	ref.credit_meals(4)
+	ref.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	ref.stalled(6.0)
+	var stopped := Vector2(300.0, 0.0)
+	var sister := ref.judge_sister(8.0, stopped + Vector2(0.0, 560.0),
+		Referee.DAUGHTER_RADIUS, true)
+	var renewed := ref.judge_person(8.0, true, born, born.keys(), true)
+	var tail: Array = ref.claim(8.0, stopped, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	var still: Array = ref.claim(8.05, stopped, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	var daughter: Array = ref.claim(8.1, stopped, 0.0, Referee.DAUGHTER_RADIUS,
+		Vector2.ZERO, 0.0, false)
+	var unseen_clean := ref.take_fouls().is_empty()
+	var unseen_expects := float(ref.expected)
+	# And the same with no OUT frame left to land: the daughter's first frame next.
+	var bare := _ref_arrived(0.0, Vector2.ZERO)
+	bare.credit_meals(4)
+	bare.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	bare.stalled(6.0)
+	var bare_sister := bare.judge_sister(8.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
+		true)
+	var bare_renewed := bare.judge_person(8.0, true, born, born.keys(), true)
+	var bare_daughter: Array = bare.claim(8.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS,
+		Vector2.ZERO, 0.0, false)
+	var bare_clean := bare.take_fouls().is_empty()
+	# Still no SISTER below r40, or twice, or from a body not here.
+	var second := bare.judge_sister(8.2, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var young := _ref_arrived(0.0, Vector2.ZERO)
+	young.credit_meals(3)
+	young.claim(2.0, Vector2.ZERO, 0.0, 38.0, Vector2.ZERO, 0.0, false)
+	var at_38 := young.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var gone := _ref_arrived(0.0, Vector2.ZERO)
+	gone.credit_meals(4)
+	gone.claim(2.0, Vector2.ZERO, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	var absent := gone.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var refused := _ref_rules(bare.take_fouls() + young.take_fouls() + gone.take_fouls())
+	_says(sister.size() == 2 and renewed == [true] and not bool(tail[5])
+			and (tail[0] as Vector2).distance_to(stopped) < 0.01
+			and (still[0] as Vector2).distance_to(stopped) < 0.01 and bool(daughter[5])
+			and is_equal_approx(unseen_expects, Referee.DAUGHTER_RADIUS) and unseen_clean
+			and bare_sister.size() == 2 and bare_renewed == [true] and bool(bare_daughter[5])
+			and bare_clean and second.is_empty() and at_38.is_empty() and absent.is_empty()
+			and refused == [Referee.SISTER, Referee.SISTER, Referee.SISTER],
+		"referee: a division the host never saw -- fed to r40, never seen out, its"
+		+ " SISTER and new body heard before its OUT frames -- is taken with no foul:"
+		+ " the sister placed, the daughter renewed and expected at r%.2f, and her"
+		% unseen_expects + " mother's last OUT frames out of the water where she"
+		+ " stopped; and with none left to land; but a second SISTER, one at r38, and"
+		+ " one from a body not here are each fouled")
+	# Owed: seen out, the daughter's first frame first -- her SISTER lost on the
+	# way -- then the daughter eaten, then the resend and her new body.
+	var owed := _ref_out_at_forty()
+	owed.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	owed.died(3.4)
+	var late := owed.judge_sister(3.9, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var late_born := owed.judge_person(3.9, true, born, born.keys(), false)
+	var owed_clean := owed.take_fouls().is_empty()
+	var twice := owed.judge_sister(4.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, false)
+	var twice_said := _ref_rules(owed.take_fouls())
+	var stale := _ref_out_at_forty()
+	stale.claim(3.0, Vector2.ZERO, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO, 0.0, false)
+	stale.died(3.4)
+	var too_late := stale.judge_sister(3.4 + Referee.BIRTH_WAIT + 0.1, Vector2(0.0, 560.0),
+		Referee.DAUGHTER_RADIUS, false)
+	var too_late_said := _ref_rules(stale.take_fouls())
+	_says(late.size() == 2 and (late[0] as Vector2).distance_to(Vector2(0.0, 560.0)) < 0.01
+			and late_born == [true] and owed_clean and twice.is_empty()
+			and twice_said == [Referee.SISTER] and too_late.is_empty()
+			and too_late_said == [Referee.SISTER],
+		"referee: a SISTER resent after her daughter was eaten is placed on the ring"
+		+ " where her mother stopped, with no foul, within %.0f s of the death; a"
+		% Referee.BIRTH_WAIT + " second one, or one later than that, is fouled")
 
 
 ## **Bodies** (the socket-free half of R7): a new body only in turn, the same
@@ -2762,6 +3007,21 @@ func _referee_arrivals() -> void:
 			taken += 1
 	var rate_said := _ref_rules(ref4.take_fouls())
 	var later := ref4.judge_enter(1.0 + Referee.ENTER_EVERY, 26.0, false)
+	# Six arrivals asked for and never made: the newest two are anchors, and a
+	# first frame at the one before the newest is no foul.
+	var chain := Referee.new(0.0)
+	for i in 6:
+		chain.judge_enter(4.0 * i, 26.0, i > 0)
+		if i > 0:
+			# What `_host_enter` does with a body that never arrived.
+			chain.left(4.0 * i, 0.0, 0.0)
+		chain.arrive(4.0 * i, Vector2(480.0, 0.0).rotated(0.5 * i), 26.0)
+	var anchors: int = (chain.get("_anchors") as Array).size()
+	chain.claim(20.05, Vector2(480.0, 0.0).rotated(2.0), 0.0, 26.0, Vector2.ZERO, 0.0, false)
+	var chain_clean := chain.take_fouls().is_empty()
+	_says(anchors == 2 and chain_clean,
+		"referee: six arrivals asked for and never made keep %d anchors, the newest"
+		% anchors + " two, and a first frame at the one before the newest is no foul")
 	_says(not swimming and _ref_rules(swimming_said) == [Referee.ENTER]
 			and float(swimming_said[0][1]) == Referee.WEIGHT_ENTER
 			and not big and not small and sizes_said == [Referee.ENTER, Referee.ENTER]
@@ -4461,6 +4721,32 @@ func _check_pond() -> void:
 		"pond: a guest's meal shows on the host +%.0f within 0.2 s at 60 fps --"
 		% CellBody.GROWTH_PER_MEAL + " %d frames of %d (%.0f ms here)"
 		% [grew_frames, _pond_budget(0.2), grew * 1000.0])
+
+	# ----------------------------------------------------------------------
+	# **The free sense, through the host's referee** (net-hardening.md B.2):
+	# the one change a worn body ever makes, handed to the guest's run the way
+	# the run hands it (`_step_sense_grant`: a sample held, a slot made if there
+	# is none) and placed as a player places it -- so what reaches the host is
+	# the real run's own PERSON, and the host must take it as the gift.
+	# ----------------------------------------------------------------------
+	var guest_genome: Node = guest_run.get_node(^"Genome")
+	guest_run.set("_sensed", true)
+	if not (guest_genome.layout() as Array).has(&""):
+		guest_genome.bonus_slots += 1
+	var sense := &"stigma"
+	var granted: int = guest_genome.gift(sense)
+	guest_genome.place((guest_genome.layout() as Array).find(&""))
+	var host_ref: Object = host_pond.call("referee_of", 0)
+	var fouls_were: int = int(host_ref.call("fouled")) if host_ref != null else -1
+	var gifted := await _pond_until(func() -> bool:
+		return Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome, sense) == 1,
+		1.0, pins)
+	_says(granted == Genome.Result.HELD and gifted >= 0.0 and host_ref != null
+			and int(host_ref.call("fouled")) == fouls_were
+			and int((host_ref.get("worn") as Dictionary).get(sense, 0)) == 1,
+		"pond: the guest's free sense, a %s, placed as a player places it, is on the"
+		% sense + " host's person %.2f s later -- its referee took the run's own PERSON"
+		% gifted + " as the gift, with no foul")
 
 	# ----------------------------------------------------------------------
 	# **Pause stops nothing (B)**, on both seats at once: the tree never
