@@ -510,11 +510,23 @@ closes, and nothing listens for the internet until you mint again.
 
 The server's own door already turns away a caller that comes too often (§3),
 but it only sees one once the encrypted handshake is done. A firewall rule per
-source address stops a flood before that. With nftables -- in the container, or
-on the Proxmox host's firewall in front of it:
+source address stops a flood before that. `install-server.sh` lays the rules
+down at **`/etc/biogenic/nftables-internet.conf`** already (checked with `nft -c`
+where nftables is present) but does **not** load them -- a firewall is yours to
+read and turn on. Review the file, then:
+
+```sh
+nft -c -f /etc/biogenic/nftables-internet.conf   # check it, load nothing
+nft -f    /etc/biogenic/nftables-internet.conf   # load it now
+```
+
+Load it in the container, or put the same rules on the Proxmox host's firewall
+in front of it; to keep them across reboots, include the file from
+`/etc/nftables.conf` and enable `nftables.service`. The ruleset:
 
 ```
-# Biogenic's internet listener, UDP 45772: new calls and datagrams, per source.
+# Biogenic's internet listener, UDP 45772: new calls and datagrams, per source,
+# and one combined ceiling for all sources at once.
 table inet biogenic {
 	set calls4 { type ipv4_addr; flags dynamic, timeout; timeout 1m; }
 	set calls6 { type ipv6_addr; flags dynamic, timeout; timeout 1m; }
@@ -526,6 +538,7 @@ table inet biogenic {
 		udp dport 45772 ct state new update @calls6 { ip6 saddr and ffff:ffff:ffff:ffff:: limit rate over 10/minute burst 20 packets } counter drop
 		udp dport 45772 update @flood4 { ip saddr limit rate over 400/second burst 800 packets } counter drop
 		udp dport 45772 update @flood6 { ip6 saddr and ffff:ffff:ffff:ffff:: limit rate over 400/second burst 800 packets } counter drop
+		udp dport 45772 limit rate over 1200/second burst 2400 packets counter drop
 	}
 }
 ```
@@ -534,26 +547,27 @@ Each address -- each /64, over IPv6 -- gets twenty new calls, then ten a
 minute, and 800 datagrams, then 400 a second. A call is one new flow (two after
 one that failed, which the phone checks once more), and a friend swimming sends
 at most about a hundred datagrams a second. Two friends behind one router share
-an address, and fit. Check the file with `nft -c -f <file>` before loading it.
+an address, and fit. The last rule is the ceiling for everyone together -- 2400
+datagrams, then 1200 a second across the whole port -- so a burst spread over
+many addresses cannot pass the per-source rules unbounded.
 
 ### 9.7 Keep the engine's handshake errors out of the journal
 
 A caller that is not a Biogenic build -- a port scanner, anything speaking plain
 UDP to 45772 -- makes the engine itself print an error line for each handshake
 it cannot finish, before any of the server's own code sees the caller, so the
-server's limiter cannot hold them back. Give the unit a journal rate limit:
-`systemctl edit biogenic-server`, and in the editor that opens,
+server's limiter cannot hold them back. The shipped unit already caps this:
 
 ```ini
-[Service]
 LogRateLimitIntervalSec=30s
 LogRateLimitBurst=200
 ```
 
-then `systemctl restart biogenic-server`. Past 200 lines in 30 s, journald keeps
-the rest out and says how many it suppressed. The limit covers every line the
-unit prints, but the server's own are already at most one of each kind per
-address every ten seconds (§3), so on an ordinary day it never bites.
+Past 200 lines in 30 s, journald keeps the rest out and says how many it
+suppressed. The limit covers every line the unit prints, but the server's own
+are already at most one of each kind per address every ten seconds (§3), so on
+an ordinary day it never bites. To change it, `systemctl edit biogenic-server`
+with your own values and `systemctl restart biogenic-server`.
 
 The engine's lines look like these, and none of them is the server failing:
 
