@@ -1321,6 +1321,7 @@ func _check_limits() -> void:
 	await _limits_direction()
 	await _limits_commands()
 	await _limits_before_hello()
+	await _limits_greeted_gone()
 	await _limits_flood()
 	await _limits_storm()
 	await _limits_queues()
@@ -1695,6 +1696,43 @@ func _limits_before_hello() -> void:
 			and int(host.link) == NetSession.Link.TOGETHER,
 		"limits T6: and the host is still up -- a real guest joins straight after")
 	await _limits_close([host, early, quiet[0], quiet[1], guest])
+
+
+## **A greeted guest that goes silent for good is let go** (#92). A host holds a
+## transport open for each guest, so one that proved itself and then stops
+## sending would keep a slot -- and, on the dedicated server, the empty pond its
+## updater waits for -- open forever. [member NetSession.silence_cut] is dropped
+## from the build's half-minute to a second and a half here.
+func _limits_greeted_gone() -> void:
+	var host: Node = await _limits_host("GoneHost")
+	host.set("silence_cut", 1.5)
+	var rogue := _limits_rogue("GoneRogue")
+	await _limits_until(func() -> bool: return rogue.connected())
+	rogue.send(Wire.hello(Wire.PROTOCOL))
+	await _limits_until(func() -> bool:
+		return int(host.link) == NetSession.Link.TOGETHER and int(host.company()) == 1)
+	var greeted := int(host.company()) == 1 and int(host.peer_count()) == 1
+	# It says nothing more. A second and a half is still three heartbeats: a
+	# guest that was still there would have spoken.
+	var waited := await _limits_until(func() -> bool: return rogue.down(), 4.0)
+	var lan_book: Dictionary = host.get("_book")
+	var barred: bool = float((lan_book.get("127.0.0.1", {}) as Dictionary)
+		.get("barred_until", 0.0)) > _now()
+	_says(greeted and waited >= 1.0 and rogue.refused_for() == Wire.REFUSE_SILENT
+			and int(host.company()) == 0 and int(host.peer_count()) == 0
+			and int(host.gate_counts["gone"]) == 1 and not barred,
+		"limits: a greeted guest silent past silence_cut (%.1f s here) is cut, told"
+		% 1.5 + " REFUSE_SILENT and not barred, and company falls back to 0 -- so a staged"
+		+ " update is no longer pinned open (#92)")
+	# The control: a real guest keeps sending its heartbeat, so it is never cut
+	# by this -- and its getting in also proves the silent one left no bar.
+	var live: Node = await _limits_guest("GoneLiveGuest")
+	await _limits_until(func() -> bool: return false, 2.0)
+	_says(int(live.link) == NetSession.Link.TOGETHER and int(host.company()) == 1
+			and int(host.gate_counts["gone"]) == 1,
+		"limits: a guest still sending its heartbeat outlives silence_cut untouched, and"
+		+ " the silent one that was cut left no bar behind it")
+	await _limits_close([host, rogue, live])
 
 
 ## **A caller that sends forty packets in the datagram that finishes its
