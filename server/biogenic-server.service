@@ -21,8 +21,10 @@ Group=biogenic
 # Godot keeps user:// -- the staged content packs, the update state, its own
 # logs -- under $HOME/.local/share/godot/app_userdata/Biogenic. StateDirectory
 # makes /var/lib/biogenic, owned by the user, and keeps it across restarts,
-# reboots and reinstalls.
+# reboots and reinstalls. 0700 so no other local account can even enter it:
+# Godot's own log mirrors the journal, callers' addresses and all (issue #90).
 StateDirectory=biogenic
+StateDirectoryMode=0700
 WorkingDirectory=/var/lib/biogenic
 Environment=HOME=/var/lib/biogenic
 # /run/biogenic, for the stop file below; systemd empties it at every stop.
@@ -68,6 +70,10 @@ ProtectClock=yes
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 SystemCallArchitectures=native
+# Everything the process writes -- Godot's log among it -- is owner-only, so a
+# copy that outlives StateDirectoryMode (an old tree, a backup) is still private
+# (issue #90).
+UMask=0077
 
 [Install]
 WantedBy=multi-user.target

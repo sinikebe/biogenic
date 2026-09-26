@@ -61,7 +61,12 @@ if ! id -u "$ACCOUNT" >/dev/null 2>&1; then
 	useradd --system --user-group --home-dir "$STATE" --no-create-home \
 		--shell /usr/sbin/nologin --comment "Biogenic dedicated server" "$ACCOUNT"
 fi
-install -d -m 0755 "$PREFIX" "$STATE"
+# The build lives world-readable in $PREFIX; the state tree is 0700, because
+# Godot's log under it carries callers' addresses (issue #90). install -d
+# re-applies the mode on an existing tree, and the unit's StateDirectoryMode
+# holds it at every start.
+install -d -m 0755 "$PREFIX"
+install -d -m 0700 "$STATE"
 chown "$ACCOUNT:$ACCOUNT" "$PREFIX" "$STATE"
 
 # 3. The latest release's build and unit, checked against its SHA256SUMS, which
