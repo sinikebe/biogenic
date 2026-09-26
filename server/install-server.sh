@@ -16,12 +16,15 @@
 #      unless both files match;
 #   4. puts the build in /opt/biogenic, owned by `biogenic`, because the server
 #      replaces its own binary when a new one is published;
-#   5. installs biogenic-server.service, enables it, and starts or restarts it;
+#   5. installs biogenic-server.service, enables it, and starts or restarts it,
+#      and lays the internet port's firewall rules in /etc/biogenic without
+#      loading them (docs/server.md §9.6);
 #   6. prints the address and the join code the server logs.
 #
-# Nothing here touches your router or your firewall. The server is for your
-# home LAN until you mint an invite: friends outside the house come in on a
-# second port, by invite only, and docs/server.md §9 says how.
+# Nothing here loads a firewall rule or touches your router. The server is for
+# your home LAN until you mint an invite: friends outside the house come in on a
+# second port, by invite only, and docs/server.md §9 says how -- including when
+# to load the firewall rules from step 5.
 #
 # BIOGENIC_REPO=owner/name installs from another fork's releases, and
 # BIOGENIC_RELEASE_URL, used as it is, from anywhere curl can read one
@@ -34,6 +37,8 @@ STATE="/var/lib/biogenic"
 ACCOUNT="biogenic"
 BINARY="biogenic-server.x86_64"
 UNIT="biogenic-server.service"
+NFT_CONF="nftables-internet.conf"
+NFT_DIR="/etc/biogenic"
 PORT="45771"
 NET_PORT="45772"
 
@@ -90,16 +95,17 @@ fi
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 say "downloading the latest server from ${BASE}/"
-for file in "$BINARY" "$UNIT" SHA256SUMS; do
+for file in "$BINARY" "$UNIT" "$NFT_CONF" SHA256SUMS; do
 	curl -fsSL --retry 3 -o "$work/$file" "$BASE/$file" \
 		|| die "could not download $file from $BASE/ -- is a release with the server published?"
 done
-awk -v a="$BINARY" -v b="$UNIT" '$2 == a || $2 == b' "$work/SHA256SUMS" > "$work/wanted.sums"
-[[ "$(wc -l < "$work/wanted.sums")" -eq 2 ]] \
-	|| die "SHA256SUMS does not list both $BINARY and $UNIT; installing nothing"
+awk -v a="$BINARY" -v b="$UNIT" -v c="$NFT_CONF" '$2 == a || $2 == b || $2 == c' \
+	"$work/SHA256SUMS" > "$work/wanted.sums"
+[[ "$(wc -l < "$work/wanted.sums")" -eq 3 ]] \
+	|| die "SHA256SUMS does not list $BINARY, $UNIT and $NFT_CONF; installing nothing"
 (cd "$work" && sha256sum --check --strict --quiet wanted.sums) \
 	|| die "checksum mismatch; installing nothing"
-say "both files match SHA256SUMS"
+say "the build, the unit and the firewall rules match SHA256SUMS"
 
 # 4. The build: written next to the old one and renamed over it, so a server
 #    that is running keeps running until the restart below.
@@ -112,6 +118,23 @@ say "installed $PREFIX/$BINARY"
 install -o root -g root -m 0644 "$work/$UNIT" "/etc/systemd/system/$UNIT"
 systemctl daemon-reload
 systemctl enable --quiet "$UNIT"
+
+# 5b. The firewall rules for the internet port, laid down but never loaded: a
+#     network firewall is the owner's to review and turn on (docs/server.md
+#     §9.6). The unit already holds the journal's flood down; these hold the
+#     packet flood down, before the handshake the server's own door sees.
+install -d -m 0755 "$NFT_DIR"
+install -o root -g root -m 0644 "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"
+if command -v nft >/dev/null 2>&1; then
+	if nft -c -f "$NFT_DIR/$NFT_CONF" >/dev/null 2>&1; then
+		say "firewall rules at $NFT_DIR/$NFT_CONF (checked, not loaded) -- review, then: nft -f $NFT_DIR/$NFT_CONF"
+	else
+		say "firewall rules at $NFT_DIR/$NFT_CONF -- nft could not check them here; review before loading"
+	fi
+else
+	say "firewall rules at $NFT_DIR/$NFT_CONF (nftables not installed here) -- review, then load with nft or on the Proxmox host"
+fi
+
 since="$(date '+%Y-%m-%d %H:%M:%S')"
 if systemctl is-active --quiet "$UNIT"; then
 	say "restarting $UNIT (anyone in the pond is dropped and swims on alone)"

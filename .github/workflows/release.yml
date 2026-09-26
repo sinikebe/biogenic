@@ -208,6 +208,7 @@ jobs:
           cp build/content/content-windows.pck build/release/
           cp build/content/content-linux.pck build/release/
           cp server/install-server.sh server/biogenic-server.service build/release/
+          cp server/nftables-internet.conf build/release/
 
       - name: Build update manifest
         run: |

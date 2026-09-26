@@ -40,6 +40,14 @@ Restart=always
 RestartSec=5
 TimeoutStopSec=20
 
+# A caller that is not a Biogenic build makes the engine print one handshake
+# error per datagram, below the server's own limiter (issue #68). Cap what the
+# unit can pour into the journal: past 200 lines in 30 s the rest are dropped
+# with a count. The server's own lines are at most one of each kind per address
+# every ten seconds (docs/server.md §3), so this never bites them.
+LogRateLimitIntervalSec=30s
+LogRateLimitBurst=200
+
 # --- Least privilege for the network-facing process (issue #70). These are
 # seccomp-, capability- and rlimit-based controls that need no mount namespace,
 # so they hold in the unprivileged Proxmox LXC of docs/server.md §1 whether or
