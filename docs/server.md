@@ -708,3 +708,37 @@ that is the price of the self-update (§4), and `ReadWritePaths=/opt/biogenic` i
 where it is paid. What actually authenticates a new build is a separate,
 unfinished piece of work (release signing); the sandbox narrows the blast
 radius, it does not replace it.
+
+### 9.11 The logs name who called (issue #90)
+
+Once the internet port is open the server writes a caller's address to its log
+on every join, departure and refusal -- an IPv4 address, or an IPv6 one by its
+/64 -- beside the invite's label. It never logs a secret or a whole invite
+line: only what an operator needs to see who is calling and why one was turned
+away (§9.9).
+
+Those lines land in **two** places, and both are the operator's alone:
+
+- The **systemd journal** (`journalctl -u biogenic-server`), which only root and
+  the `systemd-journal`/`adm` groups can read.
+- Godot's **own log file**, `…/app_userdata/Biogenic/logs/godot.log` under
+  `/var/lib/biogenic`, which mirrors the journal line for line. The state tree
+  is `0700` and its files `0600` (the unit's `StateDirectoryMode` and `UMask`,
+  and the installer), so no other local account can reach it.
+
+What is left to you is **how long they are kept and where they may go**:
+
+- **Retention.** The journal's is systemd's: cap it with `MaxRetentionSec=` (or
+  `SystemMaxUse=`) in `/etc/systemd/journald.conf`, or trim now with
+  `journalctl --vacuum-time=14d`. Godot's file log is not time-bounded -- it
+  keeps a handful of timestamped copies and rotates by count, not age -- so it
+  is the journal's retention that decides how far back an address can be read;
+  the file copy cannot be switched off without a new build, so bound the journal
+  and let disk bound the file, or delete `logs/*.log` on a schedule if you keep
+  addresses for less time than a build runs.
+- **Sharing.** A support bundle or a public bug report is where an address
+  escapes the two private stores above -- redact them before you paste a log,
+  and do not attach `journalctl` output or `godot.log` to anything public.
+- **Jurisdiction.** Whether an address is personal data, and how long you may
+  keep it, depends on where the server runs and who its friends are; decide that
+  for your own deployment rather than from a number here.
