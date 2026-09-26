@@ -51,6 +51,19 @@ const RESTART_AFTER := 30.0
 ## The download's whole budget: the launcher's own, for the same reason it
 ## gives (`HTTPRequest.timeout` is wall time from the request, not idle time).
 const DOWNLOAD_TIMEOUT := 1800.0
+## **The most a build download may weigh before it is abandoned** (#77). The
+## swap refuses any download whose bytes do not hash to the manifest's sha256
+## ([method swap_binary]), but the hash is checked only once the whole file is
+## on disk -- so without a ceiling a manifest naming a valid-looking build and a
+## url that never stopped sending could fill the disk before the mismatch was
+## caught. Each download is held to twice the size the manifest declares for it
+## ([method _download]); this is the backstop for a manifest that declares none,
+## or lies about it. `HTTPRequest` counts the bytes as they arrive -- against a
+## Content-Length when there is one, and against the running total when there is
+## not (a chunked or lying length) -- and gives up the moment either crosses the
+## limit. Well above any real server build (tens of megabytes), well under the
+## smallest sensible disk.
+const DOWNLOAD_MAX := 512 * 1024 * 1024
 const USER_AGENT := "BiogenicServer/1.0"
 
 ## The server wants to restart now, to finish [param why]. It is empty.
@@ -279,7 +292,7 @@ func swap_binary(artifact: Dictionary, version: int) -> bool:
 			"url" if url.is_empty() else "checksum"])
 		return false
 	var part := _download_path()
-	if not await _download(url, part, version):
+	if not await _download(url, part, version, int(artifact.get("size", -1))):
 		DirAccess.remove_absolute(part)
 		return false
 	var actual: String = await sha256_of(part)
@@ -418,12 +431,19 @@ func _download_path() -> String:
 	return exe_path.get_base_dir().path_join("." + exe_path.get_file() + ".download")
 
 
-func _download(url: String, dest: String, version: int) -> bool:
+func _download(url: String, dest: String, version: int, declared: int = -1) -> bool:
 	var http := HTTPRequest.new()
 	http.timeout = DOWNLOAD_TIMEOUT
 	http.use_threads = true
 	# GitHub serves release assets from a redirect to a signed CDN URL.
 	http.max_redirects = 8
+	# **A ceiling on what lands on disk before the checksum is even reached**
+	# (#77): twice the size the manifest declares, but never past DOWNLOAD_MAX,
+	# which holds even when the manifest is the thing lying. HTTPRequest gives up
+	# the moment the bytes cross it, so a url that never stops sending cannot
+	# fill the disk.
+	var cap := mini(DOWNLOAD_MAX, declared * 2) if declared > 0 else DOWNLOAD_MAX
+	http.body_size_limit = cap
 	http.download_file = dest
 	add_child(http)
 	var err := http.request(url, PackedStringArray(["User-Agent: " + USER_AGENT,
@@ -441,7 +461,10 @@ func _download(url: String, dest: String, version: int) -> bool:
 		return true
 	var what := "HTTP %d" % code if outcome == HTTPRequest.RESULT_SUCCESS \
 		else "HTTPRequest result %d" % outcome
-	if outcome == HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN \
+	if outcome == HTTPRequest.RESULT_BODY_SIZE_LIMIT_EXCEEDED:
+		what = "the download went past its %d-byte ceiling -- abandoned before it" % cap \
+			+ " could fill the disk"
+	elif outcome == HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN \
 			or outcome == HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR:
 		what += ", could not write %s -- disk full, or not writable by this user" % dest
 	_say("binary %d: download failed (%s); trying again in %d min"

@@ -6851,6 +6851,10 @@ class FakeService extends RefCounted:
 ## `HTTPRequest`'s own thread is served while the probe awaits it.
 class TinyHttp extends Node:
 	var body := PackedByteArray()
+	## When set, the response carries no Content-Length -- the body just streams
+	## until the connection closes, the shape a lying or chunked length takes,
+	## so the download's own byte count is the only ceiling.
+	var no_length := false
 	var port := 0
 	var served := 0
 	var _server := TCPServer.new()
@@ -6876,8 +6880,10 @@ class TinyHttp extends Node:
 				each[1] = asked
 			if not asked.get_string_from_ascii().contains("\r\n\r\n"):
 				continue
-			var head := ("HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream"
-				+ "\r\nContent-Length: %d\r\nConnection: close\r\n\r\n") % body.size()
+			var head := "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\n"
+			if not no_length:
+				head += "Content-Length: %d\r\n" % body.size()
+			head += "Connection: close\r\n\r\n"
 			peer.put_data(head.to_ascii_buffer())
 			peer.put_data(body)
 			peer.disconnect_from_host()
@@ -7071,6 +7077,36 @@ func _check_server_updates() -> void:
 		+ " refused -- the running build untouched, the download deleted -- and"
 		+ " not fetched again at the next check")
 	mismatch.queue_free()
+
+	# **A download is abandoned before it can fill the disk** (#77): held to
+	# twice the size the manifest declares, so a url that never stops sending is
+	# given up on -- whether its length is honestly oversized or missing
+	# altogether. Here the manifest declares a hundred bytes and the feed serves
+	# far more.
+	var oversized := PackedByteArray()
+	oversized.resize(300_000)
+	http.body = oversized
+	var kept := _read(exe)
+	var capped := 0
+	for lying: bool in [false, true]:
+		http.no_length = lying
+		var big := _fake(ServiceScript.State.BINARY_READY, 1_000_007 + int(lying))
+		big.pending_artifact = {"url": _served(http), "sha256": _sha(oversized),
+			"size": 100}
+		var bound := _updater(big, exe, note, 60.0)
+		var bound_lines := _lines_of(bound)
+		await bound.check()
+		if _read(exe) == kept and str(bound.staged).is_empty() \
+				and not FileAccess.file_exists(part) and _said(bound_lines, "ceiling"):
+			capped += 1
+		bound.queue_free()
+	http.no_length = false
+	http.body = fixed_build
+	_says(capped == 2,
+		"server updates: a build download past twice the manifest's declared size is"
+		+ " abandoned -- an honestly oversized Content-Length and a missing one both"
+		+ " -- the running build untouched and the partial deleted, so a runaway url"
+		+ " cannot fill the disk (#77)")
 
 	# **Nothing is applied from the editor**: the same news, and no download.
 	var editor := _fake(ServiceScript.State.CONTENT_READY, 1_000_006)
