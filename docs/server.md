@@ -649,3 +649,62 @@ A guest from the internet is held to exactly the rules a guest on the LAN is
 (§3): the same budgets, the same referee, the same cuts -- and the server's
 door keeps its own count of callers for each port, so a storm on 45772 never
 turns away a phone on the Wi-Fi.
+
+### 9.10 Tighten the service further (optional)
+
+The unit `install-server.sh` lays down already runs the network-facing process
+with least privilege that costs nothing on the container of §1: no
+capabilities, no new privileges, no writable-and-executable memory, only the
+address families it uses, and the syscalls of a service and no more. That is
+the shipped default, measured on the exported build.
+
+The next step up seals the filesystem off, so a hole in the process cannot read
+or rewrite anything but its own state. Those directives need a **mount
+namespace**, which an unprivileged LXC only grants with nesting on, so they are
+not in the shipped unit -- a container that follows §1 without nesting would
+fail to start the service if they were. To turn them on:
+
+1. On the Proxmox **host**, give the container nesting and restart it:
+   ```sh
+   pct set 120 --features nesting=1
+   pct reboot 120
+   ```
+   (Or create it in §1 with `--features nesting=1` from the start.)
+2. Inside the container, `systemctl edit biogenic-server` and add:
+   ```ini
+   [Service]
+   ProtectSystem=strict
+   # The two the process must still write: its own state, and the executable it
+   # replaces when it updates itself (§4).
+   ReadWritePaths=/opt/biogenic /var/lib/biogenic
+   ProtectHome=yes
+   PrivateTmp=yes
+   PrivateDevices=yes
+   ProtectKernelTunables=yes
+   ProtectControlGroups=yes
+   ProtectProc=invisible
+   ProcSubset=pid
+   ProtectHostname=yes
+   # A syscall allow-list for a service. Broad enough for a Godot build, but
+   # test the boot below before you rely on it.
+   SystemCallFilter=@system-service
+   SystemCallErrorNumber=EPERM
+   ```
+3. `systemctl daemon-reload && systemctl restart biogenic-server`, then
+   **confirm it came up** -- a missing namespace or a filtered syscall shows
+   here, not later:
+   ```sh
+   systemctl status biogenic-server        # active (running), not 226/NAMESPACE
+   journalctl -u biogenic-server -n 20      # the READY line, both listeners
+   ```
+   Then join once from the LAN, and once by invite, and run an invite job
+   (§9.1) -- the writable paths above are what let the update and the jobs keep
+   working. If the service will not start, remove the drop-in
+   (`systemctl edit biogenic-server`, clear it) and it is back to the shipped
+   default.
+
+Even sealed this way the account can still rewrite its own next executable --
+that is the price of the self-update (§4), and `ReadWritePaths=/opt/biogenic` is
+where it is paid. What actually authenticates a new build is a separate,
+unfinished piece of work (release signing); the sandbox narrows the blast
+radius, it does not replace it.

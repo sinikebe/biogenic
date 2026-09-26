@@ -37,7 +37,37 @@ ExecStop=/bin/sh -c 'if [ -n "$$MAINPID" ]; then touch /run/biogenic/stop; timeo
 Restart=always
 RestartSec=5
 TimeoutStopSec=20
+
+# --- Least privilege for the network-facing process (issue #70). These are
+# seccomp-, capability- and rlimit-based controls that need no mount namespace,
+# so they hold in the unprivileged Proxmox LXC of docs/server.md §1 whether or
+# not it has nesting. Measured on the exported build: it opens both ports,
+# answers a DTLS handshake and runs the invite jobs under all of them. The
+# stronger mount-namespace directives -- ProtectSystem=strict and the rest --
+# need `--features nesting=1` and a boot test on your own container, so they are
+# an opt-in drop-in in §9.10, not shipped here where they would silently fail a
+# container that follows §1.
 NoNewPrivileges=yes
+# The service binds 45771 and 45772 (both above 1024) as an unprivileged user
+# and needs no capability at all; an empty bounding set means a hole in the
+# process cannot pick one up either.
+CapabilityBoundingSet=
+AmbientCapabilities=
+# getifaddrs() -- how the server finds the address it logs -- speaks over
+# AF_NETLINK, so that stays; without it the server finds no address and listens
+# on nothing. AF_PACKET and the rest are never opened.
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
+RestrictNamespaces=yes
+RestrictRealtime=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+# An exported Godot server runs no JIT, so it never needs a page both writable
+# and executable; refusing that shuts the usual door from a memory bug to code.
+MemoryDenyWriteExecute=yes
+ProtectClock=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+SystemCallArchitectures=native
 
 [Install]
 WantedBy=multi-user.target
