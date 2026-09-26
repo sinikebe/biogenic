@@ -7515,6 +7515,16 @@ func _invites_calls() -> void:
 		"invites J1: a job run as root into files another user owns is refused, naming the"
 		+ " command to run as that user; root in its own files, and any other user, goes on"
 		+ " -- as here, uid %d, where asking took %.1f ms" % [int(found["uid"]), asked_ms])
+	# J2: run as root but unable to read who owns the files (owners() could not
+	# stat them), the job fails closed rather than write what the service user
+	# might not read back (#71).
+	var unverified := InviteBook.ownership_refusal(0, {}, job, exe, "/var/lib/biogenic", false)
+	var verified_clean := InviteBook.ownership_refusal(0, {}, job, exe, "/var/lib/biogenic", true)
+	_says(unverified.begins_with("refused: this runs as root")
+			and unverified.contains("could not read who owns")
+			and verified_clean.is_empty(),
+		"invites J2: run as root but unable to read who owns the files, the job fails closed"
+		+ " -- it refuses rather than write what the service user might not read")
 	# C1: in.
 	var host: Node = await _invites_host("InvCallsHost")
 	var proved: Array = []
