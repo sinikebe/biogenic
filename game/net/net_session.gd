@@ -213,6 +213,20 @@ const EARLY_GAP := 0.012
 ## the person you are playing with, and dropping them is a worse answer than
 ## saying so.
 const SILENCE := 6.0
+## **And this long with nothing heard at all cuts a greeted guest** -- where
+## [constant SILENCE] only reports it quiet. A host holds a transport open for
+## each guest, so a guest that proved itself and then sends nothing more -- an
+## invite left connected, or a client that broke -- would hold a guest slot,
+## and with it [method company], from ever falling to zero. The dedicated
+## server waits for an empty pond before it restarts onto a staged build
+## (`game/server/updater.gd`), so without this one silent guest pins it on its
+## current build for good (issue #92). An honest guest sends a heartbeat every
+## [constant HEARTBEAT], five times a second over [constant SILENCE], so thirty
+## seconds of true silence is never a guest that is still there -- and a phone
+## gone into a pocket stops answering ENet, which drops its transport sooner
+## than this. A proved guest is never barred for it: a poor link is not abuse.
+## **A test seam, [member silence_cut], sets it low.**
+const SILENCE_CUT := 5.0 * SILENCE
 ## **Callers still to say hello, at once: two.** A third is cut on arrival. A
 ## real guest says hello the moment its transport connects, so a caller left
 ## waiting is one in the middle of saying it -- or one that never will, which
@@ -593,6 +607,10 @@ var _out_pond_seq := 0
 ## what it would have done -- "would drop", "would cut" -- and the frame is
 ## taken, with no points for it. The probe's budget tests set it per session.
 var enforce_budgets := true
+## **How long a greeted guest may go without a word before it is cut**
+## ([constant SILENCE_CUT]). A seam only so the probe need not wait the whole
+## half-minute; the build runs at the constant.
+var silence_cut := SILENCE_CUT
 ## **The referee's fouls are enforced** (part B), the same shape as
 ## [member enforce_budgets] and on by default for the same reason: the owner
 ## chose to enforce A. A foul is what the host's pond calls when a guest's word
@@ -811,6 +829,16 @@ func _process(_delta: float) -> void:
 		for id: int in _peers.keys():
 			var peer: Dictionary = _peers[id]
 			if bool(peer["greeted"]):
+				# **A guest that proved itself and then went silent for good is
+				# let go** (#92): otherwise it holds a slot -- and, on the
+				# dedicated server, the empty pond its updater waits for -- open
+				# forever. ENet drops a peer that truly vanished sooner than
+				# this; what is left to catch is a transport held open with
+				# nothing sent on it. It proved an invite, so it is not barred.
+				if now - float(peer["heard"]) >= silence_cut:
+					gate_counts["gone"] += 1
+					_cut(id, "greeted, then nothing for %d s" % roundi(silence_cut),
+						true, false, Wire.REFUSE_SILENT)
 				continue
 			if now - float(peer["since"]) < HELLO_GRACE:
 				continue
@@ -2983,7 +3011,7 @@ func _zero_counts() -> void:
 		"net_refused_calls": 0, "net_refused_live": 0, "net_refused_pending": 0,
 		"net_refused_closed": 0, "net_refused_twin": 0,
 		"proofs": 0, "proofs_refused": 0, "invite_cuts": 0, "challenges_dropped": 0,
-		"net_silent": 0,
+		"net_silent": 0, "gone": 0,
 	}
 
 

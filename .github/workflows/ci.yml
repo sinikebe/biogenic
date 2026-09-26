@@ -290,11 +290,11 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 317 checks, caps itself at 500
-        # frames a second and quits itself in 137 to 140 seconds: some seven in
+        # a backstop only. The probe makes 319 checks, caps itself at 500
+        # frames a second and quits itself in 140 to 143 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
-        # eighteen to twenty-one in `limits`, at up to 100 frames a second,
+        # twenty to twenty-three in `limits`, at up to 100 frames a second,
         # about twenty-five in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
         # about ten in the server's, and about fifty-two in `invites`, at up
