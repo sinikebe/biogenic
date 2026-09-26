@@ -459,9 +459,22 @@ func _user_name() -> String:
 	if _user.is_empty():
 		_user = OS.get_environment("USER")
 	if _user.is_empty():
-		var said: Array = []
-		if OS.execute("id", ["-un"], said) == 0 and not said.is_empty():
-			_user = str(said[0]).strip_edges()
+		_user = OS.get_environment("LOGNAME")
+	if _user.is_empty():
+		# No shell-out to `id`: this process's real uid from /proc, and its name
+		# from /etc/passwd, both read with FileAccess so nothing on PATH decides
+		# it (issues #84, #71). A hint for a `chown`, so the uid alone will do if
+		# the name is not there.
+		var uid := InviteBook._proc_uid()
+		if uid >= 0:
+			for line: String in FileAccess.get_file_as_string("/etc/passwd").split("\n", false):
+				var f := line.split(":")
+				if f.size() > 2 and str(f[2]).strip_edges().is_valid_int() \
+						and int(str(f[2]).strip_edges()) == uid:
+					_user = str(f[0])
+					break
+			if _user.is_empty():
+				_user = "uid %d" % uid
 	if _user.is_empty():
 		_user = "this server's user"
 	return _user

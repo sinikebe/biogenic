@@ -88,7 +88,7 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	var code := 0
 	var whose := owners(root)
 	var refusal := ownership_refusal(int(whose["uid"]), whose["owners"], args,
-		OS.get_executable_path(), OS.get_environment("HOME"))
+		OS.get_executable_path(), OS.get_environment("HOME"), bool(whose.get("verified", true)))
 	if not refusal.is_empty():
 		return [1, [refusal]]
 	if int(whose["uid"]) == 0 or (int(whose["uid"]) < 0 and OS.get_environment("USER") == "root"):
@@ -122,22 +122,19 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	return [code, lines]
 
 
-## **Who runs this, and who owns what a job would write**: `{uid, owners}`,
-## `uid` from `id -u` (-1 where there is none to ask: not Linux, or it failed)
+## **Who runs this, and who owns what a job would write**: `{uid, owners,
+## verified}`, `uid` from `/proc` (-1 where there is none to read: not Linux)
 ## and `owners` each path that exists -- the book, `pond/`, `invites/`,
 ## `user://`, the directory it sits in, and `$HOME` -- as `[uid, name]`, from
-## one `stat`, which only root is asked for. One process for anybody else, two
-## for root -- about 6-17 ms here -- once per job run, and never by a running
-## server.
+## one `stat`, run only when root. `verified` is false when root and that `stat`
+## could not read every path, so the job can fail closed ([method
+## ownership_refusal], issue #71). No process at all for anyone but root, and
+## one `stat` for root -- a few ms, once per job run, never by a running server.
 static func owners(root: String = ROOT) -> Dictionary:
-	var out := {"uid": -1, "owners": {}}
+	var out := {"uid": -1, "owners": {}, "verified": true}
 	if OS.get_name() != "Linux":
 		return out
-	var said: Array = []
-	if OS.execute("id", ["-u"], said) != 0 or said.is_empty() \
-			or not str(said[0]).strip_edges().is_valid_int():
-		return out
-	out["uid"] = int(str(said[0]).strip_edges())
+	out["uid"] = _proc_uid()
 	if int(out["uid"]) != 0:
 		return out
 	var where := paths(root)
@@ -149,16 +146,21 @@ static func owners(root: String = ROOT) -> Dictionary:
 			continue
 		if FileAccess.file_exists(each) or DirAccess.dir_exists_absolute(each):
 			looked.append(each)
-	said = []
 	if looked.is_empty():
 		return out
-	# Each line names its path, so one that went between the look and the
-	# `stat` -- which then exits 1 -- costs only its own line.
+	# Each line names its path, so one that went between the look and the `stat`
+	# -- which then exits 1 -- costs only its own line. `stat` is the only way to
+	# read a file's owner here: Godot 4.7 has no native API for it. When it
+	# cannot read every path (a missing tool, a path that vanished), `verified`
+	# is false and the job fails closed rather than write as root into files it
+	# could not check (#71).
+	var said: Array = []
 	OS.execute("stat", PackedStringArray(["-c", "%u %U %n"]) + looked, said)
 	for row: String in (str(said[0]) if not said.is_empty() else "").split("\n", false):
 		var parts := row.split(" ", false, 2)
 		if parts.size() == 3 and parts[0].is_valid_int() and looked.has(parts[2]):
 			(out["owners"] as Dictionary)[parts[2]] = [int(parts[0]), parts[1]]
+	out["verified"] = (out["owners"] as Dictionary).size() == looked.size()
 	return out
 
 
@@ -169,9 +171,18 @@ static func owners(root: String = ROOT) -> Dictionary:
 ## of what it found, with the same home, which is how docs/server.md §9.1 says
 ## to run every job.
 static func ownership_refusal(uid: int, found: Dictionary, args: PackedStringArray,
-		exe: String, home: String) -> String:
+		exe: String, home: String, verified := true) -> String:
 	if uid != 0:
 		return ""
+	if not verified:
+		# **Root, and ownership could not be read** ([method owners], #71). Rather
+		# than write files the service user might not be able to read -- a revoke
+		# it would never see -- the job refuses and names the way to run it.
+		return ("refused: this runs as root but could not read who owns the invite"
+			+ " files, so it will not write what the service user might not read back."
+			+ " Run the job as that user: runuser -u biogenic -- env HOME=%s %s"
+			% [home, exe] + " --headless -- %s (or sudo -u biogenic, the same way;"
+			% " ".join(args) + " docs/server.md §9.1)")
 	for path: String in found.keys():
 		var owner: Array = found[path]
 		if int(owner[0]) == 0:
@@ -580,3 +591,22 @@ static func _date(unix: int) -> String:
 ## The path as the owner types it: `user://` spelled out.
 static func _real(path: String) -> String:
 	return ProjectSettings.globalize_path(path)
+
+
+## **This process's real uid, read from `/proc`** -- not from `id`, so nothing
+## on `PATH` decides whether the job thinks it is root (#84). -1 when there is
+## no `/proc` to read (not Linux), which the caller treats as "not known to be
+## root".
+static func _proc_uid() -> int:
+	# Read line by line, not get_file_as_string: a /proc file reports length 0,
+	# and get_file_as_string reads to the reported length, so it comes back empty.
+	var f := FileAccess.open("/proc/self/status", FileAccess.READ)
+	if f == null:
+		return -1
+	while not f.eof_reached():
+		var line := f.get_line()
+		if line.begins_with("Uid:"):
+			var fields := line.substr(4).replace("\t", " ").split(" ", false)
+			if not fields.is_empty() and str(fields[0]).strip_edges().is_valid_int():
+				return int(str(fields[0]).strip_edges())
+	return -1
