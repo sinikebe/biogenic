@@ -1111,7 +1111,7 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | H1 | The server, with a LAN guest and one by bob's invite; its LAN listener closed between two frames | The LAN guest let go -- its line, nothing of it kept -- and the listener open again that frame, where it calls back and is in; bob's guest plays on throughout; the log says it once: closed, then open again 0.0 s on |
   | H2 | A phone host with its friend in; the same | Back to LISTENING, "they left", and the friend calling back is in |
   | H3 | A phone host's listener closed inside the very service call a caller came in by -- after the session made its record | Found in that frame, the record let go, and the caller calling again answered on the listener opened anew |
-  | H4 | The server's, with the port taken the moment it closed, for 5 s | Tried at once and again after one second, two and four -- 3 tries, where every second would be 5 -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again at the next try, 7.0 s on, and a LAN guest in |
+  | H4 | The server's, with the port taken the moment it closed, for 5 s | Tried at once and again after one second, two and four -- 3 tries, where trying every second makes 6 -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again at the next try, 7.0 s on, and a LAN guest in |
 
   339 checks, all PASS; the probe finishes in about 157 s and 14,200 to 14,300 frames.
 - **net_fuzz** (part D): a new step, `L`, the LAN listener closing by itself with its transports gone and nothing said, in about one step in 250; after every step, a closed LAN listener open again inside a second -- this port is never anybody else's -- closed exactly when the host thinks so, and no address kept for an id no listener holds. `lan_closed` is a path the coverage check now demands. Two saved cases, 84 in all: a guest and a caller still saying hello on the server, beside a friend by invite; and a phone's listener closed again the moment it opened -- so held closed for a second -- and once more after. Seeds 1 to 6 pass.
@@ -1124,8 +1124,8 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | opened again, its peers' records kept | unaided, and both saved cases | H1-H3 | yes |
   | found only the frame after the `poll()` that closed it | -- | H3 | -- |
   | `_count_arrivals` stopping with it, as before | -- | H4 | -- |
-  | tried every frame | -- | H4 | -- |
-  | tried every second, never backing off | -- | H4 (5 tries) | -- |
+  | tried every frame | -- | H4 (250 tries) | -- |
+  | tried every second, never backing off | -- | H4 (6 tries) | -- |
   | the host never learning it is open again | unaided, both saved cases, and coverage | H4 | -- |
 
   The probe's `invites` section writes its books under `user://`, so two copies run side by side must each have a data directory of their own, or each wipes the other's and fails checks that have nothing to do with the bug.

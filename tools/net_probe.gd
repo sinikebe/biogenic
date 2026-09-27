@@ -8458,7 +8458,8 @@ func _invites_house_closed() -> void:
 		if line.begins_with("[net] the LAN listener is open again, "):
 			on = float(line.get_slice(", ", 1).get_slice(" ", 0))
 	# Tries at once, one second on and three -- each an engine line -- and
-	# the next, seven on, finds the port free. Every second would be five.
+	# the next, seven on, finds the port free. Trying every second makes six:
+	# the one due as the port is let go comes first in that frame.
 	var tries := _count(lines, "Couldn't create an ENet host")
 	_says(squatted and down and counting < 2.0 and far_on and took >= 0.0
 			and on >= 6.5 and on < 8.5 and tries == 3
