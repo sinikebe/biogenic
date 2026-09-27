@@ -1125,7 +1125,7 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | found only the frame after the `poll()` that closed it | -- | H3 | -- |
   | `_count_arrivals` stopping with it, as before | -- | H4 | -- |
   | tried every frame, not every second | -- | H4 (125 tries) | -- |
-  | the host never learning it is open again | unaided, and both saved cases | H4 | -- |
+  | the host never learning it is open again | unaided, both saved cases, and coverage | H4 | -- |
 
   The probe's `invites` section writes its books under `user://`, so two copies run side by side must each have a data directory of their own, or each wipes the other's and fails checks that have nothing to do with the bug.
 
