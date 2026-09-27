@@ -1206,7 +1206,18 @@ The same scratch script, run on `main` and on this PR:
   - Seeds 1 to 3 pass.
 - **Eight bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
 
-  PLANTED_TABLE
+  | Planted | The fuzzer | The probe |
+  |---|---|---|
+  | base64 decoded without its shape asked | unaided, and a saved case | F8 |
+  | a certificate parsed without its DER shape asked | a saved case | F8 |
+  | no bound on the certificates one paste parses | a saved case | F8 |
+  | a name whose last label is a number taken | a saved case | F7 |
+  | any IP literal taken | four saved cases | F7 |
+  | IPv4 in IPv6 clothes taken | a saved case | F7 |
+  | a leading zero taken | a saved case | F7 |
+  | multicast and reserved IPv4 taken | a saved case | F7 |
+
+  Planting them found two things in the checks themselves. The fuzzer's saved cases passed every address bug until each case said what it must read as. And one bug, planted by deleting a loop's only line, left `invite.gd` unable to parse -- 120 script errors and no verdict at all -- so it was planted again as a `pass`.
 
 ### H.4 What H does not do
 
