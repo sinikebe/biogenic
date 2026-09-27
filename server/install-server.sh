@@ -187,10 +187,10 @@ if compgen -G "$OVERRIDES/*.conf" >/dev/null; then
 	fi
 fi
 
-# 5b. The firewall rules for the internet port, laid down but never loaded: a
-#     network firewall is the owner's to review and turn on (docs/server.md
-#     §9.6). The file replaces the whole table when it is loaded, so loading
-#     this release's copy over an older one never doubles a rule.
+# 5b. The firewall rules for both ports, laid down but never loaded: a network
+#     firewall is the owner's to review and turn on (docs/server.md §5, §9.6).
+#     The file replaces the whole table when it is loaded, so loading this
+#     release's copy over an older one never doubles a rule.
 install -d -m 0755 "$NFT_DIR"
 if cmp -s "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"; then
 	rules="unchanged"
