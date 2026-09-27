@@ -35,8 +35,12 @@ const ROOT := "user://"
 ## **Valid from 2020 to 2099, whatever today is.** mbedTLS checks both dates
 ## against the device's clock -- measured on 4.7-stable: a certificate that
 ## starts in 2090, and one that ended in 2021, both fail the pin -- so a phone
-## whose clock is years out still reaches its friend's pond. The pin is the
-## certificate itself; the dates protect nothing here.
+## whose clock is years out still reaches its friend's pond. The dates protect
+## nothing here: the pin is the certificate's key -- one made again on the same
+## key passes it, but only while the one the invite carries is in date too
+## (net_probe C9) -- so a shorter life would bound a copied key only by voiding
+## every invite on a timer. A copied key is answered by `--new-key`, at once
+## (issue #89, docs/server.md §9.8).
 const VALID_FROM := "20200101000000"
 const VALID_TO := "20991231235959"
 ## `biogenic-pond`: [constant Invite.NAME], which the call checks.
@@ -481,6 +485,12 @@ static func load_identity(root: String = ROOT) -> Array:
 ## is renamed over the old in one step, which is Linux's rename, where the
 ## server runs (on Windows, Godot 4.7 deletes the old file and then moves the
 ## new one).
+##
+## **Both are written before either replaces the old** (issue #89): a disk that
+## fills halfway leaves the old pair as it was, never a new key beside the old
+## certificate, which no invite could call. Then the key goes over first: the
+## running server loads the pair again when it sees the certificate change, so
+## the certificate must land last.
 static func make_identity(root: String = ROOT) -> Array:
 	var where := paths(root)
 	var made := Invite.make_private_dir(str(where["pond"]))
@@ -498,19 +508,62 @@ static func make_identity(root: String = ROOT) -> Array:
 	# hands back (and warns about); it goes through a scratch file, and the
 	# real one is then written through `Invite.write_private`.
 	var scratch := str(where["cert"]) + ".tmp"
-	if certificate.save(scratch) != OK:
-		return [1, ["could not write the certificate to %s" % _real(scratch)]]
+	var saved := certificate.save(scratch)
 	var pem := _read(scratch)
 	DirAccess.remove_absolute(scratch)
-	var err := Invite.write_private(str(where["key"]),
-		key.save_to_string(false).to_utf8_buffer())
-	if err == OK:
-		err = Invite.write_private(str(where["cert"]), pem.to_utf8_buffer())
-	if err != OK:
-		return [1, ["could not write the key to %s (error %d)" % [_real(str(where["key"])),
-			err]]]
-	return [0, ["made the server's key and certificate: %s (only this user can read it)"
-		% _real(str(where["key"]))]]
+	var der := Invite.der_of_pem(pem)
+	if saved != OK or der.is_empty():
+		return [1, ["could not write the certificate to %s -- nothing was changed"
+			% _real(scratch)]]
+	var next := {"key": str(where["key"]) + ".next", "cert": str(where["cert"]) + ".next"}
+	var bytes := {"key": key.save_to_string(false).to_utf8_buffer(),
+		"cert": pem.to_utf8_buffer()}
+	for what: String in ["key", "cert"]:
+		var err := Invite.write_private(str(next[what]), bytes[what])
+		if err != OK:
+			_drop(next)
+			return [1, ["could not write %s (error %d) -- nothing was changed: the old key,"
+				% [_real(str(next[what])), err] + " certificate and invites are as they were."
+				+ " Free some space or fix what stopped it, and run it again."]]
+	var moved := DirAccess.rename_absolute(str(next["key"]), str(where["key"]))
+	if moved != OK:
+		_drop(next)
+		return [1, ["could not put the new key in place at %s (error %d) -- nothing was"
+			% [_real(str(where["key"])), moved] + " changed. Fix what stopped it, and run it"
+			+ " again."]]
+	moved = DirAccess.rename_absolute(str(next["cert"]), str(where["cert"]))
+	if moved != OK:
+		_drop(next)
+		return [1, ["could not put the new certificate in place at %s (error %d), after the"
+			% [_real(str(where["cert"])), moved] + " new key -- run it again: until it goes"
+			+ " through, no invite can call in."]]
+	return [0, ["made the server's key and certificate: %s (only this user can read it);"
+		% _real(str(where["key"])) + " certificate %s" % fingerprint(der)]]
+
+
+## The half-made pair [method make_identity] leaves when it stops: each file,
+## and the `.new` a write that could not be renamed leaves beside it.
+static func _drop(next: Dictionary) -> void:
+	for path: String in next.values():
+		DirAccess.remove_absolute(path)
+		DirAccess.remove_absolute(path + ".new")
+
+
+## **A certificate's fingerprint, for the owner's eyes**: the first eight bytes
+## of SHA-256 over its DER, as `AB:CD:...` -- how `openssl x509 -fingerprint
+## -sha256` begins. The job that makes a key prints it and the server's
+## listening line names the one it answers with, so the two can be matched
+## after a new key (docs/server.md §9.8). Not a secret: every invite carries
+## the certificate whole.
+static func fingerprint(der: PackedByteArray) -> String:
+	var hashing := HashingContext.new()
+	hashing.start(HashingContext.HASH_SHA256)
+	hashing.update(der)
+	var digest := hashing.finish()
+	var parts: PackedStringArray = []
+	for i in 8:
+		parts.append("%02X" % digest[i])
+	return ":".join(parts)
 
 
 ## **When invite [param key_id] last came in**, written by the running server

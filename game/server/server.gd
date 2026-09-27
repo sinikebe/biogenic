@@ -132,6 +132,10 @@ var _internet_said := ""
 ## Why nothing listens for the internet though it should, for [method
 ## _internet_status]: "" when nothing is wrong.
 var _internet_trouble := ""
+## **The certificate the internet listener answers with**, as
+## [method InviteBook.fingerprint] prints it -- the listening line names it, so
+## an owner can match it with the one `--new-key` printed (issue #89).
+var _answering_with := ""
 ## **The book or the certificate could not be read at the last look**, so the
 ## next looks at it again whatever its time says: the `chown` that fixes it
 ## changes no modification time.
@@ -334,12 +338,13 @@ func _internet_status() -> String:
 	names.sort()
 	if _net.internet_listening():
 		var where := InviteBook.reach(pond_root)
-		return ("listening on port %d/udp for %d invite%s (%s). Friends call %s: forward"
+		return ("listening on port %d/udp for %d invite%s (%s), certificate %s. Friends"
 			% [Invite.PORT, names.size(), "" if names.size() == 1 else "s",
-				", ".join(PackedStringArray(names)), Invite.reach_text(str(where["address"]),
-					int(where["port"])) if not where.is_empty() else "(no --reach set)"]
-			+ " that port, UDP, to this machine's %d/udp -- the one port to forward."
-			% Invite.PORT)
+				", ".join(PackedStringArray(names)), _answering_with]
+			+ " call %s: forward that port, UDP, to this machine's %d/udp -- the one port"
+			% [Invite.reach_text(str(where["address"]), int(where["port"]))
+				if not where.is_empty() else "(no --reach set)", Invite.PORT]
+			+ " to forward.")
 	if names.is_empty():
 		return ("nothing listens for the internet: there are no invites. To let a"
 			+ " friend in from outside, set --reach, then --invite=<name>"
@@ -447,14 +452,15 @@ func _watch_invites(first: bool) -> void:
 			_settled = false
 			_say_internet(first)
 			return
+		_answering_with = InviteBook.fingerprint(identity[2])
 	_internet_trouble = ""
 	_net.set_invites(table)
 	_say_internet(first)
 
 
 ## **Who this server runs as**, by name, for a sentence that tells the owner
-## what to `chown` to: `$USER`, which systemd sets from the unit's `User=`, and
-## `id -un` where it is not -- asked once.
+## what to `chown` to: `$USER`, which systemd sets from the unit's `User=`, then
+## `$LOGNAME`, then this process's uid looked up in `/etc/passwd` -- asked once.
 func _user_name() -> String:
 	if _user.is_empty():
 		_user = OS.get_environment("USER")
