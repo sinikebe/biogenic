@@ -411,7 +411,9 @@ nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
   s on` -- so a phone calls again as after any drop. A friend by invite is not
   touched. Should something else take the port meanwhile, the server says
   `[net] the LAN listener could not open again: port 45771 is taken -- trying
-  every 1 s`, and does, until it is free.
+  again in 1 s`, and tries again after one second, two, four, and so on up to
+  a minute, until it is free. Each try it loses is Godot's own `Couldn't
+  create an ENet host.` in the journal.
 - **`no phone can join by code`** -- the server is listening, but its address
   ends in .0 or .255 (which a network wider than a /24 can hand out), and a
   code only carries a last number from 1 to 254. Give the container another

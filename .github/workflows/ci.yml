@@ -395,9 +395,10 @@ jobs:
         # a failed send; this is the one check that the send fails and ENet
         # closes it, which an engine upgrade could change.
         #
-        # The same namespace and the same user as the fuzz step above. Some
-        # three seconds; `timeout` is the backstop for a scene that never
-        # ends, and each wait here gives up after thirty.
+        # The same namespace and the same user as the fuzz step above. About a
+        # second; `timeout` is the backstop for a scene that never ends, and
+        # each wait here gives up after thirty seconds, or at once if Godot has
+        # gone.
         run: |
           set -uo pipefail
           out=$(sudo unshare --net -- bash -c '
@@ -410,6 +411,7 @@ jobs:
               step() {
                 for _ in $(seq 300); do
                   grep -q "^\[net-drop\] $1" "$log" && return 0
+                  kill -0 "$godot" 2>/dev/null || return 1
                   sleep 0.1
                 done
                 return 1
@@ -421,7 +423,7 @@ jobs:
             _ "$(id -u)" "$(id -g)" "$HOME" "$PWD" 2>&1) || true
           grep -E "^\[net-drop\]|^\[net\]" <<< "$out" || true
           if ! grep -q "^\[net-drop\] ALL PASS$" <<< "$out"; then
-            grep -E "SCRIPT ERROR|Parse Error" <<< "$out" || true
+            grep -E "SCRIPT ERROR|Parse Error|ERROR:|WARNING:" <<< "$out" || true
             echo "::error::a host did not come back from its network going -- see the lines above"
             exit 1
           fi

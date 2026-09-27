@@ -1093,9 +1093,9 @@ Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged
 - **Found where it happens** (`_pump_one`): straight after the `poll()` that closed it -- before anything else that frame reads that listener's peers -- and at the top of any later frame while it stays closed.
 - **Said once, and each of its transports let go as its goodbye would have** (`_lan_closed_by_itself`): the line, the count `lan_closed`, and every id on it through `_on_peer_disconnected`. So a guest gets its `done after` line, what it queued is forgotten, and a phone host whose friend was on it goes back to LISTENING with "they left" and shows its code. Its ids and addresses leave `_via` and `_addresses` too, which otherwise went on counting against their address's transports at the door and refusing their ids as twins on the other listener.
 - **Opened again at once, on the same port** (`_open_lan`, which `host` now opens with): the server goes on being found by its code, and a phone too, with no new session. **The internet listener and whoever proved an invite there are not touched**, so the server's friends from outside play on. Re-hosting the whole session, which the issue also offered, would have cut them.
-- **At most once a second while the port will not open** (`LAN_REOPEN_EVERY`): a socket bound to every address opens whether or not any network is up, as the measurement shows, so this takes something else holding the port meanwhile. Each try is 4.7's own `Couldn't create an ENet host.`, and ours is one warning every 10 s (A.6); open again, the line says how long it was down.
+- **Tried again after one second, two, four -- up to a minute -- while the port will not open** (`LAN_REOPEN_EVERY`, `LAN_REOPEN_MOST`), as the server's own first listen backs off, and for the same reason: each try the port refuses is 4.7's own `Couldn't create an ENet host.` in the journal, which no limiter of ours reaches. Ours is one warning every 10 s (A.6); open again, the line says how long it was down. A socket bound to every address opens whether or not any network is up, as the measurement shows, so this takes something else holding the port meanwhile. Should it close again inside a second of opening, it waits out that second first.
 - **`_count_arrivals` counts each listener on its own**: one that is closed no longer stops the other being counted.
-- **A screen that closes the session, or hosts anew, on hearing "they left"** is left to it: the listener is not opened again behind it.
+- **A screen that closes the session, or hosts anew, on hearing "they left"** is left to it: the host stops letting go at that guest, and the listener is not opened again behind it.
 
 ### G.2 What it costs a player
 
@@ -1103,7 +1103,7 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
 
 ### G.3 Checked
 
-- **The real thing, in CI** (`tools/net_drop.gd`, the "Take the network from under a host" step): a dedicated host with a guest in, in a network namespace; the address taken away by a root shell there, and the host must say so within `WAIT`, let the guest go and listen again, open; the address back, and a new guest must be in. It closed 0.42 s after the address went -- ENet's ping to the guest, within half a second -- and the whole step takes some three seconds. It is the one check that a send fails and ENet closes the listener, which an engine upgrade could change.
+- **The real thing, in CI** (`tools/net_drop.gd`, the "Take the network from under a host" step): a dedicated host with a guest in, in a network namespace; the address taken away by a root shell there, and the host must say so within `WAIT`, let the guest go and listen again, open; the address back, and a new guest must be in. It closed 0.42 s after the address went -- ENet's ping to the guest, within half a second -- and the whole step takes about a second. It is the one check that a send fails and ENet closes the listener, which an engine upgrade could change.
 - **net_probe, `invites` section**, on real sockets over loopback, closing the listener as `poll()` does:
 
   | # | What | What must hold |
@@ -1111,11 +1111,11 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | H1 | The server, with a LAN guest and one by bob's invite; its LAN listener closed between two frames | The LAN guest let go -- its line, nothing of it kept -- and the listener open again that frame, where it calls back and is in; bob's guest plays on throughout; the log says it once: closed, then open again 0.0 s on |
   | H2 | A phone host with its friend in; the same | Back to LISTENING, "they left", and the friend calling back is in |
   | H3 | A phone host's listener closed inside the very service call a caller came in by -- after the session made its record | Found in that frame, the record let go, and the caller calling again answered on the listener opened anew |
-  | H4 | The server's, with the port taken the moment it closed, for 2.5 s | Tried every second -- 3 tries -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again 3.0 s on, and a LAN guest in |
+  | H4 | The server's, with the port taken the moment it closed, for 5 s | Tried at once and again after one second, two and four -- 3 tries, where every second would be 5 -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again at the next try, 7.0 s on, and a LAN guest in |
 
   339 checks, all PASS; the probe finishes in about 157 s and 14,200 to 14,300 frames.
 - **net_fuzz** (part D): a new step, `L`, the LAN listener closing by itself with its transports gone and nothing said, in about one step in 250; after every step, a closed LAN listener open again inside a second -- this port is never anybody else's -- closed exactly when the host thinks so, and no address kept for an id no listener holds. `lan_closed` is a path the coverage check now demands. Two saved cases, 84 in all: a guest and a caller still saying hello on the server, beside a friend by invite; and a phone's listener closed again the moment it opened -- so held closed for a second -- and once more after. Seeds 1 to 6 pass.
-- **Seven bugs planted one at a time**, each run against the fuzzer (seed 1, with the saved cases), the probe's `invites` section and `net_drop`:
+- **Eight bugs planted one at a time**, each run against the fuzzer (seed 1, with the saved cases), the probe's `invites` section and `net_drop`:
 
   | Planted | The fuzzer | The probe | net_drop |
   |---|---|---|---|
@@ -1124,7 +1124,8 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | opened again, its peers' records kept | unaided, and both saved cases | H1-H3 | yes |
   | found only the frame after the `poll()` that closed it | -- | H3 | -- |
   | `_count_arrivals` stopping with it, as before | -- | H4 | -- |
-  | tried every frame, not every second | -- | H4 (125 tries) | -- |
+  | tried every frame | -- | H4 | -- |
+  | tried every second, never backing off | -- | H4 (5 tries) | -- |
   | the host never learning it is open again | unaided, both saved cases, and coverage | H4 | -- |
 
   The probe's `invites` section writes its books under `user://`, so two copies run side by side must each have a data directory of their own, or each wipes the other's and fails checks that have nothing to do with the bug.
@@ -1135,7 +1136,7 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
 - **The internet listener closing by itself** is as C left it: its peers let go, and the server's next look at its invites opens a new one. A phone has none.
 - **A guest's own socket failing** ends its call as any lost connection does; that is not this.
 - **A dropped Wi-Fi still ends a phone's game where it did.** When the phone's address goes with no other way out, its next send fails and ENet closes the listener, before G as after. G makes the phone say so -- "they left", and its code shown again -- and answer the friend's next call once the Wi-Fi is back, where before it went on showing a friend who had gone and answered nobody.
-- **The address a host shows is the one it began with.** A network that comes back with another address leaves a phone's code, and the server's, naming the old one; the listener answers on the new one, but only a friend who knows it can call. That was so before G, and a new session -- the screen opened again, the service restarted -- is still how to take the new address.
+- **A host keeps the address it began with.** A network that comes back with another address leaves a phone's code, and the server's, naming the old one. The server's listener answers on the new one, but only a friend who knows it can call. A phone's answers nobody there: its door takes its own /24 alone, and that is the old address's (F.1), so a phone back on another /24 refuses every caller from it. Both were so before G, and a new session -- the screen opened again, the service restarted -- is still how to take the new address.
 
 ### Files
 

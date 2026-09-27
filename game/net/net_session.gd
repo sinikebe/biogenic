@@ -466,8 +466,12 @@ const NOTES_MAX := 256
 const SATURATED_BYTES := 65536.0
 const SATURATED_DATAGRAMS := 2000.0
 ## **A LAN listener that closed by itself is opened again** (issue #105): at
-## once, and then at most this often while the port will not open.
+## once; and while the port will not open, again after this long, and then
+## twice as long each time, up to [constant LAN_REOPEN_MOST] -- as the
+## server's own first listen backs off, and for the same reason: each try the
+## port refuses is a line in the journal.
 const LAN_REOPEN_EVERY := 1.0
+const LAN_REOPEN_MOST := 60.0
 
 var link := Link.OFF
 ## The heading a screen puts on the current state of the link, when that state
@@ -681,6 +685,8 @@ var _net_calls_all: Bucket = null
 ## again. See [method _lan_closed_by_itself].
 var _lan_down_since := -1.0
 var _lan_reopen_at := 0.0
+## How long after a try the port refused the next one comes.
+var _lan_reopen_wait := LAN_REOPEN_EVERY
 ## `kind|key` -> `[next line allowed, lines held back]`. See [method _note].
 var _notes: Dictionary = {}
 ## When this node's last frame began: the gap a stall is measured by.
@@ -2453,9 +2459,10 @@ func _pump_one(enet: ENetMultiplayerPeer, via: int) -> void:
 ## with no goodbye from any of them. Said once, each let go of here as its
 ## goodbye would have, and the listener opened again on the same port, so a
 ## host goes on being found by its code: a phone's screen and the server
-## alike, which hosts once and never again. Tried at once, and then at most
-## once every [constant LAN_REOPEN_EVERY] while the port will not open; the
-## internet listener, and whoever proved an invite there, are not touched.
+## alike, which hosts once and never again. Tried at once -- and should it
+## close again, a second after it last opened -- and while the port will not
+## open, as [constant LAN_REOPEN_EVERY] says. The internet listener, and
+## whoever proved an invite there, are not touched.
 func _lan_closed_by_itself() -> void:
 	var now := _now()
 	var closed := _peer
@@ -2464,19 +2471,24 @@ func _lan_closed_by_itself() -> void:
 		gate_counts["lan_closed"] += 1
 		_note("lan closed", "", "[net] the LAN listener closed by itself")
 		for id: int in _via.keys():
-			if int(_via[id]) == VIA_LAN:
-				_on_peer_disconnected(id, VIA_LAN)
-		# A screen hearing "they left" may have closed the session, or
-		# hosted anew: then this listener is nobody's to open.
-		if _peer != closed or not hosting:
-			return
+			if int(_via.get(id, -1)) != VIA_LAN:
+				continue
+			_on_peer_disconnected(id, VIA_LAN)
+			# A screen hearing "they left" may have closed the session, or
+			# hosted anew: then this listener, and whoever is left on it, are
+			# nobody's here.
+			if _peer != closed or not hosting:
+				return
 	if now < _lan_reopen_at:
 		return
-	_lan_reopen_at = now + LAN_REOPEN_EVERY
 	if not _open_lan():
+		_lan_reopen_at = now + _lan_reopen_wait
 		_note("lan reopen", "", "[net] the LAN listener could not open again: port %d is"
-			% Lan.PORT + " taken -- trying every %d s" % roundi(LAN_REOPEN_EVERY), true)
+			% Lan.PORT + " taken -- trying again in %d s" % roundi(_lan_reopen_wait), true)
+		_lan_reopen_wait = minf(_lan_reopen_wait * 2.0, LAN_REOPEN_MOST)
 		return
+	_lan_reopen_at = now + LAN_REOPEN_EVERY
+	_lan_reopen_wait = LAN_REOPEN_EVERY
 	_note("lan open", "", "[net] the LAN listener is open again, %.1f s on"
 		% (now - _lan_down_since))
 	_lan_down_since = -1.0
@@ -3561,6 +3573,7 @@ func _reset_socket() -> void:
 	_net_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
 	_lan_down_since = -1.0
 	_lan_reopen_at = 0.0
+	_lan_reopen_wait = LAN_REOPEN_EVERY
 	_frame_at = _now()
 	_saturation_from = _now()
 	trouble = ""

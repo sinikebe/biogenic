@@ -8345,12 +8345,14 @@ func _invites_room() -> void:
 ## **H1-H4: the house's listener closing by itself** (issue #105), as 4.7's
 ## `ENetMultiplayerPeer.poll()` closes one whose service failed -- a send the
 ## network refused, as when an interface goes down under it: `close()`, which
-## takes every transport on it and tells the host nothing. Closed here by hand,
-## between two frames and once inside the very call that brings a caller in,
-## where a real failure is found. The server lets its LAN guest go, keeps its
-## internet guest, and answers the house again at once; a phone goes back to
-## showing its code; and with the port taken meanwhile, the listener is tried
-## every second and opens again once it is free.
+## takes every transport on it and tells the host nothing. Closed here by hand:
+## between two frames, and once during `poll()` itself -- where 4.7 closes one,
+## in the service call a poll begins with -- from inside the very signal that
+## brings a caller in. `tools/net_drop.gd` is the real failure. The server lets
+## its LAN guest go, keeps its internet guest, and answers the house again at
+## once; a phone goes back to showing its code; and with the port taken
+## meanwhile, the listener is tried again after one second, two, four, and
+## opens again once it is free.
 func _invites_house_closed() -> void:
 	var bob := Invite.parse(FileAccess.get_file_as_string(
 		InviteBook.line_path("bob", INVITES_ROOT)))
@@ -8434,7 +8436,7 @@ func _invites_house_closed() -> void:
 		+ " let go with it, and the caller calling again is answered on the listener"
 		+ " opened anew")
 	await _limits_close([lone, caller])
-	# H4: the port taken the moment it closed.
+	# H4: the port taken the moment it closed, for five seconds.
 	host = await _invites_host("InvHouseTaken")
 	far = await _session("InvHouseTakenFar")
 	await _invites_call(far, bob)
@@ -8442,31 +8444,33 @@ func _invites_house_closed() -> void:
 	(host.get("_peer") as ENetMultiplayerPeer).close()
 	var squatter := PacketPeerUDP.new()
 	var squatted := squatter.bind(Lan.PORT) == OK
-	await _wait(2.5)
+	await _wait(5.0)
 	var down: bool = float(host.get("_lan_down_since")) >= 0.0
 	var counting: float = host._now() - float(host.get("_saturation_from"))
 	var far_on := int(far.link) == NetSession.Link.TOGETHER
 	squatter.close()
 	var took := await _limits_until(func() -> bool:
-		return float(host.get("_lan_down_since")) < 0.0, 3.0)
+		return float(host.get("_lan_down_since")) < 0.0, 4.0)
 	lan = await _limits_guest("InvHouseTakenLan")
 	lines = _inv_catcher.lines.slice(from)
 	var on := -1.0
 	for line: String in lines:
 		if line.begins_with("[net] the LAN listener is open again, "):
 			on = float(line.get_slice(", ", 1).get_slice(" ", 0))
-	# One try the frame it closed, then one a second -- each an engine line.
+	# Tries at once, one second on and three -- each an engine line -- and
+	# the next, seven on, finds the port free. Every second would be five.
 	var tries := _count(lines, "Couldn't create an ENet host")
-	_says(squatted and down and counting < 1.5 and far_on and took >= 0.0
-			and on >= 2.5 and on < 4.0 and tries >= 2 and tries <= 4
+	_says(squatted and down and counting < 2.0 and far_on and took >= 0.0
+			and on >= 6.5 and on < 8.5 and tries == 3
 			and _count(lines, "[net] the LAN listener could not open again: port %d is taken"
 				% Lan.PORT) == 1
 			and int(lan.link) == NetSession.Link.TOGETHER
 			and int(far.link) == NetSession.Link.TOGETHER,
-		"invites H4: with the port taken the moment the listener closed, it is tried again"
-		+ " every second -- %d tries in 2.5 s -- and said once, arrivals at the internet"
-		% tries + " listener still counted (%.1f s since the last count) and its guest"
-		% counting + " playing on; free again, it opens %.1f s on and a LAN guest is in" % on)
+		"invites H4: with the port taken for 5 s the moment the listener closed, it is"
+		+ " tried again after one second, two and four -- %d tries -- and said once," % tries
+		+ " arrivals at the internet listener still counted (%.1f s since the last" % counting
+		+ " count) and its guest playing on; free again, it opens at the next try, %.1f s"
+		% on + " on, and a LAN guest is in")
 	await _limits_close([host, far, lan])
 
 
