@@ -941,7 +941,11 @@ func host(guests: int = 1) -> bool:
 	_zero_counts()
 	hosting = true
 	guests_max = clampi(guests, 1, GUESTS_MAX)
-	address = Lan.local_address()
+	# **A phone hosts on its own network alone** (issue #104): never on its
+	# cellular data, whose private addresses a carrier shares with every other
+	# subscriber -- that is "no wi-fi here" -- and its door answers only its
+	# own /24 ([method _admit]).
+	address = Lan.local_address() if guests_max > 1 else Lan.hosting_address()
 	if not hostable(address, guests_max):
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
@@ -2929,8 +2933,18 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 	var now := _now()
 	if via == VIA_LAN and (not Lan.is_local_source(from, address)
 			or (not loopback_is_local and Lan.is_loopback(from))):
-		return ["lan", "not on this network -- a call from outside needs an invite, on"
-			+ " port %d" % Invite.PORT]
+		# Only a dedicated host takes invites; a phone never listens for them.
+		return ["lan", "not on this network" + (" -- a call from outside needs an invite,"
+			+ " on port %d" % Invite.PORT if guests_max > 1 else "")]
+	# **A phone host answers its own /24 alone** (issue #104), and loopback: a
+	# friend finds a phone by its code, which is the friend's own /24 with the
+	# phone's last number on it, so no other call is a friend's -- not a
+	# carrier's other subscriber calling its cellular address, nor another
+	# network of the house. Bound to its address instead, a phone would end
+	# its game at the first Wi-Fi hiccup (net-hardening.md F.1).
+	if via == VIA_LAN and guests_max == 1 and not Lan.is_loopback(from) \
+			and not Lan.same_24(from, address):
+		return ["lan", "not on this network -- a phone answers its own /24 alone"]
 	if via == VIA_NET and not internet_listening():
 		return ["closed", "the internet listener is closing"]
 	var key := Lan.source_key(from)

@@ -293,8 +293,8 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 333 checks, caps itself at 500
-        # frames a second and quits itself in 151 to 156 seconds: some seven in
+        # a backstop only. The probe makes 335 checks, caps itself at 500
+        # frames a second and quits itself in 150 to 155 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # twenty-three to twenty-six in `limits`, at up to 100 frames a second,
@@ -305,7 +305,7 @@ jobs:
         # eight seconds of a call nothing answers, the three of a caller that
         # never proves. Its pond timings are counted in frames, not wall
         # milliseconds, so a loaded runner slows the step without failing it.
-        # It prints its own frame count -- 13,700 to 14,200, measured five
+        # It prints its own frame count -- 13,800 to 14,000, measured three
         # times -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,

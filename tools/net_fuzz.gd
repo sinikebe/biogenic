@@ -71,6 +71,8 @@ const CORPUS := "res://tools/net_fuzz_corpus.txt"
 ## away, so it proves nothing and opens nothing -- it is here so a seed's
 ## invites are the same bytes on every run.
 const INVITE_CERT := "res://tools/net_fuzz_cert.pem"
+## [method _home_prefix]'s answer, once asked.
+var _home := ""
 
 ## **Each section's size at `--scale=1`** -- what CI runs.
 const WIRE_CASES := 20000
@@ -812,17 +814,17 @@ func _door_actions(count: int, phone := false) -> Array:
 			var id := _pick_id(lines)
 			var via := _pick_via(phone)
 			_door_line(lines, stage, seq, id, via)
-			actions.append(["C", id, via, _pick_address(via)])
+			actions.append(["C", id, via, _pick_address(via, phone)])
 		elif roll < 0.15:
 			# A storm: callers at once, from one address or from several, each
 			# greeting as it lands.
 			var via := _pick_via(phone)
-			var one := _pick_address(via)
+			var one := _pick_address(via, phone)
 			var alone := _rng.randf() < 0.5
 			for n in _rng.randi_range(3, 14):
 				var id := _rng.randi_range(2, 0x7FFFFFFF)
 				_door_line(lines, stage, seq, id, via)
-				actions.append(["C", id, via, one if alone else _pick_address(via)])
+				actions.append(["C", id, via, one if alone else _pick_address(via, phone)])
 				actions.append(["D", id, via, _door_next(_door_line(lines, stage, seq, id,
 					via, false), stage, seq)])
 		elif roll < 0.18:
@@ -967,7 +969,13 @@ func _pick_id(lines: Array) -> int:
 
 ## Mostly an address the listener takes -- a house address on the LAN one --
 ## and now and then one it must not.
-func _pick_address(via: int) -> String:
+func _pick_address(via: int, phone := false) -> String:
+	# **A phone's callers are mostly its own**: its /24 and loopback, all its
+	# door answers (#104), so its runs reach past the door as a host's do.
+	if phone and via == NetSession.VIA_LAN and _rng.randf() < 0.6:
+		if _rng.randf() < 0.3:
+			return "127.0.0.%d" % _rng.randi_range(1, 254)
+		return _home_prefix() + str(_rng.randi_range(1, 254))
 	# No address at all, which `_address_of` says of a peer ENet no longer
 	# holds: a key like any other to the door's book (#75).
 	if _rng.randf() < 0.02:
@@ -995,6 +1003,16 @@ func _pick_address(via: int) -> String:
 					_rng.randi_range(1, 0xFFFF)]
 			return "2001:db8::%x" % _rng.randi_range(1, 0xFFFF)
 	return "fd00::%x" % _rng.randi_range(1, 0xFFFF)
+
+
+## **The /24 a phone host here answers** (#104), as "a.b.c.": the one it will
+## host at -- in CI's namespace, 10.77.0.0/24 -- asked once.
+func _home_prefix() -> String:
+	if _home.is_empty():
+		_home = Lan.prefix_of(Lan.hosting_address())
+		if _home.is_empty():
+			_home = "10.77.0."
+	return _home
 
 
 ## **What a caller says next**: a greeting, a proof (right, wrong, or before
@@ -1391,6 +1409,12 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 		if via == NetSession.VIA_LAN and not Lan.is_local_source(str(peer["address"]),
 				host.address):
 			return "peer %d from %s let in on the LAN listener" % [id, str(peer["address"])]
+		# A phone's LAN door is its own /24 and loopback (#104).
+		if via == NetSession.VIA_LAN and host.guests_max == 1 \
+				and not Lan.is_loopback(str(peer["address"])) \
+				and not Lan.same_24(str(peer["address"]), host.address):
+			return "peer %d from %s let in by a phone host at %s, outside its /24" % [id,
+				str(peer["address"]), host.address]
 	for id: int in host._via.keys():
 		if not host._peers.has(id) and not host._hanging_up.has(id):
 			return "id %d kept in _via with no peer and nothing to hang up" % id

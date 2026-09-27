@@ -81,18 +81,18 @@ const LINK_LOCAL := "169.254."
 ## friendly name, lowercased. Container and VM bridges and their cables
 ## (docker, veth, libvirt, LXC/LXD, CNI, podman, VirtualBox, VMware), VPN and
 ## overlay tunnels (tun, tap, WireGuard, Tailscale, ZeroTier, macOS `utun`), a
-## phone's cellular data (`rmnet`, `ccmni`), which no friend is on, and a
-## phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
+## phone's cellular data ([constant CELLULAR_PREFIXES]), which no friend is on,
+## and a phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
 ## which Android puts in 192.168/16, where they would outrank a 10.x Wi-Fi on
-## range alone. A phone that *is* the hotspot still answers with it: tether and
-## cellular are both down here, and then range decides. Not `ap`: that would
+## range alone. A phone that *is* the hotspot still answers with it: the tether
+## is down here, and cellular further down still, below every other adapter
+## (issue #104). Not `ap`: that would
 ## take Windows' "Apple Mobile Device Ethernet" with it. A docker *user* bridge
 ## is `br-<id>`; a bare `br0` or Proxmox's `vmbr0` is the machine's real LAN
 ## and is not here.
 const VIRTUAL_PREFIXES: Array[String] = ["docker", "veth", "br-", "virbr",
 	"lxcbr", "lxdbr", "cni", "flannel", "podman", "vboxnet", "vmnet", "tun",
-	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "rmnet", "ccmni",
-	"swlan", "rndis", "bt-pan"]
+	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "swlan", "rndis", "bt-pan"]
 ## The same, found anywhere in the name -- which is how Windows names them:
 ## `vEthernet (WSL)`, `vEthernet (Default Switch)` for Hyper-V, `VirtualBox
 ## Host-Only Network`, `VMware Network Adapter VMnet8`, `TAP-Windows Adapter`,
@@ -102,10 +102,41 @@ const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
 	"openvpn", "tap-windows", "wintun", "vpn", "npcap"]
 
 
+## **Cellular data, by its adapter's name** (issue #104): Qualcomm's `rmnet`,
+## MediaTek's `ccmni`, Unisoc's `seth_lte` and, on its newer chips,
+## `sipa_eth`, older Android's `pdp`, and a laptop's mobile modem, `wwan0` or
+## systemd's `wwp...` -- and on Windows, by the friendly name, in English. Its
+## private addresses are the carrier's pool, shared with every other
+## subscriber the carrier lets through, so no friend is ever on it with this
+## device. And `v4-`, the interface Android adds for IPv4 over
+## an IPv6-only network: its address is 192.0.0.4 on every device, and nobody
+## else's call reaches it.
+const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "sipa_eth", "pdp",
+	"ww", "v4-"]
+const CELLULAR_WORDS: Array[String] = ["cellular", "mobile broadband"]
+
+
 ## This device's own address on whatever it is attached to, or "" if it is not
 ## attached to anything. [method pick_address] over the adapters Godot sees.
 static func local_address() -> String:
 	return pick_address(IP.get_local_interfaces())
+
+
+## **The address a phone hosts at** (issue #104): [method local_address]'s, or
+## "" when that is on cellular data -- so a phone hosts only where its friend
+## can be with it, never where the carrier's other subscribers are "in the
+## house". [method pick_hosting] over the adapters Godot sees.
+static func hosting_address() -> String:
+	return pick_hosting(IP.get_local_interfaces())
+
+
+## [method pick_address]'s choice from [param interfaces], or "" when it is on
+## a cellular adapter. A phone that is a hotspot still hosts at its tether --
+## that is the network its friend joins -- since cellular ranks below every
+## other adapter, a tether included, whatever its range.
+static func pick_hosting(interfaces: Array) -> String:
+	var best := _pick(interfaces)
+	return "" if bool(best["cellular"]) else str(best["address"])
 
 
 ## **Which of these adapters' addresses is the LAN**, from a list shaped like
@@ -127,23 +158,32 @@ static func local_address() -> String:
 ## virtual adapter still answers with it rather than "", because a wrong guess
 ## on screen is something a player can see, and nothing is not.
 static func pick_address(interfaces: Array) -> String:
-	var best := ""
+	return str(_pick(interfaces)["address"])
+
+
+## [method pick_address]'s choice, and whether its adapter is cellular data:
+## `{address, cellular}`.
+static func _pick(interfaces: Array) -> Dictionary:
+	var best := {"address": "", "cellular": false}
 	var best_rank := 1 << 30
 	for iface: Variant in interfaces:
 		if not iface is Dictionary:
 			continue
-		var virtual := _is_virtual(str(iface.get("name", "")),
-			str(iface.get("friendly", "")))
+		var name := str(iface.get("name", ""))
+		var friendly := str(iface.get("friendly", ""))
+		var cellular := _is_cellular(name, friendly)
+		# Cellular last of all: no friend is ever on it (issue #104).
+		var below := 20 if cellular else (10 if _is_virtual(name, friendly) else 0)
 		for address: String in PackedStringArray(iface.get("addresses",
 				PackedStringArray())):
 			if not _is_ipv4(address):
 				continue
 			if address.begins_with(LOOPBACK) or address.begins_with(LINK_LOCAL):
 				continue
-			var rank := _range_rank(address) + (10 if virtual else 0)
+			var rank := _range_rank(address) + below
 			if rank < best_rank:
 				best_rank = rank
-				best = address
+				best = {"address": address, "cellular": cellular}
 	return best
 
 
@@ -273,7 +313,8 @@ static func _range_rank(address: String) -> int:
 ## No for everything else, and for anything that does not parse: that is a
 ## port a router forwards, or a public IPv6 address the router lets through --
 ## the host binds every address it has, so without this such a caller would be
-## answered.
+## answered. A phone host asks more of a caller: its own /24, or loopback
+## ([method same_24], issue #104).
 ##
 ## The other place this file draws a line between networks, [method
 ## _range_rank], ranks and never refuses; this refuses and never ranks.
@@ -318,6 +359,28 @@ static func is_loopback(address: String) -> bool:
 			return loop
 		return (v6[6] >> 8) == 127
 	return v4[0] == 127
+
+
+## **Whether [param address] is in [param own]'s /24** -- each IPv4, or IPv4
+## in IPv6 clothes, and never for anything else. A phone host's door (issue
+## #104): a friend finds a phone by its code, which is the friend's own /24
+## with the phone's last number on it, so every friend's call comes from here.
+static func same_24(address: String, own: String) -> bool:
+	var a := _v4_any(address)
+	var b := _v4_any(own)
+	return a.size() == 4 and b.size() == 4 and a[0] == b[0] and a[1] == b[1] \
+		and a[2] == b[2]
+
+
+## The four octets of an IPv4 address, or of IPv4 in IPv6 clothes; or empty.
+static func _v4_any(address: String) -> PackedInt32Array:
+	var v4 := _ipv4_octets(address)
+	if not v4.is_empty():
+		return v4
+	var g := _ipv6_groups(address)
+	if g.is_empty() or not _v4_mapped(g):
+		return PackedInt32Array()
+	return PackedInt32Array([g[6] >> 8, g[6] & 0xFF, g[7] >> 8, g[7] & 0xFF])
 
 
 ## **One key per caller, for counting what it does**: an IPv4 address as it is,
@@ -441,9 +504,26 @@ static func _v6_local(g: PackedInt32Array) -> bool:
 	return loopback or (g[0] & 0xFE00) == 0xFC00 or (g[0] & 0xFFC0) == 0xFE80
 
 
+## A cellular data adapter ([constant CELLULAR_PREFIXES]), by its name or
+## friendly name.
+static func _is_cellular(name: String, friendly: String) -> bool:
+	for each: String in [name.to_lower(), friendly.to_lower()]:
+		if each.is_empty():
+			continue
+		for prefix: String in CELLULAR_PREFIXES:
+			if each.begins_with(prefix):
+				return true
+		for word: String in CELLULAR_WORDS:
+			if each.contains(word):
+				return true
+	return false
+
+
 ## A container, VM, VPN, cellular or tether adapter, by its name or friendly
 ## name.
 static func _is_virtual(name: String, friendly: String) -> bool:
+	if _is_cellular(name, friendly):
+		return true
 	for each: String in [name.to_lower(), friendly.to_lower()]:
 		if each.is_empty():
 			continue
