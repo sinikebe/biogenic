@@ -25,7 +25,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GODOT_VERSION: "4.7"
+  GODOT_VERSION: "4.7.2"
   GODOT_RELEASE: stable
   LAUNCHER_TEMPLATE_REPO: sinikebe/godot-launcher-template
   LAUNCHER_TEMPLATE_REF: ${{ inputs.ref || 'main' }}
@@ -77,6 +77,22 @@ jobs:
       - name: Install Godot
         if: steps.diff.outputs.changed == 'true'
         run: bash ci/install_godot.sh
+
+      - name: Verify the engine
+        if: steps.diff.outputs.changed == 'true'
+        # Issue #78: the engine that builds a release is the one pinned here,
+        # byte for byte. ci/install_godot.sh comes from the launcher template
+        # and checks nothing (#74 asks it to), and a cache hit skips even the
+        # download -- so every file it put in place, editor and every export
+        # template, is held to the manifest, on a fresh install and on a cache
+        # hit alike. The manifest was made from the archives after checking
+        # them against Godot's own SHA512-SUMS.txt; docs/engine.md says how,
+        # and what else an engine upgrade must repeat.
+        run: |
+          cd ~
+          sha512sum --check --strict --quiet \
+            "${GITHUB_WORKSPACE}/.github/engine/godot-${GODOT_VERSION}-${GODOT_RELEASE}.sha512"
+          echo "verified: $(~/godot/godot --version)"
 
       - name: Check the project still loads
         # A pull request opened by GITHUB_TOKEN does not trigger other workflows,

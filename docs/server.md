@@ -444,6 +444,10 @@ nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
   to (`.github/workflows/ci.yml`; `release.yml` does the same before it
   publishes). `tools/net_probe.gd` runs a server with two real guests over
   loopback, and its update decisions against a fake release feed.
+- It is built by Godot 4.7.2, held byte for byte to a pinned manifest on
+  every CI run, with its own mbedTLS 3.6.7 compiled in: `docs/engine.md` says
+  what that carries, which advisories were checked against it, and what an
+  engine upgrade repeats (issues #78 and #79).
 
 ## 9. Internet play: friends outside the house
 

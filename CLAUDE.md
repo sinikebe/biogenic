@@ -91,13 +91,15 @@ could have fixed it either: no content pack can replace that file.
 ## Run it. Do not guess.
 
 Godot 4.7 runs here and `xvfb` is installed, so the project can be imported,
-booted and **photographed** locally. Install the editor once:
+booted and **photographed** locally. Install the editor once -- the release CI
+pins, `GODOT_VERSION` in the workflows, checked against Godot's own sums:
 
 ```
-curl -fsSL -o /tmp/godot.zip \
-  https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
-unzip -q -o /tmp/godot.zip -d /tmp/g && mkdir -p ~/godot
-mv /tmp/g/Godot_v4.7-stable_linux.x86_64 ~/godot/godot && chmod +x ~/godot/godot
+V=4.7.2-stable; Z=Godot_v${V}_linux.x86_64.zip
+cd /tmp && curl -fsSL -O https://github.com/godotengine/godot/releases/download/$V/$Z \
+  -O https://github.com/godotengine/godot/releases/download/$V/SHA512-SUMS.txt
+grep " $Z\$" SHA512-SUMS.txt | sha512sum -c - && unzip -q -o $Z -d /tmp/g
+mkdir -p ~/godot && mv /tmp/g/Godot_v${V}_linux.x86_64 ~/godot/godot && chmod +x ~/godot/godot
 ```
 
 Then import once, and screenshot any scene:

@@ -22,7 +22,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GODOT_VERSION: "4.7"
+  GODOT_VERSION: "4.7.2"
   GODOT_RELEASE: stable
 
 jobs:
@@ -61,12 +61,30 @@ jobs:
       - name: Install Godot
         run: bash ci/install_godot.sh
 
+      - name: Verify the engine
+        # Issue #78: the engine that builds a release is the one pinned here,
+        # byte for byte. ci/install_godot.sh comes from the launcher template
+        # and checks nothing (#74 asks it to), and a cache hit skips even the
+        # download -- so every file it put in place, editor and every export
+        # template, is held to the manifest, on a fresh install and on a cache
+        # hit alike. The manifest was made from the archives after checking
+        # them against Godot's own SHA512-SUMS.txt; docs/engine.md says how,
+        # and what else an engine upgrade must repeat.
+        run: |
+          cd ~
+          sha512sum --check --strict --quiet \
+            "${GITHUB_WORKSPACE}/.github/engine/godot-${GODOT_VERSION}-${GODOT_RELEASE}.sha512"
+          echo "verified: $(~/godot/godot --version)"
+
       - name: Point Godot at the Android SDK
         # Godot reads these from its editor settings only -- it has no env-var
         # fallback -- and refuses to export for Android without them.
         run: |
           mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-${GODOT_VERSION}.tres <<EOF
+          # Named for the series alone: 4.7.2 reads editor_settings-4.7.tres,
+          # and a file named for the patch release is never read at all.
+          series="$(cut -d. -f1,2 <<< "${GODOT_VERSION}")"
+          cat > ~/.config/godot/editor_settings-${series}.tres <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]
