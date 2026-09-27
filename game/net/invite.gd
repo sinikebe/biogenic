@@ -41,6 +41,7 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
+const Lan := preload("res://game/net/lan.gd")
 
 const PREFIX := "biogenic-invite:"
 ## **The one format this build writes and reads.** Anything else that checks
@@ -64,6 +65,11 @@ const CHECK_CHARS := 8
 ## A paste longer than this is not an invite and a message around one; nothing
 ## past it is read.
 const PASTE_MAX := 65536
+## **Certificates read from one paste, at most** (issue #106). One that does
+## not parse is a line in the engine's log, and the check before it is no
+## secret: fifty invites with junk certificates in one paste were fifty lines.
+## A real paste holds one invite, two in a copied thread.
+const CERTIFICATES_MAX := 4
 ## `rw-------`: every file here that holds a secret.
 const PRIVATE := FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER
 ## `rwx------`: the directory the owner's invite lines are written to.
@@ -215,11 +221,12 @@ static func parse(text: String) -> Dictionary:
 	var lower := flat.to_lower()
 	var best := Read.NOT_FOUND
 	var from := 0
+	var certificates := [CERTIFICATES_MAX]
 	while true:
 		var at := lower.find(PREFIX, from)
 		if at < 0:
 			break
-		var got := _read_at(flat, at + PREFIX.length())
+		var got := _read_at(flat, at + PREFIX.length(), certificates)
 		if int(got["read"]) == Read.OK:
 			return got
 		if int(got["read"]) == Read.UNKNOWN_VERSION or best == Read.NOT_FOUND:
@@ -229,8 +236,9 @@ static func parse(text: String) -> Dictionary:
 
 
 ## One invite read from [param at], just past its prefix, in [param flat],
-## which has had everything invisible taken out.
-static func _read_at(flat: String, at: int) -> Dictionary:
+## which has had everything invisible taken out. [param certificates] is how
+## many more this paste may parse: see [constant CERTIFICATES_MAX].
+static func _read_at(flat: String, at: int, certificates: Array) -> Dictionary:
 	var damaged := {"read": Read.DAMAGED}
 	var n := flat.length()
 	var i := at
@@ -252,7 +260,12 @@ static func _read_at(flat: String, at: int) -> Dictionary:
 		return damaged
 	if int(version_text) != VERSION:
 		return {"read": Read.UNKNOWN_VERSION}
-	var payload := Marshalls.base64_to_raw(flat.substr(body_at, j - body_at))
+	# **Base64 that decodes, asked first** (issue #106): the engine's decoder
+	# says anything else in the log.
+	var body := flat.substr(body_at, j - body_at)
+	if not _base64_whole(body):
+		return damaged
+	var payload := Marshalls.base64_to_raw(body)
 	var fixed := KEY_ID_SIZE + SECRET_SIZE + 2 + 1
 	if payload.size() < fixed:
 		return damaged
@@ -272,6 +285,12 @@ static func _read_at(flat: String, at: int) -> Dictionary:
 			or address.length() != host_size or not address_ok(address):
 		return damaged
 	var der := payload.slice(k)
+	# **A certificate's shape before its parse** (issue #106), for the same
+	# reason: one DER SEQUENCE, exactly as long as it says, as every
+	# certificate is -- and no more parses than a paste may have.
+	if not _der_whole(der) or int(certificates[0]) <= 0:
+		return damaged
+	certificates[0] = int(certificates[0]) - 1
 	var certificate := certificate_of(der)
 	if certificate == null:
 		return damaged
@@ -282,6 +301,35 @@ static func _read_at(flat: String, at: int) -> Dictionary:
 
 static func _check_of(inner: String) -> String:
 	return inner.sha256_text().substr(0, CHECK_CHARS)
+
+
+## Whole groups of four, `=` only at the end and two at most: base64 the
+## engine decodes without a word. Every character is already one of
+## [method _is_base64]'s.
+static func _base64_whole(text: String) -> bool:
+	if text.length() % 4 != 0:
+		return false
+	var pad := text.find("=")
+	return pad < 0 or (pad >= text.length() - 2
+		and text.substr(pad) == "=".repeat(text.length() - pad))
+
+
+## One DER SEQUENCE, its length -- short form, or long in one or two bytes --
+## exactly the rest of [param der].
+static func _der_whole(der: PackedByteArray) -> bool:
+	if der.size() < 2 or der[0] != 0x30:
+		return false
+	var head := 2
+	var length: int = der[1]
+	if length >= 0x80:
+		var width := length & 0x7F
+		if width < 1 or width > 2 or der.size() < 2 + width:
+			return false
+		length = 0
+		for i in width:
+			length = (length << 8) | der[2 + i]
+		head += width
+	return der.size() == head + length
 
 
 ## **What a messaging app may have put inside a line**, taken out: ASCII
@@ -380,14 +428,21 @@ static func proof_mac(secret: PackedByteArray, protocol: int,
 ## zone, which names an adapter on the owner's machine and nothing a friend has
 ## -- or a host name of 1-253 characters in labels of 1-63 letters, digits and
 ## inner hyphens.
+##
+## **What it says is what it dials** (issue #106). A name whose last label is
+## all digits, or starts `0x`, is a number to a resolver: glibc's reads
+## `2130706433`, `127.1` and `0x7f.0.0.1` as 127.0.0.1, which the call screen
+## would show as written. No top-level domain is either. And a literal must be
+## one machine, written plainly: see [method _literal_ok].
 static func address_ok(address: String) -> bool:
 	if address.is_empty() or address.length() > 253 or address.contains("%"):
 		return false
 	if address.is_valid_ip_address():
-		return true
+		return _literal_ok(address)
 	if address.contains(":"):
 		return false
-	for label: String in address.split("."):
+	var labels := address.split(".")
+	for label: String in labels:
 		if label.is_empty() or label.length() > 63 or label.begins_with("-") \
 				or label.ends_with("-"):
 			return false
@@ -396,7 +451,40 @@ static func address_ok(address: String) -> bool:
 			if not (_is_digit(c) or (c >= 97 and c <= 122) or (c >= 65 and c <= 90)
 					or c == 45):
 				return false
-	return true
+	return not _numeric(labels[labels.size() - 1])
+
+
+## A label a resolver reads as a number: all digits, or `0x` and anything.
+static func _numeric(label: String) -> bool:
+	if label.to_lower().begins_with("0x"):
+		return true
+	for i in label.length():
+		if not _is_digit(label.unicode_at(i)):
+			return false
+	return not label.is_empty()
+
+
+## **An IP literal that is one machine, written plainly** (issue #106): IPv4 as
+## four numbers with no leading zero -- `010` is ten here and eight to a C
+## resolver -- and IPv6 as Lan reads it. Not the unspecified address (`0.0.0.0`
+## and the rest of 0/8, `::`), which a socket takes to mean its own device; not
+## broadcast or multicast (`255.255.255.255`, 224/4 and the reserved 240/4
+## after it, `ff00::/8`); and not IPv4 in IPv6 clothes (`::ffff:7f00:1` is
+## 127.0.0.1), which is written as the IPv4 address it is, or not at all.
+static func _literal_ok(address: String) -> bool:
+	var v4 := Lan._ipv4_octets(address)
+	if not v4.is_empty():
+		for part: String in address.split("."):
+			if part.length() > 1 and part.begins_with("0"):
+				return false
+		return v4[0] != 0 and v4[0] < 224
+	var g := Lan._ipv6_groups(address)
+	if g.is_empty() or Lan._v4_mapped(g) or (g[0] & 0xFF00) == 0xFF00:
+		return false
+	for group: int in g:
+		if group != 0:
+			return true
+	return false
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
@@ -430,8 +518,21 @@ static func parse_reach(text: String) -> Dictionary:
 	if port < 1 or port > 65535:
 		return {"error": "a port is a number from 1 to 65535"}
 	if not address_ok(host):
-		return {"error": "%s is not an address or a host name" % host}
+		return {"error": _why_not(host)}
 	return {"address": host, "port": port}
+
+
+## Why `--reach` will not take [param host] (issue #106): the owner typed it,
+## so the sentence says what to type instead.
+static func _why_not(host: String) -> String:
+	if host.is_valid_ip_address():
+		return "%s is not one machine friends can call: not 0.0.0.0 or ::, not a" % host \
+			+ " broadcast or multicast address, and IPv4 written plainly -- four numbers," \
+			+ " no leading zeros, not inside IPv6"
+	if not host.contains(":") and _numeric(host.get_slice(".", host.get_slice_count(".") - 1)):
+		return "%s is a number, not a name: an IPv4 address is four numbers from 0 to" % host \
+			+ " 255, like 203.0.113.7"
+	return "%s is not an address or a host name" % host
 
 
 ## `host:port`, or `[v6]:port`: how an address is written back to the owner.

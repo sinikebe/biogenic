@@ -12,6 +12,7 @@ Part C's plan was written against `main` at `d84bfb6`; as built, it names functi
 - **E** is one PR for #103 (strangers keeping the internet door's waiting room full). **Built.** The room makes room for a newcomer, every caller that leaves it unproved is barred, a /56 of barred /64s is barred as one, and a call the door cannot take spends no one else's place (E.1-E.5). A and C are corrected where it changes them, each pointing here.
 - **F** is one PR for #104 (a phone host answering a carrier's other subscribers). **Built.** A phone hosts only where its friend can be with it -- never on cellular data -- and its door answers its own /24 alone (F.1-F.3).
 - **G** is one PR for #105 (a LAN listener that ENet closes by itself). **Built.** The host says so, lets that listener's guests go and opens it again at once, and the internet listener's guests play on (G.1-G.4).
+- **H** is one PR for #106 (invite pastes). **Built.** An invite's address says what it dials, and a paste costs the engine's log four lines at most (H.1-H.4).
 
 The order was A, then B, then C. A carried a guard that made "LAN-only for now" true in the code; C lifts it on one listener, the dedicated server's second, and nowhere else.
 
@@ -863,7 +864,7 @@ No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): 
 
 After every step, or the run fails and prints why:
 
-- **No script error**, and no engine error from anything but the three lines 4.7's DTLS listener prints on every close (C.1), which are counted apart. The invite section counts its engine lines and does not fail on them: that is #106.
+- **No script error**, and no engine error from anything but the three lines 4.7's DTLS listener prints on every close (C.1), which are counted apart. Since #106 (H.3), an invite paste may cost the log at most `Invite.CERTIFICATES_MAX` lines, each a certificate that does not parse; before it, the invite section counted its engine lines and did not fail on them.
 - **The wire**: every value a reader hands on is finite; a state body's radius above zero and its motion inside the caps; a snapshot's count and slots inside its own, and each person's motion inside the caps.
 - **The door**:
   - Callers and ids: no peer under an id below 2; none greeted speaking another protocol; each peer's listener the same in `_via` and in its record, and connected there; no LAN peer from outside the house.
@@ -1138,12 +1139,87 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
 - **A dropped Wi-Fi still ends a phone's game where it did.** When the phone's address goes with no other way out, its next send fails and ENet closes the listener, before G as after. G makes the phone say so -- "they left", and its code shown again -- and answer the friend's next call once the Wi-Fi is back, where before it went on showing a friend who had gone and answered nobody.
 - **A host keeps the address it began with.** A network that comes back with another address leaves a phone's code, and the server's, naming the old one. The server's listener answers on the new one, but only a friend who knows it can call. A phone's answers nobody there: its door takes its own /24 alone, and that is the old address's (F.1), so a phone back on another /24 refuses every caller from it. Both were so before G, and a new session -- the screen opened again, the service restarted -- is still how to take the new address.
 
+## H. #106 in one PR: an invite says what it dials, and junk costs the log nothing
+
+The #75 read of `game/net/invite.gd` found two low things. Both are in what a paste does on the phone that pastes it -- the player's own action -- and neither involves a secret.
+
+- **An invite could point a phone at its own device without looking like it.**
+  - `address_ok` took host names a resolver reads as numbers. glibc reads `2130706433`, `127.1` and `0x7f.0.0.1` as 127.0.0.1.
+  - It also took literals that are no one machine: `0.0.0.0`, `255.255.255.255`, `::`, `ff02::1`.
+  - The call screen shows the address as written. So for up to 8 s, and one diagnostic handshake, a phone sent DTLS and ENet connection packets somewhere its screen did not name.
+  - `--reach` took the same forms, and the server's `_near_warning` said nothing of them.
+- **A crafted paste could print thousands of engine error lines.**
+  - Junk behind a valid check reached the engine's base64 and X.509 error paths, a line each.
+  - The check is no secret: anyone can compute it.
+
+Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged, no `binary_version` bump.
+
+### H.1 What changed
+
+- **An address says what it dials** (`Invite.address_ok`, with `_numeric` and `_literal_ok`):
+  - A host name whose last label is all digits, or starts `0x`, is refused. No top-level domain is either.
+  - An IP literal must be one machine, written plainly:
+    - IPv4 has no leading zero: `010` is ten to Godot and eight to a C resolver.
+    - IPv4 is none of 0/8, multicast 224/4, or the reserved 240/4 with the broadcast address in it.
+    - IPv6 is not `::` and not multicast `ff00::/8`.
+    - IPv6 is not IPv4 in IPv6 clothes: `::ffff:7f00:1` is 127.0.0.1, and would need every IPv4 rule again. An owner writes the IPv4 address instead.
+  - Loopback stays: `127.0.0.1` and `::1` say what they are.
+- **Refused everywhere an address is asked about:**
+  - `--reach` says what to type instead.
+  - The mint (`Invite.format`) makes nothing.
+  - The book's `reach` treats a stored one as unset.
+  - A pasted line reads as damaged.
+  - An invite minted to one of these before now reads as damaged, and a server whose `--reach` is one has none until it is set again. None of them was ever a way a friend could call.
+- **Base64 is checked for shape before it is decoded** (`_base64_whole`): whole groups of four, and `=` only at the end, two at most.
+- **A certificate is checked for shape before it is parsed** (`_der_whole`): one DER SEQUENCE, exactly as long as it says.
+- **At most `CERTIFICATES_MAX` (4) certificates are parsed from one paste.** What does reach the X.509 parser costs four lines at most. A real paste holds one invite, or two in a copied thread; a fifth candidate with a good check is damage.
+
+### H.2 Measured
+
+The same scratch script, run on `main` and on this PR:
+
+| Paste | `main` | H |
+|---|---|---|
+| 24 addresses that dial something other than what they say | 22 taken | none taken |
+| 2,000 invites whose base64 does not decode (the paste is cut at 64 KB) | 1,455 engine lines | 0 |
+| 50 invites whose certificate is DER-shaped junk | 50 engine lines | 4 |
+
+### H.3 Checked
+
+- **net_probe, `invites` section**, two new checks, each with no socket:
+
+  | # | What | What must hold |
+  |---|---|---|
+  | F7 | 8 addresses written plainly, and 16 that dial something other than they say: `2130706433`, `127.1`, `0x7f.0.0.1`, `0x7f000001`, `017700000001`, `010.0.0.1`, `0.0.0.0`, `0.1.2.3`, `255.255.255.255`, `224.0.0.1`, `240.0.0.1`, `::`, `ff02::1`, `::ffff:7f00:1`, `::ffff:127.0.0.1`, `pond.example.123` | The plain ones taken at `--reach`, minted and read back. The others refused at `--reach` with a sentence saying what to type, never minted, and damage in a line written without the check |
+  | F8 | Three pastes: 2,000 invites whose base64 does not decode; 50 whose certificates are not DER; 50 whose certificates are DER and do not parse. Then a real invite after three of the last kind, and after four | 0 engine lines, 0, and 4. The real invite reads after three, and is damage after four |
+
+  341 checks, all PASS.
+- **net_fuzz**:
+  - The `invite` section now fails a paste that costs the engine's log more than `CERTIFICATES_MAX` lines, or any line but a certificate's that does not parse. Before, it counted them and went on. Every saved invite case is held to the same rule.
+  - A new mutation pastes up to 60 spoiled invites, with the whole one after them or not.
+  - Six saved cases, 90 in all:
+    - invites to `2130706433`, `0.0.0.0` and `::ffff:7f00:1`;
+    - twenty invites that do not decode;
+    - a whole invite after three certificates that do not parse, and after six.
+  - Seeds 1 to 3 pass.
+- **Eight bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
+
+  PLANTED_TABLE
+
+### H.4 What H does not do
+
+- **The resolver's view of a name was measured with glibc alone.** Android's and Windows' were not checked. The rule refuses any last label a C resolver could read as a number.
+- **Ports are any from 1 to 65535**, as before: a router may map any of them.
+- **Two whole invites in one paste**: the first still wins, silently. A "which one?" answer is the owner's to want (the issue's "Also noted").
+- **A name that resolves to loopback, or to no one machine** -- `localhost`, or a name a friend's DNS points at 127.0.0.1 -- is still dialled. The name is on the screen, so the invite says what it dials as far as a person can check.
+
 ### Files
 
 - **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part B (built):** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/net/wire.gd`, `game/normal/normal_mode.gd` (the cut line, and comments), comments in `game/normal/cell.gd`, `food.gd` and `genome.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md`, `docs/design/shared-pond-ux.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part D (built):** `tools/net_fuzz.gd`, `tools/net_fuzz.tscn`, `tools/net_fuzz_corpus.txt` and `tools/net_fuzz_cert.pem` (all new, and excluded from export with the rest of `tools/`), the "Fuzz the network code" step in `.github/workflows/ci.yml`, and this document.
 - **Part F (built):** `game/net/lan.gd` (`CELLULAR_PREFIXES`, `hosting_address`, `pick_hosting`, `same_24`, the ranking), `game/net/net_session.gd` (`host`, `_admit`), two checks in `tools/net_probe.gd`, the phone door in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, and this document.
+- **Part H (built):** `game/net/invite.gd` (`address_ok`, `_numeric`, `_literal_ok`, `_why_not`, `_base64_whole`, `_der_whole`, `CERTIFICATES_MAX`), F7 and F8 in `tools/net_probe.gd`, the `invite` section of `tools/net_fuzz.gd` and its saved cases in `tools/net_fuzz_corpus.txt`, `docs/server.md` §9.2, and this document.
 - **Part G (built):** `game/net/net_session.gd` (`_open_lan`, `_pump_one`, `_lan_closed_by_itself`, `_count_arrivals`), `tools/net_drop.gd` and `tools/net_drop.tscn` (new, and excluded from export with the rest of `tools/`), H1-H4 in `tools/net_probe.gd`, the `L` step in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md` §7, the "Take the network from under a host" step in `.github/workflows/ci.yml` and the comment on its LAN step, and this document.
 - **Part E (built):** `game/net/net_session.gd` (`_admit`, `_evict`, `_left_unproved`, `_bar`), `game/net/lan.gd` (`wider_key`), `tools/net_probe.gd` (R1-R4), `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md`, the comments on `.github/workflows/ci.yml`'s two network steps, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.

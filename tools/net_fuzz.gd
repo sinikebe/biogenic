@@ -37,9 +37,10 @@ extends Node
 ## no peer taken past its budgets; every queue and book inside its cap, a
 ## phone host's inside a host's own share; the referee's answers finite and
 ## inside its caps; and no secret in any line
-## printed. Engine errors on the invite path are counted and not failed: #106
-## is that finding. **And every path the door can take is taken** -- by a run
-## or a saved case -- but the few no run here can reach.
+## printed; and no invite paste costs the engine's log more than
+## `Invite.CERTIFICATES_MAX` lines, each one a certificate that does not parse
+## (#106). **And every path the door can take is taken** -- by a run or a
+## saved case -- but the few no run here can reach.
 ##
 ## **Run it** in a network namespace of its own, as CI does -- the door binds
 ## the real LAN and internet ports, and will not run where any interface but
@@ -1843,29 +1844,49 @@ func _fuzz_invite() -> void:
 	var engine := 0
 	for i in cases:
 		var paste := _mutate_paste(line)
-		var script_before := _catcher.script_errors
 		var engine_before := _catcher.engine_errors
 		var began := Time.get_ticks_usec()
-		var read := Invite.parse(paste)
+		var judged := _paste_why(paste)
 		var took := float(Time.get_ticks_usec() - began) / 1000.0
 		engine += _catcher.engine_errors - engine_before
-		var why := ""
-		if _catcher.script_errors > script_before:
-			why = "a script error: " + _catcher.last
-		elif took > 500.0:
+		var why := str(judged[0])
+		if why.is_empty() and took > 500.0:
 			why = "%.0f ms to read %d characters" % [took, paste.length()]
-		elif int(read.get("read", -1)) == Invite.Read.OK:
-			ok += 1
-			why = _invite_why(read)
+		ok += int(judged[1])
 		if not why.is_empty():
 			bad = "case %d: %s -- --replay=\"invite %s\"" % [i, why,
 				Marshalls.utf8_to_base64(paste)]
 			break
 	_says(bad.is_empty(), "invite: %d pastes, %d of them read as an invite and every one"
 		% [cases, ok] + " of those whole -- a key id, a secret, an address a call can"
-		+ " use, a port, a certificate -- with no script error; %d engine lines from" % engine
-		+ " junk behind a check that reads, which #106 is about%s"
-		% ("" if bad.is_empty() else " -- NOT: " + bad))
+		+ " use, a port, a certificate -- with no script error, and no paste costing the"
+		+ " engine's log more than %d lines, each a certificate that does not parse:"
+		% Invite.CERTIFICATES_MAX + " %d in all (#106)%s"
+		% [engine, "" if bad.is_empty() else " -- NOT: " + bad])
+
+
+## **One paste, judged**: `[what is wrong, or "", 1 if it read as an invite]`.
+## Wrong is a script error, an invite that reads but is not whole, or an engine
+## line past what [constant Invite.CERTIFICATES_MAX] allows -- or any engine line
+## but a certificate's that does not parse (#106).
+func _paste_why(paste: String) -> Array:
+	var script_before := _catcher.script_errors
+	var engine_before := _catcher.engine_errors
+	var lines_before := _catcher.lines.size()
+	var read := Invite.parse(paste)
+	if _catcher.script_errors > script_before:
+		return ["a script error: " + _catcher.last, 0]
+	var engine := _catcher.engine_errors - engine_before
+	if engine > Invite.CERTIFICATES_MAX:
+		return ["%d engine lines from one paste, past %d" % [engine,
+			Invite.CERTIFICATES_MAX], 0]
+	if engine > 0:
+		for said: String in _catcher.lines.slice(lines_before):
+			if not said.contains("Error parsing X509 certificates"):
+				return ["an engine line from a paste that is not a certificate's: " + said, 0]
+	if int(read.get("read", -1)) != Invite.Read.OK:
+		return ["", 0]
+	return [_invite_why(read), 1]
 
 
 static func _invite_why(read: Dictionary) -> String:
@@ -1907,13 +1928,7 @@ func _mutate_paste(line: String) -> String:
 		5:
 			return line + line
 		6:
-			# **Junk behind a check that reads**: the payload spoiled, the
-			# check made over it again, so the parse gets as far as it can.
-			var inner := line.trim_prefix(Invite.PREFIX).get_slice(".", 0) + "." \
-				+ line.trim_prefix(Invite.PREFIX).get_slice(".", 1)
-			var at := _rng.randi_range(2, inner.length() - 1)
-			inner = inner.substr(0, at) + char(_rng.randi_range(48, 122)) + inner.substr(at + 1)
-			return Invite.PREFIX + inner + "." + Invite._check_of(inner)
+			return _mutate_paste_spoiled(line)
 		7:
 			var payload := PackedByteArray()
 			payload.resize(_rng.randi_range(0, 400))
@@ -1922,7 +1937,16 @@ func _mutate_paste(line: String) -> String:
 			var inner := "%d.%s" % [Invite.VERSION, Marshalls.raw_to_base64(payload)]
 			return Invite.PREFIX + inner + "." + Invite._check_of(inner)
 		8:
-			return Invite.PREFIX.repeat(_rng.randi_range(1, 400))
+			if _rng.randf() < 0.5:
+				return Invite.PREFIX.repeat(_rng.randi_range(1, 400))
+			# **Many candidates behind checks that read** (#106): each a
+			# payload spoiled somewhere, the whole invite after them or not.
+			var many := PackedStringArray()
+			for n in _rng.randi_range(2, 60):
+				many.append(_mutate_paste_spoiled(line))
+			if _rng.randf() < 0.5:
+				many.append(line)
+			return " ".join(many)
 		9:
 			if _rng.randf() < 0.3:
 				# A whole conversation pasted: the line two hundred times over,
@@ -1932,6 +1956,17 @@ func _mutate_paste(line: String) -> String:
 	for i in _rng.randi_range(0, 300):
 		noise += char(_rng.randi_range(1, 0x2FF))
 	return noise
+
+
+## **Junk behind a check that reads**: [param line]'s payload spoiled at one
+## character, the check made over it again, so the parse gets as far as it
+## can -- the payload's base64, its sizes or its certificate.
+func _mutate_paste_spoiled(line: String) -> String:
+	var inner := line.trim_prefix(Invite.PREFIX).get_slice(".", 0) + "." \
+		+ line.trim_prefix(Invite.PREFIX).get_slice(".", 1)
+	var at := _rng.randi_range(2, inner.length() - 1)
+	inner = inner.substr(0, at) + char(_rng.randi_range(48, 122)) + inner.substr(at + 1)
+	return Invite.PREFIX + inner + "." + Invite._check_of(inner)
 
 
 # ---------------------------------------------------------------------------
@@ -2361,10 +2396,7 @@ func _replay(entry: String, say: bool) -> bool:
 				print("[net-fuzz] NOTE the door counted: %s" % ", ".join(said))
 			return str(result[0]).is_empty()
 		"invite":
-			var before := _catcher.script_errors
-			var read := Invite.parse(Marshalls.base64_to_utf8(payload))
-			return _catcher.script_errors == before and (int(read.get("read", -1))
-				!= Invite.Read.OK or _invite_why(read).is_empty())
+			return str(_paste_why(Marshalls.base64_to_utf8(payload))[0]).is_empty()
 		"address":
 			# `local <address>` or `remote <address>`: what it is, then as
 			# written -- `local/<its /56>`, or `remote/` for none, to ask the

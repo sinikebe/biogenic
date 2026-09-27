@@ -518,6 +518,16 @@ An IPv6 address goes in brackets: `--reach=[2001:db8::7]:45772`. An address
 inside your own network gets a warning, because friends outside can never
 reach it.
 
+Write the address as what it is, because a friend's phone shows it exactly as
+written. `--reach` refuses a few things:
+- a number written as a name, which a resolver dials as some other address:
+  `2130706433` and `127.1` are both 127.0.0.1;
+- a number with a leading zero;
+- an address that is no one machine: `0.0.0.0` or `::`, a broadcast or
+  multicast address, or IPv4 written inside IPv6.
+
+Each refusal says what to type instead.
+
 **A name is dialled over IPv4 whenever it has an IPv4 address** (an A record),
 even when it has an IPv6 one too: a home router forwards a port over IPv4, and
 seldom opens one over IPv6. So IPv6 matters only for a name with no IPv4
