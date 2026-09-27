@@ -402,6 +402,18 @@ nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
   and tries again by itself, after five seconds and then twice as long each
   time, up to every five minutes. It means something else holds UDP 45771, or
   the network was not up yet.
+- **`[net] the LAN listener closed by itself`** -- a send to a phone in the
+  house failed, and Godot closed the listener for the house under it: the
+  container's network went away, as when its interface goes down and up. The
+  line before it in the journal is Godot's `Sending failed!`. Every phone in
+  the house is let go, each with its `done after` line, and the listener opens
+  again at once on the same port -- `[net] the LAN listener is open again, 0.0
+  s on` -- so a phone calls again as after any drop. A friend by invite is not
+  touched. Should something else take the port meanwhile, the server says
+  `[net] the LAN listener could not open again: port 45771 is taken -- trying
+  again in 1 s`, and tries again after one second, two, four, and so on up to
+  a minute, until it is free. Each try it loses is Godot's own `Couldn't
+  create an ENet host.` in the journal.
 - **`no phone can join by code`** -- the server is listening, but its address
   ends in .0 or .255 (which a network wider than a /24 can hand out), and a
   code only carries a last number from 1 to 254. Give the container another

@@ -11,6 +11,7 @@ Part C's plan was written against `main` at `d84bfb6`; as built, it names functi
 - **D** is one PR for #91 (a fuzzer for everything that reads what a stranger sends). **Built.** `tools/net_fuzz.gd`, its saved cases, and a CI step that runs both. It changes no game code: it is a check on A, B and C, and says what it covers and what it does not (D.1-D.6).
 - **E** is one PR for #103 (strangers keeping the internet door's waiting room full). **Built.** The room makes room for a newcomer, every caller that leaves it unproved is barred, a /56 of barred /64s is barred as one, and a call the door cannot take spends no one else's place (E.1-E.5). A and C are corrected where it changes them, each pointing here.
 - **F** is one PR for #104 (a phone host answering a carrier's other subscribers). **Built.** A phone hosts only where its friend can be with it -- never on cellular data -- and its door answers its own /24 alone (F.1-F.3).
+- **G** is one PR for #105 (a LAN listener that ENet closes by itself). **Built.** The host says so, lets that listener's guests go and opens it again at once, and the internet listener's guests play on (G.1-G.4).
 
 The order was A, then B, then C. A carried a guard that made "LAN-only for now" true in the code; C lifts it on one listener, the dedicated server's second, and nowhere else.
 
@@ -908,7 +909,7 @@ sudo unshare --net -- bash -c 'ip link set lo up &&
 **A replay is exact.** `--replay="<section> <case>"` runs one case:
 
 - **wire**: a frame in hex.
-- **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds` and `I:revoke|replace|restore`. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
+- **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore` and, since #105, `L` for the LAN listener closing by itself. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
 - **guest**: its frames, `from:hex`.
 - **invite**: a paste in base64.
 - **address**: `local` or `remote` -- and since #103 a `/` and the /56 it is in, or `/` alone for none -- then the address.
@@ -1079,11 +1080,70 @@ Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged
 - **A VPN pool is the same shape.** A phone with mobile data and a VPN up, and no Wi-Fi, hosts on the VPN's address -- cellular ranks below it -- and its door answers that /24 of the VPN's pool, where the VPN lets its customers reach each other. Narrower than before #104, when the door answered every private range whichever address won.
 - **A friend on the same Wi-Fi as a stranger is in the house** -- that is what the LAN is, and the door's other limits (A) are the lever there.
 
+## G. #105 in one PR: the LAN listener that ENet closes by itself
+
+The #75 read found that a LAN listener ENet closes by itself left its host deaf. 4.7's `ENetMultiplayerPeer.poll()` calls `close()` when a service call fails, and on a plain UDP socket a send the network refuses is such a failure (`enet_godot.cpp` prints `Sending failed!` and returns -1; the DTLS layer swallows its own, which is why the internet listener never does it). `close()` takes every transport on the listener and says nothing to the host. `_pump_one` handled that for the internet listener (C), and for the LAN one did nothing: it returned early on every later frame without a word, kept every record of that listener's peers, stopped `_count_arrivals` counting both listeners, and went on saying LISTENING -- or TOGETHER, with a guest that was gone. The dedicated server hosts once and never again, so it stayed deaf to the house until the service restarted; a phone went on showing a code that nothing answered. **No remote trigger was found**: the likeliest cause is the network going from under the socket, as when an interface goes down and up.
+
+**Measured, before and after**, in a namespace with the host's address on its loopback: a dedicated host with a guest in, the address taken away, and given back five seconds later. On `main` at `9e206f9`, the host's next sends failed -- six `Sending failed!` lines -- and from then on it said TOGETHER with a guest that had gone, printed nothing, and a new guest after the address came back was never answered. With G, the same failure is `[net] the LAN listener closed by itself`, the guest's `done after` line, `[net] the LAN listener is open again, 0.0 s on` and LISTENING, and the new guest is in. `tools/net_drop.gd` is that measurement, and CI runs it (G.3).
+
+Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged, no `binary_version` bump.
+
+### G.1 What changed
+
+- **Found where it happens** (`_pump_one`): straight after the `poll()` that closed it -- before anything else that frame reads that listener's peers -- and at the top of any later frame while it stays closed.
+- **Said once, and each of its transports let go as its goodbye would have** (`_lan_closed_by_itself`): the line, the count `lan_closed`, and every id on it through `_on_peer_disconnected`. So a guest gets its `done after` line, what it queued is forgotten, and a phone host whose friend was on it goes back to LISTENING with "they left" and shows its code. Its ids and addresses leave `_via` and `_addresses` too, which otherwise went on counting against their address's transports at the door and refusing their ids as twins on the other listener.
+- **Opened again at once, on the same port** (`_open_lan`, which `host` now opens with): the server goes on being found by its code, and a phone too, with no new session. **The internet listener and whoever proved an invite there are not touched**, so the server's friends from outside play on. Re-hosting the whole session, which the issue also offered, would have cut them.
+- **Tried again after one second, two, four -- up to a minute -- while the port will not open** (`LAN_REOPEN_EVERY`, `LAN_REOPEN_MOST`), as the server's own first listen backs off, and for the same reason: each try the port refuses is 4.7's own `Couldn't create an ENet host.` in the journal, which no limiter of ours reaches. Ours is one warning every 10 s (A.6); open again, the line says how long it was down. A socket bound to every address opens whether or not any network is up, as the measurement shows, so this takes something else holding the port meanwhile. Should it close again inside a second of opening, it waits out that second first.
+- **`_count_arrivals` counts each listener on its own**: one that is closed no longer stops the other being counted.
+- **A screen that closes the session, or hosts anew, on hearing "they left"** is left to it: the host stops letting go at that guest, and the listener is not opened again behind it.
+
+### G.2 What it costs a player
+
+Nothing new. A guest of a listener that closed was dropped before G too -- ENet's `close()` disconnects every transport on it -- and now it can call again at once, where before nothing answered it until the server restarted or the phone host left its screen.
+
+### G.3 Checked
+
+- **The real thing, in CI** (`tools/net_drop.gd`, the "Take the network from under a host" step): a dedicated host with a guest in, in a network namespace; the address taken away by a root shell there, and the host must say so within `WAIT`, let the guest go and listen again, open; the address back, and a new guest must be in. It closed 0.42 s after the address went -- ENet's ping to the guest, within half a second -- and the whole step takes about a second. It is the one check that a send fails and ENet closes the listener, which an engine upgrade could change.
+- **net_probe, `invites` section**, on real sockets over loopback, closing the listener as `poll()` does:
+
+  | # | What | What must hold |
+  |---|---|---|
+  | H1 | The server, with a LAN guest and one by bob's invite; its LAN listener closed between two frames | The LAN guest let go -- its line, nothing of it kept -- and the listener open again that frame, where it calls back and is in; bob's guest plays on throughout; the log says it once: closed, then open again 0.0 s on |
+  | H2 | A phone host with its friend in; the same | Back to LISTENING, "they left", and the friend calling back is in |
+  | H3 | A phone host's listener closed inside the very service call a caller came in by -- after the session made its record | Found in that frame, the record let go, and the caller calling again answered on the listener opened anew |
+  | H4 | The server's, with the port taken the moment it closed, for 5 s | Tried at once and again after one second, two and four -- 3 tries, where trying every second makes 6 -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again at the next try, 7.0 s on, and a LAN guest in |
+
+  339 checks, all PASS; the probe finishes in 160 to 162 s and 14,400 to 14,500 frames, measured three times.
+- **net_fuzz** (part D): a new step, `L`, the LAN listener closing by itself with its transports gone and nothing said, in about one step in 250; after every step, a closed LAN listener open again inside a second -- this port is never anybody else's -- closed exactly when the host thinks so, and no address kept for an id no listener holds. `lan_closed` is a path the coverage check now demands. Two saved cases, 84 in all: a guest and a caller still saying hello on the server, beside a friend by invite; and a phone's listener closed again the moment it opened -- so held closed for a second -- and once more after. Seeds 1 to 6 pass.
+- **Eight bugs planted one at a time**, each run against the fuzzer (seed 1, with the saved cases), the probe's `invites` section and `net_drop`:
+
+  | Planted | The fuzzer | The probe | net_drop |
+  |---|---|---|---|
+  | the bug as filed: nothing handles it | unaided, both saved cases, and coverage | H1-H4 | yes |
+  | let go, never opened again | unaided, and a saved case | H1-H4 | yes |
+  | opened again, its peers' records kept | unaided, and both saved cases | H1-H3 | yes |
+  | found only the frame after the `poll()` that closed it | -- | H3 | -- |
+  | `_count_arrivals` stopping with it, as before | -- | H4 | -- |
+  | tried every frame | -- | H4 (250 tries) | -- |
+  | tried every second, never backing off | -- | H4 (6 tries) | -- |
+  | the host never learning it is open again | unaided, both saved cases, and coverage | H4 | -- |
+
+  The probe's `invites` section writes its books under `user://`, so two copies run side by side must each have a data directory of their own, or each wipes the other's and fails checks that have nothing to do with the bug.
+
+### G.4 What G does not do
+
+- **Why a send failed** is not logged: 4.7 says `Sending failed!` with no reason, and the line before ours in the journal is all there is.
+- **The internet listener closing by itself** is as C left it: its peers let go, and the server's next look at its invites opens a new one. A phone has none.
+- **A guest's own socket failing** ends its call as any lost connection does; that is not this.
+- **A dropped Wi-Fi still ends a phone's game where it did.** When the phone's address goes with no other way out, its next send fails and ENet closes the listener, before G as after. G makes the phone say so -- "they left", and its code shown again -- and answer the friend's next call once the Wi-Fi is back, where before it went on showing a friend who had gone and answered nobody.
+- **A host keeps the address it began with.** A network that comes back with another address leaves a phone's code, and the server's, naming the old one. The server's listener answers on the new one, but only a friend who knows it can call. A phone's answers nobody there: its door takes its own /24 alone, and that is the old address's (F.1), so a phone back on another /24 refuses every caller from it. Both were so before G, and a new session -- the screen opened again, the service restarted -- is still how to take the new address.
+
 ### Files
 
 - **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part B (built):** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/net/wire.gd`, `game/normal/normal_mode.gd` (the cut line, and comments), comments in `game/normal/cell.gd`, `food.gd` and `genome.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md`, `docs/design/shared-pond-ux.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part D (built):** `tools/net_fuzz.gd`, `tools/net_fuzz.tscn`, `tools/net_fuzz_corpus.txt` and `tools/net_fuzz_cert.pem` (all new, and excluded from export with the rest of `tools/`), the "Fuzz the network code" step in `.github/workflows/ci.yml`, and this document.
 - **Part F (built):** `game/net/lan.gd` (`CELLULAR_PREFIXES`, `hosting_address`, `pick_hosting`, `same_24`, the ranking), `game/net/net_session.gd` (`host`, `_admit`), two checks in `tools/net_probe.gd`, the phone door in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, and this document.
+- **Part G (built):** `game/net/net_session.gd` (`_open_lan`, `_pump_one`, `_lan_closed_by_itself`, `_count_arrivals`), `tools/net_drop.gd` and `tools/net_drop.tscn` (new, and excluded from export with the rest of `tools/`), H1-H4 in `tools/net_probe.gd`, the `L` step in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md` §7, the "Take the network from under a host" step in `.github/workflows/ci.yml` and the comment on its LAN step, and this document.
 - **Part E (built):** `game/net/net_session.gd` (`_admit`, `_evict`, `_left_unproved`, `_bar`), `game/net/lan.gd` (`wider_key`), `tools/net_probe.gd` (R1-R4), `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md`, the comments on `.github/workflows/ci.yml`'s two network steps, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.
