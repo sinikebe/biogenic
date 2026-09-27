@@ -294,7 +294,7 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 342 checks, caps itself at 500
+        # a backstop only. The probe makes 343 checks, caps itself at 500
         # frames a second and quits itself in 160 to 165 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,

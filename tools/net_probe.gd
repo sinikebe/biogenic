@@ -7900,6 +7900,38 @@ func _invites_calls() -> void:
 			and verified_clean.is_empty(),
 		"invites J2: run as root but unable to read who owns the files, the job fails closed"
 		+ " -- it refuses rather than write what the service user might not read")
+	# J3: the book keeps InviteBook.INVITES_MAX invites at most (#85). A name
+	# past them is refused, says what to do and writes nothing; a name already
+	# in the book is minted again; a revoke makes room. The book is filled as
+	# mint writes it, after one real mint has made the key.
+	var full := INVITES_ROOT.path_join("full")
+	var full_first: Array = _invites_job(["--reach=203.0.113.7", "--invite=f000"], full)
+	var many := InviteBook.entries(full)
+	var random := Crypto.new()
+	for i in range(1, InviteBook.INVITES_MAX):
+		many["f%03d" % i] = {"created": 1790000000,
+			"key_id": random.generate_random_bytes(Invite.KEY_ID_SIZE).hex_encode(),
+			"secret": random.generate_random_bytes(Invite.SECRET_SIZE)}
+	var filled := InviteBook._write_book(many, full)
+	var one_more: Array = InviteBook.mint("latecomer", full)
+	var refusal := "\n".join(PackedStringArray(one_more[1]))
+	var wrote_none := not FileAccess.file_exists(InviteBook.line_path("latecomer", full)) \
+		and not InviteBook.entries(full).has("latecomer")
+	var listed_full := "\n".join(PackedStringArray(InviteBook.listing(full)[1]))
+	var again: Array = InviteBook.mint("f042", full)
+	var made_room: Array = InviteBook.revoke("f007", full)
+	var room: Array = InviteBook.mint("latecomer", full)
+	var kept := InviteBook.entries(full)
+	_invites_wipe(full)
+	var most := InviteBook.INVITES_MAX
+	_says(int(full_first[0]) == 0 and filled == OK and int(one_more[0]) == 1 and wrote_none
+			and refusal.contains("holds %d invites" % most) and refusal.contains("--revoke=")
+			and listed_full.contains("the book is full") and int(again[0]) == 0
+			and int(made_room[0]) == 0 and int(room[0]) == 0 and kept.size() == most
+			and kept.has("latecomer") and not kept.has("f007"),
+		"invites J3: the book keeps %d invites at most (#85): one more name is refused" % most
+		+ " and writes nothing ('%s'), and --invites says the book is full; a name" % refusal
+		+ " already in it is minted again, and a revoke makes room")
 	# C1: in.
 	var host: Node = await _invites_host("InvCallsHost")
 	var proved: Array = []
