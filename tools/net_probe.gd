@@ -7653,6 +7653,36 @@ func _invites_calls() -> void:
 		+ " TOGETHER in %.2f s; one under .invalid, asked for IPv4 and then IPv6," % name_took
 		+ " ends as '%s'" % lost.trouble)
 	await _limits_close([host, named_guest, lost])
+	# C9: the pin is held to the phone's clock, and to the key (issue #89). A
+	# certificate on the server's own key that ended in 2021 is refused
+	# whichever side holds it -- which is why the server's runs from 2020 to
+	# 2099 -- and one made again on the same key, with other dates, passes an
+	# invite that pinned the first: only a new key voids an invite.
+	var ended := crypto.generate_self_signed_certificate(_inv_key, InviteBook.SUBJECT,
+		"20200101000000", "20211231235959")
+	var renewed := crypto.generate_self_signed_certificate(_inv_key, InviteBook.SUBJECT,
+		"20210101000000", "20981231235959")
+	var dated := {}
+	for case: Array in [["the server's ended", ended, _inv_cert],
+			["the pinned one ended", _inv_cert, ended], ["made again", renewed, _inv_cert]]:
+		var dated_host: Node = await _session("InvCallsDatedHost")
+		dated_host.host(NetSession.GUESTS_MAX)
+		dated_host.listen_internet(_inv_key, case[1])
+		dated_host.set_invites(InviteBook.table(INVITES_ROOT))
+		var pinned := bob.duplicate()
+		pinned["certificate"] = case[2]
+		var dated_guest: Node = await _session("InvCallsDated")
+		await _invites_call(dated_guest, pinned)
+		dated[case[0]] = [int(dated_guest.link), str(dated_guest.trouble_key)]
+		await _limits_close([dated_guest, dated_host])
+	var refused_both: bool = dated["the server's ended"] == [NetSession.Link.FAILED,
+		"not_this_pond"] and dated["the pinned one ended"] == [NetSession.Link.FAILED,
+		"not_this_pond"]
+	_says(refused_both and int(dated["made again"][0]) == NetSession.Link.TOGETHER,
+		"invites C9: a certificate on the server's own key that ended in 2021 fails the pin"
+		+ " on either side, as '%s' -- why the server's runs 2020 to 2099" % Invite.says(
+			&"not_this_pond")[0] + " -- and one made again on the same key with other dates"
+		+ " passes an invite that pinned the first: only a new key voids an invite")
 
 
 ## **S1-S10: callers that are not guests, at the internet listener.** A plain
@@ -7925,16 +7955,17 @@ func _invites_doors() -> void:
 	await _limits_close([host, lan, net_guest])
 
 
-## **L1-L11: the real server scene** (`game/server/`), with a book of its own
+## **L1-L12: the real server scene** (`game/server/`), with a book of its own
 ## looked at every [constant INVITES_POLL]: no invites and no listener at the
 ## start; a mint opens it without a restart, with every file rw-------; a LAN
 ## guest and an internet guest share its pond and see each other, and a
 ## stranger beside them is not what the updater waits for; another invite
 ## coming and going leaves a guest be, and revoking its own cuts it within a
 ## look and leaves the LAN guest swimming; with none left, the listener closes;
-## a book it cannot read fails closed; a new key tells its guest and comes back
-## with the new certificate; and a job run through the scene prints as the
-## command line's does.
+## a book it cannot read fails closed; a new key that cannot be written
+## changes nothing, and one that can tells its guest and comes back with the
+## new certificate, the LAN guest swimming on; and a job run through the scene
+## prints as the command line's does.
 func _invites_server() -> void:
 	var root := INVITES_SERVER_ROOT
 	var server: Node = load(SERVER_SCENE).instantiate()
@@ -8114,12 +8145,48 @@ func _invites_server() -> void:
 		+ " invite in it, is cut %.2f s later reading '%s', nothing listens while it" % [shut,
 			erin_at.trouble] + " stays unread and the log says why -- and %.2f s after it"
 		% reopened + " reads again, the listener is back")
-	# L10: a new key while a friend swims, and an invite minted with it in the
-	# same look: she is told, not hung up on, and the listener comes back with
-	# the new certificate.
+	# L10: a new key that cannot be written -- its certificate's way blocked
+	# once the key is down, as a disk that fills there would leave it --
+	# changes nothing: the old key, certificate and book as they were, nothing
+	# half-made left beside them, and erin swims on (issue #89).
 	NetSession.forget_refusals()
 	await _invites_call(erin_at, erin)
 	var back_in := int(erin_at.link) == NetSession.Link.TOGETHER
+	var files := InviteBook.paths(root)
+	var pair_of := func() -> Array:
+		return [FileAccess.get_file_as_bytes(str(files["key"])),
+			FileAccess.get_file_as_bytes(str(files["cert"])),
+			FileAccess.get_file_as_bytes(str(files["book"]))]
+	var pair_before: Array = pair_of.call()
+	# Every name a certificate is written through, blocked by a directory that
+	# is not empty: root, which this probe may run as, writes past any mode.
+	var in_the_way := [str(files["cert"]) + ".next", str(files["cert"]) + ".new"]
+	for dir: String in in_the_way:
+		DirAccess.make_dir_recursive_absolute(dir.path_join("in-the-way"))
+	var stuck: Array = _invites_job(["--new-key"], root)
+	await _wait(INVITES_POLL * 2.0 + 0.2)
+	var pair_after: Array = pair_of.call()
+	for dir: String in in_the_way:
+		DirAccess.remove_absolute(dir.path_join("in-the-way"))
+		DirAccess.remove_absolute(dir)
+	var litter: Array[String] = []
+	for left: String in DirAccess.get_files_at(str(files["pond"])):
+		if left.contains(".next"):
+			litter.append(left)
+	var stuck_said := "\n".join(PackedStringArray(stuck[1]))
+	_says(back_in and int(stuck[0]) == 1 and stuck_said.contains("nothing was changed")
+			and pair_after == pair_before and litter.is_empty()
+			and int(erin_at.link) == NetSession.Link.TOGETHER
+			and bool(net.internet_listening()),
+		"invites L10: a --new-key whose certificate cannot be written after its key exits 1"
+		+ " and changes nothing -- the key, certificate and book as they were, nothing"
+		+ " half-made left beside them%s -- and erin swims on"
+		% ("" if litter.is_empty() else " (NOT: %s)" % ", ".join(litter)))
+	# L11: a new key while a friend swims, and an invite minted with it in the
+	# same look: she is told, not hung up on, and the listener comes back with
+	# the new certificate -- the one the job printed, which its listening line
+	# names -- while the LAN guest swims on: that listener has no key.
+	var answering_before := str(server.get("_answering_with"))
 	var rekeyed: Array = _invites_job(["--new-key", "--invite=erin"], root)
 	_invites_hide_book(root)
 	var fresh := Invite.parse(FileAccess.get_file_as_string(InviteBook.line_path("erin", root)))
@@ -8127,22 +8194,30 @@ func _invites_server() -> void:
 		return int(erin_at.link) != NetSession.Link.TOGETHER, INVITES_POLL * 4.0 + 2.0)
 	var back_up := await _limits_until(func() -> bool: return bool(net.internet_listening()),
 		INVITES_POLL * 4.0 + 3.0)
+	var made_print := InviteBook.fingerprint(Invite.der_of_pem(
+		FileAccess.get_file_as_string(str(files["cert"]))))
+	var job_named := "\n".join(PackedStringArray(rekeyed[1])).contains("certificate " + made_print)
+	var line_named := str(server.get("_internet_said")).contains("certificate " + made_print)
 	NetSession.forget_refusals()
 	var with_old: Node = await _session("InvPondErinOld")
 	await _invites_call(with_old, erin)
 	var with_new: Node = await _session("InvPondErinNew")
 	await _invites_call(with_new, fresh)
-	_says(back_in and int(rekeyed[0]) == 0 and told_at >= 0.0
+	_says(int(rekeyed[0]) == 0 and told_at >= 0.0
 			and int(erin_at.link) == NetSession.Link.REFUSED
 			and str(erin_at.trouble_key) == "invite_refused" and back_up >= 0.0
 			and str(with_old.trouble_key) == "not_this_pond"
-			and int(with_new.link) == NetSession.Link.TOGETHER,
-		"invites L10: --new-key and a new invite for erin in one look while she swims: she"
+			and int(with_new.link) == NetSession.Link.TOGETHER
+			and made_print != answering_before and job_named and line_named
+			and int(lan.link) == NetSession.Link.TOGETHER,
+		"invites L11: --new-key and a new invite for erin in one look while she swims: she"
 		+ " is told, %.2f s later, reading '%s' -- not hung up on -- and the" % [told_at,
-			erin_at.trouble] + " listener is back %.2f s after that with the new key: her"
-		% back_up + " old line meets '%s', her new one is in" % with_old.trouble)
+			erin_at.trouble] + " listener is back %.2f s after that with the new key," % back_up
+		+ " certificate %s where it was %s, as the job printed and the" % [made_print,
+			answering_before] + " listening line says: her old line meets '%s', her new one"
+		% with_old.trouble + " is in, and the LAN guest swims on")
 	await _limits_close([erin_at, with_old, with_new])
-	# L11: a job through the server scene itself, as the command line runs
+	# L12: a job through the server scene itself, as the command line runs
 	# one: its lines printed as `[server]` lines, its exit code kept, and no
 	# session opened.
 	var printed_from := _inv_catcher.lines.size()
@@ -8172,7 +8247,7 @@ func _invites_server() -> void:
 		said_nobody = said_nobody or line.begins_with("[server] --revoke: there is no invite")
 	_says(job_code == 0 and wrote_frank and listed_frank and job.session() == null
 			and int(refused_job.get("_job_code")) == 1 and said_nobody,
-		"invites L11: jobs run through the server scene itself print their lines as the"
+		"invites L12: jobs run through the server scene itself print their lines as the"
 		+ " command line does -- --invite=frank --invites exits 0, --revoke=nobody 1 -- and"
 		+ " open no session")
 	job.queue_free()

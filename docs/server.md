@@ -476,14 +476,15 @@ $BIOGENIC --invite=sam
 ```
 
 ```
-[server] made the server's key and certificate: /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/pond/key.pem (only this user can read it)
+[server] made the server's key and certificate: /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/pond/key.pem (only this user can read it); certificate D6:79:5E:66:34:BD:07:5E
 [server] invite for sam written to /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/invites/sam.txt, calling 203.0.113.7:45772 -- send its one line to sam and nobody else, and in Biogenic they tap play, then by invite, then paste invite.
 [server] a running server takes it within seconds.
 ```
 
 The first mint makes the server's key -- RSA-2048, `rw-------` -- and its
 self-signed certificate, named `biogenic-pond` and valid from 2020 to 2099, so
-a phone whose clock is years out still accepts it. A label is 1 to 24 of `a-z`,
+a phone whose clock is years out still accepts it (§9.8 says why, and how a
+key is replaced). A label is 1 to 24 of `a-z`,
 `0-9`, `-` and `_`. It names the friend in the log and the file.
 
 **The secret is never printed**, only the file's path. Copy the line out of the
@@ -506,7 +507,7 @@ invite opens the internet listener, and the log says so:
 
 ```
 [server] invites: sam added
-[server] internet: listening on port 45772/udp for 1 invite (sam). Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+[server] internet: listening on port 45772/udp for 1 invite (sam), certificate D6:79:5E:66:34:BD:07:5E. Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
 ```
 
 ### 9.5 List, replace and revoke
@@ -609,18 +610,109 @@ The engine's lines look like these, and none of them is the server failing:
 
 ### 9.8 A new key
 
-If the key may have been copied, make a new one:
+`--new-key` makes the server a new key and certificate, and every invite made
+with the old one stops working: each carries the old certificate, and the book
+is emptied. One job can make the key and mint everybody again:
 
 ```sh
-$BIOGENIC --new-key
+$BIOGENIC --invites                                  # who to mint again
+$BIOGENIC --new-key --invite=kit --invite=sam
 ```
 
-Every invite made with the old key stops working, because each carries the old
-certificate, and the book is emptied. Mint each friend again and send each the
-new line. A running server changes to the new key by itself: a friend still
-swimming on an old invite reads "invite no longer works", and the listener
-comes back with the new key a moment later (`[server] internet: the server's
-key changed ...`).
+```
+[server] made the server's key and certificate: /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/pond/key.pem (only this user can read it); certificate 46:6C:97:79:19:7D:09:E3
+[server] every invite made with the old key no longer works: kit, sam. Mint each of them again.
+[server] invite for kit written to /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/invites/kit.txt, calling 203.0.113.7:45772 -- send its one line to kit and nobody else, and in Biogenic they tap play, then by invite, then paste invite.
+[server] a running server takes it within seconds.
+[server] invite for sam written to /var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/invites/sam.txt, calling 203.0.113.7:45772 -- send its one line to sam and nobody else, and in Biogenic they tap play, then by invite, then paste invite.
+```
+
+**A running server changes over by itself**, within two seconds: a friend
+swimming on an old invite is told "invite no longer works", and the listener
+comes back about a second later, answering with the new key. Its listening
+line names the certificate the job printed -- that is how you know it took:
+
+```
+[server] internet: the server's key changed -- every guest on an invite made with the old one is cut, and the listener reopens with the new one
+[server] internet: listening on port 45772/udp for 2 invites (kit, sam), certificate 46:6C:97:79:19:7D:09:E3. Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+```
+
+Send each friend their new line (§9.4). Pasted, it replaces the old one on
+their phone -- a phone keeps one invite -- and they call as before. **The LAN is
+untouched**: its listener has no key, and a phone at home swims on.
+
+**Why the certificate runs from 2020 to 2099.** A phone accepts only the server
+that proves it holds the key of the certificate in its invite. The dates add
+nothing to that proof, and they cost something: the phone checks them against
+its own clock, and a certificate outside them fails, whichever side holds it --
+so a phone whose clock is years out would be shut out of a pond it was invited
+to. Nor can a certificate be renewed past an invite: one made again on the same
+key passes the pin only while the certificate inside the invite is still in
+date (net_probe C9, measured on 4.7). A certificate that expired would take
+every invite with it; a shorter life would only make this job run on a timer.
+So nothing here expires, and **a new key is how a certificate ends.**
+
+**What a copied key lets someone do** -- `pond/key.pem`, from a backup, a copy
+of the container, or a disk that left the house:
+
+- **Answer as your server** to any phone whose invite was made with it, if they
+  can also get between that phone and the server: your dynamic-DNS account, or
+  the network the phone calls over. The phone would swim in their pond, or
+  through them in yours.
+- **Not read calls already made.** Every call agrees a key of its own that the
+  server's key never sees -- two Godot builds settle on ECDHE-RSA with
+  ChaCha20-Poly1305, which is forward secret -- so a recording stays sealed.
+- **Most likely, more than the key.** Whatever copied it probably copied the
+  invite book beside it, and the book lets anybody call as any friend, from
+  anywhere, without getting between anybody.
+
+A new key answers all three: the key and every invite go together.
+
+**When to make one**: whenever the key, or anything holding
+`/var/lib/biogenic`, may have been copied -- and on a routine of your own if you
+want one, since it is the one way to make every line ever sent stop working.
+Nothing needs it on a timer.
+
+**If the key may have been copied**, in this order:
+
+1. **Run the job straight away** -- it is the containment. Within two seconds
+   every invite made with the old key is refused, and anybody swimming on one
+   is told. Nothing needs stopping first. If you cannot reach the server's
+   shell yet, take the port forward off the router (§9.3) until you can:
+   friends read "no answer" meanwhile, and the LAN plays on.
+2. **Check that it took.** The job exits 0 and prints the new certificate, and
+   the journal says the key changed, then names the same certificate:
+   ```sh
+   journalctl -u biogenic-server --since "-5 min" | grep 'internet:'
+   ```
+3. **Mint each friend again** and send each line **over a channel you trust** --
+   not the chat an old line may have leaked from -- and ask each to paste it,
+   which replaces the old invite on their phone: it no longer trusts the old
+   key.
+4. **A new key does not clean a machine.** If the container itself may have
+   been broken into, build a new one (§1, §2) and set it up there: its first
+   mint makes a key nobody has seen. `install-server.sh --purge` keeps
+   `/var/lib/biogenic`, key included -- it reinstalls the kit, and cleans
+   nothing.
+
+**If something goes wrong**
+
+- **The job exits 1, saying nothing was changed**: the old key, certificate and
+  invites are exactly as they were -- the new pair is written in full before
+  either replaces the old. Fix what it names -- a full disk (`df -h
+  /var/lib/biogenic`), or a job run as the wrong user (§9.1) -- and run it
+  again.
+- **It says the new certificate could not be put in place after the new key**:
+  until a run goes through, no invite can call in, which is the safe way to
+  fail. Run it again.
+- **A friend was offline**: nothing to do until they call. Their old line meets
+  "a different server" (§9.9); send them the new one.
+- **A new line meets "a different server"**: the server still answers with the
+  old key. The certificate in its listening line says which it has; a job run
+  as another user kept a book of its own (§9.1).
+- **A backup restored over `/var/lib/biogenic`** from before the new key brings
+  the old key and invites back, and with them whatever you replaced them for.
+  Run `--new-key` again after any such restore.
 
 ### 9.9 When a friend cannot get in
 
