@@ -1213,7 +1213,24 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
   - Seeds 1 to 3 pass.
 - **Fourteen bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
 
-  PLANTED_TABLE
+  | Planted | The fuzzer | The probe |
+  |---|---|---|
+  | base64 decoded without its shape asked | unaided, and a saved case | F8 |
+  | a certificate parsed without its DER shape asked | a saved case | F8 |
+  | no bound on the certificates one paste parses | a saved case | F8 |
+  | surrogates on their own kept in a paste | unaided | F8 |
+  | a name whose last label is a number taken | two saved cases | F7, F9 |
+  | any IP literal taken | five saved cases | F7 |
+  | multicast and reserved IPv4 taken | a saved case | F7 |
+  | `::` taken | a saved case | F7 |
+  | IPv6 multicast taken | a saved case | F7 |
+  | IPv4 in IPv6 clothes taken in hex | a saved case | F7 |
+  | a zero-padded address refused, as the first cut did | a saved case | F7 |
+  | IPv4 in IPv6 clothes refused while it shows its address | a saved case | F7 |
+  | a stored `--reach` it will not call taken for none | -- | F9 |
+  | the invites sent with it not named when it is changed | -- | F9 |
+
+  Planting found two things in the checks themselves. The fuzzer's saved cases passed every address bug until each case said what it must read as. And one bug, planted by deleting a loop's only line, left `invite.gd` unable to parse -- 120 script errors and no verdict at all -- so it was planted again as a `pass`.
 
 ### H.4 What H does not do
 
