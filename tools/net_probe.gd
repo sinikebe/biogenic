@@ -7693,11 +7693,15 @@ func _invites_format() -> void:
 		+ " the other side, is refused -- and each reads back as written")
 	# F7: an address says what it dials (#106) -- at --reach, at the mint, and
 	# in a line some older mint wrote.
+	# Taken as before: a literal is read by Godot's own parser, decimal, so a
+	# zero-padded one and IPv4 in IPv6 clothes that shows its IPv4 address
+	# both dial what they show.
 	var plain := ["203.0.113.7", "127.0.0.1", "10.0.0.1", "::1", "2001:db8::7",
-		"pond.example.net", "localhost", "a1.example"]
+		"pond.example.net", "localhost", "a1.example", "203.000.113.007",
+		"::ffff:203.0.113.7"]
 	var disguised := ["2130706433", "127.1", "0x7f.0.0.1", "0x7f000001", "017700000001",
-		"010.0.0.1", "0.0.0.0", "0.1.2.3", "255.255.255.255", "224.0.0.1", "240.0.0.1", "::",
-		"ff02::1", "::ffff:7f00:1", "::ffff:127.0.0.1", "pond.example.123"]
+		"0.0.0.0", "0.1.2.3", "255.255.255.255", "224.0.0.1", "240.0.0.1", "::", "ff02::1",
+		"::ffff:7f00:1", "::ffff:0.0.0.1", "::ffff:224.0.0.1", "pond.example.123"]
 	var wrong: Array = []
 	for address: String in plain:
 		if not Invite.address_ok(address) or Invite.parse_reach(address).has("error") \
@@ -7711,11 +7715,12 @@ func _invites_format() -> void:
 					!= Invite.Read.DAMAGED:
 			wrong.append("took " + address)
 	_says(wrong.is_empty(),
-		"invites F7: %d addresses written plainly are taken at --reach, minted and read"
-		% plain.size() + " back; %d that dial something other than they say -- a number" % disguised.size()
-		+ " a resolver reads as 127.0.0.1, a leading zero, no machine or every machine, IPv4"
-		+ " in IPv6 clothes -- are refused at --reach, never minted, and damage in an old"
-		+ " line, as '%s' says" % str(Invite.parse_reach("2130706433").get("error", ""))
+		"invites F7: %d addresses that show what they dial -- zero-padded, and IPv4 in"
+		% plain.size() + " IPv6 clothes showing it, as before -- are taken at --reach, minted"
+		+ " and read back; %d that do not -- a number a resolver reads as 127.0.0.1, no"
+		% disguised.size() + " machine or every machine, IPv4 in IPv6 clothes written in hex"
+		+ " -- are refused at --reach, never minted, and damage in an old line, as '%s' says"
+		% str(Invite.parse_reach("2130706433").get("error", ""))
 		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(PackedStringArray(wrong))))
 	# F8: junk behind checks that read costs the log nothing, or a certificate's
 	# worth of lines a paste at most (#106).
@@ -7743,14 +7748,52 @@ func _invites_format() -> void:
 	var after_three := int(Invite.parse(three)["read"])
 	var more := " ".join(fakes.slice(0, Invite.CERTIFICATES_MAX)) + " " + line
 	var after_more := int(Invite.parse(more)["read"])
+	# Surrogates on their own, as a Windows clipboard hands over a broken
+	# pair: 60,000 of them ahead of a real invite, made by decoding a hundred
+	# -- which prints its hundred lines here, before the paste is read.
+	var lone_bytes := PackedByteArray()
+	for n in 100:
+		lone_bytes.append(n)
+		lone_bytes.append(0xDC)
+	var lone := lone_bytes.get_string_from_utf16().repeat(600)
+	logged = _inv_catcher.lines.size()
+	var lone_read := int(Invite.parse(lone + " " + line)["read"])
+	var lone_lines := _inv_catcher.lines.size() - logged
 	_says(junk_read == Invite.Read.DAMAGED and junk_lines == 0 and fakes_read == Invite.Read.DAMAGED
 			and fake_lines == Invite.CERTIFICATES_MAX and fake_all == fake_lines
-			and after_three == Invite.Read.OK and after_more == Invite.Read.DAMAGED,
+			and after_three == Invite.Read.OK and after_more == Invite.Read.DAMAGED
+			and lone.length() == 60000 and lone_read == Invite.Read.OK and lone_lines == 0,
 		"invites F8: a paste of 2,000 invites whose base64 does not decode, and one of 50"
 		+ " whose certificates are not even DER, print %d engine lines; one of 50" % junk_lines
 		+ " whose certificates are DER and do not parse prints %d, the most a paste may: a"
 		% fake_lines + " real invite after three of those still reads, and after %d it is"
-		% Invite.CERTIFICATES_MAX + " damage")
+		% Invite.CERTIFICATES_MAX + " damage; and one behind 60,000 surrogates on their own,"
+		+ " as a broken Windows clipboard hands them over, reads and prints %d" % lone_lines)
+	# F9: an owner whose --reach, set by an older build, is one this build will
+	# not call is told so wherever that --reach is shown -- and changing it
+	# still names the invites already sent with it (#106).
+	var legacy := INVITES_ROOT.path_join("legacy")
+	var set_first: Array = InviteBook.set_reach("203.0.113.7", legacy)
+	var minted: Array = InviteBook.mint("dave", legacy)
+	var old_reach := ConfigFile.new()
+	old_reach.set_value("reach", "address", "2130706433")
+	old_reach.set_value("reach", "port", 45772)
+	Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
+		old_reach.encode_to_text().to_utf8_buffer())
+	var stale := InviteBook.reach_refused(legacy)
+	var listed: Array = InviteBook.listing(legacy)
+	var mint_refused: Array = InviteBook.mint("erin", legacy)
+	var set_again: Array = InviteBook.set_reach("203.0.113.9", legacy)
+	var set_lines := "\n".join(PackedStringArray(set_again[1]))
+	_invites_wipe(legacy)
+	_says(int(set_first[0]) == 0 and int(minted[0]) == 0 and InviteBook.reach(legacy).is_empty()
+			and stale.contains("2130706433:45772") and stale.contains("is a number")
+			and str(listed[1][0]).contains(stale) and int(mint_refused[0]) == 1
+			and str(mint_refused[1][0]).contains(stale) and int(set_again[0]) == 0
+			and set_lines.contains("invites already sent still call 2130706433:45772"),
+		"invites F9: a --reach an older build stored as 2130706433 is named, not taken for"
+		+ " none, at --invites and at the mint ('%s'), and setting a new one still says" % stale
+		+ " the invites already sent call the old")
 
 
 ## **An invite line to [param address], as [method Invite.format] writes one but

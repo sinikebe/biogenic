@@ -522,11 +522,14 @@ Write the address as what it is, because a friend's phone shows it exactly as
 written. `--reach` refuses a few things:
 - a number written as a name, which a resolver dials as some other address:
   `2130706433` and `127.1` are both 127.0.0.1;
-- a number with a leading zero;
-- an address that is no one machine: `0.0.0.0` or `::`, a broadcast or
-  multicast address, or IPv4 written inside IPv6.
+- an address that is no one machine: `0.0.0.0` or `::`, the broadcast address
+  `255.255.255.255`, or a multicast one;
+- IPv4 inside IPv6 written in hex (`::ffff:7f00:1` is 127.0.0.1), which hides
+  the IPv4 address it is -- write that address instead.
 
-Each refusal says what to type instead.
+Each refusal says why. An address an older build took that this one will not
+call is named, with why, in the server's status line, `--invites` and
+`--invite`: set `--reach` again, then mint again for anybody with an invite.
 
 **A name is dialled over IPv4 whenever it has an IPv4 address** (an A record),
 even when it has an IPv6 one too: a home router forwards a port over IPv4, and

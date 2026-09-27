@@ -337,13 +337,11 @@ func _internet_status() -> String:
 	var names: Array = _labels.keys()
 	names.sort()
 	if _net.internet_listening():
-		var where := InviteBook.reach(pond_root)
 		return ("listening on port %d/udp for %d invite%s (%s), certificate %s. Friends"
 			% [Invite.PORT, names.size(), "" if names.size() == 1 else "s",
 				", ".join(PackedStringArray(names)), _answering_with]
 			+ " call %s: forward that port, UDP, to this machine's %d/udp -- the one port"
-			% [Invite.reach_text(str(where["address"]), int(where["port"]))
-				if not where.is_empty() else "(no --reach set)", Invite.PORT]
+			% [InviteBook.reach_said(pond_root, "(no --reach set)"), Invite.PORT]
 			+ " to forward.")
 	if names.is_empty():
 		return ("nothing listens for the internet: there are no invites. To let a"

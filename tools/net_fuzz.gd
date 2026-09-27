@@ -106,13 +106,20 @@ class Catcher extends Logger:
 	## (net-hardening.md C.1). Counted here and nowhere else, so any other line
 	## still fails a run.
 	var dtls_close_lines := 0
+	## **Lines the engine prints as errors without an error's call** -- a
+	## string that does not decode says so this way (#106). Counted apart, so
+	## what a section makes on purpose to feed a reader is not that reader's.
+	var message_errors := 0
 	## The latest error, said in full.
 	var last := ""
 	var _lock := Mutex.new()
 
-	func _log_message(message: String, _error: bool) -> void:
+	func _log_message(message: String, error: bool) -> void:
 		_lock.lock()
 		lines.append(message)
+		if error:
+			message_errors += 1
+			last = message
 		_lock.unlock()
 
 	func _log_error(function: String, file: String, line: int, code: String,
@@ -228,6 +235,8 @@ var _seed := 1
 var _scale := 1.0
 var _only: Array = []
 var _rng := RandomNumberGenerator.new()
+## [method _lone_surrogates], made once a run by the invite section.
+var _lone := ""
 var _catcher: Catcher = null
 var _failed := 0
 var _key: CryptoKey = null
@@ -1837,6 +1846,7 @@ func _shrink_guest(by_invite: bool, steps: Array) -> Array:
 
 func _fuzz_invite() -> void:
 	_rng.seed = hash(_seed * 977 + 3)
+	_lone = _lone_surrogates()
 	var line := Invite.format("203.0.113.7", Invite.PORT, _key_id, _secret, _der)
 	var cases := _cases(INVITE_CASES)
 	var bad := ""
@@ -1872,11 +1882,15 @@ func _fuzz_invite() -> void:
 func _paste_why(paste: String) -> Array:
 	var script_before := _catcher.script_errors
 	var engine_before := _catcher.engine_errors
+	var messages_before := _catcher.message_errors
 	var lines_before := _catcher.lines.size()
 	var read := Invite.parse(paste)
 	var got := int(read.get("read", -1))
 	if _catcher.script_errors > script_before:
 		return ["a script error: " + _catcher.last, got]
+	if _catcher.message_errors > messages_before:
+		return ["%d error lines from one paste, the first: %s" % [
+			_catcher.message_errors - messages_before, _catcher.last], got]
 	var engine := _catcher.engine_errors - engine_before
 	if engine > Invite.CERTIFICATES_MAX:
 		return ["%d engine lines from one paste, past %d" % [engine,
@@ -1912,10 +1926,14 @@ func _mutate_paste(line: String) -> String:
 			return line.substr(0, _rng.randi_range(0, line.length()))
 		2:
 			# What a messaging app puts in a line: a break, a space, a zero-width
-			# space, a no-break space, a tab, a soft hyphen.
+			# space, a no-break space, a tab, a soft hyphen -- and what Windows'
+			# clipboard hands over from a broken one, surrogates on their own
+			# (#106), a run of them.
 			var at := _rng.randi_range(0, line.length())
+			var lone := _lone.substr(_rng.randi_range(0, _lone.length() - 1),
+				_rng.randi_range(1, 64))
 			return line.substr(0, at) + ["\n", "\r\n", " ", char(0x200B), char(0xA0), "\t",
-				char(0xAD)][_rng.randi_range(0, 6)] + line.substr(at)
+				char(0xAD), lone][_rng.randi_range(0, 7)] + line.substr(at)
 		3:
 			var out := line
 			for n in _rng.randi_range(1, 6):
@@ -1955,6 +1973,21 @@ func _mutate_paste(line: String) -> String:
 	for i in _rng.randi_range(0, 300):
 		noise += char(_rng.randi_range(1, 0x2FF))
 	return noise
+
+
+## **Surrogates on their own**, 32 trails and then 32 leads -- no lead ever
+## just before a trail, which would pair them -- as a Windows clipboard hands
+## over text that was cut in the middle of a pair. Made by decoding UTF-16,
+## which keeps them and says so once for each: those lines are the decoder's,
+## before any paste, and [member Catcher.message_errors] counts them apart.
+static func _lone_surrogates() -> String:
+	var bytes := PackedByteArray()
+	for i in 64:
+		var k := (i & 31) * 0x1F
+		var c := 0xDC00 + k if i < 32 else 0xD800 + k
+		bytes.append(c & 0xFF)
+		bytes.append(c >> 8)
+	return bytes.get_string_from_utf16()
 
 
 ## **Junk behind a check that reads**: [param line]'s payload spoiled at one

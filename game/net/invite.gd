@@ -86,7 +86,8 @@ enum Read {
 	## No `biogenic-invite:` anywhere in it.
 	NOT_FOUND,
 	## One was there, but not whole: cut short, a character changed, or a
-	## check that does not match.
+	## check that does not match -- or whole, and to an address this build
+	## will not call, or past the certificates a paste may parse (#106).
 	DAMAGED,
 	## Whole, and made by a newer build than this one.
 	UNKNOWN_VERSION,
@@ -335,7 +336,10 @@ static func _der_whole(der: PackedByteArray) -> bool:
 ## **What a messaging app may have put inside a line**, taken out: ASCII
 ## controls and space, DEL and the C1 controls, the no-break and soft-hyphen
 ## characters, every Unicode space and zero-width character, the line and
-## paragraph separators, the bidirectional marks, and the byte-order mark.
+## paragraph separators, the bidirectional marks, and the byte-order mark. And
+## what is no character at all (issue #106): a surrogate on its own, which
+## Windows' clipboard hands over as it found it, and anything past U+10FFFF --
+## `String.chr` says so in the log for each one, and none is ever an invite's.
 static func _squeeze(text: String) -> String:
 	var out := PackedStringArray()
 	for i in text.length():
@@ -343,7 +347,8 @@ static func _squeeze(text: String) -> String:
 		if c <= 0x20 or (c >= 0x7F and c <= 0xA0) or c == 0xAD or c == 0x1680 \
 				or c == 0x180E or (c >= 0x2000 and c <= 0x200F) \
 				or (c >= 0x2028 and c <= 0x202F) or (c >= 0x205F and c <= 0x206F) \
-				or c == 0x3000 or c == 0xFEFF:
+				or c == 0x3000 or c == 0xFEFF or (c >= 0xD800 and c <= 0xDFFF) \
+				or c > 0x10FFFF:
 			continue
 		out.append(String.chr(c))
 	return "".join(out)
@@ -464,27 +469,33 @@ static func _numeric(label: String) -> bool:
 	return not label.is_empty()
 
 
-## **An IP literal that is one machine, written plainly** (issue #106): IPv4 as
-## four numbers with no leading zero -- `010` is ten here and eight to a C
-## resolver -- and IPv6 as Lan reads it. Not the unspecified address (`0.0.0.0`
-## and the rest of 0/8, `::`), which a socket takes to mean its own device; not
-## broadcast or multicast (`255.255.255.255`, 224/4 and the reserved 240/4
-## after it, `ff00::/8`); and not IPv4 in IPv6 clothes (`::ffff:7f00:1` is
-## 127.0.0.1), which is written as the IPv4 address it is, or not at all.
+## **An IP literal that is one machine, and shows it** (issue #106), judged as
+## the call dials it: a literal never meets a resolver -- `create_client` reads
+## it with Godot's own parser, IPv4 as four decimal numbers, so `203.000.113.007`
+## is 203.0.113.7 on the screen and on the wire alike. Not the unspecified
+## address (`0.0.0.0` and the rest of 0/8, `::`), which a socket takes to mean
+## its own device; not the broadcast address or multicast (`255.255.255.255`,
+## 224/4 and the reserved 240/4 around it, `ff00::/8`); and IPv4 in IPv6
+## clothes only written with its IPv4 address showing (`::ffff:203.0.113.7`),
+## never in hex, where `::ffff:7f00:1` is 127.0.0.1 unseen.
 static func _literal_ok(address: String) -> bool:
-	var v4 := Lan._ipv4_octets(address)
-	if not v4.is_empty():
-		for part: String in address.split("."):
-			if part.length() > 1 and part.begins_with("0"):
-				return false
-		return v4[0] != 0 and v4[0] < 224
+	if not address.contains(":"):
+		return _v4_first_ok(address.get_slice(".", 0).to_int())
 	var g := Lan._ipv6_groups(address)
-	if g.is_empty() or Lan._v4_mapped(g) or (g[0] & 0xFF00) == 0xFF00:
+	if g.is_empty() or (g[0] & 0xFF00) == 0xFF00:
 		return false
+	if Lan._v4_mapped(g):
+		return address.contains(".") and _v4_first_ok(g[6] >> 8)
 	for group: int in g:
 		if group != 0:
 			return true
 	return false
+
+
+## An IPv4 address whose first number is [param first] is one machine: not
+## 0/8, nor 224/4 or anything above it.
+static func _v4_first_ok(first: int) -> bool:
+	return first != 0 and first < 224
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
@@ -518,18 +529,22 @@ static func parse_reach(text: String) -> Dictionary:
 	if port < 1 or port > 65535:
 		return {"error": "a port is a number from 1 to 65535"}
 	if not address_ok(host):
-		return {"error": _why_not(host)}
+		return {"error": why_not(host)}
 	return {"address": host, "port": port}
 
 
-## Why `--reach` will not take [param host] (issue #106): the owner typed it,
-## so the sentence says what to type instead.
-static func _why_not(host: String) -> String:
+## Why `--reach` will not take [param host] (issue #106), said to the owner who
+## typed it -- with what to type instead, where there is something.
+static func why_not(host: String) -> String:
 	if host.is_valid_ip_address():
-		return "%s is not one machine friends can call: not 0.0.0.0 or ::, not a" % host \
-			+ " broadcast or multicast address, and IPv4 written plainly -- four numbers," \
-			+ " no leading zeros, not inside IPv6"
+		return "%s is not one machine friends can call: not 0.0.0.0 or ::, not the" % host \
+			+ " broadcast address or a multicast one, and IPv4 inside IPv6 written with" \
+			+ " its IPv4 address showing"
 	if not host.contains(":") and _numeric(host.get_slice(".", host.get_slice_count(".") - 1)):
+		for label: String in host.split("."):
+			if not _numeric(label):
+				return "%s ends in a number, which a resolver reads as an address:" % host \
+					+ " a name ends in letters"
 		return "%s is a number, not a name: an IPv4 address is four numbers from 0 to" % host \
 			+ " 255, like 203.0.113.7"
 	return "%s is not an address or a host name" % host
