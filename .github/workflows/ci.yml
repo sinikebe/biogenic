@@ -331,6 +331,50 @@ jobs:
             exit 1
           fi
 
+      - name: Fuzz the network code
+        # tools/net_fuzz.gd (issue #91, net-hardening.md part D): everything
+        # that reads what a stranger sends, fed what a stranger could send and
+        # checked after every step -- the wire's decoders where the gate reads
+        # them, a real host's door and gate on both listeners with callers
+        # driven by hand, a guest's side of the handshake, invite pastes, the
+        # LAN door's address test, and the referee. The saved cases in
+        # tools/net_fuzz_corpus.txt run first, every time.
+        #
+        # IN A NETWORK NAMESPACE OF ITS OWN. The door binds the real LAN and
+        # internet ports, and refuses to run where any interface but loopback
+        # could reach them. `unshare --net` needs root;
+        # Godot does not, so it runs as this job's user again -- nothing it
+        # writes, the import cache or user://, is root's when the exports
+        # below come to write them. The address on lo is one the LAN host can
+        # take.
+        #
+        # Seed 1 at scale 1: every run of this step is the same run, some four
+        # seconds of it. `timeout` is the backstop -- a script that does not
+        # parse leaves the scene up forever. A failure prints what broke and a
+        # `--replay=` of it, minimised; other seeds and `--scale=20` are the
+        # longer look, run locally (the header of net_fuzz.gd says how).
+        run: |
+          set -uo pipefail
+          out=$(sudo unshare --net -- bash -c '
+              ip link set lo up && ip addr add 10.77.0.5/24 dev lo &&
+              exec setpriv --reuid="$1" --regid="$2" --clear-groups env HOME="$3" \
+                timeout 300 "$3/godot/godot" --headless --path "$4" \
+                res://tools/net_fuzz.tscn -- --seed=1' \
+            _ "$(id -u)" "$(id -g)" "$HOME" "$PWD" 2>&1) || true
+          printf '%s\n' "$out" | grep -E "^\[net-fuzz\]" || true
+          if ! printf '%s\n' "$out" | grep -q "^\[net-fuzz\] ALL PASS$"; then
+            printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error" || true
+            echo "::error::the network fuzzer found something, or did not finish -- see its lines above"
+            exit 1
+          fi
+          # The fuzzer fails a step on any script error in the code it drives;
+          # this catches one in the fuzzer itself, which may have skipped a check.
+          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+            echo "::error::the network fuzzer hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Export Android APK
         env:
           GODOT_ANDROID_KEYSTORE_RELEASE_PATH: ${{ steps.keystore.outputs.path }}

@@ -8,6 +8,8 @@ This plan covers issues #56, #57, #58 and #59. It has three parts:
 
 Part C's plan was written against `main` at `d84bfb6`; as built, it names functions, as A and B do, because they outlive a line number.
 
+- **D** is one PR for #91 (a fuzzer for everything that reads what a stranger sends). **Built.** `tools/net_fuzz.gd`, its saved cases, and a CI step that runs both. It changes no game code: it is a check on A, B and C, and says what it covers and what it does not (D.1-D.6).
+
 The order was A, then B, then C. A carried a guard that made "LAN-only for now" true in the code; C lifts it on one listener, the dedicated server's second, and nowhere else.
 
 ## 0. Rules this plan follows
@@ -825,8 +827,94 @@ No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): 
 - **No expiry.** An invite works until it is revoked or replaced, or the key is -- and the certificate runs to 2099 on purpose: its dates are checked against the phone's clock and protect nothing the pin does not, and it cannot be renewed past the copy inside an invite, so a shorter life would only void every invite on a timer (C9; docs/server.md §9.8, issue #89).
 - **Two jobs at once** -- two owners minting in the same second -- can lose one mint: the last writer wins. The book is written in one step, Linux's rename, so it is never torn.
 
+## D. #91 in one PR: a fuzzer for everything a stranger's bytes reach
+
+`tools/net_probe.gd` checks each rule with the case its author thought of. This part adds the cases nobody thought of: **`tools/net_fuzz.gd` feeds every reader of untrusted bytes what a stranger could send, checks what must hold after every step, and prints a replay of anything that breaks it, cut down to the fewest steps that still do.** It is seeded -- one seed is one run, byte for byte -- bounded, and never reachable from outside: the part that opens sockets refuses to run anywhere but a network namespace of its own.
+
+### D.1 Six sections
+
+| Section | What it drives | How |
+|---|---|---|
+| `wire` | Every `Wire.take_*`, `state_body`, `proof_parts`, `challenge_nonce` and the handshake readers, both directions | 20,000 frames at scale 1: valid frames of every kind, then cut, stretched, bit-flipped, an edge byte, a float made NaN, infinite or huge, the kind or type swapped, two spliced, or junk. **Read only where the gate would read them** (`_admit_frame` steps 2-5, and `_parses` on a host), so a value the gate never lets through is not a finding. |
+| `door` | A real host session: both listeners opened with `host()` and `listen_internet()`, and every caller driven by hand through the session's own `_on_peer_connected`, `_take_datagram`, `_on_peer_disconnected` and `_process` | 120 runs of at least 50 steps, one in ten eight times as long -- some 15,000 steps in all. Callers connect on either listener from any address, twins under one id, ids no build picks; they greet, prove when challenged -- with the right invite, a wrong MAC, a key no invite has, the replacement invite -- then play. **Storms** of a dozen calls at once reach the door's buckets, **bursts, floods and trickles** reach the budgets and the queue's per-guest share, each long run **fills a book** -- more callers from distinct places than its 1,024 entries, checked after every one -- and the owner revokes, replaces and restores the invite mid-run. Now and then a caller has no address at all, which is what `_address_of` says of a peer ENet no longer holds. Time moves only when a step says so. |
+| `guest` | A guest session, on a LAN call and on a call by invite, fed what a host could send it through `_on_peer_packet` | 150 runs of 40 frames: WELCOMEs right and wrong, REFUSEs, CHALLENGEs -- some from an id that is not the host's -- and every other host frame, spoiled now and then. |
+| `invite` | `Invite.parse` | 1,200 pastes: whole invites, cut, chatted around, doubled, a whole conversation of up to 200 KB, with what a messaging app puts in a line, and **junk behind a check that reads** -- the payload spoiled and the check made over it again, so the parse goes as deep as it can. |
+| `address` | `Lan.is_local_source` and `Lan.source_key` | 6,000 addresses made from their numbers and then written -- IPv4, IPv4 in IPv6 clothes, IPv6 compressed or not, in either case, with a zone -- so what each one is is known without parsing it back; and spoiled ones. |
+| `referee` | Every judgement: `claim`, `judge_enter`, `arrive`, `judge_person`, `judge_sister`, `judge_shout`, `judge_died`, `died`, `left`, `stalled` | 150 runs of 60, in any order. **What the host decides stays the host's** -- where a body arrives, at a size its ENTER was allowed -- and a state frame is judged only while a body is here, as `pond.gd` does. **What the guest says is anything its reader lets through**: any finite place or size to float32's edge, a heading from a bearing byte, a motion inside `MOTION_MAX` and `TURNING_MAX`. |
+
+**Every case in `tools/net_fuzz_corpus.txt` runs first**, every time -- 60 now: #107's negative ids, #75's twin under one id and its full book with a caller of no address, #102's sister and shout from float32's edge, each way to break the handshake, each change the owner's hand makes to the door, the budgets and the silence cut, a value each reader refuses, and a guest's CHALLENGEs. A failure that is fixed goes in there under a note, and stays fixed.
+
+### D.2 What must hold
+
+After every step, or the run fails and prints why:
+
+- **No script error**, and no engine error from anything but the three lines 4.7's DTLS listener prints on every close (C.1), which are counted apart. The invite section counts its engine lines and does not fail on them: that is #106.
+- **The wire**: every value a reader hands on is finite, a radius above zero, a motion inside the caps, a snapshot's count and slots inside its own.
+- **The door**: no peer under an id below 2; each peer's listener the same in `_via` and in its record, and connected there; **nothing a caller says is taken before it is greeted**, and **no caller greeted on the internet listener without a valid proof** of an invite the owner holds at that moment; nothing but a CHALLENGE or a REFUSE sent to a caller there before its proof; no LAN peer from outside the house; no frame sent to an id its listener does not hold or has cut; **no bar forgotten while it lasts**, unless every caller in a full book is barred -- the rule #75's fix restored; no more than two guests; the queue holding only greeted guests' events, each inside its own share; every book, note table and queue inside its cap.
+- **The guest**: it greets first and once; it proves an invite **only on a call by invite, only once, and only to a CHALLENGE from its host** -- never on a LAN call, whatever a LAN host sends.
+- **The invite**: a paste read as an invite is a whole one -- a key id and a secret of their sizes, an address a call can use, a port, a certificate -- and none takes half a second to read.
+- **The address**: judged local exactly when it is.
+- **The referee**: every answer finite, the body inside `BASE_RADIUS`..`DIVIDE_RADIUS`, its motion inside `SPEED_MAX` and `TURNING_MAX`, a sister at a daughter's size.
+- **At the end, no secret**: neither invite's secret, in hex or in base64, in any line the run printed.
+
+### D.3 What the door plays, and how
+
+The host is `net_session.gd` itself with five functions taken over, so no caller outside this process can reach it and the clock is the fuzzer's: `_now`, `_address_of`, `_steady_throttle`, `_to` and `_drop_on`. Its pump runs only when a step moves time, and in a namespace of its own nothing ever arrives at the real sockets it reads. **ENet is played as 4.7 behaves**, each rule measured or read in A and C: one peer an id on each listener; a caller offering 0 or 1 dropped before any signal; none past `_slots()`; a peer the host cuts inactive at once and said gone at the next service, so a frame sent to it in between is a failure (on a real host it is `put_packet` to a reset peer, an engine error); no new transport while the internet listener closes (`refuse_new_connections`); and a closed listener takes its transports with it and says nothing, the host having let them go already.
+
+**Isolation.** The door section, and a door replay, run only where loopback is the only interface -- a fresh network namespace -- and otherwise fail at once, saying so. CI runs the fuzzer under `sudo unshare --net` and hands Godot back to the job's own user; locally:
+
+```
+sudo unshare --net -- bash -c 'ip link set lo up &&
+    ip addr add 10.77.0.5/24 dev lo &&
+    godot --headless --path . res://tools/net_fuzz.tscn -- --seed=1'
+```
+
+`10.77.0.5` is an address the LAN host can take inside a namespace nothing else is in. `--only=wire,guest,invite,address,referee` runs the rest anywhere, since they open no socket.
+
+**Determinism.** Each section seeds its own generator from `--seed`, the invites are drawn from it too, and their certificate is `tools/net_fuzz_cert.pem` -- made once for this, its key thrown away, so it proves and opens nothing. Run twice, a seed prints the same lines. The door's own DTLS key is made fresh: no caller here speaks DTLS, so nothing depends on its bytes.
+
+**A replay is exact.** `--replay="<section> <case>"` runs one case: a frame in hex; the door's steps, `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore`, and `S:via:count` for a book filled, with a proof named rather than written, since its nonce is the host's; a guest's frames, `from:hex`; a paste in base64; `local` or `remote` and an address; the referee's steps with every float a float32 in `var_to_str`'s shortest form, which reads back to the same number (measured over 40,000). A failure is printed already minimised: frames cut and zeroed, steps taken out in halves, then quarters, down to one.
+
+### D.4 Measured
+
+- **CI runs seed 1 at scale 1: about 4.3 s**, 60 saved cases and some 57,000 generated ones, the import and boot around it. `timeout 300` is the backstop -- a fuzzer that does not parse leaves its scene up forever.
+- **Scale 20, seeds 11 to 15: all pass**, 42 to 44 s each.
+- **What the door reached.** Its counts, summed over a run, say which of its paths the run took. Seed 1 at scale 1 -- CI's run -- takes every refusal, cut, bar, strike, budget drop and queue drop the door can make; another seed at scale 1 can miss the rarest, the byte budget, and at scale 20 none does. Four no run here can reach, by design: `saturated`, which is the real socket's statistics; a closing listener's `refused_closed`, which ENet's `refuse_new_connections` keeps callers from; the referee's fouls, which are the pond's; and `challenges_dropped`, which is a guest's.
+- **Twelve bugs planted one at a time**, the first eleven caught at seed 1, scale 1, from an empty corpus, each replay failing on the bug and passing on `main`:
+
+  | # | Planted | Caught by | Minimised to |
+  |---|---|---|---|
+  | 1 | #107's guard taken out: an id below 2 let in | door | one connect |
+  | 2 | any MAC proves | door | connect, HELLO, a wrong-MAC proof |
+  | 3 | the twin guard taken out | door | a guest proved on the internet listener, then its id on the LAN one |
+  | 4 | a refusal sent after its cut | door | a LAN guest gone quiet for good (#92) |
+  | 5 | a NaN shout let through | wire | one 22-byte frame |
+  | 6 | 100.64.0.0/10 not local | address | one address |
+  | 7 | the claimed radius not capped | referee | an arrival, then a claim at r1e20 |
+  | 8 | a snapshot's motion unchecked | wire | one snapshot |
+  | 9 | a guest answering a CHALLENGE on a LAN call | guest | one CHALLENGE |
+  | 10 | a guest answering twice | guest | two CHALLENGEs |
+  | 11 | the host printing a secret | secrets | -- |
+  | 12 | #75's eviction put back: a full book forgetting a barred caller while `""` is unbarred | door | its saved case, at scale 1; unaided, at scale 20 by three seeds of three, in runs 19 to 519 |
+
+  With the corpus in place, every one of them is caught by a saved case before any fuzzing starts.
+
+### D.5 What it found
+
+**Nothing in the code it drives.** One thing about the referee's contract, which is written here so it stays true: `claim()` before any `arrive()` starts the body from the guest's own claimed place, since there is no anchor yet, and two claims at opposite ends of float32 then make a NaN. It cannot happen -- `pond.gd` judges a state frame only for a person, and a person exists only after `_host_enter`, which calls `arrive()` -- and the fuzzer keeps that order, as the host does. A caller of the referee that did not would have to.
+
+### D.6 What D does not do
+
+- **The engine's own C++** -- ENet, `UDPServer`, DTLS and mbedTLS -- is not driven: the door injects callers above ENet, and no caller here completes a handshake. A.1 and C.1 measured those, and the probe's `limits` and `invites` sections hold what they found.
+- **Real sockets and real time.** Loss, reordering, latency and a clock that jumps are `tools/net_lag.gd`'s and two phones', not this.
+- **`pond.gd`'s run** is not fuzzed. What its handlers apply is either what a reader let through or what the referee answered, and both are, and the probe's `pond referee` section drives a hostile guest through a real host's water by hand.
+- **A guest's `_process`**: a call by invite resolves a name and, when it fails fast, takes a second look over the network (C.7), so the guest section feeds frames only.
+- **The server's book and jobs** (`invite_book.gd`, `server.gd`) are the probe's `invites` section's.
+- **Non-finite values into the referee**: the wire refuses them before it (A.3, B.1), and the wire section holds that.
+
 ### Files
 
 - **Part A (built):** `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd`, `tools/net_probe.gd`, `docs/server.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part B (built):** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/net/wire.gd`, `game/normal/normal_mode.gd` (the cut line, and comments), comments in `game/normal/cell.gd`, `food.gd` and `genome.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md`, `docs/design/shared-pond-ux.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
+- **Part D (built):** `tools/net_fuzz.gd`, `tools/net_fuzz.tscn`, `tools/net_fuzz_corpus.txt` and `tools/net_fuzz_cert.pem` (all new, and excluded from export with the rest of `tools/`), the "Fuzz the network code" step in `.github/workflows/ci.yml`, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.
