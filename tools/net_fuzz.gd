@@ -6,7 +6,8 @@ extends Node
 ##   - **wire**: every decoder a host or a guest reads frames with, fed valid
 ##     frames of every kind and those frames cut, stretched, flipped and
 ##     spliced; read only where the gate would read them, as the gate does.
-##   - **door**: a real host session, both listeners, driven by hand -- callers
+##   - **door**: a real host session -- the dedicated server's, both listeners,
+##     and one run in four a phone's, the LAN one alone -- driven by hand: callers
 ##     that connect, say anything, prove or fail to, go and come back under
 ##     the same id or the other listener's, and more of them than a book holds
 ##     -- with every place it would touch ENet or the clock put under the
@@ -25,12 +26,16 @@ extends Node
 ##
 ## **What must hold**, all of it checked after every step: no script error,
 ## and no engine error in a reader; nothing played before a valid proof on the
-## internet listener; no peer the door did not admit, and none under an id
-## below 2; one listener's peer never taken for the other's; nothing sent to
-## an id this host does not hold; every queue and book inside its cap; the
+## internet listener, of an invite the owner holds; no peer the door did not
+## admit, none under an id below 2, none greeted on another protocol; one
+## listener's peer never taken for the other's; nothing a real ENet would
+## refuse -- a frame to an id not held or cut, a peer asked for that is not
+## there; no bar forgotten early; no peer taken past its budgets; every queue
+## and book inside its cap, a phone host's inside a host's own share; the
 ## referee's answers finite and inside its caps; and no secret in any line
 ## printed. Engine errors on the invite path are counted and not failed: #106
-## is that finding.
+## is that finding. **And every path the door can take is taken** -- by a run
+## or a saved case -- but the few no run here can reach.
 ##
 ## **Run it** in a network namespace of its own, as CI does -- the door binds
 ## the real LAN and internet ports, and will not run where any interface but
@@ -74,6 +79,12 @@ const REFEREE_STEPS := 60
 const GUEST_RUNS := 150
 const GUEST_STEPS := 40
 const SECTIONS := ["wire", "door", "guest", "invite", "address", "referee"]
+## **The door's counts no run here can move**, by design: the real socket's
+## statistics; a closing listener's door, which ENet's `refuse_new_connections`
+## keeps every caller from; the referee's fouls, which are the pond's; and a
+## guest's dropped CHALLENGEs. Every other count must be moved by some run.
+const DOOR_OUT_OF_REACH := ["saturated", "refused_closed", "net_refused_closed", "fouls",
+	"referee_strikes", "referee_would_strikes", "referee_would_cuts", "challenges_dropped"]
 ## The label and secret of the one invite the door knows: found in no log.
 const LABEL := "fuzzfriend"
 
@@ -126,11 +137,15 @@ class Catcher extends Logger:
 ##
 ## [member connected] is ENet's side of it, one Dictionary per listener: an id
 ## is `true` while its transport is up and `false` once the host has cut it and
-## ENet has not yet said so. A frame to an id that listener does not hold, or
-## has cut, is an engine error on a real host -- `put_packet` to a peer
-## `peer_disconnect_now` already reset -- so here it is a failure.
+## ENet has not yet said so. **What a real host would make an engine error of
+## is a failure here**: a frame to an id its listener does not hold or has cut
+## -- `put_packet` to a peer `peer_disconnect_now` already reset -- and asking
+## ENet for a peer it does not hold at all, to cut it, throttle it or learn its
+## address (`get_peer`). So is a frame to an id below 2, which ENet reads as
+## many peers.
 class FuzzHost extends "res://game/net/net_session.gd":
 	var now_at := 1000.0
+	## Each transport's address, by its line: `id:via`.
 	var where := {}
 	var connected := [{}, {}]
 	var sent: Array = []
@@ -143,31 +158,47 @@ class FuzzHost extends "res://game/net/net_session.gd":
 	func _now() -> float:
 		return now_at
 
-	func _address_of(id: int, _via: int = VIA_LAN) -> String:
-		return str(where.get(id, ""))
+	func _address_of(id: int, via: int = VIA_LAN) -> String:
+		_holds(id, via, "asked the address of")
+		return str(where.get("%d:%d" % [id, via], ""))
 
-	func _steady_throttle(_id: int, _via: int = VIA_LAN) -> void:
-		pass
+	func _steady_throttle(id: int, via: int = VIA_LAN) -> void:
+		_holds(id, via, "throttled")
 
 	func _to(id: int, frame: PackedByteArray) -> void:
-		# The real one's own guards, then the listener the id came in on.
+		# The listener the id came in on, as the real one sends on.
 		var via := int(_via.get(id, VIA_LAN))
-		if not hosting or _transport(via) == null or id < PEER_ID_MIN:
+		if not hosting or _transport(via) == null:
 			return
 		var held: Dictionary = connected[via]
-		if misaddressed.is_empty() and not bool(held.get(id, false)):
+		if misaddressed.is_empty() and id < PEER_ID_MIN:
+			misaddressed = "sent %d bytes to id %d, which ENet reads as many peers" % [
+				frame.size(), id]
+		elif misaddressed.is_empty() and not bool(held.get(id, false)):
 			misaddressed = "sent %d bytes to id %d on the %s listener, which %s" % [
 				frame.size(), id, "internet" if via == VIA_NET else "LAN",
 				"has already cut it" if held.has(id) else "does not hold it"]
 		sent.append([id, frame, via])
 
 	func _drop_on(via: int, id: int) -> void:
-		if not hosting or _transport(via) == null:
+		if not hosting or not _holds(id, via, "cut"):
 			return
 		var held: Dictionary = connected[via]
-		if bool(held.get(id, false)):
+		if bool(held[id]):
 			held[id] = false
 			drops.append([via, id])
+
+	## True if the listener [param via] holds [param id], cut or not; a failure
+	## noted if it does not, since the real call asks ENet's `get_peer`.
+	func _holds(id: int, via: int, doing: String) -> bool:
+		if _transport(via) == null:
+			return false
+		if (connected[via] as Dictionary).has(id):
+			return true
+		if misaddressed.is_empty():
+			misaddressed = "%s id %d on the %s listener, which does not hold it" % [doing, id,
+				"internet" if via == VIA_NET else "LAN"]
+		return false
 
 
 ## **A guest session with no transport**: its clock and what it sends are the
@@ -205,8 +236,11 @@ var _started := 0
 ## How many times a run closed an internet listener -- by closing its host,
 ## or the owner revoking an invite -- against the lines 4.7 prints for it.
 var _closes := 0
-## Every run's gate counts, summed: which of the door's paths the runs reached.
+## Every run's gate counts, summed -- the saved cases' included: which of the
+## door's paths were taken.
 var _door_counts := {}
+## Why the last host could not be opened, said.
+var _no_host := ""
 
 
 func _ready() -> void:
@@ -277,8 +311,9 @@ func _run(replay: String) -> void:
 	if _host != null and is_instance_valid(_host):
 		_host.close()
 		_host = null
-	_says(_secrets_unsaid(), "secrets: neither invite's secret, in hex or in base64, in"
-		+ " any of the %d lines this run printed" % _catcher.lines.size())
+	_says(_secrets_unsaid(), "secrets: neither invite's secret -- in hex, in base64, or as"
+		+ " GDScript prints bytes -- in any of the %d lines this run printed"
+		% _catcher.lines.size())
 	print("[net-fuzz] NOTE seed %d, scale %.2f, %.1f s in all" % [_seed, _scale,
 		float(Time.get_ticks_msec() - _started) / 1000.0])
 	if _failed == 0:
@@ -288,10 +323,12 @@ func _run(replay: String) -> void:
 
 
 ## **No secret in any line printed** -- the host's log, a guest's, the
-## fuzzer's own.
+## fuzzer's own -- in hex, in base64, or as GDScript prints the bytes, in a
+## `print` of a Dictionary or `var_to_str`.
 func _secrets_unsaid() -> bool:
 	for secret: PackedByteArray in [_secret, _secret_2]:
-		for form: String in [secret.hex_encode(), Marshalls.raw_to_base64(secret)]:
+		for form: String in [secret.hex_encode(), Marshalls.raw_to_base64(secret),
+				str(secret).trim_prefix("[").trim_suffix("]")]:
 			for line: String in _catcher.lines:
 				if line.containsn(form):
 					return false
@@ -698,8 +735,9 @@ func _fuzz_door() -> void:
 	var greeted_all := 0
 	var proofs_all := 0
 	for run in runs:
-		# One run in ten is eight times as long, for what builds up.
-		var actions := _door_actions(DOOR_STEPS * (8 if run % 10 == 9 else 1))
+		# One run in ten is eight times as long, for what builds up, and one in
+		# four is a phone's host.
+		var actions := _door_actions(DOOR_STEPS * (8 if run % 10 == 9 else 1), run % 4 == 1)
 		var result: Array = await _door_run(actions)
 		steps_all += actions.size()
 		greeted_all += int(result[1])
@@ -716,8 +754,18 @@ func _fuzz_door() -> void:
 			reached.append("%s %d" % [key, int(_door_counts[key])])
 		else:
 			never.append(key)
-	print("[net-fuzz] NOTE the door's counts, every run summed: %s; never: %s"
-		% [", ".join(reached), ", ".join(never) if not never.is_empty() else "none"])
+	print("[net-fuzz] NOTE the door's counts, every run and saved case summed: %s; never:"
+		% ", ".join(reached) + " %s" % (", ".join(never) if not never.is_empty() else "none"))
+	# **Coverage that cannot slip**: every path the door can take, taken --
+	# by the runs or by a saved case -- or the section fails, and says which.
+	# Below scale 1 there are too few runs to ask it of.
+	var missed := Array(never).filter(func(key: String) -> bool:
+		return not DOOR_OUT_OF_REACH.has(key))
+	if _scale >= 1.0:
+		_says(missed.is_empty(), "door coverage: every one of the door's %d counted paths"
+			% _door_counts.size() + " taken, but the %d no run here can reach"
+			% DOOR_OUT_OF_REACH.size() + ("" if missed.is_empty()
+				else " -- NOT: never %s" % ", ".join(PackedStringArray(missed))))
 	print("[net-fuzz] NOTE %d internet listeners closed with their host, and more by the"
 		% _closes + " owner's hand: %d lines from godot_mbedtls_mutex_free, which 4.7"
 		% _catcher.dtls_close_lines + " prints three at a time on every close (net-hardening.md"
@@ -742,8 +790,8 @@ func _fuzz_door() -> void:
 ## the door's buckets, and **bursts** -- one caller saying fifty things at
 ## once -- its budgets. What a caller has said is the generator's own record:
 ## it never knows what the host made of it, which is the point.
-func _door_actions(count: int) -> Array:
-	var actions: Array = []
+func _door_actions(count: int, phone := false) -> Array:
+	var actions: Array = [["P"]] if phone else []
 	var lines: Array = []
 	var stage := {}
 	var seq := {}
@@ -753,18 +801,18 @@ func _door_actions(count: int) -> Array:
 	while actions.size() < count:
 		if fill_at >= 0 and actions.size() >= fill_at:
 			fill_at = -1
-			actions.append(["S", 1 if _rng.randf() < 0.6 else 0, NetSession.BOOK_MAX
-				+ _rng.randi_range(1, 120)])
+			actions.append(["S", _pick_via(phone), NetSession.BOOK_MAX + _rng.randi_range(1,
+				120)])
 		var roll := _rng.randf()
 		if lines.is_empty() or roll < 0.12:
 			var id := _pick_id(lines)
-			var via := 1 if _rng.randf() < 0.6 else 0
+			var via := _pick_via(phone)
 			_door_line(lines, stage, seq, id, via)
 			actions.append(["C", id, via, _pick_address(via)])
 		elif roll < 0.15:
 			# A storm: callers at once, from one address or from several, each
 			# greeting as it lands.
-			var via := 1 if _rng.randf() < 0.6 else 0
+			var via := _pick_via(phone)
 			var one := _pick_address(via)
 			var alone := _rng.randf() < 0.5
 			for n in _rng.randi_range(3, 14):
@@ -784,22 +832,15 @@ func _door_actions(count: int) -> Array:
 				actions.append(["D", int(line.get_slice(":", 0)), int(line.get_slice(":", 1)),
 					_door_next(line, stage, seq, clean)])
 		elif roll < 0.185:
-			# A flood, past the frame budget and a stall's credit on top of it
-			# -- of state frames, or of frames of a kind from a later build at
-			# the size cap, past the byte budget.
+			# A flood, past the frame budget -- of state frames -- or past the
+			# byte budget -- of frames of a kind from a later build, at the size
+			# cap -- or of ENTERs, past the event budget.
 			var line := _playing(lines, stage)
-			var big := _rng.randf() < 0.5
-			for n in _rng.randi_range(380, 480):
-				if big:
-					var later := PackedByteArray()
-					later.resize(Wire.GUEST_FRAME_MAX)
-					later[0] = 0x20
-					actions.append(["D", int(line.get_slice(":", 0)),
-						int(line.get_slice(":", 1)), ["raw", later]])
-				else:
-					actions.append(["D", int(line.get_slice(":", 0)),
-						int(line.get_slice(":", 1)), _door_next(line, stage, seq, true,
-							"state")])
+			var what: String = ["state", "later", "enter"][_rng.randi_range(0, 2)]
+			var many := _rng.randi_range(260, 400)
+			actions.append(["F", int(line.get_slice(":", 0)), int(line.get_slice(":", 1)), what,
+				many, int(seq[line]) + 1])
+			seq[line] = int(seq[line]) + many
 		elif roll < 0.19:
 			# A trickle: a guest's events, under its budgets for half a minute,
 			# while nothing here reads its queue.
@@ -901,6 +942,14 @@ func _guest_frame(next: int, only := "") -> PackedByteArray:
 		_rng.randf_range(-PI, PI), Referee.DAUGHTER_RADIUS, tiers))
 
 
+## A listener to call: mostly the internet one on the dedicated host, and on a
+## phone's -- which has no other -- the LAN one.
+func _pick_via(phone: bool) -> int:
+	if phone:
+		return NetSession.VIA_LAN
+	return NetSession.VIA_NET if _rng.randf() < 0.6 else NetSession.VIA_LAN
+
+
 ## A new id, one of the lines' again -- a twin on the other listener, or the
 ## same caller back -- or one no Godot build picks.
 func _pick_id(lines: Array) -> int:
@@ -970,18 +1019,19 @@ func _door_bytes() -> Array:
 	return ["raw", Wire.challenge(_bytes(Wire.NONCE_SIZE))]
 
 
-## **One run on a fresh host**: `[why it failed or "", greetings, proofs]`.
+## **One run on a fresh host**: `[why it failed or "", greetings, proofs]`. A
+## run that opens with `["P"]` is a phone's: one guest, no internet listener,
+## and its events queued in the host's own share.
 func _door_run(actions: Array) -> Array:
-	var host := await _fresh_host()
+	var phone := not actions.is_empty() and str(actions[0][0]) == "P"
+	var host := await _fresh_host(phone)
 	if host == null:
-		return ["could not host: this machine has no address a LAN host can use, or"
-			+ " 45771/45772 are taken", 0, 0]
-	# A transport's line -> where in `host.sent` it began, and whether it has
-	# sent a valid proof on it; and which invite the owner holds now, as the
-	# fuzzer set it -- "first", "second", or none.
-	var began := {}
-	var proved := {}
-	var table := {"invite": "first"}
+		return ["could not host: " + _no_host, 0, 0]
+	# What the fuzzer knows of each transport, by its line -- where in
+	# `host.sent` it began, how many datagrams it has sent, the invite it
+	# proved -- and which invite the owner holds now: "first", "second" or
+	# none.
+	var run := {"began": {}, "said": {}, "proved": {}, "invite": "first"}
 	var proofs := 0
 	# Each listener's barred callers after the last step, key -> until, and
 	# how many bars the host had made by then.
@@ -991,14 +1041,14 @@ func _door_run(actions: Array) -> Array:
 		var errors := _catcher.errors()
 		var sent_before := host.sent.size()
 		var net_before := host.net_seen
-		proofs += int(_door_step(host, action, began, proved, table))
+		proofs += int(_door_step(host, action, run))
 		_settle_drops(host)
 		if host.net_seen != net_before:
 			# A listener closed takes its book with it, bars and all.
 			bars[NetSession.VIA_NET] = {}
-		var why := _door_why(host, proved)
+		var why := _door_why(host, run["proved"])
 		if why.is_empty():
-			why = _told_why(host, sent_before, proved)
+			why = _told_why(host, sent_before, run["proved"])
 		if why.is_empty():
 			why = _bars_why(host, bars)
 		if why.is_empty() and _catcher.errors() > errors:
@@ -1014,21 +1064,46 @@ func _door_run(actions: Array) -> Array:
 	return ["", _welcomes(host), proofs]
 
 
-## [param actions] with each **book filled** -- `["S", via, count]` -- written
-## out as its callers, so every check runs after each one: count callers, each
-## from a place of its own, a /64 of the documentation prefix on the internet
-## listener and of a unique-local one on the LAN. A replay keeps it one step.
+## [param actions] with each compact step written out, so every check runs
+## after each datagram and each caller -- a replay keeps them one step each:
+##
+##   - **a book filled**, `["S", via, count]`: count callers, each from a place
+##     of its own, a /64 of the documentation prefix on the internet listener
+##     and of a unique-local one on the LAN;
+##   - **a flood**, `["F", id, via, what, count, first]`: count frames from
+##     one transport at once -- state frames, ENTERs or shouts numbered from
+##     first, or frames of a kind from a later build at the size cap.
 static func _expanded(actions: Array) -> Array:
 	var out: Array = []
 	for action: Array in actions:
-		if str(action[0]) != "S":
-			out.append(action)
-			continue
-		var via := int(action[1])
-		for i in int(action[2]):
-			out.append(["C", 0x40000000 + i, via, ("2001:db8:%x::1"
-				if via == NetSession.VIA_NET else "fd00:%x::1") % i])
+		match str(action[0]):
+			"S":
+				var via := int(action[1])
+				for i in int(action[2]):
+					out.append(["C", 0x40000000 + i, via, ("2001:db8:%x::1"
+						if via == NetSession.VIA_NET else "fd00:%x::1") % i])
+			"F":
+				for i in int(action[4]):
+					out.append(["D", int(action[1]), int(action[2]), ["raw",
+						_flood_frame(str(action[3]), int(action[5]) + i)]])
+			_:
+				out.append(action)
 	return out
+
+
+static func _flood_frame(what: String, seq: int) -> PackedByteArray:
+	match what:
+		"state":
+			return Wire.state(seq, true, Vector2(10.0, 20.0), 0.5, 26.0, Vector2(100.0, 0.0),
+				0.2, Wire.STATE_POND)
+		"enter":
+			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(26.0))
+		"shout":
+			return Wire.shout(seq, Vector2(10.0, 20.0), 26.0, 400.0)
+	var later := PackedByteArray()
+	later.resize(Wire.GUEST_FRAME_MAX)
+	later[0] = 0x20
+	return later
 
 
 static func _welcomes(host: FuzzHost) -> int:
@@ -1039,7 +1114,10 @@ static func _welcomes(host: FuzzHost) -> int:
 	return count
 
 
-func _fresh_host() -> FuzzHost:
+## **A host, fresh**: the dedicated server's two-guest host with both
+## listeners, or a phone's with the LAN one alone. Null, and [member _no_host]
+## says why, when it cannot open.
+func _fresh_host(phone: bool) -> FuzzHost:
 	if _host != null and is_instance_valid(_host):
 		if _host._net_peer != null:
 			_closes += 1
@@ -1051,16 +1129,27 @@ func _fresh_host() -> FuzzHost:
 	add_child(host)
 	_host = host
 	host.loopback_is_local = true
-	if not host.host(NetSession.GUESTS_MAX):
+	if not host.host(1 if phone else NetSession.GUESTS_MAX):
+		_no_host = "this machine has no address a LAN host can use, or 45771 is taken"
 		return null
 	# Driven by hand from here: its frames are the fuzzer's steps, not the
 	# engine's.
 	host.set_process(false)
 	if get_tree().process_frame.is_connected(host._on_tree_frame):
 		get_tree().process_frame.disconnect(host._on_tree_frame)
-	if not host.listen_internet(_key, _cert):
-		return null
-	host.set_invites({_key_id.hex_encode(): [LABEL, _secret]})
+	# **The outside must be outside**: the callers meant as strangers call
+	# from documentation ranges, which the namespace's own address must not
+	# share -- or the LAN door would be right to let them in.
+	for stranger: String in ["203.0.113.9", "198.51.100.9", "2001:db8::9"]:
+		if Lan.is_local_source(stranger, host.address):
+			_no_host = "this namespace's address, %s, makes %s a house address" % [
+				host.address, stranger]
+			return null
+	if not phone:
+		if not host.listen_internet(_key, _cert):
+			_no_host = "45772 is taken"
+			return null
+		host.set_invites({_key_id.hex_encode(): [LABEL, _secret]})
 	# One frame taken, as a real host has before anybody calls: otherwise the
 	# first frame here would read as coming after a stall, and be credited.
 	host._on_tree_frame()
@@ -1068,12 +1157,15 @@ func _fresh_host() -> FuzzHost:
 
 
 ## Runs one step; true when it was a valid proof.
-func _door_step(host: FuzzHost, action: Array, began: Dictionary,
-		proved: Dictionary, table: Dictionary) -> bool:
+func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
+	var began: Dictionary = run["began"]
+	var said: Dictionary = run["said"]
+	var proved: Dictionary = run["proved"]
 	match str(action[0]):
 		"C":
 			var id := int(action[1])
 			var via := int(action[2])
+			var line := _line(id, via)
 			var held: Dictionary = host.connected[via]
 			# ENet holds one peer an id on each listener, drops a caller
 			# offering 0 or 1 itself (measured on 4.7), and turns away one past
@@ -1083,15 +1175,21 @@ func _door_step(host: FuzzHost, action: Array, began: Dictionary,
 			if via == NetSession.VIA_NET and not host.internet_listening():
 				return false
 			held[id] = true
-			host.where[id] = str(action[3])
-			began[_line(id, via)] = host.sent.size()
-			proved.erase(_line(id, via))
+			host.where[line] = str(action[3])
+			began[line] = host.sent.size()
+			said[line] = 0
+			proved.erase(line)
 			host._on_peer_connected(id, via)
 		"D":
 			var id := int(action[1])
 			var via := int(action[2])
+			var line := _line(id, via)
 			if not bool((host.connected[via] as Dictionary).get(id, false)):
 				return false
+			# What this transport sent before this datagram: a proof is valid
+			# only as its second, after its one HELLO -- the gate's own rule.
+			var before := int(said.get(line, 0))
+			said[line] = before + 1
 			var what: Array = action[3]
 			var frame := PackedByteArray()
 			var good := false
@@ -1099,7 +1197,7 @@ func _door_step(host: FuzzHost, action: Array, began: Dictionary,
 				"hello":
 					frame = Wire.hello(int(what[1]))
 				"proof":
-					var nonce := _nonce_for(host, id, int(began.get(_line(id, via), 0)))
+					var nonce := _nonce_for(host, id, int(began.get(line, 0)))
 					var mine := PackedByteArray()
 					mine.resize(Wire.NONCE_SIZE)
 					mine.fill(7)
@@ -1119,12 +1217,13 @@ func _door_step(host: FuzzHost, action: Array, began: Dictionary,
 					frame = Wire.proof(key_id, mine, Invite.proof_mac(secret, Wire.PROTOCOL,
 						nonce, mine, key_id))
 					# Valid: an invite the owner holds now, over the nonce this
-					# transport was sent, on the listener that asks for one.
-					# Whether it comes at the right moment is the host's to judge.
-					good = not holds.is_empty() and str(table["invite"]) == holds \
-						and nonce.size() == Wire.NONCE_SIZE and via == NetSession.VIA_NET
+					# transport was sent, as its second datagram, on the listener
+					# that asks for one.
+					good = not holds.is_empty() and str(run["invite"]) == holds \
+						and before == 1 and nonce.size() == Wire.NONCE_SIZE \
+						and via == NetSession.VIA_NET
 					if good:
-						proved[_line(id, via)] = true
+						proved[line] = holds
 				"raw":
 					frame = what[1]
 				"bare":
@@ -1141,7 +1240,6 @@ func _door_step(host: FuzzHost, action: Array, began: Dictionary,
 				return false
 			(host.connected[via] as Dictionary).erase(id)
 			host._on_peer_disconnected(id, via)
-
 		"T":
 			host.now_at += float(action[1])
 			host._on_tree_frame()
@@ -1151,15 +1249,20 @@ func _door_step(host: FuzzHost, action: Array, began: Dictionary,
 			# invite taken away is cut, and none left closes the listener.
 			match str(action[1]):
 				"revoke":
-					table["invite"] = ""
+					run["invite"] = ""
 					host.set_invites({})
 				"replace":
-					table["invite"] = "second"
+					run["invite"] = "second"
 					host.set_invites({_key_id_2.hex_encode(): [LABEL, _secret_2]})
 				"restore":
 					if host.listen_internet(_key, _cert):
-						table["invite"] = "first"
+						run["invite"] = "first"
 						host.set_invites({_key_id.hex_encode(): [LABEL, _secret]})
+			# A proof of an invite the owner no longer holds proves nothing
+			# from here: its guest must be gone.
+			for line: String in proved.keys():
+				if str(proved[line]) != str(run["invite"]):
+					proved.erase(line)
 	return false
 
 
@@ -1218,9 +1321,23 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 				or int(peer["in_event"]) >= 0 or int(peer["in_pond"]) >= 0
 				or not (peer["track"] as Array).is_empty()):
 			return "peer %d is not greeted, and something it said was taken" % id
+		if bool(peer["greeted"]) and int(peer["protocol"]) != Wire.PROTOCOL:
+			return "peer %d greeted, speaking protocol %d" % [id, int(peer["protocol"])]
 		if bool(peer["greeted"]) and via == NetSession.VIA_NET \
 				and not proved.has(_line(id, via)):
 			return "peer %d greeted on the internet listener with no valid proof" % id
+		# **The budgets hold**: what a peer's frames were taken to, against
+		# what its buckets could have paid since it connected. No stall is ever
+		# credited here -- every step that moves time takes a frame first.
+		var guard: Object = peer["guard"]
+		var age := host.now_at - float(peer["since"])
+		for paid: Array in [[guard.taken, guard.frames, "frames"], [guard.taken_bytes,
+				guard.bytes, "bytes"], [guard.taken_events, guard.events, "events"]]:
+			var bucket: Object = paid[1]
+			if float(paid[0]) > bucket.burst + bucket.rate * age + 0.5:
+				return "peer %d was taken %d %s in %.2f s, past %d at once and %d a second" % [
+					id, int(paid[0]), str(paid[2]), age, roundi(bucket.burst),
+					roundi(bucket.rate)]
 		if via == NetSession.VIA_LAN and not Lan.is_local_source(str(peer["address"]),
 				host.address):
 			return "peer %d from %s let in on the LAN listener" % [id, str(peer["address"])]
@@ -1242,10 +1359,12 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 				or int(load[from][1]) > NetSession.QUEUE_BYTES:
 			return "guest %d has %d events of %d bytes queued, past its share" % [from,
 				int(load[from][0]), int(load[from][1])]
-	if host.pond_events.size() > NetSession.POND_EVENTS_MAX \
+	# **A phone host's queue** is its one guest's, inside a host's own share.
+	if host.pond_events.size() > NetSession.QUEUE_FRAMES \
+			or host._pond_bytes > NetSession.QUEUE_BYTES \
 			or host.heard.size() > NetSession.HEARD_MAX:
-		return "a queue past its cap: pond %d, heard %d" % [host.pond_events.size(),
-			host.heard.size()]
+		return "a queue past its cap: %d events of %d bytes, %d shouts heard" % [
+			host.pond_events.size(), host._pond_bytes, host.heard.size()]
 	if host._book.size() > NetSession.BOOK_MAX or host._net_book.size() > NetSession.BOOK_MAX \
 			or host._notes.size() > NetSession.NOTES_MAX:
 		return "a book past its cap"
@@ -1329,6 +1448,11 @@ static func _door_code(actions: Array) -> String:
 				parts.append("I:%s" % str(action[1]))
 			"S":
 				parts.append("S:%d:%d" % [int(action[1]), int(action[2])])
+			"F":
+				parts.append("F:%d:%d:%s:%d:%d" % [int(action[1]), int(action[2]),
+					str(action[3]), int(action[4]), int(action[5])])
+			"P":
+				parts.append("P")
 	return "|".join(parts)
 
 
@@ -1359,6 +1483,10 @@ static func _door_read(code: String) -> Array:
 				actions.append(["I", f[1]])
 			"S":
 				actions.append(["S", int(f[1]), int(f[2])])
+			"F":
+				actions.append(["F", int(f[1]), int(f[2]), f[3], int(f[4]), int(f[5])])
+			"P":
+				actions.append(["P"])
 	return actions
 
 
@@ -1448,31 +1576,39 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 	if by_invite:
 		guest._invite = Invite.parse(Invite.format("203.0.113.7", Invite.PORT, _key_id,
 			_secret, _der))
+	# Its first frame is not after a stall: the clock stood where it stands.
+	guest._frame_at = guest.now_at
 	guest._set_link(NetSession.Link.REACHING)
 	guest._on_peer_connected(1)
 	var why := ""
-	var challenged := false
 	var proofs := 0
 	for step: Array in steps:
 		var errors := _catcher.errors()
 		var from := int(step[0])
 		var frame: PackedByteArray = step[1]
 		var before := guest.sent.size()
+		# A proof answers a whole CHALLENGE from its host, in the step that
+		# brings it, on a call that is still up.
+		var nonce := Wire.challenge_nonce(frame) if from == 1 and guest._peers.has(1) \
+			else PackedByteArray()
 		guest._on_peer_packet(from, frame)
 		for i in range(before, guest.sent.size()):
-			var kind := Wire.kind(guest.sent[i][1])
+			var sent: PackedByteArray = guest.sent[i][1]
+			var kind := Wire.kind(sent)
 			if kind != Wire.KIND_PROOF:
 				why = "it sent a frame of kind %d to a host's frame" % kind
 			elif not by_invite:
 				why = "it proved an invite on a LAN call"
-			elif int(guest.sent[i][0]) != 1 or not challenged and not (from == 1
-					and Wire.kind(frame) == Wire.KIND_CHALLENGE):
+			elif int(guest.sent[i][0]) != 1 or nonce.size() != Wire.NONCE_SIZE:
 				why = "it proved to something that was not its host's CHALLENGE"
 			else:
-				proofs += 1
-		if from == 1 and Wire.kind(frame) == Wire.KIND_CHALLENGE \
-				and guest._peers.has(1):
-			challenged = true
+				# Over that nonce and its own, with its invite's key and secret.
+				var parts := Wire.proof_parts(sent)
+				if parts.size() != 3 or parts[0] != _key_id or parts[2] != Invite.proof_mac(
+						_secret, Wire.PROTOCOL, nonce, parts[1], _key_id):
+					why = "its proof is not its invite's, over its host's nonce"
+				else:
+					proofs += 1
 		if why.is_empty() and proofs > 1:
 			why = "it proved %d times on one call" % proofs
 		if why.is_empty() and _catcher.errors() > errors:

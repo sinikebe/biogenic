@@ -361,16 +361,19 @@ jobs:
                 timeout 300 "$3/godot/godot" --headless --path "$4" \
                 res://tools/net_fuzz.tscn -- --seed=1' \
             _ "$(id -u)" "$(id -g)" "$HOME" "$PWD" 2>&1) || true
-          printf '%s\n' "$out" | grep -E "^\[net-fuzz\]" || true
-          if ! printf '%s\n' "$out" | grep -q "^\[net-fuzz\] ALL PASS$"; then
-            printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error" || true
+          grep -E "^\[net-fuzz\]" <<< "$out" || true
+          # Here-strings, not `printf | grep -q`: under pipefail, grep -q
+          # leaving at an early match is SIGPIPE to printf, and a 450 KB log's
+          # match near the top reads as no match at all.
+          if ! grep -q "^\[net-fuzz\] ALL PASS$" <<< "$out"; then
+            grep -E "SCRIPT ERROR|Parse Error" <<< "$out" || true
             echo "::error::the network fuzzer found something, or did not finish -- see its lines above"
             exit 1
           fi
           # The fuzzer fails a step on any script error in the code it drives;
           # this catches one in the fuzzer itself, which may have skipped a check.
-          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
-            printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
             echo "::error::the network fuzzer hit a script error -- checks after it did not run"
             exit 1
           fi

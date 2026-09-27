@@ -4,7 +4,8 @@
 # fuzzer prints comes with its `--replay=` payload -- once it is fixed, it goes
 # in here, under a note saying what it was, and stays fixed.
 #
-# Addresses are documentation ranges (RFC 5737, RFC 3849) and private ones.
+# Addresses are placeholders: documentation ranges (RFC 5737, RFC 3849),
+# private ones, and one from the carriers' shared range (RFC 6598).
 
 # --- door: a real host session, callers driven by hand -----------------------
 # #107: a caller offering a negative peer id -- ENet takes the id a client
@@ -28,24 +29,48 @@ door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:raw:040100000005000020410000a0410000d
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:hello:4
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|D:9:1:proof:good
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:other_key
+# A good proof after a wrong one, on the same line: the wrong one is refused
+# and barred, so the good one proves nothing. A HELLO from protocol 3.
+door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:wrong_mac|D:9:1:proof:good
+door C:9:0:192.168.1.9|D:9:0:hello:3
 # The owner's hand: an invite revoked under a guest, the listener closed and
 # opened again; an invite replaced, so the old one proves nothing and the new
 # one does.
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:revoke|T:1.2|I:restore|C:10:1:203.0.113.10|D:10:1:hello:4|D:10:1:proof:good
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:replace|C:10:1:203.0.113.10|D:10:1:hello:4|D:10:1:proof:good|C:11:1:203.0.113.11|D:11:1:hello:4|D:11:1:proof:new_key
+# The guest of a replaced invite, still talking: it must already be gone.
+door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:replace|D:9:1:raw:040100000005000020410000a0410000d041140000c84200000000cdcc4c3e
 # The LAN door: a caller from outside; a silent caller on the internet one,
 # barred, calling again; a guest gone quiet for good (#92); twelve calls at
 # once from one address.
 door C:5:0:203.0.113.5|D:5:0:hello:4
+# The internet listener's door, each of its own refusals: three live from one
+# address and a fourth; nine calls from one address at once, the ninth past
+# its bucket; and a twin of a LAN guest's id.
+door C:11:1:203.0.113.20|D:11:1:hello:4|D:11:1:proof:good|C:12:1:203.0.113.20|D:12:1:hello:4|D:12:1:proof:good|C:13:1:203.0.113.20|C:14:1:203.0.113.20
+door C:31:1:203.0.113.30|C:32:1:203.0.113.30|C:33:1:203.0.113.30|C:34:1:203.0.113.30|C:35:1:203.0.113.30|C:36:1:203.0.113.30|C:37:1:203.0.113.30|C:38:1:203.0.113.30|C:39:1:203.0.113.30
+door C:41:0:192.168.1.41|D:41:0:hello:4|C:41:1:203.0.113.41
 door C:9:1:203.0.113.9|T:3.5|C:10:1:203.0.113.9
 door C:5:0:192.168.1.5|D:5:0:hello:4|T:61.0|T:61.0
+# A caller refused for silence who hangs up while its refusal lingers: its
+# goodbye ends the linger, and nothing is cut twice.
+door C:7:0:192.168.1.7|T:61.0|X:7:0|T:1.2
 door C:100:0:192.168.1.5|D:100:0:hello:4|C:101:0:192.168.1.5|D:101:0:hello:4|C:102:0:192.168.1.5|D:102:0:hello:4|C:103:0:192.168.1.5|D:103:0:hello:4|C:104:0:192.168.1.5|D:104:0:hello:4|C:105:0:192.168.1.5|D:105:0:hello:4|C:106:0:192.168.1.5|D:106:0:hello:4|C:107:0:192.168.1.5|D:107:0:hello:4|C:108:0:192.168.1.5|D:108:0:hello:4|C:109:0:192.168.1.5|D:109:0:hello:4|C:110:0:192.168.1.5|D:110:0:hello:4|C:111:0:192.168.1.5|D:111:0:hello:4
 # The gate past the door, on a greeted guest: short frames until it is cut
-# and told so -- the refusal must go out before the cut -- one past the size
-# cap, and twenty-six events at once, past the event budget.
+# and told so -- the refusal must go out before the cut -- 380 state frames
+# at once, past the frame budget, 160 frames at the size cap, past the byte
+# budget, one frame past the cap itself, and twenty-six events at once, past
+# the event budget.
+door C:5:0:192.168.1.5|D:5:0:hello:4|F:5:0:state:380:1
+door C:5:0:192.168.1.5|D:5:0:hello:4|F:5:0:later:160:1
 door C:5:0:192.168.1.5|D:5:0:hello:4|D:5:0:raw:04010000000500002041|D:5:0:raw:04010000000500002041|D:5:0:raw:04010000000500002041|D:5:0:raw:04010000000500002041|D:5:0:raw:04010000000500002041|D:5:0:raw:04010000000500002041
 door C:5:0:192.168.1.5|D:5:0:hello:4|D:5:0:raw:050000000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 door C:5:0:192.168.1.5|D:5:0:hello:4|D:5:0:raw:050100000001000020410000a0410000d0410000c843|D:5:0:raw:050200000001000020410000a0410000d0410000c843|D:5:0:raw:050300000001000020410000a0410000d0410000c843|D:5:0:raw:050400000001000020410000a0410000d0410000c843|D:5:0:raw:050500000001000020410000a0410000d0410000c843|D:5:0:raw:050600000001000020410000a0410000d0410000c843|D:5:0:raw:050700000001000020410000a0410000d0410000c843|D:5:0:raw:050800000001000020410000a0410000d0410000c843|D:5:0:raw:050900000001000020410000a0410000d0410000c843|D:5:0:raw:050a00000001000020410000a0410000d0410000c843|D:5:0:raw:050b00000001000020410000a0410000d0410000c843|D:5:0:raw:050c00000001000020410000a0410000d0410000c843|D:5:0:raw:050d00000001000020410000a0410000d0410000c843|D:5:0:raw:050e00000001000020410000a0410000d0410000c843|D:5:0:raw:050f00000001000020410000a0410000d0410000c843|D:5:0:raw:051000000001000020410000a0410000d0410000c843|D:5:0:raw:051100000001000020410000a0410000d0410000c843|D:5:0:raw:051200000001000020410000a0410000d0410000c843|D:5:0:raw:051300000001000020410000a0410000d0410000c843|D:5:0:raw:051400000001000020410000a0410000d0410000c843|D:5:0:raw:051500000001000020410000a0410000d0410000c843|D:5:0:raw:051600000001000020410000a0410000d0410000c843|D:5:0:raw:051700000001000020410000a0410000d0410000c843|D:5:0:raw:051800000001000020410000a0410000d0410000c843|D:5:0:raw:051900000001000020410000a0410000d0410000c843|D:5:0:raw:051a00000001000020410000a0410000d0410000c843
+# A phone's host: one guest, the LAN listener alone. Its guest's ENTERs,
+# paced under the event budget until its queue is past the host's own share,
+# and twelve shouts, past what it keeps heard; a second guest, turned away
+# as the one too many.
+door P|C:5:0:192.168.1.5|D:5:0:hello:4|F:5:0:enter:20:1|T:4.0|F:5:0:enter:20:21|T:4.0|F:5:0:enter:20:41|T:4.0|F:5:0:enter:20:61|T:4.0|F:5:0:shout:12:81|C:6:0:192.168.1.6|D:6:0:hello:4
 
 # --- wire: frames read where the gate reads them ------------------------------
 # `g` is a guest's frame, as a host reads it; `h` a host's, as a guest does.
@@ -71,7 +96,7 @@ wire h 060100000000010000070003020000c07f0000c04004800600320000204100000000cdccc
 wire h 040100000005000020410000a0410000d0411400409c4500000000cdcc4c3e
 
 # --- guest: a guest session fed what a host could send it ---------------------
-# \`lan\` or \`invite\` -- how it called -- then \`from:frame\`, the host being 1.
+# `lan` or `invite` -- how it called -- then `from:frame`, the host being 1.
 # A CHALLENGE on a LAN call, which it must not answer; two CHALLENGEs on a call
 # by invite, answered once; one from an id that is not its host's; a WELCOME
 # on another protocol, then a CHALLENGE to the call it gave up; a REFUSE, then
@@ -90,7 +115,7 @@ invite YmlvZ2VuaWMtaW52aXRlOjEuQVFJRC5iM2I4ZTQ4Yg==
 invite YmlvZ2VuaWMtaW52aXRlOjEuQEBAQG5vdC1iYXNlNjRAQEBALjQ1OGM0MjE0
 
 # --- address: what an address is, then as ENet or a person writes it ---------
-address local ::ffff:100.118.62.221
+address local ::ffff:100.64.0.7
 address local fe80::1%wlan0
 address local 127.0.0.1
 address local fd12:3456:789a::1
