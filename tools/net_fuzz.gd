@@ -981,6 +981,10 @@ func _pick_address(via: int) -> String:
 		1:
 			return "192.168.%d.%d" % [_rng.randi_range(0, 255), _rng.randi_range(1, 254)]
 		2:
+			# Now and then the namespace's own /24 (10.77.0.0/24, see the top of
+			# this file): the one a phone host answers besides loopback (#104).
+			if _rng.randf() < 0.3:
+				return "10.77.0.%d" % _rng.randi_range(1, 254)
 			return "10.%d.%d.%d" % [_rng.randi_range(0, 255), _rng.randi_range(0, 255),
 				_rng.randi_range(1, 254)]
 		3:
@@ -1391,6 +1395,12 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 		if via == NetSession.VIA_LAN and not Lan.is_local_source(str(peer["address"]),
 				host.address):
 			return "peer %d from %s let in on the LAN listener" % [id, str(peer["address"])]
+		# A phone's LAN door is its own /24 and loopback (#104).
+		if via == NetSession.VIA_LAN and host.guests_max == 1 \
+				and not Lan.is_loopback(str(peer["address"])) \
+				and not Lan.same_24(str(peer["address"]), host.address):
+			return "peer %d from %s let in by a phone host at %s, outside its /24" % [id,
+				str(peer["address"]), host.address]
 	for id: int in host._via.keys():
 		if not host._peers.has(id) and not host._hanging_up.has(id):
 			return "id %d kept in _via with no peer and nothing to hang up" % id

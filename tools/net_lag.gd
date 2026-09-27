@@ -454,8 +454,6 @@ func _open() -> bool:
 	_near = NetSession.new()
 	_near.name = "Near"
 	add_child(_near)
-	# The near cell calls on loopback (net_session.gd's test seam).
-	_far.bind_every_address = true
 	if not _far.host() or not _near.join("127.0.0.1"):
 		return false
 	var until := _now() + 6.0

@@ -516,11 +516,6 @@ var protocol_override := 0
 ## internet listener skips the LAN-only guard -- and the LAN listener does not
 ## -- turns this off, and a loopback caller is then a stranger to the LAN door.
 var loopback_is_local := true
-## **A test seam: a phone host binds every address, as a dedicated one does.**
-## A phone host binds the address it hosts at alone (issue #104), so a caller
-## on loopback -- which is every tool's -- would never reach it. Tools set
-## this; nothing a player runs does.
-var bind_every_address := false
 
 var _api: SceneMultiplayer = null
 ## A guest's socket, or a host's LAN listener.
@@ -948,18 +943,14 @@ func host(guests: int = 1) -> bool:
 	guests_max = clampi(guests, 1, GUESTS_MAX)
 	# **A phone hosts on its own network alone** (issue #104): never on its
 	# cellular data, whose private addresses a carrier shares with every other
-	# subscriber -- that is "no wi-fi here" -- and bound to the address it hosts
-	# at, so a caller at any other of its addresses, the cellular one or a
-	# public IPv6 one, is never answered. A dedicated host binds every address
-	# (net-hardening.md A.5, issue #69).
+	# subscriber -- that is "no wi-fi here" -- and its door answers only its
+	# own /24 ([method _admit]).
 	address = Lan.local_address() if guests_max > 1 else Lan.hosting_address()
 	if not hostable(address, guests_max):
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
 		return false
 	var peer := ENetMultiplayerPeer.new()
-	if guests_max == 1 and not bind_every_address:
-		peer.set_bind_ip(address)
 	var err := peer.create_server(Lan.PORT, _slots())
 	if err != OK:
 		_give_up(Link.FAILED, "could not listen",
@@ -2944,6 +2935,15 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 			or (not loopback_is_local and Lan.is_loopback(from))):
 		return ["lan", "not on this network -- a call from outside needs an invite, on"
 			+ " port %d" % Invite.PORT]
+	# **A phone host answers its own /24 alone** (issue #104), and loopback: a
+	# friend finds a phone by its code, which is the friend's own /24 with the
+	# phone's last number on it, so no other call is a friend's -- not a
+	# carrier's other subscriber calling its cellular address, nor another
+	# network of the house. Bound to its address instead, a phone would end
+	# its game at the first Wi-Fi hiccup (net-hardening.md F.1).
+	if via == VIA_LAN and guests_max == 1 and not Lan.is_loopback(from) \
+			and not Lan.same_24(from, address):
+		return ["lan", "not on this network -- a phone answers its own /24 alone"]
 	if via == VIA_NET and not internet_listening():
 		return ["closed", "the internet listener is closing"]
 	var key := Lan.source_key(from)

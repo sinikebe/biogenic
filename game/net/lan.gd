@@ -102,15 +102,15 @@ const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
 
 
 ## **Cellular data, by its adapter's name** (issue #104): Qualcomm's `rmnet`,
-## MediaTek's `ccmni`, Unisoc's `seth_lte`, older Android's `pdp`, and a
-## laptop's mobile modem, `wwan0` or systemd's `wwp...` -- and on Windows, by
-## the friendly name. Its private addresses are the carrier's pool, shared
+## MediaTek's `ccmni`, Unisoc's `seth_lte` and, on its newer chips,
+## `sipa_eth`, older Android's `pdp`, and a laptop's mobile modem, `wwan0` or
+## systemd's `wwp...` -- and on Windows, by the friendly name, in English. Its private addresses are the carrier's pool, shared
 ## with every other subscriber the carrier lets through, so no friend is ever
 ## on it with this device. And `v4-`, the interface Android adds for IPv4 over
 ## an IPv6-only network: its address is 192.0.0.4 on every device, and nobody
 ## else's call reaches it.
-const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "pdp", "ww",
-	"v4-"]
+const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "sipa_eth", "pdp",
+	"ww", "v4-"]
 const CELLULAR_WORDS: Array[String] = ["cellular", "mobile broadband"]
 
 
@@ -129,8 +129,9 @@ static func hosting_address() -> String:
 
 
 ## [method pick_address]'s choice from [param interfaces], or "" when it is on
-## a cellular adapter. A phone that is a hotspot still hosts at its tether:
-## that is the network its friend joins.
+## a cellular adapter. A phone that is a hotspot still hosts at its tether --
+## that is the network its friend joins -- since cellular ranks below every
+## other adapter, a tether included, whatever its range.
 static func pick_hosting(interfaces: Array) -> String:
 	var best := _pick(interfaces)
 	return "" if bool(best["cellular"]) else str(best["address"])
@@ -168,17 +169,19 @@ static func _pick(interfaces: Array) -> Dictionary:
 			continue
 		var name := str(iface.get("name", ""))
 		var friendly := str(iface.get("friendly", ""))
-		var virtual := _is_virtual(name, friendly)
+		var cellular := _is_cellular(name, friendly)
+		# Cellular last of all: no friend is ever on it (issue #104).
+		var below := 20 if cellular else (10 if _is_virtual(name, friendly) else 0)
 		for address: String in PackedStringArray(iface.get("addresses",
 				PackedStringArray())):
 			if not _is_ipv4(address):
 				continue
 			if address.begins_with(LOOPBACK) or address.begins_with(LINK_LOCAL):
 				continue
-			var rank := _range_rank(address) + (10 if virtual else 0)
+			var rank := _range_rank(address) + below
 			if rank < best_rank:
 				best_rank = rank
-				best = {"address": address, "cellular": _is_cellular(name, friendly)}
+				best = {"address": address, "cellular": cellular}
 	return best
 
 
@@ -308,7 +311,8 @@ static func _range_rank(address: String) -> int:
 ## No for everything else, and for anything that does not parse: that is a
 ## port a router forwards, or a public IPv6 address the router lets through --
 ## the host binds every address it has, so without this such a caller would be
-## answered.
+## answered. A phone host asks more of a caller: its own /24, or loopback
+## ([method same_24], issue #104).
 ##
 ## The other place this file draws a line between networks, [method
 ## _range_rank], ranks and never refuses; this refuses and never ranks.
@@ -353,6 +357,28 @@ static func is_loopback(address: String) -> bool:
 			return loop
 		return (v6[6] >> 8) == 127
 	return v4[0] == 127
+
+
+## **Whether [param address] is in [param own]'s /24** -- each IPv4, or IPv4
+## in IPv6 clothes, and never for anything else. A phone host's door (issue
+## #104): a friend finds a phone by its code, which is the friend's own /24
+## with the phone's last number on it, so every friend's call comes from here.
+static func same_24(address: String, own: String) -> bool:
+	var a := _v4_any(address)
+	var b := _v4_any(own)
+	return a.size() == 4 and b.size() == 4 and a[0] == b[0] and a[1] == b[1] \
+		and a[2] == b[2]
+
+
+## The four octets of an IPv4 address, or of IPv4 in IPv6 clothes; or empty.
+static func _v4_any(address: String) -> PackedInt32Array:
+	var v4 := _ipv4_octets(address)
+	if not v4.is_empty():
+		return v4
+	var g := _ipv6_groups(address)
+	if g.is_empty() or not _v4_mapped(g):
+		return PackedInt32Array()
+	return PackedInt32Array([g[6] >> 8, g[6] & 0xFF, g[7] >> 8, g[7] & 0xFF])
 
 
 ## **One key per caller, for counting what it does**: an IPv4 address as it is,

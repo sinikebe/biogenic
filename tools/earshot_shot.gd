@@ -242,8 +242,6 @@ func _together(their_protocol: int) -> void:
 	get_tree().root.add_child.call_deferred(host)
 	await host.ready
 	_other = host
-	# Its guest calls on loopback (net_session.gd's test seam).
-	host.bind_every_address = true
 	if not host.host():
 		push_error("[earshot-shot] nothing to host on")
 		return

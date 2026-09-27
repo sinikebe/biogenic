@@ -1206,8 +1206,6 @@ func _open_peer() -> void:
 	_peer_near = NetSession.new()
 	_peer_near.name = "PeerNear"
 	add_child(_peer_near)
-	# Its guest calls on loopback (net_session.gd's test seam).
-	_peer_far.bind_every_address = true
 	if not _peer_far.host():
 		print("[peer] could not host: %s" % _peer_far.trouble)
 		return
@@ -1320,7 +1318,6 @@ func _open_seats() -> void:
 	_seat_guest = NetSession.new()
 	_seat_guest.name = "SeatGuest"
 	add_child(_seat_guest)
-	_seat_host.bind_every_address = true
 	if not _seat_host.host():
 		print("[seat] could not host: %s" % _seat_host.trouble)
 		return

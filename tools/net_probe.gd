@@ -174,7 +174,7 @@ func _ready() -> void:
 	_check_pond_field()
 	_check_referee()
 	await _check_link()
-	await _check_bound()
+	await _check_phone_door()
 	await _check_skew()
 	await _check_limits()
 	await _check_run()
@@ -386,19 +386,29 @@ func _check_adapters() -> void:
 		"addresses": ["192.168.43.1"]}]
 	var nowhere: PackedStringArray = []
 	for adapter: Array in [["ccmni1", "ccmni1", "100.64.0.10"],
-			["seth_lte0", "seth_lte0", "10.0.0.11"], ["pdp_ip0", "pdp_ip0", "10.0.0.12"],
+			["seth_lte0", "seth_lte0", "10.0.0.11"], ["sipa_eth0", "sipa_eth0", "10.0.0.16"],
+			["pdp_ip0", "pdp_ip0", "10.0.0.12"],
 			["wwan0", "wwan0", "10.0.0.13"], ["wwp0s20f0u6", "wwp0s20f0u6", "10.0.0.14"],
 			["{4}", "Cellular", "10.0.0.15"],
 			["v4-rmnet_data0", "v4-rmnet_data0", "192.0.0.4"]]:
 		if Lan.pick_hosting([{"name": adapter[0], "friendly": adapter[1],
 				"addresses": [adapter[2]]}]).is_empty():
 			nowhere.append(str(adapter[1]))
+	# A tether outside 192.168/16, as Android may hand out, still beats the
+	# cellular data it sits beside: cellular ranks below every other adapter.
+	var tether_ten := cellular + [{"name": "swlan0", "friendly": "swlan0",
+		"addresses": ["10.0.0.20"]}]
+	var tether_172 := cellular + [{"name": "rndis0", "friendly": "rndis0",
+		"addresses": ["172.16.0.20"]}]
 	_says(Lan.pick_hosting(cellular).is_empty() and Lan.pick_address(cellular) == "10.0.0.10"
 			and Lan.pick_hosting(beside_wifi) == "192.168.0.10"
-			and Lan.pick_hosting(beside_hotspot) == "192.168.43.1" and nowhere.size() == 7,
+			and Lan.pick_hosting(beside_hotspot) == "192.168.43.1"
+			and Lan.pick_hosting(tether_ten) == "10.0.0.20"
+			and Lan.pick_hosting(tether_172) == "172.16.0.20" and nowhere.size() == 8,
 		"adapters: a phone on cellular data alone hosts nowhere -- nor on %s --" % ", ".join(
 			nowhere) + " though its guest's side still answers with it; beside Wi-Fi it"
-		+ " hosts on the Wi-Fi, and when it is a hotspot, on the hotspot")
+		+ " hosts on the Wi-Fi, and when it is a hotspot, on the hotspot, in 192.168/16,"
+		+ " 10/8 or 172.16/12 alike")
 
 
 # ---------------------------------------------------------------------------
@@ -895,30 +905,39 @@ func _check_carry() -> void:
 # Two sessions, one process, over ENet on loopback.
 # ---------------------------------------------------------------------------
 
-## **A phone host answers at the address it hosts at, and nowhere else**
-## (issue #104). Bound there, a call to loopback -- another of this machine's
-## addresses -- is never answered, while one to the address it hosts at is;
-## the machine is both ends, so that call comes from the address too, which
-## the LAN door counts as its own /24.
-func _check_bound() -> void:
-	var host: Node = await _session("BoundHost")
-	host.bind_every_address = false
-	var hosted: bool = host.host()
-	var aside: Node = await _session("BoundAside")
-	var near: Node = await _session("BoundNear")
-	var from := _now()
-	aside.join("127.0.0.1")
-	near.join(str(host.address))
-	await _limits_until(func() -> bool:
-		return int(aside.link) != NetSession.Link.REACHING \
-			and int(near.link) != NetSession.Link.REACHING, NetSession.REACH_TIMEOUT + 3.0)
-	_says(hosted and int(near.link) == NetSession.Link.TOGETHER
-			and int(aside.link) != NetSession.Link.TOGETHER
-			and int(host.gate_counts["refused"]) == 0,
-		"a phone host bound to %s answers a call there, and a call to loopback" % host.address
-		+ " never reaches it -- '%s', %.1f s on -- and the door refused nobody"
-		% [aside.trouble, _now() - from])
-	await _limits_close([host, aside, near])
+## **A phone host answers its own /24 alone** (issue #104) -- and loopback, for
+## the tools -- where a dedicated host answers every house address. A friend
+## finds a phone by its code, which is the friend's own /24 with the phone's
+## last number on it, so nothing outside it is a friend's call. Asked of each
+## door itself, with a house address from another /24 -- 10.20.30.40, or
+## 10.20.31.40 should the host be in the first -- so it is outside wherever
+## this runs.
+func _check_phone_door() -> void:
+	var phone: Node = await _session("PhoneDoor")
+	var hosted: bool = phone.host()
+	var at := str(phone.address)
+	var own := Lan._v4_any(at)
+	var inside := "%d.%d.%d.%d" % [own[0], own[1], own[2], (own[3] % 250) + 2] \
+		if own.size() == 4 else ""
+	var next_door := "10.20.30.40" if not Lan.same_24("10.20.30.40", at) \
+		else "10.20.31.40"
+	var callers := [inside, "::ffff:" + inside, "127.0.0.9", "::1", next_door, "100.64.0.10",
+		"fd00::7", "fe80::7"]
+	var said: Array = []
+	for from: String in callers:
+		var no: Array = phone._admit(from, NetSession.VIA_LAN)
+		said.append("ok" if no.is_empty() else str(no[0]))
+	await _limits_close([phone])
+	var server: Node = await _session("ServerDoor")
+	server.host(NetSession.GUESTS_MAX)
+	var at_server: Array = server._admit(next_door, NetSession.VIA_LAN)
+	await _limits_close([server])
+	_says(hosted and said == ["ok", "ok", "ok", "ok", "lan", "lan", "lan", "lan"]
+			and at_server.is_empty(),
+		"a phone host at %s answers its own /24, in IPv4 clothes or not, and loopback,"
+		% at + " and refuses another /24 (%s), a carrier's pool and IPv6's"
+		% next_door + " own networks -- %s -- where a dedicated host answers that /24"
+		% ", ".join(said) + " as a house address")
 
 
 func _check_link() -> void:
@@ -6291,9 +6310,6 @@ func _pond_start(node: Node, modes: Dictionary) -> void:
 func _session(named: String) -> Node:
 	var node: Node = NetSession.new()
 	node.name = named
-	# Every caller here is on loopback, which a phone host bound to its own
-	# address alone would never hear (issue #104); `_check_bound` holds that.
-	node.bind_every_address = true
 	_tally_on(node)
 	get_tree().root.add_child.call_deferred(node)
 	await node.ready
