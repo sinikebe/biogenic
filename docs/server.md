@@ -68,22 +68,41 @@ bash install-server.sh
 ```
 
 The installer is safe to run again at any time -- to repair an install, or to
-pull the newest build by hand. In order, it:
+update it (below). In order, it:
 
 1. installs `curl` and the CA certificates if they are missing;
 2. creates a system user, `biogenic`, with no login shell and its home at
    `/var/lib/biogenic` -- where Godot keeps the server's `user://`: staged
-   content packs, the update state, and its own log files, all kept across
-   restarts, reboots and reinstalls;
-3. downloads `biogenic-server.x86_64`, `biogenic-server.service` and
-   `SHA256SUMS`, all three from the release that is the latest when it starts
-   -- looked up once, so a release published halfway through cannot mix two --
-   and installs nothing unless both files match their checksums;
+   content packs, the update state, its own log files, the invites and the
+   server's key, all kept across restarts, reboots and reinstalls, and readable
+   by no other account (§9.11);
+3. downloads `biogenic-server.x86_64`, `biogenic-server.service`,
+   `nftables-internet.conf` and `SHA256SUMS`, all from the release that is the
+   latest when it starts -- looked up once, so a release published halfway
+   through cannot mix two -- and installs nothing unless all three files match
+   their checksums;
 4. puts the build in `/opt/biogenic`, owned by `biogenic`, because the server
    replaces its own binary when a new one is published;
-5. installs the unit into `/etc/systemd/system/`, enables it and starts it (or
-   restarts it, if it was running);
-6. prints what the server says about where it is.
+5. installs the unit into `/etc/systemd/system/` and enables it, lays the
+   firewall rules in `/etc/biogenic/` without loading them (§9.6), and names
+   any `systemctl edit` override still in effect;
+6. starts the server -- or restarts it, if the build or the unit changed -- and
+   prints what it says about where it is.
+
+**Updating.** The server keeps its own build and content current (§4), but
+never the files around it: the unit, the firewall rules, the installer. Those
+change only when you run the installer again, so do that after a release --
+fetched fresh, as above. It says what it replaced, and restarts the server only
+if the build or the unit actually changed: with nothing new, nobody in the pond
+is dropped.
+
+`bash install-server.sh --purge` does the same from a clean kit. It first
+removes the build and its `.previous`, the unit and every `systemctl edit`
+override of it, and the rules file, then installs the release's files and
+nothing else -- while keeping `/var/lib/biogenic`, so the invites, the server's
+key and the address friends dial all survive, and every invite already sent
+still works. Firewall rules already loaded are left alone. To wipe everything,
+invites included, uninstall (§6) and install again.
 
 ## 3. Find the code
 
@@ -284,14 +303,18 @@ ExecStart=/opt/biogenic/biogenic-server.x86_64 --headless -- --stop-file=/run/bi
 and then `systemctl start biogenic-server`. Once the fix is published,
 `systemctl revert biogenic-server` and `systemctl restart biogenic-server` turn
 updates back on, and the server takes the fix at its first check, as it starts.
+Forget the revert and nothing on the server says so -- but the installer does:
+every run names the overrides still in effect, and this one by what it does.
 
-**Uninstalling:**
+**Uninstalling**, invites and all:
 
 ```sh
 systemctl disable --now biogenic-server
-rm /etc/systemd/system/biogenic-server.service && systemctl daemon-reload
-rm -r /opt/biogenic /var/lib/biogenic
+rm -rf /etc/systemd/system/biogenic-server.service /etc/systemd/system/biogenic-server.service.d
+systemctl daemon-reload
+rm -rf /opt/biogenic /var/lib/biogenic /etc/biogenic
 userdel biogenic
+nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
 ```
 
 ## 7. When a phone cannot find it
@@ -522,11 +545,17 @@ nft -f    /etc/biogenic/nftables-internet.conf   # load it now
 
 Load it in the container, or put the same rules on the Proxmox host's firewall
 in front of it; to keep them across reboots, include the file from
-`/etc/nftables.conf` and enable `nftables.service`. The ruleset:
+`/etc/nftables.conf` and enable `nftables.service`. Loading it replaces the
+whole `biogenic` table, so when an update brings a new copy -- the installer
+says so, and that the table is loaded -- `nft -f` again applies it without
+doubling a rule. The ruleset:
 
 ```
 # Biogenic's internet listener, UDP 45772: new calls and datagrams, per source,
 # and one combined ceiling for all sources at once.
+table inet biogenic
+delete table inet biogenic
+
 table inet biogenic {
 	set calls4 { type ipv4_addr; flags dynamic, timeout; timeout 1m; }
 	set calls6 { type ipv6_addr; flags dynamic, timeout; timeout 1m; }

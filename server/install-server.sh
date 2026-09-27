@@ -4,22 +4,38 @@
 #
 #   curl -fsSLO https://github.com/sinikebe/biogenic/releases/latest/download/install-server.sh
 #   less install-server.sh          # it is short: read it before you run it
-#   sudo bash install-server.sh
+#   sudo bash install-server.sh             # install, or update what the server cannot
+#   sudo bash install-server.sh --purge     # the same, from a clean kit (below)
+#
+# **Run it again to update.** The server updates its own build and content every
+# ten minutes, but never the files around it -- this unit, the firewall rules,
+# this installer. Running it again brings those to the latest release, says what
+# it replaced, and restarts the server only if the build or the unit actually
+# changed: with nothing to replace, nobody in the pond is dropped.
 #
 # In order, and every step is safe to run again:
 #   1. makes sure curl and the CA certificates are there;
 #   2. creates the system user `biogenic` (no login shell, home /var/lib/biogenic,
 #      which is where Godot keeps the server's user:// -- staged content packs,
-#      update state, its own log files);
-#   3. downloads the server build, its unit file and SHA256SUMS, all three from
-#      the one release that is the latest when it starts, and installs nothing
-#      unless both files match;
+#      update state, its own log files, the invites and the server's key);
+#   3. downloads the server build, its unit file, the firewall rules and
+#      SHA256SUMS, all from the one release that is the latest when it starts,
+#      and installs nothing unless all three match;
 #   4. puts the build in /opt/biogenic, owned by `biogenic`, because the server
 #      replaces its own binary when a new one is published;
-#   5. installs biogenic-server.service, enables it, and starts or restarts it,
-#      and lays the internet port's firewall rules in /etc/biogenic without
-#      loading them (docs/server.md §9.6);
-#   6. prints the address and the join code the server logs.
+#   5. installs biogenic-server.service and enables it, lays the internet port's
+#      firewall rules in /etc/biogenic without loading them (docs/server.md
+#      §9.6), and names any `systemctl edit` override still in effect;
+#   6. starts the server -- or restarts it, if the build or the unit changed --
+#      and prints the address and the join code it logs.
+#
+# --purge first removes the installed kit -- the build and its .previous
+# rollback copy, the unit and every `systemctl edit` override of it, the
+# firewall rules file -- and then installs it fresh: the release's files and
+# nothing else. It keeps /var/lib/biogenic -- the invites, the server's key, the
+# address friends dial -- so every invite already sent still works, and it does
+# not touch firewall rules already loaded. To wipe those too, uninstall first
+# (docs/server.md §6).
 #
 # Nothing here loads a firewall rule or touches your router. The server is for
 # your home LAN until you mint an invite: friends outside the house come in on a
@@ -37,6 +53,8 @@ STATE="/var/lib/biogenic"
 ACCOUNT="biogenic"
 BINARY="biogenic-server.x86_64"
 UNIT="biogenic-server.service"
+UNIT_FILE="/etc/systemd/system/$UNIT"
+OVERRIDES="/etc/systemd/system/$UNIT.d"
 NFT_CONF="nftables-internet.conf"
 NFT_DIR="/etc/biogenic"
 PORT="45771"
@@ -45,6 +63,14 @@ NET_PORT="45772"
 say() { printf '==> %s\n' "$*"; }
 die() { printf 'install-server: %s\n' "$*" >&2; exit 1; }
 
+purge=0
+for arg in "$@"; do
+	case "$arg" in
+		--purge) purge=1 ;;
+		*) die "unknown option $arg -- the only one is --purge" ;;
+	esac
+done
+
 [[ ${EUID} -eq 0 ]] || die "run it as root: sudo bash $0"
 [[ "$(uname -m)" == "x86_64" ]] || die "the server is built for x86_64, and this is $(uname -m)"
 command -v systemctl >/dev/null 2>&1 || die "this needs systemd, and there is no systemctl here"
@@ -52,7 +78,18 @@ command -v systemctl >/dev/null 2>&1 || die "this needs systemd, and there is no
 [[ -d /run/systemd/system ]] \
 	|| die "this needs systemd running as the service manager, and it is not running here"
 
-# 1. What the rest needs. coreutils (sha256sum, install, timeout, tail) and
+# 0. --purge: the kit goes, the state stays. `disable --now` stops the server
+#    the clean way (its ExecStop tells the guests) and drops the enable link, so
+#    nothing dangles once the unit file is gone.
+if (( purge )); then
+	say "purging the installed kit: $PREFIX, $UNIT_FILE and its overrides, $NFT_DIR"
+	say "keeping $STATE -- the invites, the server's key and the address friends dial"
+	systemctl disable --now --quiet "$UNIT" 2>/dev/null || true
+	rm -rf "$PREFIX" "$UNIT_FILE" "$OVERRIDES" "$NFT_DIR"
+	systemctl daemon-reload
+fi
+
+# 1. What the rest needs. coreutils (sha256sum, install, cmp, timeout, tail) and
 #    passwd (useradd) are in every Debian and Ubuntu base system.
 if ! command -v curl >/dev/null 2>&1 || [[ ! -s /etc/ssl/certs/ca-certificates.crt ]]; then
 	say "installing curl and ca-certificates"
@@ -66,20 +103,22 @@ if ! id -u "$ACCOUNT" >/dev/null 2>&1; then
 	useradd --system --user-group --home-dir "$STATE" --no-create-home \
 		--shell /usr/sbin/nologin --comment "Biogenic dedicated server" "$ACCOUNT"
 fi
-# The build lives world-readable in $PREFIX; the state tree is 0700, because
+# The build lives world-readable in $PREFIX; the state tree is private, because
 # Godot's log under it carries callers' addresses (issue #90). install -d
-# re-applies the mode on an existing tree, and the unit's StateDirectoryMode
-# holds it at every start.
+# re-applies the mode on an existing tree, chmod takes back what an older
+# install left readable, and the unit's StateDirectoryMode and UMask hold both
+# at every start.
 install -d -m 0755 "$PREFIX"
 install -d -m 0700 "$STATE"
 chown "$ACCOUNT:$ACCOUNT" "$PREFIX" "$STATE"
+chmod -R go-rwx "$STATE"
 
-# 3. The latest release's build and unit, checked against its SHA256SUMS, which
-#    CI writes over every asset it publishes -- all three from one release.
-#    releases/latest/download/ is looked up again for every file, so a release
-#    published in the middle of an install could hand over a build from one and
-#    SHA256SUMS from the other, and a checksum "mismatch" for nothing. The tag
-#    `latest` points at is read once, and everything is fetched from that tag.
+# 3. The latest release's build, unit and firewall rules, checked against its
+#    SHA256SUMS, which CI writes over every asset it publishes -- all from one
+#    release. releases/latest/download/ is looked up again for every file, so a
+#    release published in the middle of an install could hand over a build from
+#    one and SHA256SUMS from the other, and a checksum "mismatch" for nothing.
+#    The tag `latest` points at is read once, and everything is fetched from it.
 if [[ -n "${BIOGENIC_RELEASE_URL:-}" ]]; then
 	BASE="$BIOGENIC_RELEASE_URL"
 else
@@ -108,57 +147,109 @@ awk -v a="$BINARY" -v b="$UNIT" -v c="$NFT_CONF" '$2 == a || $2 == b || $2 == c'
 say "the build, the unit and the firewall rules match SHA256SUMS"
 
 # 4. The build: written next to the old one and renamed over it, so a server
-#    that is running keeps running until the restart below.
-install -o "$ACCOUNT" -g "$ACCOUNT" -m 0755 "$work/$BINARY" "$PREFIX/.$BINARY.install"
-mv -f "$PREFIX/.$BINARY.install" "$PREFIX/$BINARY"
+#    that is running keeps running until a restart. The same bytes as the
+#    installed build -- the server has usually taken the release itself -- are
+#    left where they are.
+new_build=0
+if cmp -s "$work/$BINARY" "$PREFIX/$BINARY"; then
+	say "the build in $PREFIX is already this release's -- unchanged"
+else
+	install -o "$ACCOUNT" -g "$ACCOUNT" -m 0755 "$work/$BINARY" "$PREFIX/.$BINARY.install"
+	mv -f "$PREFIX/.$BINARY.install" "$PREFIX/$BINARY"
+	new_build=1
+	say "installed $PREFIX/$BINARY"
+fi
 chown -R "$ACCOUNT:$ACCOUNT" "$PREFIX"
-say "installed $PREFIX/$BINARY"
 
 # 5. The service.
-install -o root -g root -m 0644 "$work/$UNIT" "/etc/systemd/system/$UNIT"
-systemctl daemon-reload
+new_unit=0
+if cmp -s "$work/$UNIT" "$UNIT_FILE"; then
+	say "the service file is already this release's -- unchanged"
+else
+	install -o root -g root -m 0644 "$work/$UNIT" "$UNIT_FILE"
+	systemctl daemon-reload
+	new_unit=1
+	say "installed $UNIT_FILE"
+fi
 systemctl enable --quiet "$UNIT"
+# Overrides made with `systemctl edit` sit beside the unit and outlive every
+# reinstall but --purge. Most are wanted (docs/server.md §9.10), but one left
+# from going back to a previous build (§6) keeps the server from ever updating
+# itself again, and nothing else would say so.
+if compgen -G "$OVERRIDES/*.conf" >/dev/null; then
+	say "systemctl edit overrides in effect (kept; --purge removes them):"
+	for override in "$OVERRIDES"/*.conf; do
+		printf '      %s\n' "$override"
+	done
+	if grep -qs -- '--no-update' "$OVERRIDES"/*.conf; then
+		say "an override runs the server with --no-update: it will not update itself" \
+			"until you remove it -- systemctl revert $UNIT"
+	fi
+fi
 
 # 5b. The firewall rules for the internet port, laid down but never loaded: a
 #     network firewall is the owner's to review and turn on (docs/server.md
-#     §9.6). The unit already holds the journal's flood down; these hold the
-#     packet flood down, before the handshake the server's own door sees.
+#     §9.6). The file replaces the whole table when it is loaded, so loading
+#     this release's copy over an older one never doubles a rule.
 install -d -m 0755 "$NFT_DIR"
-install -o root -g root -m 0644 "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"
-if command -v nft >/dev/null 2>&1; then
-	if nft -c -f "$NFT_DIR/$NFT_CONF" >/dev/null 2>&1; then
-		say "firewall rules at $NFT_DIR/$NFT_CONF (checked, not loaded) -- review, then: nft -f $NFT_DIR/$NFT_CONF"
-	else
-		say "firewall rules at $NFT_DIR/$NFT_CONF -- nft could not check them here; review before loading"
-	fi
+if cmp -s "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"; then
+	rules="unchanged"
 else
-	say "firewall rules at $NFT_DIR/$NFT_CONF (nftables not installed here) -- review, then load with nft or on the Proxmox host"
+	rules="$([[ -e "$NFT_DIR/$NFT_CONF" ]] && echo updated || echo installed)"
+	install -o root -g root -m 0644 "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"
+fi
+if ! command -v nft >/dev/null 2>&1; then
+	say "firewall rules at $NFT_DIR/$NFT_CONF ($rules; nftables is not installed here)" \
+		"-- review, then load them with nft, or on the Proxmox host"
+elif nft list table inet biogenic >/dev/null 2>&1; then
+	if [[ "$rules" != unchanged ]]; then
+		say "firewall rules at $NFT_DIR/$NFT_CONF ($rules) -- a biogenic table is loaded;" \
+			"apply this release's with: nft -f $NFT_DIR/$NFT_CONF"
+	else
+		say "firewall rules at $NFT_DIR/$NFT_CONF (unchanged) -- loaded"
+	fi
+elif nft -c -f "$NFT_DIR/$NFT_CONF" >/dev/null 2>&1; then
+	say "firewall rules at $NFT_DIR/$NFT_CONF ($rules, checked, not loaded)" \
+		"-- review, then: nft -f $NFT_DIR/$NFT_CONF"
+else
+	say "firewall rules at $NFT_DIR/$NFT_CONF ($rules) -- nft could not check them here;" \
+		"review before loading"
 fi
 
+# 6. Running, and where it is, as it says itself. A server already running the
+#    build and unit it would be given keeps running: a restart would only drop
+#    whoever is in the pond. One that took the build itself and is waiting for
+#    an empty pond (docs/server.md §4) keeps waiting, as it would have anyway.
 since="$(date '+%Y-%m-%d %H:%M:%S')"
-if systemctl is-active --quiet "$UNIT"; then
-	say "restarting $UNIT (anyone in the pond is dropped and swims on alone)"
-	systemctl restart "$UNIT"
-else
+waiting=1
+if ! systemctl is-active --quiet "$UNIT"; then
 	say "starting $UNIT"
 	systemctl start "$UNIT"
-fi
-
-# 6. Where it is, as it says itself.
-ready=""
-for _ in $(seq 1 30); do
-	ready="$(journalctl -u "$UNIT" --since "$since" -o cat --no-pager 2>/dev/null \
-		| grep -E '^\[server\] (READY|to join|internet|could not listen)' || true)"
-	if grep -q '^\[server\] READY' <<<"$ready"; then
-		break
-	fi
-	sleep 1
-done
-echo
-if grep -q '^\[server\] READY' <<<"$ready"; then
-	printf '%s\n' "$ready"
+elif (( new_build || new_unit )); then
+	say "restarting $UNIT for the new $( (( new_build )) && echo build)$( (( new_build && new_unit )) && echo ' and ')$( (( new_unit )) && echo 'service file')" \
+		"(anyone in the pond is dropped and swims on alone)"
+	systemctl restart "$UNIT"
 else
-	printf '%s\n' "$ready"
+	say "nothing the server runs changed, so it keeps running -- nobody is dropped"
+	waiting=0
+fi
+ready=""
+if (( waiting )); then
+	for _ in $(seq 1 30); do
+		ready="$(journalctl -u "$UNIT" --since "$since" -o cat --no-pager 2>/dev/null \
+			| grep -E '^\[server\] (READY|to join|internet|could not listen)' || true)"
+		if grep -q '^\[server\] READY' <<<"$ready"; then
+			break
+		fi
+		sleep 1
+	done
+else
+	ready="$(journalctl -u "$UNIT" -o cat --no-pager 2>/dev/null \
+		| grep -E '^\[server\] (READY|internet)' | tail -2 || true)"
+fi
+echo
+printf '%s\n' "$ready"
+if (( waiting )) && ! grep -q '^\[server\] READY' <<<"$ready"; then
 	say "the server has not said READY yet; its log: journalctl -u $UNIT -e"
 fi
 cat <<EOF
