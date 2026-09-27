@@ -84,8 +84,9 @@ const LINK_LOCAL := "169.254."
 ## phone's cellular data ([constant CELLULAR_PREFIXES]), which no friend is on,
 ## and a phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
 ## which Android puts in 192.168/16, where they would outrank a 10.x Wi-Fi on
-## range alone. A phone that *is* the hotspot still answers with it: tether and
-## cellular are both down here, and then range decides. Not `ap`: that would
+## range alone. A phone that *is* the hotspot still answers with it: the tether
+## is down here, and cellular further down still, below every other adapter
+## (issue #104). Not `ap`: that would
 ## take Windows' "Apple Mobile Device Ethernet" with it. A docker *user* bridge
 ## is `br-<id>`; a bare `br0` or Proxmox's `vmbr0` is the machine's real LAN
 ## and is not here.
@@ -104,9 +105,10 @@ const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
 ## **Cellular data, by its adapter's name** (issue #104): Qualcomm's `rmnet`,
 ## MediaTek's `ccmni`, Unisoc's `seth_lte` and, on its newer chips,
 ## `sipa_eth`, older Android's `pdp`, and a laptop's mobile modem, `wwan0` or
-## systemd's `wwp...` -- and on Windows, by the friendly name, in English. Its private addresses are the carrier's pool, shared
-## with every other subscriber the carrier lets through, so no friend is ever
-## on it with this device. And `v4-`, the interface Android adds for IPv4 over
+## systemd's `wwp...` -- and on Windows, by the friendly name, in English. Its
+## private addresses are the carrier's pool, shared with every other
+## subscriber the carrier lets through, so no friend is ever on it with this
+## device. And `v4-`, the interface Android adds for IPv4 over
 ## an IPv6-only network: its address is 192.0.0.4 on every device, and nobody
 ## else's call reaches it.
 const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "sipa_eth", "pdp",

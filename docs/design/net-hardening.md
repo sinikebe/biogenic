@@ -844,7 +844,7 @@ No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): 
 | `address` | `Lan.is_local_source` and `Lan.source_key`, and since #103 `Lan.wider_key` | 6,000 addresses made from their numbers and then written -- IPv4, IPv4 in IPv6 clothes, IPv6 compressed or not, in either case, with a zone -- so what each one is is known without parsing it back; and spoiled ones. |
 | `referee` | Every judgement: `claim`, `judge_enter`, `arrive`, `judge_person`, `judge_sister`, `judge_shout`, `judge_died`, `died`, `left`, `stalled` | 150 runs of 60, in any order. **What the host decides stays the host's** -- where a body arrives, at a size its ENTER was allowed -- and a state frame is judged only while a body is here, as `pond.gd` does. **What the guest says is anything its reader lets through**: any finite place or size to float32's edge, a heading within half a turn either way, a motion inside `MOTION_MAX` and `TURNING_MAX`. |
 
-**Every case in `tools/net_fuzz_corpus.txt` runs first**, every time -- 70 at #91, 81 since #103 (E.4):
+**Every case in `tools/net_fuzz_corpus.txt` runs first**, every time -- 70 at #91, 81 since #103 (E.4), 82 since #104 (F.2):
 
 - #107's negative ids, and #75's twin under one id and its full book with a caller of no address;
 - #102's sister and shout from float32's edge;
@@ -918,7 +918,7 @@ A failure is printed already minimised: frames cut and zeroed, steps taken out i
 
 ### D.4 Measured
 
-- **CI runs seed 1 at scale 1: about 4.2 s** at #91, 70 saved cases and some 57,000 generated ones, the import and boot around it -- about 5 s since #103, with 81 saved cases. `timeout 300` is the backstop -- a fuzzer that does not parse leaves its scene up forever.
+- **CI runs seed 1 at scale 1: about 4.2 s** at #91, 70 saved cases and some 57,000 generated ones, the import and boot around it -- about 5 s since #103, with 81 saved cases, and 82 since #104. `timeout 300` is the backstop -- a fuzzer that does not parse leaves its scene up forever.
 - **Scale 1, seeds 1 to 6, and scale 20, seeds 11 to 15: all pass** -- 80 to 94 s each at scale 20, most of it the door's books and the invite section's long pastes.
 - **What the door reached.** Its counts, summed over a run and its saved cases, say which of its 42 paths -- 45 since #103 (E.4) -- were taken, and the run fails if one it can reach was not (D.2). The saved cases alone take every one of them. Eight no run here can reach, by design:
   - `saturated`, which is the real socket's statistics;
@@ -1075,7 +1075,8 @@ Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged
 - **A caller at the phone's cellular address still reaches its socket**, where the carrier lets it: the door refuses it, but only after ENet's handshake, so it can hold ENet's slots for a while as any caller can (A.9, "a barred address can still knock"). Binding would have stopped that, at F.1's cost.
 - **A carrier pool that overlaps the home's /24** -- a subscriber at 10.0.0.9 on a carrier, and a home Wi-Fi at 10.0.0.0/24 -- is inside the phone's /24 as the door sees it. It takes a carrier handing out the home's own range, and letting subscribers reach each other.
 - **The carrier's behaviour was not measured.** Nobody here has two phones on one carrier; the fix does not depend on whether it lets subscribers reach each other.
-- **Cellular is known by name.** A cellular adapter under a name not in the list, and on Windows one whose friendly name is not English ("Mobilfunk", "Cellulaire"), ranks as a real adapter; with no Wi-Fi the phone hosts on it, and its door then answers that /24 of the carrier's pool.
+- **Cellular is known by name.** A cellular adapter under a name not in the list, and on Windows one whose friendly name is not English ("Mobilfunk", "Cellulaire"), ranks as a real adapter: with no Wi-Fi the phone hosts on it, and beside a Wi-Fi it can still win -- a 10/8 cellular address beats a 172.16/12 Wi-Fi on range, and ties a 10/8 one on the order the adapters are listed in. Its door then answers that /24 of the carrier's pool.
+- **A VPN pool is the same shape.** A phone with mobile data and a VPN up, and no Wi-Fi, hosts on the VPN's address -- cellular ranks below it -- and its door answers that /24 of the VPN's pool, where the VPN lets its customers reach each other. Narrower than before #104, when the door answered every private range whichever address won.
 - **A friend on the same Wi-Fi as a stranger is in the house** -- that is what the LAN is, and the door's other limits (A) are the lever there.
 
 ### Files

@@ -2933,8 +2933,9 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 	var now := _now()
 	if via == VIA_LAN and (not Lan.is_local_source(from, address)
 			or (not loopback_is_local and Lan.is_loopback(from))):
-		return ["lan", "not on this network -- a call from outside needs an invite, on"
-			+ " port %d" % Invite.PORT]
+		# Only a dedicated host takes invites; a phone never listens for them.
+		return ["lan", "not on this network" + (" -- a call from outside needs an invite,"
+			+ " on port %d" % Invite.PORT if guests_max > 1 else "")]
 	# **A phone host answers its own /24 alone** (issue #104), and loopback: a
 	# friend finds a phone by its code, which is the friend's own /24 with the
 	# phone's last number on it, so no other call is a friend's -- not a
