@@ -91,15 +91,18 @@ could have fixed it either: no content pack can replace that file.
 ## Run it. Do not guess.
 
 Godot 4.7 runs here and `xvfb` is installed, so the project can be imported,
-booted and **photographed** locally. Install the editor once -- the release CI
-pins, `GODOT_VERSION` in the workflows, checked against Godot's own sums:
+booted and **photographed** locally. Install the editor the release CI pins,
+`GODOT_VERSION` in the workflows, checked against Godot's own sums -- and again
+whenever `~/godot/godot --version` prints anything else:
 
 ```
 V=4.7.2-stable; Z=Godot_v${V}_linux.x86_64.zip
-cd /tmp && curl -fsSL -O https://github.com/godotengine/godot/releases/download/$V/$Z \
-  -O https://github.com/godotengine/godot/releases/download/$V/SHA512-SUMS.txt
-grep " $Z\$" SHA512-SUMS.txt | sha512sum -c - && unzip -q -o $Z -d /tmp/g
-mkdir -p ~/godot && mv /tmp/g/Godot_v${V}_linux.x86_64 ~/godot/godot && chmod +x ~/godot/godot
+U=https://github.com/godotengine/godot/releases/download/$V
+( d=$(mktemp -d) && cd "$d" && curl -fsSL -O "$U/$Z" -O "$U/SHA512-SUMS.txt" \
+  && grep " $Z\$" SHA512-SUMS.txt | sha512sum -c - && unzip -q "$Z" \
+  && mkdir -p ~/godot && mv "Godot_v${V}_linux.x86_64" ~/godot/godot \
+  && chmod +x ~/godot/godot )
+~/godot/godot --version    # 4.7.2.stable.official.ed1daf0bf
 ```
 
 Then import once, and screenshot any scene:
