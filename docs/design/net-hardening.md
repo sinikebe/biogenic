@@ -1113,7 +1113,7 @@ Nothing new. A guest of a listener that closed was dropped before G too -- ENet'
   | H3 | A phone host's listener closed inside the very service call a caller came in by -- after the session made its record | Found in that frame, the record let go, and the caller calling again answered on the listener opened anew |
   | H4 | The server's, with the port taken the moment it closed, for 5 s | Tried at once and again after one second, two and four -- 3 tries, where trying every second makes 6 -- and said once; arrivals at the internet listener still counted and its guest playing on; the port free, open again at the next try, 7.0 s on, and a LAN guest in |
 
-  339 checks, all PASS; the probe finishes in about 157 s and 14,200 to 14,300 frames.
+  339 checks, all PASS; the probe finishes in 160 to 162 s and 14,400 to 14,500 frames, measured three times.
 - **net_fuzz** (part D): a new step, `L`, the LAN listener closing by itself with its transports gone and nothing said, in about one step in 250; after every step, a closed LAN listener open again inside a second -- this port is never anybody else's -- closed exactly when the host thinks so, and no address kept for an id no listener holds. `lan_closed` is a path the coverage check now demands. Two saved cases, 84 in all: a guest and a caller still saying hello on the server, beside a friend by invite; and a phone's listener closed again the moment it opened -- so held closed for a second -- and once more after. Seeds 1 to 6 pass.
 - **Eight bugs planted one at a time**, each run against the fuzzer (seed 1, with the saved cases), the probe's `invites` section and `net_drop`:
 
