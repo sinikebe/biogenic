@@ -610,6 +610,13 @@ friend swimming on that invite is cut, reading "invite no longer works"
 (`[server] invites: sam revoked`). With no invites left the internet listener
 closes, and nothing listens for the internet until you mint again.
 
+**The book keeps 100 invites at most** (issue #85). Once it holds 100,
+`--invite` with a new name makes nothing and says so: revoke one nobody uses
+first -- `--invites` shows when each last joined, and says when the book is
+full. A name already in the book is never refused for this, since minting it
+again replaces its invite. A book an older build grew past 100 keeps every
+invite it holds, and takes no new name until it is back under.
+
 ### 9.6 Limit callers at the firewall
 
 The server's own door already turns away a caller that comes too often (§3),
