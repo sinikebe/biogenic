@@ -466,9 +466,10 @@ static func reach_refused(root: String = ROOT) -> String:
 	var stored := _stored_reach(root)
 	if stored.is_empty() or not reach(root).is_empty():
 		return ""
+	var address := str(stored["address"])
 	return "the --reach set before, %s, is not one this build calls: %s. Set it again" % [
-		Invite.reach_text(str(stored["address"]), int(stored["port"])),
-		Invite.why_not(str(stored["address"]))]
+		Invite.reach_text(address, int(stored["port"])), Invite.why_not(address)
+			if not Invite.address_ok(address) else "its port is not one from 1 to 65535"]
 
 
 ## Where friends call, for a line: the address and port, the sentence of
@@ -492,7 +493,12 @@ static func _stored_reach(root: String) -> Dictionary:
 	var address := str(file.get_value("reach", "address", ""))
 	if address.is_empty():
 		return {}
-	return {"address": address, "port": int(file.get_value("reach", "port", Invite.PORT))}
+	# A number, as `set_reach` writes it, or anything a hand made of it: what
+	# is not a number is no port, and -1 says so without a script error.
+	var port: Variant = file.get_value("reach", "port", Invite.PORT)
+	if port is String and (port as String).is_valid_int():
+		port = (port as String).to_int()
+	return {"address": address, "port": int(port) if port is int or port is float else -1}
 
 
 ## **`[key, certificate, certificate DER]`**, or empty while there is none, or

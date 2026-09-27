@@ -7701,7 +7701,8 @@ func _invites_format() -> void:
 		"::ffff:203.0.113.7"]
 	var disguised := ["2130706433", "127.1", "0x7f.0.0.1", "0x7f000001", "017700000001",
 		"0.0.0.0", "0.1.2.3", "255.255.255.255", "224.0.0.1", "240.0.0.1", "::", "ff02::1",
-		"::ffff:7f00:1", "::ffff:0.0.0.1", "::ffff:224.0.0.1", "pond.example.123"]
+		"::ffff:7f00:1", "::ffff:0.0.0.1", "::ffff:224.0.0.1", "pond.example.123",
+		"0:ffff::0.0.0.0", "0000:FFFF::0.0.0.0", "0:ffff::203.0.113.7"]
 	var wrong: Array = []
 	for address: String in plain:
 		if not Invite.address_ok(address) or Invite.parse_reach(address).has("error") \
@@ -7719,7 +7720,8 @@ func _invites_format() -> void:
 		% plain.size() + " IPv6 clothes showing it, as before -- are taken at --reach, minted"
 		+ " and read back; %d that do not -- a number a resolver reads as 127.0.0.1, no"
 		% disguised.size() + " machine or every machine, IPv4 in IPv6 clothes written in hex"
-		+ " -- are refused at --reach, never minted, and damage in an old line, as '%s' says"
+		+ " or spelled to dial another address than it shows -- are refused at --reach,"
+		+ " never minted, and damage in an old line, as '%s' says"
 		% str(Invite.parse_reach("2130706433").get("error", ""))
 		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(PackedStringArray(wrong))))
 	# F8: junk behind checks that read costs the log nothing, or a certificate's
@@ -7785,15 +7787,27 @@ func _invites_format() -> void:
 	var mint_refused: Array = InviteBook.mint("erin", legacy)
 	var set_again: Array = InviteBook.set_reach("203.0.113.9", legacy)
 	var set_lines := "\n".join(PackedStringArray(set_again[1]))
+	# And a port a hand made no port of, as a number and as no number at all:
+	# said to be the port's fault, and no script error.
+	var said_of_port: Array = []
+	for bad_port: Variant in [70000, [1]]:
+		old_reach.set_value("reach", "address", "203.0.113.7")
+		old_reach.set_value("reach", "port", bad_port)
+		Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
+			old_reach.encode_to_text().to_utf8_buffer())
+		said_of_port.append(InviteBook.reach_refused(legacy))
 	_invites_wipe(legacy)
 	_says(int(set_first[0]) == 0 and int(minted[0]) == 0 and InviteBook.reach(legacy).is_empty()
 			and stale.contains("2130706433:45772") and stale.contains("is a number")
 			and str(listed[1][0]).contains(stale) and int(mint_refused[0]) == 1
 			and str(mint_refused[1][0]).contains(stale) and int(set_again[0]) == 0
-			and set_lines.contains("invites already sent still call 2130706433:45772"),
+			and set_lines.contains("invites already sent still call 2130706433:45772")
+			and str(said_of_port[0]).contains("its port is not one from 1 to 65535")
+			and str(said_of_port[1]).contains("its port is not one from 1 to 65535"),
 		"invites F9: a --reach an older build stored as 2130706433 is named, not taken for"
 		+ " none, at --invites and at the mint ('%s'), and setting a new one still says" % stale
-		+ " the invites already sent call the old")
+		+ " the invites already sent call the old; a port a hand made no port of is said"
+		+ " to be the port's fault")
 
 
 ## **An invite line to [param address], as [method Invite.format] writes one but

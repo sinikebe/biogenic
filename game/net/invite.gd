@@ -438,12 +438,12 @@ static func proof_mac(secret: PackedByteArray, protocol: int,
 ## all digits, or starts `0x`, is a number to a resolver: glibc's reads
 ## `2130706433`, `127.1` and `0x7f.0.0.1` as 127.0.0.1, which the call screen
 ## would show as written. No top-level domain is either. And a literal must be
-## one machine, written plainly: see [method _literal_ok].
+## one machine, showing what it is: see [method _literal_problem].
 static func address_ok(address: String) -> bool:
 	if address.is_empty() or address.length() > 253 or address.contains("%"):
 		return false
 	if address.is_valid_ip_address():
-		return _literal_ok(address)
+		return _literal_problem(address).is_empty()
 	if address.contains(":"):
 		return false
 	var labels := address.split(".")
@@ -469,33 +469,53 @@ static func _numeric(label: String) -> bool:
 	return not label.is_empty()
 
 
-## **An IP literal that is one machine, and shows it** (issue #106), judged as
-## the call dials it: a literal never meets a resolver -- `create_client` reads
-## it with Godot's own parser, IPv4 as four decimal numbers, so `203.000.113.007`
-## is 203.0.113.7 on the screen and on the wire alike. Not the unspecified
-## address (`0.0.0.0` and the rest of 0/8, `::`), which a socket takes to mean
-## its own device; not the broadcast address or multicast (`255.255.255.255`,
-## 224/4 and the reserved 240/4 around it, `ff00::/8`); and IPv4 in IPv6
-## clothes only written with its IPv4 address showing (`::ffff:203.0.113.7`),
-## never in hex, where `::ffff:7f00:1` is 127.0.0.1 unseen.
-static func _literal_ok(address: String) -> bool:
+## **What is wrong with an IP literal, as the call dials it**, said to the
+## owner who typed it; "" for one machine that shows what it is (issue #106).
+## A literal never meets a resolver: `create_client` reads it with Godot's own
+## parser, IPv4 as four decimal numbers, so `203.000.113.007` is 203.0.113.7 on
+## the screen and on the wire alike. Not the unspecified address (`0.0.0.0` and
+## the rest of 0/8, `::`), which a socket takes to mean its own device; not the
+## broadcast address or multicast (`255.255.255.255`, 224/4 and the reserved
+## 240/4 around it, `ff00::/8`). And IPv4 in IPv6 clothes only written with its
+## IPv4 address showing, as `::ffff:203.0.113.7` -- never in hex, where
+## `::ffff:7f00:1` is 127.0.0.1 unseen, and never so that the two readings part:
+## Godot reads any dotted tail as IPv4 in IPv6 clothes, wherever the `::` sits,
+## so `0:ffff::0.0.0.0` dials 0.0.0.0 while the plain reading says otherwise.
+static func _literal_problem(address: String) -> String:
 	if not address.contains(":"):
-		return _v4_first_ok(address.get_slice(".", 0).to_int())
+		return _v4_problem(address.get_slice(".", 0).to_int())
 	var g := Lan._ipv6_groups(address)
-	if g.is_empty() or (g[0] & 0xFF00) == 0xFF00:
-		return false
+	if g.is_empty():
+		return "is not read the same way by this build and by the call -- write it plainly"
+	if address.contains("."):
+		if not Lan._v4_mapped(g):
+			return "is IPv4 inside IPv6 spelled so that the call dials another address" \
+				+ " than it shows -- write the IPv4 address instead"
+		return _v4_problem(g[6] >> 8)
 	if Lan._v4_mapped(g):
-		return address.contains(".") and _v4_first_ok(g[6] >> 8)
+		return "is IPv4 inside IPv6 written in hex, which hides the address it is --" \
+			+ " write that IPv4 address instead"
+	if (g[0] & 0xFF00) == 0xFF00:
+		return "is a multicast address, not one machine -- friends call your router's" \
+			+ " address on the internet"
 	for group: int in g:
 		if group != 0:
-			return true
-	return false
+			return ""
+	return "is the unspecified address, which a device takes to mean itself -- friends" \
+		+ " call your router's address on the internet"
 
 
-## An IPv4 address whose first number is [param first] is one machine: not
-## 0/8, nor 224/4 or anything above it.
-static func _v4_first_ok(first: int) -> bool:
-	return first != 0 and first < 224
+## What is wrong with an IPv4 address whose first number is [param first], or
+## "": 0/8 is a device's own, and 224 and up is multicast, reserved or the
+## broadcast address.
+static func _v4_problem(first: int) -> String:
+	if first == 0:
+		return "is in 0/8, which a device takes to mean itself -- friends call your" \
+			+ " router's address on the internet"
+	if first >= 224:
+		return "is not one machine: multicast, reserved or the broadcast address --" \
+			+ " friends call your router's address on the internet"
+	return ""
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
@@ -536,10 +556,8 @@ static func parse_reach(text: String) -> Dictionary:
 ## Why `--reach` will not take [param host] (issue #106), said to the owner who
 ## typed it -- with what to type instead, where there is something.
 static func why_not(host: String) -> String:
-	if host.is_valid_ip_address():
-		return "%s is not one machine friends can call: not 0.0.0.0 or ::, not the" % host \
-			+ " broadcast address or a multicast one, and IPv4 inside IPv6 written with" \
-			+ " its IPv4 address showing"
+	if host.is_valid_ip_address() and not _literal_problem(host).is_empty():
+		return "%s %s" % [host, _literal_problem(host)]
 	if not host.contains(":") and _numeric(host.get_slice(".", host.get_slice_count(".") - 1)):
 		for label: String in host.split("."):
 			if not _numeric(label):

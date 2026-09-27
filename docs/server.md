@@ -524,8 +524,9 @@ written. `--reach` refuses a few things:
   `2130706433` and `127.1` are both 127.0.0.1;
 - an address that is no one machine: `0.0.0.0` or `::`, the broadcast address
   `255.255.255.255`, or a multicast one;
-- IPv4 inside IPv6 written in hex (`::ffff:7f00:1` is 127.0.0.1), which hides
-  the IPv4 address it is -- write that address instead.
+- IPv4 inside IPv6 written in hex (`::ffff:7f00:1` is 127.0.0.1), or spelled
+  so that it dials another address than it shows (`0:ffff::0.0.0.0` is
+  0.0.0.0) -- write the IPv4 address instead.
 
 Each refusal says why. An address an older build took that this one will not
 call is named, with why, in the server's status line, `--invites` and

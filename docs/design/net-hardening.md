@@ -907,7 +907,7 @@ sudo unshare --net -- bash -c 'ip link set lo up &&
 
 **Determinism.** Each section seeds its own generator from `--seed`. The invites are drawn from it too, and their certificate is `tools/net_fuzz_cert.pem` -- made once for this, its key thrown away, so it proves and opens nothing. Run twice, a seed prints the same verdict lines; only the timings differ. The door's own DTLS key is made fresh: no caller here speaks DTLS, so nothing depends on its bytes.
 
-**A replay is exact.** `--replay="<section> <case>"` runs one case:
+**A replay is exact** -- but for an invite paste holding a surrogate on its own (#106), which the replay's UTF-8 cannot carry: rerun that one by its seed. `--replay="<section> <case>"` runs one case:
 
 - **wire**: a frame in hex.
 - **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore` and, since #105, `L` for the LAN listener closing by itself. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
@@ -1151,13 +1151,13 @@ The #75 read of `game/net/invite.gd` found two low things. Both are in what a pa
 - **A crafted paste could print thousands of engine error lines.**
   - Junk behind a valid check reached the engine's base64 and X.509 error paths, a line each.
   - The check is no secret: anyone can compute it.
-  - The review of this PR found a third path: a surrogate on its own, which Windows' clipboard hands over from text cut in the middle of a pair. `_squeeze` made a character of each, and each one printed a line.
+  - The first review of this PR found a third path: a surrogate on its own, which Windows' clipboard hands over from text cut in the middle of a pair. `_squeeze` made a character of each, and each one printed a line.
 
 Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged, no `binary_version` bump.
 
 ### H.1 What changed
 
-- **An address shows what it dials** (`Invite.address_ok`, with `_numeric` and `_literal_ok`):
+- **An address shows what it dials** (`Invite.address_ok`, with `_numeric` and `_literal_problem`):
   - **A name whose last label is all digits, or starts `0x`, is refused.** That is how a C resolver reads a number, and no top-level domain is either.
   - **A literal is judged as the call dials it.** An IP literal never meets a resolver: `create_client` reads it with Godot's own parser, IPv4 as four decimal numbers. So `203.000.113.007` is 203.0.113.7 on the screen and on the wire alike, and is taken as before.
   - **A literal must be one machine.**
@@ -1165,12 +1165,13 @@ Content only: GDScript, no wire change, no PROTOCOL bump, `Wire.RULES` unchanged
     - Not the broadcast address `255.255.255.255`, multicast 224/4, or the reserved 240/4 around them.
     - Not IPv6 multicast, `ff00::/8`.
   - **IPv4 in IPv6 clothes is taken only showing its IPv4 address** -- `::ffff:203.0.113.7`, held to IPv4's rules -- and never in hex, where `::ffff:7f00:1` is 127.0.0.1 unseen.
+  - **Nor spelled so that the two readings part.** Godot reads any dotted tail as IPv4 in IPv6 clothes, wherever the `::` sits: `0:ffff::0.0.0.0` dials 0.0.0.0, where the plain reading is an ordinary IPv6 address. A dotted tail is taken only where the plain reading is IPv4 in IPv6 clothes too. The second review found this hole, open in both earlier cuts: an owner could mint an invite to a friend's own device with it, and a crafted line could carry one.
   - Loopback stays: `127.0.0.1` and `::1` say what they are.
 - **Refused everywhere an address is asked about:**
   - `--reach` says why, and for a number, what to type instead.
   - The mint (`Invite.format`) makes nothing.
   - A pasted line reads as damaged.
-- **A `--reach` stored by an older build that this one will not call is named, not taken for none** (`InviteBook.reach_refused`, `reach_said`). The server's status line, `--invites` and `--invite` each say which address it was and why, and to set it again. Setting a new one still names the invites sent with the old one, to be minted again.
+- **A `--reach` stored by an older build that this one will not call is named, not taken for none** (`InviteBook.reach_refused`, `reach_said`). The server's status line, `--invites` and `--invite` each say which address it was and why, and to set it again. Setting a new one still names the invites sent with the old one, to be minted again. A port a hand made no port of -- out of range, or no number at all, which was a script error -- is said to be the port's fault, not the address's.
 - **What is no character at all is taken out of a paste** (`_squeeze`): a surrogate on its own, and anything past U+10FFFF. None is ever part of an invite.
 - **Base64 is checked for shape before it is decoded** (`_base64_whole`): whole groups of four, and `=` only at the end, two at most.
 - **A certificate is checked for shape before it is parsed** (`_der_whole`): one DER SEQUENCE, exactly as long as it says.
@@ -1182,13 +1183,13 @@ The same scratch script, run on `main` and on this PR:
 
 | Paste | `main` | H |
 |---|---|---|
-| F7's 16 addresses that do not show what they dial | 16 taken | none taken |
+| F7's 19 addresses that do not show what they dial | 19 taken | none taken |
 | F7's 10 that do, zero-padded and IPv4 in IPv6 clothes among them | 10 taken | 10 taken |
 | 2,000 invites whose base64 does not decode (the paste is cut at 64 KB) | 1,455 engine lines | 0 |
 | 50 invites whose certificate is DER-shaped junk | 50 engine lines | 4 |
-| A real invite behind 60,000 surrogates on their own | 60,000 lines | 0 |
+| `Invite.parse` of a real invite behind 60,000 surrogates on their own, in memory | 60,000 lines | 0 |
 
-A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a C resolver would misread them. The review measured what the call dials instead: Godot's parser, which reads them as they show. Both were ways a friend could call before H, and would have left an owner's `--reach` and every invite minted with it silently dead. Both are taken again.
+A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a C resolver would misread them. The first review measured what the call dials instead: Godot's parser, which reads them as they show. Both were ways a friend could call before H, and would have left an owner's `--reach` and every invite minted with it silently dead. Both are taken again.
 
 ### H.3 Checked
 
@@ -1196,22 +1197,22 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
 
   | # | What | What must hold |
   |---|---|---|
-  | F7 | 10 addresses that show what they dial, `203.000.113.007` and `::ffff:203.0.113.7` among them; and 16 that do not: `2130706433`, `127.1`, `0x7f.0.0.1`, `0x7f000001`, `017700000001`, `0.0.0.0`, `0.1.2.3`, `255.255.255.255`, `224.0.0.1`, `240.0.0.1`, `::`, `ff02::1`, `::ffff:7f00:1`, `::ffff:0.0.0.1`, `::ffff:224.0.0.1`, `pond.example.123` | The first taken at `--reach`, minted and read back. The others refused at `--reach` with a sentence saying why, never minted, and damage in a line written without the address check |
+  | F7 | 10 addresses that show what they dial, `203.000.113.007` and `::ffff:203.0.113.7` among them; and 19 that do not: `2130706433`, `127.1`, `0x7f.0.0.1`, `0x7f000001`, `017700000001`, `0.0.0.0`, `0.1.2.3`, `255.255.255.255`, `224.0.0.1`, `240.0.0.1`, `::`, `ff02::1`, `::ffff:7f00:1`, `::ffff:0.0.0.1`, `::ffff:224.0.0.1`, `pond.example.123`, `0:ffff::0.0.0.0`, `0000:FFFF::0.0.0.0`, `0:ffff::203.0.113.7` | The first taken at `--reach`, minted and read back. The others refused at `--reach` with a sentence saying why, never minted, and damage in a line written without the address check |
   | F8 | Three pastes: 2,000 invites whose base64 does not decode; 50 whose certificates are not DER; 50 whose certificates are DER and do not parse. Then a real invite after three of the last kind, and after four. Then one behind 60,000 surrogates on their own | 0 engine lines, 0, and 4. The real invite reads after three, and is damage after four. Behind the surrogates it reads, and nothing is printed |
-  | F9 | A `--reach` of `2130706433` stored as an older build could, with an invite minted before it | Named at `--invites` and at the mint, with why and what to do; setting a new one still says the invites already sent call the old |
+  | F9 | A `--reach` of `2130706433` stored as an older build could, with an invite minted before it; then a good address with port 70000, and with a port that is no number | Named at `--invites` and at the mint, with why and what to do; setting a new one still says the invites already sent call the old. The bad ports are said to be the port's fault, with no script error |
 
   342 checks, all PASS.
 - **net_fuzz**:
   - The `invite` section now fails a paste that costs the engine's log more than `CERTIFICATES_MAX` lines, or any line but a certificate's that does not parse. Before, it counted them and went on. That now includes the lines a string prints when it does not decode, which the fuzzer's catcher counted nowhere before. Every saved invite case is held to the same rule.
   - Two new mutations: up to 60 spoiled invites, with the whole one after them or not; and a run of surrogates on their own, set into the line.
-  - Fourteen saved cases, 98 in all. Each says what it must read as, because the fuzzer's own judge reads an address with the very `address_ok` a bug would break -- as three planted bugs showed, when the first cases said nothing:
-    - invites to `2130706433`, `0.0.0.0`, `::ffff:7f00:1`, `224.0.0.1`, `::`, `ff02::1` and `pond.example.123`, each damage;
+  - Fifteen saved cases, 99 in all. Each says what it must read as, because the fuzzer's own judge reads an address with the very `address_ok` a bug would break -- as three planted bugs showed, when the first cases said nothing:
+    - invites to `0:ffff::0.0.0.0`, `2130706433`, `0.0.0.0`, `::ffff:7f00:1`, `224.0.0.1`, `::`, `ff02::1` and `pond.example.123`, each damage;
     - to `127.0.0.1`, `203.000.113.007` and `::ffff:203.0.113.7`, each of which reads;
     - twenty invites that do not decode;
     - a whole invite after three certificates that do not parse, which reads, and after six, which is damage;
     - a whole invite after six certificates that are not DER at all, which reads.
   - Seeds 1 to 3 pass.
-- **Fourteen bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
+- **Eighteen bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
 
   | Planted | The fuzzer | The probe |
   |---|---|---|
@@ -1220,23 +1221,30 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
   | no bound on the certificates one paste parses | a saved case | F8 |
   | surrogates on their own kept in a paste | unaided | F8 |
   | a name whose last label is a number taken | two saved cases | F7, F9 |
-  | any IP literal taken | five saved cases | F7 |
+  | any IP literal taken | six saved cases | F7 |
+  | 0/8 taken | a saved case | F7 |
   | multicast and reserved IPv4 taken | a saved case | F7 |
   | `::` taken | a saved case | F7 |
   | IPv6 multicast taken | a saved case | F7 |
   | IPv4 in IPv6 clothes taken in hex | a saved case | F7 |
+  | a dotted tail taken where the plain reading is not IPv4 in IPv6 clothes, as the first two cuts did | a saved case | F7 |
   | a zero-padded address refused, as the first cut did | a saved case | F7 |
   | IPv4 in IPv6 clothes refused while it shows its address | a saved case | F7 |
   | a stored `--reach` it will not call taken for none | -- | F9 |
   | the invites sent with it not named when it is changed | -- | F9 |
+  | a stored port out of range blamed on its good address | -- | F9 |
+  | a stored port that is no number read as one: a script error | -- | F9 |
 
   Planting found two things in the checks themselves. The fuzzer's saved cases passed every address bug until each case said what it must read as. And one bug, planted by deleting a loop's only line, left `invite.gd` unable to parse -- 120 script errors and no verdict at all -- so it was planted again as a `pass`.
+
+  Planting tests the checks, never the rule they hold. The dotted-tail hole was in the rule itself, and every check passed on it: the second review found it by reading Godot's parser.
 
 ### H.4 What H does not do
 
 - **A subnet's broadcast address is still dialled.** `192.168.1.255` is one machine's address on a network wider than a /24, so the address alone cannot tell. An invite to the broadcast address of a friend's own network makes their phone call every device on it for up to 8 s. Only a server holding the invite's pinned certificate can answer.
 - **The resolver's view of a name was measured with glibc alone.** Android's and Windows' were not checked. The rule refuses any last label a C resolver could read as a number.
-- **Windows' clipboard decodes before the game sees it**, and the engine says so for each surrogate on its own, before any paste is read. Those lines are the engine's, not the paste's.
+- **A phone's clipboard is decoded before the game sees it, and the engine logs lone surrogates as it does so.** On Windows, the engine keeps each surrogate on its own and says so, across the whole clipboard, not just the 64 KB a paste reads. On Android, it says so and puts U+FFFD in its place. Those lines are the engine's, before any paste is read: H.2's "0" is `Invite.parse` of a string already in memory. Not checked on a device.
+- **A few spellings that dial what they show are refused**, because `Lan` reads them differently from Godot: an IPv4 part padded past three digits inside IPv6 (`::ffff:203.0000.113.7`), and `::` standing for no group at all (`1:2:3:4:5:6:7::8`). `main` took them. Nobody writes them.
 - **A friend holding an invite to an address this build will not call** sees the first page again, as if they held none, and a paste of it says damaged. Sending the same line again does not help. Their owner's server says why at every look, and a new `--reach` and a new invite are the way back.
 - **Ports are any from 1 to 65535**, as before: a router may map any of them.
 - **Two whole invites in one paste**: the first still wins, silently. A "which one?" answer is the owner's to want (the issue's "Also noted").
@@ -1248,7 +1256,7 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
 - **Part B (built):** `game/net/referee.gd` (new), `game/net/pond.gd`, `game/net/net_session.gd`, `game/net/wire.gd`, `game/normal/normal_mode.gd` (the cut line, and comments), comments in `game/normal/cell.gd`, `food.gd` and `genome.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md`, `docs/design/shared-pond-ux.md`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part D (built):** `tools/net_fuzz.gd`, `tools/net_fuzz.tscn`, `tools/net_fuzz_corpus.txt` and `tools/net_fuzz_cert.pem` (all new, and excluded from export with the rest of `tools/`), the "Fuzz the network code" step in `.github/workflows/ci.yml`, and this document.
 - **Part F (built):** `game/net/lan.gd` (`CELLULAR_PREFIXES`, `hosting_address`, `pick_hosting`, `same_24`, the ranking), `game/net/net_session.gd` (`host`, `_admit`), two checks in `tools/net_probe.gd`, the phone door in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, and this document.
-- **Part H (built):** `game/net/invite.gd` (`address_ok`, `_numeric`, `_literal_ok`, `why_not`, `_squeeze`, `_base64_whole`, `_der_whole`, `CERTIFICATES_MAX`), `game/server/invite_book.gd` (`reach_refused`, `reach_said`, `set_reach`, `mint`, `listing`), `game/server/server.gd` (its status line), F7-F9 in `tools/net_probe.gd`, the `invite` section of `tools/net_fuzz.gd` and its saved cases in `tools/net_fuzz_corpus.txt`, `docs/server.md` §9.2, `docs/design/invites-ux.md` §6.2, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
+- **Part H (built):** `game/net/invite.gd` (`address_ok`, `_numeric`, `_literal_problem`, `_v4_problem`, `why_not`, `_squeeze`, `_base64_whole`, `_der_whole`, `CERTIFICATES_MAX`), `game/server/invite_book.gd` (`reach_refused`, `reach_said`, `_stored_reach`, `set_reach`, `mint`, `listing`), `game/server/server.gd` (its status line), F7-F9 in `tools/net_probe.gd`, the `invite` section of `tools/net_fuzz.gd` and its saved cases in `tools/net_fuzz_corpus.txt`, `docs/server.md` §9.2, `docs/design/invites-ux.md` §6.2, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part G (built):** `game/net/net_session.gd` (`_open_lan`, `_pump_one`, `_lan_closed_by_itself`, `_count_arrivals`), `tools/net_drop.gd` and `tools/net_drop.tscn` (new, and excluded from export with the rest of `tools/`), H1-H4 in `tools/net_probe.gd`, the `L` step in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md` §7, the "Take the network from under a host" step in `.github/workflows/ci.yml` and the comment on its LAN step, and this document.
 - **Part E (built):** `game/net/net_session.gd` (`_admit`, `_evict`, `_left_unproved`, `_bar`), `game/net/lan.gd` (`wider_key`), `tools/net_probe.gd` (R1-R4), `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md`, the comments on `.github/workflows/ci.yml`'s two network steps, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.
