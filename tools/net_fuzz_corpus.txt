@@ -40,6 +40,19 @@ door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:revoke|T:1.2|I:restore|C
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:replace|C:10:1:203.0.113.10|D:10:1:hello:4|D:10:1:proof:good|C:11:1:203.0.113.11|D:11:1:hello:4|D:11:1:proof:new_key
 # The guest of a replaced invite, still talking: it must already be gone.
 door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:replace|D:9:1:raw:040100000005000020410000a0410000d041140000c84200000000cdcc4c3e
+# #103, the internet door's waiting room: two callers that proved nothing in
+# 1.6 s, and a third that takes the older one's place, which is barred; three
+# /64s of one /56 barred for silence, and a fourth /64 of it refused at the
+# door with them. Twelve callers on each listener, each cut the moment it
+# speaks out of turn: the bucket for everybody pays for the ten the door took,
+# and the eleventh is busy.
+door C:21:1:203.0.113.21|D:21:1:hello:4|C:22:1:203.0.113.22|D:22:1:hello:4|T:1.6|C:23:1:203.0.113.23
+door C:31:1:2001:db8:0:100::1|T:3.5|C:32:1:2001:db8:0:101::1|T:3.5|C:33:1:2001:db8:0:102::1|T:3.5|C:34:1:2001:db8:0:1ff::5
+# #103: a caller that says HELLO and hangs up before it can be hung up on,
+# then calls straight back from the same address: barred as silence is.
+door C:41:1:203.0.113.41|D:41:1:hello:4|T:1.2|X:41:1|C:42:1:203.0.113.41
+door C:60:1:203.0.113.60|D:60:1:bare:00|C:61:1:203.0.113.61|D:61:1:bare:00|C:62:1:203.0.113.62|D:62:1:bare:00|C:63:1:203.0.113.63|D:63:1:bare:00|C:64:1:203.0.113.64|D:64:1:bare:00|C:65:1:203.0.113.65|D:65:1:bare:00|C:66:1:203.0.113.66|D:66:1:bare:00|C:67:1:203.0.113.67|D:67:1:bare:00|C:68:1:203.0.113.68|D:68:1:bare:00|C:69:1:203.0.113.69|D:69:1:bare:00|C:70:1:203.0.113.70|D:70:1:bare:00|C:71:1:203.0.113.71|D:71:1:bare:00
+door C:80:0:192.168.1.80|D:80:0:bare:00|C:81:0:192.168.1.81|D:81:0:bare:00|C:82:0:192.168.1.82|D:82:0:bare:00|C:83:0:192.168.1.83|D:83:0:bare:00|C:84:0:192.168.1.84|D:84:0:bare:00|C:85:0:192.168.1.85|D:85:0:bare:00|C:86:0:192.168.1.86|D:86:0:bare:00|C:87:0:192.168.1.87|D:87:0:bare:00|C:88:0:192.168.1.88|D:88:0:bare:00|C:89:0:192.168.1.89|D:89:0:bare:00|C:90:0:192.168.1.90|D:90:0:bare:00|C:91:0:192.168.1.91|D:91:0:bare:00
 # The LAN door: a caller from outside; a silent caller on the internet one,
 # barred, calling again; a guest gone quiet for good (#92); twelve calls at
 # once from one address.
@@ -115,14 +128,20 @@ invite YmlvZ2VuaWMtaW52aXRlOjEuQVFJRC5iM2I4ZTQ4Yg==
 invite YmlvZ2VuaWMtaW52aXRlOjEuQEBAQG5vdC1iYXNlNjRAQEBALjQ1OGM0MjE0
 
 # --- address: what an address is, then as ENet or a person writes it ---------
-address local ::ffff:100.64.0.7
-address local fe80::1%wlan0
-address local 127.0.0.1
-address local fd12:3456:789a::1
-address remote 192.168.1.1.
-address remote 2001:db8::1
-address remote ::
-address remote 1e2.0.0.1
+# `local/` or `remote/`, then the /56 it is in: none for IPv4, in any clothes,
+# or for what does not parse (#103).
+address local/ ::ffff:100.64.0.7
+address local/fe80:0:0:0::/56 fe80::1%wlan0
+address local/ 127.0.0.1
+address local/fd12:3456:789a:0::/56 fd12:3456:789a::1
+address remote/ 192.168.1.1.
+address remote/2001:db8:0:0::/56 2001:db8::1
+address remote/0:0:0:0::/56 ::
+address remote/ 1e2.0.0.1
+# #103: a /64's /56 is its fourth group's high byte; IPv4 behind a dual-stack
+# socket is barred as itself, never with a /56 of every IPv4 caller.
+address remote/2001:db8:0:100::/56 2001:db8:0:1ff::5
+address remote/ ::ffff:203.0.113.7
 
 # --- referee: judgements, steps as `what:seconds since the last:values` -------
 # Claims flung to float's edge and back after an arrival: the body stays

@@ -368,9 +368,27 @@ const LIVE_PER_ADDRESS := 3
 ## **Barred after an abuse cut**: a minute, and ten for a second one inside ten
 ## minutes. An old protocol and "already two" are not abuse, and nor is silence
 ## on the LAN; on the internet listener, a caller that has proved nothing
-## within [constant HELLO_GRACE] is barred like one whose proof was wrong.
+## within [constant HELLO_GRACE] is barred like one whose proof was wrong --
+## and so is one that has proved nothing in [constant EVICT_AFTER] when a
+## newcomer needs its place, and one that hangs up having proved nothing.
 const BAR_FIRST := 60.0
 const BAR_AGAIN := 600.0
+## **The internet door's waiting room makes room** (issue #103): full, it lets
+## a newcomer take the place of the caller that has waited longest, proving
+## nothing, once that one has waited this long -- hung up on and barred as
+## silence is. A real guest proves about 0.3 s after its transport comes up
+## (net-hardening.md C.8), so five times that is still a slow link's time.
+## Every caller that leaves the room without proving is barred, however it
+## leaves, so holding both places now takes a fresh address every 0.75 s --
+## and a friend never waits behind a caller older than this.
+const EVICT_AFTER := 1.5
+## **A /56 barred as one** (issue #103): once this many of its /64s have been
+## barred at the internet door within [constant BAR_AGAIN], the whole /56 is,
+## for as long as one of them would be. A home is handed a /56 or wider and
+## makes up /64s inside it at will, which a /64's bar alone never catches up
+## with. IPv4 is never widened: carrier-grade NAT already puts strangers
+## behind one address.
+const BARS_TO_WIDEN := 3
 ## **The addresses a host remembers: at most this many**, so the limiter's own
 ## memory is bounded too. A full book forgets a caller it has not heard from
 ## for [constant BOOK_IDLE] first, then the one heard from longest ago -- and
@@ -857,9 +875,11 @@ func _process(_delta: float) -> void:
 			# proves within a few hundred milliseconds, so a caller that has
 			# not by now held one of the waiting room's two places for nothing
 			# -- and two of them calling back as each is hung up on would keep
-			# every invited friend out. A friend on a link too poor to prove in
-			# time hears "they hung up · call again in a minute", which is the
-			# bar. On the LAN, silence is a phone in the house, and is not.
+			# every invited friend out. So is one that hangs up first
+			# (`_left_unproved`), and one whose place a newcomer takes
+			# (`_evict`). A friend on a link too poor to prove in time hears
+			# "they hung up · call again in a minute", which is the bar. On the
+			# LAN, silence is a phone in the house, and is not.
 			gate_counts["net_silent"] += 1
 			var barred := _bar(str(peer["address"]), VIA_NET)
 			_refuse(id, Wire.REFUSE_SILENT, " -- %s -- barred %d s" % ["challenged, and no proof"
@@ -1798,11 +1818,15 @@ func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 				gate_counts["net_refused"] += 1
 				gate_counts["net_refused_" + str(no[0])] += 1
 			# A line per caller -- but a refusal that is about everybody, a
-			# caller from outside or a door taking no calls at all, is one line
-			# for all of them. A storm from a thousand addresses is then a line
-			# every ten seconds, and the limiter only ever remembers callers
-			# the door let near it.
-			var about_all: bool = no[0] == "lan" or no[0] == "busy" or no[0] == "closed"
+			# caller from outside, a door taking no calls at all or a waiting
+			# room with no place in it, is one line for all of them. A storm
+			# from a thousand addresses is then a line every ten seconds, and
+			# the limiter only ever remembers callers the door let near it.
+			# **On the internet door every refusal is one line a reason**
+			# (issue #103): strangers there come from as many addresses as they
+			# like, and each one's name is not news.
+			var about_all: bool = via == VIA_NET or no[0] == "lan" or no[0] == "busy" \
+				or no[0] == "closed" or no[0] == "pending"
 			var key := str(no[0]) if about_all else Lan.source_key(from)
 			_note("refused", key if via == VIA_LAN else "internet " + key,
 				"[net] refused %s%s: %s" % [from, " on the internet listener"
@@ -1871,12 +1895,32 @@ func _on_peer_disconnected(id: int, via: int = VIA_LAN) -> void:
 	if _greeted_count() == 0:
 		_told = []
 	if hosting:
+		if not peer.is_empty() and via == VIA_NET and not bool(peer["greeted"]):
+			_left_unproved(id, peer)
 		_farewell(id, peer)
 		_forget_said_by(id)
 		_lost_guest()
 		return
 	if id == _host_id:
 		_host_id = 0
+
+
+## **A caller on the internet listener that hangs up having proved nothing is
+## barred as silence is** (issue #103). Unbarred, one could hold a place in the
+## waiting room until just before a newcomer may take it, hang up, and call
+## straight back from the same address -- which neither the grace nor the
+## eviction ever sees -- and four addresses would keep every friend out. A real
+## guest proves a few hundred milliseconds after its transport is up, and its
+## own call waits 8 s for that, so this bars a player who backs out in those
+## few hundred milliseconds, and nobody else. One whose refusal is lingering
+## is not here: a refusal takes its record at once.
+func _left_unproved(id: int, peer: Dictionary) -> void:
+	gate_counts["net_left"] += 1
+	var from := str(peer["address"])
+	var barred := _bar(from, VIA_NET)
+	_note("left", Lan.source_key(from), "[net] %d (%s) hung up %.1f s after it called,"
+		% [id, from, _now() - float(peer["since"])] + " having proved nothing -- barred %d s"
+		% roundi(barred))
 
 
 func _on_connected_to_server() -> void:
@@ -2721,7 +2765,36 @@ func _bar(from: String, via: int = VIA_LAN) -> float:
 	if from.is_empty():
 		return 0.0
 	var now := _now()
-	var entry := _book_entry(Lan.source_key(from), now, _book_of(via))
+	var book := _book_of(via)
+	var entry := _book_entry(Lan.source_key(from), now, book)
+	var hold := _bar_entry(entry, now)
+	var wider := Lan.wider_key(from) if via == VIA_NET else ""
+	if wider.is_empty():
+		return hold
+	# **A /56 of barred /64s is barred as one** (issue #103), once
+	# [constant BARS_TO_WIDEN] of them have been inside [constant BAR_AGAIN].
+	entry["wider"] = wider
+	var near := 0
+	for key: String in book:
+		var other: Dictionary = book[key]
+		if str(other.get("wider", "")) == wider and int(other["bars"]) > 0 \
+				and now - float(other["barred_at"]) < BAR_AGAIN:
+			near += 1
+	if near >= BARS_TO_WIDEN:
+		var whole := _book_entry(wider, now, book)
+		if now >= float(whole["barred_until"]):
+			var held := _bar_entry(whole, now)
+			gate_counts["net_barred_wide"] += 1
+			_note("barred wide", wider, "[net] barred %s for %d s at the internet door:"
+				% [wider, roundi(held)] + " %d of its /64s barred inside %d s"
+				% [near, roundi(BAR_AGAIN)])
+	return hold
+
+
+## [param entry] barred from [param now]: [constant BAR_FIRST], or
+## [constant BAR_AGAIN] when it was barred inside the last [constant BAR_AGAIN]
+## already. Returns how long.
+func _bar_entry(entry: Dictionary, now: float) -> float:
 	var again := int(entry["bars"]) > 0 and now - float(entry["barred_at"]) < BAR_AGAIN
 	var hold := BAR_AGAIN if again else BAR_FIRST
 	entry["bars"] = int(entry["bars"]) + 1 if again else 1
@@ -2794,8 +2867,10 @@ static func _who(peer: Dictionary) -> String:
 ## own address's bucket turns away never touches the bucket every address
 ## shares** -- or one device calling fast would lock every other one out (the
 ## review measured it: twelve calls from one address, and a first call from
-## another was refused as busy). Nor does a call the shared bucket turns away
-## cost its address anything.
+## another was refused as busy). **And the shared bucket pays only for a call
+## the door takes** (issue #103): every call is counted against its own
+## address first, and one turned away for its address's transports or for
+## want of room costs nobody else a place.
 ##
 ## **[param via] is the listener, and each keeps its own door** (part C): its
 ## own address book -- the call buckets and the bars -- its own bucket for every
@@ -2813,18 +2888,23 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 	if via == VIA_NET and not internet_listening():
 		return ["closed", "the internet listener is closing"]
 	var key := Lan.source_key(from)
-	var entry := _book_entry(key, now, _book_of(via))
+	var book := _book_of(via)
+	# A /56 barred as one first, so a call from inside it leaves no entry of
+	# its own in the book.
+	var wider := Lan.wider_key(from) if via == VIA_NET else ""
+	if not wider.is_empty() and book.has(wider) \
+			and now < float(book[wider]["barred_until"]):
+		return ["barred", "barred for %d s more, with the /56 it is in"
+			% ceili(float(book[wider]["barred_until"]) - now)]
+	var entry := _book_entry(key, now, book)
 	if now < float(entry["barred_until"]):
 		return ["barred", "barred for %d s more" % ceili(float(entry["barred_until"]) - now)]
+	# **Every call from an address is counted against it**, before the door
+	# asks whether it has room.
 	var own: Bucket = entry["calls"]
-	if own.level(now) < 1.0:
+	if not own.take(1.0, now):
 		return ["calls", "calling too often -- %d at once, then one every %d s"
 			% [roundi(CALLS_BURST), roundi(1.0 / CALLS_RATE)]]
-	var everybody: Bucket = _calls_all if via == VIA_LAN else _net_calls_all
-	if not everybody.take(1.0, now):
-		return ["busy", "more than %d calls a second, from everywhere"
-			% roundi(CALLS_ALL_RATE)]
-	own.take(1.0, now)
 	var live := 0
 	for other: int in _addresses:
 		if str(_addresses[other]) == key and int(_via.get(other, VIA_LAN)) == via:
@@ -2832,13 +2912,47 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 	if live >= LIVE_PER_ADDRESS:
 		return ["live", "%d connections from there already" % live]
 	var pending := 0
+	var longest := -1
+	var since := INF
 	for other: int in _peers:
-		if not bool(_peers[other]["greeted"]) \
-				and int(_peers[other].get("via", VIA_LAN)) == via:
-			pending += 1
+		var peer: Dictionary = _peers[other]
+		if bool(peer["greeted"]) or int(peer.get("via", VIA_LAN)) != via:
+			continue
+		pending += 1
+		if float(peer["since"]) < since:
+			since = float(peer["since"])
+			longest = other
+	var evict := -1
 	if pending >= PENDING_MAX:
-		return ["pending", "%d callers are already saying hello" % pending]
+		if via != VIA_NET or now - since < EVICT_AFTER:
+			return ["pending", "%d callers are already saying hello" % pending]
+		evict = longest
+	# **The bucket for everybody pays only for a call the door takes** (issue
+	# #103): one turned away for want of room costs no friend a place.
+	var everybody: Bucket = _calls_all if via == VIA_LAN else _net_calls_all
+	if not everybody.take(1.0, now):
+		return ["busy", "more than %d calls a second, from everywhere"
+			% roundi(CALLS_ALL_RATE)]
+	if evict >= 0:
+		_evict(evict, now - since)
 	return []
+
+
+## **Room made** (issue #103): the caller on the internet listener that has
+## waited longest, [param waited] s with nothing proved, hung up on and barred
+## as silence is -- for a newcomer the door has taken. The newcomer is taken
+## even when the one it pushes out called from its own address, which that
+## bars: a phone calling again past a transport of its own that stalled gets
+## in, and a stranger gains no call by it -- its next finds the address barred.
+func _evict(id: int, waited: float) -> void:
+	var peer: Dictionary = _peers.get(id, {})
+	if peer.is_empty():
+		return
+	gate_counts["net_evicted"] += 1
+	var barred := _bar(str(peer["address"]), VIA_NET)
+	_refuse(id, Wire.REFUSE_SILENT, " -- %s in %.1f s, and a caller waiting behind it --"
+		% ["challenged, and no proof" if int(peer.get("stage", STAGE_HELLO)) == STAGE_PROOF
+			else "nothing said", waited] + " barred %d s" % roundi(barred))
 
 
 ## The address book's entry for [param key] in [param book], made if there is
@@ -3038,6 +3152,10 @@ func _zero_counts() -> void:
 		"net_refused_closed": 0, "net_refused_twin": 0, "net_refused_id": 0,
 		"proofs": 0, "proofs_refused": 0, "invite_cuts": 0, "challenges_dropped": 0,
 		"net_silent": 0, "gone": 0,
+		# **The internet door's waiting room** (issue #103): callers whose place
+		# a newcomer took, callers that hung up having proved nothing, and /56s
+		# barred as one.
+		"net_evicted": 0, "net_left": 0, "net_barred_wide": 0,
 	}
 
 
