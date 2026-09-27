@@ -23,8 +23,8 @@
 #      and installs nothing unless all three match;
 #   4. puts the build in /opt/biogenic, owned by `biogenic`, because the server
 #      replaces its own binary when a new one is published;
-#   5. installs biogenic-server.service and enables it, lays the internet port's
-#      firewall rules in /etc/biogenic without loading them (docs/server.md
+#   5. installs biogenic-server.service and enables it, lays the firewall rules
+#      for both ports in /etc/biogenic without loading them (docs/server.md §5,
 #      §9.6), and names any `systemctl edit` override still in effect;
 #   6. starts the server -- or restarts it, if the build or the unit changed --
 #      and prints the address and the join code it logs.
@@ -187,10 +187,10 @@ if compgen -G "$OVERRIDES/*.conf" >/dev/null; then
 	fi
 fi
 
-# 5b. The firewall rules for the internet port, laid down but never loaded: a
-#     network firewall is the owner's to review and turn on (docs/server.md
-#     §9.6). The file replaces the whole table when it is loaded, so loading
-#     this release's copy over an older one never doubles a rule.
+# 5b. The firewall rules for both ports, laid down but never loaded: a network
+#     firewall is the owner's to review and turn on (docs/server.md §5, §9.6).
+#     The file replaces the whole table when it is loaded, so loading this
+#     release's copy over an older one never doubles a rule.
 install -d -m 0755 "$NFT_DIR"
 if cmp -s "$work/$NFT_CONF" "$NFT_DIR/$NFT_CONF"; then
 	rules="unchanged"

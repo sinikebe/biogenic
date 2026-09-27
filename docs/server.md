@@ -17,7 +17,9 @@ any x86_64 Debian or Ubuntu machine with systemd.
 > checks every frame, cuts a guest that keeps sending what no Biogenic build
 > sends or far more than any phone sends, and checks what every guest *says*
 > (§3; issues #56, #57 and #58, `docs/design/net-hardening.md` parts A and B).
-> **Never forward 45771.** A friend outside the house comes in through a second
+> **Never forward 45771**, and keep it off the internet at the firewall too
+> (§5): the server's own check is a second line, not the first. A friend
+> outside the house comes in through a second
 > port, UDP 45772, which exists only while you have minted at least one invite:
 > the call is encrypted, the server proves itself with a certificate the invite
 > pins, and the friend proves the invite's secret before anything else is
@@ -84,8 +86,8 @@ update it (below). In order, it:
 4. puts the build in `/opt/biogenic`, owned by `biogenic`, because the server
    replaces its own binary when a new one is published;
 5. installs the unit into `/etc/systemd/system/` and enables it, lays the
-   firewall rules in `/etc/biogenic/` without loading them (§9.6), and names
-   any `systemctl edit` override still in effect;
+   firewall rules for both ports in `/etc/biogenic/` without loading them (§5,
+   §9.6), and names any `systemctl edit` override still in effect;
 6. starts the server -- or restarts it, if the build or the unit changed -- and
    prints what it says about where it is.
 
@@ -250,18 +252,65 @@ join again.
 
 ## 5. The port
 
-The server listens on **UDP 45771**, on every address the container has. The
-phones reach it across your LAN and nothing else needs to.
+The server listens on **UDP 45771** for the home Wi-Fi, on every address the
+container has. The phones reach it across your LAN, nothing else needs to, and
+the server answers a caller there only from a home network's address (the note
+at the top). **That check is a second line, not the first** (issue #69):
 
-- If the container runs a firewall, let the LAN in on that port and only the
-  LAN. With `ufw`, for example: `ufw allow from 192.0.2.0/24 to any port 45771
-  proto udp`, with your own range in place of the placeholder.
-- **Do not forward 45771 on your router.** See the note at the top.
-- **UDP 45772 is the internet's**, and only while there are invites (§9). It is
-  the one port to forward, and only if you want friends outside the house.
-- A router's "guest network" or "client isolation" stops devices on it from
-  reaching each other, and so stops a phone from reaching the server. Put the
-  phones on the main Wi-Fi.
+- **It counts the server's own /24 as home**, since the tap code assumes one.
+  On a container with a public address, that /24 is a neighbour's at your
+  provider -- measured: a phone there joined with no invite.
+- **It sees each address as it arrives.** A router that forwards 45771 and
+  rewrites the sender to its own LAN address -- some do, for "NAT loopback" --
+  makes every caller from the internet look like one at home.
+
+So keep 45771 off the internet before it gets that far:
+
+- **At the router: never forward 45771.** UDP 45772 is the internet's, and
+  only while there are invites (§9): the one port to forward, and only if you
+  want friends outside the house. If the router hands out IPv6, check that its
+  firewall does not let inbound IPv6 through to the container -- that needs no
+  forward at all.
+- **On the machine: load the rules the installer laid down** at
+  `/etc/biogenic/nftables-internet.conf` (§9.6). Their last two drop anything
+  that reaches 45771 from outside the home ranges -- loopback, 10/8,
+  172.16/12, 192.168/16, 100.64/10 and 169.254/16, and over IPv6 `::1`,
+  `fc00::/7` and `fe80::/10` -- which closes the first gap and a public IPv6
+  address, whatever the router does. A phone at home never meets them. If your
+  home network is in none of those ranges, add it to the rule's first set.
+  Load the file in the container, or put the same rules on the Proxmox host's
+  firewall in front of it: **one of the two owns both ports' rules**, and you
+  should know which. With `ufw` in the container instead: `ufw allow from
+  192.0.2.0/24 to any port 45771 proto udp` with your own range in place of
+  the placeholder, and no other rule for 45771.
+
+Neither the server nor a rule on it can see through a forward that rewrites
+the sender; only the router can refuse it. **So check from outside the house**
+that nothing reaches 45771. On the server:
+
+```sh
+apt-get install -y tcpdump netcat-openbsd
+tcpdump -lni any -A 'udp port 45771' | grep --line-buffered outside-test
+```
+
+From a device on another network -- a laptop on a phone's hotspot -- send to
+your public address (a placeholder here):
+
+```sh
+echo outside-test | nc -u -w1 203.0.113.7 45771
+```
+
+Nothing printed on the server within a few seconds: the internet does not reach
+45771, which is right. A line printed: something forwards it -- take that
+forward off the router. The capture sees a datagram before any rule does, so
+the answer is the same with the rules loaded or not. Over IPv6, send to the
+container's global address instead (`ip -6 addr show scope global` shows it;
+`nc -6 -u -w1 2001:db8::7 45771`). Stop the capture with Ctrl-C. A phone at
+home joins with its four taps throughout.
+
+A router's "guest network" or "client isolation" stops devices on it from
+reaching each other, and so stops a phone from reaching the server. Put the
+phones on the main Wi-Fi.
 
 ## 6. Every day
 
@@ -537,7 +586,8 @@ but it only sees one once the encrypted handshake is done. A firewall rule per
 source address stops a flood before that. `install-server.sh` lays the rules
 down at **`/etc/biogenic/nftables-internet.conf`** already (checked with `nft -c`
 where nftables is present) but does **not** load them -- a firewall is yours to
-read and turn on. Review the file, then:
+read and turn on. The same file keeps the LAN's port to home addresses (§5).
+Review it, then:
 
 ```sh
 nft -c -f /etc/biogenic/nftables-internet.conf   # check it, load nothing
@@ -553,7 +603,8 @@ doubling a rule. The ruleset:
 
 ```
 # Biogenic's internet listener, UDP 45772: new calls and datagrams, per source,
-# and one combined ceiling for all sources at once.
+# and one combined ceiling for all sources at once. And the LAN's, UDP 45771:
+# home addresses only.
 table inet biogenic
 delete table inet biogenic
 
@@ -569,6 +620,8 @@ table inet biogenic {
 		udp dport 45772 update @flood4 { ip saddr limit rate over 400/second burst 800 packets } counter drop
 		udp dport 45772 update @flood6 { ip6 saddr and ffff:ffff:ffff:ffff:: limit rate over 400/second burst 800 packets } counter drop
 		udp dport 45772 limit rate over 1200/second burst 2400 packets counter drop
+		udp dport 45771 ip saddr != { 127.0.0.0/8, 10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16, 100.64.0.0/10, 169.254.0.0/16 } counter drop
+		udp dport 45771 ip6 saddr != { ::1, fc00::/7, fe80::/10 } counter drop
 	}
 }
 ```
@@ -577,9 +630,10 @@ Each address -- each /64, over IPv6 -- gets twenty new calls, then ten a
 minute, and 800 datagrams, then 400 a second. A call is one new flow (two after
 one that failed, which the phone checks once more), and a friend swimming sends
 at most about a hundred datagrams a second. Two friends behind one router share
-an address, and fit. The last rule is the ceiling for everyone together -- 2400
-datagrams, then 1200 a second across the whole port -- so a burst spread over
-many addresses cannot pass the per-source rules unbounded.
+an address, and fit. The fifth rule is the ceiling for everyone together --
+2400 datagrams, then 1200 a second across the whole port -- so a burst spread
+over many addresses cannot pass the per-source rules unbounded. The two after
+it are §5's: 45771 answers home addresses and nothing else.
 
 ### 9.7 Keep the engine's handshake errors out of the journal
 
