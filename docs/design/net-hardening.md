@@ -196,6 +196,7 @@ A host whose last greeted guest is cut, or leaves, goes back to listening. **Cha
 | Limit | Phone host | Server | Why |
 |---|---|---|---|
 | **LAN-only guard:** the source must be loopback, RFC 1918, 100.64/10, 169.254/16, the host's own /24, or IPv6 loopback, ULA or link-local | on | on for the LAN listener; the internet listener (C) asks for an invite instead | Makes "LAN-only for now" true in code. A forwarded port, or a public IPv6 address the router lets through, hits the guard and is refused with one log line. The host binds the wildcard address, so IPv6 is otherwise open wherever a router allows inbound IPv6. 100.64/10 is allowed because lan.gd counts carrier-grade-NAT Wi-Fi as a home network, and it is also Tailscale's range (C1). The own-/24 rule is there because this container's own address is 192.0.2.2. `Lan.is_local_source(address, own)`. |
+| **A peer id of 2 or more** (issue #75) | on | on, on both listeners | ENet takes whatever id a caller offers, and a host addresses every frame by id through `set_target_peer`, where 0 means every peer and a negative id every peer but one. Godot's own builds pick theirs from 2 up, so anything lower is refused at the door, before a frame could be addressed to it, and `_to` never sends to one. Measured on 4.7: ENet drops a caller offering 0 or 1 by itself, but a negative id reached the door, and before this it became a peer |
 | ENet slots (`create_server`) | 4 | 6 | `_slots()` = one per guest, the two pending callers, and one half-dead predecessor per guest. Each slot can hold up to 32 MiB of ENet buffering, so no more than this. (The server had 5 before.) |
 | greeted guests | 1 | 2 | Beyond this, REFUSE_FULL with its sentence, as before |
 | pending (not greeted) | 2 | 2 | A third is cut on arrival (`PENDING_MAX`) |
@@ -777,6 +778,7 @@ No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): 
 | D1 | Loopback made a stranger to the LAN door (`loopback_is_local`, the seam) | A LAN call from 127.0.0.1 refused as not on this network; an internet call from it proves bob's invite and is in |
 | D2 | Fifteen silent internet callers from 127.0.0.1, .2 and .3; a LAN guest in the middle | At most 2 waiting on the internet side, 4 turned away for its waiting room; the LAN guest answered, the LAN door refusing nobody. At the doors themselves: twelve first calls on the internet are 10 answered and 2 busy, then ten LAN callers are all answered |
 | D3 | A bare DTLS connection offering a LAN guest's id; a bare plain one offering an internet guest's | Each refused on its own listener; both guests play on, each on its own |
+| D4 | A bare caller offering a negative id, at each listener (issue #75) | Refused at the door of either (`refused_id`), never a peer; both guests play on |
 | L1 | The real server scene, with an empty book | No internet listener, and its READY says so |
 | L2 | `--reach` alone, then a mint, by the jobs' own code | `pond/` `rwx------` from the `--reach`; the listener open 0.42-0.46 s after the mint, with no restart |
 | L3 | The files | Key, book, address and line 0600; `pond/` and `invites/` 0700 |

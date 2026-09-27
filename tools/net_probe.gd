@@ -7952,6 +7952,22 @@ func _invites_doors() -> void:
 		"invites D3: a caller on the internet listener with a LAN guest's id, and one on"
 		+ " the LAN with an internet guest's, are each refused on their own listener, and"
 		+ " both guests play on, each on the listener it came in by")
+	# D4: an id below 2 -- which no Godot build picks, and which a host's
+	# `set_target_peer` would read as more than one peer -- refused at the door
+	# of either listener before anything is kept for it (issue #75).
+	var low_lan := await _invites_raw_call(false, -5)
+	var low_net := await _invites_raw_call(true, -6)
+	await _wait(0.3)
+	_says(bool(low_lan[1]) and bool(low_net[1])
+			and int(host.gate_counts["refused_id"]) == 2
+			and int(host.gate_counts["net_refused_id"]) == 1
+			and not (host.peer_ids() as Array).has(-5) and not (host.peer_ids() as Array).has(-6)
+			and int(lan.link) == NetSession.Link.TOGETHER
+			and int(net_guest.link) == NetSession.Link.TOGETHER
+			and (host.guests() as Array).size() == 2,
+		"invites D4: a caller offering an id below 2 -- one a host would address as more"
+		+ " than one peer -- is refused at the door of either listener, and both guests"
+		+ " play on")
 	await _limits_close([host, lan, net_guest])
 
 
