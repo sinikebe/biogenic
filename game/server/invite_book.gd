@@ -288,9 +288,10 @@ static func mint(text: String, root: String = ROOT) -> Array:
 				DirAccess.remove_absolute(line_path(old, root))
 			book.clear()
 	if not book.has(name) and book.size() >= INVITES_MAX:
-		return [1, out + PackedStringArray(["--invite: the book already holds %d invites,"
-			% book.size() + " the most it keeps. --revoke=<name> one nobody uses first:"
-			+ " --invites says when each last joined."])]
+		return [1, out + PackedStringArray(["--invite: no invite made for %s: the book"
+			% name + " holds %d invites, and keeps %d at most. Revoke %s nobody uses"
+			% [book.size(), INVITES_MAX, _over_cap(book.size())] + " first, with"
+			+ " --revoke=<name> -- --invites says when each last joined."])]
 	var crypto := Crypto.new()
 	var key_id := crypto.generate_random_bytes(Invite.KEY_ID_SIZE)
 	while _key_in_use(book, key_id.hex_encode()):
@@ -390,9 +391,19 @@ static func listing(root: String = ROOT) -> Array:
 		out.append("  %s -- made %s, last joined %s" % [name, _date(int(entry["created"])),
 			_date(last) if last > 0 else "never"])
 	if names.size() >= INVITES_MAX:
-		out.append("the book is full: it keeps %d invites at most, so --revoke=<name> one"
-			% INVITES_MAX + " before minting another.")
+		out.append("the book is full: it keeps %d invites at most, so revoke %s before"
+			% [INVITES_MAX, _over_cap(names.size())] + " minting another, with"
+			+ " --revoke=<name>.")
 	return [0, out]
+
+
+## How many invites a book of [param size] must lose before one more fits,
+## said as a sentence says it: "one" for a full book, more for one an older
+## build or a hand grew past [constant INVITES_MAX] -- which keeps every invite
+## it holds, and takes no new name until it is back under.
+static func _over_cap(size: int) -> String:
+	var over := size - INVITES_MAX + 1
+	return "one" if over == 1 else str(over)
 
 
 ## **`--new-key`**: a new key and certificate, and every invite void -- for a

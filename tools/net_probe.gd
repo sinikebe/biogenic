@@ -7901,10 +7901,14 @@ func _invites_calls() -> void:
 		"invites J2: run as root but unable to read who owns the files, the job fails closed"
 		+ " -- it refuses rather than write what the service user might not read")
 	# J3: the book keeps InviteBook.INVITES_MAX invites at most (#85). A name
-	# past them is refused, says what to do and writes nothing; a name already
-	# in the book is minted again; a revoke makes room. The book is filled as
-	# mint writes it, after one real mint has made the key.
+	# past them is refused, named, told what to do, and writes nothing -- not a
+	# byte of the book, the key or the certificate; a name already in the book
+	# is minted again; a revoke makes room, and the book no longer says it is
+	# full. A book an older build grew past the cap keeps every invite, and is
+	# told how many to revoke. It is filled as mint writes it, after one real
+	# mint has made the key.
 	var full := INVITES_ROOT.path_join("full")
+	_invites_wipe(full)
 	var full_first: Array = _invites_job(["--reach=203.0.113.7", "--invite=f000"], full)
 	var many := InviteBook.entries(full)
 	var random := Crypto.new()
@@ -7913,25 +7917,52 @@ func _invites_calls() -> void:
 			"key_id": random.generate_random_bytes(Invite.KEY_ID_SIZE).hex_encode(),
 			"secret": random.generate_random_bytes(Invite.SECRET_SIZE)}
 	var filled := InviteBook._write_book(many, full)
+	var files := InviteBook.paths(full)
+	var before: Array = []
+	for what: String in ["book", "key", "cert"]:
+		before.append(FileAccess.get_file_as_bytes(str(files[what])))
 	var one_more: Array = InviteBook.mint("latecomer", full)
 	var refusal := "\n".join(PackedStringArray(one_more[1]))
-	var wrote_none := not FileAccess.file_exists(InviteBook.line_path("latecomer", full)) \
-		and not InviteBook.entries(full).has("latecomer")
+	var after: Array = []
+	for what: String in ["book", "key", "cert"]:
+		after.append(FileAccess.get_file_as_bytes(str(files[what])))
+	var wrote_none := after == before and not (before[0] as PackedByteArray).is_empty() \
+		and not FileAccess.file_exists(InviteBook.line_path("latecomer", full))
 	var listed_full := "\n".join(PackedStringArray(InviteBook.listing(full)[1]))
 	var again: Array = InviteBook.mint("f042", full)
 	var made_room: Array = InviteBook.revoke("f007", full)
+	var listed_room := "\n".join(PackedStringArray(InviteBook.listing(full)[1]))
 	var room: Array = InviteBook.mint("latecomer", full)
 	var kept := InviteBook.entries(full)
+	# Grown past the cap, as a build before #85 could: 150 invites.
+	var grown := kept.duplicate()
+	for i in range(InviteBook.INVITES_MAX, 150):
+		grown["f%03d" % i] = {"created": 1790000000,
+			"key_id": random.generate_random_bytes(Invite.KEY_ID_SIZE).hex_encode(),
+			"secret": random.generate_random_bytes(Invite.SECRET_SIZE)}
+	var grew := InviteBook._write_book(grown, full)
+	var grown_bytes := FileAccess.get_file_as_bytes(str(files["book"]))
+	var past: Array = InviteBook.mint("another", full)
+	var past_said := "\n".join(PackedStringArray(past[1]))
+	var listed_past := "\n".join(PackedStringArray(InviteBook.listing(full)[1]))
+	var past_kept := InviteBook.entries(full).size() == 150 \
+		and FileAccess.get_file_as_bytes(str(files["book"])) == grown_bytes
 	_invites_wipe(full)
 	var most := InviteBook.INVITES_MAX
 	_says(int(full_first[0]) == 0 and filled == OK and int(one_more[0]) == 1 and wrote_none
-			and refusal.contains("holds %d invites" % most) and refusal.contains("--revoke=")
-			and listed_full.contains("the book is full") and int(again[0]) == 0
-			and int(made_room[0]) == 0 and int(room[0]) == 0 and kept.size() == most
-			and kept.has("latecomer") and not kept.has("f007"),
+			and refusal.contains("no invite made for latecomer")
+			and refusal.contains("holds %d invites, and keeps %d at most. Revoke one" % [most,
+				most]) and listed_full.contains("the book is full")
+			and listed_full.contains("revoke one") and int(again[0]) == 0
+			and int(made_room[0]) == 0 and not listed_room.contains("the book is full")
+			and int(room[0]) == 0 and kept.size() == most and kept.has("latecomer")
+			and not kept.has("f007") and grew == OK and int(past[0]) == 1 and past_kept
+			and past_said.contains("holds 150 invites") and past_said.contains("Revoke 51")
+			and listed_past.contains("revoke 51"),
 		"invites J3: the book keeps %d invites at most (#85): one more name is refused" % most
 		+ " and writes nothing ('%s'), and --invites says the book is full; a name" % refusal
-		+ " already in it is minted again, and a revoke makes room")
+		+ " already in it is minted again, and a revoke makes room; a book of 150 an older"
+		+ " build made keeps all 150, and is told to revoke 51")
 	# C1: in.
 	var host: Node = await _invites_host("InvCallsHost")
 	var proved: Array = []
