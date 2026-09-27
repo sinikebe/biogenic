@@ -1852,7 +1852,7 @@ func _fuzz_invite() -> void:
 		var why := str(judged[0])
 		if why.is_empty() and took > 500.0:
 			why = "%.0f ms to read %d characters" % [took, paste.length()]
-		ok += int(judged[1])
+		ok += 1 if int(judged[1]) == Invite.Read.OK else 0
 		if not why.is_empty():
 			bad = "case %d: %s -- --replay=\"invite %s\"" % [i, why,
 				Marshalls.utf8_to_base64(paste)]
@@ -1865,28 +1865,27 @@ func _fuzz_invite() -> void:
 		% [engine, "" if bad.is_empty() else " -- NOT: " + bad])
 
 
-## **One paste, judged**: `[what is wrong, or "", 1 if it read as an invite]`.
-## Wrong is a script error, an invite that reads but is not whole, or an engine
-## line past what [constant Invite.CERTIFICATES_MAX] allows -- or any engine line
-## but a certificate's that does not parse (#106).
+## **One paste, judged**: `[what is wrong, or "", what it read as]`. Wrong is a
+## script error, an invite that reads but is not whole, or an engine line past
+## what [constant Invite.CERTIFICATES_MAX] allows -- or any engine line but a
+## certificate's that does not parse (#106).
 func _paste_why(paste: String) -> Array:
 	var script_before := _catcher.script_errors
 	var engine_before := _catcher.engine_errors
 	var lines_before := _catcher.lines.size()
 	var read := Invite.parse(paste)
+	var got := int(read.get("read", -1))
 	if _catcher.script_errors > script_before:
-		return ["a script error: " + _catcher.last, 0]
+		return ["a script error: " + _catcher.last, got]
 	var engine := _catcher.engine_errors - engine_before
 	if engine > Invite.CERTIFICATES_MAX:
 		return ["%d engine lines from one paste, past %d" % [engine,
-			Invite.CERTIFICATES_MAX], 0]
+			Invite.CERTIFICATES_MAX], got]
 	if engine > 0:
 		for said: String in _catcher.lines.slice(lines_before):
 			if not said.contains("Error parsing X509 certificates"):
-				return ["an engine line from a paste that is not a certificate's: " + said, 0]
-	if int(read.get("read", -1)) != Invite.Read.OK:
-		return ["", 0]
-	return [_invite_why(read), 1]
+				return ["an engine line from a paste that is not a certificate's: " + said, got]
+	return [_invite_why(read) if got == Invite.Read.OK else "", got]
 
 
 static func _invite_why(read: Dictionary) -> String:
@@ -2396,7 +2395,19 @@ func _replay(entry: String, say: bool) -> bool:
 				print("[net-fuzz] NOTE the door counted: %s" % ", ".join(said))
 			return str(result[0]).is_empty()
 		"invite":
-			return str(_paste_why(Marshalls.base64_to_utf8(payload))[0]).is_empty()
+			# `[ok|none|damaged|newer] <paste in base64>`: what it must read as,
+			# when said -- a judge of its own, which the fuzzer's does not
+			# have: an invite that reads is only held to be whole by the very
+			# `address_ok` it is read with.
+			var want := -1
+			var paste := payload
+			if payload.contains(" "):
+				want = ["ok", "none", "damaged", "newer"].find(payload.get_slice(" ", 0))
+				paste = payload.get_slice(" ", 1)
+				if want < 0:
+					return false
+			var judged := _paste_why(Marshalls.base64_to_utf8(paste))
+			return str(judged[0]).is_empty() and (want < 0 or int(judged[1]) == want)
 		"address":
 			# `local <address>` or `remote <address>`: what it is, then as
 			# written -- `local/<its /56>`, or `remote/` for none, to ask the

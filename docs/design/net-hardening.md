@@ -912,7 +912,7 @@ sudo unshare --net -- bash -c 'ip link set lo up &&
 - **wire**: a frame in hex.
 - **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore` and, since #105, `L` for the LAN listener closing by itself. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
 - **guest**: its frames, `from:hex`.
-- **invite**: a paste in base64.
+- **invite**: a paste in base64 -- since #106 after the word for what it must read as, where that is the point: `ok`, `none`, `damaged` or `newer`.
 - **address**: `local` or `remote` -- and since #103 a `/` and the /56 it is in, or `/` alone for none -- then the address.
 - **referee**: its steps, with every float a float32 in `var_to_str`'s shortest form, which reads back to the same number (measured over 40,000).
 
@@ -1197,10 +1197,12 @@ The same scratch script, run on `main` and on this PR:
 - **net_fuzz**:
   - The `invite` section now fails a paste that costs the engine's log more than `CERTIFICATES_MAX` lines, or any line but a certificate's that does not parse. Before, it counted them and went on. Every saved invite case is held to the same rule.
   - A new mutation pastes up to 60 spoiled invites, with the whole one after them or not.
-  - Six saved cases, 90 in all:
-    - invites to `2130706433`, `0.0.0.0` and `::ffff:7f00:1`;
+  - Ten saved cases, 94 in all. Each says what it must read as, because the fuzzer's own judge reads an address with the very `address_ok` a bug would break -- as three planted bugs showed, when the first cases said nothing:
+    - invites to `2130706433`, `0.0.0.0`, `::ffff:7f00:1`, `010.0.0.1` and `224.0.0.1`, each damage;
+    - one to `127.0.0.1`, which reads;
     - twenty invites that do not decode;
-    - a whole invite after three certificates that do not parse, and after six.
+    - a whole invite after three certificates that do not parse, which reads, and after six, which is damage;
+    - a whole invite after six certificates that are not DER at all, which reads.
   - Seeds 1 to 3 pass.
 - **Eight bugs planted one at a time**, each run against the fuzzer's `invite` section (seed 1, with its saved cases) and the probe's `invites` section:
 
