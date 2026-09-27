@@ -207,7 +207,7 @@ jobs:
             # the stick hard over under `stick`, the starboard pad under
             # `pads`. A daughter is half the area, so r40 becomes r28.28: any
             # r2x in the trace is a division that was answered.
-            if ! printf '%s\n' "$out" | grep -qE "^\[trace\].*me r2[0-9]\."; then
+            if ! grep -qE "^\[trace\].*me r2[0-9]\." <<< "$out"; then
               printf '%s\n' "$out" | grep -E "^\[trace\]" || true
               echo "::error::scheme $scheme never committed a daughter -- a held lean did not reach the division"
               fail=1
@@ -237,7 +237,7 @@ jobs:
           set -uo pipefail
           out=$(~/godot/godot --headless --path . res://tools/back_probe.tscn 2>&1) || true
           printf '%s\n' "$out" | grep -E "^\[back-probe\]" || true
-          if ! printf '%s\n' "$out" | grep -q "^\[back-probe\] ALL PASS$"; then
+          if ! grep -q "^\[back-probe\] ALL PASS$" <<< "$out"; then
             printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
             echo "::error::Back did not walk back out of the game cleanly -- see the probe lines above"
             exit 1
@@ -245,8 +245,11 @@ jobs:
           # A clean run prints no script error at all. One that does has lost
           # the rest of whatever function it was in -- a Godot runtime error
           # aborts only that function, and its caller goes on to print ALL PASS
-          # over the checks it skipped.
-          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+          # over the checks it skipped. A here-string, not `printf | grep -q`:
+          # under pipefail, grep -q leaving at an early match is SIGPIPE to
+          # printf, and on a log past the pipe's 64 KiB a match near its top
+          # reads as no match at all (#110).
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
             printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
             echo "::error::the Back probe hit a script error -- checks after it did not run"
             exit 1
@@ -316,7 +319,7 @@ jobs:
           out=$(~/godot/godot --headless --path . --quit-after 20000 \
                   res://tools/net_probe.tscn 2>&1) || true
           printf '%s\n' "$out" | grep -E "^\[net-probe\]" || true
-          if ! printf '%s\n' "$out" | grep -q "^\[net-probe\] ALL PASS$"; then
+          if ! grep -q "^\[net-probe\] ALL PASS$" <<< "$out"; then
             printf '%s\n' "$out" | grep -E "SCRIPT ERROR|Parse Error|ERROR:" || true
             echo "::error::the LAN session did not come up -- see the probe lines above"
             exit 1
@@ -324,8 +327,9 @@ jobs:
           # The same guard as the Back step's, and it matters more here: the
           # pond-field section reaches food.gd's own functions by name, so a
           # rename there is a runtime error that skips the rest of a section
-          # while the probe still prints ALL PASS. A clean run prints none.
-          if printf '%s\n' "$out" | grep -qE "SCRIPT ERROR|Parse Error"; then
+          # while the probe still prints ALL PASS. A clean run prints none. A
+          # here-string, as the Back step's is (#110).
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
             printf '%s\n' "$out" | grep -E -A2 "SCRIPT ERROR|Parse Error"
             echo "::error::the LAN probe hit a script error -- checks after it did not run"
             exit 1
