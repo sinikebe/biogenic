@@ -787,7 +787,8 @@ func _fuzz_door() -> void:
 ## **A run's steps, drawn from the seed.** Each is an Array: `["C", id, via,
 ## address]` connect, `["D", id, via, what]` a datagram, `["X", id, via]` the
 ## transport gone, `["T", seconds]` time, `["I", how]` the owner's invites
-## revoked, replaced by another or restored.
+## revoked, replaced by another or restored, and `["L"]` the LAN listener
+## closing by itself (#105).
 ##
 ## **Most callers follow the script** -- greet, prove when asked, then play,
 ## numbering their frames as a guest does -- so the run reaches every stage of
@@ -867,6 +868,8 @@ func _door_actions(count: int, phone := false) -> Array:
 		elif roll < 0.93:
 			actions.append(["I", ["revoke", "replace", "restore", "restore"][
 				_rng.randi_range(0, 3)]])
+		elif roll < 0.934:
+			actions.append(["L"])
 		else:
 			actions.append(["T", [0.05, 0.4, 1.2, 3.5, 7.0, 31.0, 61.0][
 				_rng.randi_range(0, 6)]])
@@ -1212,6 +1215,11 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 				return false
 			if via == NetSession.VIA_NET and not host.internet_listening():
 				return false
+			# Nor on a LAN listener closed, and not open again yet (#105).
+			var lan: Variant = host.get("_peer")
+			if via == NetSession.VIA_LAN and (lan == null
+					or lan.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED):
+				return false
 			held[id] = true
 			host.where[line] = str(action[3])
 			began[line] = host.sent.size()
@@ -1312,6 +1320,16 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 			host.now_at += float(action[1])
 			host._on_tree_frame()
 			host._process(0.016)
+		"L":
+			# **The LAN listener closes by itself** (#105), as ENet closes one
+			# whose service fails: its transports go with it, saying nothing,
+			# and the host's next frame finds it closed.
+			var enet: Variant = host.get("_peer")
+			if enet == null:
+				return false
+			(host.connected[NetSession.VIA_LAN] as Dictionary).clear()
+			enet.close()
+			host._on_tree_frame()
 		"I":
 			# The owner, at the server's console: every guest who proved the
 			# invite taken away is cut, and none left closes the listener.
@@ -1442,6 +1460,23 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 	if host._book.size() > NetSession.BOOK_MAX or host._net_book.size() > NetSession.BOOK_MAX \
 			or host._notes.size() > NetSession.NOTES_MAX:
 		return "a book past its cap"
+	for id: int in host._addresses.keys():
+		if not host._via.has(id):
+			return "id %d's address kept, and no listener holds it" % id
+	# **A LAN listener that closed by itself is open again inside a second**
+	# (#105): at once, or -- closing again inside a second of opening -- a
+	# second after it opened, since this port is never anybody else's. Every
+	# step that moves time runs a frame.
+	var lan: Variant = host.get("_peer")
+	var closed: bool = lan != null \
+		and lan.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED
+	if closed and host.now_at >= host._lan_down_since + NetSession.LAN_REOPEN_EVERY:
+		return "the LAN listener closed at %.2f, and is still closed at %.2f" % [
+			host._lan_down_since, host.now_at]
+	if closed != (host._lan_down_since >= 0.0):
+		return "the LAN listener is %s, and the host thinks it %s" % [
+			"closed" if closed else "open", "closed" if host._lan_down_since >= 0.0
+				else "open"]
 	return ""
 
 
@@ -1581,6 +1616,8 @@ static func _door_code(actions: Array) -> String:
 					payload.replace(" ", "_")])
 			"X":
 				parts.append("X:%d:%d" % [int(action[1]), int(action[2])])
+			"L":
+				parts.append("L")
 			"T":
 				parts.append("T:%s" % str(action[1]))
 			"I":
@@ -1616,6 +1653,8 @@ static func _door_read(code: String) -> Array:
 				actions.append(["D", int(f[1]), int(f[2]), what])
 			"X":
 				actions.append(["X", int(f[1]), int(f[2])])
+			"L":
+				actions.append(["L"])
 			"T":
 				actions.append(["T", float(f[1])])
 			"I":

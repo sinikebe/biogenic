@@ -7527,6 +7527,7 @@ func _check_invites() -> void:
 	await _invites_strangers()
 	await _invites_doors()
 	await _invites_room()
+	await _invites_house_closed()
 	await _invites_server()
 	OS.remove_logger(_inv_catcher)
 	_invites_no_secret()
@@ -8339,6 +8340,134 @@ func _invites_room() -> void:
 		+ " answered -- while three barred IPv4 addresses bar no neighbour, and three /64s"
 		+ " barred at the LAN door none either")
 	await _limits_close([host])
+
+
+## **H1-H4: the house's listener closing by itself** (issue #105), as 4.7's
+## `ENetMultiplayerPeer.poll()` closes one whose service failed -- a send the
+## network refused, as when an interface goes down under it: `close()`, which
+## takes every transport on it and tells the host nothing. Closed here by hand,
+## between two frames and once inside the very call that brings a caller in,
+## where a real failure is found. The server lets its LAN guest go, keeps its
+## internet guest, and answers the house again at once; a phone goes back to
+## showing its code; and with the port taken meanwhile, the listener is tried
+## every second and opens again once it is free.
+func _invites_house_closed() -> void:
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	# H1: the server, with a guest from the house and one by invite.
+	var host: Node = await _invites_host("InvHouseHost")
+	var lan: Node = await _limits_guest("InvHouseLan")
+	var lan_id: int = lan.my_id()
+	var far: Node = await _session("InvHouseFar")
+	await _invites_call(far, bob)
+	var far_id: int = far.my_id()
+	var from := _inv_catcher.lines.size()
+	(host.get("_peer") as ENetMultiplayerPeer).close()
+	await _limits_until(func() -> bool:
+		return int(host.gate_counts["lan_closed"]) >= 1 \
+			and int(lan.link) != NetSession.Link.TOGETHER)
+	var let_go: bool = host.via_of(lan_id) == -1 \
+		and not (host.get("_addresses") as Dictionary).has(lan_id) \
+		and host.guests() == [far_id] and int(host.link) == NetSession.Link.TOGETHER
+	lan.join("127.0.0.1")
+	await _until_link(lan, NetSession.Link.TOGETHER)
+	await _wait(0.3)
+	var lines := _inv_catcher.lines.slice(from)
+	_says(let_go and int(host.gate_counts["lan_closed"]) == 1
+			and _count(lines, "[net] the LAN listener closed by itself") == 1
+			and _count(lines, "[net] the LAN listener is open again, 0.0 s on") == 1
+			and _said(lines, "[net] %d (127.0.0.1) done after" % lan_id)
+			and int(lan.link) == NetSession.Link.TOGETHER
+			and int(host.via_of(lan.my_id())) == NetSession.VIA_LAN
+			and int(far.link) == NetSession.Link.TOGETHER
+			and int(host.via_of(far_id)) == NetSession.VIA_NET
+			and str(host.label_of(far_id)) == "bob" and (host.guests() as Array).size() == 2,
+		"invites H1: the server's LAN listener closing under a LAN guest lets that guest go"
+		+ " -- its line in the log, nothing of it kept -- and opens again the same frame,"
+		+ " where it calls back and is in; bob's guest by invite plays on throughout, and"
+		+ " the log says it once: 'the LAN listener closed by itself', 'open again, 0.0 s on'")
+	await _limits_close([host, lan, far])
+	# H2: a phone, with its friend in.
+	var phone: Node = await _limits_host("InvHousePhone")
+	var friend: Node = await _limits_guest("InvHouseFriend")
+	(phone.get("_peer") as ENetMultiplayerPeer).close()
+	await _limits_until(func() -> bool:
+		return int(phone.gate_counts["lan_closed"]) >= 1 \
+			and int(friend.link) != NetSession.Link.TOGETHER)
+	var showing: bool = int(phone.link) == NetSession.Link.LISTENING \
+		and str(phone.trouble) == "they left" and (phone.guests() as Array).is_empty()
+	friend.join("127.0.0.1")
+	await _until_link(friend, NetSession.Link.TOGETHER)
+	_says(showing and int(friend.link) == NetSession.Link.TOGETHER
+			and (phone.guests() as Array).size() == 1,
+		"invites H2: a phone host's listener closing under its friend shows its code again"
+		+ " -- 'they left' -- and the friend calling back is in")
+	await _limits_close([phone, friend])
+	# H3: inside the call that brings a caller in, the session's record of it
+	# made first.
+	var lone: Node = await _limits_host("InvHouseLone")
+	var enet: ENetMultiplayerPeer = lone.get("_peer")
+	# The records the session had made, and the frame it closed in.
+	var held := [-1, -1]
+	enet.peer_connected.connect(func(_id: int) -> void:
+		held[0] = (lone.get("_via") as Dictionary).size()
+		held[1] = Engine.get_process_frames()
+		enet.close(), CONNECT_ONE_SHOT)
+	var caller: Node = await _session("InvHouseCaller")
+	caller.join("127.0.0.1")
+	var seen := [-1]
+	await _limits_until(func() -> bool:
+		if int(lone.gate_counts["lan_closed"]) >= 1:
+			seen[0] = Engine.get_process_frames()
+		return int(seen[0]) >= 0)
+	var none_kept: bool = (lone.peer_ids() as Array).is_empty() \
+		and (lone.get("_via") as Dictionary).is_empty() \
+		and (lone.get("_addresses") as Dictionary).is_empty() \
+		and lone.get("_peer") != enet
+	await _limits_until(func() -> bool: return int(caller.link) != NetSession.Link.REACHING)
+	caller.join("127.0.0.1")
+	await _until_link(caller, NetSession.Link.TOGETHER)
+	_says(int(held[0]) == 1 and int(seen[0]) == int(held[1]) and none_kept
+			and int(caller.link) == NetSession.Link.TOGETHER,
+		"invites H3: a listener closing in the very service call a caller came in by is"
+		+ " found straight after it, in that frame, the record just made for that caller"
+		+ " let go with it, and the caller calling again is answered on the listener"
+		+ " opened anew")
+	await _limits_close([lone, caller])
+	# H4: the port taken the moment it closed.
+	host = await _invites_host("InvHouseTaken")
+	far = await _session("InvHouseTakenFar")
+	await _invites_call(far, bob)
+	from = _inv_catcher.lines.size()
+	(host.get("_peer") as ENetMultiplayerPeer).close()
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(Lan.PORT) == OK
+	await _wait(2.5)
+	var down: bool = float(host.get("_lan_down_since")) >= 0.0
+	var counting: float = host._now() - float(host.get("_saturation_from"))
+	var far_on := int(far.link) == NetSession.Link.TOGETHER
+	squatter.close()
+	var took := await _limits_until(func() -> bool:
+		return float(host.get("_lan_down_since")) < 0.0, 3.0)
+	lan = await _limits_guest("InvHouseTakenLan")
+	lines = _inv_catcher.lines.slice(from)
+	var on := -1.0
+	for line: String in lines:
+		if line.begins_with("[net] the LAN listener is open again, "):
+			on = float(line.get_slice(", ", 1).get_slice(" ", 0))
+	# One try the frame it closed, then one a second -- each an engine line.
+	var tries := _count(lines, "Couldn't create an ENet host")
+	_says(squatted and down and counting < 1.5 and far_on and took >= 0.0
+			and on >= 2.5 and on < 4.0 and tries >= 2 and tries <= 4
+			and _count(lines, "[net] the LAN listener could not open again: port %d is taken"
+				% Lan.PORT) == 1
+			and int(lan.link) == NetSession.Link.TOGETHER
+			and int(far.link) == NetSession.Link.TOGETHER,
+		"invites H4: with the port taken the moment the listener closed, it is tried again"
+		+ " every second -- %d tries in 2.5 s -- and said once, arrivals at the internet"
+		% tries + " listener still counted (%.1f s since the last count) and its guest"
+		% counting + " playing on; free again, it opens %.1f s on and a LAN guest is in" % on)
+	await _limits_close([host, far, lan])
 
 
 ## **L1-L12: the real server scene** (`game/server/`), with a book of its own

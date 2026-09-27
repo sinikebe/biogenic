@@ -465,6 +465,9 @@ const NOTES_MAX := 256
 ## Two real guests send about 7 KB and 170 datagrams a second.
 const SATURATED_BYTES := 65536.0
 const SATURATED_DATAGRAMS := 2000.0
+## **A LAN listener that closed by itself is opened again** (issue #105): at
+## once, and then at most this often while the port will not open.
+const LAN_REOPEN_EVERY := 1.0
 
 var link := Link.OFF
 ## The heading a screen puts on the current state of the link, when that state
@@ -673,6 +676,11 @@ var _calls_all: Bucket = null
 ## The internet listener's own address book and all-callers bucket.
 var _net_book: Dictionary = {}
 var _net_calls_all: Bucket = null
+## **The LAN listener's own recovery** (issue #105): since when it has been
+## down, having closed by itself, or -1; and the soonest it may be opened
+## again. See [method _lan_closed_by_itself].
+var _lan_down_since := -1.0
+var _lan_reopen_at := 0.0
 ## `kind|key` -> `[next line allowed, lines held back]`. See [method _note].
 var _notes: Dictionary = {}
 ## When this node's last frame began: the gap a stall is measured by.
@@ -950,22 +958,31 @@ func host(guests: int = 1) -> bool:
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
 		return false
-	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_server(Lan.PORT, _slots())
-	if err != OK:
+	if not _open_lan():
 		_give_up(Link.FAILED, "could not listen",
 			"something else on this device is already using the water.")
 		return false
-	# **Read here, and not by SceneMultiplayer**: `_api` is never handed this
-	# peer, or SceneTree would poll it at the top of every frame and run every
-	# command it carries before the gate saw a byte. See [method _pump].
-	_peer = peer
-	peer.peer_connected.connect(_on_peer_connected.bind(VIA_LAN))
-	peer.peer_disconnected.connect(_on_peer_disconnected.bind(VIA_LAN))
 	if is_inside_tree() and not get_tree().process_frame.is_connected(_on_tree_frame):
 		get_tree().process_frame.connect(_on_tree_frame)
 	set_process(true)
 	_set_link(Link.LISTENING)
+	return true
+
+
+## **The LAN listener, opened** on [constant Lan.PORT]: by [method host], and
+## again after it closed by itself ([method _lan_closed_by_itself]). False,
+## with nothing kept, if the port is taken.
+##
+## **Read here, and not by SceneMultiplayer**: `_api` is never handed this
+## peer, or SceneTree would poll it at the top of every frame and run every
+## command it carries before the gate saw a byte. See [method _pump].
+func _open_lan() -> bool:
+	var peer := ENetMultiplayerPeer.new()
+	if peer.create_server(Lan.PORT, _slots()) != OK:
+		return false
+	_peer = peer
+	peer.peer_connected.connect(_on_peer_connected.bind(VIA_LAN))
+	peer.peer_disconnected.connect(_on_peer_disconnected.bind(VIA_LAN))
 	return true
 
 
@@ -2396,10 +2413,18 @@ func _pump() -> void:
 
 
 func _pump_one(enet: ENetMultiplayerPeer, via: int) -> void:
-	if enet == null \
-			or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+	if enet == null:
+		return
+	if enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		# The LAN listener, closed on an earlier frame and not open again yet.
+		if via == VIA_LAN and hosting and _peer == enet:
+			_lan_closed_by_itself()
 		return
 	enet.poll()
+	if via == VIA_LAN and hosting and _peer == enet \
+			and enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+		_lan_closed_by_itself()
+		return
 	if via == VIA_NET and _net_peer == enet \
 			and enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 		# ENet closes a listener whose service fails. Nothing a caller sends
@@ -2420,6 +2445,41 @@ func _pump_one(enet: ENetMultiplayerPeer, via: int) -> void:
 	while _transport(via) == enet and enet.get_available_packet_count() > 0:
 		var from := enet.get_packet_peer()
 		_take_datagram(from, enet.get_packet(), via)
+
+
+## **The LAN listener closed by itself** (issue #105). ENet closes a listener
+## whose service fails -- on a plain UDP socket, a send the network refused,
+## as when an interface goes down under it -- and its transports go with it,
+## with no goodbye from any of them. Said once, each let go of here as its
+## goodbye would have, and the listener opened again on the same port, so a
+## host goes on being found by its code: a phone's screen and the server
+## alike, which hosts once and never again. Tried at once, and then at most
+## once every [constant LAN_REOPEN_EVERY] while the port will not open; the
+## internet listener, and whoever proved an invite there, are not touched.
+func _lan_closed_by_itself() -> void:
+	var now := _now()
+	var closed := _peer
+	if _lan_down_since < 0.0:
+		_lan_down_since = now
+		gate_counts["lan_closed"] += 1
+		_note("lan closed", "", "[net] the LAN listener closed by itself")
+		for id: int in _via.keys():
+			if int(_via[id]) == VIA_LAN:
+				_on_peer_disconnected(id, VIA_LAN)
+		# A screen hearing "they left" may have closed the session, or
+		# hosted anew: then this listener is nobody's to open.
+		if _peer != closed or not hosting:
+			return
+	if now < _lan_reopen_at:
+		return
+	_lan_reopen_at = now + LAN_REOPEN_EVERY
+	if not _open_lan():
+		_note("lan reopen", "", "[net] the LAN listener could not open again: port %d is"
+			% Lan.PORT + " taken -- trying every %d s" % roundi(LAN_REOPEN_EVERY), true)
+		return
+	_note("lan open", "", "[net] the LAN listener is open again, %.1f s on"
+		% (now - _lan_down_since))
+	_lan_down_since = -1.0
 
 
 ## **One datagram, as ENet delivered it.** Oversize is judged before anything
@@ -3128,8 +3188,9 @@ func _queue_inbox(from: int, size: int) -> void:
 ## The peaks are kept in [member gate_counts] for tools.
 func _count_arrivals(now: float) -> void:
 	var span := now - _saturation_from
-	if span < 1.0 or _peer == null \
-			or _peer.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
+	# **Each listener on its own** (issue #105): one that closed by itself no
+	# longer stops the other being counted.
+	if span < 1.0 or (_peer == null and _net_peer == null):
 		return
 	_saturation_from = now
 	# Both listeners, the internet one's counted after DTLS has had its say:
@@ -3221,6 +3282,8 @@ func _zero_counts() -> void:
 		# a newcomer took, callers that hung up having proved nothing, and /56s
 		# barred as one.
 		"net_evicted": 0, "net_left": 0, "net_barred_wide": 0,
+		# **Times the LAN listener closed by itself** (issue #105).
+		"lan_closed": 0,
 	}
 
 
@@ -3496,6 +3559,8 @@ func _reset_socket() -> void:
 	_notes.clear()
 	_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
 	_net_calls_all = Bucket.new(CALLS_ALL_RATE, CALLS_ALL_BURST, _now())
+	_lan_down_since = -1.0
+	_lan_reopen_at = 0.0
 	_frame_at = _now()
 	_saturation_from = _now()
 	trouble = ""

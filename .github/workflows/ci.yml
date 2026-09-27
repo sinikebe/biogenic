@@ -278,8 +278,9 @@ jobs:
         # feed and a loopback HTTP server -- no network. Last, `invites`
         # (net-hardening.md part C): the invite line and the kept invite, calls
         # by invite over DTLS on loopback and each way one ends, hostile callers
-        # at the internet listener, the two doors, and the real server scene
-        # with a book of its own.
+        # at the internet listener, the two doors, the LAN listener closing
+        # under a host (part G), and the real server scene with a book of its
+        # own.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -293,19 +294,19 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 335 checks, caps itself at 500
-        # frames a second and quits itself in 150 to 155 seconds: some seven in
+        # a backstop only. The probe makes 339 checks, caps itself at 500
+        # frames a second and quits itself in 157 to 161 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # twenty-three to twenty-six in `limits`, at up to 100 frames a second,
         # about twenty-five in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
-        # about ten in the server's, and about sixty in `invites`, at up to 50
-        # frames a second, most of it waiting out what a player would -- the
-        # eight seconds of a call nothing answers, the three of a caller that
-        # never proves. Its pond timings are counted in frames, not wall
+        # about ten in the server's, and about sixty-seven in `invites`, at up
+        # to 50 frames a second, most of it waiting out what a player would --
+        # the eight seconds of a call nothing answers, the three of a caller
+        # that never proves. Its pond timings are counted in frames, not wall
         # milliseconds, so a loaded runner slows the step without failing it.
-        # It prints its own frame count -- 13,800 to 14,000, measured three
+        # It prints its own frame count -- 14,200 to 14,600, measured three
         # times -- so the margin on 20000 is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
@@ -379,6 +380,54 @@ jobs:
           if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
             grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
             echo "::error::the network fuzzer hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
+      - name: Take the network from under a host
+        # tools/net_drop.gd (issue #105, net-hardening.md part G): a send that
+        # really fails. A dedicated host on an address of lo, with a guest in;
+        # when it prints `ready` this shell -- root in the namespace, which
+        # Godot is not -- takes the address away, and the host's next send
+        # fails. ENet closes a listener whose send fails, and the host must say
+        # so, let its guest go and listen again at once. When it prints
+        # `dropped` the address comes back, and a new guest must be in. The
+        # probe's `invites` H1-H4 close the listener by hand, as 4.7 does after
+        # a failed send; this is the one check that the send fails and ENet
+        # closes it, which an engine upgrade could change.
+        #
+        # The same namespace and the same user as the fuzz step above. Some
+        # three seconds; `timeout` is the backstop for a scene that never
+        # ends, and each wait here gives up after thirty.
+        run: |
+          set -uo pipefail
+          out=$(sudo unshare --net -- bash -c '
+              ip link set lo up && ip addr add 10.77.0.5/24 dev lo || exit 1
+              log=$(mktemp)
+              setpriv --reuid="$1" --regid="$2" --clear-groups env HOME="$3" \
+                timeout 60 "$3/godot/godot" --headless --path "$4" \
+                res://tools/net_drop.tscn > "$log" 2>&1 &
+              godot=$!
+              step() {
+                for _ in $(seq 300); do
+                  grep -q "^\[net-drop\] $1" "$log" && return 0
+                  sleep 0.1
+                done
+                return 1
+              }
+              step ready && ip addr del 10.77.0.5/24 dev lo
+              step dropped && ip addr add 10.77.0.5/24 dev lo
+              wait "$godot"
+              cat "$log"' \
+            _ "$(id -u)" "$(id -g)" "$HOME" "$PWD" 2>&1) || true
+          grep -E "^\[net-drop\]|^\[net\]" <<< "$out" || true
+          if ! grep -q "^\[net-drop\] ALL PASS$" <<< "$out"; then
+            grep -E "SCRIPT ERROR|Parse Error" <<< "$out" || true
+            echo "::error::a host did not come back from its network going -- see the lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the network-drop check hit a script error"
             exit 1
           fi
 

@@ -48,6 +48,12 @@ door C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|I:replace|D:9:1:raw:040100
 # everybody pays for the ten the door took, and the eleventh is busy.
 door C:21:1:203.0.113.21|D:21:1:hello:4|T:0.2|C:22:1:203.0.113.22|D:22:1:hello:4|T:1.4|C:23:1:203.0.113.23
 door C:31:1:2001:db8:0:100::1|T:3.5|C:32:1:2001:db8:0:101::1|T:3.5|C:33:1:2001:db8:0:102::1|T:3.5|C:34:1:2001:db8:0:1ff::5
+# #105: the LAN listener closes by itself under a guest and a caller still
+# saying hello, beside an internet guest, and both are let go; the next caller
+# is answered on the listener opened again. And a phone's, closed again the
+# moment it opened -- so held closed for a second -- and once more after.
+door C:5:0:192.168.1.5|D:5:0:hello:4|C:6:0:192.168.1.6|C:9:1:203.0.113.9|D:9:1:hello:4|D:9:1:proof:good|L|C:7:0:192.168.1.7|D:7:0:hello:4|T:0.05
+door P|C:5:0:127.0.0.5|D:5:0:hello:4|L|L|C:6:0:127.0.0.6|D:6:0:hello:4|T:1.2|L|C:7:0:127.0.0.7|D:7:0:hello:4
 # #104: a phone host answers its own /24 and loopback alone -- not the
 # carrier's pool, another /24 of the house, or IPv6's own networks.
 door P|C:7:0:100.64.0.10|D:7:0:hello:4|C:8:0:10.20.30.40|C:9:0:fd00::9|C:10:0:127.0.0.9|D:10:0:hello:4
