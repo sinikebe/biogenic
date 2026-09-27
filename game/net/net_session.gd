@@ -2803,7 +2803,8 @@ func _drop_on(via: int, id: int) -> void:
 
 ## Bars [param from] for [constant BAR_FIRST], or [constant BAR_AGAIN] when it
 ## was barred inside the last [constant BAR_AGAIN] already, at the door of the
-## listener [param via]. Returns how long.
+## listener [param via] -- never past [param most], which spares the address
+## and not its /56. Returns how long.
 func _bar(from: String, via: int = VIA_LAN, most: float = INF) -> float:
 	if from.is_empty():
 		return 0.0
@@ -2824,9 +2825,11 @@ func _bar(from: String, via: int = VIA_LAN, most: float = INF) -> float:
 				and now - float(other["barred_at"]) < BAR_AGAIN:
 			near += 1
 	if near >= BARS_TO_WIDEN:
+		# The /56 by its own count, whatever [param most] spared the address:
+		# an old protocol's minute is for a phone, not for a neighbourhood.
 		var whole := _book_entry(wider, now, book)
 		if now >= float(whole["barred_until"]):
-			var held := _bar_entry(whole, now, most)
+			var held := _bar_entry(whole, now)
 			gate_counts["net_barred_wide"] += 1
 			_note("barred wide", "internet", "[net] barred %s for %d s at the internet door:"
 				% [wider, roundi(held)] + " %d of its /64s barred inside %d s"
