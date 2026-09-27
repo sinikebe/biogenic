@@ -273,6 +273,9 @@ var _arrivals := 0
 var _dead := false
 ## ...and the first arrival asked for after it must be a born cell's, r26.
 var _born_next := false
+## **The death was the guest's own DIED**, not one the host made: see
+## [method judge_enter].
+var _died_itself := false
 ## The last body to leave without dying: when, its wound and grace then, and
 ## whether it had ever arrived.
 var _left_at := -INF
@@ -307,6 +310,14 @@ var _gift_used := false
 var _stale_until := -INF
 ## A SISTER was taken: one PERSON with a new body may follow.
 var _birth_open := false
+## **Until when a birth may be said** -- [constant BIRTH_WAIT] after its SISTER,
+## which the daughter's PERSON follows on the same ordered channel (#102). A
+## birth held back past it is not one.
+var _birth_until := -INF
+## **Whether this body's shout bonus is spent**: one per body -- a death, an
+## arrival or a birth hands a new one -- however many times a new body is said
+## (#102).
+var _bonus_spent := false
 var _out := false
 var _frozen := Vector2.ZERO
 var _division_open := false
@@ -328,6 +339,9 @@ var _history: Array = []
 ## The reach of the body before this one, for a shout that was sent before a
 ## new body and lands after it.
 var _reach_before := 0.0
+## Until when [member _reach_before] is still the body's: [constant SHOUT_PAST]
+## after the new body -- a call already on its way -- and no longer (#102).
+var _reach_before_until := -INF
 
 
 func _init(now: float) -> void:
@@ -390,6 +404,7 @@ func credit_meals(meals: int) -> void:
 func died(now: float) -> void:
 	_dead = true
 	_born_next = true
+	_bonus_spent = false
 	_owe_sister(now)
 	_end_body()
 
@@ -415,8 +430,16 @@ func left(now: float, wound: float, grace: float) -> void:
 ## that has not arrived yet -- the retry after an unanswered ENTER.
 func judge_enter(now: float, radius: float, present: bool) -> bool:
 	judged["enter"] = int(judged["enter"]) + 1
+	# **Only the first ENTER after a death the host made must be a born
+	# cell's**, so no guest is locked out: one that left the water as its body
+	# was killed never heard the kill -- a contact is not obeyed out of the pond
+	# (`_guest_hears`) -- and comes back as the body it still is. **After its
+	# own death the rule holds until a born cell arrives** (#102): a guest that
+	# said DIED knows it died, and every honest build comes back from that as
+	# one, so a refusal cannot be spent to come back full-grown.
 	var born := _born_next
-	_born_next = false
+	if not _died_itself:
+		_born_next = false
 	if present and arrived:
 		_foul(ENTER, WEIGHT_ENTER, "arrival: asked to arrive while it is swimming here",
 			now)
@@ -460,6 +483,8 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 	_arrivals += 1
 	_dead = false
 	_born_next = false
+	_died_itself = false
+	_bonus_spent = false
 	_end_body()
 	# **Anchored at the arrival**: the first frame must lie within the slack and
 	# 1,100 a second since, of where the host put it -- or of the arrival before,
@@ -514,15 +539,24 @@ func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		return []
 	var fouled := false
 	if new_body:
-		if not present or not arrived or _birth_open:
+		var birth := _birth_open and now <= _birth_until
+		if not present or not arrived or birth:
 			_birth_open = false
 			_reach_before = _reach()
+			_reach_before_until = now + SHOUT_PAST
 			worn = tiers.duplicate()
 			_arrival_worn = worn.duplicate()
 			_gift_used = false
 			_new_shout_rate(now)
-			_shout_bonus()
-			return [true]
+			if not _bonus_spent:
+				_bonus_spent = true
+				_shout_bonus()
+			# **Renewed only where a renew is a new body**: with none here -- the
+			# PERSON before an ENTER -- or at a birth. A body placed and not yet
+			# arrived keeps what its arrival granted: its tiers are taken, but a
+			# renew now would give it a new cell's wound and grace, and an
+			# honest build says a new body before its ENTER, never after (#102).
+			return [not present or birth]
 		_foul(BODY, WEIGHT_BODY, "body: a new one out of turn -- taken as the one it"
 			+ " has", now)
 		fouled = true
@@ -589,9 +623,21 @@ func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Arra
 		_out = true
 		_frozen_unknown = true
 		_meals_at_out = _meals
+		# **Unseen, but not anywhere** (#102): the mother swam no further since
+		# her last frame than the movement budget allows -- a host stall is
+		# credited to it -- and her sister is born a ring's width from there.
+		move.refill(now)
+		var could := SISTER_DISTANCE + SISTER_RING + maxf(move.tokens, 0.0) + MOVE_SLACK
+		var far := (at - _claim_at).length()
+		if not (far <= could):
+			_foul(SISTER, WEIGHT_SISTER_OFF, "sister: %.0f units from where her mother"
+				% far + " was last, where she could be %.0f -- put there" % could, now)
+			at = _claim_at + _toward(at - _claim_at) * could
 	_division_open = false
 	_sister_taken = true
 	_birth_open = true
+	_birth_until = now + BIRTH_WAIT
+	_bonus_spent = false
 	_born_by = -INF
 	# The daughter, and whatever the host fed her if her first frames beat the
 	# SISTER here: every meal sent since her mother was last seen out.
@@ -611,10 +657,11 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 	if absf(radius - DAUGHTER_RADIUS) > RADIUS_SLACK:
 		size = DAUGHTER_RADIUS
 		off = true
+	# A distance that overflows float32 -- past about 1.8e19 -- is off the ring,
+	# and [method _toward] still finds her direction (#102).
 	var apart := at.distance_to(mother)
-	if ring and absf(apart - SISTER_DISTANCE) > SISTER_RING:
-		var away := (at - mother) / apart if apart > 0.001 else Vector2.RIGHT
-		place = mother + away * SISTER_DISTANCE
+	if ring and not (absf(apart - SISTER_DISTANCE) <= SISTER_RING):
+		place = mother + _toward(at - mother) * SISTER_DISTANCE
 		off = true
 	if off and ring:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f, %.0f units from her mother --"
@@ -635,6 +682,7 @@ func judge_died(now: float, cause: int, by: int, present: bool) -> Array:
 	if not present:
 		return []
 	died(now)
+	_died_itself = true
 	if cause == FoodField.Cause.STARVED and by == 0:
 		return [cause, by]
 	_foul(DIED, WEIGHT_DIED, "death: said it died of cause %d by %d, where only"
@@ -656,6 +704,16 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 	# new born body's reach, which is none. Dropped, uncharged and never fouled.
 	if not (reach > 0.0) or not (radius > 0.0):
 		return false
+	# **Never bigger than a body, never further than an organ calls**, in the
+	# water or out of it (#102). A listener holds a call's mark for as long as
+	# its caller's size says, so a call from a guest with no body here is held
+	# to the numbers no honest call passes.
+	var reach_max: float = CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1]
+	if radius > CellBody.DIVIDE_RADIUS + RADIUS_SLACK or reach > reach_max + RADIUS_SLACK:
+		_foul(SHOUT, WEIGHT_SHOUT, "shout: at r%.2f reaching %.0f, where no body is over"
+			% [radius, reach] + " r%.0f and no organ calls past %.0f" % [
+				CellBody.DIVIDE_RADIUS, reach_max], now)
+		return false
 	if shouts.take(1.0, now) < 1.0:
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: more often than what it wears calls", now)
 		return false
@@ -675,7 +733,8 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 		return false
 	var reach_now := _reach()
 	if not (reach_now > 0.0 and is_equal_approx(reach, reach_now)) \
-			and not (_reach_before > 0.0 and is_equal_approx(reach, _reach_before)):
+			and not (_reach_before > 0.0 and now <= _reach_before_until
+				and is_equal_approx(reach, _reach_before)):
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: reaching %.0f, where what it wears reaches %.0f"
 			% [reach, reach_now], now)
 		return false
@@ -836,6 +895,19 @@ func _await_birth(now: float) -> void:
 	if _division_open:
 		_division_open = false
 		_foul(OUT, WEIGHT_OUT, "dividing: came back a daughter and left no sister", now)
+
+
+## **The way [param v] points**, for any vector a wire can carry: scaled before
+## it is normalised, because float32 squares a component past about 1.8e19 to
+## inf, and a direction divided by inf is nothing (#102). Along x for none.
+static func _toward(v: Vector2) -> Vector2:
+	var span := maxf(absf(v.x), absf(v.y))
+	if not (span > 0.001):
+		return Vector2.RIGHT
+	if not is_finite(span):
+		return Vector2(signf(v.x) if not is_finite(v.x) else 0.0,
+			signf(v.y) if not is_finite(v.y) else 0.0).normalized()
+	return (v / span).normalized()
 
 
 func _nearest_anchor(at: Vector2) -> Vector2:

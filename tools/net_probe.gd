@@ -2323,6 +2323,7 @@ func _check_referee() -> void:
 	_referee_shouts()
 	_referee_reentry()
 	_referee_once()
+	_referee_gaps()
 	for node: Node in _ref_nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -3082,7 +3083,11 @@ func _referee_arrivals() -> void:
 	ref3.judge_died(1.0, FoodField.Cause.STARVED, 0, true)
 	var not_born := ref3.judge_enter(2.0, 40.0, false)
 	var not_born_said := _ref_rules(ref3.take_fouls())
+	# It said DIED itself, so until a born cell arrives every ENTER must be one
+	# (#102): a refusal does not spend the rule, where the first build let the
+	# next one past.
 	var next := ref3.judge_enter(2.1, 40.0, false)
+	var born_next := ref3.judge_enter(2.2, 26.0, false)
 	var ref4 := Referee.new(0.0)
 	var taken := 0
 	for i in 6:
@@ -3108,12 +3113,14 @@ func _referee_arrivals() -> void:
 	_says(not swimming and _ref_rules(swimming_said) == [Referee.ENTER]
 			and float(swimming_said[0][1]) == Referee.WEIGHT_ENTER
 			and not big and not small and sizes_said == [Referee.ENTER, Referee.ENTER]
-			and waiting and not not_born and not_born_said == [Referee.ENTER] and next
-			and taken == int(Referee.ENTER_BANK) and rate_said == [Referee.ENTER] and later,
+			and waiting and not not_born and not_born_said == [Referee.ENTER] and not next
+			and born_next and taken == int(Referee.ENTER_BANK) and rate_said == [Referee.ENTER]
+			and later,
 		"referee R8: an ENTER while swimming here is refused, %.0f point; r45 and"
 		% (float(swimming_said[0][1]) if not swimming_said.is_empty() else 0.0)
 		+ " r20 are refused; one while the last is still waiting is taken; after a"
-		+ " death the first must be r26, and the next is taken; %d at once are" % taken
+		+ " death it said itself every one must be r26 until one arrives; %d at once are"
+		% taken
 		+ " taken and the rest refused until the budget refills")
 
 
@@ -3276,6 +3283,132 @@ func _referee_once() -> void:
 		% called + " without the stall it is")
 
 
+## **The gaps the full read of game/net found, shut** (#102): each one a rule a
+## modified guest could step round for a point or none. A new body said behind
+## its ENTER does not renew the arrival; a birth is said at once or not at all;
+## the born-cell rule outlives a refused ENTER; a call is held to what a body and
+## an organ can be, in the water or out; a body earns one shout bonus however
+## often it is said; the last body's reach counts only while its calls can
+## still be landing; and a sister's place is bounded when her mother's stop was
+## never seen, and found on the ring even from 1e20 units off.
+func _referee_gaps() -> void:
+	var born := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 1}
+	# A new body behind its ENTER: its tiers taken, no renew, no foul.
+	var behind := Referee.new(0.0)
+	behind.judge_enter(0.0, CellBody.BASE_RADIUS, false)
+	behind.arrive(0.0, Vector2.ZERO, CellBody.BASE_RADIUS)
+	var behind_said := behind.judge_person(0.1, true, born, born.keys(), true)
+	var behind_clean := behind.take_fouls().is_empty()
+	# A birth: said at once, renewed; held back past BIRTH_WAIT, out of turn.
+	var birth := _ref_out_at_forty()
+	birth.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var at_once := birth.judge_person(3.0, true, born, born.keys(), true)
+	var at_once_clean := birth.take_fouls().is_empty()
+	var held := _ref_out_at_forty()
+	held.judge_sister(3.0, Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS, true)
+	var held_back := held.judge_person(3.0 + Referee.BIRTH_WAIT + 1.0, true, born,
+		born.keys(), true)
+	var held_said := _ref_rules(held.take_fouls())
+	# After its own death -- it said DIED -- an ENTER at r40 is refused, and so
+	# is the next: the rule is not spent by a refusal. Then a born cell's.
+	var reborn := _ref_arrived(0.0, Vector2.ZERO)
+	reborn.judge_died(1.0, FoodField.Cause.STARVED, 0, true)
+	var big_first := reborn.judge_enter(2.0, CellBody.DIVIDE_RADIUS, false)
+	var big_again := reborn.judge_enter(3.0, CellBody.DIVIDE_RADIUS, false)
+	var as_born := reborn.judge_enter(4.0, CellBody.BASE_RADIUS, false)
+	var reborn_said := _ref_rules(reborn.take_fouls())
+	# After a death the host made, only the first need be a born cell's: a guest
+	# that left the water as it was killed never heard the kill, comes back as
+	# the body it still is, and must not be locked out.
+	var killed := _ref_arrived(0.0, Vector2.ZERO)
+	killed.died(1.0)
+	var killed_first := killed.judge_enter(2.0, 35.0, false)
+	var killed_again := killed.judge_enter(3.0, 35.0, false)
+	var killed_said := _ref_rules(killed.take_fouls())
+	# A call no body could make, from a guest with no body here; then an honest
+	# one from the biggest body with the farthest organ.
+	var worn := Genome.BORN.duplicate()
+	worn[&"ampulla"] = 1
+	var caller := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	var huge := caller.judge_shout(1.0, Vector2.ZERO, 3.0e38, 3.0e38, false)
+	var huge_said := _ref_rules(caller.take_fouls())
+	var reach_max: float = CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1]
+	var biggest := caller.judge_shout(2.0, Vector2(9000.0, 0.0), CellBody.DIVIDE_RADIUS,
+		reach_max, false)
+	var biggest_clean := caller.take_fouls().is_empty()
+	# A new body said twice a second for 30 s with no body here, and a call
+	# after each: what the organ calls, and one bonus -- not one a body.
+	var farm := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
+	farm.left(0.5, 0.0, 0.0)
+	var farmed := 0
+	for i in 60:
+		var t := 1.0 + 0.5 * float(i)
+		farm.judge_person(t, true, worn, worn.keys(), false)
+		if farm.judge_shout(t, Vector2.ZERO, 26.0, 1100.0, false):
+			farmed += 1
+	farm.take_fouls()
+	var calls_itself := int(Referee.SHOUT_BANK) + 2 \
+		+ int(30.0 / (CellBody.PING_PERIOD_BY_TIER[1] - Referee.SHOUT_EARLY))
+	# The last body's reach: while its calls may still be landing, and no longer.
+	var three := Genome.BORN.duplicate()
+	three[&"ampulla"] = 3
+	var old := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, three)
+	old.died(1.0)
+	old.judge_person(1.5, true, Genome.BORN, Genome.BORN.keys(), false)
+	old.judge_enter(1.5, CellBody.BASE_RADIUS, false)
+	old.arrive(1.5, Vector2.ZERO, CellBody.BASE_RADIUS)
+	old.claim(1.6, Vector2.ZERO, 0.0, CellBody.BASE_RADIUS, Vector2.ZERO, 0.0, false)
+	var landing := old.judge_shout(2.0, Vector2.ZERO, CellBody.BASE_RADIUS, reach_max, true)
+	var long_after := old.judge_shout(1.5 + Referee.SHOUT_PAST + 1.0, Vector2.ZERO,
+		CellBody.BASE_RADIUS, reach_max, true)
+	var old_said := _ref_rules(old.take_fouls())
+	# A division never seen, her sister said 1e30 units off: put where her
+	# mother could have swum to since her last frame, and fouled.
+	var flung := _ref_arrived(0.0, Vector2.ZERO)
+	flung.credit_meals(4)
+	flung.claim(2.0, Vector2.ZERO, 0.0, CellBody.DIVIDE_RADIUS, Vector2.ZERO, 0.0, false)
+	var thrown := flung.judge_sister(2.5, Vector2(-2.0e30, 3.0e30), Referee.DAUGHTER_RADIUS,
+		true)
+	var thrown_said := _ref_rules(flung.take_fouls())
+	var could := Referee.SISTER_DISTANCE + Referee.SISTER_RING + Referee.MOVE_HOLD \
+		+ Referee.MOVE_SLACK
+	var thrown_ok := thrown.size() == 2 and (thrown[0] as Vector2).is_finite() \
+		and (thrown[0] as Vector2).length() <= could + 1.0
+	# A division seen, her sister said 1e20 units off: on the ring, not on her
+	# mother -- float32 squares that distance to inf.
+	var ring := _ref_out_at_forty()
+	var off_ring := ring.judge_sister(3.0, Vector2(1.0e20, 0.0), Referee.DAUGHTER_RADIUS, true)
+	var ring_ok := off_ring.size() == 2 \
+		and (off_ring[0] as Vector2).distance_to(Vector2(Referee.SISTER_DISTANCE, 0.0)) < 0.01
+	_says(behind_said == [false] and behind_clean and at_once == [true] and at_once_clean
+			and held_back == [false] and held_said == [Referee.BODY],
+		"referee R11: a new body said behind its ENTER takes its tiers but renews"
+		+ " nothing -- the arrival's wound and grace stand -- and a daughter said at"
+		+ " her SISTER is renewed, where one held back %.0f s is out of turn"
+		% (Referee.BIRTH_WAIT + 1.0))
+	_says(not big_first and not big_again and as_born
+			and reborn_said == [Referee.ENTER, Referee.ENTER] and not killed_first
+			and killed_again and killed_said == [Referee.ENTER],
+		"referee R12: after a death it said itself, an ENTER at r40 is refused, and so"
+		+ " is the next -- a refusal does not spend the born-cell rule -- and one at"
+		+ " r26 is taken; after a death the host made, the second is taken, so a guest"
+		+ " that left as it was killed is never locked out")
+	_says(not huge and huge_said == [Referee.SHOUT] and biggest and biggest_clean
+			and farmed <= calls_itself and landing and not long_after
+			and old_said == [Referee.SHOUT],
+		"referee R13: a call at r3e38 reaching 3e38 from a guest with no body here is"
+		+ " refused and fouled, where r40 reaching %.0f is heard; a new body said" % reach_max
+		+ " twice a second for 30 s buys %d calls, not one each (at most %d); and the"
+		% [farmed, calls_itself] + " last body's reach is heard %.0f s after it and" % 0.5
+		+ " refused %.0f s after" % (Referee.SHOUT_PAST + 1.0))
+	_says(thrown_ok and thrown_said == [Referee.SISTER] and ring_ok,
+		"referee R14: an unseen division's sister said 3e30 units off is put %.0f"
+		% ((thrown[0] as Vector2).length() if thrown.size() == 2 else -1.0)
+		+ " from her mother's last place, within the %.0f she could swim, and" % could
+		+ " fouled; a seen one's said 1e20 off is put on the ring at %.0f, not on her"
+		% Referee.SISTER_DISTANCE + " mother")
+
+
 # ---------------------------------------------------------------------------
 # The whole way through: a real run, a real session, a real membrane.
 #
@@ -3399,6 +3532,19 @@ func _check_run() -> void:
 	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
 	_says(marks.is_empty(),
 		"a shout from beyond twice the shouter's reach is not heard")
+
+	# **A call no body could make** (#102), from the host -- over whose calls a
+	# guest has no referee: as big as a float and reaching as far, it is heard
+	# as the biggest honest call, and its mark held no longer than one.
+	marks.clear()
+	other.shout(SHOUT_FROM, 3.0e38, 3.0e38)
+	await _hold(cell, Vector2.ZERO, PI * 0.5, 0.5)
+	var longest := FoodField.PING_RING * 2.0 * CellBody.DIVIDE_RADIUS / FoodField.PING_SPEED
+	var capped := not marks.is_empty() and float(marks[0]["hold"]) <= longest + 1e-4 \
+		and float(marks[0]["strength"]) <= 1.0
+	_says(capped, "a call at r3e38 reaching 3e38 is held as the biggest honest one:"
+		+ " %.2f s, where r%.0f's is %.2f s" % [float(marks[0]["hold"]) if not marks.is_empty()
+			else -1.0, CellBody.DIVIDE_RADIUS, longest])
 
 	# ----------------------------------------------------------------------
 	# **The marker, all the way to the thing that draws it.** Everything above

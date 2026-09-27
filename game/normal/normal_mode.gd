@@ -876,12 +876,17 @@ func _hear_others() -> void:
 		return
 	for said: Array in _net.drain_heard():
 		var at: Vector2 = said[0]
-		var radius := float(said[1])
-		var reach := float(said[2])
+		# **No bigger than a body, no further than an organ calls** (#102): the
+		# mark is held for as long as the caller's size says, and a host's
+		# referee is the only thing between a guest's call and here -- a guest
+		# has none over its host. Honest calls are never over either.
+		var radius := minf(float(said[1]), CellBody.DIVIDE_RADIUS)
+		var reach := minf(float(said[2]),
+			CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1])
 		# A bodiless or organless shouter is not a thing a cell can hear, and
 		# it is also the one input that would divide by zero below. Both
 		# answered by not hearing it.
-		if radius <= 0.0 or reach <= 0.0:
+		if not (radius > 0.0) or not (reach > 0.0):
 			continue
 		var apart := _cell.position.distance_to(at)
 		# Surface to surface, the way `_cast_ping` measures everything.
