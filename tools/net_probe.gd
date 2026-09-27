@@ -7691,6 +7691,160 @@ func _invites_format() -> void:
 		"invites F6: CHALLENGE is %d bytes and PROOF %d, each exactly and from its own"
 		% [Wire.CHALLENGE_SIZE, Wire.PROOF_SIZE] + " side alone -- a byte either side, or"
 		+ " the other side, is refused -- and each reads back as written")
+	# F7: an address says what it dials (#106) -- at --reach, at the mint, and
+	# in a line some older mint wrote.
+	# Taken as before: a literal is read by Godot's own parser, decimal, so a
+	# zero-padded one and IPv4 in IPv6 clothes that shows its IPv4 address
+	# both dial what they show.
+	var plain := ["203.0.113.7", "127.0.0.1", "10.0.0.1", "::1", "2001:db8::7",
+		"pond.example.net", "localhost", "a1.example", "203.000.113.007",
+		"::ffff:203.0.113.7"]
+	var disguised := ["2130706433", "127.1", "0x7f.0.0.1", "0x7f000001", "017700000001",
+		"0.0.0.0", "0.1.2.3", "255.255.255.255", "224.0.0.1", "240.0.0.1", "::", "ff02::1",
+		"::ffff:7f00:1", "::ffff:0.0.0.1", "::ffff:224.0.0.1", "pond.example.123",
+		"0:ffff::0.0.0.0", "0000:FFFF::0.0.0.0", "0:ffff::203.0.113.7"]
+	# Refused though they dial what they show: `Lan` reads them otherwise, or
+	# not at all, and `Lan` is what places an address -- a home network, or a
+	# phone's own loopback.
+	var unread := ["203.0000.113.7", "0203.0.113.7", "::ffff:203.0000.113.7",
+		"1:2:3:4:5:6:7::8", "0:0:0:0:0:0::ffff:203.0.113.7"]
+	var wrong: Array = []
+	for address: String in plain:
+		if not Invite.address_ok(address) or Invite.parse_reach(address).has("error") \
+				or int(Invite.parse(Invite.format(address, Invite.PORT, key_id, secret,
+					der))["read"]) != Invite.Read.OK:
+			wrong.append("refused " + address)
+	for address: String in disguised + unread:
+		if Invite.address_ok(address) or not Invite.parse_reach(address).has("error") \
+				or not Invite.format(address, Invite.PORT, key_id, secret, der).is_empty() \
+				or int(Invite.parse(_invite_line_to(address, key_id, secret, der))["read"]) \
+					!= Invite.Read.DAMAGED:
+			wrong.append("took " + address)
+	for address: String in unread:
+		if not str(Invite.parse_reach(address).get("error", "")).contains("not read the same"):
+			wrong.append("did not say why of " + address)
+	_says(wrong.is_empty(),
+		"invites F7: %d addresses that show what they dial -- zero-padded, and IPv4 in"
+		% plain.size() + " IPv6 clothes showing it, as before -- are taken at --reach, minted"
+		+ " and read back; %d that do not -- a number a resolver reads as 127.0.0.1, no"
+		% disguised.size() + " machine or every machine, IPv4 in IPv6 clothes written in hex"
+		+ " or spelled to dial another address than it shows -- are refused at --reach,"
+		+ " never minted, and damage in an old line, as '%s' says;" % str(Invite.parse_reach(
+			"2130706433").get("error", "")) + " and so are %d that dial what they show but"
+		% unread.size() + " that this build reads otherwise, saying so"
+		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(PackedStringArray(wrong))))
+	# F8: junk behind checks that read costs the log nothing, or a certificate's
+	# worth of lines a paste at most (#106).
+	var junk := PackedStringArray()
+	for n in 2000:
+		var spoiled := "1.%s" % ["QUJDRA", "QUI=QUJD", "QQ===", "QUJDRA="][n % 4]
+		junk.append(Invite.PREFIX + spoiled + "." + Invite._check_of(spoiled))
+	var shaped := PackedByteArray([0x30, 0x82, 0x01, 0x00])
+	shaped.resize(4 + 256)
+	var fakes := PackedStringArray()
+	var shapeless := PackedStringArray()
+	for n in 50:
+		fakes.append(_invite_line_to("203.0.113.7", key_id, secret, shaped))
+		shapeless.append(_invite_line_to("203.0.113.7", key_id, secret,
+			crypto.generate_random_bytes(260)))
+	var logged := _inv_catcher.lines.size()
+	var junk_read := int(Invite.parse(" ".join(junk))["read"])
+	junk_read = maxi(junk_read, int(Invite.parse(" ".join(shapeless))["read"]))
+	var junk_lines := _inv_catcher.lines.size() - logged
+	logged = _inv_catcher.lines.size()
+	var fakes_read := int(Invite.parse(" ".join(fakes))["read"])
+	var fake_lines := _count(_inv_catcher.lines.slice(logged), "Error parsing X509 certificates")
+	var fake_all := _inv_catcher.lines.size() - logged
+	var three := " ".join(fakes.slice(0, 3)) + " " + line
+	var after_three := int(Invite.parse(three)["read"])
+	var more := " ".join(fakes.slice(0, Invite.CERTIFICATES_MAX)) + " " + line
+	var after_more := int(Invite.parse(more)["read"])
+	# Surrogates on their own, as a Windows clipboard hands over a broken
+	# pair: 60,000 of them ahead of a real invite, made by decoding a hundred
+	# -- which prints its hundred lines here, before the paste is read.
+	var lone_bytes := PackedByteArray()
+	for n in 100:
+		lone_bytes.append(n)
+		lone_bytes.append(0xDC)
+	var lone := lone_bytes.get_string_from_utf16().repeat(600)
+	logged = _inv_catcher.lines.size()
+	var lone_read := int(Invite.parse(lone + " " + line)["read"])
+	var lone_lines := _inv_catcher.lines.size() - logged
+	_says(junk_read == Invite.Read.DAMAGED and junk_lines == 0 and fakes_read == Invite.Read.DAMAGED
+			and fake_lines == Invite.CERTIFICATES_MAX and fake_all == fake_lines
+			and after_three == Invite.Read.OK and after_more == Invite.Read.DAMAGED
+			and lone.length() == 60000 and lone_read == Invite.Read.OK and lone_lines == 0,
+		"invites F8: a paste of 2,000 invites whose base64 does not decode, and one of 50"
+		+ " whose certificates are not even DER, print %d engine lines; one of 50" % junk_lines
+		+ " whose certificates are DER and do not parse prints %d, the most a paste may: a"
+		% fake_lines + " real invite after three of those still reads, and after %d it is"
+		% Invite.CERTIFICATES_MAX + " damage; and one behind 60,000 surrogates on their own,"
+		+ " as a broken Windows clipboard hands them over, reads and prints %d" % lone_lines)
+	# F9: an owner whose --reach, set by an older build, is one this build will
+	# not call is told so wherever that --reach is shown -- and changing it
+	# still names the invites already sent with it (#106).
+	var legacy := INVITES_ROOT.path_join("legacy")
+	var set_first: Array = InviteBook.set_reach("203.0.113.7", legacy)
+	var minted: Array = InviteBook.mint("dave", legacy)
+	var old_reach := ConfigFile.new()
+	old_reach.set_value("reach", "address", "2130706433")
+	old_reach.set_value("reach", "port", 45772)
+	Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
+		old_reach.encode_to_text().to_utf8_buffer())
+	var stale := InviteBook.reach_refused(legacy)
+	var none_taken := InviteBook.reach(legacy).is_empty()
+	var listed: Array = InviteBook.listing(legacy)
+	var mint_refused: Array = InviteBook.mint("erin", legacy)
+	var set_again: Array = InviteBook.set_reach("203.0.113.9", legacy)
+	var set_lines := "\n".join(PackedStringArray(set_again[1]))
+	# And a port a hand made no port of, as a number and as no number at all:
+	# said to be the port's fault, and no script error.
+	var said_of_port: Array = []
+	for bad_port: Variant in [70000, [1]]:
+		old_reach.set_value("reach", "address", "203.0.113.7")
+		old_reach.set_value("reach", "port", bad_port)
+		Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
+			old_reach.encode_to_text().to_utf8_buffer())
+		said_of_port.append(InviteBook.reach_refused(legacy))
+	# Setting a new one then names the invites already sent by their address
+	# alone: no invite ever called a port that is no port.
+	var set_past_bad: Array = InviteBook.set_reach("203.0.113.9", legacy)
+	var past_bad_lines := "\n".join(PackedStringArray(set_past_bad[1]))
+	_invites_wipe(legacy)
+	_says(int(set_first[0]) == 0 and int(minted[0]) == 0 and none_taken
+			and stale.contains("2130706433:45772") and stale.contains("is a number")
+			and str(listed[1][0]).contains(stale) and int(mint_refused[0]) == 1
+			and str(mint_refused[1][0]).contains(stale) and int(set_again[0]) == 0
+			and set_lines.contains("invites already sent still call 2130706433:45772")
+			and str(said_of_port[0]).contains("its port is not one from 1 to 65535")
+			and str(said_of_port[1]).contains("before, 203.0.113.7, is not one this build")
+			and str(said_of_port[1]).contains("its port is not one from 1 to 65535")
+			and past_bad_lines.contains("invites already sent still call 203.0.113.7: mint")
+			and not (str(said_of_port[1]) + past_bad_lines).contains(":-1"),
+		"invites F9: a --reach an older build stored as 2130706433 is named, not taken for"
+		+ " none, at --invites and at the mint ('%s'), and setting a new one still says" % stale
+		+ " the invites already sent call the old; a port a hand made no port of is said"
+		+ " to be the port's fault, and never shown as one")
+
+
+## **An invite line to [param address], as [method Invite.format] writes one but
+## asking nothing of the address** -- what a mint from before #106 could have
+## written, or anybody by hand.
+static func _invite_line_to(address: String, key_id: PackedByteArray,
+		secret: PackedByteArray, der: PackedByteArray) -> String:
+	var payload := PackedByteArray()
+	payload.append_array(key_id)
+	payload.append_array(secret)
+	payload.append(Invite.PORT & 0xFF)
+	payload.append((Invite.PORT >> 8) & 0xFF)
+	var host := address.to_ascii_buffer()
+	payload.append(host.size())
+	payload.append_array(host)
+	payload.append(der.size() & 0xFF)
+	payload.append((der.size() >> 8) & 0xFF)
+	payload.append_array(der)
+	var inner := "%d.%s" % [Invite.VERSION, Marshalls.raw_to_base64(payload)]
+	return Invite.PREFIX + inner + "." + Invite._check_of(inner)
 
 
 ## **C1-C8: calls by invite, to a host of their own each, over DTLS on

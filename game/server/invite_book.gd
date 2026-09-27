@@ -212,7 +212,9 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 	if said.has("error"):
 		return [1, ["--reach: %s. For example --reach=203.0.113.7 or" % said["error"]
 			+ " --reach=pond.example.net:45772 (both placeholders)."]]
-	var before := reach(root)
+	# As written, so an address this build no longer calls is still named in
+	# the line below: the invites sent with it are the owner's to mint again.
+	var before := _stored_reach(root)
 	# `pond/` made `rwx------` now, when `--reach` is the first job: the key
 	# and the book will go in it, and a directory made in passing is `rwxr-xr-x`.
 	var made := Invite.make_private_dir(str(paths(root)["pond"]))
@@ -238,8 +240,7 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 			and (str(before["address"]) != str(said["address"])
 				or int(before["port"]) != int(said["port"])):
 		out.append("invites already sent still call %s: mint them again (--invite=<name>)"
-			% Invite.reach_text(str(before["address"]), int(before["port"]))
-			+ " for anyone who has one.")
+			% _stored_text(before) + " for anyone who has one.")
 	return [0, out]
 
 
@@ -252,6 +253,9 @@ static func mint(text: String, root: String = ROOT) -> Array:
 	if name.begins_with("!"):
 		return [1, [name.substr(1)]]
 	var where := reach(root)
+	if where.is_empty() and not reach_refused(root).is_empty():
+		return [1, ["--invite: %s, with --reach=<your public address or name>[:<port>]."
+			% reach_refused(root)]]
 	if where.is_empty():
 		return [1, ["--invite: friends need an address to call first. Set it with"
 			+ " --reach=<your public address or name>[:<port>] -- where your router"
@@ -361,11 +365,9 @@ static func revoke(text: String, root: String = ROOT) -> Array:
 ## Never a secret.
 static func listing(root: String = ROOT) -> Array:
 	var book := entries(root)
-	var where := reach(root)
 	var out: PackedStringArray = []
 	out.append("friends call %s; the server listens on %d/udp for them."
-		% [Invite.reach_text(str(where["address"]), int(where["port"]))
-			if not where.is_empty() else "(nowhere yet: set --reach)", Invite.PORT])
+		% [reach_said(root, "(nowhere yet: set --reach)"), Invite.PORT])
 	if book.is_empty():
 		out.append("no invites. --invite=<name> makes one.")
 		return [0, out]
@@ -445,8 +447,52 @@ static func entries_of(text: String) -> Dictionary:
 	return out
 
 
-## `{address, port}` friends dial, or empty before `--reach`.
+## `{address, port}` friends dial, or empty before `--reach` -- and empty for a
+## stored one this build will not call, which [method reach_refused] says why.
 static func reach(root: String = ROOT) -> Dictionary:
+	var stored := _stored_reach(root)
+	if stored.is_empty() or not Invite.address_ok(str(stored["address"])) \
+			or int(stored["port"]) < 1 or int(stored["port"]) > 65535:
+		return {}
+	return stored
+
+
+## **A `--reach` set before, that this build will not call** (issue #106): the
+## sentence saying so, and what to do, for every place that would otherwise
+## say none was set; or "" for none, or one it calls. An address a resolver
+## reads as a number, or one that is no one machine, was taken before #106.
+static func reach_refused(root: String = ROOT) -> String:
+	var stored := _stored_reach(root)
+	if stored.is_empty() or not reach(root).is_empty():
+		return ""
+	var address := str(stored["address"])
+	return "the --reach set before, %s, is not one this build calls: %s. Set it again" % [
+		_stored_text(stored), Invite.why_not(address)
+			if not Invite.address_ok(address) else "its port is not one from 1 to 65535"]
+
+
+## Where friends call, for a line: the address and port, the sentence of
+## [method reach_refused] in brackets, or [param none].
+static func reach_said(root: String, none: String) -> String:
+	var where := reach(root)
+	if not where.is_empty():
+		return Invite.reach_text(str(where["address"]), int(where["port"]))
+	var refused := reach_refused(root)
+	return "(%s)" % refused if not refused.is_empty() else none
+
+
+## A stored reach as a line names it: the address and port, or the address
+## alone when its port is no port at all -- only a hand makes one, and no
+## invite ever called it.
+static func _stored_text(stored: Dictionary) -> String:
+	var port := int(stored["port"])
+	if port < 1 or port > 65535:
+		return str(stored["address"])
+	return Invite.reach_text(str(stored["address"]), port)
+
+
+## The `{address, port}` in the reach file as written, asking nothing of it.
+static func _stored_reach(root: String) -> Dictionary:
 	var text := _read(str(paths(root)["reach"]))
 	if text.is_empty():
 		return {}
@@ -454,10 +500,14 @@ static func reach(root: String = ROOT) -> Dictionary:
 	if file.parse(text) != OK:
 		return {}
 	var address := str(file.get_value("reach", "address", ""))
-	var port := int(file.get_value("reach", "port", Invite.PORT))
-	if not Invite.address_ok(address) or port < 1 or port > 65535:
+	if address.is_empty():
 		return {}
-	return {"address": address, "port": port}
+	# A number, as `set_reach` writes it, or anything a hand made of it: what
+	# is not a number is no port, and -1 says so without a script error.
+	var port: Variant = file.get_value("reach", "port", Invite.PORT)
+	if port is String and (port as String).is_valid_int():
+		port = (port as String).to_int()
+	return {"address": address, "port": int(port) if port is int or port is float else -1}
 
 
 ## **`[key, certificate, certificate DER]`**, or empty while there is none, or

@@ -41,6 +41,7 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Wire := preload("res://game/net/wire.gd")
+const Lan := preload("res://game/net/lan.gd")
 
 const PREFIX := "biogenic-invite:"
 ## **The one format this build writes and reads.** Anything else that checks
@@ -64,6 +65,11 @@ const CHECK_CHARS := 8
 ## A paste longer than this is not an invite and a message around one; nothing
 ## past it is read.
 const PASTE_MAX := 65536
+## **Certificates read from one paste, at most** (issue #106). One that does
+## not parse is a line in the engine's log, and the check before it is no
+## secret: fifty invites with junk certificates in one paste were fifty lines.
+## A real paste holds one invite, two in a copied thread.
+const CERTIFICATES_MAX := 4
 ## `rw-------`: every file here that holds a secret.
 const PRIVATE := FileAccess.UNIX_READ_OWNER | FileAccess.UNIX_WRITE_OWNER
 ## `rwx------`: the directory the owner's invite lines are written to.
@@ -80,7 +86,8 @@ enum Read {
 	## No `biogenic-invite:` anywhere in it.
 	NOT_FOUND,
 	## One was there, but not whole: cut short, a character changed, or a
-	## check that does not match.
+	## check that does not match -- or whole, and to an address this build
+	## will not call, or past the certificates a paste may parse (#106).
 	DAMAGED,
 	## Whole, and made by a newer build than this one.
 	UNKNOWN_VERSION,
@@ -215,11 +222,12 @@ static func parse(text: String) -> Dictionary:
 	var lower := flat.to_lower()
 	var best := Read.NOT_FOUND
 	var from := 0
+	var certificates := [CERTIFICATES_MAX]
 	while true:
 		var at := lower.find(PREFIX, from)
 		if at < 0:
 			break
-		var got := _read_at(flat, at + PREFIX.length())
+		var got := _read_at(flat, at + PREFIX.length(), certificates)
 		if int(got["read"]) == Read.OK:
 			return got
 		if int(got["read"]) == Read.UNKNOWN_VERSION or best == Read.NOT_FOUND:
@@ -229,8 +237,9 @@ static func parse(text: String) -> Dictionary:
 
 
 ## One invite read from [param at], just past its prefix, in [param flat],
-## which has had everything invisible taken out.
-static func _read_at(flat: String, at: int) -> Dictionary:
+## which has had everything invisible taken out. [param certificates] is how
+## many more this paste may parse: see [constant CERTIFICATES_MAX].
+static func _read_at(flat: String, at: int, certificates: Array) -> Dictionary:
 	var damaged := {"read": Read.DAMAGED}
 	var n := flat.length()
 	var i := at
@@ -252,7 +261,12 @@ static func _read_at(flat: String, at: int) -> Dictionary:
 		return damaged
 	if int(version_text) != VERSION:
 		return {"read": Read.UNKNOWN_VERSION}
-	var payload := Marshalls.base64_to_raw(flat.substr(body_at, j - body_at))
+	# **Base64 that decodes, asked first** (issue #106): the engine's decoder
+	# says anything else in the log.
+	var body := flat.substr(body_at, j - body_at)
+	if not _base64_whole(body):
+		return damaged
+	var payload := Marshalls.base64_to_raw(body)
 	var fixed := KEY_ID_SIZE + SECRET_SIZE + 2 + 1
 	if payload.size() < fixed:
 		return damaged
@@ -272,6 +286,12 @@ static func _read_at(flat: String, at: int) -> Dictionary:
 			or address.length() != host_size or not address_ok(address):
 		return damaged
 	var der := payload.slice(k)
+	# **A certificate's shape before its parse** (issue #106), for the same
+	# reason: one DER SEQUENCE, exactly as long as it says, as every
+	# certificate is -- and no more parses than a paste may have.
+	if not _der_whole(der) or int(certificates[0]) <= 0:
+		return damaged
+	certificates[0] = int(certificates[0]) - 1
 	var certificate := certificate_of(der)
 	if certificate == null:
 		return damaged
@@ -284,10 +304,42 @@ static func _check_of(inner: String) -> String:
 	return inner.sha256_text().substr(0, CHECK_CHARS)
 
 
+## Whole groups of four, `=` only at the end and two at most: base64 the
+## engine decodes without a word. Every character is already one of
+## [method _is_base64]'s.
+static func _base64_whole(text: String) -> bool:
+	if text.length() % 4 != 0:
+		return false
+	var pad := text.find("=")
+	return pad < 0 or (pad >= text.length() - 2
+		and text.substr(pad) == "=".repeat(text.length() - pad))
+
+
+## One DER SEQUENCE, its length -- short form, or long in one or two bytes --
+## exactly the rest of [param der].
+static func _der_whole(der: PackedByteArray) -> bool:
+	if der.size() < 2 or der[0] != 0x30:
+		return false
+	var head := 2
+	var length: int = der[1]
+	if length >= 0x80:
+		var width := length & 0x7F
+		if width < 1 or width > 2 or der.size() < 2 + width:
+			return false
+		length = 0
+		for i in width:
+			length = (length << 8) | der[2 + i]
+		head += width
+	return der.size() == head + length
+
+
 ## **What a messaging app may have put inside a line**, taken out: ASCII
 ## controls and space, DEL and the C1 controls, the no-break and soft-hyphen
 ## characters, every Unicode space and zero-width character, the line and
-## paragraph separators, the bidirectional marks, and the byte-order mark.
+## paragraph separators, the bidirectional marks, and the byte-order mark. And
+## what is no character at all (issue #106): a surrogate on its own, which
+## Windows' clipboard hands over as it found it, and anything past U+10FFFF --
+## `String.chr` says so in the log for each one, and none is ever an invite's.
 static func _squeeze(text: String) -> String:
 	var out := PackedStringArray()
 	for i in text.length():
@@ -295,7 +347,8 @@ static func _squeeze(text: String) -> String:
 		if c <= 0x20 or (c >= 0x7F and c <= 0xA0) or c == 0xAD or c == 0x1680 \
 				or c == 0x180E or (c >= 0x2000 and c <= 0x200F) \
 				or (c >= 0x2028 and c <= 0x202F) or (c >= 0x205F and c <= 0x206F) \
-				or c == 0x3000 or c == 0xFEFF:
+				or c == 0x3000 or c == 0xFEFF or (c >= 0xD800 and c <= 0xDFFF) \
+				or c > 0x10FFFF:
 			continue
 		out.append(String.chr(c))
 	return "".join(out)
@@ -380,14 +433,21 @@ static func proof_mac(secret: PackedByteArray, protocol: int,
 ## zone, which names an adapter on the owner's machine and nothing a friend has
 ## -- or a host name of 1-253 characters in labels of 1-63 letters, digits and
 ## inner hyphens.
+##
+## **What it says is what it dials** (issue #106). A name whose last label is
+## all digits, or starts `0x`, is a number to a resolver: glibc's reads
+## `2130706433`, `127.1` and `0x7f.0.0.1` as 127.0.0.1, which the call screen
+## would show as written. No top-level domain is either. And a literal must be
+## one machine, showing what it is: see [method _literal_problem].
 static func address_ok(address: String) -> bool:
 	if address.is_empty() or address.length() > 253 or address.contains("%"):
 		return false
 	if address.is_valid_ip_address():
-		return true
+		return _literal_problem(address).is_empty()
 	if address.contains(":"):
 		return false
-	for label: String in address.split("."):
+	var labels := address.split(".")
+	for label: String in labels:
 		if label.is_empty() or label.length() > 63 or label.begins_with("-") \
 				or label.ends_with("-"):
 			return false
@@ -396,7 +456,84 @@ static func address_ok(address: String) -> bool:
 			if not (_is_digit(c) or (c >= 97 and c <= 122) or (c >= 65 and c <= 90)
 					or c == 45):
 				return false
-	return true
+	return not _numeric(labels[labels.size() - 1])
+
+
+## A label a resolver reads as a number: all digits, or `0x` and anything.
+static func _numeric(label: String) -> bool:
+	if label.to_lower().begins_with("0x"):
+		return true
+	for i in label.length():
+		if not _is_digit(label.unicode_at(i)):
+			return false
+	return not label.is_empty()
+
+
+## **What is wrong with an IP literal, as the call dials it**, said to the
+## owner who typed it; "" for one machine that shows what it is (issue #106).
+## A literal never meets a resolver: `create_client` reads it with Godot's own
+## parser, IPv4 as four decimal numbers, so `203.000.113.007` is 203.0.113.7 on
+## the screen and on the wire alike. Not the unspecified address (`0.0.0.0` and
+## the rest of 0/8, `::`), which a socket takes to mean its own device; not the
+## broadcast address or multicast (`255.255.255.255`, 224/4 and the reserved
+## 240/4 around it, `ff00::/8`). And IPv4 in IPv6 clothes only written with its
+## IPv4 address showing, as `::ffff:203.0.113.7` -- never in hex, where
+## `::ffff:7f00:1` is 127.0.0.1 unseen, and never so that the two readings part:
+## Godot reads any dotted tail as IPv4 in IPv6 clothes, wherever the `::` sits,
+## so `0:ffff::0.0.0.0` dials 0.0.0.0 while the plain reading says otherwise.
+## Last, `Lan` must read it as the call does, since `Lan` is what places it --
+## a home network for the owner's warning, loopback for a phone offline -- so a
+## part padded past three digits, `203.0000.113.7`, is refused, though it dials
+## what it shows. What the call dials is judged first, so the sentence is the
+## last one an owner needs.
+static func _literal_problem(address: String) -> String:
+	if not address.contains(":"):
+		if Lan._ipv4_octets(address).is_empty():
+			return _unread()
+		return _v4_problem(address.get_slice(".", 0).to_int())
+	var g := Lan._ipv6_groups(address)
+	if g.is_empty():
+		return _unread()
+	if address.contains(".") or Lan._v4_mapped(g):
+		# The call dials the IPv4 address in the last two groups, whatever the
+		# plain reading makes of the rest.
+		var dialled := _v4_problem(g[6] >> 8)
+		if not dialled.is_empty():
+			return dialled
+		if not Lan._v4_mapped(g):
+			return "is IPv4 inside IPv6 spelled so that the call dials another address" \
+				+ " than it shows -- write the IPv4 address instead"
+		if not address.contains("."):
+			return "is IPv4 inside IPv6 written in hex, which hides the address it is --" \
+				+ " write that IPv4 address instead"
+		return ""
+	if (g[0] & 0xFF00) == 0xFF00:
+		return "is a multicast address, not one machine -- friends call your router's" \
+			+ " address on the internet"
+	for group: int in g:
+		if group != 0:
+			return ""
+	return "is the unspecified address, which a device takes to mean itself -- friends" \
+		+ " call your router's address on the internet"
+
+
+## The sentence for a literal Godot reads one way and `Lan` another, or not at
+## all.
+static func _unread() -> String:
+	return "is not read the same way by this build and by the call -- write it plainly"
+
+
+## What is wrong with an IPv4 address whose first number is [param first], or
+## "": 0/8 is a device's own, and 224 and up is multicast, reserved or the
+## broadcast address.
+static func _v4_problem(first: int) -> String:
+	if first == 0:
+		return "is in 0/8, which a device takes to mean itself -- friends call your" \
+			+ " router's address on the internet"
+	if first >= 224:
+		return "is not one machine: multicast, reserved or the broadcast address --" \
+			+ " friends call your router's address on the internet"
+	return ""
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
@@ -430,8 +567,23 @@ static func parse_reach(text: String) -> Dictionary:
 	if port < 1 or port > 65535:
 		return {"error": "a port is a number from 1 to 65535"}
 	if not address_ok(host):
-		return {"error": "%s is not an address or a host name" % host}
+		return {"error": why_not(host)}
 	return {"address": host, "port": port}
+
+
+## Why `--reach` will not take [param host] (issue #106), said to the owner who
+## typed it -- with what to type instead, where there is something.
+static func why_not(host: String) -> String:
+	if host.is_valid_ip_address() and not _literal_problem(host).is_empty():
+		return "%s %s" % [host, _literal_problem(host)]
+	if not host.contains(":") and _numeric(host.get_slice(".", host.get_slice_count(".") - 1)):
+		for label: String in host.split("."):
+			if not _numeric(label):
+				return "%s ends in a number, which a resolver reads as an address:" % host \
+					+ " a name ends in letters"
+		return "%s is a number, not a name: an IPv4 address is four numbers from 0 to" % host \
+			+ " 255, like 203.0.113.7"
+	return "%s is not an address or a host name" % host
 
 
 ## `host:port`, or `[v6]:port`: how an address is written back to the owner.

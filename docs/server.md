@@ -518,6 +518,22 @@ An IPv6 address goes in brackets: `--reach=[2001:db8::7]:45772`. An address
 inside your own network gets a warning, because friends outside can never
 reach it.
 
+Write the address as what it is, because a friend's phone shows it exactly as
+written. `--reach` refuses a few things:
+- a number written as a name, which a resolver dials as some other address:
+  `2130706433` and `127.1` are both 127.0.0.1;
+- an address that is no one machine: `0.0.0.0` or `::`, the broadcast address
+  `255.255.255.255`, or a multicast one;
+- IPv4 inside IPv6 written in hex (`::ffff:7f00:1` is 127.0.0.1), or spelled
+  so that it dials another address than it shows (`0:ffff::203.0.113.7` is
+  203.0.113.7) -- write the IPv4 address instead;
+- a spelling this build does not read the way the call does, such as a part
+  padded past three digits (`203.0000.113.7`) -- write it plainly.
+
+Each refusal says why. An address an older build took that this one will not
+call is named, with why, in the server's status line, `--invites` and
+`--invite`: set `--reach` again, then mint again for anybody with an invite.
+
 **A name is dialled over IPv4 whenever it has an IPv4 address** (an A record),
 even when it has an IPv6 one too: a home router forwards a port over IPv4, and
 seldom opens one over IPv6. So IPv6 matters only for a name with no IPv4

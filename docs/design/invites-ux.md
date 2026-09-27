@@ -293,6 +293,15 @@ Row 4 mirrors `invite kept`. Its receipt says `still kept:` only when §2's
 read-back makes that true. It belongs in `Invite.SAYS` with the other three, not
 in the screen.
 
+Since #106 (net-hardening.md H.1), row 2 also covers two cases where the check
+is sound: an invite to an address this build will not call -- a number a
+resolver reads as some other address, no one machine, or one spelled to hide
+what it dials -- and a paste past the certificates it may parse. Neither arises from a real invite and a real paste.
+The first can come from a server that minted it before its own update, which
+now says why at every look, so "ask your friend to send it again" is still the
+way back: the friend's owner sets `--reach` and mints again. Whether it earns
+a sentence of its own is the owner's call.
+
 ### 6.3 Call failures, on TROUBLE
 
 The screen also needs the key, because the first button depends on it. The
