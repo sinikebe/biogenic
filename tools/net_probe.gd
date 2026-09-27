@@ -174,6 +174,7 @@ func _ready() -> void:
 	_check_pond_field()
 	_check_referee()
 	await _check_link()
+	await _check_bound()
 	await _check_skew()
 	await _check_limits()
 	await _check_run()
@@ -371,6 +372,33 @@ func _check_adapters() -> void:
 		+ " tether up answers with the Wi-Fi (%s); a phone that is the tether,"
 		% ", ".join(joined) + " with only cellular besides, answers with the"
 		+ " tether (%s)" % ", ".join(hosting))
+	# **Where a phone hosts** (issue #104): never on its cellular data, whose
+	# private addresses a carrier shares with every other subscriber, though a
+	# guest's side still answers with it; beside Wi-Fi, on the Wi-Fi; and when
+	# it is a hotspot, on the hotspot. 100.64.0.10 stands in for a carrier's
+	# pool (RFC 6598); 192.0.0.4 is the address Android gives every phone's
+	# IPv4 over an IPv6-only network.
+	var cellular := [{"name": "rmnet_data0", "friendly": "rmnet_data0",
+		"addresses": ["10.0.0.10"]}]
+	var beside_wifi := cellular + [{"name": "wlan0", "friendly": "wlan0",
+		"addresses": ["192.168.0.10"]}]
+	var beside_hotspot := cellular + [{"name": "swlan0", "friendly": "swlan0",
+		"addresses": ["192.168.43.1"]}]
+	var nowhere: PackedStringArray = []
+	for adapter: Array in [["ccmni1", "ccmni1", "100.64.0.10"],
+			["seth_lte0", "seth_lte0", "10.0.0.11"], ["pdp_ip0", "pdp_ip0", "10.0.0.12"],
+			["wwan0", "wwan0", "10.0.0.13"], ["wwp0s20f0u6", "wwp0s20f0u6", "10.0.0.14"],
+			["{4}", "Cellular", "10.0.0.15"],
+			["v4-rmnet_data0", "v4-rmnet_data0", "192.0.0.4"]]:
+		if Lan.pick_hosting([{"name": adapter[0], "friendly": adapter[1],
+				"addresses": [adapter[2]]}]).is_empty():
+			nowhere.append(str(adapter[1]))
+	_says(Lan.pick_hosting(cellular).is_empty() and Lan.pick_address(cellular) == "10.0.0.10"
+			and Lan.pick_hosting(beside_wifi) == "192.168.0.10"
+			and Lan.pick_hosting(beside_hotspot) == "192.168.43.1" and nowhere.size() == 7,
+		"adapters: a phone on cellular data alone hosts nowhere -- nor on %s --" % ", ".join(
+			nowhere) + " though its guest's side still answers with it; beside Wi-Fi it"
+		+ " hosts on the Wi-Fi, and when it is a hotspot, on the hotspot")
 
 
 # ---------------------------------------------------------------------------
@@ -866,6 +894,32 @@ func _check_carry() -> void:
 # ---------------------------------------------------------------------------
 # Two sessions, one process, over ENet on loopback.
 # ---------------------------------------------------------------------------
+
+## **A phone host answers at the address it hosts at, and nowhere else**
+## (issue #104). Bound there, a call to loopback -- another of this machine's
+## addresses -- is never answered, while one to the address it hosts at is;
+## the machine is both ends, so that call comes from the address too, which
+## the LAN door counts as its own /24.
+func _check_bound() -> void:
+	var host: Node = await _session("BoundHost")
+	host.bind_every_address = false
+	var hosted: bool = host.host()
+	var aside: Node = await _session("BoundAside")
+	var near: Node = await _session("BoundNear")
+	var from := _now()
+	aside.join("127.0.0.1")
+	near.join(str(host.address))
+	await _limits_until(func() -> bool:
+		return int(aside.link) != NetSession.Link.REACHING \
+			and int(near.link) != NetSession.Link.REACHING, NetSession.REACH_TIMEOUT + 3.0)
+	_says(hosted and int(near.link) == NetSession.Link.TOGETHER
+			and int(aside.link) != NetSession.Link.TOGETHER
+			and int(host.gate_counts["refused"]) == 0,
+		"a phone host bound to %s answers a call there, and a call to loopback" % host.address
+		+ " never reaches it -- '%s', %.1f s on -- and the door refused nobody"
+		% [aside.trouble, _now() - from])
+	await _limits_close([host, aside, near])
+
 
 func _check_link() -> void:
 	var host: Node = await _session("HostSide")
@@ -6237,6 +6291,9 @@ func _pond_start(node: Node, modes: Dictionary) -> void:
 func _session(named: String) -> Node:
 	var node: Node = NetSession.new()
 	node.name = named
+	# Every caller here is on loopback, which a phone host bound to its own
+	# address alone would never hear (issue #104); `_check_bound` holds that.
+	node.bind_every_address = true
 	_tally_on(node)
 	get_tree().root.add_child.call_deferred(node)
 	await node.ready

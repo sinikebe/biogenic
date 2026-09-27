@@ -81,8 +81,8 @@ const LINK_LOCAL := "169.254."
 ## friendly name, lowercased. Container and VM bridges and their cables
 ## (docker, veth, libvirt, LXC/LXD, CNI, podman, VirtualBox, VMware), VPN and
 ## overlay tunnels (tun, tap, WireGuard, Tailscale, ZeroTier, macOS `utun`), a
-## phone's cellular data (`rmnet`, `ccmni`), which no friend is on, and a
-## phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
+## phone's cellular data ([constant CELLULAR_PREFIXES]), which no friend is on,
+## and a phone's own tethers -- hotspot `swlan`, USB `rndis`, Bluetooth `bt-pan` --
 ## which Android puts in 192.168/16, where they would outrank a 10.x Wi-Fi on
 ## range alone. A phone that *is* the hotspot still answers with it: tether and
 ## cellular are both down here, and then range decides. Not `ap`: that would
@@ -91,8 +91,7 @@ const LINK_LOCAL := "169.254."
 ## and is not here.
 const VIRTUAL_PREFIXES: Array[String] = ["docker", "veth", "br-", "virbr",
 	"lxcbr", "lxdbr", "cni", "flannel", "podman", "vboxnet", "vmnet", "tun",
-	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "rmnet", "ccmni",
-	"swlan", "rndis", "bt-pan"]
+	"tap", "utun", "wg", "zt", "tailscale", "zerotier", "swlan", "rndis", "bt-pan"]
 ## The same, found anywhere in the name -- which is how Windows names them:
 ## `vEthernet (WSL)`, `vEthernet (Default Switch)` for Hyper-V, `VirtualBox
 ## Host-Only Network`, `VMware Network Adapter VMnet8`, `TAP-Windows Adapter`,
@@ -102,10 +101,39 @@ const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
 	"openvpn", "tap-windows", "wintun", "vpn", "npcap"]
 
 
+## **Cellular data, by its adapter's name** (issue #104): Qualcomm's `rmnet`,
+## MediaTek's `ccmni`, Unisoc's `seth_lte`, older Android's `pdp`, and a
+## laptop's mobile modem, `wwan0` or systemd's `wwp...` -- and on Windows, by
+## the friendly name. Its private addresses are the carrier's pool, shared
+## with every other subscriber the carrier lets through, so no friend is ever
+## on it with this device. And `v4-`, the interface Android adds for IPv4 over
+## an IPv6-only network: its address is 192.0.0.4 on every device, and nobody
+## else's call reaches it.
+const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "pdp", "ww",
+	"v4-"]
+const CELLULAR_WORDS: Array[String] = ["cellular", "mobile broadband"]
+
+
 ## This device's own address on whatever it is attached to, or "" if it is not
 ## attached to anything. [method pick_address] over the adapters Godot sees.
 static func local_address() -> String:
 	return pick_address(IP.get_local_interfaces())
+
+
+## **The address a phone hosts at** (issue #104): [method local_address]'s, or
+## "" when that is on cellular data -- so a phone hosts only where its friend
+## can be with it, never where the carrier's other subscribers are "in the
+## house". [method pick_hosting] over the adapters Godot sees.
+static func hosting_address() -> String:
+	return pick_hosting(IP.get_local_interfaces())
+
+
+## [method pick_address]'s choice from [param interfaces], or "" when it is on
+## a cellular adapter. A phone that is a hotspot still hosts at its tether:
+## that is the network its friend joins.
+static func pick_hosting(interfaces: Array) -> String:
+	var best := _pick(interfaces)
+	return "" if bool(best["cellular"]) else str(best["address"])
 
 
 ## **Which of these adapters' addresses is the LAN**, from a list shaped like
@@ -127,13 +155,20 @@ static func local_address() -> String:
 ## virtual adapter still answers with it rather than "", because a wrong guess
 ## on screen is something a player can see, and nothing is not.
 static func pick_address(interfaces: Array) -> String:
-	var best := ""
+	return str(_pick(interfaces)["address"])
+
+
+## [method pick_address]'s choice, and whether its adapter is cellular data:
+## `{address, cellular}`.
+static func _pick(interfaces: Array) -> Dictionary:
+	var best := {"address": "", "cellular": false}
 	var best_rank := 1 << 30
 	for iface: Variant in interfaces:
 		if not iface is Dictionary:
 			continue
-		var virtual := _is_virtual(str(iface.get("name", "")),
-			str(iface.get("friendly", "")))
+		var name := str(iface.get("name", ""))
+		var friendly := str(iface.get("friendly", ""))
+		var virtual := _is_virtual(name, friendly)
 		for address: String in PackedStringArray(iface.get("addresses",
 				PackedStringArray())):
 			if not _is_ipv4(address):
@@ -143,7 +178,7 @@ static func pick_address(interfaces: Array) -> String:
 			var rank := _range_rank(address) + (10 if virtual else 0)
 			if rank < best_rank:
 				best_rank = rank
-				best = address
+				best = {"address": address, "cellular": _is_cellular(name, friendly)}
 	return best
 
 
@@ -441,9 +476,26 @@ static func _v6_local(g: PackedInt32Array) -> bool:
 	return loopback or (g[0] & 0xFE00) == 0xFC00 or (g[0] & 0xFFC0) == 0xFE80
 
 
+## A cellular data adapter ([constant CELLULAR_PREFIXES]), by its name or
+## friendly name.
+static func _is_cellular(name: String, friendly: String) -> bool:
+	for each: String in [name.to_lower(), friendly.to_lower()]:
+		if each.is_empty():
+			continue
+		for prefix: String in CELLULAR_PREFIXES:
+			if each.begins_with(prefix):
+				return true
+		for word: String in CELLULAR_WORDS:
+			if each.contains(word):
+				return true
+	return false
+
+
 ## A container, VM, VPN, cellular or tether adapter, by its name or friendly
 ## name.
 static func _is_virtual(name: String, friendly: String) -> bool:
+	if _is_cellular(name, friendly):
+		return true
 	for each: String in [name.to_lower(), friendly.to_lower()]:
 		if each.is_empty():
 			continue

@@ -516,6 +516,11 @@ var protocol_override := 0
 ## internet listener skips the LAN-only guard -- and the LAN listener does not
 ## -- turns this off, and a loopback caller is then a stranger to the LAN door.
 var loopback_is_local := true
+## **A test seam: a phone host binds every address, as a dedicated one does.**
+## A phone host binds the address it hosts at alone (issue #104), so a caller
+## on loopback -- which is every tool's -- would never reach it. Tools set
+## this; nothing a player runs does.
+var bind_every_address := false
 
 var _api: SceneMultiplayer = null
 ## A guest's socket, or a host's LAN listener.
@@ -941,12 +946,20 @@ func host(guests: int = 1) -> bool:
 	_zero_counts()
 	hosting = true
 	guests_max = clampi(guests, 1, GUESTS_MAX)
-	address = Lan.local_address()
+	# **A phone hosts on its own network alone** (issue #104): never on its
+	# cellular data, whose private addresses a carrier shares with every other
+	# subscriber -- that is "no wi-fi here" -- and bound to the address it hosts
+	# at, so a caller at any other of its addresses, the cellular one or a
+	# public IPv6 one, is never answered. A dedicated host binds every address
+	# (net-hardening.md A.5, issue #69).
+	address = Lan.local_address() if guests_max > 1 else Lan.hosting_address()
 	if not hostable(address, guests_max):
 		_give_up(Link.FAILED, "no wi-fi here",
 			"this device is not on a network two cells could share.")
 		return false
 	var peer := ENetMultiplayerPeer.new()
+	if guests_max == 1 and not bind_every_address:
+		peer.set_bind_ip(address)
 	var err := peer.create_server(Lan.PORT, _slots())
 	if err != OK:
 		_give_up(Link.FAILED, "could not listen",
