@@ -7703,26 +7703,35 @@ func _invites_format() -> void:
 		"0.0.0.0", "0.1.2.3", "255.255.255.255", "224.0.0.1", "240.0.0.1", "::", "ff02::1",
 		"::ffff:7f00:1", "::ffff:0.0.0.1", "::ffff:224.0.0.1", "pond.example.123",
 		"0:ffff::0.0.0.0", "0000:FFFF::0.0.0.0", "0:ffff::203.0.113.7"]
+	# Refused though they dial what they show: `Lan` reads them otherwise, or
+	# not at all, and `Lan` is what places an address -- a home network, or a
+	# phone's own loopback.
+	var unread := ["203.0000.113.7", "0203.0.113.7", "::ffff:203.0000.113.7",
+		"1:2:3:4:5:6:7::8", "0:0:0:0:0:0::ffff:203.0.113.7"]
 	var wrong: Array = []
 	for address: String in plain:
 		if not Invite.address_ok(address) or Invite.parse_reach(address).has("error") \
 				or int(Invite.parse(Invite.format(address, Invite.PORT, key_id, secret,
 					der))["read"]) != Invite.Read.OK:
 			wrong.append("refused " + address)
-	for address: String in disguised:
+	for address: String in disguised + unread:
 		if Invite.address_ok(address) or not Invite.parse_reach(address).has("error") \
 				or not Invite.format(address, Invite.PORT, key_id, secret, der).is_empty() \
 				or int(Invite.parse(_invite_line_to(address, key_id, secret, der))["read"]) \
 					!= Invite.Read.DAMAGED:
 			wrong.append("took " + address)
+	for address: String in unread:
+		if not str(Invite.parse_reach(address).get("error", "")).contains("not read the same"):
+			wrong.append("did not say why of " + address)
 	_says(wrong.is_empty(),
 		"invites F7: %d addresses that show what they dial -- zero-padded, and IPv4 in"
 		% plain.size() + " IPv6 clothes showing it, as before -- are taken at --reach, minted"
 		+ " and read back; %d that do not -- a number a resolver reads as 127.0.0.1, no"
 		% disguised.size() + " machine or every machine, IPv4 in IPv6 clothes written in hex"
 		+ " or spelled to dial another address than it shows -- are refused at --reach,"
-		+ " never minted, and damage in an old line, as '%s' says"
-		% str(Invite.parse_reach("2130706433").get("error", ""))
+		+ " never minted, and damage in an old line, as '%s' says;" % str(Invite.parse_reach(
+			"2130706433").get("error", "")) + " and so are %d that dial what they show but"
+		% unread.size() + " that this build reads otherwise, saying so"
 		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(PackedStringArray(wrong))))
 	# F8: junk behind checks that read costs the log nothing, or a certificate's
 	# worth of lines a paste at most (#106).
@@ -7783,6 +7792,7 @@ func _invites_format() -> void:
 	Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
 		old_reach.encode_to_text().to_utf8_buffer())
 	var stale := InviteBook.reach_refused(legacy)
+	var none_taken := InviteBook.reach(legacy).is_empty()
 	var listed: Array = InviteBook.listing(legacy)
 	var mint_refused: Array = InviteBook.mint("erin", legacy)
 	var set_again: Array = InviteBook.set_reach("203.0.113.9", legacy)
@@ -7796,18 +7806,25 @@ func _invites_format() -> void:
 		Invite.write_private(str(InviteBook.paths(legacy)["reach"]),
 			old_reach.encode_to_text().to_utf8_buffer())
 		said_of_port.append(InviteBook.reach_refused(legacy))
+	# Setting a new one then names the invites already sent by their address
+	# alone: no invite ever called a port that is no port.
+	var set_past_bad: Array = InviteBook.set_reach("203.0.113.9", legacy)
+	var past_bad_lines := "\n".join(PackedStringArray(set_past_bad[1]))
 	_invites_wipe(legacy)
-	_says(int(set_first[0]) == 0 and int(minted[0]) == 0 and InviteBook.reach(legacy).is_empty()
+	_says(int(set_first[0]) == 0 and int(minted[0]) == 0 and none_taken
 			and stale.contains("2130706433:45772") and stale.contains("is a number")
 			and str(listed[1][0]).contains(stale) and int(mint_refused[0]) == 1
 			and str(mint_refused[1][0]).contains(stale) and int(set_again[0]) == 0
 			and set_lines.contains("invites already sent still call 2130706433:45772")
 			and str(said_of_port[0]).contains("its port is not one from 1 to 65535")
-			and str(said_of_port[1]).contains("its port is not one from 1 to 65535"),
+			and str(said_of_port[1]).contains("before, 203.0.113.7, is not one this build")
+			and str(said_of_port[1]).contains("its port is not one from 1 to 65535")
+			and past_bad_lines.contains("invites already sent still call 203.0.113.7: mint")
+			and not (str(said_of_port[1]) + past_bad_lines).contains(":-1"),
 		"invites F9: a --reach an older build stored as 2130706433 is named, not taken for"
 		+ " none, at --invites and at the mint ('%s'), and setting a new one still says" % stale
 		+ " the invites already sent call the old; a port a hand made no port of is said"
-		+ " to be the port's fault")
+		+ " to be the port's fault, and never shown as one")
 
 
 ## **An invite line to [param address], as [method Invite.format] writes one but

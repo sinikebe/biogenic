@@ -240,8 +240,7 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 			and (str(before["address"]) != str(said["address"])
 				or int(before["port"]) != int(said["port"])):
 		out.append("invites already sent still call %s: mint them again (--invite=<name>)"
-			% Invite.reach_text(str(before["address"]), int(before["port"]))
-			+ " for anyone who has one.")
+			% _stored_text(before) + " for anyone who has one.")
 	return [0, out]
 
 
@@ -468,7 +467,7 @@ static func reach_refused(root: String = ROOT) -> String:
 		return ""
 	var address := str(stored["address"])
 	return "the --reach set before, %s, is not one this build calls: %s. Set it again" % [
-		Invite.reach_text(address, int(stored["port"])), Invite.why_not(address)
+		_stored_text(stored), Invite.why_not(address)
 			if not Invite.address_ok(address) else "its port is not one from 1 to 65535"]
 
 
@@ -480,6 +479,16 @@ static func reach_said(root: String, none: String) -> String:
 		return Invite.reach_text(str(where["address"]), int(where["port"]))
 	var refused := reach_refused(root)
 	return "(%s)" % refused if not refused.is_empty() else none
+
+
+## A stored reach as a line names it: the address and port, or the address
+## alone when its port is no port at all -- only a hand makes one, and no
+## invite ever called it.
+static func _stored_text(stored: Dictionary) -> String:
+	var port := int(stored["port"])
+	if port < 1 or port > 65535:
+		return str(stored["address"])
+	return Invite.reach_text(str(stored["address"]), port)
 
 
 ## The `{address, port}` in the reach file as written, asking nothing of it.

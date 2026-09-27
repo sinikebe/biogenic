@@ -481,20 +481,32 @@ static func _numeric(label: String) -> bool:
 ## `::ffff:7f00:1` is 127.0.0.1 unseen, and never so that the two readings part:
 ## Godot reads any dotted tail as IPv4 in IPv6 clothes, wherever the `::` sits,
 ## so `0:ffff::0.0.0.0` dials 0.0.0.0 while the plain reading says otherwise.
+## Last, `Lan` must read it as the call does, since `Lan` is what places it --
+## a home network for the owner's warning, loopback for a phone offline -- so a
+## part padded past three digits, `203.0000.113.7`, is refused, though it dials
+## what it shows. What the call dials is judged first, so the sentence is the
+## last one an owner needs.
 static func _literal_problem(address: String) -> String:
 	if not address.contains(":"):
+		if Lan._ipv4_octets(address).is_empty():
+			return _unread()
 		return _v4_problem(address.get_slice(".", 0).to_int())
 	var g := Lan._ipv6_groups(address)
 	if g.is_empty():
-		return "is not read the same way by this build and by the call -- write it plainly"
-	if address.contains("."):
+		return _unread()
+	if address.contains(".") or Lan._v4_mapped(g):
+		# The call dials the IPv4 address in the last two groups, whatever the
+		# plain reading makes of the rest.
+		var dialled := _v4_problem(g[6] >> 8)
+		if not dialled.is_empty():
+			return dialled
 		if not Lan._v4_mapped(g):
 			return "is IPv4 inside IPv6 spelled so that the call dials another address" \
 				+ " than it shows -- write the IPv4 address instead"
-		return _v4_problem(g[6] >> 8)
-	if Lan._v4_mapped(g):
-		return "is IPv4 inside IPv6 written in hex, which hides the address it is --" \
-			+ " write that IPv4 address instead"
+		if not address.contains("."):
+			return "is IPv4 inside IPv6 written in hex, which hides the address it is --" \
+				+ " write that IPv4 address instead"
+		return ""
 	if (g[0] & 0xFF00) == 0xFF00:
 		return "is a multicast address, not one machine -- friends call your router's" \
 			+ " address on the internet"
@@ -503,6 +515,12 @@ static func _literal_problem(address: String) -> String:
 			return ""
 	return "is the unspecified address, which a device takes to mean itself -- friends" \
 		+ " call your router's address on the internet"
+
+
+## The sentence for a literal Godot reads one way and `Lan` another, or not at
+## all.
+static func _unread() -> String:
+	return "is not read the same way by this build and by the call -- write it plainly"
 
 
 ## What is wrong with an IPv4 address whose first number is [param first], or

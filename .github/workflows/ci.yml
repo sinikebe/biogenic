@@ -298,7 +298,7 @@ jobs:
         # frames a second and quits itself in 160 to 165 seconds: some seven in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
-        # twenty-three to twenty-six in `limits`, at up to 100 frames a second,
+        # twenty-three to twenty-seven in `limits`, at up to 100 frames a second,
         # about twenty-five in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
         # about ten in the server's, and about seventy-one in `invites`, at up
