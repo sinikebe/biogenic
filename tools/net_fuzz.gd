@@ -31,7 +31,9 @@ extends Node
 ## listener's peer never taken for the other's; nothing a real ENet would
 ## refuse -- a frame to an id not held or cut, a peer asked for that is not
 ## there; no bar forgotten early, no call taken from a barred address or /56,
-## and none turned away at a cost to the bucket every address shares (#103);
+## none turned away at a cost to the bucket every address shares, and room
+## made only by the caller that has waited longest, long enough, from another
+## address and /56 (#103);
 ## no peer taken past its budgets; every queue and book inside its cap, a
 ## phone host's inside a host's own share; the referee's answers finite and
 ## inside its caps; and no secret in any line
@@ -1048,6 +1050,13 @@ func _door_run(actions: Array) -> Array:
 		var errors := _catcher.errors()
 		var sent_before := host.sent.size()
 		var net_before := host.net_seen
+		# Every caller on the internet listener yet to prove, and where from.
+		var unproved := {}
+		for id: int in host._peers:
+			var peer: Dictionary = host._peers[id]
+			if not bool(peer["greeted"]) \
+					and int(peer.get("via", NetSession.VIA_LAN)) == NetSession.VIA_NET:
+				unproved[id] = str(peer["address"])
 		proofs += int(_door_step(host, action, run))
 		_settle_drops(host)
 		if host.net_seen != net_before:
@@ -1060,6 +1069,8 @@ func _door_run(actions: Array) -> Array:
 			why = _told_why(host, sent_before, run["proved"])
 		if why.is_empty():
 			why = _bars_why(host, bars)
+		if why.is_empty() and host.net_seen == net_before:
+			why = _left_why(host, unproved, run["proved"])
 		if why.is_empty() and _catcher.errors() > errors:
 			why = "an error: " + _catcher.last
 		if why.is_empty() and not host.misaddressed.is_empty():
@@ -1190,24 +1201,35 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 			proved.erase(line)
 			# **What the door does with a call** (#103): one from a barred
 			# address -- or on the internet door, from a barred /56 -- is never
-			# taken, and one it turns away spends nothing of the bucket every
-			# address shares. Time stands still inside a step, so the bucket's
-			# level can only fall by what a take spends.
+			# taken, before the call or after the room it made; one it turns
+			# away spends nothing of the bucket every address shares; and room
+			# is made only by the caller on the internet listener that has
+			# waited longest, [constant NetSession.EVICT_AFTER] or more, and
+			# never from the newcomer's own address or /56. Time stands still
+			# inside a step, so the bucket's level can only fall by what a take
+			# spends.
 			var from := str(action[3])
 			var book: Dictionary = host._book if via == NetSession.VIA_LAN else host._net_book
-			var barred := _barred_in(book, Lan.source_key(from), host.now_at) \
-				or (via == NetSession.VIA_NET
-					and _barred_in(book, Lan.wider_key(from), host.now_at))
+			var barred := _barred_now(book, from, via, host.now_at)
 			var everybody: Variant = host._calls_all if via == NetSession.VIA_LAN \
 				else host._net_calls_all
 			var level: float = everybody.level(host.now_at) if everybody != null else 0.0
+			var waiting := {}
+			for other: int in host._peers:
+				var peer: Dictionary = host._peers[other]
+				if not bool(peer["greeted"]) \
+						and int(peer.get("via", NetSession.VIA_LAN)) == NetSession.VIA_NET:
+					waiting[other] = peer
+			var evicted := int(host.gate_counts["net_evicted"])
 			host._on_peer_connected(id, via)
 			var taken := host._peers.has(id) and int(host._via.get(id, -1)) == via
-			if taken and barred:
+			if taken and (barred or _barred_now(book, from, via, host.now_at)):
 				run["door"] = "a call from %s was taken at the door while it is barred" % from
 			elif not taken and everybody != null and everybody.level(host.now_at) < level:
 				run["door"] = "a call from %s turned away at the door spent the bucket" % from \
 					+ " every address shares"
+			elif int(host.gate_counts["net_evicted"]) > evicted:
+				run["door"] = _evicted_why(host, waiting, from)
 		"D":
 			var id := int(action[1])
 			var via := int(action[2])
@@ -1411,6 +1433,65 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 ## "", which is no key at all.
 static func _barred_in(book: Dictionary, key: String, now: float) -> bool:
 	return not key.is_empty() and book.has(key) and now < float(book[key]["barred_until"])
+
+
+## **Every way out of the internet waiting room without a proof bars** (#103):
+## "" if each caller of [param unproved] -- id -> address, every caller on the
+## internet listener yet to prove before the step -- that has gone left its
+## address barred, or had proved an invite on its way out ("already two"). A
+## book full of bars may forget one, and a listener closing bars nobody.
+static func _left_why(host: FuzzHost, unproved: Dictionary, proved: Dictionary) -> String:
+	if not host.internet_listening():
+		return ""
+	var book: Dictionary = host._net_book
+	for id: int in unproved:
+		if host._peers.has(id) or proved.has(_line(id, NetSession.VIA_NET)):
+			continue
+		var key := Lan.source_key(str(unproved[id]))
+		if key.is_empty() or _barred_in(book, key, host.now_at) \
+				or (not book.has(key) and book.size() >= NetSession.BOOK_MAX):
+			continue
+		return "%d (%s) left the internet listener's waiting room with nothing proved," % [
+			id, str(unproved[id])] + " and its address is not barred"
+	return ""
+
+
+## Whether a call from [param from] on [param via] finds its address barred at
+## [param now] -- or on the internet door, its /56.
+static func _barred_now(book: Dictionary, from: String, via: int, now: float) -> bool:
+	return _barred_in(book, Lan.source_key(from), now) or (via == NetSession.VIA_NET
+		and _barred_in(book, Lan.wider_key(from), now))
+
+
+## **Room made for a call from [param from]** (#103): "" if the caller it took
+## the place of, out of [param waiting] -- every unproved caller on the
+## internet listener just before, by id -- had waited longest, at least
+## [constant NetSession.EVICT_AFTER], and called from neither the newcomer's
+## address nor its /56.
+static func _evicted_why(host: FuzzHost, waiting: Dictionary, from: String) -> String:
+	var gone: Array = []
+	var eldest := INF
+	for other: int in waiting:
+		eldest = minf(eldest, float(waiting[other]["since"]))
+		if not host._peers.has(other):
+			gone.append(other)
+	if gone.size() != 1:
+		return "room made for %s, and %d callers gone from the waiting room" % [from,
+			gone.size()]
+	var elder: Dictionary = waiting[gone[0]]
+	var there := str(elder["address"])
+	var waited := host.now_at - float(elder["since"])
+	if float(elder["since"]) > eldest:
+		return "room made for %s by pushing out %d, which had not waited longest" % [from,
+			int(gone[0])]
+	if waited < NetSession.EVICT_AFTER:
+		return "room made for %s by pushing out %d after %.2f s" % [from, int(gone[0]),
+			waited]
+	if Lan.source_key(there) == Lan.source_key(from) or (not Lan.wider_key(from).is_empty()
+			and Lan.wider_key(there) == Lan.wider_key(from)):
+		return "room made for %s by pushing out %d, from its own address or /56 (%s)" % [
+			from, int(gone[0]), there]
+	return ""
 
 
 static func _bars_why(host: FuzzHost, bars: Array) -> String:

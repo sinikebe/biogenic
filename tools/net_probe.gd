@@ -7929,12 +7929,16 @@ func _invites_strangers() -> void:
 		% [with_lan[0], with_lan[1], without_lan[0], without_lan[1]]
 		+ " who proved an invite %d of %d" % [friend_counts[0], friend_counts[1]])
 	await _limits_close([friend] + again)
-	# S4, S5 and S7: the wrong thing before the PROOF, each cut at once.
+	# S4, S5 and S7: the wrong thing before the PROOF, each cut at once -- and
+	# barred (#103), so each from an address of its own: 127.0.0.4, .5, .6.
 	var proofs_before := int(host.gate_counts["proofs"])
 	var early: Array = []
+	var early_barred := 0
 	for what: String in ["a STATE before its PROOF", "a PROOF before any CHALLENGE",
 			"a second HELLO"]:
-		var rogue := _invites_rogue("InvStranger%d" % early.size())
+		var source := "127.0.0.%d" % (4 + early.size())
+		var rogue := _invites_stranger("InvStranger%d" % early.size(), source,
+			47296 + early.size())
 		await _limits_until(func() -> bool: return rogue.connected())
 		var cuts := int(host.gate_counts["cuts"])
 		if what != "a PROOF before any CHALLENGE":
@@ -7950,29 +7954,47 @@ func _invites_strangers() -> void:
 		var gone := await _limits_until(func() -> bool: return rogue.down(), 2.0)
 		if gone >= 0.0 and int(host.gate_counts["cuts"]) == cuts + 1 and not rogue.welcomed():
 			early.append(what)
-	var barred := float(net_book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now()
-	_says(early.size() == 3 and int(host.gate_counts["strikes"]) == 0 and not barred
+		if float(net_book.get(source, {}).get("barred_until", 0.0)) > _now():
+			early_barred += 1
+	_says(early.size() == 3 and early_barred == 3 and int(host.gate_counts["strikes"]) == 0
 			and int(host.gate_counts["proofs"]) == proofs_before,
-		"invites S4-S5, S7: %s -- each cut the moment it spoke, with no strike and no bar"
-		% ", ".join(early))
+		"invites S4-S5, S7: %s -- each cut the moment it spoke, with no strike, and barred"
+		% ", ".join(early) + " at the internet door (%d of 3): no Biogenic build speaks"
+		% early_barred + " out of turn there")
 	# S8: an old protocol is refused on the compatibility check, before any
-	# CHALLENGE; a real guest reads the far sentence for it.
-	var old := _invites_rogue("InvStrangerOld")
+	# CHALLENGE, and barred for a minute -- a minute again the next time, never
+	# the ten of a second bar (#103); a real guest reads the far sentence for it.
+	var old_from := "127.0.0.7"
+	var old := _invites_stranger("InvStrangerOld", old_from, 47299)
 	await _limits_until(func() -> bool: return old.connected())
 	old.send(Wire.hello(Wire.PROTOCOL - 1))
 	await _limits_until(func() -> bool: return old.refused_for() >= 0)
+	var old_held := float(net_book.get(old_from, {}).get("barred_until", 0.0)) - _now()
+	# The minute brought to its end here, rather than waited out.
+	if net_book.has(old_from):
+		(net_book[old_from] as Dictionary)["barred_until"] = _now()
+	var old_again := _invites_stranger("InvStrangerOldAgain", old_from, 47287)
+	await _limits_until(func() -> bool: return old_again.connected())
+	old_again.send(Wire.hello(Wire.PROTOCOL - 1))
+	await _limits_until(func() -> bool: return old_again.refused_for() >= 0)
+	var again_held := float(net_book.get(old_from, {}).get("barred_until", 0.0)) - _now()
 	var old_guest: Node = await _session("InvStrangerOldGuest")
 	old_guest.protocol_override = Wire.PROTOCOL - 1
 	await _invites_call(old_guest, bob)
 	_says(old.refused_for() == Wire.REFUSE_PROTOCOL and old.challenge().is_empty()
+			and old_again.refused_for() == Wire.REFUSE_PROTOCOL
+			and old_held > NetSession.BAR_FIRST - 10.0 and old_held < NetSession.BAR_FIRST + 0.5
+			and again_held > NetSession.BAR_FIRST - 10.0
+			and again_held < NetSession.BAR_FIRST + 0.5
 			and int(old_guest.link) == NetSession.Link.REFUSED
 			and str(old_guest.trouble_key) == "game_older",
 		"invites S8: a caller on protocol %d is refused on the compatibility"
-		% (Wire.PROTOCOL - 1) + " check"
-		+ " before it is ever challenged, and a guest reads '%s: %s'"
-		% [old_guest.trouble, old_guest.because])
+		% (Wire.PROTOCOL - 1) + " check before it is ever challenged, and barred for"
+		+ " %.0f s -- and %.0f s the next time, not ten minutes -- and a guest reads"
+		% [old_held, again_held] + " '%s: %s'" % [old_guest.trouble, old_guest.because])
 	# S6: a good PROOF, then another -- cut, told and barred.
-	var twice := _invites_rogue("InvStrangerTwice")
+	var twice_from := "127.0.0.8"
+	var twice := _invites_stranger("InvStrangerTwice", twice_from, 47288)
 	await _limits_until(func() -> bool: return twice.connected())
 	twice.send(Wire.hello(Wire.PROTOCOL))
 	await _limits_until(func() -> bool: return not twice.challenge().is_empty())
@@ -7984,12 +8006,12 @@ func _invites_strangers() -> void:
 	var welcomed := twice.welcomed()
 	twice.send(proof)
 	await _limits_until(func() -> bool: return twice.down(), 3.0)
-	barred = float(net_book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now()
+	var barred := float(net_book.get(twice_from, {}).get("barred_until", 0.0)) > _now()
 	_says(welcomed and twice.refused_for() == Wire.REFUSE_BROKEN and twice.down() and barred
 			and int(host.gate_counts["proofs"]) == proofs_before + 1,
 		"invites S6: a caller that proves bob's invite and is welcomed, then sends a second"
 		+ " PROOF, is cut with REFUSE_BROKEN and barred")
-	await _limits_close([host, quiet, mute, old, old_guest, twice])
+	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice])
 
 
 ## **D1-D3: the doors.** The LAN-only guard is the LAN listener's alone; a
@@ -8121,26 +8143,26 @@ func _invites_doors() -> void:
 ## **R1-R4: the internet door's waiting room makes room** (issue #103). Two
 ## strangers that prove nothing fill it, and first calls from twenty addresses
 ## meanwhile are turned away for want of room without spending the bucket for
-## everybody; a friend calling by invite once the two have waited takes the
-## older one's place, and that one is told why and barred; the other hangs up
-## before it can be hung up on and is barred all the same; and at the door
-## itself three barred /64s bar the /56 they are in, where IPv4 and the LAN
-## door never widen.
+## everybody; a friend calling by invite once the elder has waited takes its
+## place -- the elder's alone -- and that one is told why and barred; a third
+## stranger that hangs up before it can be hung up on is barred all the same;
+## and at the door itself the third barred /64 of a /56 bars the /56, where
+## two do not, IPv4 never widens and the LAN door never does.
 func _invites_room() -> void:
 	var bob := Invite.parse(FileAccess.get_file_as_string(
 		InviteBook.line_path("bob", INVITES_ROOT)))
 	var host: Node = await _invites_host("InvRoomHost")
 	var peers: Dictionary = host.get("_peers")
 	# R1: two strangers from 127.0.0.2 and .3, so the friend of R2 can call
-	# from .1 -- one challenged and silent after it, one silent throughout.
+	# from .1 -- one challenged and silent after it, one silent throughout, and
+	# the second a good while after the first, so which is the elder is plain.
 	var talker := _invites_stranger("InvRoomTalker", "127.0.0.2", 47310)
-	var mute := _invites_stranger("InvRoomMute", "127.0.0.3", 47311)
-	var from := {talker: "127.0.0.2", mute: "127.0.0.3"}
-	await _limits_until(func() -> bool:
-		return talker.connected() and mute.connected() \
-			and peers.has(talker.id) and peers.has(mute.id))
+	await _limits_until(func() -> bool: return talker.connected() and peers.has(talker.id))
 	talker.send(Wire.hello(Wire.PROTOCOL))
-	await _limits_until(func() -> bool: return not talker.challenge().is_empty())
+	await _wait(0.3)
+	var mute := _invites_stranger("InvRoomMute", "127.0.0.3", 47311)
+	await _limits_until(func() -> bool: return mute.connected() and peers.has(mute.id))
+	var from := {talker: "127.0.0.2", mute: "127.0.0.3"}
 	var everybody: Variant = host.get("_net_calls_all")
 	var level_before: float = everybody.level(host._now())
 	var said: Array = []
@@ -8154,14 +8176,19 @@ func _invites_room() -> void:
 		+ " twenty addresses are turned away for want of room, %d of 20, and the bucket"
 		% said.count("pending") + " for everybody is as it was, %.1f then %.1f: a call the"
 		% [level_before, level_after] + " door cannot take costs no friend a place")
-	# R2: the friend calls once the elder has waited 1.25 s here. Its call comes
-	# up at ENet's first resend, 0.5 s on -- past the 1.5 s a newcomer waits
-	# for, and well inside the 3 s of silence either would be cut for.
+	# R2: the friend calls once the elder has waited 1.2 s here. Its call comes
+	# up at ENet's first resend, some 0.55 s on, or at the next if its DTLS
+	# handshake misses that, a second later -- either way past the 1.5 s a
+	# newcomer waits for, and inside the 3 s the elder has before it would be
+	# cut for its silence.
 	var since := {talker: float(peers[talker.id]["since"]), mute: float(peers[mute.id]["since"])}
 	var eldest := minf(float(since[talker]), float(since[mute]))
-	await _limits_until(func() -> bool: return host._now() - eldest >= 1.25, 3.0)
+	await _limits_until(func() -> bool: return host._now() - eldest >= 1.2, 3.0)
 	var friend: Node = await _session("InvRoomFriend")
 	await _invites_call(friend, bob)
+	var arrived := -1.0
+	if peers.has(friend.my_id()):
+		arrived = float(peers[friend.my_id()]["since"]) - eldest
 	var net_book: Dictionary = host.get("_net_book")
 	var gone: Array = []
 	for rogue: Rogue in [talker, mute]:
@@ -8179,43 +8206,48 @@ func _invites_room() -> void:
 	_says(int(friend.link) == NetSession.Link.TOGETHER and gone.size() == 1
 			and int(host.gate_counts["net_evicted"]) == 1
 			and (gone[0] as Rogue).refused_for() == Wire.REFUSE_SILENT
-			and float(since[gone[0]]) <= float(since[left]) and peers.has(left.id)
+			and float(since[gone[0]]) < float(since[left]) and peers.has(left.id)
 			and held > NetSession.BAR_FIRST - 10.0 and not line.is_empty(),
-		"invites R2: a friend calling by invite once the two have waited is in, in the"
-		+ " place of the elder, which is told REFUSE_SILENT and barred for %.0f s, the"
-		% held + " other waiting on: '%s'" % line)
-	# R3: the other hangs up before its grace is out -- barred all the same, so
-	# a call straight back from there is refused at the door.
-	var back: Rogue = null
-	var left_held := 0.0
-	var left_line := ""
+		"invites R2: a friend calling by invite %.2f s after the elder came is in, in the"
+		% arrived + " place of the elder alone, which is told REFUSE_SILENT and barred for"
+		+ " %.0f s, the younger waiting on: '%s'" % [held, line])
+	# R3: a fresh stranger from 127.0.0.4, which says HELLO and hangs up before
+	# it can be hung up on -- barred all the same, so a call straight back from
+	# there is refused at the door.
+	var quitter := _invites_stranger("InvRoomQuitter", "127.0.0.4", 47312)
+	await _limits_until(func() -> bool:
+		return quitter.connected() and peers.has(quitter.id))
+	quitter.send(Wire.hello(Wire.PROTOCOL))
+	await _limits_until(func() -> bool: return not quitter.challenge().is_empty())
 	var refused_barred := int(host.gate_counts["net_refused_barred"])
-	if left != null:
-		var left_from: String = from[left]
-		left.hang_up()
-		await _limits_until(func() -> bool: return int(host.gate_counts["net_left"]) >= 1, 2.0)
-		left_held = float(net_book.get(left_from, {}).get("barred_until", 0.0)) - _now()
-		for each: String in _inv_catcher.lines:
-			if each.contains("(%s) hung up" % left_from):
-				left_line = each.strip_edges()
-		back = _invites_stranger("InvRoomBack", left_from, 47312)
-		await _limits_until(func() -> bool: return back.down(), 4.0)
-	_says(back != null and back.down() and int(host.gate_counts["net_left"]) == 1
+	quitter.hang_up()
+	await _limits_until(func() -> bool: return int(host.gate_counts["net_left"]) >= 1, 2.0)
+	var quit_held := float(net_book.get("127.0.0.4", {}).get("barred_until", 0.0)) - _now()
+	var quit_line := ""
+	for each: String in _inv_catcher.lines:
+		if each.contains("(127.0.0.4) hung up"):
+			quit_line = each.strip_edges()
+	var back := _invites_stranger("InvRoomBack", "127.0.0.4", 47313)
+	await _limits_until(func() -> bool: return back.down(), 4.0)
+	_says(back.down() and int(host.gate_counts["net_left"]) == 1
 			and int(host.gate_counts["net_refused_barred"]) == refused_barred + 1
-			and left_held > NetSession.BAR_FIRST - 10.0 and not left_line.is_empty(),
-		"invites R3: the other stranger hangs up before its grace is out and is barred all"
-		+ " the same, for %.0f s -- '%s' -- and its call straight back is refused at the"
-		% [left_held, left_line] + " door as barred")
+			and quit_held > NetSession.BAR_FIRST - 10.0 and not quit_line.is_empty(),
+		"invites R3: a stranger that hangs up before its grace is out is barred all the"
+		+ " same, for %.0f s -- '%s' -- and its call straight back is refused at the door"
+		% [quit_held, quit_line] + " as barred")
 	await _limits_close([host, talker, mute, friend, back])
-	# R4: at the door itself.
+	# R4: at the door itself -- two /64s of 2001:db8:0:100::/56 barred, and one
+	# of the next /56, bar nothing more; a third bars the /56.
 	host = await _invites_host("InvRoomDoor")
-	for net: String in ["2001:db8:0:100::1", "2001:db8:0:101::1", "2001:db8:0:102::1",
-			"203.0.113.1", "203.0.113.2", "203.0.113.3"]:
+	for net: String in ["2001:db8:0:100::1", "2001:db8:0:101::1", "2001:db8:0:200::1"]:
+		host._bar(net, NetSession.VIA_NET)
+	var two: Array = host._admit("2001:db8:0:1ff::5", NetSession.VIA_NET)
+	for net: String in ["2001:db8:0:102::1", "203.0.113.1", "203.0.113.2", "203.0.113.3"]:
 		host._bar(net, NetSession.VIA_NET)
 	for lan: String in ["fd00:0:0:100::1", "fd00:0:0:101::1", "fd00:0:0:102::1"]:
 		host._bar(lan, NetSession.VIA_LAN)
 	var wide: Array = host._admit("2001:db8:0:1ff::5", NetSession.VIA_NET)
-	var beside: Array = host._admit("2001:db8:0:200::5", NetSession.VIA_NET)
+	var beside: Array = host._admit("2001:db8:0:201::5", NetSession.VIA_NET)
 	var fourth: Array = host._admit("203.0.113.4", NetSession.VIA_NET)
 	var lan_wide: Array = host._admit("fd00:0:0:1ff::5", NetSession.VIA_LAN)
 	# What is left of the /56's bar: a hair over a minute when no millisecond
@@ -8223,15 +8255,16 @@ func _invites_room() -> void:
 	var book: Dictionary = host.get("_net_book")
 	var whole: float = float(book.get("2001:db8:0:100::/56", {}).get("barred_until", 0.0)) \
 		- host._now()
-	_says(wide.size() == 2 and str(wide[0]) == "barred" and str(wide[1]).contains("/56")
-			and beside.is_empty() and fourth.is_empty() and lan_wide.is_empty()
-			and int(host.gate_counts["net_barred_wide"]) == 1
+	_says(two.is_empty() and wide.size() == 2 and str(wide[0]) == "barred"
+			and str(wide[1]).contains("/56") and beside.is_empty() and fourth.is_empty()
+			and lan_wide.is_empty() and int(host.gate_counts["net_barred_wide"]) == 1
 			and whole > NetSession.BAR_FIRST - 1.0 and whole < NetSession.BAR_FIRST + 0.5,
-		"invites R4: three /64s barred at the internet door bar the /56 they are in for"
-		+ " %.0f s -- a fourth /64 in it is told '%s', and one in the next /56 is answered"
-		% [whole, str(wide[1]) if wide.size() == 2 else "nothing"] + " -- while three"
-		+ " barred IPv4 addresses bar no neighbour, and three /64s barred at the LAN door"
-		+ " none either")
+		"invites R4: two /64s of a /56 barred at the internet door, and one of the next /56,"
+		+ " bar nothing more (%s); the third bars the /56 for %.0f s -- a fourth /64 in it"
+		% ["answered" if two.is_empty() else str(two[0]), whole] + " is told '%s', and"
+		% (str(wide[1]) if wide.size() == 2 else "nothing") + " one in the next /56 is"
+		+ " answered -- while three barred IPv4 addresses bar no neighbour, and three /64s"
+		+ " barred at the LAN door none either")
 	await _limits_close([host])
 
 

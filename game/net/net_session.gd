@@ -227,12 +227,15 @@ const SILENCE := 6.0
 ## than this. A proved guest is never barred for it: a poor link is not abuse.
 ## **A test seam, [member silence_cut], sets it low.**
 const SILENCE_CUT := 5.0 * SILENCE
-## **Callers still to say hello, at once: two.** A third is cut on arrival. A
+## **Callers still to say hello, at once: two.** A third is cut on arrival --
+## but on the internet listener, one that finds the elder there
+## [constant EVICT_AFTER] with nothing proved takes its place (issue #103). A
 ## real guest says hello the moment its transport connects, so a caller left
 ## waiting is one in the middle of saying it -- or one that never will, which
-## [constant HELLO_GRACE] hangs up on (and, on the internet listener, bars, so
-## no address can hold a place here by calling back). Each listener has its own
-## two. More than one guest is still refused with a sentence rather than by the
+## [constant HELLO_GRACE] hangs up on. On the internet listener every caller
+## that leaves this room unproved is barred, however it leaves, so no address
+## can hold a place here by calling back. Each listener has its own two. More
+## than one guest is still refused with a sentence rather than by the
 ## transport, so the extra device learns why; see [method _slots] for how many
 ## transports a host holds at all.
 const PENDING_MAX := 2
@@ -366,28 +369,31 @@ const CALLS_ALL_RATE := 10.0
 ## retry.
 const LIVE_PER_ADDRESS := 3
 ## **Barred after an abuse cut**: a minute, and ten for a second one inside ten
-## minutes. An old protocol and "already two" are not abuse, and nor is silence
-## on the LAN; on the internet listener, a caller that has proved nothing
-## within [constant HELLO_GRACE] is barred like one whose proof was wrong --
-## and so is one that has proved nothing in [constant EVICT_AFTER] when a
-## newcomer needs its place, and one that hangs up having proved nothing.
+## minutes. "Already two" is not abuse, and on the LAN nor is an old protocol,
+## silence or speaking out of turn. **On the internet listener every way out
+## of the waiting room without a proof bars** (issue #103): silence past
+## [constant HELLO_GRACE], a newcomer taking the place after
+## [constant EVICT_AFTER], hanging up, speaking out of turn, and a wrong proof
+## -- and an old protocol too, but for a minute only, ever, since that caller
+## may be a friend's phone that has not updated yet.
 const BAR_FIRST := 60.0
 const BAR_AGAIN := 600.0
 ## **The internet door's waiting room makes room** (issue #103): full, it lets
 ## a newcomer take the place of the caller that has waited longest, proving
 ## nothing, once that one has waited this long -- hung up on and barred as
-## silence is. A real guest proves about 0.3 s after its transport comes up
-## (net-hardening.md C.8), so five times that is still a slow link's time.
-## Every caller that leaves the room without proving is barred, however it
-## leaves, so holding both places now takes a fresh address every 0.75 s --
-## and a friend never waits behind a caller older than this.
+## silence is -- unless the two call from the same address or /56. A real
+## guest proves about 0.3 s after its transport comes up (net-hardening.md
+## C.8), so five times that is still a slow link's time. Every caller that
+## leaves the room without proving is barred, however it leaves, so holding
+## both places takes a caller every 0.75 s that costs its address a bar -- and
+## a friend never waits behind a caller older than this.
 const EVICT_AFTER := 1.5
 ## **A /56 barred as one** (issue #103): once this many of its /64s have been
-## barred at the internet door within [constant BAR_AGAIN], the whole /56 is,
-## for as long as one of them would be. A home is handed a /56 or wider and
-## makes up /64s inside it at will, which a /64's bar alone never catches up
-## with. IPv4 is never widened: carrier-grade NAT already puts strangers
-## behind one address.
+## barred at the internet door within [constant BAR_AGAIN], the whole /56 is
+## -- a minute, and ten for a second time inside ten, by its own count. A home
+## is handed a /56 or wider and makes up /64s inside it at will, which a /64's
+## bar alone never catches up with. IPv4 is never widened: carrier-grade NAT
+## already puts strangers behind one address.
 const BARS_TO_WIDEN := 3
 ## **The addresses a host remembers: at most this many**, so the limiter's own
 ## memory is bounded too. A full book forgets a caller it has not heard from
@@ -875,9 +881,11 @@ func _process(_delta: float) -> void:
 			# proves within a few hundred milliseconds, so a caller that has
 			# not by now held one of the waiting room's two places for nothing
 			# -- and two of them calling back as each is hung up on would keep
-			# every invited friend out. So is one that hangs up first
-			# (`_left_unproved`), and one whose place a newcomer takes
-			# (`_evict`). A friend on a link too poor to prove in time hears
+			# every invited friend out. So is every other way out of the room
+			# with nothing proved (issue #103): hanging up (`_left_unproved`),
+			# a newcomer taking the place (`_evict`), speaking out of turn
+			# (`_cut_too_soon`) and an old protocol, for a minute
+			# (`_take_hello`). A friend on a link too poor to prove in time hears
 			# "they hung up · call again in a minute", which is the bar. On the
 			# LAN, silence is a phone in the house, and is not.
 			gate_counts["net_silent"] += 1
@@ -1918,7 +1926,7 @@ func _left_unproved(id: int, peer: Dictionary) -> void:
 	gate_counts["net_left"] += 1
 	var from := str(peer["address"])
 	var barred := _bar(from, VIA_NET)
-	_note("left", Lan.source_key(from), "[net] %d (%s) hung up %.1f s after it called,"
+	_note("left", _note_key(peer, from), "[net] %d (%s) hung up %.1f s after it called,"
 		% [id, from, _now() - float(peer["since"])] + " having proved nothing -- barred %d s"
 		% roundi(barred))
 
@@ -2018,7 +2026,16 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		# internet listener too, and **before any invite is asked for**: the
 		# compatibility check and the proof are two questions, and an old
 		# build's answer to the first is "update", never "ask again".
-		_refuse(id, Wire.REFUSE_PROTOCOL)
+		#
+		# **There, barred for a minute and never ten** (issue #103): unbarred,
+		# it was a way out of the waiting room that let a stranger straight
+		# back in, and a friend's phone that has not updated reads this
+		# sentence first and "call again in a minute" after it.
+		var barred := 0.0
+		if int(peer.get("via", VIA_LAN)) == VIA_NET:
+			barred = _bar(str(peer["address"]), VIA_NET, BAR_FIRST)
+		_refuse(id, Wire.REFUSE_PROTOCOL, " -- barred %d s" % roundi(barred)
+			if barred > 0.0 else "")
 		_say("different versions", _skew_says(theirs))
 		return
 	if int(peer.get("via", VIA_LAN)) == VIA_NET:
@@ -2211,12 +2228,28 @@ func _skew_key(theirs: int) -> StringName:
 ## kept in [member _hanging_up] so the line still gets cut if the other end
 ## decides to stay.
 func _refuse(id: int, reason: int, detail: String = "") -> void:
-	var from := str((_peers.get(id, {}) as Dictionary).get("address", ""))
+	var peer: Dictionary = _peers.get(id, {})
+	var from := str(peer.get("address", ""))
 	_to(id, Wire.refuse(_speaks(), reason))
 	_peers.erase(id)
 	_hanging_up[id] = _now() + REFUSE_LINGER
-	_note("hung up", Lan.source_key(from), "[net] hung up on %d (%s): %s%s"
+	var key := _note_key(peer, from)
+	if key == "internet":
+		key += " %d" % reason
+	_note("hung up", key, "[net] hung up on %d (%s): %s%s"
 		% [id, from, Wire.reason_says(reason), detail])
+
+
+## **The log limiter's key for [param peer]** (A.6): the address it calls from
+## -- but for a caller on the internet listener that has proved nothing, one
+## key for all of them, and a hang-up's reason beside it (issue #103).
+## Strangers there come from as many addresses as they like, so a line an
+## address would be a line for every address they spend, and journald would
+## drop the lines that matter with them.
+static func _note_key(peer: Dictionary, from: String) -> String:
+	if int(peer.get("via", VIA_LAN)) == VIA_NET and not bool(peer.get("greeted", false)):
+		return "internet"
+	return Lan.source_key(from)
 
 
 # ---------------------------------------------------------------------------
@@ -2403,7 +2436,7 @@ func _take_datagram(id: int, bytes: PackedByteArray, via: int = VIA_LAN) -> void
 		return
 	if bytes.size() < 2 or bytes[0] != RAW:
 		if not bool(peer["greeted"]):
-			_cut(id, _too_soon(peer), false, false)
+			_cut_too_soon(id, peer)
 		else:
 			_malformed(id, "a command byte %d, where a frame starts with %d"
 				% [bytes[0] if not bytes.is_empty() else -1, RAW])
@@ -2446,7 +2479,7 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 			else Wire.KIND_HELLO
 		if kind == wants and Wire.size_ok(kind, 0, size, false):
 			return true
-		_cut(id, _too_soon(peer), false, false)
+		_cut_too_soon(id, peer)
 		return false
 	# 4-5. A kind this protocol knows must come from the side that sends it, at
 	# a size its writer produces.
@@ -2521,6 +2554,16 @@ static func _parses(kind: int, type: int, frame: PackedByteArray) -> bool:
 
 
 ## What a caller that said the wrong thing before it was welcomed is cut for.
+## **Anything but the handshake, before it**: cut on the spot, with no strike.
+## On the LAN with no bar either -- a port scanner or a confused client does
+## exactly this, and a real guest from the same address may call straight
+## after (T6). **On the internet listener, barred** (issue #103): no Biogenic
+## build speaks out of turn there, and unbarred it was a way out of the
+## waiting room that let the same address straight back in.
+func _cut_too_soon(id: int, peer: Dictionary) -> void:
+	_cut(id, _too_soon(peer), false, int(peer.get("via", VIA_LAN)) == VIA_NET)
+
+
 static func _too_soon(peer: Dictionary) -> String:
 	if int(peer.get("stage", STAGE_HELLO)) == STAGE_PROOF:
 		return "spoke before its proof"
@@ -2726,7 +2769,7 @@ func _cut(id: int, why: String, tell: bool, abuse: bool,
 		_drop_now(id)
 	gate_counts["cuts"] += 1
 	var barred := _bar(from, int(peer.get("via", VIA_LAN))) if abuse else 0.0
-	_note("cut", Lan.source_key(from), "[net] cut %d (%s): %s%s" % [id, _who(peer), why,
+	_note("cut", _note_key(peer, from), "[net] cut %d (%s): %s%s" % [id, _who(peer), why,
 		" -- barred %d s" % roundi(barred) if barred > 0.0 else ""])
 	if greeted:
 		_farewell(id, peer)
@@ -2761,13 +2804,13 @@ func _drop_on(via: int, id: int) -> void:
 ## Bars [param from] for [constant BAR_FIRST], or [constant BAR_AGAIN] when it
 ## was barred inside the last [constant BAR_AGAIN] already, at the door of the
 ## listener [param via]. Returns how long.
-func _bar(from: String, via: int = VIA_LAN) -> float:
+func _bar(from: String, via: int = VIA_LAN, most: float = INF) -> float:
 	if from.is_empty():
 		return 0.0
 	var now := _now()
 	var book := _book_of(via)
 	var entry := _book_entry(Lan.source_key(from), now, book)
-	var hold := _bar_entry(entry, now)
+	var hold := _bar_entry(entry, now, most)
 	var wider := Lan.wider_key(from) if via == VIA_NET else ""
 	if wider.is_empty():
 		return hold
@@ -2783,9 +2826,9 @@ func _bar(from: String, via: int = VIA_LAN) -> float:
 	if near >= BARS_TO_WIDEN:
 		var whole := _book_entry(wider, now, book)
 		if now >= float(whole["barred_until"]):
-			var held := _bar_entry(whole, now)
+			var held := _bar_entry(whole, now, most)
 			gate_counts["net_barred_wide"] += 1
-			_note("barred wide", wider, "[net] barred %s for %d s at the internet door:"
+			_note("barred wide", "internet", "[net] barred %s for %d s at the internet door:"
 				% [wider, roundi(held)] + " %d of its /64s barred inside %d s"
 				% [near, roundi(BAR_AGAIN)])
 	return hold
@@ -2793,10 +2836,10 @@ func _bar(from: String, via: int = VIA_LAN) -> float:
 
 ## [param entry] barred from [param now]: [constant BAR_FIRST], or
 ## [constant BAR_AGAIN] when it was barred inside the last [constant BAR_AGAIN]
-## already. Returns how long.
-func _bar_entry(entry: Dictionary, now: float) -> float:
+## already -- and never past [param most]. Returns how long.
+func _bar_entry(entry: Dictionary, now: float, most: float = INF) -> float:
 	var again := int(entry["bars"]) > 0 and now - float(entry["barred_at"]) < BAR_AGAIN
-	var hold := BAR_AGAIN if again else BAR_FIRST
+	var hold := minf(BAR_AGAIN if again else BAR_FIRST, most)
 	entry["bars"] = int(entry["bars"]) + 1 if again else 1
 	entry["barred_at"] = now
 	entry["barred_until"] = now + hold
@@ -2926,6 +2969,13 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 	if pending >= PENDING_MAX:
 		if via != VIA_NET or now - since < EVICT_AFTER:
 			return ["pending", "%d callers are already saying hello" % pending]
+		# **Never room made by a neighbour** (issue #103): the elder's bar
+		# would fall on the newcomer's own address or /56, and let one address
+		# in again and again, pushing out its own.
+		var elder := str(_peers[longest]["address"])
+		if Lan.source_key(elder) == key \
+				or (not wider.is_empty() and Lan.wider_key(elder) == wider):
+			return ["pending", "%d callers are already saying hello" % pending]
 		evict = longest
 	# **The bucket for everybody pays only for a call the door takes** (issue
 	# #103): one turned away for want of room costs no friend a place.
@@ -2940,10 +2990,8 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 
 ## **Room made** (issue #103): the caller on the internet listener that has
 ## waited longest, [param waited] s with nothing proved, hung up on and barred
-## as silence is -- for a newcomer the door has taken. The newcomer is taken
-## even when the one it pushes out called from its own address, which that
-## bars: a phone calling again past a transport of its own that stalled gets
-## in, and a stranger gains no call by it -- its next finds the address barred.
+## as silence is -- for a newcomer the door has taken, never one from the same
+## address or /56 (see [method _admit]).
 func _evict(id: int, waited: float) -> void:
 	var peer: Dictionary = _peers.get(id, {})
 	if peer.is_empty():
