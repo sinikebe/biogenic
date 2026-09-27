@@ -23,8 +23,8 @@
 #      and installs nothing unless all three match;
 #   4. puts the build in /opt/biogenic, owned by `biogenic`, because the server
 #      replaces its own binary when a new one is published;
-#   5. installs biogenic-server.service and enables it, lays the internet port's
-#      firewall rules in /etc/biogenic without loading them (docs/server.md
+#   5. installs biogenic-server.service and enables it, lays the firewall rules
+#      for both ports in /etc/biogenic without loading them (docs/server.md §5,
 #      §9.6), and names any `systemctl edit` override still in effect;
 #   6. starts the server -- or restarts it, if the build or the unit changed --
 #      and prints the address and the join code it logs.
