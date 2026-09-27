@@ -236,6 +236,13 @@ const SILENCE_CUT := 5.0 * SILENCE
 ## transport, so the extra device learns why; see [method _slots] for how many
 ## transports a host holds at all.
 const PENDING_MAX := 2
+## **The lowest id a caller may have: 2** (issue #75). Godot's own builds pick
+## theirs at random from 2 up (`generate_unique_id`), but ENet takes whatever
+## id a caller offers, and a host addresses every frame by id through
+## `set_target_peer` -- where 0 means every peer, and a negative id every peer
+## but one. So a caller offering less is refused at the door, before a single
+## frame could be addressed to it, and [method _to] never sends to one.
+const PEER_ID_MIN := 2
 ## **The most guests any host takes: two**, a dedicated host's (`game/server/`),
 ## each of whom sees the other as the friend. A phone takes one.
 const GUESTS_MAX := 2
@@ -1750,6 +1757,19 @@ func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 	_steady_throttle(id, via)
 	var from := ""
 	if hosting:
+		# **An id no Godot build picks** ([constant PEER_ID_MIN]): refused on its
+		# own transport, before the door keeps anything for it.
+		if id < PEER_ID_MIN:
+			gate_counts["refused"] += 1
+			gate_counts["refused_id"] += 1
+			if via == VIA_NET:
+				gate_counts["net_refused"] += 1
+				gate_counts["net_refused_id"] += 1
+			from = _address_of(id, via)
+			_note("refused id", "", "[net] refused %s: its id %d is not one a Biogenic"
+				% [from, id] + " build picks")
+			_drop_on(via, id)
+			return
 		# **One id, one peer.** ENet makes each listener's ids unique and no
 		# more, so the other listener may already hold this one -- or be
 		# hanging up on it. The newcomer is refused on its own transport, and
@@ -1834,9 +1854,11 @@ func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 
 
 func _on_peer_disconnected(id: int, via: int = VIA_LAN) -> void:
-	# A listener's goodbye to an id it does not hold here -- the other
-	# listener's twin of it, refused -- is not news about this peer.
-	if hosting and int(_via.get(id, via)) != via:
+	# A listener's goodbye to an id it does not hold here is not news about a
+	# peer: the other listener's twin of it, or any caller the door refused --
+	# neither ever had a record. Asked of `_via` itself, so a refused twin's
+	# goodbye that comes after its elder has gone is ignored too (issue #75).
+	if hosting and (not _via.has(id) or int(_via[id]) != via):
 		return
 	var peer: Dictionary = _peers.get(id, {})
 	_peers.erase(id)
@@ -2836,6 +2858,7 @@ func _book_entry(key: String, now: float, book: Dictionary) -> Dictionary:
 
 func _forget_a_caller(now: float, book: Dictionary) -> void:
 	var oldest := ""
+	var found := false
 	var oldest_seen := INF
 	for key: String in book.keys():
 		var entry: Dictionary = book[key]
@@ -2847,9 +2870,12 @@ func _forget_a_caller(now: float, book: Dictionary) -> void:
 		if float(entry["seen"]) < oldest_seen:
 			oldest_seen = float(entry["seen"])
 			oldest = key
+			found = true
 	if book.size() < BOOK_MAX:
 		return
-	if oldest.is_empty():
+	# Found is its own flag: "" is a key like any other, and taking it for
+	# "none unbarred" would forget a barred caller early (issue #75).
+	if not found:
 		oldest = str(book.keys()[0])
 	book.erase(oldest)
 
@@ -3006,10 +3032,10 @@ func _zero_counts() -> void:
 		# one id, invites proved and refused, guests cut when theirs was
 		# revoked, a guest's CHALLENGEs it had no invite to answer, and callers
 		# hung up on and barred for proving nothing in time.
-		"refused_twin": 0, "refused_closed": 0,
+		"refused_twin": 0, "refused_closed": 0, "refused_id": 0,
 		"net_refused": 0, "net_refused_barred": 0, "net_refused_busy": 0,
 		"net_refused_calls": 0, "net_refused_live": 0, "net_refused_pending": 0,
-		"net_refused_closed": 0, "net_refused_twin": 0,
+		"net_refused_closed": 0, "net_refused_twin": 0, "net_refused_id": 0,
 		"proofs": 0, "proofs_refused": 0, "invite_cuts": 0, "challenges_dropped": 0,
 		"net_silent": 0, "gone": 0,
 	}
@@ -3032,9 +3058,11 @@ func _to(id: int, frame: PackedByteArray) -> void:
 		# build cannot tell the difference. Through the listener the guest came
 		# in on.
 		var enet := _transport_of(id)
-		if enet == null \
+		if enet == null or id < PEER_ID_MIN \
 				or enet.get_connection_status() == MultiplayerPeer.CONNECTION_DISCONNECTED:
 			return
+		# One peer, always: [constant PEER_ID_MIN] keeps 0 and the negative
+		# ids, which address many, from ever reaching here.
 		enet.set_target_peer(id)
 		enet.transfer_channel = 0
 		enet.transfer_mode = _mode_for(frame)
