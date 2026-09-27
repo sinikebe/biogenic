@@ -125,15 +125,21 @@ extends Node
 ##                           stretch transform on the way in, so this one must
 ##                           not. Either way the number you write is the canvas
 ##                           coordinate and nothing else.
-##   --sample=<gene>         put a gene in the genome's held sample, the state
+##   --sample=<gene>[:copies][,<gene>[:copies]...]
+##                           put genes in the genome's waiting queue, the state
 ##                           §3.3 gives a second heartbeat and §5.2 gives the
-##                           strip. Reaching it by playing means eating a fourth
-##                           gene with a full genome, which is fourteen minutes
-##                           and a lot of luck.
-##   --sample-left=<secs>    how many of the forty-five seconds that sample has
+##                           strip. Several, comma separated, queue in that order
+##                           -- the first is the head -- and `:2` is a gene eaten
+##                           twice before it was placed (#118). Each goes in
+##                           through `integrate()`, the path a meal takes, so a
+##                           gene the DNA already carries is raised rather than
+##                           queued, exactly as eating it would.
+##   --sample-left=<secs>    how many of the forty-five seconds the head has
 ##                           left, held there, so early, mid-clock and about to
 ##                           lapse are three photographs instead of one taken
 ##                           three times. Default is the whole SAMPLE_SECONDS.
+##                           Only the clock is held: a gene placed during the
+##                           run stays placed.
 ##   --wound=<0..1>          hold the player's body at that much damage. Bodies
 ##                           knit up every frame, so a wound cannot be posed by
 ##                           setting it once. A pond guest's wound is the host's,
@@ -606,6 +612,8 @@ var _finger: Dictionary = {}
 ## The same, for the cursor.
 var _cursor := Vector2.ZERO
 var _sample: StringName = &""
+## --sample=: every gene to queue, as `[gene, copies]`, head first.
+var _samples: Array = []
 var _sample_left := -1.0
 var _wound := -1.0
 ## Cumulative meals eaten by one field cell off another, which is the one thing
@@ -901,7 +909,12 @@ func _ready() -> void:
 		elif text.begins_with("--sample-left="):
 			_sample_left = float(text.trim_prefix("--sample-left="))
 		elif text.begins_with("--sample="):
-			_sample = StringName(text.trim_prefix("--sample="))
+			_samples.clear()
+			for spec: String in text.trim_prefix("--sample=").split(",", false):
+				var bits := spec.split(":", false)
+				_samples.append([StringName(bits[0]),
+					clampi(int(bits[1]), 1, 3) if bits.size() > 1 else 1])
+			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
 		elif text.begins_with("--hover="):
@@ -1081,9 +1094,11 @@ func _ready() -> void:
 	if _dna_spec != "" and _genome != null:
 		_force_dna(_dna_spec)
 	if _sample != &"" and _genome != null:
-		_genome.held_sample = _sample
-		_genome.held_remaining = _genome.SAMPLE_SECONDS
-		print("[drive] holding a sample of ", _sample)
+		_genome.held_sample = &""
+		for one: Array in _samples:
+			for copy in int(one[1]):
+				_genome.integrate(one[0])
+		print("[drive] waiting: ", _waiting_text())
 	if _sister_distance > 0.0 and _food != null:
 		_put_sister()
 	if _pond_dist >= 0.0 and _food != null:
@@ -1882,7 +1897,7 @@ func _fingerprint_state() -> Array:
 		out.append(cell.get(key) if cell != null else null)
 	if _genome != null:
 		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout(),
-			_genome.held_sample, _genome.held_remaining])
+			_waiting_text()])
 	if _metabolism != null:
 		out.append_array([_metabolism.hunger, _metabolism.starve_seconds])
 	var motes := _find_script(self, "res://game/normal/motes.gd")
@@ -2286,12 +2301,13 @@ func _step_trace(delta: float) -> void:
 	var speed := _travelled / maxf(_speed_clock, 0.001)
 	_travelled = 0.0
 	_speed_clock = 0.0
-	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) body %s dna %s" % [
+	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) body %s dna %s waiting %s" % [
 		_clock, cell.radius, cell.gape(), cell.wound,
 		"alive" if _metabolism != null and _metabolism.is_processing() else " DEAD",
 		cell.swim_speed(), speed,
 		_genome_text(_genome.tiers() if _genome != null else {}),
-		_genome_text(_genome.dna() if _genome != null else {})])
+		_genome_text(_genome.dna() if _genome != null else {}),
+		_waiting_text()])
 	print("        %s" % _membrane_text())
 	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
 		_food.dread_level, _food.threat,
@@ -2392,6 +2408,18 @@ func _field_text(index: int, cell: Node) -> String:
 		"EATS ME" if gape > cell.radius else "       ",
 		"edible" if radius < cell.gape() else "      ",
 		"  %s" % _genome_text(b.get("genome"))]
+
+
+## The genes waiting for a slot, head first, as `[gene:copies left ...]`.
+func _waiting_text() -> String:
+	if _genome == null:
+		return "[]"
+	var parts: PackedStringArray = []
+	for gene: StringName in _genome.waiting():
+		parts.append("%s:%d" % [gene, _genome.waiting_copies(gene)])
+	if not parts.is_empty():
+		parts[0] += " %.1fs" % _genome.held_remaining
+	return "[" + " ".join(parts) + "]"
 
 
 func _genome_text(tiers: Dictionary) -> String:
@@ -2517,7 +2545,6 @@ func _hold_world() -> void:
 	# A held sample runs down whether or not anything is watching, so a posed
 	# one has to be put back every frame to stay where it was posed.
 	if _sample != &"" and _sample_left >= 0.0 and _genome != null:
-		_genome.held_sample = _sample
 		_genome.held_remaining = _sample_left
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain

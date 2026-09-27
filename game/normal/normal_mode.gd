@@ -1030,7 +1030,13 @@ func _begin_split() -> void:
 	# body ran out of arcs is holding a gesture this screen never saw begin, and
 	# §4.1 gives it to the lean.
 	_choose_gesture.clear()
-	_daughters = _make_daughters()
+	# **The daughters are not rolled yet** -- that waits for the pinch
+	# ([method _step_split]). The quickening is 2.4 seconds of a body that still
+	# swims and still eats, and a DNA rolled at its first frame never saw a
+	# copy it swallowed or a waiting gene that lapsed into a free slot in the
+	# rest of it (#118). Nothing draws a daughter before PART, so rolling at
+	# the pinch changes nothing on screen.
+	_daughters = []
 
 
 ## Two daughters of equal mass, one faithful and one with a single sideways
@@ -1068,6 +1074,10 @@ func _step_split(delta: float) -> void:
 			if _split_clock >= DIVIDE_QUICKEN:
 				_split = Split.PINCH
 				_split_clock = 0.0
+				# From the DNA as it stands at the end of the quickening, the
+				# last frame anything can still write it. See [method
+				# _begin_split].
+				_daughters = _make_daughters()
 				# The same call a death makes. The water stops, the body does
 				# not: what is left moving is the division itself.
 				_update_simulating()
@@ -1271,8 +1281,12 @@ func _be_born() -> void:
 	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	_metabolism.reset()
 	# The DNA becomes both registers again: expressed whole, at birth, which is
-	# the whole of INHERIT_TIER_LOSS being zero.
+	# the whole of INHERIT_TIER_LOSS being zero. **And what her mother had not
+	# placed yet goes with her, still waiting** (#118) -- `express()` empties
+	# the queue, so it is taken first and handed back after.
+	var carried := _genome.take_waiting()
 	_genome.express(pick["tiers"], pick["order"], pick["body"])
+	_genome.carry(carried)
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
@@ -3057,6 +3071,11 @@ const HINT_EMPTY := "an empty locus · nothing to pass on from here"
 ## rather than a thing to act on.
 const ACT_ARM := "tap a locus · your daughters may wear it"
 const ACT_COMMIT := "tap again to place"
+## **What waits behind the sample being placed** (#118), after the instruction.
+## The strip places one gene at a time and the next one would otherwise arrive
+## unannounced the moment this one lands; one clause says there is more to do.
+const ACT_QUEUE := " · %d more after it"
+const ACT_QUEUE_ONE := " · one more after it"
 const ACT_MOVE := "drag it to another locus"
 const ACT_CARRY := "%s · let go over a locus to move it there"
 const ACT_LAND := "let go to move %s here"
@@ -3367,14 +3386,15 @@ func _update_hint() -> void:
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
 		_genome_hint.text = HINT_CERTAIN
 		return
-	# **`maxi(.., 1)` because a held sample is worth one copy, not none.** A
-	# locus always carries at least one, so this never used to matter; a sample
-	# has `dna_tier == 0`, which indexes the empty string, and the held-sample
-	# branch returning first is the only reason nobody ever saw it. Now that the
-	# instruction has moved to `Act` this line is reached while a sample is
-	# selected -- so without the clamp the odds go blank at exactly the moment
-	# the player is deciding what a placement is worth.
-	_genome_hint.text = HINT_CHANCE[clampi(maxi(_genome.dna_tier(gene), 1), 0,
+	# **[method _copies_of] and never the bare DNA tier**, because a held sample
+	# is worth the copies it waited with, not none. A locus always carries at
+	# least one, so this never used to matter; a sample has `dna_tier == 0`,
+	# which indexes the empty string, and the held-sample branch returning first
+	# is the only reason nobody ever saw it. Now that the instruction has moved
+	# to `Act` this line is reached while a sample is selected -- so without it
+	# the odds go blank at exactly the moment the player is deciding what a
+	# placement is worth.
+	_genome_hint.text = HINT_CHANCE[clampi(_copies_of(gene), 0,
 		HINT_CHANCE.size() - 1)]
 
 
@@ -3408,10 +3428,19 @@ func _update_act() -> void:
 		# `_armed >= 0` and not `!= SLOT_NONE`: a sample waiting off the head of
 		# the strand is selected and not placeable, so it must not promise a
 		# second tap that does nothing.
-		_genome_act.text = ACT_COMMIT if _armed >= 0 else ACT_ARM
+		_genome_act.text = (ACT_COMMIT if _armed >= 0 else ACT_ARM) \
+			+ _queue_text()
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	_genome_act.text = ACT_MOVE if _movable(slot) else ""
+
+
+## The clause the verb line gains while more than one gene waits, or "".
+func _queue_text() -> String:
+	var more := _genome.waiting().size() - 1
+	if more <= 0:
+		return ""
+	return ACT_QUEUE_ONE if more == 1 else ACT_QUEUE % more
 
 
 ## The plain word a gene is read by on this surface. A gene this build has no
@@ -3419,6 +3448,15 @@ func _update_act() -> void:
 ## -- falls back to its own name rather than to nothing.
 func _word(gene: StringName) -> String:
 	return String(WORDS.get(gene, String(gene)))
+
+
+## How many copies [param gene] is read at on this surface: the DNA's for a gene
+## it carries, and for a waiting one the copies it will be written with -- eaten
+## twice before it was placed, it lands at two (#118). **At least one**: a
+## sample has `dna_tier == 0`, which indexes the empty string of the odds table,
+## and it is worth a copy the moment it is placed.
+func _copies_of(gene: StringName) -> int:
+	return maxi(maxi(_genome.dna_tier(gene), _genome.waiting_copies(gene)), 1)
 
 
 ## True when [param slot] is a DNA locus with a gene in it, which is the only
@@ -3456,7 +3494,7 @@ func _update_explain() -> void:
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	var gene := _reading()
 	_explain_gene = gene
-	_explain_tier = maxi(_genome.dna_tier(gene), 1) if gene != &"" else 0
+	_explain_tier = _copies_of(gene) if gene != &"" else 0
 	if _explain_organ != null:
 		_explain_organ.queue_redraw()
 	if gene == &"":
@@ -3780,7 +3818,8 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 		# frame where the player can see that placing changes their daughters
 		# and not themselves.
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
-			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(held), 1, 0)
+			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(held),
+			_copies_of(held), 0)
 
 	if selected and held != &"" and slot >= 0 and _dragging == SLOT_NONE:
 		_draw_sample(node, held, LOCUS_W * 0.5, HELIX_MID - HELIX_AMP)
@@ -4182,9 +4221,17 @@ func _commit_slot(index: int) -> void:
 	# nothing about that selection is committable any more -- it is a receipt,
 	# and the one moment in a run where the player most wants to know what they
 	# have just given their daughters.
+	#
+	# **Unless another gene is waiting behind it** (#118), and then the
+	# selection goes back to the sample. Left on the locus it would be armed for
+	# the *next* gene -- drawn hovering over the gene that just landed, one more
+	# tap from writing over it. The one irreversible action in the game must
+	# never be a tap away without a fresh first tap to arm it.
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
 	_hovered = SLOT_NONE
+	if _genome.held_sample != &"":
+		_select_default()
 	# The bus is told now rather than on the next unpaused frame: the membrane
 	# keeps beating under the scrim, and an echo for a sample that no longer
 	# exists is the game lying about the player's own body.
