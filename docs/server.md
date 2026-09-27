@@ -146,10 +146,13 @@ often, a caller that never said hello or runs another version, a guest cut for
 sending what no Biogenic build sends or for saying what no honest game can, and
 a second in which far more arrived at the port than two phones could send. Each
 kind of line is printed at most once every ten seconds for each address -- calls
-from outside the network, and calls turned away because too many came from
-everywhere at once, once every ten seconds for all of them together -- and the
-next one says how many like it were held back, so a noisy device cannot fill
-the journal. And every guest gets one line as it goes, however it goes, saying
+from outside the network, calls turned away because too many came from
+everywhere at once or the two places for callers still saying hello were taken,
+and at the internet door (§9) every call turned away and every caller hung up on
+before it proved an invite, once every ten seconds for each reason, whatever the
+address -- and the next one says how many like it were held back, so a noisy
+device cannot fill the journal. And every guest gets one line as it goes,
+however it goes, saying
 how long it stayed, what it sent, how many times it went over its budgets, and
 how many fouls the referee called on it (below). These lines name the caller's
 address; the journal is on your machine, not in the repository. For example,
@@ -804,6 +807,8 @@ What their phone says, and what to look for in `journalctl -u biogenic-server`:
   your dynamic-DNS name.
 - **"different versions"** -- the phone or the server is older. The server
   updates itself once its water is empty (§4), the phone from its launcher.
+  The server bars that phone's address for a minute, so a call again inside it
+  reads "they hung up"; it is never barred for longer than that.
 - **"already two"** -- two friends are in. The limit counts the home Wi-Fi and
   the internet together.
 - **"they hung up"** -- the server closed the call. Most often it proved nothing
@@ -815,7 +820,23 @@ What their phone says, and what to look for in `journalctl -u biogenic-server`:
   [net] refused 198.51.100.4 on the internet listener: barred for 41 s more
   ```
   The phone says to call again in a minute, which is the bar; a second one
-  within ten minutes lasts ten. It is also what a friend swimming reads when
+  within ten minutes lasts ten. The server holds two places for callers still
+  proving their invite, and a stranger that proves nothing gives its place up
+  to the next caller after a second and a half. Every caller that leaves those
+  places without proving an invite is barred, however it leaves -- hanging up,
+  or sending anything but the handshake -- and a phone on another version is
+  barred for a minute, never ten. Over IPv6, once three addresses from one
+  home's block (a /56) are barred, the whole block is:
+  ```
+  [net] hung up on 1587052382 (198.51.100.4): no greeting -- challenged, and no proof in 1.8 s, and a caller waiting behind it -- barred 60 s
+  [net] 1587052382 (198.51.100.4) hung up 0.4 s after it called, having proved nothing -- barred 60 s
+  [net] cut 1587052382 (198.51.100.4): spoke before its proof -- barred 60 s
+  [net] barred 2001:db8:0:100::/56 for 60 s at the internet door: 3 of its /64s barred inside 600 s
+  [net] refused 2001:db8:0:1ff::5 on the internet listener: barred for 41 s more, with the /56 it is in
+  ```
+  A friend barred with a stranger -- behind the same carrier's shared address,
+  or in the same /56 -- waits out the bar too (docs/design/net-hardening.md
+  E.3). It is also what a friend swimming reads when
   the server is stopped -- an update never restarts it with anyone in (§4).
 - **"cut off"** -- the server's gate or referee cut the friend for sending what
   no Biogenic build sends, or far more than any phone sends (§3). The `[net]

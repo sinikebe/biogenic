@@ -19,8 +19,8 @@ extends Node
 ##   - **invite**: pastes, from whole invites to junk behind a check that
 ##     reads.
 ##   - **address**: the LAN door's `is_local_source` and the limiter's
-##     `source_key`, for addresses written every way ENet and people write
-##     them, against what each address is.
+##     `source_key` and `wider_key`, for addresses written every way ENet and
+##     people write them, against what each address is.
 ##   - **referee**: every judgement a guest can ask for, in any order, with any
 ##     finite values a frame can carry.
 ##
@@ -30,9 +30,13 @@ extends Node
 ## admit, none under an id below 2, none greeted on another protocol; one
 ## listener's peer never taken for the other's; nothing a real ENet would
 ## refuse -- a frame to an id not held or cut, a peer asked for that is not
-## there; no bar forgotten early; no peer taken past its budgets; every queue
-## and book inside its cap, a phone host's inside a host's own share; the
-## referee's answers finite and inside its caps; and no secret in any line
+## there; no bar forgotten early, no call taken from a barred address or /56,
+## none turned away at a cost to the bucket every address shares, and room
+## made only by the caller that has waited longest, long enough, from another
+## address and /56 (#103);
+## no peer taken past its budgets; every queue and book inside its cap, a
+## phone host's inside a host's own share; the referee's answers finite and
+## inside its caps; and no secret in any line
 ## printed. Engine errors on the invite path are counted and not failed: #106
 ## is that finding. **And every path the door can take is taken** -- by a run
 ## or a saved case -- but the few no run here can reach.
@@ -46,7 +50,7 @@ extends Node
 ##       res://tools/net_fuzz.tscn -- --seed=1'
 ##
 ## The address is one the LAN host can take, in a namespace nothing else is
-## in. Options: `--seed=N`, `--scale=K` (1 is CI's four seconds, 20 a longer
+## in. Options: `--seed=N`, `--scale=K` (1 is CI's five seconds, 20 a longer
 ## look), `--only=wire,door,...` -- which also narrows the corpus to those
 ## sections, and is how to run the rest anywhere -- and `--replay=` one case.
 ## A failure prints what broke and a `--replay=` that runs that case alone,
@@ -984,6 +988,11 @@ func _pick_address(via: int) -> String:
 		4:
 			return "198.51.100.%d" % _rng.randi_range(1, 254)
 		5:
+			# Now and then a neighbour: one of four /64s under one /56, which the
+			# internet door bars as a whole once three of them are (#103).
+			if _rng.randf() < 0.5:
+				return "2001:db8:0:%x::%x" % [0x100 + _rng.randi_range(0, 3),
+					_rng.randi_range(1, 0xFFFF)]
 			return "2001:db8::%x" % _rng.randi_range(1, 0xFFFF)
 	return "fd00::%x" % _rng.randi_range(1, 0xFFFF)
 
@@ -1031,7 +1040,7 @@ func _door_run(actions: Array) -> Array:
 	# `host.sent` it began, how many datagrams it has sent, the invite it
 	# proved -- and which invite the owner holds now: "first", "second" or
 	# none.
-	var run := {"began": {}, "said": {}, "proved": {}, "invite": "first"}
+	var run := {"began": {}, "said": {}, "proved": {}, "invite": "first", "door": ""}
 	var proofs := 0
 	# Each listener's barred callers after the last step, key -> until, and
 	# how many bars the host had made by then.
@@ -1041,16 +1050,27 @@ func _door_run(actions: Array) -> Array:
 		var errors := _catcher.errors()
 		var sent_before := host.sent.size()
 		var net_before := host.net_seen
+		# Every caller on the internet listener yet to prove, and where from.
+		var unproved := {}
+		for id: int in host._peers:
+			var peer: Dictionary = host._peers[id]
+			if not bool(peer["greeted"]) \
+					and int(peer.get("via", NetSession.VIA_LAN)) == NetSession.VIA_NET:
+				unproved[id] = str(peer["address"])
 		proofs += int(_door_step(host, action, run))
 		_settle_drops(host)
 		if host.net_seen != net_before:
 			# A listener closed takes its book with it, bars and all.
 			bars[NetSession.VIA_NET] = {}
-		var why := _door_why(host, run["proved"])
+		var why := str(run["door"])
+		if why.is_empty():
+			why = _door_why(host, run["proved"])
 		if why.is_empty():
 			why = _told_why(host, sent_before, run["proved"])
 		if why.is_empty():
 			why = _bars_why(host, bars)
+		if why.is_empty() and host.net_seen == net_before:
+			why = _left_why(host, unproved, run["proved"])
 		if why.is_empty() and _catcher.errors() > errors:
 			why = "an error: " + _catcher.last
 		if why.is_empty() and not host.misaddressed.is_empty():
@@ -1179,7 +1199,37 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 			began[line] = host.sent.size()
 			said[line] = 0
 			proved.erase(line)
+			# **What the door does with a call** (#103): one from a barred
+			# address -- or on the internet door, from a barred /56 -- is never
+			# taken, before the call or after the room it made; one it turns
+			# away spends nothing of the bucket every address shares; and room
+			# is made only by the caller on the internet listener that has
+			# waited longest, [constant NetSession.EVICT_AFTER] or more, and
+			# never from the newcomer's own address or /56. Time stands still
+			# inside a step, so the bucket's level can only fall by what a take
+			# spends.
+			var from := str(action[3])
+			var book: Dictionary = host._book if via == NetSession.VIA_LAN else host._net_book
+			var barred := _barred_now(book, from, via, host.now_at)
+			var everybody: Variant = host._calls_all if via == NetSession.VIA_LAN \
+				else host._net_calls_all
+			var level: float = everybody.level(host.now_at) if everybody != null else 0.0
+			var waiting := {}
+			for other: int in host._peers:
+				var peer: Dictionary = host._peers[other]
+				if not bool(peer["greeted"]) \
+						and int(peer.get("via", NetSession.VIA_LAN)) == NetSession.VIA_NET:
+					waiting[other] = peer
+			var evicted := int(host.gate_counts["net_evicted"])
 			host._on_peer_connected(id, via)
+			var taken := host._peers.has(id) and int(host._via.get(id, -1)) == via
+			if taken and (barred or _barred_now(book, from, via, host.now_at)):
+				run["door"] = "a call from %s was taken at the door while it is barred" % from
+			elif not taken and everybody != null and everybody.level(host.now_at) < level:
+				run["door"] = "a call from %s turned away at the door spent the bucket" % from \
+					+ " every address shares"
+			elif int(host.gate_counts["net_evicted"]) > evicted:
+				run["door"] = _evicted_why(host, waiting, from)
 		"D":
 			var id := int(action[1])
 			var via := int(action[2])
@@ -1379,6 +1429,71 @@ func _door_why(host: FuzzHost, proved: Dictionary) -> String:
 ## then, and is brought up to date: in full only when that count has moved,
 ## since only `_bar` makes one, and a filling book is checked after every
 ## caller.
+## Whether [param key] is barred in [param book] at [param now]: never for
+## "", which is no key at all.
+static func _barred_in(book: Dictionary, key: String, now: float) -> bool:
+	return not key.is_empty() and book.has(key) and now < float(book[key]["barred_until"])
+
+
+## **Every way out of the internet waiting room without a proof bars** (#103):
+## "" if each caller of [param unproved] -- id -> address, every caller on the
+## internet listener yet to prove before the step -- that has gone left its
+## address barred, or had proved an invite on its way out ("already two"). A
+## book full of bars may forget one, and a listener closing bars nobody.
+static func _left_why(host: FuzzHost, unproved: Dictionary, proved: Dictionary) -> String:
+	if not host.internet_listening():
+		return ""
+	var book: Dictionary = host._net_book
+	for id: int in unproved:
+		if host._peers.has(id) or proved.has(_line(id, NetSession.VIA_NET)):
+			continue
+		var key := Lan.source_key(str(unproved[id]))
+		if key.is_empty() or _barred_in(book, key, host.now_at) \
+				or (not book.has(key) and book.size() >= NetSession.BOOK_MAX):
+			continue
+		return "%d (%s) left the internet listener's waiting room with nothing proved," % [
+			id, str(unproved[id])] + " and its address is not barred"
+	return ""
+
+
+## Whether a call from [param from] on [param via] finds its address barred at
+## [param now] -- or on the internet door, its /56.
+static func _barred_now(book: Dictionary, from: String, via: int, now: float) -> bool:
+	return _barred_in(book, Lan.source_key(from), now) or (via == NetSession.VIA_NET
+		and _barred_in(book, Lan.wider_key(from), now))
+
+
+## **Room made for a call from [param from]** (#103): "" if the caller it took
+## the place of, out of [param waiting] -- every unproved caller on the
+## internet listener just before, by id -- had waited longest, at least
+## [constant NetSession.EVICT_AFTER], and called from neither the newcomer's
+## address nor its /56.
+static func _evicted_why(host: FuzzHost, waiting: Dictionary, from: String) -> String:
+	var gone: Array = []
+	var eldest := INF
+	for other: int in waiting:
+		eldest = minf(eldest, float(waiting[other]["since"]))
+		if not host._peers.has(other):
+			gone.append(other)
+	if gone.size() != 1:
+		return "room made for %s, and %d callers gone from the waiting room" % [from,
+			gone.size()]
+	var elder: Dictionary = waiting[gone[0]]
+	var there := str(elder["address"])
+	var waited := host.now_at - float(elder["since"])
+	if float(elder["since"]) > eldest:
+		return "room made for %s by pushing out %d, which had not waited longest" % [from,
+			int(gone[0])]
+	if waited < NetSession.EVICT_AFTER:
+		return "room made for %s by pushing out %d after %.2f s" % [from, int(gone[0]),
+			waited]
+	if Lan.source_key(there) == Lan.source_key(from) or (not Lan.wider_key(from).is_empty()
+			and Lan.wider_key(there) == Lan.wider_key(from)):
+		return "room made for %s by pushing out %d, from its own address or /56 (%s)" % [
+			from, int(gone[0]), there]
+	return ""
+
+
 static func _bars_why(host: FuzzHost, bars: Array) -> String:
 	var now := host.now_at
 	var made := int(host.gate_counts["bars"])
@@ -1772,20 +1887,24 @@ func _fuzz_address() -> void:
 		var errors := _catcher.errors()
 		var got := Lan.is_local_source(written, own)
 		Lan.source_key(written)
+		var wider := Lan.wider_key(written)
 		if _catcher.errors() > errors:
 			bad = "case %d: %s raised an error" % [i, written]
 			break
-		if got != want:
-			bad = "case %d: %s judged %s, where it is %s -- --replay=\"address %s %s\"" % [i,
-				written, "local" if got else "not local", "local" if want else "not local",
-				"local" if want else "remote", written]
+		if got != want or wider != str(made[2]):
+			bad = "case %d: %s judged %s in '%s', where it is %s in '%s'" % [i, written,
+				"local" if got else "not local", wider, "local" if want else "not local",
+				made[2]] + " -- --replay=\"address %s/%s %s\"" % ["local" if want else "remote",
+				made[2], written]
 			break
 	_says(bad.is_empty(), "address: %d addresses -- IPv4 and IPv6, compressed and not," % cases
 		+ " with zones, in IPv4 clothes, and spoiled -- each judged local by the LAN door"
-		+ " exactly when it is%s" % ("" if bad.is_empty() else " -- NOT: " + bad))
+		+ " exactly when it is, and put in the /56 it is in, and IPv4 in none (#103)%s"
+		% ("" if bad.is_empty() else " -- NOT: " + bad))
 
 
-## **An address and whether it is local**, made from its numbers and then
+## **An address, whether it is local, and the /56 it is in** -- "" for IPv4,
+## in any clothes, and for anything spoiled -- made from its numbers and then
 ## written out, so what it is is known without parsing it back. Own /24:
 ## 192.0.2.0/24.
 func _address() -> Array:
@@ -1813,8 +1932,8 @@ func _address() -> Array:
 		var text := "%d.%d.%d.%d" % o
 		if roll == 4:
 			# In IPv6 clothes, as a dual-stack socket reports it.
-			return ["::ffff:" + text, local]
-		return [text, local]
+			return ["::ffff:" + text, local, ""]
+		return [text, local, ""]
 	if roll <= 7:
 		var g: Array = []
 		for i in 8:
@@ -1831,12 +1950,12 @@ func _address() -> Array:
 				g[1] = 0x0DB8
 		var local := g == [0, 0, 0, 0, 0, 0, 0, 1] or (int(g[0]) & 0xFE00) == 0xFC00 \
 			or (int(g[0]) & 0xFFC0) == 0xFE80
-		return [_v6_text(g), local]
+		return [_v6_text(g), local, "%x:%x:%x:%x::/56" % [g[0], g[1], g[2], int(g[3]) & 0xFF00]]
 	# Spoiled: never local, however close it looks.
 	var spoiled := ["192.168.1", "192.168.1.1.1", "256.1.1.1", "10.0.0.-1", "", "::1::",
 		"fe80::1::2", "fd00::g", "localhost", "192.168.1.1.", "1e2.0.0.1", "10.0.0.1/8",
 		"0x0a.0.0.1", ":::", "fd00:::1", "1:2:3:4:5:6:7:8:9"]
-	return [spoiled[_rng.randi_range(0, spoiled.size() - 1)], false]
+	return [spoiled[_rng.randi_range(0, spoiled.size() - 1)], false, ""]
 
 
 static func _v4_local(o: Array) -> bool:
@@ -2184,13 +2303,18 @@ func _replay(entry: String, say: bool) -> bool:
 			return _catcher.script_errors == before and (int(read.get("read", -1))
 				!= Invite.Read.OK or _invite_why(read).is_empty())
 		"address":
-			# `local <address>` or `remote <address>`: what it is, then as written.
-			var want := payload.get_slice(" ", 0) == "local"
+			# `local <address>` or `remote <address>`: what it is, then as
+			# written -- `local/<its /56>`, or `remote/` for none, to ask the
+			# /56 too.
+			var kind := payload.get_slice(" ", 0)
+			var want := kind.get_slice("/", 0) == "local"
 			var written := payload.substr(payload.find(" ") + 1)
 			var before := _catcher.errors()
 			var got := Lan.is_local_source(written, "192.0.2.10")
 			Lan.source_key(written)
-			return _catcher.errors() == before and got == want
+			var wider := Lan.wider_key(written)
+			return _catcher.errors() == before and got == want \
+				and (not kind.contains("/") or wider == kind.substr(kind.find("/") + 1))
 		"guest":
 			var result: Array = await _guest_run(payload.get_slice(" ", 0) == "invite",
 				_guest_read(payload.get_slice(" ", 1)))

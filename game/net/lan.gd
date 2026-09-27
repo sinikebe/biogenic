@@ -335,6 +335,21 @@ static func source_key(address: String) -> String:
 	return "%x:%x:%x:%x::/64" % [g[0], g[1], g[2], g[3]]
 
 
+## **The /56 an IPv6 caller's /64 is in**: the internet door bars one as a
+## whole once enough /64s inside it have been barred (net_session.gd's `_bar`,
+## issue #103), because a home or a server is handed a /56 or wider and makes
+## up /64s inside it at will. "" for IPv4 -- carrier-grade NAT puts strangers
+## behind one address, and never wider -- for IPv4 in IPv6 clothes, and for
+## anything that does not parse.
+static func wider_key(address: String) -> String:
+	if not _ipv4_octets(address).is_empty():
+		return ""
+	var g := _ipv6_groups(address)
+	if g.is_empty() or _v4_mapped(g):
+		return ""
+	return "%x:%x:%x:%x::/56" % [g[0], g[1], g[2], g[3] & 0xFF00]
+
+
 ## Four octets out of a dotted IPv4, or empty. Digits only, 0 to 255 each.
 static func _ipv4_octets(address: String) -> PackedInt32Array:
 	var parts := address.strip_edges().split(".")
