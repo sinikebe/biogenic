@@ -71,7 +71,9 @@ const TIER_MAX := 3
 ##
 ## **`rhabdom` was removed from this list and nothing closed over the gap**, for
 ## the same reason: the order is a tie-break, so lifting one entry out of the
-## middle leaves every remaining pair in the order it was already in. This list
+## middle leaves every remaining pair in the order it was already in. `statocyst`
+## / level went the same way on 2026-09-28: the owner judged it useless, since
+## knowing which way is up says nothing about the water. This list
 ## is also what [method _mutate_drift] draws a replacement gene from, so a gene
 ## that is not on it can never re-enter a lineage. three-senses.md §8 row 2 is
 ## the decision and food.gd's DRIFTER_GENES carries the reasoning.
@@ -84,7 +86,7 @@ const TIER_MAX := 3
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
 	&"ocellus", &"chemocyte", &"ampulla",
-	&"axoneme", &"statocyst", &"palp", &"myoneme",
+	&"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.

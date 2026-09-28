@@ -66,7 +66,6 @@ const HUES := {
 	# The flagellum's evolution, so it keeps the flagellum's family: orchid ->
 	# magenta. Close on purpose -- these two are the same organ, twice.
 	&"axoneme": Color(0.98, 0.44, 0.90),     # push, 306 deg
-	&"statocyst": Color(0.38, 0.76, 1.00),   # level, 202 deg
 	&"palp": Color(1.00, 0.68, 0.48),        # touch, 23 deg
 	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
 	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
@@ -93,7 +92,6 @@ const EARNED_COUNT := {
 	# violets at a glance.
 	&"ampulla": 6,
 	&"axoneme": 8,
-	&"statocyst": 2,
 	&"palp": 8,
 	&"myoneme": 5,
 	&"trichocyst": 3,
@@ -118,9 +116,11 @@ const EARNED_COUNT := {
 ## a gene that no longer exists, and it is a visible organ on a readable body,
 ## which is the trade this list was written for.
 ##
-## **72 degrees is free again**, which is where `rhabdom`'s yellow-green sat.
-## It is not added below because these two are in wheel order and a third entry
-## would change which colour an unknown gene gets.
+## **72 degrees is free again**, which is where `rhabdom`'s yellow-green sat,
+## **and so is 202**, `statocyst`'s sky blue: the owner retired that one too, on
+## 2026-09-28, and a map that still names it draws indigo the same way. Neither
+## is added below because these two are in wheel order and a third entry would
+## change which colour an unknown gene gets.
 const RESERVED_HUES: Array[Color] = [
 	Color(0.48, 0.42, 0.95),  # indigo, 250 deg
 	Color(0.94, 0.42, 0.68),  # rose, 333 deg

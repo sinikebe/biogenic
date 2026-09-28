@@ -160,8 +160,9 @@ Three ways were built on the same frame while this was designed:
   not make. Rejected.
 - **A digit.** It reads — `eat 2`, `swim 3` — but it has no scale (two of
   what?), it cannot say worn against carried, and it is the first number this
-  game would put on a gene. And `statocyst`'s plain word is **`level`**: a
-  digit renders `level 3`. `A08` has that gene waiting at three copies.
+  game would put on a gene. And `statocyst`'s plain word was **`level`**: a
+  digit rendered `level 3`. `A08` has that gene waiting at three copies. (The
+  owner retired `statocyst` on 2026-09-28; the other reasons stand on their own.)
 - **Pips.** Three marks are read without counting, the scale is on screen, and
   filled against hollow is `diegetic-hud.md` §1's integrated against held — the
   same shape meaning the same thing in the water and on this screen. Shape, so

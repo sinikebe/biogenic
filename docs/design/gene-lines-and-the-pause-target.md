@@ -11,7 +11,7 @@ Two changes, both on surfaces that already exist. Nothing new to teach, no new
 screen, no new input, no new binary. Extends `genes-and-cilia.md` §5 (the genome
 strip) and takes the exemption `diegetic-hud.md` §3 did not have.
 
-## 1. The seventeen lines
+## 1. The sixteen lines
 
 Voice: lowercase, plain, no jargon — the register of `choose a view` and
 `a sense grew`. **Each line says what the gene does for the player, not what the
@@ -29,7 +29,6 @@ pips' job, and `+30%` is the classic HUD this game spent two phases not building
 | `chemocyte` | *smell* | smells food, strongest where your nose is pointed |
 | `ampulla` | *ping* | a pulse that answers off everything, not just food |
 | `axoneme` | *push* | holding on pushes you, instead of only steering |
-| `statocyst` | *level* | always knows which way is up, however you turn |
 | `palp` | *touch* | feels what is against you, with no light at all |
 | `myoneme` | *dash* | tap for a burst of speed, paid for in hunger |
 | `trichocyst` | *sting* | a dart at whatever closes in on that side |
@@ -38,6 +37,10 @@ pips' job, and `+30%` is the classic HUD this game spent two phases not building
 | `plastid` | *sun* | makes a little of its own food, so you starve slower |
 | `vacuole` | *store* | a bigger tank, so hunger takes longer to reach you |
 | `crista` | *burn* | burns cleaner, so everything you carry costs less |
+
+`statocyst` / *level* (*always knows which way is up, however you turn*) was a
+seventeenth line until the owner retired the gene on 2026-09-28: knowing which
+way is up says nothing about the water.
 
 And one for a slot with nothing in it, because an empty slot still has the one
 thing the compass on its tile is drawing:
@@ -132,7 +135,7 @@ Three consequences worth writing down:
 
 **Desktop gets hover on top.** Pointing at a tile shows its line without
 selecting it; moving off restores the selected tile's. That is the cheapest
-possible way to read all seventeen, and it costs a touch player nothing because a
+possible way to read all sixteen, and it costs a touch player nothing because a
 thumb has no hover — which is exactly why the tap path is the one that is tested.
 Hover deliberately does not restyle the tile: a tile that lit under the cursor
 would be promising a second tap it has not been given, and the cursor is already
@@ -355,7 +358,7 @@ the frame.**
 4. **The strip now costs six to eight `Tab` stops.** Tiles come before the
    light slider in tree order, so tabbing forward from `leave` wraps onto the
    strip and walks it before reaching anything else. That is the price of making
-   seventeen lines reachable without a mouse, and it is paid only by a player who
+   sixteen lines reachable without a mouse, and it is paid only by a player who
    tabs; `Esc` and the buttons are where they were.
 5. **Tapping a gap between tiles does nothing**, because the 20px separation
    belongs to no tile. It is 1.5mm on a phone and a mis-tap costs nothing, so it

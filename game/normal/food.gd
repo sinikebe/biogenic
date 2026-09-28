@@ -234,7 +234,7 @@ const GENE_WEIGHTS := {
 	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
 	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
-	&"statocyst": 2, &"palp": 2, &"myoneme": 2,
+	&"palp": 2, &"myoneme": 2,
 	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
 	&"plastid": 2, &"vacuole": 2, &"crista": 2,
 }
@@ -251,9 +251,14 @@ const GENE_WEIGHTS := {
 ## whole of the retirement; every table that *consumes* a gene name still
 ## answers for one it has never heard of, which is why an old `{gene: tier}`
 ## map that still names it loads and draws rather than crashing.
+##
+## **`statocyst` is retired the same way** (2026-09-28): which way is up told the
+## player nothing about the water, and the owner removed it. A build older than
+## this one can still hand one over in a shared pond; it arrives as a gene this
+## build does not know, kept and drawn but doing nothing, exactly like `rhabdom`.
 const DRIFTER_GENES: Array[StringName] = [
 	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
-	&"ocellus", &"axoneme", &"statocyst", &"palp", &"myoneme",
+	&"ocellus", &"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
@@ -553,8 +558,8 @@ const THREAT_HIGH := 1.35
 #   grows, as you grow and as you are hurt. There is no question here with a
 #   yes/no answer, which is the rule the whole of THREAT_LOW's note defends.
 # - **theta = PI, not the live bearing.** Dread is what a body *could* do.
-#   Feeding it the real angle would make dread swing as the player turns, which
-#   is `statocyst`'s job and not fear's.
+#   Feeding it the real angle would make dread swing as the player turns, and
+#   fear is not a compass.
 # - **it keys on your own wound**, continuously: a whole body feels a third of
 #   it, a chewed one all of it. Being hurt genuinely does make the water more
 #   dangerous and the membrane should say so. It adds no state and no gate --

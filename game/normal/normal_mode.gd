@@ -785,15 +785,11 @@ func _process(delta: float) -> void:
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
-	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"statocyst"),
-		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
+	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"chemocyte"),
+		_cell.extra(&"ampulla"))
 	_post_beam()
 	_post_pings()
 	_tell_others()
-	# `statocyst`: absolute up, as a bearing this body reads it -- which is
-	# minus the heading, and the one bearing on the membrane that moves when the
-	# cell turns rather than when the water does.
-	_bus.level(-_cell.heading, 1.0 if _cell.extra(&"statocyst") > 0 else 0.0)
 	# `palp`: something solid, right there, felt with no light at all.
 	if _food.touch_level > 0.0:
 		_bus.touch(_food.touch_bearing, _food.touch_level)
@@ -1169,7 +1165,6 @@ func _hush() -> void:
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
 	_bus.ping_out(0.0, 0.0)
-	_bus.level(0.0, 0.0)
 	_bus.hold(0.0)
 	_bus.shear(0.0)
 
@@ -3111,11 +3106,10 @@ const CHIP_WORD := 14
 ## **The level is three pips**, after the word, at its x-height. Built three
 ## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
 ## read as grit at a 28 px lobe, and a digit has no scale -- two of what? -- and
-## cannot say worn against carried; `statocyst`'s plain word is `level`, and a
-## digit renders `level 3`. Three marks are read without counting, the scale is
-## on screen, and filled against hollow is diegetic-hud.md §1's integrated
-## against held: the same shape meaning the same thing in the water and here,
-## which is shape and so survives greyscale.
+## cannot say worn against carried. Three marks are read without counting, the
+## scale is on screen, and filled against hollow is diegetic-hud.md §1's
+## integrated against held: the same shape meaning the same thing in the water
+## and here, which is shape and so survives greyscale.
 ##
 ## **The rungs stay.** They are the same count, and they are what makes a slot a
 ## piece of DNA rather than a label. The rungs are the picture; the pips are the
@@ -3316,14 +3310,14 @@ const WORD_UNEXPRESSED := 0.42
 const WORDS := {
 	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
-	&"statocyst": "level", &"palp": "touch",
+	&"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
 	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
 ## **One line per gene, and it says what the gene does to the player** -- not
-## what the organelle is. Seventeen tiles carrying one word each are enough to
+## what the organelle is. Sixteen tiles carrying one word each are enough to
 ## recognise a gene you already know and not enough to learn one, which is the
 ## whole of the owner's ask.
 ##
@@ -3356,7 +3350,6 @@ const EXPLAINS := {
 	&"chemocyte": "smells food, strongest where your nose is pointed",
 	&"ampulla": "a pulse that answers off everything, not just food",
 	&"axoneme": "holding on pushes you, instead of only steering",
-	&"statocyst": "always knows which way is up, however you turn",
 	&"palp": "feels what is against you, with no light at all",
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
@@ -5370,7 +5363,7 @@ const CHOOSE_DART_X := 66.0
 ## **The word budget, measured, because it is the number this block ran out of
 ## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
 ## [constant LABEL_SIZE] 13 in the fallback font the widest of
-## [constant WORDS]'s seventeen is `venom` at **44.00**. Three pixels of tail,
+## [constant WORDS]'s sixteen is `venom` at **44.00**. Three pixels of tail,
 ## and that is the whole of it: the next word to need more has nowhere to go
 ## and will run past the block's own edge, silently, because nothing clips it.
 ##
@@ -5605,7 +5598,7 @@ func _choose_at(side: int, slot: int) -> Array:
 
 
 ## **The two lines below, and they are shared rather than one per side.** The
-## seventeen gene lines are about the gene, and both strands carry the same gene
+## sixteen gene lines are about the gene, and both strands carry the same gene
 ## at five or six of seven loci, so a per-side line would be the same sentence
 ## twice in most frames -- and the longest of them is 519 px, which two of,
 ## centred under daughters 264 px apart, overlap by 255. Which strand is being
