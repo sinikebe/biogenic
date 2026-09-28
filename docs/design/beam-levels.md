@@ -319,26 +319,319 @@ level on the wire. It is not asked for here.
 
 ## 8. The screens
 
-**To be written by the UX designer.** The mechanics need these things from
-the screens:
+*The UX designer's.* Decided here and **not built**. Every picture below is a
+mock: a scratch overlay, kept outside the repository with its frames, drew over
+the real pause and choosing screens at 1280x720 and 2400x1080 through the real
+harness. With nothing mocked, it reproduces `tools/shot.tscn` to 0 pixels. §8.7
+names the frames and says what the build has to shoot again.
 
-1. **A gene's level is visible** wherever the gene is read: its slot on the
-   pause screen, and the lines under the figure. The three pips stay the copies
-   (`dna-body.md` §3.1). Copies and level are now two different numbers, and
-   they must not be confused.
-2. **Progress toward the next level** is readable on the pause screen.
-3. **The fork is offered** when the beam reaches level 3 with no path: which
-   two, what each one does, and a confirm, because the choice is permanent.
-4. **The player learns in play that a choice is waiting**, with no new text
-   on the sensory screen: `perception.md` §6.1 allows exactly one string there,
-   and `genes-and-cilia.md` §8 kept it that way. Words belong on the pause
-   screen.
-5. **A level-up is felt in play**, however quietly.
-6. **The choosing screen** shows, or deliberately does not show, the level each
-   daughter would inherit. Both daughters inherit the same level.
+**The pips stay the copies. The level is a number, and the number never sits
+in the pips' row.** (`dna-body.md` §3.1 calls the pips "the level"; they were a
+copy count then and still are. From here on *level* means only the number.)
 
-Everything is rendered at 1280x720 and 2400x1080 and judged before it is called
-done.
+### 8.1 The level, on its slot
+
+A gene with a progression (`_genome.progression(gene) != null`; today only
+`ocellus`) draws its **level as a numeral inside the third lobe of its slot's
+helix**, the one right of the rungs. That lobe is empty on every chip, and no
+tether crosses it. Computed from `_chip_edge()` for all seven seats, tethers
+start on the bottom edge (nose, forward diagonals), on the top edge (tail, and
+the rear diagonals at x 28.5 and 67.5, rising away), or on the left (flank).
+Every other gene draws exactly what it draws today.
+
+| | value |
+| --- | --- |
+| text | `str(progression.level())`: the **banked** level. Not `level_of()`, which is held at the fork |
+| font | the Hud's default (Open Sans SemiBold), `LEVEL_SIZE` 12 px; 10 px from 100 up |
+| seat | centred on x `LEVEL_X` 76 (`CHIP_X + 2.5 × CHIP_LOBE`), baseline `LEVEL_BASE` 23.5: the digits' ink spans chip y 14..22, centred in the lens. At an open fork, x `LEVEL_FORK_X` 81 (§8.3) |
+| tint | the word's own: `LABEL_TINT`, `LABEL_TINT_LOUD` when selected, `Color(PALE, WORD_UNEXPRESSED)` when not worn. `Color(hue, 0.95)` while the fork is open |
+| drawn | wherever the chip draws its word: its slot, and the armed preview of a gene in hand. Not on a drag source, an empty slot, an unearned one, **or a waiting chip in the tray**. A waiting gene has earned nothing; if its body still wears a level, the line below says so (§8.2) |
+
+**1–99 fits, measured on the widest chip the game can make** (`M08`): `venom`,
+the widest word, three worn copies, level 99. Digits are tabular, 7 px at 12 px,
+so `99` is 14 px. Its ink runs chip x 70..81, y 14..22: 2.6 px inside the
+lobe's backbones at the tightest corner, and 12 px clear of the third rung. The
+word and pips are untouched (7.6 px margins, as today), so the level costs the
+chip no width. At 2400x1080 the chip is 144 x 84 device px and the digits 13 px
+tall. The 10 px fallback is a guard: level 100 is about 80 hours of use at
+`BEAM_XP_STEP` 40.
+
+- **Not after the pips** (`M03`, built and rejected): `beam ●•• 12` reads as a
+  count of the dots, fills 94 of 96 px, and `venom` with two digits is 101 px.
+  In the lobe the two numbers differ by row, shape and tint, and the lobe is
+  the truthful place: the level is inherited with the gene (§3), which is what
+  the strand draws.
+- **A `1` is not a rung** (`M02`): a rung is a 22 px bar in the gene's hue; the
+  digit is 9 px, pale, and has a flag.
+
+### 8.2 The line under the figure: level and progress
+
+`Genome/Hint` becomes an `HBoxContainer` (separation 6, `ALIGNMENT_CENTER`,
+min height 20). Its existing label moves inside as `Text`, and two children go
+in front of it:
+
+| child | what | shown |
+| --- | --- | --- |
+| `Level` | `Label`, 14 px, `LABEL_TINT`: `level %d` | a levelled gene is read |
+| `Gauge` | `Control` 36 x 20 drawing a 36 x 4 bar at y 9, radius 2: track `Color(PALE, 0.14)`, fill `Color(hue, 0.85)` `round(36 × progress())` px wide | the same |
+| `Text` | the hint as today, 14 px at 0.38 | always |
+
+So `level 7 ▰▰▱ · two copies · a daughter probably wears it` (`M05`): the
+level is what a daughter inherits, and the copies are whether she wears it,
+which is §0 row 5 in one line. The widest, `level 99`, the gauge and
+`· three copies · a daughter always wears it`, is 383 of 560 px. It is a gauge
+and not a number because experience means nothing to a player, and
+`progress()` is already a fraction: one pixel is 1/36 of a level.
+
+**Armed over a levelled gene, the warning names the level** (no gauge):
+
+| constant | text |
+| --- | --- |
+| `HINT_LOSES_LEVEL` | `%s leaves your dna · level %d ends with this body` |
+| `HINT_LOSES_LEVEL_CARRIED` | `%s leaves your dna · its level %d is lost` |
+
+The body keeps a gene it wears, level and all, for this life (§3). Its daughters
+never get it. At most 355 px.
+
+**In a pond the level moves under an open menu**, because the beam earns there
+(§2). Redraw the read chip and this row when `level()` changes or the gauge
+would move a pixel. Nothing rebuilds.
+
+### 8.3 The fork
+
+The fork is open while `_genome.can_choose(gene)`: level at or past
+`FORK_LEVEL`, no path. It shows in three places and is chosen in one.
+
+**The slot: its strands part** (`M04`). The helix stops halfway through its
+third lobe and the two strands separate, like a replication fork. Lobes 0–1
+draw as today. From `along` 56 to 70 the weave continues, and from 70 to 88
+the strands leave it: swing `CHIP_AMP + 6.5 u²`, `u = (along − 70) / 18`,
+2 px, blending from their depth colour to `Color(hue, 0.9)` at the tips. The
+tips land at chip x 94, y 1.5 and 36.5, inside the box. The numeral moves into
+the fork's mouth and takes the hue. The chip's outline changes, not only its
+colour, so it survives greyscale. Put it in `cilia.gd` beside `draw_weave`, as
+a static `draw_fork(canvas, axis, lobe, mid, amp, from, to, spread, tone,
+bright)`, because the tray draws the same fork.
+
+**The tray: the fork waits with the genes.** `Genome/Waiting` gets **one fork
+chip per open fork, after the waiting genes**. The tray is where this screen
+keeps what waits for the player, and a fork does. The chip is 116 x 48,
+`FOCUS_ALL`, `MOUSE_FILTER_STOP`, **not draggable and never a drop target**:
+
+| part | value |
+| --- | --- |
+| glyph | `draw_fork` over `along` 28..88 (a lobe, a half, the parting) at scale 0.5, origin (7, 22): chip x 7..37 |
+| word | 14 px at x 44, baseline 27, `LABEL_TINT`; loud while the view is open |
+| level | 12 px, `Color(hue, 0.95)`, 6 px after the word. `venom 99` ends at 111 of 116 |
+| open | underline x 6..110, y 45, 1.5 px, `Color(hue, 0.55)`: the gene-in-hand mark |
+| dim | `WAIT_DIM` while a waiting gene is in hand, like every other chip in the tray |
+
+`waiting` captions the tray whenever anything is in it, a fork included. Four
+genes and a fork wrap to a second row: `A08`'s height, which fits.
+
+**The fork view.** A tap on the fork chip swaps the figure for two cards
+(`M06`, `M07`). So does a second tap on the forking slot, when nothing is in
+hand. `Genome/Fork`, a `Control` 420 x 372 beside `Figure`, takes its place,
+and exactly one of the two is visible, so the column does not move:
+
+```
+Genome/Fork   Control 420 x 372, MOUSE_FILTER_IGNORE, hidden unless open
+  Way0        Control 200 x 290 at (0, 41), STOP, FOCUS_ALL   paths[0], extend
+  Way1        Control 200 x 290 at (220, 41)                  paths[1], sweep
+```
+
+The cards sit at canvas x 578..778 and 798..998, y 213..503 (x +160 at
+2400x1080), 49 px clear of the tray and of `Explain`. They are 300 x 435 device
+px on a phone.
+
+| a card | value |
+| --- | --- |
+| surface | `StyleBoxFlat` bg `Color(0.063, 0.141, 0.125, 0.90)`, border 1 px `Color(0.12, 0.70, 0.58, 0.26)`, radius 6. **Opaque on purpose.** Full vision pins the ghost of the player's cell to x 640, inside the left card. On a clear patch of that card, at the slab's usual 0.45, it reads 23.5 with a 36.5 peak where the ghost's rim shows through (`M06_fv`). At 0.90 it reads 29.9, peak 32.5, against a flat 29.7 in point of view |
+| picture | the tile organ (`draw_tile_organ`, scale 1.0) at (100, 154); rays from (100, 146), drawn 16..110 px out, 2 px, `hue` 0.30 at the root to 0.85 at a 2.2 px tip dot |
+| its content | **the beam that path gives at `max(level(), FORK_LEVEL + 1)`**, from `CellBody.beam_shape()` and stepped by a `ray_fan.gd`, so the card is the water's own beam. Fill: that many rays, still. Sweep: three rays at the real rate, each over its sector (filled `hue` 0.06), with three trailing copies 0.03 s apart at 0.45, 0.25 and 0.12 of the ray's ink. Stepped on wall time while open, because single player has stopped the tree |
+| title | 20 px, `Color(hue, 0.95)`, centred, baseline 188 |
+| pro, con | 14 px, `EXPLAIN_TINT`, centred, baselines 216 and 238 |
+| cost | 14 px, 0.38, centred, baseline 266 |
+| focus | `FOCUS_TINT` underline, inset 14, y 284: the chips' mark, not a box |
+| armed | border 2 px `Color(hue, 0.85)`; the other card's ink x 0.55 |
+| hover | no restyle, as a chip: the lines below describe the hovered way |
+
+Its words belong at the edge (`normal_mode.gd`), not in `progression.gd`. The
+two names are the owner's call (§8.9):
+
+| path | title | pro | con | cost |
+| --- | --- | --- | --- | --- |
+| `extend` | `fill` | `every ray lit, all the time` | `small things slip between` | `costs more to keep` |
+| `sweep` | `sweep` | `no gaps between rays` | `shows where things were` | `costs less to keep` |
+
+**The three lines keep their jobs** while the view is open:
+
+| | nothing armed | a way hovered or armed |
+| --- | --- | --- |
+| `Explain` | the gene's own line | `fill · a new ray every level, filling the fan` / `sweep · your three rays swing, faster every level` |
+| `Hint` | `level 5 ▰▱ · works as level 3 until you choose`; at level 3 itself, `level 3 ▱ · both ways start at the next level` | `level 5 ▰▱ · costs more to keep than sweep` / `· costs less to keep than fill` |
+| `Act` | `tap a way to choose it` | armed: `tap again to choose sweep · for good` |
+
+**At level 3 the two ways draw the same beam**: three rays, and a sweep of 0°/s
+(§4.1–§4.3). That is why the cards draw level 4 there, and why the hint says a
+choice made at 3 changes nothing until 4.
+
+**Choosing is the pause screen's one confirm, unchanged in kind.** Tap a way to
+arm it; tap it again to choose it for good. `ARM_GUARD_MS` 300 lies between the
+two taps, and `ARM_TIMEOUT_MS` 4000 disarms it on its own. The second tap
+commits on the **lift, inside the card**, like a slot's, so sliding off
+cancels. A tap on the other way arms that one instead.
+
+| | touch | mouse | keyboard |
+| --- | --- | --- | --- |
+| open | tap the fork chip; or, nothing in hand, tap the forking slot again once it is selected | click, the same | `Enter` on the fork chip (Tab reaches it after the waiting genes), or on the selected forking slot. Focus goes to `Way0` |
+| read a way | tap it: it arms, which is harmless | hover | `←` `→` between the cards |
+| choose | tap the armed way again | click it again | `Enter` on the armed way |
+| leave it | tap the fork chip, or any waiting gene (it goes in hand) | the same | `Esc` shuts the view only; a second `Esc` resumes (`dna-body.md` §8's rule). Focus returns to the fork chip |
+
+**What it cannot collide with:**
+
+- **Placement.** The view hides every slot, so nothing can be armed or written
+  while it is open; opening it disarms any armed slot, and the gene in hand
+  comes back with the figure. With a gene in hand, a tap on the forking *slot*
+  is the placement's first tap, as it is today, and §8.2's warning names the
+  level at stake. The fork is reached from the tray then. That is why the tray
+  carries it.
+- **The drag.** The fork chip neither drags nor takes a drop. A press on a
+  waiting gene shuts the view first, so its drag lands on the figure.
+- **The slot's second tap.** With a gene in hand it places; with none, and the
+  slot's fork open, it opens the view; otherwise it does nothing, as today. The
+  300 ms guard covers both, so a touch and the mouse click Godot emulates from
+  it cannot select and open in one press.
+- **A pond.** The view is held by gene, like the gene in hand (`dna-body.md`
+  §5.1), so a tray rebuilt under it keeps it open.
+
+**After choosing**: `_genome.choose(gene, path)`. The view shuts and the figure
+comes back with that slot selected, as a receipt, the way a placement leaves
+one. Its strands close, its numeral goes pale, and its tray chip leaves (the
+tray keeps its height). `Explain` gives the path's line, a new
+`EXPLAINS_PATH`: `ocellus · a fan of rays out of that side, one more every
+level` and `ocellus · three rays sweeping that side, faster every level`, 464
+and 446 px with their names.
+
+**What pause opens on.** With a gene waiting, the head in hand, as today.
+Otherwise the first slot with an open fork, selected, with `Act` reading
+`tap again to choose how beam grows`. Otherwise the first gene carried, as
+today (§8.9 row 3).
+
+### 8.4 In play: a choice is waiting, and the eye buds
+
+No word, and no rhythm: the second heartbeat means a gene is waiting, which
+lapses, and a fork never does. **The eyespot doubles**, like an organelle
+about to divide. The single pigment disc that `_draw_earned` draws becomes
+two, side by side along the arc (`E02`, `F02`). It is `cilia.gd`'s one routine,
+so both views draw it. It is passed only for the player's own cell, by a new
+`eye` argument to `draw_cell`, as `draw_pending` takes `offer`: no other
+cell's level is known, and the friend's is not on the wire (§6).
+
+| | value |
+| --- | --- |
+| lobes | two, `0.15 r` each (core `0.075 r`), at `± r × (0.10 + 0.02 × min(banked, 4))` along the arc from the usual seat; `banked = level() − FORK_LEVEL` |
+| ink | the pigment's own, x `BUD_INK` 1.2 |
+| shimmer | in antiphase, x `1 ± 0.2 sin(2π t / 2.4)`, on the body's own `clock` |
+| while | the body wears the gene and its fork is open |
+
+**Measured, it loses to every sensation** (point of view, 1280x720, σ = 6
+glance, frames reproduced to 0 pixels). The eye at rest is 55.6. Budding, it
+is 56.5, and **58.9 at its brightest phase**: under dread's 60 and a beam
+return's 67. A ±0.3 shimmer reached 60.9, a dead heat with dread, which is the
+measurement `soma.gd` moved `FADE_PENDING` for. So it says *changed* by shape,
+not loudness, and the longer a fork is left, the further apart the lobes sit.
+
+**The pause target breathes once when a fork opens** (§8.9 row 4). That is on
+the level-up that reaches `FORK_LEVEL`, once per lineage: a daughter who
+inherits an open fork is not told again. It goes to its hot state
+(`gene-lines-and-the-pause-target.md` §4.1) over 0.3 s, holds one beat, and
+settles over 1.5 s. It is the only thing in the water that points at pause.
+
+### 8.5 In play: a level up, and the eye flares
+
+On the first beat after `level()` rises, and after a path is chosen, when the
+banked levels land at once, the eyespot flares for 1.2 s: 0.15 s up, then
+1.05 s down on `1 − smoothstep` (`E03`, `F03`). At the peak the pigment is
+drawn solid, the whole organ's ink x 1.35, its haze 1.5x wider and twice as
+dense, and its bristles 30 % longer. Same routine, both views, own cell only.
+
+Measured at the peak: 86.6, against the resting eye's 55.6. That is a clear
+flicker on your own body, above a beam return for a second and far under a
+taste band's 136. The first cut, ink x 2, reached 111: a flash, not a feeling.
+Past the fork, the beam changes too: full vision draws one more ray or a faster
+sweep, and point of view gets more marks. A banked level flares as well. The
+replay flares when the level it is handed rises, never on a seek.
+
+### 8.6 The choosing screen
+
+**The level goes in the lines, not on the strands** (`C01`). Both daughters
+carry the same level for every gene they share. A mark on both strands would
+say that twice (`choosing.md` §5's reason for one shared row), and the block
+has 3 px of word budget left.
+
+- `Hint`: `worn · level 7 · one copy · a daughter may not wear it`, from the
+  mother's `level()`; a gene drifted in reads `level 1`. The widest,
+  `carried · level 12 · two copies · a daughter probably wears it`, is 400 px,
+  centred and clear of both blocks.
+- `Explain`: the chosen path's line (§8.3). An open fork reads as no path yet.
+
+The daughters differ in level only when **a drift replaced the levelled gene**
+in one of them: that daughter has lost it. Her strand already shows a
+different word and hue with the caret, and reading the other daughter's locus
+gives the level at stake. §8.8 leaves open whether that is enough.
+
+### 8.7 Rendered
+
+Mocks, point of view unless noted. `G` is `dna-body.md` §11's; the choosing
+frames use `choosing.md` §10.1's recipe with `ocellus:1:3` in the DNA.
+
+| frame | shows | judgement |
+| --- | --- | --- |
+| `pause`, `choose` | the screens as shipped, and the space measured here | baseline |
+| `ctl` | the harness with nothing mocked | 0 px from `pause`: the overlay moves nothing |
+| `M01` (both shapes) | `7` in the beam chip's third lobe, selected | passes |
+| `M02` | 1, 11 and 99 | passes |
+| `M03` | the numeral after the pips | rejected, §8.1 |
+| `M04` (both) | the fork open: strands parted, tray chip, level and gauge, the `Act` line | passes |
+| `M04b` | the same with `ping` waiting: `waiting`, `ping`, then the fork chip | the tray passes; its lines are the mock's, not the design's |
+| `M05` | level, gauge and odds | passes |
+| `M06` (both; full vision) | the fork view, nothing armed | **failed first**: in full vision the player's ghost showed through the left card. Passes opaque |
+| `M07` (both) | `sweep` armed | passes |
+| `M08`, `M09` (both) | `venom`, three copies, 99, with and without the fork | passes, once the prong tips came in 2 px |
+| `C01` (both) | the choosing lines with level 7 and a path | passes |
+| `E01`–`E04`, `F01`–`F03` | the eye at rest, budding and flaring, in point of view and full vision | pass at §8.4–§8.5's numbers. Full vision was judged by eye |
+
+**The build shoots these again** on the real code, at both shapes and in both
+views, with `--level=ocellus:5` (fork open, two banked) and
+`--level=ocellus:8:sweep` / `:extend`. That includes the gestures: `--touch=`
+the selected beam chip (938,204; 1098,204 on a phone) to open the view, a card
+twice, 0.3–4 s apart (678,358 and 898,358, +160), to choose, and `Enter`, `←`
+`→` and `Esc` by `--tap=`. `--rects=` gains `Fork`, both ways and the fork
+chip. It measures the glance of §8.4–§8.5 again, from its own frames. The
+pause target's breath was not mocked; its hot state is §4.3's measured 87.
+
+### 8.8 Left open
+
+1. **A drift that takes a levelled gene** is marked the way any drift is
+   (§8.6). If a lost level 12 reads too quietly, the replacement's hint could
+   say so.
+2. **A levelled gene only the body wears**, after the DNA wrote over it, keeps
+   its level for this life and has no slot. The body's word names it
+   (`dna-body.md` §4) without a level. An open fork it has is still in the
+   tray.
+3. **More than two paths** would need narrower cards. Nothing specified needs
+   them.
+
+### 8.9 Owner's call
+
+| # | Question | Options | What it means |
+|---|---|---|---|
+| 1 | What are the two ways called? | **fill and sweep ✓ recommended** · extension and sweep · more rays and sweep | The two words on the choice cards. "fill" says what happens: each level adds a ray between the ones you have, so the fan fills in and never gets wider. "extension" is your word, but it can read as a longer beam, and neither way makes it longer |
+| 2 | Where does a gene's level show on its slot? | **a small number inside the slot's twist of DNA ✓ recommended** · a number after the three dots · no number on the slot, only in the line below | You see `7` framed by the DNA beside its rungs, apart from the dots, which stay the copies. After the dots, `●•• 7` looks like a count of dots, and the longest gene name leaves no room for two digits |
+| 3 | When a choice is waiting and no gene is, what does pause open on? | **your body, with the beam already picked ✓ recommended** · straight onto the two choice cards | Recommended: pause looks as it does now, with the beam lit, and one more tap brings up the two ways. Opening on the cards puts the choice in front of you on every pause, even one to change the light |
+| 4 | Should the pause button glow once when your beam can grow? | **yes, once per choice ✓ recommended** · no, the eye alone | For about two heartbeats the pause button in the corner lights up. It is the only sign in the water that pause has something new. Without it the only sign is your eye doubling, which you may not connect with pause |
 
 ---
 
