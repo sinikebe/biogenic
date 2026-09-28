@@ -7,6 +7,9 @@ name: Release
 # Runs only on merges to main and on manual dispatch. Pull requests are handled
 # by ci.yml, which builds the same way but never sees a secret and never
 # publishes -- so a fork PR cannot reach the signing key.
+#
+# main only ever receives a release: the one pull request from dev that the
+# `release` skill opens (CLAUDE.md, "Git workflow"). Work itself lands on dev.
 
 on:
   push:
@@ -28,6 +31,10 @@ env:
 jobs:
   release:
     name: Build and publish
+    # Players get what main has, and nothing else. A manual dispatch runs on
+    # whatever branch it is started from -- dev, if dev is the default -- and
+    # would publish that branch to every player as the latest release.
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload its assets

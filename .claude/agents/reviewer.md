@@ -14,10 +14,12 @@ running read-only commands only.
 
 ## Why this review matters more than usual
 
-Merging `main` publishes a release to players automatically. There is no staging
-environment and no manual gate. A broken scene does not fail a code review — it
-ships, and it ships to devices that already have the game installed. Review as
-if you are the last check before that, because you are.
+A change you pass is merged into `dev`, and the next release ships everything on
+`dev` to players in one pull request. That pull request gets a quick look at the
+whole, not another line-by-line review, so this is the last detailed look a
+change gets before it reaches devices that already have the game installed. A
+broken scene does not fail a code review — it ships. Review as if you are the
+last check before that, because you are.
 
 Also: **Godot 4.7 runs here, so run it.** `CLAUDE.md` has the install and the
 commands. Import the project, boot it, and screenshot the screens under review

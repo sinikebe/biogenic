@@ -95,10 +95,13 @@ launcher's `play_requested` signal.
 
 ## Releasing
 
-Merge to `main`. That's the whole flow — the
-[release workflow](.github/workflows/release.yml) exports the APK, the Windows
-executable and both content packs, writes `manifest.json`, and publishes them as
-the latest release. Players pick it up on their next launch.
+Work lands on `dev`; `main` is what players have. A release is one pull request
+from `dev` to `main`, opened and merged by the `release` skill
+(`.claude/skills/release/`). Merging it runs the
+[release workflow](.github/workflows/release.yml), which exports the APK, the
+Windows executable and both content packs, writes `manifest.json`, and publishes
+them as the latest release. Players pick it up on their next launch, with one
+patch note for everything since the previous release.
 
 Bump `binary_version` in [version.json](version.json) in the same commit whenever
 the change needs a new binary; leave it alone and the release goes out as a
