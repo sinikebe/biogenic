@@ -637,11 +637,78 @@ pause target's breath was not mocked; its hot state is §4.3's measured 87.
 
 ## 9. Measured
 
-*Filled in by the build.* It will cover:
+All under Godot 4.7.2, `--fixed-fps 60`, on this container. Section 8's
+screens are measured in §8.7.
 
-- the run that sets `STEP`;
-- the frame cost of `_step_beams` at 3, 10 and 20 rays;
-- 0-pixel reproducibility before any A/B;
-- both paths at level 8 in both views at both shapes;
-- the pause screen with the fork offered;
-- net_probe's `referee` section passing untouched.
+### 9.1 `STEP`: the run that sets it
+
+`tools/drive.gd --sniff` is the harness's forager, and it steers by smell
+alone. It was given a nose and a beam dead ahead:
+`--genome=cytostome:1,cirrus:1,flagellum:1,chemocyte:1:1,ocellus:1:0 --sniff
+--trace=5`, seeds 1–8, six to ten minutes each. Only the first life counts,
+because a death is a clean restart and takes the level with it. Seconds to
+reach each level:
+
+| `STEP` | level 2 | the fork (3) | seeds that reached it |
+| --- | --- | --- | --- |
+| 60 | 155–275, median ~185 | 235–260, median ~255 | 6 and 3 of 8 |
+| **40, shipped** | **100–185, median ~145** | **150–225, median ~195** | 7 and 6 of 8 |
+
+The bot does not aim. A player who turns the beam onto things earns faster,
+so ordinary play should reach level 2 in about a minute and the fork in about
+three. Level 1 is the slow stretch: one ray earns the bot about 0.35 a second,
+two rays about 1.5, and three sit near the cap of 3. Past the fork, banked
+levels came every 45–90 seconds (seeds 4, 6, 7 and 8). At the cap that puts
+level 10 about ten minutes past the fork and level 20 about 40, before either
+path's upkeep makes holding one hard.
+
+### 9.2 The beam's frame cost
+
+`--field-cost=1200`, seed 5: the field's whole frame, p50 over 1200 frames,
+twice each.
+
+| beam | p50 | vs no beam |
+| --- | --- | --- |
+| none | 507 µs | — |
+| level 3, 3 rays (**dev's tier 3: 576–592 µs**) | 569 µs | +62 |
+| level 10, fill, 10 rays | 600 µs | +93 |
+| level 10, sweep | 598–607 µs | +96 |
+| level 20, fill, 20 rays | 643–656 µs | +143 |
+
+The skip of §4.4 more than pays for itself: three rays cost less than they
+did before it. Twenty rays add 0.14 ms to a 16.7 ms frame here. A low-end
+phone should be measured before a player reaches level 20, which is hours
+away.
+
+### 9.3 What did not change
+
+- **Reproducible first**: one frame rendered three times, in each view,
+  differs by 0 pixels.
+- **A cell without a beam**: `--genome=cytostome:1,cirrus:1,flagellum:2,
+  stigma:1:3,chemocyte:1:4,ampulla:2:2 --seed=11` renders **0 pixels**
+  different from dev (`5793ca9`), in both views.
+- **A level-1 beam is the old tier-1 beam**: `ocellus:1:0` with two bodies
+  parked in it, `--cell=2,200,4,20 --cell=3,420,-3,24`, lit and hitting, is
+  **0 pixels** different from dev in both views.
+- **The wire**: net_probe `ALL PASS`, including the `referee` section's
+  fingerprint of `Wire.RULES`. net_fuzz `--seed=1` and net_drop pass in their
+  own network namespaces, as CI runs them.
+- `tools/levels_probe.gd`: 38 checks, `ALL PASS`, in CI.
+
+### 9.4 Both paths at level 8
+
+`--level=ocellus:8:extend` and `:sweep`. Upkeep reads 2.26 and 1.81, which is
+§5's table. Frames in both views, at both shapes:
+
+- **Full vision**, four bodies parked in the fan at 250–520 units: fill's
+  eight rays pass either side of a radius-16 body at +16°, which is 3.7° wide
+  against the rays' 14.3° spacing, and **never see it**. Sweep lights all four
+  and leaves each one's held marks on its near edge. This is the trade in one
+  frame pair.
+- **Point of view**, four bodies at 95–130 units: fill leaves one clean mark
+  per ray that lands, five on four bodies. Sweep draws **an arc of fading
+  marks along each body's near edge**, brightest where the ray has just been:
+  a radar scope, and honest that the marks are a pass old. The same arcs sit
+  in the same places at 2400x1080.
+- **The replay**, raised over a live sweep (`--panes=2.0`): both panes draw
+  the held marks, each in its own register.
