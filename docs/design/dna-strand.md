@@ -17,6 +17,9 @@ DNA and rolls again in the next generation, which is what a recessive trait is.
 
 ## 1. The strand
 
+> Superseded as a layout by `dna-body.md`; the helix, rungs and worn/carried
+> shapes below survive, one slot at a time.
+
 **A chromosome, not a row of boxes.** A real chromosome is a strand, genes sit at
 loci along it, and a locus is exactly the slot-is-an-arc idea the game already
 had. The biology handed the layout over; the row of squares was the invented

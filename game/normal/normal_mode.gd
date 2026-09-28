@@ -37,9 +37,10 @@ const RecorderNode := preload("res://game/replay/recorder.gd")
 ## Loaded on the press, never preloaded: `replay.gd` reads this file's division
 ## fades, and a preload back would be a cycle GDScript will not resolve.
 const REPLAY_SCENE := "res://game/replay/replay.tscn"
-## The genome strip draws the same organs, in the same hues, as the water does.
-## One vocabulary: §2.4's promise is that a point-of-view player who looks in
-## the mirror already speaks the language if they ever switch views.
+## The pause screen draws the player's own body with the water's own routine,
+## and the same organs, in the same hues, beside every gene it names. One
+## vocabulary: §2.4's promise is that a point-of-view player who looks in the
+## mirror already speaks the language if they ever switch views.
 const Cilia := preload("res://game/vision/cilia.gd")
 ## **The other cell, if there is one.** Preloaded for one static lookup: the
 ## session is a node under `/root` that the earshot screen left there, and a run
@@ -104,11 +105,11 @@ const SCRIM_FULL_VISION := Color(0.023, 0.055, 0.05, 0.86)
 ## behind the column. A mock's number; judge it in motion on a phone.
 const SCRIM_POND := Color(0.023, 0.055, 0.05, 0.70)
 
-## **What "selected" means on the strand**, and it is three values rather than
-## two because a held sample with no locus chosen yet is a real state: it waits
-## off the head of the chromosome and is selected there, and there is nothing to
-## place it into. Declared up here because [member _armed] is initialised from
-## it. See the strand's own section for what selection buys.
+## **What "selected" means on the pause screen**, and it is three values rather
+## than two because a gene in hand with no slot chosen yet is a real state: it is
+## selected in the tray, and there is nothing yet to place it into. Declared up
+## here because [member _armed] is initialised from it. See the figure's own
+## section for what selection buys.
 const SLOT_NONE := -9
 const SLOT_SAMPLE := -1
 
@@ -224,41 +225,47 @@ var scheme := -1
 @onready var _onboarding: Label = $Hud/Onboarding
 @onready var _pause_ui: Control = $Hud/Pause
 @onready var _scrim: ColorRect = $Hud/Pause/Scrim
-@onready var _resume_button: Button = $Hud/Pause/Center/Buttons/Resume
-@onready var _leave_button: Button = $Hud/Pause/Center/Buttons/Leave
+@onready var _resume_button: Button = $Hud/Pause/Center/Columns/Side/Resume
+@onready var _leave_button: Button = $Hud/Pause/Center/Columns/Side/Leave
 ## **What pause means in a pond, said once, where it cannot be missed**
 ## (shared-pond-ux.md §6): a child of `resume` so the column never lays it out,
 ## in the 48 px gap above it. Hidden everywhere else.
-@onready var _warn: Label = $Hud/Pause/Center/Buttons/Resume/Warn
-## The two settings panels share a row now: the second strand and the `Act`
-## line cost 94 px on a column that had 36 px of slack, and stacking two
-## identical 232 x 101 panels was the only reason the column was as tall as it
-## was. Side by side they are 512 px wide, narrower than the strand block, so
-## the column gains no new outer edge.
-@onready var _light_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/Light
-@onready var _gain_caption: Label = $Hud/Pause/Center/Buttons/Settings/Light/Box/Caption
-@onready var _gain_slider: HSlider = $Hud/Pause/Center/Buttons/Settings/Light/Box/Slider
-@onready var _view_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/View
-@onready var _view_caption: Label = $Hud/Pause/Center/Buttons/Settings/View/Box/Caption
-@onready var _view_button: Button = $Hud/Pause/Center/Buttons/Settings/View/Box/Toggle
-## The third panel in the same row, and it costs **zero vertical pixels**: the
-## row is already 101 tall and had horizontal room. `Settings` goes from 512 to
-## 792 wide, which is still inboard of a seven-locus strand block at 928.
-@onready var _feel_panel: PanelContainer = $Hud/Pause/Center/Buttons/Settings/Feel
-@onready var _feel_caption: Label = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Caption
-@onready var _feel_button: Button = $Hud/Pause/Center/Buttons/Settings/Feel/Box/Toggle
-@onready var _genome_caption: Label = $Hud/Pause/Center/Buttons/Genome/Caption
-## **The body above and the DNA below**, at identical pitch and identical x, so
-## column *i* is arc *i* on both rows and a comparison is a vertical scan. Only
-## the lower one takes input: a row you cannot change must not look like one you
-## can, and the asymmetry is drawn by what responds rather than by a tint.
-@onready var _body_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Body
-@onready var _genome_row: HBoxContainer = $Hud/Pause/Center/Buttons/Genome/Row
-@onready var _explain_organ: Control = $Hud/Pause/Center/Buttons/Genome/Explain/Organ
-@onready var _explain_name: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Gene
-@onready var _explain_says: Label = $Hud/Pause/Center/Buttons/Genome/Explain/Says
-@onready var _genome_hint: Label = $Hud/Pause/Center/Buttons/Genome/Hint
-@onready var _genome_act: Label = $Hud/Pause/Center/Buttons/Genome/Act
+@onready var _warn: Label = $Hud/Pause/Center/Columns/Side/Resume/Warn
+## **The settings stack in a column of their own, left of the genome, and it
+## was measured rather than preferred** (dna-body.md §7). Full vision's camera
+## pins the player's own cell to the middle of the screen, behind the scrim.
+## With the settings on the right the ghost of it sat behind the `turn` slot and
+## raised the light under that chip by 29%; with them on the left the centred
+## row puts the ring's one empty cell -- the port flank, which has no slot --
+## within 2 px of the screen's centre at any width, so the ghost lands in the
+## one place with nothing in it. Three 232 x 101 panels, unchanged, stacked.
+@onready var _light_panel: PanelContainer = $Hud/Pause/Center/Columns/Side/Settings/Light
+@onready var _gain_caption: Label = $Hud/Pause/Center/Columns/Side/Settings/Light/Box/Caption
+@onready var _gain_slider: HSlider = $Hud/Pause/Center/Columns/Side/Settings/Light/Box/Slider
+@onready var _view_panel: PanelContainer = $Hud/Pause/Center/Columns/Side/Settings/View
+@onready var _view_caption: Label = $Hud/Pause/Center/Columns/Side/Settings/View/Box/Caption
+@onready var _view_button: Button = $Hud/Pause/Center/Columns/Side/Settings/View/Box/Toggle
+@onready var _feel_panel: PanelContainer = $Hud/Pause/Center/Columns/Side/Settings/Feel
+@onready var _feel_caption: Label = $Hud/Pause/Center/Columns/Side/Settings/Feel/Box/Caption
+@onready var _feel_button: Button = $Hud/Pause/Center/Columns/Side/Settings/Feel/Box/Toggle
+@onready var _genome_caption: Label = $Hud/Pause/Center/Columns/Genome/Caption
+## **The waiting genes, head first** (#118), one chip each above the figure --
+## which is the queue, drawn, and why the verb line no longer counts it.
+@onready var _tray: HFlowContainer = $Hud/Pause/Center/Columns/Genome/Waiting
+## **The body, and the DNA at each part of it** (dna-body.md). Two layers of one
+## box: `Body` draws the cell, its tethers, its own words and the arc being
+## read, and takes no input; `Slots` holds the seven chips, the only things on
+## the figure a finger can change. A drawing you cannot change must not look
+## like one you can, and the asymmetry is drawn by what responds rather than by
+## a tint -- the rule the two strands had, kept.
+@onready var _figure: Control = $Hud/Pause/Center/Columns/Genome/Figure
+@onready var _figure_body: Control = $Hud/Pause/Center/Columns/Genome/Figure/Body
+@onready var _figure_slots: Control = $Hud/Pause/Center/Columns/Genome/Figure/Slots
+@onready var _explain_organ: Control = $Hud/Pause/Center/Columns/Genome/Explain/Organ
+@onready var _explain_name: Label = $Hud/Pause/Center/Columns/Genome/Explain/Gene
+@onready var _explain_says: Label = $Hud/Pause/Center/Columns/Genome/Explain/Says
+@onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Hint
+@onready var _genome_act: Label = $Hud/Pause/Center/Columns/Genome/Act
 ## The division's reading surface. Built once in [method _ready] and then only
 ## ever redrawn: seven loci a side is an invariant, not a maximum.
 @onready var _choosing: Control = $Hud/Choosing
@@ -281,11 +288,11 @@ var scheme := -1
 ## never freed and no scene change happens.
 var _replay: Node = null
 
-## Which locus is selected, or [constant SLOT_NONE]. Selecting is reversible and
-## that is why a mis-tap costs nothing, which is in turn why no gap between loci
-## is acceptable.
+## Which slot is selected, [constant SLOT_SAMPLE] for the gene in hand with no
+## slot chosen, or [constant SLOT_NONE]. Selecting is reversible and that is why
+## a mis-tap costs nothing, which is in turn why chips this close are acceptable.
 var _armed := SLOT_NONE
-## Which locus the mouse is over, or [constant SLOT_NONE]. Desktop only by
+## Which slot the mouse is over, or [constant SLOT_NONE]. Desktop only by
 ## nature: a phone has no hover, which is exactly why the tap path above exists.
 var _hovered := SLOT_NONE
 
@@ -296,35 +303,45 @@ var _pause_well_rest: StyleBoxFlat = null
 var _pause_well_hot: StyleBoxFlat = null
 var _pause_bar_rest: StyleBoxFlat = null
 var _pause_bar_hot: StyleBoxFlat = null
-## Milliseconds, from Time, not an accumulated delta: the strip only exists
-## while the tree is paused, and a paused tree hands this node a delta for a
-## frame in which nothing else moved.
+## Milliseconds, from Time, not an accumulated delta: the genome screen only
+## exists while the menu is up, and in single player that is a paused tree
+## handing this node a delta for a frame in which nothing else moved.
 var _armed_at := 0
-## The gene in each slot, left to right, index-matched to the loci in Row.
+## The gene in each DNA slot as the chips were last built, by slot index --
+## which is how the chips are seated, not the order they sit in on screen. Also
+## the screen's record of the layout it is showing: see [method _strip_current].
 var _slot_genes: Array[StringName] = []
-## **The waiting gene the strip was built around** -- the head of the queue when
-## [method _build_genome_strip] last ran, &"" for none.
+## **The waiting gene in hand, by name**: the one a placement writes, the head
+## of the queue unless the player picked another from the tray, &"" for none.
 ##
-## A placement may only ever write the gene the strip is showing. With the
-## queue (#118) the head can change under an open strip: in a pond the menu
-## stops nothing, so the head can lapse -- or be eaten again, which sends it to
-## the back -- while a locus is armed for it, and the next gene in line becomes
-## the head without a frame of it ever being drawn. Before the queue a lapse
-## emptied the sample and the confirming tap did nothing; with a queue the same
-## tap would write a gene the player never saw over the one in that locus, for
-## good. [method _committable] refuses that, and [method _step_arming] rebuilds
-## the strip around the new head the first frame no gesture is in flight.
-var _strip_head: StringName = &""
-## Which DNA locus a gene has been lifted out of while a move is in the air, or
+## A placement may only ever write the gene the screen is showing in hand. In a
+## pond the menu stops nothing, so the queue can change under an open screen
+## (#118's review): the gene in hand can lapse, or be eaten again and go to the
+## back, while a slot is armed for it. **So it is held by gene and never by its
+## place in the queue**, because a place in the queue is exactly what those two
+## change: remembered as an index, a lapse turns "the second gene" into the next
+## gene in line -- one the player never picked -- and the confirming tap writes
+## it over whatever the slot held, for good. The index is looked up with
+## `Genome.waiting_index()` at the moment of placing; a gene that is no longer
+## waiting places nothing ([method _committable]), and [method _catch_up] puts
+## the head in hand the first frame no gesture is in flight.
+var _in_hand: StringName = &""
+## **The queue the tray was built around**, head first. When the genome's own
+## queue stops matching it -- a gene lapsed or arrived under an open screen in a
+## pond -- no tap places anything until [method _catch_up] has rebuilt the
+## screen around what waits now, keeping the hand if it still waits.
+var _strip_waiting: Array[StringName] = []
+## Which DNA slot a gene has been lifted out of while a move is in the air,
+## [constant SLOT_SAMPLE] while a waiting gene is carried out of the tray, or
 ## [constant SLOT_NONE]. Set by `_get_drag_data` and cleared by the drop or by
 ## `NOTIFICATION_DRAG_END`, whichever arrives -- and one of them always does.
 var _dragging := SLOT_NONE
-## Which locus a finger is holding down with a placement waiting on the lift,
+## Which slot a finger is holding down with a placement waiting on the lift,
 ## or [constant SLOT_NONE].
 ##
 ## **The confirming gesture and the drag-starting gesture cannot be the same
 ## event, and this variable is what keeps them apart.** A pointer going *down*
-## on an armed locus is ambiguous by construction: it is the second tap of
+## on an armed slot is ambiguous by construction: it is the second tap of
 ## §9.7's placement and it is also how a move begins, and both readings are
 ## live at the same instant on the same pixel. Committing on the down-stroke
 ## resolved that by the clock -- the same finger, the same two points on
@@ -333,10 +350,10 @@ var _dragging := SLOT_NONE
 ## those two outcomes evicts a gene from the lineage for good.
 ##
 ## So the down-stroke only **primes**: it says *a placement is waiting on this
-## locus*, changes nothing, and is cancelled by the one thing that proves the
+## slot*, changes nothing, and is cancelled by the one thing that proves the
 ## finger meant a move, which is the drag actually starting ([method
-## _locus_drag]). The irreversible half happens on the up-stroke, and only if
-## the finger is still inside the locus it pressed. A drag can no longer
+## _slot_drag]). The irreversible half happens on the up-stroke, and only if
+## the finger is still inside the chip it pressed. A drag can no longer
 ## perform a placement, because by the time a placement could happen the drag
 ## has already claimed the gesture and cleared this.
 ##
@@ -541,6 +558,12 @@ func _ready() -> void:
 	_explain_organ.custom_minimum_size = EXPLAIN_ORGAN_SIZE
 	_explain_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_explain_organ.draw.connect(_draw_explain_organ)
+	# The figure's box and its body layer. The chips and the tray are built when
+	# the screen opens; nothing here draws until then, so a headless boot pays
+	# for two signal connections.
+	_figure.custom_minimum_size = FIGURE_SIZE
+	_figure_body.draw.connect(_draw_figure_body)
+	_tray.resized.connect(_latch_tray)
 	_pause_ui.hide()
 	# Eighteen Controls and two rows of text, built once. Nothing here asks for
 	# a window, an input device or a network, so a headless boot pays one
@@ -651,14 +674,14 @@ func _process(delta: float) -> void:
 		_step_death(delta)
 		return
 	if _menu_open and not _session_up():
-		# The genome strip is the one thing on screen that still has a clock
-		# running: a slot armed *over a held sample* lapses after four seconds
+		# The genome screen is the one thing on screen that still has a clock
+		# running: a slot armed for the gene in hand lapses after four seconds
 		# whether or not the simulation is moving. §5.2. A selection with
 		# nothing to commit has no clock -- see [method _step_arming].
 		#
 		# **Single player only.** With a session up the tree is never paused
 		# (shared-pond.md §1.7, owner's B): the menu is open over a live water,
-		# and everything below still runs, the strip's clock included.
+		# and everything below still runs, the screen's clock included.
 		_step_arming()
 		return
 	# The pond's three still moments: held while the host is quiet, the beat of
@@ -668,6 +691,9 @@ func _process(delta: float) -> void:
 		return
 	if _menu_open:
 		_step_arming()
+		# The waiting genes' own clocks run under an open menu here, and the
+		# tray shows the last fifteen seconds of each.
+		_step_tray()
 	# The division. Its first phase leaves the simulation running -- steering
 	# still works and nothing is taken away -- and from the pinch on
 	# _update_simulating() stops it, exactly as it does for a death, so there
@@ -1441,15 +1467,17 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 		payload["color"] = Cilia.hue(gene)
 	_bus.ingest(payload)
 	_metabolism.feed(MetabolismNode.MEAL * nutrition)
-	# **The strip rebuilds on a meal** (shared-pond.md §1.7): with the menu open
-	# over a live pond the genome can change under it. Unreachable in single
-	# player, where the menu stops the water.
+	# **The genome screen rebuilds on a meal** (shared-pond.md §1.7): with the
+	# menu open over a live pond the genome can change under it. Unreachable in
+	# single player, where the menu stops the water.
 	if _menu_open:
-		# A meal that changed the head -- the first gene to wait, or the head
-		# eaten again and sent to the back -- is a new decision; see
-		# [member _strip_head].
-		if _genome.held_sample != _strip_head:
-			_select_default()
+		# A meal that brought the first gene to wait is a new decision, and the
+		# head goes in hand as it does when the screen opens. **A gene eaten
+		# again stays in hand**: it is still waiting -- one copy more, at the
+		# back of the queue -- and it is still the gene the player picked. See
+		# [member _in_hand] and [method _catch_up]. Rebuilt whatever that says:
+		# a meal can raise a copy without moving anything.
+		_catch_up()
 		_build_genome_strip()
 
 
@@ -2203,11 +2231,12 @@ func _notification(what: int) -> void:
 			# **A drag that ends on nothing is a move that did not happen.**
 			# Godot posts this to the whole tree whether the release landed on a
 			# drop target or on open screen, so the one place the lifted gene
-			# goes back into its locus is here -- and a mis-drag costs exactly
-			# what a mis-tap costs, which is nothing.
+			# goes back into its slot is here -- and a mis-drag costs exactly
+			# what a mis-tap costs, which is nothing. A waiting gene carried out
+			# of the tray and let go on nothing stays in hand, unplaced.
 			if _dragging != SLOT_NONE:
 				_dragging = SLOT_NONE
-				_redraw_strand()
+				_redraw_figure()
 				_update_explain()
 				_update_hint()
 		NOTIFICATION_APPLICATION_FOCUS_OUT, NOTIFICATION_APPLICATION_PAUSED:
@@ -2216,8 +2245,8 @@ func _notification(what: int) -> void:
 			# pause: a pause screen nobody asked for is its own bug.
 			_cell.release()
 			_controls.let_go()
-			# The same argument for the strand: a finger that left with the
-			# app never lifts, so the placement it was holding is abandoned
+			# The same argument for the genome screen: a finger that left with
+			# the app never lifts, so the placement it was holding is abandoned
 			# rather than left waiting for a release that cannot come.
 			_primed = SLOT_NONE
 
@@ -2668,11 +2697,13 @@ func _set_menu(open: bool) -> void:
 	# the game looking like it did not hear.
 	_update_pause_tap()
 	# **Both of these are the scrim argument again.** The pause column is
-	# centred and so is the self-figure, so the light slider's track ran
+	# centred and so is the self-figure, so the light slider's track once ran
 	# straight through the cell's own cilia -- the exact failure that took the
-	# world view down to a ghost behind SCRIM_FULL_VISION. The membrane stays,
-	# because it is the live preview of the slider; the body and the line are
-	# not, and the strip above is a better mirror than either. Rendered.
+	# world view down to a ghost behind SCRIM_FULL_VISION -- and today the
+	# figure would land in the ring's empty cell, a second body beside the one
+	# the screen draws. The membrane stays, because it is the live preview of
+	# the slider; the body and the line are not, and the body drawn on this
+	# screen is a better mirror than either. Rendered.
 	_show_self(not paused and not _vision_active() and _life == Life.ALIVE)
 	_onboarding.visible = not paused and _onboard != Onboard.OFF
 	if paused:
@@ -2702,18 +2733,27 @@ func _set_menu(open: bool) -> void:
 		# draws in the outer ~150px of the viewport, which the column never
 		# reaches. Measured, at both shapes.
 		#
+		# **The column is shaped round the ghost now as well** (dna-body.md §7):
+		# with the settings on the left, the one cell of the ring with no slot
+		# in it sits over the middle of the screen, so what shows through the
+		# scrim there is the cell itself, faintly, in the one place nothing is
+		# drawn on top of it.
+		#
 		# **Under B the water is what they came to read** (UX §6): a hunter can
 		# reach this cell with the menu up, so full vision keeps it legible.
 		_scrim.color = (SCRIM_POND if live else SCRIM_FULL_VISION) \
 			if _vision_active() else SCRIM_POV
 		# Built on opening rather than kept in step: the genome cannot change
-		# while the tree is paused except by the two taps below, and a strip
-		# rebuilt sixty times a second to say the same thing is five nodes of
-		# churn a frame for nothing.
+		# while the tree is paused except by the placements and moves this
+		# screen makes itself, and a figure rebuilt sixty times a second to say
+		# the same thing is a dozen nodes of churn a frame for nothing.
 		# Nothing can be in the air on a screen that was not open, and a stale
-		# source locus would draw a hole in the strand.
+		# source slot would draw a hole in the figure.
 		_dragging = SLOT_NONE
 		_primed = SLOT_NONE
+		# The tray's held height is let go here and only here: it never shrinks
+		# while the screen is open. See [method _latch_tray].
+		_tray.custom_minimum_size.y = WAIT_SIZE.y
 		_select_default()
 		_build_genome_strip()
 		_resume_button.grab_focus()
@@ -2775,23 +2815,22 @@ func _on_gain_settled(changed: bool) -> void:
 ##
 ## **`Light`, `Resume` and `Leave` are shrink-centred**, here and in the scene.
 ## They used to inherit the VBox's width, which is the width of the widest thing
-## in it -- and with a seven-locus strand above them that is 800px. Rendered,
+## in it -- and with a seven-locus strand above them that was 800px. Rendered,
 ## and it looked wrong; at 232 they stay the buttons Phase 4 shipped whatever is
-## above them.
+## beside them, and the column they share now is exactly that wide.
 func _style_pause() -> void:
 	for control: Control in [_light_panel, _view_panel, _feel_panel,
 			_resume_button, _leave_button]:
 		control.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
 
 	# **Every group on the pause column is a surface, and `light` was the one
-	# that was not.** `resume` and `leave` are slabs, the strand is a drawn
+	# that was not.** `resume` and `leave` are slabs, the figure is a drawn
 	# object of its own, and the light caption and its track were bare strokes
-	# floating on
-	# the water -- which is why they were the pair the player's own cell tangled
-	# with. Same slab, same border, same radius -- but fainter than a button on
-	# purpose, because it is a surface and not a third thing to press. One rule
-	# a later screen can apply without asking: every group on this column is a
-	# surface.
+	# floating on the water -- which is why they were the pair the player's own
+	# cell tangled with. Same slab, same border, same radius -- but fainter than
+	# a button on purpose, because it is a surface and not a third thing to
+	# press. One rule a later screen can apply without asking: every group on
+	# this column is a surface.
 	_light_panel.add_theme_stylebox_override("panel", _slab(-0.2))
 	# Same slab, same rule: every group on this column is a surface.
 	for panel: PanelContainer in [_view_panel, _feel_panel]:
@@ -2801,9 +2840,10 @@ func _style_pause() -> void:
 		caption.add_theme_color_override("font_color",
 			Color(0.855, 0.953, 0.933, 0.52))
 
-	_genome_caption.add_theme_font_size_override("font_size", 15)
-	_genome_caption.add_theme_color_override("font_color",
-		Color(0.855, 0.953, 0.933, 0.45))
+	# The tray's `waiting` wears the same, so the genome's two captions are one
+	# voice. See [method _make_tray_caption].
+	_genome_caption.add_theme_font_size_override("font_size", CAPTION_SIZE)
+	_genome_caption.add_theme_color_override("font_color", CAPTION_TINT)
 	_genome_hint.add_theme_font_size_override("font_size", 14)
 	_genome_hint.add_theme_color_override("font_color",
 		Color(0.855, 0.953, 0.933, 0.38))
@@ -2895,29 +2935,30 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 
 
 # ---------------------------------------------------------------------------
-# The strand, on the pause screen. docs/design/dna-strand.md.
+# The body and its slots, on the pause screen. docs/design/dna-body.md.
 #
-# **It is a chromosome, not a row of boxes.** A real chromosome is a strand,
-# genes sit at loci along it, and a locus is exactly the slot-is-an-arc idea the
-# game already had -- so the biology handed the layout over and the row of
-# square tiles was the thing that had been invented. Every channel the tiles
-# carried has a place on a strand that is more literal than the place it had on
-# a tile:
+# **The owner could not read which part of the body an arrow meant, so the
+# screen draws the body and puts each slot beside the part it is.** The slot is
+# the arc, and the arc is a place on a body the player has been looking at for
+# the whole run -- so reading a slot is pointing at it rather than decoding a
+# bearing. The figure is the water's own drawing, `Cilia.draw_cell`, nose up and
+# still: no second drawing of a cell exists anywhere, and this is not one. Every
+# channel the strand carried has a place, and most of them are more literal
+# than the place they had:
 #
-#   the plain word    under its own locus, where a chromosome map puts it
-#   the tier          **copies**: one, two or three rungs at the locus. Gene
-#                     dosage is real, it is why the tier now decides how likely
-#                     a daughter is to wear the organ, and it is countable
-#   which arc         the dart, beside the word, unchanged and still the reason
-#                     placement is a decision
-#   the two registers a rung that reaches both backbones is an organ this body
-#                     wears; one floating clear in the middle is one the DNA
-#                     carries and the body does not. Shape, so it survives a
-#                     luminance-only render
-#   the selection     the lens between the backbones fills, and the word goes
-#                     loud. The explanation line below is unchanged
-#   the held sample   a loose base pair floating over the locus it is being
-#                     placed into, on a thread. The two taps are unchanged
+#   which arc         where the chip sits on the 3 x 3 ring, and the faint
+#                     tether from it to its arc on the skin
+#   the plain word    under the chip's own three-lobe piece of helix
+#   the copies        rungs, as on the strand: they are the picture
+#   the level         three pips after the word, and they are the reading: a
+#                     disc for a copy this body wears, a ring for a copy only
+#                     the DNA carries, a dot for room to grow
+#   the two registers the drawing is the body and the chips are the DNA; where
+#                     the two disagree at an arc, the body names what it wears
+#   the selection     the lens fills, the word goes loud, and the arc lights on
+#                     the skin -- the owner's sentence answered on the body
+#   waiting genes     a tray above the figure, soonest to lapse first, one of
+#                     them in hand; the two taps place it, as they always have
 #
 # **A launcher-themed surface, not the membrane aesthetic.** The membrane is
 # what the cell feels; this is what the player consults. It lives on pause
@@ -2925,51 +2966,165 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 # reachable by a gesture the player knows.
 # ---------------------------------------------------------------------------
 
-## One locus: 96 canvas px of strand, 86 tall, and the **whole block** is the
-## touch target -- sample band, weave and label. That is 144 x 129 device px at
-## 2400x1080 against a 48 px rule.
-const LOCUS_W := 96.0
-const LOCUS_H := 86.0
-## Half-lenses per locus. **Odd on purpose, and that is geometry rather than
-## taste**: a locus has to begin and end at a crossing so neighbours join with
-## no seam, and its centre has to be at maximum separation so the rungs are the
-## same length at every locus. Only an odd count does both. One lobe of 96 px
-## against 36 of swing is a 2.7:1 lens and reads as two crossing waves;
-## three of 32 against 36 of swing is round, and reads as DNA.
-const LOCUS_LOBES := 3
-const LOBE_W := LOCUS_W / float(LOCUS_LOBES)
-## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
-## than starting mid-lens. Two, because the head is where a held sample waits
-## before a locus has been chosen and it needs room for the bar and its word;
-## the tail matches so the loci stay centred in the row whatever is held.
-const CAP_LOBES := 2
-const CAP_W := LOBE_W * float(CAP_LOBES)
+## The figure's own box, and where the body sits in it. **Set in code, as the
+## choosing screen's column is**: every seat below is measured from
+## [constant FIGURE_AT], and a `.tscn` cannot add. The scene carries the same
+## size so the tree reads right in an editor; this is what binds.
+const FIGURE_SIZE := Vector2(420.0, 372.0)
+const FIGURE_AT := Vector2(210.0, 170.0)
+## **A fixed radius, not the cell's.** Drawn at the cell's own size the ring of
+## slots would move between two pauses as the body grew, and growth is already
+## said by the slots that light up. Sixty is what the worst body the game can
+## make -- every born organ and four earned ones at level 3 -- leaves room
+## around: the mouth's bow clears the nose row by 9 px, the flank oars by 17,
+## the tail by 21 (dna-body.md §2).
+const FIGURE_R := 60.0
+## A mirror is read, so it is drawn nearly whole: quieter than the chips beside
+## it, and far louder than the water behind the scrim.
+const FIGURE_FADE := 0.85
+## One slot, and the whole of its touch target: 144 x 84 device px at
+## 2400x1080. Neighbours are 54 px apart across and 82 and 112 down.
+const SLOT_SIZE := Vector2(96.0, 56.0)
+## Chip centres from the body's centre, by slot index. **A 3 x 3 ring, not a
+## circle at true bearings**: words are horizontal, rows and columns give the
+## arrow keys a meaning, and every chip still sits within 5.3 degrees of its
+## arc's true bearing -- the forward diagonals at 47.4 against 42.1, the rear
+## ones at 138.2 against 133.3, the flank at 90 against 92.5.
+##
+## **There is no port-flank seat, and the empty cell says so.** Slot 1 is the
+## flank pair: the cirrus wears both flanks, anything else the starboard one
+## (cilia.gd). The hole is truthful, and it has a job: see [member _light_panel].
+const SLOT_SEAT: Array[Vector2] = [
+	Vector2(0.0, -138.0),     # 0 nose
+	Vector2(150.0, 0.0),      # 1 starboard flank
+	Vector2(0.0, 168.0),      # 2 tail
+	Vector2(150.0, -138.0),   # 3 forward starboard
+	Vector2(-150.0, -138.0),  # 4 forward port
+	Vector2(150.0, 168.0),    # 5 rear starboard
+	Vector2(-150.0, 168.0),   # 6 rear port
+]
+## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
+## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
+## **One table for both**, so the key that looks at a slot is the key that moves
+## a gene into it. Down from the nose crosses the body to the tail -- down the
+## body is down the screen -- and nothing wraps: a gene that left one edge of
+## the ring and came back in at the other would land on an arc nobody aimed at,
+## which is the strand's clamp argument in two dimensions.
+const SLOT_NEIGHBOUR: Array = [
+	[4, -1, 3, 2],    # 0 nose
+	[-1, 3, -1, 5],   # 1 starboard flank
+	[6, 0, 5, -1],    # 2 tail
+	[0, -1, -1, 1],   # 3 forward starboard
+	[-1, -1, 0, 6],   # 4 forward port
+	[2, 1, -1, -1],   # 5 rear starboard
+	[-1, 4, 2, -1],   # 6 rear port
+]
+## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
+## them for a focus neighbour.
+const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
+## Tab order: clockwise round the body from the nose, and then on to `light`.
+const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4]
 
-## Inside a locus, measured from its top edge.
-const BAND_MID := 13.0     ## the held sample floats here, over its destination
-const HELIX_MID := 47.0
-const HELIX_AMP := 18.0
-const LABEL_MID := 76.0    ## the dart's centre
-const LABEL_BASE := 81.0   ## the word's baseline
+## **A tether per live slot**, from the chip's edge to the middle of its arc on
+## the skin, drawn under the body so the body wins wherever the two cross. It is
+## what makes a diagonal exact -- rendered without, a corner chip is only an
+## approximation of an arc -- and it is the line the body's own word sits on
+## (dna-body.md §4). A thread and not a leader line: 1.2 px at 0.16, in the
+## slot's hue, and bowed, because a ruled line would be the one piece of chart
+## furniture on a surface that has none.
+const TETHER_WIDTH := 1.2
+const TETHER_ALPHA := 0.16
+const TETHER_BOW := 0.06
+## How far off the skin a tether stops, and how far inside the chip's box it
+## starts, so it ends clear of the fringe and begins clear of the chip's word.
+const TETHER_LIFT := 4.0
+const TETHER_INSET := Vector2(10.0, 4.0)
+## **The part being read lights up on the body**: the arc of the selected,
+## hovered, armed or drop-target slot, traced on the skin in the hue of whatever
+## would be there -- the gene in hand while a slot is armed, the travelling gene
+## while one is dragged. The owner's sentence, answered on the body itself.
+const ARC_MARK_WIDTH := 3.0
+const ARC_MARK_LIFT := 5.0
+const ARC_MARK_ALPHA := 0.85
+const ARC_MARK_STEPS := 12
+## **Where the body wears a different organ from the gene its slot now carries,
+## the body names it**: that organ's own word, in its own hue, on the tether
+## this far out from the skin. The word is needed and a render proved it -- a
+## newborn whose forward-starboard slot holds `sting` while her body wears
+## `beam` there draws two violet, three-stroke organs, and without the word the
+## figure cannot say which one that is (dna-body.md §4). `moving-a-gene.md`
+## §2.3's rule, a word only where the two registers disagree, moved from a
+## second strand onto the body it describes.
+const DISSENT_ALONG := 0.56
+const DISSENT_SIZE := 12
+const DISSENT_ALPHA := 0.92
+
+## A slot's own piece of helix, inside its 96 x 56 box: three lobes of 28 px,
+## from x 6 to 90, the middle one the slot. **An odd count, for the strand's
+## reason** -- it begins and ends at a crossing and is widest in the middle, so
+## the rungs sit where the backbones are furthest apart. 28 against 22 of swing
+## is a 1.27:1 lens, between the choosing screen's 1.33 and the old strand's
+## 0.89: it still reads as DNA at a third of the strand's height.
+const CHIP_LOBE := 28.0
+const CHIP_LOBES := 3
+const CHIP_X := 6.0
+const CHIP_MID := 19.0
+const CHIP_AMP := 11.0
+## The word's baseline, and its size -- one up from the strand's 13, because a
+## chip is read on its own rather than along a row of neighbours.
+const CHIP_BASE := 50.0
+const CHIP_WORD := 14
+## **The level is three pips**, after the word, at its x-height. Built three
+## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
+## read as grit at a 28 px lobe, and a digit has no scale -- two of what? -- and
+## cannot say worn against carried; `statocyst`'s plain word is `level`, and a
+## digit renders `level 3`. Three marks are read without counting, the scale is
+## on screen, and filled against hollow is diegetic-hud.md §1's integrated
+## against held: the same shape meaning the same thing in the water and here,
+## which is shape and so survives greyscale.
+##
+## **The rungs stay.** They are the same count, and they are what makes a slot a
+## piece of DNA rather than a label. The rungs are the picture; the pips are the
+## reading.
+const PIP_R := 3.4
+const PIP_PITCH := 10.0
+const PIP_GAP := 7.0
+const PIP_LIFT := 4.6
+const PIP_RING := 1.4
+## Room to grow, as a dot too faint to count as a copy -- which is what puts the
+## whole scale on screen whatever the level is.
+const PIP_ROOM_R := 1.6
+const PIP_ROOM_ALPHA := 0.30
+## **A slot the body has not earned yet** is its helix at this brightness and
+## nothing else: no rungs, no word, no tether, no focus and no input. Only the
+## first generation shows any -- a daughter inherits a seven-long layout, so
+## hers are all live -- and that is exactly when *your body will grow a slot
+## here* is news. Empty (bright, live) and unearned (faint, dead) read apart at
+## both shapes.
+const UNEARNED_INK := 0.32
 
 ## **The backbone, the depth alpha, the rung states and the segment count all
-## live in `cilia.gd` now**, because the division's choosing screen draws the
-## same helix on its side and two copies of a drawing drift apart. See
+## live in `cilia.gd`**, because the division's choosing screen draws the same
+## helix on its side and two copies of a drawing drift apart. See
 ## `Cilia.STRAND_*` and choosing.md §9.1; what stays here is this surface's own
 ## geometry, which is the only thing the two screens disagree about.
 ##
-## The selected locus's own stretch of backbone, brighter.
+## The selected slot's own stretch of backbone, brighter.
 const BACKBONE_LIT := 1.25
 
-## The lens between the backbones, filled on the selected locus. Area, not a
-## border -- there is no box to put a border on any more, and a filled lens is
-## the one mark that cannot be confused with a rung.
+## The lens between the backbones, filled on the selected slot. Area, not a
+## border -- there is no box to put a border on, and a filled lens is the one
+## mark that cannot be confused with a rung.
 const LENS_SELECTED := 0.20
-## An empty locus has no gene, so its selection and its dart are the column's
+## A chip's lens is a third the size of the choosing screen's, and needs a
+## little more fill to read as selected at all.
+const CHIP_LENS := LENS_SELECTED + 0.08
+## An empty slot has no gene, so its selection and its tether are the column's
 ## own pale tint.
 const PALE := Color(0.855, 0.953, 0.933)
 
-## The held sample: a base pair that is not in a ladder yet.
+## **A waiting gene: a base pair that is not in a ladder yet.** A bar with a
+## base at each end -- in the tray, and riding a finger across the figure.
 const SAMPLE_BAR := 15.0
 const SAMPLE_WIDTH := 2.6
 const SAMPLE_CAP := 2.5
@@ -2979,75 +3134,57 @@ const SAMPLE_WORD := 13
 ## widget, which diegetic-hud.md §2 spent three passes establishing.
 const SAMPLE_HALO: Array[float] = [9.0, 13.5]
 const SAMPLE_HALO_ALPHA: Array[float] = [0.11, 0.05]
-const SAMPLE_THREAD_ALPHA := 0.38
+## The travelling gene's own box: the width of a chip, and the height of the
+## band the strand once reserved for it.
+const SAMPLE_BOX := Vector2(96.0, 26.0)
 
-## **The body strand: the same weave at the same pitch**, with no sample band
-## and its label row *above* its helix. `HELIX_AMP` is shared, so the two rows
-## are the same object at the same scale and a rung on one is comparable with a
-## rung on the other by eye.
-##
-## **The labels go outboard of the pair, and it was built both ways.** With both
-## label rows under their own helix, the DNA row's 26 px sample band sits
-## beneath the body's words -- a held sample and a body dissent land 25 px apart
-## in one column -- and the two weaves end up 77 px apart instead of 37.
-## Outboard puts the sample alone in the band it owns and halves the distance
-## the eye travels to compare two rungs.
-const BODY_LOCUS_H := 58.0
-const BODY_HELIX_MID := 40.0     ## the helix spans 22 .. 58 of its own control
-const BODY_LABEL_MID := 11.0     ## the dart's centre
-const BODY_LABEL_BASE := 16.0    ## the word's baseline
-
-## How far above the pointer the travelling gene rides during a move.
+## How far above the pointer the travelling gene rides during a drag.
 ##
 ## **Above the finger, not under it.** A fingertip is about 9 mm, which at
-## 2400x1080 is roughly 100 canvas units -- one whole locus -- so a preview
-## centred on the pointer and a lens filling beneath it are both under the thumb
-## on a phone. 34 px lifts the base pair into the band a DNA locus already
-## reserves for a held sample, which is as far as it can go before it collides
-## with the body row. It is drawn because a mouse can see it; the `Act` line is
-## what a thumb reads.
+## 2400x1080 is roughly 100 canvas units -- a whole chip -- so a preview centred
+## on the pointer and a lens filling beneath it are both under the thumb on a
+## phone. 34 px lifts the base pair clear of a 56 px chip being pressed from its
+## middle. It is drawn because a mouse can see it; the `Act` line is what a
+## thumb reads.
 const DRAG_LIFT := 34.0
 
-## The row label gutter: `body` over `dna`, right-aligned against the lead-in.
-## One caption per row, where a second `Label` row of the column would cost a
-## whole line of height to say two words.
+## **The tray above the figure: every gene waiting for a slot, head first**
+## (dna-body.md §5), soonest to lapse first -- #118's order. A tray chip is the
+## gene's loose base pair, its word and its level as ring pips, because a
+## waiting gene is carried by definition: `sting` eaten twice reads two rings
+## and a dot, and lands at two.
 ##
-## **Each row ends with the same width, invisible**, or the strand sits half a
-## gutter left of the centre every other group on this column is centred on.
-## Measured at 7 px, and visible against the `Explain` line below it. This is
-## genes-and-cilia.md §5.2's trailing-spacer trick, deleted by dna-strand.md
-## §1.4 when the sample stopped changing the strand's width, and earned again
-## here for a different reason.
-const GUTTER_W := 64.0
-const GUTTER_TINT := Color(0.855, 0.953, 0.933, 0.45)
-const GUTTER_SIZE := 15
+## 48 tall is the touch rule and 116 wide fits the longest word with its pips
+## and air either side. **Four fit on a row beside the caption and a fifth
+## wraps**: the tray is 560 wide, and five genes at once have been posed and
+## still fit the column with 58 px to spare above and below.
+const WAIT_SIZE := Vector2(116.0, 48.0)
+const WAIT_BAR_X := 16.0
+const WAIT_WORD_X := 32.0
+## Every gene not in hand is drawn down to this; the one in hand goes loud and
+## gains an underline in its own hue.
+const WAIT_DIM := 0.55
+## The tray's caption, in the voice of every other caption on this column.
+const WAIT_CAPTION := "waiting"
+const CAPTION_TINT := Color(0.855, 0.953, 0.933, 0.45)
+const CAPTION_SIZE := 15
 
+## The strand's dart, sized for the choosing screen, which still draws one under
+## each locus (dna-body.md §9).
 const DART_R := 6.5
-const DART_GAP := 4.0
 ## The second tap cannot land sooner than this after the first, so a double-tap
 ## -- or the mouse event Godot emulates from a touch -- cannot commit.
 const ARM_GUARD_MS := 300
-## Arming lapses on its own, so a strip left armed is not a trap.
+## Arming lapses on its own, so a slot left armed is not a trap.
 const ARM_TIMEOUT_MS := 4000
 
-## Every word Phase 5 adds to the screen is here, under a locus, or on the
-## explanation line below the strand. perception.md §6.1's one string in normal
-## mode is untouched.
-##
-## **"place", not "replace".** Every new gene is a placement decision now, and
-## most of them land in an empty slot -- the slot is the arc, so which empty one
-## is the whole question. The dart under each locus is what answers it.
-## **"your daughters wear it", because placing no longer changes you.** One word
-## of difference, and it is the whole of lifecycle.md §1 said on the one surface
-## that can say it.
-const HINT_ARM := "tap a locus · your daughters may wear it"
-const HINT_COMMIT := "tap again to place"
-## **What the hint says when nothing is held: how likely the selected locus is
-## to reach a daughter.** Eating a gene writes it into the DNA; a daughter is a
-## roll against that DNA, and copy number is the odds -- so the one line under
-## the strand is where the rungs are put into words. It is said *before* the
-## division, on the surface the player is already reading, which is the whole of
-## "the chance must be legible before, not announced after".
+## **What the hint says: how likely the selected slot is to reach a daughter.**
+## Eating a gene writes it into the DNA; a daughter is a roll against that DNA,
+## and copy number is the odds -- so the one line under the figure is where the
+## pips are put into words. It is said *before* the division, on the surface the
+## player is already reading, which is the whole of "the chance must be legible
+## before, not announced after". The pips draw the level; this line says why it
+## matters, which is the owner's call 2 (dna-body.md §13).
 const HINT_CHANCE: Array[String] = [
 	"",
 	"one copy · a daughter may not wear it",
@@ -3057,13 +3194,24 @@ const HINT_CHANCE: Array[String] = [
 ## The mouth is the one gene that always expresses (genome.gd's
 ## ALWAYS_EXPRESSED), so it says so instead of quoting odds it does not obey.
 const HINT_CERTAIN := "the mouth · a daughter always wears it"
-const HINT_EMPTY := "an empty locus · nothing to pass on from here"
+## The choosing screen reads this one as well, under an empty locus of its own.
+const HINT_EMPTY := "an empty slot · nothing to pass on from here"
+## **Armed over a gene, the hint says what the next tap costs** instead of what
+## the gene is worth. Reading *a daughter always wears it* about the gene the
+## tap is about to erase was the wrong sentence at the worst moment
+## (dna-body.md §6). The second clause is only true of an organ this body
+## actually wears, so a gene the DNA carries and the body does not says the
+## first half and stops.
+const HINT_LOSES := "%s leaves your dna · your body keeps it"
+const HINT_LOSES_CARRIED := "%s leaves your dna"
 
-## **The verb line: what you can do about the locus you are reading.**
+## **The verb line: what you can do about the slot you are reading.**
 ##
-## The two placement instructions moved here out of the hint, which is where
-## they always belonged -- the hint's job is a readout and theirs is a verb --
-## and the move's own instructions join them.
+## **"place", not "replace".** Every new gene is a placement decision, and most
+## of them land in an empty slot -- the slot is the arc, so which empty one is
+## the whole question, and the figure is what answers it. **"your daughters
+## wear it", because placing does not change you.** One word of difference, and
+## it is the whole of lifecycle.md §1 said on the one surface that can say it.
 ##
 ## **It is the third row down and it is *not* the third loudest, and that is
 ## deliberate rather than an oversight.** Measured off the render at 1280x720,
@@ -3079,30 +3227,38 @@ const HINT_EMPTY := "an empty locus · nothing to pass on from here"
 ## - **This is the only row that changes during a gesture, and on touch it is
 ##   the only feedback a thumb cannot cover.** `DRAG_LIFT` puts the travelling
 ##   base pair 34 px above the pointer and the destination lens fills *under*
-##   it; at 2400x1080 a fingertip is about one whole locus wide, so both of
+##   it; at 2400x1080 a fingertip is about one whole chip wide, so both of
 ##   those are under the hand that is making the move. Making the line that
 ##   says `let go to swap eat and ping` the quietest thing on the column would
 ##   be quieting the one part of the move that is legible while it happens.
 ##
-## It is empty when the selected locus is empty and nothing is held: there is
+## It is empty when the selected slot is empty and nothing is in hand: there is
 ## nothing to do there, and a line that said so would be an instruction to read
 ## rather than a thing to act on.
-const ACT_ARM := "tap a locus · your daughters may wear it"
+##
+## **The queue has no clause here any more**: #118 added `· 2 more after it`
+## because the strand could only show the head. The tray is the queue, on
+## screen, so the count would be a sentence about a picture directly above it.
+const ACT_ARM := "tap a slot · your daughters may wear it"
 const ACT_COMMIT := "tap again to place"
-## **What waits behind the sample being placed** (#118), after the instruction.
-## The strip places one gene at a time and the next one would otherwise arrive
-## unannounced the moment this one lands; one clause says there is more to do.
-const ACT_QUEUE := " · %d more after it"
-const ACT_QUEUE_ONE := " · one more after it"
-const ACT_MOVE := "drag it to another locus"
-const ACT_CARRY := "%s · let go over a locus to move it there"
+## Armed over a gene, the verb names both genes: what the tap writes and what it
+## writes over. `tap again to place` alone read as harmless over `eat`.
+const ACT_COMMIT_OVER := "tap again to write %s over %s"
+## **A waiting gene carried out of the tray** lands on an empty slot when it is
+## let go -- nothing is evicted and a move can still take it anywhere, so one
+## gesture is enough (owner's call 6). Over a gene it only arms: the drop is the
+## first tap, and the eviction still needs the second.
+const ACT_DROP := "let go to place %s here"
+const ACT_DROP_OVER := "let go, then tap again to place %s over %s"
+const ACT_MOVE := "drag it to another slot"
+const ACT_CARRY := "%s · let go over a slot to put it there"
 const ACT_LAND := "let go to move %s here"
 const ACT_SWAP := "let go to swap %s and %s"
 ## **Letting go where you picked up is a real answer, not a missed drop.** It
 ## is the first thing a nervous player tries -- lift a gene, think better of
-## it, put it back -- and it was silent: the source locus said exactly what open
+## it, put it back -- and it was silent: the source slot said exactly what open
 ## water said, so the one gesture whose whole point is *undo this* got no
-## acknowledgement at all. The locus already draws the picture (its lens fills
+## acknowledgement at all. The chip already draws the picture (its lens fills
 ## in the gene's own hue, which is that gene coming home); this is the sentence
 ## for it, and it fires while the finger is still down, which is when the
 ## player is still deciding.
@@ -3139,21 +3295,21 @@ const WORDS := {
 ##
 ## The voice is the screen's: lowercase, plain, no jargon, one clause and then
 ## its consequence. No line names another gene, because a player reading `armor`
-## has not necessarily met `cytostome` yet. No line carries a number: tiers are
+## has not necessarily met `cytostome` yet. No line carries a number: levels are
 ## the pips' job and a line that said "+30%" would be the classic HUD this game
 ## spent two phases not building.
 ##
 ## `that side` in `ocellus` and `trichocyst` is deliberate and it points at the
-## dart already drawn under the same locus -- the two directional genes are the
-## two whose line has to explain why the locus mattered.
+## arc the slot is tethered to -- the two directional genes are the two whose
+## line has to explain why the slot mattered.
 ##
 ## **This line is also the one place the biological name reaches the screen, and
 ## that is a deliberate reading of §8 rather than a breach of it.** The rule §8
-## states is that *the locus* wears the plain word, and the argument it gives is
+## states is that *the slot* wears the plain word, and the argument it gives is
 ## the glance: four short verbs are parsed at arm's length and nine letters of
 ## Greek are not, on the surface whose whole job is a quick decision. This line
 ## is not a glance -- it is read because the player stopped to read it -- so the
-## name sits at the head of it and the plain word keeps the locus. §9.1 gives
+## name sits at the head of it and the plain word keeps the slot. §9.1 gives
 ## every gene two names on purpose; a name no player ever meets is a convention
 ## for the compiler, and CLAUDE.md's *realism is a tool* is the argument that
 ## `ampulla` is worth meeting.
@@ -3176,24 +3332,25 @@ const EXPLAINS := {
 	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
 	&"crista": "burns cleaner, so everything you carry costs less",
 }
-## An empty locus has no gene to explain, so it explains the one thing it does
-## have: a direction. The dart under it is what "this way" refers to.
-const EXPLAIN_EMPTY := "nothing here yet · an organ here would look this way"
+## An empty slot has no gene to explain, so it explains the one thing it does
+## have: a side of the body. The tether from it is what "this side" refers to,
+## and on the choosing screen, which reads this line too, the dart is.
+const EXPLAIN_EMPTY := "nothing here yet · an organ here grows on this side"
 ## Loud enough to be the thing you are reading, quieter than the word on the
-## strand: caption 0.45, hint 0.38, locus word 0.66, this 0.62.
+## chip: caption 0.45, hint 0.38, slot word 0.66, this 0.62.
 const EXPLAIN_TINT := Color(0.855, 0.953, 0.933, 0.62)
 ## The name is drawn in the gene's own hue, which is the hue of the rungs the
-## player just tapped -- that is what ties the line to the locus with no arrow
+## player just tapped -- that is what ties the line to the slot with no arrow
 ## and no animation.
 const EXPLAIN_NAME_ALPHA := 0.95
 
 const LABEL_TINT := Color(0.855, 0.953, 0.933, 0.66)
 const LABEL_TINT_LOUD := Color(0.855, 0.953, 0.933, 0.92)
+## The choosing screen's word size. A slot's word is [constant CHIP_WORD].
 const LABEL_SIZE := 13
-## Focus has to be drawn, and it must not be a box: the whole point of the
-## strand is that a locus is a place on a thread and not a square. An underline
-## under the locus says where the keyboard is standing without rebuilding the
-## thing that was replaced.
+## Focus has to be drawn, and it must not be a box: a slot is a piece of DNA and
+## not a square. An underline under the chip says where the keyboard is
+## standing without rebuilding the thing that was replaced.
 const FOCUS_TINT := Color(0.588, 1.0, 0.859, 0.85)
 const FOCUS_INSET := 14.0
 const FOCUS_WIDTH := 2.0
@@ -3211,51 +3368,59 @@ const EXPLAIN_ORGAN_SCALE := 0.60
 ## puts the tuft outside its own row.
 const EXPLAIN_ORGAN_SEAT := Vector2(17.0, 18.5)
 
+## The seven chips, by slot index, as last built; null only before the first
+## build.
+var _slot_chips: Array[Control] = []
+## How many of the seven slots are live: the ones the body has earned, or the
+## whole layout a newborn inherits. The rest are drawn and dead.
+var _slot_count := 0
 
-## Rebuilds the strand from the genome as it is right now. Cheap and total:
-## five to nine tiny nodes, built on opening the pause screen, on arming, on the
-## arm lapsing and after a swap.
+
+## Rebuilds the figure's chips and the tray from the genome as it is right now.
+## Cheap and total: seven chips and a tray of a handful, built on opening the
+## pause screen, after a placement or a move, and when the genome changes under
+## an open screen in a pond.
 ##
-## **Every rebuild frees the locus the keyboard was standing on, so every rebuild
-## has to hand the keyboard somewhere.** Godot does no focus navigation from a
-## null focus: with `gui.key_focus` cleared, Tab does nothing, Enter does
+## **Every rebuild frees the control the keyboard was standing on, so every
+## rebuild has to hand the keyboard somewhere.** Godot does no focus navigation
+## from a null focus: with `gui.key_focus` cleared, Tab does nothing, Enter does
 ## nothing, and `resume` and `leave` are unreachable until the player finds a
 ## mouse or presses Esc -- which resumes the run, which is not what they asked
 ## for. That is a dead pause screen, and it sits on top of the one irreversible
 ## action in the game.
 ##
-## It lives here rather than at the call sites because there are four of them
+## It lives here rather than at the call sites because there were four of them
 ## and the first attempt got three. [method _commit_slot] carried its own copy
 ## and [method _step_arming] did not, three lines apart; measured on a real
-## display, arming a locus and then simply reading it for four seconds -- which
-## is the behaviour §9.7 asks for when it sells *"three pips going dark before
-## it is confirmed"* -- killed the keyboard.
+## display, arming a locus of the old strand and then simply reading it for four
+## seconds killed the keyboard. The tray is a second place for the keyboard to
+## stand, so it gets the same treatment.
 func _build_genome_strip() -> void:
-	# Taken before anything is freed. -1 means the keyboard was not on the
-	# strip at all, and then nothing here should move it: the player is on
-	# `resume`, or on the slider, or is using a thumb and has no focus ring to
-	# lose.
+	# Taken before anything is freed. SLOT_NONE means the keyboard was not on a
+	# slot at all, and then nothing here should move it: the player is on
+	# `resume`, or on the slider, or on the tray, or is using a thumb and has no
+	# focus ring to lose.
 	var keeping := _focused_slot()
-	# Every locus about to be freed takes its hover with it, and Godot will not
-	# re-enter a control the cursor never left. The selection carries the line
-	# until the mouse moves again, which is the same locus either way.
+	# The tray's own, by gene, because the chip it was on is about to be freed
+	# and the gene may since have moved in the queue or left it.
+	var keeping_gene := _focused_waiting()
+	# Every chip about to be freed takes its hover with it, and Godot will not
+	# re-enter a control the cursor never left. The selection carries the lines
+	# until the mouse moves again, which is the same slot either way.
 	_hovered = SLOT_NONE
 	# And with it goes any placement waiting on a finger: the control that took
-	# that press is about to be freed, so the lift it was waiting for will
-	# never arrive here. This is what makes the four-second lapse safe under a
-	# held finger -- the arm went, so the confirmation goes with it.
+	# that press is about to be freed, so the lift it was waiting for will never
+	# arrive here.
 	_primed = SLOT_NONE
-	for row: HBoxContainer in [_body_row, _genome_row]:
-		for child in row.get_children():
-			row.remove_child(child)
+	for layer: Control in [_figure_slots, _tray]:
+		for child in layer.get_children():
+			layer.remove_child(child)
 			child.queue_free()
 	_slot_genes.clear()
-	_strip_head = _genome.held_sample
+	_strip_waiting = _genome.waiting()
 
-	# **The strip is the DNA**, and the body is the other register -- it is the
-	# thing in the middle of the screen the rest of the time. What the body
-	# dissents about is carried by the pips, which is where the tier is already
-	# read. lifecycle.md §3.
+	# **The chips are the DNA**, and the body is the other register -- it is the
+	# drawing they sit around. lifecycle.md §3.
 	var dna := _genome.dna()
 	var body := _genome.tiers()
 	# **The layout, not the dictionary.** Slot index is the arc a gene is worn
@@ -3264,127 +3429,158 @@ func _build_genome_strip() -> void:
 	# built on purpose.
 	_slot_genes.assign(_genome.layout())
 
-	# maxi, not slots(), so a genome can never be longer than the strand that
+	# maxi, not slots(), so a genome can never be longer than the figure that
 	# claims to show it. **A newborn is over capacity and that is intended**: she
 	# carries up to seven genes on a body whose slots() is 3, so she may replace
-	# but not add until she grows.
-	var count := maxi(_genome.slots(), _slot_genes.size())
-
-	# **Nothing in either row moves when a sample arrives or lapses.** The old
-	# strip grew a tile and an arrow on the left and needed an invisible
-	# trailing spacer to stop the slots sliding 73 px; the sample now floats in
-	# a band the locus already reserves, so the strand is the same width held or
-	# not. The lead-in is where it waits before a locus has been chosen: off the
-	# head of the chromosome, attached to nothing, which is exactly what a held
-	# sample is.
-	#
-	# A trailing spacer is back, and for a different job: it mirrors the row's
-	# label gutter so the weave stays centred on the column rather than sitting
-	# half a gutter left of everything else. See GUTTER_W.
-	#
-	# **The body row first, because it is what you are.** Read top to bottom the
-	# surface says *this is you* and then *this is what you are writing*, and
-	# that is the order the owner's two sentences are in.
-	var worn: Array[StringName] = _genome.body_layout()
-	_body_row.add_child(_make_gutter("body", BODY_LOCUS_H))
-	_body_row.add_child(_make_cap(0, 1, BODY_HELIX_MID, BODY_LOCUS_H))
-	for i in count:
-		var mine: StringName = worn[i] if i < worn.size() else &""
-		var written: StringName = _slot_genes[i] if i < _slot_genes.size() \
+	# but not add until she grows -- and every slot her DNA has is live.
+	_slot_count = mini(maxi(_genome.slots(), _slot_genes.size()),
+		SLOT_SEAT.size())
+	_slot_chips.clear()
+	_slot_chips.resize(SLOT_SEAT.size())
+	for slot in SLOT_SEAT.size():
+		var gene: StringName = _slot_genes[slot] if slot < _slot_genes.size() \
 			else &""
-		_body_row.add_child(_make_body_locus(mine, int(body.get(mine, 0)), i,
-			CAP_LOBES + i * LOCUS_LOBES, mine != written))
-	_body_row.add_child(_make_cap(CAP_LOBES + count * LOCUS_LOBES, -1,
-		BODY_HELIX_MID, BODY_LOCUS_H))
-	_body_row.add_child(_make_spacer(BODY_LOCUS_H))
+		# **A rung answers *do I express this gene at all*, and the figure
+		# answers *where*.** `dna-strand.md` §1.2 defines worn against carried as
+		# exactly that question, and it stays that question: carried means the
+		# roll missed, worn means the body expresses it. Narrowing it to *worn on
+		# this arc* put two different facts on one mark once already --
+		# `moving-a-gene.md` §2.4 -- and the body drawn in the middle now says
+		# where every organ is, with a word wherever that disagrees.
+		var chip := _make_slot(gene, int(dna.get(gene, 0)),
+			int(body.get(gene, 0)), slot, slot < _slot_count)
+		_figure_slots.add_child(chip)
+		_slot_chips[slot] = chip
+	_wire_focus()
 
-	_genome_row.add_child(_make_gutter("dna", LOCUS_H))
-	_genome_row.add_child(_make_cap(0, 1, HELIX_MID, LOCUS_H))
-	for i in count:
-		var gene: StringName = _slot_genes[i] if i < _slot_genes.size() else &""
-		# **A rung answers *do I express this gene at all*, and the row above
-		# answers *where*.** `dna-strand.md` §1.2 defines worn against carried
-		# as exactly that question, and it stays that question.
-		#
-		# It was briefly narrowed to *worn on this arc* -- `body.get(gene, 0)
-		# if slot_of(gene) == i else 0` -- to close a lie the one-row strand
-		# told: a gene the body wears at arc 1 drew a full rung at DNA locus 3
-		# and looked like it was claiming arc 3. **The body row closes that lie
-		# by existing**, because the rows are labelled and the upper one prints
-		# the organ under the arc it is actually on. Narrowing the rung as well
-		# put two different facts on one mark: a gene moved and a gene that
-		# missed its expression roll drew the same floating bar, and rendered
-		# at the same locus with the same hue they were **0 differing pixels**
-		# apart -- the only evidence 232 px away on the other row. Worse, it
-		# contradicted the line under the strand in an ordinary frame: move
-		# `cytostome` and locus 4 drew *the body does not have this* directly
-		# above `the mouth · a daughter always wears it`.
-		#
-		# So: carried means the roll missed, worn means the body expresses it,
-		# and both questions stay local to the mark that answers them.
-		# `moving-a-gene.md` §2.4.
-		var here := int(body.get(gene, 0))
-		_genome_row.add_child(_make_locus(gene, int(dna.get(gene, 0)),
-			here, i, CAP_LOBES + i * LOCUS_LOBES))
-	_genome_row.add_child(_make_cap(CAP_LOBES + count * LOCUS_LOBES, -1,
-		HELIX_MID, LOCUS_H))
-	_genome_row.add_child(_make_spacer(LOCUS_H))
+	# **The tray, head first.** Its caption only while something waits: an
+	# empty tray is 48 px of nothing, which is what the space above a body
+	# with nothing loose in it should be.
+	if not _strip_waiting.is_empty():
+		_tray.add_child(_make_tray_caption())
+	for gene: StringName in _strip_waiting:
+		_tray.add_child(_make_waiting(gene))
 
-	# **The caption carries the generation now**, because the hint below the
-	# strand took on what a locus is worth to a daughter. Zero pixels either
-	# way: both lines already existed. It says `genome` rather than `dna`
-	# because the group is now two registers and only one of them is the DNA --
-	# that word moved down to the row it actually names, with `body` above it,
-	# so both are on screen instead of one.
+	_figure_body.queue_redraw()
+	# **The caption carries the generation**, because the hint below the figure
+	# carries what a slot is worth to a daughter. It says `genome` because the
+	# group is two registers, and only the chips are the DNA.
 	_genome_caption.text = "genome · %s" % _generation_text()
 	_update_hint()
 	_update_explain()
 	_restore_focus(keeping)
+	_restore_tray_focus(keeping_gene)
 
 
-## Which slot the keyboard is on, or -1 for "not on the strand".
+## **The ring's keyboard**: a plain arrow goes where it points, Tab goes round
+## clockwise from the nose and then on to `light`, and no arrow leaves the ring.
+## Set on every rebuild, because every rebuild makes new chips.
 ##
-## Read off a meta rather than off the child's position in Row. The row carries
-## a lead-in and a tail as well as the loci, so a child index is not a slot
-## index and never was; a locus carrying its own slot number cannot be wrong
-## about it, whatever else the row grows.
+## **A direction with no live slot that way points the chip at itself**, which
+## Godot takes as *stay here*. Left unset, its geometric search would carry the
+## focus off the ring to whatever control happens to lie that way -- and an
+## unearned slot would be a hole the arrow fell straight through, which is the
+## one thing [constant SLOT_NEIGHBOUR] says a move into it is not.
+func _wire_focus() -> void:
+	var live: Array[Control] = []
+	for slot: int in SLOT_RING:
+		if _slot_live(slot):
+			live.append(_slot_chips[slot])
+	for i in live.size():
+		var chip := live[i]
+		var slot := int(chip.get_meta(&"slot"))
+		for way in NEIGHBOUR_SIDES.size():
+			var to := int(SLOT_NEIGHBOUR[slot][way])
+			var neighbour: Control = _slot_chips[to] if _slot_live(to) else chip
+			chip.set_focus_neighbor(NEIGHBOUR_SIDES[way],
+				chip.get_path_to(neighbour))
+		chip.focus_next = chip.get_path_to(
+			live[i + 1] if i + 1 < live.size() else _gain_slider)
+		# The nose's previous is left to the tree: the last waiting gene if
+		# there is one, and `leave` if not -- which is where Tab came from.
+		if i > 0:
+			chip.focus_previous = chip.get_path_to(live[i - 1])
+	# And `light` backs into the ring where Tab left it, not at whichever chip
+	# happens to be last in the tree.
+	if not live.is_empty():
+		_gain_slider.focus_previous = _gain_slider.get_path_to(
+			live[live.size() - 1])
+
+
+## True when [param slot] is one of this figure's live slots: earned, or
+## inherited. The keys' one test, and a drop's.
+func _slot_live(slot: int) -> bool:
+	return slot >= 0 and slot < _slot_count and slot < _slot_chips.size() \
+		and _slot_chips[slot] != null
+
+
+## Which slot the keyboard is on, or [constant SLOT_NONE] for "not on a slot".
+##
+## Read off a meta rather than off the child's position, so a chip carrying its
+## own slot number cannot be wrong about it whatever else the layer grows.
 func _focused_slot() -> int:
-	for child in _genome_row.get_children():
-		var tile := child as Control
-		if tile != null and tile.has_focus():
-			return int(tile.get_meta(&"slot", SLOT_NONE))
+	for child in _figure_slots.get_children():
+		var chip := child as Control
+		if chip != null and chip.has_focus():
+			return int(chip.get_meta(&"slot", SLOT_NONE))
 	return SLOT_NONE
+
+
+## Which waiting gene the keyboard is on, or &"" for "not on the tray".
+func _focused_waiting() -> StringName:
+	for child in _tray.get_children():
+		var chip := child as Control
+		if chip != null and chip.has_focus():
+			return StringName(chip.get_meta(&"waiting", &""))
+	return &""
 
 
 ## Puts the keyboard back on [param slot] after a rebuild.
 ##
-## **Which slot, rather than `resume`, and the distinction is the whole fix.**
-## An arm that lapses does not lapse the sample -- ARM_TIMEOUT_MS is four
-## seconds and SAMPLE_SECONDS is forty-five -- so the loci are still live and
-## the player is still mid-decision, in front of the same locus they were
-## reading. Sending them to `resume` would answer "can I still use the
-## keyboard" with yes and "am I where I was" with no. A commit is the same case
-## now that every locus stays selectable: the sample is spent, but the slot it
-## landed in is still a locus to stand on and still the one being read, so the
-## keyboard stays there too. The `resume` fallback below is what catches a slot
-## that no longer exists.
+## **Which slot, rather than `resume`, and the distinction is the whole fix.** A
+## placement spends the gene in hand, but the slot it landed in is still a slot
+## to stand on and still the one being read, and a move sends the keyboard after
+## the gene it moved, which is what makes `Shift`+arrow repeatable. Sending them
+## to `resume` would answer "can I still use the keyboard" with yes and "am I
+## where I was" with no. The `resume` fallback below is what catches a slot that
+## no longer exists.
 func _restore_focus(slot: int) -> void:
 	if slot == SLOT_NONE:
 		return
-	for child in _genome_row.get_children():
-		var tile := child as Control
-		if tile != null and tile.focus_mode == Control.FOCUS_ALL \
-				and int(tile.get_meta(&"slot", SLOT_NONE)) == slot:
-			tile.grab_focus()
+	for child in _figure_slots.get_children():
+		var chip := child as Control
+		if chip != null and chip.focus_mode == Control.FOCUS_ALL \
+				and int(chip.get_meta(&"slot", SLOT_NONE)) == slot:
+			chip.grab_focus()
 			return
 	_resume_button.grab_focus()
 
 
-## **One line, two jobs, and they never overlap.** While a sample is held the
-## line is the instruction, because a decision is waiting. The rest of the time
-## -- which is most of a run -- it is what the selected locus is worth to a
-## daughter, which is the one thing the strand draws (copies) and cannot say in
-## words on its own.
+## The same for the tray: back onto [param gene] if it still waits, else onto
+## the tray's first gene -- it lapsed or was placed, and the tray is where the
+## player was -- else onto `resume`.
+func _restore_tray_focus(gene: StringName) -> void:
+	if gene == &"":
+		return
+	var first: Control = null
+	for child in _tray.get_children():
+		var chip := child as Control
+		if chip == null or chip.focus_mode != Control.FOCUS_ALL:
+			continue
+		if StringName(chip.get_meta(&"waiting", &"")) == gene:
+			chip.grab_focus()
+			return
+		if first == null:
+			first = chip
+	if first != null:
+		first.grab_focus()
+	else:
+		_resume_button.grab_focus()
+
+
+## **One line, one job**: what the slot being read is worth to a daughter,
+## which is the one thing the pips draw and cannot say in words on their own --
+## or, armed over a gene, what the next tap costs.
 func _update_hint() -> void:
 	_update_act()
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
@@ -3393,26 +3589,27 @@ func _update_hint() -> void:
 		return
 	# **The same gene the explanation line is describing**, through the same
 	# resolution, because the two rows are read together and a pair that
-	# disagrees about its subject is worse than either alone. The shipped code
-	# could not disagree -- both of its fallbacks were behind an early return
-	# that fired whenever a sample was held -- and moving the instruction to
-	# `Act` took that return away. Posed and it showed: a gene in the air over
-	# an empty locus explained the travelling gene and priced the hole.
+	# disagrees about its subject is worse than either alone. Posed and it
+	# showed once: a gene in the air over an empty locus explained the
+	# travelling gene and priced the hole.
 	var gene := _reading()
 	if gene == &"":
 		_genome_hint.text = HINT_EMPTY
 		return
+	if slot >= 0 and slot == _armed and _dragging == SLOT_NONE \
+			and _hand() != &"" and _gene_at(slot) != &"":
+		var under := _gene_at(slot)
+		_genome_hint.text = (HINT_LOSES if _genome.tier(under) > 0
+			else HINT_LOSES_CARRIED) % _word(under)
+		return
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
 		_genome_hint.text = HINT_CERTAIN
 		return
-	# **[method _copies_of] and never the bare DNA tier**, because a held sample
-	# is worth the copies it waited with, not none. A locus always carries at
-	# least one, so this never used to matter; a sample has `dna_tier == 0`,
-	# which indexes the empty string, and the held-sample branch returning first
-	# is the only reason nobody ever saw it. Now that the instruction has moved
-	# to `Act` this line is reached while a sample is selected -- so without it
-	# the odds go blank at exactly the moment the player is deciding what a
-	# placement is worth.
+	# **[method _copies_of] and never the bare DNA tier**, because a waiting
+	# gene is worth the copies it waited with, not none. A slot always carries
+	# at least one; a waiting gene has `dna_tier == 0`, which indexes the empty
+	# string -- so without this the odds go blank at exactly the moment the
+	# player is deciding what a placement is worth.
 	_genome_hint.text = HINT_CHANCE[clampi(_copies_of(gene), 0,
 		HINT_CHANCE.size() - 1)]
 
@@ -3423,43 +3620,49 @@ func _update_hint() -> void:
 ## are wanted at once, and the moment one would have to be chosen over the other
 ## is the moment the player is about to change their daughters.
 func _update_act() -> void:
-	# A gene in the air outranks a held sample: the sample is not going anywhere
-	# while a move is in flight (see [method _draw_cap]), so the line reports
-	# the gesture that is actually happening.
+	# A gene in the air outranks the gene in hand: the line reports the gesture
+	# that is actually happening.
 	if _dragging != SLOT_NONE:
 		# **The one piece of feedback a thumb cannot cover.** The travelling
 		# base pair rides above the finger and the lens fills under it; both are
 		# within a fingertip of the pointer on a phone. This line is not.
 		var flying := _gene_at(_dragging)
+		var under := _gene_at(_hovered) if _hovered >= 0 else &""
+		if _dragging == SLOT_SAMPLE:
+			# Out of the tray: a drop on an empty slot places it, a drop on a
+			# gene arms that slot for the second tap.
+			if _hovered < 0:
+				_genome_act.text = ACT_CARRY % _word(flying)
+			elif under == &"":
+				_genome_act.text = ACT_DROP % _word(flying)
+			else:
+				_genome_act.text = ACT_DROP_OVER % [_word(flying), _word(under)]
+			return
 		if _hovered == _dragging:
-			# Back over the locus it came out of: a drop here is refused by
-			# [method _locus_can_drop] and the gene simply stays, which is the
+			# Back over the slot it came out of: a drop here is refused by
+			# [method _slot_can_drop] and the gene simply stays, which is the
 			# gesture's own cancel and now says so.
 			_genome_act.text = ACT_KEEP % _word(flying)
 		elif _hovered >= 0:
-			var displaced := _gene_at(_hovered)
-			_genome_act.text = ACT_SWAP % [_word(flying), _word(displaced)] \
-				if displaced != &"" else ACT_LAND % _word(flying)
+			_genome_act.text = ACT_SWAP % [_word(flying), _word(under)] \
+				if under != &"" else ACT_LAND % _word(flying)
 		else:
 			_genome_act.text = ACT_CARRY % _word(flying)
 		return
-	if _genome.held_sample != &"":
-		# `_armed >= 0` and not `!= SLOT_NONE`: a sample waiting off the head of
-		# the strand is selected and not placeable, so it must not promise a
-		# second tap that does nothing.
-		_genome_act.text = (ACT_COMMIT if _armed >= 0 else ACT_ARM) \
-			+ _queue_text()
+	var hand := _hand()
+	if hand != &"":
+		# `_armed >= 0` and not `!= SLOT_NONE`: the hand with no slot chosen is
+		# selected and not placeable, so it must not promise a second tap that
+		# does nothing.
+		if _armed < 0:
+			_genome_act.text = ACT_ARM
+			return
+		var under := _gene_at(_armed)
+		_genome_act.text = ACT_COMMIT if under == &"" \
+			else ACT_COMMIT_OVER % [_word(hand), _word(under)]
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	_genome_act.text = ACT_MOVE if _movable(slot) else ""
-
-
-## The clause the verb line gains while more than one gene waits, or "".
-func _queue_text() -> String:
-	var more := _genome.waiting().size() - 1
-	if more <= 0:
-		return ""
-	return ACT_QUEUE_ONE if more == 1 else ACT_QUEUE % more
 
 
 ## The plain word a gene is read by on this surface. A gene this build has no
@@ -3472,13 +3675,13 @@ func _word(gene: StringName) -> String:
 ## How many copies [param gene] is read at on this surface: the DNA's for a gene
 ## it carries, and for a waiting one the copies it will be written with -- eaten
 ## twice before it was placed, it lands at two (#118). **At least one**: a
-## sample has `dna_tier == 0`, which indexes the empty string of the odds table,
-## and it is worth a copy the moment it is placed.
+## waiting gene has `dna_tier == 0`, which indexes the empty string of the odds
+## table, and it is worth a copy the moment it is placed.
 func _copies_of(gene: StringName) -> int:
 	return maxi(maxi(_genome.dna_tier(gene), _genome.waiting_copies(gene)), 1)
 
 
-## True when [param slot] is a DNA locus with a gene in it, which is the only
+## True when [param slot] is a DNA slot with a gene in it, which is the only
 ## thing a move can pick up.
 ##
 ## **No guard, no timeout and no second tap**, deliberately: that machinery
@@ -3491,23 +3694,44 @@ func _movable(slot: int) -> bool:
 	return slot >= 0 and _gene_at(slot) != &""
 
 
+## **The gene in hand, if it is still waiting**, and &"" if not. Everything that
+## reads the hand reads it through here -- every chip, every line, and the tap
+## that places -- so a gene that lapses under an open screen stops being in hand
+## everywhere in the same frame it stops being placeable. See [member _in_hand].
+func _hand() -> StringName:
+	if _in_hand != &"" and _genome.waiting_index(_in_hand) >= 0:
+		return _in_hand
+	return &""
+
+
+## True when the hand no longer matches the queue: the gene in hand stopped
+## waiting -- it lapsed, or settled on its own -- or nothing was in hand and a
+## gene waits now. Either is a new decision, and the head goes in hand, as it
+## does when the screen opens. Only a pond reaches this, where the menu stops
+## nothing; paused, nothing moves the queue but a placement, which rebuilds for
+## itself.
+func _hand_lost() -> bool:
+	if _in_hand == &"":
+		return _genome.held_sample != &""
+	return _genome.waiting_index(_in_hand) < 0
+
+
 ## **The answer line: what the selected gene does, in the player's terms.**
 ##
 ## Two labels rather than one, because the two halves are different kinds of
 ## thing and the hue is what says so: the biological name in the gene's own
-## colour -- the colour of the tile border the player just tapped, and of the
-## organ on their own body -- and then the sentence in the pale tint every other
-## word on this column wears.
+## colour -- the colour of the rungs the player just tapped, and of the organ on
+## their own body -- and then the sentence in the pale tint every other word on
+## this column wears.
 ##
-## Hover wins over selection, and only on desktop: a mouse can ask about a locus
+## Hover wins over selection, and only on desktop: a mouse can ask about a slot
 ## without committing to it, which is the cheapest possible way to read all
-## seventeen. A thumb has no hover, so the tap path is the one that has to work,
-## and it is the one that is tested.
+## seven. A thumb has no hover, so the tap path is the one that has to work, and
+## it is the one that is tested.
 ##
-## **An empty locus with a sample held explains the sample**, which is the one
-## rule that changed when the sample stopped being a tile of its own. There is
-## nothing in that locus to describe and the gene about to land in it is the
-## decision; an *occupied* locus still describes its own gene, because that is
+## **An empty slot with a gene in hand explains the gene in hand.** There is
+## nothing in that slot to describe and the gene about to land in it is the
+## decision; an *occupied* slot still describes its own gene, because that is
 ## what a second tap would overwrite and the player should read it first.
 func _update_explain() -> void:
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
@@ -3516,10 +3740,12 @@ func _update_explain() -> void:
 	_explain_tier = _copies_of(gene) if gene != &"" else 0
 	if _explain_organ != null:
 		_explain_organ.queue_redraw()
+	# The arc on the skin follows the same reading.
+	_figure_body.queue_redraw()
 	if gene == &"":
 		_explain_name.text = ""
-		# Two different silences: no locus chosen says nothing at all; a chosen
-		# empty locus still has a direction to explain.
+		# Two different silences: no slot chosen says nothing at all; a chosen
+		# empty slot still has a side of the body to explain.
 		_explain_says.text = "" if slot == SLOT_NONE else EXPLAIN_EMPTY
 		return
 	_explain_name.text = String(gene)
@@ -3532,12 +3758,12 @@ func _update_explain() -> void:
 	_explain_says.text = "" if says.is_empty() else "· " + says
 
 
-## **What the three lines under the strand are about**, resolved once.
+## **What the three lines under the figure are about**, resolved once.
 ##
-## The locus being read -- hovered first, because a mouse can ask about a locus
-## without committing to it -- and then two fallbacks for the two ways a locus
-## can be empty while something is still in hand. An **occupied** locus always
-## describes its own gene: with a sample held that is what a second tap would
+## The slot being read -- hovered first, because a mouse can ask about a slot
+## without committing to it -- and then two fallbacks for the two ways a slot
+## can be empty while something is still in hand. An **occupied** slot always
+## describes its own gene: with a gene in hand that is what a second tap would
 ## overwrite, and under a gene in the air that is what a drop would displace,
 ## and either way it should be read before it goes.
 func _reading() -> StringName:
@@ -3546,42 +3772,82 @@ func _reading() -> StringName:
 	if gene == &"" and _dragging != SLOT_NONE:
 		gene = _gene_at(_dragging)
 	if gene == &"":
-		gene = _genome.held_sample
+		gene = _hand()
 	return gene
 
 
-## The gene a locus stands for: the held sample, the gene in that slot, or &"".
+## The gene a selection stands for: the gene in hand, the gene in that slot, or
+## &"".
 func _gene_at(slot: int) -> StringName:
 	if slot == SLOT_SAMPLE:
-		return _genome.held_sample
+		return _hand()
 	if slot >= 0 and slot < _slot_genes.size():
 		return _slot_genes[slot]
 	return &""
 
 
-## True when a second tap on [param slot] would place the held sample into it --
+## True when a second tap on [param slot] would place the gene in hand into it --
 ## which is the only case that is irreversible, and therefore the only case that
 ## needs the guard, the timeout and the confirming second tap.
-func _committable(slot: int) -> bool:
-	# The head must still be the gene the strip was built around -- see
-	# [member _strip_head]. A tap on a locus armed for a gene that has since
-	# lapsed does nothing; the rebuild that follows shows what waits now.
-	return slot >= 0 and _genome.held_sample != &"" \
-		and _genome.held_sample == _strip_head
-
-
-## What is selected when the pause screen opens, and after an arm lapses.
 ##
-## **Never nothing.** A strand that opens with no line under it would have to
-## teach the tap with a line of instructions; one that opens with a locus lit
-## and its sentence underneath has already shown what tapping a locus does, and
-## the player's next tap is on a different one. The held sample first,
-## because that is the decision they came here to make; otherwise the first gene
-## they actually carry, which on a born cell is the mouth.
+## **The gene in hand has to still be waiting**, which [method _hand] asks by
+## gene and never by place in the queue -- see [member _in_hand]. **And the
+## screen has to still be the genome** ([method _strip_current]): with a queue,
+## a *different* gene can lapse under an open menu into the very empty slot a
+## tap is confirming, and that tap would write over a gene the player never saw
+## there. Either way the tap does nothing, and [method _catch_up] shows what
+## changed the first frame no finger is down.
+func _committable(slot: int) -> bool:
+	return slot >= 0 and _hand() != &"" and _strip_current()
+
+
+## True while the queue and the DNA's layout are what the chips and the tray were
+## built from. Always true in single player, where only this screen changes them
+## and every change rebuilds.
+func _strip_current() -> bool:
+	return _genome.waiting() == _strip_waiting \
+		and _genome.layout() == _slot_genes
+
+
+## **The screen catches up with a genome that changed under it** -- only in a
+## pond, where the menu stops nothing. A hand that stopped waiting goes back to
+## the head, as the screen opening would put it. A slot armed for the hand whose
+## own gene changed is disarmed: the arm was a first tap on a different decision
+## -- `place into an empty slot` is not `write over ping` -- and the one
+## irreversible action must never be a tap away without a first tap on what it
+## would actually do. Returns true when the figure needs rebuilding, which the
+## caller does, because only the caller knows whether a finger is on a chip.
+func _catch_up() -> bool:
+	if not _hand_lost() and _strip_current():
+		return false
+	if _hand_lost():
+		_select_default()
+		return true
+	# A selection with nothing in hand is a reading, not an arm, and stays.
+	if _armed >= 0 and _hand() != &"":
+		var layout := _genome.layout()
+		var there: StringName = layout[_armed] if _armed < layout.size() else &""
+		if there != _gene_at(_armed):
+			_armed = SLOT_SAMPLE
+			_armed_at = Time.get_ticks_msec()
+	return true
+
+
+## What is selected when the pause screen opens, when a placement leaves more
+## waiting, and when the gene in hand stops being there.
+##
+## **Never nothing.** A figure that opens with no line under it would have to
+## teach the tap with a line of instructions; one that opens with something lit
+## and its sentence underneath has already shown what tapping does, and the
+## player's next tap is on a different one. **The head goes in hand**, because
+## the soonest to lapse is the decision they came here to make (#118's order);
+## otherwise the first gene they actually carry, which on a born cell is the
+## mouth.
 func _select_default() -> void:
 	_hovered = SLOT_NONE
 	_armed_at = Time.get_ticks_msec()
-	if _genome.held_sample != &"":
+	_in_hand = _genome.held_sample
+	if _in_hand != &"":
 		_armed = SLOT_SAMPLE
 		return
 	_armed = SLOT_NONE
@@ -3598,44 +3864,49 @@ func _generation_text() -> String:
 	return "generation %d" % _generation
 
 
-## One locus: its slice of the weave, its copies, its word and its dart, and --
-## when the sample is bound for it -- the loose base pair floating above.
+## One chip, seated at its arc: its piece of helix, its copies, its word and its
+## level -- and, while the gene in hand is bound for an empty one, that gene as
+## it would land.
 ##
 ## [param tier] is the DNA's copy count and [param body_tier] is how many of
-## those copies this body expressed. The rungs draw both, which is what makes
-## the strand the two registers rather than one.
-##
-## [param lobe0] is the locus's first half-lens in the strand's own phase, so
-## neighbours join with no seam and the locus's centre is always a maximum.
-func _make_locus(gene: StringName, tier: int, body_tier: int, slot: int,
-		lobe0: int) -> Control:
+## those copies this body expressed. The rungs and the pips draw both, which is
+## what makes a chip the two registers rather than one. [param live] is false
+## for a slot the body has not earned yet: drawn faint, and it takes no input
+## and no focus.
+func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
+		live: bool) -> Control:
 	var node := Control.new()
-	node.custom_minimum_size = Vector2(LOCUS_W, LOCUS_H)
-	node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-
+	# Named, so a focus path and a harness's `--rects=` both read as what they
+	# are. The chip it replaces has already left the tree, so the name is free.
+	node.name = "Slot%d" % slot
+	node.custom_minimum_size = SLOT_SIZE
+	node.size = SLOT_SIZE
+	node.position = FIGURE_AT + SLOT_SEAT[slot] - SLOT_SIZE * 0.5
 	# Its own slot number, so a rebuild can find the node that replaced it
-	# without re-deriving an offset that may have changed underneath.
+	# without re-deriving where it was.
 	node.set_meta(&"slot", slot)
+	if not live:
+		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		node.focus_mode = Control.FOCUS_NONE
+		node.draw.connect(_draw_unearned.bind(node))
+		return node
 
-	# **Every locus is live, sample or no sample.** Selecting is what the
+	# **Every live slot takes input, gene in hand or not.** Selecting is what the
 	# explanation line and the odds line hang off; *committing* is still gated
-	# on a sample being held ([method _committable]), so nothing became easier
-	# to do by accident: the one irreversible action in the game needs the same
-	# two taps, the same 300 ms guard and the same held sample it always did.
+	# on a gene in hand ([method _committable]), so nothing became easier to do
+	# by accident: the one irreversible action in the game needs the same two
+	# taps and the same 300 ms guard it always did.
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	node.focus_mode = Control.FOCUS_ALL
-
-	node.draw.connect(_draw_locus.bind(node, gene, tier, body_tier, slot, lobe0))
-	node.gui_input.connect(_on_locus_input.bind(node, slot))
+	node.draw.connect(_draw_slot.bind(node, gene, tier, body_tier, slot))
+	node.gui_input.connect(_on_slot_input.bind(node, slot))
 	node.focus_entered.connect(node.queue_redraw)
 	node.focus_exited.connect(node.queue_redraw)
-	# Hover only moves the two lines below the strand; it deliberately does not
-	# light the locus and deliberately does not rebuild. A strand rebuilt on
-	# every mouse crossing would be ten nodes a frame to say nothing, and a
-	# locus that lit under the cursor would promise a tap it has not been given.
-	node.mouse_entered.connect(_on_locus_hover.bind(slot))
-	node.mouse_exited.connect(_on_locus_unhover.bind(slot))
+	# Hover moves the lines below the figure and the arc on the body; it
+	# deliberately does not light the chip and deliberately does not rebuild. A
+	# chip that lit under the cursor would promise a tap it has not been given.
+	node.mouse_entered.connect(_on_slot_hover.bind(slot))
+	node.mouse_exited.connect(_on_slot_unhover.bind(slot))
 	# **The move is Godot's own drag, not a hand-rolled one, and the reason is
 	# choosing.md §4.2.** The engine records which control owns a pointer only
 	# when the *press* landed on a control, and re-hit-tests every drag
@@ -3644,167 +3915,190 @@ func _make_locus(gene: StringName, tier: int, body_tier: int, slot: int,
 	# `InputEventScreenDrag` into a motion, so the same machinery runs on a
 	# phone -- and it clears `gui.mouse_focus` when a drag begins, which is why
 	# `mouse_entered` keeps firing and the drop target is knowable at all.
-	node.set_drag_forwarding(_locus_drag.bind(node, slot),
-		_locus_can_drop.bind(slot), _locus_drop.bind(slot))
+	node.set_drag_forwarding(_slot_drag.bind(node, slot),
+		_slot_can_drop.bind(slot), _slot_drop.bind(slot))
 	return node
 
 
-## The lead-in and the tail: the chromosome arriving and leaving. [param taper]
-## is +1 at the head and -1 at the tail; both ramp amplitude and alpha so the
-## strand does not begin mid-lens. Neither takes input -- there is nothing at
-## either end to choose.
-##
-## [param mid] and [param height] are the row's, because both rows have caps and
-## they sit at different seats in controls of different heights.
-func _make_cap(lobe0: int, taper: int, mid: float, height: float) -> Control:
+## The tray's caption, the height of a chip so the row centres on it.
+func _make_tray_caption() -> Control:
+	var caption := Label.new()
+	caption.name = "Caption"
+	caption.text = WAIT_CAPTION
+	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	caption.custom_minimum_size = Vector2(0.0, WAIT_SIZE.y)
+	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
+	caption.add_theme_font_size_override("font_size", CAPTION_SIZE)
+	caption.add_theme_color_override("font_color", CAPTION_TINT)
+	return caption
+
+
+## One waiting gene in the tray. **Carries its gene, not its place in the
+## queue**: a place is exactly what a lapse or a second meal changes under an
+## open screen. See [member _in_hand].
+func _make_waiting(gene: StringName) -> Control:
 	var node := Control.new()
-	node.custom_minimum_size = Vector2(CAP_W, height)
-	node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	node.draw.connect(_draw_cap.bind(node, lobe0, taper, mid))
+	node.name = "Waiting_%s" % gene
+	node.custom_minimum_size = WAIT_SIZE
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+	node.focus_mode = Control.FOCUS_ALL
+	node.set_meta(&"waiting", gene)
+	node.draw.connect(_draw_waiting.bind(node, gene))
+	node.gui_input.connect(_on_waiting_input.bind(node, gene))
+	node.focus_entered.connect(node.queue_redraw)
+	node.focus_exited.connect(node.queue_redraw)
+	# Dragged out, it is carried; nothing is ever dropped onto the tray.
+	node.set_drag_forwarding(_waiting_drag.bind(node, gene), Callable(),
+		Callable())
 	return node
 
 
-## The row's own name, in the gutter left of its lead-in. Two words name the two
-## registers where a second caption would cost a whole row of the column.
-func _make_gutter(text: String, height: float) -> Control:
-	var node := Label.new()
-	node.custom_minimum_size = Vector2(GUTTER_W, height)
-	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	node.focus_mode = Control.FOCUS_NONE
-	node.text = text
-	node.horizontal_alignment = HORIZONTAL_ALIGNMENT_RIGHT
-	node.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	node.add_theme_font_size_override("font_size", GUTTER_SIZE)
-	node.add_theme_color_override("font_color", GUTTER_TINT)
-	return node
-
-
-## The gutter mirrored on the right, invisible, so the strand stays centred on
-## the column the `Explain` line below it is centred on. Without it the weave
-## sits 7 px left of everything else, which is small and is visible.
-func _make_spacer(height: float) -> Control:
-	var node := Control.new()
-	node.custom_minimum_size = Vector2(GUTTER_W, height)
-	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	return node
-
-
-## One locus of the **body** row: what this cell is wearing, on the arc it is
-## wearing it on.
-##
-## **Every rung is worn, by definition** -- a body has no carried copies, since
-## `Genome.expressed()` writes the DNA's whole copy count or none of it. And
-## nothing here takes input or takes focus: the body is fixed, so a row that
-## responded would promise an edit of a thing that cannot be edited, and it adds
-## no Tab stops to the six to eight this screen already costs.
-##
-## [param dissents] is whether the two rows disagree at this locus, which is the
-## only case that draws a word. See [method _draw_body_locus].
-func _make_body_locus(gene: StringName, tier: int, slot: int, lobe0: int,
-		dissents: bool) -> Control:
-	var node := Control.new()
-	node.custom_minimum_size = Vector2(LOCUS_W, BODY_LOCUS_H)
-	node.size_flags_horizontal = Control.SIZE_SHRINK_CENTER
-	node.size_flags_vertical = Control.SIZE_SHRINK_CENTER
-	node.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	node.focus_mode = Control.FOCUS_NONE
-	node.draw.connect(_draw_body_locus.bind(node, gene, tier, slot, lobe0,
-		dissents))
-	return node
-
-
-## **A word on the body row only where the two rows disagree**, and it was
-## measured both ways. A word under every body locus is the same seven verbs
-## printed twice -- rendered, and it is a wall of text in which the one line
-## that is news disappears. Where the rows agree the DNA row's word sits in the
-## same column and names both. Where they disagree the body has something on
-## screen that nothing else says, so it says it -- and the dart comes with the
-## word, which is the first time this game has drawn *where an organ actually
-## is*. The row reserves its full height either way, so nothing moves when a
-## disagreement appears.
-func _draw_body_locus(node: Control, gene: StringName, tier: int, slot: int,
-		lobe0: int, dissents: bool) -> void:
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, BODY_HELIX_MID,
-		HELIX_AMP, LOCUS_LOBES, lobe0, 1.0, 0)
-	if gene != &"":
-		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, BODY_HELIX_MID,
-			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(gene), tier, tier)
-	# **The dart comes with the word and never on its own.** A locus the body
-	# leaves empty while the DNA fills it disagrees, but it has nothing to name,
-	# and a bare arrow over a bare weave is a mark with nothing to anchor to.
-	# `maxi(tier, 1)` is the word's tint rather than its count: a gene on the
-	# body row is worn by definition, so its word is never the dim one.
-	if dissents and gene != &"":
-		_draw_locus_label(node, gene, maxi(tier, 1), slot, false,
-			BODY_LABEL_MID, BODY_LABEL_BASE)
-
-
-func _on_locus_hover(index: int) -> void:
-	_hovered = index
+func _on_slot_hover(slot: int) -> void:
+	_hovered = slot
 	_update_explain()
 	_update_hint()
-	# Hover deliberately does not light a locus -- except while a gene is in the
-	# air, when the locus under the pointer is where it would land and has to
-	# say so. Godot clears the pointer's captured control the moment a drag
-	# begins, which is exactly why hover keeps tracking through one.
+	# Hover deliberately does not light a chip -- except while a gene is in the
+	# air, when the chip under the pointer is where it would land and has to say
+	# so. Godot clears the pointer's captured control the moment a drag begins,
+	# which is exactly why hover keeps tracking through one.
 	if _dragging != SLOT_NONE:
-		_redraw_strand()
+		_redraw_figure()
 
 
-func _on_locus_unhover(index: int) -> void:
-	if _hovered != index:
+func _on_slot_unhover(slot: int) -> void:
+	if _hovered != slot:
 		return
 	_hovered = SLOT_NONE
 	_update_explain()
 	_update_hint()
 	if _dragging != SLOT_NONE:
-		_redraw_strand()
+		_redraw_figure()
 
 
-func _draw_cap(node: Control, lobe0: int, taper: int, mid: float) -> void:
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, mid,
-		HELIX_AMP, CAP_LOBES, lobe0, 1.0, taper)
-	# The body row has no sample band; only the DNA row's head can hold one.
-	if mid != HELIX_MID:
+## **The body register, drawn as a body**: what she wears and where she wears
+## it, fixed at birth -- the routine the water uses, nose up, `clock` 0, a still
+## mirror. The tethers go first so the body wins where they cross; then the cell;
+## then the body's own words where it disagrees with its DNA; then the arc being
+## read, last, so nothing covers it.
+func _draw_figure_body() -> void:
+	if _genome == null:
 		return
-	# A sample that has not been given a locus yet waits off the head, on
-	# nothing. That is the truthful picture and it is also the one that makes
-	# the first tap obvious: it is not anywhere until you say where.
-	#
-	# **A sample waits off the lead-in whenever no locus is bound for it, and a
-	# gene in the air unbinds it.** That is the rule this surface already had,
-	# extended by one clause, and it is what stops a move and a placement from
-	# claiming the same locus: while a move is in flight the selection is the
-	# move's own source, which is not where the sample is going. Posed on
-	# purpose and it collided -- two base pairs and two words at one locus, and
-	# a line naming the wrong gesture. The sample goes back to hanging on
-	# nothing, which is what it is, and rebinds on release.
-	if taper > 0 and _genome.held_sample != &"" \
-			and (_armed == SLOT_SAMPLE or _dragging != SLOT_NONE):
-		_draw_sample(node, _genome.held_sample, CAP_W * 0.5, -1.0)
+	var tiers := _genome.tiers()
+	var worn: Array[StringName] = _genome.body_layout()
+	for slot in _slot_count:
+		_draw_tether(slot)
+	Cilia.draw_cell(_figure_body, FIGURE_AT, 0.0, FIGURE_R, tiers,
+		CellBody.gape_of(int(tiers.get(&"cytostome", 0)), FIGURE_R), FIGURE_R,
+		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn)
+	_draw_dissent(worn)
+	_draw_arc_mark()
 
 
-func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
-		slot: int, lobe0: int) -> void:
-	var selected := _armed == slot
-	var held := _genome.held_sample
+## One slot's thread, from its chip to the middle of its arc, in its gene's hue
+## -- or the column's pale, for a slot with nothing in it yet.
+func _draw_tether(slot: int) -> void:
+	var gene := _gene_at(slot)
 	var tone := Cilia.hue(gene) if gene != &"" else PALE
-	# An empty locus with the sample bound for it wears the hue of what is
-	# coming, so the second tap confirms something the strand is already
-	# showing. An *occupied* one keeps its own: that hue is what a second tap
-	# would erase, and it should be the last thing the player sees before it
-	# goes.
-	if gene == &"" and selected and held != &"":
-		tone = Cilia.hue(held)
+	var to := _skin_at(slot, TETHER_LIFT)
+	var from := _chip_edge(slot, to)
+	var bow := (to - from).orthogonal() * TETHER_BOW
+	_figure_body.draw_polyline(
+		PackedVector2Array([from, from.lerp(to, 0.5) + bow, to]),
+		Color(tone, TETHER_ALPHA), TETHER_WIDTH, true)
 
-	# **Both ends of a swap show what would arrive at them, and nothing moves
+
+## **Where the body disagrees with its DNA, the body says what it wears**: a
+## word at every arc whose organ is not the gene the slot now carries. A slot
+## the body leaves empty says nothing -- there is no organ to name, and the
+## chip's own floating rungs already say the DNA's gene is not worn.
+func _draw_dissent(worn: Array[StringName]) -> void:
+	var font := _figure_body.get_theme_default_font()
+	if font == null:
+		return
+	for slot in mini(worn.size(), _slot_count):
+		var mine := worn[slot]
+		if mine == &"" or mine == _gene_at(slot):
+			continue
+		var near := _skin_at(slot, TETHER_LIFT)
+		var at := near.lerp(_chip_edge(slot, near), DISSENT_ALONG)
+		var word := _word(mine)
+		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			DISSENT_SIZE).x
+		_figure_body.draw_string(font,
+			at + Vector2(-width * 0.5, DISSENT_SIZE * 0.36), word,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, DISSENT_SIZE,
+			Color(Cilia.hue(mine), DISSENT_ALPHA))
+
+
+## **The part being read, lit on the skin.** Hovered first, like every line
+## under the figure; the travelling gene's hue over a drop target, the hand's
+## over the slot armed for it, and otherwise the slot's own.
+func _draw_arc_mark() -> void:
+	var slot := _hovered if _hovered >= 0 else _armed
+	if slot < 0 or slot >= _slot_count:
+		return
+	var gene := _gene_at(slot)
+	if _dragging != SLOT_NONE and slot == _hovered and slot != _dragging:
+		gene = _gene_at(_dragging)
+	elif _dragging == SLOT_NONE and slot == _armed and _hand() != &"":
+		gene = _hand()
+	var arc := Cilia.arc_for_slot(slot)
+	var points := PackedVector2Array()
+	for i in ARC_MARK_STEPS + 1:
+		var t := deg_to_rad(lerpf(arc.x, arc.y,
+			float(i) / float(ARC_MARK_STEPS)))
+		points.append(Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R, t,
+			ARC_MARK_LIFT))
+	_figure_body.draw_polyline(points,
+		Color(Cilia.hue(gene) if gene != &"" else PALE, ARC_MARK_ALPHA),
+		ARC_MARK_WIDTH, true)
+
+
+## The middle of [param slot]'s arc on this figure's skin, [param lift] off it.
+## Slot 1 is the flank pair: its chip and its thread are on the starboard side,
+## where anything but the cirrus is worn.
+func _skin_at(slot: int, lift: float) -> Vector2:
+	var arc := Cilia.arc_for_slot(slot)
+	return Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R,
+		deg_to_rad((arc.x + arc.y) * 0.5), lift)
+
+
+## Where a line from [param slot]'s chip toward [param to] leaves the chip, inset
+## so it starts clear of the chip's own word and helix.
+func _chip_edge(slot: int, to: Vector2) -> Vector2:
+	var centre := FIGURE_AT + SLOT_SEAT[slot]
+	var d := to - centre
+	var half := SLOT_SIZE * 0.5 - TETHER_INSET
+	var k := 1.0
+	if absf(d.x) > 0.001:
+		k = minf(k, half.x / absf(d.x))
+	if absf(d.y) > 0.001:
+		k = minf(k, half.y / absf(d.y))
+	return centre + d * k
+
+
+func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
+		slot: int) -> void:
+	var selected := _armed == slot
+	var hand := _hand()
+	var tone := Cilia.hue(gene) if gene != &"" else PALE
+	# **Armed for the gene in hand, the lens takes the incoming hue**, as the arc
+	# on the body does. An empty slot also shows the gene as it would land; an
+	# *occupied* one keeps drawing its own, because that is what the tap
+	# erases and it should be the last thing read before it goes. The first
+	# build previewed the incoming gene over an occupant too: rendered, `eat`
+	# vanished from the screen while the line under it still read *the mouth · a
+	# daughter always wears it*.
+	var armed := selected and hand != &"" and _dragging == SLOT_NONE
+	if armed:
+		tone = Cilia.hue(hand)
+
+	# **Both ends of a drag show what would arrive at them, and nothing moves
 	# until the finger lifts.** The lens is the only mark that changes and it is
 	# the mark selection already uses, so the destination keeps drawing its own
 	# copies: what is about to be displaced stays readable right up to the drop.
 	if _dragging != SLOT_NONE:
-		if slot >= 0 and slot == _hovered and slot != _dragging:
+		if slot == _hovered and slot != _dragging:
 			var flying := _gene_at(_dragging)
 			if flying != &"":
 				selected = true
@@ -3816,141 +4110,194 @@ func _draw_locus(node: Control, gene: StringName, tier: int, body_tier: int,
 			var displaced := _gene_at(_hovered)
 			tone = Cilia.hue(displaced) if displaced != &"" else PALE
 
-	# **The lens fills, and that is the whole of "selected".** There is no box
-	# to put a border on any more; area between the backbones is the one mark on
-	# this surface that cannot be mistaken for a rung or for a strand.
-	if selected:
-		# 1.0: a locus is three lobes wide and the lens is its middle one.
-		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
-			HELIX_AMP, lobe0, 1.0, Color(tone, LENS_SELECTED))
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID, HELIX_AMP,
-		LOCUS_LOBES, lobe0, BACKBONE_LIT if selected else 1.0, 0)
-
-	# The gene is in the air: the locus it came out of has nothing in it until
-	# it lands, and drawing its rungs in both places would be the one lie a
-	# drag can tell.
+	var shown := gene
+	var copies := tier
+	# Worn copies are a subset of the DNA's: a body that kept an organ at two
+	# while its slot was written with the same gene at one draws one, worn.
+	var worn := mini(body_tier, tier)
 	if _dragging == slot:
-		gene = &""
-	if gene != &"":
-		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
-			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(gene), tier, body_tier)
-	elif selected and held != &"" and _dragging == SLOT_NONE:
-		# What a second tap would do, drawn before it is done: a placed gene is
-		# written to the DNA and **not** to this body, so the preview is a
-		# carried rung and not a worn one. That is not a nicety -- it is the one
-		# frame where the player can see that placing changes their daughters
-		# and not themselves.
-		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, LOBE_W, HELIX_MID,
-			HELIX_AMP, lobe0, LOCUS_W * 0.5, Cilia.hue(held),
-			_copies_of(held), 0)
+		# The gene is in the air: the slot it came out of has nothing in it
+		# until it lands, and drawing its rungs in both places would be the one
+		# lie a drag can tell.
+		shown = &""
+	elif armed and gene == &"":
+		# What a second tap would write, drawn before it is written: a placed
+		# gene reaches the DNA and **not** this body, so the preview is carried
+		# rungs and ring pips. It is the one frame where the player can see that
+		# placing changes their daughters and not themselves.
+		shown = hand
+		copies = _copies_of(hand)
+		worn = 0
 
-	if selected and held != &"" and slot >= 0 and _dragging == SLOT_NONE:
-		_draw_sample(node, held, LOCUS_W * 0.5, HELIX_MID - HELIX_AMP)
+	node.draw_set_transform(Vector2(CHIP_X, 0.0))
+	# **The lens fills, and that is the whole of "selected".** The middle lobe
+	# of three is the slot's own.
+	if selected:
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS))
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
+		CHIP_LOBES, 0, BACKBONE_LIT if selected else 1.0, 0)
+	if shown != &"":
+		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(shown), copies, worn)
+	node.draw_set_transform(Vector2.ZERO)
 
-	_draw_locus_label(node, gene, body_tier, slot, selected)
+	_draw_chip_label(node, shown, copies, worn, selected)
 
 	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET, LOCUS_H - 1.0),
-			Vector2(LOCUS_W - FOCUS_INSET, LOCUS_H - 1.0),
+		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
+			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
 
 
-## The plain word and the dart, centred under the locus as one group so a long
-## word and a short one both sit under their own stretch of strand.
+## A slot the body has not earned: its helix, faint, and nothing else.
+func _draw_unearned(node: Control) -> void:
+	node.draw_set_transform(Vector2(CHIP_X, 0.0))
+	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
+		CHIP_LOBES, 0, UNEARNED_INK, 0)
+	node.draw_set_transform(Vector2.ZERO)
+
+
+## The plain word and the level, centred under the chip as one group so a long
+## word and a short one both sit under their own piece of helix.
 ##
-## **The word is the strip's word, unchanged**: four short verbs parsed at arm's
-## length, never the biological name. That belongs to the explanation line,
-## which is read rather than glanced at.
-##
-## [param label_mid] and [param label_base] default to the DNA row's seats,
-## under its helix; the body row passes its own, which are above.
-func _draw_locus_label(node: Control, gene: StringName, body_tier: int,
-		slot: int, selected: bool, label_mid := LABEL_MID,
-		label_base := LABEL_BASE) -> void:
-	var font := node.get_theme_default_font()
-	var word := String(WORDS.get(gene, String(gene))) if gene != &"" else ""
-	var width := 0.0
-	if font != null and not word.is_empty():
-		width = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			LABEL_SIZE).x
-	var group := DART_R * 2.0
-	if width > 0.0:
-		group += DART_GAP + width
-	var dart_x := LOCUS_W * 0.5 - group * 0.5 + DART_R
-	Cilia.draw_slot_dart(node, slot,
-		Cilia.hue(gene) if gene != &"" else Color(PALE, 0.6),
-		Vector2(dart_x, label_mid), DART_R)
-	if width <= 0.0 or font == null:
+## **The word is the slot's word**: a short verb parsed at arm's length, never
+## the biological name. That belongs to the explanation line, which is read
+## rather than glanced at.
+func _draw_chip_label(node: Control, gene: StringName, copies: int, worn: int,
+		selected: bool) -> void:
+	if gene == &"":
 		return
+	var font := node.get_theme_default_font()
+	if font == null:
+		return
+	var word := _word(gene)
+	var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+		CHIP_WORD).x
+	var group := width + PIP_GAP + PIP_PITCH * float(GenomeNode.TIER_MAX - 1) \
+		+ PIP_R * 2.0
+	var left := (SLOT_SIZE.x - group) * 0.5
 	var tint := LABEL_TINT
 	if selected:
 		tint = LABEL_TINT_LOUD
-	elif body_tier <= 0:
-		# The third channel, agreeing with the floating rungs: a word for an
-		# organ this body does not wear is quieter than one it does.
+	elif worn <= 0:
+		# The third channel, agreeing with the floating rungs and the rings: a
+		# word for an organ this body does not wear is quieter than one it does.
 		tint = Color(PALE, WORD_UNEXPRESSED)
-	node.draw_string(font, Vector2(dart_x + DART_R + DART_GAP, label_base),
-		word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, tint)
+	node.draw_string(font, Vector2(left, CHIP_BASE), word,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD, tint)
+	_draw_pips(node,
+		Vector2(left + width + PIP_GAP + PIP_R, CHIP_BASE - PIP_LIFT),
+		Cilia.hue(gene), copies, worn, 1.0)
 
 
-## **The held sample: a base pair that is not in a ladder yet.** A bar with a
-## base at each end, floating in the band above the locus it is bound for, with
-## a thread down to where its rung would go. Off the head of the strand -- with
-## [param thread_to] negative -- it hangs on nothing at all, which is the
-## picture of a gene that has not been given a place.
+## Three pips from [param first], a pitch apart: a disc for each copy worn, a
+## ring for each copy only carried, a dot for each copy there is still room for.
+## [param ink] is the tray's dim; a chip passes 1.
+func _draw_pips(node: Control, first: Vector2, tone: Color, copies: int,
+		worn: int, ink: float) -> void:
+	for i in GenomeNode.TIER_MAX:
+		var at := first + Vector2(PIP_PITCH * float(i), 0.0)
+		if i < worn:
+			node.draw_circle(at, PIP_R, Color(tone, 0.95 * ink), true, -1.0, true)
+		elif i < copies:
+			# Stroked inside the disc's radius, so a ring and a disc are the
+			# same size and only their fill differs.
+			node.draw_arc(at, PIP_R - PIP_RING * 0.5, 0.0, TAU, 16,
+				Color(tone, 0.95 * ink), PIP_RING, true)
+		else:
+			node.draw_circle(at, PIP_ROOM_R, Color(PALE, PIP_ROOM_ALPHA * ink),
+				true, -1.0, true)
+
+
+## One waiting gene: its loose base pair, its word and its level as rings.
 ##
-## It keeps the plain word beside it, because the word is what the strand is
-## built to be read by and a sample with no word is a coloured dot.
-func _draw_sample(node: Control, gene: StringName, centre_x: float,
-		thread_to: float) -> void:
+## **The wilt** (dna-body.md §5): its halos fade over its last
+## [constant Cilia.HELD_WILT] seconds, the vesicle's own clock on the body, so
+## the tray and the figure in the water say *about to lapse* the same way. Only
+## a pond shows it -- single player stops every clock while this screen is open
+## -- and [method _step_tray] redraws it there.
+func _draw_waiting(node: Control, gene: StringName) -> void:
+	var in_hand := gene == _hand() and _dragging != SLOT_SAMPLE
+	var ink := 1.0 if in_hand else WAIT_DIM
+	var tone := Cilia.hue(gene)
+	var mid := WAIT_SIZE.y * 0.5 - 2.0
+	var wilt := clampf(_genome.waiting_left(gene) / Cilia.HELD_WILT, 0.0, 1.0)
+	_draw_base_pair(node, Vector2(WAIT_BAR_X, mid), tone, ink,
+		(1.6 if in_hand else 1.0) * (0.40 + 0.60 * wilt))
+	var font := node.get_theme_default_font()
+	if font != null:
+		var word := _word(gene)
+		node.draw_string(font, Vector2(WAIT_WORD_X, mid + 5.0), word,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
+			LABEL_TINT_LOUD if in_hand else LABEL_TINT)
+		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			CHIP_WORD).x
+		# Carried by definition, so rings and never a disc.
+		_draw_pips(node, Vector2(WAIT_WORD_X + width + PIP_GAP + PIP_R, mid),
+			tone, _genome.waiting_copies(gene), 0, ink)
+	if in_hand:
+		node.draw_line(Vector2(6.0, WAIT_SIZE.y - 3.0),
+			Vector2(WAIT_SIZE.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
+			1.5, true)
+	if node.has_focus():
+		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			Vector2(WAIT_SIZE.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **A base pair that is not in a ladder yet**: a bar with a base at each end,
+## inside two faint rings -- the picture of a gene that has not been given a
+## place, in the tray and on a finger alike. [param halo] scales the rings.
+func _draw_base_pair(node: CanvasItem, bar: Vector2, tone: Color, ink: float,
+		halo: float) -> void:
+	for i in SAMPLE_HALO.size():
+		node.draw_arc(bar, SAMPLE_HALO[i], 0.0, TAU, 24,
+			Color(tone, SAMPLE_HALO_ALPHA[i] * halo), 1.4, true)
+	var top := bar - Vector2(0.0, SAMPLE_BAR * 0.5)
+	var bottom := bar + Vector2(0.0, SAMPLE_BAR * 0.5)
+	node.draw_line(top, bottom, Color(tone, 0.94 * ink), SAMPLE_WIDTH, true)
+	node.draw_circle(top, SAMPLE_CAP, Color(tone, 0.94 * ink), true, -1.0, true)
+	node.draw_circle(bottom, SAMPLE_CAP, Color(tone, 0.94 * ink), true, -1.0,
+		true)
+
+
+## **The travelling gene**: the base pair with its plain word beside it, centred
+## as a group on [param centre]. The word stays, because a base pair with no
+## word is a coloured dot.
+func _draw_sample(node: Control, gene: StringName, centre: Vector2) -> void:
 	var tone := Cilia.hue(gene)
 	var font := node.get_theme_default_font()
-	var word := String(WORDS.get(gene, String(gene)))
+	var word := _word(gene)
 	var width := 0.0
 	if font != null:
 		width = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 			SAMPLE_WORD).x
 	var group := SAMPLE_WIDTH + SAMPLE_GAP + width
-	var bar_x := centre_x - group * 0.5 + SAMPLE_WIDTH * 0.5
-	var top := Vector2(bar_x, BAND_MID - SAMPLE_BAR * 0.5)
-	var bottom := Vector2(bar_x, BAND_MID + SAMPLE_BAR * 0.5)
-
-	for i in SAMPLE_HALO.size():
-		node.draw_arc(Vector2(bar_x, BAND_MID), SAMPLE_HALO[i], 0.0, TAU, 24,
-			Color(tone, SAMPLE_HALO_ALPHA[i]), 1.4, true)
-	if thread_to >= 0.0:
-		# One bowed strand from the base pair to the locus it is reaching for.
-		var thread := PackedVector2Array()
-		for i in 7:
-			var u := float(i) / 6.0
-			thread.append(Vector2(
-				lerpf(bar_x, centre_x, u) + sin(u * PI) * 5.0,
-				lerpf(bottom.y, thread_to, u)))
-		node.draw_polyline(thread, Color(tone, SAMPLE_THREAD_ALPHA), 1.4, true)
-	node.draw_line(top, bottom, Color(tone, 0.94), SAMPLE_WIDTH, true)
-	node.draw_circle(top, SAMPLE_CAP, Color(tone, 0.94), true, -1.0, true)
-	node.draw_circle(bottom, SAMPLE_CAP, Color(tone, 0.94), true, -1.0, true)
+	var bar := Vector2(centre.x - group * 0.5 + SAMPLE_WIDTH * 0.5, centre.y)
+	_draw_base_pair(node, bar, tone, 1.0, 1.0)
 	if font != null:
 		node.draw_string(font,
-			Vector2(bar_x + SAMPLE_WIDTH * 0.5 + SAMPLE_GAP,
-				BAND_MID + SAMPLE_WORD * 0.38),
-			word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, SAMPLE_WORD,
-			LABEL_TINT_LOUD)
+			Vector2(bar.x + SAMPLE_WIDTH * 0.5 + SAMPLE_GAP,
+				centre.y + SAMPLE_WORD * 0.38),
+			word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, SAMPLE_WORD, LABEL_TINT_LOUD)
 
 
-## **The one organ on the pause screen, beside the sentence that explains it.**
+## **The one organ beside a sentence on the pause screen.**
 ##
 ## The old tiles drew an organ each, which is what taught a point-of-view
-## player the cilia vocabulary (genes-and-cilia.md §2.4). A strand has nowhere
-## to put seven of them, and seven small tufts over a chromosome would be the
-## four-tuft mistake diegetic-hud.md §2 already made and measured. One, at the
-## thing the player is reading, in the row that already exists, keeps the
-## vocabulary and spends 30 px.
+## player the cilia vocabulary (genes-and-cilia.md §2.4). The figure now draws
+## every organ the body wears, where it wears it; what it cannot draw is a gene
+## the body does not wear -- a waiting one, or one only the DNA carries -- and
+## seven small tufts round a ring of chips would be the four-tuft mistake
+## diegetic-hud.md §2 already made and measured. One, at the thing the player
+## is reading, in the row that already exists, keeps the vocabulary and spends
+## 30 px.
 func _draw_explain_organ() -> void:
 	if _explain_gene == &"" or _explain_organ == null:
 		return
 	var worn := _genome.tier(_explain_gene) > 0 \
-		or _explain_gene == _genome.held_sample
+		or _genome.waiting_index(_explain_gene) >= 0
 	Cilia.draw_tile_organ(_explain_organ, _explain_gene, _explain_tier,
 		EXPLAIN_ORGAN_SEAT,
 		Cilia.TILE_STROKE_ALPHA if worn else ORGAN_UNEXPRESSED,
@@ -3960,39 +4307,66 @@ func _draw_explain_organ() -> void:
 # --- Two taps on the same target -------------------------------------------
 # The only pattern that is safe on touch and navigable by keyboard. A mis-tap
 # costs nothing because arming is reversible, and that is the argument that
-# makes 20px between tiles acceptable even though it is about 1.5mm on a phone.
-# The destructive control here is not adjacent to `resume`.
+# makes neighbouring chips acceptable on a phone. The destructive control here
+# is not adjacent to `resume`: they are in different columns.
+
+## **Picking a waiting gene.** A tap takes it in hand, and any armed slot
+## disarms: a slot armed for one gene must never be a tap away from writing a
+## different one. Tapping the gene already in hand disarms too, which is how a
+## thumb with no Escape takes an arm back.
+func _on_waiting_input(event: InputEvent, node: Control,
+		gene: StringName) -> void:
+	if not _is_widget_tap(event):
+		return
+	node.accept_event()
+	_primed = SLOT_NONE
+	# Lapsed under the tray in a pond: the rebuild that shows it gone is a frame
+	# away, and picking a gene that is not waiting would put nothing in hand.
+	if _genome.waiting_index(gene) < 0:
+		return
+	if _in_hand == gene and _armed == SLOT_SAMPLE:
+		return
+	_in_hand = gene
+	_armed = SLOT_SAMPLE
+	_armed_at = Time.get_ticks_msec()
+	_hovered = SLOT_NONE
+	_redraw_figure()
+	_update_explain()
+	_update_hint()
+
 
 ## **[param tile] is dead after [method _build_genome_strip] runs.** A rebuild
-## removes and frees every tile -- including the one whose `gui_input` we are
+## removes and frees every chip -- including the one whose `gui_input` we are
 ## standing inside. That is legal (`queue_free` is deferred and `remove_child`
 ## during emission is fine) and it is exercised on both the touch path and the
 ## keyboard path, but it means nothing may touch `tile` after the rebuild. Read
-## the new node out of Row instead, the way the focus line does.
+## the new node out of the layer instead, the way the focus line does.
 ##
 ## Two of the branches below rebuild -- a move and a commit -- and **selecting
 ## does not**, because a press that selects may still become a drag and Godot
 ## hangs the drag off the control that took the press. Everything `tile` is
 ## used for happens before either rebuild: `accept_event()`, and the rect the
 ## up-stroke is tested against.
-func _on_locus_input(event: InputEvent, tile: Control, index: int) -> void:
-	var step := _move_key(event)
-	if step != 0:
+func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
+	var way := _move_key(event)
+	if way >= 0:
 		# `accept_event()` on the chord, or GUI focus navigation runs as well
-		# and the keyboard walks off the locus the gene just moved to.
+		# and the keyboard walks off the slot the gene just moved to.
 		tile.accept_event()
-		_move_slot(index, index + step)
+		var to := int(SLOT_NEIGHBOUR[index][way])
+		if _slot_live(to):
+			_move_slot(index, to)
 		return
-	# **The up-stroke, which is where a placement lands now.** See [member
-	# _primed] for why it cannot land on the down-stroke any more.
+	# **The up-stroke, which is where a placement lands.** See [member _primed]
+	# for why it cannot land on the down-stroke.
 	if _is_pointer_lift(event):
 		tile.accept_event()
 		var was_primed := _primed == index
 		_primed = SLOT_NONE
-		# `has_point` and not simply "this locus got the release": Godot keeps
+		# `has_point` and not simply "this slot got the release": Godot keeps
 		# delivering to the control the press landed on, so a finger that
-		# pressed an armed locus, slid four loci away and lifted there gets its
-		# release *here*, with a local x of -336. That is a gesture the player
+		# pressed an armed slot, slid off it and lifted elsewhere gets its
+		# release *here*, outside the chip's rect. That is a gesture the player
 		# aborted, and aborting by sliding off is the oldest cancel there is.
 		if was_primed and _dragging == SLOT_NONE \
 				and Rect2(Vector2.ZERO, tile.size).has_point(
@@ -4027,37 +4401,39 @@ func _on_locus_input(event: InputEvent, tile: Control, index: int) -> void:
 			# presses Enter.
 			_commit_slot(index)
 			return
-		# Nothing to commit -- no sample, or this is the sample itself -- so the
-		# second tap is simply the first one again and the tile stays selected.
+		# Nothing to commit -- nothing in hand, or, in a pond, a screen the
+		# genome has moved on from -- so the second tap is simply the first one
+		# again and the slot stays selected.
 		#
 		# **It used to deselect, and the render is what killed that.** Godot
-		# focuses a control on click, so the tile a thumb has just tapped keeps
-		# a focus ring whether or not it is selected: deselecting left a tile
-		# ringed in pale teal with an empty sentence under it, which is the
+		# focuses a control on click, so the chip a thumb has just tapped keeps
+		# a focus ring whether or not it is selected: deselecting left a chip
+		# underlined in pale teal with an empty sentence under it, which is the
 		# surface pointing at something and then refusing to say what. Blanking
 		# the one line the player came for is a worse answer than doing nothing.
 		return
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
-	# **A selection redraws; it does not rebuild.** Freeing and remaking ten
-	# nodes to move one lens was always waste, and once a press can become a
+	# **A selection redraws; it does not rebuild.** Freeing and remaking the
+	# chips to move one lens was always waste, and once a press can become a
 	# drag it is a bug rather than waste: Godot hangs a drag off the control
-	# that took the *press*, and this handler used to free that control before
-	# the finger had moved -- so the drag could never start and the gesture
-	# looked unimplemented. Nothing about the genome changed here, so nothing
-	# has to be rebuilt; the loci read [member _armed] at draw time. It also
-	# removes the focus churn [method _restore_focus] exists to repair.
-	_redraw_strand()
+	# that took the *press*, and freeing that control before the finger had
+	# moved meant the drag could never start. Nothing about the genome changed
+	# here, so nothing has to be rebuilt; the chips read [member _armed] at draw
+	# time. It also removes the focus churn [method _restore_focus] exists to
+	# repair.
+	_redraw_figure()
 	_update_explain()
 	_update_hint()
 
 
-## Every control on both rows, redrawn. The loci read the selection and the
-## drag out of [member _armed] and [member _dragging] at draw time, so this is
-## all either of them ever needs.
-func _redraw_strand() -> void:
-	for row: HBoxContainer in [_body_row, _genome_row]:
-		for child in row.get_children():
+## Every chip, every tray chip and the body, redrawn. They read the selection,
+## the hand and the drag out of [member _armed], [member _in_hand] and
+## [member _dragging] at draw time, so this is all a change of any of them needs.
+func _redraw_figure() -> void:
+	_figure_body.queue_redraw()
+	for layer: Control in [_figure_slots, _tray]:
+		for child in layer.get_children():
 			var node := child as CanvasItem
 			if node != null:
 				node.queue_redraw()
@@ -4071,14 +4447,14 @@ func _redraw_strand() -> void:
 # consequences get two gestures, which is the cheapest possible way to say that
 # one of them is heavier than the other.
 #
-# Tap-then-tap was not available: a tap already selects a locus and reads it,
-# and a second tap already places a held sample. Redefining the pair as a move
-# would cost the ability to read a second gene, which is most of what the strand
-# is for.
+# Tap-then-tap was not available: a tap already selects a slot and reads it,
+# and a second tap already places the gene in hand. Redefining the pair as a
+# move would cost the ability to read a second gene, which is most of what the
+# figure is for.
 
-## The gene leaves its locus. Returning `null` refuses the drag, which is what
-## an empty locus does.
-func _locus_drag(_at: Vector2, node: Control, slot: int) -> Variant:
+## The gene leaves its slot. Returning `null` refuses the drag, which is what
+## an empty slot does.
+func _slot_drag(_at: Vector2, node: Control, slot: int) -> Variant:
 	if not _movable(slot):
 		return null
 	var gene := _gene_at(slot)
@@ -4090,82 +4466,136 @@ func _locus_drag(_at: Vector2, node: Control, slot: int) -> Variant:
 	_dragging = slot
 	_armed = slot
 	_armed_at = Time.get_ticks_msec()
-	# The travelling gene is the held sample's own base pair, because that is
-	# already this surface's picture of a gene that is not in a ladder: a bar,
-	# two halo rings and the plain word. Nothing new to learn.
-	var preview := Control.new()
-	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	preview.custom_minimum_size = Vector2(LOCUS_W, BAND_MID * 2.0)
-	preview.size = Vector2(LOCUS_W, BAND_MID * 2.0)
-	preview.position = Vector2(-LOCUS_W * 0.5, -BAND_MID - DRAG_LIFT)
-	preview.draw.connect(_draw_sample.bind(preview, gene, LOCUS_W * 0.5, -1.0))
-	# Godot seats a drag preview's *root* on the pointer, so the offset has to
-	# live on a child of it; a wrapper is the one way to lift the picture off
-	# the thumb.
-	var wrap := Control.new()
-	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	wrap.add_child(preview)
-	node.set_drag_preview(wrap)
-	_redraw_strand()
+	node.set_drag_preview(_drag_preview(gene))
+	_redraw_figure()
 	_update_explain()
 	_update_hint()
 	return {&"move_from": slot, &"gene": gene}
 
 
-## Every DNA locus but the one the gene came out of. **Not refused on an
-## occupied one**: a late-game strand is dense, so refusing would fail most
-## drops and a gesture that usually does nothing reads as broken. An occupied
-## destination swaps, which is the same operation `Genome._mutate_shift`
-## already performs at every division -- and an empty one is the degenerate
-## case of that same swap, so there is one rule and not two.
-func _locus_can_drop(_at: Vector2, data: Variant, slot: int) -> bool:
-	if not (data is Dictionary) or not (data as Dictionary).has(&"move_from"):
+## **A waiting gene, carried out of the tray** (dna-body.md §5). It is in hand
+## from the moment it leaves: onto an empty slot it lands on the drop, and onto
+## an occupied one the drop is only the first tap. The data carries the gene,
+## never its place in the queue -- see [member _in_hand].
+func _waiting_drag(_at: Vector2, node: Control, gene: StringName) -> Variant:
+	if _genome.waiting_index(gene) < 0:
+		return null
+	_in_hand = gene
+	_primed = SLOT_NONE
+	_dragging = SLOT_SAMPLE
+	_armed = SLOT_SAMPLE
+	_armed_at = Time.get_ticks_msec()
+	node.set_drag_preview(_drag_preview(gene))
+	_redraw_figure()
+	_update_explain()
+	_update_hint()
+	return {&"place": gene}
+
+
+## The travelling gene's picture, lifted off the pointer.
+##
+## Godot seats a drag preview's *root* on the pointer, so the offset has to live
+## on a child of it; a wrapper is the one way to lift the picture off the thumb.
+func _drag_preview(gene: StringName) -> Control:
+	var preview := Control.new()
+	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	preview.custom_minimum_size = SAMPLE_BOX
+	preview.size = SAMPLE_BOX
+	preview.position = Vector2(-SAMPLE_BOX.x * 0.5,
+		-SAMPLE_BOX.y * 0.5 - DRAG_LIFT)
+	preview.draw.connect(_draw_sample.bind(preview, gene, SAMPLE_BOX * 0.5))
+	var wrap := Control.new()
+	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	wrap.add_child(preview)
+	return wrap
+
+
+## **A move lands on every live slot but the one it came out of, and a waiting
+## gene on every live slot.** Not refused on an occupied one: a late-game ring
+## is dense, so refusing would fail most drops and a gesture that usually does
+## nothing reads as broken. An occupied destination swaps, which is the same
+## operation `Genome._mutate_shift` already performs at every division -- and an
+## empty one is the degenerate case of that same swap, so there is one rule and
+## not two. A waiting gene that lapsed while it was being carried lands nowhere.
+func _slot_can_drop(_at: Vector2, data: Variant, slot: int) -> bool:
+	if not (data is Dictionary) or not _slot_live(slot):
 		return false
-	return slot >= 0 and slot < _slot_genes.size() \
-		and slot != int((data as Dictionary)[&"move_from"])
+	var carried := data as Dictionary
+	if carried.has(&"place"):
+		return _genome.waiting_index(StringName(carried[&"place"])) >= 0
+	if not carried.has(&"move_from"):
+		return false
+	return slot != int(carried[&"move_from"])
 
 
-func _locus_drop(_at: Vector2, data: Variant, slot: int) -> void:
+func _slot_drop(_at: Vector2, data: Variant, slot: int) -> void:
 	_dragging = SLOT_NONE
+	var carried := data as Dictionary
+	if carried.has(&"place"):
+		_drop_waiting(StringName(carried[&"place"]), slot)
+		return
 	# The moved gene stays selected and the keyboard follows it, so the three
-	# lines under the strand are a receipt for what moved and where it now
+	# lines under the figure are a receipt for what moved and where it now
 	# points. That is the rule a commit already has.
-	_move_slot(int((data as Dictionary)[&"move_from"]), slot)
+	_move_slot(int(carried[&"move_from"]), slot)
+
+
+## **A waiting gene let go over a slot.** Onto an empty one it is placed there
+## and then: nothing is evicted, and a move can still take it anywhere, so the
+## second tap would confirm nothing (owner's call 6). Onto a gene the drop is
+## the first tap and the slot arms, with the guard and the timeout running from
+## now -- the eviction still needs its own second tap.
+func _drop_waiting(gene: StringName, slot: int) -> void:
+	_in_hand = gene
+	if _gene_at(slot) == &"":
+		_commit_slot(slot)
+		return
+	_armed = slot
+	_armed_at = Time.get_ticks_msec()
+	_redraw_figure()
+	_update_explain()
+	_update_hint()
 
 
 ## **`Shift` and an arrow, read raw.** A content pack cannot add an `InputMap`
 ## action, and the bare arrows are how the GUI is navigated -- so the chord is
-## read off the key event itself rather than through an action. Returns -1, +1
-## or 0 for anything else.
+## read off the key event itself rather than through an action. Returns the
+## arrow's side in [constant SLOT_NEIGHBOUR] -- 0 left, 1 up, 2 right, 3 down --
+## or -1 for anything else. Directions on the ring, not steps along a strand.
 func _move_key(event: InputEvent) -> int:
 	var key := event as InputEventKey
 	if key == null or not key.pressed or not key.shift_pressed:
-		return 0
-	if key.keycode == KEY_LEFT:
 		return -1
-	return 1 if key.keycode == KEY_RIGHT else 0
+	match key.keycode:
+		KEY_LEFT:
+			return 0
+		KEY_UP:
+			return 1
+		KEY_RIGHT:
+			return 2
+		KEY_DOWN:
+			return 3
+	return -1
 
 
-## One move, from either gesture.
-##
-## [param to] is **clamped rather than wrapped**: a gene that walked off the end
-## of the strand and reappeared at the other end would land on a different arc
-## from the one being aimed at, which is the whole thing a move is for.
+## One move, from either gesture. [param to] is taken or refused, never
+## adjusted: the table in [constant SLOT_NEIGHBOUR] and the drop target both
+## name an exact arc, and a gene that landed on a different one would defeat the
+## whole thing a move is for.
 func _move_slot(from: int, to: int) -> void:
-	var target := clampi(to, 0, maxi(_slot_genes.size() - 1, 0))
-	if not _genome.move(from, target):
+	if not _genome.move(from, to):
 		return
-	_armed = target
+	_armed = to
 	_armed_at = Time.get_ticks_msec()
 	_hovered = SLOT_NONE
-	# The genome really did change, so this one is a rebuild: both rows read
-	# their genes and their copy counts at build time, and the move changed
-	# both rows at once.
+	# The genome really did change, so this one is a rebuild: the chips read
+	# their genes and their copy counts at build time, and the tethers, the
+	# body's words and the arc all follow the new layout.
 	_build_genome_strip()
-	# The strip's own focus restore only fires for a locus that *had* focus, and
-	# a mouse drag never gave one to anything. Sending the keyboard after the
-	# gene it just moved is what makes `Shift`+arrow repeatable.
-	_restore_focus(target)
+	# The rebuild's own focus restore only fires for a slot that *had* focus,
+	# and a mouse drag never gave one to anything. Sending the keyboard after
+	# the gene it just moved is what makes `Shift`+arrow repeatable.
+	_restore_focus(to)
 
 
 func _is_widget_tap(event: InputEvent) -> bool:
@@ -4180,7 +4610,7 @@ func _is_widget_tap(event: InputEvent) -> bool:
 ## The down-stroke of a **pointer** specifically, which is the half of
 ## [method _is_widget_tap] that can turn into a drag. Both copies of a thumb
 ## press answer true: Godot emulates a mouse button from every screen touch and
-## the locus is handed both.
+## the chip is handed both.
 func _is_pointer_press(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return (event as InputEventScreenTouch).pressed
@@ -4205,8 +4635,8 @@ func _is_pointer_lift(event: InputEvent) -> bool:
 	return false
 
 
-## Where a pointer event landed, in the locus's own coordinates. Off the end of
-## the strand is a legal answer and the reason this is asked at all.
+## Where a pointer event landed, in the chip's own coordinates. Off the chip is
+## a legal answer and the reason this is asked at all.
 func _pointer_at(event: InputEvent) -> Vector2:
 	if event is InputEventScreenTouch:
 		return (event as InputEventScreenTouch).position
@@ -4219,112 +4649,144 @@ func _pointer_at(event: InputEvent) -> Vector2:
 ## not a choice, and §1.3's drifter floor is what makes even the worst swap --
 ## dropping a fourth gene over your own mouth -- survivable rather than a soft
 ## lock.
-## **Gated on the strip, not on the ladder.** `_genome.slots()` is the capacity
+##
+## **Gated on the figure, not on the ladder.** `_genome.slots()` is the capacity
 ## the *body* earned, and a newborn carries her mother's whole DNA on a body two
 ## thirds the size -- so gating on it would silently deaden four of seven live
-## tiles for the commonest state in the late game. The strip is the DNA and the
+## slots for the commonest state in the late game. The chips are the DNA and the
 ## DNA is what is being placed into.
 func _commit_slot(index: int) -> void:
 	# **Nothing is written while a gesture is in flight**, which is the guard
-	# [method _step_arming] already carries three functions down and this one
-	# was missing. The reachable case is desktop and it is one hand on each
-	# device: a mouse drag lifting `eat` out of locus 0 while the other hand
-	# presses Enter -- `ui_accept` is Enter, KP-Enter *and* Space -- on a
-	# focused locus with a sample held. Without this the sample lands, the
-	# strip rebuilds mid-drag, [member _dragging] still points at a locus that
-	# now holds a different gene, and the release moves the gene that was just
-	# placed rather than the one the drag picked up.
+	# [method _step_arming] already carries and this one was missing once. The
+	# reachable case is desktop and it is one hand on each device: a mouse drag
+	# lifting `eat` out of slot 0 while the other hand presses Enter --
+	# `ui_accept` is Enter, KP-Enter *and* Space -- on a focused slot with a gene
+	# in hand. Without this the gene lands, the figure rebuilds mid-drag,
+	# [member _dragging] still points at a slot that now holds a different gene,
+	# and the release moves the gene that was just placed rather than the one
+	# the drag picked up.
 	if _dragging != SLOT_NONE:
 		return
 	if index < 0 or index >= _slot_genes.size():
 		return
-	# **Asked again here, on every path that writes the DNA.** A lift commits
-	# on the strength of a press made earlier, and the head can change between
-	# the two in a pond -- see [member _strip_head].
+	# **Asked again here, on every path that writes the DNA.** A lift commits on
+	# the strength of a press made earlier, and in a pond the genome can change
+	# between the two -- the gene in hand can lapse, or another can lapse into
+	# this slot. Then nothing is written, and the screen catches up now rather
+	# than a frame later.
 	if not _committable(index):
+		if _catch_up():
+			_build_genome_strip()
 		return
-	_genome.place(index)
-	# **The placed slot stays selected**, so the line under the strip is now the
-	# gene that just landed and the tile it landed in. The sample is spent, so
+	# **Looked up by gene, now, and never remembered as a place in the queue.**
+	_genome.place(index, _genome.waiting_index(_in_hand))
+	# **The placed slot stays selected**, so the lines under the figure are now
+	# the gene that just landed and the slot it landed in. The gene is spent, so
 	# nothing about that selection is committable any more -- it is a receipt,
 	# and the one moment in a run where the player most wants to know what they
 	# have just given their daughters.
 	#
-	# **Unless another gene is waiting behind it** (#118), and then the
-	# selection goes back to the sample. Left on the locus it would be armed for
-	# the *next* gene -- drawn hovering over the gene that just landed, one more
-	# tap from writing over it. The one irreversible action in the game must
-	# never be a tap away without a fresh first tap to arm it.
+	# **Unless another gene is waiting behind it** (#118), and then the head
+	# goes in hand, unplaced. Left on the slot it would be armed for the *next*
+	# gene -- drawn over the gene that just landed, one more tap from writing
+	# over it. The one irreversible action in the game must never be a tap away
+	# without a fresh first tap to arm it.
+	_in_hand = &""
 	_armed = index
 	_armed_at = Time.get_ticks_msec()
 	_hovered = SLOT_NONE
 	if _genome.held_sample != &"":
 		_select_default()
 	# The bus is told now rather than on the next unpaused frame: the membrane
-	# keeps beating under the scrim, and an echo for a sample that no longer
-	# exists is the game lying about the player's own body. **Or for one that
-	# does**: with another gene still waiting the echo goes on, now for it.
+	# keeps beating under the scrim, and an echo for a gene that no longer waits
+	# is the game lying about the player's own body. **Or for one that does**:
+	# with another gene still waiting the echo goes on, now for it.
 	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_build_genome_strip()
 
 
-## The armed slot lapses on its own, so a strip left armed is not a trap.
+## The armed slot lapses on its own, so a screen left armed is not a trap -- and,
+## in a pond, the queue can change under it, which this is where the screen
+## catches up with.
 ##
-## **This does not lapse the sample.** Four seconds is a hesitation; the sample
-## has forty-five, and its clock is not even running -- `Genome` is
+## **This does not lapse the gene.** Four seconds is a hesitation; the gene has
+## forty-five, and in single player its clock is not even running -- `Genome` is
 ## `process_mode = 1`, so it stops with the rest of the simulation while the
-## pause screen is open. So the player is still holding a gene, the tiles are
-## still live, and the rebuild puts them back on the tile they were reading.
-## **Only a committable selection lapses**, which is the one rule that had to
-## change when selecting became something you do to read rather than only to
-## place. The timeout exists to make sure a strip left armed is not a trap; a
-## selection with no sample behind it is not a trap, it is a player reading a
-## sentence, and four seconds is not long enough to read one twice. So a tile
-## selected with nothing held stays selected until another tile is, and an arm
-## that does lapse falls back to the sample rather than to nothing.
+## pause screen is open. **An arm that lapses goes back to the gene in hand, not
+## to the head**: the player picked that gene, and four seconds of reading is
+## not a reason to take it off them. It is a redraw and not a rebuild -- nothing
+## in the genome changed -- so the chip under a resting mouse keeps its hover
+## and the keyboard stays where it was.
+##
+## **Only a committable selection lapses.** The timeout exists to make sure a
+## slot left armed is not a trap; a selection with nothing in hand behind it is
+## not a trap, it is a player reading a sentence, and four seconds is not long
+## enough to read one twice.
 func _step_arming() -> void:
-	# **Nothing lapses while a gesture is in flight.** A lapse rebuilds the
-	# strand, which frees the locus the drag came out of and the one under the
-	# pointer -- and four seconds is an easy hold for a thumb that is choosing
-	# between seven destinations.
+	# **Nothing lapses while a gesture is in flight.** A rebuild frees the chip
+	# a drag came out of and the one under the pointer -- and four seconds is an
+	# easy hold for a thumb that is choosing between seven destinations.
 	if _dragging != SLOT_NONE:
 		return
 	# **A finger already down counts as a gesture in flight**, and this one was
 	# found by posing the move at 2400x1080, where the renderer is slow enough
 	# that the wall clock outran the harness's own clock. A press lands on an
-	# armed locus, the four seconds run out before the finger has moved the ten
-	# pixels Godot needs to call `_get_drag_data`, the lapse rebuilds the strand
-	# and frees the control the press landed on -- and the drag can never start.
-	# The player's finger is on the strand and the gesture silently does
-	# nothing, which is the same failure the select-redraws change fixed at the
-	# other end. The window is narrow (the press has to land in the last frames
-	# of the timeout) and the cure is one line: a strip with a finger on it is
-	# not a strip left armed, which is the only thing the timeout is for.
+	# armed slot, the four seconds run out before the finger has moved the ten
+	# pixels Godot needs to call `_get_drag_data`, a rebuild frees the control
+	# the press landed on -- and the drag can never start. The cure is one line:
+	# a slot with a finger on it is not a slot left armed.
 	if _primed != SLOT_NONE:
 		return
-	# **A new head is a new decision** (#118): it lapsed, or it was eaten again
-	# and went to the back, and the gene now first in line has never been on
-	# this strip. Back to the sample, and the strip rebuilt around it -- the
-	# same answer a lapsed arm gets below. Only reachable in a pond, where the
-	# menu stops nothing; paused, nothing moves the queue but a placement,
-	# which rebuilds for itself.
-	if _genome.held_sample != _strip_head:
-		_select_default()
+	# **A genome that changed under the screen is a new picture, and sometimes
+	# a new decision** (#118): the gene in hand lapsed and the head goes in hand;
+	# a gene behind it lapsed or a new one arrived, and the hand stays, because
+	# the gene the player picked is still the one they are placing; a slot armed
+	# over a gene that changed is disarmed. Only reachable in a pond, where the
+	# menu stops nothing. See [method _catch_up].
+	if _catch_up():
 		_build_genome_strip()
 		return
 	if not _committable(_armed):
 		return
 	if Time.get_ticks_msec() - _armed_at < ARM_TIMEOUT_MS:
 		return
-	_select_default()
-	_build_genome_strip()
+	_armed = SLOT_SAMPLE
+	_armed_at = Time.get_ticks_msec()
+	_redraw_figure()
+	_update_explain()
+	_update_hint()
+
+
+## **The wilt, kept moving** (dna-body.md §5): the tray is redrawn while any
+## waiting gene is inside its last [constant Cilia.HELD_WILT] seconds, so its
+## halos fade on the vesicle's clock. A pond only -- single player stops every
+## clock while this screen is open, and redrawing a still picture is waste.
+func _step_tray() -> void:
+	for gene: StringName in _strip_waiting:
+		if _genome.waiting_left(gene) < Cilia.HELD_WILT:
+			for child in _tray.get_children():
+				(child as CanvasItem).queue_redraw()
+			return
+
+
+## **The tray never shrinks while the screen is open** (dna-body.md §5). Four
+## genes fit beside the caption and a fifth wraps, so placing the fifth would
+## otherwise pull the whole figure 56 px up under the finger that just placed
+## it. Whatever height the tray reaches is held until the screen opens again,
+## which is where [method _set_menu] lets it go.
+func _latch_tray() -> void:
+	if _tray.size.y > _tray.custom_minimum_size.y:
+		_tray.custom_minimum_size.y = _tray.size.y
 
 
 # ---------------------------------------------------------------------------
 # Choosing a daughter (docs/design/choosing.md)
 #
 # **Two vertical strands, one outboard of each daughter, drawn by the same code
-# as the pause screen's horizontal one.** The owner's ask was that the choice be
+# the pause screen's chips are** -- `Cilia.draw_weave`, its lens and its rungs.
+# The pause screen drew a horizontal strand of its own until it drew the body
+# instead (dna-body.md); this screen keeps its strands for now, and §9 there is
+# why and what comes next. The owner's ask was that the choice be
 # readable: the two bodies already draw what each daughter *wears*, and the one
 # thing they cannot draw is what she *carries* -- a gene that lost its
 # expression roll is still in her DNA and rolls again in her own daughters. A
@@ -4335,9 +4797,10 @@ func _step_arming() -> void:
 # vocabulary is `dna-strand.md`'s, unchanged: hue is the gene, a rung is a copy,
 # a full rung is worn and a floating bar is carried, the dart is the arc, the
 # word is the plain verb, the lens fills on the locus being read. **The player
-# learns all of that on the pause screen and spends it here.** The only new mark
-# is the caret (§6), and it exists because the expression roll would otherwise
-# be indistinguishable from the mutation.
+# learns all of that on the pause screen and spends it here** -- all but the
+# dart, which the pause screen no longer draws: there the arc is where the chip
+# sits on the body. The only new mark is the caret (§6), and it exists because
+# the expression roll would otherwise be indistinguishable from the mutation.
 #
 # Three things about the geometry are worth stating rather than deriving:
 #
@@ -4348,8 +4811,8 @@ func _step_arming() -> void:
 #   dart, no rungs, no word -- because locus *i* has to sit at the same canvas y
 #   on both sides or the comparison stops being a horizontal scan, and that scan
 #   is the whole mechanism.
-# - **One lobe per locus, at 48 px.** The pause strand is 800 canvas px wide and
-#   the space beside a daughter is 335; it does not fit at either shape, so the
+# - **One lobe per locus, at 48 px.** The pause strand was 800 canvas px wide and
+#   the space beside a daughter is 335; it did not fit at either shape, so the
 #   pitch shrinks and the lobe count with it. A locus must begin and end at a
 #   crossing with its centre at maximum separation, which needs an odd count --
 #   and one is odd. At 48 : 36 the lens is 1.33:1, between the 2.67:1 that
@@ -4374,8 +4837,8 @@ const CHOOSE_LOCI := 7
 ## One locus, along the strand, and therefore one lobe of the weave.
 const CHOOSE_PITCH := 48.0
 ## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
-## than starting mid-lens. One each, against the pause strand's two, because
-## there is no held sample to park off the head of this one.
+## than starting mid-lens. One each, against the old pause strand's two,
+## because there is no held sample to park off the head of this one.
 const CHOOSE_CAP_LOBES := 1
 ## **124 and not 118.** Rendered at 118, `armor` -- five letters at
 ## `LABEL_SIZE` -- ran one pixel past the block's own edge, which collides with
@@ -4419,10 +4882,11 @@ const CHOOSE_COLUMN_TOP := 112.0
 ## is this strand" the same question, and every gesture on this screen -- the
 ## whole of [method _input] included -- assumes they are.
 const CHOOSE_SEAT := 232.0
-## The weave's axis and its swing, inside the block. The swing is the pause
-## strand's own [constant HELIX_AMP]: same helix, different pitch.
+## The weave's axis and its swing, inside the block. The swing is the one the
+## pause strand had before the pause screen drew the body (dna-body.md): same
+## helix, different pitch, and kept so this screen did not change with it.
 const CHOOSE_HELIX_MID := 34.0
-const CHOOSE_HELIX_AMP := HELIX_AMP
+const CHOOSE_HELIX_AMP := 18.0
 ## Left to right inside a block: the caret, the weave at 16 .. 52, the dart, the
 ## word. The word gets everything from [constant CHOOSE_WORD_X] to the block's
 ## edge.
@@ -4590,7 +5054,7 @@ func _update_choosing() -> void:
 ## first locus that does, and redraw everything.
 ##
 ## **The screen opens with a locus already selected**, which is the pause
-## strand's own *never nothing* rule -- a surface that opens blank has to teach
+## screen's own *never nothing* rule -- a surface that opens blank has to teach
 ## the tap with a line of instructions, and normal mode is allowed exactly one
 ## authored string. The locus it opens on is the first the two daughters
 ## disagree at, because that is the locus that most wants reading and it
@@ -4802,7 +5266,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 ## [method _unhandled_input]: with every `accept_event()` deleted, a press held
 ## on a locus and a press plus three drags both still leave the run in CHOOSING.
 ## It is kept anyway, for two reasons and neither is superstition. It is this
-## file's own precedent -- `PauseTap` and the pause strand's loci both consume
+## file's own precedent -- `PauseTap` and the pause screen's slots both consume
 ## their own press explicitly -- and the thing it is guarding is the one
 ## irreversible action in the game, which should not rest on which of two engine
 ## mechanisms happens to fire first. What is *not* claimed is that it is what

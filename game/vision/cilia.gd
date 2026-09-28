@@ -622,6 +622,19 @@ static func _normal(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
 	return n.normalized() if n.length_squared() > 0.0 else fwd
 
 
+## **A point on the skin**, at ovoid parameter [param t] -- radians, 0 the nose
+## and +PI/2 starboard, the parameter every arc in this file is written in --
+## pushed [param lift] out along the analytic normal. For a caller that has to
+## meet a body exactly without drawing one: the pause screen's tethers end here
+## and the arc it lights is traced here (dna-body.md §2). One curve, so the
+## mark and the fringe it sits beside cannot drift apart.
+static func skin_point(at: Vector2, heading: float, r: float, t: float,
+		lift: float = 0.0) -> Vector2:
+	var fwd := Vector2(sin(heading), -cos(heading))
+	var stb := Vector2(cos(heading), sin(heading))
+	return _surface(at, fwd, stb, r, t) + _normal(fwd, stb, t) * lift
+
+
 # ---------------------------------------------------------------------------
 # The fringe. One draw_multiline per gene rather than one draw_polyline per
 # cilium: a tier-3 cell wears 82 of them and there are five cells in the water,
