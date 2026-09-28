@@ -55,6 +55,7 @@ const CellBody := preload("res://game/normal/cell.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
+const Afterglow := preload("res://game/mechanics/afterglow.gd")
 
 ## Canvas pixels per world unit. **The figure's, taken from the figure**, so the
 ## two can never drift apart -- see the header.
@@ -168,6 +169,8 @@ var driven := false
 
 var _cell: CellBody = null
 var _food: FoodField = null
+## A sweep's hits, held and fading (beam-levels.md §4.3).
+var _glow := Afterglow.new()
 @onready var _marks: Control = $Marks
 
 
@@ -191,6 +194,10 @@ func setup(cell: CellBody, food: FoodField) -> void:
 ## under exactly the same conditions; `normal_mode.gd` owns the switch.
 func set_active(on: bool) -> void:
 	visible = on
+	if not on:
+		# Held marks are claims about a moment; one that was hidden through a
+		# pause or full vision is stale when it comes back.
+		_glow.clear()
 
 
 ## **Which part of the screen the marks are drawn in.** The whole viewport in
@@ -205,9 +212,10 @@ func set_frame(rect: Rect2) -> void:
 	_marks.queue_redraw()
 
 
-func _process(_delta: float) -> void:
+func _process(delta: float) -> void:
 	if not visible:
 		return
+	_catch_hits(delta)
 	_marks.queue_redraw()
 
 
@@ -247,22 +255,58 @@ func _draw_marks() -> void:
 ## and this is the register with room to say so.
 func _draw_pointers(centre: Vector2) -> void:
 	var tone := Cilia.hue(&"ocellus")
+	# **A sweep draws what it has held** (beam-levels.md §4.3): every hit of the
+	# last pass, where the body was when the ray crossed it, fading until the
+	# ray comes back. This frame's hits are the newest of them.
+	var life := _food.beam_hold
+	if life > 0.0:
+		for i in _glow.count():
+			var rel := _glow.point(i) - _cell.position
+			_draw_pointer(centre, _cell.bearing_to(_glow.point(i)), rel.length(),
+				tone, _glow.strength(i, life))
+		return
 	for beam: Array in _food.beams:
 		if not bool(beam[2]):
 			continue
 		# `beam[1]` is how far along the ray the surface was, from the centre of
 		# this body -- not the beam's range, which is what it holds when nothing
 		# was hit and `beam[2]` is false.
-		var distance := float(beam[1])
-		var at := centre + _ray(float(beam[0])) * distance * SCALE
-		var vis := _edge_fade(at) * smoothstep(
-			_cell.radius * POINT_SKIN, _cell.radius * POINT_CLEAR, distance)
-		if vis <= 0.0:
+		_draw_pointer(centre, float(beam[0]), float(beam[1]), tone, 1.0)
+
+
+## One mark, [param distance] out along [param bearing], at [param fade] of its
+## full strength.
+func _draw_pointer(centre: Vector2, bearing: float, distance: float, tone: Color,
+		fade: float) -> void:
+	var at := centre + _ray(bearing) * distance * SCALE
+	var vis := fade * _edge_fade(at) * smoothstep(
+		_cell.radius * POINT_SKIN, _cell.radius * POINT_CLEAR, distance)
+	if vis <= 0.0:
+		return
+	_marks.draw_circle(at, POINT_HALO, Color(tone, POINT_HALO_ALPHA * vis),
+		true, -1.0, true)
+	_marks.draw_circle(at, POINT_CORE, Color(tone, POINT_CORE_ALPHA * vis),
+		true, -1.0, true)
+
+
+## **A sweep's hits, caught as they happen**, in the water's own coordinates so
+## they stay where the body was while this cell turns and moves. A fan that does
+## not sweep holds nothing: its rays never leave, so this frame's hits are the
+## whole truth.
+func _catch_hits(delta: float) -> void:
+	if _cell == null or _food == null:
+		return
+	var live := driven or (_food.is_processing() and _food.in_water)
+	var life := _food.beam_hold if live else 0.0
+	_glow.step(delta, life, _cell.position)
+	if life <= 0.0:
+		return
+	for beam: Array in _food.beams:
+		if not bool(beam[2]):
 			continue
-		_marks.draw_circle(at, POINT_HALO, Color(tone, POINT_HALO_ALPHA * vis),
-			true, -1.0, true)
-		_marks.draw_circle(at, POINT_CORE, Color(tone, POINT_CORE_ALPHA * vis),
-			true, -1.0, true)
+		var bearing := float(beam[0])
+		_glow.add(_cell.position + (_cell.forward() * cos(bearing)
+			+ _cell.starboard() * sin(bearing)) * float(beam[1]))
 
 
 ## **The wave.** The wavefront of the pulse currently in flight, expanding out of

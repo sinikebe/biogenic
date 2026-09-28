@@ -60,7 +60,12 @@ const CAPACITY := SECONDS * RATE
 ## STRIDE] adding up, and the replay reads the same constants.
 const BODIES := FoodField.COUNT
 const MOTES := MotesField.COUNT
-const BEAMS := 3
+## **Twenty-four rays a frame**, not three: past its fork the beam grows a ray a
+## level (beam-levels.md §7). That is 63 more floats a frame than three -- about
+## 0.9 MB more ring over the minute -- and the ring lives in RAM and is never
+## saved, so no older recording has to be read. A fan wider than this, which is
+## tens of hours of use away, keeps its hits first and drops misses.
+const BEAMS := 24
 
 ## player: pos, heading, velocity, radius, wound, steer
 const AT_PLAYER := 0
@@ -72,7 +77,7 @@ const BODY_FLOATS := 6
 const AT_MOTES := AT_BODIES + BODIES * BODY_FLOATS
 ## The membrane, as uniforms. signal_bus.gd is the only file that knows which.
 const AT_MEMBRANE := AT_MOTES + MOTES * 2
-## 3 x (bearing, distance, hit)
+## 24 x (bearing, distance, hit)
 const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
 ## **The ping, out and back.** Two outgoing fronts and four returning echoes,
@@ -281,12 +286,13 @@ func capture(delta: float) -> void:
 		_ring[at + AT_BEAT] = _bus.pulse()
 
 	var beam_at := at + AT_BEAMS
+	var kept := _kept_beams()
 	for slot in BEAMS:
 		var hit := 0.0
 		var bearing := 0.0
 		var distance := 0.0
-		if _food != null and slot < _food.beams.size():
-			var beam: Array = _food.beams[slot]
+		if slot < kept.size():
+			var beam: Array = _food.beams[kept[slot]]
 			bearing = float(beam[0])
 			distance = float(beam[1])
 			hit = 1.0 if bool(beam[2]) else 0.0
@@ -381,6 +387,31 @@ func _capture_division(at: int) -> void:
 	_ring[at + AT_COMMIT] = commit
 
 
+## **Which of the field's beams get a slot**, in the field's own order while
+## they fit -- a slot has to be the same ray frame after frame, or playback
+## would lerp one ray's bearing into another's. Only a fan wider than
+## [constant BEAMS] is reordered, hits first, so what it found survives.
+func _kept_beams() -> PackedInt32Array:
+	var out := PackedInt32Array()
+	if _food == null:
+		return out
+	var total: int = _food.beams.size()
+	if total <= BEAMS:
+		for i in total:
+			out.append(i)
+		return out
+	for i in total:
+		if bool(_food.beams[i][2]):
+			out.append(i)
+	for i in total:
+		if out.size() >= BEAMS:
+			break
+		if not bool(_food.beams[i][2]):
+			out.append(i)
+	out.resize(mini(out.size(), BEAMS))
+	return out
+
+
 # ---------------------------------------------------------------------------
 # What the floats cannot carry. Genomes are dictionaries and layouts are
 # arrays; both change in steps and rarely, so they are recorded when they
@@ -412,6 +443,9 @@ func _watch_state() -> void:
 				"worn": _genome.body_layout(),
 				"bonus": _genome.bonus_slots,
 				"sample": _genome.held_sample,
+				# **The lineage's levels** (beam-levels.md §7): what the beam's
+				# shape and a sweep's hold are read off at playback.
+				"levels": _genome.level_state(),
 			}])
 	if _food != null:
 		var cells: Array = _food.bodies()
@@ -468,6 +502,14 @@ func _sign_genome() -> int:
 	var order: Array = _genome.layout()
 	for slot in order.size():
 		sig += (order[slot] as StringName).hash() * (slot + 7)
+	# **A level, not its experience.** Experience moves every second the beam
+	# touches something, and a delta a second is a delta nobody needs; what
+	# playback reads is the shape, which moves on a level or a path.
+	var levels: Dictionary = _genome.levels()
+	for gene: StringName in levels:
+		var grown: RefCounted = levels[gene]
+		sig += gene.hash() * (int(grown.effective_level()) + 13) * 307
+		sig += StringName(grown.path).hash() * 17
 	return sig
 
 

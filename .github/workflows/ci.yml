@@ -291,6 +291,29 @@ jobs:
             exit 1
           fi
 
+      - name: Check the levels
+        # docs/design/beam-levels.md: the arithmetic and the bookkeeping of a
+        # gene's level -- the curve, the fork, what a daughter inherits, what a
+        # level costs, a sweep that a slow phone must not cross with gaps in it,
+        # and a skip that must not change what a ray hits. None of it shows in a
+        # render, and a player would find a fault in it an hour into a run.
+        # Grepped, not trusted to the exit code, for the reason the Back probe
+        # gives.
+        run: |
+          set -uo pipefail
+          out=$(~/godot/godot --headless --path . res://tools/levels_probe.tscn 2>&1) || true
+          grep -E "^\[levels-probe\]" <<< "$out" || true
+          if ! grep -q "^\[levels-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a level, a price or the fan is wrong -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the levels probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the LAN session
         # Two sessions in ONE headless process, talking ENet over loopback: a
         # guest through a SceneMultiplayer bound to its own subtree with

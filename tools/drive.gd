@@ -240,6 +240,15 @@ extends Node
 ##                           1 starboard flank, 2 astern, 3 and 4 the forward
 ##                           diagonals, 5 and 6 the rear ones. That is how a
 ##                           beam gets aimed.
+##   --level=<g:level[:path],...>
+##                           pose a levelled gene's level and the path it took
+##                           at its fork (docs/design/beam-levels.md), e.g.
+##                           ocellus:8:sweep or ocellus:6:extend. Its experience
+##                           is set to where that level starts; a path needs a
+##                           level at or past the fork. Applied after --genome=,
+##                           --dna= and --body=, so the gene has to be in one.
+##                           Levels are earned by use, and level 8 is most of an
+##                           hour of it, so this is the only way to photograph one
 ##   --check-seeding=<n>     reseed the field n times and print what §1.3's
 ##                           distribution actually produces, including whether
 ##                           the drifter floor ever fails. Quits when done.
@@ -608,6 +617,7 @@ var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
 var _body_spec := ""
+var _level_spec := ""
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -947,6 +957,8 @@ func _ready() -> void:
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--dna="):
 			_dna_spec = text.trim_prefix("--dna=")
+		elif text.begins_with("--level="):
+			_level_spec = text.trim_prefix("--level=")
 		elif text.begins_with("--body="):
 			_body_spec = text.trim_prefix("--body=")
 		elif text.begins_with("--check-seeding="):
@@ -1144,6 +1156,12 @@ func _ready() -> void:
 		_force_dna(_dna_spec)
 	if _body_spec != "" and _genome != null:
 		_force_body(_body_spec)
+	# --dna= and --body= write the registers behind the genome's back, so its
+	# levels are put back in step with them before anything reads a level.
+	if (_dna_spec != "" or _body_spec != "") and _genome != null:
+		_genome.call("_tend_levels")
+	if _level_spec != "" and _genome != null:
+		_force_levels(_level_spec)
 	if _sample != &"" and _genome != null:
 		_genome.held_sample = &""
 		for one: Array in _samples:
@@ -1961,6 +1979,9 @@ func _fingerprint_state() -> Array:
 		out.append(cell.get(key) if cell != null else null)
 	if _genome != null:
 		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout()])
+		# The levels, experience and all: a beam that earned one point more is
+		# a different run.
+		out.append(_genome.level_state())
 		# Every waiting gene at full width: its copies and its own clock, not
 		# the trace's one decimal.
 		for gene: StringName in _genome.waiting():
@@ -2384,6 +2405,17 @@ func _step_trace(delta: float) -> void:
 		_metabolism.hunger if _metabolism != null else 0.0, _field_meals,
 		100.0 * _dread_seconds / maxf(_run_seconds, 0.001),
 		_dread_area / maxf(_run_seconds, 0.001)])
+	# **The levels** (beam-levels.md): what each levelled gene works at, what it
+	# has earned, and how many rays and bodies the beam has this frame -- the
+	# line the run that sets `BEAM_XP_STEP` is read off.
+	if _genome != null:
+		for gene: StringName in _genome.levels():
+			var grown: RefCounted = _genome.levels()[gene]
+			print("        level %s %d (works at %d, path %s)  xp %.1f  next in %.1f  rays %d  touched %d" % [
+				gene, int(grown.call("level")), _genome.level_of(gene),
+				_genome.path_of(gene), float(grown.get("xp")),
+				float(grown.call("to_next")), _food.beams.size(),
+				_food.beam_touched.size()])
 	for i in _food.points().size():
 		print("        cell %d  %s" % [i, _field_text(i, cell)])
 
@@ -3182,6 +3214,30 @@ func _force_body(spec: String) -> void:
 	_genome.set("_body_slots", seats)
 	print("[drive] body forced to %s at %s (dna stays %s)" % [
 		_genome_text(tiers), seats, _genome_text(_genome.dna())])
+
+
+## **A level and a path, posed** (beam-levels.md): `gene:level[:path]`. The
+## experience is set to where that level starts, and the path is taken the way
+## the pause screen takes it, so a path before the fork is refused here exactly
+## as it would be there.
+func _force_levels(spec: String) -> void:
+	for pair in spec.split(",", false):
+		var bits := str(pair).split(":")
+		var gene := StringName(bits[0].strip_edges())
+		var grown: RefCounted = _genome.progression(gene)
+		if grown == null or bits.size() < 2:
+			print("[drive] --level=: %s has no level to pose" % pair)
+			continue
+		var at := maxi(int(bits[1]), 1)
+		grown.set("xp", grown.call("xp_at", at, float(grown.get("step"))))
+		if bits.size() >= 3 and bits[2].strip_edges() != "":
+			var path := StringName(bits[2].strip_edges())
+			if not bool(_genome.choose(gene, path)):
+				print("[drive] --level=: %s refused path %s at level %d" % [
+					gene, path, at])
+		print("[drive] %s posed at level %d (works at %d), path %s, upkeep %.2f" % [
+			gene, int(grown.call("level")), _genome.level_of(gene),
+			_genome.path_of(gene), _genome.upkeep()])
 
 
 ## `cytostome:3,cirrus:2` into `[{gene: tier}, layout]`. `gene:tier` as before,

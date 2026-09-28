@@ -27,6 +27,7 @@ extends Node
 const Panes := preload("res://game/replay/panes.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
@@ -173,6 +174,9 @@ func _write_state() -> void:
 		# It still costs no ring floats: a delta is a dictionary.
 		_food.ping_bearing = _ping_bearing()
 		_food.ping_through = _cell.ping_through() if _cell != null else 0.0
+		# **How long a sweep's hits are held**, off the restored level and path
+		# (beam-levels.md §7), so both panes fade them as the run did.
+		_food.beam_hold = _beam_hold()
 		# **Before the world pane draws**, which is what `process_priority`
 		# -10 buys: `vision.gd` asks the field who is hunting and draws the
 		# three predator rings round the answer. Rounded rather than cast --
@@ -199,6 +203,16 @@ func _write_state() -> void:
 ## because a cell with no `ampulla` has no reach and no pulse in flight.
 func _ping_bearing() -> float:
 	return Cilia.bearing_of(_genome, &"ampulla")
+
+
+## The revisit time of the beam being watched, 0 for a fan that does not sweep
+## -- the same number `normal_mode.gd` hands the field live.
+func _beam_hold() -> float:
+	if _cell == null:
+		return 0.0
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
+	return RayFan.revisit_of(int(shape[0]), deg_to_rad(float(shape[1])),
+		deg_to_rad(float(shape[2])))
 
 
 func _read_beams() -> Array:
@@ -302,6 +316,7 @@ func _apply_deltas() -> void:
 					# worn on. docs/design/replay.md §4.1.
 					_genome.express(state["dna"], state["order"],
 						state["body"], state["worn"])
+					_genome.restore_levels(state.get("levels", {}))
 					_genome.bonus_slots = int(state["bonus"])
 					_genome.held_sample = state["sample"]
 			RecorderNode.Delta.BODY:

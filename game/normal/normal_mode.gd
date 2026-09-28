@@ -49,6 +49,12 @@ const NetSession := preload("res://game/net/net_session.gd")
 ## **The shared pond on the wire** (shared-pond.md §3). Built only by a run that
 ## began inside a session; a solo run never makes one.
 const Pond := preload("res://game/net/pond.gd")
+## **The beam's fan, and the count that earns it levels** (beam-levels.md). Both
+## are general pieces that know nothing about eyes; this file is the edge that
+## gives them a gene, because it is the one with the genome, the field and
+## cilia.gd's arc table all in reach.
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
+const Tally := preload("res://game/mechanics/tally.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -451,6 +457,20 @@ var _death_clock := 0.0
 var _death_loud := true
 var _vision_cut := false
 
+# --- The beam (beam-levels.md) ----------------------------------------------
+## Where the beam's rays are and what arc each crossed this frame. Kept from
+## frame to frame because a sweep is a place in a cycle.
+var _beam_fan := RayFan.new()
+## Different bodies the beam touched this second, which is its experience.
+var _beam_tally := Tally.new(CellBody.BEAM_XP_CAP)
+## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
+## is only lit once a pass stays on the skin and fades over the revisit time,
+## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes
+## them, and how long ago that hit was.
+var _beam_held := 0.0
+var _beam_held_bearing := 0.0
+var _beam_held_age := 0.0
+
 # --- The division -----------------------------------------------------------
 var _split := Split.NONE
 var _split_clock := 0.0
@@ -731,8 +751,7 @@ func _process(delta: float) -> void:
 	var venom := mini(_cell.extra(&"toxicyst"),
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
-	_food.beam_range = _cell.beam_range()
-	_food.beam_bearings = _beam_bearings()
+	_aim_beam(delta)
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.
@@ -785,9 +804,12 @@ func _process(delta: float) -> void:
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
-	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"chemocyte"),
-		_cell.extra(&"ampulla"))
-	_post_beam()
+	# The beam's by its level, held to the three rungs the membrane's lobe
+	# widths are written for; the other two are still their copies.
+	_bus.sense_organs(mini(_cell.beam_level(), CellBody.BEAM_FORK_LEVEL),
+		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
+	_post_beam(delta)
+	_earn_beam(delta)
 	_post_pings()
 	_tell_others()
 	# `palp`: something solid, right there, felt with no light at all.
@@ -819,26 +841,63 @@ func _process(delta: float) -> void:
 		_begin_split()
 
 
-## Which way this cell's beams look. **The slot is the arc and the arc is the
-## bearing** -- that is the whole of placement mattering, and it is resolved
-## here because this file has both the genome and cilia.gd's arc table. cell.gd
-## cannot: cilia.gd preloads genome.gd, which preloads cell.gd, so a preload
-## back the other way would be a cycle GDScript will not resolve.
-func _beam_bearings() -> PackedFloat32Array:
-	var out := PackedFloat32Array()
-	var tier := mini(_cell.extra(&"ocellus"), CellBody.BEAM_COUNT_BY_TIER.size() - 1)
-	var count := CellBody.BEAM_COUNT_BY_TIER[tier]
-	if count <= 0:
-		return out
+## **Where this cell's beams look, and the arc each one crossed this frame.**
+## The slot is the arc and the arc is the bearing -- that is the whole of
+## placement mattering, and it is resolved here because this file has both the
+## genome and cilia.gd's arc table. cell.gd cannot: cilia.gd preloads
+## genome.gd, which preloads cell.gd, so a preload back the other way would be
+## a cycle GDScript will not resolve.
+##
+## The fan's shape is the beam's level and path (cell.gd's `beam_shape`); the
+## fan works out where each ray is; this adds where the organ is worn. The field
+## is handed each sweeping ray's arc as well as its bearing, because a sweep has
+## to be tested across everything it crossed (beam-levels.md §4.3), and the
+## fan's middle and half-width, so it can skip bodies nowhere near it (§4.4).
+func _aim_beam(delta: float) -> void:
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
 	var slot := _genome.slot_of(&"ocellus")
-	if slot < 0:
-		return out
+	_food.beam_range = float(shape[3])
+	var bearings := PackedFloat32Array()
+	var arcs := PackedFloat32Array()
+	if int(shape[0]) <= 0 or slot < 0:
+		_food.beam_bearings = bearings
+		_food.beam_arcs = arcs
+		_food.beam_hold = 0.0
+		_food.beam_fan_half = -1.0
+		return
+	var half := deg_to_rad(float(shape[1]))
+	_beam_fan.configure(int(shape[0]), half, deg_to_rad(float(shape[2])))
+	_beam_fan.step(delta)
 	var middle := Cilia.slot_bearing(slot)
-	var fan := deg_to_rad(CellBody.BEAM_FAN_DEG_BY_TIER[tier])
-	for i in count:
-		var u := 0.0 if count < 2 else -1.0 + 2.0 * float(i) / float(count - 1)
-		out.append(wrapf(middle + u * fan, -PI, PI))
-	return out
+	var offsets := _beam_fan.offsets()
+	var low := _beam_fan.arc_low()
+	var high := _beam_fan.arc_high()
+	var hold := _beam_fan.revisit()
+	for i in offsets.size():
+		bearings.append(wrapf(middle + offsets[i], -PI, PI))
+		if hold > 0.0:
+			arcs.append(wrapf(middle + low[i], -PI, PI))
+			arcs.append(wrapf(middle + high[i], -PI, PI))
+	_food.beam_bearings = bearings
+	_food.beam_arcs = arcs
+	_food.beam_hold = hold
+	_food.beam_fan_mid = middle
+	_food.beam_fan_half = half
+
+
+## **The beam's experience** (beam-levels.md §2): one for every different body
+## its rays touched in a second, capped, and only while this body wears it.
+## Every body counts -- food, a hunter, a sister, the other player -- because
+## the beam's job is to find surfaces, not to judge them.
+func _earn_beam(delta: float) -> void:
+	if _cell.extra(&"ocellus") <= 0:
+		_beam_tally.reset()
+		return
+	for index: int in _food.beam_touched:
+		_beam_tally.touch(index)
+	var earned := _beam_tally.step(delta)
+	if earned > 0:
+		_genome.earn(&"ocellus", float(earned))
 
 
 ## Which way a directional organ looks: the bearing of the arc it is worn on,
@@ -849,10 +908,15 @@ func _slot_bearing_of(gene: StringName) -> float:
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow
-## lobe left in the shader and three beams at tier 3, so they compete rather
+## lobe left in the shader and many rays past the fork, so they compete rather
 ## than sum -- the closest surface is the one worth telling a blind cell about.
 ## Full vision draws all of them, which is what full vision is for.
-func _post_beam() -> void:
+##
+## **A sweep's hit is held**, fading over the time the sweep takes to come back
+## (beam-levels.md §4.3): a ray that passes a body once a pass would otherwise
+## light the skin for one frame in thirty. A nearer hit takes over at once. A
+## fixed fan's hold is 0, and then this is the post it always was.
+func _post_beam(delta: float) -> void:
 	var best := 0.0
 	var bearing := 0.0
 	var reach := _food.beam_range
@@ -863,6 +927,20 @@ func _post_beam() -> void:
 		if near > best:
 			best = near
 			bearing = float(beam[0])
+	var hold := _food.beam_hold
+	if hold > 0.0:
+		_beam_held_age += delta
+		var fading := _beam_held * clampf(1.0 - _beam_held_age / hold, 0.0, 1.0)
+		if best >= fading and best > 0.0:
+			_beam_held = best
+			_beam_held_bearing = bearing
+			_beam_held_age = 0.0
+		else:
+			best = fading
+			bearing = _beam_held_bearing
+	else:
+		_beam_held = 0.0
+		_beam_held_age = 0.0
 	_bus.beam(bearing, best)
 
 
@@ -1322,7 +1400,11 @@ func _be_born() -> void:
 	# placed yet goes with her, still waiting** (#118) -- `express()` empties
 	# the queue, so it is taken first and handed back after.
 	var carried := _genome.take_waiting()
-	_genome.express(pick["tiers"], pick["order"], pick["body"])
+	# **And her mother's levels** (beam-levels.md §3): a copy of each one for a
+	# gene in her own DNA, grown or not. The same copies her sister would have
+	# had, so which daughter is chosen never changes a level.
+	_genome.express(pick["tiers"], pick["order"], pick["body"], null,
+		_genome.levels())
 	_genome.carry(carried)
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
