@@ -53,6 +53,8 @@ Everything below was built in the working tree, photographed at 1280x720 **and**
 
 ## 2. Two strands
 
+> Superseded by `dna-body.md`, which draws the body register as the body.
+
 ### 2.1 Why it is two strands and not a mark
 
 `genome.gd` already holds the two registers and already answers both questions:
@@ -511,6 +513,8 @@ nothing to aim, and one who has is told by that gene's own line.
 ---
 
 ## 6. It does not fit, so the column changes shape
+
+> Superseded by `dna-body.md` §7, which gives the settings a column of their own.
 
 Measured on the shipped build, through `get_global_rect()` on a paused
 `normal_mode` with seven loci, **identical at 1280x720 and 2400x1080**:

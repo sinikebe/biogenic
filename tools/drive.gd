@@ -40,11 +40,13 @@ extends Node
 ##                           quit under this flag -- that is the point of it
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
 ##                           esc, enter, up, down, left, right, tab, v, and the
-##                           two chords shift-left / shift-right. The chords
-##                           exist because the strand's move is `Shift`+arrow
-##                           read as a **raw** key -- a content pack cannot add
-##                           an InputMap action -- so nothing else in this
-##                           harness could reach it.
+##                           four chords shift-left / shift-right / shift-up /
+##                           shift-down. The chords exist because the genome
+##                           screen's move is `Shift`+arrow read as a **raw**
+##                           key -- a content pack cannot add an InputMap
+##                           action -- so nothing else in this harness could
+##                           reach it. On the ring of slots all four go
+##                           somewhere (dna-body.md §6).
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
 ##                           repeatable. This is how the genome strip's two-tap
@@ -209,9 +211,17 @@ extends Node
 ##   --dna=<g:t[:slot],...>  force the player's DNA only, leaving the body it is
 ##                           wearing alone. That is the state a cell reaches by
 ##                           eating -- lifecycle.md §1 -- and the one the pause
-##                           strip's three pip states exist to show, so it is the
-##                           only way to photograph them without playing a whole
-##                           generation. Applied after --genome=.
+##                           screen's worn and carried marks exist to show, so it
+##                           is the only way to photograph them without playing a
+##                           whole generation. Applied after --genome=.
+##   --body=<g:t:slot,...>   force the player's **body** only -- what she wears
+##                           and on which arc -- leaving the DNA alone. The other
+##                           half of --dna=: a newborn whose DNA is longer than
+##                           what expressed, or a body that kept an organ its DNA
+##                           has since written over, is the state the pause
+##                           screen names with the body's own word (dna-body.md
+##                           §4), and it takes a whole division to reach by
+##                           playing. Every gene needs its slot. Applied last.
 ##   --genome=<g:t[:slot],...>
 ##                           force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
@@ -276,12 +286,14 @@ extends Node
 ##   --capture-cost=<secs>   print the recorder's rolling maximum microseconds
 ##                           per capture() on that interval. §4.6 asks for a
 ##                           measurement and refuses to accept the estimate
-##   --rects=<seconds>       print `get_global_rect()` for the pause column and
-##                           each of its groups, once, at that time. The column
-##                           is the one thing in this game measured in canvas
-##                           pixels rather than judged by eye -- docs/design/
-##                           moving-a-gene.md section 6 -- and a render cannot
-##                           show the rect of a container that draws nothing
+##   --rects=<seconds>       print `get_global_rect()` for the pause screen's two
+##                           columns and each of their groups, every slot chip
+##                           and every waiting gene, once, at that time. The
+##                           column is the one thing in this game measured in
+##                           canvas pixels rather than judged by eye --
+##                           docs/design/dna-body.md section 7 -- and a render
+##                           cannot show the rect of a container that draws
+##                           nothing
 ##   --controls=<seconds>    print what the drawn controls are being told to do
 ##                           on that interval: which of them is held, by which
 ##                           pointer, the steer they derive and whether they are
@@ -575,6 +587,7 @@ var _sister_spec := ""
 var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
+var _body_spec := ""
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -902,6 +915,8 @@ func _ready() -> void:
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--dna="):
 			_dna_spec = text.trim_prefix("--dna=")
+		elif text.begins_with("--body="):
+			_body_spec = text.trim_prefix("--body=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
@@ -1093,6 +1108,8 @@ func _ready() -> void:
 		_force_genome(_genome_spec)
 	if _dna_spec != "" and _genome != null:
 		_force_dna(_dna_spec)
+	if _body_spec != "" and _genome != null:
+		_force_body(_body_spec)
 	if _sample != &"" and _genome != null:
 		_genome.held_sample = &""
 		for one: Array in _samples:
@@ -2331,16 +2348,23 @@ func _step_rects() -> void:
 	if _rects_at < 0.0 or _clock < _rects_at or _run == null:
 		return
 	_rects_at = -1.0
-	var base := "Hud/Pause/Center/Buttons"
+	var base := "Hud/Pause/Center/Columns"
 	var paths := {
-		"Buttons": base,
+		"Columns": base,
+		"Side": base + "/Side",
+		"Settings": base + "/Side/Settings",
+		"Light": base + "/Side/Settings/Light",
+		"View": base + "/Side/Settings/View",
+		"Feel": base + "/Side/Settings/Feel",
+		"Resume": base + "/Side/Resume",
+		"Leave": base + "/Side/Leave",
 		"Genome": base + "/Genome",
-		"Settings": base + "/Settings",
-		"Light": base + "/Settings/Light",
-		"View": base + "/Settings/View",
-		"Feel": base + "/Settings/Feel",
-		"Resume": base + "/Resume",
-		"Leave": base + "/Leave",
+		"Caption": base + "/Genome/Caption",
+		"Waiting": base + "/Genome/Waiting",
+		"Figure": base + "/Genome/Figure",
+		"Explain": base + "/Genome/Explain",
+		"Hint": base + "/Genome/Hint",
+		"Act": base + "/Genome/Act",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -2351,6 +2375,20 @@ func _step_rects() -> void:
 		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)" % [
 			name, r.position.x, r.end.x, r.size.x,
 			r.position.y, r.end.y, r.size.y])
+	# Every chip on the figure, live or not, and every waiting gene: the touch
+	# targets themselves, which is what the 48 px rule is about.
+	for layer: String in ["/Genome/Figure/Slots", "/Genome/Waiting"]:
+		var holder := _run.get_node_or_null(base + layer)
+		if holder == null:
+			continue
+		for child in holder.get_children():
+			var chip := child as Control
+			if chip == null:
+				continue
+			var cr := chip.get_global_rect()
+			print("[rect]  %-18s x %7.1f .. %7.1f   y %6.1f .. %6.1f   %s" % [
+				chip.name, cr.position.x, cr.end.x, cr.position.y, cr.end.y,
+				"live" if chip.focus_mode == Control.FOCUS_ALL else "dead"])
 
 
 ## What the drawn controls are being told, straight off the node that owns
@@ -2719,6 +2757,8 @@ func _keycode(name: String) -> Key:
 		# locus reads the raw key. That makes this the only way to pose it.
 		"shift-left": return (KEY_LEFT | KEY_MASK_SHIFT) as Key
 		"shift-right": return (KEY_RIGHT | KEY_MASK_SHIFT) as Key
+		"shift-up": return (KEY_UP | KEY_MASK_SHIFT) as Key
+		"shift-down": return (KEY_DOWN | KEY_MASK_SHIFT) as Key
 		"v": return KEY_V
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
@@ -3025,7 +3065,7 @@ func _force_genome(spec: String) -> void:
 
 
 ## **The DNA without the body**, which is the state a cell reaches by eating and
-## the one the pause strip exists to show: the organism and the plan disagreeing.
+## the one the pause screen exists to show: the organism and the plan disagreeing.
 ## Reached by playing it is a whole generation of foraging, so it is posed here.
 ## Reaching for a private member is a thing only tools/ is allowed to do.
 func _force_dna(spec: String) -> void:
@@ -3034,6 +3074,27 @@ func _force_dna(spec: String) -> void:
 	_genome.set("_order", made[1])
 	print("[drive] dna forced to %s in %s (body stays %s)" % [
 		_genome_text(made[0]), made[1], _genome_text(_genome.tiers())])
+
+
+## **The body without the DNA**: what she wears, at what tier, and on which arc.
+## `gene:tier:slot`, and the slot is not optional -- a body's slot is where the
+## organ grew, and there is no layout to fall back on for one that is not the
+## DNA's. Private members again, and for the same reason as [method _force_dna].
+func _force_body(spec: String) -> void:
+	var tiers := {}
+	var seats := {}
+	for pair in spec.split(",", false):
+		var bits := str(pair).split(":")
+		if bits.size() < 3:
+			print("[drive] --body= needs gene:tier:slot, not %s" % pair)
+			continue
+		var gene := StringName(bits[0].strip_edges())
+		tiers[gene] = int(bits[1])
+		seats[gene] = int(bits[2])
+	_genome.set("_body", tiers)
+	_genome.set("_body_slots", seats)
+	print("[drive] body forced to %s at %s (dna stays %s)" % [
+		_genome_text(tiers), seats, _genome_text(_genome.dna())])
 
 
 ## `cytostome:3,cirrus:2` into `[{gene: tier}, layout]`. `gene:tier` as before,
