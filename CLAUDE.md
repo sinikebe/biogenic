@@ -5,36 +5,67 @@ repository's GitHub releases.
 
 ## Git workflow — no exceptions
 
-- **`main` is the only branch that matters.** Work is never left sitting on a
-  feature branch. Every task ends committed, pushed, and merged to `main`.
+Two branches matter, and each has one job.
+
+- **`dev` is where work lands.** Every task ends committed, pushed, and merged
+  into `dev` through a pull request, reviewed and CI-green -- the way work used
+  to land on `main`. Work is never left sitting on a feature branch.
+- **`main` is what players have.** Nothing reaches it but a release. When the
+  owner asks for one, the `release` skill (`.claude/skills/release/SKILL.md`)
+  opens a single pull request from `dev` to `main` and merges it, and
+  everything since the previous release ships together, under one patch note.
+  Never merge anything else into `main`, and never start a release the owner
+  did not ask for.
+- **`main` stays the repository's default branch.** `gh release create` tags a
+  release on the default branch's head, and the template's workflows take the
+  default branch to be the one players get. `release.yml` names `main` outright,
+  so switching could not send `dev` to players, but every release would be
+  tagged on the wrong commit.
 - **Never leave anything local.** Uncommitted or unpushed work does not exist.
-  A clean tree and a merged branch are the definition of done, not a tidy-up.
+  A clean tree and a branch merged into `dev` are the definition of done, not a
+  tidy-up.
+- **A pull request's squash title is a line of the next patch note.**
+  `ci/collect_changes.sh` builds a release's patch note from the subject line of
+  every commit since the previous release. So write the title for a player --
+  what changed for them, without the PR number. Title a change no player can
+  notice -- docs, CI, tooling, this workflow -- `chore: …`, and the note leaves
+  it out.
 - **Work that comes from an issue gets a pull request that closes it.** Open the
-  PR as though the branch had been created from the issue itself, and put a
-  `Closes #N` line in the body so merging closes the issue. Closing keywords are
-  only honoured when the PR targets the default branch — ours always do.
+  PR against `dev`, as though the branch had been created from the issue itself,
+  and put a `Closes #N` line in its body and in its squash commit message.
+  GitHub closes the issue when that commit reaches the default branch.
   The cross-repository form (`Closes owner/repo#N`) links the two, but closing
   still needs write access on that repository. We have none on the template, so
   a template issue is closed by hand over there — never by a merge here.
-- **Check for a pending launcher upgrade immediately before every merge.** Look
-  for an open `launcher-sync` pull request, or compare the `commit` in
-  `addons/launcher/.launcher-sync.json` against the template's `main`. If one is
-  waiting, do not merge past it: take the new launcher, re-test your own changes
-  against it, fix whatever broke, and merge the two together. Merging your work
-  first and syncing afterwards means the combination ships to players untested —
+- **Check for a pending launcher upgrade before every merge into `dev`, and
+  again before every release.** Look for an open `launcher-sync` pull request,
+  or compare the `commit` in `addons/launcher/.launcher-sync.json` against the
+  template's `main`. If one is waiting, do not merge past it: take the new
+  launcher into `dev`, re-test your own changes against it, fix whatever broke,
+  and merge the two together. A release never goes out past a pending upgrade --
   the launcher is most of what the app *is*, so "it worked before the sync" is
   not evidence about the release you are actually cutting.
 
 ### What a merge costs
 
-Merging to `main` **publishes a release to players.**
-`.github/workflows/release.yml` exports the APK, the Windows executable and both
-content packs, writes `manifest.json`, and publishes them as the latest release.
-Installed games pick it up on their next launch. There is no staging environment
-and no manual gate.
+**A merge into `dev` reaches the owner's dev app.** `release.yml` publishes every
+push to `dev` as the prerelease `branch-dev`: "Biogenic (dev)", a separate app
+with its own package id and its own saves, installed beside the game and
+updating itself from `dev` the way the players' game updates from `main`. That is
+where a change is tried on a device before any player has it -- a
+`binary_version` bump included, since installing over the top is the one step no
+local test covers. `/releases/latest/` never returns a prerelease, so no player
+is ever offered it.
 
-So the review happens *before* the merge. There is no "fix it in the next one"
-that does not also ship.
+**A release publishes to players.** Merging the release into `main` runs
+`.github/workflows/release.yml`: it exports the APK, the Windows executable and
+both content packs, writes `manifest.json`, and publishes them as the latest
+release. Installed games pick it up on their next launch. There is no manual
+gate after that merge.
+
+So the review happens *before* a change reaches `dev`, and the owner plays it on
+the dev app before it reaches `main`. There is no "fix it in the next one" that
+does not also ship.
 
 Bump `binary_version` in `version.json` in the same commit when a change cannot
 ship as a content pack: an engine upgrade, a new permission, a native plugin, a
@@ -91,13 +122,18 @@ could have fixed it either: no content pack can replace that file.
 ## Run it. Do not guess.
 
 Godot 4.7 runs here and `xvfb` is installed, so the project can be imported,
-booted and **photographed** locally. Install the editor once:
+booted and **photographed** locally. Install the editor the release CI pins,
+`GODOT_VERSION` in the workflows, checked against Godot's own sums -- and again
+whenever `~/godot/godot --version` prints anything else:
 
 ```
-curl -fsSL -o /tmp/godot.zip \
-  https://github.com/godotengine/godot/releases/download/4.7-stable/Godot_v4.7-stable_linux.x86_64.zip
-unzip -q -o /tmp/godot.zip -d /tmp/g && mkdir -p ~/godot
-mv /tmp/g/Godot_v4.7-stable_linux.x86_64 ~/godot/godot && chmod +x ~/godot/godot
+V=4.7.2-stable; Z=Godot_v${V}_linux.x86_64.zip
+U=https://github.com/godotengine/godot/releases/download/$V
+( d=$(mktemp -d) && cd "$d" && curl -fsSL -O "$U/$Z" -O "$U/SHA512-SUMS.txt" \
+  && grep " $Z\$" SHA512-SUMS.txt | sha512sum -c - && unzip -q "$Z" \
+  && mkdir -p ~/godot && mv "Godot_v${V}_linux.x86_64" ~/godot/godot \
+  && chmod +x ~/godot/godot )
+~/godot/godot --version    # 4.7.2.stable.official.ed1daf0bf
 ```
 
 Then import once, and screenshot any scene:

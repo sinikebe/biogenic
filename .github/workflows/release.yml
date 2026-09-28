@@ -4,30 +4,64 @@ name: Release
 # packs, then publishes them as a GitHub release together with the manifest the
 # in-app updater polls.
 #
-# Runs only on merges to main and on manual dispatch. Pull requests are handled
-# by ci.yml, which builds the same way but never sees a secret and never
-# publishes -- so a fork PR cannot reach the signing key.
+# Runs on merges to main, on pushes to dev, and on manual dispatch. Pull
+# requests are handled by ci.yml, which builds the same way but never sees a
+# secret and never publishes -- so a fork PR cannot reach the signing key.
+#
+# A push to main is a release, and every player gets it. main only ever receives
+# one: the pull request from dev that the `release` skill opens (CLAUDE.md, "Git
+# workflow"). Work lands on dev, and a push to dev publishes the dev app instead:
+# the rolling prerelease branch-dev, which /releases/latest/ never returns. The
+# dev app is a separate app -- its own package id, name and user:// -- because it
+# was exported for dev, and the stamp that gives it that identity is the one that
+# decides what it polls, so nothing built for main can reach it. The template's
+# docs/UPDATES.md, "Trying a change on a device before it ships", has the
+# mechanism.
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 # Read-only by default; the publish job opts into the one extra scope it needs.
 permissions:
   contents: read
 
+# Per-ref, so a push to dev does not queue behind a release to main. Still never
+# cancelled: two runs publishing to the same tag would race on its assets.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  GODOT_VERSION: "4.7"
+  GODOT_VERSION: "4.7.2"
   GODOT_RELEASE: stable
+  # Empty on main, which is what makes a release a release: prepare_build.sh and
+  # publish_release.sh behave exactly as they always did when it is unset. On dev
+  # it names the stream the build follows.
+  #
+  # The literal "main", where the template compares against the repository's
+  # default branch. main is what players have whatever the default branch is set
+  # to (CLAUDE.md, "Git workflow"); with the template's comparison, making dev the
+  # default would publish every push to dev to every player.
+  #
+  # `!= 'main' && ref_name || ''`, not the other way round: an empty string is
+  # falsy to Actions, so `== 'main' && '' || ref_name` would fall through and hand
+  # every release the branch path.
+  #
+  # An environment variable, never interpolated into a `run:` block: a branch name
+  # can come from anyone who can push one. prepare_build.sh refuses anything
+  # outside [A-Za-z0-9._-].
+  RELEASE_BRANCH: ${{ github.ref_name != 'main' && github.ref_name || '' }}
 
 jobs:
   release:
     name: Build and publish
+    # Only main (the release every player gets) and dev (the dev app) publish.
+    # A manual dispatch runs on whatever branch it is started from, and would
+    # otherwise build that branch -- reviewed or not -- with the signing key and
+    # publish it as a prerelease of its own.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload its assets
@@ -56,17 +90,55 @@ jobs:
           path: |
             ~/godot
             ~/.local/share/godot/export_templates
-          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux
+          # ci/install_godot.sh verifies a restored engine against the manifest it
+          # wrote at install and fails the job on any difference. actions/cache
+          # never saves over a key that matched, so a bad entry is dropped by
+          # bumping -verified-vN -- the template's key, copied by hand.
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-verified-v1
 
       - name: Install Godot
         run: bash ci/install_godot.sh
 
+      - name: Verify the engine
+        # Issue #78: the engine that builds a release is the one pinned here,
+        # byte for byte. ci/install_godot.sh, from the launcher template, checks
+        # a download against Godot's published SHA512-SUMS.txt and a cache hit
+        # against the record it wrote at install -- but the sums come from the
+        # same place as the bytes, and the record from the same cache entry, so
+        # neither proves where the engine came from. This manifest does: it
+        # lives in the repository, outside the cache. Every file the script put
+        # in place, editor and every export template, is held to it, on a fresh
+        # install and on a cache hit alike. Nothing else may lie beside them but
+        # the script's own two records: one empty `._sc_` next to the editor
+        # puts it in self-contained mode, which exports with templates from
+        # ~/godot/editor_data instead (measured). The manifest was made from the
+        # archives after checking them against Godot's own SHA512-SUMS.txt;
+        # docs/engine.md says how, and what else an engine upgrade must repeat.
+        run: |
+          cd ~
+          manifest="${GITHUB_WORKSPACE}/.github/engine/godot-${GODOT_VERSION}-${GODOT_RELEASE}.sha512"
+          sha512sum --check --strict --quiet "${manifest}"
+          # install_godot.sh's records, skipped by exact path and nowhere else:
+          # the engine never reads them, and the template may change their text.
+          diff <(sed 's/^[0-9a-f]*  //' "${manifest}" | LC_ALL=C sort) \
+               <(find godot .local/share/godot/export_templates ! -type d \
+                   ! -path godot/.verified-install.sha512 \
+                   ! -path ".local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}/.verified-install.sha512" \
+                   | LC_ALL=C sort) \
+            || { echo "::error::files the manifest does not list lie beside the engine (the > lines)"; exit 1; }
+          echo "verified: $(~/godot/godot --version)"
+
       - name: Point Godot at the Android SDK
-        # Godot reads these from its editor settings only -- it has no env-var
-        # fallback -- and refuses to export for Android without them.
+        # Godot refuses to export for Android without these. It takes them from
+        # its editor settings; a path the file leaves out defaults to
+        # ANDROID_HOME or JAVA_HOME (measured), which the setup steps above
+        # export too. The file wins, so the export uses the paths named here.
         run: |
           mkdir -p ~/.config/godot
-          cat > ~/.config/godot/editor_settings-${GODOT_VERSION}.tres <<EOF
+          # Named for the series alone: 4.7.2 reads editor_settings-4.7.tres,
+          # and a file named for the patch release is never read at all.
+          series="$(cut -d. -f1,2 <<< "${GODOT_VERSION}")"
+          cat > ~/.config/godot/editor_settings-${series}.tres <<EOF
           [gd_resource type="EditorSettings" format=3]
 
           [resource]

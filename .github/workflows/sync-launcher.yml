@@ -2,9 +2,10 @@ name: Sync launcher
 
 # Pulls launcher updates from the template repository into this game.
 #
-# Opens a pull request and stops there -- it never merges. Merging main in a
-# consuming game publishes a release to players, so deciding a launcher change
-# is safe to ship is the game developer's call. Do not add a merge step here.
+# Opens a pull request against dev and stops there -- it never merges. A
+# launcher change lands on dev like any other change: it reaches the dev app
+# first, and players with the next release (CLAUDE.md, "Git workflow"). Deciding
+# it is safe to ship is the game developer's call. Do not add a merge step here.
 
 on:
   schedule:
@@ -25,7 +26,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  GODOT_VERSION: "4.7"
+  GODOT_VERSION: "4.7.2"
   GODOT_RELEASE: stable
   LAUNCHER_TEMPLATE_REPO: sinikebe/godot-launcher-template
   LAUNCHER_TEMPLATE_REF: ${{ inputs.ref || 'main' }}
@@ -47,6 +48,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # The sync is made on dev, where work lands, whichever branch the run
+          # itself started from -- a schedule starts from the default branch.
+          ref: dev
 
       - name: Sync launcher
         id: sync
@@ -72,11 +76,50 @@ jobs:
           path: |
             ~/godot
             ~/.local/share/godot/export_templates
-          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux
+          # ci/install_godot.sh verifies a restored engine against the manifest it
+          # wrote at install and fails the job on any difference. actions/cache
+          # never saves over a key that matched, so a bad entry is dropped by
+          # bumping -verified-vN -- the template's key, copied by hand.
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-verified-v1
 
       - name: Install Godot
         if: steps.diff.outputs.changed == 'true'
         run: bash ci/install_godot.sh
+
+      - name: Verify the engine
+        if: steps.diff.outputs.changed == 'true'
+        # Issue #78: the engine that builds a release is the one pinned here,
+        # byte for byte. ci/install_godot.sh, from the launcher template, checks
+        # a download against Godot's published SHA512-SUMS.txt and a cache hit
+        # against the record it wrote at install -- but the sums come from the
+        # same place as the bytes, and the record from the same cache entry, so
+        # neither proves where the engine came from. This manifest does: it
+        # lives in the repository, outside the cache. Every file the script put
+        # in place, editor and every export template, is held to it, on a fresh
+        # install and on a cache hit alike. Nothing else may lie beside them but
+        # the script's own two records: one empty `._sc_` next to the editor
+        # puts it in self-contained mode, which exports with templates from
+        # ~/godot/editor_data instead (measured). The manifest was made from the
+        # archives after checking them against Godot's own SHA512-SUMS.txt;
+        # docs/engine.md says how, and what else an engine upgrade must repeat.
+        #
+        # Here the sync has already replaced ci/, so if the template ever moves
+        # where install_godot.sh puts the engine, this fails before a pull
+        # request opens: a red scheduled run, and no sync PR. The log says
+        # which: a path not found is a move, a FAILED line a changed byte.
+        run: |
+          cd ~
+          manifest="${GITHUB_WORKSPACE}/.github/engine/godot-${GODOT_VERSION}-${GODOT_RELEASE}.sha512"
+          sha512sum --check --strict --quiet "${manifest}"
+          # install_godot.sh's records, skipped by exact path and nowhere else:
+          # the engine never reads them, and the template may change their text.
+          diff <(sed 's/^[0-9a-f]*  //' "${manifest}" | LC_ALL=C sort) \
+               <(find godot .local/share/godot/export_templates ! -type d \
+                   ! -path godot/.verified-install.sha512 \
+                   ! -path ".local/share/godot/export_templates/${GODOT_VERSION}.${GODOT_RELEASE}/.verified-install.sha512" \
+                   | LC_ALL=C sort) \
+            || { echo "::error::files the manifest does not list lie beside the engine (the > lines)"; exit 1; }
+          echo "verified: $(~/godot/godot --version)"
 
       - name: Check the project still loads
         # A pull request opened by GITHUB_TOKEN does not trigger other workflows,
@@ -113,7 +156,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: launcher-sync
-          BASE: ${{ github.event.repository.default_branch }}
+          BASE: dev
           # Everything below comes from the TEMPLATE repository, not this one:
           # SUBJECT is its HEAD commit subject, WORKFLOW_DRIFT and
           # WORKFLOW_MISSING are lists of its workflow filenames. A `${{ }}` is
@@ -162,7 +205,7 @@ jobs:
 
           The project was imported and booted headless on this branch before the PR was opened.
 
-          **Review before merging** -- merging publishes a release to players."
+          **Review before merging** -- merging puts this launcher on the dev app, and the next release ships it to players."
 
           # Two categories, reported separately. A workflow that is new upstream
           # and absent here cannot be noticed any other way -- there is no local
