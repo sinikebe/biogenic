@@ -236,6 +236,10 @@ one substitution.
 - `cell.radius = 28.28`, `wound = 0.0`, `metabolism.reset()` — a new body, not a
   starving one. The mother spent herself.
 - `genome` takes the chosen DNA as **both** body and DNA. `bonus_slots = 0`.
+- **Whatever was still waiting for a slot goes with her** (#118): `take_waiting()`
+  before `express()` and `carry()` after, each gene on a fresh forty-five
+  seconds. None of them is the gift any more -- that was for the mother's body,
+  and a blind daughter is given her own at five seconds.
 - **`food.setup(cell)` — the field is reseeded.** `DIVIDE_RESEEDS_FIELD := true`.
   The water around you was sized to a 40-unit body and the newborn is 28; the
   field is a treadmill already (cull at 1700, recycle to 920–1350), so this is

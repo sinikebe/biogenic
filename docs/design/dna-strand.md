@@ -296,10 +296,19 @@ At 1280x720 **and** 2400x1080, GL Compatibility, through `tools/shot.tscn` with
    a coin toss at one copy feels like variety or like theft. It is the first dial
    after `GROWTH_PER_MEAL`.
 2. **`GROWTH_PER_MEAL` at 4.0** — §4.2's caveat.
-3. **A sample is still replaced by the next thing you eat**, and at three meals a
-   generation that is a larger share of what you swallow than it was at twelve.
-   Shipped behaviour, not touched here, and the case for a second held slot is
-   now stronger than it was.
+3. ~~**A sample is still replaced by the next thing you eat**, and at three meals
+   a generation that is a larger share of what you swallow than it was at
+   twelve.~~ **Closed by #118**, which found the sample lost a second way as
+   well: a division dropped it, always for the gene in the meal that finished
+   the growth. Genes now wait in a queue (`Genome._waiting`), each on its own
+   forty-five seconds and soonest to lapse first; the same gene eaten again
+   before it is placed waits as one sample of two copies and lands at two; and a
+   division hands whatever is still waiting to the daughter the player takes,
+   each on a fresh clock -- a gene outside the chromosome is a plasmid, and a
+   dividing cell passes its plasmids on. The daughters are now rolled at the
+   pinch rather than at the first frame of the quickening, so a copy eaten in
+   those 2.4 seconds reaches them too. The strip still places one gene at a
+   time, the head first; the verb line says how many more wait behind it.
 4. **`body_tier > dna_tier` cannot happen in the game** and the strand does not
    draw it. Only `--genome=` followed by `--dna=` can pose it, and there it
    under-draws. Left alone rather than spending a branch on a harness artefact.
