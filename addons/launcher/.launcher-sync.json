@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "4469c004aa194bb55089525995f44e9e505a8478",
-  "subject": "Merge pull request #56 from sinikebe/55-ci-install-godot-sh-installs-the-engine-that-builds-every-release-without-checking-a-byte-of-it",
-  "synced_at": "2026-09-28T10:08:30Z"
+  "commit": "ca4a2f85ae6a8bd4e593058b452c4289a59a42fd",
+  "subject": "Merge pull request #57 from sinikebe/54-let-a-build-follow-a-branch-s-releases-so-a-game-can-be-tried-on-a-device-before-it-ships",
+  "synced_at": "2026-09-28T10:37:33Z"
 }
