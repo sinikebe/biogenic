@@ -396,8 +396,12 @@ two, where the other thumb is. When to place becomes a real choice — which is
 the game, and not a cost to design away.
 
 **The body shuts, with nothing placed**, on a death, the menu opening, the
-pinch of a division, a pond going still, and the app losing focus — and when
-the gene it opened for lapses. The quickening still swims, so the body opens
+pinch of a division, a pond going still, the app losing focus and a touch the
+system cancels (`canceled` -- palm rejection, an overlay, an OEM swipe: a
+placement the player did not finish) — and when the gene it opened for lapses.
+**The hold is timed from the press**: the frame that delivers it does not
+count, because its delta is mostly time from before the finger touched glass,
+and a stall there would otherwise open the body under a tap. The quickening still swims, so the body opens
 in it, and a gene placed there reaches the daughters: they are rolled at the
 pinch. **Placement asks again at the lift**, by name: the slot must still be
 free and the gene must still be waiting. A gene can lapse into the first free
@@ -573,6 +577,16 @@ pixels, inside one hollow pip.
    tapped once used to be written over by the waiting gene; now that tap only
    arms (`tap again to write ping over beam`). Writing over a gene takes two
    taps on its slot, both of them the player's, on every path.
+
+7. **Body first, then a steering finger: the second finger does not steer.**
+   cell.gd steers with one finger, the first down, and ignores any other. With
+   the steering thumb down first -- the order this was designed for -- it keeps
+   its steer while the other opens the body (+0.42 held). The reverse order is
+   the gap: a finger resting on the body is cell.gd's steering finger until the
+   hold takes it, and the second finger, pressed meanwhile, was ignored and
+   stays ignored until it is lifted and put down again, placement or not.
+   Closing it means cell.gd adopting a finger it never saw press, which is a
+   change to steering itself and not to this gesture.
 
 ---
 

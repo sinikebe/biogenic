@@ -1162,8 +1162,11 @@ const OFFER_REACH_MIN := 118.0
 const OFFER_ALPHA := 0.34
 const OFFER_AIM_ALPHA := 0.95
 const OFFER_SCALE := 1.15
-## The line to the lit bud starts this share of the reach out, clear of the rim,
-## the fringe and the thumb.
+## The line to the lit bud starts this share of the reach out, clear of the
+## thumb. On a small body that is clear of the rim and the fringe too; once the
+## body outgrows [constant OFFER_REACH_MIN] -- about r30 in point of view -- it
+## starts just inside the rim (0.97 r), and reads as the bud's thread leaving
+## the skin rather than a line laid over it.
 const OFFER_LINE_FROM := 0.42
 const OFFER_LINE_ALPHA := 0.55
 const OFFER_LINE_WIDTH := 1.4

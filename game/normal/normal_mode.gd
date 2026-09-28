@@ -4879,6 +4879,16 @@ var _offer_from := Vector2.ZERO
 var _offer_at := Vector2.ZERO
 ## Seconds the finger has rested, toward [constant OFFER_HOLD].
 var _offer_clock := 0.0
+## **True from the press until the first frame after it has been skipped.** The
+## frame that delivers a press steps with the whole delta since the frame
+## before, and most of that passed before the finger touched glass: summed in,
+## a stall at the press -- a GC, a shader compiled on first use -- counted
+## toward the hold, and one of 0.35 s opened the body on the first frame under
+## a tap that then neither dashed (cell.gd times its tap on the wall clock, from
+## the press) nor placed. Skipping that one delta keeps the hold measured from
+## the press on the frame clock, which is what keeps a `--fixed-fps` run
+## repeatable.
+var _offer_fresh := false
 ## The free slot that is lit, or -1 for none -- a finger back inside the body.
 var _offer_aim := -1
 ## **The gene the body opened for, held by name** -- the guarantee [member
@@ -5037,6 +5047,7 @@ func _offer_close(place: bool) -> void:
 	_offer_pointer = POINTER_NONE
 	_offer_aim = -1
 	_offer_clock = 0.0
+	_offer_fresh = false
 	_offer_gene = &""
 	# Now, not on the next frame: a death draws its first frame of collapse
 	# this one, and the bloom must not be on it.
@@ -5149,11 +5160,18 @@ func _offer_pointer_input(event: InputEvent) -> bool:
 	var at := Vector2.ZERO
 	var press := false
 	var lift := false
+	# **A touch the system took back is not a let-go.** Android cancels a
+	# gesture for palm rejection, a system overlay or an OEM swipe, and Godot
+	# delivers that as a release with `canceled` set. Read as a lift it placed
+	# the gene into whatever slot happened to be lit -- a placement the player
+	# never finished, and for the gift an organ fixed on this body at that arc.
+	var canceled := false
 	if event is InputEventScreenTouch:
 		var touch := event as InputEventScreenTouch
 		at = touch.position
 		press = touch.pressed
 		lift = not touch.pressed
+		canceled = touch.canceled
 	elif event is InputEventScreenDrag:
 		at = (event as InputEventScreenDrag).position
 	elif event is InputEventMouseButton:
@@ -5177,6 +5195,7 @@ func _offer_pointer_input(event: InputEvent) -> bool:
 		_offer_from = at
 		_offer_at = at
 		_offer_clock = 0.0
+		_offer_fresh = true
 		if _floating():
 			# `anywhere`: a steer until the hold says otherwise. It goes on to
 			# cell.gd, so a tap on the body is still a dash.
@@ -5190,7 +5209,7 @@ func _offer_pointer_input(event: InputEvent) -> bool:
 	_offer_at = at
 	if lift:
 		if _offer_open:
-			_offer_close(true)
+			_offer_close(not canceled)
 			return true
 		# Let go before the hold: a tap or a short press, and cell.gd's.
 		_offer_pointer = POINTER_NONE
@@ -5214,7 +5233,10 @@ func _step_offer(delta: float) -> void:
 		# the body was open. It shuts, and nothing is placed.
 		_offer_close(false)
 	if _offer_pointer != POINTER_NONE and not _offer_open:
-		_offer_clock += delta
+		if _offer_fresh:
+			_offer_fresh = false
+		else:
+			_offer_clock += delta
 		if _offer_clock >= OFFER_HOLD:
 			_offer_begin()
 	if _offer_open:
