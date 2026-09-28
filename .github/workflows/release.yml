@@ -8,13 +8,15 @@ name: Release
 # requests are handled by ci.yml, which builds the same way but never sees a
 # secret and never publishes -- so a fork PR cannot reach the signing key.
 #
-# A push to main is a release, and every player gets it. A push to dev publishes
-# the dev app instead: the rolling prerelease branch-dev, which /releases/latest/
-# never returns. The dev app is a separate app -- its own package id, name and
-# user:// -- because it was exported for dev, and the stamp that gives it that
-# identity is the one that decides what it polls, so nothing built for main can
-# reach it. The template's docs/UPDATES.md, "Trying a change on a device before
-# it ships", has the mechanism.
+# A push to main is a release, and every player gets it. main only ever receives
+# one: the pull request from dev that the `release` skill opens (CLAUDE.md, "Git
+# workflow"). Work lands on dev, and a push to dev publishes the dev app instead:
+# the rolling prerelease branch-dev, which /releases/latest/ never returns. The
+# dev app is a separate app -- its own package id, name and user:// -- because it
+# was exported for dev, and the stamp that gives it that identity is the one that
+# decides what it polls, so nothing built for main can reach it. The template's
+# docs/UPDATES.md, "Trying a change on a device before it ships", has the
+# mechanism.
 
 on:
   push:
@@ -55,6 +57,11 @@ env:
 jobs:
   release:
     name: Build and publish
+    # Only main (the release every player gets) and dev (the dev app) publish.
+    # A manual dispatch runs on whatever branch it is started from, and would
+    # otherwise build that branch -- reviewed or not -- with the signing key and
+    # publish it as a prerelease of its own.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload its assets

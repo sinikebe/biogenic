@@ -2,9 +2,10 @@ name: Sync launcher
 
 # Pulls launcher updates from the template repository into this game.
 #
-# Opens a pull request and stops there -- it never merges. Merging main in a
-# consuming game publishes a release to players, so deciding a launcher change
-# is safe to ship is the game developer's call. Do not add a merge step here.
+# Opens a pull request against dev and stops there -- it never merges. A
+# launcher change lands on dev like any other change: it reaches the dev app
+# first, and players with the next release (CLAUDE.md, "Git workflow"). Deciding
+# it is safe to ship is the game developer's call. Do not add a merge step here.
 
 on:
   schedule:
@@ -47,6 +48,9 @@ jobs:
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
+          # The sync is made on dev, where work lands, whichever branch the run
+          # itself started from -- a schedule starts from the default branch.
+          ref: dev
 
       - name: Sync launcher
         id: sync
@@ -117,7 +121,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           BRANCH: launcher-sync
-          BASE: ${{ github.event.repository.default_branch }}
+          BASE: dev
           # Everything below comes from the TEMPLATE repository, not this one:
           # SUBJECT is its HEAD commit subject, WORKFLOW_DRIFT and
           # WORKFLOW_MISSING are lists of its workflow filenames. A `${{ }}` is
@@ -166,7 +170,7 @@ jobs:
 
           The project was imported and booted headless on this branch before the PR was opened.
 
-          **Review before merging** -- merging publishes a release to players."
+          **Review before merging** -- merging puts this launcher on the dev app, and the next release ships it to players."
 
           # Two categories, reported separately. A workflow that is new upstream
           # and absent here cannot be noticed any other way -- there is no local
