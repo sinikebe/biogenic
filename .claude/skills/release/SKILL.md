@@ -103,9 +103,6 @@ Base `main`, head `dev`, titled `Release YYYY-MM-DD`. The body, for the owner:
   line. GitHub closes each one when the release reaches `main`, if merging into
   `dev` has not already.
 - **Anything step 4 flagged.**
-- **If the dev app did not exist for this release** (before
-  sinikebe/godot-launcher-template#54 landed): the release was not tried on a
-  device.
 
 Wait for CI on the pull request. `Export check` must pass: it builds exactly
 what the release will publish. `github-advanced-security` fails on every pull

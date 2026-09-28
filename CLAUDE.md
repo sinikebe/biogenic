@@ -16,6 +16,11 @@ Two branches matter, and each has one job.
   everything since the previous release ships together, under one patch note.
   Never merge anything else into `main`, and never start a release the owner
   did not ask for.
+- **`main` stays the repository's default branch.** `gh release create` tags a
+  release on the default branch's head, and the template's workflows take the
+  default branch to be the one players get. `release.yml` names `main` outright,
+  so switching could not send `dev` to players, but every release would be
+  tagged on the wrong commit.
 - **Never leave anything local.** Uncommitted or unpushed work does not exist.
   A clean tree and a branch merged into `dev` are the definition of done, not a
   tidy-up.
@@ -43,12 +48,14 @@ Two branches matter, and each has one job.
 
 ### What a merge costs
 
-**A merge into `dev` reaches the owner's dev app**: a separate "Biogenic Dev"
-build, with its own saves, that updates itself from `dev` the way the players'
-game updates from `main`. That is where a change is tried on a device before any
-player has it. Until the launcher can follow a branch
-(sinikebe/godot-launcher-template#54), there is no dev app yet and `dev` builds
-are not published.
+**A merge into `dev` reaches the owner's dev app.** `release.yml` publishes every
+push to `dev` as the prerelease `branch-dev`: "Biogenic (dev)", a separate app
+with its own package id and its own saves, installed beside the game and
+updating itself from `dev` the way the players' game updates from `main`. That is
+where a change is tried on a device before any player has it -- a
+`binary_version` bump included, since installing over the top is the one step no
+local test covers. `/releases/latest/` never returns a prerelease, so no player
+is ever offered it.
 
 **A release publishes to players.** Merging the release into `main` runs
 `.github/workflows/release.yml`: it exports the APK, the Windows executable and

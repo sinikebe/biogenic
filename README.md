@@ -39,8 +39,8 @@ documents every field.
 
 [.github/workflows/sync-launcher.yml](.github/workflows/sync-launcher.yml) runs
 daily, pulls the template, boots the project to prove it still loads, and opens
-a pull request if anything changed. Merging it releases to players, so it stops
-short of that on purpose.
+a pull request against `dev` if anything changed. Merging it puts the new
+launcher on the dev app; the next release ships it to players.
 
 ## How updating works
 
@@ -102,6 +102,13 @@ from `dev` to `main`, opened and merged by the `release` skill
 Windows executable and both content packs, writes `manifest.json`, and publishes
 them as the latest release. Players pick it up on their next launch, with one
 patch note for everything since the previous release.
+
+Every merge into `dev` runs the same workflow for the dev app instead:
+"Biogenic (dev)", a separate app with its own package id and saves, published
+as the prerelease
+[`branch-dev`](https://github.com/sinikebe/biogenic/releases/tag/branch-dev) and
+updating itself from there. `/releases/latest/` never returns a prerelease, so
+players never see it.
 
 Bump `binary_version` in [version.json](version.json) in the same commit whenever
 the change needs a new binary; leave it alone and the release goes out as a
