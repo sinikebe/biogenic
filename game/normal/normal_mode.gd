@@ -4585,7 +4585,18 @@ func _move_key(event: InputEvent) -> int:
 func _move_slot(from: int, to: int) -> void:
 	if not _genome.move(from, to):
 		return
-	_armed = to
+	# **The moved gene is selected -- unless a gene is in hand.** Then the
+	# selection goes back to the hand, and the keyboard alone follows the move
+	# (below). Left on the destination, the selection would be an *arm* for the
+	# gene in hand that no tap ever made: a drop, or a `Shift`+arrow, is not a
+	# first tap on that slot, and the next tap there would write the gene in
+	# hand over the one that just moved in -- a player tapping to read what they
+	# moved would lose it. The one irreversible action takes two taps on the
+	# slot it writes, both of them the player's.
+	if _hand() != &"":
+		_armed = SLOT_SAMPLE
+	else:
+		_armed = to
 	_armed_at = Time.get_ticks_msec()
 	_hovered = SLOT_NONE
 	# The genome really did change, so this one is a rebuild: the chips read
