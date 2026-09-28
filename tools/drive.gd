@@ -1896,8 +1896,12 @@ func _fingerprint_state() -> Array:
 	for key: StringName in FINGERPRINT_CELL:
 		out.append(cell.get(key) if cell != null else null)
 	if _genome != null:
-		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout(),
-			_waiting_text()])
+		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout()])
+		# Every waiting gene at full width: its copies and its own clock, not
+		# the trace's one decimal.
+		for gene: StringName in _genome.waiting():
+			out.append_array([gene, _genome.waiting_copies(gene),
+				_genome.waiting_left(gene)])
 	if _metabolism != null:
 		out.append_array([_metabolism.hunger, _metabolism.starve_seconds])
 	var motes := _find_script(self, "res://game/normal/motes.gd")

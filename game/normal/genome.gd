@@ -511,6 +511,13 @@ func waiting_copies(gene: StringName) -> int:
 	return _waiting[at].copies if at >= 0 else 0
 
 
+## Seconds [param gene] has left to wait before it lapses, 0 if it is not
+## waiting.
+func waiting_left(gene: StringName) -> float:
+	var at := waiting_index(gene)
+	return _waiting[at].left if at >= 0 else 0.0
+
+
 ## Where [param gene] is in the queue, or -1.
 func waiting_index(gene: StringName) -> int:
 	for i in _waiting.size():

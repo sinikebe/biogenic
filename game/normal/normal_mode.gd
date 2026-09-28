@@ -302,6 +302,19 @@ var _pause_bar_hot: StyleBoxFlat = null
 var _armed_at := 0
 ## The gene in each slot, left to right, index-matched to the loci in Row.
 var _slot_genes: Array[StringName] = []
+## **The waiting gene the strip was built around** -- the head of the queue when
+## [method _build_genome_strip] last ran, &"" for none.
+##
+## A placement may only ever write the gene the strip is showing. With the
+## queue (#118) the head can change under an open strip: in a pond the menu
+## stops nothing, so the head can lapse -- or be eaten again, which sends it to
+## the back -- while a locus is armed for it, and the next gene in line becomes
+## the head without a frame of it ever being drawn. Before the queue a lapse
+## emptied the sample and the confirming tap did nothing; with a queue the same
+## tap would write a gene the player never saw over the one in that locus, for
+## good. [method _committable] refuses that, and [method _step_arming] rebuilds
+## the strip around the new head the first frame no gesture is in flight.
+var _strip_head: StringName = &""
 ## Which DNA locus a gene has been lifted out of while a move is in the air, or
 ## [constant SLOT_NONE]. Set by `_get_drag_data` and cleared by the drop or by
 ## `NOTIFICATION_DRAG_END`, whichever arrives -- and one of them always does.
@@ -1432,6 +1445,11 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# over a live pond the genome can change under it. Unreachable in single
 	# player, where the menu stops the water.
 	if _menu_open:
+		# A meal that changed the head -- the first gene to wait, or the head
+		# eaten again and sent to the back -- is a new decision; see
+		# [member _strip_head].
+		if _genome.held_sample != _strip_head:
+			_select_default()
 		_build_genome_strip()
 
 
@@ -3232,6 +3250,7 @@ func _build_genome_strip() -> void:
 			row.remove_child(child)
 			child.queue_free()
 	_slot_genes.clear()
+	_strip_head = _genome.held_sample
 
 	# **The strip is the DNA**, and the body is the other register -- it is the
 	# thing in the middle of the screen the rest of the time. What the body
@@ -3544,7 +3563,11 @@ func _gene_at(slot: int) -> StringName:
 ## which is the only case that is irreversible, and therefore the only case that
 ## needs the guard, the timeout and the confirming second tap.
 func _committable(slot: int) -> bool:
-	return slot >= 0 and _genome.held_sample != &""
+	# The head must still be the gene the strip was built around -- see
+	# [member _strip_head]. A tap on a locus armed for a gene that has since
+	# lapsed does nothing; the rebuild that follows shows what waits now.
+	return slot >= 0 and _genome.held_sample != &"" \
+		and _genome.held_sample == _strip_head
 
 
 ## What is selected when the pause screen opens, and after an arm lapses.
@@ -4215,6 +4238,11 @@ func _commit_slot(index: int) -> void:
 		return
 	if index < 0 or index >= _slot_genes.size():
 		return
+	# **Asked again here, on every path that writes the DNA.** A lift commits
+	# on the strength of a press made earlier, and the head can change between
+	# the two in a pond -- see [member _strip_head].
+	if not _committable(index):
+		return
 	_genome.place(index)
 	# **The placed slot stays selected**, so the line under the strip is now the
 	# gene that just landed and the tile it landed in. The sample is spent, so
@@ -4234,8 +4262,9 @@ func _commit_slot(index: int) -> void:
 		_select_default()
 	# The bus is told now rather than on the next unpaused frame: the membrane
 	# keeps beating under the scrim, and an echo for a sample that no longer
-	# exists is the game lying about the player's own body.
-	_bus.hold(0.0)
+	# exists is the game lying about the player's own body. **Or for one that
+	# does**: with another gene still waiting the echo goes on, now for it.
+	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_build_genome_strip()
 
 
@@ -4272,6 +4301,16 @@ func _step_arming() -> void:
 	# of the timeout) and the cure is one line: a strip with a finger on it is
 	# not a strip left armed, which is the only thing the timeout is for.
 	if _primed != SLOT_NONE:
+		return
+	# **A new head is a new decision** (#118): it lapsed, or it was eaten again
+	# and went to the back, and the gene now first in line has never been on
+	# this strip. Back to the sample, and the strip rebuilt around it -- the
+	# same answer a lapsed arm gets below. Only reachable in a pond, where the
+	# menu stops nothing; paused, nothing moves the queue but a placement,
+	# which rebuilds for itself.
+	if _genome.held_sample != _strip_head:
+		_select_default()
+		_build_genome_strip()
 		return
 	if not _committable(_armed):
 		return
