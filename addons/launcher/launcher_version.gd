@@ -19,10 +19,10 @@ extends RefCounted
 const VERSION: String = "2.1.0"
 
 ## Template commit this copy came from, or "local" inside the template itself.
-const COMMIT: String = "6a3796da"
+const COMMIT: String = "4469c004"
 
 ## RFC3339 date this copy was synced, or "" inside the template.
-const SYNCED_AT: String = "2026-09-14T18:42:18Z"
+const SYNCED_AT: String = "2026-09-28T10:08:30Z"
 
 ## Repository it was synced from, or "" inside the template.
 const SOURCE: String = "sinikebe/godot-launcher-template"

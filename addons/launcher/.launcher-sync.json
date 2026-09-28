@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "6a3796dab7adc31b893970f14a246f5abe853938",
-  "subject": "Merge pull request #48 from sinikebe/9-what-s-new-visibility-predicate-does-not-match-the-dialog-s-own-emptiness-test",
-  "synced_at": "2026-09-14T18:42:18Z"
+  "commit": "4469c004aa194bb55089525995f44e9e505a8478",
+  "subject": "Merge pull request #56 from sinikebe/55-ci-install-godot-sh-installs-the-engine-that-builds-every-release-without-checking-a-byte-of-it",
+  "synced_at": "2026-09-28T10:08:30Z"
 }
