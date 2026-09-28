@@ -785,15 +785,11 @@ func _process(delta: float) -> void:
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
-	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"statocyst"),
-		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
+	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"chemocyte"),
+		_cell.extra(&"ampulla"))
 	_post_beam()
 	_post_pings()
 	_tell_others()
-	# `statocyst`: absolute up, as a bearing this body reads it -- which is
-	# minus the heading, and the one bearing on the membrane that moves when the
-	# cell turns rather than when the water does.
-	_bus.level(-_cell.heading, 1.0 if _cell.extra(&"statocyst") > 0 else 0.0)
 	# `palp`: something solid, right there, felt with no light at all.
 	if _food.touch_level > 0.0:
 		_bus.touch(_food.touch_bearing, _food.touch_level)
@@ -1169,7 +1165,6 @@ func _hush() -> void:
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
 	_bus.ping_out(0.0, 0.0)
-	_bus.level(0.0, 0.0)
 	_bus.hold(0.0)
 	_bus.shear(0.0)
 
@@ -3111,11 +3106,10 @@ const CHIP_WORD := 14
 ## **The level is three pips**, after the word, at its x-height. Built three
 ## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
 ## read as grit at a 28 px lobe, and a digit has no scale -- two of what? -- and
-## cannot say worn against carried; `statocyst`'s plain word is `level`, and a
-## digit renders `level 3`. Three marks are read without counting, the scale is
-## on screen, and filled against hollow is diegetic-hud.md §1's integrated
-## against held: the same shape meaning the same thing in the water and here,
-## which is shape and so survives greyscale.
+## cannot say worn against carried. Three marks are read without counting, the
+## scale is on screen, and filled against hollow is diegetic-hud.md §1's
+## integrated against held: the same shape meaning the same thing in the water
+## and here, which is shape and so survives greyscale.
 ##
 ## **The rungs stay.** They are the same count, and they are what makes a slot a
 ## piece of DNA rather than a label. The rungs are the picture; the pips are the
@@ -3195,6 +3189,12 @@ const DRAG_LIFT := 34.0
 const WAIT_SIZE := Vector2(116.0, 48.0)
 const WAIT_BAR_X := 16.0
 const WAIT_WORD_X := 32.0
+## The air right of a chip's last pip: what `venom`, the widest word, leaves at
+## 116. A gene this build has no word for is read by its own name, and a name is
+## wider than any word -- `statocyst`'s reaches 128 with its pips -- so its chip
+## grows to keep this much rather than land its pips on the next chip. See
+## [method _waiting_width].
+const WAIT_AIR := 3.0
 ## Every gene not in hand is drawn down to this; the one in hand goes loud and
 ## gains an underline in its own hue.
 const WAIT_DIM := 0.55
@@ -3316,14 +3316,14 @@ const WORD_UNEXPRESSED := 0.42
 const WORDS := {
 	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
-	&"statocyst": "level", &"palp": "touch",
+	&"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
 	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
 ## **One line per gene, and it says what the gene does to the player** -- not
-## what the organelle is. Seventeen tiles carrying one word each are enough to
+## what the organelle is. Sixteen tiles carrying one word each are enough to
 ## recognise a gene you already know and not enough to learn one, which is the
 ## whole of the owner's ask.
 ##
@@ -3356,7 +3356,6 @@ const EXPLAINS := {
 	&"chemocyte": "smells food, strongest where your nose is pointed",
 	&"ampulla": "a pulse that answers off everything, not just food",
 	&"axoneme": "holding on pushes you, instead of only steering",
-	&"statocyst": "always knows which way is up, however you turn",
 	&"palp": "feels what is against you, with no light at all",
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
@@ -3973,7 +3972,7 @@ func _make_tray_caption() -> Control:
 func _make_waiting(gene: StringName) -> Control:
 	var node := Control.new()
 	node.name = "Waiting_%s" % gene
-	node.custom_minimum_size = WAIT_SIZE
+	node.custom_minimum_size = Vector2(_waiting_width(gene), WAIT_SIZE.y)
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	node.focus_mode = Control.FOCUS_ALL
 	node.set_meta(&"waiting", gene)
@@ -3985,6 +3984,20 @@ func _make_waiting(gene: StringName) -> Control:
 	node.set_drag_forwarding(_waiting_drag.bind(node, gene), Callable(),
 		Callable())
 	return node
+
+
+## How wide [param gene]'s chip is: [constant WAIT_SIZE] for every word in
+## [constant WORDS], and wider for a name that is not one -- a retired gene's,
+## handed over by a host on older content. The tray is a flow, so a wide chip
+## can cost a row but never lands on its neighbour.
+func _waiting_width(gene: StringName) -> float:
+	var font := _tray.get_theme_default_font()
+	if font == null:
+		return WAIT_SIZE.x
+	var word := font.get_string_size(_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0, CHIP_WORD).x
+	return maxf(WAIT_SIZE.x, ceilf(WAIT_WORD_X + word + PIP_GAP + PIP_R * 2.0
+		+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + WAIT_AIR))
 
 
 func _on_slot_hover(slot: int) -> void:
@@ -4270,13 +4283,15 @@ func _draw_waiting(node: Control, gene: StringName) -> void:
 		# Carried by definition, so rings and never a disc.
 		_draw_pips(node, Vector2(WAIT_WORD_X + width + PIP_GAP + PIP_R, mid),
 			tone, _genome.waiting_copies(gene), 0, ink)
+	# The chip's own width, not WAIT_SIZE's: a name wider than any word grows
+	# its chip, and the underline is under the whole of it.
 	if in_hand:
 		node.draw_line(Vector2(6.0, WAIT_SIZE.y - 3.0),
-			Vector2(WAIT_SIZE.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
+			Vector2(node.size.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
 			1.5, true)
 	if node.has_focus():
 		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			Vector2(WAIT_SIZE.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			Vector2(node.size.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
 
 
@@ -5370,7 +5385,7 @@ const CHOOSE_DART_X := 66.0
 ## **The word budget, measured, because it is the number this block ran out of
 ## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
 ## [constant LABEL_SIZE] 13 in the fallback font the widest of
-## [constant WORDS]'s seventeen is `venom` at **44.00**. Three pixels of tail,
+## [constant WORDS]'s sixteen is `venom` at **44.00**. Three pixels of tail,
 ## and that is the whole of it: the next word to need more has nowhere to go
 ## and will run past the block's own edge, silently, because nothing clips it.
 ##
@@ -5605,7 +5620,7 @@ func _choose_at(side: int, slot: int) -> Array:
 
 
 ## **The two lines below, and they are shared rather than one per side.** The
-## seventeen gene lines are about the gene, and both strands carry the same gene
+## sixteen gene lines are about the gene, and both strands carry the same gene
 ## at five or six of seven loci, so a per-side line would be the same sentence
 ## twice in most frames -- and the longest of them is 519 px, which two of,
 ## centred under daughters 264 px apart, overlap by 255. Which strand is being

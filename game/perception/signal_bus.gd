@@ -211,10 +211,11 @@ const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
 const LIGHT_FLOOR := 0.02
 
 # --- The genes that reach the membrane --------------------------------------
-# Nothing below adds a uniform: the beam takes the last free glow lobe, `level`
-# takes the last free *pressure* lobe, and `touch` fires the bruise envelope the
-# membrane has had since Phase 1. `focus` used to narrow a lobe that already
-# existed; the lobe it narrowed became a ring and the gene was retired.
+# Nothing below adds a uniform: the beam takes the last free glow lobe, and
+# `touch` fires the bruise envelope the membrane has had since Phase 1. `focus`
+# used to narrow a lobe that already existed; the lobe it narrowed became a ring
+# and the gene was retired. `level` held the last free *pressure* lobe until it
+# was retired too, and that lobe is idle again.
 
 ## `ocellus` / beam. **The only thing you can see**: the point where the beam
 ## hits something, at that bearing and nothing else. Louder than the stigma's
@@ -224,13 +225,10 @@ const BEAM_PEAK := 0.46
 const BEAM_HALFWIDTH_DEG: Array[float] = [0.0, 14.0, 11.0, 8.0]
 const BEAM_FLOOR := 0.02
 
-## `statocyst` / level. Absolute up, as a steady dent that does **not** turn
-## with the body -- turn the cell and it walks round the contour, which is the
-## whole readout. A pressure lobe rather than a glow one on purpose: it is not a
-## thing out there, it is which way is up, and the game already has one channel
-## that means "something is pressing on you from over there".
-const LEVEL_PUSH_BY_TIER: Array[float] = [0.0, 0.13, 0.17, 0.23]
-const LEVEL_HALFWIDTH_DEG: Array[float] = [0.0, 30.0, 22.0, 15.0]
+## `statocyst` / level **was here**, as a steady dent at absolute up that walked
+## round the contour as the cell turned. The owner retired the gene on
+## 2026-09-28: which way is up says nothing about the water. Its pressure slot
+## is free again -- see the end of [method _compose_lobes].
 
 ## `palp` / touch. Feeling a body at close range with no light at all: the
 ## bruise envelope, held at a level rather than struck, so it reads as pressure
@@ -318,17 +316,16 @@ const PING_HUM_HALFWIDTH := 54.0
 ## of this pair: raise that above the hold times and the sweep is a chord again.
 const PING_ARCS := 4
 
-## The earned senses, in genome order: `ocellus`, `statocyst`, `chemocyte`,
-## `ampulla`. Written once a frame by [method sense_organs], exactly like
-## [method organs].
+## The earned senses, in genome order: `ocellus`, `chemocyte`, `ampulla`.
+## Written once a frame by [method sense_organs], exactly like [method organs].
 ##
-## `rhabdom` used to sit at index 2 and the indices below closed over its gap.
+## `rhabdom` used to sit at index 2 and the indices below closed over its gap;
+## `statocyst` sat at index 1 and they closed over its gap too.
 ## Nothing outside this file reads them -- [method sense_organs] takes named
 ## arguments and every use is `_senses[SENSE_*]` -- so renumbering is contained.
 const SENSE_OCELLUS := 0
-const SENSE_STATOCYST := 1
-const SENSE_CHEMOCYTE := 2
-const SENSE_AMPULLA := 3
+const SENSE_CHEMOCYTE := 1
+const SENSE_AMPULLA := 2
 
 # --- A held sample is a second heartbeat (§3.3) -----------------------------
 # The one new point-of-view signal Phase 5 adds, and the answer to "how does a
@@ -638,10 +635,10 @@ var _pushed_hollow := -1.0
 ## Defaults are the born cell: mediocre at three things and blind. Nothing here
 ## may become a way to describe what is *outside* the cell.
 var _organs := PackedInt32Array([1, 1, 1, 0])
-## `ocellus`, `statocyst`, `chemocyte`, `ampulla`. A born cell has none of them
-## -- **including the nose**, which is the change Phase 6 made to what "born"
+## `ocellus`, `chemocyte`, `ampulla`. A born cell has none of them --
+## **including the nose**, which is the change Phase 6 made to what "born"
 ## means. Taste was innate from Phase 1 to Phase 5.
-var _senses := PackedInt32Array([0, 0, 0, 0])
+var _senses := PackedInt32Array([0, 0, 0])
 
 ## Shear has no attack at all -- it is the proof that the player is connected to
 ## something, so it must answer the same frame the turn starts.
@@ -712,12 +709,10 @@ var _dread_target := 0.0
 var _light := 0.0
 var _light_bearing := 0.0
 
-## Where the beam is hitting something and how near, and which way is up. Both
-## continuous, both posted every frame, neither with an envelope.
+## Where the beam is hitting something and how near. Continuous, posted every
+## frame, with no envelope.
 var _beam := 0.0
 var _beam_bearing := 0.0
-var _level := 0.0
-var _level_bearing := 0.0
 
 ## Seconds left on the held sample, 0 for none, and the echo it schedules.
 var _held := 0.0
@@ -985,10 +980,8 @@ func organs(cytostome: int, cirrus: int, flagellum: int, stigma: int) -> void:
 ##
 ## Same rule as [method organs] and it is not a loophole: three small integers
 ## about this cell's own anatomy are not a fact about anything in the water.
-func sense_organs(ocellus: int, statocyst: int,
-		chemocyte: int = 0, ampulla: int = 0) -> void:
+func sense_organs(ocellus: int, chemocyte: int = 0, ampulla: int = 0) -> void:
 	_senses[SENSE_OCELLUS] = clampi(ocellus, 0, ORGAN_TIER_MAX)
-	_senses[SENSE_STATOCYST] = clampi(statocyst, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_CHEMOCYTE] = clampi(chemocyte, 0, ORGAN_TIER_MAX)
 	_senses[SENSE_AMPULLA] = clampi(ampulla, 0, ORGAN_TIER_MAX)
 	# How hollow a ping mark is rides in the palette's alpha, so a tier that has
@@ -1181,19 +1174,6 @@ func ping_out(bearing: float, level: float) -> void:
 		return
 	_hum = clampf(level, 0.0, 1.0)
 	_hum_bearing = bearing
-
-
-## **Which way is up**, in a game where the body is the only frame of reference
-## there has ever been. [param bearing] is body-relative like everything else --
-## that is the point: it is the one bearing that moves when you turn and stays
-## still when you do not.
-##
-## Not gated for subscribers: it changes every frame a turning cell exists, and
-## a gate that fires every frame is a gate that costs more than it saves.
-func level(bearing: float, strength: float) -> void:
-	var seen := _senses[SENSE_STATOCYST] > 0
-	_level = clampf(strength, 0.0, 1.0) if seen else 0.0
-	_level_bearing = bearing if seen else 0.0
 
 
 ## **Something solid is right there**, felt and not seen. `palp`: the bruise
@@ -1441,8 +1421,6 @@ func _end_collapse() -> void:
 	_beam = 0.0
 	_beam_bearing = 0.0
 	_said_beam = -1.0
-	_level = 0.0
-	_level_bearing = 0.0
 	_held = 0.0
 	_echo_in = -1.0
 	_echo_at = 0.0
@@ -1465,7 +1443,7 @@ func _end_collapse() -> void:
 	# the dead cell's tiers. After the envelope resets, because this retunes one
 	# of them.
 	organs(1, 1, 1, 0)
-	sense_organs(0, 0, 0, 0)
+	sense_organs(0, 0, 0)
 	_idle_lobes()
 	_beat_phase = 0.0
 	_beat_this_period = _beat_period
@@ -1626,15 +1604,10 @@ func _compose_lobes() -> void:
 	else:
 		_press_lobes[0] = IDLE_LOBE
 
-	# Absolute up, in the last pressure slot. Steady, so it is the only mark on
-	# the membrane that is not an event -- and it walks round the contour as the
-	# cell turns, which is the whole of what a statocyst knows.
-	var level_tier := _senses[SENSE_STATOCYST]
-	if _level > 0.0 and level_tier > 0:
-		_press_lobes[1] = _lobe(_level_bearing,
-			LEVEL_HALFWIDTH_DEG[level_tier], LEVEL_PUSH_BY_TIER[level_tier] * _level)
-	else:
-		_press_lobes[1] = IDLE_LOBE
+	# The last pressure slot is free: it drew `statocyst`'s level until the gene
+	# was retired. It stays idle rather than leaving the shader, so the uniform
+	# and every lobe block keep their shape.
+	_press_lobes[1] = IDLE_LOBE
 
 
 ## The lobe `z` for which the shader's `smoothstep(z, 1.0, dot)` equals [param
