@@ -39,14 +39,23 @@ extends Node
 ##                           the window does on a device. The app really can
 ##                           quit under this flag -- that is the point of it
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right, tab, v, and the
-##                           four chords shift-left / shift-right / shift-up /
-##                           shift-down. The chords exist because the genome
-##                           screen's move is `Shift`+arrow read as a **raw**
-##                           key -- a content pack cannot add an InputMap
-##                           action -- so nothing else in this harness could
-##                           reach it. On the ring of slots all four go
-##                           somewhere (dna-body.md §6).
+##                           esc, enter, up, down, left, right, tab, v, space,
+##                           w, e, a, d, and the four chords shift-left /
+##                           shift-right / shift-up / shift-down. The chords
+##                           exist because the genome screen's move is
+##                           `Shift`+arrow read as a **raw** key -- a content
+##                           pack cannot add an InputMap action -- so nothing
+##                           else in this harness could reach it. On the ring of
+##                           slots all four go somewhere (dna-body.md §6).
+##   --key-down=<seconds>:<key>
+##   --key-up=<seconds>:<key>
+##                           press a key and leave it down, then let it go; the
+##                           same key names as --tap=, repeatable. --tap= is a
+##                           press and its release in one frame, which cannot
+##                           pose a gesture that *is* the hold: `E` opens the
+##                           body to place a gene, `A` / `D` walk the lit slot
+##                           while it stays down, and letting go is what places
+##                           (dna-body.md §8)
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
 ##                           repeatable. This is how the genome strip's two-tap
@@ -301,6 +310,15 @@ extends Node
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
+##   --offer=<seconds>       print the placing gesture's state on that interval,
+##                           and at once whenever it changes: whether the body
+##                           is open and to which finger, the slot lit, the
+##                           cell's steer and heading, and the waiting genes
+##                           and the DNA. dna-body.md §8's evidence is a log,
+##                           because what the gesture does to steering -- a tap
+##                           on the body still dashes, a drag still steers, a
+##                           second finger keeps the first one's turn -- is
+##                           nothing a frame can show
 ##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
 ##                           **a second player**, on a real loopback session --
 ##                           two `net_session.gd` nodes in this process, a real
@@ -508,6 +526,8 @@ var _esc_sent := false
 var _back_ats: Array[float] = []
 ## [[seconds, keycode], ...], consumed as the clock passes each one.
 var _taps: Array = []
+## --key-down= / --key-up=: [[seconds, keycode, pressed], ...], the same way.
+var _key_holds: Array = []
 var _freeze_at := -1.0
 var _freeze_on := ""
 var _freeze_countdown := -1
@@ -605,6 +625,11 @@ var _lifts: Array = []
 ## How often to print the drawn controls' own state, or -1 for never.
 var _controls_trace := -1.0
 var _controls_clock := 0.0
+## --offer=: the interval, the clock toward it, and the last state printed, so a
+## change prints at once.
+var _offer_trace := -1.0
+var _offer_clock := 0.0
+var _offer_said := ""
 ## What `--seed=` was given, kept rather than only spent. The global `seed()`
 ## call is made where the flag is parsed; the membrane bus owns a private
 ## generator that no global call can reach, so the number has to survive until
@@ -843,6 +868,13 @@ func _ready() -> void:
 			var parts := text.trim_prefix("--tap=").split(":")
 			if parts.size() == 2:
 				_taps.append([float(parts[0]), _keycode(parts[1])])
+		elif text.begins_with("--key-down=") or text.begins_with("--key-up="):
+			var down := text.begins_with("--key-down=")
+			var key_parts := text.trim_prefix(
+				"--key-down=" if down else "--key-up=").split(":")
+			if key_parts.size() == 2:
+				_key_holds.append([float(key_parts[0]), _keycode(key_parts[1]),
+					down])
 		elif text.begins_with("--freeze-at="):
 			_freeze_at = float(text.trim_prefix("--freeze-at="))
 		elif text.begins_with("--freeze-on="):
@@ -968,6 +1000,8 @@ func _ready() -> void:
 				int(lift[1]) if lift.size() > 1 else 0])
 		elif text.begins_with("--controls="):
 			_controls_trace = float(text.trim_prefix("--controls="))
+		elif text.begins_with("--offer="):
+			_offer_trace = float(text.trim_prefix("--offer="))
 		elif text.begins_with("--rects="):
 			_rects_at = float(text.trim_prefix("--rects="))
 		elif text.begins_with("--mouse-press="):
@@ -1781,6 +1815,7 @@ func _process(delta: float) -> void:
 	_step_trace(delta)
 	_step_pings_trace(delta)
 	_step_controls(delta)
+	_step_offer(delta)
 	_step_rects()
 	_step_kill()
 	_step_divide()
@@ -1805,6 +1840,18 @@ func _process(delta: float) -> void:
 			_send_key(code, false)
 			print("[drive] %5.2f  tap %d" % [_clock, code])
 			_taps.remove_at(i)
+	# Front to back, unlike the taps: two that fall due in one frame arrive in
+	# the order they were given, so a key let go and pressed again stays that
+	# way round.
+	var due := 0
+	while due < _key_holds.size():
+		if _clock < float(_key_holds[due][0]):
+			due += 1
+			continue
+		var one: Array = _key_holds.pop_at(due)
+		_send_key(one[1], bool(one[2]))
+		print("[drive] %5.2f  key %d %s" % [_clock, one[1],
+			"down" if bool(one[2]) else "up"])
 
 	for i in range(_touches.size() - 1, -1, -1):
 		if _clock >= float(_touches[i][0]):
@@ -2420,6 +2467,41 @@ func _step_controls(delta: float) -> void:
 		cell.steer if cell != null else 0.0])
 
 
+## The placing gesture, read off the run (dna-body.md §8): whether the body is
+## open and to which finger or key, the slot lit, and what the steering and the
+## DNA are doing meanwhile. On the interval, and at once on any change of the
+## first three or of the queue or the layout -- so an open, a new aim and a
+## placement each get a line at the frame they happened, with the steer on it.
+##
+## Reaching for the run's private state is a thing only tools/ may do; the game
+## itself prints nothing about this gesture.
+func _step_offer(delta: float) -> void:
+	if _offer_trace <= 0.0 or _run == null or _genome == null:
+		return
+	# A scene with no such gesture -- --play= something else -- has nothing to say.
+	if _run.get("_offer_open") == null:
+		return
+	var open: bool = _run.get("_offer_open")
+	var pointer: int = _run.get("_offer_pointer")
+	var keyed: bool = _run.get("_offer_key")
+	var aim: int = _run.get("_offer_aim")
+	var layout: Array = _genome.layout()
+	var who := "key e" if keyed else ("finger %d" % pointer if pointer >= 0
+		else ("mouse" if pointer == -1 else "nobody"))
+	var said := "%s %s %d %s %s" % [open, who, aim, layout, _genome.waiting()]
+	_offer_clock += delta
+	if said == _offer_said and _offer_clock < _offer_trace:
+		return
+	_offer_clock = 0.0
+	_offer_said = said
+	var cell := _find_node_with(_run, &"bearing_to")
+	print("[offer] %6.2f  %s  %-8s  aim %2d  steer %+5.2f  heading %+7.1f  waiting %s  dna %s" % [
+		_clock, "OPEN  " if open else "closed", who, aim,
+		cell.steer if cell != null else 0.0,
+		rad_to_deg(cell.heading) if cell != null else 0.0,
+		_waiting_text(), layout])
+
+
 func _field_text(index: int, cell: Node) -> String:
 	var bodies: Array = _food.get("_cells")
 	var b: Object = bodies[index]
@@ -2763,6 +2845,11 @@ func _keycode(name: String) -> Key:
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
 		"w": return KEY_W
+		# The placing gesture's keys (dna-body.md §8): `E` holds the body open,
+		# and `A` / `D` -- the steer keys -- walk the lit slot while it does.
+		"e": return KEY_E
+		"a": return KEY_A
+		"d": return KEY_D
 		_: return KEY_NONE
 
 
