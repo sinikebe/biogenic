@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "6a3796dab7adc31b893970f14a246f5abe853938",
-  "subject": "Merge pull request #48 from sinikebe/9-what-s-new-visibility-predicate-does-not-match-the-dialog-s-own-emptiness-test",
-  "synced_at": "2026-09-14T18:42:18Z"
+  "commit": "ca4a2f85ae6a8bd4e593058b452c4289a59a42fd",
+  "subject": "Merge pull request #57 from sinikebe/54-let-a-build-follow-a-branch-s-releases-so-a-game-can-be-tried-on-a-device-before-it-ships",
+  "synced_at": "2026-09-28T10:37:33Z"
 }
