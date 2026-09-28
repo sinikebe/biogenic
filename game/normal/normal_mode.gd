@@ -2235,6 +2235,14 @@ func _notification(what: int) -> void:
 			# what a mis-tap costs, which is nothing. A waiting gene carried out
 			# of the tray and let go on nothing stays in hand, unplaced.
 			if _dragging != SLOT_NONE:
+				# **And a gene let go on nothing, or back where it came from,
+				# leaves its slot unarmed when a gene is in hand.** The press
+				# that lifted it began a drag, not a first tap, so the slot
+				# must not be one tap from the gene in hand writing over it --
+				# the rule [method _move_slot] keeps for a move that landed.
+				if _dragging >= 0 and _hand() != &"":
+					_armed = SLOT_SAMPLE
+					_armed_at = Time.get_ticks_msec()
 				_dragging = SLOT_NONE
 				_redraw_figure()
 				_update_explain()
@@ -4534,9 +4542,10 @@ func _slot_drop(_at: Vector2, data: Variant, slot: int) -> void:
 	if carried.has(&"place"):
 		_drop_waiting(StringName(carried[&"place"]), slot)
 		return
-	# The moved gene stays selected and the keyboard follows it, so the three
-	# lines under the figure are a receipt for what moved and where it now
-	# points. That is the rule a commit already has.
+	# The keyboard follows the moved gene, and with nothing in hand the gene
+	# stays selected too, so the three lines under the figure are a receipt for
+	# what moved and where it now points. With a gene in hand the selection
+	# goes back to the hand -- see [method _move_slot].
 	_move_slot(int(carried[&"move_from"]), slot)
 
 

@@ -503,10 +503,15 @@ time past it, so the arm had lapsed by the shot. Rendered alone it holds.
    run on it.
 5. **Tray hover on desktop** — pointing at a waiting gene to read it — is not
    built.
-6. **A move while a gene is in hand leaves its destination armed**, as it did
-   on the strand: the drop is the arming tap, and one more tap writes the gene
-   in hand over the gene just moved. `tap again to write … over …` now says so
-   on the verb line; whether a move should disarm instead is a separate call.
+6. ~~**A move while a gene is in hand leaves its destination armed.**~~
+   **Closed before it shipped** -- the strand had done the same. A drop, a
+   `Shift`+arrow and a drag let go on nothing or back where it began are none
+   of them a first tap on that slot, so with a gene in hand each of them now
+   hands the selection back to the hand, and the keyboard alone follows the
+   gene. Measured by mouse: the beam dragged to the empty forward-port slot and
+   tapped once used to be written over by the waiting gene; now that tap only
+   arms (`tap again to write ping over beam`). Writing over a gene takes two
+   taps on its slot, both of them the player's, on every path.
 
 ---
 
