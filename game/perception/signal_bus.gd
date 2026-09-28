@@ -211,10 +211,11 @@ const LIGHT_HALFWIDTH_DEG: Array[float] = [0.0, 26.0, 19.0, 13.0]
 const LIGHT_FLOOR := 0.02
 
 # --- The genes that reach the membrane --------------------------------------
-# Nothing below adds a uniform: the beam takes the last free glow lobe, `level`
-# takes the last free *pressure* lobe, and `touch` fires the bruise envelope the
-# membrane has had since Phase 1. `focus` used to narrow a lobe that already
-# existed; the lobe it narrowed became a ring and the gene was retired.
+# Nothing below adds a uniform: the beam takes the last free glow lobe, and
+# `touch` fires the bruise envelope the membrane has had since Phase 1. `focus`
+# used to narrow a lobe that already existed; the lobe it narrowed became a ring
+# and the gene was retired. `level` held the last free *pressure* lobe until it
+# was retired too, and that lobe is idle again.
 
 ## `ocellus` / beam. **The only thing you can see**: the point where the beam
 ## hits something, at that bearing and nothing else. Louder than the stigma's

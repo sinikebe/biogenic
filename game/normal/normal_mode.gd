@@ -3189,6 +3189,12 @@ const DRAG_LIFT := 34.0
 const WAIT_SIZE := Vector2(116.0, 48.0)
 const WAIT_BAR_X := 16.0
 const WAIT_WORD_X := 32.0
+## The air right of a chip's last pip: what `venom`, the widest word, leaves at
+## 116. A gene this build has no word for is read by its own name, and a name is
+## wider than any word -- `statocyst`'s reaches 128 with its pips -- so its chip
+## grows to keep this much rather than land its pips on the next chip. See
+## [method _waiting_width].
+const WAIT_AIR := 3.0
 ## Every gene not in hand is drawn down to this; the one in hand goes loud and
 ## gains an underline in its own hue.
 const WAIT_DIM := 0.55
@@ -3966,7 +3972,7 @@ func _make_tray_caption() -> Control:
 func _make_waiting(gene: StringName) -> Control:
 	var node := Control.new()
 	node.name = "Waiting_%s" % gene
-	node.custom_minimum_size = WAIT_SIZE
+	node.custom_minimum_size = Vector2(_waiting_width(gene), WAIT_SIZE.y)
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	node.focus_mode = Control.FOCUS_ALL
 	node.set_meta(&"waiting", gene)
@@ -3978,6 +3984,20 @@ func _make_waiting(gene: StringName) -> Control:
 	node.set_drag_forwarding(_waiting_drag.bind(node, gene), Callable(),
 		Callable())
 	return node
+
+
+## How wide [param gene]'s chip is: [constant WAIT_SIZE] for every word in
+## [constant WORDS], and wider for a name that is not one -- a retired gene's,
+## handed over by a host on older content. The tray is a flow, so a wide chip
+## can cost a row but never lands on its neighbour.
+func _waiting_width(gene: StringName) -> float:
+	var font := _tray.get_theme_default_font()
+	if font == null:
+		return WAIT_SIZE.x
+	var word := font.get_string_size(_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0, CHIP_WORD).x
+	return maxf(WAIT_SIZE.x, ceilf(WAIT_WORD_X + word + PIP_GAP + PIP_R * 2.0
+		+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + WAIT_AIR))
 
 
 func _on_slot_hover(slot: int) -> void:
@@ -4263,13 +4283,15 @@ func _draw_waiting(node: Control, gene: StringName) -> void:
 		# Carried by definition, so rings and never a disc.
 		_draw_pips(node, Vector2(WAIT_WORD_X + width + PIP_GAP + PIP_R, mid),
 			tone, _genome.waiting_copies(gene), 0, ink)
+	# The chip's own width, not WAIT_SIZE's: a name wider than any word grows
+	# its chip, and the underline is under the whole of it.
 	if in_hand:
 		node.draw_line(Vector2(6.0, WAIT_SIZE.y - 3.0),
-			Vector2(WAIT_SIZE.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
+			Vector2(node.size.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
 			1.5, true)
 	if node.has_focus():
 		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			Vector2(WAIT_SIZE.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			Vector2(node.size.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
 
 
