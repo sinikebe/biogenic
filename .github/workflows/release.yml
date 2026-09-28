@@ -4,30 +4,64 @@ name: Release
 # packs, then publishes them as a GitHub release together with the manifest the
 # in-app updater polls.
 #
-# Runs only on merges to main and on manual dispatch. Pull requests are handled
-# by ci.yml, which builds the same way but never sees a secret and never
-# publishes -- so a fork PR cannot reach the signing key.
+# Runs on merges to main, on pushes to dev, and on manual dispatch. Pull
+# requests are handled by ci.yml, which builds the same way but never sees a
+# secret and never publishes -- so a fork PR cannot reach the signing key.
+#
+# A push to main is a release, and every player gets it. main only ever receives
+# one: the pull request from dev that the `release` skill opens (CLAUDE.md, "Git
+# workflow"). Work lands on dev, and a push to dev publishes the dev app instead:
+# the rolling prerelease branch-dev, which /releases/latest/ never returns. The
+# dev app is a separate app -- its own package id, name and user:// -- because it
+# was exported for dev, and the stamp that gives it that identity is the one that
+# decides what it polls, so nothing built for main can reach it. The template's
+# docs/UPDATES.md, "Trying a change on a device before it ships", has the
+# mechanism.
 
 on:
   push:
-    branches: [main]
+    branches: [main, dev]
   workflow_dispatch:
 
 # Read-only by default; the publish job opts into the one extra scope it needs.
 permissions:
   contents: read
 
+# Per-ref, so a push to dev does not queue behind a release to main. Still never
+# cancelled: two runs publishing to the same tag would race on its assets.
 concurrency:
-  group: release
+  group: release-${{ github.ref }}
   cancel-in-progress: false
 
 env:
   GODOT_VERSION: "4.7.2"
   GODOT_RELEASE: stable
+  # Empty on main, which is what makes a release a release: prepare_build.sh and
+  # publish_release.sh behave exactly as they always did when it is unset. On dev
+  # it names the stream the build follows.
+  #
+  # The literal "main", where the template compares against the repository's
+  # default branch. main is what players have whatever the default branch is set
+  # to (CLAUDE.md, "Git workflow"); with the template's comparison, making dev the
+  # default would publish every push to dev to every player.
+  #
+  # `!= 'main' && ref_name || ''`, not the other way round: an empty string is
+  # falsy to Actions, so `== 'main' && '' || ref_name` would fall through and hand
+  # every release the branch path.
+  #
+  # An environment variable, never interpolated into a `run:` block: a branch name
+  # can come from anyone who can push one. prepare_build.sh refuses anything
+  # outside [A-Za-z0-9._-].
+  RELEASE_BRANCH: ${{ github.ref_name != 'main' && github.ref_name || '' }}
 
 jobs:
   release:
     name: Build and publish
+    # Only main (the release every player gets) and dev (the dev app) publish.
+    # A manual dispatch runs on whatever branch it is started from, and would
+    # otherwise build that branch -- reviewed or not -- with the signing key and
+    # publish it as a prerelease of its own.
+    if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     permissions:
       contents: write # create the release and upload its assets
@@ -56,7 +90,11 @@ jobs:
           path: |
             ~/godot
             ~/.local/share/godot/export_templates
-          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux
+          # ci/install_godot.sh verifies a restored engine against the manifest it
+          # wrote at install and fails the job on any difference. actions/cache
+          # never saves over a key that matched, so a bad entry is dropped by
+          # bumping -verified-vN -- the template's key, copied by hand.
+          key: godot-${{ env.GODOT_VERSION }}-${{ env.GODOT_RELEASE }}-linux-verified-v1
 
       - name: Install Godot
         run: bash ci/install_godot.sh
