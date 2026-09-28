@@ -10,26 +10,37 @@ library it carries, and what an engine upgrade has to repeat. Issues #78 and
 |---|---|
 | Engine | Godot **4.7.2-stable**, official build `ed1daf0bf` |
 | Pinned in | `GODOT_VERSION` in `.github/workflows/ci.yml`, `release.yml` and `sync-launcher.yml` |
-| Installed by | `ci/install_godot.sh`, from the launcher template (it checks nothing: #74) |
+| Installed by | `ci/install_godot.sh`, from the launcher template, which checks a download against Godot's `SHA512-SUMS.txt` and a cache hit against its own record (sinikebe/godot-launcher-template#55) |
 | Held to | `.github/engine/godot-4.7.2-stable.sha512`: the editor and all 35 files of the export templates, SHA-512 each, and nothing beside them |
 | Reported by | the server's status line, `Godot 4.7.2-stable (official)`, and `--version`, `4.7.2.stable.official.ed1daf0bf`, which the updater's pre-flight reads |
-| `binary_version` | 4 |
+| `binary_version` | 5 |
 
 **The manifest is checked on every run, not only on a download.** CI caches
-`~/godot` and the export templates under a key made of the version, and a cache
-hit skips `install_godot.sh`'s download entirely. So the "Verify the engine"
-step runs `sha512sum --check --strict` over the files as they stand: a fresh
-install and a cache hit are held to the same bytes, and a manifest missing for
-the pinned version fails the job. The manifest's own provenance is Godot's
-release: each archive was checked against that release's `SHA512-SUMS.txt`
-before a file was taken out of it (§4 has the commands).
+`~/godot` and the export templates under a key made of the version. On a
+download, `install_godot.sh` checks each archive against the `SHA512-SUMS.txt`
+published beside it; on a cache hit it downloads nothing and checks the files
+against the record it wrote at install. Neither says where the bytes came from:
+the sums are served from the same place as the archives, and the record rides
+in the same cache entry as the files it describes -- the template says as much,
+and leaves origin to a manifest the game pins itself. This is that manifest. The
+"Verify the engine" step runs `sha512sum --check --strict` over the files as
+they stand: a fresh install and a cache hit are held to the same bytes, and a
+manifest missing for the pinned version fails the job. The manifest's own
+provenance is Godot's release: each archive was checked against that release's
+`SHA512-SUMS.txt` before a file was taken out of it (§4 has the commands).
 
 **Nothing may lie beside those files.** One empty `._sc_` next to the editor
 puts it in self-contained mode, and an export then takes its templates from
 `~/godot/editor_data/export_templates/` -- measured with 4.7.2, by the path its
 missing-template error names. Every checksum would still pass, the pinned files
 all there and unused. So the step also compares the files under `~/godot` and
-the templates directory with the manifest's list, and one extra fails it.
+the templates directory with the manifest's list, and one extra fails it. The
+two exceptions are `install_godot.sh`'s own records, one `.verified-install.sha512`
+in each tree, skipped by their exact paths and nowhere else: the engine never
+reads them, and the template may change their text. Measured on the 4.7.2 tree
+with both records in place: it passes, and a `._sc_`, a record anywhere else, a
+file inside a directory named like a record, a changed byte, a missing template
+and an extra one each fail it.
 
 **The launcher sync verifies too, after it has replaced `ci/`.** If the
 template ever moves where `install_godot.sh` puts the engine, the sync job
@@ -168,7 +179,8 @@ server replaces its executable (`docs/server.md` §4).
    `grep ' <archive>$' SHA512-SUMS.txt | sha512sum -c -`.
 2. **Write the manifest**, from a scratch home laid out as `install_godot.sh`
    lays it: `godot/godot` and
-   `.local/share/godot/export_templates/<V>.stable/*`, nothing else. From that
+   `.local/share/godot/export_templates/<V>.stable/*`, nothing else -- not
+   the script's `.verified-install.sha512` records either. From that
    home, with `<repo>` the repository's absolute path:
    `{ sha512sum godot/godot; find .local/share/godot/export_templates/<V>.stable -type f | LC_ALL=C sort | xargs sha512sum; } > <repo>/.github/engine/godot-<V>-stable.sha512`,
    then run the body of "Verify the engine" there, with `HOME` at that home,
