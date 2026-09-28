@@ -372,6 +372,9 @@ var _dim := 1.0
 ## **The division**, written once a frame by the run; same contract as
 ## soma.gd's. Empty is an ordinary body. docs/design/lifecycle.md §4.
 var division := {}
+## **The body held open to place a gene**, written once a frame by the run; same
+## contract as soma.gd's. Empty is an ordinary body. dna-body.md §8.
+var offer := {}
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -1748,7 +1751,23 @@ func _draw_held_sample(p: Vector2, r: float, beat: float, a: float) -> void:
 		_genome_node.layout() if _genome_node != null else [],
 		_genome_node.held_sample if _genome_node != null else &"",
 		_genome_node.held_remaining if _genome_node != null else 0.0,
-		beat, _clock, a, 1.0 / ZOOM)
+		beat, _clock, a, 1.0 / ZOOM, offer)
+
+
+## **Where the player's own body is on the screen**, which way its nose points
+## there and its radius, in canvas px -- `[centre, heading, radius]`, the same
+## answer soma.gd gives for point of view. The one thing the run needs to
+## hit-test a press on the body (dna-body.md §8).
+##
+## **The heading is the screen's, not the world's**: with the camera locked the
+## world turns under the cell by [member _spin], and a finger is aimed at the
+## body the player sees. Read off the same transform the body is drawn through,
+## so the hit circle cannot drift from the drawing. Empty with nothing bound.
+func self_on_screen() -> Array:
+	if _cell == null:
+		return []
+	return [_world.get_global_transform_with_canvas() * _cell.position,
+		_cell.heading + _spin, _cell.radius * ZOOM]
 
 
 ## Where the cell is pointing. Teal, thin, and always exactly the same length --

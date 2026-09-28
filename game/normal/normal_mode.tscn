@@ -173,119 +173,73 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Buttons" type="VBoxContainer" parent="Hud/Pause/Center"]
+[node name="Columns" type="HBoxContainer" parent="Hud/Pause/Center"]
+mouse_filter = 2
+theme_override_constants/separation = 64
+
+[node name="Side" type="VBoxContainer" parent="Hud/Pause/Center/Columns"]
+mouse_filter = 2
+size_flags_vertical = 4
 theme_override_constants/separation = 48
 
-[node name="Genome" type="VBoxContainer" parent="Hud/Pause/Center/Buttons"]
-theme_override_constants/separation = 8
-
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
-theme_override_font_sizes/font_size = 15
-text = "genome"
-horizontal_alignment = 1
-
-[node name="Body" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
-mouse_filter = 2
-theme_override_constants/separation = 0
-alignment = 1
-
-[node name="Row" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
-theme_override_constants/separation = 0
-alignment = 1
-
-[node name="Explain" type="HBoxContainer" parent="Hud/Pause/Center/Buttons/Genome"]
-custom_minimum_size = Vector2(0, 26)
-mouse_filter = 2
-theme_override_constants/separation = 4
-alignment = 1
-
-[node name="Organ" type="Control" parent="Hud/Pause/Center/Buttons/Genome/Explain"]
-custom_minimum_size = Vector2(34, 26)
-mouse_filter = 2
-
-[node name="Gene" type="Label" parent="Hud/Pause/Center/Buttons/Genome/Explain"]
-mouse_filter = 2
-theme_override_font_sizes/font_size = 15
-
-[node name="Says" type="Label" parent="Hud/Pause/Center/Buttons/Genome/Explain"]
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.62)
-theme_override_font_sizes/font_size = 15
-
-[node name="Hint" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
-custom_minimum_size = Vector2(0, 19)
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
-theme_override_font_sizes/font_size = 14
-horizontal_alignment = 1
-
-[node name="Act" type="Label" parent="Hud/Pause/Center/Buttons/Genome"]
-custom_minimum_size = Vector2(0, 19)
-mouse_filter = 2
-theme_override_colors/font_color = Color(0.588, 1, 0.859, 0.5)
-theme_override_font_sizes/font_size = 14
-horizontal_alignment = 1
-
-[node name="Settings" type="HBoxContainer" parent="Hud/Pause/Center/Buttons"]
+[node name="Settings" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side"]
 mouse_filter = 2
 size_flags_horizontal = 4
-theme_override_constants/separation = 48
+theme_override_constants/separation = 12
 
-[node name="Light" type="PanelContainer" parent="Hud/Pause/Center/Buttons/Settings"]
+[node name="Light" type="PanelContainer" parent="Hud/Pause/Center/Columns/Side/Settings"]
 
-[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Buttons/Settings/Light"]
+[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side/Settings/Light"]
 theme_override_constants/separation = 6
 
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Settings/Light/Box"]
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Side/Settings/Light/Box"]
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
 theme_override_font_sizes/font_size = 15
 text = "light"
 horizontal_alignment = 1
 
-[node name="Slider" type="HSlider" parent="Hud/Pause/Center/Buttons/Settings/Light/Box"]
+[node name="Slider" type="HSlider" parent="Hud/Pause/Center/Columns/Side/Settings/Light/Box"]
 min_value = 1.0
 max_value = 2.4
 step = 0.05
 value = 1.0
 
-[node name="View" type="PanelContainer" parent="Hud/Pause/Center/Buttons/Settings"]
+[node name="View" type="PanelContainer" parent="Hud/Pause/Center/Columns/Side/Settings"]
 
-[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Buttons/Settings/View"]
+[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side/Settings/View"]
 theme_override_constants/separation = 6
 
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Settings/View/Box"]
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Side/Settings/View/Box"]
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
 theme_override_font_sizes/font_size = 15
 text = "camera"
 horizontal_alignment = 1
 
-[node name="Toggle" type="Button" parent="Hud/Pause/Center/Buttons/Settings/View/Box"]
+[node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/View/Box"]
 text = "north up"
 
-[node name="Feel" type="PanelContainer" parent="Hud/Pause/Center/Buttons/Settings"]
+[node name="Feel" type="PanelContainer" parent="Hud/Pause/Center/Columns/Side/Settings"]
 
-[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Buttons/Settings/Feel"]
+[node name="Box" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Side/Settings/Feel"]
 theme_override_constants/separation = 6
 
-[node name="Caption" type="Label" parent="Hud/Pause/Center/Buttons/Settings/Feel/Box"]
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
 theme_override_font_sizes/font_size = 15
 text = "controls"
 horizontal_alignment = 1
 
-[node name="Toggle" type="Button" parent="Hud/Pause/Center/Buttons/Settings/Feel/Box"]
+[node name="Toggle" type="Button" parent="Hud/Pause/Center/Columns/Side/Settings/Feel/Box"]
 text = "anywhere"
 
-[node name="Resume" type="Button" parent="Hud/Pause/Center/Buttons"]
+[node name="Resume" type="Button" parent="Hud/Pause/Center/Columns/Side"]
 size_flags_horizontal = 4
 text = "resume"
 
-[node name="Warn" type="Label" parent="Hud/Pause/Center/Buttons/Resume"]
+[node name="Warn" type="Label" parent="Hud/Pause/Center/Columns/Side/Resume"]
 visible = false
 anchors_preset = -1
 anchor_left = 0.5
@@ -301,9 +255,83 @@ theme_override_font_sizes/font_size = 15
 text = "the water is still moving · you can still be eaten"
 horizontal_alignment = 1
 
-[node name="Leave" type="Button" parent="Hud/Pause/Center/Buttons"]
+[node name="Leave" type="Button" parent="Hud/Pause/Center/Columns/Side"]
 size_flags_horizontal = 4
 text = "leave"
+
+[node name="Genome" type="VBoxContainer" parent="Hud/Pause/Center/Columns"]
+custom_minimum_size = Vector2(560, 0)
+mouse_filter = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 8
+
+[node name="Caption" type="Label" parent="Hud/Pause/Center/Columns/Genome"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.45)
+theme_override_font_sizes/font_size = 15
+text = "genome"
+horizontal_alignment = 1
+
+[node name="Waiting" type="HFlowContainer" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(0, 48)
+mouse_filter = 2
+theme_override_constants/h_separation = 8
+theme_override_constants/v_separation = 8
+alignment = 1
+
+[node name="Figure" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(420, 372)
+mouse_filter = 2
+size_flags_horizontal = 4
+
+[node name="Body" type="Control" parent="Hud/Pause/Center/Columns/Genome/Figure"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Slots" type="Control" parent="Hud/Pause/Center/Columns/Genome/Figure"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Explain" type="HBoxContainer" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(0, 26)
+mouse_filter = 2
+theme_override_constants/separation = 4
+alignment = 1
+
+[node name="Organ" type="Control" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+custom_minimum_size = Vector2(34, 26)
+mouse_filter = 2
+
+[node name="Gene" type="Label" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+mouse_filter = 2
+theme_override_font_sizes/font_size = 15
+
+[node name="Says" type="Label" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.62)
+theme_override_font_sizes/font_size = 15
+
+[node name="Hint" type="Label" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
+
+[node name="Act" type="Label" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(0, 19)
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.588, 1, 0.859, 0.5)
+theme_override_font_sizes/font_size = 14
+horizontal_alignment = 1
 
 [node name="Recorder" type="Node" parent="."]
 process_mode = 1

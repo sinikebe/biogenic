@@ -1753,6 +1753,10 @@ It is announced on the one line of text this mode has (§8), in the same voice:
 steering line this shows on **every** run, because the thing it announces
 happens on every run and a player who missed it once is a player swimming blind.
 
+> Since `dna-body.md` §8 the line names the gesture that places it without
+> pausing: `a sense grew · hold e to place it`, or `· hold your body to place
+> it` on touch.
+
 **Guaranteeing it lands cost one new idea.** The born genome is already full —
 three slots, three organs — so a sample granted into it has nowhere to lapse to
 and evaporates after forty-five seconds, leaving exactly the state the grant
@@ -1761,6 +1765,15 @@ one *only when there is no free slot*: the gift comes with somewhere to put it.
 It is absorbed rather than permanent, because `slots()` still clamps at
 `SLOT_MAX`. A player who never opens the pause screen gets the gene anyway, in
 that slot, at fifty seconds.
+
+**Since #118 the gift can take a second one.** Genes now queue instead of
+replacing each other, so a gene eaten before the grant can lapse first -- into
+the slot the gift brought. The gift, lapsing after it with no room, is given
+one more bonus slot rather than evaporating. Before the queue the same meal was
+simply overwritten by the gift, so the choice was between losing that gene and
+lending one more early slot; the slot costs less, and it is absorbed by growth
+the same way. A layout the bonus cannot widen -- seven loci, or a newborn's
+inherited layout longer than her body -- still leaves the gift nowhere to land.
 
 `FIRST_DISTANCE` moves from 1400 to 1000 so the authored first arrival is inside
 the reach of a tier-1 `chemocyte` (1100) and a tier-1 `ampulla` (1100), and still

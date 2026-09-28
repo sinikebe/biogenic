@@ -123,17 +123,61 @@ const EXPRESS_CHANCE: Array[float] = [0.0, 0.55, 0.80, 1.00]
 ## it. One exception, named, rather than a rule with a soft edge.
 const ALWAYS_EXPRESSED: Array[StringName] = [&"cytostome"]
 
-## The gene whose sample is waiting for a free slot, or &"" for none.
+## One gene waiting for a slot: which gene, how many copies of it have been
+## eaten since it arrived, and how many seconds it has left.
+class Waiting:
+	var gene: StringName
+	var copies: int
+	var left: float
+
+	func _init(what: StringName, count: int, seconds: float) -> void:
+		gene = what
+		copies = count
+		left = seconds
+
+
+## **Every gene waiting for a slot, soonest to lapse first.** Issue #118: this
+## used to be one held sample, and the next new gene overwrote it -- eating two
+## in a row threw the first away before the player was ever offered it, and
+## dna-strand.md §6.3 had already said that at three meals a generation that is
+## a large share of what you swallow. Now a second gene waits behind the first.
+##
+## **The order is the lapse order, and it holds by construction**: every clock
+## runs at the same rate, and anything that starts a clock -- a new gene, the
+## same gene eaten again, a birth -- starts it full and puts it at the back. So
+## the head is always the next to lapse, and it is also the one a placement
+## takes unless the player picks another ([method place]).
 ##
 ## Expressed twice, which is what having two views is for. Point of view gets a
 ## second, smaller heartbeat behind every beat (§3.3): `pulse_now()` on a delay,
 ## in signal_bus.gd's _step_beat, carrying no identity at all -- only *there is
 ## something in you that is not resolved*. Full vision gets the literal thing, a
-## disc of the gene's hue inside the body. §5.2's two-tap swap on the pause
-## screen is what resolves it, through [method replace].
-var held_sample: StringName = &""
-## Seconds left on that sample.
-var held_remaining := 0.0
+## disc of the head's hue inside the body. §5.2's two-tap swap on the pause
+## screen is what resolves it, through [method place].
+var _waiting: Array[Waiting] = []
+
+## The gene at the head of the queue -- the one a placement takes, the one the
+## body draws and the membrane echoes -- or &"" for none.
+##
+## **Assigning it is a pose, not a meal**: the queue becomes that one gene at one
+## copy with a full clock, or empties for &"". Only the dev harness and the
+## replay write it, and the replay restores exactly what it recorded, which is
+## the head -- so neither has to know there is a queue behind it.
+var held_sample: StringName:
+	get:
+		return _waiting[0].gene if not _waiting.is_empty() else &""
+	set(gene):
+		_waiting.clear()
+		if gene != &"":
+			_waiting.append(Waiting.new(gene, 1, SAMPLE_SECONDS))
+## Seconds left on [member held_sample], 0 with nothing waiting. Assigning sets
+## the head's clock, which is how a posed sample and the replay hold it still.
+var held_remaining: float:
+	get:
+		return _waiting[0].left if not _waiting.is_empty() else 0.0
+	set(seconds):
+		if not _waiting.is_empty():
+			_waiting[0].left = seconds
 
 ## **Slots the body did not earn.** Exactly one thing grants these: the free
 ## sensing gene normal_mode.gd hands over at five seconds.
@@ -253,14 +297,16 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 			_body_slots[gene] = slot
 	bonus_slots = 0
 	_gift = &""
-	held_sample = &""
-	held_remaining = 0.0
+	# A death, a forced genome and a replayed one start with nothing waiting. A
+	# birth does too, and then gets back what her mother had not yet placed:
+	# normal_mode.gd's `_be_born()` hands it over through [method carry].
+	_waiting.clear()
 	_sync_order()
 
 
 func _process(delta: float) -> void:
 	_sync_order()
-	if held_sample == &"":
+	if _waiting.is_empty():
 		return
 	# **A slot opening no longer places the sample, and that is the change.**
 	# Phase 5 auto-filled the first free slot, which meant the player only ever
@@ -268,31 +314,58 @@ func _process(delta: float) -> void:
 	# which is the *end* of a run. The slot is the arc, so auto-placing is the
 	# game aiming the player's laser for them. It waits for a tap now.
 	#
-	# What still resolves itself is the case where there is nothing left for the
-	# sample to be: the gene arrived by some other route while it was held.
-	if _dna.has(held_sample):
-		# It arrived by another route. If it was the anti-blindness grant, it
-		# still has to land on the *body* -- otherwise eating the same gene
-		# inside the forty-five seconds would quietly cancel the one rescue in
-		# the game and leave a blind cell blind.
-		if held_sample == _gift:
-			_express_gift(held_sample, _order.find(held_sample))
-		integrate_into(_dna, held_sample, maxi(slots(), _order.size()))
-		held_sample = &""
-		held_remaining = 0.0
-		return
-	held_remaining -= delta
-	if held_remaining > 0.0:
-		return
-	# **A lapse with room still settles.** Forty-five seconds of not choosing is
-	# an answer -- "anywhere" -- and throwing the gene away for it would punish
-	# a player who never opens the pause screen by quietly deleting the whole
-	# progression. With no room it is simply gone, exactly as it always was.
+	# What still resolves itself is the case where there is nothing left for a
+	# sample to be: its gene reached the DNA by some other route while it
+	# waited -- a daughter whose one mutation drew that very gene, say.
+	for i in range(_waiting.size() - 1, -1, -1):
+		if _dna.has(_waiting[i].gene):
+			_settle(_waiting.pop_at(i), -1)
+	# **Every clock runs, not only the head's**: each meal is given its own
+	# forty-five seconds. The head is always the next to lapse (see
+	# [member _waiting]), so the lapses come off the front.
+	for waiting: Waiting in _waiting:
+		waiting.left -= delta
+	while not _waiting.is_empty() and _waiting[0].left <= 0.0:
+		_lapse(_waiting.pop_front())
+
+
+## **A lapse with room still settles.** Forty-five seconds of not choosing is an
+## answer -- "anywhere" -- and throwing the gene away for it would punish a
+## player who never opens the pause screen by quietly deleting the whole
+## progression. With no room it is simply gone, exactly as it always was.
+##
+## **The gift gets one more chance at room.** It came with a slot of its own
+## ([member bonus_slots]), but with a queue a gene eaten meanwhile can lapse into
+## that slot first -- so the gift is given one more, the same leg-up the grant
+## already gives, rather than the one rescue in the game evaporating behind an
+## ordinary meal. A layout the bonus cannot widen -- seven loci, or a newborn's
+## inherited layout already longer than her body -- still has no room for it,
+## exactly as the single held sample never did.
+func _lapse(waiting: Waiting) -> void:
 	var free := _first_free()
+	if free < 0 and waiting.gene == _gift and slots() < CellBody.SLOT_MAX:
+		bonus_slots += 1
+		free = _first_free()
 	if free >= 0:
-		_write(free, held_sample)
-	held_sample = &""
-	held_remaining = 0.0
+		_settle(waiting, free)
+
+
+## Writes one waiting gene into the DNA: into [param slot], or -- when its gene
+## is already there, which is the only case [param slot] may be -1 -- as more
+## copies of the locus that already carries it, never a second locus.
+##
+## If it was the anti-blindness grant it also lands on the *body*, whichever way
+## it arrived: otherwise eating the same gene inside the forty-five seconds
+## would quietly cancel the one rescue in the game and leave a blind cell blind.
+func _settle(waiting: Waiting, slot: int) -> int:
+	if _dna.has(waiting.gene):
+		if waiting.gene == _gift:
+			_express_gift(waiting.gene, _order.find(waiting.gene))
+		for copy in waiting.copies:
+			integrate_into(_dna, waiting.gene, maxi(slots(), _order.size()))
+		return Result.RAISED
+	_write(slot, waiting.gene, waiting.copies)
+	return Result.INTEGRATED
 
 
 ## Tier of one organ **this body wears**, 0 if it does not wear it. This is what
@@ -369,11 +442,21 @@ func integrate(gene: StringName) -> int:
 		_dna[gene] = value + 1
 		return Result.RAISED
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
-	# is told by a second, smaller heartbeat rather than by a screen. A sample
-	# arriving while one is already held replaces it -- the newest thing you
-	# swallowed is the one in you.
-	held_sample = gene
-	held_remaining = SAMPLE_SECONDS
+	# is told by a second, smaller heartbeat rather than by a screen. **A sample
+	# arriving while another waits queues behind it** (#118) -- it used to
+	# replace it, and the first gene was gone before anyone was asked.
+	var at := waiting_index(gene)
+	if at < 0:
+		_waiting.append(Waiting.new(gene, 1, SAMPLE_SECONDS))
+		return Result.HELD
+	# **The same gene again, before it was placed, is one more copy of it** --
+	# exactly what eating it again would have done had it been placed in
+	# between -- and its clock starts over, so it moves to the back: the
+	# newest meal is the one it waits from.
+	var again: Waiting = _waiting.pop_at(at)
+	again.copies = mini(again.copies + 1, TIER_MAX)
+	again.left = SAMPLE_SECONDS
+	_waiting.append(again)
 	return Result.HELD
 
 
@@ -388,32 +471,86 @@ func gift(gene: StringName) -> int:
 	return result
 
 
-## Puts the held sample over [param gene], at tier 1. §5.2's two-tap swap, and
-## §9.7's one irreversible action in the game: the player may drop this over
-## their own `cytostome` and fall to gape 0.58r, which cannot be undone. It is
-## either a real and interesting mistake or a soft lock, and §1.3's drifter
-## floor is what makes it the first -- there is always something small enough
-## left to eat.
+## Puts a waiting gene into DNA [param slot], at the copies it waited with, over
+## whatever is there. §5.2's two-tap swap, and §9.7's one irreversible action in
+## the game: the player may drop it over their own `cytostome` and fall to gape
+## 0.58r, which cannot be undone. It is either a real and interesting mistake or
+## a soft lock, and §1.3's drifter floor is what makes it the first -- there is
+## always something small enough left to eat.
+##
+## [param which] is the waiting gene's place in the queue: the head unless the
+## player picked another.
 ##
 ## **The slot the player tapped is the slot the gene lands in**, empty or not.
 ## That is the one placement decision in the game, and [member _order] is what
 ## makes it survivable: the gene goes to that index whatever else is empty, so
 ## the arc it will be worn on is the arc the tile's compass promised.
-func place(slot: int) -> int:
-	if held_sample == &"":
+func place(slot: int, which: int = 0) -> int:
+	if which < 0 or which >= _waiting.size():
 		return Result.NOTHING
 	_sync_order()
 	if slot < 0 or slot >= _order.size():
 		return Result.NOTHING
-	var taking := held_sample
-	held_sample = &""
-	held_remaining = 0.0
-	if _dna.has(taking):
-		# It arrived by another route while the sample was held. Nothing to do,
-		# and certainly not a second copy in a second slot.
-		return Result.NOTHING
-	_write(slot, taking)
-	return Result.INTEGRATED
+	# It reached the DNA by another route while it waited: [method _settle]
+	# raises that locus, and certainly writes no second copy in a second slot.
+	return _settle(_waiting.pop_at(which), slot)
+
+
+## Every gene waiting for a slot, head first. A fresh array: read it.
+func waiting() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for one: Waiting in _waiting:
+		out.append(one.gene)
+	return out
+
+
+## How many copies of [param gene] are waiting to be placed, 0 if it is not.
+## What a placement will write, and so the level a waiting gene is read at.
+func waiting_copies(gene: StringName) -> int:
+	var at := waiting_index(gene)
+	return _waiting[at].copies if at >= 0 else 0
+
+
+## Seconds [param gene] has left to wait before it lapses, 0 if it is not
+## waiting.
+func waiting_left(gene: StringName) -> float:
+	var at := waiting_index(gene)
+	return _waiting[at].left if at >= 0 else 0.0
+
+
+## Where [param gene] is in the queue, or -1.
+func waiting_index(gene: StringName) -> int:
+	for i in _waiting.size():
+		if _waiting[i].gene == gene:
+			return i
+	return -1
+
+
+## **Everything still waiting, handed over and emptied** -- the mother's half of
+## a division. See [method carry].
+func take_waiting() -> Array[Waiting]:
+	var out := _waiting.duplicate()
+	_waiting.clear()
+	return out
+
+
+## **What was still waiting goes with the daughter** (#118). A gene outside the
+## chromosome is a plasmid, and a dividing cell passes its plasmids on to its
+## daughters; the one the player goes on living as wakes carrying whatever her
+## mother had not placed yet, still waiting to be placed. It used to be dropped
+## by the [method express] a birth runs -- silently, and always for the gene in
+## the meal that finished the growth, which starts the split the same frame and
+## never had a chance at all.
+##
+## **Each clock starts full**, in the order they came: a new body is a new
+## forty-five seconds. And none of them is the gift any more -- [method express]
+## has already forgotten it -- because the grant was for the mother's body; a
+## daughter who cannot sense is given her own.
+func carry(samples: Array[Waiting]) -> void:
+	for one: Waiting in samples:
+		if waiting_index(one.gene) >= 0:
+			continue
+		_waiting.append(Waiting.new(one.gene, one.copies, SAMPLE_SECONDS))
 
 
 ## **Two loci trade places in the DNA, and nothing else changes.** The body is
@@ -479,19 +616,22 @@ func slot_of(gene: StringName) -> int:
 	return int(_body_slots.get(gene, -1))
 
 
-## Puts [param gene] in DNA [param slot], evicting whatever was there.
+## Puts [param copies] of [param gene] in DNA [param slot], evicting whatever was
+## there. One copy for a gene eaten once; more for one eaten again while it
+## waited (#118), which is what placing it between the two meals would have
+## written.
 ##
 ## The body is left alone: an organ you are wearing stays worn even after the
 ## DNA has written something else over its slot, which is what makes §9.7's
 ## irreversible mistake gentler and better -- dropping a gene over your own
 ## `cytostome` now costs your *daughters* a mouth, and you have a whole
 ## generation to see it coming on the strip and put it right.
-func _write(slot: int, gene: StringName) -> void:
+func _write(slot: int, gene: StringName, copies: int = 1) -> void:
 	var old := _order[slot]
 	if old != &"":
 		_dna.erase(old)
 	_order[slot] = gene
-	_dna[gene] = 1
+	_dna[gene] = clampi(copies, 1, TIER_MAX)
 	_express_gift(gene, slot)
 
 

@@ -622,6 +622,19 @@ static func _normal(fwd: Vector2, stb: Vector2, t: float) -> Vector2:
 	return n.normalized() if n.length_squared() > 0.0 else fwd
 
 
+## **A point on the skin**, at ovoid parameter [param t] -- radians, 0 the nose
+## and +PI/2 starboard, the parameter every arc in this file is written in --
+## pushed [param lift] out along the analytic normal. For a caller that has to
+## meet a body exactly without drawing one: the pause screen's tethers end here
+## and the arc it lights is traced here (dna-body.md §2). One curve, so the
+## mark and the fringe it sits beside cannot drift apart.
+static func skin_point(at: Vector2, heading: float, r: float, t: float,
+		lift: float = 0.0) -> Vector2:
+	var fwd := Vector2(sin(heading), -cos(heading))
+	var stb := Vector2(cos(heading), sin(heading))
+	return _surface(at, fwd, stb, r, t) + _normal(fwd, stb, t) * lift
+
+
 # ---------------------------------------------------------------------------
 # The fringe. One draw_multiline per gene rather than one draw_polyline per
 # cilium: a tier-3 cell wears 82 of them and there are five cells in the water,
@@ -1060,13 +1073,21 @@ const HELD_WILT := 15.0
 ## player's own cell**: every other body in the water has a genome too, but what
 ## is loose inside it is not something a cell could see from outside, and a
 ## water full of vacancy beads would be ink spent on nothing anyone can act on.
+##
+## [param offer] is the body held open to place [param gene] (dna-body.md §8):
+## `{"aim": slot, "copies": n}`, or empty. See [method _draw_offer].
 static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, remaining: float,
 		beat: float, clock: float, fade: float = 1.0,
-		unit: float = 1.0) -> void:
+		unit: float = 1.0, offer: Dictionary = {}) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var free := free_arcs(order)
+	var aim := -1
+	if not offer.is_empty() and gene != &"":
+		aim = int(offer.get("aim", -1))
+		_draw_offer(canvas, at, heading, r, order, gene,
+			int(offer.get("copies", 1)), aim, fade, unit)
 	var held := gene != &"" and remaining > 0.0
 	if free.is_empty() and not held:
 		return
@@ -1099,6 +1120,13 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 			if d < near:
 				near = d
 				tried = i
+		# **Held open, the finger decides which hole is being tried**, not the
+		# drift: the tuft on the skin and the thread move to the slot that is
+		# lit, so the body says the same thing as the bloom outside it -- and
+		# on a phone, where the lit bud is under the thumb, the tuft is the half
+		# that stays visible.
+		if aim >= 0:
+			tried = free.find(arc_for_slot(aim))
 
 	for i in free.size():
 		_draw_socket(canvas, at, fwd, stb, r, free[i], tone, i == tried,
@@ -1110,6 +1138,64 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		target = _socket_bead(at, fwd, stb, r, free[tried])
 	_draw_vesicle(canvas, seat, size, target, tried >= 0, -fwd, tone, wilt,
 		pulse, clock, fade, unit)
+
+
+## **The body held open** (dna-body.md §8), outboard of it. Every free slot
+## blooms as the waiting gene's own organ -- the tile organ the pause screen
+## draws, turned to point out along the slot's bearing -- and the one the finger
+## is aimed at goes bright, with a line from the skin to it.
+##
+## **Out at [constant OFFER_REACH] radii and never nearer than
+## [constant OFFER_REACH_MIN] canvas px, because the thumb is on the body**: on
+## the skin, every bud would be under the finger doing the choosing. The floor
+## is in canvas px, through [param unit], so full vision's real-size body blooms
+## as far out as the figure's.
+##
+## **The organ, and not a box, a ring or an arrow**: there is no HUD surface in
+## the playfield (diegetic-hud.md §1), and a bud of the gene's own strokes says
+## what is being placed and where it will grow in one mark. Only for free slots
+## -- nothing here ever offers to write over a gene.
+const OFFER_REACH := 2.3
+const OFFER_REACH_MIN := 118.0
+## The buds not aimed at, then the one that is. Multiplied by the caller's fade,
+## so the point-of-view figure's buds sit at its own FADE_PENDING.
+const OFFER_ALPHA := 0.34
+const OFFER_AIM_ALPHA := 0.95
+const OFFER_SCALE := 1.15
+## The line to the lit bud starts this share of the reach out, clear of the
+## thumb. On a small body that is clear of the rim and the fringe too; once the
+## body outgrows [constant OFFER_REACH_MIN] -- about r30 in point of view -- it
+## starts just inside the rim (0.97 r), and reads as the bud's thread leaving
+## the skin rather than a line laid over it.
+const OFFER_LINE_FROM := 0.42
+const OFFER_LINE_ALPHA := 0.55
+const OFFER_LINE_WIDTH := 1.4
+
+
+static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
+		r: float, order: Array, gene: StringName, copies: int, aim: int,
+		fade: float, unit: float) -> void:
+	var reach := maxf(r * OFFER_REACH, OFFER_REACH_MIN * unit)
+	var tone := hue(gene)
+	for slot in mini(order.size(), 3 + ARC_FREE.size()):
+		if StringName(order[slot]) != &"":
+			continue
+		var bearing := slot_bearing(slot) + heading
+		var dir := Vector2(sin(bearing), -cos(bearing))
+		var seat := at + dir * reach
+		var lit := slot == aim
+		if lit:
+			canvas.draw_line(at + dir * (reach * OFFER_LINE_FROM),
+				seat - dir * (TILE_ARC_RADIUS * OFFER_SCALE * unit),
+				Color(tone, OFFER_LINE_ALPHA * fade), OFFER_LINE_WIDTH * unit,
+				true)
+		# The tile organ is a dome that opens up the screen; turned by the
+		# bearing it opens away from the body, and seated 4 px inboard of its
+		# own centre so the strokes, not the arc, reach the seat.
+		canvas.draw_set_transform(seat, bearing, Vector2.ONE * unit)
+		draw_tile_organ(canvas, gene, copies, Vector2(0.0, 4.0),
+			(OFFER_AIM_ALPHA if lit else OFFER_ALPHA) * fade, OFFER_SCALE)
+		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
 ## **Where an empty DNA slot is drawn, and it is not on the skin.** The beads

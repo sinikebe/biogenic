@@ -74,6 +74,15 @@ var beat := 0.0
 ## water and this figure never draws her again.
 var division := {}
 
+## **The body held open to place a gene** (dna-body.md §8), written once a frame
+## by the run: `{"aim": slot, "copies": n}` while a finger or `E` holds it, empty
+## otherwise. cilia.gd's [method Cilia.draw_pending] draws it; this layer only
+## passes it on, exactly as vision.gd does, so the two views are one picture.
+##
+## Inside this layer's licence for the same reason the loose gene is: it is the
+## player's own body and the player's own decision, and nothing about the water.
+var offer := {}
+
 ## How far either side of centre the two of them are seated, in canvas px.
 ##
 ## **It was briefly scaled by the width of the frame, and that was reverted.**
@@ -172,7 +181,20 @@ func _draw_figure() -> void:
 	Cilia.draw_pending(_figure, centre, 0.0, r, dna,
 		_genome.held_sample if _genome != null else &"",
 		_genome.held_remaining if _genome != null else 0.0,
-		clampf(beat, 0.0, 1.0), _clock, FADE_PENDING)
+		clampf(beat, 0.0, 1.0), _clock, FADE_PENDING, 1.0, offer)
+
+
+## **Where the body is on the screen**, which way its nose points there and its
+## radius, in canvas px -- `[centre, heading, radius]`, the answer vision.gd's
+## `self_on_screen()` gives for full vision. The one thing the run needs to
+## hit-test a press on the body (dna-body.md §8). Nose up, always: this figure
+## is drawn in the frame the whole point-of-view screen is in. Empty with
+## nothing bound.
+func self_on_screen() -> Array:
+	if _cell == null or _figure == null:
+		return []
+	return [_figure.get_global_transform_with_canvas() * (_figure.size * 0.5), 0.0,
+		_cell.radius * SCALE]
 
 
 ## **Two daughters, drawn as real bodies before the player commits.**

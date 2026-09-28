@@ -809,8 +809,13 @@ Every clause earns its place:
 **For a gesture rather than a frame**, the PNG is beside the point and the log is
 the measurement: add `--wait=11.0 --trace=0.5` and the gesture flags. The commit
 time is the first non-`beat` sensation after t=7.4, and which daughter committed
-is `--trace`'s `dna` after t=8.3 — at seed 12345 the port daughter prints
-`[cir1 cyt1 fla1]` and the starboard one `[cyt1 fla1 pel1]`.
+is `--trace`'s `dna` after t=8.3 — with the recipe above, at seed 12345, the
+port daughter prints `[amp2 cir2 cyt3 fla3 pel1 sti1 tox2]` (the faithful one)
+and the starboard one `[amp2 cir2 cyt3 fla3 pel1 sti2 tox1]` (a trade),
+measured twice each side after #118. **Re-measure rather than trust these**:
+anything that changes what draws from the global stream before the roll moves
+them, and #118 did exactly that by rolling the daughters at the pinch instead
+of at the first frame of the quickening.
 
 **Use `[trace]` and not `[drive]`'s sensation log** for anything about the
 simulation itself: the bus prints the beat every 0.55 s, which is a noise floor

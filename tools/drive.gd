@@ -39,12 +39,23 @@ extends Node
 ##                           the window does on a device. The app really can
 ##                           quit under this flag -- that is the point of it
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
-##                           esc, enter, up, down, left, right, tab, v, and the
-##                           two chords shift-left / shift-right. The chords
-##                           exist because the strand's move is `Shift`+arrow
-##                           read as a **raw** key -- a content pack cannot add
-##                           an InputMap action -- so nothing else in this
-##                           harness could reach it.
+##                           esc, enter, up, down, left, right, tab, v, space,
+##                           w, e, a, d, and the four chords shift-left /
+##                           shift-right / shift-up / shift-down. The chords
+##                           exist because the genome screen's move is
+##                           `Shift`+arrow read as a **raw** key -- a content
+##                           pack cannot add an InputMap action -- so nothing
+##                           else in this harness could reach it. On the ring of
+##                           slots all four go somewhere (dna-body.md §6).
+##   --key-down=<seconds>:<key>
+##   --key-up=<seconds>:<key>
+##                           press a key and leave it down, then let it go; the
+##                           same key names as --tap=, repeatable. --tap= is a
+##                           press and its release in one frame, which cannot
+##                           pose a gesture that *is* the hold: `E` opens the
+##                           body to place a gene, `A` / `D` walk the lit slot
+##                           while it stays down, and letting go is what places
+##                           (dna-body.md §8)
 ##   --touch=<seconds>:<x>,<y>
 ##                           press and release one finger at that canvas point;
 ##                           repeatable. This is how the genome strip's two-tap
@@ -125,15 +136,21 @@ extends Node
 ##                           stretch transform on the way in, so this one must
 ##                           not. Either way the number you write is the canvas
 ##                           coordinate and nothing else.
-##   --sample=<gene>         put a gene in the genome's held sample, the state
+##   --sample=<gene>[:copies][,<gene>[:copies]...]
+##                           put genes in the genome's waiting queue, the state
 ##                           §3.3 gives a second heartbeat and §5.2 gives the
-##                           strip. Reaching it by playing means eating a fourth
-##                           gene with a full genome, which is fourteen minutes
-##                           and a lot of luck.
-##   --sample-left=<secs>    how many of the forty-five seconds that sample has
+##                           strip. Several, comma separated, queue in that order
+##                           -- the first is the head -- and `:2` is a gene eaten
+##                           twice before it was placed (#118). Each goes in
+##                           through `integrate()`, the path a meal takes, so a
+##                           gene the DNA already carries is raised rather than
+##                           queued, exactly as eating it would.
+##   --sample-left=<secs>    how many of the forty-five seconds the head has
 ##                           left, held there, so early, mid-clock and about to
 ##                           lapse are three photographs instead of one taken
 ##                           three times. Default is the whole SAMPLE_SECONDS.
+##                           Only the clock is held: a gene placed during the
+##                           run stays placed.
 ##   --wound=<0..1>          hold the player's body at that much damage. Bodies
 ##                           knit up every frame, so a wound cannot be posed by
 ##                           setting it once. A pond guest's wound is the host's,
@@ -203,9 +220,17 @@ extends Node
 ##   --dna=<g:t[:slot],...>  force the player's DNA only, leaving the body it is
 ##                           wearing alone. That is the state a cell reaches by
 ##                           eating -- lifecycle.md §1 -- and the one the pause
-##                           strip's three pip states exist to show, so it is the
-##                           only way to photograph them without playing a whole
-##                           generation. Applied after --genome=.
+##                           screen's worn and carried marks exist to show, so it
+##                           is the only way to photograph them without playing a
+##                           whole generation. Applied after --genome=.
+##   --body=<g:t:slot,...>   force the player's **body** only -- what she wears
+##                           and on which arc -- leaving the DNA alone. The other
+##                           half of --dna=: a newborn whose DNA is longer than
+##                           what expressed, or a body that kept an organ its DNA
+##                           has since written over, is the state the pause
+##                           screen names with the body's own word (dna-body.md
+##                           §4), and it takes a whole division to reach by
+##                           playing. Every gene needs its slot. Applied last.
 ##   --genome=<g:t[:slot],...>
 ##                           force the player's genome, e.g.
 ##                           cytostome:3,cirrus:3,flagellum:3. This is the only
@@ -270,12 +295,14 @@ extends Node
 ##   --capture-cost=<secs>   print the recorder's rolling maximum microseconds
 ##                           per capture() on that interval. §4.6 asks for a
 ##                           measurement and refuses to accept the estimate
-##   --rects=<seconds>       print `get_global_rect()` for the pause column and
-##                           each of its groups, once, at that time. The column
-##                           is the one thing in this game measured in canvas
-##                           pixels rather than judged by eye -- docs/design/
-##                           moving-a-gene.md section 6 -- and a render cannot
-##                           show the rect of a container that draws nothing
+##   --rects=<seconds>       print `get_global_rect()` for the pause screen's two
+##                           columns and each of their groups, every slot chip
+##                           and every waiting gene, once, at that time. The
+##                           column is the one thing in this game measured in
+##                           canvas pixels rather than judged by eye --
+##                           docs/design/dna-body.md section 7 -- and a render
+##                           cannot show the rect of a container that draws
+##                           nothing
 ##   --controls=<seconds>    print what the drawn controls are being told to do
 ##                           on that interval: which of them is held, by which
 ##                           pointer, the steer they derive and whether they are
@@ -283,6 +310,15 @@ extends Node
 ##                           other output -- `axoneme` thrust is a velocity add
 ##                           and never reaches the bus -- so this is the only
 ##                           way to check two fingers at once from a log
+##   --offer=<seconds>       print the placing gesture's state on that interval,
+##                           and at once whenever it changes: whether the body
+##                           is open and to which finger, the slot lit, the
+##                           cell's steer and heading, and the waiting genes
+##                           and the DNA. dna-body.md §8's evidence is a log,
+##                           because what the gesture does to steering -- a tap
+##                           on the body still dashes, a drag still steers, a
+##                           second finger keeps the first one's turn -- is
+##                           nothing a frame can show
 ##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
 ##                           **a second player**, on a real loopback session --
 ##                           two `net_session.gd` nodes in this process, a real
@@ -490,6 +526,8 @@ var _esc_sent := false
 var _back_ats: Array[float] = []
 ## [[seconds, keycode], ...], consumed as the clock passes each one.
 var _taps: Array = []
+## --key-down= / --key-up=: [[seconds, keycode, pressed], ...], the same way.
+var _key_holds: Array = []
 var _freeze_at := -1.0
 var _freeze_on := ""
 var _freeze_countdown := -1
@@ -569,6 +607,7 @@ var _sister_spec := ""
 var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
+var _body_spec := ""
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -586,6 +625,11 @@ var _lifts: Array = []
 ## How often to print the drawn controls' own state, or -1 for never.
 var _controls_trace := -1.0
 var _controls_clock := 0.0
+## --offer=: the interval, the clock toward it, and the last state printed, so a
+## change prints at once.
+var _offer_trace := -1.0
+var _offer_clock := 0.0
+var _offer_said := ""
 ## What `--seed=` was given, kept rather than only spent. The global `seed()`
 ## call is made where the flag is parsed; the membrane bus owns a private
 ## generator that no global call can reach, so the number has to survive until
@@ -606,6 +650,8 @@ var _finger: Dictionary = {}
 ## The same, for the cursor.
 var _cursor := Vector2.ZERO
 var _sample: StringName = &""
+## --sample=: every gene to queue, as `[gene, copies]`, head first.
+var _samples: Array = []
 var _sample_left := -1.0
 var _wound := -1.0
 ## Cumulative meals eaten by one field cell off another, which is the one thing
@@ -822,6 +868,13 @@ func _ready() -> void:
 			var parts := text.trim_prefix("--tap=").split(":")
 			if parts.size() == 2:
 				_taps.append([float(parts[0]), _keycode(parts[1])])
+		elif text.begins_with("--key-down=") or text.begins_with("--key-up="):
+			var down := text.begins_with("--key-down=")
+			var key_parts := text.trim_prefix(
+				"--key-down=" if down else "--key-up=").split(":")
+			if key_parts.size() == 2:
+				_key_holds.append([float(key_parts[0]), _keycode(key_parts[1]),
+					down])
 		elif text.begins_with("--freeze-at="):
 			_freeze_at = float(text.trim_prefix("--freeze-at="))
 		elif text.begins_with("--freeze-on="):
@@ -894,6 +947,8 @@ func _ready() -> void:
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--dna="):
 			_dna_spec = text.trim_prefix("--dna=")
+		elif text.begins_with("--body="):
+			_body_spec = text.trim_prefix("--body=")
 		elif text.begins_with("--check-seeding="):
 			_check_seeding = int(text.trim_prefix("--check-seeding="))
 		elif text.begins_with("--cell="):
@@ -901,7 +956,12 @@ func _ready() -> void:
 		elif text.begins_with("--sample-left="):
 			_sample_left = float(text.trim_prefix("--sample-left="))
 		elif text.begins_with("--sample="):
-			_sample = StringName(text.trim_prefix("--sample="))
+			_samples.clear()
+			for spec: String in text.trim_prefix("--sample=").split(",", false):
+				var bits := spec.split(":", false)
+				_samples.append([StringName(bits[0]),
+					clampi(int(bits[1]), 1, 3) if bits.size() > 1 else 1])
+			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
 		elif text.begins_with("--hover="):
@@ -940,6 +1000,8 @@ func _ready() -> void:
 				int(lift[1]) if lift.size() > 1 else 0])
 		elif text.begins_with("--controls="):
 			_controls_trace = float(text.trim_prefix("--controls="))
+		elif text.begins_with("--offer="):
+			_offer_trace = float(text.trim_prefix("--offer="))
 		elif text.begins_with("--rects="):
 			_rects_at = float(text.trim_prefix("--rects="))
 		elif text.begins_with("--mouse-press="):
@@ -1080,10 +1142,14 @@ func _ready() -> void:
 		_force_genome(_genome_spec)
 	if _dna_spec != "" and _genome != null:
 		_force_dna(_dna_spec)
+	if _body_spec != "" and _genome != null:
+		_force_body(_body_spec)
 	if _sample != &"" and _genome != null:
-		_genome.held_sample = _sample
-		_genome.held_remaining = _genome.SAMPLE_SECONDS
-		print("[drive] holding a sample of ", _sample)
+		_genome.held_sample = &""
+		for one: Array in _samples:
+			for copy in int(one[1]):
+				_genome.integrate(one[0])
+		print("[drive] waiting: ", _waiting_text())
 	if _sister_distance > 0.0 and _food != null:
 		_put_sister()
 	if _pond_dist >= 0.0 and _food != null:
@@ -1749,6 +1815,7 @@ func _process(delta: float) -> void:
 	_step_trace(delta)
 	_step_pings_trace(delta)
 	_step_controls(delta)
+	_step_offer(delta)
 	_step_rects()
 	_step_kill()
 	_step_divide()
@@ -1773,6 +1840,18 @@ func _process(delta: float) -> void:
 			_send_key(code, false)
 			print("[drive] %5.2f  tap %d" % [_clock, code])
 			_taps.remove_at(i)
+	# Front to back, unlike the taps: two that fall due in one frame arrive in
+	# the order they were given, so a key let go and pressed again stays that
+	# way round.
+	var due := 0
+	while due < _key_holds.size():
+		if _clock < float(_key_holds[due][0]):
+			due += 1
+			continue
+		var one: Array = _key_holds.pop_at(due)
+		_send_key(one[1], bool(one[2]))
+		print("[drive] %5.2f  key %d %s" % [_clock, one[1],
+			"down" if bool(one[2]) else "up"])
 
 	for i in range(_touches.size() - 1, -1, -1):
 		if _clock >= float(_touches[i][0]):
@@ -1881,8 +1960,12 @@ func _fingerprint_state() -> Array:
 	for key: StringName in FINGERPRINT_CELL:
 		out.append(cell.get(key) if cell != null else null)
 	if _genome != null:
-		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout(),
-			_genome.held_sample, _genome.held_remaining])
+		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout()])
+		# Every waiting gene at full width: its copies and its own clock, not
+		# the trace's one decimal.
+		for gene: StringName in _genome.waiting():
+			out.append_array([gene, _genome.waiting_copies(gene),
+				_genome.waiting_left(gene)])
 	if _metabolism != null:
 		out.append_array([_metabolism.hunger, _metabolism.starve_seconds])
 	var motes := _find_script(self, "res://game/normal/motes.gd")
@@ -2286,12 +2369,13 @@ func _step_trace(delta: float) -> void:
 	var speed := _travelled / maxf(_speed_clock, 0.001)
 	_travelled = 0.0
 	_speed_clock = 0.0
-	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) body %s dna %s" % [
+	print("[trace] %6.2f  me r%5.2f gape %5.2f wound %4.2f %s swim %5.1f (real %5.1f) body %s dna %s waiting %s" % [
 		_clock, cell.radius, cell.gape(), cell.wound,
 		"alive" if _metabolism != null and _metabolism.is_processing() else " DEAD",
 		cell.swim_speed(), speed,
 		_genome_text(_genome.tiers() if _genome != null else {}),
-		_genome_text(_genome.dna() if _genome != null else {})])
+		_genome_text(_genome.dna() if _genome != null else {}),
+		_waiting_text()])
 	print("        %s" % _membrane_text())
 	print("        dread %.3f  threat %.3f  hunter %s  range %s  upkeep %.2f  hunger %.2f  field meals %d  dread duty %.0f%% mean %.2f" % [
 		_food.dread_level, _food.threat,
@@ -2311,16 +2395,23 @@ func _step_rects() -> void:
 	if _rects_at < 0.0 or _clock < _rects_at or _run == null:
 		return
 	_rects_at = -1.0
-	var base := "Hud/Pause/Center/Buttons"
+	var base := "Hud/Pause/Center/Columns"
 	var paths := {
-		"Buttons": base,
+		"Columns": base,
+		"Side": base + "/Side",
+		"Settings": base + "/Side/Settings",
+		"Light": base + "/Side/Settings/Light",
+		"View": base + "/Side/Settings/View",
+		"Feel": base + "/Side/Settings/Feel",
+		"Resume": base + "/Side/Resume",
+		"Leave": base + "/Side/Leave",
 		"Genome": base + "/Genome",
-		"Settings": base + "/Settings",
-		"Light": base + "/Settings/Light",
-		"View": base + "/Settings/View",
-		"Feel": base + "/Settings/Feel",
-		"Resume": base + "/Resume",
-		"Leave": base + "/Leave",
+		"Caption": base + "/Genome/Caption",
+		"Waiting": base + "/Genome/Waiting",
+		"Figure": base + "/Genome/Figure",
+		"Explain": base + "/Genome/Explain",
+		"Hint": base + "/Genome/Hint",
+		"Act": base + "/Genome/Act",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -2331,6 +2422,20 @@ func _step_rects() -> void:
 		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)" % [
 			name, r.position.x, r.end.x, r.size.x,
 			r.position.y, r.end.y, r.size.y])
+	# Every chip on the figure, live or not, and every waiting gene: the touch
+	# targets themselves, which is what the 48 px rule is about.
+	for layer: String in ["/Genome/Figure/Slots", "/Genome/Waiting"]:
+		var holder := _run.get_node_or_null(base + layer)
+		if holder == null:
+			continue
+		for child in holder.get_children():
+			var chip := child as Control
+			if chip == null:
+				continue
+			var cr := chip.get_global_rect()
+			print("[rect]  %-18s x %7.1f .. %7.1f   y %6.1f .. %6.1f   %s" % [
+				chip.name, cr.position.x, cr.end.x, cr.position.y, cr.end.y,
+				"live" if chip.focus_mode == Control.FOCUS_ALL else "dead"])
 
 
 ## What the drawn controls are being told, straight off the node that owns
@@ -2360,6 +2465,41 @@ func _step_controls(delta: float) -> void:
 		_clock, node.scheme, "yes" if node.visible else "no ",
 		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
 		cell.steer if cell != null else 0.0])
+
+
+## The placing gesture, read off the run (dna-body.md §8): whether the body is
+## open and to which finger or key, the slot lit, and what the steering and the
+## DNA are doing meanwhile. On the interval, and at once on any change of the
+## first three or of the queue or the layout -- so an open, a new aim and a
+## placement each get a line at the frame they happened, with the steer on it.
+##
+## Reaching for the run's private state is a thing only tools/ may do; the game
+## itself prints nothing about this gesture.
+func _step_offer(delta: float) -> void:
+	if _offer_trace <= 0.0 or _run == null or _genome == null:
+		return
+	# A scene with no such gesture -- --play= something else -- has nothing to say.
+	if _run.get("_offer_open") == null:
+		return
+	var open: bool = _run.get("_offer_open")
+	var pointer: int = _run.get("_offer_pointer")
+	var keyed: bool = _run.get("_offer_key")
+	var aim: int = _run.get("_offer_aim")
+	var layout: Array = _genome.layout()
+	var who := "key e" if keyed else ("finger %d" % pointer if pointer >= 0
+		else ("mouse" if pointer == -1 else "nobody"))
+	var said := "%s %s %d %s %s" % [open, who, aim, layout, _genome.waiting()]
+	_offer_clock += delta
+	if said == _offer_said and _offer_clock < _offer_trace:
+		return
+	_offer_clock = 0.0
+	_offer_said = said
+	var cell := _find_node_with(_run, &"bearing_to")
+	print("[offer] %6.2f  %s  %-8s  aim %2d  steer %+5.2f  heading %+7.1f  waiting %s  dna %s" % [
+		_clock, "OPEN  " if open else "closed", who, aim,
+		cell.steer if cell != null else 0.0,
+		rad_to_deg(cell.heading) if cell != null else 0.0,
+		_waiting_text(), layout])
 
 
 func _field_text(index: int, cell: Node) -> String:
@@ -2392,6 +2532,18 @@ func _field_text(index: int, cell: Node) -> String:
 		"EATS ME" if gape > cell.radius else "       ",
 		"edible" if radius < cell.gape() else "      ",
 		"  %s" % _genome_text(b.get("genome"))]
+
+
+## The genes waiting for a slot, head first, as `[gene:copies left ...]`.
+func _waiting_text() -> String:
+	if _genome == null:
+		return "[]"
+	var parts: PackedStringArray = []
+	for gene: StringName in _genome.waiting():
+		parts.append("%s:%d" % [gene, _genome.waiting_copies(gene)])
+	if not parts.is_empty():
+		parts[0] += " %.1fs" % _genome.held_remaining
+	return "[" + " ".join(parts) + "]"
 
 
 func _genome_text(tiers: Dictionary) -> String:
@@ -2517,7 +2669,6 @@ func _hold_world() -> void:
 	# A held sample runs down whether or not anything is watching, so a posed
 	# one has to be put back every frame to stay where it was posed.
 	if _sample != &"" and _sample_left >= 0.0 and _genome != null:
-		_genome.held_sample = _sample
 		_genome.held_remaining = _sample_left
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
@@ -2688,10 +2839,17 @@ func _keycode(name: String) -> Key:
 		# locus reads the raw key. That makes this the only way to pose it.
 		"shift-left": return (KEY_LEFT | KEY_MASK_SHIFT) as Key
 		"shift-right": return (KEY_RIGHT | KEY_MASK_SHIFT) as Key
+		"shift-up": return (KEY_UP | KEY_MASK_SHIFT) as Key
+		"shift-down": return (KEY_DOWN | KEY_MASK_SHIFT) as Key
 		"v": return KEY_V
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
 		"w": return KEY_W
+		# The placing gesture's keys (dna-body.md §8): `E` holds the body open,
+		# and `A` / `D` -- the steer keys -- walk the lit slot while it does.
+		"e": return KEY_E
+		"a": return KEY_A
+		"d": return KEY_D
 		_: return KEY_NONE
 
 
@@ -2994,7 +3152,7 @@ func _force_genome(spec: String) -> void:
 
 
 ## **The DNA without the body**, which is the state a cell reaches by eating and
-## the one the pause strip exists to show: the organism and the plan disagreeing.
+## the one the pause screen exists to show: the organism and the plan disagreeing.
 ## Reached by playing it is a whole generation of foraging, so it is posed here.
 ## Reaching for a private member is a thing only tools/ is allowed to do.
 func _force_dna(spec: String) -> void:
@@ -3003,6 +3161,27 @@ func _force_dna(spec: String) -> void:
 	_genome.set("_order", made[1])
 	print("[drive] dna forced to %s in %s (body stays %s)" % [
 		_genome_text(made[0]), made[1], _genome_text(_genome.tiers())])
+
+
+## **The body without the DNA**: what she wears, at what tier, and on which arc.
+## `gene:tier:slot`, and the slot is not optional -- a body's slot is where the
+## organ grew, and there is no layout to fall back on for one that is not the
+## DNA's. Private members again, and for the same reason as [method _force_dna].
+func _force_body(spec: String) -> void:
+	var tiers := {}
+	var seats := {}
+	for pair in spec.split(",", false):
+		var bits := str(pair).split(":")
+		if bits.size() < 3:
+			print("[drive] --body= needs gene:tier:slot, not %s" % pair)
+			continue
+		var gene := StringName(bits[0].strip_edges())
+		tiers[gene] = int(bits[1])
+		seats[gene] = int(bits[2])
+	_genome.set("_body", tiers)
+	_genome.set("_body_slots", seats)
+	print("[drive] body forced to %s at %s (dna stays %s)" % [
+		_genome_text(tiers), seats, _genome_text(_genome.dna())])
 
 
 ## `cytostome:3,cirrus:2` into `[{gene: tier}, layout]`. `gene:tier` as before,
