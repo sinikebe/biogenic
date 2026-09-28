@@ -763,6 +763,19 @@ func release() -> void:
 	steer = 0.0
 
 
+## Drops the held drag **only if [param index] is the pointer holding it**, and
+## answers whether it was. [method release] lets go of whatever is held, which
+## is right for a pause and wrong for normal_mode.gd's placing gesture
+## (dna-body.md §8): that gesture takes one finger off the steering, and it was
+## measured taking the wrong one -- a second finger held on the body dropped the
+## first finger's steer from +0.42 to 0. This is the one-finger half.
+func release_pointer(index: int) -> bool:
+	if index == POINTER_NONE or _pointer != index:
+		return false
+	release()
+	return true
+
+
 # ---------------------------------------------------------------------------
 # Input. Drag on touch, A/D or the arrows on desktop; both work at once and
 # neither costs a pixel of screen.

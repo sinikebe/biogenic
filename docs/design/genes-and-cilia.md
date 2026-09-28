@@ -1753,6 +1753,10 @@ It is announced on the one line of text this mode has (§8), in the same voice:
 steering line this shows on **every** run, because the thing it announces
 happens on every run and a player who missed it once is a player swimming blind.
 
+> Since `dna-body.md` §8 the line names the gesture that places it without
+> pausing: `a sense grew · hold e to place it`, or `· hold your body to place
+> it` on touch.
+
 **Guaranteeing it lands cost one new idea.** The born genome is already full —
 three slots, three organs — so a sample granted into it has nowhere to lapse to
 and evaporates after forty-five seconds, leaving exactly the state the grant

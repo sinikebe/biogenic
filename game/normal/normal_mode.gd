@@ -661,6 +661,9 @@ func _process(delta: float) -> void:
 	# And before them for the opposite reason: the controls are drawn through a
 	# division and through a pause, and what changes is *which* of them.
 	_update_controls()
+	# Before them too: the states they lead to -- dead, paused, held, divided --
+	# are exactly the ones the body held open has to shut in. dna-body.md §8.
+	_step_offer(delta)
 	# This node runs while paused so it can hear Esc and Back, and the membrane
 	# layer keeps beating under the pause scrim -- the cell is still alive, it is
 	# just not going anywhere. Everything else below here stops.
@@ -1562,6 +1565,8 @@ func _die(loud: bool, bearing: float) -> void:
 	# **The ring is sealed here**, before the collapse writes a single frame of
 	# itself into it. What the player is offered is the run, not the dying.
 	_recorder.seal()
+	# The body held open goes with the steering, nothing placed.
+	_offer_close(false)
 	_cell.release()
 	# The collapse owns the screen. A body still swimming calmly in the middle
 	# of a membrane slamming shut is the game contradicting itself.
@@ -1975,13 +1980,16 @@ func _begin_onboarding() -> void:
 	_onboard_clock = 0.0
 
 
-## **A sense arrived, and here is where to put it.** The pause screen is the
-## only place a sample can be placed, so the line names the gesture that gets
-## there -- Back on the one touch platform we ship, Escape everywhere else --
-## and the strip's own hint takes over from there.
+## **A sense arrived, and here is where to put it.** The line names the quick
+## way (dna-body.md §8) -- hold your own body on the one touch platform we
+## ship, hold `E` everywhere else -- and it is there whenever this is said: the
+## grant comes with a free slot of its own. The gesture places the gene the
+## body is showing, which is the sense unless an earlier meal is still waiting
+## ahead of it. Back and Escape still open the pause screen, the one place a
+## gene can be written over another. Owner's call 4.
 func _say_sense() -> void:
-	_say("a sense grew · back to place it" if _touch_first()
-		else "a sense grew · esc to place it", SENSE_LINE_HOLD)
+	_say("a sense grew · hold your body to place it" if _touch_first()
+		else "a sense grew · hold e to place it", SENSE_LINE_HOLD)
 
 
 ## Puts [param text] on the line and fades it in from wherever the line already
@@ -2257,6 +2265,11 @@ func _notification(what: int) -> void:
 			# the app never lifts, so the placement it was holding is abandoned
 			# rather than left waiting for a release that cannot come.
 			_primed = SLOT_NONE
+			# And for the body held open (dna-body.md §8), nothing placed. The
+			# emulated mouse's finger goes with it: its release may never come.
+			_offer_close(false)
+			_mouse_twin = POINTER_NONE
+			_mouse_twin_next = false
 
 
 ## **First contact decides the gesture, and this is the function that makes that
@@ -2344,6 +2357,14 @@ func _notification(what: int) -> void:
 ## screen whose own rule is that releasing early undoes it. Now the lift lands
 ## where the press does, and neither commits anything on its own.
 func _input(event: InputEvent) -> void:
+	# **The body held open to place a gene goes first** (dna-body.md §8): it is
+	# the one gesture in the playfield that starts on the body, and a pointer it
+	# has claimed must reach neither the GUI nor cell.gd. It claims nothing
+	# unless a live cell is swimming with a gene waiting and a slot free, so
+	# from the pinch on -- everything below -- it is never the one answering.
+	if _offer_input(event):
+		get_viewport().set_input_as_handled()
+		return
 	if _replay != null or _split < Split.PINCH or _menu_open:
 		return
 	var index := _pointer_index(event)
@@ -2660,6 +2681,11 @@ func _toggle_pause() -> void:
 ## cell's own steering, because the arrows are moving menu focus. With no
 ## session up, this is the shipped pause exactly.
 func _set_menu(open: bool) -> void:
+	# **The body held open shuts first** (dna-body.md §8), nothing placed, and
+	# before this function decides what `steering_off` is: the `E` key holds
+	# the flag while it has the body, and handing it back after the lines below
+	# had set it would undo a pond's deaf menu.
+	_offer_close(false)
 	var paused := open
 	_menu_open = open
 	var live := _session_up()
@@ -4797,6 +4823,436 @@ func _step_tray() -> void:
 func _latch_tray() -> void:
 	if _tray.size.y > _tray.custom_minimum_size.y:
 		_tray.custom_minimum_size.y = _tray.size.y
+
+
+# ---------------------------------------------------------------------------
+# Placing a waiting gene without the pause screen (docs/design/dna-body.md §8).
+#
+# **Hold your own body, slide the gene out toward the side it should grow on,
+# and let go.** The slot is the arc, so the gesture is literally *push it that
+# way*: the direction chooses the slot, and the gene is the head of the queue --
+# the one the body is already showing.
+#
+# **Free slots only, never an eviction.** Placing into an empty slot destroys
+# nothing and a move can still change it, so one gesture is enough; the one
+# irreversible action in the game keeps its two taps on the pause screen. With
+# no free slot the body does not open, and a press on it is an ordinary steer.
+#
+# **The water keeps moving.** A pond cannot stop, and a shortcut that paused
+# would be the pause screen again. The price is the flick: about 0.6 s under
+# `anywhere`, when that finger is not steering, and about 0.25 s under `stick`
+# and `pads`, where the other thumb still is. When to place becomes a choice,
+# which is the game rather than a cost to design away.
+#
+# **Hand-hit-tested in `_input`, before the GUI and before cell.gd**, for the
+# reason controls.gd gives at its top: no `Control` in the playfield and no
+# `MOUSE_FILTER_STOP`. A pointer this claims is swallowed whole; one it has not
+# claimed reaches cell.gd untouched.
+# ---------------------------------------------------------------------------
+
+## Under `anywhere` a finger resting on the body becomes this gesture after this
+## long. Past cell.gd's TAP_SECONDS (0.28), so a tap on the body is still a
+## dash, and a finger that moves first is still a steer. Owner's call 5.
+const OFFER_HOLD := 0.35
+## Further than this from where it pressed, before the hold, and the finger is
+## steering: the gesture lets go of it for good. Stricter than cell.gd's
+## TAP_SLOP (26) on purpose -- a slow lean that starts on the body has to read
+## as the steer it is.
+const OFFER_SLOP := 14.0
+## The body's hit circle: its drawn radius and a little, and never a radius
+## under [constant OFFER_HIT_MIN] canvas px. Full vision draws a born cell at
+## r26, which alone would be a hit radius of 30; the floor keeps the target a
+## thumb's at both views, and far over CLAUDE.md's 48 px.
+const OFFER_HIT := 1.15
+const OFFER_HIT_MIN := 56.0
+
+## The finger on the body -- a touch index, or [constant POINTER_MOUSE] for a
+## real mouse -- or [constant POINTER_NONE]. Under `anywhere` it is still
+## steering until [constant OFFER_HOLD] has passed with it resting.
+var _offer_pointer := POINTER_NONE
+## The body is open: the bloom is drawn, and letting go places.
+var _offer_open := false
+## Opened by holding `E` rather than by a finger.
+var _offer_key := false
+## Where the finger pressed, and where it is now, in canvas px.
+var _offer_from := Vector2.ZERO
+var _offer_at := Vector2.ZERO
+## Seconds the finger has rested, toward [constant OFFER_HOLD].
+var _offer_clock := 0.0
+## **True from the press until the first frame after it has been skipped.** The
+## frame that delivers a press steps with the whole delta since the frame
+## before, and most of that passed before the finger touched glass: summed in,
+## a stall at the press -- a GC, a shader compiled on first use -- counted
+## toward the hold, and one of 0.35 s opened the body on the first frame under
+## a tap that then neither dashed (cell.gd times its tap on the wall clock, from
+## the press) nor placed. Skipping that one delta keeps the hold measured from
+## the press on the frame clock, which is what keeps a `--fixed-fps` run
+## repeatable.
+var _offer_fresh := false
+## The free slot that is lit, or -1 for none -- a finger back inside the body.
+var _offer_aim := -1
+## **The gene the body opened for, held by name** -- the guarantee [member
+## _in_hand] keeps on the pause screen. It is the head when the body opens, and
+## if it stops being waiting while the body is open, nothing is placed.
+var _offer_gene: StringName = &""
+## **Which finger Godot's emulated mouse is following**, or [constant
+## POINTER_NONE]. `emulate_mouse_from_touch` is on, so the first finger down
+## arrives twice: as itself, and a moment before, as a mouse with `device`
+## `DEVICE_ID_EMULATION`. cell.gd's one slot usually holds that mouse copy, so
+## taking the finger off the steering means releasing its twin -- and only when
+## it *is* its twin. **Read off the events, not assumed to be touch 0**: probed
+## at 4.7, each emulated press, drag and release is dispatched just before the
+## touch it copies, the copy follows whichever finger went down first, and a
+## second finger gets none -- so the touch press after an emulated press is the
+## finger it follows, and the emulated release is where it stops.
+var _mouse_twin := POINTER_NONE
+var _mouse_twin_next := false
+
+
+## Whether the body can be held open at all.
+func _offer_allowed() -> bool:
+	if _life != Life.ALIVE or _menu_open or _replay != null:
+		return false
+	# The quickening still swims, and the daughters are rolled from the DNA as
+	# it stands at the pinch, so a gene placed in it reaches them. From the
+	# pinch on, the division owns every pointer.
+	if _split >= Split.PINCH:
+		return false
+	# The pond's three still moments, when nothing is simulated.
+	if _held or _water_beat >= 0.0 or _entering_held:
+		return false
+	return _genome.held_sample != &"" and not _offer_free().is_empty()
+
+
+## The DNA's free slots, in slot order. The layout is exactly the figure's live
+## slots -- earned, or inherited by a newborn -- so a hole in it is a slot the
+## pause screen would take a gene into, and nothing outside it is.
+func _offer_free() -> Array[int]:
+	var out: Array[int] = []
+	var layout := _genome.layout()
+	for slot in mini(layout.size(), SLOT_SEAT.size()):
+		if layout[slot] == &"":
+			out.append(slot)
+	return out
+
+
+## `[centre, heading, radius]` of the player's body on the screen, in canvas px,
+## from whichever view is drawing it; empty when neither can say.
+func _offer_body() -> Array:
+	return _vision.self_on_screen() if _vision_active() \
+		else _soma.self_on_screen()
+
+
+func _offer_hit(body: Array) -> float:
+	return maxf(float(body[2]) * OFFER_HIT, OFFER_HIT_MIN)
+
+
+func _offer_on_body(at: Vector2) -> bool:
+	var body := _offer_body()
+	return not body.is_empty() and at.distance_to(body[0]) <= _offer_hit(body)
+
+
+## The free slot a finger at [param at] points at: the one whose bearing is
+## nearest the finger's, **in the body's own frame**. So it follows the body and
+## not the screen -- with the nose pointing east, a finger slid straight up
+## lights the forward-port slot. Inside the hit circle it points at nothing, and
+## letting go there places nothing: that is how a player changes their mind.
+func _offer_aim_at(at: Vector2) -> int:
+	var body := _offer_body()
+	if body.is_empty():
+		return -1
+	var reach: Vector2 = at - body[0]
+	if reach.length() <= _offer_hit(body):
+		return -1
+	var bearing := atan2(reach.x, -reach.y) - float(body[1])
+	var best := -1
+	var best_off := INF
+	for slot in _offer_free():
+		var off := absf(angle_difference(bearing, Cilia.slot_bearing(slot)))
+		if off < best_off:
+			best_off = off
+			best = slot
+	return best
+
+
+## The keyboard's first aim: the free slot nearest the nose, and the starboard
+## one when two are level -- the forward diagonals are mirror images, and the
+## first aim should be the same slot every time.
+func _offer_default() -> int:
+	var best := -1
+	var best_off := INF
+	for slot in _offer_free():
+		var bearing := Cilia.slot_bearing(slot)
+		var off := absf(bearing) - (0.001 if bearing > 0.0 else 0.0)
+		if off < best_off:
+			best_off = off
+			best = slot
+	return best
+
+
+## One step round the body through the free slots: clockwise for +1, which is
+## `D` and the right arrow -- the way a nose-up body turns to starboard.
+func _offer_walk(step: int) -> void:
+	var free := _offer_free()
+	if free.is_empty():
+		return
+	free.sort_custom(_offer_clockwise)
+	var at := free.find(_offer_aim)
+	_offer_aim = free[posmod(at + step, free.size())] if at >= 0 else free[0]
+
+
+func _offer_clockwise(a: int, b: int) -> bool:
+	return wrapf(Cilia.slot_bearing(a), 0.0, TAU) \
+		< wrapf(Cilia.slot_bearing(b), 0.0, TAU)
+
+
+## Opens the body. The bloom is drawn from this frame's `_process`, and the
+## finger that opened it stops steering -- that finger and no other.
+func _offer_begin() -> void:
+	_offer_open = true
+	_offer_gene = _genome.held_sample
+	_offer_aim = _offer_default() if _offer_key else _offer_aim_at(_offer_at)
+	if _offer_key:
+		# `A` and `D` walk the lit slot while `E` is down, so they must not also
+		# turn the cell; `steering_off` silences the keys cell.gd polls itself.
+		# Flipped with the release and the let-go, both ways round, as cell.gd
+		# asks of whoever flips it.
+		_cell.steering_off = true
+		_cell.release()
+		_controls.let_go()
+		return
+	# **Only this finger stops steering.** A thumb steering elsewhere keeps its
+	# turn: releasing the whole cell was measured taking a second finger's press
+	# on the body as a reason to drop the first finger's steer, +0.42 to 0.
+	# Under `stick` and `pads` cell.gd never grabs a press that misses the drawn
+	# controls, so neither of these finds anything to let go of.
+	_cell.release_pointer(_offer_pointer)
+	if _offer_pointer >= 0 and _offer_pointer == _mouse_twin:
+		_cell.release_pointer(POINTER_MOUSE)
+
+
+## Shuts the body, and places the gene first when [param place] says so and the
+## genome still allows it.
+func _offer_close(place: bool) -> void:
+	if place and _offer_open:
+		_offer_place()
+	if _offer_key:
+		# Handed back as the menu would have it: a menu open over a live pond
+		# is the one other thing that holds the cell deaf.
+		_cell.steering_off = _menu_open and _session_up()
+		_cell.release()
+		_controls.let_go()
+	_offer_open = false
+	_offer_key = false
+	_offer_pointer = POINTER_NONE
+	_offer_aim = -1
+	_offer_clock = 0.0
+	_offer_fresh = false
+	_offer_gene = &""
+	# Now, not on the next frame: a death draws its first frame of collapse
+	# this one, and the bloom must not be on it.
+	_soma.offer = {}
+	_vision.offer = {}
+
+
+## **Into the slot that is lit, if it is still free, and the gene the body
+## opened for, if it is still waiting** -- both asked now, never remembered from
+## the press. The water keeps moving under a held finger, and the gene can lapse
+## into the first free slot a frame before the lift. Then nothing is written:
+## the pause screen's own guarantee (#118), that a gene which lapsed in hand
+## never lets a gesture place a different one.
+func _offer_place() -> void:
+	var slot := _offer_aim
+	var which := _genome.waiting_index(_offer_gene)
+	if slot < 0 or which < 0 or not _offer_free().has(slot):
+		return
+	_genome.place(slot, which)
+
+
+## Called first in `_input`. True when the event was this gesture's, and then
+## nothing after it -- the GUI, cell.gd, the drawn controls -- sees it at all.
+func _offer_input(event: InputEvent) -> bool:
+	# The emulated mouse before anything can return: which finger it follows
+	# has to be known whether or not the body can open right now.
+	if event.device == InputEvent.DEVICE_ID_EMULATION and (
+			event is InputEventMouseButton or event is InputEventMouseMotion):
+		return _offer_emulated(event)
+	if _mouse_twin_next and event is InputEventScreenTouch \
+			and (event as InputEventScreenTouch).pressed:
+		_mouse_twin = (event as InputEventScreenTouch).index
+		_mouse_twin_next = false
+	if not _offer_allowed():
+		if _offer_open or _offer_pointer != POINTER_NONE:
+			_offer_close(false)
+		return false
+	if event is InputEventKey:
+		return _offer_keys(event as InputEventKey)
+	return _offer_pointer_input(event)
+
+
+## One of Godot's emulated mouse events: the finger in [member _mouse_twin],
+## seen twice. Swallowed when that finger is holding the body open -- it is the
+## same gesture, and cell.gd must not see half of it -- and passed on untouched
+## otherwise: every other finger, and every press, which arrives before its
+## touch and before anything can say whose it is.
+func _offer_emulated(event: InputEvent) -> bool:
+	var ours := _offer_open and _offer_pointer >= 0 \
+		and _offer_pointer == _mouse_twin
+	if event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if click.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		if click.pressed:
+			_mouse_twin_next = true
+			return false
+		_mouse_twin = POINTER_NONE
+	return ours
+
+
+## `E` held opens the body; `A` / `D` or the arrows walk the lit slot round it;
+## letting go of `E` places. `Esc` cancels any open body, keyed or held by a
+## finger, and is then not also a pause.
+func _offer_keys(key: InputEventKey) -> bool:
+	if key.keycode == KEY_E or key.physical_keycode == KEY_E:
+		if key.echo:
+			return _offer_key
+		if key.pressed:
+			# A finger has the body already, or is resting on it; the key does
+			# not take it from them.
+			if _offer_open or _offer_pointer != POINTER_NONE:
+				return false
+			_offer_key = true
+			_offer_begin()
+			return true
+		if _offer_key:
+			_offer_close(true)
+			return true
+		return false
+	if _offer_open and key.pressed and not key.echo \
+			and key.keycode == KEY_ESCAPE:
+		_offer_close(false)
+		return true
+	if not _offer_key:
+		return false
+	var step := 0
+	if key.keycode == KEY_A or key.keycode == KEY_LEFT:
+		step = -1
+	elif key.keycode == KEY_D or key.keycode == KEY_RIGHT:
+		step = 1
+	if step == 0:
+		return false
+	# One step a press. The repeats and the release are swallowed too: the
+	# arrows are `ui_left` and `ui_right` as well, and nothing else should read
+	# them while `E` is down.
+	if key.pressed and not key.echo:
+		_offer_walk(step)
+	return true
+
+
+## A finger or a real mouse: pressed on the body, rested, slid, let go.
+func _offer_pointer_input(event: InputEvent) -> bool:
+	# While `E` has the body, a finger is whatever it would have been.
+	if _offer_key:
+		return false
+	var index := _pointer_index(event)
+	if index == POINTER_NONE:
+		return false
+	var at := Vector2.ZERO
+	var press := false
+	var lift := false
+	# **A touch the system took back is not a let-go.** Android cancels a
+	# gesture for palm rejection, a system overlay or an OEM swipe, and Godot
+	# delivers that as a release with `canceled` set. Read as a lift it placed
+	# the gene into whatever slot happened to be lit -- a placement the player
+	# never finished, and for the gift an organ fixed on this body at that arc.
+	var canceled := false
+	if event is InputEventScreenTouch:
+		var touch := event as InputEventScreenTouch
+		at = touch.position
+		press = touch.pressed
+		lift = not touch.pressed
+		canceled = touch.canceled
+	elif event is InputEventScreenDrag:
+		at = (event as InputEventScreenDrag).position
+	elif event is InputEventMouseButton:
+		var click := event as InputEventMouseButton
+		if click.button_index != MOUSE_BUTTON_LEFT:
+			return false
+		at = click.position
+		press = click.pressed
+		lift = not click.pressed
+	else:
+		var moved := event as InputEventMouseMotion
+		if (moved.button_mask & MOUSE_BUTTON_MASK_LEFT) == 0:
+			return false
+		at = moved.position
+	if press:
+		# One finger holds the body. Any other is whatever it would have been:
+		# the other thumb on the stick, or a steer.
+		if _offer_pointer != POINTER_NONE or not _offer_on_body(at):
+			return false
+		_offer_pointer = index
+		_offer_from = at
+		_offer_at = at
+		_offer_clock = 0.0
+		_offer_fresh = true
+		if _floating():
+			# `anywhere`: a steer until the hold says otherwise. It goes on to
+			# cell.gd, so a tap on the body is still a dash.
+			return false
+		# `stick` and `pads`: the water is inert under them, so a press on the
+		# body means nothing else, and it opens at once.
+		_offer_begin()
+		return true
+	if index != _offer_pointer:
+		return false
+	_offer_at = at
+	if lift:
+		if _offer_open:
+			_offer_close(not canceled)
+			return true
+		# Let go before the hold: a tap or a short press, and cell.gd's.
+		_offer_pointer = POINTER_NONE
+		return false
+	if _offer_open:
+		_offer_aim = _offer_aim_at(at)
+		return true
+	if at.distance_to(_offer_from) > OFFER_SLOP:
+		# Moved before the hold: a steer, and cell.gd's for good.
+		_offer_pointer = POINTER_NONE
+	return false
+
+
+## Once a frame, before anything in `_process` can return: shutting the body
+## when it can no longer be open, the hold's clock, the aim under a finger that
+## is still while the body turns, and the bloom handed to both views.
+func _step_offer(delta: float) -> void:
+	if (_offer_open or _offer_pointer != POINTER_NONE) and (not _offer_allowed()
+			or (_offer_open and _genome.held_sample != _offer_gene)):
+		# A death, a menu, the pinch, a held pond -- or the gene lapsed while
+		# the body was open. It shuts, and nothing is placed.
+		_offer_close(false)
+	if _offer_pointer != POINTER_NONE and not _offer_open:
+		if _offer_fresh:
+			_offer_fresh = false
+		else:
+			_offer_clock += delta
+		if _offer_clock >= OFFER_HOLD:
+			_offer_begin()
+	if _offer_open:
+		if _offer_key:
+			if not _offer_free().has(_offer_aim):
+				_offer_aim = _offer_default()
+		else:
+			# The body turns and, in full vision, drifts under a finger that has
+			# not moved, and the slot lit is the one it points at now.
+			_offer_aim = _offer_aim_at(_offer_at)
+	var state := {}
+	if _offer_open:
+		state = {"aim": _offer_aim,
+			"copies": _genome.waiting_copies(_offer_gene)}
+	_soma.offer = state
+	_vision.offer = state
 
 
 # ---------------------------------------------------------------------------

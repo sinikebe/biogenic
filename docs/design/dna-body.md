@@ -366,8 +366,8 @@ with the wider canvas, and the pond's `Warn` still fits in the 48 px above
 
 ## 8. Placing without the pause screen
 
-*Issue #121, shipped in its own change; until it lands the gift's line still
-says `back to place it`.*
+*Issue #121, the second of the two changes. `normal_mode.gd`, under* Placing a
+waiting gene without the pause screen.
 
 **Hold your own body, slide the gene out toward the side it should grow on,
 and let go.** The slot is the arc, so the gesture is literally *push it that
@@ -375,13 +375,14 @@ way*: the direction chooses the slot.
 
 | | |
 | --- | --- |
-| **where** | a press within `max(1.15 r, 56)` px of the body as it is drawn — the soma figure at the centre in point of view, `vision.self_on_screen()` in full vision |
+| **where** | a press within `max(1.15 r, 56)` canvas px of the body as it is drawn — the soma figure in point of view, the real cell in full vision. Each view answers `self_on_screen()`: centre, heading on the screen, radius |
 | **`anywhere`** | the press is still a steer; it becomes this gesture only if it stays within 14 px for **0.35 s** (past `TAP_SECONDS` 0.28, so a tap on the body is still a dash) |
 | **`stick`, `pads`** | the water is inert there, so the press opens the body at once; the other thumb keeps its control |
-| **while held** | every free slot blooms outward as the **waiting gene's own organ** (`draw_tile_organ`, scale 1.15, turned to point out) at `max(2.3 r, 118)` px along its bearing, alpha 0.34; the one nearest the finger's body-relative bearing lights (0.95) with a reach line, and the skin's ghost tuft moves to it |
+| **while held** | every free slot blooms outward as the **waiting gene's own organ** (`draw_tile_organ`, scale 1.15, turned to point out) at `max(2.3 r, 118)` canvas px along its bearing, alpha 0.34; the one nearest the finger's body-relative bearing lights (0.95) with a reach line, and the skin's ghost tuft and the vesicle's thread move to it. The aim is taken again every frame, so a still finger over a turning body lights what it points at now |
 | **let go** | outside the body: placed into the lit slot. Inside it: nothing |
-| **which gene** | the head — the one the body is already showing |
-| **desktop** | the mouse is the same gesture. Or hold **`E`**: the nearest-the-nose free slot lights, `A`/`D` or `←`/`→` walk it round, let go of `E` to place, `Esc` to cancel. Steering is off while `E` is held |
+| **which gene** | the head — the one the body is already showing — held by name from the moment the body opens |
+| **desktop** | the mouse is the same gesture. Or hold **`E`**: the free slot nearest the nose lights (starboard when two are level), `A`/`D` or `←`/`→` walk it round, one step a press, and letting go of `E` places. Steering is off while `E` is held |
+| **`Esc`** | shuts any open body, keyed or held by a finger, with nothing placed — and is then not also a pause |
 
 **Free slots only, never an eviction.** Placing into an empty slot destroys
 nothing and a move can still change it, so one gesture is enough. The one
@@ -394,20 +395,58 @@ during which that finger is not steering, and about 0.25 s under the other
 two, where the other thumb is. When to place becomes a real choice — which is
 the game, and not a cost to design away.
 
+**The body shuts, with nothing placed**, on a death, the menu opening, the
+pinch of a division, a pond going still, the app losing focus and a touch the
+system cancels (`canceled` -- palm rejection, an overlay, an OEM swipe: a
+placement the player did not finish) — and when the gene it opened for lapses.
+**The hold is timed from the press**: the frame that delivers it does not
+count, because its delta is mostly time from before the finger touched glass,
+and a stall there would otherwise open the body under a tap. The quickening still swims, so the body opens
+in it, and a gene placed there reaches the daughters: they are rolled at the
+pinch. **Placement asks again at the lift**, by name: the slot must still be
+free and the gene must still be waiting. A gene can lapse into the first free
+slot a frame before the finger comes up, and then the lift writes nothing —
+the pause screen's #118 guarantee, that a gene which lapsed in hand never lets
+a gesture place a different one.
+
 **It is hand-hit-tested in `_input`**, before the GUI and before `cell.gd`,
 exactly as `controls.gd` explains: no `Control` in the playfield and no
 `MOUSE_FILTER_STOP`. A claimed pointer's later events are swallowed; an
 unclaimed one reaches `cell.gd` untouched.
 
-**What it does to steering, from the design's logs** (`anywhere`, a gene
-waiting):
+**Only the finger on the body stops steering**, through `cell.gd`'s
+`release_pointer()`. `release()` drops whatever is held, and the design's
+first build used it: one finger steering, a second holding the body, and the
+first finger's steer fell from +0.42 to 0. There is a second half to it.
+`emulate_mouse_from_touch` is on, so the **first finger down** also arrives as
+a mouse, dispatched just before each of its touch events, and `cell.gd`'s one
+slot usually holds that copy. Probed at 4.7: the copy follows whichever finger
+went down first — not touch 0 — and a second finger gets none. So the run
+learns which finger the copy follows from the events themselves, and releases
+the copy only when it is the copy of the finger on the body.
+
+**What it does to steering**, from `tools/drive.gd --offer=` at
+`--fixed-fps 60`, `B` below with `--size=1280x720 --mode=0`:
 
 | gesture | log |
 | --- | --- |
-| press on the body, slide 150 px right in 0.2 s | steer +0.32, then +0.79; heading 6° → 13°. No offer |
-| tap on the body, `myoneme` worn | `thrust … strength 1.00` — the dash. No offer |
-| press on the body, hold, slide left, lift | steer 0 throughout; opens at 0.35 s; placed into slot 4; no dash |
-| one finger steering, a second holds the body | **failed first**: the first finger's steer fell from +0.42 to 0.00. Only the offer's own finger may be released; fixed, it holds +0.42 |
+| `anywhere`: press on the body, slide 150 px right in 0.2 s | steer +0.11, then +0.79. Never opened |
+| `anywhere`: tap on the body, `myoneme` worn | `thrust … strength 1.00` in the same frame — the dash. Never opened |
+| `anywhere`: press on the body, hold, slide 80 px left, lift | steer 0 throughout; opens at 0.35 s; `ocellus` into slot 4; no dash |
+| `anywhere`: one finger steering, a second holds the body, slides, lifts | the first finger holds +0.42 throughout; opens at 0.35 s; into slot 5 |
+| `pads`: port held, a second finger on the body | steer −1.00 throughout; opens on the press; into slot 5 — in either finger order |
+| `stick`: stick deflected, a second finger on the body | steer +0.81 throughout; opens on the press; into slot 3 |
+| `E` down, `D` held 0.3 s, `E` up | opens on slot 3; `D` walks to 5 once and does not turn the cell — steer 0 while it is held, where the same `D` after `E` turns it at +1.00; letting go of `E` places into 5 |
+| `E` down, `Esc` | shut, nothing placed, steering handed back; the menu stays shut, and a second `Esc` pauses as it always did |
+| the mouse: press, hold, slide up and right, lift | opens at 0.35 s; into slot 3 |
+| no free slot: press on the body and hold 0.8 s | never opens; an ordinary steer |
+| full vision: press, hold, slide left, lift | opens at 0.35 s; into slot 4 |
+
+And by hand, lapsing the gene under an open body: the body shuts, the gene
+goes where a lapse puts it — the first free slot — and the slot that was lit
+stays empty. With a second gene waiting, a lift that reaches the run *after*
+the lapse — the body still open for the first gene, the second now the head —
+places nothing, and the second gene waits on. The same with a pond up.
 
 The one behaviour that changes: under `anywhere`, a finger held still on your
 own body while a gene waits no longer means *swim straight* — it opens the
@@ -417,9 +456,12 @@ body, and the bloom says so.
 sliding straight up lands on the forward-port arc, drawn up and to the right.
 
 **The line that teaches it is the one already there.** The five-second sense
-grant says `a sense grew · back to place it`; it becomes `a sense grew · hold
-your body to place it` (touch) and `… hold e to place it` (desktop). No new
-string. Owner's call 4.
+grant said `a sense grew · back to place it`; it says `a sense grew · hold
+your body to place it` on a phone and `a sense grew · hold e to place it` at a
+keyboard. Nothing new is put on the screen. The grant always comes with a free
+slot, so the line is true when it is said; the gesture places the head, which
+is the sense unless an earlier meal is still waiting ahead of it. Owner's call
+4.
 
 ---
 
@@ -442,7 +484,11 @@ opened up. `draw_slot_dart` stays in `cilia.gd` for it.
 | `normal_mode.gd` | the figure replaces the rows: `SLOT_SEAT`, `SLOT_NEIGHBOUR`, `SLOT_RING`, the chips (`_make_slot`, `_draw_slot`, the pips), `_draw_figure_body` with its tethers, the body's words and the lit arc, `_wire_focus`; the tray (`_in_hand` by gene, its chips, picking, dragging, the wilt, the no-shrink latch); `_move_key` returns a direction; `_commit_slot` places `waiting_index(_in_hand)`; `_catch_up` for a genome that changed under the screen; §6's strings. Deletes the caps, gutters, spacers, the body row and `_queue_text` |
 | `cilia.gd` | `skin_point()`, the one public point on the ovoid, for the tethers and the lit arc |
 | `tools/drive.gd` | `--body=`, the `shift-up` / `shift-down` chords, `--rects=` on the new tree, every chip included |
-| §8, #121 | `cilia.gd`'s `draw_pending(…, offer)` and the bloom; `soma.gd` and `vision.gd` passing the offer through and `vision.self_on_screen()`; `cell.gd` releasing **one** pointer; `tools/drive.gd`'s `--key-down=` / `--key-up=` and keys `e a d` |
+| §8: `normal_mode.gd` | the gesture, under *Placing a waiting gene without the pause screen*: `_offer_input` first in `_input`, `_step_offer` before every early return in `_process`, the emulated mouse's finger, and the body shut on a menu, a death and a lost focus; `_say_sense`'s two strings |
+| §8: `cilia.gd` | `draw_pending(…, offer)` and `_draw_offer`, the bloom; the tuft and the thread follow the aim |
+| §8: `soma.gd`, `vision.gd` | pass `offer` through, and answer `self_on_screen()` |
+| §8: `cell.gd` | `release_pointer()`, which lets go of **one** pointer |
+| §8: `tools/drive.gd` | `--key-down=` / `--key-up=`, keys `e a d`, and `--offer=`, the gesture's log |
 
 `genome.gd` is unchanged: `waiting_index()` and `waiting_left()` were already
 there. No `project.godot`, no `version.json`, no binary change, no `addons/`,
@@ -482,6 +528,25 @@ An arming frame at 2400x1080 wants the machine to itself: the 4 s arm timeout
 is wall clock, and four software-GL renders in parallel stretched 0.9 s of game
 time past it, so the arm had lapsed by the shot. Rendered alone it holds.
 
+The gesture's frames, in play. The hold is counted in game time, so these hold
+under any load:
+
+```
+B = --genome=cytostome:1,cirrus:1,flagellum:1 --radius=37 --sample=ocellus --seed=7
+```
+
+| frame | flags | judgement |
+| --- | --- | --- |
+| `B01_play_pov` | `B --mode=0 --scheme=0 --press=1.0:640,360`, three `--slide=` to `540,249` | passes — three buds, forward-port lit, the tuft on the skin agrees |
+| `B02_play_fv_turned` | `B --mode=1 --scheme=0 --hold=d --press=2.2:640,360`, three `--slide=` straight up to `640,230` | passes — the bloom turns with the body: nose east, the finger up, forward-port lit |
+| `B03_play_keys` | `B --mode=0 --scheme=0 --key-down=1.2:e --tap=1.5:d` | passes — `E` lit forward-starboard, `D` walked to rear-starboard |
+| `B04_play_pads` | `B --mode=0 --scheme=2 --press=1.0:96,624,1 --press=1.2:640,360`, two `--slide=` to `760,470` | passes — the port pad held and the body open at once, rear-starboard lit |
+| `B05_placed_then_paused` | `B01` then `--lift=1.9 --esc-at=2.4` | passes — the flicked gene is in the DNA at the forward-port slot, carried: `beam ○••` |
+| `B06_gift_line` | `--genome=cytostome:1,cirrus:1,flagellum:1 --radius=30 --seed=7 --mode=0`, at 6.4 s | passes — `a sense grew · hold e to place it` under the body. The phone's `hold your body` wording is chosen by `OS.has_feature("mobile")`, and this container is not a phone |
+
+`B01` to `B04` are the design's own frames to the pixel; `B05` differs by 32
+pixels, inside one hollow pip.
+
 ---
 
 ## 12. Left open
@@ -513,6 +578,16 @@ time past it, so the arm had lapsed by the shot. Rendered alone it holds.
    arms (`tap again to write ping over beam`). Writing over a gene takes two
    taps on its slot, both of them the player's, on every path.
 
+7. **Body first, then a steering finger: the second finger does not steer.**
+   cell.gd steers with one finger, the first down, and ignores any other. With
+   the steering thumb down first -- the order this was designed for -- it keeps
+   its steer while the other opens the body (+0.42 held). The reverse order is
+   the gap: a finger resting on the body is cell.gd's steering finger until the
+   hold takes it, and the second finger, pressed meanwhile, was ignored and
+   stays ignored until it is lifted and put down again, placement or not.
+   Closing it means cell.gd adopting a finger it never saw press, which is a
+   change to steering itself and not to this gesture.
+
 ---
 
 ## 13. Owner's call
@@ -530,5 +605,6 @@ Each is a switch rather than a rewrite; the line under the table says where.
 | 6 | Dropping a waiting gene on an empty slot | **places it at once ✓ recommended** · still asks for a tap | Nothing is destroyed and you can still move it later, so no confirmation is needed. Writing over a gene still takes two taps |
 
 Where each switch is, all in `game/normal/normal_mode.gd`: 1, `_draw_pips`;
-2, `HINT_CHANCE`; 3 and 5, §8's gesture (#121); 4, `_say_sense` (#121); 6,
+2, `HINT_CHANCE`; 3, the section *Placing a waiting gene without the pause
+screen*, whose entry is `_offer_input`; 4, `_say_sense`; 5, `OFFER_HOLD`; 6,
 `_drop_waiting`, which would arm an empty slot as it arms an occupied one.
