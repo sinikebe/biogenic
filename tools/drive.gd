@@ -249,6 +249,15 @@ extends Node
 ##                           --dna= and --body=, so the gene has to be in one.
 ##                           Levels are earned by use, and level 8 is most of an
 ##                           hour of it, so this is the only way to photograph one
+##   --earn=<seconds>:<gene>:<xp>
+##                           hand a levelled gene that much experience at that
+##                           time, **through the run's own door** -- `_earn()`,
+##                           which the beam's tally calls -- so a level-up it
+##                           causes is shown exactly as an earned one is: the eye
+##                           flares on the next beat, and one that opens the fork
+##                           has the pause target breathe (beam-levels.md §8.4-
+##                           §8.5). `--level=` sets a level and shows nothing,
+##                           because nothing rose. Repeatable
 ##   --check-seeding=<n>     reseed the field n times and print what §1.3's
 ##                           distribution actually produces, including whether
 ##                           the drifter floor ever fails. Quits when done.
@@ -618,6 +627,8 @@ var _genome_spec := ""
 var _dna_spec := ""
 var _body_spec := ""
 var _level_spec := ""
+## --earn=: [[seconds, gene, xp], ...], consumed as the clock passes each one.
+var _earns: Array = []
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -959,6 +970,11 @@ func _ready() -> void:
 			_dna_spec = text.trim_prefix("--dna=")
 		elif text.begins_with("--level="):
 			_level_spec = text.trim_prefix("--level=")
+		elif text.begins_with("--earn="):
+			var earn := text.trim_prefix("--earn=").split(":")
+			if earn.size() == 3:
+				_earns.append([float(earn[0]), StringName(earn[1]),
+					float(earn[2])])
 		elif text.begins_with("--body="):
 			_body_spec = text.trim_prefix("--body=")
 		elif text.begins_with("--check-seeding="):
@@ -1876,6 +1892,14 @@ func _process(delta: float) -> void:
 			_send_touch(_touches[i][1])
 			_touches.remove_at(i)
 
+	for i in range(_earns.size() - 1, -1, -1):
+		if _clock >= float(_earns[i][0]) and _run != null \
+				and _run.has_method(&"_earn"):
+			_run.call(&"_earn", _earns[i][1], _earns[i][2])
+			print("[drive] %5.2f  earn %s %.1f" % [_clock, _earns[i][1],
+				float(_earns[i][2])])
+			_earns.remove_at(i)
+
 	for i in range(_hovers.size() - 1, -1, -1):
 		if _clock >= float(_hovers[i][0]):
 			_send_hover(_hovers[i][1])
@@ -2416,6 +2440,18 @@ func _step_trace(delta: float) -> void:
 				_genome.path_of(gene), float(grown.get("xp")),
 				float(grown.call("to_next")), _food.beams.size(),
 				_food.beam_touched.size()])
+		# **What the levels look like** (beam-levels.md §8.4-§8.5): the eye the
+		# views were handed, how far through its flare it is, and the pause
+		# target's one breath. A flare is a second long; a frame shows one
+		# instant of it and this shows when it began.
+		if not _genome.levels().is_empty() and _run != null:
+			var flare: Object = _run.get("_eye_flare")
+			var breath: Object = _run.get("_pause_breath")
+			var soma := _run.get_node_or_null("Soma")
+			print("        eye %s  flare %.2f  breath %.2f" % [
+				soma.get("eye") if soma != null else {},
+				float(flare.call("value")) if flare != null else 0.0,
+				float(breath.call("value")) if breath != null else 0.0])
 	for i in _food.points().size():
 		print("        cell %d  %s" % [i, _field_text(i, cell)])
 
@@ -2443,7 +2479,18 @@ func _step_rects() -> void:
 		"Figure": base + "/Genome/Figure",
 		"Explain": base + "/Genome/Explain",
 		"Hint": base + "/Genome/Hint",
+		# The row's three parts (beam-levels.md §8.2): the level and its gauge
+		# show only for a gene that levels, and a hidden one prints its rect
+		# all the same -- read `visible` beside it.
+		"Level": base + "/Genome/Hint/Level",
+		"Gauge": base + "/Genome/Hint/Gauge",
+		"Text": base + "/Genome/Hint/Text",
 		"Act": base + "/Genome/Act",
+		# **The fork view and its two cards** (§8.3, §8.7): the one surface
+		# that takes the figure's place, so its fit is a measurement too.
+		"Fork": base + "/Genome/Fork",
+		"Way0": base + "/Genome/Fork/Way0",
+		"Way1": base + "/Genome/Fork/Way1",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -2451,11 +2498,13 @@ func _step_rects() -> void:
 			print("[rect]  %-9s absent" % name)
 			continue
 		var r: Rect2 = node.get_global_rect()
-		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)" % [
+		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)%s" % [
 			name, r.position.x, r.end.x, r.size.x,
-			r.position.y, r.end.y, r.size.y])
-	# Every chip on the figure, live or not, and every waiting gene: the touch
-	# targets themselves, which is what the 48 px rule is about.
+			r.position.y, r.end.y, r.size.y,
+			"" if (node as CanvasItem).is_visible_in_tree() else "  hidden"])
+	# Every chip on the figure, live or not, and every waiting gene -- and the
+	# fork's chip, which stands after them in the tray (`Fork_<gene>`): the
+	# touch targets themselves, which is what the 48 px rule is about.
 	for layer: String in ["/Genome/Figure/Slots", "/Genome/Waiting"]:
 		var holder := _run.get_node_or_null(base + layer)
 		if holder == null:
