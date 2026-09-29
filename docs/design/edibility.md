@@ -165,8 +165,8 @@ Four properties, each of which is the reason for one line:
   argument, `clampf` is continuous, the sum is continuous. A body's contribution
   moves smoothly as its mouth grows, as you grow and as you are hurt.
 - **`theta = PI` is used, not the live angle.** Dread is what a body *could* do.
-  Feeding the real bearing in would make dread swing as the player turns, which
-  is `statocyst`'s job and not fear's.
+  Feeding the real bearing in would make dread swing as the player turns, and
+  fear is not a compass.
 - **It keys on your own wound, continuously.** `0.35 + 0.65 * wound`: a whole
   body feels a third of it, a body that has been chewed feels all of it. Being
   hurt genuinely does make the water more dangerous, and the membrane should say

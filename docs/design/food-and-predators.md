@@ -20,7 +20,8 @@ Phase 5 is out of scope. `ingest` lands here and the hook is named in §3.4.
 > quickening the beat and something dangerous making it stumble, the wake, the
 > two deaths, the compound floor. Those were always properties of the
 > relationship. Only the question *"which is this?"* is answered differently —
-> by a gape comparison instead of by a species tag.
+> by a gape comparison instead of by a species tag. (All but the first: food
+> stopped quickening the beat on 2026-09-29, the last note here.)
 >
 > **Superseded on one point.** This document calls the gene a *roll on eating*.
 > `genes-and-cilia.md` §3.4 replaces that: the gene is a property of the food,
@@ -28,6 +29,14 @@ Phase 5 is out of scope. `ingest` lands here and the hook is named in §3.4.
 > can advertise what it carries *before* you eat it — and a roll cannot be seen
 > in advance. The signal shape below is unchanged; only where the value comes
 > from is.
+>
+> **Superseded on the beat, 2026-09-29: food no longer quickens it.** The owner:
+> *"Remove the food, waiting gene and divide indicators from the heartbeat. It's
+> too much info from one thing. Food is found using senses."* The beat is hunger
+> alone (`metabolism.gd`), and it still stumbles under dread, which is this
+> document's other column and stays. So §1's *beat quickens* and *beat races*,
+> and §2's beat column, are history: food is found with the organs a cell has
+> grown — a nose, a ping, an eye — and never with the beat.
 
 ## 1. The decision
 
@@ -54,7 +63,15 @@ brightness, on any screen, in daylight. So dread arrives as a *timing* failure
 and only later as a *light* failure. That reordering is what makes §6.2's
 "reads as a broken screen rather than as dying" avoidable — see §5.1.
 
-**Taste stays a short-range sense.** The beat is the long-range one. Nothing
+> **Three beats are slower now.** In water that was never empty they took about
+> two and a half seconds; since 2026-09-29 the beat is 2.4 s at rest, so three
+> take about seven. Measured on four seeds with a hunter released at 1600, the
+> player now feels one beat, not four, between the first dread and the first
+> wake; a slow approach still stumbles visibly. The owner judges it on the dev
+> app.
+
+**Taste stays a short-range sense.** The beat is the long-range one (no longer
+since 2026-09-29: the organs a cell grows are, and the beat says hunger). Nothing
 below gives the player a position, a distance, a shape, a count or an identity.
 
 ## 2. Foraging, and why it works inside that rule
@@ -104,6 +121,12 @@ The player learns "my best beat is getting worse" — starvation stays readable
 *through* a meal, which is when they most need to know. One line, same file, and
 §6.2's rule that the mapping lives in exactly one place is preserved.
 
+> **Gone, 2026-09-29**, with the rest of food's hold on the beat (the note at
+> the top). `beat_period()` is the two hunger lerps and nothing else, and
+> `RICH_PERIOD` is deleted. What this section protected comes for free now:
+> nothing but hunger sets the beat's pace (dread only shakes it), so no meal
+> can hide starvation behind it.
+
 ## 3. Food
 
 ### 3.1 The cell
@@ -148,7 +171,8 @@ func scent(d: float) -> float:
     return minf(1.0, v * smoothstep(SCENT_RANGE, SCENT_RANGE - SCENT_WINDOW, d))
 ```
 
-Per frame, the field posts one taste and sets the metabolism's concentration:
+Per frame, the field posts one taste and sets the metabolism's concentration
+(the second half is gone since 2026-09-29, when food came off the beat):
 
 ```gdscript
 var total := 0.0
@@ -179,6 +203,24 @@ every 60–90 seconds, so the bar is usually somewhere in the middle and the bea
 is usually saying something. **Move `HUNGER_SECONDS` first if the pace is wrong;
 `MEAL` sets how much one success is worth and should stay near half a bar so a
 single meal is felt and two are needed.**
+
+> **Seven minutes is now the pace at rest, 2026-09-29.** The owner asked for
+> starving to come sooner "not necessarily by reducing the storage": every
+> stroke and every turn now costs energy on top (`energy.md`). A born cell that
+> never eats dies at 5:19 drifting, 4:36 steering a third of the time and 3:41
+> turning all the time, where it died at 7:40 whatever it did. The first dial
+> to move is `cell.gd`'s `STROKE_COST` and `TURN_COST`; `HUNGER_SECONDS` second.
+
+> **Thirty seconds, later the same day** (`energy.md` §7). The owner: "Adapt so
+> we starve after 30 seconds with spawn gear". `HUNGER_SECONDS` is 36 and a born
+> cell that never eats dies at 30 s steering now and then (34 s drifting, 26 s
+> turning all the time). `MEAL` is **1.0**, a meal your size fills the bar, and
+> the rule above that it "should stay near half a bar" is withdrawn: at thirty
+> seconds half a bar is ten seconds of life, and a bot that went for every meal
+> on its screen starved in about half of its three-minute games. Competent
+> foraging is now a meal every 8 to 19 seconds, and even that starves in a
+> quarter to three-eighths of games, to stretches with no food in sight.
+> `HUNGER_SECONDS` is the pace now; the costs are how much of it moving takes.
 
 Eating at full does not waste the food: it still fires `ingest` and still
 carries the gene. There is always a reason to eat.
@@ -487,7 +529,10 @@ There are two, and they feel opposite.
 
 ### 6.1 Starvation — quiet
 
-`hunger` reaching 1.0 starts `STARVE_GRACE = 40.0` seconds. The beat *strength*
+`hunger` reaching 1.0 starts `STARVE_GRACE = 40.0` seconds. (**Ten since
+2026-09-29**, the last ten of the thirty a born cell has: `energy.md` §7. What
+follows says forty, and "telegraphed for minutes"; it is the same grace,
+shorter, telegraphed for twenty seconds, and the same death.) The beat *strength*
 stays on its floor throughout — the floor rule has no exceptions — and only the
 **period** stretches past it, toward `DYING_PERIOD = 7.5s`. Rate is free; it
 costs no light and nothing else is using it at that moment.

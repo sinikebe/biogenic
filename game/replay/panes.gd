@@ -255,6 +255,25 @@ func set_division(division: Dictionary) -> void:
 			or float(division.get("pinch", 0.0)) > 0.0)
 
 
+## **The recording has started again.** The world view forgets its trail and
+## its marks, which were drawn in real time and would otherwise join the death
+## to the start of the next pass. The membrane has nothing to forget: it is
+## written from the recording every frame.
+func rewound() -> void:
+	if _vision != null:
+		_vision.forget()
+
+
+## The eye both views draw on the body being watched: budding while a fork
+## waits, flaring as a level arrives (beam-levels.md §8.4-§8.5). Same contract
+## as the run's: empty is an ordinary eye.
+func set_eye(eye: Dictionary) -> void:
+	if _soma != null:
+		_soma.eye = eye
+	if _vision != null:
+		_vision.eye = eye
+
+
 func _process(_delta: float) -> void:
 	if not live:
 		return
@@ -266,6 +285,7 @@ func _process(_delta: float) -> void:
 		push_block(_block, 0)
 	if _run_soma != null:
 		set_division(_run_soma.division)
+		set_eye(_run_soma.eye)
 
 
 # ---------------------------------------------------------------------------

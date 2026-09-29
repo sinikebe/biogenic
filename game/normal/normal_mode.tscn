@@ -120,6 +120,11 @@ mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.62)
 theme_override_font_sizes/font_size = 15
 
+[node name="Numbers" type="Control" parent="Hud/Choosing/Says"]
+visible = false
+custom_minimum_size = Vector2(0, 38)
+mouse_filter = 2
+
 [node name="Hint" type="Label" parent="Hud/Choosing/Says"]
 custom_minimum_size = Vector2(0, 19)
 mouse_filter = 2
@@ -300,38 +305,99 @@ grow_horizontal = 2
 grow_vertical = 2
 mouse_filter = 2
 
-[node name="Explain" type="HBoxContainer" parent="Hud/Pause/Center/Columns/Genome"]
+[node name="Fork" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
+visible = false
+custom_minimum_size = Vector2(420, 372)
+mouse_filter = 2
+size_flags_horizontal = 4
+
+[node name="Way0" type="Control" parent="Hud/Pause/Center/Columns/Genome/Fork"]
+offset_top = 41.0
+offset_right = 200.0
+offset_bottom = 331.0
+
+[node name="Way1" type="Control" parent="Hud/Pause/Center/Columns/Genome/Fork"]
+offset_left = 220.0
+offset_top = 41.0
+offset_right = 420.0
+offset_bottom = 331.0
+
+[node name="Lines" type="Control" parent="Hud/Pause/Center/Columns/Genome"]
+custom_minimum_size = Vector2(0, 82)
+mouse_filter = 2
+
+[node name="Stack" type="VBoxContainer" parent="Hud/Pause/Center/Columns/Genome/Lines"]
+anchors_preset = 10
+anchor_right = 1.0
+grow_horizontal = 2
+mouse_filter = 2
+theme_override_constants/separation = 8
+
+[node name="Explain" type="HBoxContainer" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack"]
 custom_minimum_size = Vector2(0, 26)
 mouse_filter = 2
 theme_override_constants/separation = 4
 alignment = 1
 
-[node name="Organ" type="Control" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+[node name="Organ" type="Control" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain"]
 custom_minimum_size = Vector2(34, 26)
 mouse_filter = 2
 
-[node name="Gene" type="Label" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+[node name="Gene" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain"]
 mouse_filter = 2
 theme_override_font_sizes/font_size = 15
 
-[node name="Says" type="Label" parent="Hud/Pause/Center/Columns/Genome/Explain"]
+[node name="Says" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain"]
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.62)
 theme_override_font_sizes/font_size = 15
 
-[node name="Hint" type="Label" parent="Hud/Pause/Center/Columns/Genome"]
+[node name="Numbers" type="Control" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack"]
+visible = false
+custom_minimum_size = Vector2(0, 38)
+mouse_filter = 2
+
+[node name="Hint" type="HBoxContainer" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack"]
+custom_minimum_size = Vector2(0, 20)
+mouse_filter = 2
+theme_override_constants/separation = 6
+alignment = 1
+
+[node name="Level" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint"]
+visible = false
+mouse_filter = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.66)
+theme_override_font_sizes/font_size = 14
+
+[node name="Gauge" type="Control" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint"]
+visible = false
+custom_minimum_size = Vector2(36, 20)
+mouse_filter = 2
+
+[node name="Text" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint"]
 custom_minimum_size = Vector2(0, 19)
 mouse_filter = 2
+size_flags_horizontal = 3
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.38)
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
 
-[node name="Act" type="Label" parent="Hud/Pause/Center/Columns/Genome"]
+[node name="Act" type="Label" parent="Hud/Pause/Center/Columns/Genome/Lines/Stack"]
 custom_minimum_size = Vector2(0, 19)
 mouse_filter = 2
 theme_override_colors/font_color = Color(0.588, 1, 0.859, 0.5)
 theme_override_font_sizes/font_size = 14
 horizontal_alignment = 1
+
+[node name="NumbersToggle" type="Control" parent="Hud/Pause/Center/Columns/Genome/Lines"]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = 16.0
+offset_top = -11.0
+offset_right = 112.0
+offset_bottom = 37.0
+focus_mode = 2
 
 [node name="Recorder" type="Node" parent="."]
 process_mode = 1

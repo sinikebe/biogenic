@@ -38,6 +38,7 @@ extends Node
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+const Progression := preload("res://game/mechanics/progression.gd")
 
 ## What eating something did. Returned by [method integrate] so the caller --
 ## and the genome strip on the pause screen -- can react without re-deriving it.
@@ -71,7 +72,9 @@ const TIER_MAX := 3
 ##
 ## **`rhabdom` was removed from this list and nothing closed over the gap**, for
 ## the same reason: the order is a tie-break, so lifting one entry out of the
-## middle leaves every remaining pair in the order it was already in. This list
+## middle leaves every remaining pair in the order it was already in. `statocyst`
+## / level went the same way on 2026-09-28: the owner judged it useless, since
+## knowing which way is up says nothing about the water. This list
 ## is also what [method _mutate_drift] draws a replacement gene from, so a gene
 ## that is not on it can never re-enter a lineage. three-senses.md §8 row 2 is
 ## the decision and food.gd's DRIFTER_GENES carries the reasoning.
@@ -84,7 +87,7 @@ const TIER_MAX := 3
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
 	&"ocellus", &"chemocyte", &"ampulla",
-	&"axoneme", &"statocyst", &"palp", &"myoneme",
+	&"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
@@ -93,8 +96,9 @@ const GENE_ORDER: Array[StringName] = [
 const BORN := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 
 ## The price of power, paid in the one channel the game already reads -- the
-## beat. One tier-3 gene starves in 420 / 1.36 = 309s. §3.2, and the owner has
-## settled that this ships at 0.18 to be judged by playing (§9.3).
+## beat. At rest, one tier-3 gene empties the tank in 36 / 1.36 = 26 s rather
+## than 36; moving is paid on top (docs/design/energy.md). §3.2, and the owner
+## has settled that this ships at 0.18 to be judged by playing (§9.3).
 const UPKEEP_PER_TIER := 0.18
 
 ## How long a sample waits for a slot before it is simply gone. There is no
@@ -148,16 +152,17 @@ class Waiting:
 ## the head is always the next to lapse, and it is also the one a placement
 ## takes unless the player picks another ([method place]).
 ##
-## Expressed twice, which is what having two views is for. Point of view gets a
-## second, smaller heartbeat behind every beat (§3.3): `pulse_now()` on a delay,
-## in signal_bus.gd's _step_beat, carrying no identity at all -- only *there is
-## something in you that is not resolved*. Full vision gets the literal thing, a
-## disc of the head's hue inside the body. §5.2's two-tap swap on the pause
-## screen is what resolves it, through [method place].
+## **Read off the body**, in both views: cilia.gd's `draw_pending` draws the
+## head as a vesicle adrift inside the cell, circling the nucleus, with a tuft
+## of the organ it would become floating clear of the skin and a thread toward
+## the arc it could go on. Point of view used to get a second, smaller heartbeat
+## behind every beat as well (§3.3); the owner took it off the beat on
+## 2026-09-29. §5.2's two-tap swap on the pause screen, or holding the body, is
+## what resolves it, through [method place].
 var _waiting: Array[Waiting] = []
 
-## The gene at the head of the queue -- the one a placement takes, the one the
-## body draws and the membrane echoes -- or &"" for none.
+## The gene at the head of the queue -- the one a placement takes and the one
+## the body draws -- or &"" for none.
 ##
 ## **Assigning it is a pose, not a meal**: the queue becomes that one gene at one
 ## copy with a full clock, or empties for &"". Only the dev harness and the
@@ -223,6 +228,22 @@ var _body_slots := {}
 ## to grow -- so it is the one thing that does not wait for a division.
 var _gift: StringName = &""
 
+## **One progression per gene that earns levels** (docs/design/beam-levels.md
+## §3): gene to Progression, for the genes in cell.gd's LEVELLED.
+##
+## **The level is the lineage's, not the body's.** It is kept while the body
+## wears the gene or the DNA carries it, so a daughter who carries the beam
+## without growing it keeps its level for her own daughters -- a coin toss at
+## one copy must not wipe out an hour of use, or copies would matter more than
+## the level again, which is decision 5 backwards. It is dropped when neither
+## register has the gene, which is an eviction or a drift.
+##
+## **Never in [member _body] or [member _dna]**, and that is load-bearing: the
+## worn map is what crosses the wire, and a shared pond's referee holds it fixed
+## for a whole life. A level written into it would make the first level-up a
+## foul. Beside it, nothing another machine can see changes (§6).
+var _levels := {}
+
 var _cell: CellBody = null
 
 
@@ -270,8 +291,19 @@ func reset() -> void:
 ## [param order] would draw the organ where the DNA has it rather than where it
 ## was worn. `null` and not an empty array for the same reason [param body]
 ## is: an empty layout is a real one, and it means nothing is worn anywhere.
+##
+## [param levels] is **the lineage's levels** (beam-levels.md §3), gene to
+## progression, as [method levels] returns them: a birth passes her mother's,
+## and she keeps a copy of each one for a gene in her own DNA or body. Left
+## `null` -- a death, a forced genome, the replay -- every levelled gene starts
+## at level 1. Copied before anything is replaced, so passing this genome's own
+## [method levels] is safe.
 func express(dna: Dictionary, order: Array, body: Variant = null,
-		worn: Variant = null) -> void:
+		worn: Variant = null, levels: Variant = null) -> void:
+	var inherited := {}
+	if levels != null:
+		for gene: Variant in (levels as Dictionary):
+			inherited[StringName(gene)] = (levels[gene] as RefCounted).copy()
 	_dna = dna.duplicate()
 	_order = []
 	for gene: Variant in order:
@@ -301,6 +333,8 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 	# birth does too, and then gets back what her mother had not yet placed:
 	# normal_mode.gd's `_be_born()` hands it over through [method carry].
 	_waiting.clear()
+	_levels = inherited
+	_tend_levels()
 	_sync_order()
 
 
@@ -412,8 +446,123 @@ func filled() -> int:
 ## what makes lifecycle.md §5's late game a subtraction problem: a newborn
 ## expresses a dense DNA whole, on a body that started at 28 units, and pays for
 ## all of it from her first second.
+##
+## **A levelled gene is priced by its level, not its copies** (beam-levels.md
+## §5). Copies stopped buying strength, so they stopped costing anything: what
+## the body pays for its beam is the beam it actually has.
 func upkeep() -> float:
-	return upkeep_of(_body)
+	var priced := {}
+	for gene: StringName in _levels:
+		if not _body.has(gene):
+			continue
+		var grown: Progression = _levels[gene]
+		var at := grown.effective_level()
+		var cost := CellBody.levelled_upkeep(gene, at, grown.path)
+		priced[gene] = cost if cost >= 0.0 \
+			else UPKEEP_PER_TIER * float(maxi(at - 1, 0))
+	return upkeep_of(_body, priced)
+
+
+# --- Levels (docs/design/beam-levels.md) ------------------------------------
+
+## The lineage's levels, gene to progression. Read it; do not write it -- hand
+## it to [method express] at a birth, which copies what the daughter keeps.
+func levels() -> Dictionary:
+	return _levels
+
+
+## **The levels a daughter can inherit**: those of the genes this DNA carries.
+## A gene only this body still wears -- its DNA written over -- ends with the
+## body, as the pause screen says when the placement is made
+## (beam-levels.md §8.2), so a drift that brings the same gene back to a
+## daughter brings it back new, at level 1.
+func heritable_levels() -> Dictionary:
+	var out := {}
+	for gene: StringName in _levels:
+		if _dna.has(gene):
+			out[gene] = _levels[gene]
+	return out
+
+
+## The progression [param gene] levels with, or null for a gene that does not
+## level or that neither register carries.
+func progression(gene: StringName) -> Progression:
+	return _levels.get(gene, null) as Progression
+
+
+## **The level [param gene] works at**: held at the fork until a path is
+## taken. A gene that does not level answers its worn tier, which is what its
+## strength has always been.
+func level_of(gene: StringName) -> int:
+	var grown := progression(gene)
+	if grown != null:
+		return grown.effective_level()
+	if CellBody.LEVELLED.has(gene) and (_body.has(gene) or _dna.has(gene)):
+		return 1
+	return tier(gene)
+
+
+## The path [param gene] has taken at its fork, &"" before it has, or for a gene
+## with no fork.
+func path_of(gene: StringName) -> StringName:
+	var grown := progression(gene)
+	return grown.path if grown != null else &""
+
+
+## True while [param gene]'s fork is open and waiting to be taken.
+func can_choose(gene: StringName) -> bool:
+	var grown := progression(gene)
+	return grown != null and grown.can_choose()
+
+
+## Takes [param path] at [param gene]'s fork, for good. False and nothing
+## changes when the fork is not open or the path is not one it offers.
+func choose(gene: StringName, path: StringName) -> bool:
+	var grown := progression(gene)
+	return grown != null and grown.choose(path)
+
+
+## **Experience for [param gene], earned by using it.** Only a body that wears
+## the organ can use it, so a gene carried in the DNA and not grown earns
+## nothing. Returns true when this took the gene up a level.
+func earn(gene: StringName, amount: float) -> bool:
+	var grown := progression(gene)
+	if grown == null or not _body.has(gene):
+		return false
+	var before := grown.level()
+	grown.earn(amount)
+	return grown.level() > before
+
+
+## The levels' state, gene to `[xp, path]`: what a recording keeps.
+func level_state() -> Dictionary:
+	var out := {}
+	for gene: StringName in _levels:
+		out[gene] = (_levels[gene] as Progression).to_state()
+	return out
+
+
+## Puts back what [method level_state] took, for the genes this genome still
+## levels. The replay calls it after its [method express].
+func restore_levels(state: Dictionary) -> void:
+	for gene: Variant in state:
+		var grown := progression(StringName(gene))
+		if grown != null:
+			grown.set_state(state[gene] as Array)
+
+
+## **Keeps [member _levels] in step with the two registers**: a progression for
+## every levelled gene either one holds, a fresh one at level 1 for a gene just
+## arrived, and none for a gene neither holds any more.
+func _tend_levels() -> void:
+	for gene: StringName in CellBody.LEVELLED:
+		if (_dna.has(gene) or _body.has(gene)) and not _levels.has(gene):
+			var rules: Array = CellBody.LEVELLED[gene]
+			_levels[gene] = Progression.new(float(rules[0]), int(rules[1]),
+				rules[2])
+	for gene: StringName in _levels.keys():
+		if not _dna.has(gene) and not _body.has(gene):
+			_levels.erase(gene)
 
 
 ## What this cell is most made of, which is what eating it gives you. §3.4.
@@ -442,7 +591,7 @@ func integrate(gene: StringName) -> int:
 		_dna[gene] = value + 1
 		return Result.RAISED
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
-	# is told by a second, smaller heartbeat rather than by a screen. **A sample
+	# is told by the body, which draws it, rather than by a screen. **A sample
 	# arriving while another waits queues behind it** (#118) -- it used to
 	# replace it, and the first gene was gone before anyone was asked.
 	var at := waiting_index(gene)
@@ -633,6 +782,9 @@ func _write(slot: int, gene: StringName, copies: int = 1) -> void:
 	_order[slot] = gene
 	_dna[gene] = clampi(copies, 1, TIER_MAX)
 	_express_gift(gene, slot)
+	# A new gene starts at level 1; the one written over keeps its level only
+	# while this body still wears it.
+	_tend_levels()
 
 
 ## The one exception to *a body is fixed*, and the reason is in [member _gift]:
@@ -647,6 +799,7 @@ func _express_gift(gene: StringName, slot: int) -> void:
 	_body[gene] = maxi(int(_body.get(gene, 0)), 1)
 	if slot >= 0:
 		_body_slots[gene] = slot
+	_tend_levels()
 
 
 func _first_free() -> int:
@@ -684,16 +837,24 @@ static func tier_of(tiers: Dictionary, gene: StringName) -> int:
 	return int(tiers.get(gene, 0))
 
 
-static func upkeep_of(tiers: Dictionary) -> float:
+## [param priced] is gene to what that gene adds to the multiplier, for a gene
+## whose price is not its copies -- a levelled one, priced by its level. Every
+## other gene pays `UPKEEP_PER_TIER` for each tier above the first, as it always
+## has. Empty for every cell in the water, which has no levels.
+static func upkeep_of(tiers: Dictionary, priced: Dictionary = {}) -> float:
 	var extra := 0
-	for value: int in tiers.values():
-		extra += maxi(value - 1, 0)
+	var levelled := 0.0
+	for gene: Variant in tiers:
+		if priced.has(gene):
+			levelled += float(priced[gene])
+			continue
+		extra += maxi(int(tiers[gene]) - 1, 0)
 	# `crista` / burn is the one gene that buys upkeep back, and it is applied
 	# as a multiplier on the whole bill rather than as a subtraction: it is
 	# worth most to the expensive build, which is the one that needs it.
 	var burn := CellBody.BURN_BY_TIER[clampi(tier_of(tiers, &"crista"), 0,
 		CellBody.BURN_BY_TIER.size() - 1)]
-	return (1.0 + UPKEEP_PER_TIER * float(extra)) * burn
+	return (1.0 + UPKEEP_PER_TIER * float(extra) + levelled) * burn
 
 
 ## The highest-tier gene, ties broken by arc order. Deterministic on purpose:

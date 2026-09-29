@@ -196,7 +196,7 @@ budget).
 
 **The word budget, and it is 3 px.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**
 of room for the word. Measured with `Font.get_string_size` at `LABEL_SIZE` 13 in
-the fallback font, the widest of the seventeen in `WORDS` is `venom` at **44.00**.
+the fallback font, the widest of the sixteen in `WORDS` is `venom` at **44.00**.
 Letters are not the measure — the font is proportional, and `shield` is six
 letters at 38.00 against `poison`'s six at 43.00 — so what a new gene has to pass
 is `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. Nothing
@@ -586,7 +586,7 @@ The new clause is the one thing the copy count cannot say — **whether this
 daughter got it** — and it is the register the rung shape is drawing, in words,
 for the same reason the pause screen says the odds out loud.
 
-**One row, shared, not one per side.** The seventeen lines are about the gene, and
+**One row, shared, not one per side.** The sixteen lines are about the gene, and
 both strands carry the same gene at five or six of seven loci, so a per-side line
 would be the same sentence twice in most frames. The arithmetic agrees: the
 longest line, `toxicyst`, measures **519 px** with its organ; two of them
@@ -733,7 +733,7 @@ Hud  (CanvasLayer)
 it `Explain/Says`, inside a container also called `Says`, which is two different
 things with one name at two depths of the same path — `Hud/Choosing/Says/Explain/Says`.
 The container keeps the name (it is the pause screen's, and both rows under it
-are things the screen says); the label is `Line`, which is what the seventeen
+are things the screen says); the label is `Line`, which is what the sixteen
 authored strings are called everywhere else in this document.
 
 A locus target is **124 x 48 canvas px** = 186 x 72 device px at 2400x1080, and
@@ -819,7 +819,8 @@ of at the first frame of the quickening.
 
 **Use `[trace]` and not `[drive]`'s sensation log** for anything about the
 simulation itself: the bus prints the beat every 0.55 s, which is a noise floor
-above the signal, and two runs that differ can look identical in it.
+above the signal, and two runs that differ can look identical in it. (Every
+2.4 s now: the quickening came off the beat on 2026-09-29. The advice stands.)
 
 | frame | judgement |
 | --- | --- |

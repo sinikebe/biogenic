@@ -65,6 +65,14 @@ is the whole explanation and costs no string (§5).
 | **pixels at rest** | **none** | 27,648 canvas px², 3.00% / 2.40% | 36,864 canvas px², 4.00% / 3.20% |
 | **what it is for** | the game as designed: the dash costs no pixel and no second finger | one thumb does everything, the other only dashes | three verbs fully independent — the only scheme that can turn without swimming |
 
+> **Thrust costs energy now, 2026-09-29** (`energy.md`). With `axoneme`, a
+> finger down under `anywhere` and a thumb on the stick under `stick` push, as
+> this table says — so they also pay for it. Measured at `axoneme 1`, steering
+> flat out by touch burns ×3.00 of a resting body against ×2.28 on the keyboard
+> or under `pads`, and a thumb only resting on the glass under `anywhere` burns
+> ×2.17 against ×1.51 with nothing down. `pads` is still the scheme that can
+> turn without swimming, and now also without paying to swim.
+
 **Keys are unchanged under every scheme.** `ui_left`/`A`, `ui_right`/`D`,
 `ui_up`/`W`, `Space`, `V`, `Esc`. The scheme is a *touch* choice; a desktop
 player who picks `pads` gets the pads **and** the keys, and there is no platform
@@ -191,8 +199,9 @@ rectangles, in **canvas** units, converted to device pixels by `H / 720`:
 
 **The genome carries a sense on purpose.** `stigma:1` is in it so the free grant
 at five seconds finds one already there and does not fire: an unforced genome
-gets handed a random sense at t=5, which starts a held sample, a second
-heartbeat and a second line of text, and none of that is the same picture twice.
+gets handed a random sense at t=5, which starts a held sample (a second
+heartbeat, too, until 2026-09-29) and a second line of text, and none of that is
+the same picture twice.
 
 **The exact command**, one scheme per run, `0` `1` `2`:
 
@@ -206,7 +215,9 @@ xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
 
 For 2400x1080, change the screen and `--size=`. For the beat-peak row, replace
 `--freeze-at=6.0` with `--arm-at=5.5 --freeze-on=beat --freeze-delay=2 --wait=9`,
-which freezes at 6.30 s.
+which freezes at 6.30 s. (At 7.95 s since 2026-09-29, when the beat stopped
+running fast in rich water: still a peak frame, but not the one the table below
+was measured on.)
 
 **`--seed=` is load-bearing and until this review it did not cover the
 membrane.** `signal_bus.gd`'s jitter came off an unseedable private generator,

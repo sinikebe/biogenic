@@ -309,3 +309,7 @@ more interesting than the invented one.
 
 Game code lives in `game/`. `play_scene` in `launcher_config.tres` points the
 launcher's Play button at its entry scene. Design specs live in `docs/design/`.
+
+**Keep mechanics generic.** Future versions of this game will reuse its systems,
+so when you write or edit one -- a sense, a pulse, a ray, a cost -- keep the
+mechanic free of the cell and the gene, and put those names at the edges.

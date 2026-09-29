@@ -211,16 +211,50 @@ const DRAG := 0.74
 ## `ocellus` / beam. How far the beam reaches, how many of them there are, and
 ## how wide they fan either side of the arc they are worn on.
 ##
-## **Count is tier, not copies, and that is a divergence worth writing down.**
-## The design asks for one beam per copy of the gene in the genome, so a genome
-## full of ocelli approaches full vision. A genome is a `{gene: tier}` map, so
-## it cannot hold the same gene twice -- a second one raises the tier instead.
-## Tier therefore buys the beams, and the fan widens with it so that three beams
-## sweep 100 degrees rather than sitting on top of each other. Real per-copy
-## stacking needs a slot-keyed genome, which is a refactor and not a speed run.
+## **Indexed by the beam's level, not its copies** (beam-levels.md §4.1). The
+## first design asked for one beam per copy; a genome is a `{gene: tier}` map
+## and cannot hold the same gene twice, so for a while the tier bought the beams
+## and the fan widened with it, so that three beams covered 100 degrees rather
+## than sitting on top of each other. Levels replaced that: copies are how
+## likely a daughter is to grow the organ, and the level -- earned by using it
+## -- is how strong it is. Levels 1 to 3 are exactly this ladder's three rungs.
 const BEAM_RANGE_BY_TIER: Array[float] = [0.0, 620.0, 900.0, 1240.0]
 const BEAM_COUNT_BY_TIER: Array[int] = [0, 1, 2, 3]
 const BEAM_FAN_DEG_BY_TIER: Array[float] = [0.0, 0.0, 22.0, 50.0]
+
+## **Past level 3 the beam forks, for good** (beam-levels.md §1, §4). `extend`
+## adds a ray per level and the fan fills in; `sweep` keeps three rays and
+## swings each across its own third of the fan, faster every level. Until one
+## is taken the levels bank and the beam stays at level 3.
+const BEAM_FORK_LEVEL := 3
+const BEAM_PATHS: Array[StringName] = [&"extend", &"sweep"]
+## What going from level L to L + 1 costs, divided by L: level 2 at one
+## `STEP`, the fork at three. Set off an instrumented run so that ordinary play
+## reaches level 2 in about a minute and the fork in about three --
+## beam-levels.md §9 is the run.
+const BEAM_XP_STEP := 40.0
+## Experience comes from every different body the beam touched in a second,
+## and no more than this many a second (§2).
+const BEAM_XP_CAP := 3
+## **x and y, the owner's two prices** (§5): upkeep for every ray after the
+## first, and for every degree a second of sweep. X is the old per-tier price,
+## so levels 1 to 3 cost exactly what tiers 1 to 3 did; Y makes a level of
+## sweep cost half a level of extension. Balance numbers, judged by playing.
+const BEAM_RAY_COST := 0.18
+const BEAM_SWEEP_COST := 0.0027
+## How much faster each sweeping ray crosses its sector per level past the
+## fork, in degrees a second: one sector a second at level 4.
+const BEAM_SWEEP_STEP_DEG := 100.0 / 3.0
+## A ceiling on the rays one fan casts, which no player reaches -- level 64 is
+## tens of hours of use -- and which keeps `_step_beams` bounded if one does.
+const BEAM_RAYS_MAX := 64
+
+## **Which genes earn levels, and by what rules**: `[step, fork level, paths]`.
+## The progression that holds a level knows nothing about genes; this is the
+## edge where the names go.
+const LEVELLED := {
+	&"ocellus": [BEAM_XP_STEP, BEAM_FORK_LEVEL, BEAM_PATHS],
+}
 
 ## `chemocyte` / smell. **How far this cell's chemoreceptors reach.** The scent
 ## field itself is unchanged -- what the water is doing is not a function of who
@@ -323,6 +357,12 @@ const PUSH_CHASE_SHARE := 0.5
 ## myoneme is a cheaper dash, not a bigger one, so it stays a decision.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
+## **What a dash costs, as a share of a born cell's tank**: 2.2, 1.6 and 1.2 s
+## of rest. The run pays it as those seconds, through metabolism.gd's `spend`,
+## like every other cost, so `crista` makes it cheaper and a bigger `vacuole`
+## tank makes it a smaller share (gene-stats.md §11, owner's call 2, answered
+## *yes* on 2026-09-29). It was a fixed share of the bar that neither softened;
+## a born cell pays what it did.
 const DASH_COST_BY_TIER: Array[float] = [0.0, 0.060, 0.045, 0.032]
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_COOLDOWN := 1.4
@@ -357,11 +397,17 @@ const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 
 ## `toxicyst` / venom. What surviving being eaten costs, in hunger. A cell that
 ## swallows you dies of it and you are spat out starving.
+##
+## A share of a born cell's tank, paid as seconds of rest through `spend` as
+## the dash is, so `crista` and `vacuole` soften it too (gene-stats.md §11,
+## call 2). The values are wire.gd's to guard; the host only asks whether this
+## is `>= 0`, and how it is paid is each device's own hunger.
 const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
 
-## `statocyst` / level buys no number here: it is a lobe on the membrane at a
-## bearing that does not turn with the body, and it lives in signal_bus.gd,
-## which owns every envelope and every lobe.
+## `statocyst` / level used to be named here: it bought no number, only a lobe
+## on the membrane at a bearing that did not turn with the body. The owner
+## retired it on 2026-09-28 -- knowing which way is up said nothing about the
+## water -- and nothing replaced it.
 ##
 ## `rhabdom` / focus used to be named here beside it, for narrowing a lobe that
 ## already existed. Both of the things it narrowed -- the taste lobe's width and
@@ -382,6 +428,34 @@ const TURN_RESPONSE_BY_TIER: Array[float] = [1.43, 1.10, 0.85, 0.65]
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const WANDER_RATE := 0.13
 const WANDER_TAU := 2.6
+
+# --- What moving costs (docs/design/energy.md) -------------------------------
+# **Every stroke and every turn is paid for**, in seconds of rest: how long a
+# resting body of upkeep 1 takes to burn as much (metabolism.gd's `spend`). The
+# owner, 2026-09-29: starving should come sooner, "not necessarily by reducing
+# the storage. It can be by adding consumption. [...] each swim should consume
+# energy. turning should also consume energy."
+#
+# The costs are paid on what the body actually does, not on what was asked of
+# it: the speed a stroke adds and the angle the body turns. So a better
+# flagellum, which beats harder and more often, costs more to run and still
+# costs the same per unit of speed, and a better cirrus turns faster for the
+# same price per degree. What an organ buys is how fast; what it costs is how
+# much. None of this crosses the wire -- hunger is each player's own.
+
+## **Seconds of rest per unit of speed a stroke adds** -- a beat of the
+## flagellum, on the speed it gives, and a held push, on the speed it adds each
+## frame. A tier-1 beat adds 117 u/s on average and costs 1.3 s of rest, and the
+## flagellum beating on its own schedule comes to half again what a resting body
+## burns. The dash is not in it: `DASH_COST_BY_TIER` is its price, and it is
+## paid in the same seconds of rest, through the same `spend`, so `crista` and
+## `vacuole` soften both alike.
+const STROKE_COST := 0.0113
+## **Seconds of rest per radian the body turns under steering.** A half turn
+## costs about 4 s of rest, and turning flat out at tier 1 burns 0.8 of a
+## resting body's rate on top of everything else. The water's own wander is
+## free: it is not the cirrus doing it.
+const TURN_COST := 1.3
 
 # --- Input -----------------------------------------------------------------
 ## Canvas pixels of drag for a full-rate turn.
@@ -404,6 +478,9 @@ var _omega := 0.0
 var _wander := 0.0
 var _impulse_timer := 0.0
 var _dash_timer := 0.0
+## Seconds of rest this body has spent moving since the run last took them
+## ([method take_effort]).
+var _effort := 0.0
 ## When the current press started and where, so a tap can be told from a steer.
 var _pointer_at := 0.0
 var _pointer_from := 0.0
@@ -462,6 +539,7 @@ func reset(keep_place: bool = false) -> void:
 	_wander = 0.0
 	_impulse_timer = randf_range(0.6, 1.4)
 	_dash_timer = 0.0
+	_effort = 0.0
 	release()
 
 
@@ -480,6 +558,8 @@ func _process(delta: float) -> void:
 	var pull := 1.0 - exp(-delta / WANDER_TAU)
 	_wander = lerpf(_wander, randf_range(-WANDER_RATE, WANDER_RATE), pull)
 	heading = wrapf(heading + (_omega + _wander) * delta, -PI, PI)
+	# The turn the cirrus made, and only that: the wander above is the water's.
+	_effort += absf(_omega) * delta * TURN_COST
 
 	_impulse_timer -= delta
 	if _impulse_timer <= 0.0:
@@ -493,6 +573,7 @@ func _process(delta: float) -> void:
 	var push := PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))]
 	if push > 0.0 and _pushing():
 		velocity += forward() * push * delta
+		_effort += push * delta * STROKE_COST
 
 	velocity *= exp(-DRAG * delta)
 	position += velocity * delta
@@ -504,6 +585,7 @@ func _fire_impulse() -> void:
 	var strength := randf_range(0.7, 1.0)
 	var aim := heading + randf_range(-IMPULSE_SPREAD, IMPULSE_SPREAD)
 	velocity += Vector2(sin(aim), -cos(aim)) * impulse_speed() * strength
+	_effort += impulse_speed() * strength * STROKE_COST
 	impulsed.emit(strength)
 
 
@@ -546,7 +628,65 @@ func swallow_radius() -> float:
 ## the arc table lives -- this file cannot preload cilia.gd, because
 ## cilia -> genome -> cell would be a preload cycle.
 func beam_range() -> float:
-	return BEAM_RANGE_BY_TIER[_tier_index(extra(&"ocellus"))]
+	return float(beam_shape(beam_level(), beam_path())[3])
+
+
+## **The level this body's beam works at**, 0 for a body with no ocellus. The
+## level and not the copies (beam-levels.md §0 row 5), held at the fork until a
+## path is taken.
+func beam_level() -> int:
+	if extra(&"ocellus") <= 0:
+		return 0
+	return maxi(int(genome.level_of(&"ocellus")), 1)
+
+
+## Which way this body's beam has grown past the fork, &"" before it has.
+func beam_path() -> StringName:
+	if extra(&"ocellus") <= 0:
+		return &""
+	return StringName(genome.path_of(&"ocellus"))
+
+
+## **The beam at [param level] down [param path]**: `[rays, half-span in
+## degrees, sweep in degrees a second, reach]`. Before the fork, and down a path
+## this build does not know, it is the old three-rung ladder, held at the top
+## rung. beam-levels.md §4.
+static func beam_shape(level: int, path: StringName) -> Array:
+	if level <= 0:
+		return [0, 0.0, 0.0, 0.0]
+	var top := mini(BEAM_FORK_LEVEL, BEAM_COUNT_BY_TIER.size() - 1)
+	var rung := mini(level, top)
+	var reach: float = BEAM_RANGE_BY_TIER[rung]
+	var past := level - top
+	if past <= 0 or not BEAM_PATHS.has(path):
+		return [BEAM_COUNT_BY_TIER[rung], BEAM_FAN_DEG_BY_TIER[rung], 0.0, reach]
+	var half: float = BEAM_FAN_DEG_BY_TIER[top]
+	if path == &"sweep":
+		return [BEAM_COUNT_BY_TIER[top], half, BEAM_SWEEP_STEP_DEG * float(past),
+			reach]
+	return [mini(level, BEAM_RAYS_MAX), half, 0.0, reach]
+
+
+## **What the beam at [param level] down [param path] adds to the metabolic
+## multiplier**: x for every ray after the first, y for every degree a second
+## of sweep. beam-levels.md §5.
+static func beam_upkeep(level: int, path: StringName) -> float:
+	var shape := beam_shape(level, path)
+	return BEAM_RAY_COST * float(maxi(int(shape[0]) - 1, 0)) \
+		+ BEAM_SWEEP_COST * float(shape[2])
+
+
+## **What a levelled gene adds to the metabolic multiplier**, in place of the
+## `UPKEEP_PER_TIER` its copies used to cost. The genome asks this for every
+## gene in [constant LEVELLED] that the body wears; it is the one place a
+## level's price is looked up by name. -1 for a gene with no price of its own,
+## which the genome charges at the old per-tier rate, by level.
+static func levelled_upkeep(gene: StringName, level: int, path: StringName) -> float:
+	match gene:
+		&"ocellus":
+			return beam_upkeep(level, path)
+		_:
+			return -1.0
 
 
 ## How far this cell can smell, 0 for a cell with no `chemocyte`.
@@ -738,6 +878,17 @@ func bearing_to(point: Vector2) -> float:
 func shear_rate() -> float:
 	var turning := _omega / turn_rate()
 	return steer if absf(steer) > absf(turning) else turning
+
+
+## **What moving has cost since the last call**, in seconds of rest, and nothing
+## after it: every stroke, every frame of a held push and every radian turned
+## (docs/design/energy.md). The cell cannot spend hunger itself -- metabolism
+## belongs to the run -- so the run takes this once a frame and pays it with
+## metabolism.gd's `spend`, the way the dash's price rides out on `dashed`.
+func take_effort() -> float:
+	var spent := _effort
+	_effort = 0.0
+	return spent
 
 
 ## Knocked off course by something solid. [param normal] points from the thing

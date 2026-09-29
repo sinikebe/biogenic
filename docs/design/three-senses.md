@@ -504,7 +504,11 @@ Four things keep it survivable, and the last two are new:
 **Where it is genuinely worse, and it should be said plainly.** The first meal
 takes about three times as long and one run in eight does not get one inside
 ninety seconds. `HUNGER_SECONDS` is 420 with a 40-second grace, so nobody dies
-of it — but the opening minute stops being safe, and a player who is unlucky
+of it (420 at rest: since 2026-09-29 moving costs energy too, and a born cell
+that never eats dies at 3:41 to 5:19 by how much it turns, `energy.md`. **No
+longer true: since energy.md §7 it dies at 26 to 34 s**, so a first meal later
+than that is a death, and the nose bot starves before eating on 7 seeds in 8)
+— but the opening minute stops being safe, and a player who is unlucky
 twice in a row will feel it. On top of that, when the food around you is evenly
 spread the swing narrows: worst measured 1.41x on the shipped nose, and in that
 case the sense is saying *there is food and no direction is much better*, which
@@ -1024,6 +1028,10 @@ thing a run opens with. Two facts put it in proportion and neither excuses it:
 
 - `HUNGER_SECONDS` is 420 with a 40-second grace, so a 73-second first meal is
   nowhere near starving. The change makes the opening *anxious*, not lethal.
+  (Still true since 2026-09-29, when moving began to cost energy: turning all
+  the time, a 73-second first meal has spent 0.4 of the bar, `energy.md`.
+  **Not since energy.md §7**, the same day: a born cell dies at 26 to 34 s,
+  so a 73-second first meal comes after the death. §7.4 there measures it.)
 - The bot is worse than a player at this. It reads one number and ignores the
   beat entirely, and the beat is an independent, always-on reading of the same
   water (§2.5). A player has two instruments and the bot has one.
@@ -1033,7 +1041,9 @@ re-measures the whole table on the built code.
 
 `concentration`, and therefore the beat, is unchanged: it is still the plain
 unweighted sum over the whole field, so a noseless cell still beats faster in
-rich water and hunger reads exactly as it did.
+rich water and hunger reads exactly as it did. (Since 2026-09-29 the beat does
+not read `concentration` at all: the owner took food off it, and its pace is
+hunger's alone.)
 
 #### 7.5.1 Re-measured on the built code, over 24 seeds — and it does not reproduce
 
@@ -1595,7 +1605,9 @@ different.** It is the one the owner has the least reason to want on the
 evidence: a player finds their first meal in a median 26 seconds today and 73
 seconds after, one run in eight does not eat inside ninety, and one facing sweep
 in twelve is too flat to steer by. It is not fatal — starvation is 420 seconds
-away and the beat is untouched — and the sense that comes out the far side is
+away (at rest; since 2026-09-29 moving costs energy too, `energy.md`; **and since
+energy.md §7 it is thirty seconds away, and it is fatal**) and the
+beat is untouched — and the sense that comes out the far side is
 more interesting to use than the one that goes in. But it is the only change
 here that makes the game *harder in a way that is not also more interesting on
 the first try*, and it is the row in §8 that should be answered before anything

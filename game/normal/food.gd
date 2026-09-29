@@ -15,16 +15,18 @@ extends Node
 ## What died: a fixed predator RADIUS and a hard-coded PREY_SPEED, both of which
 ## assumed the hunter and the hunted were different kinds of thing.
 ##
-## The cell reads exactly three things out of this field: its **total scent
-## concentration**, which sets the beat rate, its **taste level**, which sets
-## the green band wash and carries no direction at all, and **dread**, a scalar
-## with no bearing either. Everything else it learns by being hit.
+## The cell reads two scalars out of this field with no bearing in them: its
+## **taste level**, which sets the green band wash, and **dread**. A third, the
+## water's **total scent concentration**, set the beat rate until the owner took
+## food off the beat on 2026-09-29 (metabolism.gd): food is found with the
+## senses. [member concentration] is still worked out, as a fact about the water
+## the dev tools dump and diff, and nothing in a run reads it.
 ##
-## This node computes; it does not post. [member concentration],
-## [member taste_level] and [member dread_level] are read once a frame by
-## whoever owns the run, which is the only place allowed to talk to the signal
-## bus; discrete events are signals. A per-frame signal here would allocate a
-## dictionary sixty times a second to say the same thing.
+## This node computes; it does not post. [member taste_level] and [member
+## dread_level] are read once a frame by whoever owns the run, which is the only
+## place allowed to talk to the signal bus; discrete events are signals. A
+## per-frame signal here would allocate a dictionary sixty times a second to say
+## the same thing.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -234,7 +236,7 @@ const GENE_WEIGHTS := {
 	&"cytostome": 3, &"cirrus": 4, &"flagellum": 4, &"stigma": 3,
 	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
-	&"statocyst": 2, &"palp": 2, &"myoneme": 2,
+	&"palp": 2, &"myoneme": 2,
 	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
 	&"plastid": 2, &"vacuole": 2, &"crista": 2,
 }
@@ -251,9 +253,14 @@ const GENE_WEIGHTS := {
 ## whole of the retirement; every table that *consumes* a gene name still
 ## answers for one it has never heard of, which is why an old `{gene: tier}`
 ## map that still names it loads and draws rather than crashing.
+##
+## **`statocyst` is retired the same way** (2026-09-28): which way is up told the
+## player nothing about the water, and the owner removed it. A build older than
+## this one can still hand one over in a shared pond; it arrives as a gene this
+## build does not know, kept and drawn but doing nothing, exactly like `rhabdom`.
 const DRIFTER_GENES: Array[StringName] = [
 	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
-	&"ocellus", &"axoneme", &"statocyst", &"palp", &"myoneme",
+	&"ocellus", &"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
@@ -553,8 +560,8 @@ const THREAT_HIGH := 1.35
 #   grows, as you grow and as you are hurt. There is no question here with a
 #   yes/no answer, which is the rule the whole of THREAT_LOW's note defends.
 # - **theta = PI, not the live bearing.** Dread is what a body *could* do.
-#   Feeding it the real angle would make dread swing as the player turns, which
-#   is `statocyst`'s job and not fear's.
+#   Feeding it the real angle would make dread swing as the player turns, and
+#   fear is not a compass.
 # - **it keys on your own wound**, continuously: a whole body feels a third of
 #   it, a chewed one all of it. Being hurt genuinely does make the water more
 #   dangerous and the membrane should say so. It adds no state and no gate --
@@ -617,6 +624,17 @@ const SHADOW_MIN_RATIO := 0.8
 ## own size casts a whole one, with a curve in between; nothing below 0.8 casts
 ## anything, which is what the number in §6 actually means.
 const SHADOW_FULL_RATIO := 1.05
+
+# --- The beam (`ocellus`, beam-levels.md) -----------------------------------
+
+## The widest step a sweeping ray takes between two casts inside the arc it
+## crossed this frame: 2 degrees, in radians. At a level-10 sweep a ray moves
+## 3.9 degrees a frame at 60 fps and 7.8 at 30, so this is two casts a frame on
+## a fast phone and four on a slow one, and the slow one misses nothing extra.
+const BEAM_SUBSTEP := 0.034906585
+## A hair of angle added to the fan's reach before a body is skipped for being
+## outside it, so a body exactly at the edge is still cast at.
+const BEAM_SLACK := 0.001
 
 # --- The ping (`ampulla`) ---------------------------------------------------
 ## How fast the pulse travels, in world units per second -- **out and back**.
@@ -925,9 +943,10 @@ class Person:
 	var slot := PERSON_SLOT
 
 
-## Total scent concentration at the cell, 0..1. The other half of metabolism's
-## beat mapping, and the reason the outer kilometre is hot-and-cold with no
-## direction in it.
+## Total scent concentration at the cell, 0..1. What the water is like, and no
+## longer what the beat is: it was the other half of metabolism's beat mapping
+## until 2026-09-29. Kept because the dev tools dump and diff it with the rest
+## of the field; nothing in a run reads it.
 var concentration := 0.0
 ## What the membrane should be told, 0..1. No bearing, ever: a hunter's
 ## metabolites saturate the chemoreceptor, and a blocked receptor has no
@@ -955,10 +974,30 @@ var shadow_bearing := 0.0
 ## cell's beams point along, and how far they reach.
 var beam_bearings := PackedFloat32Array()
 var beam_range := 0.0
+## **What arc each sweeping beam crossed this frame**, as `[low, high]` pairs of
+## body-relative bearings index-matched to [member beam_bearings], written by
+## the run; empty for a fan that does not sweep. A sweeping beam is tested
+## across its whole arc (beam-levels.md §4.3), so a slow phone does not see
+## less than a fast one.
+var beam_arcs := PackedFloat32Array()
+## **Where the fan points and how far either side it reaches**, written by the
+## run, so a body nowhere near it is skipped before any ray is cast (§4.4).
+## A negative half-width skips nothing, which is what a caller that never wrote
+## it gets.
+var beam_fan_mid := 0.0
+var beam_fan_half := -1.0
+## **How long a sweep's hit stays on screen**, the time the sweep takes to come
+## back; 0 for a fan that does not sweep. Written by the run for the two views,
+## which hold and fade each hit over it. The field itself holds nothing.
+var beam_hold := 0.0
 ## Answered here, index-matched to [member beam_bearings]:
-## `[bearing, distance, hit]` -- `distance` is the full reach when nothing was
-## hit and `hit` is false then.
+## `[bearing, distance, hit, body]` -- `distance` is the full reach when nothing
+## was hit and `hit` is false then, and `body` is the slot of the body it
+## stopped on, -1 for none. A sweeping beam's bearing is where in its arc it hit.
 var beams: Array = []
+## **Every body a beam touched this frame**, by slot, once each: the beam's
+## experience is counted off this (beam-levels.md §2).
+var beam_touched := PackedInt32Array()
 ## `chemocyte`. How far this cell's chemoreceptors reach, written once a frame
 ## by the run. 0 is a cell with no nose, and a cell with no nose smells nothing
 ## edible at all.
@@ -983,10 +1022,11 @@ var smell_bearing := 0.0
 ## whole reason the gradient is still there to follow.
 ##
 ## Two numbers rather than one, and the split is the point. [member
-## concentration] is what the *water* is like, and it drives the metabolic beat,
-## which is a property of the body and not of its senses -- an eyeless, noseless
-## cell still beats faster in rich water. This is what the *organ* picks up, and
-## it is the only one of the two that reaches the membrane.
+## concentration] is what the *water* is like; this is what the *organ* picks
+## up, and it is the only one of the two that reaches the membrane. The water's
+## own richness used to reach it too, through the beat -- an eyeless, noseless
+## cell beat faster in rich water -- until the owner took food off the beat on
+## 2026-09-29. Food is found with the senses.
 ##
 ## **Nothing else leaves the nose.** There is no taste bearing any more: the
 ## organ answers *how strong*, and the player answers *which way* by turning.
@@ -1182,6 +1222,7 @@ func _fresh_senses() -> void:
 	dread_level = 0.0
 	threat = 0.0
 	beams.clear()
+	beam_touched.clear()
 	touch_level = 0.0
 	taste_level = 0.0
 	pings.clear()
@@ -1204,8 +1245,9 @@ func _process(delta: float) -> void:
 		return
 
 	# The drift path does not exist until the cell drifts. Placing the first
-	# body along the real velocity vector is what makes the beat quicken at
-	# about 0:12 instead of whenever the wander happens to point at something.
+	# body along the real velocity vector is what puts it where a first nose or
+	# ampulla can find it (FIRST_DISTANCE), instead of wherever the wander
+	# happens to point.
 	if _first_pending and _cell.velocity.length_squared() > 1.0:
 		_first_pending = false
 		_cells[0].pos = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
@@ -2849,38 +2891,87 @@ func _step_sense() -> void:
 	dread_level = minf(dread, 1.0) * DREAD_CAP
 
 
-## **The beams.** One ray per ocellus, cast against every body in the water:
-## the nearest surface along the ray, or nothing. Sixteen ray-circle tests a
-## frame at the very worst, which is four bodies by four beams.
+## **The beams.** Each ray cast against every body near it: the nearest surface
+## along the ray, or nothing.
+##
+## **Bodies nowhere near the fan are skipped first**, by one range test and one
+## angle test against [member beam_fan_mid] and [member beam_fan_half]. Past the
+## fork there can be twenty rays, and twenty rays against 34 bodies is 680 ray
+## tests a frame (three-senses.md §3.4); most of the water is behind or beside a
+## 100-degree fan. A body that passes is tested exactly as it always was, so the
+## answer does not change.
+##
+## **A sweeping ray is cast across the whole arc it crossed this frame**, in
+## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
+## nearest hit in that arc (beam-levels.md §4.3).
 ##
 ## Deliberately blind to the motes: they are inert dust with no chemistry and no
 ## genome, and a beam that stopped on grit would spend the one clear signal the
 ## player owns on something that does not matter.
 func _step_beams() -> void:
 	beams.clear()
+	beam_touched.clear()
 	if beam_range <= 0.0 or beam_bearings.is_empty() or _cell == null:
 		return
 	var origin := _cell.position
-	for bearing: float in beam_bearings:
-		var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-		var best := beam_range
-		var found := false
-		for i in _cells.size():
-			var b := _cells[i]
-			if not b.seeded:
+	var near: Array[int] = []
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var to := b.pos - origin
+		var d := to.length()
+		if d - b.radius > beam_range:
+			continue
+		if beam_fan_half >= 0.0 and d > b.radius:
+			var at := atan2(to.dot(_cell.starboard()), to.dot(_cell.forward()))
+			var reach := asin(clampf(b.radius / d, 0.0, 1.0))
+			if absf(angle_difference(beam_fan_mid, at)) \
+					> beam_fan_half + reach + BEAM_SLACK:
 				continue
-			var to := b.pos - origin
-			var along := to.dot(dir)
-			if along <= 0.0 or along - b.radius > best:
-				continue
-			var perp := (to - dir * along).length()
-			if perp >= b.radius:
-				continue
-			var hit := along - sqrt(maxf(b.radius * b.radius - perp * perp, 0.0))
-			if hit >= 0.0 and hit < best:
-				best = hit
-				found = true
-		beams.append([bearing, best, found])
+		near.append(i)
+	var sweeping := beam_arcs.size() == beam_bearings.size() * 2
+	for k in beam_bearings.size():
+		var bearing := beam_bearings[k]
+		if not sweeping:
+			beams.append(_cast_beam(origin, bearing, near))
+			continue
+		var low := beam_arcs[2 * k]
+		var span := angle_difference(low, beam_arcs[2 * k + 1])
+		var steps := maxi(int(ceilf(absf(span) / BEAM_SUBSTEP)), 1)
+		var best: Array = [bearing, beam_range, false, -1]
+		for s in steps + 1:
+			var ray := _cast_beam(origin, low + span * float(s) / float(steps), near)
+			if bool(ray[2]) and (not bool(best[2]) or float(ray[1]) < float(best[1])):
+				best = ray
+		beams.append(best)
+
+
+## **One ray**: the nearest surface of the bodies in [param near] along
+## [param bearing], as `[bearing, distance, hit, body]`. Whatever it stops on is
+## counted as touched.
+func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
+	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
+	var best := beam_range
+	var found := false
+	var body := -1
+	for i: int in near:
+		var b := _cells[i]
+		var to := b.pos - origin
+		var along := to.dot(dir)
+		if along <= 0.0 or along - b.radius > best:
+			continue
+		var perp := (to - dir * along).length()
+		if perp >= b.radius:
+			continue
+		var hit := along - sqrt(maxf(b.radius * b.radius - perp * perp, 0.0))
+		if hit >= 0.0 and hit < best:
+			best = hit
+			found = true
+			body = i
+	if found and not beam_touched.has(body):
+		beam_touched.append(body)
+	return [bearing, best, found, body]
 
 
 ## **The ping.** `ampulla`: a pulse on its own clock, and a bearing for every

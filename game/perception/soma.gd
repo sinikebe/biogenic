@@ -83,6 +83,13 @@ var division := {}
 ## player's own body and the player's own decision, and nothing about the water.
 var offer := {}
 
+## **The eye: a choice waiting, and a level arriving** (beam-levels.md §8.4-
+## §8.5), written once a frame by the run: `{"gene": g, "bud": n, "flare": f}`,
+## or empty. cilia.gd's [method Cilia.draw_cell] draws it on this body and on
+## no other; this layer only passes it on, exactly as vision.gd does. A level
+## is something this body has earned, so it is inside the licence too.
+var eye := {}
+
 ## How far either side of centre the two of them are seated, in canvas px.
 ##
 ## **It was briefly scaled by the width of the frame, and that was reverted.**
@@ -172,12 +179,13 @@ func _draw_figure() -> void:
 	Cilia.draw_cell(_figure, centre, 0.0, r, tiers,
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
-		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
+		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
+		0.0, false, eye)
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
-	# figure stands on -- and the second heartbeat the membrane already carries
-	# now has a picture to belong to. The rhythm says *something is unresolved*;
-	# this says *what*, and *where*.
+	# figure stands on. It is the only place point of view says a gene is
+	# waiting: the second heartbeat that used to say it came off the beat on
+	# 2026-09-29, and this says *what* and *where* as well as *that*.
 	Cilia.draw_pending(_figure, centre, 0.0, r, dna,
 		_genome.held_sample if _genome != null else &"",
 		_genome.held_remaining if _genome != null else 0.0,
