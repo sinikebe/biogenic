@@ -18,7 +18,8 @@ and, the same day, on why:
 
 This spec is the mechanics. §8, the screens, is the UX designer's.
 
-Status: **specified, not built.**
+Status: **built.** The mechanics (§1–§7) and the screens (§8) are in the game;
+§9 is what was measured.
 
 ---
 
