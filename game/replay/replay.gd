@@ -13,11 +13,11 @@ extends Node
 ## hangs two buttons underneath.
 ##
 ## **The transport is minimal on purpose.** Play/pause with a loop, one speed
-## toggle through 1x, 1/2x and 1/4x, and `leave`. No scrub bar, no jump buttons,
-## no frame step: the panes are the feature and a video editor grafted onto them
-## is the part of the ask that is disproportionate. A button tapped sixty times
-## to cross a second is not a control; 1/4x with a pause does the same job in
-## one tap. docs/design/replay.md §5 and owner's call 5 in §7.
+## toggle through 1x, 2x, 4x, 1/4x and 1/2x, and `leave`. No scrub bar, no jump
+## buttons, no frame step: the panes are the feature and a video editor grafted
+## onto them is the part of the ask that is disproportionate. A button tapped
+## sixty times to cross a second is not a control; 1/4x with a pause does the
+## same job in one tap. docs/design/replay.md §5 and owner's call 5 in §7.
 ##
 ## Nothing here is freed on a death and nothing here is written to disk. Closing
 ## it is `queue_free()`; the ring dies with the run that made it.
@@ -65,10 +65,16 @@ const BUTTON_GAP := 32.0
 ## How far up the band the row of controls starts, under the captions.
 const ROW_TOP := 32.0
 
-## 1x, then half, then a quarter. Three, because slower than a quarter is a
-## still and there is a pause button for that.
-const SPEEDS: Array[float] = [1.0, 0.5, 0.25]
-const SPEED_TEXT: Array[String] = ["1x", "1/2x", "1/4x"]
+## **Faster first, then slower** (the owner, 2026-09-29: "the ability to speed
+## up the replay after death"). A born cell that never eats lives thirty
+## seconds, so the replay is mostly the run-up and the part worth watching is
+## the end. A tap goes to 2x and 4x to skim it, and the next tap from 4x drops
+## straight to 1/4x -- the one tap a player wants as the death arrives -- then
+## 1/2x, then back to 1x. Still one toggle (replay.md §7 row 5). Slower than a
+## quarter is a still, and there is a pause button for that; faster than four
+## crosses a life in eight seconds, which is a blur.
+const SPEEDS: Array[float] = [1.0, 2.0, 4.0, 0.25, 0.5]
+const SPEED_TEXT: Array[String] = ["1x", "2x", "4x", "1/4x", "1/2x"]
 
 ## Set by the run before this scene enters the tree.
 var recorder: RecorderNode = null
