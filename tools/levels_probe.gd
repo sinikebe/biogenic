@@ -10,6 +10,10 @@ extends Node
 ## invisible in a frame and felt only as a cell that starves sooner than it
 ## should, or later.
 ##
+## **And the numbers a player can ask to see** (docs/design/gene-stats.md): the
+## formatter's rules, a few rows of the table against the constants they are
+## read off, and the dash and the venom paid the way their rows say.
+##
 ## Headless and deterministic. Prints one line per check and `ALL PASS` only if
 ## every one held; CI asserts on that marker rather than on the exit code,
 ## because Godot exits 0 after a script error too.
@@ -22,6 +26,8 @@ const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
+const Readout := preload("res://game/mechanics/readout.gd")
+const GeneStats := preload("res://game/normal/gene_stats.gd")
 
 const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 
@@ -39,6 +45,7 @@ func _ready() -> void:
 	_tally_and_glow()
 	_field()
 	_energy()
+	_gene_stats()
 	for node in _nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -468,3 +475,147 @@ func _energy() -> void:
 	_check("a held push pays on the speed it adds (%.4f, want %.4f), and a new body"
 		% [push, push_want] + " owes nothing (%.4f)" % after_reset,
 		is_equal_approx(push, push_want) and after_reset == 0.0)
+
+
+# --- A gene's numbers (docs/design/gene-stats.md) -------------------------------
+
+func _gene_stats() -> void:
+	# §4, one rule per unit -- and the two traps that made it a rule: Godot 4.7's
+	# String.num keeps a whole number's ".0", and "%.1f" % 1.45 prints 1.4.
+	var cases := [
+		[619.6, Readout.Unit.DISTANCE, "620"], [56.5, Readout.Unit.SPEED, "57"],
+		[5.0671, Readout.Unit.TIME, "5.07"], [1.45, Readout.Unit.TIME, "1.45"],
+		[3.0, Readout.Unit.TIME, "3"], [15.2, Readout.Unit.TIME, "15.2"],
+		[26.0, Readout.Unit.TIME, "26"], [1.3255, Readout.Unit.ENERGY, "1.3"],
+		[2.0, Readout.Unit.ENERGY, "2"], [29.52, Readout.Unit.ENERGY, "30"],
+		[36.0, Readout.Unit.ENERGY, "36"], [0.5, Readout.Unit.RATE, "0.50"],
+		[1.3, Readout.Unit.TIMES, "1.30"], [0.07, Readout.Unit.SHARE, "7%"],
+		[26.0, Readout.Unit.ANGLE, "26°"], [3.0, Readout.Unit.COUNT, "3"],
+		[-0.2, Readout.Unit.COUNT, "0"],
+	]
+	var wrong := PackedStringArray()
+	for want: Array in cases:
+		var got := Readout.format(float(want[0]), int(want[1]))
+		if got != String(want[2]):
+			wrong.append("%s gave %s, not %s" % [want[0], got, want[2]])
+	_check("the formatter writes all %d cases by §4's rule%s" % [cases.size(),
+		"" if wrong.is_empty() else ": " + ", ".join(wrong)], wrong.is_empty())
+	var line := Readout.runs([
+		Readout.item("out to {} µm", [620.0], [Readout.Unit.DISTANCE]),
+		Readout.item("bites take {} less", [0.12], [Readout.Unit.SHARE]),
+		Readout.item("free to wear")])
+	_check("a line is words and brighter numbers, each unit in the words and ` · `"
+		+ " between items: %s" % str(line), line == [["out to ", false], ["620", true],
+		[" µm · bites take ", false], ["12", true], ["% less · free to wear", false]])
+
+	# A few rows of §5's table, read off the constants: move one and its row
+	# moves, and so must the table.
+	var born := GeneStats.context({})
+	var rows := PackedStringArray()
+	for gene: StringName in [&"flagellum", &"cirrus", &"ampulla", &"vacuole"]:
+		for copies in range(1, 4):
+			var said: Array = GeneStats.lines(gene, copies, 0, &"", born)
+			rows.append(Readout.plain(said[0]) + " / " + Readout.plain(said[1]))
+	_check("flagellum beats burn 0.50, 0.70 and 0.99 s a second, as energy.md §2 says",
+		rows[0] == "swims about 57 µm a second · a beat every 1.7–3.6 s / beating burns"
+			+ " 0.50 s a second, 1.3 s a beat · free to wear"
+		and rows[1].ends_with("/ beating burns 0.70 s a second, 1.6 s a beat · wearing it"
+			+ " burns 0.18 s a second")
+		and rows[2].ends_with("/ beating burns 0.99 s a second, 1.8 s a beat · wearing it"
+			+ " burns 0.36 s a second"))
+	_check("a half turn costs 4.1 s at every cirrus, done in 5.07, 3.93 and 3.08 s: %s"
+		% rows[3], rows[3].begins_with("a half turn in 5.07 s") and rows[4].begins_with(
+		"a half turn in 3.93 s") and rows[5].begins_with("a half turn in 3.08 s")
+		and rows[3].contains(", 4.1 s a half turn") and rows[4].contains(", 4.1 s a half turn")
+		and rows[5].contains(", 4.1 s a half turn"))
+	_check("a ping reaches 1100, 1500 and 1900 µm",
+		rows[6].contains("out to 1100 µm") and rows[7].contains("out to 1500 µm")
+		and rows[8].contains("out to 1900 µm"))
+	_check("a vacuole's tank holds 46, 58 and 72 s: %s" % rows[9],
+		rows[9].begins_with("a full tank holds 46 s, not 36") and rows[10].begins_with(
+		"a full tank holds 58 s, not 36") and rows[11].begins_with(
+		"a full tank holds 72 s, not 36"))
+	var eye := _genome()
+	eye.express({&"cytostome": 1, &"ocellus": 1}, [&"cytostome", &"ocellus"])
+	var grown: Progression = eye.progression(&"ocellus")
+	var next := Readout.plain([GeneStats.progress_item(grown.level(), grown.to_next())])
+	var beam: Array = GeneStats.lines(&"ocellus", 1, grown.effective_level(), grown.path, born)
+	_check("a fresh beam reads `%s` and `%s`" % [Readout.plain(beam[0]), next],
+		next == "level 2 after 40 strikes"
+		and Readout.plain(beam[0]) == "1 ray · reaches 620 µm")
+	_check("a gene with no row draws nothing, as a gene with no line says nothing",
+		GeneStats.lines(&"statocyst", 2, 0, &"", born) == [[], []])
+	var clause := Readout.plain(GeneStats.cell_items(CellBody.BASE_RADIUS,
+		GenomeNode.BORN, GenomeNode.upkeep_of(GenomeNode.BORN)))
+	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"
+		% clause, clause == "52 µm across · a full tank: 36 s, 24 s drifting")
+
+	# **The dash and the venom are paid as their rows say** (§11, call 2), by
+	# the run's own handlers: seconds of rest through `spend`, so a newborn pays
+	# the share it always paid, `crista` pays less, and a bigger tank pays the
+	# same seconds out of more. The run is built and never enters the tree.
+	var run: Node = load("res://game/normal/normal_mode.gd").new()
+	_nodes.append(run)
+	var met: Node = Metabolism.new()
+	met.set_process(false)
+	_nodes.append(met)
+	var field: Node = FoodField.new()
+	_nodes.append(field)
+	var bus: Node = load("res://game/perception/signal_bus.gd").new()
+	_nodes.append(bus)
+	run.set("_metabolism", met)
+	run.set("_food", field)
+	run.set("_bus", bus)
+	field.venom_cost = CellBody.VENOM_COST_BY_TIER[3]
+	var dash := CellBody.DASH_COST_BY_TIER[1]
+	var venom := CellBody.VENOM_COST_BY_TIER[3]
+	var burn := CellBody.BURN_BY_TIER[2]
+	var tank := CellBody.STORE_BY_TIER[3]
+	var newborn_dash := _paid(run, met, 0, 0, false, dash)
+	var newborn_venom := _paid(run, met, 0, 0, true, dash)
+	_check("a newborn's dash takes %.3f of the bar and venom %.3f, exactly the share"
+		% [newborn_dash[0], newborn_venom[0]] + " each always took",
+		is_equal_approx(newborn_dash[0], dash) and is_equal_approx(newborn_venom[0], venom))
+	var burned_dash := _paid(run, met, 2, 0, false, dash)
+	var burned_venom := _paid(run, met, 2, 0, true, dash)
+	_check("with crista 2 both cost %.2f of it: a dash %.2f s, venom %.2f s"
+		% [burn, burned_dash[1], burned_venom[1]],
+		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn)
+		and is_equal_approx(burned_venom[1], venom * Metabolism.HUNGER_SECONDS * burn))
+	var stored_dash := _paid(run, met, 0, 3, false, dash)
+	var stored_venom := _paid(run, met, 0, 3, true, dash)
+	_check("with vacuole 3 they cost the same seconds (%.2f s, %.2f s), a smaller share"
+		% [stored_dash[1], stored_venom[1]] + " of a tank %.0f times as big" % tank,
+		is_equal_approx(stored_dash[1], dash * Metabolism.HUNGER_SECONDS)
+		and is_equal_approx(stored_venom[1], venom * Metabolism.HUNGER_SECONDS)
+		and is_equal_approx(stored_dash[0], dash / tank))
+	var s04 := GeneStats.context({&"crista": 2, &"vacuole": 3})
+	var said_dash: float = GeneStats.lines(&"myoneme", 1, 0, &"", s04)[1][0]["values"][0]
+	var said_venom: float = GeneStats.lines(&"toxicyst", 3, 0, &"", s04)[1][0]["values"][0]
+	_check("and the numbers say what is paid: `each dash burns %s s`, `being spat out"
+		% Readout.format(said_dash, Readout.Unit.ENERGY) + " burns %s s`"
+		% Readout.format(said_venom, Readout.Unit.ENERGY),
+		is_equal_approx(said_dash, _paid(run, met, 2, 3, false, dash)[1])
+		and is_equal_approx(said_venom, _paid(run, met, 2, 3, true, dash)[1]))
+	var odds := PackedStringArray([GeneStats.odds_text(1), GeneStats.odds_text(2),
+		GeneStats.odds_text(3)])
+	_check("the odds gain their percentage: %s" % " | ".join(odds),
+		odds[0] == "one copy · 55% of daughters wear it"
+		and odds[1] == "two copies · 80% of daughters wear it"
+		and odds[2] == "three copies · a daughter always wears it")
+
+
+## One dash of [param cost], or one sting, paid by the run's own handler out of
+## a body with `crista` and `vacuole` at those copies. Returns what it took:
+## `[share of the bar, seconds of rest out of that body's tank]`.
+func _paid(run: Node, met: Node, crista: int, vacuole: int, stung: bool,
+		cost: float) -> Array:
+	met.reset()
+	met.burn = CellBody.BURN_BY_TIER[crista]
+	met.reserve = CellBody.STORE_BY_TIER[vacuole]
+	if stung:
+		run.call("_on_stung", 0.0)
+	else:
+		run.call("_on_dashed", cost)
+	var share: float = met.hunger
+	return [share, share * Metabolism.HUNGER_SECONDS * float(met.reserve)]

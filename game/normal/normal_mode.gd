@@ -60,6 +60,11 @@ const Tally := preload("res://game/mechanics/tally.gd")
 ## looks like -- the eye's flare, and the pause target's one breath.
 const Progression := preload("res://game/mechanics/progression.gd")
 const Swell := preload("res://game/mechanics/swell.gd")
+## **A gene's numbers** (gene-stats.md §6.1): the readout knows units and never
+## genes, and gene_stats.gd is the edge where the two meet. This file only asks
+## for the lines of the gene being read, and draws them.
+const Readout := preload("res://game/mechanics/readout.gd")
+const GeneStats := preload("res://game/normal/gene_stats.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -228,6 +233,13 @@ var mode := -1
 ## run to inherit.
 var scheme := -1
 
+## Whether this run shows a gene's numbers: 1 on, 0 off, -1 to take whatever
+## `user://` remembers (gene-stats.md §2.2). Set it before the scene enters the
+## tree to pin it, which is what `tools/drive.gd --numbers=` does. **A pinned
+## run never writes the key**, so one tapped frame cannot leak numbers into
+## every render after it.
+var numbers := -1
+
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
 @onready var _returns: ReturnsLayer = $Returns
@@ -277,18 +289,34 @@ var scheme := -1
 @onready var _figure: Control = $Hud/Pause/Center/Columns/Genome/Figure
 @onready var _figure_body: Control = $Hud/Pause/Center/Columns/Genome/Figure/Body
 @onready var _figure_slots: Control = $Hud/Pause/Center/Columns/Genome/Figure/Slots
-@onready var _explain_organ: Control = $Hud/Pause/Center/Columns/Genome/Explain/Organ
-@onready var _explain_name: Label = $Hud/Pause/Center/Columns/Genome/Explain/Gene
-@onready var _explain_says: Label = $Hud/Pause/Center/Columns/Genome/Explain/Says
+## **The three rows under the figure sit in a box that does not grow**
+## (gene-stats.md §3.1): `Lines` is a plain `Control`, which takes no minimum
+## from its children, so the column lays out as if the numbers did not exist.
+## `Stack` is anchored to its top and grows down past it into the empty canvas
+## under the column, which is how the numbers arrive without moving anything a
+## finger is on.
+@onready var _lines: Control = $Hud/Pause/Center/Columns/Genome/Lines
+@onready var _stack: VBoxContainer = $Hud/Pause/Center/Columns/Genome/Lines/Stack
+@onready var _explain_organ: Control = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain/Organ
+@onready var _explain_name: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain/Gene
+@onready var _explain_says: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Explain/Says
+## **A gene's numbers, for a player who asked for them** (gene-stats.md): two
+## lines under the gene's own, what it does and what it costs. Hidden while
+## `numbers` is off, and then the screen is the one it always was.
+@onready var _numbers: Control = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Numbers
+## **The switch**, beside the line it opens (§2.1): a quiet chip to the right of
+## the column, centred on the gene's line. A child of `Lines`, so it is placed
+## by the same box and never by the column.
+@onready var _numbers_toggle: Control = $Hud/Pause/Center/Columns/Genome/Lines/NumbersToggle
 ## **The line under the figure is a row now** (beam-levels.md §8.2): a levelled
 ## gene's level and its gauge in front of the words it always had. `Text` is
 ## that label, moved inside; the other two are hidden for every gene that does
 ## not level, which is every gene but the beam.
-@onready var _hint_row: HBoxContainer = $Hud/Pause/Center/Columns/Genome/Hint
-@onready var _hint_level: Label = $Hud/Pause/Center/Columns/Genome/Hint/Level
-@onready var _hint_gauge: Control = $Hud/Pause/Center/Columns/Genome/Hint/Gauge
-@onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Hint/Text
-@onready var _genome_act: Label = $Hud/Pause/Center/Columns/Genome/Act
+@onready var _hint_row: HBoxContainer = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint
+@onready var _hint_level: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Level
+@onready var _hint_gauge: Control = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Gauge
+@onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Hint/Text
+@onready var _genome_act: Label = $Hud/Pause/Center/Columns/Genome/Lines/Stack/Act
 ## **The fork view** (beam-levels.md §8.3): two cards, one per way, in the
 ## figure's own place. Exactly one of `Figure` and `Fork` is visible, and both
 ## are 420 x 372, so the column never moves when one takes over.
@@ -306,6 +334,8 @@ var scheme := -1
 @onready var _choose_name: Label = $Hud/Choosing/Says/Explain/Gene
 @onready var _choose_line: Label = $Hud/Choosing/Says/Explain/Line
 @onready var _choose_hint: Label = $Hud/Choosing/Says/Hint
+## The same two lines for a daughter's locus, between her line and her odds.
+@onready var _choose_numbers: Control = $Hud/Choosing/Says/Numbers
 @onready var _pause_tap: Control = $Hud/PauseTap
 ## The drawn controls, under `Hud` and **before** `PauseTap` in the tree so the
 ## pause scrim covers them -- they stay drawn while paused, dead to input, which
@@ -608,6 +638,9 @@ func _ready() -> void:
 	# `stick` last run must not have to choose it again.
 	if scheme < 0:
 		scheme = RunState.load_scheme()
+	# And the numbers (gene-stats.md §2.2), for the same reason again: a player
+	# who asked for them once should not have to ask every run.
+	_show_numbers = RunState.load_numbers() if numbers < 0 else numbers > 0
 	_apply_mode()
 
 	_style_pause()
@@ -624,6 +657,10 @@ func _ready() -> void:
 	# styleboxes, drawn only once the screen opens on a gene that levels.
 	_build_level_row()
 	_build_fork_view()
+	# The numbers' switch and their two lines (gene-stats.md): a few
+	# connections and four styleboxes, after the level's row, whose height
+	# `Lines` is measured with.
+	_build_numbers()
 	# **The heartbeat is the flare's cue** (beam-levels.md §8.5), and the pause
 	# target's breath rides the same beat. Listening is not posting: this file
 	# is still the only one that writes to the bus.
@@ -1635,10 +1672,16 @@ func _on_impulsed(strength: float) -> void:
 
 
 ## `myoneme`. The cell asked for the burst and cannot spend hunger itself.
+##
+## [param cost] is a share of a born cell's tank, and it is paid as the seconds
+## of rest that share comes to, **through `spend`, like every other cost**
+## (gene-stats.md §11, owner's call 2): `crista` makes it cheaper and a bigger
+## `vacuole` tank makes it a smaller share. A born cell -- burn 1, reserve 1 --
+## pays exactly what it did when this was a fixed share of the bar.
 func _on_dashed(cost: float) -> void:
 	if _life != Life.ALIVE:
 		return
-	_metabolism.feed(-cost)
+	_metabolism.spend(cost * MetabolismNode.HUNGER_SECONDS)
 
 
 ## `trichocyst`. The dart went off; something that was committed to you is not
@@ -1649,11 +1692,17 @@ func _on_darted(bearing: float) -> void:
 
 
 ## `toxicyst`. It swallowed you and died of it, and you are starving for it.
+##
+## Paid as the dash is, in seconds of rest through `spend` (gene-stats.md §11,
+## call 2). `venom_cost` keeps its values, which are all the host ever asks of
+## it (`>= 0`), so nothing about this crosses the wire. A negative one -- no
+## venom -- spends nothing, where the negative meal it used to be would have
+## fed the cell.
 func _on_stung(bearing: float) -> void:
 	if _life != Life.ALIVE:
 		return
 	_bus.hit(bearing, 1.0)
-	_metabolism.feed(-_food.venom_cost)
+	_metabolism.spend(_food.venom_cost * MetabolismNode.HUNGER_SECONDS)
 
 
 ## A mouth closed on a body it could not swallow -- yours on something too big,
@@ -2784,6 +2833,18 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _life != Life.ALIVE:
 		return
 
+	# **`N` turns a gene's numbers on and off** while the pause screen is up
+	# (gene-stats.md §2.2), on the press and never on an echo. Read raw, as the
+	# `Shift`+arrow move is: a content pack cannot add an action. Nothing else
+	# reads `N`.
+	if _menu_open and event is InputEventKey:
+		var asked := event as InputEventKey
+		if asked.pressed and not asked.echo \
+				and (asked.keycode == KEY_N or asked.physical_keycode == KEY_N):
+			_toggle_numbers()
+			get_viewport().set_input_as_handled()
+			return
+
 	# V flips the view. Desktop only by nature -- it costs no pixel and there is
 	# no key on a phone, where the mode select is the way in.
 	if _menu_open or not (event is InputEventKey):
@@ -3360,7 +3421,8 @@ const SLOT_NEIGHBOUR: Array = [
 ## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
 ## them for a focus neighbour.
 const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
-## Tab order: clockwise round the body from the nose, and then on to `light`.
+## Tab order: clockwise round the body from the nose, and then on to the
+## `numbers` switch and `light`.
 const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4]
 
 ## **A tether per live slot**, from the chip's edge to the middle of its arc on
@@ -3916,7 +3978,7 @@ func _build_genome_strip() -> void:
 	# **The caption carries the generation**, because the hint below the figure
 	# carries what a slot is worth to a daughter. It says `genome` because the
 	# group is two registers, and only the chips are the DNA.
-	_genome_caption.text = "genome · %s" % _generation_text()
+	_update_caption()
 	_update_hint()
 	_update_explain()
 	_restore_focus(keeping)
@@ -3925,8 +3987,9 @@ func _build_genome_strip() -> void:
 
 
 ## **The ring's keyboard**: a plain arrow goes where it points, Tab goes round
-## clockwise from the nose and then on to `light`, and no arrow leaves the ring.
-## Set on every rebuild, because every rebuild makes new chips.
+## clockwise from the nose and then on to the `numbers` switch and `light`, and
+## no arrow leaves the ring. Set on every rebuild, because every rebuild makes
+## new chips.
 ##
 ## **A direction with no live slot that way points the chip at itself**, which
 ## Godot takes as *stay here*. Left unset, its geometric search would carry the
@@ -3947,15 +4010,18 @@ func _wire_focus() -> void:
 			chip.set_focus_neighbor(NEIGHBOUR_SIDES[way],
 				chip.get_path_to(neighbour))
 		chip.focus_next = chip.get_path_to(
-			live[i + 1] if i + 1 < live.size() else _gain_slider)
+			live[i + 1] if i + 1 < live.size() else _numbers_toggle)
 		# The nose's previous is left to the tree: the last waiting gene if
 		# there is one, and `leave` if not -- which is where Tab came from.
 		if i > 0:
 			chip.focus_previous = chip.get_path_to(live[i - 1])
-	# And `light` backs into the ring where Tab left it, not at whichever chip
-	# happens to be last in the tree.
+	# **Then the switch, then `light`** (gene-stats.md §2.2), and back the same
+	# way: `light` backs onto the switch, and the switch into the ring where Tab
+	# left it, not at whichever chip happens to be last in the tree.
+	_numbers_toggle.focus_next = _numbers_toggle.get_path_to(_gain_slider)
+	_gain_slider.focus_previous = _gain_slider.get_path_to(_numbers_toggle)
 	if not live.is_empty():
-		_gain_slider.focus_previous = _gain_slider.get_path_to(
+		_numbers_toggle.focus_previous = _numbers_toggle.get_path_to(
 			live[live.size() - 1])
 
 
@@ -4074,8 +4140,15 @@ func _update_hint() -> void:
 	# at least one; a waiting gene has `dna_tier == 0`, which indexes the empty
 	# string -- so without this the odds go blank at exactly the moment the
 	# player is deciding what a placement is worth.
-	_set_hint(HINT_CHANCE[clampi(_copies_of(gene), 0, HINT_CHANCE.size() - 1)],
-		gene)
+	_set_hint(_odds(_copies_of(gene)), gene)
+
+
+## **The odds a copy count gives**, in words -- and with the numbers on, with
+## their percentage (gene-stats.md §5.4). A certainty says so either way.
+func _odds(copies: int) -> String:
+	if _show_numbers:
+		return GeneStats.odds_text(copies)
+	return HINT_CHANCE[clampi(copies, 0, HINT_CHANCE.size() - 1)]
 
 
 ## **The row under the figure, whole** (beam-levels.md §8.2): [param text], and
@@ -4238,6 +4311,9 @@ func _update_explain() -> void:
 	var gene := _fork_gene if _fork_open() else _reading()
 	_explain_gene = gene
 	_explain_tier = _copies_of(gene) if gene != &"" else 0
+	# The numbers read the same gene, through the same resolution, so the two
+	# lines never disagree about their subject (gene-stats.md §6.3).
+	_update_numbers()
 	if _explain_organ != null:
 		_explain_organ.queue_redraw()
 	# The arc on the skin follows the same reading.
@@ -4275,6 +4351,257 @@ func _explains(gene: StringName) -> String:
 	if grown != null and taken.has(grown.path):
 		return String(taken[grown.path])
 	return String(EXPLAINS.get(gene, ""))
+
+
+# --- A gene's numbers (docs/design/gene-stats.md) -----------------------------
+# **For the player who wants to master the game, and invisible to the one who
+# does not** (the owner, 2026-09-29). One switch, off by default and
+# remembered; with it on, two lines under the gene's own -- what it does, then
+# what it costs -- on this screen, on the fork's cards and on the choosing
+# screen. The playfield never shows a number (diegetic-hud.md §3).
+
+## The two lines: 14 px, 19 apart, the first baseline 14 px into a block that
+## is 38 tall whether or not anything is in it -- so reading an empty slot moves
+## nothing below it (§3.3, §5.3).
+const NUMBERS_SIZE := 14
+const NUMBERS_PITCH := 19.0
+const NUMBERS_BASE := 14.0
+const NUMBERS_HEIGHT := 38.0
+## The words in the column's pale tint, and the numbers in the same tint a
+## little stronger, so the eye finds them -- only the number: its unit keeps the
+## words' tint. Drawn at 0.88 the values out-shone the sentence they explain;
+## at 0.70 they read as its details (§3.3).
+const NUMBERS_WORD := Color(0.855, 0.953, 0.933, 0.42)
+const NUMBERS_VALUE := Color(0.855, 0.953, 0.933, 0.70)
+## A gene this body does not wear, drawn in the figure's dim register: the same
+## numbers, saying *what a body wearing it would have* (§5.3).
+const NUMBERS_DIM := 0.62
+
+## **The switch** (§2.1): a 96 x 48 hit rect and, across its middle, a 96 x 30
+## slab with `numbers` centred in it. Teal, because on this column teal means
+## *this responds*; a word and not a `+`, because beside a gene on a screen
+## about placing genes, a `+` reads as *add a copy*.
+const TOGGLE_SLAB := Rect2(0.0, 9.0, 96.0, 30.0)
+const TOGGLE_CORNER := 6
+const TOGGLE_WORD := "numbers"
+const TOGGLE_WORD_SIZE := 14
+## The chips' focus mark: an underline, under the slab.
+const TOGGLE_FOCUS_Y := 44.0
+## Its four states, off, off and hovered or focused, on, and on and hovered or
+## focused: `[fill, edge width, edge alpha, word alpha]`. **On differs from
+## hovered by its 2 px edge**, this screen's mark for an armed tile
+## (genes-and-cilia.md §5.2), so the difference is a shape and survives
+## greyscale.
+const TOGGLE_STATES: Array = [
+	[Color(0.063, 0.141, 0.125, 0.35), 1, 0.22, 0.50],
+	[Color(0.063, 0.141, 0.125, 0.55), 1, 0.40, 0.72],
+	[Color(0.086, 0.204, 0.176, 0.80), 2, 0.62, 0.80],
+	[Color(0.086, 0.204, 0.176, 0.80), 2, 0.78, 0.92],
+]
+const TOGGLE_EDGE := Color(0.12, 0.70, 0.58)
+const TOGGLE_INK := Color(0.588, 1.0, 0.859)
+
+## Whether the numbers are shown. From [member numbers] when the harness pins
+## it, else from `user://`.
+var _show_numbers := false
+## What the two blocks draw: `[what it does, what it costs]`, readout items
+## each, and whether they are drawn dim.
+var _numbers_lines: Array = [[], []]
+var _numbers_dim := false
+var _choose_lines: Array = [[], []]
+var _choose_dim := false
+## The mouse is over the switch.
+var _numbers_hot := false
+## The frame the switch last answered on. A touch arrives twice -- as itself
+## and as the click Godot emulates from it -- and a switch answered twice is no
+## switch (the fork chip's rule, beam-levels.md §8.3).
+var _numbers_frame := -1
+## What [method _step_levels_shown] last saw of [method _numbers_sign].
+var _numbers_seen := 0
+## The switch's four boxes, built once in [method _build_numbers].
+var _toggle_boxes: Array[StyleBoxFlat] = []
+
+
+## The switch and the two blocks (gene-stats.md §2, §3). The scene carries the
+## same numbers; this is what binds, as it is for the figure.
+func _build_numbers() -> void:
+	# **`Lines` is exactly as tall as the three rows it has always held**
+	# (§3.1), measured with the numbers hidden, so it follows a row that ever
+	# changes height. Nothing below it can tell the numbers exist.
+	_numbers.hide()
+	_lines.custom_minimum_size = Vector2(0.0, _stack.get_combined_minimum_size().y)
+	for block: Control in [_numbers, _choose_numbers]:
+		block.custom_minimum_size = Vector2(0.0, NUMBERS_HEIGHT)
+		block.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_numbers.draw.connect(_draw_numbers.bind(_numbers, false))
+	_choose_numbers.draw.connect(_draw_numbers.bind(_choose_numbers, true))
+	_numbers_toggle.mouse_filter = Control.MOUSE_FILTER_STOP
+	_numbers_toggle.focus_mode = Control.FOCUS_ALL
+	_numbers_toggle.draw.connect(_draw_numbers_toggle)
+	_numbers_toggle.gui_input.connect(_on_numbers_toggle_input)
+	_numbers_toggle.mouse_entered.connect(_set_numbers_hot.bind(true))
+	_numbers_toggle.mouse_exited.connect(_set_numbers_hot.bind(false))
+	_numbers_toggle.focus_entered.connect(_numbers_toggle.queue_redraw)
+	_numbers_toggle.focus_exited.connect(_numbers_toggle.queue_redraw)
+	# **No arrow leaves it**, the ring's own rule: its four neighbours are
+	# itself. Tab and Shift-Tab are set with the ring's, in [method _wire_focus].
+	for side in NEIGHBOUR_SIDES:
+		_numbers_toggle.set_focus_neighbor(side,
+			_numbers_toggle.get_path_to(_numbers_toggle))
+	_toggle_boxes.clear()
+	for state: Array in TOGGLE_STATES:
+		_toggle_boxes.append(_flat(state[0], TOGGLE_CORNER,
+			Color(TOGGLE_EDGE, float(state[2])), int(state[1])))
+	_apply_numbers()
+
+
+## **Everything the switch changes** (§6.3): whether the two blocks are there,
+## and every line that says a number. A closed screen is rebuilt with all of it
+## when it opens, so only an open one is redrawn here.
+func _apply_numbers() -> void:
+	_numbers.visible = _show_numbers
+	_choose_numbers.visible = _show_numbers
+	_numbers_toggle.queue_redraw()
+	if _menu_open:
+		_update_caption()
+		_update_numbers()
+		_update_hint()
+	if _daughters.size() == 2:
+		_choose_say()
+
+
+## **One toggle, from whichever door**: the switch's lift, `Enter` or `Space`
+## on it, or `N`. Once a frame. Written to `user://` unless the harness pinned
+## this run.
+func _toggle_numbers() -> void:
+	var frame := Engine.get_process_frames()
+	if frame == _numbers_frame:
+		return
+	_numbers_frame = frame
+	_show_numbers = not _show_numbers
+	if numbers < 0:
+		RunState.save_numbers(_show_numbers)
+	_apply_numbers()
+
+
+## **The switch answers on the lift, inside it**, and a key on the press -- the
+## fork chip's rule (beam-levels.md §8.3), for the same reason: a touch arrives
+## twice. The press is taken so that nothing under it sees it; a lift that was
+## cancelled, or that left the switch, changes nothing. It is a control of its
+## own, so it never arms, disarms or places anything, and it neither starts a
+## drag nor takes a drop.
+func _on_numbers_toggle_input(event: InputEvent) -> void:
+	if _is_pointer_press(event):
+		_numbers_toggle.accept_event()
+		return
+	if event.is_action_pressed(&"ui_accept"):
+		_numbers_toggle.accept_event()
+		_toggle_numbers()
+		return
+	if not _is_pointer_lift(event):
+		return
+	_numbers_toggle.accept_event()
+	if event.is_canceled() or not Rect2(Vector2.ZERO, _numbers_toggle.size).has_point(
+			_pointer_at(event)):
+		return
+	_toggle_numbers()
+
+
+## Lit under the pointer -- **but not under a gene being carried** (§2.3): it
+## takes no drop, so it must not answer one as if it might.
+func _set_numbers_hot(on: bool) -> void:
+	_numbers_hot = on and not get_viewport().gui_is_dragging()
+	_numbers_toggle.queue_redraw()
+
+
+## The switch: its slab in one of four states, the word, and the chips' focus
+## mark when the keyboard is on it.
+func _draw_numbers_toggle() -> void:
+	var node := _numbers_toggle
+	if _toggle_boxes.size() < TOGGLE_STATES.size():
+		return
+	var state := (2 if _show_numbers else 0) \
+		+ (1 if _numbers_hot or node.has_focus() else 0)
+	node.draw_style_box(_toggle_boxes[state], TOGGLE_SLAB)
+	var font := node.get_theme_default_font()
+	if font != null:
+		var width := font.get_string_size(TOGGLE_WORD, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			TOGGLE_WORD_SIZE).x
+		var centre := TOGGLE_SLAB.get_center()
+		var base := centre.y + (font.get_ascent(TOGGLE_WORD_SIZE)
+			- font.get_descent(TOGGLE_WORD_SIZE)) * 0.5
+		node.draw_string(font, Vector2(centre.x - width * 0.5, base), TOGGLE_WORD,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, TOGGLE_WORD_SIZE,
+			Color(TOGGLE_INK, float(TOGGLE_STATES[state][3])))
+	if node.has_focus():
+		node.draw_line(Vector2(FOCUS_INSET, TOGGLE_FOCUS_Y),
+			Vector2(node.size.x - FOCUS_INSET, TOGGLE_FOCUS_Y), FOCUS_TINT,
+			FOCUS_WIDTH, true)
+
+
+## One block's two lines, centred on it: under the figure, or under a
+## daughter's line on the choosing screen.
+func _draw_numbers(node: Control, choosing: bool) -> void:
+	var said: Array = _choose_lines if choosing else _numbers_lines
+	var font := node.get_theme_default_font()
+	if font == null:
+		return
+	var ink := NUMBERS_DIM if (_choose_dim if choosing else _numbers_dim) else 1.0
+	var word := Color(NUMBERS_WORD, NUMBERS_WORD.a * ink)
+	var value := Color(NUMBERS_VALUE, NUMBERS_VALUE.a * ink)
+	for i in mini(said.size(), 2):
+		var items: Array = said[i]
+		if items.is_empty():
+			continue
+		Readout.draw(node, font, NUMBERS_SIZE, Readout.runs(items), node.size.x * 0.5,
+			NUMBERS_BASE + NUMBERS_PITCH * float(i), word, value)
+
+
+## **The numbers of the gene being read** (gene-stats.md §5.3), from the same
+## reading as the line above them. This body's own: the copies it wears -- not
+## the DNA's, which are its daughters' -- and for a gene it does not wear, the
+## copies it would be worn with, dimmer. A levelled gene is read at the level it
+## works at, and a way on the cards at the cards' level (§5.2).
+func _update_numbers() -> void:
+	_numbers_lines = [[], []]
+	_numbers_dim = false
+	var gene := _fork_gene if _fork_open() else _reading()
+	if _show_numbers and gene != &"":
+		var worn := _genome.tier(gene)
+		var copies := worn if worn > 0 else _copies_of(gene)
+		_numbers_dim = worn <= 0
+		var level := 0
+		var path: StringName = &""
+		var grown := _genome.progression(gene)
+		if grown != null:
+			level = grown.effective_level()
+			path = grown.path
+		elif CellBody.LEVELLED.has(gene):
+			level = 1
+		var way := _way_reading()
+		if _fork_open() and way >= 0:
+			level = _way_level()
+			path = _way_path(way)
+			_numbers_dim = false
+		_numbers_lines = GeneStats.lines(gene, copies, level, path,
+			GeneStats.context(_genome.tiers()))
+		# **The next level**, at the end of the costs: only a worn gene earns,
+		# and the cards are about a level not yet had.
+		if grown != null and worn > 0 and not _fork_open():
+			(_numbers_lines[1] as Array).append(
+				GeneStats.progress_item(grown.level(), grown.to_next()))
+	_numbers.queue_redraw()
+
+
+## **The caption, whole** (§5.4): the generation, and with the numbers on, this
+## body's size, what its full tank holds and how long that lasts drifting -- in
+## the caption's own size and tint, so it is still a caption.
+func _update_caption() -> void:
+	var caption := "genome · %s" % _generation_text()
+	if _show_numbers:
+		caption += Readout.SEP + Readout.plain(GeneStats.cell_items(_cell.radius,
+			_genome.tiers(), _genome.upkeep()))
+	_genome_caption.text = caption
 
 
 ## **What the three lines under the figure are about**, resolved once.
@@ -5647,9 +5974,9 @@ func _build_fork_view() -> void:
 		card.focus_entered.connect(_on_way_focus)
 		card.focus_exited.connect(_on_way_focus)
 	# **`←` and `→` go between the two and no further**: no arrow leaves the
-	# cards, as none leaves the ring. Tab goes on to `light`, as it does from
-	# the ring's last slot, and back from the first card to the fork's chip,
-	# which is where the tree already puts it.
+	# cards, as none leaves the ring. Tab goes on to the `numbers` switch and
+	# `light`, as it does from the ring's last slot, and back from the first
+	# card to the fork's chip, which is where the tree already puts it.
 	for way in _ways.size():
 		var card := _ways[way]
 		var other := _ways[1 - way]
@@ -5658,7 +5985,7 @@ func _build_fork_view() -> void:
 		card.focus_neighbor_top = card.get_path_to(card)
 		card.focus_neighbor_bottom = card.get_path_to(card)
 	_ways[_ways.size() - 1].focus_next = _ways[_ways.size() - 1].get_path_to(
-		_gain_slider)
+		_numbers_toggle)
 
 
 ## True while a fork's cards are up in place of the figure.
@@ -5698,15 +6025,37 @@ func _levels_sign() -> int:
 ## redrawn when a level or the gauge would change a pixel. Nothing rebuilds; a
 ## fork opening under the menu is [method _catch_up]'s, because the tray has a
 ## chip to grow.
+##
+## **And with the numbers on, they follow as well** (gene-stats.md §6.3): the
+## beam's strikes to its next level and the price of the level it has, and the
+## caption's size, which a meal eaten under the menu grows.
 func _step_levels_shown() -> void:
 	var seen := _levels_sign()
-	if seen == _levels_seen:
+	if seen != _levels_seen:
+		_levels_seen = seen
+		_redraw_figure()
+		_update_hint()
+		if _fork_open():
+			_reshape_way_fans()
+	if not _show_numbers:
 		return
-	_levels_seen = seen
-	_redraw_figure()
-	_update_hint()
-	if _fork_open():
-		_reshape_way_fans()
+	var told := _numbers_sign()
+	if told == _numbers_seen:
+		return
+	_numbers_seen = told
+	_update_numbers()
+	_update_caption()
+
+
+## Everything the numbers read that moves under a pond's open menu, as one
+## number: the body's width in whole µm, as the caption writes it, and every
+## strike still to earn -- which moves with each one, and with every level.
+func _numbers_sign() -> int:
+	var sig := int(roundf(_cell.radius * 2.0))
+	for gene: StringName in _genome.levels():
+		var grown := _genome.progression(gene)
+		sig += gene.hash() * (int(ceilf(grown.to_next())) + 1)
+	return sig
 
 
 ## One chip per open fork, after the waiting genes (§8.3). **It neither drags
@@ -5902,16 +6251,18 @@ func _reset_fork_view() -> void:
 
 
 ## Exactly one of the two is visible, and they are the same size, so the column
-## does not move when one takes over from the other. **`light` backs into
-## whichever is showing**: Shift-Tab from it must not land on a hidden chip, or
-## the keyboard is standing on something nobody can see.
+## does not move when one takes over from the other. **The `numbers` switch
+## backs into whichever is showing**, and `light` onto the switch: Shift-Tab
+## must not land on a hidden chip, or the keyboard is standing on something
+## nobody can see.
 func _show_fork_view() -> void:
 	var open := _fork_open()
 	_figure.visible = not open
 	_fork_view.visible = open
 	if open:
-		_gain_slider.focus_previous = _gain_slider.get_path_to(
+		_numbers_toggle.focus_previous = _numbers_toggle.get_path_to(
 			_ways[_ways.size() - 1])
+		_gain_slider.focus_previous = _gain_slider.get_path_to(_numbers_toggle)
 	else:
 		_wire_focus()
 
@@ -7040,6 +7391,22 @@ func _choose_say() -> void:
 	_choose_tier = maxi(int(found[1]), 1) if gene != &"" else 0
 	_choose_worn = int(found[2]) > 0
 	_choose_organ.queue_redraw()
+	# **Her numbers** (gene-stats.md §5.3): the locus's copies in her own
+	# body's `crista` and `vacuole`, dimmer for a gene she carries and does not
+	# wear, as the organ beside her line is drawn. A levelled gene is read at
+	# the level and the way she inherits.
+	_choose_lines = [[], []]
+	_choose_dim = not _choose_worn
+	if _show_numbers and gene != &"":
+		var works_at := 0
+		var took: StringName = &""
+		if CellBody.LEVELLED.has(gene):
+			var inherited: Progression = _genome.heritable_levels().get(gene, null)
+			works_at = inherited.effective_level() if inherited != null else 1
+			took = inherited.path if inherited != null else &""
+		_choose_lines = GeneStats.lines(gene, maxi(int(found[1]), 1), works_at, took,
+			GeneStats.context(_daughters[side]["body"]))
+	_choose_numbers.queue_redraw()
 	if gene == &"":
 		_choose_name.text = ""
 		# A locus with nothing in it still has a direction to explain, which is
@@ -7057,7 +7424,7 @@ func _choose_say() -> void:
 	_choose_line.text = "" if says.is_empty() else "· " + says
 	var register := CHOOSE_WORN if _choose_worn else CHOOSE_CARRIED
 	var odds := HINT_CERTAIN if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
-		else HINT_CHANCE[clampi(int(found[1]), 0, HINT_CHANCE.size() - 1)]
+		else _odds(int(found[1]))
 	# **The level goes in the line, not on the strands** (§8.6): both daughters
 	# carry the same level for every gene they share, so a mark on both strands
 	# would say it twice. `worn · level 7 · one copy · a daughter may not wear

@@ -341,6 +341,10 @@ Each row gives the value at 1, 2 and 3 worn copies, for a newborn with no
   a share of it. `S04` shows this: a three-copy venom in a `vacuole`-3 body
   reads `being spat out burns 16 s`, against 7.9 for a newborn.
 
+  > **Built with call 2's *yes*, 2026-09-29** (§11): they cost the same seconds
+  > in any tank and fewer with `crista`, so `S04`'s `crista`-2 body reads
+  > `being spat out burns 6.1 s`.
+
 ### 5.2 The beam, by level and way
 
 The beam is read at its **effective level**, which is held at 3 while the fork
@@ -589,3 +593,10 @@ CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:
 **Row 2 is the loose end `energy.md` §1.3 left for this work by name.** It is
 two lines in `normal_mode.gd`, and no constant moves. Each player's own device
 pays its own hunger, so it crosses no wire (§9).
+
+> **Row 2 is built with the recommended option, 2026-09-29, pending the owner's
+> answer.** `_on_dashed` and `_on_stung` pay through `spend`, `crista` reads
+> `everything burns {} less`, and the dash and venom rows take `× burn`. A
+> newborn pays what it did; `S04` reads `6.1 s` where it read 16. To take *no*
+> instead, put back the two `feed(-…)` lines, those two rows' `× reserve` and
+> `crista`'s old words. Row 1 is built as recommended too: µm.

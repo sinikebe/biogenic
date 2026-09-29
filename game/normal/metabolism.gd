@@ -146,8 +146,10 @@ func feed(amount: float) -> void:
 
 ## **Energy the body spent doing something**, in seconds of rest: how long a
 ## resting cell of upkeep 1 takes to burn as much. What moving costs is paid
-## here (cell.gd's `take_effort`, docs/design/energy.md); being alive is paid
-## in [method _process], at [member upkeep].
+## here (cell.gd's `take_effort`, docs/design/energy.md), and so are a dash and
+## being spat out by venom, which used to take a fixed share of the bar instead
+## (gene-stats.md §11, owner's call 2). Being alive is paid in [method _process],
+## at [member upkeep].
 ##
 ## Scaled like everything else on the bar: [member burn] makes it cheaper and
 ## [member reserve] makes it a smaller share of a bigger tank. It stops at full
