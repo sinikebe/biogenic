@@ -1769,6 +1769,73 @@ static func draw_weave(canvas: CanvasItem, axis: int, lobe: float, mid: float,
 	canvas.draw_polyline_colors(b_pts, b_col, STRAND_WIDTH, true)
 
 
+## **A replication fork**: the weave from [param from] onward, and then its two
+## strands stop winding and part (beam-levels.md §8.3). It is how a slot says
+## *a choice is waiting here*, and it changes the chip's outline rather than
+## only its colour, so it survives greyscale. The pause screen's forking slot
+## draws it, and so does the fork's chip in the tray, which is why it lives
+## here and not with either of them.
+##
+## The strands part at **the last crest before [param to]**, where they are
+## already furthest apart and running level -- so the parting leaves the helix
+## without a kink. From there to [param to] each swings out by a further
+## [param spread] as the square of the way along, and blends from its depth
+## colour to [param tone] at 0.9, so the two tips carry the gene's hue.
+## [param from], [param to] and the swing are in the same `along` units as
+## [method draw_weave]'s, counted from the helix's own origin (its `lobe0` 0),
+## so the two calls meet exactly when one takes over from the other.
+## [param bright] is the weave's own, and dims the tips with it.
+static func draw_fork(canvas: CanvasItem, axis: int, lobe: float, mid: float,
+		amp: float, from: float, to: float, spread: float, tone: Color,
+		bright: float) -> void:
+	var split := lobe * (floorf(to / lobe - 0.5) + 0.5)
+	if split < from:
+		split = from
+	# Which strand is on which side at the crest: the parting carries it on.
+	var lean := signf(sin(strand_phase(split, 0, lobe)))
+	if lean == 0.0:
+		lean = 1.0
+	var a_pts := PackedVector2Array()
+	var b_pts := PackedVector2Array()
+	var a_col := PackedColorArray()
+	var b_col := PackedColorArray()
+	var winding := maxi(int(ceilf((split - from) / lobe * float(STRAND_STEPS))),
+		0)
+	for i in winding + 1:
+		var along := lerpf(from, split, float(i) / float(maxi(winding, 1)))
+		var t := strand_phase(along, 0, lobe)
+		var swing := amp * sin(t)
+		a_pts.append(strand_point(axis, along, mid - swing))
+		b_pts.append(strand_point(axis, along, mid + swing))
+		var near := 0.5 * (cos(t) + 1.0)
+		a_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_BACK, STRAND_FRONT,
+			near) * bright))
+		b_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK,
+			near) * bright))
+	# The parting. Its first point is the crest the weave just reached, so the
+	# polyline carries straight on; each strand's colour leaves the depth colour
+	# it had there.
+	var t0 := strand_phase(split, 0, lobe)
+	var near0 := 0.5 * (cos(t0) + 1.0)
+	var a_from := Color(STRAND_BACKBONE, lerpf(STRAND_BACK, STRAND_FRONT, near0)
+		* bright)
+	var b_from := Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK, near0)
+		* bright)
+	var tip := Color(tone, 0.9 * minf(bright, 1.0))
+	var parted := maxi(int(ceilf((to - split) / lobe * float(STRAND_STEPS))) * 2,
+		1)
+	for i in range(1, parted + 1):
+		var u := float(i) / float(parted)
+		var along := lerpf(split, to, u)
+		var swing := lean * (amp + spread * u * u)
+		a_pts.append(strand_point(axis, along, mid - swing))
+		b_pts.append(strand_point(axis, along, mid + swing))
+		a_col.append(a_from.lerp(tip, u))
+		b_col.append(b_from.lerp(tip, u))
+	canvas.draw_polyline_colors(a_pts, a_col, STRAND_WIDTH, true)
+	canvas.draw_polyline_colors(b_pts, b_col, STRAND_WIDTH, true)
+
+
 ## One lens of the weave, filled. Built from the same two strands, so the
 ## selection is exactly the shape of the thing being selected.
 ##
