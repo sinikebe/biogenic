@@ -318,6 +318,31 @@ Controls, all at least 48 px: `leave`; back 0.25 s / play-pause / forward
 0.25 s; a speed toggle cycling 1x, 1/2x, 1/4x; and a scrub track 48 px tall at
 about 15 px per second, so a thumb-width is roughly 3 seconds.
 
+> **Faster as well, 2026-09-29.** The owner: *"the ability to speed up the
+> replay after death"*. Since `energy.md` §7 a newborn that never eats lives
+> thirty seconds, so the replay is mostly the run-up and the part worth
+> watching is the end. The one toggle (§7 row 5) now cycles **1x, 2x, 4x,
+> 1/4x, 1/2x**. A tap goes faster to skim, and the tap after 4x drops straight
+> to 1/4x, which is the tap a player wants as the death arrives. Measured on the
+> built screen: the cursor moves 1.02, 2.03, 4.07, 0.25 and 0.51 s of replay per
+> second, then 1.02 again. The membrane is replayed from recorded snapshots, so
+> it keeps pace at any speed.
+>
+> **What runs in real time**, as it always did at 1/4x, and so shows more at 4x:
+> the world pane's contact rings; the beam's held marks; the beat's glow; and
+> the camera's lag, which at 4x leaves the body a little ahead of centre, never
+> more than its 72-unit cap. The world pane's trail is sampled in real time too,
+> so at 4x it reaches four times as far back.
+>
+> **Each loop now starts with no history.** Until now nothing cleared the world
+> pane's trail when the replay looped, so for its first seven seconds a straight
+> line joined the death to the start. At 4x a thirty-second life loops every
+> 7.5 s, which would have left that line up almost all the time, with last
+> loop's path drawn ahead of the body. The replay now tells the world view to
+> forget its trail and marks as each loop begins (`vision.gd`'s `forget()`, the
+> same history a view coming back on already dropped), and the camera starts on
+> the body.
+
 **No frame step.** A button tapped sixty times to cross a second is not a
 control; 1/4x with a pause does the same job in one tap.
 
@@ -748,4 +773,4 @@ in the last place it still reached.
 | 2 | Does the truth pane keep the membrane under the world? | **yes ✓ recommended** · no, the right pane is only the water | Keeping it lets the player see the lie and the truth in one glance — the green band pointing one way and the food sitting the other. Dropping it stops the replay being the two shipped modes side by side. |
 | 3 | How is the replay offered? | **one `watch` button, tap anywhere else still restarts ✓ recommended** · a gesture · automatically | The button changes nothing for a player who does not want it. A gesture is a thing nobody finds. Automatic makes every death longer. |
 | 4 | Every death, or only past generation 1? | **every death ✓ recommended** · from the second generation | Dying in the first thirty seconds is the death a new player most needs explained. |
-| 5 | Transport: full or minimal? | **minimal — play/loop and one speed toggle ✓ recommended** · full — scrub, speed, jumps, play/pause | The panes are the feature; the transport is the part to grow after watching somebody use it. §5. |
+| 5 | Transport: full or minimal? | **minimal — play/loop and one speed toggle ✓ recommended** · full — scrub, speed, jumps, play/pause | The panes are the feature; the transport is the part to grow after watching somebody use it. §5. (Grown on 2026-09-29: the toggle also speeds up, §4.4.) |

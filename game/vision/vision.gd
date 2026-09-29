@@ -534,19 +534,28 @@ func set_active(on: bool) -> void:
 		# Come back at the camera the cell is at now, not where it was left, and
 		# with no history: nothing ages while the view is off, so anything kept
 		# would reappear frozen at whatever age it had when it went dark.
-		if _cell != null:
-			_camera = _cell.position
-		_trail.clear()
-		_trail_clock = 0.0
-		_forget_peer()
-		_peer_trail_clock = 0.0
-		_forget_friend()
-		_kicks.clear()
-		_hits.clear()
-		_ghosts.clear()
-		_meals.clear()
-		_wakes.clear()
+		forget()
 	_apply_visibility()
+
+
+## **No history: the camera on the cell and nothing trailing behind it.** The
+## trail, the peer's trail and every mark go, so what is drawn next is only what
+## happens next. For a view coming back on, and for the replay starting its
+## loop again, where the trail would otherwise draw a line from the death
+## straight back to the start (replay.md §4.4).
+func forget() -> void:
+	if _cell != null:
+		_camera = _cell.position
+	_trail.clear()
+	_trail_clock = 0.0
+	_forget_peer()
+	_peer_trail_clock = 0.0
+	_forget_friend()
+	_kicks.clear()
+	_hits.clear()
+	_ghosts.clear()
+	_meals.clear()
+	_wakes.clear()
 
 
 func is_active() -> bool:
