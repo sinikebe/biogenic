@@ -1543,9 +1543,11 @@ func _be_born() -> void:
 	var carried := _genome.take_waiting()
 	# **And her mother's levels** (beam-levels.md §3): a copy of each one for a
 	# gene in her own DNA, grown or not. The same copies her sister would have
-	# had, so which daughter is chosen never changes a level.
+	# had, so which daughter is chosen never changes a level. Only the levels
+	# her mother's DNA carries: one her mother's body alone still wore ended
+	# with that body, as the pause screen said it would.
 	_genome.express(pick["tiers"], pick["order"], pick["body"], null,
-		_genome.levels())
+		_genome.heritable_levels())
 	_genome.carry(carried)
 	_forget_eye()
 	_soma.setup(_cell, _genome)
@@ -2516,8 +2518,10 @@ func _notification(what: int) -> void:
 			_controls.let_go()
 			# The same argument for the genome screen: a finger that left with
 			# the app never lifts, so the placement it was holding is abandoned
-			# rather than left waiting for a release that cannot come.
+			# rather than left waiting for a release that cannot come. So is a
+			# card's confirm: it would otherwise never lapse.
 			_primed = SLOT_NONE
+			_way_primed = -1
 			# And for the body held open (dna-body.md §8), nothing placed. The
 			# emulated mouse's finger goes with it: its release may never come.
 			_offer_close(false)
@@ -4949,7 +4953,7 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 		# pressed an armed slot, slid off it and lifted elsewhere gets its
 		# release *here*, outside the chip's rect. That is a gesture the player
 		# aborted, and aborting by sliding off is the oldest cancel there is.
-		if was_primed and _dragging == SLOT_NONE \
+		if was_primed and _dragging == SLOT_NONE and not event.is_canceled() \
 				and Rect2(Vector2.ZERO, tile.size).has_point(
 					_pointer_at(event)):
 			_second_tap(index, false)
@@ -5232,6 +5236,13 @@ func _is_pointer_press(event: InputEvent) -> bool:
 ## apart -- and when a drag *is* in flight it delivers no release here at all,
 ## because the release is the drop. That is exactly the discrimination
 ## [member _primed] needs, and it is free.
+##
+## **A cancelled one is still a lift, and must commit nothing.** Android ends a
+## gesture the system takes away -- a call, the shade, the screen locking, a
+## back swipe -- as every held finger lifting with `canceled` set, and Godot's
+## emulated click carries the flag too (core/input/input.cpp, 4.7.2). So a
+## lift ends what a press primed, and the two places a lift *lands* something
+## ask [method InputEvent.is_canceled] first.
 func _is_pointer_lift(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return not (event as InputEventScreenTouch).pressed
@@ -5529,6 +5540,12 @@ var _gauge_gene: StringName = &""
 ## and as the click Godot emulates from it -- and a toggle answered twice is
 ## no toggle.
 var _fork_chip_frame := -1
+## **The frame the cards came up on.** A card takes no pointer event in it: the
+## view has just been shown and not yet laid out, so whatever the rest of that
+## press or lift is hit-tested against is where the card was never meant to
+## be. Nothing a finger meant can land on a card that was not on screen when
+## the finger went down.
+var _fork_opened_frame := -1
 var _way_box: StyleBoxFlat = null
 var _way_box_armed: StyleBoxFlat = null
 var _gauge_track: StyleBoxFlat = null
@@ -5736,13 +5753,28 @@ func _draw_fork_chip(node: Control, gene: StringName) -> void:
 
 
 ## **A tap on the fork's chip opens its cards, and a second shuts them.** On the
-## press: nothing here is irreversible, and the view is the chip's own. Enter
-## opens with the keyboard on the first card.
+## **lift**, inside the chip, as a slot's second tap lands -- never on the
+## press. A thumb's press arrives twice, as the click Godot emulates from it
+## and then as the touch, and the cards were hidden until now and have never
+## been laid out: opened on the first copy, the second was hit-tested against
+## a card still sitting at the column's origin, right over this chip, and
+## armed it. One tap read `tap again to choose sweep`. Enter opens on the press,
+## with the keyboard on the first card.
 func _on_fork_chip_input(event: InputEvent, node: Control,
 		gene: StringName) -> void:
-	if not _is_widget_tap(event):
+	if _is_pointer_press(event):
+		node.accept_event()
 		return
-	node.accept_event()
+	var by_key := event.is_action_pressed(&"ui_accept")
+	if not by_key:
+		if not _is_pointer_lift(event):
+			return
+		node.accept_event()
+		if event.is_canceled() or not Rect2(Vector2.ZERO, node.size).has_point(
+				_pointer_at(event)):
+			return
+	else:
+		node.accept_event()
 	var frame := Engine.get_process_frames()
 	if frame == _fork_chip_frame:
 		return
@@ -5751,7 +5783,7 @@ func _on_fork_chip_input(event: InputEvent, node: Control,
 	if _fork_gene == gene:
 		_close_fork(false)
 		return
-	_open_fork(gene, not _is_pointer_press(event))
+	_open_fork(gene, by_key)
 
 
 ## Which gene's fork chip the keyboard is on, or &"".
@@ -5796,6 +5828,7 @@ func _open_fork(gene: StringName, by_key: bool) -> void:
 	_primed = SLOT_NONE
 	_hovered = SLOT_NONE
 	_fork_gene = gene
+	_fork_opened_frame = Engine.get_process_frames()
 	_way_armed = -1
 	_way_primed = -1
 	_way_hovered = -1
@@ -5965,12 +5998,17 @@ func _step_fork_view(delta: float) -> void:
 ## the press and landing on the lift inside the card, so sliding off cancels.
 ## A key is not ambiguous and lands on the press.
 func _on_way_input(event: InputEvent, card: Control, way: int) -> void:
+	if (_is_pointer_press(event) or _is_pointer_lift(event)) \
+			and Engine.get_process_frames() == _fork_opened_frame:
+		card.accept_event()
+		return
 	if _is_pointer_lift(event):
 		card.accept_event()
 		var was_primed := _way_primed == way
 		_way_primed = -1
-		if was_primed and Rect2(Vector2.ZERO, card.size).has_point(
-				_pointer_at(event)):
+		# **A cancelled lift is not a lift** (see [method _is_pointer_lift]).
+		if was_primed and not event.is_canceled() \
+				and Rect2(Vector2.ZERO, card.size).has_point(_pointer_at(event)):
 			_choose_way(way)
 		return
 	if not _is_widget_tap(event):
@@ -7006,11 +7044,12 @@ func _choose_say() -> void:
 
 ## **The level a daughter's gene will have**, which is her mother's -- the level
 ## is the lineage's (beam-levels.md §3) -- or 1 for a gene that drifted in,
-## which the lineage never carried. 0 for a gene that does not level.
+## which the lineage's DNA did not carry, even if her mother's body still
+## wore it. 0 for a gene that does not level.
 func _choose_level(gene: StringName) -> int:
 	if not CellBody.LEVELLED.has(gene):
 		return 0
-	var grown := _genome.progression(gene)
+	var grown: Progression = _genome.heritable_levels().get(gene, null)
 	return grown.level() if grown != null else 1
 
 

@@ -81,6 +81,11 @@ const HUES := {
 ## degrees apart: a three-bristle tuft and a nine-bristle tuft are different
 ## objects at a glance and stay different under any colour-blindness simulation.
 ## Anything not listed falls back to [constant COUNT_EARNED].
+## **No eye**: what every cell but the player's own passes to [method
+## draw_cell], and the organ drawn as it always was. One shared, read-only
+## dictionary rather than a fresh `{}` per organ per body per frame.
+const NO_EYE := {}
+
 const EARNED_COUNT := {
 	&"stigma": 4,
 	&"ocellus": 3,
@@ -530,7 +535,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
-		eye: Dictionary = {}) -> void:
+		eye: Dictionary = NO_EYE) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -711,7 +716,7 @@ static func default_order(tiers: Dictionary) -> Array:
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
 		steer: float, unit: float, order: Array = [],
-		eye: Dictionary = {}) -> void:
+		eye: Dictionary = NO_EYE) -> void:
 	if tiers.is_empty():
 		return
 
@@ -752,7 +757,7 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		if tier > 0:
 			_draw_earned(canvas, at, fwd, stb, r, gene, tier,
 				arc_for_slot(slot), fade, unit, clock,
-				eye if StringName(eye.get("gene", &"")) == gene else {})
+				eye if StringName(eye.get("gene", &"")) == gene else NO_EYE)
 
 
 ## The oral mat: dense, fine, standing just off the surface, with a beat that
@@ -852,7 +857,7 @@ static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
 		fade: float, unit: float, clock: float = 0.0,
-		eye: Dictionary = {}) -> void:
+		eye: Dictionary = NO_EYE) -> void:
 	var tone := hue(gene)
 	var mid := deg_to_rad((arc.x + arc.y) * 0.5)
 	var seat := _surface(at, fwd, stb, r * PIGMENT_SEAT, mid)

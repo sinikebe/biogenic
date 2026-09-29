@@ -2004,8 +2004,11 @@ func _fingerprint_state() -> Array:
 	if _genome != null:
 		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout()])
 		# The levels, experience and all: a beam that earned one point more is
-		# a different run.
-		out.append(_genome.level_state())
+		# a different run. Only when there are any, so a run with no levelled
+		# gene hashes exactly as it did before levels existed -- the identity
+		# gate (shared-pond.md §5) compares against builds that never had them.
+		if not _genome.level_state().is_empty():
+			out.append(_genome.level_state())
 		# Every waiting gene at full width: its copies and its own clock, not
 		# the trace's one decimal.
 		for gene: StringName in _genome.waiting():

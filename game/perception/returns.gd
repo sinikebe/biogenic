@@ -56,6 +56,9 @@ const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
+## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
+## the field's own sub-step, in radians.
+const GLOW_SPACING := 0.034906585
 
 ## Canvas pixels per world unit. **The figure's, taken from the figure**, so the
 ## two can never drift apart -- see the header.
@@ -170,7 +173,7 @@ var driven := false
 var _cell: CellBody = null
 var _food: FoodField = null
 ## A sweep's hits, held and fading (beam-levels.md §4.3).
-var _glow := Afterglow.new()
+var _glow := _new_glow()
 @onready var _marks: Control = $Marks
 
 
@@ -301,12 +304,13 @@ func _catch_hits(delta: float) -> void:
 	_glow.step(delta, life, _cell.position)
 	if life <= 0.0:
 		return
-	for beam: Array in _food.beams:
+	for k in _food.beams.size():
+		var beam: Array = _food.beams[k]
 		if not bool(beam[2]):
 			continue
 		var bearing := float(beam[0])
 		_glow.add(_cell.position + (_cell.forward() * cos(bearing)
-			+ _cell.starboard() * sin(bearing)) * float(beam[1]))
+			+ _cell.starboard() * sin(bearing)) * float(beam[1]), k, bearing)
 
 
 ## **The wave.** The wavefront of the pulse currently in flight, expanding out of
@@ -476,3 +480,11 @@ func _edge_fade(at: Vector2) -> float:
 	var size := _marks.size
 	var edge := minf(minf(at.x, size.x - at.x), minf(at.y, size.y - at.y))
 	return smoothstep(EDGE_HIDE, EDGE_SHOW, edge)
+
+
+## A sweep's held marks, one per [constant GLOW_SPACING] of each ray's travel
+## (beam-levels.md §4.3): the same trail at any frame rate.
+static func _new_glow() -> Afterglow:
+	var glow := Afterglow.new()
+	glow.spacing = GLOW_SPACING
+	return glow

@@ -360,6 +360,19 @@ func _apply(food: Node, cell: Node, st: Dictionary) -> void:
 	cell.get("genome").t = (st[&"cell_tiers"] as Dictionary).duplicate()
 
 
+## **A beam as `[bearing, distance, hit]`**, which is all an older food.gd
+## answers: the fourth field, the body a ray stopped on (beam-levels.md §4.4),
+## is new, and comparing it against a build that never had it would call every
+## beam a mismatch when the simulation is the same.
+func _comparable(key: StringName, value: Variant) -> Variant:
+	if key != &"beams" or not value is Array:
+		return value
+	var out := []
+	for beam: Variant in value:
+		out.append((beam as Array).slice(0, 3) if beam is Array else beam)
+	return out
+
+
 func _snap(food: Node, cell: Node) -> Array:
 	var out := []
 	for b: Object in food.get("_cells"):
@@ -368,7 +381,7 @@ func _snap(food: Node, cell: Node) -> Array:
 			row.append(b.get(k))
 		out.append(row)
 	for k: StringName in FIELD_KEYS:
-		out.append(food.get(k))
+		out.append(_comparable(k, food.get(k)))
 	for k: StringName in CELL_KEYS:
 		out.append(cell.get(k))
 	out.append((cell.get("genome").t as Dictionary).duplicate())

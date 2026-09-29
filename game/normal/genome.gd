@@ -469,6 +469,19 @@ func levels() -> Dictionary:
 	return _levels
 
 
+## **The levels a daughter can inherit**: those of the genes this DNA carries.
+## A gene only this body still wears -- its DNA written over -- ends with the
+## body, as the pause screen says when the placement is made
+## (beam-levels.md §8.2), so a drift that brings the same gene back to a
+## daughter brings it back new, at level 1.
+func heritable_levels() -> Dictionary:
+	var out := {}
+	for gene: StringName in _levels:
+		if _dna.has(gene):
+			out[gene] = _levels[gene]
+	return out
+
+
 ## The progression [param gene] levels with, or null for a gene that does not
 ## level or that neither register carries.
 func progression(gene: StringName) -> Progression:

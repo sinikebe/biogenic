@@ -1218,6 +1218,7 @@ func _fresh_senses() -> void:
 	dread_level = 0.0
 	threat = 0.0
 	beams.clear()
+	beam_touched.clear()
 	touch_level = 0.0
 	taste_level = 0.0
 	pings.clear()

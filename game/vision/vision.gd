@@ -45,6 +45,9 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
+## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
+## the field's own sub-step, in radians.
+const GLOW_SPACING := 0.034906585
 ## **For one constant, and never for a session.** TRACK_GAP is the length of
 ## silence after which a friend's next frame lands as a step; the view decides
 ## that for itself and must agree with the session on the number. It still
@@ -434,7 +437,7 @@ var _kicks: Array[Array] = []
 ## [[world position, world direction, strength, age], ...]
 var _hits: Array[Array] = []
 ## A sweep's hits, held and fading (beam-levels.md §4.3).
-var _beam_glow := Afterglow.new()
+var _beam_glow := _new_glow()
 ## [[world position, age], ...] -- motes the field has already recycled.
 var _ghosts: Array[Array] = []
 ## [[world position, radius, age, gene hue], ...] -- cells eaten since, held so
@@ -1566,9 +1569,11 @@ func _catch_beam_hits(delta: float) -> void:
 	_beam_glow.step(delta, life, _cell.position)
 	if life <= 0.0:
 		return
-	for beam: Array in _food_node.beams:
+	for k in _food_node.beams.size():
+		var beam: Array = _food_node.beams[k]
 		if bool(beam[2]):
-			_beam_glow.add(_cell.position + _ray(float(beam[0])) * float(beam[1]))
+			_beam_glow.add(_cell.position + _ray(float(beam[0])) * float(beam[1]),
+				k, float(beam[0]))
 
 
 ## **The `ampulla`.** Every wavefront currently in flight, as a half-ring
@@ -2137,3 +2142,11 @@ func _walk(node: Node) -> void:
 		_bus = node as SignalBus
 	for child in node.get_children():
 		_walk(child)
+
+
+## A sweep's held marks, one per [constant GLOW_SPACING] of each ray's travel
+## (beam-levels.md §4.3): the same trail at any frame rate.
+static func _new_glow() -> Afterglow:
+	var glow := Afterglow.new()
+	glow.spacing = GLOW_SPACING
+	return glow

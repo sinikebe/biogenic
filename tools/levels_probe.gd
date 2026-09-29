@@ -158,6 +158,11 @@ func _lineage() -> void:
 	child.express(over.dna(), over.layout(), null, null, over.levels())
 	_check("and her daughters, who do not carry it, do not inherit it",
 		child.progression(&"ocellus") == null)
+	var back := _genome()
+	back.express({&"cytostome": 1, &"palp": 1, &"ocellus": 1},
+		[&"cytostome", &"palp", &"ocellus"], null, null, over.heritable_levels())
+	_check("a drift that brings it back to a daughter brings it back new, at 1",
+		back.level_of(&"ocellus") == 1 and back.path_of(&"ocellus") == &"")
 
 
 # --- The price (§5) ------------------------------------------------------------
@@ -279,6 +284,21 @@ func _tally_and_glow() -> void:
 	glow.step(0.0, 1.0, Vector2(1000, 0))
 	_check("a mark fades over its life, then goes, and a jump clears the rest",
 		is_equal_approx(half, 0.5) and gone == 0 and glow.count() == 0)
+	# One mark per `spacing` of a lane's travel, so the trail is the sweep's and
+	# not the frame rate's: the same arc crossed in 60 steps and in 30 leaves
+	# the same number of marks.
+	var counts := []
+	for steps: int in [60, 30]:
+		var trail := Afterglow.new()
+		trail.spacing = deg_to_rad(2.0)
+		for i in steps + 1:
+			var along := deg_to_rad(30.0) * float(i) / float(steps)
+			trail.add(Vector2(float(i), 0.0), 0, along)
+		counts.append(trail.count())
+	# 15 or 16, depending on which side of the last 2-degree line 30 degrees
+	# lands in floating point; what matters is that the two rates agree.
+	_check("a ray crossing 30 degrees leaves the same marks at 60 steps and 30: %s"
+		% str(counts), counts[0] == counts[1] and counts[0] >= 15)
 
 
 # --- The field (§4.3, §4.4) ----------------------------------------------------

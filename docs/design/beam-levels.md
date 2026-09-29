@@ -220,7 +220,10 @@ that arc as the ray's. A slow phone must not see less than a fast one.
 **What the sweep leaves behind.** A hit that is only lit once a pass has to stay
 visible between passes, or the sweep reads as flicker. Each sweep hit **holds
 and fades over the revisit time** in both views: point of view's pointer marks
-(`returns.gd`) and full vision's hit dots. So does the membrane's beam lobe,
+(`returns.gd`) and full vision's hit dots. A ray leaves **one mark per 2° of
+its travel**, the field's own sub-step, not one a frame: per frame, a 60 fps
+phone held twice a 30 fps one's marks and hit the cap first, so the faster
+phone showed the shorter trail. So does the membrane's beam lobe,
 which already carries only the nearest hit. The result reads as a radar scope,
 and it is honest about staleness: the mark sits where the body was when the ray
 last passed. Extension has no fade, because its rays are always on.
@@ -307,8 +310,10 @@ level on the wire. It is not asked for here.
   delta and into `_sign_genome()`, or a level-up records nothing. `replay.gd`
   restores them after its `express()`.
 - **More rays than the ring has room for.** `recorder.gd` stores exactly
-  `BEAMS = 3` rays a frame. Raise it to **24**, capturing hits first so a
-  crowded fan keeps what it found. That is 63 more floats a frame, about
+  `BEAMS = 3` rays a frame. Raise it to **24**, in the field's own order while
+  they fit -- a slot must be the same ray frame after frame, or playback lerps
+  one ray into another -- and hits first only past 24, so a crowded fan keeps
+  what it found. That is 63 more floats a frame, about
   0.9 MB more ring over a 60-second window. The ring lives in RAM and is never
   saved, so no old recording is at risk. `three-senses.md` §3.3 named this and
   left it to the builder; this is the decision.
@@ -543,8 +548,16 @@ today (§8.9 row 3).
   `costs more/less to keep` and the hint's comparison come from
   `CellBody.levelled_upkeep` at the cards' level, so if X and Y ever move so
   far that the ways trade places, the words trade with them.
-- The fork chip answers on the press, once a press: a touch arrives twice, as
-  itself and as the click Godot emulates from it.
+- **The fork chip answers on the lift, inside the chip**, as a slot's second
+  tap lands, and `Enter` on the press. It first answered on the press, and a
+  review found one tap arming a card: a touch arrives twice -- the click Godot
+  emulates from it first -- and the cards, hidden since the screen was built,
+  had never been laid out, so the touch copy was hit-tested against a card
+  still sitting at the column's origin, over the chip. A card now also takes no
+  pointer event in the frame the view opened.
+- **A cancelled lift commits nothing**, here or on a slot: Android ends a
+  gesture the system takes away (a call, the shade, a back swipe) as every held
+  finger lifting with `canceled` set, and the emulated click carries the flag.
 - **While the cards are up the fork chip carries the in-hand mark**, and the
   waiting gene in hand is drawn stepped back: one thing in the tray is being
   decided at a time. The hand is kept, and comes back with the figure.

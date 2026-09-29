@@ -301,7 +301,9 @@ jobs:
         # gives.
         run: |
           set -uo pipefail
-          out=$(~/godot/godot --headless --path . res://tools/levels_probe.tscn 2>&1) || true
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 300 ~/godot/godot --headless --path . res://tools/levels_probe.tscn 2>&1) || true
           grep -E "^\[levels-probe\]" <<< "$out" || true
           if ! grep -q "^\[levels-probe\] ALL PASS$" <<< "$out"; then
             grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
