@@ -6,11 +6,13 @@ extends Node
 ## running out", so hunger is a perception parameter, not just a survival
 ## number.
 ##
-## **And it carries nothing else** (the owner, 2026-09-29: "too much info from
-## one thing"). The beat used to quicken in rich water, echo a second time for
-## a gene waiting to be placed, and run up before a division. Food is found
-## with the senses now; a waiting gene and a coming division are read off the
-## cell, which draws both in either view.
+## **Food, a waiting gene and a coming division are off it** (the owner,
+## 2026-09-29: "too much info from one thing"). The beat used to quicken in rich
+## water, echo a second time for a gene waiting to be placed, and run up before
+## a division. Food is found with the senses now; a waiting gene and a coming
+## division are read off the cell, which draws both in either view. What is
+## left is hunger, from this file, and dread's stumble and drain, which
+## signal_bus.gd lays over it.
 ##
 ## Everything that maps hunger to how the membrane reads lives in this file and
 ## nowhere else -- change starvation balance here and you can see, in the same
@@ -22,7 +24,7 @@ extends Node
 ## without polling.
 signal hunger_changed(hunger: float)
 
-## Beat period when fed and in plain water. The rest state of the whole game.
+## Beat period when fed. The rest state of the whole game.
 const REST_PERIOD := 2.4
 ## The floor on the beat *rate* while there is still time to fix it. A starving
 ## cell beats this slowly -- the membrane must still be there to read.

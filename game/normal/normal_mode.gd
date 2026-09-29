@@ -864,8 +864,9 @@ func _process(delta: float) -> void:
 	# `palp`: something solid, right there, felt with no light at all.
 	if _food.touch_level > 0.0:
 		_bus.touch(_food.touch_bearing, _food.touch_level)
-	# **The beat is hunger and nothing else** (metabolism.gd). A waiting gene
-	# and a coming division are read off the body, which both views draw.
+	# **The beat's pace is hunger's** (metabolism.gd), with dread's stumble laid
+	# over it in the bus. A waiting gene and a coming division are read off the
+	# body, which both views draw.
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
 	# Proprioception is not a sensation and does not go on the bus: it is a
@@ -972,7 +973,8 @@ func _earn(gene: StringName, amount: float) -> void:
 ## **A new body starts with an ordinary eye and a quiet pause target**: a
 ## death, a birth and a return. A flare or a breath armed for the body that
 ## just ended is about that body, and a daughter who inherits an open fork is
-## not told about it again.
+## not told about it again -- unless it was never shown at all, which
+## [method _be_born] keeps for her first beat.
 func _forget_eye() -> void:
 	_eye_flare.clear()
 	_eye_gene = &""
@@ -1538,6 +1540,16 @@ func _be_born() -> void:
 	# placed yet goes with her, still waiting** (#118) -- `express()` empties
 	# the queue, so it is taken first and handed back after.
 	var carried := _genome.take_waiting()
+	# **What her mother earned in her last seconds and never saw** (beam-levels.md
+	# §8.5). A level is shown on the next beat, and the division can come
+	# first: the quickening used to run the beat up to 0.55 s and always found
+	# one, and since the beat stopped doing that (2026-09-29) the next can be
+	# 2.4 s off, past the pinch. A flare still armed here was never seen, so it
+	# waits for her first beat -- while it is still true of her, below.
+	var unseen: StringName = _eye_gene if _eye_flare.armed() else &""
+	var mothers := _genome.progression(unseen)
+	var unseen_level := mothers.level() if mothers != null else -1
+	var unseen_breath := _pause_breath.armed()
 	# **And her mother's levels** (beam-levels.md §3): a copy of each one for a
 	# gene in her own DNA, grown or not. The same copies her sister would have
 	# had, so which daughter is chosen never changes a level. Only the levels
@@ -1547,6 +1559,15 @@ func _be_born() -> void:
 		_genome.heritable_levels())
 	_genome.carry(carried)
 	_forget_eye()
+	# True of her when her copy of the level is her mother's, which is when her
+	# DNA carries the gene; a gene that came back new starts at level 1. The
+	# breath goes with it only while her fork is still open.
+	var hers := _genome.progression(unseen)
+	if unseen != &"" and hers != null and hers.level() == unseen_level:
+		_eye_gene = unseen
+		_eye_flare.arm()
+		if unseen_breath and _genome.can_choose(unseen):
+			_pause_breath.arm()
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5

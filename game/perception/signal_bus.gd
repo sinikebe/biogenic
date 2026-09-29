@@ -331,8 +331,9 @@ const SENSE_AMPULLA := 2
 # A second, smaller pulse behind every beat while a gene waited to be placed.
 # The owner took it off the beat on 2026-09-29, with the quickening in rich
 # water and the run-up before a division: "too much info from one thing". The
-# beat is hunger alone now, and a waiting gene is read off the cell, which
-# cilia.gd's `draw_pending` draws in both views.
+# beat's pace is hunger's now, and dread's stumble below is all this file lays
+# over it; a waiting gene is read off the cell, which cilia.gd's
+# `draw_pending` draws in both views.
 
 ## Dread rises over about ten seconds and falls in about four and a half. The
 ## asymmetry is the whole of §5.4: relief has to arrive fast enough that a

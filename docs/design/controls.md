@@ -207,7 +207,9 @@ xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
 
 For 2400x1080, change the screen and `--size=`. For the beat-peak row, replace
 `--freeze-at=6.0` with `--arm-at=5.5 --freeze-on=beat --freeze-delay=2 --wait=9`,
-which freezes at 6.30 s.
+which freezes at 6.30 s. (At 7.95 s since 2026-09-29, when the beat stopped
+running fast in rich water: still a peak frame, but not the one the table below
+was measured on.)
 
 **`--seed=` is load-bearing and until this review it did not cover the
 membrane.** `signal_bus.gd`'s jitter came off an unseedable private generator,

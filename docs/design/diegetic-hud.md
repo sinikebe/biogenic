@@ -53,7 +53,8 @@ point of view may say bounds it.
    rather than assumed; nothing was added to make it true.
    **Retired on 2026-09-29:** the owner took the second heartbeat off the beat
    (*"Waiting gene by reading the cell"*). The mark still breathes on the beat,
-   which is hunger alone now, and the picture is the whole of the signal.
+   which says hunger now and stumbles under dread, and the picture is the whole
+   of the signal.
 4. **The clock is decay, not a countdown.** Two clocks, on purpose: `left` runs
    the whole 45 s and shrinks the vesicle, so early and mid are different
    pictures; `wilt` is flat until the last 15 s and then falls, so *about to

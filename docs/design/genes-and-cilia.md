@@ -824,8 +824,9 @@ on the beat and shrinking with `remaining`.
 >
 > **The echo is retired too, 2026-09-29.** The owner: *"Remove the food, waiting
 > gene and divide indicators from the heartbeat. It's too much info from one
-> thing. […] Waiting gene by reading the cell."* The beat is hunger alone, so
-> `HELD_ECHO`, `HELD_ECHO_DELAY`, `HELD_FADE` and the bus's `hold()` are deleted,
+> thing. […] Waiting gene by reading the cell."* The beat says hunger, and
+> stumbles under dread, and nothing else, so `HELD_ECHO`, `HELD_ECHO_DELAY`,
+> `HELD_FADE` and the bus's `hold()` are deleted,
 > and the picture on the body is the whole of the signal, in both views.
 > `HELD_WILT` is the one clock left.
 
@@ -1674,7 +1675,7 @@ Two numbers come out of the field where there was one. `concentration` is what
 the *water* is like and still drives the metabolic beat — a noseless cell
 still beats faster in rich water, because the beat is a property of the body and
 not of its senses. (No longer: on 2026-09-29 the owner took food off the beat,
-which is hunger alone, and nothing in a run reads `concentration` now.)
+whose pace is hunger's alone now, and nothing in a run reads `concentration`.)
 `taste_level` is what the *organ* picks up, summed only over
 sources inside `smell_range`, and it is the only one of the two that reaches the
 membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level` at

@@ -156,8 +156,8 @@ class Waiting:
 ## of the organ it would become floating clear of the skin and a thread toward
 ## the arc it could go on. Point of view used to get a second, smaller heartbeat
 ## behind every beat as well (§3.3); the owner took it off the beat on
-## 2026-09-29, which is hunger alone now. §5.2's two-tap swap on the pause
-## screen, or holding the body, is what resolves it, through [method place].
+## 2026-09-29. §5.2's two-tap swap on the pause screen, or holding the body, is
+## what resolves it, through [method place].
 var _waiting: Array[Waiting] = []
 
 ## The gene at the head of the queue -- the one a placement takes and the one

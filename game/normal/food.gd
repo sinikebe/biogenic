@@ -1245,8 +1245,9 @@ func _process(delta: float) -> void:
 		return
 
 	# The drift path does not exist until the cell drifts. Placing the first
-	# body along the real velocity vector is what puts it in front of the first
-	# sense (FIRST_DISTANCE) instead of wherever the wander happens to point.
+	# body along the real velocity vector is what puts it where a first nose or
+	# ampulla can find it (FIRST_DISTANCE), instead of wherever the wander
+	# happens to point.
 	if _first_pending and _cell.velocity.length_squared() > 1.0:
 		_first_pending = false
 		_cells[0].pos = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
