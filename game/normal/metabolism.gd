@@ -71,8 +71,9 @@ const HUNGER_SECONDS := 36.0
 ## twelve seconds, starved in about half of its three-minute games. A whole bar
 ## loses a third fewer and keeps the bar in the middle on average. The rest are
 ## lost to stretches with no food on the screen that outlast a full tank, which
-## no meal bridges (energy.md §7). **Owner's call 2**, answered on 2026-09-29
-## with the recommended option: the whole bar, over three quarters and half.
+## no meal bridges (energy.md §7). **Owner's call 2** (energy.md §7.6),
+## answered on 2026-09-29 with the recommended option: the whole bar, over three
+## quarters and half.
 ##
 ## **This stays a const.** §3.2 took it off the tier table: if `cytostome` tier
 ## raised the value of a meal as well as the gape, every tier of it would
@@ -84,7 +85,8 @@ const MEAL := 1.0
 ## Seconds at full hunger before the cell dies. It exists so that food ten
 ## seconds away is still worth swimming for, and now it is exactly that: ten of
 ## the thirty seconds a born cell has. It was forty while the tank was seven
-## minutes (energy.md §7).
+## minutes (energy.md §7). The other half of **owner's call 1**, with
+## [constant HUNGER_SECONDS].
 const STARVE_GRACE := 10.0
 
 ## 0.0 just fed, 1.0 fully starved.

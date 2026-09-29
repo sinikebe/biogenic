@@ -403,10 +403,11 @@ recommended." Nothing moves, because the recommended option is what was built:
 - **Row 2:** a meal your size fills the bar (`MEAL` 1.0).
 - **Row 3:** no sense changes until the owner has played point of view on the
   dev app.
-- **Row 4:** a first death says nothing but the heartbeat.
+- **Row 4:** no words on the screen for a first death. The slowing heartbeat,
+  and the replay behind `watch`, are what explain it.
 
-Rows 3 and 4 are answered by playing, so they stay open to what the dev app
-shows.
+Rows 1 and 3 have their answers, so nothing here holds a release. Rows 3 and 4
+were answered "play it first", so what the dev app shows can still reopen them.
 
 ### 7.7 To measure again
 
