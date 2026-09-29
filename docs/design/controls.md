@@ -191,8 +191,9 @@ rectangles, in **canvas** units, converted to device pixels by `H / 720`:
 
 **The genome carries a sense on purpose.** `stigma:1` is in it so the free grant
 at five seconds finds one already there and does not fire: an unforced genome
-gets handed a random sense at t=5, which starts a held sample, a second
-heartbeat and a second line of text, and none of that is the same picture twice.
+gets handed a random sense at t=5, which starts a held sample (a second
+heartbeat, too, until 2026-09-29) and a second line of text, and none of that is
+the same picture twice.
 
 **The exact command**, one scheme per run, `0` `1` `2`:
 

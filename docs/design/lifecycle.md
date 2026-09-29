@@ -185,7 +185,7 @@ icon, no text in the playfield** beyond one onboarding line.
 | phase | seconds | what happens |
 | --- | --- | --- |
 | **warning** | from `r37` | the nucleus **doubles**: `_draw_nucleus` draws a second core, the pair separating from 0 to `NUCLEUS_SPLIT_MAX := 0.52 r` as radius runs 37 → 40. The most legible "about to divide" image in biology, for one extra `draw_circle` pair. **0.52 was chosen by rendering it:** below about 0.40 the two cores overlap into one brighter disc, and a brighter nucleus already means the beat. |
-| **quicken** | 2.4 | the beat runs up to `RICH_PERIOD 0.55` at full amplitude. Steering still works; nothing is taken away. |
+| **quicken** | 2.4 | the body is full and the nucleus has doubled. Steering still works; nothing is taken away. (The beat ran up to `RICH_PERIOD 0.55` at full amplitude here until 2026-09-29, when the owner took the division off the beat: *"Waiting gene by reading the cell, and same for divide indicator."* The warning row above is the whole of it now.) |
 | **pinch** | 1.5 | `_set_simulating(false)` — the same call a death makes. The body elongates along the heading and narrows at the waist: `OVOID_ALONG` 1.18 → 1.62 under a new `split` argument to `draw_cell`. |
 | **part** | 1.0 | two bodies, each drawn by `draw_cell` from its own genome at `r28.28`, separating to `DIVIDE_SEAT_POV := 132.0` canvas px either side of centre, or `DIVIDE_SPREAD_WORLD := 160.0` world units in full vision. **Both are `is_self`**, so both are pure `SELF_TINT` and neither takes a gene tint: they are still you. |
 | **choosing** | until the player acts | §4.1 |
@@ -327,7 +327,8 @@ Keep it, say nothing about it.
   echo, `FADE_PENDING 0.68` — is untouched.
 - **`genes-and-cilia.md` §3.2's four integration cases** are unchanged in
   mechanism and changed in meaning: all four now write DNA. §3.3's held sample,
-  its 45-second clock and its second heartbeat are unchanged.
+  its 45-second clock and its second heartbeat are unchanged. (The second
+  heartbeat was retired on 2026-09-29; the body draws the waiting gene.)
 - **§9.4** is replaced by §1.5 above.
 - **§9.7** — the player may drop a gene over their own `cytostome` — gets
   gentler and better: the mistake now costs your *daughters* a mouth, and you

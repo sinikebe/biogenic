@@ -183,9 +183,9 @@ func _draw_figure() -> void:
 		0.0, false, eye)
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
-	# figure stands on -- and the second heartbeat the membrane already carries
-	# now has a picture to belong to. The rhythm says *something is unresolved*;
-	# this says *what*, and *where*.
+	# figure stands on. It is the only place point of view says a gene is
+	# waiting: the second heartbeat that used to say it came off the beat on
+	# 2026-09-29, and this says *what* and *where* as well as *that*.
 	Cilia.draw_pending(_figure, centre, 0.0, r, dna,
 		_genome.held_sample if _genome != null else &"",
 		_genome.held_remaining if _genome != null else 0.0,

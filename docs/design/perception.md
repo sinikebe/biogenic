@@ -85,6 +85,11 @@ entered. The beat period falls from 2.4s toward 1.6s. Turn away and it slows and
 dims. This is hot-and-cold, and it is self-teaching because turning is the only
 verb the player has.
 
+> **Gone, 2026-09-29.** The owner took food off the beat: *"too much info from
+> one thing. Food is found using senses."* The beat is hunger alone, so nothing
+> here quickens; the first body is placed in reach of the sense a newborn is
+> given (`food.gd`'s `FIRST_DISTANCE`) and found with it.
+
 **~0:30 — direction resolves.** Past a concentration threshold, a wide green
 wash appears on one side of the band — 78° half-width, jittering, lagged. It
 narrows toward 26° as they close. The player turns until it sits at the top and
@@ -250,7 +255,7 @@ Play is a continuous cut with no flash.
 
 | signal | uniform | value | half-width | envelope |
 | --- | --- | --- | --- | --- |
-| metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s → 0.55s as concentration rises |
+| metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s fed → 4.8s starved → 7.5s at the end of the grace, **hunger alone** (2026-09-29; it used to fall to 0.55s as concentration rose) |
 | thrust bloom | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.14 | 60° at bearing 0° | attack 60ms, decay 500ms, on each impulse |
 | turn shear | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.10 × `|ω|/ω_max` | 84° at ±90°, outside of the turn | no lag; decay 180ms |
 | nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `pow(clamp((c-0.02)/(0.70-0.02)),0.8) * 0.62`, faded in over 0.02 and suppressed 60% by dread | **a full ring, not a lobe**: `z` solved so its dimmest point is 0.22 of its brightest | no lag and no jitter at all; off below c = 0.02. **The bearing is the organ's own arc on this body, not a direction to food** — it decides which side of the ring is bright and nothing else. Silent without `chemocyte`, and `c` is `s / (s + SMELL_HALF)` where `s` is the facing-weighted sum over **every** source inside that organ's reach — superposition, then a receptor that saturates rather than clips. three-senses.md §2 and §7.5.2 |
@@ -311,7 +316,8 @@ not move between the two frames — only its brightness does, by 73%.
   sense at all and one is granted free — and the alternative to naming it is a
   second heartbeat the player has never been taught to read. It is a notice
   rather than onboarding, so it shows on every run and not only the first.
-  `genes-and-cilia.md` §11.3.
+  `genes-and-cilia.md` §11.3. (That second heartbeat is gone as of 2026-09-29:
+  the body draws the waiting gene, and the line says how to place it.)
   The gap between those two buttons matters more than their size: 56 canvas px
   is about 5.3mm on a 2400x1080 phone, under the ~9mm a thumb needs, and the
   control directly below `resume` ends the run. They are separated by 48 canvas

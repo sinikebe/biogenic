@@ -151,16 +151,17 @@ class Waiting:
 ## the head is always the next to lapse, and it is also the one a placement
 ## takes unless the player picks another ([method place]).
 ##
-## Expressed twice, which is what having two views is for. Point of view gets a
-## second, smaller heartbeat behind every beat (§3.3): `pulse_now()` on a delay,
-## in signal_bus.gd's _step_beat, carrying no identity at all -- only *there is
-## something in you that is not resolved*. Full vision gets the literal thing, a
-## disc of the head's hue inside the body. §5.2's two-tap swap on the pause
-## screen is what resolves it, through [method place].
+## **Read off the body**, in both views: cilia.gd's `draw_pending` draws the
+## head as a vesicle adrift inside the cell, circling the nucleus, with a tuft
+## of the organ it would become floating clear of the skin and a thread toward
+## the arc it could go on. Point of view used to get a second, smaller heartbeat
+## behind every beat as well (§3.3); the owner took it off the beat on
+## 2026-09-29, which is hunger alone now. §5.2's two-tap swap on the pause
+## screen, or holding the body, is what resolves it, through [method place].
 var _waiting: Array[Waiting] = []
 
-## The gene at the head of the queue -- the one a placement takes, the one the
-## body draws and the membrane echoes -- or &"" for none.
+## The gene at the head of the queue -- the one a placement takes and the one
+## the body draws -- or &"" for none.
 ##
 ## **Assigning it is a pose, not a meal**: the queue becomes that one gene at one
 ## copy with a full clock, or empties for &"". Only the dev harness and the
@@ -589,7 +590,7 @@ func integrate(gene: StringName) -> int:
 		_dna[gene] = value + 1
 		return Result.RAISED
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
-	# is told by a second, smaller heartbeat rather than by a screen. **A sample
+	# is told by the body, which draws it, rather than by a screen. **A sample
 	# arriving while another waits queues behind it** (#118) -- it used to
 	# replace it, and the first gene was gone before anyone was asked.
 	var at := waiting_index(gene)

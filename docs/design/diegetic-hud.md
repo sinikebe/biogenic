@@ -51,13 +51,17 @@ point of view may say bounds it.
    echo as well as on the beat. The contour says *something in you is
    unresolved*; the body says *what*, and *where*. This was verified in the code
    rather than assumed; nothing was added to make it true.
+   **Retired on 2026-09-29:** the owner took the second heartbeat off the beat
+   (*"Waiting gene by reading the cell"*). The mark still breathes on the beat,
+   which is hunger alone now, and the picture is the whole of the signal.
 4. **The clock is decay, not a countdown.** Two clocks, on purpose: `left` runs
    the whole 45 s and shrinks the vesicle, so early and mid are different
    pictures; `wilt` is flat until the last 15 s and then falls, so *about to
    lapse* is an event rather than a slope nobody notices they are on. 15 s is
    `HELD_WILT` and **it must stay the twin of `signal_bus.gd`'s `HELD_FADE`** —
    a player who feels the rhythm weaken while the organ is still bright is
-   reading two clocks.
+   reading two clocks. (`HELD_FADE` went with the second heartbeat on
+   2026-09-29, so there is one clock to keep.)
 5. **Player only.** Every body in the water has a genome, but what is loose
    inside one is not something a cell could see from outside, and a water full
    of vacancy beads would be ink spent on nothing anyone can act on.

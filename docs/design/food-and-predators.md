@@ -28,6 +28,14 @@ Phase 5 is out of scope. `ingest` lands here and the hook is named in §3.4.
 > can advertise what it carries *before* you eat it — and a roll cannot be seen
 > in advance. The signal shape below is unchanged; only where the value comes
 > from is.
+>
+> **Superseded on the beat, 2026-09-29: food no longer quickens it.** The owner:
+> *"Remove the food, waiting gene and divide indicators from the heartbeat. It's
+> too much info from one thing. Food is found using senses."* The beat is hunger
+> alone (`metabolism.gd`), and it still stumbles under dread, which is this
+> document's other column and stays. So §1's *beat quickens* and *beat races*,
+> and §2's beat column, are history: food is found with the organs a cell has
+> grown — a nose, a ping, an eye — and never with the beat.
 
 ## 1. The decision
 
@@ -103,6 +111,11 @@ A starving cell's fastest possible beat becomes 1.10s against a fed cell's 0.55s
 The player learns "my best beat is getting worse" — starvation stays readable
 *through* a meal, which is when they most need to know. One line, same file, and
 §6.2's rule that the mapping lives in exactly one place is preserved.
+
+> **Gone, 2026-09-29**, with the rest of food's hold on the beat (the note at
+> the top). `beat_period()` is the two hunger lerps and nothing else, and
+> `RICH_PERIOD` is deleted. What this section protected comes for free now:
+> nothing but hunger moves the beat, so nothing can hide it.
 
 ## 3. Food
 

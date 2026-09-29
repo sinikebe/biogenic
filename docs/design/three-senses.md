@@ -1033,7 +1033,9 @@ re-measures the whole table on the built code.
 
 `concentration`, and therefore the beat, is unchanged: it is still the plain
 unweighted sum over the whole field, so a noseless cell still beats faster in
-rich water and hunger reads exactly as it did.
+rich water and hunger reads exactly as it did. (Since 2026-09-29 the beat does
+not read `concentration` at all: the owner took food off it, and it is hunger
+alone.)
 
 #### 7.5.1 Re-measured on the built code, over 24 seeds — and it does not reproduce
 

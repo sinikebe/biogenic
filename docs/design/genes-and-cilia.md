@@ -821,6 +821,13 @@ on the beat and shrinking with `remaining`.
 > unchanged**; what changed is that it now has a picture to belong to, and the
 > two are already synchronised because `soma.beat` is `_bus.pulse()`, which the
 > echo pumps. `HELD_FADE` here and `HELD_WILT` there must stay equal.
+>
+> **The echo is retired too, 2026-09-29.** The owner: *"Remove the food, waiting
+> gene and divide indicators from the heartbeat. It's too much info from one
+> thing. […] Waiting gene by reading the cell."* The beat is hunger alone, so
+> `HELD_ECHO`, `HELD_ECHO_DELAY`, `HELD_FADE` and the bus's `hold()` are deleted,
+> and the picture on the body is the whole of the signal, in both views.
+> `HELD_WILT` is the one clock left.
 
 If the sample lapses it is simply gone. There is no discard control and there
 does not need to be one.
@@ -1393,7 +1400,8 @@ predator:
 **Phase 4's perception design survives intact**, which is the reassuring part:
 food quickens the beat and something dangerous makes it stumble, and both are
 now computed from the same gape comparison instead of from two species. Nothing
-in `perception.md` or in the membrane changes.
+in `perception.md` or in the membrane changes. (Food stopped quickening the beat
+on 2026-09-29, the owner's call; the stumble stays. `food-and-predators.md`.)
 
 What genuinely dies is the *authored menace*: a single hand-placed hunter with a
 scripted arrival. What replaces it is a field where the dangerous cell is
@@ -1622,7 +1630,8 @@ prototype, at 1280x720 and 2400x1080, through `tools/drive.tscn`:
 
 Three things in this document are made of time and cannot be photographed: **the
 second heartbeat, the steering lean, and every number in §1.3.** They must be
-judged by playing, and they are the things here most likely to be wrong.
+judged by playing, and they are the things here most likely to be wrong. (The
+owner judged the first and took it out on 2026-09-29: §3.3.)
 
 **A fourth thing, found by looking and not by measuring:** in ordinary play the
 water often has **no cell on screen at all** — `food.COUNT` is 4 and the field is
@@ -1664,7 +1673,9 @@ always-on taste every build before this one shipped with.
 Two numbers come out of the field where there was one. `concentration` is what
 the *water* is like and still drives the metabolic beat — a noseless cell
 still beats faster in rich water, because the beat is a property of the body and
-not of its senses. `taste_level` is what the *organ* picks up, summed only over
+not of its senses. (No longer: on 2026-09-29 the owner took food off the beat,
+which is hunger alone, and nothing in a run reads `concentration` now.)
+`taste_level` is what the *organ* picks up, summed only over
 sources inside `smell_range`, and it is the only one of the two that reaches the
 membrane. A cell with no `chemocyte` leaves `_step_sense()` with `taste_level` at
 flat zero, because `smell_range` is zero and nothing is ever inside the nose.

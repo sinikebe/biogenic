@@ -15,16 +15,18 @@ extends Node
 ## What died: a fixed predator RADIUS and a hard-coded PREY_SPEED, both of which
 ## assumed the hunter and the hunted were different kinds of thing.
 ##
-## The cell reads exactly three things out of this field: its **total scent
-## concentration**, which sets the beat rate, its **taste level**, which sets
-## the green band wash and carries no direction at all, and **dread**, a scalar
-## with no bearing either. Everything else it learns by being hit.
+## The cell reads two scalars out of this field with no bearing in them: its
+## **taste level**, which sets the green band wash, and **dread**. A third, the
+## water's **total scent concentration**, set the beat rate until the owner took
+## food off the beat on 2026-09-29 (metabolism.gd): food is found with the
+## senses. [member concentration] is still worked out, as a fact about the water
+## the dev tools dump and diff, and nothing in a run reads it.
 ##
-## This node computes; it does not post. [member concentration],
-## [member taste_level] and [member dread_level] are read once a frame by
-## whoever owns the run, which is the only place allowed to talk to the signal
-## bus; discrete events are signals. A per-frame signal here would allocate a
-## dictionary sixty times a second to say the same thing.
+## This node computes; it does not post. [member taste_level] and [member
+## dread_level] are read once a frame by whoever owns the run, which is the only
+## place allowed to talk to the signal bus; discrete events are signals. A
+## per-frame signal here would allocate a dictionary sixty times a second to say
+## the same thing.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -941,9 +943,10 @@ class Person:
 	var slot := PERSON_SLOT
 
 
-## Total scent concentration at the cell, 0..1. The other half of metabolism's
-## beat mapping, and the reason the outer kilometre is hot-and-cold with no
-## direction in it.
+## Total scent concentration at the cell, 0..1. What the water is like, and no
+## longer what the beat is: it was the other half of metabolism's beat mapping
+## until 2026-09-29. Kept because the dev tools dump and diff it with the rest
+## of the field; nothing in a run reads it.
 var concentration := 0.0
 ## What the membrane should be told, 0..1. No bearing, ever: a hunter's
 ## metabolites saturate the chemoreceptor, and a blocked receptor has no
@@ -1019,10 +1022,11 @@ var smell_bearing := 0.0
 ## whole reason the gradient is still there to follow.
 ##
 ## Two numbers rather than one, and the split is the point. [member
-## concentration] is what the *water* is like, and it drives the metabolic beat,
-## which is a property of the body and not of its senses -- an eyeless, noseless
-## cell still beats faster in rich water. This is what the *organ* picks up, and
-## it is the only one of the two that reaches the membrane.
+## concentration] is what the *water* is like; this is what the *organ* picks
+## up, and it is the only one of the two that reaches the membrane. The water's
+## own richness used to reach it too, through the beat -- an eyeless, noseless
+## cell beat faster in rich water -- until the owner took food off the beat on
+## 2026-09-29. Food is found with the senses.
 ##
 ## **Nothing else leaves the nose.** There is no taste bearing any more: the
 ## organ answers *how strong*, and the player answers *which way* by turning.
@@ -1241,8 +1245,8 @@ func _process(delta: float) -> void:
 		return
 
 	# The drift path does not exist until the cell drifts. Placing the first
-	# body along the real velocity vector is what makes the beat quicken at
-	# about 0:12 instead of whenever the wander happens to point at something.
+	# body along the real velocity vector is what puts it in front of the first
+	# sense (FIRST_DISTANCE) instead of wherever the wander happens to point.
 	if _first_pending and _cell.velocity.length_squared() > 1.0:
 		_first_pending = false
 		_cells[0].pos = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE

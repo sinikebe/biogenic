@@ -573,8 +573,9 @@ today (§8.9 row 3).
 
 ### 8.4 In play: a choice is waiting, and the eye buds
 
-No word, and no rhythm: the second heartbeat means a gene is waiting, which
-lapses, and a fork never does. **The eyespot doubles**, like an organelle
+No word, and no rhythm: the beat carries hunger and nothing else (the owner,
+2026-09-29), so a fork is read off the body, as a waiting gene and a coming
+division are. **The eyespot doubles**, like an organelle
 about to divide. The single pigment disc that `_draw_earned` draws becomes
 two, side by side along the arc (`E02`, `F02`). It is `cilia.gd`'s one routine,
 so both views draw it. It is passed only for the player's own cell, by a new

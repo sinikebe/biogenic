@@ -4,9 +4,17 @@ extends Node
 ## The owner's decision (docs/design/perception.md §6.2): the metabolic beat
 ## rate *is* the hunger readout. One signal carries both "I exist" and "I am
 ## running out", so hunger is a perception parameter, not just a survival
-## number. Everything that maps hunger to how the membrane reads lives in this
-## file and nowhere else -- change starvation balance here and you can see, in
-## the same screenful, what it does to legibility.
+## number.
+##
+## **And it carries nothing else** (the owner, 2026-09-29: "too much info from
+## one thing"). The beat used to quicken in rich water, echo a second time for
+## a gene waiting to be placed, and run up before a division. Food is found
+## with the senses now; a waiting gene and a coming division are read off the
+## cell, which draws both in either view.
+##
+## Everything that maps hunger to how the membrane reads lives in this file and
+## nowhere else -- change starvation balance here and you can see, in the same
+## screenful, what it does to legibility.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -19,8 +27,6 @@ const REST_PERIOD := 2.4
 ## The floor on the beat *rate* while there is still time to fix it. A starving
 ## cell beats this slowly -- the membrane must still be there to read.
 const STARVED_PERIOD := 4.8
-## Deep inside a nutrient field.
-const RICH_PERIOD := 0.55
 ## Past the point of fixing: the last forty seconds stretch to here. Intervals
 ## long enough that you sit waiting, wondering whether it is coming back. Rate
 ## is free -- it costs no light, and nothing else is using it at that moment.
@@ -55,15 +61,12 @@ const STARVE_GRACE := 40.0
 
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
-## Nutrient concentration at the cell, 0..1, written by the food field.
-var concentration := 0.0
-## Metabolic multiplier, written once a frame by the run exactly as
-## [member concentration] is: 1.0 for a cell that is tier 1 across the board,
-## and higher for every tier above that. **The price of power, and it is paid in
-## the channel the game already reads** -- a cell with one tier-3 gene starves in
-## 420 / 1.36 = 309s, and that arrives as a beat that will not settle rather than
-## as a number on a screen. genome.gd owns what it comes to;
-## docs/design/genes-and-cilia.md §3.2.
+## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
+## is tier 1 across the board, and higher for every tier above that. **The
+## price of power, and it is paid in the channel the game already reads** -- a
+## cell with one tier-3 gene starves in 420 / 1.36 = 309s, and that arrives as a
+## beat that will not settle rather than as a number on a screen. genome.gd
+## owns what it comes to; docs/design/genes-and-cilia.md §3.2.
 var upkeep := 1.0
 ## `vacuole` / store: how much bigger this cell's reserve is than a born
 ## cell's. Written once a frame by the run, like [member upkeep]. A larger tank
@@ -108,7 +111,6 @@ func feed(amount: float) -> void:
 ## Back to a cell with nothing wrong with it.
 func reset() -> void:
 	starve_seconds = 0.0
-	concentration = 0.0
 	upkeep = 1.0
 	reserve = 1.0
 	photosynthesis = 0.0
@@ -130,17 +132,14 @@ func starved() -> bool:
 ## THE mapping, half one. Seconds between beats.
 ##
 ## Starving stretches the period toward [constant STARVED_PERIOD] and then, in
-## the last forty seconds, toward [constant DYING_PERIOD]. Chemistry is a
-## *multiplier* on whatever that came to, not a second lerp that replaces it:
-## nested, a starving cell in rich food beat at 0.55s, exactly as fast as a
-## healthy one, and starvation became invisible at the moment the player most
-## needed to read it. Multiplied, a starving cell's best possible beat is 1.10s
-## against a fed cell's 0.55s, so "my best beat is getting worse" survives a
-## meal. docs/design/food-and-predators.md §2.1.
+## the last forty seconds, toward [constant DYING_PERIOD]. **Hunger alone.** The
+## water's richness used to multiply this down to 0.55 s beside food
+## (food-and-predators.md §2.1); the owner took it off on 2026-09-29, because
+## food is what the senses are for, so the same hunger now beats the same
+## rhythm wherever the cell is.
 func beat_period() -> float:
 	var starved := lerpf(REST_PERIOD, STARVED_PERIOD, hunger)
-	starved = lerpf(starved, DYING_PERIOD, dying())
-	return starved * lerpf(1.0, RICH_PERIOD / REST_PERIOD, sqrt(clampf(concentration, 0.0, 1.0)))
+	return lerpf(starved, DYING_PERIOD, dying())
 
 
 ## THE mapping, half two. How hard each beat lands, 0..1.
