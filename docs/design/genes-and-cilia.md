@@ -718,6 +718,12 @@ A cell with one tier-3 gene starves in 420 / 1.36 = **309s**; a late cell with
 Upkeep needs no number on screen: it is read off the beat, which has been the
 hunger readout since `perception.md` §6.2.
 
+> **Upkeep is the price of being alive; since 2026-09-29 moving has its own**
+> (`energy.md`). Every stroke and every turn is paid in seconds of rest, on top
+> of this, so the times above and the seconds-per-meal table below are a body
+> at rest. A born cell's meal buys 140 s drifting, not 210, and 118 s steering a
+> third of the time. `crista`'s burn softens both bills; so does `vacuole`.
+
 > **Two things the previous draft claimed about this economy are false, and the
 > arithmetic is short enough to check here.** The unit that matters is not
 > "how long until I starve" but **how many seconds of life one meal buys**,

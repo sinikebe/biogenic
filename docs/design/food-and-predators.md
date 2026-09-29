@@ -204,6 +204,13 @@ is usually saying something. **Move `HUNGER_SECONDS` first if the pace is wrong;
 `MEAL` sets how much one success is worth and should stay near half a bar so a
 single meal is felt and two are needed.**
 
+> **Seven minutes is now the pace at rest, 2026-09-29.** The owner asked for
+> starving to come sooner "not necessarily by reducing the storage": every
+> stroke and every turn now costs energy on top (`energy.md`). A born cell that
+> never eats dies at 5:19 drifting, 4:36 steering a third of the time and 3:41
+> turning all the time, where it died at 7:40 whatever it did. The first dial
+> to move is `cell.gd`'s `STROKE_COST` and `TURN_COST`; `HUNGER_SECONDS` second.
+
 Eating at full does not waste the food: it still fires `ingest` and still
 carries the gene. There is always a reason to eat.
 
