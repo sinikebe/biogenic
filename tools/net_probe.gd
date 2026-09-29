@@ -3829,6 +3829,15 @@ class StubGenome extends Node:
 	func tiers() -> Dictionary:
 		return body
 
+	# cell.gd reads the beam's level and path off its genome
+	# (beam-levels.md); a hand-built cell has no levels, so its level is its
+	# tier, exactly as the beam read it before levels existed.
+	func level_of(gene: StringName) -> int:
+		return tier(gene)
+
+	func path_of(_gene: StringName) -> StringName:
+		return &""
+
 
 ## **The field, watched.** A seed, a seed-for, a retirement on the person's
 ## slot, or a meal with a person on either side, is counted -- and must never

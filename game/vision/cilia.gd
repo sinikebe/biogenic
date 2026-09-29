@@ -81,6 +81,11 @@ const HUES := {
 ## degrees apart: a three-bristle tuft and a nine-bristle tuft are different
 ## objects at a glance and stay different under any colour-blindness simulation.
 ## Anything not listed falls back to [constant COUNT_EARNED].
+## **No eye**: what every cell but the player's own passes to [method
+## draw_cell], and the organ drawn as it always was. One shared, read-only
+## dictionary rather than a fresh `{}` per organ per body per frame.
+const NO_EYE := {}
+
 const EARNED_COUNT := {
 	&"stigma": 4,
 	&"ocellus": 3,
@@ -322,6 +327,46 @@ const PIGMENT_SEAT := 0.80
 const PIGMENT_OUTER := 0.20
 const PIGMENT_INNER := 0.10
 const PIGMENT_HAZE := 0.30
+## The organelle's two inks, rim and core. The core is what "drawn solid" fills
+## the whole disc with, at the top of a flare.
+const PIGMENT_RIM_ALPHA := 0.55
+const PIGMENT_CORE_ALPHA := 0.85
+
+# --- The eye: a choice waiting, and a level arriving (beam-levels.md §8.4-§8.5)
+# Drawn on the player's own body only, because only the player's own level is
+# known -- nothing about another cell's is on the wire (§6). See [param eye] on
+# [method draw_cell].
+
+## **A choice waiting: the eyespot doubles**, like an organelle about to divide.
+## Two lobes of this size in place of the one disc, their cores half that, side
+## by side along the arc -- and further apart the longer the fork is left, up
+## to [constant BUD_BANKED_MAX] banked levels. It says *changed* by shape rather
+## than by loudness: measured at σ 6 in point of view, 1280x720, the eye at rest
+## reads 55 and budding 56, 59 at its brightest -- under dread's 60 and a beam
+## return's 67. The design's mock put a ±0.3 shimmer at 60.9, a dead heat with
+## dread, which is why it is 0.2.
+const BUD_R := 0.15               ## of r, each lobe
+const BUD_CORE := 0.075           ## of r
+const BUD_APART := 0.10           ## of r, each lobe from the seat, at the fork
+const BUD_APART_PER_LEVEL := 0.02 ## of r, more for every level banked since
+const BUD_BANKED_MAX := 4
+## The pigment's own ink, a little stronger for being two.
+const BUD_INK := 1.2
+## The lobes shimmer in antiphase, on the body's own clock.
+const BUD_SHIMMER := 0.2
+const BUD_SHIMMER_PERIOD := 2.4
+
+## **A level arriving: the eyespot flares** for about a second. At the top the
+## pigment is drawn solid, the whole organ is this much brighter, its haze this
+## much wider and denser and its bristles this much longer. Measured at the
+## peak, the same way, it reads 82 against the resting eye's 55: a clear
+## flicker on your own body, above a beam return for a second and far under a
+## taste band's 136. The mock's first cut, ink x 2, reached 111 -- a flash, not
+## a feeling.
+const FLARE_INK := 1.35
+const FLARE_HAZE_WIDE := 1.5
+const FLARE_HAZE_DENSE := 2.0
+const FLARE_REACH := 1.30
 
 # --- Tier is magnitude, not a badge (§4.3) ----------------------------------
 ## Longer, denser, brighter. Countable without counting.
@@ -476,12 +521,21 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## same water: a person, so never a gene tint -- no cell the water makes is
 ## untinted -- but a mouth that can reach you, so a threat when their gape
 ## exceeds your radius. shared-pond-ux.md §0.1 and §8.
+##
+## [param eye] is **one organ's pigment, about to change or just changed**
+## (beam-levels.md §8.4-§8.5): `{"gene": g, "bud": n, "flare": f}`, or empty.
+## `bud` is how many levels have banked at an open fork -- the pigment doubles,
+## and the lobes sit further apart the higher it is -- or -1 for no fork; `flare`
+## is 0..1, a level arriving. Passed **only for the player's own cell**, the
+## way [method draw_pending] takes `offer`: no other cell's level is known, and
+## a friend's is not on the wire. Empty draws exactly what it always drew.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
-		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false) -> void:
+		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
+		eye: Dictionary = NO_EYE) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -493,7 +547,8 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound,
 		pinch)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade, double)
-	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order)
+	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order,
+		eye)
 	draw_gape(canvas, at, fwd, stb, r, gape,
 		Genome.tier_of(tiers, &"cytostome"),
 		not is_self and gape > viewer_radius, fade, unit)
@@ -660,7 +715,8 @@ static func default_order(tiers: Dictionary) -> Array:
 
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
-		steer: float, unit: float, order: Array = []) -> void:
+		steer: float, unit: float, order: Array = [],
+		eye: Dictionary = NO_EYE) -> void:
 	if tiers.is_empty():
 		return
 
@@ -700,7 +756,8 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		var tier := int(tiers.get(gene, 0))
 		if tier > 0:
 			_draw_earned(canvas, at, fwd, stb, r, gene, tier,
-				arc_for_slot(slot), fade, unit)
+				arc_for_slot(slot), fade, unit, clock,
+				eye if StringName(eye.get("gene", &"")) == gene else NO_EYE)
 
 
 ## The oral mat: dense, fine, standing just off the surface, with a beat that
@@ -793,23 +850,47 @@ static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 
 ## An earned gene: stiff sensory bristles that do not row, over a pigment
 ## organelle that is the one filled spot of gene colour on a body.
+##
+## [param eye] is [method draw_cell]'s, already known to be this gene's: the
+## pigment buds while a choice waits and flares as a level arrives. Empty, every
+## factor below is exactly 1 and the organ is drawn as it always was.
 static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
-		fade: float, unit: float) -> void:
+		fade: float, unit: float, clock: float = 0.0,
+		eye: Dictionary = NO_EYE) -> void:
 	var tone := hue(gene)
 	var mid := deg_to_rad((arc.x + arc.y) * 0.5)
 	var seat := _surface(at, fwd, stb, r * PIGMENT_SEAT, mid)
+	var flare := clampf(float(eye.get("flare", 0.0)), 0.0, 1.0)
+	var bud := int(eye.get("bud", -1))
+	# The whole organ is brighter at the top of a flare, and the haze wider and
+	# denser as well: the flare is the organ lighting up, not a disc on it.
+	var ink := lerpf(1.0, FLARE_INK, flare)
+	var wide := lerpf(1.0, FLARE_HAZE_WIDE, flare)
+	var dense := lerpf(1.0, FLARE_HAZE_DENSE, flare)
 	for k in 3:
 		var q := float(k) / 3.0
-		canvas.draw_circle(seat, r * PIGMENT_HAZE * (1.0 + 1.6 * q),
-			Color(tone, 0.030 * (1.0 - q) * fade), true, -1.0, true)
-	canvas.draw_circle(seat, r * PIGMENT_OUTER, Color(tone, 0.55 * fade),
-		true, -1.0, true)
-	canvas.draw_circle(seat, r * PIGMENT_INNER, Color(tone, 0.85 * fade),
-		true, -1.0, true)
+		canvas.draw_circle(seat, r * PIGMENT_HAZE * (1.0 + 1.6 * q) * wide,
+			Color(tone, 0.030 * (1.0 - q) * dense * ink * fade), true, -1.0,
+			true)
+	# **Drawn solid at the top of a flare**: the rim rises to the core's ink, so
+	# the pigment is one bright spot rather than a spot in a ring. Clamped only
+	# once the view's fade is in: point of view draws this body at a third, and
+	# a clamp before that would throw the brightening away.
+	var rim := lerpf(PIGMENT_RIM_ALPHA, PIGMENT_CORE_ALPHA, flare) * ink
+	var core := PIGMENT_CORE_ALPHA * ink
+	if bud < 0:
+		canvas.draw_circle(seat, r * PIGMENT_OUTER,
+			Color(tone, minf(rim * fade, 1.0)), true, -1.0, true)
+		canvas.draw_circle(seat, r * PIGMENT_INNER,
+			Color(tone, minf(core * fade, 1.0)), true, -1.0, true)
+	else:
+		_draw_bud(canvas, seat, _normal(fwd, stb, mid), r, tone, bud, rim, core,
+			clock, fade)
 
 	var count := _count(int(EARNED_COUNT.get(gene, COUNT_EARNED)), tier)
 	var scale := _tier(TIER_LEN, tier)
+	var reach := lerpf(1.0, FLARE_REACH, flare)
 	var strokes := PackedVector2Array()
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
@@ -817,13 +898,38 @@ static func _draw_earned(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		# No clock: a sensory cilium does not row. The variation across the arc
 		# is a standing bow rather than a wave, so the arc reads as a tuft and
 		# not as a picket fence.
-		var length := LEN_EARNED * r * (0.88 + 0.14 * sin(u * PI)) * scale
+		var length := LEN_EARNED * r * (0.88 + 0.14 * sin(u * PI)) * scale \
+			* reach
 		var dir := _normal(fwd, stb, t)
 		var root := _surface(at, fwd, stb, r, t)
 		strokes.append(root)
 		strokes.append(root + dir * length)
 	_stroke(canvas, strokes, tone,
-		ALPHA_EARNED * _tier(TIER_ALPHA, tier) * fade, WIDTH_EARNED * unit)
+		ALPHA_EARNED * _tier(TIER_ALPHA, tier) * ink * fade, WIDTH_EARNED * unit)
+
+
+## **The pigment, doubled**: two lobes side by side along the arc, where the one
+## disc was, and further apart for every level banked since the fork opened --
+## an organelle about to divide, which is the one way a body can say *something
+## here is waiting to be decided* without a word or a rhythm. [param normal] is
+## the skin's outward normal at the seat; the lobes sit across it.
+##
+## They shimmer in antiphase on the body's own [param clock], so the pair
+## breathes as one organ rather than as two lights.
+static func _draw_bud(canvas: CanvasItem, seat: Vector2, normal: Vector2,
+		r: float, tone: Color, banked: int, rim: float, core: float,
+		clock: float, fade: float) -> void:
+	var along := normal.orthogonal()
+	var apart := r * (BUD_APART
+		+ BUD_APART_PER_LEVEL * float(clampi(banked, 0, BUD_BANKED_MAX)))
+	var wave := BUD_SHIMMER * sin(TAU * clock / BUD_SHIMMER_PERIOD)
+	for side: float in [-1.0, 1.0]:
+		var lobe := seat + along * (apart * side)
+		var shimmer := BUD_INK * (1.0 + wave * side)
+		canvas.draw_circle(lobe, r * BUD_R,
+			Color(tone, minf(rim * shimmer * fade, 1.0)), true, -1.0, true)
+		canvas.draw_circle(lobe, r * BUD_CORE,
+			Color(tone, minf(core * shimmer * fade, 1.0)), true, -1.0, true)
 
 
 # ---------------------------------------------------------------------------
@@ -1664,6 +1770,73 @@ static func draw_weave(canvas: CanvasItem, axis: int, lobe: float, mid: float,
 			near) * fade * bright))
 		b_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK,
 			near) * fade * bright))
+	canvas.draw_polyline_colors(a_pts, a_col, STRAND_WIDTH, true)
+	canvas.draw_polyline_colors(b_pts, b_col, STRAND_WIDTH, true)
+
+
+## **A replication fork**: the weave from [param from] onward, and then its two
+## strands stop winding and part (beam-levels.md §8.3). It is how a slot says
+## *a choice is waiting here*, and it changes the chip's outline rather than
+## only its colour, so it survives greyscale. The pause screen's forking slot
+## draws it, and so does the fork's chip in the tray, which is why it lives
+## here and not with either of them.
+##
+## The strands part at **the last crest before [param to]**, where they are
+## already furthest apart and running level -- so the parting leaves the helix
+## without a kink. From there to [param to] each swings out by a further
+## [param spread] as the square of the way along, and blends from its depth
+## colour to [param tone] at 0.9, so the two tips carry the gene's hue.
+## [param from], [param to] and the swing are in the same `along` units as
+## [method draw_weave]'s, counted from the helix's own origin (its `lobe0` 0),
+## so the two calls meet exactly when one takes over from the other.
+## [param bright] is the weave's own, and dims the tips with it.
+static func draw_fork(canvas: CanvasItem, axis: int, lobe: float, mid: float,
+		amp: float, from: float, to: float, spread: float, tone: Color,
+		bright: float) -> void:
+	var split := lobe * (floorf(to / lobe - 0.5) + 0.5)
+	if split < from:
+		split = from
+	# Which strand is on which side at the crest: the parting carries it on.
+	var lean := signf(sin(strand_phase(split, 0, lobe)))
+	if lean == 0.0:
+		lean = 1.0
+	var a_pts := PackedVector2Array()
+	var b_pts := PackedVector2Array()
+	var a_col := PackedColorArray()
+	var b_col := PackedColorArray()
+	var winding := maxi(int(ceilf((split - from) / lobe * float(STRAND_STEPS))),
+		0)
+	for i in winding + 1:
+		var along := lerpf(from, split, float(i) / float(maxi(winding, 1)))
+		var t := strand_phase(along, 0, lobe)
+		var swing := amp * sin(t)
+		a_pts.append(strand_point(axis, along, mid - swing))
+		b_pts.append(strand_point(axis, along, mid + swing))
+		var near := 0.5 * (cos(t) + 1.0)
+		a_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_BACK, STRAND_FRONT,
+			near) * bright))
+		b_col.append(Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK,
+			near) * bright))
+	# The parting. Its first point is the crest the weave just reached, so the
+	# polyline carries straight on; each strand's colour leaves the depth colour
+	# it had there.
+	var t0 := strand_phase(split, 0, lobe)
+	var near0 := 0.5 * (cos(t0) + 1.0)
+	var a_from := Color(STRAND_BACKBONE, lerpf(STRAND_BACK, STRAND_FRONT, near0)
+		* bright)
+	var b_from := Color(STRAND_BACKBONE, lerpf(STRAND_FRONT, STRAND_BACK, near0)
+		* bright)
+	var tip := Color(tone, 0.9 * minf(bright, 1.0))
+	var parted := maxi(int(ceilf((to - split) / lobe * float(STRAND_STEPS))) * 2,
+		1)
+	for i in range(1, parted + 1):
+		var u := float(i) / float(parted)
+		var along := lerpf(split, to, u)
+		var swing := lean * (amp + spread * u * u)
+		a_pts.append(strand_point(axis, along, mid - swing))
+		b_pts.append(strand_point(axis, along, mid + swing))
+		a_col.append(a_from.lerp(tip, u))
+		b_col.append(b_from.lerp(tip, u))
 	canvas.draw_polyline_colors(a_pts, a_col, STRAND_WIDTH, true)
 	canvas.draw_polyline_colors(b_pts, b_col, STRAND_WIDTH, true)
 

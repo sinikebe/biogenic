@@ -49,6 +49,17 @@ const NetSession := preload("res://game/net/net_session.gd")
 ## **The shared pond on the wire** (shared-pond.md §3). Built only by a run that
 ## began inside a session; a solo run never makes one.
 const Pond := preload("res://game/net/pond.gd")
+## **The beam's fan, and the count that earns it levels** (beam-levels.md). Both
+## are general pieces that know nothing about eyes; this file is the edge that
+## gives them a gene, because it is the one with the genome, the field and
+## cilia.gd's arc table all in reach.
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
+const Tally := preload("res://game/mechanics/tally.gd")
+## **A level, and what it shows** (beam-levels.md §8): the progression is read
+## on the pause screen and the choosing screen, and the swell is what a level-up
+## looks like -- the eye's flare, and the pause target's one breath.
+const Progression := preload("res://game/mechanics/progression.gd")
+const Swell := preload("res://game/mechanics/swell.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -264,8 +275,22 @@ var scheme := -1
 @onready var _explain_organ: Control = $Hud/Pause/Center/Columns/Genome/Explain/Organ
 @onready var _explain_name: Label = $Hud/Pause/Center/Columns/Genome/Explain/Gene
 @onready var _explain_says: Label = $Hud/Pause/Center/Columns/Genome/Explain/Says
-@onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Hint
+## **The line under the figure is a row now** (beam-levels.md §8.2): a levelled
+## gene's level and its gauge in front of the words it always had. `Text` is
+## that label, moved inside; the other two are hidden for every gene that does
+## not level, which is every gene but the beam.
+@onready var _hint_row: HBoxContainer = $Hud/Pause/Center/Columns/Genome/Hint
+@onready var _hint_level: Label = $Hud/Pause/Center/Columns/Genome/Hint/Level
+@onready var _hint_gauge: Control = $Hud/Pause/Center/Columns/Genome/Hint/Gauge
+@onready var _genome_hint: Label = $Hud/Pause/Center/Columns/Genome/Hint/Text
 @onready var _genome_act: Label = $Hud/Pause/Center/Columns/Genome/Act
+## **The fork view** (beam-levels.md §8.3): two cards, one per way, in the
+## figure's own place. Exactly one of `Figure` and `Fork` is visible, and both
+## are 420 x 372, so the column never moves when one takes over.
+@onready var _fork_view: Control = $Hud/Pause/Center/Columns/Genome/Fork
+@onready var _ways: Array[Control] = [
+	$Hud/Pause/Center/Columns/Genome/Fork/Way0,
+	$Hud/Pause/Center/Columns/Genome/Fork/Way1]
 ## The division's reading surface. Built once in [method _ready] and then only
 ## ever redrawn: seven loci a side is an invariant, not a maximum.
 @onready var _choosing: Control = $Hud/Choosing
@@ -451,6 +476,32 @@ var _death_clock := 0.0
 var _death_loud := true
 var _vision_cut := false
 
+# --- The beam (beam-levels.md) ----------------------------------------------
+## Where the beam's rays are and what arc each crossed this frame. Kept from
+## frame to frame because a sweep is a place in a cycle.
+var _beam_fan := RayFan.new()
+## Different bodies the beam touched this second, which is its experience.
+var _beam_tally := Tally.new(CellBody.BEAM_XP_CAP)
+## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
+## is only lit once a pass stays on the skin and fades over the revisit time,
+## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes
+## them, and how long ago that hit was.
+var _beam_held := 0.0
+var _beam_held_bearing := 0.0
+var _beam_held_age := 0.0
+
+## **A level arriving: the eyespot flares** (beam-levels.md §8.5). Armed by the
+## level-up, and by a path taken with levels banked behind it, and cued by the
+## next heartbeat, because the beat is the one rhythm the player is already
+## watching: 0.15 s up, then 1.05 s down on `1 - smoothstep`. Own cell only,
+## both views; cilia.gd draws it. The replay flares the same way, off the same
+## two numbers.
+const EYE_FLARE_RISE := 0.15
+const EYE_FLARE_FALL := 1.05
+var _eye_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
+## Which gene's pigment the flare is on: the one that levelled.
+var _eye_gene: StringName = &""
+
 # --- The division -----------------------------------------------------------
 var _split := Split.NONE
 var _split_clock := 0.0
@@ -564,6 +615,14 @@ func _ready() -> void:
 	_figure.custom_minimum_size = FIGURE_SIZE
 	_figure_body.draw.connect(_draw_figure_body)
 	_tray.resized.connect(_latch_tray)
+	# The level's row and the fork's two cards: a few connections and four
+	# styleboxes, drawn only once the screen opens on a gene that levels.
+	_build_level_row()
+	_build_fork_view()
+	# **The heartbeat is the flare's cue** (beam-levels.md §8.5), and the pause
+	# target's breath rides the same beat. Listening is not posting: this file
+	# is still the only one that writes to the bus.
+	_bus.sensation.connect(_on_bus_sensation)
 	_pause_ui.hide()
 	# Eighteen Controls and two rows of text, built once. Nothing here asks for
 	# a window, an input device or a network, so a headless boot pays one
@@ -686,6 +745,9 @@ func _process(delta: float) -> void:
 		# (shared-pond.md §1.7, owner's B): the menu is open over a live water,
 		# and everything below still runs, the screen's clock included.
 		_step_arming()
+		# The fork's cards move on this node's own frame delta, which a paused
+		# tree still hands it: the one picture on the screen that is alive.
+		_step_fork_view(delta)
 		return
 	# The pond's three still moments: held while the host is quiet, the beat of
 	# the water changing, and a run opening inside the pond waiting for its
@@ -697,6 +759,10 @@ func _process(delta: float) -> void:
 		# The waiting genes' own clocks run under an open menu here, and the
 		# tray shows the last fifteen seconds of each.
 		_step_tray()
+		_step_fork_view(delta)
+		# And the beam earns under it (beam-levels.md §2), so the level and
+		# its gauge move while the screen is up.
+		_step_levels_shown()
 	# The division. Its first phase leaves the simulation running -- steering
 	# still works and nothing is taken away -- and from the pinch on
 	# _update_simulating() stops it, exactly as it does for a death, so there
@@ -731,8 +797,7 @@ func _process(delta: float) -> void:
 	var venom := mini(_cell.extra(&"toxicyst"),
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
-	_food.beam_range = _cell.beam_range()
-	_food.beam_bearings = _beam_bearings()
+	_aim_beam(delta)
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
 	# field so it can answer in bearings -- the same contract as beam_range.
@@ -785,9 +850,12 @@ func _process(delta: float) -> void:
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
-	_bus.sense_organs(_cell.extra(&"ocellus"), _cell.extra(&"chemocyte"),
-		_cell.extra(&"ampulla"))
-	_post_beam()
+	# The beam's by its level, held to the three rungs the membrane's lobe
+	# widths are written for; the other two are still their copies.
+	_bus.sense_organs(mini(_cell.beam_level(), CellBody.BEAM_FORK_LEVEL),
+		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
+	_post_beam(delta)
+	_earn_beam(delta)
 	_post_pings()
 	_tell_others()
 	# `palp`: something solid, right there, felt with no light at all.
@@ -799,6 +867,8 @@ func _process(delta: float) -> void:
 	# Proprioception is not a sensation and does not go on the bus: it is a
 	# view, and it is handed the one number it cannot derive for itself.
 	_soma.beat = _bus.pulse()
+	# The eye and the pause target: a choice waiting, a level arriving.
+	_step_eye(delta)
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
 	# After the beat above, because it replaces it: the quickening is the beat
@@ -819,26 +889,156 @@ func _process(delta: float) -> void:
 		_begin_split()
 
 
-## Which way this cell's beams look. **The slot is the arc and the arc is the
-## bearing** -- that is the whole of placement mattering, and it is resolved
-## here because this file has both the genome and cilia.gd's arc table. cell.gd
-## cannot: cilia.gd preloads genome.gd, which preloads cell.gd, so a preload
-## back the other way would be a cycle GDScript will not resolve.
-func _beam_bearings() -> PackedFloat32Array:
-	var out := PackedFloat32Array()
-	var tier := mini(_cell.extra(&"ocellus"), CellBody.BEAM_COUNT_BY_TIER.size() - 1)
-	var count := CellBody.BEAM_COUNT_BY_TIER[tier]
-	if count <= 0:
-		return out
+## **Where this cell's beams look, and the arc each one crossed this frame.**
+## The slot is the arc and the arc is the bearing -- that is the whole of
+## placement mattering, and it is resolved here because this file has both the
+## genome and cilia.gd's arc table. cell.gd cannot: cilia.gd preloads
+## genome.gd, which preloads cell.gd, so a preload back the other way would be
+## a cycle GDScript will not resolve.
+##
+## The fan's shape is the beam's level and path (cell.gd's `beam_shape`); the
+## fan works out where each ray is; this adds where the organ is worn. The field
+## is handed each sweeping ray's arc as well as its bearing, because a sweep has
+## to be tested across everything it crossed (beam-levels.md §4.3), and the
+## fan's middle and half-width, so it can skip bodies nowhere near it (§4.4).
+func _aim_beam(delta: float) -> void:
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
 	var slot := _genome.slot_of(&"ocellus")
-	if slot < 0:
-		return out
+	_food.beam_range = float(shape[3])
+	var bearings := PackedFloat32Array()
+	var arcs := PackedFloat32Array()
+	if int(shape[0]) <= 0 or slot < 0:
+		_food.beam_bearings = bearings
+		_food.beam_arcs = arcs
+		_food.beam_hold = 0.0
+		_food.beam_fan_half = -1.0
+		return
+	var half := deg_to_rad(float(shape[1]))
+	_beam_fan.configure(int(shape[0]), half, deg_to_rad(float(shape[2])))
+	_beam_fan.step(delta)
 	var middle := Cilia.slot_bearing(slot)
-	var fan := deg_to_rad(CellBody.BEAM_FAN_DEG_BY_TIER[tier])
-	for i in count:
-		var u := 0.0 if count < 2 else -1.0 + 2.0 * float(i) / float(count - 1)
-		out.append(wrapf(middle + u * fan, -PI, PI))
-	return out
+	var offsets := _beam_fan.offsets()
+	var low := _beam_fan.arc_low()
+	var high := _beam_fan.arc_high()
+	var hold := _beam_fan.revisit()
+	for i in offsets.size():
+		bearings.append(wrapf(middle + offsets[i], -PI, PI))
+		if hold > 0.0:
+			arcs.append(wrapf(middle + low[i], -PI, PI))
+			arcs.append(wrapf(middle + high[i], -PI, PI))
+	_food.beam_bearings = bearings
+	_food.beam_arcs = arcs
+	_food.beam_hold = hold
+	_food.beam_fan_mid = middle
+	_food.beam_fan_half = half
+
+
+## **The beam's experience** (beam-levels.md §2): one for every different body
+## its rays touched in a second, capped, and only while this body wears it.
+## Every body counts -- food, a hunter, a sister, the other player -- because
+## the beam's job is to find surfaces, not to judge them.
+func _earn_beam(delta: float) -> void:
+	if _cell.extra(&"ocellus") <= 0:
+		_beam_tally.reset()
+		return
+	for index: int in _food.beam_touched:
+		_beam_tally.touch(index)
+	var earned := _beam_tally.step(delta)
+	if earned > 0:
+		_earn(&"ocellus", float(earned))
+
+
+## **Experience for [param gene], and what a level-up shows** (beam-levels.md
+## §8.4-§8.5). The genome keeps the level; this is the edge that makes it seen:
+## the eye flares on the next beat, and a level-up that opens the fork has the
+## pause target breathe once. **Once per lineage** falls out of where it is
+## asked: a daughter who inherits an open fork never levels into it, so she is
+## not told again.
+##
+## The one door experience comes in by -- the beam's tally, and
+## `tools/drive.gd --earn=`, which poses a level-up through it.
+func _earn(gene: StringName, amount: float) -> void:
+	var grown := _genome.progression(gene)
+	if grown == null:
+		return
+	var before := grown.level()
+	if not _genome.earn(gene, amount):
+		return
+	_eye_gene = gene
+	_eye_flare.arm()
+	if PAUSE_BREATHES_AT_FORK and before < grown.fork_level \
+			and _genome.can_choose(gene):
+		_pause_breath.arm()
+
+
+## **A new body starts with an ordinary eye and a quiet pause target**: a
+## death, a birth and a return. A flare or a breath armed for the body that
+## just ended is about that body, and a daughter who inherits an open fork is
+## not told about it again.
+func _forget_eye() -> void:
+	_eye_flare.clear()
+	_eye_gene = &""
+	if _pause_breath.running():
+		_pause_tap.queue_redraw()
+	_pause_breath.clear()
+	_soma.eye = {}
+	_vision.eye = {}
+
+
+## The heartbeat, heard. It cues what a level-up armed -- **but only a beat the
+## body is on screen for**: a pause over it in single player, where the bus
+## keeps beating under the scrim, would spend the flare where nobody can see
+## it, so it waits for the first beat back in the water.
+func _on_bus_sensation(kind: StringName, _info: Dictionary) -> void:
+	if kind != &"beat":
+		return
+	if _menu_open or _life != Life.ALIVE or _split >= Split.PINCH:
+		return
+	_eye_flare.cue()
+	if _pause_breath.armed():
+		# It holds for one beat, and the beat is whatever the body is beating
+		# at now: a starving cell's breath is slower, as its heart is.
+		_pause_breath.hold = _metabolism.beat_period()
+		_pause_breath.cue()
+
+
+## Once a frame, in the water: the flare and the breath move on, and both views
+## are handed the eye. The pause target is redrawn for as long as it breathes,
+## and once more after, to lay it back at rest.
+func _step_eye(delta: float) -> void:
+	_eye_flare.step(delta)
+	var breathing := _pause_breath.running()
+	_pause_breath.step(delta)
+	if breathing:
+		_pause_tap.queue_redraw()
+	var eye := eye_of(_genome, _eye_gene, _eye_flare.value())
+	_soma.eye = eye
+	_vision.eye = eye
+
+
+## **What the eye is doing, for cilia.gd** (beam-levels.md §8.4-§8.5):
+## `{"gene": g, "bud": n, "flare": f}`, or empty for an ordinary eye.
+##
+## It buds for the first levelled gene **this body wears** whose fork is open --
+## the pigment is on the body, so a gene only the DNA carries has none to bud --
+## with `bud` the levels banked since the fork. [param flaring] is the gene a
+## level just arrived for and [param flare] how far through its swell it is.
+## Static, because the replay asks the same question of the genome it restored
+## and must get the same answer.
+static func eye_of(genome: GenomeNode, flaring: StringName,
+		flare: float) -> Dictionary:
+	if genome == null:
+		return {}
+	for gene: StringName in genome.levels():
+		if genome.tier(gene) <= 0:
+			continue
+		var grown := genome.progression(gene)
+		var bud := grown.level() - grown.fork_level if grown.can_choose() else -1
+		var lit := flare if gene == flaring else 0.0
+		if bud < 0 and lit <= 0.0:
+			continue
+		return {"gene": gene, "bud": bud, "flare": lit}
+	return {}
 
 
 ## Which way a directional organ looks: the bearing of the arc it is worn on,
@@ -849,10 +1049,15 @@ func _slot_bearing_of(gene: StringName) -> float:
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow
-## lobe left in the shader and three beams at tier 3, so they compete rather
+## lobe left in the shader and many rays past the fork, so they compete rather
 ## than sum -- the closest surface is the one worth telling a blind cell about.
 ## Full vision draws all of them, which is what full vision is for.
-func _post_beam() -> void:
+##
+## **A sweep's hit is held**, fading over the time the sweep takes to come back
+## (beam-levels.md §4.3): a ray that passes a body once a pass would otherwise
+## light the skin for one frame in thirty. A nearer hit takes over at once. A
+## fixed fan's hold is 0, and then this is the post it always was.
+func _post_beam(delta: float) -> void:
 	var best := 0.0
 	var bearing := 0.0
 	var reach := _food.beam_range
@@ -863,6 +1068,20 @@ func _post_beam() -> void:
 		if near > best:
 			best = near
 			bearing = float(beam[0])
+	var hold := _food.beam_hold
+	if hold > 0.0:
+		_beam_held_age += delta
+		var fading := _beam_held * clampf(1.0 - _beam_held_age / hold, 0.0, 1.0)
+		if best >= fading and best > 0.0:
+			_beam_held = best
+			_beam_held_bearing = bearing
+			_beam_held_age = 0.0
+		else:
+			best = fading
+			bearing = _beam_held_bearing
+	else:
+		_beam_held = 0.0
+		_beam_held_age = 0.0
 	_bus.beam(bearing, best)
 
 
@@ -1322,8 +1541,15 @@ func _be_born() -> void:
 	# placed yet goes with her, still waiting** (#118) -- `express()` empties
 	# the queue, so it is taken first and handed back after.
 	var carried := _genome.take_waiting()
-	_genome.express(pick["tiers"], pick["order"], pick["body"])
+	# **And her mother's levels** (beam-levels.md §3): a copy of each one for a
+	# gene in her own DNA, grown or not. The same copies her sister would have
+	# had, so which daughter is chosen never changes a level. Only the levels
+	# her mother's DNA carries: one her mother's body alone still wore ended
+	# with that body, as the pause screen said it would.
+	_genome.express(pick["tiers"], pick["order"], pick["body"], null,
+		_genome.heritable_levels())
 	_genome.carry(carried)
+	_forget_eye()
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
@@ -1533,6 +1759,7 @@ func _die(loud: bool, bearing: float) -> void:
 	_death_clock = 0.0
 	_vision_cut = false
 	_tap_pending = false
+	_forget_eye()
 	# A death during the quickening -- the one phase the water is still moving
 	# in -- takes the division with it. The collapse owns the screen, and two
 	# daughters drawn under it would be the game contradicting itself twice.
@@ -1754,6 +1981,7 @@ func _return(place: Array) -> void:
 		_ponded = false
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
+	_forget_eye()
 	# A new cell is a born cell, and a born cell has no senses: the five-second
 	# clock starts again, and so does the line that announces it. **A run keeps
 	# nothing** -- and that has to include the leg-up and the lineage.
@@ -2117,6 +2345,23 @@ const PAUSE_BAR_GAP := 6.0
 const PAUSE_REST := 0.17
 const PAUSE_HOT := 0.92
 
+## **The one breath** (beam-levels.md §8.4): when the beam's fork opens, the
+## target goes to its hot state over [constant BREATH_RISE], holds for one
+## heartbeat and settles over [constant BREATH_FALL]. It is the only thing in
+## the water that points at pause, and the only time it moves on its own -- a
+## touch player has no hover, so this is the one time they see the hot state.
+## Hot is gene-lines-and-the-pause-target.md §4.3's measured 87 of glance, for
+## about two heartbeats and then never again that lineage.
+const BREATH_RISE := 0.3
+const BREATH_FALL := 1.5
+var _pause_breath := Swell.new(BREATH_RISE, 0.0, BREATH_FALL)
+## **Owner's call 4** (beam-levels.md §8.9): whether it breathes at all. Off,
+## the eye budding is the only sign that pause has something new.
+const PAUSE_BREATHES_AT_FORK := true
+## The in-between states, one stylebox each, recoloured as it breathes.
+var _pause_well_breath: StyleBoxFlat = null
+var _pause_bar_breath: StyleBoxFlat = null
+
 func _update_pause_tap() -> void:
 	# **Hidden wherever pause cannot be reached**, which is not a nicety: a
 	# control that is drawn and does nothing teaches the player that tapping it
@@ -2155,6 +2400,17 @@ func _draw_pause_tap() -> void:
 	var box := _pause_tap.size
 	var well := _pause_well_hot if _pause_hot else _pause_well_rest
 	var bar := _pause_bar_hot if _pause_hot else _pause_bar_rest
+	# Breathing, it is somewhere between the two, on the same four colours.
+	var lift := _pause_breath.value()
+	if lift > 0.0 and not _pause_hot:
+		_pause_well_breath.bg_color = _pause_well_rest.bg_color.lerp(
+			_pause_well_hot.bg_color, lift)
+		_pause_well_breath.border_color = _pause_well_rest.border_color.lerp(
+			_pause_well_hot.border_color, lift)
+		_pause_bar_breath.bg_color = _pause_bar_rest.bg_color.lerp(
+			_pause_bar_hot.bg_color, lift)
+		well = _pause_well_breath
+		bar = _pause_bar_breath
 	_pause_tap.draw_style_box(well, Rect2(Vector2.ZERO, box))
 	var mid := box * 0.5
 	for i in 2:
@@ -2228,6 +2484,10 @@ func _notification(what: int) -> void:
 			# exit -- straight out, skipping the pause screen.
 			elif _life != Life.ALIVE:
 				_leave()
+			# The fork's two cards are a screen over the figure, and Back shuts
+			# the top one: the view, and only the view.
+			elif _fork_open():
+				_close_fork(true)
 			else:
 				_toggle_pause()
 		NOTIFICATION_DRAG_END:
@@ -2258,8 +2518,10 @@ func _notification(what: int) -> void:
 			_controls.let_go()
 			# The same argument for the genome screen: a finger that left with
 			# the app never lifts, so the placement it was holding is abandoned
-			# rather than left waiting for a release that cannot come.
+			# rather than left waiting for a release that cannot come. So is a
+			# card's confirm: it would otherwise never lapse.
 			_primed = SLOT_NONE
+			_way_primed = -1
 			# And for the body held open (dna-body.md §8), nothing placed. The
 			# emulated mouse's finger goes with it: its release may never come.
 			_offer_close(false)
@@ -2429,6 +2691,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		if _back_once():
 			if _life != Life.ALIVE:
 				_leave()
+			# **`Esc` shuts the fork view only; a second one resumes** -- the
+			# rule dna-body.md §8 set for the body held open, for the same
+			# reason: one key, one step back.
+			elif _fork_open():
+				_close_fork(true)
 			else:
 				_toggle_pause()
 		get_viewport().set_input_as_handled()
@@ -2783,10 +3050,18 @@ func _set_menu(open: bool) -> void:
 		# The tray's held height is let go here and only here: it never shrinks
 		# while the screen is open. See [method _latch_tray].
 		_tray.custom_minimum_size.y = WAIT_SIZE.y
+		# Every opening starts on the figure: a fork view left open last time
+		# is a question from another moment.
+		_reset_fork_view()
 		_select_default()
 		_build_genome_strip()
 		_resume_button.grab_focus()
+		# **Owner's call 3** (beam-levels.md §8.9): the figure, with the forking
+		# slot selected, is what pause opens on. The other answer is this.
+		if PAUSE_OPENS_ON_CARDS and _hand() == &"" and not _strip_forks.is_empty():
+			_open_fork(_strip_forks[0], false)
 	else:
+		_reset_fork_view()
 		RunState.save_gain(_bus.gain)
 
 
@@ -2885,6 +3160,8 @@ func _style_pause() -> void:
 	_pause_well_hot = _well(0.58, 0.48)
 	_pause_bar_rest = _bar(PAUSE_REST)
 	_pause_bar_hot = _bar(PAUSE_HOT)
+	_pause_well_breath = _well(0.13, 0.09)
+	_pause_bar_breath = _bar(PAUSE_REST)
 
 	# The camera toggle and the control-scheme toggle are buttons, so they are
 	# styled like ones -- but narrower and shorter than `resume`, because they
@@ -2978,10 +3255,13 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 #   which arc         where the chip sits on the 3 x 3 ring, and the faint
 #                     tether from it to its arc on the skin
 #   the plain word    under the chip's own three-lobe piece of helix
-#   the copies        rungs, as on the strand: they are the picture
-#   the level         three pips after the word, and they are the reading: a
+#   the copies        rungs, as on the strand: they are the picture -- and
+#                     three pips after the word, which are the reading: a
 #                     disc for a copy this body wears, a ring for a copy only
 #                     the DNA carries, a dot for room to grow
+#   the level         a numeral in the helix's third lobe, for a gene that
+#                     levels; its strands part while its fork waits
+#                     (beam-levels.md §8)
 #   the two registers the drawing is the body and the chips are the DNA; where
 #                     the two disagree at an arc, the body names what it wears
 #   the selection     the lens fills, the word goes loud, and the arc lights on
@@ -3103,13 +3383,14 @@ const CHIP_AMP := 11.0
 ## chip is read on its own rather than along a row of neighbours.
 const CHIP_BASE := 50.0
 const CHIP_WORD := 14
-## **The level is three pips**, after the word, at its x-height. Built three
+## **The copies are three pips**, after the word, at its x-height. Built three
 ## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
 ## read as grit at a 28 px lobe, and a digit has no scale -- two of what? -- and
 ## cannot say worn against carried. Three marks are read without counting, the
 ## scale is on screen, and filled against hollow is diegetic-hud.md §1's
 ## integrated against held: the same shape meaning the same thing in the water
-## and here, which is shape and so survives greyscale.
+## and here, which is shape and so survives greyscale. A gene's *level* is a
+## different number and never sits in this row (beam-levels.md §8.1).
 ##
 ## **The rungs stay.** They are the same count, and they are what makes a slot a
 ## piece of DNA rather than a label. The rungs are the picture; the pips are the
@@ -3120,9 +3401,50 @@ const PIP_GAP := 7.0
 const PIP_LIFT := 4.6
 const PIP_RING := 1.4
 ## Room to grow, as a dot too faint to count as a copy -- which is what puts the
-## whole scale on screen whatever the level is.
+## whole scale on screen whatever the copy count is.
 const PIP_ROOM_R := 1.6
 const PIP_ROOM_ALPHA := 0.30
+
+## **The level, on its slot** (beam-levels.md §8.1): a numeral for a gene that
+## levels, which today is only the beam. Every other chip draws what it always
+## drew.
+##
+## **Owner's call 2** (§8.9): where it sits. `LOBE`, recommended, puts it inside
+## the third lobe of the chip's helix, the one right of the rungs -- empty on
+## every chip, crossed by no tether, and truthful, because the level is
+## inherited with the gene, which is what the strand draws. `AFTER_PIPS` is the
+## built-and-rejected `M03`: `beam ●•• 12` reads as a count of the dots, and
+## `venom` with two digits is 101 px on a 96 px chip. `NONE` leaves the level to
+## the line under the figure.
+enum LevelSeat { LOBE, AFTER_PIPS, NONE }
+const LEVEL_SEAT := LevelSeat.LOBE
+## The numeral: the Hud's own font at 12 px, and 10 from level 100 up -- about
+## eighty hours of use, so a guard rather than a case. Digits are tabular, 7 px
+## each at 12, so `99` is 14 px and fits the widest chip the game makes with
+## 2.6 px to spare inside the lobe's backbones.
+const LEVEL_SIZE := 12
+const LEVEL_SIZE_SMALL := 10
+const LEVEL_SMALL_FROM := 100
+## Centred on the third lobe, `CHIP_X + 2.5 lobes`, on a baseline that puts
+## the digits' ink across the middle of the lens.
+const LEVEL_X := CHIP_X + 2.5 * CHIP_LOBE
+const LEVEL_BASE := 23.5
+## At an open fork the numeral moves into the fork's mouth, and takes the hue.
+const LEVEL_FORK_X := 81.0
+const LEVEL_FORK_ALPHA := 0.95
+## `AFTER_PIPS` only: the gap between the last pip and the numeral.
+const LEVEL_AFTER_GAP := 6.0
+
+## **The fork on the slot** (§8.3): lobes 0 and 1 as ever, and then the helix
+## stops halfway through its third and its strands part, like a replication
+## fork. The weave runs on from `along` 56 to the crest at 70, and from there
+## to [constant FORK_TIPS] each strand swings a further [constant FORK_SPREAD]
+## as the square of the way out. The tips land at chip x 94, y 1.5 and 36.5 --
+## inside the box. The outline changes, not only the colour, so it survives
+## greyscale.
+const FORK_FROM := 2.0 * CHIP_LOBE
+const FORK_TIPS := 88.0
+const FORK_SPREAD := 6.5
 ## **A slot the body has not earned yet** is its helix at this brightness and
 ## nothing else: no rungs, no word, no tether, no focus and no input. Only the
 ## first generation shows any -- a daughter inherits a seven-long layout, so
@@ -3203,6 +3525,22 @@ const WAIT_CAPTION := "waiting"
 const CAPTION_TINT := Color(0.855, 0.953, 0.933, 0.45)
 const CAPTION_SIZE := 15
 
+## **A fork waits with the genes** (beam-levels.md §8.3): one chip per open
+## fork, after the waiting genes, because the tray is where this screen keeps
+## what waits for the player. It is [constant WAIT_SIZE], and it **neither drags
+## nor takes a drop**: it opens the fork's two cards. Its glyph is the slot's
+## fork -- a lobe, a half and the parting, `along` 28 to 88 -- at half size, its
+## axis on the base pairs' line.
+const FORK_GLYPH_FROM := CHIP_LOBE
+const FORK_GLYPH_SCALE := 0.5
+const FORK_GLYPH_AT := Vector2(7.0, 22.0)
+## The gene's word and its level after it, in the level's hue.
+const FORK_WORD_X := 44.0
+const FORK_WORD_BASE := 27.0
+const FORK_LEVEL_GAP := 6.0
+## While its cards are up, the chip carries the gene-in-hand mark.
+const FORK_OPEN_Y := 45.0
+
 ## The strand's dart, sized for the choosing screen, which still draws one under
 ## each locus (dna-body.md §9).
 const DART_R := 6.5
@@ -3238,6 +3576,28 @@ const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## first half and stops.
 const HINT_LOSES := "%s leaves your dna · your body keeps it"
 const HINT_LOSES_CARRIED := "%s leaves your dna"
+## **And over a gene that levels, the warning names the level** (beam-levels.md
+## §8.2). The body keeps a gene it wears, level and all, for this life; its
+## daughters never get it. At most 355 px.
+const HINT_LOSES_LEVEL := "%s leaves your dna · level %d ends with this body"
+const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
+
+## **The level, in front of the odds** (§8.2): `level 7 ▰▰▱ · two copies · a
+## daughter probably wears it`. The level is what a daughter inherits and the
+## copies are whether she wears it -- decision 5 of beam-levels.md §0 in one
+## line. The banked level, never the one held at the fork.
+const HINT_LEVEL := "level %d"
+## **A gauge and not a number**, because experience means nothing to a player
+## and `progress()` is already a fraction: a 36 x 4 bar at y 9 in its own
+## 36 x 20 box, one pixel a thirty-sixth of a level.
+const GAUGE_SIZE := Vector2(36.0, 20.0)
+const GAUGE_BAR := Rect2(0.0, 9.0, 36.0, 4.0)
+const GAUGE_RADIUS := 2
+const GAUGE_TRACK := Color(0.855, 0.953, 0.933, 0.14)
+const GAUGE_FILL_ALPHA := 0.85
+## The row itself: the level, the gauge and the words, centred as one.
+const HINT_ROW_SEPARATION := 6
+const HINT_ROW_HEIGHT := 20.0
 
 ## **The verb line: what you can do about the slot you are reading.**
 ##
@@ -3297,6 +3657,10 @@ const ACT_SWAP := "let go to swap %s and %s"
 ## for it, and it fires while the finger is still down, which is when the
 ## player is still deciding.
 const ACT_KEEP := "let go to leave %s where it is"
+## **A slot whose fork is open, selected with nothing in hand**: its second tap
+## brings up the two ways (beam-levels.md §8.3), and this is the one line that
+## says so. It is what pause opens on when a fork waits and no gene does.
+const ACT_FORK := "tap again to choose how %s grows"
 
 ## How deep the lineage is: the only readout of how far into the run the player
 ## is, and the nearest thing the game has to a score. It moved from the hint to
@@ -3364,6 +3728,17 @@ const EXPLAINS := {
 	&"plastid": "makes a little of its own food, so you starve slower",
 	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
 	&"crista": "burns cleaner, so everything you carry costs less",
+}
+## **Once a way is taken, the gene's line says which** (beam-levels.md §8.3):
+## gene, then path, then what the organ now does -- the pause screen's receipt
+## for the choice, and the choosing screen's line for a daughter who inherits
+## it. 464 and 446 px with the name in front. A fork still open reads as no
+## path yet: the gene's own line above.
+const EXPLAINS_PATH := {
+	&"ocellus": {
+		&"extend": "a fan of rays out of that side, one more every level",
+		&"sweep": "three rays sweeping that side, faster every level",
+	},
 }
 ## An empty slot has no gene to explain, so it explains the one thing it does
 ## have: a side of the body. The tether from it is what "this side" refers to,
@@ -3437,6 +3812,8 @@ func _build_genome_strip() -> void:
 	# The tray's own, by gene, because the chip it was on is about to be freed
 	# and the gene may since have moved in the queue or left it.
 	var keeping_gene := _focused_waiting()
+	# And a fork chip's, by the gene whose fork it is.
+	var keeping_fork := _focused_fork()
 	# Every chip about to be freed takes its hover with it, and Godot will not
 	# re-enter a control the cursor never left. The selection carries the lines
 	# until the mouse moves again, which is the same slot either way.
@@ -3451,6 +3828,7 @@ func _build_genome_strip() -> void:
 			child.queue_free()
 	_slot_genes.clear()
 	_strip_waiting = _genome.waiting()
+	_strip_forks = _open_forks()
 
 	# **The chips are the DNA**, and the body is the other register -- it is the
 	# drawing they sit around. lifecycle.md §3.
@@ -3488,11 +3866,21 @@ func _build_genome_strip() -> void:
 
 	# **The tray, head first.** Its caption only while something waits: an
 	# empty tray is 48 px of nothing, which is what the space above a body
-	# with nothing loose in it should be.
-	if not _strip_waiting.is_empty():
+	# with nothing loose in it should be. **A fork waits too** (beam-levels.md
+	# §8.3), after the genes, and captions the tray like one.
+	if not _strip_waiting.is_empty() or not _strip_forks.is_empty():
 		_tray.add_child(_make_tray_caption())
 	for gene: StringName in _strip_waiting:
 		_tray.add_child(_make_waiting(gene))
+	for gene: StringName in _strip_forks:
+		_tray.add_child(_make_fork_chip(gene))
+	# **The view is held by gene** (dna-body.md §5.1's rule for the hand), so a
+	# tray rebuilt under it in a pond keeps it open -- unless the fork it shows
+	# is no longer there to choose.
+	if _fork_gene != &"" and not _strip_forks.has(_fork_gene):
+		_reset_fork_view()
+	_show_fork_view()
+	_levels_seen = _levels_sign()
 
 	_figure_body.queue_redraw()
 	# **The caption carries the generation**, because the hint below the figure
@@ -3503,6 +3891,7 @@ func _build_genome_strip() -> void:
 	_update_explain()
 	_restore_focus(keeping)
 	_restore_tray_focus(keeping_gene)
+	_restore_fork_focus(keeping_fork)
 
 
 ## **The ring's keyboard**: a plain arrow goes where it points, Tab goes round
@@ -3616,9 +4005,13 @@ func _restore_tray_focus(gene: StringName) -> void:
 ## or, armed over a gene, what the next tap costs.
 func _update_hint() -> void:
 	_update_act()
+	# The fork's cards have lines of their own (beam-levels.md §8.3).
+	if _fork_open():
+		_set_hint(_fork_hint(), _fork_gene)
+		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	if slot == SLOT_NONE:
-		_genome_hint.text = ""
+		_set_hint("")
 		return
 	# **The same gene the explanation line is describing**, through the same
 	# resolution, because the two rows are read together and a pair that
@@ -3627,24 +4020,58 @@ func _update_hint() -> void:
 	# travelling gene and priced the hole.
 	var gene := _reading()
 	if gene == &"":
-		_genome_hint.text = HINT_EMPTY
+		_set_hint(HINT_EMPTY)
 		return
 	if slot >= 0 and slot == _armed and _dragging == SLOT_NONE \
 			and _hand() != &"" and _gene_at(slot) != &"":
 		var under := _gene_at(slot)
-		_genome_hint.text = (HINT_LOSES if _genome.tier(under) > 0
-			else HINT_LOSES_CARRIED) % _word(under)
+		var worn := _genome.tier(under) > 0
+		# **A level at stake is named**, and the gauge stays out of it: the
+		# line is a warning, and what it warns about is the number.
+		var grown := _genome.progression(under)
+		if grown != null:
+			_set_hint((HINT_LOSES_LEVEL if worn else HINT_LOSES_LEVEL_CARRIED)
+				% [_word(under), grown.level()])
+		else:
+			_set_hint((HINT_LOSES if worn else HINT_LOSES_CARRIED)
+				% _word(under))
 		return
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
-		_genome_hint.text = HINT_CERTAIN
+		_set_hint(HINT_CERTAIN, gene)
 		return
 	# **[method _copies_of] and never the bare DNA tier**, because a waiting
 	# gene is worth the copies it waited with, not none. A slot always carries
 	# at least one; a waiting gene has `dna_tier == 0`, which indexes the empty
 	# string -- so without this the odds go blank at exactly the moment the
 	# player is deciding what a placement is worth.
-	_genome_hint.text = HINT_CHANCE[clampi(_copies_of(gene), 0,
-		HINT_CHANCE.size() - 1)]
+	_set_hint(HINT_CHANCE[clampi(_copies_of(gene), 0, HINT_CHANCE.size() - 1)],
+		gene)
+
+
+## **The row under the figure, whole** (beam-levels.md §8.2): [param text], and
+## -- when [param gene] levels -- its level and its gauge in front of it, the
+## three centred as one group. A waiting gene that the body still wears a level
+## for shows it too; one that has earned nothing has no progression and shows
+## none.
+##
+## **Alone, the words span the row and centre themselves**, exactly as the
+## label they were did before the row existed -- so every screen with no level
+## on it lays out to the pixel as it always has. Beside a level they shrink to
+## their own width, and the row centres the group.
+func _set_hint(text: String, gene: StringName = &"") -> void:
+	var grown: Progression = _genome.progression(gene) if gene != &"" else null
+	var levelled := grown != null
+	_hint_level.visible = levelled
+	_hint_gauge.visible = levelled
+	_genome_hint.size_flags_horizontal = Control.SIZE_FILL if levelled \
+		else Control.SIZE_EXPAND_FILL
+	_gauge_gene = gene if levelled else &""
+	if not levelled:
+		_genome_hint.text = text
+		return
+	_hint_level.text = HINT_LEVEL % grown.level()
+	_hint_gauge.queue_redraw()
+	_genome_hint.text = "· " + text if text != "" else ""
 
 
 ## **The verb line**, kept in step with the hint because the two are read
@@ -3653,6 +4080,11 @@ func _update_hint() -> void:
 ## are wanted at once, and the moment one would have to be chosen over the other
 ## is the moment the player is about to change their daughters.
 func _update_act() -> void:
+	# The fork's cards: pick a way, then take it (beam-levels.md §8.3).
+	if _fork_open():
+		_genome_act.text = ACT_CHOOSE_WAY % _path_title(_way_path(_way_armed)) \
+			if _way_armed >= 0 else ACT_PICK_WAY
+		return
 	# A gene in the air outranks the gene in hand: the line reports the gesture
 	# that is actually happening.
 	if _dragging != SLOT_NONE:
@@ -3695,6 +4127,11 @@ func _update_act() -> void:
 			else ACT_COMMIT_OVER % [_word(hand), _word(under)]
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
+	# **The selected slot's fork is open, so its second tap opens the cards.**
+	# Only the selected one: a slot being hovered has not had its first tap.
+	if slot >= 0 and slot == _armed and _forks_at(slot):
+		_genome_act.text = ACT_FORK % _word(_gene_at(slot))
+		return
 	_genome_act.text = ACT_MOVE if _movable(slot) else ""
 
 
@@ -3768,7 +4205,7 @@ func _hand_lost() -> bool:
 ## what a second tap would overwrite and the player should read it first.
 func _update_explain() -> void:
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
-	var gene := _reading()
+	var gene := _fork_gene if _fork_open() else _reading()
 	_explain_gene = gene
 	_explain_tier = _copies_of(gene) if gene != &"" else 0
 	if _explain_organ != null:
@@ -3784,11 +4221,30 @@ func _update_explain() -> void:
 	_explain_name.text = String(gene)
 	_explain_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+	# **The cards keep this line's job** (beam-levels.md §8.3): the gene's own
+	# line until a way is hovered or armed, and then that way, by its name.
+	var way := _way_reading()
+	if _fork_open() and way >= 0:
+		_explain_name.text = _path_title(_way_path(way))
+		_explain_says.text = "· " + String(PATH_SAYS.get(_way_path(way), ""))
+		return
 	# A gene this build has no line for -- a later phase's, arriving over an
 	# older binary in a content pack -- shows its name and says nothing, rather
 	# than showing a bare separator.
-	var says := String(EXPLAINS.get(gene, ""))
+	var says := _explains(gene)
 	_explain_says.text = "" if says.is_empty() else "· " + says
+
+
+## **What [param gene] does, in the player's terms**: its line, or -- once its
+## fork is behind it -- the line for the way it took (beam-levels.md §8.3). The
+## pause screen and the choosing screen both read it, so a daughter reads what
+## her mother chose.
+func _explains(gene: StringName) -> String:
+	var grown := _genome.progression(gene)
+	var taken: Dictionary = EXPLAINS_PATH.get(gene, {})
+	if grown != null and taken.has(grown.path):
+		return String(taken[grown.path])
+	return String(EXPLAINS.get(gene, ""))
 
 
 ## **What the three lines under the figure are about**, resolved once.
@@ -3834,12 +4290,14 @@ func _committable(slot: int) -> bool:
 	return slot >= 0 and _hand() != &"" and _strip_current()
 
 
-## True while the queue and the DNA's layout are what the chips and the tray were
-## built from. Always true in single player, where only this screen changes them
-## and every change rebuilds.
+## True while the queue, the DNA's layout and the open forks are what the chips
+## and the tray were built from. Always true in single player, where only this
+## screen changes them and every change rebuilds. In a pond a fork can open
+## under the menu, because the beam earns there (beam-levels.md §2), and then
+## the tray has a chip to grow.
 func _strip_current() -> bool:
 	return _genome.waiting() == _strip_waiting \
-		and _genome.layout() == _slot_genes
+		and _genome.layout() == _slot_genes and _open_forks() == _strip_forks
 
 
 ## **The screen catches up with a genome that changed under it** -- only in a
@@ -3874,8 +4332,9 @@ func _catch_up() -> bool:
 ## and its sentence underneath has already shown what tapping does, and the
 ## player's next tap is on a different one. **The head goes in hand**, because
 ## the soonest to lapse is the decision they came here to make (#118's order);
-## otherwise the first gene they actually carry, which on a born cell is the
-## mouth.
+## **otherwise the first slot whose fork is open** (beam-levels.md §8.3, owner's
+## call 3), one tap from its two ways; otherwise the first gene they actually
+## carry, which on a born cell is the mouth.
 func _select_default() -> void:
 	_hovered = SLOT_NONE
 	_armed_at = Time.get_ticks_msec()
@@ -3885,6 +4344,10 @@ func _select_default() -> void:
 		return
 	_armed = SLOT_NONE
 	var layout := _genome.layout()
+	for i in layout.size():
+		if layout[i] != &"" and _genome.can_choose(layout[i]):
+			_armed = i
+			return
 	for i in layout.size():
 		if layout[i] != &"":
 			_armed = i
@@ -4182,14 +4645,26 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	if selected:
 		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
 			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS))
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
-		CHIP_LOBES, 0, BACKBONE_LIT if selected else 1.0, 0)
+	var bright := BACKBONE_LIT if selected else 1.0
+	# **A fork waiting here parts the strands** (beam-levels.md §8.3): the first
+	# two lobes as ever, and then the fork where the third one was.
+	var forking := shown != &"" and _genome.can_choose(shown)
+	if forking:
+		Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, CHIP_LOBES - 1, 0, bright, 0)
+		Cilia.draw_fork(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, FORK_FROM, FORK_TIPS, FORK_SPREAD, Cilia.hue(shown), bright)
+	else:
+		Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, CHIP_LOBES, 0, bright, 0)
 	if shown != &"":
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
 			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(shown), copies, worn)
 	node.draw_set_transform(Vector2.ZERO)
 
 	_draw_chip_label(node, shown, copies, worn, selected)
+	if LEVEL_SEAT == LevelSeat.LOBE:
+		_draw_chip_level(node, shown, worn, selected, forking)
 
 	if node.has_focus():
 		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
@@ -4223,19 +4698,70 @@ func _draw_chip_label(node: Control, gene: StringName, copies: int, worn: int,
 		CHIP_WORD).x
 	var group := width + PIP_GAP + PIP_PITCH * float(GenomeNode.TIER_MAX - 1) \
 		+ PIP_R * 2.0
+	# Owner's call 2 answered the other way: the level after the pips, in the
+	# group, so the whole reading stays centred under its helix.
+	var level := ""
+	var level_size := LEVEL_SIZE
+	var grown := _genome.progression(gene)
+	if LEVEL_SEAT == LevelSeat.AFTER_PIPS and grown != null:
+		level = str(grown.level())
+		level_size = _level_size(grown.level())
+		group += LEVEL_AFTER_GAP + font.get_string_size(level,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, level_size).x
 	var left := (SLOT_SIZE.x - group) * 0.5
-	var tint := LABEL_TINT
-	if selected:
-		tint = LABEL_TINT_LOUD
-	elif worn <= 0:
-		# The third channel, agreeing with the floating rungs and the rings: a
-		# word for an organ this body does not wear is quieter than one it does.
-		tint = Color(PALE, WORD_UNEXPRESSED)
+	var tint := _word_tint(selected, worn)
 	node.draw_string(font, Vector2(left, CHIP_BASE), word,
 		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD, tint)
 	_draw_pips(node,
 		Vector2(left + width + PIP_GAP + PIP_R, CHIP_BASE - PIP_LIFT),
 		Cilia.hue(gene), copies, worn, 1.0)
+	if level != "":
+		node.draw_string(font, Vector2(left + width + PIP_GAP
+			+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + PIP_R * 2.0
+			+ LEVEL_AFTER_GAP, CHIP_BASE), level, HORIZONTAL_ALIGNMENT_LEFT,
+			-1.0, level_size, tint)
+
+
+## The tint a chip's word is drawn in -- and its level, which reads with it.
+## Loud while selected; quieter for an organ this body does not wear, the third
+## channel agreeing with the floating rungs and the rings.
+func _word_tint(selected: bool, worn: int) -> Color:
+	if selected:
+		return LABEL_TINT_LOUD
+	if worn <= 0:
+		return Color(PALE, WORD_UNEXPRESSED)
+	return LABEL_TINT
+
+
+## **The level, in the third lobe** (beam-levels.md §8.1): the banked level --
+## `level()`, never the one held at the fork -- centred in the lens right of the
+## rungs, in the word's own tint. At an open fork it moves into the fork's mouth
+## and takes the gene's hue, so the one chip that is asking for something is the
+## one whose number is coloured. Drawn wherever the chip draws its word, and so
+## never on a drag source or an empty slot.
+func _draw_chip_level(node: Control, gene: StringName, worn: int,
+		selected: bool, forking: bool) -> void:
+	if gene == &"":
+		return
+	var grown := _genome.progression(gene)
+	var font := node.get_theme_default_font()
+	if grown == null or font == null:
+		return
+	var text := str(grown.level())
+	var size := _level_size(grown.level())
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+		size).x
+	var at := LEVEL_FORK_X if forking else LEVEL_X
+	node.draw_string(font, Vector2(at - width * 0.5, LEVEL_BASE), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, size,
+		Color(Cilia.hue(gene), LEVEL_FORK_ALPHA) if forking
+			else _word_tint(selected, worn))
+
+
+## The numeral's size: [constant LEVEL_SIZE], and one step down from three
+## digits, which the lobe was measured to hold at two.
+func _level_size(level: int) -> int:
+	return LEVEL_SIZE if level < LEVEL_SMALL_FROM else LEVEL_SIZE_SMALL
 
 
 ## Three pips from [param first], a pitch apart: a disc for each copy worn, a
@@ -4265,7 +4791,11 @@ func _draw_pips(node: Control, first: Vector2, tone: Color, copies: int,
 ## a pond shows it -- single player stops every clock while this screen is open
 ## -- and [method _step_tray] redraws it there.
 func _draw_waiting(node: Control, gene: StringName) -> void:
-	var in_hand := gene == _hand() and _dragging != SLOT_SAMPLE
+	# While a fork's cards are up the fork chip carries the in-hand mark: one
+	# thing in the tray is being decided at a time. The hand is kept, and it is
+	# drawn in hand again the moment the figure comes back.
+	var in_hand := gene == _hand() and _dragging != SLOT_SAMPLE \
+		and not _fork_open()
 	var ink := 1.0 if in_hand else WAIT_DIM
 	var tone := Cilia.hue(gene)
 	var mid := WAIT_SIZE.y * 0.5 - 2.0
@@ -4369,11 +4899,17 @@ func _on_waiting_input(event: InputEvent, node: Control,
 		return
 	node.accept_event()
 	_primed = SLOT_NONE
+	# **A waiting gene is one way out of the fork's cards** (beam-levels.md
+	# §8.3): the view shuts on the press, so the gene goes in hand on the figure
+	# and a drag that grows out of this press lands on the slots.
+	var was_open := _fork_open()
+	if was_open:
+		_close_fork(false)
 	# Lapsed under the tray in a pond: the rebuild that shows it gone is a frame
 	# away, and picking a gene that is not waiting would put nothing in hand.
 	if _genome.waiting_index(gene) < 0:
 		return
-	if _in_hand == gene and _armed == SLOT_SAMPLE:
+	if _in_hand == gene and _armed == SLOT_SAMPLE and not was_open:
 		return
 	_in_hand = gene
 	_armed = SLOT_SAMPLE
@@ -4417,10 +4953,10 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 		# pressed an armed slot, slid off it and lifted elsewhere gets its
 		# release *here*, outside the chip's rect. That is a gesture the player
 		# aborted, and aborting by sliding off is the oldest cancel there is.
-		if was_primed and _dragging == SLOT_NONE \
+		if was_primed and _dragging == SLOT_NONE and not event.is_canceled() \
 				and Rect2(Vector2.ZERO, tile.size).has_point(
 					_pointer_at(event)):
-			_commit_slot(index)
+			_second_tap(index, false)
 		return
 	if not _is_widget_tap(event):
 		return
@@ -4449,6 +4985,19 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 			# arrive mid-gesture: a mouse drag in flight while the other hand
 			# presses Enter.
 			_commit_slot(index)
+			return
+		# **With nothing in hand, a slot whose fork is open opens its two ways**
+		# (beam-levels.md §8.3). The same guard, so a touch and the click Godot
+		# emulates from it cannot select and open in one press; primed on the
+		# press and landing on the lift, because the press may still become a
+		# move -- the slot's gene is as movable as any other.
+		if _hand() == &"" and _forks_at(index):
+			if Time.get_ticks_msec() - _armed_at < ARM_GUARD_MS:
+				return
+			if _is_pointer_press(event):
+				_primed = index
+				return
+			_second_tap(index, true)
 			return
 		# Nothing to commit -- nothing in hand, or, in a pond, a screen the
 		# genome has moved on from -- so the second tap is simply the first one
@@ -4687,6 +5236,13 @@ func _is_pointer_press(event: InputEvent) -> bool:
 ## apart -- and when a drag *is* in flight it delivers no release here at all,
 ## because the release is the drop. That is exactly the discrimination
 ## [member _primed] needs, and it is free.
+##
+## **A cancelled one is still a lift, and must commit nothing.** Android ends a
+## gesture the system takes away -- a call, the shade, the screen locking, a
+## back swipe -- as every held finger lifting with `canceled` set, and Godot's
+## emulated click carries the flag too (core/input/input.cpp, 4.7.2). So a
+## lift ends what a press primed, and the two places a lift *lands* something
+## ask [method InputEvent.is_canceled] first.
 func _is_pointer_lift(event: InputEvent) -> bool:
 	if event is InputEventScreenTouch:
 		return not (event as InputEventScreenTouch).pressed
@@ -4704,6 +5260,18 @@ func _pointer_at(event: InputEvent) -> Vector2:
 	if event is InputEventMouseButton:
 		return (event as InputEventMouseButton).position
 	return Vector2(-1.0, -1.0)
+
+
+## **A second tap that landed on the selected slot**, by the lift inside the
+## chip or by a key. With a gene in hand it places it, as it always has; with
+## none, on a slot whose fork is open, it opens that fork's two ways
+## (beam-levels.md §8.3). [param by_key] says the keyboard asked, which is what
+## sends focus onto the first card.
+func _second_tap(index: int, by_key: bool) -> void:
+	if _hand() == &"" and _forks_at(index):
+		_open_fork(_gene_at(index), by_key)
+		return
+	_commit_slot(index)
 
 
 ## The one irreversible action in the game (§9.7). A genome you cannot ruin is
@@ -4838,6 +5406,814 @@ func _step_tray() -> void:
 func _latch_tray() -> void:
 	if _tray.size.y > _tray.custom_minimum_size.y:
 		_tray.custom_minimum_size.y = _tray.size.y
+
+
+# ---------------------------------------------------------------------------
+# The level and the fork, on the pause screen (docs/design/beam-levels.md §8).
+#
+# **A gene that levels carries two numbers, and they never share a row.** The
+# pips are its copies -- whether a daughter wears it -- and the level is how
+# strong it is, which a daughter inherits whether she wears it or not. The
+# level sits in the third lobe of the slot's helix and at the front of the line
+# under the figure. At the fork three places say a choice waits -- the slot's
+# strands part, the tray holds a chip for it, and the eye buds in the water --
+# and one place takes it: two cards, one per way, in the figure's own place.
+#
+# **Choosing is the pause screen's one confirm, unchanged in kind.** Tap a way
+# to arm it; tap it again to take it, for good. The guard and the timeout are
+# the slot's, and the second tap lands on the lift inside the card, so sliding
+# off cancels. The words for the ways live here, at the edge, and nothing in
+# progression.gd knows them.
+# ---------------------------------------------------------------------------
+
+## **Owner's call 1** (beam-levels.md §8.9): what the two ways are called. The
+## cards' titles, and the name every line about a way uses, so a different
+## answer is this line. `fill`, recommended, says what happens: each level adds
+## a ray between the ones there are, so the fan fills in and never widens.
+## `extension`, the owner's own word, can read as a longer beam, and neither way
+## is longer.
+const PATH_TITLES := {&"extend": "fill", &"sweep": "sweep"}
+## What each way is good and bad at: one clause each, no numbers, in the gene
+## lines' voice.
+const PATH_LINES := {
+	&"extend": ["every ray lit, all the time", "small things slip between"],
+	&"sweep": ["no gaps between rays", "shows where things were"],
+}
+## What a way does as it grows, after its name on the explanation line.
+const PATH_SAYS := {
+	&"extend": "a new ray every level, filling the fan",
+	&"sweep": "your three rays swing, faster every level",
+}
+## **What a way costs is read off the prices, never written down.** X and Y are
+## balance numbers the owner judges by playing (beam-levels.md §5); if they
+## ever move so far that the two ways trade places, the words trade with them.
+const COST_MORE := "costs more to keep"
+const COST_LESS := "costs less to keep"
+const COST_SAME := "costs the same to keep"
+## The hint while the cards are up: what the banked levels do until a way is
+## taken -- and at the fork itself, why a choice changes nothing yet -- and, a
+## way hovered or armed, what it costs beside the other.
+const HINT_WORKS_AS := "works as level %d until you choose"
+const HINT_BOTH_NEXT := "both ways start at the next level"
+const HINT_COSTS := "%s than %s"
+## The verbs: arming is harmless, and taking is for good.
+const ACT_PICK_WAY := "tap a way to choose it"
+const ACT_CHOOSE_WAY := "tap again to choose %s · for good"
+
+## **Owner's call 3** (§8.9): what pause opens on with a fork open and no gene
+## waiting. `false`, recommended: the figure, with the forking slot selected
+## and one tap from the cards -- pause looks as it does now, and a pause to
+## change the light is still that. `true` opens straight onto the cards.
+const PAUSE_OPENS_ON_CARDS := false
+
+## The cards, in the view's own 420 x 372: 200 x 290, 20 apart, 41 down, which
+## is 49 px clear of the tray above and of `Explain` below, and 300 x 435 device
+## px on a phone. `Way0` is the progression's first path, `Way1` its second.
+const WAY_SIZE := Vector2(200.0, 290.0)
+const WAY_SEAT: Array[Vector2] = [Vector2(0.0, 41.0), Vector2(220.0, 41.0)]
+## **Opaque on purpose.** Full vision pins the ghost of the player's cell to
+## canvas x 640, inside the left card. At the slab's usual 0.45 the design's
+## mock saw its rim through the card, 36.5 of glance on a card that read 23.5;
+## at 0.90, over the ghost's seat, the card reads 30.8 in full vision against
+## 30.5 in point of view, and no pixel of it is more than 6 of 255 apart.
+const WAY_FILL := Color(0.063, 0.141, 0.125, 0.90)
+const WAY_EDGE := Color(0.12, 0.70, 0.58, 0.26)
+const WAY_CORNER := 6
+## Armed: a 2 px border in the gene's hue, and the other card steps back.
+const WAY_EDGE_ARMED := 2
+const WAY_EDGE_ARMED_ALPHA := 0.85
+const WAY_OTHER_INK := 0.55
+## **The picture is the water's own beam**: the organ, and the fan that way
+## gives at the next level it will have, from `CellBody.beam_shape()` and
+## stepped by a ray fan -- so what the card shows is what the beam will do.
+const WAY_ORGAN_AT := Vector2(100.0, 154.0)
+const WAY_RAY_ROOT := Vector2(100.0, 146.0)
+const WAY_RAY_FROM := 16.0
+const WAY_RAY_TO := 110.0
+const WAY_RAY_WIDTH := 2.0
+const WAY_RAY_ROOT_ALPHA := 0.30
+const WAY_RAY_TIP_ALPHA := 0.85
+const WAY_RAY_DOT := 2.2
+## A sweeping ray's own share of the fan, filled faintly, and the three copies
+## it trails -- where it was 0.03, 0.06 and 0.09 s ago -- at these shares of its
+## ink. Still rays trail nothing.
+const WAY_SECTOR_ALPHA := 0.06
+const WAY_TRAIL_STEP := 0.03
+const WAY_TRAIL: Array[float] = [0.45, 0.25, 0.12]
+const WAY_SECTOR_STEPS := 8
+## The words: the way's name in the gene's hue, the good and the bad in the
+## explanation's tint, and the price in the hint's.
+const WAY_TITLE_SIZE := 20
+const WAY_TITLE_BASE := 188.0
+const WAY_TITLE_ALPHA := 0.95
+const WAY_LINE_SIZE := 14
+const WAY_PRO_BASE := 216.0
+const WAY_CON_BASE := 238.0
+const WAY_COST_BASE := 266.0
+const WAY_COST_ALPHA := 0.38
+## Focus is the chips' own underline, never a box.
+const WAY_FOCUS_Y := 284.0
+
+## **The gene whose fork's cards are up**, &"" while the figure is. Held by
+## gene, as the gene in hand is (dna-body.md §5.1), so a tray rebuilt under it
+## in a pond keeps it open.
+var _fork_gene: StringName = &""
+## The armed way, since when, and the way a finger is holding its confirm on:
+## [member _armed], [member _armed_at] and [member _primed], for the cards. -1
+## is none.
+var _way_armed := -1
+var _way_armed_at := 0
+var _way_primed := -1
+## The way the mouse is over, -1 for none. Desktop's read, as on the slots.
+var _way_hovered := -1
+## Each card's fans, stepped while the view is up: one for a still way; for a
+## sweeping one, the fan and the three that trail it.
+var _way_fans: Array = []
+## The open forks the tray was built with, in the order their chips stand.
+var _strip_forks: Array[StringName] = []
+## Every level and gauge last drawn, as one number. In a pond they move under
+## an open menu, and a change is a redraw, never a rebuild (§8.2).
+var _levels_seen := 0
+## Whose progress the gauge draws, &"" for none.
+var _gauge_gene: StringName = &""
+## The frame the fork chip last answered on. A touch arrives twice -- as itself
+## and as the click Godot emulates from it -- and a toggle answered twice is
+## no toggle.
+var _fork_chip_frame := -1
+## **The frame the cards came up on.** A card takes no pointer event in it: the
+## view has just been shown and not yet laid out, so whatever the rest of that
+## press or lift is hit-tested against is where the card was never meant to
+## be. Nothing a finger meant can land on a card that was not on screen when
+## the finger went down.
+var _fork_opened_frame := -1
+var _way_box: StyleBoxFlat = null
+var _way_box_armed: StyleBoxFlat = null
+var _gauge_track: StyleBoxFlat = null
+var _gauge_fill: StyleBoxFlat = null
+
+
+## The row under the figure: the level's label and the gauge's box, beside the
+## words that were the whole row before (§8.2). The scene carries the same
+## numbers; this is what binds, as it is for the figure.
+func _build_level_row() -> void:
+	_hint_row.add_theme_constant_override("separation", HINT_ROW_SEPARATION)
+	_hint_row.alignment = BoxContainer.ALIGNMENT_CENTER
+	_hint_row.custom_minimum_size = Vector2(0.0, HINT_ROW_HEIGHT)
+	_hint_level.add_theme_font_size_override("font_size", 14)
+	_hint_level.add_theme_color_override("font_color", LABEL_TINT)
+	_hint_level.hide()
+	_hint_gauge.custom_minimum_size = GAUGE_SIZE
+	_hint_gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_hint_gauge.hide()
+	_hint_gauge.draw.connect(_draw_gauge)
+	_gauge_track = _flat(GAUGE_TRACK, GAUGE_RADIUS)
+	_gauge_fill = _flat(GAUGE_TRACK, GAUGE_RADIUS)
+
+
+## The gauge: a track, and the share of the level already earned in the gene's
+## hue. One pixel is a thirty-sixth of a level.
+func _draw_gauge() -> void:
+	var grown: Progression = _genome.progression(_gauge_gene) \
+		if _gauge_gene != &"" else null
+	if grown == null:
+		return
+	_hint_gauge.draw_style_box(_gauge_track, GAUGE_BAR)
+	var fill := roundf(GAUGE_BAR.size.x * grown.progress())
+	if fill <= 0.0:
+		return
+	_gauge_fill.bg_color = Color(Cilia.hue(_gauge_gene), GAUGE_FILL_ALPHA)
+	_hint_gauge.draw_style_box(_gauge_fill,
+		Rect2(GAUGE_BAR.position, Vector2(fill, GAUGE_BAR.size.y)))
+
+
+## A plain rounded box, filled, with an edge if one is asked for.
+func _flat(fill: Color, radius: int, edge := Color(0.0, 0.0, 0.0, 0.0),
+		width := 0) -> StyleBoxFlat:
+	var box := StyleBoxFlat.new()
+	box.bg_color = fill
+	box.set_corner_radius_all(radius)
+	if width > 0:
+		box.border_color = edge
+		box.set_border_width_all(width)
+	return box
+
+
+## The fork view's two cards. Their places are set here, as the figure's are;
+## the scene carries the same numbers so the tree reads right in an editor.
+func _build_fork_view() -> void:
+	_fork_view.custom_minimum_size = FIGURE_SIZE
+	_fork_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_fork_view.hide()
+	_way_box = _flat(WAY_FILL, WAY_CORNER, WAY_EDGE, 1)
+	_way_box_armed = _flat(WAY_FILL, WAY_CORNER, WAY_EDGE, WAY_EDGE_ARMED)
+	for way in _ways.size():
+		var card := _ways[way]
+		card.position = WAY_SEAT[way]
+		card.size = WAY_SIZE
+		card.custom_minimum_size = WAY_SIZE
+		card.mouse_filter = Control.MOUSE_FILTER_STOP
+		card.focus_mode = Control.FOCUS_ALL
+		card.draw.connect(_draw_way.bind(card, way))
+		card.gui_input.connect(_on_way_input.bind(card, way))
+		card.mouse_entered.connect(_on_way_hover.bind(way))
+		card.mouse_exited.connect(_on_way_unhover.bind(way))
+		card.focus_entered.connect(_on_way_focus)
+		card.focus_exited.connect(_on_way_focus)
+	# **`←` and `→` go between the two and no further**: no arrow leaves the
+	# cards, as none leaves the ring. Tab goes on to `light`, as it does from
+	# the ring's last slot, and back from the first card to the fork's chip,
+	# which is where the tree already puts it.
+	for way in _ways.size():
+		var card := _ways[way]
+		var other := _ways[1 - way]
+		card.focus_neighbor_left = card.get_path_to(other if way == 1 else card)
+		card.focus_neighbor_right = card.get_path_to(other if way == 0 else card)
+		card.focus_neighbor_top = card.get_path_to(card)
+		card.focus_neighbor_bottom = card.get_path_to(card)
+	_ways[_ways.size() - 1].focus_next = _ways[_ways.size() - 1].get_path_to(
+		_gain_slider)
+
+
+## True while a fork's cards are up in place of the figure.
+func _fork_open() -> bool:
+	return _fork_gene != &""
+
+
+## True when [param slot] carries a gene whose fork is open.
+func _forks_at(slot: int) -> bool:
+	var gene := _gene_at(slot)
+	return slot >= 0 and gene != &"" and _genome.can_choose(gene)
+
+
+## Every gene whose fork is open, in the order the tray stands their chips:
+## the genome's own order of levelled genes.
+func _open_forks() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for gene: StringName in _genome.levels():
+		if _genome.can_choose(gene):
+			out.append(gene)
+	return out
+
+
+## Every level and gauge width, as one number that moves when either would
+## change a pixel.
+func _levels_sign() -> int:
+	var sig := 0
+	for gene: StringName in _genome.levels():
+		var grown := _genome.progression(gene)
+		sig += gene.hash() * (grown.level() * 64
+			+ int(roundf(GAUGE_BAR.size.x * grown.progress())) + 1)
+	return sig
+
+
+## **In a pond the level moves under an open menu**, because the beam earns
+## there (beam-levels.md §2): the chips, the fork's chip and the row are
+## redrawn when a level or the gauge would change a pixel. Nothing rebuilds; a
+## fork opening under the menu is [method _catch_up]'s, because the tray has a
+## chip to grow.
+func _step_levels_shown() -> void:
+	var seen := _levels_sign()
+	if seen == _levels_seen:
+		return
+	_levels_seen = seen
+	_redraw_figure()
+	_update_hint()
+	if _fork_open():
+		_reshape_way_fans()
+
+
+## One chip per open fork, after the waiting genes (§8.3). **It neither drags
+## nor takes a drop** -- no forwarding at all -- because what it opens is the
+## cards, and a gene carried out of the tray must land on the figure.
+func _make_fork_chip(gene: StringName) -> Control:
+	var node := Control.new()
+	node.name = "Fork_%s" % gene
+	node.custom_minimum_size = Vector2(_fork_chip_width(gene), WAIT_SIZE.y)
+	node.mouse_filter = Control.MOUSE_FILTER_STOP
+	node.focus_mode = Control.FOCUS_ALL
+	node.set_meta(&"fork", gene)
+	node.draw.connect(_draw_fork_chip.bind(node, gene))
+	node.gui_input.connect(_on_fork_chip_input.bind(node, gene))
+	node.focus_entered.connect(node.queue_redraw)
+	node.focus_exited.connect(node.queue_redraw)
+	return node
+
+
+## [constant WAIT_SIZE], and wider only for a name no word was written for --
+## `venom 99`, the widest the game makes, ends at 111 of 116.
+func _fork_chip_width(gene: StringName) -> float:
+	var font := _tray.get_theme_default_font()
+	var grown := _genome.progression(gene)
+	if font == null or grown == null:
+		return WAIT_SIZE.x
+	var word := font.get_string_size(_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
+		-1.0, CHIP_WORD).x
+	var digits := font.get_string_size(str(grown.level()),
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, _level_size(grown.level())).x
+	return maxf(WAIT_SIZE.x, ceilf(FORK_WORD_X + word + FORK_LEVEL_GAP + digits
+		+ WAIT_AIR))
+
+
+## The fork's chip: the slot's fork, half size, then the gene's word and its
+## level in its hue. Loud, and carrying the gene-in-hand mark, while its cards
+## are up; stepped back, like every other chip in the tray, while a waiting
+## gene is in hand.
+func _draw_fork_chip(node: Control, gene: StringName) -> void:
+	var grown := _genome.progression(gene)
+	if grown == null:
+		return
+	var open := _fork_gene == gene
+	var tone := Cilia.hue(gene)
+	var ink := 1.0 if open or _hand() == &"" else WAIT_DIM
+	node.draw_set_transform(FORK_GLYPH_AT
+		- Vector2(FORK_GLYPH_FROM, CHIP_MID) * FORK_GLYPH_SCALE, 0.0,
+		Vector2.ONE * FORK_GLYPH_SCALE)
+	Cilia.draw_fork(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
+		FORK_GLYPH_FROM, FORK_TIPS, FORK_SPREAD, tone, ink)
+	node.draw_set_transform(Vector2.ZERO)
+	var font := node.get_theme_default_font()
+	if font != null:
+		var word := _word(gene)
+		node.draw_string(font, Vector2(FORK_WORD_X, FORK_WORD_BASE), word,
+			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
+			LABEL_TINT_LOUD if open else LABEL_TINT)
+		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			CHIP_WORD).x
+		node.draw_string(font,
+			Vector2(FORK_WORD_X + width + FORK_LEVEL_GAP, FORK_WORD_BASE),
+			str(grown.level()), HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+			_level_size(grown.level()), Color(tone, LEVEL_FORK_ALPHA * ink))
+	if open:
+		node.draw_line(Vector2(6.0, FORK_OPEN_Y),
+			Vector2(node.size.x - 6.0, FORK_OPEN_Y), Color(tone, 0.55), 1.5, true)
+	if node.has_focus():
+		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			Vector2(node.size.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
+			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **A tap on the fork's chip opens its cards, and a second shuts them.** On the
+## **lift**, inside the chip, as a slot's second tap lands -- never on the
+## press. A thumb's press arrives twice, as the click Godot emulates from it
+## and then as the touch, and the cards were hidden until now and have never
+## been laid out: opened on the first copy, the second was hit-tested against
+## a card still sitting at the column's origin, right over this chip, and
+## armed it. One tap read `tap again to choose sweep`. Enter opens on the press,
+## with the keyboard on the first card.
+func _on_fork_chip_input(event: InputEvent, node: Control,
+		gene: StringName) -> void:
+	if _is_pointer_press(event):
+		node.accept_event()
+		return
+	var by_key := event.is_action_pressed(&"ui_accept")
+	if not by_key:
+		if not _is_pointer_lift(event):
+			return
+		node.accept_event()
+		if event.is_canceled() or not Rect2(Vector2.ZERO, node.size).has_point(
+				_pointer_at(event)):
+			return
+	else:
+		node.accept_event()
+	var frame := Engine.get_process_frames()
+	if frame == _fork_chip_frame:
+		return
+	_fork_chip_frame = frame
+	_primed = SLOT_NONE
+	if _fork_gene == gene:
+		_close_fork(false)
+		return
+	_open_fork(gene, by_key)
+
+
+## Which gene's fork chip the keyboard is on, or &"".
+func _focused_fork() -> StringName:
+	for child in _tray.get_children():
+		var chip := child as Control
+		if chip != null and chip.has_focus():
+			return StringName(chip.get_meta(&"fork", &""))
+	return &""
+
+
+## Puts the keyboard back on [param gene]'s fork chip after a rebuild, if it was
+## there and the chip still is.
+func _restore_fork_focus(gene: StringName) -> void:
+	if gene != &"":
+		_focus_fork_chip(gene)
+
+
+## The keyboard onto [param gene]'s fork chip, or onto `resume` when there is
+## none -- a fork just taken takes its chip with it.
+func _focus_fork_chip(gene: StringName) -> void:
+	for child in _tray.get_children():
+		var chip := child as Control
+		if chip != null and StringName(chip.get_meta(&"fork", &"")) == gene:
+			chip.grab_focus()
+			return
+	_resume_button.grab_focus()
+
+
+## **The cards come up in the figure's place.** Nothing can be armed or written
+## while they are: the view hides every slot, so a slot armed for the gene in
+## hand is disarmed and the hand is kept -- it comes back with the figure.
+## [param by_key] puts the keyboard on the first card; a tap leaves it where it
+## was, unless that was a slot, which has just been hidden, and then it goes to
+## the fork's chip, the view's own way back.
+func _open_fork(gene: StringName, by_key: bool) -> void:
+	if not _genome.can_choose(gene):
+		return
+	if _armed >= 0 and _hand() != &"":
+		_armed = SLOT_SAMPLE
+		_armed_at = Time.get_ticks_msec()
+	_primed = SLOT_NONE
+	_hovered = SLOT_NONE
+	_fork_gene = gene
+	_fork_opened_frame = Engine.get_process_frames()
+	_way_armed = -1
+	_way_primed = -1
+	_way_hovered = -1
+	_start_way_fans()
+	_show_fork_view()
+	var focused := get_viewport().gui_get_focus_owner()
+	if by_key:
+		_ways[0].grab_focus()
+	elif focused == null or not focused.is_visible_in_tree():
+		_focus_fork_chip(gene)
+	_redraw_figure()
+	_redraw_ways()
+	_update_explain()
+	_update_hint()
+
+
+## **The cards go, nothing taken, and the figure comes back.** [param to_chip]
+## sends the keyboard to the fork's chip -- `Esc`'s way back -- and so does a
+## card that had it, which has just been hidden.
+func _close_fork(to_chip: bool) -> void:
+	if not _fork_open():
+		return
+	var gene := _fork_gene
+	var had_focus := false
+	for card in _ways:
+		had_focus = had_focus or card.has_focus()
+	_reset_fork_view()
+	if to_chip or had_focus:
+		_focus_fork_chip(gene)
+	_redraw_figure()
+	_update_explain()
+	_update_hint()
+
+
+## Back to the figure, with nothing armed on the cards. The menu opening and
+## shutting both come through here, as does a fork that stopped being there.
+func _reset_fork_view() -> void:
+	_fork_gene = &""
+	_way_armed = -1
+	_way_primed = -1
+	_way_hovered = -1
+	_way_fans.clear()
+	_show_fork_view()
+
+
+## Exactly one of the two is visible, and they are the same size, so the column
+## does not move when one takes over from the other. **`light` backs into
+## whichever is showing**: Shift-Tab from it must not land on a hidden chip, or
+## the keyboard is standing on something nobody can see.
+func _show_fork_view() -> void:
+	var open := _fork_open()
+	_figure.visible = not open
+	_fork_view.visible = open
+	if open:
+		_gain_slider.focus_previous = _gain_slider.get_path_to(
+			_ways[_ways.size() - 1])
+	else:
+		_wire_focus()
+
+
+func _redraw_ways() -> void:
+	for card in _ways:
+		card.queue_redraw()
+
+
+## The path way [param way] stands for, &"" for none.
+func _way_path(way: int) -> StringName:
+	var grown := _genome.progression(_fork_gene) if _fork_open() else null
+	if grown == null or way < 0 or way >= grown.paths.size():
+		return &""
+	return grown.paths[way]
+
+
+## A way's name, from [constant PATH_TITLES]; a path this build has no word for
+## is read by its own name rather than by nothing.
+func _path_title(path: StringName) -> String:
+	return String(PATH_TITLES.get(path, String(path)))
+
+
+## **The way the lines below describe**: the one the mouse is over, then the one
+## the keyboard is on -- `←` and `→` read the cards as hover does -- then the
+## armed one, and -1 for none.
+func _way_reading() -> int:
+	if not _fork_open():
+		return -1
+	if _way_hovered >= 0:
+		return _way_hovered
+	for way in _ways.size():
+		if _ways[way].has_focus():
+			return way
+	return _way_armed
+
+
+## **The level the cards draw**: the next the gene will have, and never the fork
+## itself -- at the fork both ways draw the same beam, three rays at rest, which
+## is why the hint says a choice made there changes nothing until the next.
+func _way_level() -> int:
+	var grown := _genome.progression(_fork_gene) if _fork_open() else null
+	if grown == null:
+		return 0
+	return maxi(grown.level(), grown.fork_level + 1)
+
+
+## `[rays, half-span deg, sweep deg/s, reach]` for [param gene] at [param level]
+## down [param path], or empty for a gene whose cards have no fan to show. The
+## beam is the only gene that forks, and this is where it is named.
+func _way_shape(gene: StringName, level: int, path: StringName) -> Array:
+	if gene == &"ocellus":
+		return CellBody.beam_shape(level, path)
+	return []
+
+
+## Each card's fan, from the shape its way gives at [method _way_level]. A
+## sweeping way gets three more fans, each started one trail step behind the
+## last, so its trail is where the ray really was.
+func _start_way_fans() -> void:
+	_way_fans.clear()
+	var at := _way_level()
+	for way in _ways.size():
+		var fans: Array = []
+		var shape := _way_shape(_fork_gene, at, _way_path(way))
+		if not shape.is_empty():
+			var copies := 1 + (WAY_TRAIL.size() if float(shape[2]) > 0.0 else 0)
+			for k in copies:
+				var fan := RayFan.new()
+				fan.configure(int(shape[0]), deg_to_rad(float(shape[1])),
+					deg_to_rad(float(shape[2])))
+				fan.step(WAY_TRAIL_STEP * float(copies - 1 - k))
+				fans.append(fan)
+		_way_fans.append(fans)
+
+
+## A level that rose under the open cards in a pond: the fans take the new shape
+## and keep their place in their sweep.
+func _reshape_way_fans() -> void:
+	var at := _way_level()
+	for way in mini(_way_fans.size(), _ways.size()):
+		var shape := _way_shape(_fork_gene, at, _way_path(way))
+		if shape.is_empty():
+			continue
+		for fan: RayFan in _way_fans[way]:
+			fan.configure(int(shape[0]), deg_to_rad(float(shape[1])),
+				deg_to_rad(float(shape[2])))
+
+
+## **The cards, alive**: their fans step on this node's own frame delta, which
+## a paused tree still hands it, and an armed way lapses on its own after
+## [constant ARM_TIMEOUT_MS] -- the slot's rule, so a card left armed is not a
+## trap. Not while a finger is holding its confirm.
+func _step_fork_view(delta: float) -> void:
+	if not _fork_open():
+		return
+	for fans: Array in _way_fans:
+		for fan: RayFan in fans:
+			fan.step(delta)
+	if _way_armed >= 0 and _way_primed < 0 \
+			and Time.get_ticks_msec() - _way_armed_at >= ARM_TIMEOUT_MS:
+		_way_armed = -1
+		_update_explain()
+		_update_hint()
+	_redraw_ways()
+
+
+## **The two taps, on a card.** The first arms it, which is harmless and is how
+## a thumb reads a way; a tap on the other card arms that one instead. The
+## second, [constant ARM_GUARD_MS] or more later, takes it for good -- primed on
+## the press and landing on the lift inside the card, so sliding off cancels.
+## A key is not ambiguous and lands on the press.
+func _on_way_input(event: InputEvent, card: Control, way: int) -> void:
+	if (_is_pointer_press(event) or _is_pointer_lift(event)) \
+			and Engine.get_process_frames() == _fork_opened_frame:
+		card.accept_event()
+		return
+	if _is_pointer_lift(event):
+		card.accept_event()
+		var was_primed := _way_primed == way
+		_way_primed = -1
+		# **A cancelled lift is not a lift** (see [method _is_pointer_lift]).
+		if was_primed and not event.is_canceled() \
+				and Rect2(Vector2.ZERO, card.size).has_point(_pointer_at(event)):
+			_choose_way(way)
+		return
+	if not _is_widget_tap(event):
+		return
+	card.accept_event()
+	_way_primed = -1
+	if _way_armed == way:
+		# The guard, for the reason the slot gives: one thumb press arrives
+		# twice, and the second copy must not take what the first just armed.
+		if Time.get_ticks_msec() - _way_armed_at < ARM_GUARD_MS:
+			return
+		if _is_pointer_press(event):
+			_way_primed = way
+			return
+		_choose_way(way)
+		return
+	_way_armed = way
+	_way_armed_at = Time.get_ticks_msec()
+	_redraw_ways()
+	_update_explain()
+	_update_hint()
+
+
+func _on_way_hover(way: int) -> void:
+	_way_hovered = way
+	_update_explain()
+	_update_hint()
+
+
+func _on_way_unhover(way: int) -> void:
+	if _way_hovered != way:
+		return
+	_way_hovered = -1
+	_update_explain()
+	_update_hint()
+
+
+## The keyboard moved onto a card or off one: it reads the card it is on.
+func _on_way_focus() -> void:
+	_redraw_ways()
+	if _fork_open():
+		_update_explain()
+		_update_hint()
+
+
+## **A way, taken for good** (§8.3). The cards go and the figure comes back
+## with that slot selected, as a receipt, the way a placement leaves one: its
+## strands closed, its numeral pale, its tray chip gone and the tray holding
+## its height. With a gene in hand the hand keeps the selection instead, since
+## a slot armed for it without a tap on that slot would be one tap from writing
+## over the gene that just grew.
+##
+## **The banked levels land at once**, and the eye flares for them on the first
+## beat back in the water (§8.5). At the fork itself nothing lands: both ways
+## start at the next level.
+func _choose_way(way: int) -> void:
+	var gene := _fork_gene
+	var path := _way_path(way)
+	var grown := _genome.progression(gene)
+	if grown == null or path == &"":
+		return
+	var banked := grown.level() > grown.fork_level
+	if not _genome.choose(gene, path):
+		_close_fork(false)
+		return
+	if banked:
+		_eye_gene = gene
+		_eye_flare.arm()
+	_reset_fork_view()
+	var slot := _genome.layout().find(gene)
+	if _hand() != &"":
+		_armed = SLOT_SAMPLE
+	elif slot >= 0:
+		_armed = slot
+	_armed_at = Time.get_ticks_msec()
+	_hovered = SLOT_NONE
+	_build_genome_strip()
+	# The card that had the keyboard has gone; the slot that now reads the way
+	# it took is where the player is.
+	if slot >= 0:
+		_restore_focus(slot)
+	else:
+		_resume_button.grab_focus()
+
+
+## The hint while the cards are up (§8.3).
+func _fork_hint() -> String:
+	var grown := _genome.progression(_fork_gene)
+	if grown == null:
+		return ""
+	var way := _way_reading()
+	if way >= 0 and grown.paths.size() == 2:
+		return HINT_COSTS % [_cost_words(way), _path_title(_way_path(1 - way))]
+	if grown.level() > grown.fork_level:
+		return HINT_WORKS_AS % grown.fork_level
+	return HINT_BOTH_NEXT
+
+
+## What way [param way] costs beside the other, at the level the cards draw --
+## out of the gene's own prices.
+func _cost_words(way: int) -> String:
+	var at := _way_level()
+	var mine := CellBody.levelled_upkeep(_fork_gene, at, _way_path(way))
+	var theirs := CellBody.levelled_upkeep(_fork_gene, at, _way_path(1 - way))
+	if is_equal_approx(mine, theirs):
+		return COST_SAME
+	return COST_MORE if mine > theirs else COST_LESS
+
+
+## **One card**: the slab, opaque; the organ and the beam this way gives,
+## rising out of it; its name, what it is good and bad at, and its price. Armed,
+## a border in the gene's hue and the other card at [constant WAY_OTHER_INK].
+## Hover restyles nothing, as on a chip: the lines below say which way is read.
+func _draw_way(card: Control, way: int) -> void:
+	var path := _way_path(way)
+	if path == &"":
+		return
+	var gene := _fork_gene
+	var tone := Cilia.hue(gene)
+	var armed := _way_armed == way
+	var ink := WAY_OTHER_INK if _way_armed >= 0 and not armed else 1.0
+	var box := _way_box
+	if armed:
+		_way_box_armed.border_color = Color(tone, WAY_EDGE_ARMED_ALPHA)
+		box = _way_box_armed
+	card.draw_style_box(box, Rect2(Vector2.ZERO, card.size))
+	Cilia.draw_tile_organ(card, gene, _copies_of(gene), WAY_ORGAN_AT,
+		Cilia.TILE_STROKE_ALPHA * ink)
+	_draw_way_beam(card, way, tone, ink)
+	var font := card.get_theme_default_font()
+	if font != null:
+		var lines: Array = PATH_LINES.get(path, ["", ""])
+		_draw_centred(card, font, _path_title(path), WAY_TITLE_BASE,
+			WAY_TITLE_SIZE, Color(tone, WAY_TITLE_ALPHA * ink))
+		_draw_centred(card, font, String(lines[0]), WAY_PRO_BASE, WAY_LINE_SIZE,
+			Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+		_draw_centred(card, font, String(lines[1]), WAY_CON_BASE, WAY_LINE_SIZE,
+			Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+		_draw_centred(card, font, _cost_words(way), WAY_COST_BASE,
+			WAY_LINE_SIZE, Color(PALE, WAY_COST_ALPHA * ink))
+	if card.has_focus():
+		card.draw_line(Vector2(FOCUS_INSET, WAY_FOCUS_Y),
+			Vector2(card.size.x - FOCUS_INSET, WAY_FOCUS_Y), FOCUS_TINT,
+			FOCUS_WIDTH, true)
+
+
+## The beam a way gives: still rays for a still way; for a sweeping one each
+## ray's own share of the fan, faintly filled, and the ray with its trail.
+func _draw_way_beam(card: Control, way: int, tone: Color, ink: float) -> void:
+	if way >= _way_fans.size():
+		return
+	var fans: Array = _way_fans[way]
+	if fans.is_empty():
+		return
+	var lead: RayFan = fans[0]
+	if lead.sweep > 0.0 and lead.half_span > 0.0 and lead.count > 0:
+		var width := 2.0 * lead.half_span / float(lead.count)
+		for i in lead.count:
+			var low := -lead.half_span + width * float(i)
+			_draw_way_sector(card, low, low + width,
+				Color(tone, WAY_SECTOR_ALPHA * ink))
+		# Oldest first, so each copy lies under the one after it.
+		for k in range(fans.size() - 1, 0, -1):
+			var trail: RayFan = fans[k]
+			for offset: float in trail.offsets():
+				_draw_way_ray(card, offset, tone, ink * WAY_TRAIL[k - 1])
+	for offset: float in lead.offsets():
+		_draw_way_ray(card, offset, tone, ink)
+
+
+## One ray, out of the organ at [param offset] radians from straight up: faint
+## at the root, bright at a round tip.
+func _draw_way_ray(card: Control, offset: float, tone: Color,
+		ink: float) -> void:
+	var dir := Vector2(sin(offset), -cos(offset))
+	var tip := WAY_RAY_ROOT + dir * WAY_RAY_TO
+	card.draw_polyline_colors(
+		PackedVector2Array([WAY_RAY_ROOT + dir * WAY_RAY_FROM, tip]),
+		PackedColorArray([Color(tone, WAY_RAY_ROOT_ALPHA * ink),
+			Color(tone, WAY_RAY_TIP_ALPHA * ink)]), WAY_RAY_WIDTH, true)
+	card.draw_circle(tip, WAY_RAY_DOT, Color(tone, WAY_RAY_TIP_ALPHA * ink),
+		true, -1.0, true)
+
+
+## A sweeping ray's share of the fan, from [param from] to [param to] radians,
+## over the stretch its ray is drawn along.
+func _draw_way_sector(card: Control, from: float, to: float,
+		tint: Color) -> void:
+	var points := PackedVector2Array()
+	for i in WAY_SECTOR_STEPS + 1:
+		var a := lerpf(from, to, float(i) / float(WAY_SECTOR_STEPS))
+		points.append(WAY_RAY_ROOT + Vector2(sin(a), -cos(a)) * WAY_RAY_TO)
+	for i in range(WAY_SECTOR_STEPS, -1, -1):
+		var a := lerpf(from, to, float(i) / float(WAY_SECTOR_STEPS))
+		points.append(WAY_RAY_ROOT + Vector2(sin(a), -cos(a)) * WAY_RAY_FROM)
+	card.draw_colored_polygon(points, tint)
+
+
+## One line of a card's words, centred across it on [param base].
+func _draw_centred(card: Control, font: Font, text: String, base: float,
+		size: int, tint: Color) -> void:
+	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+		size).x
+	card.draw_string(font, Vector2((card.size.x - width) * 0.5, base), text,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, size, tint)
 
 
 # ---------------------------------------------------------------------------
@@ -5647,14 +7023,34 @@ func _choose_say() -> void:
 	_choose_name.text = String(gene)
 	_choose_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
-	var says := String(EXPLAINS.get(gene, ""))
+	# **The way her mother took, if she took one** (beam-levels.md §8.6): a
+	# daughter inherits the path with the level, and an open fork reads as no
+	# path yet.
+	var says := _explains(gene)
 	_choose_line.text = "" if says.is_empty() else "· " + says
 	var register := CHOOSE_WORN if _choose_worn else CHOOSE_CARRIED
-	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
-		_choose_hint.text = "%s · %s" % [register, HINT_CERTAIN]
+	var odds := HINT_CERTAIN if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
+		else HINT_CHANCE[clampi(int(found[1]), 0, HINT_CHANCE.size() - 1)]
+	# **The level goes in the line, not on the strands** (§8.6): both daughters
+	# carry the same level for every gene they share, so a mark on both strands
+	# would say it twice. `worn · level 7 · one copy · a daughter may not wear
+	# it`; the widest, 400 px, centres clear of both blocks.
+	var level := _choose_level(gene)
+	if level > 0:
+		_choose_hint.text = "%s · %s · %s" % [register, HINT_LEVEL % level, odds]
 	else:
-		_choose_hint.text = "%s · %s" % [register,
-			HINT_CHANCE[clampi(int(found[1]), 0, HINT_CHANCE.size() - 1)]]
+		_choose_hint.text = "%s · %s" % [register, odds]
+
+
+## **The level a daughter's gene will have**, which is her mother's -- the level
+## is the lineage's (beam-levels.md §3) -- or 1 for a gene that drifted in,
+## which the lineage's DNA did not carry, even if her mother's body still
+## wore it. 0 for a gene that does not level.
+func _choose_level(gene: StringName) -> int:
+	if not CellBody.LEVELLED.has(gene):
+		return 0
+	var grown: Progression = _genome.heritable_levels().get(gene, null)
+	return grown.level() if grown != null else 1
 
 
 ## The one organ, beside the sentence that explains it -- the pause screen's own

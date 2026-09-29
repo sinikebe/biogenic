@@ -255,6 +255,16 @@ func set_division(division: Dictionary) -> void:
 			or float(division.get("pinch", 0.0)) > 0.0)
 
 
+## The eye both views draw on the body being watched: budding while a fork
+## waits, flaring as a level arrives (beam-levels.md §8.4-§8.5). Same contract
+## as the run's: empty is an ordinary eye.
+func set_eye(eye: Dictionary) -> void:
+	if _soma != null:
+		_soma.eye = eye
+	if _vision != null:
+		_vision.eye = eye
+
+
 func _process(_delta: float) -> void:
 	if not live:
 		return
@@ -266,6 +276,7 @@ func _process(_delta: float) -> void:
 		push_block(_block, 0)
 	if _run_soma != null:
 		set_division(_run_soma.division)
+		set_eye(_run_soma.eye)
 
 
 # ---------------------------------------------------------------------------

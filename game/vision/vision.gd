@@ -44,6 +44,10 @@ const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+const Afterglow := preload("res://game/mechanics/afterglow.gd")
+## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
+## the field's own sub-step, in radians.
+const GLOW_SPACING := 0.034906585
 ## **For one constant, and never for a session.** TRACK_GAP is the length of
 ## silence after which a friend's next frame lands as a step; the view decides
 ## that for itself and must agree with the session on the number. It still
@@ -375,6 +379,10 @@ var division := {}
 ## **The body held open to place a gene**, written once a frame by the run; same
 ## contract as soma.gd's. Empty is an ordinary body. dna-body.md §8.
 var offer := {}
+## **The eye budding or flaring**, written once a frame by the run; same
+## contract as soma.gd's. Drawn on the player's own cell and never on another
+## body. Empty is an ordinary eye. beam-levels.md §8.4-§8.5.
+var eye := {}
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -428,6 +436,8 @@ var _peer_twist := 0.0
 var _kicks: Array[Array] = []
 ## [[world position, world direction, strength, age], ...]
 var _hits: Array[Array] = []
+## A sweep's hits, held and fading (beam-levels.md §4.3).
+var _beam_glow := _new_glow()
 ## [[world position, age], ...] -- motes the field has already recycled.
 var _ghosts: Array[Array] = []
 ## [[world position, radius, age, gene hue], ...] -- cells eaten since, held so
@@ -604,6 +614,7 @@ func _process(delta: float) -> void:
 	_age(_ghosts, 1, delta, GHOST_LIFE)
 	_age(_meals, 2, delta, GHOST_LIFE)
 	_age(_wakes, 3, delta, WAKE_LIFE)
+	_catch_beam_hits(delta)
 
 	if _water.size.x > 1.0:
 		_view = _water.size
@@ -1531,12 +1542,38 @@ func _draw_beams(a: float) -> void:
 		_world.draw_polyline_colors(PackedVector2Array([root, tip]),
 			PackedColorArray([Color(tone, (0.34 if found else 0.10) * a), head]),
 			(1.8 if found else 1.2) / ZOOM, true)
-		if not found:
+		if not found or _food_node.beam_hold > 0.0:
 			continue
 		# The hit. A filled point with a halo, because it is the one thing in
 		# this view the blind cell can also see.
 		_world.draw_circle(tip, 9.0, Color(tone, 0.16 * a), true, -1.0, true)
 		_world.draw_circle(tip, 3.4, Color(tone, 0.92 * a), true, -1.0, true)
+	# **A sweep's hits are held** where the body was when the ray crossed it,
+	# fading until the ray comes back (beam-levels.md §4.3) -- the same marks
+	# point of view holds, in the water's own coordinates.
+	var life := _food_node.beam_hold
+	for i in _beam_glow.count():
+		var fade := _beam_glow.strength(i, life) * a
+		_world.draw_circle(_beam_glow.point(i), 9.0, Color(tone, 0.16 * fade),
+			true, -1.0, true)
+		_world.draw_circle(_beam_glow.point(i), 3.4, Color(tone, 0.92 * fade),
+			true, -1.0, true)
+
+
+## **A sweep's hits, caught as they happen**, for [method _draw_beams] to hold.
+## A fan that does not sweep holds nothing: its rays never leave.
+func _catch_beam_hits(delta: float) -> void:
+	if _cell == null or _food_node == null:
+		return
+	var life := _food_node.beam_hold
+	_beam_glow.step(delta, life, _cell.position)
+	if life <= 0.0:
+		return
+	for k in _food_node.beams.size():
+		var beam: Array = _food_node.beams[k]
+		if bool(beam[2]):
+			_beam_glow.add(_cell.position + _ray(float(beam[0])) * float(beam[1]),
+				k, float(beam[0]))
 
 
 ## **The `ampulla`.** Every wavefront currently in flight, as a half-ring
@@ -1700,7 +1737,8 @@ func _draw_cell(a: float) -> void:
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
-		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
+		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
+		0.0, false, eye)
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)
@@ -2104,3 +2142,11 @@ func _walk(node: Node) -> void:
 		_bus = node as SignalBus
 	for child in node.get_children():
 		_walk(child)
+
+
+## A sweep's held marks, one per [constant GLOW_SPACING] of each ray's travel
+## (beam-levels.md §4.3): the same trail at any frame rate.
+static func _new_glow() -> Afterglow:
+	var glow := Afterglow.new()
+	glow.spacing = GLOW_SPACING
+	return glow

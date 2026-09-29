@@ -623,6 +623,17 @@ const SHADOW_MIN_RATIO := 0.8
 ## anything, which is what the number in §6 actually means.
 const SHADOW_FULL_RATIO := 1.05
 
+# --- The beam (`ocellus`, beam-levels.md) -----------------------------------
+
+## The widest step a sweeping ray takes between two casts inside the arc it
+## crossed this frame: 2 degrees, in radians. At a level-10 sweep a ray moves
+## 3.9 degrees a frame at 60 fps and 7.8 at 30, so this is two casts a frame on
+## a fast phone and four on a slow one, and the slow one misses nothing extra.
+const BEAM_SUBSTEP := 0.034906585
+## A hair of angle added to the fan's reach before a body is skipped for being
+## outside it, so a body exactly at the edge is still cast at.
+const BEAM_SLACK := 0.001
+
 # --- The ping (`ampulla`) ---------------------------------------------------
 ## How fast the pulse travels, in world units per second -- **out and back**.
 ## This is the whole reason the ping reads as a sweep rather than as a chord:
@@ -960,10 +971,30 @@ var shadow_bearing := 0.0
 ## cell's beams point along, and how far they reach.
 var beam_bearings := PackedFloat32Array()
 var beam_range := 0.0
+## **What arc each sweeping beam crossed this frame**, as `[low, high]` pairs of
+## body-relative bearings index-matched to [member beam_bearings], written by
+## the run; empty for a fan that does not sweep. A sweeping beam is tested
+## across its whole arc (beam-levels.md §4.3), so a slow phone does not see
+## less than a fast one.
+var beam_arcs := PackedFloat32Array()
+## **Where the fan points and how far either side it reaches**, written by the
+## run, so a body nowhere near it is skipped before any ray is cast (§4.4).
+## A negative half-width skips nothing, which is what a caller that never wrote
+## it gets.
+var beam_fan_mid := 0.0
+var beam_fan_half := -1.0
+## **How long a sweep's hit stays on screen**, the time the sweep takes to come
+## back; 0 for a fan that does not sweep. Written by the run for the two views,
+## which hold and fade each hit over it. The field itself holds nothing.
+var beam_hold := 0.0
 ## Answered here, index-matched to [member beam_bearings]:
-## `[bearing, distance, hit]` -- `distance` is the full reach when nothing was
-## hit and `hit` is false then.
+## `[bearing, distance, hit, body]` -- `distance` is the full reach when nothing
+## was hit and `hit` is false then, and `body` is the slot of the body it
+## stopped on, -1 for none. A sweeping beam's bearing is where in its arc it hit.
 var beams: Array = []
+## **Every body a beam touched this frame**, by slot, once each: the beam's
+## experience is counted off this (beam-levels.md §2).
+var beam_touched := PackedInt32Array()
 ## `chemocyte`. How far this cell's chemoreceptors reach, written once a frame
 ## by the run. 0 is a cell with no nose, and a cell with no nose smells nothing
 ## edible at all.
@@ -1187,6 +1218,7 @@ func _fresh_senses() -> void:
 	dread_level = 0.0
 	threat = 0.0
 	beams.clear()
+	beam_touched.clear()
 	touch_level = 0.0
 	taste_level = 0.0
 	pings.clear()
@@ -2854,38 +2886,87 @@ func _step_sense() -> void:
 	dread_level = minf(dread, 1.0) * DREAD_CAP
 
 
-## **The beams.** One ray per ocellus, cast against every body in the water:
-## the nearest surface along the ray, or nothing. Sixteen ray-circle tests a
-## frame at the very worst, which is four bodies by four beams.
+## **The beams.** Each ray cast against every body near it: the nearest surface
+## along the ray, or nothing.
+##
+## **Bodies nowhere near the fan are skipped first**, by one range test and one
+## angle test against [member beam_fan_mid] and [member beam_fan_half]. Past the
+## fork there can be twenty rays, and twenty rays against 34 bodies is 680 ray
+## tests a frame (three-senses.md §3.4); most of the water is behind or beside a
+## 100-degree fan. A body that passes is tested exactly as it always was, so the
+## answer does not change.
+##
+## **A sweeping ray is cast across the whole arc it crossed this frame**, in
+## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
+## nearest hit in that arc (beam-levels.md §4.3).
 ##
 ## Deliberately blind to the motes: they are inert dust with no chemistry and no
 ## genome, and a beam that stopped on grit would spend the one clear signal the
 ## player owns on something that does not matter.
 func _step_beams() -> void:
 	beams.clear()
+	beam_touched.clear()
 	if beam_range <= 0.0 or beam_bearings.is_empty() or _cell == null:
 		return
 	var origin := _cell.position
-	for bearing: float in beam_bearings:
-		var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-		var best := beam_range
-		var found := false
-		for i in _cells.size():
-			var b := _cells[i]
-			if not b.seeded:
+	var near: Array[int] = []
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		var to := b.pos - origin
+		var d := to.length()
+		if d - b.radius > beam_range:
+			continue
+		if beam_fan_half >= 0.0 and d > b.radius:
+			var at := atan2(to.dot(_cell.starboard()), to.dot(_cell.forward()))
+			var reach := asin(clampf(b.radius / d, 0.0, 1.0))
+			if absf(angle_difference(beam_fan_mid, at)) \
+					> beam_fan_half + reach + BEAM_SLACK:
 				continue
-			var to := b.pos - origin
-			var along := to.dot(dir)
-			if along <= 0.0 or along - b.radius > best:
-				continue
-			var perp := (to - dir * along).length()
-			if perp >= b.radius:
-				continue
-			var hit := along - sqrt(maxf(b.radius * b.radius - perp * perp, 0.0))
-			if hit >= 0.0 and hit < best:
-				best = hit
-				found = true
-		beams.append([bearing, best, found])
+		near.append(i)
+	var sweeping := beam_arcs.size() == beam_bearings.size() * 2
+	for k in beam_bearings.size():
+		var bearing := beam_bearings[k]
+		if not sweeping:
+			beams.append(_cast_beam(origin, bearing, near))
+			continue
+		var low := beam_arcs[2 * k]
+		var span := angle_difference(low, beam_arcs[2 * k + 1])
+		var steps := maxi(int(ceilf(absf(span) / BEAM_SUBSTEP)), 1)
+		var best: Array = [bearing, beam_range, false, -1]
+		for s in steps + 1:
+			var ray := _cast_beam(origin, low + span * float(s) / float(steps), near)
+			if bool(ray[2]) and (not bool(best[2]) or float(ray[1]) < float(best[1])):
+				best = ray
+		beams.append(best)
+
+
+## **One ray**: the nearest surface of the bodies in [param near] along
+## [param bearing], as `[bearing, distance, hit, body]`. Whatever it stops on is
+## counted as touched.
+func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
+	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
+	var best := beam_range
+	var found := false
+	var body := -1
+	for i: int in near:
+		var b := _cells[i]
+		var to := b.pos - origin
+		var along := to.dot(dir)
+		if along <= 0.0 or along - b.radius > best:
+			continue
+		var perp := (to - dir * along).length()
+		if perp >= b.radius:
+			continue
+		var hit := along - sqrt(maxf(b.radius * b.radius - perp * perp, 0.0))
+		if hit >= 0.0 and hit < best:
+			best = hit
+			found = true
+			body = i
+	if found and not beam_touched.has(body):
+		beam_touched.append(body)
+	return [bearing, best, found, body]
 
 
 ## **The ping.** `ampulla`: a pulse on its own clock, and a bearing for every

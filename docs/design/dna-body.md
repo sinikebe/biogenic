@@ -30,14 +30,16 @@ them rendered three times differs by 0 pixels.
    slot beside each part of it.** Which part is read off *where the slot is*.
    The compass darts are gone from this screen. §2.
 2. **A slot is a piece of DNA**: a three-lobe helix whose rungs are the copies,
-   the plain word, and the level. §3.
-3. **The level is three pips** — filled for a copy the body wears, a ring for a
-   copy only the DNA carries, a faint dot for room to grow. Not a digit. §3.1.
+   the plain word, and the copies again as pips. §3.
+3. **The copies are three pips** — filled for a copy the body wears, a ring for
+   a copy only the DNA carries, a faint dot for room to grow. Not a digit. §3.1.
+   A gene that earns levels shows its level as a number in the helix's third
+   lobe, apart from the pips (`beam-levels.md` §8.1).
 4. **The drawing is the body; the slots are the DNA.** Where the two disagree
    at an arc, the body names the organ it is actually wearing there. §4.
 5. **Slots the body has not earned are drawn faint and take nothing.** §3.2.
 6. **Waiting genes sit in a tray above the body, soonest to lapse first, each
-   with its level.** Tap one to take it in hand; place it with the same two
+   with its copies.** Tap one to take it in hand; place it with the same two
    taps as before, or drag it onto an empty slot. §5.
 7. **Arrows go where they point.** `Shift` + arrow moves a gene to the slot
    that way; Tab goes round clockwise from the nose. §6.
@@ -121,7 +123,7 @@ Inside its 96 x 56 control:
 | rungs | `draw_rungs` at the middle lens, unchanged | full = worn, floating = carried, one per copy |
 | selection | `draw_lens` at `LENS_SELECTED + 0.08`, backbone at `BACKBONE_LIT` | unchanged grammar |
 | word | 14 px, baseline 50, `LABEL_TINT` (loud when selected, `WORD_UNEXPRESSED` when not worn) | the plain word, never the Greek |
-| level | three pips after the word, §3.1 | |
+| copies | three pips after the word, §3.1 | |
 | focus | underline, inset 14, y 55, `FOCUS_TINT` | still not a box |
 
 | state | what changes |
@@ -138,9 +140,11 @@ The first build previewed the incoming gene over an occupied slot too.
 Rendered, `eat` vanished from the screen while the hint under it still read
 *the mouth · a daughter always wears it*. The occupant stays.
 
-### 3.1 The level is three pips
+### 3.1 The copies are three pips
 
 `PIP_R 3.4`, pitch 10, 7 px after the word, vertically at the word's x-height.
+A gene's *level* is a different number, drawn inside the helix
+(`beam-levels.md` §8.1).
 
 | pip | means |
 | --- | --- |
@@ -598,8 +602,8 @@ Each is a switch rather than a rewrite; the line under the table says where.
 
 | # | Question | Options | What it means |
 | --- | --- | --- | --- |
-| 1 | How does a gene show its level? | **three dots, filled up to the level ✓ recommended** · a number · both | You see `●●○` beside `eat`: two of three, and room for one more. A hollow dot means your daughters carry it but you do not. A number says `2` but not *out of three*, and cannot tell those apart |
-| 2 | What do the words under the body call it? | **keep `two copies` ✓ recommended** · `level two` | The dots are the level at a glance; the line explains why it matters — more copies, more likely a daughter wears it. `level two` matches your word but loses the reason |
+| 1 | How does a gene show its copies? | **three dots, filled up to its copies ✓ recommended** · a number · both | You see `●●○` beside `eat`: two of three, and room for one more. A hollow dot means your daughters carry it but you do not. A number says `2` but not *out of three*, and cannot tell those apart |
+| 2 | What do the words under the body call it? | **keep `two copies` ✓ recommended** · `level two` | The dots are the copies at a glance; the line explains why it matters — more copies, more likely a daughter wears it. `level two` matches your word but loses the reason |
 | 3 | How do you place a gene without pausing? | **hold your body, slide it where it should grow ✓ recommended** · a button that appears in a corner · double-tap your body | Recommended: nothing new on screen, the direction you push is the side it grows on, and a quick tap still dashes. A corner button is one more control in the water; a double-tap would steal the dash |
 | 4 | What does the gift's line say? | **`a sense grew · hold your body to place it` ✓ recommended** · keep `back to place it` | The one sentence the game already shows when a free gene arrives, pointing at the new shortcut instead of the pause screen |
 | 5 | How long must you hold your body? | **0.35 s ✓ recommended** · 0.5 s | Shorter than this and a quick tap stops being a dash. Longer is safer and slower. Only playing it will tell |

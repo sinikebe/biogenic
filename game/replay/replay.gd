@@ -27,6 +27,7 @@ extends Node
 const Panes := preload("res://game/replay/panes.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
@@ -40,6 +41,8 @@ const Cilia := preload("res://game/vision/cilia.gd")
 ## replay from the one the player just watched. Safe to preload because
 ## `normal_mode.gd` reaches this file by path and loads it on the press.
 const Run := preload("res://game/normal/normal_mode.gd")
+## The eye's flare, the run's own envelope (beam-levels.md §8.5).
+const Swell := preload("res://game/mechanics/swell.gd")
 
 ## Where the transport sits, which is the band the panes gave up. Never over
 ## them: the membrane's band is 104px deep from every edge, and a bar floating
@@ -97,6 +100,14 @@ var _sensation_at := 0
 var _mark_at := 0
 var _delta_at := 0
 var _daughters: Array = []
+## **The eye, as the run drew it** (beam-levels.md §8.4-§8.5). It buds off the
+## levels each delta restores, and it flares when a level it is handed rises --
+## armed there, and cued by the next recorded beat, exactly as the run does it.
+## **Never on a seek**: a rewind forgets every level it has seen, so the first
+## pass after one only learns them.
+var _eye_flare := Swell.new(Run.EYE_FLARE_RISE, 0.0, Run.EYE_FLARE_FALL)
+var _eye_gene: StringName = &""
+var _eye_levels := {}
 var _view := Vector2(1280.0, 720.0)
 
 
@@ -119,6 +130,8 @@ func _process(delta: float) -> void:
 		return
 	if _playing:
 		_at += delta * SPEEDS[_speed]
+		# On the replay's clock, so a slowed replay flares slowly too.
+		_eye_flare.step(delta * SPEEDS[_speed])
 		var span := recorder.span()
 		if _at >= span:
 			# **Looping, not stopping.** The mistake is usually three seconds
@@ -173,6 +186,9 @@ func _write_state() -> void:
 		# It still costs no ring floats: a delta is a dictionary.
 		_food.ping_bearing = _ping_bearing()
 		_food.ping_through = _cell.ping_through() if _cell != null else 0.0
+		# **How long a sweep's hits are held**, off the restored level and path
+		# (beam-levels.md §7), so both panes fade them as the run did.
+		_food.beam_hold = _beam_hold()
 		# **Before the world pane draws**, which is what `process_priority`
 		# -10 buys: `vision.gd` asks the field who is hunting and draws the
 		# three predator rings round the answer. Rounded rather than cast --
@@ -186,6 +202,8 @@ func _write_state() -> void:
 	if _genome != null:
 		_genome.held_remaining = _frame[RecorderNode.AT_HELD]
 	_panes.set_division(_read_division())
+	# The same question the run asks of its genome, asked of the one restored.
+	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
 
 
@@ -199,6 +217,16 @@ func _write_state() -> void:
 ## because a cell with no `ampulla` has no reach and no pulse in flight.
 func _ping_bearing() -> float:
 	return Cilia.bearing_of(_genome, &"ampulla")
+
+
+## The revisit time of the beam being watched, 0 for a fan that does not sweep
+## -- the same number `normal_mode.gd` hands the field live.
+func _beam_hold() -> float:
+	if _cell == null:
+		return 0.0
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
+	return RayFan.revisit_of(int(shape[0]), deg_to_rad(float(shape[1])),
+		deg_to_rad(float(shape[2])))
 
 
 func _read_beams() -> Array:
@@ -302,6 +330,7 @@ func _apply_deltas() -> void:
 					# worn on. docs/design/replay.md §4.1.
 					_genome.express(state["dna"], state["order"],
 						state["body"], state["worn"])
+					_genome.restore_levels(state.get("levels", {}))
 					_genome.bonus_slots = int(state["bonus"])
 					_genome.held_sample = state["sample"]
 			RecorderNode.Delta.BODY:
@@ -311,6 +340,21 @@ func _apply_deltas() -> void:
 				_daughters = row[3]
 			_:
 				pass
+	_watch_levels()
+
+
+## **A level the replay is handed, rising, arms the flare** -- the run's rule,
+## on the recording's levels. A level first seen since a rewind is only learned:
+## the pass that restores the window's opening state must not flare for it.
+func _watch_levels() -> void:
+	if _genome == null:
+		return
+	for gene: StringName in _genome.levels():
+		var at: int = _genome.progression(gene).level()
+		if _eye_levels.has(gene) and at > int(_eye_levels[gene]):
+			_eye_gene = gene
+			_eye_flare.arm()
+		_eye_levels[gene] = at
 
 
 ## Sensations back on the replay's own bus, and ground truth straight into the
@@ -322,6 +366,9 @@ func _fire_events() -> void:
 		var row: Array = sens[_sensation_at]
 		_sensation_at += 1
 		_panes.feel(row[1], {"bearing": row[2], "strength": row[3]})
+		# The recorded heartbeat is the flare's cue, as the live one was.
+		if row[1] == &"beat":
+			_eye_flare.cue()
 	var marks: Array = recorder.marks()
 	while _mark_at < marks.size() and float(marks[_mark_at][0]) <= t:
 		var row: Array = marks[_mark_at]
@@ -345,6 +392,10 @@ func _rewind() -> void:
 	_mark_at = 0
 	_delta_at = 0
 	_daughters = []
+	# A seek is not a level-up: the flare goes, and the levels are learned
+	# afresh from the window's first delta.
+	_eye_flare.clear()
+	_eye_levels = {}
 
 
 # ---------------------------------------------------------------------------

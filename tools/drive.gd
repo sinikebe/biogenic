@@ -240,6 +240,24 @@ extends Node
 ##                           1 starboard flank, 2 astern, 3 and 4 the forward
 ##                           diagonals, 5 and 6 the rear ones. That is how a
 ##                           beam gets aimed.
+##   --level=<g:level[:path],...>
+##                           pose a levelled gene's level and the path it took
+##                           at its fork (docs/design/beam-levels.md), e.g.
+##                           ocellus:8:sweep or ocellus:6:extend. Its experience
+##                           is set to where that level starts; a path needs a
+##                           level at or past the fork. Applied after --genome=,
+##                           --dna= and --body=, so the gene has to be in one.
+##                           Levels are earned by use, and level 8 is most of an
+##                           hour of it, so this is the only way to photograph one
+##   --earn=<seconds>:<gene>:<xp>
+##                           hand a levelled gene that much experience at that
+##                           time, **through the run's own door** -- `_earn()`,
+##                           which the beam's tally calls -- so a level-up it
+##                           causes is shown exactly as an earned one is: the eye
+##                           flares on the next beat, and one that opens the fork
+##                           has the pause target breathe (beam-levels.md §8.4-
+##                           §8.5). `--level=` sets a level and shows nothing,
+##                           because nothing rose. Repeatable
 ##   --check-seeding=<n>     reseed the field n times and print what §1.3's
 ##                           distribution actually produces, including whether
 ##                           the drifter floor ever fails. Quits when done.
@@ -608,6 +626,9 @@ var _sister_radius := 0.0
 var _genome_spec := ""
 var _dna_spec := ""
 var _body_spec := ""
+var _level_spec := ""
+## --earn=: [[seconds, gene, xp], ...], consumed as the clock passes each one.
+var _earns: Array = []
 var _check_seeding := 0
 ## [[index, distance, bearing_deg, radius, {gene: tier}], ...] from --cell=.
 var _posed: Array = []
@@ -947,6 +968,13 @@ func _ready() -> void:
 			_genome_spec = text.trim_prefix("--genome=")
 		elif text.begins_with("--dna="):
 			_dna_spec = text.trim_prefix("--dna=")
+		elif text.begins_with("--level="):
+			_level_spec = text.trim_prefix("--level=")
+		elif text.begins_with("--earn="):
+			var earn := text.trim_prefix("--earn=").split(":")
+			if earn.size() == 3:
+				_earns.append([float(earn[0]), StringName(earn[1]),
+					float(earn[2])])
 		elif text.begins_with("--body="):
 			_body_spec = text.trim_prefix("--body=")
 		elif text.begins_with("--check-seeding="):
@@ -1144,6 +1172,12 @@ func _ready() -> void:
 		_force_dna(_dna_spec)
 	if _body_spec != "" and _genome != null:
 		_force_body(_body_spec)
+	# --dna= and --body= write the registers behind the genome's back, so its
+	# levels are put back in step with them before anything reads a level.
+	if (_dna_spec != "" or _body_spec != "") and _genome != null:
+		_genome.call("_tend_levels")
+	if _level_spec != "" and _genome != null:
+		_force_levels(_level_spec)
 	if _sample != &"" and _genome != null:
 		_genome.held_sample = &""
 		for one: Array in _samples:
@@ -1858,6 +1892,14 @@ func _process(delta: float) -> void:
 			_send_touch(_touches[i][1])
 			_touches.remove_at(i)
 
+	for i in range(_earns.size() - 1, -1, -1):
+		if _clock >= float(_earns[i][0]) and _run != null \
+				and _run.has_method(&"_earn"):
+			_run.call(&"_earn", _earns[i][1], _earns[i][2])
+			print("[drive] %5.2f  earn %s %.1f" % [_clock, _earns[i][1],
+				float(_earns[i][2])])
+			_earns.remove_at(i)
+
 	for i in range(_hovers.size() - 1, -1, -1):
 		if _clock >= float(_hovers[i][0]):
 			_send_hover(_hovers[i][1])
@@ -1961,6 +2003,12 @@ func _fingerprint_state() -> Array:
 		out.append(cell.get(key) if cell != null else null)
 	if _genome != null:
 		out.append_array([_genome.tiers(), _genome.dna(), _genome.layout()])
+		# The levels, experience and all: a beam that earned one point more is
+		# a different run. Only when there are any, so a run with no levelled
+		# gene hashes exactly as it did before levels existed -- the identity
+		# gate (shared-pond.md §5) compares against builds that never had them.
+		if not _genome.level_state().is_empty():
+			out.append(_genome.level_state())
 		# Every waiting gene at full width: its copies and its own clock, not
 		# the trace's one decimal.
 		for gene: StringName in _genome.waiting():
@@ -2384,6 +2432,29 @@ func _step_trace(delta: float) -> void:
 		_metabolism.hunger if _metabolism != null else 0.0, _field_meals,
 		100.0 * _dread_seconds / maxf(_run_seconds, 0.001),
 		_dread_area / maxf(_run_seconds, 0.001)])
+	# **The levels** (beam-levels.md): what each levelled gene works at, what it
+	# has earned, and how many rays and bodies the beam has this frame -- the
+	# line the run that sets `BEAM_XP_STEP` is read off.
+	if _genome != null:
+		for gene: StringName in _genome.levels():
+			var grown: RefCounted = _genome.levels()[gene]
+			print("        level %s %d (works at %d, path %s)  xp %.1f  next in %.1f  rays %d  touched %d" % [
+				gene, int(grown.call("level")), _genome.level_of(gene),
+				_genome.path_of(gene), float(grown.get("xp")),
+				float(grown.call("to_next")), _food.beams.size(),
+				_food.beam_touched.size()])
+		# **What the levels look like** (beam-levels.md §8.4-§8.5): the eye the
+		# views were handed, how far through its flare it is, and the pause
+		# target's one breath. A flare is a second long; a frame shows one
+		# instant of it and this shows when it began.
+		if not _genome.levels().is_empty() and _run != null:
+			var flare: Object = _run.get("_eye_flare")
+			var breath: Object = _run.get("_pause_breath")
+			var soma := _run.get_node_or_null("Soma")
+			print("        eye %s  flare %.2f  breath %.2f" % [
+				soma.get("eye") if soma != null else {},
+				float(flare.call("value")) if flare != null else 0.0,
+				float(breath.call("value")) if breath != null else 0.0])
 	for i in _food.points().size():
 		print("        cell %d  %s" % [i, _field_text(i, cell)])
 
@@ -2411,7 +2482,18 @@ func _step_rects() -> void:
 		"Figure": base + "/Genome/Figure",
 		"Explain": base + "/Genome/Explain",
 		"Hint": base + "/Genome/Hint",
+		# The row's three parts (beam-levels.md §8.2): the level and its gauge
+		# show only for a gene that levels, and a hidden one prints its rect
+		# all the same -- read `visible` beside it.
+		"Level": base + "/Genome/Hint/Level",
+		"Gauge": base + "/Genome/Hint/Gauge",
+		"Text": base + "/Genome/Hint/Text",
 		"Act": base + "/Genome/Act",
+		# **The fork view and its two cards** (§8.3, §8.7): the one surface
+		# that takes the figure's place, so its fit is a measurement too.
+		"Fork": base + "/Genome/Fork",
+		"Way0": base + "/Genome/Fork/Way0",
+		"Way1": base + "/Genome/Fork/Way1",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -2419,11 +2501,13 @@ func _step_rects() -> void:
 			print("[rect]  %-9s absent" % name)
 			continue
 		var r: Rect2 = node.get_global_rect()
-		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)" % [
+		print("[rect]  %-9s x %7.1f .. %7.1f (w %6.1f)   y %6.1f .. %6.1f (h %5.1f)%s" % [
 			name, r.position.x, r.end.x, r.size.x,
-			r.position.y, r.end.y, r.size.y])
-	# Every chip on the figure, live or not, and every waiting gene: the touch
-	# targets themselves, which is what the 48 px rule is about.
+			r.position.y, r.end.y, r.size.y,
+			"" if (node as CanvasItem).is_visible_in_tree() else "  hidden"])
+	# Every chip on the figure, live or not, and every waiting gene -- and the
+	# fork's chip, which stands after them in the tray (`Fork_<gene>`): the
+	# touch targets themselves, which is what the 48 px rule is about.
 	for layer: String in ["/Genome/Figure/Slots", "/Genome/Waiting"]:
 		var holder := _run.get_node_or_null(base + layer)
 		if holder == null:
@@ -3182,6 +3266,30 @@ func _force_body(spec: String) -> void:
 	_genome.set("_body_slots", seats)
 	print("[drive] body forced to %s at %s (dna stays %s)" % [
 		_genome_text(tiers), seats, _genome_text(_genome.dna())])
+
+
+## **A level and a path, posed** (beam-levels.md): `gene:level[:path]`. The
+## experience is set to where that level starts, and the path is taken the way
+## the pause screen takes it, so a path before the fork is refused here exactly
+## as it would be there.
+func _force_levels(spec: String) -> void:
+	for pair in spec.split(",", false):
+		var bits := str(pair).split(":")
+		var gene := StringName(bits[0].strip_edges())
+		var grown: RefCounted = _genome.progression(gene)
+		if grown == null or bits.size() < 2:
+			print("[drive] --level=: %s has no level to pose" % pair)
+			continue
+		var at := maxi(int(bits[1]), 1)
+		grown.set("xp", grown.call("xp_at", at, float(grown.get("step"))))
+		if bits.size() >= 3 and bits[2].strip_edges() != "":
+			var path := StringName(bits[2].strip_edges())
+			if not bool(_genome.choose(gene, path)):
+				print("[drive] --level=: %s refused path %s at level %d" % [
+					gene, path, at])
+		print("[drive] %s posed at level %d (works at %d), path %s, upkeep %.2f" % [
+			gene, int(grown.call("level")), _genome.level_of(gene),
+			_genome.path_of(gene), _genome.upkeep()])
 
 
 ## `cytostome:3,cirrus:2` into `[{gene: tier}, layout]`. `gene:tier` as before,
