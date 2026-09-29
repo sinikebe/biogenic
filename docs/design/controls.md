@@ -65,6 +65,14 @@ is the whole explanation and costs no string (§5).
 | **pixels at rest** | **none** | 27,648 canvas px², 3.00% / 2.40% | 36,864 canvas px², 4.00% / 3.20% |
 | **what it is for** | the game as designed: the dash costs no pixel and no second finger | one thumb does everything, the other only dashes | three verbs fully independent — the only scheme that can turn without swimming |
 
+> **Thrust costs energy now, 2026-09-29** (`energy.md`). With `axoneme`, a
+> finger down under `anywhere` and a thumb on the stick under `stick` push, as
+> this table says — so they also pay for it. Measured at `axoneme 1`, steering
+> flat out by touch burns ×3.00 of a resting body against ×2.28 on the keyboard
+> or under `pads`, and a thumb only resting on the glass under `anywhere` burns
+> ×2.17 against ×1.51 with nothing down. `pads` is still the scheme that can
+> turn without swimming, and now also without paying to swim.
+
 **Keys are unchanged under every scheme.** `ui_left`/`A`, `ui_right`/`D`,
 `ui_up`/`W`, `Space`, `V`, `Esc`. The scheme is a *touch* choice; a desktop
 player who picks `pads` gets the pads **and** the keys, and there is no platform

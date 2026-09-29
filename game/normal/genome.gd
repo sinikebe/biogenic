@@ -96,7 +96,8 @@ const GENE_ORDER: Array[StringName] = [
 const BORN := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 
 ## The price of power, paid in the one channel the game already reads -- the
-## beat. One tier-3 gene starves in 420 / 1.36 = 309s. §3.2, and the owner has
+## beat. At rest, one tier-3 gene starves in 420 / 1.36 = 309s; moving is paid on
+## top (docs/design/energy.md). §3.2, and the owner has
 ## settled that this ships at 0.18 to be judged by playing (§9.3).
 const UPKEEP_PER_TIER := 0.18
 

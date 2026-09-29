@@ -784,6 +784,15 @@ func _process(delta: float) -> void:
 		mini(_cell.extra(&"vacuole"), CellBody.STORE_BY_TIER.size() - 1)]
 	_metabolism.photosynthesis = CellBody.SUN_BY_TIER[
 		mini(_cell.extra(&"plastid"), CellBody.SUN_BY_TIER.size() - 1)]
+	# `crista`: the same efficiency upkeep already carries, for what moving
+	# costs. Then what moving has cost since this was last paid -- every stroke,
+	# a held push and every radian of steering (docs/design/energy.md) -- after
+	# the tank and the burn it is measured against. The cell steps after this
+	# node, so it is the step before this one, and after a still moment it is
+	# whatever the body did in it, paid once.
+	_metabolism.burn = CellBody.BURN_BY_TIER[
+		mini(_cell.extra(&"crista"), CellBody.BURN_BY_TIER.size() - 1)]
+	_metabolism.spend(_cell.take_effort())
 	# What the water has to be told about this body before it answers. All
 	# scalars about the cell's own anatomy; the field turns them into bearings.
 	_food.touch_range = CellBody.TOUCH_RANGE_BY_TIER[

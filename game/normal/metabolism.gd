@@ -41,11 +41,18 @@ const FULL_AMPLITUDE := 1.0
 ## floor rule has no exceptions, and only the period is allowed past it.
 const STARVED_AMPLITUDE := 0.35
 
-## Seconds of swimming from fed to starved. Seven minutes, so with competent
-## foraging -- a meal every 60 to 90 seconds -- the bar is usually somewhere in
-## the middle and the beat is usually saying something.
+## Seconds from fed to starved **for a body at rest**. Seven minutes, so with
+## competent foraging -- a meal every 60 to 90 seconds -- the bar is usually
+## somewhere in the middle and the beat is usually saying something.
 ##
-## **Move this first if the pace is wrong.** docs/design/food-and-predators.md §3.3.
+## **A living cell is never at rest.** Since 2026-09-29 every stroke and every
+## turn is paid on top ([method spend], docs/design/energy.md): the owner asked
+## for starving to come sooner "not necessarily by reducing the storage", so the
+## tank stayed and the spending grew. A born cell that only drifts is starving
+## in 4:39 rather than 7:00, and one that steers a third of the time in 3:56.
+##
+## **Move cell.gd's `STROKE_COST` and `TURN_COST` first if the pace is wrong;
+## this one second.** docs/design/food-and-predators.md §3.3.
 const HUNGER_SECONDS := 420.0
 ## What a meal your own size is worth. Near half a bar on purpose: a single meal
 ## is felt and two are needed.
@@ -65,10 +72,11 @@ const STARVE_GRACE := 40.0
 var hunger := 0.0
 ## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
 ## is tier 1 across the board, and higher for every tier above that. **The
-## price of power, and it is paid in the channel the game already reads** -- a
-## cell with one tier-3 gene starves in 420 / 1.36 = 309s, and that arrives as a
-## beat that will not settle rather than as a number on a screen. genome.gd
-## owns what it comes to; docs/design/genes-and-cilia.md §3.2.
+## price of power, and it is paid in the channel the game already reads** -- at
+## rest a cell with one tier-3 gene starves in 420 / 1.36 = 309s, sooner once it
+## moves ([method spend]), and that arrives as a beat that will not settle rather
+## than as a number on a screen. genome.gd owns what it comes to;
+## docs/design/genes-and-cilia.md §3.2.
 var upkeep := 1.0
 ## `vacuole` / store: how much bigger this cell's reserve is than a born
 ## cell's. Written once a frame by the run, like [member upkeep]. A larger tank
@@ -79,6 +87,11 @@ var reserve := 1.0
 ## the cell is making it. Subtracted from the rate rather than added to feeding,
 ## so it reads on the beat as "this body runs cheap" and never as a meal.
 var photosynthesis := 0.0
+## `crista` / burn: what effort costs, as a multiplier on [method spend].
+## Written once a frame by the run, like [member reserve]. [member upkeep] has
+## the same multiplier folded in already (genome.gd's `upkeep_of`); this is the
+## one mitochondrion paying for what the body *does* as well as for being alive.
+var burn := 1.0
 ## Seconds held at full hunger. Public so the dev harness can photograph the end
 ## of the grace without waiting forty seconds for it.
 var starve_seconds := 0.0
@@ -110,12 +123,28 @@ func feed(amount: float) -> void:
 	set_hunger(hunger - amount)
 
 
+## **Energy the body spent doing something**, in seconds of rest: how long a
+## resting cell of upkeep 1 takes to burn as much. What moving costs is paid
+## here (cell.gd's `take_effort`, docs/design/energy.md); being alive is paid
+## in [method _process], at [member upkeep].
+##
+## Scaled like everything else on the bar: [member burn] makes it cheaper and
+## [member reserve] makes it a smaller share of a bigger tank. It stops at full
+## hunger and never touches the grace, which is time on purpose: swimming for
+## food in the last forty seconds is exactly what the grace is for.
+func spend(rest_seconds: float) -> void:
+	if rest_seconds <= 0.0 or HUNGER_SECONDS <= 0.0:
+		return
+	set_hunger(hunger + rest_seconds * burn / (HUNGER_SECONDS * maxf(reserve, 0.05)))
+
+
 ## Back to a cell with nothing wrong with it.
 func reset() -> void:
 	starve_seconds = 0.0
 	upkeep = 1.0
 	reserve = 1.0
 	photosynthesis = 0.0
+	burn = 1.0
 	set_hunger(0.0)
 
 

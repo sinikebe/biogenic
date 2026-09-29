@@ -299,8 +299,8 @@ extends Node
 ##                           way to test a window that is made of time.
 ##   --kill-at=<seconds>     starve the cell to death at that time, so the death
 ##                           screen, the `watch` offer and the replay itself can
-##                           each be photographed without waiting seven minutes
-##                           for hunger or gambling on a hunter
+##                           each be photographed without waiting minutes for
+##                           hunger or gambling on a hunter
 ##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
 ##                           at a known time -- in a pond, after the guest has
 ##                           arrived

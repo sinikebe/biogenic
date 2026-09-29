@@ -418,6 +418,32 @@ const TURN_RESPONSE_BY_TIER: Array[float] = [1.43, 1.10, 0.85, 0.65]
 const WANDER_RATE := 0.13
 const WANDER_TAU := 2.6
 
+# --- What moving costs (docs/design/energy.md) -------------------------------
+# **Every stroke and every turn is paid for**, in seconds of rest: how long a
+# resting body of upkeep 1 takes to burn as much (metabolism.gd's `spend`). The
+# owner, 2026-09-29: starving should come sooner, "not necessarily by reducing
+# the storage. It can be by adding consumption. [...] each swim should consume
+# energy. turning should also consume energy."
+#
+# The costs are paid on what the body actually does, not on what was asked of
+# it: the speed a stroke adds and the angle the body turns. So a better
+# flagellum, which beats harder and more often, costs more to run and still
+# costs the same per unit of speed, and a better cirrus turns faster for the
+# same price per degree. What an organ buys is how fast; what it costs is how
+# much. None of this crosses the wire -- hunger is each player's own.
+
+## **Seconds of rest per unit of speed a stroke adds** -- a beat of the
+## flagellum, on the speed it gives, and a held push, on the speed it adds each
+## frame. A tier-1 beat adds 117 u/s on average and costs 1.3 s of rest, and the
+## flagellum beating on its own schedule comes to half again what a resting body
+## burns. The dash is not in it: `DASH_COST_BY_TIER` was always its price.
+const STROKE_COST := 0.0113
+## **Seconds of rest per radian the body turns under steering.** A half turn
+## costs about 4 s of rest, and turning flat out at tier 1 burns 0.8 of a
+## resting body's rate on top of everything else. The water's own wander is
+## free: it is not the cirrus doing it.
+const TURN_COST := 1.3
+
 # --- Input -----------------------------------------------------------------
 ## Canvas pixels of drag for a full-rate turn.
 const DRAG_SPAN := 190.0
@@ -439,6 +465,9 @@ var _omega := 0.0
 var _wander := 0.0
 var _impulse_timer := 0.0
 var _dash_timer := 0.0
+## Seconds of rest this body has spent moving since the run last took them
+## ([method take_effort]).
+var _effort := 0.0
 ## When the current press started and where, so a tap can be told from a steer.
 var _pointer_at := 0.0
 var _pointer_from := 0.0
@@ -497,6 +526,7 @@ func reset(keep_place: bool = false) -> void:
 	_wander = 0.0
 	_impulse_timer = randf_range(0.6, 1.4)
 	_dash_timer = 0.0
+	_effort = 0.0
 	release()
 
 
@@ -515,6 +545,8 @@ func _process(delta: float) -> void:
 	var pull := 1.0 - exp(-delta / WANDER_TAU)
 	_wander = lerpf(_wander, randf_range(-WANDER_RATE, WANDER_RATE), pull)
 	heading = wrapf(heading + (_omega + _wander) * delta, -PI, PI)
+	# The turn the cirrus made, and only that: the wander above is the water's.
+	_effort += absf(_omega) * delta * TURN_COST
 
 	_impulse_timer -= delta
 	if _impulse_timer <= 0.0:
@@ -528,6 +560,7 @@ func _process(delta: float) -> void:
 	var push := PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))]
 	if push > 0.0 and _pushing():
 		velocity += forward() * push * delta
+		_effort += push * delta * STROKE_COST
 
 	velocity *= exp(-DRAG * delta)
 	position += velocity * delta
@@ -539,6 +572,7 @@ func _fire_impulse() -> void:
 	var strength := randf_range(0.7, 1.0)
 	var aim := heading + randf_range(-IMPULSE_SPREAD, IMPULSE_SPREAD)
 	velocity += Vector2(sin(aim), -cos(aim)) * impulse_speed() * strength
+	_effort += impulse_speed() * strength * STROKE_COST
 	impulsed.emit(strength)
 
 
@@ -831,6 +865,17 @@ func bearing_to(point: Vector2) -> float:
 func shear_rate() -> float:
 	var turning := _omega / turn_rate()
 	return steer if absf(steer) > absf(turning) else turning
+
+
+## **What moving has cost since the last call**, in seconds of rest, and nothing
+## after it: every stroke, every frame of a held push and every radian turned
+## (docs/design/energy.md). The cell cannot spend hunger itself -- metabolism
+## belongs to the run -- so the run takes this once a frame and pays it with
+## metabolism.gd's `spend`, the way the dash's price rides out on `dashed`.
+func take_effort() -> float:
+	var spent := _effort
+	_effort = 0.0
+	return spent
 
 
 ## Knocked off course by something solid. [param normal] points from the thing

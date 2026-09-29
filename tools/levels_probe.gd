@@ -6,6 +6,10 @@ extends Node
 ## slow phone crosses with gaps in it, a skip that drops a body a ray would
 ## have hit.
 ##
+## **And what moving costs** (docs/design/energy.md): the same kind of number,
+## invisible in a frame and felt only as a cell that starves sooner than it
+## should, or later.
+##
 ## Headless and deterministic. Prints one line per check and `ALL PASS` only if
 ## every one held; CI asserts on that marker rather than on the exit code,
 ## because Godot exits 0 after a script error too.
@@ -17,6 +21,7 @@ const Afterglow := preload("res://game/mechanics/afterglow.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const FoodField := preload("res://game/normal/food.gd")
+const Metabolism := preload("res://game/normal/metabolism.gd")
 
 const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 
@@ -33,6 +38,7 @@ func _ready() -> void:
 	_fan()
 	_tally_and_glow()
 	_field()
+	_energy()
 	for node in _nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -363,3 +369,91 @@ func _field() -> void:
 	_check("a sweep finds what lies inside the arc it crossed (a ray alone: %s)"
 		% alone, swept and not alone
 		and (field.beam_touched as PackedInt32Array).has(0))
+
+
+# --- What moving costs (docs/design/energy.md) ----------------------------------
+
+func _energy() -> void:
+	# The table energy.md §2 gives the gene descriptions: each organ as a
+	# multiple of a resting body. Move a cost and this moves with it, and so must
+	# the table.
+	var gap := (CellBody.IMPULSE_GAP_MIN_BY_TIER[1] + CellBody.IMPULSE_GAP_MAX_BY_TIER[1]) * 0.5
+	var beating := CellBody.IMPULSE_SPEED_BY_TIER[1] * CellBody.IMPULSE_MEAN \
+		* CellBody.STROKE_COST / gap
+	var turning := CellBody.TURN_RATE_BY_TIER[1] * CellBody.TURN_COST
+	var pushing := CellBody.PUSH_ACCEL_BY_TIER[1] * CellBody.STROKE_COST
+	_check("at tier 1 the flagellum's own beating costs %.2f of rest, turning flat"
+		% beating + " out %.2f and pushing %.2f -- energy.md's 0.50, 0.81, 0.68"
+		% [turning, pushing], absf(beating - 0.50) < 0.005
+		and absf(turning - 0.81) < 0.005 and absf(pushing - 0.68) < 0.005)
+
+	# The tank: seconds of rest in, a share of the bar out, and the grace is time.
+	var met: Node = Metabolism.new()
+	met.set_process(false)
+	_nodes.append(met)
+	var half_tank := 0.5 * Metabolism.HUNGER_SECONDS
+	met.reset()
+	met.spend(half_tank)
+	var plain: float = met.hunger
+	met.reset()
+	met.reserve = CellBody.STORE_BY_TIER[3]
+	met.spend(half_tank)
+	var stored: float = met.hunger
+	met.reset()
+	met.burn = CellBody.BURN_BY_TIER[3]
+	met.spend(half_tank)
+	var burned: float = met.hunger
+	_check("half a tank of rest spent is half the bar (%.3f), a quarter with store 3"
+		% plain + " (%.3f) and 0.66 of a half with burn 3 (%.3f)" % [stored, burned],
+		is_equal_approx(plain, 0.5) and is_equal_approx(stored, 0.25)
+		and is_equal_approx(burned, 0.5 * CellBody.BURN_BY_TIER[3]))
+	met.reset()
+	met.set_hunger(1.0)
+	met.starve_seconds = 12.0
+	met.spend(60.0)
+	var full_ok: bool = is_equal_approx(met.hunger, 1.0) \
+		and is_equal_approx(met.starve_seconds, 12.0)
+	met.reset()
+	met.spend(0.0)
+	met.spend(-30.0)
+	_check("spending at full hunger leaves the grace alone, and nothing spent is"
+		+ " nothing", full_ok and met.hunger == 0.0)
+
+	# The body: a stroke pays on the speed it adds, a push on the speed it adds
+	# each frame, a turn on the angle it turns -- and the water's wander is free.
+	var cell: Node = CellBody.new()
+	_nodes.append(cell)
+	var g := _genome()
+	g.express({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"axoneme": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"axoneme"])
+	cell.set("genome", g)
+	cell.call("_fire_impulse")
+	var stroke: float = cell.call("take_effort")
+	var again: float = cell.call("take_effort")
+	var speed := CellBody.IMPULSE_SPEED_BY_TIER[1] * CellBody.STROKE_COST
+	_check("one tier-1 stroke costs %.2f s of rest, within %.2f..%.2f for its strength,"
+		% [stroke, 0.7 * speed, speed] + " and is paid once",
+		stroke >= 0.7 * speed - 1e-6 and stroke <= speed + 1e-6 and again == 0.0)
+	cell.set("_impulse_timer", 1000.0)
+	cell.set("_omega", CellBody.TURN_RATE_BY_TIER[1])
+	cell.call("_process", 0.1)
+	var omega: float = cell.get("_omega")
+	var turn: float = cell.call("take_effort")
+	cell.set("_omega", 0.0)
+	cell.set("_wander", CellBody.WANDER_RATE)
+	cell.call("_process", 0.1)
+	var wander: float = cell.call("take_effort")
+	_check("a turn is paid on the angle the cirrus turned (%.4f for %.4f rad) and the"
+		% [turn, absf(omega) * 0.1] + " water's wander costs nothing (%.4f)" % wander,
+		is_equal_approx(turn, absf(omega) * 0.1 * CellBody.TURN_COST) and wander == 0.0)
+	Input.action_press(&"ui_up")
+	cell.call("_process", 0.1)
+	Input.action_release(&"ui_up")
+	var push: float = cell.call("take_effort")
+	var push_want := CellBody.PUSH_ACCEL_BY_TIER[1] * 0.1 * CellBody.STROKE_COST
+	cell.set("_effort", 3.0)
+	cell.call("reset")
+	var after_reset: float = cell.call("take_effort")
+	_check("a held push pays on the speed it adds (%.4f, want %.4f), and a new body"
+		% [push, push_want] + " owes nothing (%.4f)" % after_reset,
+		is_equal_approx(push, push_want) and after_reset == 0.0)
