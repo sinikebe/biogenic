@@ -387,6 +387,17 @@ func _energy() -> void:
 		% [turning, pushing], absf(beating - 0.50) < 0.005
 		and absf(turning - 0.81) < 0.005 and absf(pushing - 0.68) < 0.005)
 
+	# The owner's number (energy.md §7): a born cell that never eats, steering a
+	# third of the time, dies at thirty seconds. Being alive, its tail's own
+	# beating and a third of a flat-out turn, then the grace; seeds 1 to 3
+	# measure 30.2 to 30.3 s. Move HUNGER_SECONDS, STARVE_GRACE or a cost and
+	# this says so.
+	var steering := 1.0 + beating + turning / 3.0
+	var dies_at := Metabolism.HUNGER_SECONDS / steering + Metabolism.STARVE_GRACE
+	_check("a born cell that never eats and steers a third of the time dies at %.1f s"
+		% dies_at + " (burning %.2f of rest) -- the owner's thirty" % steering,
+		absf(dies_at - 30.0) < 1.0)
+
 	# The tank: seconds of rest in, a share of the bar out, and the grace is time.
 	var met: Node = Metabolism.new()
 	met.set_process(false)

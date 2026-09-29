@@ -313,6 +313,14 @@ flourish — it is the drifter-floor invariant, and it re-fires with the field a
 every division. Every generation is guaranteed one meal it can certainly take.
 Keep it, say nothing about it.
 
+> **Thirty seconds, 2026-09-29** (`energy.md` §7). A newborn that never eats
+> now dies at about 30 s. Both guarantees here still hold as rules and no
+> longer hold as outcomes. The first drifter is always swallowable, and it is
+> 1000 units ahead, about 18 s of straight swimming: a newborn left to drift
+> ate anything at all on 5 seeds of 16. And the grant still lands without the
+> pause screen, but it lapses into its slot at 50 s, after a newborn that has
+> not eaten has died; a player who wants the sense in time has to place it.
+
 ## 7. What this changes elsewhere
 
 - **`diegetic-hud.md` §2.1 rank 2 needs one geometric change.** Empty-slot
