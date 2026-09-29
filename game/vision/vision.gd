@@ -376,6 +376,10 @@ var division := {}
 ## **The body held open to place a gene**, written once a frame by the run; same
 ## contract as soma.gd's. Empty is an ordinary body. dna-body.md §8.
 var offer := {}
+## **The eye budding or flaring**, written once a frame by the run; same
+## contract as soma.gd's. Drawn on the player's own cell and never on another
+## body. Empty is an ordinary eye. beam-levels.md §8.4-§8.5.
+var eye := {}
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -1728,7 +1732,8 @@ func _draw_cell(a: float) -> void:
 	Cilia.draw_cell(_world, p, _cell.heading, r, tiers, _cell.gape(),
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
-		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)))
+		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
+		0.0, false, eye)
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)

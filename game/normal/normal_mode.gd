@@ -55,6 +55,10 @@ const Pond := preload("res://game/net/pond.gd")
 ## cilia.gd's arc table all in reach.
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
 const Tally := preload("res://game/mechanics/tally.gd")
+## **A level arriving, and what it shows** (beam-levels.md §8.4-§8.5): the swell
+## is what a level-up looks like -- the eye's flare, and the pause target's one
+## breath.
+const Swell := preload("res://game/mechanics/swell.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -471,6 +475,18 @@ var _beam_held := 0.0
 var _beam_held_bearing := 0.0
 var _beam_held_age := 0.0
 
+## **A level arriving: the eyespot flares** (beam-levels.md §8.5). Armed by the
+## level-up, and by a path taken with levels banked behind it, and cued by the
+## next heartbeat, because the beat is the one rhythm the player is already
+## watching: 0.15 s up, then 1.05 s down on `1 - smoothstep`. Own cell only,
+## both views; cilia.gd draws it. The replay flares the same way, off the same
+## two numbers.
+const EYE_FLARE_RISE := 0.15
+const EYE_FLARE_FALL := 1.05
+var _eye_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
+## Which gene's pigment the flare is on: the one that levelled.
+var _eye_gene: StringName = &""
+
 # --- The division -----------------------------------------------------------
 var _split := Split.NONE
 var _split_clock := 0.0
@@ -584,6 +600,10 @@ func _ready() -> void:
 	_figure.custom_minimum_size = FIGURE_SIZE
 	_figure_body.draw.connect(_draw_figure_body)
 	_tray.resized.connect(_latch_tray)
+	# **The heartbeat is the flare's cue** (beam-levels.md §8.5), and the pause
+	# target's breath rides the same beat. Listening is not posting: this file
+	# is still the only one that writes to the bus.
+	_bus.sensation.connect(_on_bus_sensation)
 	_pause_ui.hide()
 	# Eighteen Controls and two rows of text, built once. Nothing here asks for
 	# a window, an input device or a network, so a headless boot pays one
@@ -821,6 +841,8 @@ func _process(delta: float) -> void:
 	# Proprioception is not a sensation and does not go on the bus: it is a
 	# view, and it is handed the one number it cannot derive for itself.
 	_soma.beat = _bus.pulse()
+	# The eye and the pause target: a choice waiting, a level arriving.
+	_step_eye(delta)
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
 	# After the beat above, because it replaces it: the quickening is the beat
@@ -897,7 +919,100 @@ func _earn_beam(delta: float) -> void:
 		_beam_tally.touch(index)
 	var earned := _beam_tally.step(delta)
 	if earned > 0:
-		_genome.earn(&"ocellus", float(earned))
+		_earn(&"ocellus", float(earned))
+
+
+## **Experience for [param gene], and what a level-up shows** (beam-levels.md
+## §8.4-§8.5). The genome keeps the level; this is the edge that makes it seen:
+## the eye flares on the next beat, and a level-up that opens the fork has the
+## pause target breathe once. **Once per lineage** falls out of where it is
+## asked: a daughter who inherits an open fork never levels into it, so she is
+## not told again.
+##
+## The one door experience comes in by -- the beam's tally, and
+## `tools/drive.gd --earn=`, which poses a level-up through it.
+func _earn(gene: StringName, amount: float) -> void:
+	var grown := _genome.progression(gene)
+	if grown == null:
+		return
+	var before := grown.level()
+	if not _genome.earn(gene, amount):
+		return
+	_eye_gene = gene
+	_eye_flare.arm()
+	if PAUSE_BREATHES_AT_FORK and before < grown.fork_level \
+			and _genome.can_choose(gene):
+		_pause_breath.arm()
+
+
+## **A new body starts with an ordinary eye and a quiet pause target**: a
+## death, a birth and a return. A flare or a breath armed for the body that
+## just ended is about that body, and a daughter who inherits an open fork is
+## not told about it again.
+func _forget_eye() -> void:
+	_eye_flare.clear()
+	_eye_gene = &""
+	if _pause_breath.running():
+		_pause_tap.queue_redraw()
+	_pause_breath.clear()
+	_soma.eye = {}
+	_vision.eye = {}
+
+
+## The heartbeat, heard. It cues what a level-up armed -- **but only a beat the
+## body is on screen for**: a pause over it in single player, where the bus
+## keeps beating under the scrim, would spend the flare where nobody can see
+## it, so it waits for the first beat back in the water.
+func _on_bus_sensation(kind: StringName, _info: Dictionary) -> void:
+	if kind != &"beat":
+		return
+	if _menu_open or _life != Life.ALIVE or _split >= Split.PINCH:
+		return
+	_eye_flare.cue()
+	if _pause_breath.armed():
+		# It holds for one beat, and the beat is whatever the body is beating
+		# at now: a starving cell's breath is slower, as its heart is.
+		_pause_breath.hold = _metabolism.beat_period()
+		_pause_breath.cue()
+
+
+## Once a frame, in the water: the flare and the breath move on, and both views
+## are handed the eye. The pause target is redrawn for as long as it breathes,
+## and once more after, to lay it back at rest.
+func _step_eye(delta: float) -> void:
+	_eye_flare.step(delta)
+	var breathing := _pause_breath.running()
+	_pause_breath.step(delta)
+	if breathing:
+		_pause_tap.queue_redraw()
+	var eye := eye_of(_genome, _eye_gene, _eye_flare.value())
+	_soma.eye = eye
+	_vision.eye = eye
+
+
+## **What the eye is doing, for cilia.gd** (beam-levels.md §8.4-§8.5):
+## `{"gene": g, "bud": n, "flare": f}`, or empty for an ordinary eye.
+##
+## It buds for the first levelled gene **this body wears** whose fork is open --
+## the pigment is on the body, so a gene only the DNA carries has none to bud --
+## with `bud` the levels banked since the fork. [param flaring] is the gene a
+## level just arrived for and [param flare] how far through its swell it is.
+## Static, because the replay asks the same question of the genome it restored
+## and must get the same answer.
+static func eye_of(genome: GenomeNode, flaring: StringName,
+		flare: float) -> Dictionary:
+	if genome == null:
+		return {}
+	for gene: StringName in genome.levels():
+		if genome.tier(gene) <= 0:
+			continue
+		var grown := genome.progression(gene)
+		var bud := grown.level() - grown.fork_level if grown.can_choose() else -1
+		var lit := flare if gene == flaring else 0.0
+		if bud < 0 and lit <= 0.0:
+			continue
+		return {"gene": gene, "bud": bud, "flare": lit}
+	return {}
 
 
 ## Which way a directional organ looks: the bearing of the arc it is worn on,
@@ -1406,6 +1521,7 @@ func _be_born() -> void:
 	_genome.express(pick["tiers"], pick["order"], pick["body"], null,
 		_genome.levels())
 	_genome.carry(carried)
+	_forget_eye()
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
@@ -1615,6 +1731,7 @@ func _die(loud: bool, bearing: float) -> void:
 	_death_clock = 0.0
 	_vision_cut = false
 	_tap_pending = false
+	_forget_eye()
 	# A death during the quickening -- the one phase the water is still moving
 	# in -- takes the division with it. The collapse owns the screen, and two
 	# daughters drawn under it would be the game contradicting itself twice.
@@ -1836,6 +1953,7 @@ func _return(place: Array) -> void:
 		_ponded = false
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
+	_forget_eye()
 	# A new cell is a born cell, and a born cell has no senses: the five-second
 	# clock starts again, and so does the line that announces it. **A run keeps
 	# nothing** -- and that has to include the leg-up and the lineage.
@@ -2199,6 +2317,23 @@ const PAUSE_BAR_GAP := 6.0
 const PAUSE_REST := 0.17
 const PAUSE_HOT := 0.92
 
+## **The one breath** (beam-levels.md §8.4): when the beam's fork opens, the
+## target goes to its hot state over [constant BREATH_RISE], holds for one
+## heartbeat and settles over [constant BREATH_FALL]. It is the only thing in
+## the water that points at pause, and the only time it moves on its own -- a
+## touch player has no hover, so this is the one time they see the hot state.
+## Hot is gene-lines-and-the-pause-target.md §4.3's measured 87 of glance, for
+## about two heartbeats and then never again that lineage.
+const BREATH_RISE := 0.3
+const BREATH_FALL := 1.5
+var _pause_breath := Swell.new(BREATH_RISE, 0.0, BREATH_FALL)
+## **Owner's call 4** (beam-levels.md §8.9): whether it breathes at all. Off,
+## the eye budding is the only sign that pause has something new.
+const PAUSE_BREATHES_AT_FORK := true
+## The in-between states, one stylebox each, recoloured as it breathes.
+var _pause_well_breath: StyleBoxFlat = null
+var _pause_bar_breath: StyleBoxFlat = null
+
 func _update_pause_tap() -> void:
 	# **Hidden wherever pause cannot be reached**, which is not a nicety: a
 	# control that is drawn and does nothing teaches the player that tapping it
@@ -2237,6 +2372,17 @@ func _draw_pause_tap() -> void:
 	var box := _pause_tap.size
 	var well := _pause_well_hot if _pause_hot else _pause_well_rest
 	var bar := _pause_bar_hot if _pause_hot else _pause_bar_rest
+	# Breathing, it is somewhere between the two, on the same four colours.
+	var lift := _pause_breath.value()
+	if lift > 0.0 and not _pause_hot:
+		_pause_well_breath.bg_color = _pause_well_rest.bg_color.lerp(
+			_pause_well_hot.bg_color, lift)
+		_pause_well_breath.border_color = _pause_well_rest.border_color.lerp(
+			_pause_well_hot.border_color, lift)
+		_pause_bar_breath.bg_color = _pause_bar_rest.bg_color.lerp(
+			_pause_bar_hot.bg_color, lift)
+		well = _pause_well_breath
+		bar = _pause_bar_breath
 	_pause_tap.draw_style_box(well, Rect2(Vector2.ZERO, box))
 	var mid := box * 0.5
 	for i in 2:
@@ -2967,6 +3113,8 @@ func _style_pause() -> void:
 	_pause_well_hot = _well(0.58, 0.48)
 	_pause_bar_rest = _bar(PAUSE_REST)
 	_pause_bar_hot = _bar(PAUSE_HOT)
+	_pause_well_breath = _well(0.13, 0.09)
+	_pause_bar_breath = _bar(PAUSE_REST)
 
 	# The camera toggle and the control-scheme toggle are buttons, so they are
 	# styled like ones -- but narrower and shorter than `resume`, because they
