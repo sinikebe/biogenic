@@ -252,17 +252,17 @@ steering now and then, because that is the row the owner was answering.
 came down with the tank and kept its share: a born cell still burns ×1.50
 drifting and ×1.78 steering a third of the time. Two prices are shares of the
 bar, not seconds of rest, and kept their share: the dash (6, 4.5 and 3.2 %,
-which is now 2.2, 1.6 and 1.2 s of rest; at tier 1 that is exactly what a
-stroke of the same speed costs, 0.0113 s of rest per unit of speed) and
+which is now 2.2, 1.6 and 1.2 s of rest; at tier 1 that is almost exactly what
+a stroke of the same speed costs, 2.16 s against 2.15 s) and
 `toxicyst`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
 `Wire.PROTOCOL` or `Wire.RULES` change (§1.3), and it ships as a content pack.
 
 ### 7.2 Dies at
 
-`--fixed-fps 60`, seed 3, §3's plays over 120 s, never eating. The burn is
-measured with hunger held low every frame, so the tank never empties under the
-measurement and no meal hides what was spent (`tools/forage_probe.gd --burn`,
-§7.7):
+`--fixed-fps 60`, seed 3, §3's plays over 120 s. The burn is measured with
+hunger held low every frame, so the tank never empties under the measurement and
+a meal changes nothing; the times are those of a cell that never eats
+(`tools/forage_probe.gd --burn`, §7.7):
 
 | play | burn | empty at | dies at |
 | --- | --- | --- | --- |
@@ -276,52 +276,67 @@ measurement and no meal hides what was spent (`tools/forage_probe.gd --burn`,
 | `vacuole 2`, drifting | ×1.05 | 34.2 s | **44.2 s** |
 
 Seeds 1 and 2 give 30.2 s steering a third of the time. `levels_probe.gd`
-holds the owner's number in CI from the constants alone, `36 / (1 + 0.50 +
-0.81 / 3) + 10 = 30.4` s, and fails if it moves a second from thirty.
+holds the owner's number in CI from the constants alone, `36 / (1 + 0.500 +
+0.806 / 3) + 10 = 30.35` s, and fails if it moves a second from thirty.
 
 ### 7.3 What a meal is worth
 
 At thirty seconds the old `MEAL`, half a bar, is ten seconds of life, and a
 drifter a newborn can swallow is worth half to four-fifths of that. Measured
-with a bot that steers at the nearest body its mouth can take within 800
-units, which is what a player in full vision does with the food on the screen:
-eight seeds, three minutes each, a division answered by leaning port.
+with a bot that does what a player in full vision does: it steers at the
+nearest body its mouth can take **on the screen** (the camera is north-up and
+unzoomed, so a 16:9 screen is 1280 × 720 units around the cell and a 20:9 phone
+1600 × 720). Sixteen seeds on each shape, three minutes each, a division
+answered by leaning port.
 
-| a meal your size is worth | starved within three minutes | the bar on average | time in the grace |
-| --- | --- | --- | --- |
-| half the bar, as before | 4 of 8 | 0.59–0.68 | 13–24 % |
-| three quarters | 2 of 8 | 0.49–0.63 | 8–17 % |
-| **the whole bar** | **0 of 8** | **0.44–0.54** | **6–12 %** |
-| one and a half | 0 of 8 | 0.39–0.47 | 4–11 % |
+| a meal your size is worth | starved within three minutes, 16:9 | on a 20:9 phone | the bar on average | time in the grace |
+| --- | --- | --- | --- | --- |
+| half the bar, as before | 9 of 16 | 7 of 16 | 0.61 · 0.64 | 1–28 % |
+| three quarters | 8 of 16 | 4 of 16 | 0.52 · 0.56 | 1–21 % |
+| **the whole bar** | **6 of 16** | **4 of 16** | **0.46 · 0.49** | **0–16 %** |
+| one and a half | 6 of 16 | 1 of 16 | 0.41 · 0.41 | 0–15 % |
 
-**The whole bar** keeps a player who eats what they can see alive, with the bar
-in the middle, so the beat is usually saying something, and with the grace
-reached now and then rather than lived in. At one and a half nearly every meal
-fills the bar and the pressure mostly goes. That bot eats every 10 to 17 s,
-has its first meal at 14 to 21 s, waits 25 to 31 s at the longest and divides
-3 to 5 times in the three minutes. Each division is a fed daughter, which is
-most of why the longest waits do not kill it.
+**The whole bar** loses a third fewer games than half a bar, and keeps the bar
+in the middle, so the beat is usually saying something. The bot eats every
+12.5 s at the median (8 to 19 s), has its first meal at 15 to 23 s and divides up
+to six times in the three minutes; each division is a fed daughter.
+
+**What it still loses to is not the meal.** The games it loses are lost to a
+stretch with no food on the screen that outlasts a full tank, 32 s and more,
+and no meal bridges that: on a 16:9 screen one and a half bars loses the same
+six. The wider phone screen sees more water and has fewer such stretches. What
+bridges them is time, §7.6 row 1: empty at 30 s and dead at 40 s, the same
+bot starved in 2 of 16 on 16:9 and none of 16 on a phone.
 
 ### 7.4 Who can find food in thirty seconds
 
-The same eight seeds and three minutes, with the whole-bar meal:
+The same sixteen seeds and three minutes, with the whole-bar meal:
 
-| forager | starved | before any meal | first meal, where there was one |
+| forager | starved within three minutes | before any meal | first meal, where there was one |
 | --- | --- | --- | --- |
-| steering at food on the screen (full vision) | 0 of 8 | — | 14–21 s |
-| drifting, no input | 8 of 8 | 6, at 32–35 s | 27–28 s; starved by 65 s |
-| following its nose (`--sniff`, `chemocyte 1` from birth) | 8 of 8 | 7, at 27–29 s | 23 s; starved at 58 s |
-| steering at radar echoes (`ampulla 1`, a crude bot) | 8 of 8 | 3, at 30–32 s | 20–23 s; starved at 44–94 s |
+| steering at food on the screen (full vision) | 6 of 16 on 16:9, 4 on a phone | none | 15–23 s |
+| drifting, no input | 16 of 16 | 11, at 32–35 s | 23–28 s; then starved at 48–68 s |
+| following its nose (`--sniff`, `chemocyte 1` from birth) | 16 of 16 | 9, at 27–29 s | 23–27 s; then starved at 44–96 s |
+| steering at radar echoes (`ampulla 1` from birth, a crude bot) | 16 of 16 | 10, at 29–32 s | 18–28 s; then starved at 43–117 s |
 
-**Point of view is where thirty seconds bites.** Both sense bots are worse than
-a person. The nose bot reads the level alone and spirals; the radar bot acts
-on each echo once and only then. A player will do better than either, and how
-much better is what the dev app has to say. Three things the bots do settle:
+**Point of view is where thirty seconds bites hardest.** Both sense bots are
+worse than a person. The nose bot reads the level alone and spirals; the radar
+bot acts on each echo once and only then, and ignores the ampulla's baffles and
+its own body's shadow, which flatters it. A player will do better than either,
+and how much better is what the dev app has to say. What the bots and the
+arithmetic do settle:
 
-- **More food does not fix it.** Doubling the water's cells (`COUNT` 68) left
-  the nose bot starving before its first meal on 7 of 8 seeds. The nose reads a
-  sum, and more sources flatten it.
-- **A bigger meal does not fix it.** The nose bot starves before it has eaten.
+- **The opening is tight whatever the sense.** The first body the water places
+  for a newborn is 1000 units straight ahead (`FIRST_DISTANCE`), about 18 s of
+  swimming at a born cell's 56 units a second; everything else arrives 920 to
+  1350 units away; and the free sense comes at five seconds. A newborn steering
+  now and then dies at thirty, so even a perfect opening has about ten seconds
+  to spare.
+- **More food did not fix it for the nose.** Doubling the water's cells
+  (`COUNT` 68, eight seeds) left the nose bot starving before its first meal on
+  7 of 8. The nose reads a sum, and more sources flatten it.
+- **A bigger meal does not fix it.** Most of these bots starve before they have
+  eaten anything.
 - **The senses' tempo does.** A tier-1 nose answers one arc at a time; a tier-1
   `ampulla` pings every 8.8 s, and an echo from 1100 units takes 8.8 s to come
   back. Food has to be found inside the twenty seconds a tank lasts.
@@ -355,16 +370,30 @@ Two things about the opening:
   will starve at about thirty seconds**, on their first life, with nothing to
   say why but the slowing beat and the quiet death.
 
+And one about the shared pond: there the pause menu stops nothing, and hunger
+keeps burning under it (normal_mode.gd, shared-pond.md §1.7). Ten seconds in the
+menu is two fifths of a drifting newborn's tank.
+
 ### 7.6 For the owner
 
 | # | Question | Options | What it means |
 | --- | --- | --- | --- |
-| 1 | How are the thirty seconds split? | **20 s to empty, then 10 s of last chance ✓ recommended** · 25 s, then 5 s · empty at 30 s, then the old 40 s | The last chance is the end, where the heart slows right down and one meal still saves you. Ten seconds is enough to reach food you can already sense. Five is about one heartbeat. Keeping forty means dying at 70 seconds, not 30. |
-| 2 | How much should a meal fill you? | **a meal your size fills you completely ✓ recommended** · three quarters · half, as before | A small drifter then fills you half to four-fifths of the way. With three quarters, a player who goes for every food they can see still starves in a quarter of games within three minutes; with half, in half of them. |
-| 3 | In point of view, a newborn usually starves before its first meal. What should change? | **nothing yet: play point of view on the dev app first ✓ recommended** · more time (row 1's last option) · give the nose back its direction | Test bots that find food by smell or radar starve before eating in most games; a bot that sees food on the screen never does. A person is better than those bots, but only playing says by how much. More food does not help. The nose that pointed fed a bot in 21 seconds, but it undoes your smell change, and changing a sense is its own piece of work. |
+| 1 | What should the thirty seconds be? | **dead at 30 s: 20 s to empty, then 10 s of last chance ✓ recommended** · dead at 30 s: 25 s, then 5 s · empty at 30 s, dead at 40 s | The last chance is the end, where the heart slows right down and one meal still saves you. In ten seconds a newborn swims about 560 units, most of the way from the middle of the screen to its side. Five seconds is about one heartbeat. Dead at 30 s, a player who goes for every food on the screen still starves in about one game in three within three minutes on a 16:9 screen, one in four on a phone. Dead at 40 s, one in eight on 16:9 and none on a phone. |
+| 2 | How much should a meal fill you? | **a meal your size fills you completely ✓ recommended** · three quarters · half, as before | A small drifter then fills you half to four-fifths of the way. With half, that same player starves in about half of three-minute games; with the whole bar, in about one in three on a 16:9 screen and one in four on a phone. More than a whole bar helps on a phone's wider screen and not at all on a 16:9 one, where what kills is a long stretch with no food in sight. |
+| 3 | In point of view, a newborn usually starves before its first meal. Should its senses find food faster? | **not yet: play point of view on the dev app first ✓ recommended** · give the nose back its direction | Test bots that find food by smell or by radar starve before eating in about three games in five, and all of them within three minutes. A person is better than those bots, but only playing says by how much. The nose that pointed fed a bot in 21 seconds, but it undoes your smell change, and changing a sense is its own piece of work. |
+| 4 | A first-time player starves at about 30 s, and only the heartbeat says why. Keep it? | **keep it, and judge it on the dev app ✓ recommended** · say it once, the first time a cell starves | The game has no tutorial on purpose: the heartbeat slowing is the lesson. Saying it once would put words on the screen where there are none now. |
 
 Row 1's options are `HUNGER_SECONDS` and `STARVE_GRACE`: 36 and 10, 45 and 5,
-or 53 and 40. Row 2's are `MEAL`: 1.0, 0.75 or 0.5.
+or 53 and 10. Row 2's are `MEAL`: 1.0, 0.75 or 0.5.
+
+Rows 1 and 3 pull the same way: dying at 40 s also gives point of view ten
+more seconds to find its first meal. And the free first sense, if nobody places
+it, lapses into its slot by itself 45 s after it arrives, at 50 s, which is
+after a newborn that has not eaten has died (lifecycle.md §6's grant).
+
+**Rows 1 and 3 want an answer before the next release.** Everything on `dev`
+ships together, so a release cut before them sends thirty seconds to players
+as built.
 
 ### 7.7 To measure again
 
@@ -380,6 +409,9 @@ godot --headless --path . --fixed-fps 60 -s res://tools/forage_probe.gd -- \
 That is §7.2's drifting row. Add `--hold=a` to turn all the time, and
 `--key-down=T:a --key-up=T+2:a` for T = 0, 6, 12, and so on up to 114, to steer
 a third of the time. For §7.3 and §7.4, drop `--burn` and `stigma`, run
-`--probe-until=180` on seeds 1 to 8, and add `--seek=800`, or `--ping` with
-`ampulla:1`, or drive's own `--sniff` with `chemocyte:1`. With none of them it
-is the drifting row.
+`--probe-until=180` on seeds 1 to 16, and add `--screen=1280x720` (a 16:9
+screen) or `--screen=1600x720` (a 20:9 phone), or `--ping` with `ampulla:1`, or
+drive's own `--sniff` with `chemocyte:1`. With none of them it is the drifting
+row. `--seek=800`, the first draft's bot, sees 800 units in every direction,
+past a real screen's top and bottom, and it starved in none of eight games: it
+is there to compare with, not to quote.

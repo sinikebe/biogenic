@@ -5547,9 +5547,14 @@ func _check_pond() -> void:
 	# hunger.
 	# ----------------------------------------------------------------------
 	await _pond_until(func() -> bool: return false, 0.2, pins)
+	# Half a bar, so a takeover that lost the hunger -- back to fed, or to
+	# anything else -- shows. The body's own is put back after the check, so
+	# what follows sees the run it saw.
+	var guest_met: Node = guest_run.get_node(^"Metabolism")
+	var own_hunger: float = guest_met.hunger
+	guest_met.set_hunger(0.5)
 	var kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers().duplicate(),
-		int(guest_run.get("_generation")),
-		float((guest_run.get_node(^"Metabolism")).hunger)]
+		int(guest_run.get("_generation")), float(guest_met.hunger)]
 	var closed_at := _now()
 	host_net.close()
 	var took := await _pond_until(func() -> bool: return not guest_food.mirroring(),
@@ -5560,14 +5565,12 @@ func _check_pond() -> void:
 		if not body.seeded:
 			fresh = false
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
-		int(guest_run.get("_generation")),
-		float((guest_run.get_node(^"Metabolism")).hunger)]
+		int(guest_run.get("_generation")), float(guest_met.hunger)]
 	# Kept, less what the body spent while the host went: the second the wait
 	# allows at rest, and one stroke, which at the thirty-second pace is up to
 	# 0.06 of the bar on its own (energy.md §7).
 	var spent_max: float = (1.0 + CellBody.STROKE_COST * CellBody.IMPULSE_SPEED_BY_TIER[
-		CellBody.IMPULSE_SPEED_BY_TIER.size() - 1]) \
-		/ float((guest_run.get_node(^"Metabolism")).HUNGER_SECONDS)
+		CellBody.IMPULSE_SPEED_BY_TIER.size() - 1]) / float(guest_met.HUNGER_SECONDS)
 	var gained := float(now_kept[3]) - float(kept[3])
 	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh
 			and is_equal_approx(float(kept[0]), float(now_kept[0]))
@@ -5577,8 +5580,9 @@ func _check_pond() -> void:
 		% took_frames + " at 60 fps is %d; %.0f ms here) in %d fresh cells,"
 		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0,
 			guest_food.bodies().size()]
-		+ " keeping r%.2f, its genome, generation %d and hunger %.2f"
-		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3])])
+		+ " keeping r%.2f, its genome, generation %d and hunger %.2f (set to %.2f)"
+		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3]), float(kept[3])])
+	guest_met.set_hunger(own_hunger)
 
 	# **Alone when the link goes, with the menu open** (§1.7): a guest that is
 	# not in the pond has nothing to take over, so nothing closes its menu --

@@ -90,7 +90,8 @@ const SENSE_LINE_HOLD := 7.0
 # genome.gd's `bonus_slots` is what guarantees it lands -- the born genome is
 # already full at three, so the gift comes with somewhere to put it, and a
 # player who never opens the pause screen still gets the gene when the sample
-# lapses into that slot.
+# lapses into that slot -- forty-five seconds on, which since energy.md §7 is
+# after a newborn that has not eaten has starved.
 
 ## About five seconds of swimming, which is two involuntary impulses -- long
 ## enough to have felt the cell move and be wondering what to do with it.

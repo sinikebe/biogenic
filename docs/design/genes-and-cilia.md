@@ -284,7 +284,8 @@ The only change is **what a recycled cell comes back as.**
 > | ±50% | 32% | 28% | 0% | **40%** |
 >
 > With `food.COUNT = 4`, a ±25% spread puts **0.6 edible cells in the entire
-> field** against a 420-second hunger clock that wants a meal every 60–90s. The
+> field** against a 420-second hunger clock that wants a meal every 60–90s.
+> (The clock is 36 s since `energy.md` §7, and wants a meal every 8 to 19 s.) The
 > newborn cell starves surrounded by food it cannot fit in its mouth. Let the
 > arrivals' cytostome tier vary 1:1:1 instead and the numbers invert: **50% of
 > everything can eat you, permanently, at every radius.**

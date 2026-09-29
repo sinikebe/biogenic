@@ -63,9 +63,10 @@ const HUNGER_SECONDS := 36.0
 ## It was half a bar, "so a single meal is felt and two are needed", while the
 ## bar lasted seven minutes. At thirty seconds half a bar is ten seconds of
 ## life, and a cell steered at every meal it could see on the screen, one every
-## twelve seconds, starved in four of eight waters within three minutes. A whole
-## bar keeps it alive in all eight, with its bar in the middle on average and
-## the grace reached now and then (energy.md §7).
+## twelve seconds, starved in about half of its three-minute games. A whole bar
+## loses a third fewer and keeps the bar in the middle on average. The rest are
+## lost to stretches with no food on the screen that outlast a full tank, which
+## no meal bridges (energy.md §7).
 ##
 ## **This stays a const.** §3.2 took it off the tier table: if `cytostome` tier
 ## raised the value of a meal as well as the gape, every tier of it would

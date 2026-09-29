@@ -217,9 +217,10 @@ single meal is felt and two are needed.**
 > turning all the time). `MEAL` is **1.0**, a meal your size fills the bar, and
 > the rule above that it "should stay near half a bar" is withdrawn: at thirty
 > seconds half a bar is ten seconds of life, and a bot that went for every meal
-> on its screen starved in half its waters. Competent foraging is now a meal
-> every 10 to 17 seconds. `HUNGER_SECONDS` is the pace now; the costs are how
-> much of it moving takes.
+> on its screen starved in about half of its three-minute games. Competent
+> foraging is now a meal every 8 to 19 seconds, and even that starves in a
+> quarter to three-eighths of games, to stretches with no food in sight.
+> `HUNGER_SECONDS` is the pace now; the costs are how much of it moving takes.
 
 Eating at full does not waste the food: it still fires `ingest` and still
 carries the gene. There is always a reason to eat.
@@ -530,7 +531,8 @@ There are two, and they feel opposite.
 
 `hunger` reaching 1.0 starts `STARVE_GRACE = 40.0` seconds. (**Ten since
 2026-09-29**, the last ten of the thirty a born cell has: `energy.md` §7. What
-follows says forty; it is the same grace, shorter, and the same death.) The beat *strength*
+follows says forty, and "telegraphed for minutes"; it is the same grace,
+shorter, telegraphed for twenty seconds, and the same death.) The beat *strength*
 stays on its floor throughout — the floor rule has no exceptions — and only the
 **period** stretches past it, toward `DYING_PERIOD = 7.5s`. Rate is free; it
 costs no light and nothing else is using it at that moment.
