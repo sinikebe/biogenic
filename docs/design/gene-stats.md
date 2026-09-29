@@ -15,6 +15,12 @@ copy of the game outside the repository, on `a483fd7`. Every frame and every
 measurement below comes from it, at 1280x720 and at 2400x1080. The builder
 builds it for real and shoots §8 again.
 
+> **Built, 2026-09-29** (PR #138), and §8 shot again on the build. §11's two
+> calls are built with the recommended options, pending the owner's answer.
+> What the build and its review changed is in dated notes: §3.3 (the dim),
+> §5.1 (the bite line), §5.3 (a worn gene in hand), §8 (`S04`), §11 (the way
+> back from call 2).
+
 ---
 
 ## 1. Decided, in one place
@@ -212,7 +218,7 @@ y 660                          drag it to another slot
 | lines | two, centred on the column, 14 px, pitch 19, first baseline 14 px into `Numbers` |
 | words | `Color(0.855, 0.953, 0.933, 0.42)` |
 | values | `Color(0.855, 0.953, 0.933, 0.70)`, for the number only; its unit keeps the words' tint |
-| a gene this body does not wear | both colours × 0.62 (§5.3) |
+| a gene this body does not wear | both colours × 0.85 (§5.3, and the note below: it was 0.62) |
 | separator | ` · `, in the words' tint |
 | drawn by | `Readout.draw()` in `Numbers`' `draw` signal, the way the cards draw their lines (`_draw_centred`) |
 
@@ -232,6 +238,15 @@ brighter than the line they explain.** Peak glyph luminance at 1280x720
 The first cut drew the values at alpha 0.88. They peaked at 211, louder than
 the sentence they explain, which put the details above the headline. At 0.70
 they read as the details of that sentence.
+
+> **A gene this body does not wear is × 0.85, not × 0.62** (the build's
+> review, 2026-09-29). The table above measured the full register only. At the
+> figure's own 0.62 the words peaked at 71, fainter than the hint's 98 and the
+> faintest text on the screen -- on exactly the gene a player holds while
+> deciding where it goes, which is what pause opens on whenever a gene is
+> waiting (§10.6). At 0.85 the words peak at 92, beside the hint, and the values
+> at 145 against a worn gene's 170, so the dimmer register still reads.
+> `NUMBERS_DIM` in `normal_mode.gd`.
 
 ---
 
@@ -299,7 +314,7 @@ Each row gives the value at 1, 2 and 3 worn copies, for a newborn with no
 | gene | | words | 1 | 2 | 3 | from |
 | --- | --- | --- | --- | --- | --- | --- |
 | `cytostome` *eat* | 1 | `swallows whole under {} × your size` | 0.82 | 1.05 | 1.40 | `GAPE_BY_TIER` |
-| | 1 | `bites take {} of a body, {} at its tail` | 7%, 15% | 10%, 21% | 14%, 29% | `BITE_BY_TIER`, and that × `FLANK_ASTERN` |
+| | 1 | `bites take {} head-on, {} from behind` | 7%, 15% | 10%, 21% | 14%, 29% | `BITE_BY_TIER` × `FLANK_AHEAD`, and × `FLANK_ASTERN` |
 | | 2 | `its biggest meal is worth {} s` or `its biggest meal fills you` | 30 s | fills you | fills you | `MEAL × clamp(GAPE, MEAL_MIN, MEAL_MAX)` (metabolism.gd, food.gd) × tank; "fills you" when `MEAL × clamp(…) ≥ 1` |
 | `cirrus` *turn* | 1 | `a half turn in {} s` | 5.07 | 3.93 | 3.08 | `PI / TURN_RATE_BY_TIER` |
 | | 1 | `the turn builds over {} s` | 1.1 | 0.85 | 0.65 | `TURN_RESPONSE_BY_TIER` |
@@ -336,6 +351,14 @@ Each row gives the value at 1, 2 and 3 worn copies, for a newborn with no
 
 - **Line 2 always exists.** For most genes it is only the wear item, and
   `free to wear` is worth reading: one copy costs nothing to wear.
+- **A bite is said at both ends** (the build's review, 2026-09-29). The first
+  words were `bites take {} of a body, {} at its tail`, which offered the least
+  a bite takes, at the nose, as if it were the usual one: cell.gd's `flank` runs
+  from `FLANK_AHEAD` at the nose through 1.55 on the flank to `FLANK_ASTERN` at
+  the tail. `head-on` and `from behind` fit where `of a body` did not. It is
+  now the widest line the table makes, at two copies: 550 px, inside the 560 px
+  column, its ink 23 px from the switch at both shapes (`S13`'s 538 px line was
+  the widest before).
 - **The dash and venom** are shown in seconds for this body. While call 2
   stands as built, a bigger tank makes them cost more seconds, because they are
   a share of it. `S04` shows this: a three-copy venom in a `vacuole`-3 body
@@ -385,11 +408,11 @@ is open, and at the way it took. This is what `EXPLAINS_PATH` follows too.
 | what is read | shown at | drawn |
 | --- | --- | --- |
 | a slot whose gene the body wears | the copies it wears (`_genome.tier`). Not the DNA's, which are the daughters' | full |
-| a slot the DNA carries and the body does not wear | the DNA's copies | × 0.62 |
-| a waiting gene, in hand | the copies it waits with (`_copies_of`) | × 0.62 |
+| a slot the DNA carries and the body does not wear | the DNA's copies | × 0.85 (§3.3's note) |
+| a waiting gene, in hand | the copies it waits with (`_copies_of`) | × 0.85 |
 | a levelled gene | its effective level and its way | as above |
 | a way on the fork's cards | that way, at the cards' level | full |
-| a daughter's locus, on the choosing screen | that locus's copies, in **her** body's `crista` and `vacuole` | full if she wears it, × 0.62 if she only carries it |
+| a daughter's locus, on the choosing screen | that locus's copies, in **her** body's `crista` and `vacuole` | full if she wears it, × 0.85 if she only carries it |
 | an empty slot, or nothing selected | nothing; the block keeps its height, so `Hint` and `Act` do not jump | |
 
 Why these choices:
@@ -400,6 +423,14 @@ Why these choices:
 - **The worn copies, not the DNA's.** The body wears what it was born with, so
   a gene eaten again this life shows today's numbers. Its extra copy is still
   shown in the pips as a ring.
+- **A gene in hand that the body also wears reads as worn** (the build's
+  review, 2026-09-29). It happens when a slot is written over while the body
+  still wears its old gene, and that gene is eaten again and waits. Its numbers
+  are the copies the body wears, at full brightness, as its slot's are: they are
+  this body's own (§1.4). The odds under them are the waiting copies', because
+  the odds are the DNA's.
+- **The numbers dim less than the figure** (§3.3's note): × 0.85 against the
+  figure's 0.62, so the words stay as legible as the hint.
 
 ### 5.4 The caption and the odds
 
@@ -520,7 +551,7 @@ CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:
 | `S01` both | 2.0 `G --touch=1.4:938,204` | numbers off: today's screen and the quiet switch | passes; §3.2's diff |
 | `S02` both | `S01 --numbers=1` | the beam: `1 ray · reaches 620 µm` / `free to wear · level 2 after 40 strikes`, the odds at 55%, the caption | passes |
 | `S03` both | 2.0 `G --numbers=1 --touch=1.4:788,510` | a three-copy tail, both lines full | passes |
-| `S04` both | 2.0 `--genome=cytostome:1,cirrus:1,flagellum:1,toxicyst:3:3,crista:2:4,vacuole:3:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,204` | venom in a body with `crista` and `vacuole`: `burns 16 s`, `0.28 s a second`, `72 s, 39 s drifting` | passes, and shows call 2's loose end |
+| `S04` both | 2.0 `--genome=cytostome:1,cirrus:1,flagellum:1,toxicyst:3:3,crista:2:4,vacuole:3:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,204` | venom in a body with `crista` and `vacuole`: `burns 16 s`, `0.28 s a second`, `72 s, 39 s drifting` | passes, and shows call 2's loose end. **On the build** (call 2's *yes*): `burns 6.1 s` |
 | `S05` both | 2.0 `G --sample=ampulla --numbers=1` | a waiting gene in hand, dimmed; `one copy · 55% of daughters wear it` | passes |
 | `S06` both | 2.4 `G F5 --numbers=1` | the cards, with `sweep` armed at level 5 | passes |
 | `S07` both | 2.0 `G --sample=ampulla,trichocyst:2,chemocyte,pellicle,stigma:3 --numbers=1` | two tray rows, the tightest case: `Act` ends at y 708 | passes, with 12 px to spare |
@@ -528,7 +559,7 @@ CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:
 | `S09` both | 3.2 `G`, seven `--tap=…:tab`, then `--tap=2.5:enter` | the keyboard alone, from `resume` | passes |
 | `S10` both | 2.0 `G --touch=1.4:938,204 --hover=1.7:1132,565` | the switch off and hovered | passes |
 | `S11`, `S12` both | 6.0 `CH --numbers=1 --touch=5.5:340,376` and `…:340,472` | choosing: a worn `ping`, and a carried `venom` dimmed | passes, centred, clear of both strands and the contour |
-| `S13` both | 2.0 `--genome=cytostome:1,cirrus:3,flagellum:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,342` | the widest line, 538 px | passes, its ink 28 px from the switch |
+| `S13` both | 2.0 `--genome=cytostome:1,cirrus:3,flagellum:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,342` | the widest line, 538 px | passes, its ink 28 px from the switch. **On the build** the bite line is wider: 550 px, 23 px (§5.1's note) |
 | `S14` both | `S03` with `--mode=1` | full vision: the ghost still in the ring's empty cell | passes |
 | `T1`–`T4` | `S01`/`S02`, each with and without `--hover=1.7:1132,565` | the switch's four states, zoomed, in colour and in greyscale | passes |
 
@@ -597,6 +628,17 @@ pays its own hunger, so it crosses no wire (§9).
 > **Row 2 is built with the recommended option, 2026-09-29, pending the owner's
 > answer.** `_on_dashed` and `_on_stung` pay through `spend`, `crista` reads
 > `everything burns {} less`, and the dash and venom rows take `× burn`. A
-> newborn pays what it did; `S04` reads `6.1 s` where it read 16. To take *no*
-> instead, put back the two `feed(-…)` lines, those two rows' `× reserve` and
-> `crista`'s old words. Row 1 is built as recommended too: µm.
+> newborn pays what it did; `S04` reads `6.1 s` where it read 16. Row 1 is
+> built as recommended too: µm.
+>
+> To take *no* instead:
+> - put back the two `feed(-…)` lines in `_on_dashed` and `_on_stung`;
+> - put back `× reserve` in `gene_stats.gd`'s dash and venom rows, and
+>   `crista`'s old words (`living, swimming, turning and pushing burn {} less`);
+> - turn round the three `levels_probe.gd` checks that pin the *yes* (`with
+>   crista 2…`, `with vacuole 3…`, `and the numbers say what is paid…`), which
+>   fail without it;
+> - and take back what describes it: `DASH_COST_BY_TIER`, `VENOM_COST_BY_TIER`
+>   and `STROKE_COST` in `cell.gd`, `spend()` in `metabolism.gd`, `_on_dashed`
+>   and `_on_stung` in `normal_mode.gd`, and the dated notes in `energy.md`
+>   §1.3, §2 and §7.1.

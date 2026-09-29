@@ -71,9 +71,12 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 			var meal := Readout.item("its biggest meal fills you") if share >= 1.0 \
 				else Readout.item("its biggest meal is worth {} s", [share * _tank(ctx)],
 					[U.ENERGY])
+			# What a bite takes depends on where it lands (cell.gd's `flank`):
+			# the least at the nose, the most at the tail, so the line says both.
 			return [[Readout.item("swallows whole under {} × your size", [gape], [U.TIMES]),
-				Readout.item("bites take {} of a body, {} at its tail",
-					[bite, bite * CellBody.FLANK_ASTERN], [U.SHARE, U.SHARE])],
+				Readout.item("bites take {} head-on, {} from behind",
+					[bite * CellBody.FLANK_AHEAD, bite * CellBody.FLANK_ASTERN],
+					[U.SHARE, U.SHARE])],
 				[meal, wear]]
 		&"cirrus":
 			var rate := CellBody.TURN_RATE_BY_TIER[t]

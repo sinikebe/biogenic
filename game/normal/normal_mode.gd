@@ -4373,9 +4373,12 @@ const NUMBERS_HEIGHT := 38.0
 ## at 0.70 they read as its details (§3.3).
 const NUMBERS_WORD := Color(0.855, 0.953, 0.933, 0.42)
 const NUMBERS_VALUE := Color(0.855, 0.953, 0.933, 0.70)
-## A gene this body does not wear, drawn in the figure's dim register: the same
-## numbers, saying *what a body wearing it would have* (§5.3).
-const NUMBERS_DIM := 0.62
+## A gene this body does not wear, drawn a little dimmer: the same numbers,
+## saying *what a body wearing it would have* (§5.3). **0.85, not the figure's
+## own 0.62**: at 0.62 the words fell to the faintest text on the screen, on
+## exactly the gene a player holds while deciding where it goes. At 0.85 they
+## sit with the odds line, the faintest text the screen already had.
+const NUMBERS_DIM := 0.85
 
 ## **The switch** (§2.1): a 96 x 48 hit rect and, across its middle, a 96 x 30
 ## slab with `numbers` centred in it. Teal, because on this column teal means
