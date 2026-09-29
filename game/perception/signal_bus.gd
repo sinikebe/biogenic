@@ -327,27 +327,13 @@ const SENSE_OCELLUS := 0
 const SENSE_CHEMOCYTE := 1
 const SENSE_AMPULLA := 2
 
-# --- A held sample is a second heartbeat (§3.3) -----------------------------
-# The one new point-of-view signal Phase 5 adds, and the answer to "how does a
-# player with no HUD know a decision is waiting". It is rhythm, which
-# food-and-predators.md §5.1 established as the channel that survives
-# everything: it outlives dread and it outlives starvation.
-#
-# It is **teal, not the gene's colour** -- perception.md's rule stands, the
-# contour carries bearing and intensity and never identity. The echo says
-# *there is something in you that is not resolved*, and nothing else. It costs
-# no interior and no new uniform: it is pulse_now() on a delay.
-
-## How loud the echo is, as a fraction of the beat it follows.
-const HELD_ECHO := 0.44
-## Seconds after the beat. 0.58 clears PULSE_ATTACK + PULSE_DECAY = 0.51, so the
-## two pulses are separate. Below a 1.7s beat period the delay compresses and at
-## rich-food periods the two merge into a flutter -- which is acceptable,
-## because it is still not the normal rhythm. Do not add a uniform to fix it.
-const HELD_ECHO_DELAY := 0.58
-## The echo weakens over the last seconds of the sample, so a lapse is felt
-## coming rather than noticed afterwards.
-const HELD_FADE := 15.0
+# --- A held sample was a second heartbeat (§3.3) ----------------------------
+# A second, smaller pulse behind every beat while a gene waited to be placed.
+# The owner took it off the beat on 2026-09-29, with the quickening in rich
+# water and the run-up before a division: "too much info from one thing". The
+# beat's pace is hunger's now, and dread's stumble below is all this file lays
+# over it; a waiting gene is read off the cell, which cilia.gd's
+# `draw_pending` draws in both views.
 
 ## Dread rises over about ten seconds and falls in about four and a half. The
 ## asymmetry is the whole of §5.4: relief has to arrive fast enough that a
@@ -713,12 +699,6 @@ var _light_bearing := 0.0
 ## frame, with no envelope.
 var _beam := 0.0
 var _beam_bearing := 0.0
-
-## Seconds left on the held sample, 0 for none, and the echo it schedules.
-var _held := 0.0
-var _echo_at := 0.0
-## Negative means nothing is waiting.
-var _echo_in := -1.0
 
 ## What the next flood floods with. The gene's hue while a gene arrived with the
 ## meal, nutrient green otherwise -- which is every meal Phase 4 ever served.
@@ -1187,23 +1167,6 @@ func touch(bearing: float, strength: float) -> void:
 	_bruise.fire(TOUCH_PEAK * s, bearing)
 
 
-## A gene swallowed with nowhere to put it. [param remaining] is seconds left on
-## the sample and 0 is "nothing held"; posted every frame, like taste and dread.
-##
-## Nothing is drawn for this and nothing new is written: it schedules a second,
-## smaller pulse behind each beat (§3.3). The player is told a decision is
-## waiting by the rhythm of their own body, which is the only channel that
-## survives dread and starvation both.
-func hold(remaining: float) -> void:
-	var next := maxf(remaining, 0.0)
-	var was := _held > 0.0
-	_held = next
-	if next <= 0.0:
-		_echo_in = -1.0
-	if (next > 0.0) != was:
-		sensation.emit(&"hold", {"strength": 1.0 if next > 0.0 else 0.0})
-
-
 ## The one licensed flood of the interior.
 ##
 ## [param payload] carries `gene` and `color`: §2.2 spends the seam Phase 4
@@ -1421,9 +1384,6 @@ func _end_collapse() -> void:
 	_beam = 0.0
 	_beam_bearing = 0.0
 	_said_beam = -1.0
-	_held = 0.0
-	_echo_in = -1.0
-	_echo_at = 0.0
 	_ingest_hue = NUTRIENT_COLOR
 	_said_taste = -1.0
 	_said_shear = 0.0
@@ -1485,27 +1445,11 @@ func _process(delta: float) -> void:
 
 
 func _step_beat(delta: float) -> void:
-	# The echo first, so a beat landing this frame schedules the *next* echo
-	# rather than cancelling the one it is still waiting on.
-	if _echo_in >= 0.0:
-		_echo_in -= delta
-		if _echo_in <= 0.0:
-			_echo_in = -1.0
-			pulse_now(_echo_at)
-			sensation.emit(&"echo", {"strength": _echo_at})
-
 	_beat_phase += delta / _beat_this_period
 	if _beat_phase < 1.0:
 		return
 	_beat_phase -= floorf(_beat_phase)
 	pulse_now()
-	if _held > 0.0:
-		# Weaker as the sample runs out, so the lapse is felt coming. The delay
-		# is capped at a third of the period as well as at HELD_ECHO_DELAY, so
-		# on a fast beat the echo stays inside its own beat instead of landing
-		# on top of the next one.
-		_echo_at = HELD_ECHO * minf(_held / HELD_FADE, 1.0)
-		_echo_in = minf(HELD_ECHO_DELAY, 0.34 * _beat_this_period)
 	# The beat is the game's one permanent signal and the hunger readout, so it
 	# is the first thing an audio layer will want to hear about.
 	sensation.emit(&"beat", {"strength": beat_strength(), "period": _beat_period})

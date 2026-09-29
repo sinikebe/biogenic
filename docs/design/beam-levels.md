@@ -573,8 +573,9 @@ today (§8.9 row 3).
 
 ### 8.4 In play: a choice is waiting, and the eye buds
 
-No word, and no rhythm: the second heartbeat means a gene is waiting, which
-lapses, and a fork never does. **The eyespot doubles**, like an organelle
+No word, and no rhythm: since 2026-09-29 the beat carries hunger and dread's
+stumble and nothing else (the owner's call), so a fork is read off the body, as
+a waiting gene and a coming division are. **The eyespot doubles**, like an organelle
 about to divide. The single pigment disc that `_draw_earned` draws becomes
 two, side by side along the arc (`E02`, `F02`). It is `cilia.gd`'s one routine,
 so both views draw it. It is passed only for the player's own cell, by a new
@@ -605,7 +606,12 @@ settles over 1.5 s. It is the only thing in the water that points at pause.
 **the first heartbeat the body is on screen for** -- no menu over it, alive,
 short of the pinch -- so a level earned under a pond's menu, or a way taken on
 the pause screen, flares on the first beat back in the water. The breath rises
-on that same beat and holds for the period the body is beating at. Both are
+on that same beat and holds for the period the body is beating at. **A level
+earned too close to a division waits for the daughter** (2026-09-29): the
+quickening used to run the beat up and always found one before the pinch, and
+at 2.4 s it need not, so a flare or a breath still armed at the birth is kept
+for her first beat -- when her copy of the level is her mother's, and for the
+breath while her fork is still open. Otherwise the birth clears it. Both are
 `game/mechanics/swell.gd`, a one-shot envelope that knows nothing about eyes.
 `tools/drive.gd --earn=` poses a level-up through the run's own door, `_earn()`,
 which is how `E03`, `E04` and `B01` are shot.

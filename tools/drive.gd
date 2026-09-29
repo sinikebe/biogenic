@@ -138,8 +138,8 @@ extends Node
 ##                           coordinate and nothing else.
 ##   --sample=<gene>[:copies][,<gene>[:copies]...]
 ##                           put genes in the genome's waiting queue, the state
-##                           §3.3 gives a second heartbeat and §5.2 gives the
-##                           strip. Several, comma separated, queue in that order
+##                           the body draws and §5.2 gives the strip.
+##                           Several, comma separated, queue in that order
 ##                           -- the first is the head -- and `:2` is a gene eaten
 ##                           twice before it was placed (#118). Each goes in
 ##                           through `integrate()`, the path a meal takes, so a

@@ -1155,12 +1155,10 @@ const THREAD_ALPHA := 0.42
 const THREAD_WIDTH := 1.3
 const THREAD_BOW := 0.09         ## of the chord, perpendicular to it
 
-## Seconds of the sample's life over which the picture wilts. **The twin of
-## signal_bus.gd's `HELD_FADE`, and it must stay the twin**: the second
-## heartbeat and the picture on the body are one event seen twice, and a player
-## who feels the rhythm weaken while the organ is still bright is reading two
-## clocks. It is a constant here rather than an import because this file draws
-## and must not depend on the sensory bus.
+## Seconds of the sample's life over which the picture wilts. It had a twin in
+## signal_bus.gd, `HELD_FADE`, which faded a second heartbeat on the same clock
+## so the player never read two; that heartbeat came off the beat on 2026-09-29,
+## and the picture is the one clock left.
 const HELD_WILT := 15.0
 
 

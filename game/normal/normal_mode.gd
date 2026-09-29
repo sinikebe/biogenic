@@ -142,7 +142,11 @@ enum Life { ALIVE, DYING, WAITING, RETURNING }
 ## QUICKEN still steers; PINCH stops the simulation, exactly as a death does.
 enum Split { NONE, QUICKEN, PINCH, PART, CHOOSING, COMMIT }
 
-## The beat runs up to RICH_PERIOD at full amplitude. Nothing is taken away.
+## The body is full and its nucleus has doubled, and it still swims and eats.
+## Nothing is taken away. The beat used to run up to 0.55 s here; the owner
+## took the division off the beat on 2026-09-29, so the warning is the body
+## alone. The name stays, and still fits: a quickening is the first sign of a
+## life inside another, which is what a doubled nucleus is.
 const DIVIDE_QUICKEN := 2.4
 ## The body elongates along the heading and narrows at the waist.
 const DIVIDE_PINCH := 1.5
@@ -773,7 +777,6 @@ func _process(delta: float) -> void:
 			return
 
 	# Read once, post once. Nothing below carries a position.
-	_metabolism.concentration = _food.concentration
 	_metabolism.upkeep = _genome.upkeep()
 	# `vacuole` and `plastid`: a bigger tank and a body that makes some of its
 	# own. Both land on the beat, which is where every cost in this game lands.
@@ -820,10 +823,10 @@ func _process(delta: float) -> void:
 	# survives into the readout. ping-as-outline.md §4.
 	_food.ping_tier = _cell.ping_tier()
 	# **`taste_level`, not `concentration`.** The first is what this nose picks
-	# up and the second is what the water is like; the beat above reads the
-	# water, the membrane reads the organ. A cell with no chemocyte hands over a
-	# flat zero and gets no green band at all -- which is the whole change, and
-	# is enforced again inside the bus.
+	# up and the second is what the water is like, and only the organ reaches
+	# the membrane: the beat stopped reading the water on 2026-09-29. A cell
+	# with no chemocyte hands over a flat zero and gets no green band at all --
+	# which is the whole change, and is enforced again inside the bus.
 	#
 	# **The bearing is the organ's own arc and comes from this file, not from
 	# the field.** Nothing about the water reaches the membrane through this
@@ -861,7 +864,9 @@ func _process(delta: float) -> void:
 	# `palp`: something solid, right there, felt with no light at all.
 	if _food.touch_level > 0.0:
 		_bus.touch(_food.touch_bearing, _food.touch_level)
-	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
+	# **The beat's pace is hunger's** (metabolism.gd), with dread's stumble laid
+	# over it in the bus. A waiting gene and a coming division are read off the
+	# body, which both views draw.
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.shear(_cell.shear_rate())
 	# Proprioception is not a sensation and does not go on the bus: it is a
@@ -871,12 +876,6 @@ func _process(delta: float) -> void:
 	_step_eye(delta)
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
-	# After the beat above, because it replaces it: the quickening is the beat
-	# running up to RICH_PERIOD at full strength, and posting the metabolic one
-	# afterwards would undo it every frame.
-	if _split == Split.QUICKEN:
-		_bus.set_beat(lerpf(_metabolism.beat_period(), MetabolismNode.RICH_PERIOD,
-			clampf(_split_clock / DIVIDE_QUICKEN, 0.0, 1.0)), 1.0)
 	_push_division()
 
 	if _metabolism.starved():
@@ -974,7 +973,8 @@ func _earn(gene: StringName, amount: float) -> void:
 ## **A new body starts with an ordinary eye and a quiet pause target**: a
 ## death, a birth and a return. A flare or a breath armed for the body that
 ## just ended is about that body, and a daughter who inherits an open fork is
-## not told about it again.
+## not told about it again -- unless it was never shown at all, which
+## [method _be_born] keeps for her first beat.
 func _forget_eye() -> void:
 	_eye_flare.clear()
 	_eye_gene = &""
@@ -1252,8 +1252,8 @@ func _step_sense_grant(delta: float) -> void:
 	if _genome.gift(gene) != GenomeNode.Result.HELD:
 		return
 	# The strip is built when the pause screen opens, so there is nothing to
-	# rebuild here -- but the echo behind the beat starts on the next frame's
-	# hold(), and the line says what the echo cannot.
+	# rebuild here. The body shows the waiting gene from the next frame on, and
+	# the line says where to put it.
 	_say_sense()
 
 
@@ -1267,7 +1267,7 @@ func _step_sense_grant(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 ## The body has run out of arcs. Nothing is taken away yet -- QUICKEN still
-## steers, and the player has 2.4 seconds of a body beating faster to read
+## steers, and the player has 2.4 seconds of a body with two nuclei to read
 ## before anything stops.
 func _begin_split() -> void:
 	# **A division closes the menu** (shared-pond.md §1.7). Only reachable with
@@ -1384,7 +1384,6 @@ func _hush() -> void:
 	_bus.light(0.0, 0.0)
 	_bus.beam(0.0, 0.0)
 	_bus.ping_out(0.0, 0.0)
-	_bus.hold(0.0)
 	_bus.shear(0.0)
 
 
@@ -1541,6 +1540,16 @@ func _be_born() -> void:
 	# placed yet goes with her, still waiting** (#118) -- `express()` empties
 	# the queue, so it is taken first and handed back after.
 	var carried := _genome.take_waiting()
+	# **What her mother earned in her last seconds and never saw** (beam-levels.md
+	# §8.5). A level is shown on the next beat, and the division can come
+	# first: the quickening used to run the beat up to 0.55 s and always found
+	# one, and since the beat stopped doing that (2026-09-29) the next can be
+	# 2.4 s off, past the pinch. A flare still armed here was never seen, so it
+	# waits for her first beat -- while it is still true of her, below.
+	var unseen: StringName = _eye_gene if _eye_flare.armed() else &""
+	var mothers := _genome.progression(unseen)
+	var unseen_level := mothers.level() if mothers != null else -1
+	var unseen_breath := _pause_breath.armed()
 	# **And her mother's levels** (beam-levels.md §3): a copy of each one for a
 	# gene in her own DNA, grown or not. The same copies her sister would have
 	# had, so which daughter is chosen never changes a level. Only the levels
@@ -1550,6 +1559,15 @@ func _be_born() -> void:
 		_genome.heritable_levels())
 	_genome.carry(carried)
 	_forget_eye()
+	# True of her when her copy of the level is her mother's, which is when her
+	# DNA carries the gene; a gene that came back new starts at level 1. The
+	# breath goes with it only while her fork is still open.
+	var hers := _genome.progression(unseen)
+	if unseen != &"" and hers != null and hers.level() == unseen_level:
+		_eye_gene = unseen
+		_eye_flare.arm()
+		if unseen_breath and _genome.can_choose(unseen):
+			_pause_breath.arm()
 	_soma.setup(_cell, _genome)
 	_motes.setup(_cell)
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
@@ -2176,8 +2194,8 @@ func _toggle_mode() -> void:
 # short, lowercase and in the same voice, and it is gone seven seconds later.
 #
 # perception.md §6.1's "one string in normal mode" is stretched to two by this,
-# and deliberately: the alternative to telling the player a gene is waiting is
-# a second heartbeat they have never been taught to read.
+# and deliberately: a gene waiting is drawn on the body, but nothing on the body
+# says how to place it. The beat no longer carries it at all (2026-09-29).
 # ---------------------------------------------------------------------------
 
 func _begin_onboarding() -> void:
@@ -5328,11 +5346,6 @@ func _commit_slot(index: int) -> void:
 	_hovered = SLOT_NONE
 	if _genome.held_sample != &"":
 		_select_default()
-	# The bus is told now rather than on the next unpaused frame: the membrane
-	# keeps beating under the scrim, and an echo for a gene that no longer waits
-	# is the game lying about the player's own body. **Or for one that does**:
-	# with another gene still waiting the echo goes on, now for it.
-	_bus.hold(_genome.held_remaining if _genome.held_sample != &"" else 0.0)
 	_build_genome_strip()
 
 

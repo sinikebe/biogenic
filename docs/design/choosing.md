@@ -819,7 +819,8 @@ of at the first frame of the quickening.
 
 **Use `[trace]` and not `[drive]`'s sensation log** for anything about the
 simulation itself: the bus prints the beat every 0.55 s, which is a noise floor
-above the signal, and two runs that differ can look identical in it.
+above the signal, and two runs that differ can look identical in it. (Every
+2.4 s now: the quickening came off the beat on 2026-09-29. The advice stands.)
 
 | frame | judgement |
 | --- | --- |

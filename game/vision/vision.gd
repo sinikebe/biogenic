@@ -1781,9 +1781,9 @@ func _draw_daughters(p: Vector2, beat: float) -> void:
 ## point-of-view figure calls**, so the two views are one picture at two scales
 ## rather than two drawings that have to be kept in step by hand.
 ##
-## Point of view still gets the second, smaller heartbeat as well. The rhythm
-## says *something in you is unresolved*; the body says what it is and where it
-## could go, which is the discipline of having two views.
+## Nothing else says it, in either view. Point of view used to carry a second,
+## smaller heartbeat as well, and it came off the beat on 2026-09-29: the body
+## says that something is waiting, what it is and where it could go.
 func _draw_held_sample(p: Vector2, r: float, beat: float, a: float) -> void:
 	Cilia.draw_pending(_world, p, _cell.heading, r,
 		_genome_node.layout() if _genome_node != null else [],
