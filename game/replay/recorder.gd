@@ -505,10 +505,16 @@ func _sign_genome() -> int:
 	# **A level, not its experience.** Experience moves every second the beam
 	# touches something, and a delta a second is a delta nobody needs; what
 	# playback reads is the shape, which moves on a level or a path.
+	#
+	# **The banked level, not the one held at the fork.** Signed by the held
+	# one, a level earned past an open fork wrote nothing, so a watched run
+	# never saw the eye flare for it or its lobes move apart
+	# (beam-levels.md §8.4-§8.5) -- the shape alone did not need it; the eye
+	# does. The held level moves only when this one does, or with the path.
 	var levels: Dictionary = _genome.levels()
 	for gene: StringName in levels:
 		var grown: RefCounted = levels[gene]
-		sig += gene.hash() * (int(grown.effective_level()) + 13) * 307
+		sig += gene.hash() * (int(grown.level()) + 13) * 307
 		sig += StringName(grown.path).hash() * 17
 	return sig
 
