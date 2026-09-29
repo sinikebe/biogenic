@@ -121,7 +121,7 @@ Inside its 96 x 56 control:
 | rungs | `draw_rungs` at the middle lens, unchanged | full = worn, floating = carried, one per copy |
 | selection | `draw_lens` at `LENS_SELECTED + 0.08`, backbone at `BACKBONE_LIT` | unchanged grammar |
 | word | 14 px, baseline 50, `LABEL_TINT` (loud when selected, `WORD_UNEXPRESSED` when not worn) | the plain word, never the Greek |
-| level | three pips after the word, §3.1 | |
+| copies | three pips after the word, §3.1 | |
 | focus | underline, inset 14, y 55, `FOCUS_TINT` | still not a box |
 
 | state | what changes |
@@ -138,9 +138,11 @@ The first build previewed the incoming gene over an occupied slot too.
 Rendered, `eat` vanished from the screen while the hint under it still read
 *the mouth · a daughter always wears it*. The occupant stays.
 
-### 3.1 The level is three pips
+### 3.1 The copies are three pips
 
 `PIP_R 3.4`, pitch 10, 7 px after the word, vertically at the word's x-height.
+A gene's *level* is a different number, drawn inside the helix
+(`beam-levels.md` §8.1).
 
 | pip | means |
 | --- | --- |
@@ -598,7 +600,7 @@ Each is a switch rather than a rewrite; the line under the table says where.
 
 | # | Question | Options | What it means |
 | --- | --- | --- | --- |
-| 1 | How does a gene show its level? | **three dots, filled up to the level ✓ recommended** · a number · both | You see `●●○` beside `eat`: two of three, and room for one more. A hollow dot means your daughters carry it but you do not. A number says `2` but not *out of three*, and cannot tell those apart |
+| 1 | How does a gene show its copies? | **three dots, filled up to its copies ✓ recommended** · a number · both | You see `●●○` beside `eat`: two of three, and room for one more. A hollow dot means your daughters carry it but you do not. A number says `2` but not *out of three*, and cannot tell those apart |
 | 2 | What do the words under the body call it? | **keep `two copies` ✓ recommended** · `level two` | The dots are the level at a glance; the line explains why it matters — more copies, more likely a daughter wears it. `level two` matches your word but loses the reason |
 | 3 | How do you place a gene without pausing? | **hold your body, slide it where it should grow ✓ recommended** · a button that appears in a corner · double-tap your body | Recommended: nothing new on screen, the direction you push is the side it grows on, and a quick tap still dashes. A corner button is one more control in the water; a double-tap would steal the dash |
 | 4 | What does the gift's line say? | **`a sense grew · hold your body to place it` ✓ recommended** · keep `back to place it` | The one sentence the game already shows when a free gene arrives, pointing at the new shortcut instead of the pause screen |

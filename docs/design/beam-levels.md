@@ -319,15 +319,17 @@ level on the wire. It is not asked for here.
 
 ## 8. The screens
 
-*The UX designer's.* Decided here and **not built**. Every picture below is a
-mock: a scratch overlay, kept outside the repository with its frames, drew over
-the real pause and choosing screens at 1280x720 and 2400x1080 through the real
-harness. With nothing mocked, it reproduces `tools/shot.tscn` to 0 pixels. §8.7
-names the frames and says what the build has to shoot again.
+*The UX designer's.* **Built**, on the recommended answer to every row of
+§8.9, each behind one constant. It was designed on mocks -- a scratch overlay
+drawn over the real screens -- and §8.7 is now the real code, shot again at
+1280x720 and 2400x1080, with the command for every frame. Where the build had
+to decide something this section left open, the paragraph says so under
+**Built:**.
 
 **The pips stay the copies. The level is a number, and the number never sits
-in the pips' row.** (`dna-body.md` §3.1 calls the pips "the level"; they were a
-copy count then and still are. From here on *level* means only the number.)
+in the pips' row.** (`dna-body.md` §3.1 called the pips "the level"; they were a
+copy count then and still are, and it calls them the copies now. From here on
+*level* means only the number.)
 
 ### 8.1 The level, on its slot
 
@@ -364,6 +366,11 @@ tall. The 10 px fallback is a guard: level 100 is about 80 hours of use at
 - **A `1` is not a rung** (`M02`): a rung is a 22 px bar in the gene's hue; the
   digit is 9 px, pale, and has a flag.
 
+**Built:** the armed preview of a gene in hand draws a numeral only when that
+gene already has a level -- its body still wears one -- because a gene arriving
+fresh has none until it lands. The numeral and the word share one tint helper,
+so the two cannot drift apart.
+
 ### 8.2 The line under the figure: level and progress
 
 `Genome/Hint` becomes an `HBoxContainer` (separation 6, `ALIGNMENT_CENTER`,
@@ -396,6 +403,12 @@ never get it. At most 355 px.
 **In a pond the level moves under an open menu**, because the beam earns there
 (§2). Redraw the read chip and this row when `level()` changes or the gauge
 would move a pixel. Nothing rebuilds.
+
+**Built:** alone, `Text` fills the row and centres itself, exactly as the label
+it replaced did, so a screen with no level on it lays out to the pixel as it
+always has (§8.7's A/B); beside a level it shrinks to its words and the row
+centres the three. The one rebuild under a pond's menu is a fork opening there,
+because the tray has a chip to grow (`P01`).
 
 ### 8.3 The fork
 
@@ -519,6 +532,31 @@ Otherwise the first slot with an open fork, selected, with `Act` reading
 `tap again to choose how beam grows`. Otherwise the first gene carried, as
 today (§8.9 row 3).
 
+**Built:** where this section left something to decide, the build decided:
+
+- `Cilia.draw_fork` parts the strands at **the last crest before `to`**, where
+  they already run level, so the parting leaves the helix without a kink.
+  `from` and `to` are in the helix's own `along`, so it meets `draw_weave`
+  exactly.
+- **A way's price is read off the prices**, not written down: the card's
+  `costs more/less to keep` and the hint's comparison come from
+  `CellBody.levelled_upkeep` at the cards' level, so if X and Y ever move so
+  far that the ways trade places, the words trade with them.
+- The fork chip answers on the press, once a press: a touch arrives twice, as
+  itself and as the click Godot emulates from it.
+- **While the cards are up the fork chip carries the in-hand mark**, and the
+  waiting gene in hand is drawn stepped back: one thing in the tray is being
+  decided at a time. The hand is kept, and comes back with the figure.
+- A tap on the forking slot hides the slot the keyboard was on, so the keyboard
+  goes to the fork chip, the view's way back; `Enter` puts it on `Way0`. A card
+  the keyboard is on reads as a hovered one does: that is `←` `→` reading.
+- **Android Back does what `Esc` does**: the view first, then pause.
+- `light` backs into whichever of the figure and the cards is showing, so
+  Shift-Tab never lands on a hidden chip.
+- The cards' fans step on the run node's own frame delta, which a paused tree
+  still hands it: they move while single player is stopped, and they repeat
+  to the pixel under `--fixed-fps`, which a clock read by hand would not.
+
 ### 8.4 In play: a choice is waiting, and the eye buds
 
 No word, and no rhythm: the second heartbeat means a gene is waiting, which
@@ -549,6 +587,15 @@ inherits an open fork is not told again. It goes to its hot state
 (`gene-lines-and-the-pause-target.md` §4.1) over 0.3 s, holds one beat, and
 settles over 1.5 s. It is the only thing in the water that points at pause.
 
+**Built:** the flare and the breath are armed by the level-up and cued by
+**the first heartbeat the body is on screen for** -- no menu over it, alive,
+short of the pinch -- so a level earned under a pond's menu, or a way taken on
+the pause screen, flares on the first beat back in the water. The breath rises
+on that same beat and holds for the period the body is beating at. Both are
+`game/mechanics/swell.gd`, a one-shot envelope that knows nothing about eyes.
+`tools/drive.gd --earn=` poses a level-up through the run's own door, `_earn()`,
+which is how `E03`, `E04` and `B01` are shot.
+
 ### 8.5 In play: a level up, and the eye flares
 
 On the first beat after `level()` rises, and after a path is chosen, when the
@@ -563,6 +610,16 @@ taste band's 136. The first cut, ink x 2, reached 111: a flash, not a feeling.
 Past the fork, the beam changes too: full vision draws one more ray or a faster
 sweep, and point of view gets more marks. A banked level flares as well. The
 replay flares when the level it is handed rises, never on a seek.
+
+**Built:** the organ's ink is clamped only once the view's fade is in: point of
+view draws the body at a third, and clamped before that the flare measured 76
+of glance rather than 82. **The replay needed one
+line in `recorder.gd`**: it signed a genome by the level held at the fork, so a
+level earned past an open fork wrote no delta and a watched run could neither
+flare for it nor move the bud's lobes apart. It signs `level()` now; the held
+level only ever moves when that one does, or with the path. The replay's flare
+runs on the replay's clock, slower at ½x and ¼x, and a rewind learns the levels
+afresh without flaring.
 
 ### 8.6 The choosing screen
 
@@ -584,33 +641,91 @@ gives the level at stake. §8.8 leaves open whether that is enough.
 
 ### 8.7 Rendered
 
-Mocks, point of view unless noted. `G` is `dna-body.md` §11's; the choosing
-frames use `choosing.md` §10.1's recipe with `ocellus:1:3` in the DNA.
+**On the real code.** Every frame is `tools/shot.tscn` driving
+`tools/drive.tscn`, at 1280x720 and -- marked *both* -- at 2400x1080 as well,
+where every canvas x below is 160 further right:
 
-| frame | shows | judgement |
+```
+xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
+    --rendering-driver opengl3 --fixed-fps 60 res://tools/shot.tscn -- \
+    --scene=res://tools/drive.tscn --out=/tmp/frame.png --size=1280x720 \
+    --wait=<wait> <flags>
+
+G    = --genome=cytostome:2,cirrus:1,flagellum:3,ocellus:1:3 --radius=34 --esc-at=1.0 --seed=7
+W    = G without --esc-at: in the water
+F5   = --level=ocellus:5 --earn=0.5:ocellus:100     fork open, two banked, half a level on
+CH   = --seed=12345 --radius=40 --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,
+       ocellus:1:3,ampulla:2:4,pellicle:1:5,toxicyst:2:6    choosing.md §10.1, beam at 3
+OPEN = --touch=1.5:938,204    ARM = --touch=2.0:898,358    TAKE = --touch=2.6:898,358
+PEAK = --arm-at=2.0 --freeze-on=beat --freeze-after=0.15
+```
+
+Point of view (`--mode=0`) unless a frame says full vision (`--mode=1`).
+
+**Reproducible first**, three runs each and 0 pixels apart: the shipped pause
+screen, the fork view at both shapes in both views, the flare at both shapes,
+and a real pond (`P01`). The cards' fans step on the run node's own frame
+delta, so `--fixed-fps` holds them still between runs.
+
+**Nothing changed for a player without a levelled gene.** Thirteen commands on
+the commit this started from and on this build, diffed: **0 pixels in every
+one** -- the pause screen for `cytostome:2,cirrus:1,flagellum:3` in both views
+at both shapes, a pause with two genes waiting and an `ampulla` at both shapes,
+the choosing screen on `choosing.md` §10.1's recipe in both views, and play in
+both views at both shapes. Also 0: play with a level-1 beam in full vision, and
+a level-2 beam's resting eye (`E01`) in point of view.
+
+| frame | wait, flags | shows | judgement |
+| --- | --- | --- | --- |
+| `M01` *both* | 2.0 `G --level=ocellus:7:extend --touch=1.4:938,204` | `7`, pale, in the selected beam chip's third lobe; the path's line in `Explain` | passes |
+| `M02` | 2.0 `G --level=ocellus:1` / `:11:extend` / `:99:sweep`, `--touch=1.4:938,204` | 1, 11 and 99 | passes: all inside the lobe, and a `1` is not a rung |
+| `alt_after_pips` | `M01`, with `LEVEL_SEAT := LevelSeat.AFTER_PIPS` | owner's call 2 answered the other way: `beam ●•• 7` | renders; rejected, §8.1 |
+| `M04` *both*, both views | 2.0 `G F5` | pause opened on the forking slot: strands parted, `5` in the hue in the fork's mouth, the tray chip, `level 5 ▰▱`, `tap again to choose how beam grows` | passes; in full vision the ghost buds too, in the ring's empty cell |
+| `M04b` *both* | 2.0 `G F5 --sample=ampulla` | `waiting`, `ping` in hand, then the fork chip stepped back to `WAIT_DIM` | passes |
+| `M04c` | 2.0 `G --level=ocellus:3 OPEN` | at the fork itself: both cards at level 4, `level 3 ▱ · both ways start at the next level` | passes |
+| `M05` *both* | 2.0 `G` with `ocellus:2:3`, `--level=ocellus:7:extend --earn=0.5:ocellus:150 --touch=1.4:938,204` | `level 7 ▰▰▱ · two copies · a daughter probably wears it` | passes |
+| `M06` *both*, both views | 2.0 `G F5 OPEN` | the cards, nothing armed: the gene's own line, `works as level 3 until you choose`, `tap a way to choose it` | passes. Full vision: the ghost is gone behind the left card, which reads 30.8 over its seat against point of view's 30.5, no pixel more than 6 of 255 apart |
+| `M07` *both* | 2.4 `G F5 OPEN ARM` | `sweep` armed: 2 px border in the hue, `fill` at 0.55, `costs less to keep than fill`, `tap again to choose sweep · for good` | passes |
+| `M07b` | 2.4 `M07 --hover=2.2:678,358` | the mouse reading `fill` while `sweep` is armed | passes: the two lines follow the hover, `Act` keeps the armed way, nothing restyles |
+| `M07c` *both* | 3.0 `M07 TAKE` | taken: the figure back with the slot selected as a receipt, strands closed, numeral pale, the tray empty at its height, `ocellus · three rays sweeping that side, faster every level` | passes |
+| `M08`, `M09` *both* | 2.0 `G` with `ocellus:3:3`, `--level=ocellus:99`, and `:99:sweep --touch=1.4:938,204` | the widest chip this build can make, `beam ●●● 99`, with and without its fork; `level 99` in the row | passes. `venom` does not level, so the mock's `venom 99` stays §8.1's arithmetic |
+| `M10` | 2.0 `G --level=ocellus:7:extend --sample=ampulla --touch=1.4:938,204` | armed over the beam with `ping` in hand: `beam leaves your dna · level 7 ends with this body`, no gauge | passes |
+| `M10b` | `M10 --body=cytostome:2:0,cirrus:1:1,flagellum:3:2` | the same over a beam only the DNA carries: `its level 7 is lost` | passes |
+| `M11` | 2.0 `G F5 --sample=ampulla,trichocyst:2,chemocyte,pellicle` | four genes and a fork: the fork chip wraps to a second row | passes, at `A08`'s height |
+| `K01`–`K05` | 1.8–3.1 `G F5` with `--tap=` | Tab Tab Enter on the chip opens with the keyboard on `fill`, reading it; `→` Enter arms `sweep`; `Esc` shuts the view, keyboard on the fork chip; `Esc` resumes; Tab x4 then Enter on the selected slot opens too | pass |
+| `K06`, `K07` | 2.4 `G F5 OPEN ARM --back-at=2.2`; 2.9 the same and `--back-at=2.6` | Android Back with `sweep` armed shuts the view, nothing taken, keyboard on the fork chip; a second Back resumes, the eye still budding | pass |
+| `alt_opens_on_cards` | `M04`, with `PAUSE_OPENS_ON_CARDS := true` | owner's call 3 answered the other way | renders |
+| `P01` | 3.0 `W --level=ocellus:2 --pond=host --esc-at=1.0 --earn=2.0:ocellus:80` | a real pond: the fork opens under the open menu, the tray grows its chip and the slot parts; the selection stays where the player was reading | passes |
+| `L8_*` *both*, both views | 2.0/3.0 `G`/`W --level=ocellus:8:extend` and `:8:sweep` | `8` on the chip and each path's line; in the water, eight rays filling the fan against three sweeping | pass |
+| `C01` *both* | 6.0 `CH --level=ocellus:7:extend --touch=5.5:340,328` | `ocellus · a fan of rays out of that side, one more every level` over `worn · level 7 · one copy · a daughter may not wear it` | passes: centred, clear of both blocks |
+| `C02` | 6.0 `CH --level=ocellus:5 --touch=5.5:340,328` | an open fork reads as no path yet, at `level 5` | passes |
+| `E01`, `E02`, `E03` *both*; `E04` | 3.0 `W --level=ocellus:2 --freeze-at=2.5`; 3.5 `:5 --freeze-at=3.0`; 6.0 `:6:sweep --earn=2.0:ocellus:240 PEAK`; 6.0 `:4 --earn=2.0:ocellus:200 PEAK` | the eye at rest, budding at its brightest phase, at the top of a flare, and a banked level flaring on a budded eye | pass, at the numbers below |
+| `F01`–`F03` *both* | the same, full vision | the same three | pass, by eye: one routine, both views |
+| `B01` *both* | 6.0 `W --level=ocellus:2 --earn=2.0:ocellus:80 --arm-at=2.0 --freeze-on=beat --freeze-after=0.6` | the level-up that opens the fork: the eye flares as it buds, and the pause target is in its breath's hold | passes |
+| `R01`, `R02` | 11.5 `W --level=ocellus:6:sweep --earn=2.0:ocellus:240 --kill-at=5.0 --touch=8.5:640,360 --freeze-at=10.45` / `10.75` | `watch`: the replay just before and at the recorded level-up's flare | pass: both panes flare |
+
+**Measured**, the σ 6 glance, point of view, 1280x720, over the eye (x 650..700,
+y 300..350) and, for the breath, over the pause target's corner:
+
+| | the mock | this build |
 | --- | --- | --- |
-| `pause`, `choose` | the screens as shipped, and the space measured here | baseline |
-| `ctl` | the harness with nothing mocked | 0 px from `pause`: the overlay moves nothing |
-| `M01` (both shapes) | `7` in the beam chip's third lobe, selected | passes |
-| `M02` | 1, 11 and 99 | passes |
-| `M03` | the numeral after the pips | rejected, §8.1 |
-| `M04` (both) | the fork open: strands parted, tray chip, level and gauge, the `Act` line | passes |
-| `M04b` | the same with `ping` waiting: `waiting`, `ping`, then the fork chip | the tray passes; its lines are the mock's, not the design's |
-| `M05` | level, gauge and odds | passes |
-| `M06` (both; full vision) | the fork view, nothing armed | **failed first**: in full vision the player's ghost showed through the left card. Passes opaque |
-| `M07` (both) | `sweep` armed | passes |
-| `M08`, `M09` (both) | `venom`, three copies, 99, with and without the fork | passes, once the prong tips came in 2 px |
-| `C01` (both) | the choosing lines with level 7 and a path | passes |
-| `E01`–`E04`, `F01`–`F03` | the eye at rest, budding and flaring, in point of view and full vision | pass at §8.4–§8.5's numbers. Full vision was judged by eye |
+| the eye at rest | 55.6 | 55 |
+| budding | 56.5 | 56 |
+| budding, at its brightest phase | 58.9 | 59 |
+| at the top of a flare | 86.6 | 82 |
+| a banked level flaring on a budded eye | -- | 85 |
+| the pause target breathing, its corner | hot 87 (§4.3) | 84, against 31 at rest |
+| the replay's flare, point of view / full vision | -- | 56 to 83 / 120 to 159 |
 
-**The build shoots these again** on the real code, at both shapes and in both
-views, with `--level=ocellus:5` (fork open, two banked) and
-`--level=ocellus:8:sweep` / `:extend`. That includes the gestures: `--touch=`
-the selected beam chip (938,204; 1098,204 on a phone) to open the view, a card
-twice, 0.3–4 s apart (678,358 and 898,358, +160), to choose, and `Enter`, `←`
-`→` and `Esc` by `--tap=`. `--rects=` gains `Fork`, both ways and the fork
-chip. It measures the glance of §8.4–§8.5 again, from its own frames. The
-pause target's breath was not mocked; its hot state is §4.3's measured 87.
+The flare comes in 4.6 under the mock -- and still above a beam return's 67 and
+far under a taste band's 136, which is what §8.5 asks of it. It measured 76
+before the organ's ink was clamped after the view's fade rather than before
+(§8.5, **Built**).
+
+**The rects** (`--rects=`, 1280x720): `Fork` is 578..998 x 172..544, `Figure`'s
+own rect to the pixel, so the column never moves; `Way0` is 578..778 and `Way1`
+798..998, both 213..503; the fork chip is 116 x 48; the hint row stays 20 tall,
+its `Level`, `Gauge` and `Text` centred as one group.
 
 ### 8.8 Left open
 
@@ -632,6 +747,13 @@ pause target's breath was not mocked; its hot state is §4.3's measured 87.
 | 2 | Where does a gene's level show on its slot? | **a small number inside the slot's twist of DNA ✓ recommended** · a number after the three dots · no number on the slot, only in the line below | You see `7` framed by the DNA beside its rungs, apart from the dots, which stay the copies. After the dots, `●•• 7` looks like a count of dots, and the longest gene name leaves no room for two digits |
 | 3 | When a choice is waiting and no gene is, what does pause open on? | **your body, with the beam already picked ✓ recommended** · straight onto the two choice cards | Recommended: pause looks as it does now, with the beam lit, and one more tap brings up the two ways. Opening on the cards puts the choice in front of you on every pause, even one to change the light |
 | 4 | Should the pause button glow once when your beam can grow? | **yes, once per choice ✓ recommended** · no, the eye alone | For about two heartbeats the pause button in the corner lights up. It is the only sign in the water that pause has something new. Without it the only sign is your eye doubling, which you may not connect with pause |
+
+The build took the recommended option in every row, and each other answer is
+one line in `game/normal/normal_mode.gd`: 1, `PATH_TITLES`, the one table the
+cards' titles and every line about a way read; 2, `LEVEL_SEAT` (`LOBE`,
+`AFTER_PIPS`, `NONE`); 3, `PAUSE_OPENS_ON_CARDS`; 4, `PAUSE_BREATHES_AT_FORK`.
+Rows 2 and 3 were flipped and rendered to prove it (§8.7, `alt_*`), then put
+back.
 
 ---
 
