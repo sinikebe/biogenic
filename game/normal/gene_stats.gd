@@ -14,7 +14,8 @@ extends RefCounted
 ## way, its own `crista` and `vacuole`. Energy is in `energy.md`'s seconds of
 ## rest, read against the tank the caption states; a time second follows
 ## *every*, *in*, *after* or *over*, and an energy second follows *burns*,
-## *worth*, *holds* or *makes* (§4).
+## *worth*, *holds* or *makes* (§4). Distance is in µm, the world's own unit
+## (owner's call 1, §11, answered on 2026-09-29).
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 

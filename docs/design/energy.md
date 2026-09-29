@@ -89,8 +89,8 @@ the button. So:
   share of the bar that store and burn do not soften, which is older than this
   and is for the gene-stats work to make consistent.
 
-  > **Made consistent, 2026-09-29** (`gene-stats.md` §11, call 2, built with
-  > the recommended option while the owner's answer is pending). A dash, and
+  > **Made consistent, 2026-09-29** (`gene-stats.md` §11, call 2: the
+  > recommended option, which the owner chose the same day). A dash, and
   > being spat out by venom, are paid as the seconds of rest their share of a
   > born cell's tank comes to, through `spend`, like every other cost: `crista`
   > makes them cheaper and a bigger `vacuole` tank makes them a smaller share of
