@@ -270,7 +270,9 @@ The term goes into the same multiplier every other gene's upkeep does
 reaches the player as the beat, like any other cost. A cell with nothing else
 above tier 1 starves in `420 / (1 + term)` seconds: 309 s at level 3, 244 s
 (extension) or 273 s (sweep) at level 5, and 160 s against 211 s at level 10.
-(At rest: since 2026-09-29 moving is paid on top, `energy.md`.)
+(At rest: since 2026-09-29 moving is paid on top, `energy.md`. And since
+`energy.md` §7 the tank is 36 s at rest, not 420: 26 s at level 3, 21 s or 23 s
+at level 5, and 14 s against 18 s at level 10. The ratios are the same.)
 
 **`X` and `Y` are balance numbers, and the owner judges them by playing** on the
 dev app. They are constants with this paragraph beside them.

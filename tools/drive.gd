@@ -165,7 +165,7 @@ extends Node
 ##   --hunger=<0..1>         force the cell's hunger, to photograph what the
 ##                           starvation floor actually leaves on screen
 ##   --starve=<seconds>      seconds already spent at full hunger, so the end of
-##                           the forty-second grace can be reached in one frame
+##                           the grace can be reached in one frame
 ##   --stalk=<units>         park a hunting cell this far off the cell's front
 ##                           quarter and hold it there, so dread, a wake and a
 ##                           lunge can each be photographed at a known range. In
@@ -2138,7 +2138,7 @@ func _step_field_cost() -> void:
 	get_tree().quit(0)
 
 
-## Straight to the end of the forty-second grace, which is a death this frame.
+## Straight to the end of the grace, which is a death this frame.
 ## --divide-at=: this cell reaches DIVIDE_RADIUS, and the run divides it --
 ## at a known time, so a division can be photographed where it happens: in a
 ## pond, after the guest has arrived rather than in the water it swam in alone.

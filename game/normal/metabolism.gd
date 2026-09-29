@@ -29,9 +29,9 @@ const REST_PERIOD := 2.4
 ## The floor on the beat *rate* while there is still time to fix it. A starving
 ## cell beats this slowly -- the membrane must still be there to read.
 const STARVED_PERIOD := 4.8
-## Past the point of fixing: the last forty seconds stretch to here. Intervals
-## long enough that you sit waiting, wondering whether it is coming back. Rate
-## is free -- it costs no light, and nothing else is using it at that moment.
+## Past the point of fixing: the grace stretches to here. Intervals long enough
+## that you sit waiting, wondering whether it is coming back. Rate is free -- it
+## costs no light, and nothing else is using it at that moment.
 const DYING_PERIOD := 7.5
 
 const FULL_AMPLITUDE := 1.0
@@ -41,21 +41,31 @@ const FULL_AMPLITUDE := 1.0
 ## floor rule has no exceptions, and only the period is allowed past it.
 const STARVED_AMPLITUDE := 0.35
 
-## Seconds from fed to starved **for a body at rest**. Seven minutes, so with
-## competent foraging -- a meal every 60 to 90 seconds -- the bar is usually
-## somewhere in the middle and the beat is usually saying something.
+## Seconds from fed to starved **for a body at rest**, which no living cell is:
+## every stroke and every turn is paid on top ([method spend],
+## docs/design/energy.md).
 ##
-## **A living cell is never at rest.** Since 2026-09-29 every stroke and every
-## turn is paid on top ([method spend], docs/design/energy.md): the owner asked
-## for starving to come sooner "not necessarily by reducing the storage", so the
-## tank stayed and the spending grew. A born cell that only drifts is starving
-## in 4:39 rather than 7:00, and one that steers a third of the time in 3:56.
+## **Thirty-six, so a born cell that never eats dies at thirty seconds.** The
+## owner, 2026-09-29: "starve after 30 seconds with spawn gear". Steering a
+## third of the time, a born cell burns 1.78 times a resting one, so it is empty
+## at 20 s, and [constant STARVE_GRACE] is the last ten. Drifting, it dies at
+## 34 s; turning all the time, at 26 s. It was 420, seven minutes at rest. What
+## moving costs is priced in seconds of rest, so it came down with this and kept
+## its share.
 ##
-## **Move cell.gd's `STROKE_COST` and `TURN_COST` first if the pace is wrong;
-## this one second.** docs/design/food-and-predators.md §3.3.
-const HUNGER_SECONDS := 420.0
-## What a meal your own size is worth. Near half a bar on purpose: a single meal
-## is felt and two are needed.
+## **This is the pace, and [constant MEAL] moves with it**: a meal has to buy
+## enough of the tank to reach the next one (energy.md §7). cell.gd's
+## `STROKE_COST` and `TURN_COST` are how much of the pace moving takes.
+const HUNGER_SECONDS := 36.0
+## What a meal your own size is worth: **the whole bar**. A drifter a born cell
+## can swallow is worth half to four-fifths of it.
+##
+## It was half a bar, "so a single meal is felt and two are needed", while the
+## bar lasted seven minutes. At thirty seconds half a bar is ten seconds of
+## life, and a cell steered at every meal it could see on the screen, one every
+## twelve seconds, starved in four of eight waters within three minutes. A whole
+## bar keeps it alive in all eight, with its bar in the middle on average and
+## the grace reached now and then (energy.md §7).
 ##
 ## **This stays a const.** §3.2 took it off the tier table: if `cytostome` tier
 ## raised the value of a meal as well as the gape, every tier of it would
@@ -63,20 +73,22 @@ const HUNGER_SECONDS := 420.0
 ## a strictly dominant gene with no reason ever to put anything else in a slot.
 ## The meal is scaled by what the prey weighed instead, at the call site --
 ## food.gd measures it against your body, not against your gape.
-const MEAL := 0.50
+const MEAL := 1.0
 ## Seconds at full hunger before the cell dies. It exists so that food ten
-## seconds away is still worth swimming for.
-const STARVE_GRACE := 40.0
+## seconds away is still worth swimming for, and now it is exactly that: ten of
+## the thirty seconds a born cell has. It was forty while the tank was seven
+## minutes (energy.md §7).
+const STARVE_GRACE := 10.0
 
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
 ## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
 ## is tier 1 across the board, and higher for every tier above that. **The
 ## price of power, and it is paid in the channel the game already reads** -- at
-## rest a cell with one tier-3 gene starves in 420 / 1.36 = 309s, sooner once it
-## moves ([method spend]), and that arrives as a beat that will not settle rather
-## than as a number on a screen. genome.gd owns what it comes to;
-## docs/design/genes-and-cilia.md §3.2.
+## rest a cell with one tier-3 gene is empty in 36 / 1.36 = 26 s rather than 36,
+## sooner once it moves ([method spend]), and that arrives as a beat that will
+## not settle rather than as a number on a screen. genome.gd owns what it comes
+## to; docs/design/genes-and-cilia.md §3.2.
 var upkeep := 1.0
 ## `vacuole` / store: how much bigger this cell's reserve is than a born
 ## cell's. Written once a frame by the run, like [member upkeep]. A larger tank
@@ -93,7 +105,7 @@ var photosynthesis := 0.0
 ## one mitochondrion paying for what the body *does* as well as for being alive.
 var burn := 1.0
 ## Seconds held at full hunger. Public so the dev harness can photograph the end
-## of the grace without waiting forty seconds for it.
+## of the grace without waiting it out.
 var starve_seconds := 0.0
 
 
@@ -131,7 +143,7 @@ func feed(amount: float) -> void:
 ## Scaled like everything else on the bar: [member burn] makes it cheaper and
 ## [member reserve] makes it a smaller share of a bigger tank. It stops at full
 ## hunger and never touches the grace, which is time on purpose: swimming for
-## food in the last forty seconds is exactly what the grace is for.
+## food in the last ten seconds is exactly what the grace is for.
 func spend(rest_seconds: float) -> void:
 	if rest_seconds <= 0.0 or HUNGER_SECONDS <= 0.0:
 		return
@@ -148,7 +160,7 @@ func reset() -> void:
 	set_hunger(0.0)
 
 
-## How far into the last forty seconds, 0..1.
+## How far into the grace, 0..1.
 func dying() -> float:
 	if STARVE_GRACE <= 0.0:
 		return 1.0 if hunger >= 1.0 else 0.0
@@ -162,8 +174,8 @@ func starved() -> bool:
 
 ## THE mapping, half one. Seconds between beats.
 ##
-## Starving stretches the period toward [constant STARVED_PERIOD] and then, in
-## the last forty seconds, toward [constant DYING_PERIOD]. **Hunger alone.** The
+## Starving stretches the period toward [constant STARVED_PERIOD] and then,
+## through the grace, toward [constant DYING_PERIOD]. **Hunger alone.** The
 ## water's richness used to multiply this down to 0.55 s beside food
 ## (food-and-predators.md §2.1); the owner took it off on 2026-09-29, because
 ## food is what the senses are for, so the same hunger now beats the same

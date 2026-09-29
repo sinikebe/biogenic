@@ -5562,10 +5562,17 @@ func _check_pond() -> void:
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
 		int(guest_run.get("_generation")),
 		float((guest_run.get_node(^"Metabolism")).hunger)]
+	# Kept, less what the body spent while the host went: the second the wait
+	# allows at rest, and one stroke, which at the thirty-second pace is up to
+	# 0.06 of the bar on its own (energy.md §7).
+	var spent_max: float = (1.0 + CellBody.STROKE_COST * CellBody.IMPULSE_SPEED_BY_TIER[
+		CellBody.IMPULSE_SPEED_BY_TIER.size() - 1]) \
+		/ float((guest_run.get_node(^"Metabolism")).HUNGER_SECONDS)
+	var gained := float(now_kept[3]) - float(kept[3])
 	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh
 			and is_equal_approx(float(kept[0]), float(now_kept[0]))
 			and kept[1] == now_kept[1] and int(kept[2]) == int(now_kept[2])
-			and absf(float(kept[3]) - float(now_kept[3])) < 0.01,
+			and gained > -0.01 and gained < spent_max + 0.01,
 		"pond: the host closes and the guest takes over %d frames later (0.1 s"
 		% took_frames + " at 60 fps is %d; %.0f ms here) in %d fresh cells,"
 		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0,

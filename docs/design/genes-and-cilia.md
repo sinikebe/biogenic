@@ -724,6 +724,13 @@ hunger readout since `perception.md` §6.2.
 > at rest. A born cell's meal buys 140 s drifting, not 210, and 118 s steering a
 > third of the time. `crista`'s burn softens both bills; so does `vacuole`.
 
+> **Thirty seconds, later the same day** (`energy.md` §7). `HUNGER_SECONDS` is
+> 36 and `MEAL` is 1.0, so every time here is at the old pace: at rest one
+> tier-3 gene empties the tank in 36 / 1.36 = **26 s** and the late cell above in
+> 36 / 2.08 = **17 s**, and the unit below is `36 * MEAL / upkeep`, which is
+> **36 s** a meal for a born cell at rest and 20 s steering a third of the time.
+> The argument the table makes is about ratios, and the ratios hold.
+
 > **Two things the previous draft claimed about this economy are false, and the
 > arithmetic is short enough to check here.** The unit that matters is not
 > "how long until I starve" but **how many seconds of life one meal buys**,

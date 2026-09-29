@@ -60,6 +60,13 @@ cold. Direction only resolves as they close.
 
 No tutorial. The opening is authored so the rules teach themselves in order.
 
+> **The sixty seconds are thirty since 2026-09-29** (`energy.md` §7). A born cell
+> that never eats dies at about 0:30, so the reward at ~0:45 below now comes
+> after the death, and the predator at 0:45 never arrives for a cell that has
+> not eaten (nothing may hunt the player before 42 s). The first meal has to
+> land inside the thirty. A free sense left to lapse in at about 0:50 arrives
+> after it too, so in point of view the first sense has to be placed.
+
 **0:00 — the beat.** Black, with one crisp teal contour that brightens every
 2.4s and fades. Nothing else. The player learns: the screen is not broken, the
 edge is alive, that is me.
