@@ -395,6 +395,20 @@ after a newborn that has not eaten has died (lifecycle.md §6's grant).
 ships together, so a release cut before them sends thirty seconds to players
 as built.
 
+**Answered 2026-09-29: the recommended option, all four rows.** "All
+recommended." Nothing moves, because the recommended option is what was built:
+
+- **Row 1:** dead at thirty seconds, twenty to empty and ten of grace
+  (`HUNGER_SECONDS` 36, `STARVE_GRACE` 10).
+- **Row 2:** a meal your size fills the bar (`MEAL` 1.0).
+- **Row 3:** no sense changes until the owner has played point of view on the
+  dev app.
+- **Row 4:** no words on the screen for a first death. The slowing heartbeat,
+  and the replay behind `watch`, are what explain it.
+
+Rows 1 and 3 have their answers, so nothing here holds a release. Rows 3 and 4
+were answered "play it first", so what the dev app shows can still reopen them.
+
 ### 7.7 To measure again
 
 `tools/forage_probe.gd` wraps `tools/drive.tscn`, so every drive flag plays the
