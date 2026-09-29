@@ -16,7 +16,8 @@ measurement below comes from it, at 1280x720 and at 2400x1080. The builder
 builds it for real and shoots §8 again.
 
 > **Built, 2026-09-29** (PR #138), and §8 shot again on the build. §11's two
-> calls are built with the recommended options, pending the owner's answer.
+> calls are built with the recommended options, and the owner chose those the
+> same day.
 > What the build and its review changed is in dated notes: §3.3 (the dim),
 > §5.1 (the bite line), §5.3 (a worn gene in hand), §8 (`S04`), §11 (the way
 > back from call 2).
@@ -642,3 +643,15 @@ pays its own hunger, so it crosses no wire (§9).
 >   and `STROKE_COST` in `cell.gd`, `spend()` in `metabolism.gd`, `_on_dashed`
 >   and `_on_stung` in `normal_mode.gd`, and the dated notes in `energy.md`
 >   §1.3, §2 and §7.1.
+
+**Answered 2026-09-29: the recommended option, both rows.** "All
+recommended." Nothing moves, because the recommended option is what was built:
+
+- **Row 1:** distances and speeds in micrometres, `620 µm`, the world's own
+  unit.
+- **Row 2:** yes. A dash and being spat out by venom are paid in seconds of
+  rest through `spend`, like every other cost, so `burn` makes them cheaper
+  and a bigger `store` tank a smaller share of it. A newborn pays what it
+  always did.
+
+Neither row holds a release.

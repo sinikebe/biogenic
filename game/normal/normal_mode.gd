@@ -1675,9 +1675,10 @@ func _on_impulsed(strength: float) -> void:
 ##
 ## [param cost] is a share of a born cell's tank, and it is paid as the seconds
 ## of rest that share comes to, **through `spend`, like every other cost**
-## (gene-stats.md §11, owner's call 2): `crista` makes it cheaper and a bigger
-## `vacuole` tank makes it a smaller share. A born cell -- burn 1, reserve 1 --
-## pays exactly what it did when this was a fixed share of the bar.
+## (gene-stats.md §11, owner's call 2, answered *yes* on 2026-09-29): `crista`
+## makes it cheaper and a bigger `vacuole` tank makes it a smaller share. A born
+## cell -- burn 1, reserve 1 -- pays exactly what it did when this was a fixed
+## share of the bar.
 func _on_dashed(cost: float) -> void:
 	if _life != Life.ALIVE:
 		return
