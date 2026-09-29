@@ -115,6 +115,10 @@ var _eye_flare := Swell.new(Run.EYE_FLARE_RISE, 0.0, Run.EYE_FLARE_FALL)
 var _eye_gene: StringName = &""
 var _eye_levels := {}
 var _view := Vector2(1280.0, 720.0)
+## Set by a rewind and answered after the next seek, once the body is back at
+## the start of the window, so the world view forgets its history there and not
+## at the death it has just left.
+var _forget := false
 
 
 func _ready() -> void:
@@ -145,6 +149,9 @@ func _process(delta: float) -> void:
 			_at = 0.0
 			_rewind()
 	_seek()
+	if _forget:
+		_forget = false
+		_panes.rewound()
 
 
 # ---------------------------------------------------------------------------
@@ -402,6 +409,7 @@ func _rewind() -> void:
 	# afresh from the window's first delta.
 	_eye_flare.clear()
 	_eye_levels = {}
+	_forget = true
 
 
 # ---------------------------------------------------------------------------

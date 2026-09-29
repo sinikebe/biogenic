@@ -326,8 +326,22 @@ about 15 px per second, so a thumb-width is roughly 3 seconds.
 > to 1/4x, which is the tap a player wants as the death arrives. Measured on the
 > built screen: the cursor moves 1.02, 2.03, 4.07, 0.25 and 0.51 s of replay per
 > second, then 1.02 again. The membrane is replayed from recorded snapshots, so
-> it keeps pace at any speed. The world pane's contact rings run in real time,
-> as they always did at 1/4x, so at 4x a few more of them trail behind the body.
+> it keeps pace at any speed.
+>
+> **What runs in real time**, as it always did at 1/4x, and so shows more at 4x:
+> the world pane's contact rings; the beam's held marks; the beat's glow; and
+> the camera's lag, which at 4x leaves the body a little ahead of centre, never
+> more than its 72-unit cap. The world pane's trail is sampled in real time too,
+> so at 4x it reaches four times as far back.
+>
+> **Each loop now starts with no history.** Until now nothing cleared the world
+> pane's trail when the replay looped, so for its first seven seconds a straight
+> line joined the death to the start. At 4x a thirty-second life loops every
+> 7.5 s, which would have left that line up almost all the time, with last
+> loop's path drawn ahead of the body. The replay now tells the world view to
+> forget its trail and marks as each loop begins (`vision.gd`'s `forget()`, the
+> same history a view coming back on already dropped), and the camera starts on
+> the body.
 
 **No frame step.** A button tapped sixty times to cross a second is not a
 control; 1/4x with a pause does the same job in one tap.
