@@ -2355,7 +2355,8 @@ const PAUSE_HOT := 0.92
 const BREATH_RISE := 0.3
 const BREATH_FALL := 1.5
 var _pause_breath := Swell.new(BREATH_RISE, 0.0, BREATH_FALL)
-## **Owner's call 4** (beam-levels.md §8.9): whether it breathes at all. Off,
+## **Owner's call 4** (beam-levels.md §8.9), answered on 2026-09-29 with the
+## recommended option: whether it breathes at all. Off,
 ## the eye budding is the only sign that pause has something new.
 const PAUSE_BREATHES_AT_FORK := true
 ## The in-between states, one stylebox each, recoloured as it breathes.
@@ -3409,7 +3410,8 @@ const PIP_ROOM_ALPHA := 0.30
 ## levels, which today is only the beam. Every other chip draws what it always
 ## drew.
 ##
-## **Owner's call 2** (§8.9): where it sits. `LOBE`, recommended, puts it inside
+## **Owner's call 2** (§8.9), answered on 2026-09-29 with the recommended
+## option: where it sits. `LOBE`, recommended, puts it inside
 ## the third lobe of the chip's helix, the one right of the rungs -- empty on
 ## every chip, crossed by no tether, and truthful, because the level is
 ## inherited with the gene, which is what the strand draws. `AFTER_PIPS` is the
@@ -5426,7 +5428,8 @@ func _latch_tray() -> void:
 # progression.gd knows them.
 # ---------------------------------------------------------------------------
 
-## **Owner's call 1** (beam-levels.md §8.9): what the two ways are called. The
+## **Owner's call 1** (beam-levels.md §8.9), answered on 2026-09-29 with the
+## recommended option: what the two ways are called. The
 ## cards' titles, and the name every line about a way uses, so a different
 ## answer is this line. `fill`, recommended, says what happens: each level adds
 ## a ray between the ones there are, so the fan fills in and never widens.
@@ -5460,7 +5463,8 @@ const HINT_COSTS := "%s than %s"
 const ACT_PICK_WAY := "tap a way to choose it"
 const ACT_CHOOSE_WAY := "tap again to choose %s · for good"
 
-## **Owner's call 3** (§8.9): what pause opens on with a fork open and no gene
+## **Owner's call 3** (§8.9), answered on 2026-09-29 with the recommended
+## option: what pause opens on with a fork open and no gene
 ## waiting. `false`, recommended: the figure, with the forking slot selected
 ## and one tap from the cards -- pause looks as it does now, and a pause to
 ## change the light is still that. `true` opens straight onto the cards.

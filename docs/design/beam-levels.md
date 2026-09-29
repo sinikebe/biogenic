@@ -755,6 +755,10 @@ its `Level`, `Gauge` and `Text` centred as one group.
 
 ### 8.9 Owner's call
 
+**Decided on 2026-09-29: the recommended option, all four rows** -- "Recommended
+for all". That is what was built, so nothing changed but this line and the
+constants' comments.
+
 | # | Question | Options | What it means |
 |---|---|---|---|
 | 1 | What are the two ways called? | **fill and sweep ✓ recommended** · extension and sweep · more rays and sweep | The two words on the choice cards. "fill" says what happens: each level adds a ray between the ones you have, so the fan fills in and never gets wider. "extension" is your word, but it can read as a longer beam, and neither way makes it longer |
