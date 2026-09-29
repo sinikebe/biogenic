@@ -64,6 +64,12 @@ the button. So:
   costs the same at every tier; a better cirrus just finishes it sooner.
 - **The water's own drift is free.** The heading's wander and an impulse's kick
   are not the cirrus working, and cost nothing.
+- **A push is a push, however it was asked for.** With `axoneme`, a finger down
+  under `anywhere` and a thumb on the stick under `stick` push — they always
+  did (controls.md §1) — so they pay for it too. Steering by touch with an
+  `axoneme` costs more than on the keyboard or under `pads`, which is the scheme
+  that turns without swimming. §3 measures it and §6 row 3 asks whether it
+  should.
 
 ### 1.3 What did not move
 
@@ -131,11 +137,22 @@ grace, never eating.
 | `flagellum 3`, drifting | ×1.36 | 5:49 | ×2.32 | **3:41** |
 | `crista 2`, drifting | ×0.91 | 8:22 | ×1.30 | **6:04** |
 | `vacuole 2`, drifting | ×0.74 | 10:09 | ×1.05 | **7:19** |
+| `axoneme 1`, steering flat out by touch (`anywhere`) | ×1.00 | 7:40 | ×3.00 | **3:00** |
+| `axoneme 1`, a thumb resting on the glass (`anywhere`) | ×1.00 | 7:40 | ×2.17 | **3:53** |
+| `axoneme 1`, steering flat out on the keyboard | ×1.00 | 7:40 | ×2.28 | **3:43** |
+
+The last three rows are 40 s, before any meal: under `anywhere` a finger down is
+also a push (§1.2).
 
 Seeds 1 and 2 give ×1.48 and ×1.53 drifting and ×2.29–2.30 turning: the spread is
 the stroke's random strength. Every row matches the arithmetic of §2 to within
 it — the `crista` row is `(1.18 + 0.5) × 0.77`, the `vacuole` row
 `(1.18 + 0.5) / 1.6`, since tier 2 of either adds its own 0.18 of upkeep.
+
+**To measure again** when a cost moves, with the committed harness: `tools/
+drive.tscn` under `--fixed-fps 60`, with `-- --seed=3 --mode=0 --genome=cytostome:1,
+cirrus:1,flagellum:1,stigma:1 --trace=10`, and `--hold=d` to turn, reading the
+trace's `hunger` before the first `[meal]` line.
 
 **What a meal buys** (half a bar, genes-and-cilia.md §3.2's unit), for a born
 cell: 210 s before at any pace; now 140 s drifting, 118 s steering a third of the
@@ -160,9 +177,10 @@ Nothing new is drawn and nothing new is said. The beat is the hunger readout
 a third of the time is at hunger 0.51 after two minutes: its beat has gone from
 2.4 s to 3.6 s and to two thirds of its strength, where before it had reached
 3.1 s and 0.81. A player learning by playing finds out that swimming around
-wears them out, and that sitting still in a good spot is a strategy. A player
-who wants to master it gets the numbers in §2 when the gene descriptions carry
-them.
+wears them out, and that turning less and pushing less saves it — never all of
+it, because the tail beats on its own, and for a newborn that is two thirds of
+what moving costs. A player who wants to master it gets the numbers in §2 when
+the gene descriptions carry them.
 
 ## 5. For the gene descriptions (the next piece of work)
 
@@ -172,7 +190,10 @@ than walking through it:
 
 - every cost is one constant per organ, in a unit that reads as time;
 - §2's table is what each organ costs, by tier, in that unit;
-- the pause screen's `EXPLAINS` lines are untouched, and still true.
+- the pause screen's `EXPLAINS` lines are untouched, and still true;
+- `plastid`'s sun is unchanged: a fixed income taken off the resting bill. That
+  bill is always the larger of the two, so the sun saves as much as it would if
+  it came off the whole.
 
 ## 6. For the owner
 
@@ -180,6 +201,8 @@ than walking through it:
 | --- | --- | --- | --- |
 | 1 | How much sooner should a cell starve? | gentle · **as built ✓ recommended** · harsh | A newborn that never eats and steers now and then dies at **5:42 · 4:36 · 3:24** (it was 7:40). Just drifting: 6:16 · 5:19 · 4:10. Turning all the time: 4:54 · 3:41 · 2:36. |
 | 2 | Should `crista` and `vacuole` also make moving cheaper? | **yes ✓ recommended** · no | They already make being alive cheaper. With yes, swimming and turning get cheaper the same way, so both genes are worth more than before. With no, they only soften the resting cost. |
+| 3 | With the push organ, should steering by touch pay for the push it gives? | **as built ✓ recommended** · make that push free | Once you grow the push organ, a finger on the screen pushes you (it always did), and now that costs food: turning by touch costs about a third more than on a keyboard, and a thumb just resting on the screen costs as much as holding the push key. The `pads` layout turns without pushing. Free would give phone players speed that keyboard players pay for. |
+| 4 | Should the tail's automatic beat cost energy, or only what the player does? | **as built ✓ recommended** · only turning and pushing | As built, every cell starves sooner even if you touch nothing: about two thirds of the new cost is the tail beating by itself, and a faster tail costs clearly more. With the other, a drifting cell keeps the old 7:40, and only steering and pushing make you starve sooner. |
 
 Row 1's gentle and harsh are `STROKE_COST` and `TURN_COST` halved and doubled;
 nothing else moves.

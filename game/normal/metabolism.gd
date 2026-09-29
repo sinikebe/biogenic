@@ -72,10 +72,11 @@ const STARVE_GRACE := 40.0
 var hunger := 0.0
 ## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
 ## is tier 1 across the board, and higher for every tier above that. **The
-## price of power, and it is paid in the channel the game already reads** -- a
-## cell with one tier-3 gene starves in 420 / 1.36 = 309s, and that arrives as a
-## beat that will not settle rather than as a number on a screen. genome.gd
-## owns what it comes to; docs/design/genes-and-cilia.md §3.2.
+## price of power, and it is paid in the channel the game already reads** -- at
+## rest a cell with one tier-3 gene starves in 420 / 1.36 = 309s, sooner once it
+## moves ([method spend]), and that arrives as a beat that will not settle rather
+## than as a number on a screen. genome.gd owns what it comes to;
+## docs/design/genes-and-cilia.md §3.2.
 var upkeep := 1.0
 ## `vacuole` / store: how much bigger this cell's reserve is than a born
 ## cell's. Written once a frame by the run, like [member upkeep]. A larger tank
