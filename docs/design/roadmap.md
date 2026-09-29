@@ -144,6 +144,25 @@ It depends on the pond only in that the pond must not special-case players, so
 that this rule lands on every cell at once. It is also Phase 6's kind of number:
 a human has to play it.
 
+**Next — the evolving water, in four packs** (the owner, 2026-09-29). Cells in
+the water carry behaviour as well as genes, and pass both on with small
+mutations, "so the cell dangerousness improve with time not only because of
+genes, but also from a kind of learning". Players then build their own cell's
+behaviour from the same blocks. The owner set the order and asked for each pack
+to ship on its own and be played on the dev app before the next starts:
+
+1. **A real ocean.** A finite drop of water that keeps its cells, rules that
+   spawn cells where there are too few, and food that isn't alive.
+   `docs/design/ocean.md`.
+2. **Water cells divide**, passing on their genes.
+3. **Behaviour blocks with mutation** replace the hand-written AI.
+4. **The player's own block screen**, built from the same blocks.
+
+Each depends on the one before. A lineage needs a water that keeps it long
+enough to have one; mutation needs births; and the player's screen needs blocks
+that already run the water. Pack 1 settles which rules the water keeps in the
+meantime. For example, water cells die of age until pack 2 gives them division.
+
 ## Standing rules the order obeys
 
 - **Nothing is built before the thing it is evidence about.** Full vision exists
