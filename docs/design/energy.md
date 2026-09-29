@@ -88,6 +88,14 @@ the button. So:
   (2.2, 1.6 and 1.2 s at §7's). It is not also charged as a stroke. It stays a
   share of the bar that store and burn do not soften, which is older than this
   and is for the gene-stats work to make consistent.
+
+  > **Made consistent, 2026-09-29** (`gene-stats.md` §11, call 2, built with
+  > the recommended option while the owner's answer is pending). A dash, and
+  > being spat out by venom, are paid as the seconds of rest their share of a
+  > born cell's tank comes to, through `spend`, like every other cost: `crista`
+  > makes them cheaper and a bigger `vacuole` tank makes them a smaller share of
+  > it. A born cell pays exactly what it did. Neither table moved, and nothing
+  > crosses the wire.
 - **The grace** is time. Spending stops at full hunger and never shortens it
   (forty seconds here, ten since §7), because swimming for food at the end is
   exactly what the grace is for.
@@ -126,6 +134,9 @@ descriptions can start from:
 Per use: a tier-1 beat costs **1.3 s** of rest (1.8 s at tier 3); a half turn
 costs **4.1 s** and a full circle **8.2 s** at every tier. The dash's seconds are
 at §7's pace; at the seven-minute pace they were 25, 19 and 13.
+
+> **Of rest, since 2026-09-29**: the dash's row is paid in those seconds through
+> `spend`, so `crista` and `vacuole` soften it like the rows above (§1.3's note).
 
 A body that has lost its flagellum (tier 0, which genes-and-cilia.md §9.7
 allows) beats on the tier-0 ladder and pays 0.36.
@@ -256,6 +267,12 @@ which is now 2.2, 1.6 and 1.2 s of rest; at tier 1 that is almost exactly what
 a stroke of the same speed costs, 2.16 s against 2.15 s) and
 `toxicyst`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
 `Wire.PROTOCOL` or `Wire.RULES` change (§1.3), and it ships as a content pack.
+
+> **Seconds of rest since, 2026-09-29** (`gene-stats.md` §11, call 2). The dash
+> and the venom are paid as the seconds their share of a born cell's tank comes
+> to -- 2.2, 1.6 and 1.2 s, and 17, 12 and 7.9 s -- through `spend`, so `crista`
+> and `vacuole` soften them as they soften every other cost. A born cell's price
+> is unchanged. §1.3 has the note.
 
 ### 7.2 Dies at
 

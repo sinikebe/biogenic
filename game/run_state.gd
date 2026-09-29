@@ -104,6 +104,22 @@ static func save_scheme(value: int) -> void:
 	_store("run", "scheme", value)
 
 
+## **Whether a gene's numbers are shown** on the pause screen and the choosing
+## screen (docs/design/gene-stats.md §2.2). Remembered beside the camera lock
+## for the reason it is: the player who wants the numbers turns them on once and
+## reads them from then on, and the one who never asks never sees one. Off by
+## default.
+static func load_numbers() -> bool:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return false
+	return bool(config.get_value("run", "numbers", false))
+
+
+static func save_numbers(value: bool) -> void:
+	_store("run", "numbers", value)
+
+
 static func onboarding_seen() -> bool:
 	var config := ConfigFile.new()
 	if config.load(PATH) != OK:

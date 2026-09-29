@@ -27,6 +27,12 @@ extends Node
 ##                           photographed without writing one the next run --
 ##                           and every other render in this project -- would
 ##                           inherit
+##   --numbers=0|1           pin a gene's numbers off or on (gene-stats.md
+##                           §2.2). Remembered in `user://` too, and for the same
+##                           reason a pinned run never writes it: a tap on the
+##                           switch in one frame must not leave numbers on in
+##                           every render after it. Pass `--numbers=0` to shoot
+##                           the switch being tapped
 ##   --hold=a|d              hold a steering key for the whole run
 ##   --drag=<pixels>         press near the middle and drag this far sideways
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
@@ -40,7 +46,7 @@ extends Node
 ##                           quit under this flag -- that is the point of it
 ##   --tap=<seconds>:<key>   tap a key once at that time; repeatable. Keys are
 ##                           esc, enter, up, down, left, right, tab, v, space,
-##                           w, e, a, d, and the four chords shift-left /
+##                           w, e, a, d, n, and the four chords shift-left /
 ##                           shift-right / shift-up / shift-down. The chords
 ##                           exist because the genome screen's move is
 ##                           `Shift`+arrow read as a **raw** key -- a content
@@ -315,7 +321,8 @@ extends Node
 ##                           measurement and refuses to accept the estimate
 ##   --rects=<seconds>       print `get_global_rect()` for the pause screen's two
 ##                           columns and each of their groups, every slot chip
-##                           and every waiting gene, once, at that time. The
+##                           and every waiting gene, and the choosing screen's
+##                           lines (gene-stats.md §3.2), once, at that time. The
 ##                           column is the one thing in this game measured in
 ##                           canvas pixels rather than judged by eye --
 ##                           docs/design/dna-body.md section 7 -- and a render
@@ -615,6 +622,8 @@ var _pings_peak_fronts := 0
 var _pings_peak_echoes := 0
 ## Which control scheme to force, or -1 to take whatever user:// remembers.
 var _scheme := -1
+## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
+var _numbers := -1
 var _hunter_gape := 1.40
 var _prey_radius := -1.0
 var _radius := -1.0
@@ -911,6 +920,8 @@ func _ready() -> void:
 			_mode = int(text.trim_prefix("--mode="))
 		elif text.begins_with("--scheme="):
 			_scheme = int(text.trim_prefix("--scheme="))
+		elif text.begins_with("--numbers="):
+			_numbers = clampi(int(text.trim_prefix("--numbers=")), 0, 1)
 		elif text.begins_with("--hunger="):
 			_hunger = float(text.trim_prefix("--hunger="))
 		elif text.begins_with("--starve="):
@@ -1150,6 +1161,11 @@ func _ready() -> void:
 		# so cycling the pause button to photograph one would leave it behind.
 		run.set("scheme", _scheme)
 		print("[drive] scheme forced to ", _scheme)
+	if _numbers >= 0:
+		# And the numbers, for the scheme's reason: a pinned run never writes
+		# the key, so a tapped switch is not inherited by the next render.
+		run.set("numbers", _numbers)
+		print("[drive] numbers pinned to ", _numbers)
 	add_child(run)
 	_run = run
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
@@ -2483,20 +2499,34 @@ func _step_rects() -> void:
 		"Caption": base + "/Genome/Caption",
 		"Waiting": base + "/Genome/Waiting",
 		"Figure": base + "/Genome/Figure",
-		"Explain": base + "/Genome/Explain",
-		"Hint": base + "/Genome/Hint",
+		# **The three rows and the numbers, in a box that does not grow**
+		# (gene-stats.md §3.1): `Lines` is the rows' height with the numbers
+		# off, and `Stack` hangs from its top, past it when they are on.
+		"Lines": base + "/Genome/Lines",
+		"Stack": base + "/Genome/Lines/Stack",
+		"Explain": base + "/Genome/Lines/Stack/Explain",
+		"Numbers": base + "/Genome/Lines/Stack/Numbers",
+		"Hint": base + "/Genome/Lines/Stack/Hint",
 		# The row's three parts (beam-levels.md §8.2): the level and its gauge
 		# show only for a gene that levels, and a hidden one prints its rect
 		# all the same -- read `visible` beside it.
-		"Level": base + "/Genome/Hint/Level",
-		"Gauge": base + "/Genome/Hint/Gauge",
-		"Text": base + "/Genome/Hint/Text",
-		"Act": base + "/Genome/Act",
+		"Level": base + "/Genome/Lines/Stack/Hint/Level",
+		"Gauge": base + "/Genome/Lines/Stack/Hint/Gauge",
+		"Text": base + "/Genome/Lines/Stack/Hint/Text",
+		"Act": base + "/Genome/Lines/Stack/Act",
+		# The switch: its hit rect, which is 96 x 48 however it is drawn.
+		"NumbersToggle": base + "/Genome/Lines/NumbersToggle",
 		# **The fork view and its two cards** (§8.3, §8.7): the one surface
 		# that takes the figure's place, so its fit is a measurement too.
 		"Fork": base + "/Genome/Fork",
 		"Way0": base + "/Genome/Fork/Way0",
 		"Way1": base + "/Genome/Fork/Way1",
+		# The choosing screen's lines (gene-stats.md §3.2): its numbers come
+		# between the gene's line and the odds, and the block grows down.
+		"Says": "Hud/Choosing/Says",
+		"SaysExplain": "Hud/Choosing/Says/Explain",
+		"SaysNumbers": "Hud/Choosing/Says/Numbers",
+		"SaysHint": "Hud/Choosing/Says/Hint",
 	}
 	for name: String in paths:
 		var node := _run.get_node_or_null(paths[name])
@@ -2937,6 +2967,9 @@ func _keycode(name: String) -> Key:
 		"e": return KEY_E
 		"a": return KEY_A
 		"d": return KEY_D
+		# The pause screen's `numbers` switch (gene-stats.md §2.2), read raw
+		# for the same reason the chords are.
+		"n": return KEY_N
 		_: return KEY_NONE
 
 

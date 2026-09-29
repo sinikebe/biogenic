@@ -357,6 +357,11 @@ const PUSH_CHASE_SHARE := 0.5
 ## myoneme is a cheaper dash, not a bigger one, so it stays a decision.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
+## **What a dash costs, as a share of a born cell's tank**: 2.2, 1.6 and 1.2 s
+## of rest. The run pays it as those seconds, through metabolism.gd's `spend`,
+## like every other cost, so `crista` makes it cheaper and a bigger `vacuole`
+## tank makes it a smaller share (gene-stats.md §11, owner's call 2). It was a
+## fixed share of the bar that neither softened; a born cell pays what it did.
 const DASH_COST_BY_TIER: Array[float] = [0.0, 0.060, 0.045, 0.032]
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_COOLDOWN := 1.4
@@ -391,6 +396,11 @@ const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 
 ## `toxicyst` / venom. What surviving being eaten costs, in hunger. A cell that
 ## swallows you dies of it and you are spat out starving.
+##
+## A share of a born cell's tank, paid as seconds of rest through `spend` as
+## the dash is, so `crista` and `vacuole` soften it too (gene-stats.md §11,
+## call 2). The values are wire.gd's to guard; the host only asks whether this
+## is `>= 0`, and how it is paid is each device's own hunger.
 const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
 
 ## `statocyst` / level used to be named here: it bought no number, only a lobe
@@ -436,7 +446,9 @@ const WANDER_TAU := 2.6
 ## flagellum, on the speed it gives, and a held push, on the speed it adds each
 ## frame. A tier-1 beat adds 117 u/s on average and costs 1.3 s of rest, and the
 ## flagellum beating on its own schedule comes to half again what a resting body
-## burns. The dash is not in it: `DASH_COST_BY_TIER` was always its price.
+## burns. The dash is not in it: `DASH_COST_BY_TIER` is its price, and it is
+## paid in the same seconds of rest, through the same `spend`, so `crista` and
+## `vacuole` soften both alike.
 const STROKE_COST := 0.0113
 ## **Seconds of rest per radian the body turns under steering.** A half turn
 ## costs about 4 s of rest, and turning flat out at tier 1 burns 0.8 of a
