@@ -550,11 +550,13 @@ func _say_line() -> void:
 	_line.text = trouble if not trouble.is_empty() else "waiting for an answer"
 
 
+## `address · port`: this device's address, and the LAN's port on its channel
+## (channel.gd) -- 45781, not the release app's 45771, on a dev build.
 func _here_says() -> String:
 	var here := Lan.local_address()
 	if here.is_empty():
 		return "no network here"
-	return "%s · %d" % [here, Lan.PORT]
+	return "%s · %d" % [here, Lan.channel_port()]
 
 
 ## What Back and Esc do here, said where a player looks for it -- or what Back

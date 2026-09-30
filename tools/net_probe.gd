@@ -61,6 +61,13 @@ extends Node
 ## slow search -- and the server scene's `--no-upnp`, remembered and for one
 ## run. Not a packet leaves the machine.
 ##
+## **And which pair of ports a build is on** (`channel`, `game/net/channel.gd`,
+## docs/server.md "A dev server"): the release channel's 45771 and 45772, and a
+## branch's 45781 and 45782, posed as each -- every socket the game binds and
+## dials, with a dev server and a live one side by side on one address, the
+## forward and its name, and every sentence that names a port, the release
+## channel's word for word as before there were two.
+##
 ## **And the door and the gate** (`limits`, docs/design/net-hardening.md A.8):
 ## hostile peers against a host of their own each -- every frame at and past
 ## its size bound, malformed and wrong-way frames, a command that is not a
@@ -163,6 +170,13 @@ func _ready() -> void:
 		print("[net-probe] NOTE --upnp-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--channel-only` is the same for the channel: which pair of ports a build
+	# is on, and everything that binds, dials or says one.
+	if OS.get_cmdline_user_args().has("--channel-only"):
+		await _check_channel()
+		print("[net-probe] NOTE --channel-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	# `--referee-only` is the same for the referee (net-hardening.md part B):
 	# its socket-free checks and the pond's own, which include the real game.
 	if OS.get_cmdline_user_args().has("--referee-only"):
@@ -197,6 +211,7 @@ func _ready() -> void:
 	await _check_server_updates()
 	await _check_invites()
 	await _check_upnp()
+	await _check_channel()
 	# **The margin on CI's backstop, printed.** The step runs this with no
 	# frame cap and `--quit-after 20000`, which is a count of frames, not of
 	# seconds -- so a faster runner reaches it sooner, and a probe that grew
@@ -1198,7 +1213,7 @@ func _check_link() -> void:
 	var older_peer: ENetPacketPeer = null
 	if older.create_host(1) == OK:
 		# The id a client offers ENet's server: 2 or more, and nobody else's.
-		older_peer = older.connect_to_host("127.0.0.1", Lan.PORT, 0,
+		older_peer = older.connect_to_host("127.0.0.1", Lan.channel_port(), 0,
 			3 if guest.my_id() == 2 else 2)
 	var older_knobs: Array = []
 	var older_until := _now() + SETTLE
@@ -1315,7 +1330,7 @@ class Rogue extends Node:
 		process_mode = Node.PROCESS_MODE_ALWAYS
 
 	func call_host() -> bool:
-		if peer.create_client("127.0.0.1", Lan.PORT) != OK:
+		if peer.create_client("127.0.0.1", Lan.channel_port()) != OK:
 			return false
 		id = peer.get_unique_id()
 		return true
@@ -1328,7 +1343,7 @@ class Rogue extends Node:
 			local_port: int = 0) -> bool:
 		if not source.is_empty():
 			peer.set_bind_ip(source)
-		if peer.create_client("127.0.0.1", Invite.PORT, 0, 0, 0, local_port) != OK:
+		if peer.create_client("127.0.0.1", Invite.channel_port(), 0, 0, 0, local_port) != OK:
 			return false
 		if peer.host.dtls_client_setup(Invite.NAME,
 				TLSOptions.client(certificate, Invite.NAME)) != OK:
@@ -1833,7 +1848,7 @@ func _limits_squat(id: int) -> Array:
 	var squatter := ENetConnection.new()
 	var peer: ENetPacketPeer = null
 	if squatter.create_host(1) == OK:
-		peer = squatter.connect_to_host("127.0.0.1", Lan.PORT, 0, id)
+		peer = squatter.connect_to_host("127.0.0.1", Lan.channel_port(), 0, id)
 	var seen := [false, false]
 	await _limits_until(func() -> bool:
 		if peer == null:
@@ -7691,7 +7706,7 @@ func _invites_format() -> void:
 		refused += 1 if Invite.parse_reach(typed).has("error") else 0
 	_says(reach_ok and str(reach_read["address"]) == "2001:db8::7"
 			and int(reach_read["port"]) == 50000 and str(name_read["address"]) == "pond.example.net"
-			and int(name_read["port"]) == Invite.PORT and refused == 8,
+			and int(name_read["port"]) == Invite.channel_port() and refused == 8,
 		"invites F4: --reach takes an address, a name or [IPv6] with or without a port,"
 		+ " and refuses %d of 8 things that are none of them" % refused)
 	# F5: kept once pasted, where only this user reads it.
@@ -7903,7 +7918,7 @@ func _invites_calls() -> void:
 	_says(int(minted[0]) == 0 and int(alice["read"]) == Invite.Read.OK
 			and int(bob["read"]) == Invite.Read.OK and alice["key_id"] != bob["key_id"],
 		"invites C0: two invites minted from the command line's own code, each with its"
-		+ " own key id and secret, both calling 127.0.0.1:%d" % Invite.PORT)
+		+ " own key id and secret, both calling 127.0.0.1:%d" % Invite.channel_port())
 	# J1: a job root would run into another user's files is refused, with the
 	# command to run instead; root in its own, and anybody else, goes on. The
 	# rule is asked with the owners given, since this probe runs as root in one
@@ -8174,10 +8189,10 @@ func _invites_strangers() -> void:
 	var host: Node = await _invites_host("InvStrangersHost")
 	# S1 and S2 together: each waits out its own timeout.
 	var plain: Node = await _session("InvPlainAtInternet")
-	_invites_join_port(plain, Invite.PORT)
+	_invites_join_port(plain, Invite.channel_port())
 	var crossed: Node = await _session("InvDtlsAtLan")
 	var at_lan := bob.duplicate()
-	at_lan["port"] = Lan.PORT
+	at_lan["port"] = Lan.channel_port()
 	crossed.call_invite(at_lan)
 	var waited := await _limits_until(func() -> bool:
 		return int(plain.link) != NetSession.Link.REACHING \
@@ -8697,7 +8712,7 @@ func _invites_house_closed() -> void:
 	from = _inv_catcher.lines.size()
 	(host.get("_peer") as ENetMultiplayerPeer).close()
 	var squatter := PacketPeerUDP.new()
-	var squatted := squatter.bind(Lan.PORT) == OK
+	var squatted := squatter.bind(Lan.channel_port()) == OK
 	await _wait(5.0)
 	var down: bool = float(host.get("_lan_down_since")) >= 0.0
 	var counting: float = host._now() - float(host.get("_saturation_from"))
@@ -8718,7 +8733,7 @@ func _invites_house_closed() -> void:
 	_says(squatted and down and counting < 2.0 and far_on and took >= 0.0
 			and on >= 6.5 and on < 8.5 and tries == 3
 			and _count(lines, "[net] the LAN listener could not open again: port %d is taken"
-				% Lan.PORT) == 1
+				% Lan.channel_port()) == 1
 			and int(lan.link) == NetSession.Link.TOGETHER
 			and int(far.link) == NetSession.Link.TOGETHER,
 		"invites H4: with the port taken for 5 s the moment the listener closed, it is"
@@ -9128,7 +9143,8 @@ func _invites_raw_call(internet: bool, id: int) -> Array:
 	if raw.create_host(1) == OK:
 		if internet:
 			raw.dtls_client_setup(Invite.NAME, TLSOptions.client(_inv_cert, Invite.NAME))
-		peer = raw.connect_to_host("127.0.0.1", Invite.PORT if internet else Lan.PORT, 0, id)
+		peer = raw.connect_to_host("127.0.0.1", Invite.channel_port() if internet
+			else Lan.channel_port(), 0, id)
 	var seen := [false, false]
 	await _limits_until(func() -> bool:
 		if peer == null:
@@ -9369,13 +9385,13 @@ func _upnp_only(calls: Array, port: int) -> int:
 	return calls.size()
 
 
-## A forward of [constant Invite.PORT] that never maps [constant Lan.PORT], as
+## A forward of [method Invite.channel_port] that never maps [method Lan.channel_port], as
 ## the server makes it, through [param router], its events kept in
 ## [param events].
 func _upnp_forward(router: UpnpRouter, events: UpnpEvents,
-		port: int = Invite.PORT) -> Node:
-	var forward: Node = PortForward.new(port, DedicatedServer.UPNP_DESCRIPTION,
-		PackedInt32Array([Lan.PORT]), router)
+		port: int = Invite.channel_port()) -> Node:
+	var forward: Node = PortForward.new(port, DedicatedServer.upnp_description(),
+		PackedInt32Array([Lan.channel_port()]), router)
 	forward.reported.connect(events.take)
 	add_child(forward)
 	return forward
@@ -9411,28 +9427,29 @@ func _upnp_maps_and_removes() -> void:
 		else PackedInt32Array()
 	_says(mapped >= 0.0 and searches.size() == 1
 			and int(searches[0][1]) == PortForward.DISCOVER_TIMEOUT
-			and avoided.has(Invite.PORT) and avoided.has(Lan.PORT)
+			and avoided.has(Invite.channel_port()) and avoided.has(Lan.channel_port())
 			and absf(counted_from - asked_at) < 0.05 and adds.size() == 1
-			and int(adds[0][1]) == Invite.PORT and str(adds[0][2]) == "UDP"
-			and str(adds[0][3]) == "Biogenic server" and int(adds[0][4]) == PortForward.LEASE
+			and int(adds[0][1]) == Invite.channel_port() and str(adds[0][2]) == "UDP"
+			and str(adds[0][3]) == DedicatedServer.upnp_description()
+			and int(adds[0][4]) == PortForward.LEASE
 			and not bool(forward.is_permanent()) and str(said.get("internal", "")) == "192.0.2.12"
 			and str(address.get("address", "")) == "203.0.113.7"
 			and StringName(address.get("kind", &"")) == &"public" and router.on_main == 0,
 		"upnp U1: started, the forward searches once, off the main thread and never listening on"
 		+ " %s, and maps UDP %d to this machine's %s:%d for %d s, %.2f s in -- the lease" % [
-			str(avoided), Invite.PORT, said.get("internal", "?"), Invite.PORT, PortForward.LEASE,
-			mapped] + " counted from %.0f ms before the router answered -- and says the" % (
-			(asked_at + 0.25 - counted_from) * 1000.0) + " router's public address, %s (%s)" % [
-			address.get("address", "?"), events.names()])
+			str(avoided), Invite.channel_port(), said.get("internal", "?"),
+			Invite.channel_port(), PortForward.LEASE, mapped] + " counted from %.0f ms before"
+		% ((asked_at + 0.25 - counted_from) * 1000.0) + " the router answered -- and says the"
+		+ " router's public address, %s (%s)" % [address.get("address", "?"), events.names()])
 	forward.stop()
 	var stopped := await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
 	await _wait(0.3)
 	var removals := router.calls("delete")
 	var all := router.calls()
-	_says(stopped >= 0.0 and removals.size() == 1 and int(removals[0][1]) == Invite.PORT
+	_says(stopped >= 0.0 and removals.size() == 1 and int(removals[0][1]) == Invite.channel_port()
 			and str(removals[0][2]) == "UDP" and not bool(forward.holds())
 			and events.count(&"removed") == 1 and all.size() == 5
-			and str(all[3][0]) == "add" and int(all[3][1]) == Invite.PORT
+			and str(all[3][0]) == "add" and int(all[3][1]) == Invite.channel_port()
 			and str(all[4][0]) == "delete" and router.on_main == 0,
 		"upnp U2: stopped, it asks for that forward once more and then takes it off the router,"
 		+ " %.2f s later, says so once, and asks nothing more" % stopped)
@@ -9467,7 +9484,8 @@ func _upnp_renews() -> void:
 	var searches := router.calls("discover").size()
 	_says(refused >= 4 and adds.size() >= 5 and int(adds[1][4]) == 4
 			and searches == adds.size() - 1
-			and int(adds[1][1]) == Invite.PORT and asked >= 1.9 and asked < 2.5 and took < 4.0
+			and int(adds[1][1]) == Invite.channel_port() and asked >= 1.9 and asked < 2.5
+			and took < 4.0
 			and events.count(&"renew_failed") == 1 and events.count(&"renewed") == 1
 			and str(told.get("name", "")) == "http error" and bool(forward.holds())
 			and events.count(&"lapsed") == 0,
@@ -9555,7 +9573,8 @@ func _upnp_conflict() -> void:
 	holding.queue_free()
 	_says(looks >= 3 and events.count(&"conflict") == 1 and not kept
 			and router.calls("delete").is_empty() and line.contains("forwards UDP %d elsewhere"
-				% Invite.PORT) and line.contains("left alone") and line.contains("192.0.2.12")
+				% Invite.channel_port()) and line.contains("left alone")
+			and line.contains("192.0.2.12")
 			and not bool(elsewhere.get("held", true)) and not hint.contains("set --reach")
 			and hint.contains("which this server's own forward does not")
 			and given.calls("add").size() == 2 and given.calls("delete").is_empty()
@@ -9567,21 +9586,21 @@ func _upnp_conflict() -> void:
 		+ " left there: \"%s...\"" % line.substr(0, 60))
 
 
-## **U6: never the LAN's port.** A forward made for [constant Lan.PORT] asks the
+## **U6: never the LAN's port.** A forward made for [method Lan.channel_port] asks the
 ## router nothing at all, not even a search; one made for the internet port
 ## and pointed at the LAN's afterwards is refused where the call is made; and
 ## the guard itself: its own port, 1 to 65535, and none of its never-list.
 func _upnp_never_the_lan() -> void:
 	var router := UpnpRouter.new()
 	var events := UpnpEvents.new()
-	var lan_forward := _upnp_forward(router, events, Lan.PORT)
+	var lan_forward := _upnp_forward(router, events, Lan.channel_port())
 	lan_forward.start()
 	await _wait(0.3)
 	var asked_for_lan := router.calls().size()
 	lan_forward.queue_free()
 	var turned := UpnpEvents.new()
 	var retold := _upnp_forward(router, turned)
-	retold.set("port", Lan.PORT)
+	retold.set("port", Lan.channel_port())
 	retold.start()
 	await _wait(0.3)
 	var untouched := router.calls().is_empty()
@@ -9593,26 +9612,28 @@ func _upnp_never_the_lan() -> void:
 	holding.lease = 2
 	holding.start()
 	await _limits_until(func() -> bool: return bool(holding.holds()), 3.0)
-	holding.set("port", Lan.PORT)
+	holding.set("port", Lan.channel_port())
 	await _limits_until(func() -> bool: return held.count(&"forbidden") > 0, 3.0)
 	holding.stop()
 	await _limits_until(func() -> bool: return bool(holding.is_stopped()), 3.0)
 	holding.queue_free()
 	var lan_calls := 0
 	for call: Array in router.calls():
-		if call.size() > 1 and int(call[1]) == Lan.PORT:
+		if call.size() > 1 and int(call[1]) == Lan.channel_port():
 			lan_calls += 1
 	var removed := router.calls("delete")
-	var guard := not PortForward.may_map(Lan.PORT, Lan.PORT, PackedInt32Array([Lan.PORT])) \
-		and not PortForward.may_map(Lan.PORT, Invite.PORT, PackedInt32Array()) \
+	var lan := Lan.channel_port()
+	var net := Invite.channel_port()
+	var guard := not PortForward.may_map(lan, lan, PackedInt32Array([lan])) \
+		and not PortForward.may_map(lan, net, PackedInt32Array()) \
 		and not PortForward.may_map(0, 0, PackedInt32Array()) \
-		and PortForward.may_map(Invite.PORT, Invite.PORT, PackedInt32Array([Lan.PORT]))
+		and PortForward.may_map(net, net, PackedInt32Array([lan]))
 	_says(asked_for_lan == 0 and events.count(&"forbidden") == 1 and untouched
 			and turned.count(&"forbidden") == 1 and held.count(&"forbidden") == 1
-			and lan_calls == 0 and removed.size() == 1 and int(removed[0][1]) == Invite.PORT
-			and _upnp_only(router.calls("add"), Invite.PORT) == 2 and guard,
-		"upnp U6: UDP %d is never forwarded -- a forward made for it asks the router" % Lan.PORT
-		+ " nothing; one turned to it before it starts, or while it holds %d, is" % Invite.PORT
+			and lan_calls == 0 and removed.size() == 1 and int(removed[0][1]) == net
+			and _upnp_only(router.calls("add"), net) == 2 and guard,
+		"upnp U6: UDP %d is never forwarded -- a forward made for it asks the router" % lan
+		+ " nothing; one turned to it before it starts, or while it holds %d, is" % net
 		+ " refused where the call is made, and the one holding takes off its own port at a"
 		+ " stop and no other; the guard takes only the port a forward was made for")
 
@@ -9639,14 +9660,14 @@ func _upnp_cannot_help() -> void:
 	var shared := str(lines["100.64.0.2"])
 	var private := str(lines["10.0.0.2"])
 	var unsaid := str(lines[""])
-	var facts := {"port": Invite.PORT, "protocol": "UDP", "address": "203.0.113.7",
+	var facts := {"port": Invite.channel_port(), "protocol": "UDP", "address": "203.0.113.7",
 		"kind": PortForward.kind_of("203.0.113.7")}
 	var hint := DedicatedServer.upnp_said(&"address", facts)
 	var named := DedicatedServer.upnp_said(&"address", facts, {"address": "203.0.113.7",
-		"port": Invite.PORT})
+		"port": Invite.channel_port()})
 	var v6 := DedicatedServer.upnp_said(&"address", facts, {"address": "2001:db8::7",
-		"port": Invite.PORT})
-	var gone_private := DedicatedServer.upnp_said(&"address", {"port": Invite.PORT,
+		"port": Invite.channel_port()})
+	var gone_private := DedicatedServer.upnp_said(&"address", {"port": Invite.channel_port(),
 		"protocol": "UDP", "address": "10.0.0.2", "kind": PortForward.kind_of("10.0.0.2")})
 	_says(adds == 0 and shared.contains("100.64.0.2") and shared.contains("shares one address")
 			and shared.contains("cannot reach you") and private.contains("10.0.0.2")
@@ -9722,8 +9743,8 @@ func _upnp_has(lines: Array[String], part: String) -> bool:
 
 
 ## **U9-U11: the server scene.** It forwards from its first READY, whatever the
-## invites -- there are none here -- to [constant Invite.PORT] and never
-## [constant Lan.PORT]; `--no-upnp`, run as the command line runs it, takes the
+## invites -- there are none here -- to [method Invite.channel_port] and never
+## [method Lan.channel_port]; `--no-upnp`, run as the command line runs it, takes the
 ## forward off within a look, is remembered in `pond/upnp.cfg`, `rw-------`, and
 ## asks the router nothing while it holds; `--upnp` forwards again within a
 ## look; and the server's clean stop takes the forward off.
@@ -9735,16 +9756,16 @@ func _upnp_server_switch() -> void:
 	var up := await _limits_until(func() -> bool: return forward != null and bool(forward.holds()),
 		3.0)
 	var at_start := _upnp_lines(from)
-	_says(up >= 0.0 and int(forward.port) == Invite.PORT
-			and (forward.call("never") as PackedInt32Array).has(Lan.PORT)
+	_says(up >= 0.0 and int(forward.port) == Invite.channel_port()
+			and (forward.call("never") as PackedInt32Array).has(Lan.channel_port())
 			and not bool(server.session().internet_listening())
 			and _upnp_has(at_start, "looking for the router")
-			and _upnp_has(at_start, "forwarded UDP %d" % Invite.PORT)
+			and _upnp_has(at_start, "forwarded UDP %d" % Invite.channel_port())
 			and _upnp_has(at_start, "set --reach=203.0.113.7")
 			and router.on_main == 0,
 		"upnp U9: the server forwards UDP %d from its first READY, %.2f s in, with no" % [
-			Invite.PORT, up] + " invite and nothing listening there -- never UDP %d --" % Lan.PORT
-		+ " and says so in %d [upnp] lines" % at_start.size())
+			Invite.channel_port(), up] + " invite and nothing listening there -- never UDP %d --"
+		% Lan.channel_port() + " and says so in %d [upnp] lines" % at_start.size())
 	var job: Array = InviteBook.run(PackedStringArray(["--no-upnp"]), UPNP_ROOT)
 	var mode := FileAccess.get_unix_permissions(str(InviteBook.paths(UPNP_ROOT)["upnp"]))
 	var off := await _limits_until(func() -> bool:
@@ -9774,7 +9795,8 @@ func _upnp_server_switch() -> void:
 	var at_stop := _upnp_lines(line_from)
 	_says(int(job[0]) == 0 and again >= 0.0 and InviteBook.upnp_setting(UPNP_ROOT) == 1
 			and _upnp_has(_upnp_lines(from), "on again (--upnp)") and taken >= 0.0
-			and _upnp_has(at_stop, "took the forward of UDP %d off the router" % Invite.PORT)
+			and _upnp_has(at_stop, "took the forward of UDP %d off the router"
+				% Invite.channel_port())
 			and router.on_main == 0,
 		"upnp U11: --upnp forwards again %.2f s later, and the server's clean stop takes the"
 		% again + " forward off the router %.2f s after it is asked" % taken)
@@ -9845,14 +9867,15 @@ func _upnp_lasting_ceiling() -> void:
 
 ## **U14: the search never listens on the forwarded port, or the LAN's.** Its
 ## port is drawn from 49152 to 65535 for every search; twenty thousand draws
-## land in that range and never on 45771 or 45772, and a draw that lands on a
-## port it must avoid moves on to the next, round the range. The forward hands
-## the search its own port and its never-list. A search port the forward
-## reached would take any datagram from the internet for a router's answer.
+## land in that range and never on the forwarded port or the LAN's -- 45772 and
+## 45771 on the release channel -- and a draw that lands on a port it must
+## avoid moves on to the next, round the range. The forward hands the search
+## its own port and its never-list. A search port the forward reached would
+## take any datagram from the internet for a router's answer.
 func _upnp_search_port() -> void:
 	var draw := RandomNumberGenerator.new()
 	draw.seed = 7
-	var avoid := PackedInt32Array([Invite.PORT, Lan.PORT])
+	var avoid := PackedInt32Array([Invite.channel_port(), Lan.channel_port()])
 	var outside := 0
 	var ours := 0
 	var low := 65536
@@ -9879,12 +9902,13 @@ func _upnp_search_port() -> void:
 	await _upnp_gone(forward)
 	var told: PackedInt32Array = router.calls("discover")[0][2] \
 		if not router.calls("discover").is_empty() else PackedInt32Array()
-	_says(outside == 0 and ours == 0 and cornered == 60000 and told.has(Invite.PORT)
-			and told.has(Lan.PORT) and PortForward.Upnp.SEARCH_PORT_LOW > Invite.PORT
-			and PortForward.Upnp.SEARCH_PORT_LOW > Lan.PORT,
+	_says(outside == 0 and ours == 0 and cornered == 60000 and told.has(Invite.channel_port())
+			and told.has(Lan.channel_port())
+			and PortForward.Upnp.SEARCH_PORT_LOW > Invite.channel_port()
+			and PortForward.Upnp.SEARCH_PORT_LOW > Lan.channel_port(),
 		"upnp U14: 20000 search ports drawn from %d-%d, none outside it and none %d or %d;" % [
-			low, high, Invite.PORT, Lan.PORT] + " a draw on an avoided port moves on, and the"
-		+ " forward tells its search to avoid %s" % str(told))
+			low, high, Invite.channel_port(), Lan.channel_port()] + " a draw on an avoided port"
+		+ " moves on, and the forward tells its search to avoid %s" % str(told))
 
 
 ## **U15: a running server's own `--no-upnp` or `--upnp` is found and named.**
@@ -9959,7 +9983,7 @@ func _upnp_proc_wipe() -> void:
 ## a stop still waiting on the router says so at once, with the wait it will
 ## take and that SIGTERM comes sooner under systemd.
 func _upnp_words() -> void:
-	var what := {"port": Invite.PORT, "protocol": "UDP"}
+	var what := {"port": Invite.channel_port(), "protocol": "UDP"}
 	var silent := DedicatedServer.upnp_said(&"no_router", what.merged({"network": true}))
 	var unread := DedicatedServer.upnp_said(&"no_gateway", what.merged({"why": &"not_igd",
 		"devices": 2}))
@@ -9968,9 +9992,9 @@ func _upnp_words() -> void:
 		"permanent": true}))
 	var timed := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": true,
 		"permanent": false, "lease": 3600}))
-	var on := InviteBook.forward_advice(Invite.PORT, 1)
-	var off := InviteBook.forward_advice(Invite.PORT, 0)
-	var unreadable := InviteBook.forward_advice(Invite.PORT, -1)
+	var on := InviteBook.forward_advice(Invite.channel_port(), 1)
+	var off := InviteBook.forward_advice(Invite.channel_port(), 0)
+	var unreadable := InviteBook.forward_advice(Invite.channel_port(), -1)
 	var other := InviteBook.forward_advice(50000, 1)
 	_says(silent.contains("UPnP is off in the router, most likely")
 			and unread.contains("UPnP is on") and unread.contains("could not be read")
@@ -9981,8 +10005,552 @@ func _upnp_words() -> void:
 			and timed.contains("lapses within an hour")
 			and on.contains("by UPnP") and off.contains("(--no-upnp)")
 			and unreadable.contains("cannot be read") and not unreadable.contains("--no-upnp")
-			and other.contains("is of %d, not of 50000" % Invite.PORT),
+			and other.contains("is of %d, not of 50000" % Invite.channel_port()),
 		"upnp U16: the lines say what is so -- no router answering is where UPnP off lands, a"
 		+ " description that cannot be read is not called off, an unreadable switch is not"
 		+ " called --no-upnp, and a stop still waiting says how long, and that SIGTERM comes"
 		+ " sooner")
+
+
+# ---------------------------------------------------------------------------
+# **The channel** (`game/net/channel.gd`; docs/server.md, "A dev server"):
+# which pair of ports a build is on. A build that follows a branch's rolling
+# prerelease -- the dev app, and the dev server beside it -- is on its branch's
+# channel, 45781 and 45782; every other build is on the release channel, 45771
+# and 45772, as every build was before there were two. This section poses as
+# each through `Channel.posing`, the seam no player reaches, and holds the game
+# to the pair wherever it binds, dials, forwards, prints or defaults a port --
+# the sockets themselves, not only the helpers -- and the release channel to
+# what it said before, word for word.
+# ---------------------------------------------------------------------------
+
+const Channel := preload("res://game/net/channel.gd")
+## For its receipt, `address · port`, which is the one port a screen shows.
+const Earshot := preload("res://game/net/earshot.gd")
+## Where this section keeps its books and its stand-in `/proc`: never a real
+## server's `user://pond`.
+const CHANNEL_ROOT := "user://net_probe_channel/"
+const CHANNEL_SERVER_ROOT := "user://net_probe_channel_server/"
+const CHANNEL_WORDS_ROOT := "user://net_probe_channel_words/"
+const CHANNEL_PROC_ROOT := "user://net_probe_channel_proc/"
+## **The two pairs, written out** -- the LAN's port, then the internet's --
+## which the helpers are held to.
+const RELEASE_PAIR := [45771, 45772]
+const BRANCH_PAIR := [45781, 45782]
+
+var _channel_catcher: LineCatcher = null
+
+
+func _check_channel() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var ceiling := Engine.max_fps
+	Engine.max_fps = INVITES_FPS
+	NetSession.forget_refusals()
+	for root: String in [CHANNEL_ROOT, CHANNEL_SERVER_ROOT, CHANNEL_WORDS_ROOT]:
+		_invites_wipe(root)
+	_channel_catcher = LineCatcher.new()
+	OS.add_logger(_channel_catcher)
+	_channel_pairs()
+	await _channel_sockets()
+	await _channel_server("dev")
+	await _channel_server("")
+	_channel_words()
+	_channel_own_server()
+	Channel.posing = null
+	OS.remove_logger(_channel_catcher)
+	_channel_catcher = null
+	NetSession.forget_refusals()
+	for root: String in [CHANNEL_ROOT, CHANNEL_SERVER_ROOT, CHANNEL_WORDS_ROOT]:
+		_invites_wipe(root)
+	print("[net-probe] NOTE channel took %.1f s and %d frames, at most %d a second"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	Engine.max_fps = ceiling
+
+
+## **K1: the two pairs.** Posed as the release channel, the LAN's port is 45771
+## and the internet's 45772 -- `Lan.PORT` and `Invite.PORT`, as they always
+## were; posed as a branch's, 45781 and 45782. The four are apart, and all
+## below the range a UPnP search listens in. Unposed, the channel is this
+## build's own stamp, read from BuildInfo and fixed: the same at every ask.
+func _channel_pairs() -> void:
+	var info := get_node_or_null(^"/root/BuildInfo")
+	var stamped: Variant = info.get("release_branch") if info != null else null
+	var stamp: String = stamped if stamped is String else ""
+	Channel.posing = null
+	var own := [Channel.branch(), Lan.channel_port(), Invite.channel_port()]
+	Channel.posing = ""
+	var release := [Lan.channel_port(), Invite.channel_port(), Channel.is_branch(),
+		Channel.port(1000)]
+	Channel.posing = "dev"
+	var branch := [Lan.channel_port(), Invite.channel_port(), Channel.is_branch(),
+		Channel.port(1000)]
+	Channel.posing = null
+	var again := [Channel.branch(), Lan.channel_port(), Invite.channel_port()]
+	var own_pair: Array = BRANCH_PAIR if not stamp.is_empty() else RELEASE_PAIR
+	var below := true
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		below = below and port < PortForward.Upnp.SEARCH_PORT_LOW
+	var apart := {}
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		apart[port] = true
+	_says(release == [45771, 45772, false, 1000] and branch == [45781, 45782, true, 1010]
+			and [Lan.PORT, Invite.PORT] == RELEASE_PAIR and Channel.BRANCH_SHIFT == 10
+			and own == [stamp, own_pair[0], own_pair[1]] and again == own
+			and apart.size() == 4 and below,
+		"channel K1: the release channel is on %d and %d, a branch's on %d and %d -- four"
+		% [release[0], release[1], branch[0], branch[1]] + " ports, all apart; this"
+		+ " build's own stamp, read from BuildInfo, is '%s': %d and %d, the same at"
+		% [stamp, own[1], own[2]] + " every ask")
+
+
+## Whether [param port] is held on this machine: a UDP socket cannot bind it.
+func _channel_held(port: int) -> bool:
+	var probe := PacketPeerUDP.new()
+	var held := probe.bind(port) != OK
+	probe.close()
+	return held
+
+
+## Which of the four ports are held: the release channel's LAN and internet
+## ports, then the branch channel's.
+func _channel_holds() -> Array:
+	var out: Array = []
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		out.append(_channel_held(port))
+	return out
+
+
+## The port [param guest]'s LAN call went to.
+func _channel_dialled(guest: Node) -> int:
+	var peer := guest.get("_peer") as ENetMultiplayerPeer
+	if peer == null or peer.get_peer(1) == null:
+		return -1
+	return peer.get_peer(1).get_remote_port()
+
+
+## **K2: every listener binds its channel's port. K3: every call dials its
+## own channel's.** Posed as a branch, a server's LAN listener binds 45781 and
+## its internet one 45782, and nothing of the release channel's; posed as the
+## release channel, a second server beside it binds 45771 and 45772. With both
+## up on one address, a guest on each channel dials its own channel's LAN port
+## and is in with its own server and never the other; and a call by each
+## channel's invite -- minted with `--reach` naming no port -- is in at its own
+## internet listener. **K4:** the LAN listener, closed under its guest, opens
+## again on its channel's port, and a phone hosts on it too.
+func _channel_sockets() -> void:
+	# One book for both servers: one key, and an invite minted on each channel
+	# to a --reach with no port.
+	Channel.posing = "dev"
+	var dev_minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
+		"--invite=dev-friend"]), CHANNEL_ROOT)
+	Channel.posing = ""
+	var live_minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
+		"--invite=live-friend"]), CHANNEL_ROOT)
+	var identity := InviteBook.load_identity(CHANNEL_ROOT)
+	var table := InviteBook.table(CHANNEL_ROOT)
+	var dev_invite := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("dev-friend", CHANNEL_ROOT)))
+	var live_invite := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("live-friend", CHANNEL_ROOT)))
+	var held_before := _channel_holds()
+	# The dev server alone first: its pair held, and none of the release's.
+	Channel.posing = "dev"
+	var dev_host: Node = await _session("ChannelDevHost")
+	var dev_up: bool = dev_host.host(NetSession.GUESTS_MAX) \
+		and dev_host.listen_internet(identity[0], identity[1])
+	dev_host.set_invites(table)
+	var dev_alone := _channel_holds()
+	Channel.posing = ""
+	var live_host: Node = await _session("ChannelLiveHost")
+	var live_up: bool = live_host.host(NetSession.GUESTS_MAX) \
+		and live_host.listen_internet(identity[0], identity[1])
+	live_host.set_invites(table)
+	var both := _channel_holds()
+	_says(int(dev_minted[0]) == 0 and int(live_minted[0]) == 0 and identity.size() == 3
+			and held_before == [false, false, false, false] and dev_up and live_up
+			and dev_alone == [false, false, true, true] and both == [true, true, true, true],
+		"channel K2: posed as a branch, a server's LAN listener binds %d and its internet"
+		% BRANCH_PAIR[0] + " one %d, and nothing of the release channel's; posed as the"
+		% BRANCH_PAIR[1] + " release channel, a server beside it binds %d and %d -- held"
+		% RELEASE_PAIR + " %s, then %s" % [str(dev_alone), str(both)])
+	# A guest on each channel, calling the one address.
+	Channel.posing = "dev"
+	var dev_guest: Node = await _limits_guest("ChannelDevGuest")
+	var dev_dialled := _channel_dialled(dev_guest)
+	var after_dev := [(dev_host.guests() as Array).size(), (live_host.guests() as Array).size()]
+	Channel.posing = ""
+	var live_guest: Node = await _limits_guest("ChannelLiveGuest")
+	var live_dialled := _channel_dialled(live_guest)
+	var after_live := [(dev_host.guests() as Array).size(),
+		(live_host.guests() as Array).size()]
+	# By invite, each at its own channel's internet listener.
+	Channel.posing = "dev"
+	var dev_far: Node = await _session("ChannelDevFar")
+	await _invites_call(dev_far, dev_invite)
+	Channel.posing = ""
+	var live_far: Node = await _session("ChannelLiveFar")
+	await _invites_call(live_far, live_invite)
+	var far_in := [str(dev_host.label_of(dev_far.my_id())),
+		str(live_host.label_of(live_far.my_id()))]
+	var together := int(dev_guest.link) == NetSession.Link.TOGETHER \
+		and int(live_guest.link) == NetSession.Link.TOGETHER \
+		and int(dev_far.link) == NetSession.Link.TOGETHER \
+		and int(live_far.link) == NetSession.Link.TOGETHER
+	_says(together and dev_dialled == BRANCH_PAIR[0] and after_dev == [1, 0]
+			and live_dialled == RELEASE_PAIR[0] and after_live == [1, 1]
+			and int(dev_invite["port"]) == BRANCH_PAIR[1]
+			and int(live_invite["port"]) == RELEASE_PAIR[1]
+			and far_in == ["dev-friend", "live-friend"],
+		"channel K3: on one address, a dev guest dials %d and is in with the dev server"
+		% dev_dialled + " alone, and a release guest dials %d and is in with the live one" % (
+			live_dialled) + " alone; each channel's invite, minted to a --reach with no port,"
+		+ " calls %d and %d and is in at its own server's internet listener -- %s" % [
+			int(dev_invite["port"]), int(live_invite["port"]), str(far_in)])
+	# The LAN listener closed under its guest, as 4.7 closes one whose send
+	# failed, with its port held by something else that moment -- as H4 holds
+	# the release channel's: it says so, naming its own channel's port, and
+	# once the port is free it opens on it again, and the guest is back.
+	Channel.posing = "dev"
+	var from := _channel_catcher.lines.size()
+	(dev_host.get("_peer") as ENetMultiplayerPeer).close()
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(BRANCH_PAIR[0]) == OK
+	await _limits_until(func() -> bool:
+		return int(dev_host.gate_counts["lan_closed"]) >= 1 \
+			and int(dev_guest.link) != NetSession.Link.TOGETHER \
+			and _count(_channel_catcher.lines.slice(from), "could not open again") >= 1)
+	squatter.close()
+	await _limits_until(func() -> bool:
+		return float(dev_host.get("_lan_down_since")) < 0.0, 4.0)
+	var taken_said := _count(_channel_catcher.lines.slice(from),
+		"[net] the LAN listener could not open again: port %d is taken" % BRANCH_PAIR[0])
+	var reopened := float(dev_host.get("_lan_down_since")) < 0.0 \
+		and _channel_held(BRANCH_PAIR[0])
+	dev_guest.join("127.0.0.1")
+	await _until_link(dev_guest, NetSession.Link.TOGETHER)
+	var back := int(dev_guest.link) == NetSession.Link.TOGETHER \
+		and _channel_dialled(dev_guest) == BRANCH_PAIR[0]
+	await _limits_close([dev_host, dev_guest, dev_far])
+	# A phone, which hosts on the LAN's port alone.
+	var phone: Node = await _session("ChannelDevPhone")
+	var phone_up: bool = phone.host(1)
+	var phone_holds := _channel_holds()
+	var friend: Node = await _limits_guest("ChannelDevFriend")
+	var friend_in := int(friend.link) == NetSession.Link.TOGETHER \
+		and _channel_dialled(friend) == BRANCH_PAIR[0] and (phone.guests() as Array).size() == 1
+	# A session's close() frees it as well.
+	await _limits_close([phone, friend, live_host, live_guest, live_far])
+	Channel.posing = null
+	var held_after := _channel_holds()
+	_says(squatted and taken_said == 1 and reopened and back and phone_up
+			and phone_holds == [true, true, true, false] and friend_in
+			and held_after == [false, false, false, false],
+		"channel K4: a dev server's LAN listener, closed under its guest with %d held" % (
+			BRANCH_PAIR[0]) + " elsewhere, says that port is taken, opens again on it once it"
+		+ " is free, and the guest is back; a dev phone hosts on %d alone, beside"
+		% BRANCH_PAIR[0] + " the live server's %d, and its friend dials it there; and" % (
+			RELEASE_PAIR[0]) + " closed, every port is let go")
+
+
+## The `[server]` and `[upnp]` lines printed since [param from].
+func _channel_lines(from: int) -> Array[String]:
+	var out: Array[String] = []
+	for line: String in _channel_catcher.lines.slice(from):
+		if line.begins_with("[server] ") or line.begins_with("[upnp] "):
+			out.append(line.strip_edges())
+	return out
+
+
+## **K5 and K6: the server scene, as [param branch]'s build** -- K5 a dev
+## build, K6 the release channel's. Its LAN listener binds its channel's port
+## and not the other channel's; its READY, join and listening lines name that
+## port -- a dev build's saying whose build it is, the release channel's word
+## for word as they always were. With an invite in its book, minted to a
+## `--reach` with no port, and its internet port held by something else as it
+## starts, its `internet:` line says that port is taken; free, the next says
+## it listens there, for friends calling that port. Its forward asks the
+## router for its channel's internet port, never the LAN's, under its
+## channel's name; and its clean stop takes that forward off.
+func _channel_server(branch: String) -> void:
+	Channel.posing = branch
+	var dev := not branch.is_empty()
+	var lan: int = BRANCH_PAIR[0] if dev else RELEASE_PAIR[0]
+	var net: int = BRANCH_PAIR[1] if dev else RELEASE_PAIR[1]
+	var other_lan: int = RELEASE_PAIR[0] if dev else BRANCH_PAIR[0]
+	_invites_wipe(CHANNEL_SERVER_ROOT)
+	var minted: Array = InviteBook.run(PackedStringArray(["--reach=203.0.113.7",
+		"--invite=channel"]), CHANNEL_SERVER_ROOT)
+	var identity := InviteBook.load_identity(CHANNEL_SERVER_ROOT)
+	var certificate := InviteBook.fingerprint(identity[2]) if identity.size() == 3 else "?"
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(net) == OK
+	var router := UpnpRouter.new()
+	var from := _channel_catcher.lines.size()
+	var server: Node = await _upnp_server(router, CHANNEL_SERVER_ROOT, PackedStringArray())
+	var forward: Node = server.call("forward")
+	var up := await _limits_until(func() -> bool:
+		return forward != null and bool(forward.holds()), 3.0)
+	squatter.close()
+	var listening := await _limits_until(func() -> bool:
+		return bool(server.session().internet_listening()), 3.0)
+	var held := [_channel_held(lan), _channel_held(other_lan)]
+	server.call("_announce", false)
+	var address := str(server.session().address)
+	var code: String = DedicatedServer.clock_code(address)
+	var lines := _channel_lines(from)
+	var ready_line := "[server] READY -- listening on %s port %d/udp, code %s" % [address, lan,
+		code] + (" -- a dev build: only the dev app finds it" if dev else "")
+	var join_line := ("[server] to join: a phone on this wi-fi (%sx) opens within earshot,"
+		% Lan.prefix_of(address) + (" in the dev app," if dev else "") + " taps answer, and"
+		+ " taps the ring at %s, in that order. LAN only: do not forward this port." % code)
+	var listening_line := ("[server] listening on %s port %d/udp, code %s -- 0 of %d guests, 0 in"
+		% [address, lan, code, FoodField.GUESTS_MAX] + " the water -- internet: 1 invite -- upnp:"
+		+ " forwarded" + (" -- a dev build" if dev else ""))
+	var taken_line := ("[server] internet: not listening for the internet: there are invites, but"
+		+ " port %d/udp is taken, or not free yet. Trying again in %d s." % [net,
+			roundi(UPNP_POLL)])
+	var internet_line := ("[server] internet: listening on port %d/udp for 1 invite (channel),"
+		% net + " certificate %s. Friends call 203.0.113.7:%d, which must reach this" % [
+			certificate, net] + " machine's %d/udp: the [upnp] lines say whether the router" % net
+		+ " forwards it, and if not, forward it by hand -- the one port to forward"
+		+ " (docs/server.md §9.3).")
+	var adds := router.calls("add")
+	var avoided: PackedInt32Array = router.calls("discover")[0][2] \
+		if not router.calls("discover").is_empty() else PackedInt32Array()
+	var description := "Biogenic server (dev)" if dev else "Biogenic server"
+	var asked := adds.size() == 1 and int(adds[0][1]) == net and str(adds[0][2]) == "UDP" \
+		and str(adds[0][3]) == description and int(adds[0][4]) == PortForward.LEASE
+	var joins := Lan.octet_of(address) < 0 or lines.has(join_line)
+	var never: PackedInt32Array = forward.call("never")
+	var to := "[upnp] forwarded UDP %d on the router to this machine," % net
+	var forwarded := false
+	for line: String in lines:
+		forwarded = forwarded or line.begins_with(to)
+	var line_from := _channel_catcher.lines.size()
+	server.call("shut_down")
+	var down := await _limits_until(func() -> bool:
+		return router.calls("delete").size() == 1 and bool(forward.is_stopped()), 3.0)
+	var at_stop := _channel_lines(line_from)
+	var removed := router.calls("delete")
+	server.queue_free()
+	await _wait(0.3)
+	Channel.posing = null
+	_says(up >= 0.0 and held == [true, false] and lines.has(ready_line) and joins
+			and int(minted[0]) == 0 and squatted and lines.has(taken_line) and listening >= 0.0
+			and lines.has(internet_line) and lines.has(listening_line) and asked and forwarded
+			and never == PackedInt32Array([lan]) and avoided.has(net) and avoided.has(lan)
+			and lines.has("[upnp] looking for the router, to forward UDP %d to this" % net
+				+ " machine for as long as the server runs -- nothing answers there without"
+				+ " an invite")
+			and down >= 0.0 and removed.size() == 1 and int(removed[0][1]) == net
+			and at_stop.has("[upnp] took the forward of UDP %d off the router" % net)
+			and router.on_main == 0,
+		"channel %s: %s server listens on %d and not %d, says so in its READY, join and" % [
+			"K5" if dev else "K6", "a dev" if dev else "the release channel's", lan, other_lan]
+		+ " listening lines%s; with an invite, its internet line says %d is taken while" % [
+			" -- a dev build's own" if dev else " -- word for word as ever", net]
+		+ " held and then that it listens there; it asks the router for UDP %d as '%s'," % [net,
+			description] + " never %d, and takes that forward off at its stop" % lan)
+
+
+## **K7: every sentence that names a port, or the service's account, names its
+## channel's -- and on the release channel, word for word what it said before
+## there were two.** `--reach` with no port, and a `reach.cfg` a hand made with
+## none, mean the internet's port; `--reach` and `--invite` refused say it; the
+## advice for the router, the UPnP switch and `--invites` name it; a call from
+## outside the house at the LAN's door is sent to it; the earshot screen shows
+## the LAN's; the forward's line and its name on the router are the channel's;
+## and the note a job run as root gives, and the refusal when a job run as root
+## cannot read who owns the book, name the channel's service account.
+func _channel_words() -> void:
+	var release := {
+		"reach": "45772,45772,50000",
+		"reach_job": "friends will call 203.0.113.7:45772. The server asks your router to"
+			+ " forward UDP 45772 to it by itself, by UPnP, and its [upnp] lines say whether the"
+			+ " router did; if not, forward UDP 45772 on your router to this machine's port"
+			+ " 45772/udp, and nothing else.",
+		"reach_refused": "--reach: a port is a number from 1 to 65535. For example"
+			+ " --reach=203.0.113.7 or --reach=pond.example.net:45772 (both placeholders).",
+		"mint_refused": "--invite: friends need an address to call first. Set it with"
+			+ " --reach=<your public address or name>[:<port>] -- where your router answers,"
+			+ " and the port it forwards to this machine's 45772/udp.",
+		"handmade": "45772",
+		"advice_off": "Forward UDP 45772 on your router to this machine's port 45772/udp, and"
+			+ " nothing else -- UPnP is off here (--no-upnp).",
+		"advice_other": "Forward UDP 50000 on your router to this machine's port 45772/udp,"
+			+ " and nothing else: the server's own forward, by UPnP, is of 45772, not of"
+			+ " 50000.",
+		"switch_on": "upnp: on -- the server asks the router to forward 45772/udp to it"
+			+ " (--no-upnp turns that off)",
+		"switch_off": "upnp: off -- forward 45772/udp to this machine by hand (--upnp turns it"
+			+ " back on)",
+		"set_off": "upnp: off, remembered -- the server asks the router for nothing. For"
+			+ " friends outside the house, forward UDP 45772 to this machine by hand"
+			+ " (docs/server.md §9.3); --upnp turns it back on.",
+		"set_on": "upnp: on, remembered -- the server asks the router to forward UDP 45772 to"
+			+ " this machine for as long as it runs, and its [upnp] lines say whether the"
+			+ " router did (docs/server.md §9.3).",
+		"listing": "friends call 203.0.113.7:45772; the server listens on 45772/udp for them.",
+		"door": "not on this network -- a call from outside needs an invite, on port 45772",
+		"mapped": "forwarded UDP 45772 on the router to this machine, 192.0.2.12:45772, for an"
+			+ " hour at a time -- renewed every 30 minutes while the server runs, and taken off"
+			+ " when it stops",
+		"receipt": "%s · 45771" % Lan.local_address() if not Lan.local_address().is_empty()
+			else "no network here",
+		"account": "biogenic",
+		"description": "Biogenic server",
+		"tag": "|",
+		"root_note": "note: this runs as root, so it keeps root's own book, in %s, which the"
+			% ProjectSettings.globalize_path(CHANNEL_WORDS_ROOT).trim_suffix("/") + " service"
+			+ " never reads. For the service's, run the job as its user: runuser -u biogenic --"
+			+ " env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless --"
+			+ " <job> (docs/server.md §9.1)",
+		"ownership": "refused: this runs as root but could not read who owns the invite files,"
+			+ " so it will not write what the service user might not read back. Run the job as"
+			+ " that user: runuser -u biogenic -- env HOME=/h /x --headless -- --invites (or"
+			+ " sudo -u biogenic, the same way; docs/server.md §9.1)",
+	}
+	# A dev build's: the same sentences on the other pair, and its own names.
+	var branch := {}
+	for key: String in release:
+		branch[key] = str(release[key]).replace("45772", "45782").replace("45771", "45781")
+	branch["account"] = "biogenic-dev"
+	branch["root_note"] = str(release["root_note"]).replace("biogenic -- env HOME=/var/lib/biogenic"
+		+ " /opt/biogenic/", "biogenic-dev -- env HOME=/var/lib/biogenic-dev /opt/biogenic-dev/")
+	branch["ownership"] = str(release["ownership"]).replace("runuser -u biogenic --",
+		"runuser -u biogenic-dev --").replace("sudo -u biogenic,", "sudo -u biogenic-dev,")
+	branch["description"] = "Biogenic server (dev)"
+	branch["tag"] = " -- a dev build: only the dev app finds it| -- a dev build"
+	var wrong: Array[String] = []
+	for posed: String in ["", "dev"]:
+		Channel.posing = posed
+		var said := _channel_sentences()
+		var want: Dictionary = branch if not posed.is_empty() else release
+		for key: String in want:
+			if str(said.get(key, "")) != str(want[key]):
+				wrong.append("%s %s: '%s'" % ["dev" if not posed.is_empty() else "release", key,
+					said.get(key, "")])
+	Channel.posing = null
+	_says(wrong.is_empty(),
+		"channel K7: %d sentences that name a port or the service's account name their" % (
+			release.size()) + " channel's, and the release channel's are word for word what"
+		+ " they were before there were two" + ("" if wrong.is_empty() else " -- NOT: "
+			+ "; ".join(wrong)))
+
+
+## Every sentence K7 holds, as this channel says it, from the game's own code.
+func _channel_sentences() -> Dictionary:
+	_invites_wipe(CHANNEL_WORDS_ROOT)
+	var said := {}
+	said["reach"] = "%d,%d,%d" % [int(Invite.parse_reach("203.0.113.7")["port"]),
+		int(Invite.parse_reach("2001:db8::7")["port"]),
+		int(Invite.parse_reach("pond.example.net:50000")["port"])]
+	said["mint_refused"] = str((InviteBook.mint("sam", CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["reach_refused"] = str((InviteBook.set_reach("203.0.113.7:0", CHANNEL_WORDS_ROOT)[1]
+		as Array)[0])
+	said["reach_job"] = str((InviteBook.set_reach("203.0.113.7", CHANNEL_WORDS_ROOT)[1]
+		as Array)[0])
+	said["listing"] = str((InviteBook.listing(CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["set_off"] = str((InviteBook.set_upnp(false, CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["set_on"] = str((InviteBook.set_upnp(true, CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	# A reach.cfg a hand made, with an address and no port.
+	var handmade := ConfigFile.new()
+	handmade.set_value("reach", "address", "203.0.113.7")
+	Invite.write_private(str(InviteBook.paths(CHANNEL_WORDS_ROOT)["reach"]),
+		handmade.encode_to_text().to_utf8_buffer())
+	said["handmade"] = str(int(InviteBook.reach(CHANNEL_WORDS_ROOT).get("port", -1)))
+	_invites_wipe(CHANNEL_WORDS_ROOT)
+	said["advice_off"] = InviteBook.forward_advice(Invite.channel_port(), 0)
+	said["advice_other"] = InviteBook.forward_advice(50000, 1)
+	said["switch_on"] = InviteBook.upnp_said(1, 0)
+	said["switch_off"] = InviteBook.upnp_said(0, 0)
+	# The LAN's door, as a server's: a call from outside the house.
+	var door: Node = NetSession.new()
+	door.set("address", "192.0.2.12")
+	door.set("guests_max", NetSession.GUESTS_MAX)
+	said["door"] = str((door.call("_admit", "203.0.113.9", NetSession.VIA_LAN) as Array)[1])
+	door.free()
+	said["mapped"] = DedicatedServer.upnp_said(&"mapped", {"port": Invite.channel_port(),
+		"protocol": "UDP", "internal": "192.0.2.12", "lease": PortForward.LEASE})
+	var screen: Node = Earshot.new()
+	said["receipt"] = str(screen.call("_here_says"))
+	screen.free()
+	said["account"] = InviteBook.service_account()
+	said["root_note"] = InviteBook.root_note(CHANNEL_WORDS_ROOT)
+	said["ownership"] = InviteBook.ownership_refusal(0, {}, PackedStringArray(["--invites"]),
+		"/x", "/h", false)
+	said["description"] = DedicatedServer.upnp_description()
+	said["tag"] = DedicatedServer.channel_said(true) + "|" + DedicatedServer.channel_said(false)
+	return said
+
+
+## **K8: a job reads its own server's command line, and never the other
+## channel's.** The live server and the dev server run the same file name from
+## two directories, so the server a job asks about is the one started from its
+## own path: under a stand-in `/proc`, a live service with neither switch and a
+## dev service with `--no-upnp` -- the live job sees neither, and the dev job
+## its own `--no-upnp`. One started by another path to the same file -- a
+## symlinked directory -- is known by the `exe` link `/proc` keeps, the same
+## after its build was replaced, when the link reads ` (deleted)`; and one
+## started by a relative path is known by its name.
+func _channel_own_server() -> void:
+	var live := "/opt/biogenic/biogenic-server.x86_64"
+	var dev := "/opt/biogenic-dev/biogenic-server.x86_64"
+	var write := func(pid: String, argv: Array) -> void:
+		DirAccess.make_dir_recursive_absolute(CHANNEL_PROC_ROOT.path_join(pid))
+		var bytes := PackedByteArray()
+		for arg: String in argv:
+			bytes.append_array(arg.to_utf8_buffer())
+			bytes.append(0)
+		var file := FileAccess.open(CHANNEL_PROC_ROOT.path_join(pid).path_join("cmdline"),
+			FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+	_channel_proc_wipe()
+	write.call("201", [live, "--headless", "--", "--stop-file=/run/biogenic/stop"])
+	write.call("202", [dev, "--headless", "--", "--stop-file=/run/biogenic-dev/stop",
+		"--no-upnp"])
+	var live_sees := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	var dev_sees := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	write.call("203", ["./biogenic-server.x86_64", "--headless", "--", "--no-update",
+		"--upnp"])
+	var by_name := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	# Started through a symlinked directory: the same file, by its link.
+	var linked := "/srv/pond/biogenic-server.x86_64"
+	write.call("204", [linked, "--headless", "--", "--stop-file=/run/biogenic/stop",
+		"--no-upnp"])
+	var linking := DirAccess.open(CHANNEL_PROC_ROOT.path_join("204"))
+	var link_made := linking != null and linking.create_link(live, "exe") == OK
+	var by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	var dev_by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	write.call("205", [linked, "--headless", "--", "--no-update", "--upnp"])
+	linking = DirAccess.open(CHANNEL_PROC_ROOT.path_join("205"))
+	link_made = link_made and linking != null \
+		and linking.create_link(live + " (deleted)", "exe") == OK
+	var by_deleted := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	_channel_proc_wipe()
+	_says(live_sees == 0 and dev_sees == -1 and by_name == 1 and link_made and by_link == -1
+			and dev_by_link == -2 and by_deleted == 1,
+		"channel K8: beside a dev server run with --no-upnp, a live server's job sees its own"
+		+ " server with neither (%d), the dev server's job its --no-upnp (%d); one started" % [
+			live_sees, dev_sees] + " through a symlinked directory is known by its /proc link"
+		+ " (%d, and %d to the dev job), and after its build was replaced (%d); one" % [
+			by_link, dev_by_link, by_deleted] + " started by a relative path is known by its"
+		+ " name (%d)" % by_name)
+
+
+func _channel_proc_wipe() -> void:
+	if not DirAccess.dir_exists_absolute(CHANNEL_PROC_ROOT):
+		return
+	for pid: String in DirAccess.get_directories_at(CHANNEL_PROC_ROOT):
+		var dir := CHANNEL_PROC_ROOT.path_join(pid)
+		# The `exe` link first, by name: one that leads nowhere may not list.
+		DirAccess.remove_absolute(dir.path_join("exe"))
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
+	DirAccess.remove_absolute(CHANNEL_PROC_ROOT)

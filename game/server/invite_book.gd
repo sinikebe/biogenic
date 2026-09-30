@@ -5,7 +5,8 @@ extends RefCounted
 ## all of it.
 ##
 ## **Where it all lives**, under `user://` -- which for the service is
-## `/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic`, never the
+## `/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic`, and for the dev
+## server `/var/lib/biogenic-dev/.local/share/biogenic-dev` -- never the
 ## repository:
 ##
 ##   - `pond/key.pem`, the server's RSA-2048 key, `rw-------`;
@@ -18,7 +19,8 @@ extends RefCounted
 ##     writes it, so the two never write one file;
 ##   - `pond/reach.cfg`, the address friends dial (`--reach`);
 ##   - `pond/upnp.cfg`, whether the server asks the router to forward
-##     [constant Invite.PORT] to it (`--no-upnp`, `--upnp`); no file is yes;
+##     [method Invite.channel_port] to it (`--no-upnp`, `--upnp`); no file is
+##     yes;
 ##   - `invites/<label>.txt`, the line to send, `rw-------`, in a directory
 ##     that is `rwx------`.
 ##
@@ -32,6 +34,7 @@ extends RefCounted
 
 const Invite := preload("res://game/net/invite.gd")
 const Lan := preload("res://game/net/lan.gd")
+const Channel := preload("res://game/net/channel.gd")
 
 const ROOT := "user://"
 ## **Valid from 2020 to 2099, whatever today is.** mbedTLS checks both dates
@@ -109,6 +112,15 @@ static func is_run(args: PackedStringArray) -> bool:
 	return false
 
 
+## **The account this build's service runs as**, as `install-server.sh` names
+## it: `biogenic` on the release channel, and `biogenic-<branch>` on a
+## branch's (channel.gd) -- `biogenic-dev`, from `--dev` -- with its home in
+## `/var/lib/` and its build in `/opt/` under the same name. For the sentences
+## that tell an owner which account a job runs as.
+static func service_account() -> String:
+	return "biogenic" + ("-" + Channel.branch() if Channel.is_branch() else "")
+
+
 ## **Every job [param args] asks for, in a sensible order** -- the address
 ## first, then the UPnP switch, then a new key, then revoking, then minting,
 ## then the list -- as
@@ -129,10 +141,7 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	if not refusal.is_empty():
 		return [1, [refusal]]
 	if int(whose["uid"]) == 0 or (int(whose["uid"]) < 0 and OS.get_environment("USER") == "root"):
-		lines.append("note: this runs as root, so it keeps root's own book, in %s, which the"
-			% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
-			+ " job as its user: runuser -u biogenic -- env HOME=/var/lib/biogenic"
-			+ " /opt/biogenic/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)")
+		lines.append(root_note(root))
 	var runs := is_run(args)
 	for job: String in JOBS:
 		if runs and UPNP_JOBS.has(job):
@@ -164,6 +173,19 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 				if not lines.has(said):
 					lines.append(said)
 	return [code, lines]
+
+
+## **The note a job run as root, in its own `user://` under [param root],
+## gives**: that the book it keeps there is root's, which the service never
+## reads -- and the command that runs the job as the service's own user,
+## [method service_account], instead.
+static func root_note(root: String = ROOT) -> String:
+	var account := service_account()
+	return ("note: this runs as root, so it keeps root's own book, in %s, which the"
+		% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
+		+ " job as its user: runuser -u %s -- env HOME=/var/lib/%s" % [account, account]
+		+ " /opt/%s/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)"
+		% account)
 
 
 ## **Who runs this, and who owns what a job would write**: `{uid, owners,
@@ -224,9 +246,9 @@ static func ownership_refusal(uid: int, found: Dictionary, args: PackedStringArr
 		# it would never see -- the job refuses and names the way to run it.
 		return ("refused: this runs as root but could not read who owns the invite"
 			+ " files, so it will not write what the service user might not read back."
-			+ " Run the job as that user: runuser -u biogenic -- env HOME=%s %s"
-			% [home, exe] + " --headless -- %s (or sudo -u biogenic, the same way;"
-			% " ".join(args) + " docs/server.md §9.1)")
+			+ " Run the job as that user: runuser -u %s -- env HOME=%s %s"
+			% [service_account(), home, exe] + " --headless -- %s (or sudo -u %s, the"
+			% [" ".join(args), service_account()] + " same way; docs/server.md §9.1)")
 	for path: String in found.keys():
 		var owner: Array = found[path]
 		if int(owner[0]) == 0:
@@ -246,12 +268,13 @@ static func ownership_refusal(uid: int, found: Dictionary, args: PackedStringArr
 
 ## `--reach=<host>[:<port>]`: the address friends dial, as the owner types it:
 ## a public address, or a name that leads to one, and the port the router
-## forwards to [constant Invite.PORT] -- that port unless it says otherwise.
+## forwards to [method Invite.channel_port] -- that port unless it says
+## otherwise.
 static func set_reach(text: String, root: String = ROOT) -> Array:
 	var said := Invite.parse_reach(text)
 	if said.has("error"):
 		return [1, ["--reach: %s. For example --reach=203.0.113.7 or" % said["error"]
-			+ " --reach=pond.example.net:45772 (both placeholders)."]]
+			+ " --reach=pond.example.net:%d (both placeholders)." % Invite.channel_port()]]
 	# As written, so an address this build no longer calls is still named in
 	# the line below: the invites sent with it are the owner's to mint again.
 	var before := _stored_reach(root)
@@ -298,7 +321,8 @@ static func mint(text: String, root: String = ROOT) -> Array:
 	if where.is_empty():
 		return [1, ["--invite: friends need an address to call first. Set it with"
 			+ " --reach=<your public address or name>[:<port>] -- where your router"
-			+ " answers, and the port it forwards to this machine's %d/udp." % Invite.PORT]]
+			+ " answers, and the port it forwards to this machine's %d/udp."
+			% Invite.channel_port()]]
 	var out: PackedStringArray = []
 	if name != text.strip_edges():
 		out.append("labels are lowercase: this one is %s" % name)
@@ -372,27 +396,28 @@ static func mint(text: String, root: String = ROOT) -> Array:
 ## **What the owner must do on the router** for friends to reach
 ## [param outside], the port `--reach` names, with the UPnP switch at
 ## [param setting] ([method upnp_setting]): nothing, when the server forwards it
-## itself -- it is [constant Invite.PORT], and the switch is on -- but the log
-## says whether the router let it; otherwise forward it by hand.
+## itself -- it is [method Invite.channel_port], and the switch is on -- but the
+## log says whether the router let it; otherwise forward it by hand.
 static func forward_advice(outside: int, setting: int) -> String:
+	var ours := Invite.channel_port()
 	var by_hand := "UDP %d on your router to this machine's port %d/udp, and nothing else" \
-		% [outside, Invite.PORT]
+		% [outside, ours]
 	if setting == 0:
 		return "Forward %s -- UPnP is off here (--no-upnp)." % by_hand
 	if setting < 0:
 		return ("Forward %s -- the UPnP switch, pond/upnp.cfg, cannot be read here, so the"
 			% by_hand + " server takes it as off.")
-	if outside != Invite.PORT:
+	if outside != ours:
 		return ("Forward %s: the server's own forward, by UPnP, is of %d, not of %d."
-			% [by_hand, Invite.PORT, outside])
+			% [by_hand, ours, outside])
 	return ("The server asks your router to forward UDP %d to it by itself, by UPnP, and its"
-		% Invite.PORT + " [upnp] lines say whether the router did; if not, forward %s."
+		% ours + " [upnp] lines say whether the router did; if not, forward %s."
 		% by_hand)
 
 
 ## **`--no-upnp` and `--upnp`: whether the server asks the router to forward
-## [constant Invite.PORT] to it**, remembered here the way `--reach` is -- in
-## `pond/upnp.cfg`, `rw-------`, and nowhere else -- so it holds across
+## [method Invite.channel_port] to it**, remembered here the way `--reach` is --
+## in `pond/upnp.cfg`, `rw-------`, and nowhere else -- so it holds across
 ## restarts, updates and `install-server.sh --purge`. Off, a forward the running
 ## server holds is taken off within seconds; on, it looks for the router within
 ## seconds. With no file it is on: the owner's call, "the server should be
@@ -413,12 +438,12 @@ static func set_upnp(on: bool, root: String = ROOT) -> Array:
 	var said: PackedStringArray = []
 	if on:
 		said.append("upnp: on, remembered -- the server asks the router to forward UDP %d to"
-			% Invite.PORT + " this machine for as long as it runs, and its [upnp] lines say"
-			+ " whether the router did (docs/server.md §9.3).")
+			% Invite.channel_port() + " this machine for as long as it runs, and its [upnp]"
+			+ " lines say whether the router did (docs/server.md §9.3).")
 	else:
 		said.append("upnp: off, remembered -- the server asks the router for nothing. For"
-			+ " friends outside the house, forward UDP %d to this machine by hand" % Invite.PORT
-			+ " (docs/server.md §9.3); --upnp turns it back on.")
+			+ " friends outside the house, forward UDP %d to this machine by hand"
+			% Invite.channel_port() + " (docs/server.md §9.3); --upnp turns it back on.")
 	said.append(_running_takes(on, running_upnp_override()))
 	return [0, said]
 
@@ -445,11 +470,12 @@ static func _running_takes(on: bool, override: int) -> String:
 ## [method upnp_setting] -- says, and what the running server's own command
 ## line does with it, [param override] ([method running_upnp_override]).
 static func upnp_said(setting: int, override: int) -> String:
+	var ours := Invite.channel_port()
 	var said := ("upnp: on -- the server asks the router to forward %d/udp to it (--no-upnp"
-		% Invite.PORT + " turns that off)") if setting == 1 else ("upnp: off -- forward %d/udp"
-		% Invite.PORT + " to this machine by hand (--upnp turns it back on)") if setting == 0 \
+		% ours + " turns that off)") if setting == 1 else ("upnp: off -- forward %d/udp"
+		% ours + " to this machine by hand (--upnp turns it back on)") if setting == 0 \
 		else ("upnp: off -- pond/upnp.cfg cannot be read here, so the server takes the switch as"
-			+ " off; forward %d/udp to this machine by hand" % Invite.PORT)
+			+ " off; forward %d/udp to this machine by hand" % ours)
 	if override == -2:
 		return said + ("; a --no-upnp or --upnp on the service's own command line would hold"
 			+ " instead, for its run")
@@ -465,14 +491,15 @@ static func upnp_said(setting: int, override: int) -> String:
 ## [param proc]: one of this executable -- [param exe], this one's when "" --
 ## started with the service's own flags ([constant RUN_FLAGS]) after its `--`,
 ## and not process [param me], this one when -1. A job run as the service's
-## user sees the service. No process is started, and a `/proc` that cannot be
-## read is no server seen.
+## user sees the service -- and only its own: a dev server's build shares its
+## file name with the live one's beside it ([method _same_program]). No process
+## is started, and a `/proc` that cannot be read is no server seen.
 static func running_upnp_override(proc: String = "/proc", exe: String = "",
 		me: int = -1) -> int:
 	var found := -2
 	if not DirAccess.dir_exists_absolute(proc):
 		return found
-	var name := (exe if not exe.is_empty() else OS.get_executable_path()).get_file()
+	var mine := exe if not exe.is_empty() else OS.get_executable_path()
 	if me < 0:
 		me = OS.get_process_id()
 	for entry: String in DirAccess.get_directories_at(proc):
@@ -483,16 +510,38 @@ static func running_upnp_override(proc: String = "/proc", exe: String = "",
 			continue
 		# A /proc file reports length 0: read what is there, not what it says.
 		var argv := _nul_split(file.get_buffer(65536))
-		if argv.is_empty() or str(argv[0]).get_file() != name:
+		if argv.is_empty():
 			continue
+		# A run first, which is cheap to see, and then whose: only a server's
+		# own `/proc` link is ever read.
 		var cut := argv.find("--")
 		var own := argv.slice(cut + 1) if cut >= 0 else PackedStringArray()
-		if not is_run(own):
+		if not is_run(own) or not _same_program(str(argv[0]), mine, proc.path_join(entry)):
 			continue
 		if own.has("--no-upnp"):
 			return -1
 		found = 1 if own.has("--upnp") else maxi(found, 0)
 	return found
+
+
+## **Whether a process started as [param argv0] runs [param exe]**: the same
+## path, when it was started by a whole one -- as a unit's `ExecStart=` starts
+## it, so `/opt/biogenic-dev/` is never taken for `/opt/biogenic/` -- or, by
+## another whole path, the same file behind the `exe` link in its [param dir]
+## under `/proc`: a path through a symlinked directory. [param exe] is resolved
+## already -- `OS.get_executable_path()` is -- and the link reads only to the
+## process's own user, which is who runs a job. A running build that was
+## replaced reads ` (deleted)` after its path. Started by a relative path, the
+## same file name.
+static func _same_program(argv0: String, exe: String, dir: String = "") -> bool:
+	if not argv0.is_absolute_path():
+		return argv0.get_file() == exe.get_file()
+	var mine := exe.simplify_path()
+	if argv0.simplify_path() == mine or dir.is_empty():
+		return argv0.simplify_path() == mine
+	var at := DirAccess.open(dir)
+	var real := at.read_link("exe").trim_suffix(" (deleted)") if at != null else ""
+	return not real.is_empty() and real.simplify_path() == mine
 
 
 ## The NUL-separated strings of a `cmdline`.
@@ -569,7 +618,7 @@ static func listing(root: String = ROOT) -> Array:
 	var book := entries(root)
 	var out: PackedStringArray = []
 	out.append("friends call %s; the server listens on %d/udp for them."
-		% [reach_said(root, "(nowhere yet: set --reach)"), Invite.PORT])
+		% [reach_said(root, "(nowhere yet: set --reach)"), Invite.channel_port()])
 	out.append(upnp_said(upnp_setting(root), running_upnp_override()))
 	if book.is_empty():
 		out.append("no invites. --invite=<name> makes one.")
@@ -720,7 +769,7 @@ static func _stored_reach(root: String) -> Dictionary:
 		return {}
 	# A number, as `set_reach` writes it, or anything a hand made of it: what
 	# is not a number is no port, and -1 says so without a script error.
-	var port: Variant = file.get_value("reach", "port", Invite.PORT)
+	var port: Variant = file.get_value("reach", "port", Invite.channel_port())
 	if port is String and (port as String).is_valid_int():
 		port = (port as String).to_int()
 	return {"address": address, "port": int(port) if port is int or port is float else -1}

@@ -1181,7 +1181,8 @@ func _fresh_host(phone: bool) -> FuzzHost:
 	_host = host
 	host.loopback_is_local = true
 	if not host.host(1 if phone else NetSession.GUESTS_MAX):
-		_no_host = "this machine has no address a LAN host can use, or 45771 is taken"
+		_no_host = "this machine has no address a LAN host can use, or %d is taken" \
+			% Lan.channel_port()
 		return null
 	# Driven by hand from here: its frames are the fuzzer's steps, not the
 	# engine's.
@@ -1198,7 +1199,7 @@ func _fresh_host(phone: bool) -> FuzzHost:
 			return null
 	if not phone:
 		if not host.listen_internet(_key, _cert):
-			_no_host = "45772 is taken"
+			_no_host = "%d is taken" % Invite.channel_port()
 			return null
 		host.set_invites({_key_id.hex_encode(): [LABEL, _secret]})
 	# One frame taken, as a real host has before anybody calls: otherwise the

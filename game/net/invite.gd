@@ -42,6 +42,8 @@ extends RefCounted
 
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
+## Which pair of ports this build is on.
+const Channel := preload("res://game/net/channel.gd")
 
 const PREFIX := "biogenic-invite:"
 ## **The one format this build writes and reads.** Anything else that checks
@@ -49,7 +51,10 @@ const PREFIX := "biogenic-invite:"
 const VERSION := 1
 ## **The internet listener's port**: the one port an owner forwards, next to
 ## the LAN's `Lan.PORT`, 45771, which stays unforwarded. The port in an invite
-## is the one friends *dial*, which a router may map onto this one.
+## is the one friends *dial*, which a router may map onto this one. **The
+## release channel's**: a build on a branch's channel is on another pair, so
+## nothing binds, forwards or defaults to this but through
+## [method channel_port].
 const PORT := 45772
 ## **The server certificate's fixed name.** Every server's certificate is
 ## self-signed with this name, and the call checks it
@@ -157,6 +162,14 @@ const SAYS := {
 	&"hung_up": ["they hung up",
 		"your friend's server closed the call. call again in a minute."],
 }
+
+
+## **The internet listener's port on this build's channel** (channel.gd):
+## [constant PORT], 45772, on the release channel, and 45782 on a branch's.
+## The listener binds it, the router is asked to forward it, and it is the
+## port `--reach` means when it names none.
+static func channel_port() -> int:
+	return Channel.port(PORT)
 
 
 ## `[heading, sentence]` for [param key] in [constant SAYS].
@@ -537,15 +550,15 @@ static func _v4_problem(first: int) -> String:
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
-## IPv6 address is taken whole, with the default port. A host name is
-## lowercased and loses a trailing dot. `{"address", "port"}`, or
-## `{"error": sentence}`.
+## IPv6 address is taken whole, with the default port -- this channel's,
+## [method channel_port]. A host name is lowercased and loses a trailing dot.
+## `{"address", "port"}`, or `{"error": sentence}`.
 static func parse_reach(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	if t.is_empty():
 		return {"error": "it needs the address friends dial"}
 	var host := t
-	var port := PORT
+	var port := channel_port()
 	if t.begins_with("["):
 		var close := t.find("]")
 		if close < 0:

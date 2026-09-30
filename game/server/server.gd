@@ -40,16 +40,17 @@ extends Node
 ##
 ## **Its port on the router** (`game/net/port_forward.gd`; docs/server.md
 ## §9.3). From its first READY until it stops, the server asks the home router
-## to forward UDP [constant Invite.PORT] to it by UPnP -- whatever the invites:
-## the owner's call, "the server should be always exposed". What listens there
-## does not change: nothing, until there is an invite. [constant Lan.PORT], the
-## house's, is never forwarded, and the forward refuses it where each call to
-## the router is made. Every such call is on a worker thread, and what happened
-## is one `[upnp]` line. `--no-upnp` as a job turns it off and is remembered in
-## `user://`, the way `--reach` is; `--upnp` turns it back on; a running server
-## takes either within [member invites_poll] seconds. On the service's own
-## command line -- beside `--stop-file=` or `--no-update` -- `--no-upnp` holds
-## for that run and writes nothing.
+## to forward UDP [method Invite.channel_port] to it by UPnP -- whatever the
+## invites: the owner's call, "the server should be always exposed". What
+## listens there does not change: nothing, until there is an invite.
+## [method Lan.channel_port], the house's, is never forwarded, and the forward
+## refuses it where each call to the router is made. Every such call is on a
+## worker thread, and what happened is one `[upnp]` line. `--no-upnp` as a job
+## turns it off and is remembered in `user://`, the way `--reach` is; `--upnp`
+## turns it back on; a running server takes either within
+## [member invites_poll] seconds. On the service's own command line -- beside
+## `--stop-file=` or `--no-update` -- `--no-upnp` holds for that run and writes
+## nothing.
 ##
 ## **Stopping cleanly.** Godot 4.7 does not catch SIGTERM, SIGINT or SIGQUIT --
 ## measured on the exported template: the process dies at once, exit status
@@ -70,6 +71,13 @@ extends Node
 ## **Updates** are `updater.gd`'s: every ten minutes, and never with anyone
 ## connected.
 ##
+## **A build for a branch is that branch's server** (channel.gd): the dev
+## server, which follows `dev` and hosts the dev app's pond before a release.
+## Its ports are its channel's, 45781 and 45782, so it runs beside the live
+## server -- on one machine, if need be -- and the two never meet. Its lines
+## that name the LAN's port say it is a dev build, and its forward on the router
+## is named for its branch.
+##
 ## Every line it prints starts `[server]`, for `journalctl -u biogenic-server`.
 ## The log is not the repository: it names this machine's address on purpose.
 ##
@@ -85,6 +93,7 @@ const Updater := preload("res://game/server/updater.gd")
 const InviteBook := preload("res://game/server/invite_book.gd")
 const Invite := preload("res://game/net/invite.gd")
 const PortForward := preload("res://game/net/port_forward.gd")
+const Channel := preload("res://game/net/channel.gd")
 
 ## **Sixty frames a second, not as many as the core will run.** The field is
 ## stepped at the game's own rate -- what the phones step theirs at -- and a
@@ -116,7 +125,8 @@ const INVITES_POLL := 2.0
 ## ([constant PortForward.EXIT_WAIT_MS] a call) -- unless the unit's SIGTERM,
 ## ten seconds after the stop was asked, comes first.
 const UPNP_STOP_WAIT := 5.0
-## What the router's own list of forwards calls this one.
+## What the router's own list of forwards calls this one -- the release
+## channel's; a branch's names its branch after it ([method upnp_description]).
 const UPNP_DESCRIPTION := "Biogenic server"
 
 ## **Seams, set before this node enters the tree.** A test runs the pond and
@@ -374,7 +384,7 @@ func _announce(first: bool) -> void:
 	var code := clock_code(address)
 	if first:
 		print("[server] READY -- listening on %s port %d/udp, code %s"
-			% [address, Lan.PORT, code])
+			% [address, Lan.channel_port(), code] + channel_said(true))
 		if Lan.octet_of(address) < 0:
 			# Listening all the same (NetSession.hostable): the log is where the
 			# owner finds out, and a loop of "no wi-fi here" would not say why.
@@ -385,16 +395,28 @@ func _announce(first: bool) -> void:
 				+ " do not forward this port.")
 		else:
 			print("[server] to join: a phone on this wi-fi (%sx) opens within earshot,"
-				% Lan.prefix_of(address) + " taps answer, and taps the ring at %s, in"
-				% code + " that order. LAN only: do not forward this port.")
+				% Lan.prefix_of(address) + ("" if not Channel.is_branch()
+					else " in the %s app," % Channel.branch()) + " taps answer, and taps"
+				+ " the ring at %s, in that order. LAN only: do not forward this port." % code)
 		_internet_said = _internet_status()
 		print("[server] internet: " + _internet_said)
 		return
 	print("[server] listening on %s port %d/udp, code %s -- %d of %d guests, %d in"
-		% [address, Lan.PORT, code, _net.guests().size(), FoodField.GUESTS_MAX,
+		% [address, Lan.channel_port(), code, _net.guests().size(), FoodField.GUESTS_MAX,
 			_pond.guests_in_water()] + " the water -- internet: %s"
 		% ("%d invite%s" % [_labels.size(), "" if _labels.size() == 1 else "s"]
-			if _net.internet_listening() else "off") + " -- upnp: %s" % _forward_state())
+			if _net.internet_listening() else "off") + " -- upnp: %s" % _forward_state()
+		+ channel_said(false))
+
+
+## **What a line naming the LAN's port adds on a branch's channel**: that this
+## is that branch's build, and -- [param whole] -- that only that branch's app
+## finds it. "" on the release channel, whose lines are as they always were.
+static func channel_said(whole: bool) -> String:
+	if not Channel.is_branch():
+		return ""
+	return " -- a %s build" % Channel.branch() + (": only the %s app finds it"
+		% Channel.branch() if whole else "")
 
 
 ## **What listens for the internet, in a sentence** -- the READY line's, and
@@ -407,10 +429,10 @@ func _internet_status() -> String:
 	names.sort()
 	if _net.internet_listening():
 		return ("listening on port %d/udp for %d invite%s (%s), certificate %s. Friends"
-			% [Invite.PORT, names.size(), "" if names.size() == 1 else "s",
+			% [Invite.channel_port(), names.size(), "" if names.size() == 1 else "s",
 				", ".join(PackedStringArray(names)), _answering_with]
 			+ " call %s, which must reach this machine's %d/udp: the [upnp] lines say"
-			% [InviteBook.reach_said(pond_root, "(no --reach set)"), Invite.PORT]
+			% [InviteBook.reach_said(pond_root, "(no --reach set)"), Invite.channel_port()]
 			+ " whether the router forwards it, and if not, forward it by hand -- the one"
 			+ " port to forward (docs/server.md §9.3).")
 	if names.is_empty():
@@ -514,7 +536,7 @@ func _watch_invites(first: bool) -> void:
 			return
 		if not _net.listen_internet(identity[0], identity[1]):
 			_internet_trouble = "there are invites, but port %d/udp is taken, or not free" \
-				% Invite.PORT + " yet. Trying again in %d s." % roundi(invites_poll)
+				% Invite.channel_port() + " yet. Trying again in %d s." % roundi(invites_poll)
 			# Looked at again next time, whatever the files say.
 			_book_bytes = PackedByteArray()
 			_settled = false
@@ -603,16 +625,27 @@ func _on_invite_proved(_label: String, key_id: String) -> void:
 # The internet port on the router (docs/server.md §9.3).
 # ---------------------------------------------------------------------------
 
-## **The forward, made** for [constant Invite.PORT] and never
-## [constant Lan.PORT]: the house's port, which no router may ever forward
-## (docs/server.md §5). Its never-list is where that is held, at every call.
+## **The forward, made** for [method Invite.channel_port] and never
+## [method Lan.channel_port]: the house's port, which no router may ever
+## forward (docs/server.md §5). Its never-list is where that is held, at every
+## call. Named on the router as [method upnp_description] says.
 func _open_forward() -> void:
-	_forward = PortForward.new(Invite.PORT, UPNP_DESCRIPTION, PackedInt32Array([Lan.PORT]),
-		upnp_router)
+	_forward = PortForward.new(Invite.channel_port(), upnp_description(),
+		PackedInt32Array([Lan.channel_port()]), upnp_router)
 	_forward.name = "PortForward"
 	_forward.reported.connect(_on_forward_reported)
 	add_child(_forward)
 	_watch_upnp(true)
+
+
+## **The forward's name on the router's list**: [constant UPNP_DESCRIPTION] on
+## the release channel, and the branch's after it on a branch's --
+## `Biogenic server (dev)` -- so an owner with both servers can tell which
+## forward is which.
+static func upnp_description() -> String:
+	if not Channel.is_branch():
+		return UPNP_DESCRIPTION
+	return "%s (%s)" % [UPNP_DESCRIPTION, Channel.branch()]
 
 
 ## **The UPnP switch, looked at** -- this run's, when the command line gave
@@ -637,7 +670,7 @@ func _watch_upnp(first: bool) -> void:
 ## What the switch at [param setting] says: on, off -- remembered, or for this
 ## run -- or unreadable.
 func _upnp_switch_said(setting: int, turned_on: bool) -> String:
-	var what := "UDP %d" % Invite.PORT
+	var what := "UDP %d" % Invite.channel_port()
 	var by_hand := "for friends outside the house, forward %s to this machine by hand" % what \
 		+ " (docs/server.md §9.3)"
 	if setting > 0:
@@ -677,7 +710,8 @@ func _on_forward_reported(event: StringName, facts: Dictionary) -> void:
 ## scene's own). [param reach] is `--reach`'s `{address, port}`, or empty, for
 ## the public address's hint. "" for an event with nothing to say.
 static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = {}) -> String:
-	var what := "%s %d" % [str(facts.get("protocol", "UDP")), int(facts.get("port", Invite.PORT))]
+	var what := "%s %d" % [str(facts.get("protocol", "UDP")), int(facts.get("port",
+		Invite.channel_port()))]
 	var by_hand := "forward %s to this machine by hand (docs/server.md §9.3)" % what
 	var again := "it looks again within %d minutes" % roundi(PortForward.LOOK_AGAIN_MAX / 60.0)
 	var lease := int(facts.get("lease", PortForward.LEASE))
@@ -706,7 +740,7 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 				StringName(facts.get("kind", &"unknown")), what)
 		&"mapped":
 			var internal := "%s:%d" % [str(facts.get("internal", "?")),
-				int(facts.get("port", Invite.PORT))]
+				int(facts.get("port", Invite.channel_port()))]
 			if bool(facts.get("permanent", false)):
 				return ("forwarded %s on the router to this machine, %s, with no time limit --"
 					% [what, internal] + " the router takes no other kind: put again every"
@@ -726,7 +760,7 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 					% str(facts.get("address", "")) + " --reach once %s reaches this" % what
 					+ " machine, which this server's own forward does not (docs/server.md §9.3)")
 			return _address_hint(str(facts.get("address", "")), reach,
-				int(facts.get("port", Invite.PORT)))
+				int(facts.get("port", Invite.channel_port())))
 		&"conflict":
 			return ("the router already forwards %s elsewhere -- to another machine, or by a"
 				% what + " forward made by hand -- so it was left alone: this server never takes"

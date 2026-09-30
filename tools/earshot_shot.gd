@@ -39,7 +39,9 @@ extends Node
 ## page reads the session, and a session is only welcomed by a real host. Its
 ## label is `earshot-shot`; it is revoked, `--reach` is put back as it was, and a
 ## key and certificate this run made are removed, once the shot is taken. It
-## listens on UDP 45771 and 45772 of this machine. The pages that use it:
+## listens on its channel's pair of this machine (`game/net/channel.gd`): UDP
+## 45771 and 45772, or 45781 and 45782 in a tree stamped for a branch -- where
+## every invite here names its channel's port too. The pages that use it:
 ## `far-together`, `far-refused-back`, and the troubles `not_this_pond` (an
 ## invite pinned to another certificate), `invite_refused` (a revoked one),
 ## `game_older` and `server_older` (this game made to speak one protocol
@@ -504,7 +506,8 @@ func _line_for(address: String) -> String:
 	if identity.is_empty():
 		return ""
 	var crypto := Crypto.new()
-	return Invite.format(address, Invite.PORT, crypto.generate_random_bytes(Invite.KEY_ID_SIZE),
+	return Invite.format(address, Invite.channel_port(),
+		crypto.generate_random_bytes(Invite.KEY_ID_SIZE),
 		crypto.generate_random_bytes(Invite.SECRET_SIZE), identity[2])
 
 
