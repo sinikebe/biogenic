@@ -110,6 +110,9 @@ key and the address friends dial all survive, and every invite already sent
 still works. Firewall rules already loaded are left alone. To wipe everything,
 invites included, uninstall (§6) and install again.
 
+A second server that follows `dev` -- the dev app's pond, before a release --
+installs beside this one with `--dev` (§10).
+
 ## 3. Find the code
 
 The server logs its address and its code when it starts, and again every five
@@ -1121,3 +1124,129 @@ What is left to you is **how long they are kept and where they may go**:
 - **Jurisdiction.** Whether an address is personal data, and how long you may
   keep it, depends on where the server runs and who its friends are; decide that
   for your own deployment rather than from a number here.
+
+## 10. A dev server
+
+Every push to `dev` is published as the rolling prerelease `branch-dev`, and the
+dev app -- "Biogenic (dev)", a separate app beside the game -- updates itself
+from it. A **dev server** is that app's pond: a second server that follows
+`dev` the way the live server follows the releases, so a change to the shared
+pond is played on the dev app, with a server, before any player has it.
+
+It is the same server, built from `dev`, installed beside the live one -- on a
+machine of its own or on the same one -- and **the two never meet**: not on the
+LAN, not on the router, not in each other's files.
+
+- **Its own ports.** A build that follows `dev` -- the dev app and the dev
+  server alike -- takes the live pair plus ten: **UDP 45781 for the LAN and
+  45782 for friends outside**. So the dev app finds the dev server and nothing
+  else, and the players' app never finds it.
+- **Its own names**, every one:
+
+| | Live server | Dev server |
+|---|---|---|
+| Follows | the latest release | `dev`, through `branch-dev` |
+| Account | `biogenic` | `biogenic-dev` |
+| State, its `HOME` | `/var/lib/biogenic` | `/var/lib/biogenic-dev` |
+| Its `user://` | `/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic` | `/var/lib/biogenic-dev/.local/share/biogenic-dev` |
+| Build | `/opt/biogenic` | `/opt/biogenic-dev` |
+| Unit | `biogenic-server.service` | `biogenic-server-dev.service` |
+| Its overrides | `biogenic-server.service.d/` | `biogenic-server-dev.service.d/` |
+| Stop file | `/run/biogenic/stop` | `/run/biogenic-dev/stop` |
+| Firewall rules | `/etc/biogenic/`, table `inet biogenic` | `/etc/biogenic-dev/`, table `inet biogenic_dev` |
+| LAN port | UDP 45771 | UDP 45781 |
+| Internet port, forwarded by UPnP | UDP 45772, as `Biogenic server` | UDP 45782, as `Biogenic server (dev)` |
+
+### 10.1 Install it
+
+As root, with the installer from `dev`'s own prerelease -- the only one with
+`--dev` until a release carries it:
+
+```sh
+curl -fsSLO https://github.com/sinikebe/biogenic/releases/download/branch-dev/install-server.sh
+less install-server.sh      # read what you are about to run
+bash install-server.sh --dev
+```
+
+It does what §2 says, with the dev server's names, and says first that this is
+the dev server, that it follows `dev`, that it uses UDP 45781 and 45782, and
+that it is separate from the live server. The build, the unit and the firewall
+rules come from `branch-dev`, checked against that prerelease's `SHA256SUMS`,
+and it makes the unit and the rules its own: the account, paths, ports and table
+above, in place of the live server's. If anything of the live server's is left
+in them, it installs nothing and says what. Nothing it does touches the live
+server's account, files, unit, overrides, rules, state or running process.
+
+Run it again, the same way, to update what the server cannot: it says
+`unchanged` and drops nobody when nothing changed. `bash install-server.sh
+--purge --dev` does the same from a clean kit, keeping `/var/lib/biogenic-dev`.
+It purges the dev kit alone, and the live server's `--purge` purges the live one
+alone. `branch-dev` is refreshed in place on every push to `dev`, so an install
+that meets one half-published fails its checksum check and installs nothing:
+run it again a few minutes later.
+
+### 10.2 How it updates
+
+It reads `branch-dev`'s manifest, the one the dev app reads, when it starts and
+every ten minutes, and takes each push to `dev` the way §4 takes a release: the
+content pack or the build, checked, and a restart once its pond has been empty
+for thirty seconds. **Within ten minutes of `dev` being published, the dev
+server runs it**, unless somebody is swimming.
+
+### 10.3 Find it, and join it
+
+```sh
+journalctl -u biogenic-server-dev -o cat | grep -E '^\[server\] (READY|listening|to join)' | tail -2
+journalctl -u biogenic-server-dev -f
+```
+
+For a server at the placeholder `192.0.2.12`:
+
+```
+[server] READY -- listening on 192.0.2.12 port 45781/udp, code 1, 7, 12, 12 o'clock -- a dev build: only the dev app finds it
+[server] to join: a phone on this wi-fi (192.0.2.x) opens within earshot, in the dev app, taps answer, and taps the ring at 1, 7, 12, 12 o'clock, in that order. LAN only: do not forward this port.
+```
+
+**On one machine, the two servers have the same code**: a code carries the
+machine's address, and both are at it. Which one a phone reaches is its app's
+doing. The dev app calls 45781 and finds the dev server; the players' app calls
+45771 and finds the live one. Neither app ever reaches the other's server.
+
+### 10.4 Its jobs, and its router port
+
+The invite jobs (§9.1) run as the dev server's own user, with its own home and
+its own build:
+
+```sh
+BIOGENIC_DEV="runuser -u biogenic-dev -- env HOME=/var/lib/biogenic-dev /opt/biogenic-dev/biogenic-server.x86_64 --headless --"
+$BIOGENIC_DEV --reach=203.0.113.7       # a placeholder: your public address
+$BIOGENIC_DEV --invite=sam
+$BIOGENIC_DEV --invites
+```
+
+Its book, its key and its `--reach` are its own, under
+`/var/lib/biogenic-dev/.local/share/biogenic-dev`, and `--reach` with no port
+means 45782. An invite the dev server mints calls the dev server, whichever app
+pastes it -- and two builds play together only when their protocols match -- so
+send dev invites to friends on the dev app.
+
+It asks the router to forward **UDP 45782** to it by UPnP, as §9.3 says,
+listed on the router's own page as `Biogenic server (dev)` beside the live
+server's `Biogenic server` on 45772. By hand, forward 45782 to this machine's
+45782, and never 45781. Its firewall rules are at
+`/etc/biogenic-dev/nftables-internet.conf`, as the table `inet biogenic_dev`:
+load them as §9.6 says, beside the live server's or alone. Each table keeps to
+its own server's two ports.
+
+### 10.5 Uninstalling it
+
+Everything of the dev server's, invites and all, and nothing of the live one's:
+
+```sh
+systemctl disable --now biogenic-server-dev
+rm -rf /etc/systemd/system/biogenic-server-dev.service /etc/systemd/system/biogenic-server-dev.service.d
+systemctl daemon-reload
+rm -rf /opt/biogenic-dev /var/lib/biogenic-dev /etc/biogenic-dev
+userdel biogenic-dev
+nft delete table inet biogenic_dev   # only if you loaded its firewall rules
+```

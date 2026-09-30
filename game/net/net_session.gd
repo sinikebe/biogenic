@@ -44,17 +44,18 @@ extends Node
 ## or only watched while [member enforce_referee] is off.
 ##
 ## **A friend outside the house comes in by invite** (part C, issue #59), and
-## only to the dedicated server. Beside its LAN listener on `Lan.PORT` it can
-## hold a second, on `Invite.PORT`, that speaks DTLS with the server's own
-## certificate ([method listen_internet]), which the invite pins. That door
-## skips the LAN-only guard and nothing else, and before a caller is welcomed
-## it must prove an invite's secret: HELLO -- the frozen compatibility check,
-## refused with its sentence as ever -- then CHALLENGE, a fresh nonce, then
-## PROOF, an HMAC over both nonces keyed with the secret. Both listeners feed one
-## set of peers, one pond and one limit of two guests; each keeps its own
-## waiting room and call buckets, so nothing that arrives over the internet can
-## ever turn a LAN caller away. A phone host never opens it. A guest calls one
-## with [method call_invite].
+## only to the dedicated server. Beside its LAN listener on `Lan.channel_port()`
+## it can hold a second, on `Invite.channel_port()` -- each its channel's
+## (channel.gd), so a build meets only builds on its own channel -- that speaks
+## DTLS with the server's own certificate ([method listen_internet]), which the
+## invite pins. That door skips the LAN-only guard and nothing else, and before
+## a caller is welcomed it must prove an invite's secret: HELLO -- the frozen
+## compatibility check, refused with its sentence as ever -- then CHALLENGE, a
+## fresh nonce, then PROOF, an HMAC over both nonces keyed with the secret. Both
+## listeners feed one set of peers, one pond and one limit of two guests; each
+## keeps its own waiting room and call buckets, so nothing that arrives over the
+## internet can ever turn a LAN caller away. A phone host never opens it. A
+## guest calls one with [method call_invite].
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
@@ -528,7 +529,7 @@ var _api: SceneMultiplayer = null
 ## A guest's socket, or a host's LAN listener.
 var _peer: ENetMultiplayerPeer = null
 ## **A dedicated host's internet listener**, or null: DTLS on
-## [constant Invite.PORT], opened by [method listen_internet] while there are
+## [method Invite.channel_port], opened by [method listen_internet] while there are
 ## invites and closed when none remain.
 var _net_peer: ENetMultiplayerPeer = null
 ## When a closing internet listener is put down: its refusals get
@@ -975,7 +976,7 @@ func host(guests: int = 1) -> bool:
 	return true
 
 
-## **The LAN listener, opened** on [constant Lan.PORT]: by [method host], and
+## **The LAN listener, opened** on [method Lan.channel_port]: by [method host], and
 ## again after it closed by itself ([method _lan_closed_by_itself]). False,
 ## with nothing kept, if the port is taken.
 ##
@@ -984,7 +985,7 @@ func host(guests: int = 1) -> bool:
 ## command it carries before the gate saw a byte. See [method _pump].
 func _open_lan() -> bool:
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(Lan.PORT, _slots()) != OK:
+	if peer.create_server(Lan.channel_port(), _slots()) != OK:
 		return false
 	_peer = peer
 	peer.peer_connected.connect(_on_peer_connected.bind(VIA_LAN))
@@ -993,7 +994,7 @@ func _open_lan() -> bool:
 
 
 ## **Open the internet listener** (net-hardening.md C): DTLS on
-## [constant Invite.PORT], answering with [param certificate] and its
+## [method Invite.channel_port], answering with [param certificate] and its
 ## [param key], beside the LAN listener [method host] opened. A dedicated
 ## host's alone -- one that greets more than one guest; a phone host never
 ## opens it. Callers there must prove an invite of [method set_invites]'s.
@@ -1014,7 +1015,7 @@ func listen_internet(key: CryptoKey, certificate: X509Certificate) -> bool:
 			return true
 		_finish_closing_internet()
 	var peer := ENetMultiplayerPeer.new()
-	if peer.create_server(Invite.PORT, _slots()) != OK:
+	if peer.create_server(Invite.channel_port(), _slots()) != OK:
 		return false
 	if peer.host.dtls_server_setup(TLSOptions.server(key, certificate)) != OK:
 		peer.close()
@@ -1157,7 +1158,7 @@ func join(at: String) -> bool:
 			"this device is not on a network two cells could share.")
 		return false
 	var peer := ENetMultiplayerPeer.new()
-	var err := peer.create_client(at, Lan.PORT)
+	var err := peer.create_client(at, Lan.channel_port())
 	if err != OK:
 		_give_up(Link.FAILED, "could not reach",
 			"the address that code points at is not one this device can call.")
@@ -2484,7 +2485,8 @@ func _lan_closed_by_itself() -> void:
 	if not _open_lan():
 		_lan_reopen_at = now + _lan_reopen_wait
 		_note("lan reopen", "", "[net] the LAN listener could not open again: port %d is"
-			% Lan.PORT + " taken -- trying again in %d s" % roundi(_lan_reopen_wait), true)
+			% Lan.channel_port() + " taken -- trying again in %d s" % roundi(_lan_reopen_wait),
+			true)
 		_lan_reopen_wait = minf(_lan_reopen_wait * 2.0, LAN_REOPEN_MOST)
 		return
 	_lan_reopen_at = now + LAN_REOPEN_EVERY
@@ -3007,7 +3009,7 @@ func _admit(from: String, via: int = VIA_LAN) -> Array:
 			or (not loopback_is_local and Lan.is_loopback(from))):
 		# Only a dedicated host takes invites; a phone never listens for them.
 		return ["lan", "not on this network" + (" -- a call from outside needs an invite,"
-			+ " on port %d" % Invite.PORT if guests_max > 1 else "")]
+			+ " on port %d" % Invite.channel_port() if guests_max > 1 else "")]
 	# **A phone host answers its own /24 alone** (issue #104), and loopback: a
 	# friend finds a phone by its code, which is the friend's own /24 with the
 	# phone's last number on it, so no other call is a friend's -- not a
