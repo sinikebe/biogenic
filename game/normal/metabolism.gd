@@ -18,6 +18,15 @@ extends Node
 ## nowhere else -- change starvation balance here and you can see, in the same
 ## screenful, what it does to legibility.
 ##
+## **The arithmetic of a tank is in static functions** -- [method rest_rate],
+## [method effort_cost], [method meal] -- and this node's [method _process],
+## [method spend] and [method feed] are their callers, as the water's bodies
+## will be (docs/design/ocean.md §5.2, §14.1). So the player's pace and the
+## drop's are one definition: a change to one is a change to the other, and
+## drop_probe's metabolism check holds the node and the functions to the same
+## hunger. They know a tank and nothing else -- light and absorption are the
+## callers' names for an income.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 ## Emitted whenever hunger moves, for anything that wants to watch starvation
@@ -88,6 +97,15 @@ const MEAL := 1.0
 ## minutes (energy.md §7). The other half of **owner's call 1**, with
 ## [constant HUNGER_SECONDS].
 const STARVE_GRACE := 10.0
+## **What a body with no `cytostome` takes from the water**, in seconds of rest
+## a second: exactly a one-gene drifter's upkeep, so a drifter at rest holds its
+## tank where it is and dies only when something eats it (ocean.md §5.3, row
+## 11). An income like `plastid`'s light, summed with it by the caller.
+## Nothing in a run reads it yet: the drop's water and a mouthless player take
+## it up in the next phase (§14.2).
+const ABSORB := 1.0
+## The smallest tank the arithmetic divides by, as a share of a born cell's.
+const RESERVE_MIN := 0.05
 
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
@@ -118,10 +136,17 @@ var burn := 1.0
 var starve_seconds := 0.0
 
 
+## Being alive, at [method rest_rate]: `plastid`'s light is this body's income.
+## Written `delta * rate / HUNGER_SECONDS`, in that order, as it always was, and
+## checked bit for bit against the node before it once, over 1.2 million calls,
+## by 1a-1's build and again by its review. The fingerprints cannot see it: no
+## fingerprint run eats, and a hunger pinned at full hides a reordered sum. What
+## CI holds is this node against the static functions to 1e-6 (drop_probe) and
+## the thirty-second death to within two frames (levels_probe).
 func _process(delta: float) -> void:
 	if HUNGER_SECONDS > 0.0:
-		var rate := maxf(upkeep - photosynthesis, 0.0) / maxf(reserve, 0.05)
-		set_hunger(hunger + delta * rate / HUNGER_SECONDS)
+		set_hunger(hunger + delta * rest_rate(upkeep, photosynthesis, reserve)
+			/ HUNGER_SECONDS)
 	if hunger >= 1.0:
 		starve_seconds += delta
 	else:
@@ -138,10 +163,12 @@ func set_hunger(value: float) -> void:
 	hunger_changed.emit(hunger)
 
 
-## A meal. Eating at full does not waste the food -- the caller still fires
-## ingest and still rolls the gene, so there is always a reason to eat.
-func feed(amount: float) -> void:
-	set_hunger(hunger - amount)
+## A meal worth [param nutrition] of one whole meal: the prey's size against
+## this body's, clamped, as food.gd's `eaten` carries it. Eating at full does
+## not waste the food -- the caller still fires ingest and still rolls the gene,
+## so there is always a reason to eat.
+func feed(nutrition: float) -> void:
+	set_hunger(hunger - meal(nutrition))
 
 
 ## **Energy the body spent doing something**, in seconds of rest: how long a
@@ -158,7 +185,38 @@ func feed(amount: float) -> void:
 func spend(rest_seconds: float) -> void:
 	if rest_seconds <= 0.0 or HUNGER_SECONDS <= 0.0:
 		return
-	set_hunger(hunger + rest_seconds * burn / (HUNGER_SECONDS * maxf(reserve, 0.05)))
+	set_hunger(hunger + effort_cost(rest_seconds, burn, reserve))
+
+
+# --- The tank's arithmetic (docs/design/ocean.md §5.2) ------------------------
+# Every body's, the player's through the three callers above. A unit of rest is
+# one second of a born cell doing nothing: 1.0 a second at rest, and a share of
+# the bar is that over HUNGER_SECONDS.
+
+## **How fast a body at rest burns, in seconds of rest a second**: its
+## [param upkeep_rate] less its [param income], over its [param reserve_size].
+## Never below nothing -- an income that covers the upkeep holds the tank, it
+## does not fill it. A caller turns it into hunger as
+## `delta * rest_rate(...) / HUNGER_SECONDS`, which is exact over any stretch in
+## which the three do not change.
+static func rest_rate(upkeep_rate: float, income: float, reserve_size: float) -> float:
+	return maxf(upkeep_rate - income, 0.0) / maxf(reserve_size, RESERVE_MIN)
+
+
+## **What [param seconds] of rest spent on an effort take out of a tank**, as a
+## share of the bar: a stroke, a turn, a dash, venom's sting. [param burn_rate]
+## makes it cheaper and a bigger [param reserve_size] makes it a smaller share.
+## Nothing for nothing spent.
+static func effort_cost(seconds: float, burn_rate: float, reserve_size: float) -> float:
+	if seconds <= 0.0 or HUNGER_SECONDS <= 0.0:
+		return 0.0
+	return seconds * burn_rate / (HUNGER_SECONDS * maxf(reserve_size, RESERVE_MIN))
+
+
+## **What a meal is worth**, as a share of the bar: [param nutrition] of one
+## whole meal, which is the prey's size against the eater's.
+static func meal(nutrition: float) -> float:
+	return MEAL * nutrition
 
 
 ## Back to a cell with nothing wrong with it.

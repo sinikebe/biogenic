@@ -1848,7 +1848,7 @@ func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# leaves the organism it went into alone (lifecycle.md §1), so printing the
 	# body here would show a genome that never changes however much you eat.
 	print("[meal]  %5.2f  nutrition %.2f of one meal (%.2f hunger)  gene %s -> dna %s  me r%.2f gape %.2f" % [
-		_clock, nutrition, Metabolism.MEAL * nutrition, gene if gene != &"" else &"none",
+		_clock, nutrition, Metabolism.meal(nutrition), gene if gene != &"" else &"none",
 		_genome_text(_genome.dna() if _genome != null else {}),
 		cell.radius if cell != null else 0.0, cell.gape() if cell != null else 0.0])
 

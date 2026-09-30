@@ -736,6 +736,10 @@ func _ready() -> void:
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	if _pond != null:
 		_begin_pond()
+	# The dev app's frame readout (ocean.md §14.2), out of the way while the pause
+	# menu is up; a release build adds nothing.
+	preload("res://game/dev/frame_readout.gd").attach(self, _food,
+		func() -> bool: return _menu_open)
 
 
 func _exit_tree() -> void:
@@ -1735,9 +1739,10 @@ func _on_struck(bearing: float, strength: float, _at: Vector2) -> void:
 ## position, so it is allowed on the bus.
 ##
 ## [param nutrition] is already the prey's size measured against this body and
-## clamped (food.gd, §3.2). MEAL stays the constant it always was and this is
-## the call site that scales it: a big meal fills more of the bar, and the bar
-## is the beat.
+## clamped (food.gd, §3.2). MEAL stays the constant it always was, and
+## metabolism.gd's `meal` scales it -- the one definition every body's meal goes
+## through (ocean.md §5.2): a big meal fills more of the bar, and the bar is the
+## beat.
 func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# A meal cannot arrive for a cell that is already dying. Not reachable
 	# today -- the field stops the frame the kill lands -- but this signal is
@@ -1768,7 +1773,7 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	if gene != &"":
 		payload["color"] = Cilia.hue(gene)
 	_bus.ingest(payload)
-	_metabolism.feed(MetabolismNode.MEAL * nutrition)
+	_metabolism.feed(nutrition)
 	# **The genome screen rebuilds on a meal** (shared-pond.md §1.7): with the
 	# menu open over a live pond the genome can change under it. Unreachable in
 	# single player, where the menu stops the water.

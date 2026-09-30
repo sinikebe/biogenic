@@ -67,6 +67,14 @@ So the review happens *before* a change reaches `dev`, and the owner plays it on
 the dev app before it reaches `main`. There is no "fix it in the next one" that
 does not also ship.
 
+**Test in proportion to where it lands.** The owner, 2026-09-30: *"don't test
+extensively dev features. There will be a human playtest anyway, + you will be
+able to do that for the release if you want."* A change into `dev` needs CI
+green, its own checks passing, and a look at anything a player can see. It does
+not need mutation sweeps, repeated review rounds or evidence dossiers: the dev
+app is where it gets played. The thorough pass belongs to the release, before
+`main`.
+
 Bump `binary_version` in `version.json` in the same commit when a change cannot
 ship as a content pack: an engine upgrade, a new permission, a native plugin, a
 new icon, or a launcher sync that moves `build_info.gd` (see below). Everything

@@ -67,8 +67,8 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 			var bite := CellBody.BITE_BY_TIER[t]
 			# The biggest meal is a body just inside the gape, and a meal is
 			# worth its size against yours, clamped as food.gd clamps it.
-			var share := MetabolismNode.MEAL * clampf(gape, FoodField.MEAL_MIN,
-				FoodField.MEAL_MAX)
+			var share := MetabolismNode.meal(clampf(gape, FoodField.MEAL_MIN,
+				FoodField.MEAL_MAX))
 			var meal := Readout.item("its biggest meal fills you") if share >= 1.0 \
 				else Readout.item("its biggest meal is worth {} s", [share * _tank(ctx)],
 					[U.ENERGY])

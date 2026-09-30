@@ -398,12 +398,26 @@ func _energy() -> void:
 	# third of the time, dies at thirty seconds. Being alive, its tail's own
 	# beating and a third of a flat-out turn, then the grace; seeds 1 to 3
 	# measure 30.2 to 30.3 s. Move HUNGER_SECONDS, STARVE_GRACE or a cost and
-	# this says so.
-	var steering := 1.0 + beating + turning / 3.0
-	var dies_at := Metabolism.HUNGER_SECONDS / steering + Metabolism.STARVE_GRACE
+	# this says so. **Through the tank's own arithmetic** (ocean.md §14.3): the
+	# static functions the node and the drop's water both call -- and then the
+	# node itself, a frame at a time, dying at the same moment.
+	var moving := beating + turning / 3.0
+	var per_second := Metabolism.rest_rate(GenomeNode.upkeep_of(GenomeNode.BORN), 0.0,
+		1.0) / Metabolism.HUNGER_SECONDS + Metabolism.effort_cost(moving, 1.0, 1.0)
+	var steering := per_second * Metabolism.HUNGER_SECONDS
+	var dies_at := 1.0 / per_second + Metabolism.STARVE_GRACE
+	var dying: Node = Metabolism.new()
+	_nodes.append(dying)
+	dying.upkeep = GenomeNode.upkeep_of(GenomeNode.BORN)
+	var frames := 0
+	while not dying.starved() and frames < 3600:
+		dying.spend(moving / 60.0)
+		dying.call(&"_process", 1.0 / 60.0)
+		frames += 1
 	_check("a born cell that never eats and steers a third of the time dies at %.1f s"
-		% dies_at + " (burning %.2f of rest) -- the owner's thirty" % steering,
-		absf(dies_at - 30.0) < 1.0)
+		% dies_at + " (burning %.2f of rest) -- the owner's thirty; the node, a frame"
+		% steering + " at a time, at %.2f s" % (float(frames) / 60.0),
+		absf(dies_at - 30.0) < 1.0 and absf(float(frames) / 60.0 - dies_at) < 2.0 / 60.0)
 
 	# The tank: seconds of rest in, a share of the bar out, and the grace is time.
 	var met: Node = Metabolism.new()
