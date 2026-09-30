@@ -65,6 +65,17 @@ NET_PORT="45772"
 
 say() { printf '==> %s\n' "$*"; }
 die() { printf 'install-server: %s\n' "$*" >&2; exit 1; }
+# The server's [upnp] lines since its latest READY, but the one that says it is
+# looking: what the router made of the forward. Only since READY, because a
+# restart puts the old process's own lines -- "took the forward ... off" as it
+# stopped -- in the journal after any time taken before the restart. Arguments
+# go to journalctl.
+upnp_since_ready() {
+	journalctl -u "$UNIT" "$@" -o cat --no-pager 2>/dev/null \
+		| awk '/^\[server\] READY/ { said = "" }
+			/^\[upnp\] / && !/^\[upnp\] looking for the router/ { said = said $0 "\n" }
+			END { printf "%s", said }' || true
+}
 
 purge=0
 for arg in "$@"; do
@@ -192,6 +203,15 @@ if compgen -G "$OVERRIDES/*.conf" >/dev/null; then
 		say "an override runs the server with --no-upnp: it will not ask the router to" \
 			"forward UDP $NET_PORT -- forward it by hand (docs/server.md §9.3)"
 	fi
+	# --no-upnp or --upnp with neither --stop-file= nor --no-update beside it is
+	# no run but a job (docs/server.md §9.3): it exits at once, systemd starts it
+	# again every five seconds, and the server never serves.
+	if grep -hs '^[[:space:]]*ExecStart=.' "$OVERRIDES"/*.conf \
+			| grep -e '--no-upnp' -e '--upnp' | grep -qv -e '--stop-file=' -e '--no-update'; then
+		say "an override's ExecStart= gives --no-upnp or --upnp without --stop-file=: that is" \
+			"a job, which exits at once and is started again every 5 s -- the server never" \
+			"serves. Keep --stop-file=/run/biogenic/stop on that line (docs/server.md §6)"
+	fi
 fi
 
 # 5b. The firewall rules for both ports, laid down but never loaded: a network
@@ -256,19 +276,16 @@ else
 fi
 # 6b. What the router made of the server's forward (docs/server.md §9.3). It
 #     asks after READY, and a search that finds no router takes about four
-#     seconds, so a few more for its answer -- anything but the line that says
-#     it is looking.
+#     seconds, so a few more for its answer.
 router=""
 if (( waiting )) && grep -q '^\[server\] READY' <<<"$ready"; then
 	for _ in $(seq 1 10); do
-		router="$(journalctl -u "$UNIT" --since "$since" -o cat --no-pager 2>/dev/null \
-			| grep -E '^\[upnp\] ' | grep -v '^\[upnp\] looking for the router' || true)"
+		router="$(upnp_since_ready --since "$since")"
 		[[ -n "$router" ]] && break
 		sleep 1
 	done
 elif ! (( waiting )); then
-	router="$(journalctl -u "$UNIT" -o cat --no-pager 2>/dev/null \
-		| grep -E '^\[upnp\] ' | grep -v '^\[upnp\] looking for the router' | tail -2 || true)"
+	router="$(upnp_since_ready | tail -2)"
 fi
 echo
 printf '%s\n' "$ready"
@@ -297,7 +314,8 @@ if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: 
 	echo "ufw is active here. Let the LAN in, and only the LAN, with something like:"
 	echo "  sudo ufw allow from 192.0.2.0/24 to any port $PORT proto udp"
 	echo "(192.0.2.0/24 is a placeholder: use your own network's range.)"
-	echo "And let the router answer the server's UPnP search, or it finds no router:"
-	echo "  sudo ufw allow proto udp from 192.0.2.1 port 1900"
+	echo "And let the router answer the server's UPnP search -- which listens on a port"
+	echo "from 49152 to 65535 -- or it finds no router:"
+	echo "  sudo ufw allow proto udp from 192.0.2.1 to any port 49152:65535"
 	echo "(192.0.2.1 is a placeholder: use your router's address -- docs/server.md §9.3.)"
 fi

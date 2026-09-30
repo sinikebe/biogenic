@@ -28,17 +28,24 @@ extends Node
 ##     (`OnlyPermanentLeasesSupported`, 725);
 ##   - **it renews it** at half the lease, and one with no time limit every
 ##     [member permanent_check], which puts it back after the router restarts;
-##     and a renewal the router does not answer is asked again by a fresh
-##     search, since a router that restarted may answer somewhere else;
+##     a renewal the router does not answer is asked again by a fresh search,
+##     since a router that restarted may answer somewhere else, and a renewal
+##     that did not take is asked again sooner and sooner apart -- never further
+##     apart than [member permanent_check];
 ##   - **it never takes a port the router forwards elsewhere**
 ##     (`ConflictInMappingEntry`, 718): it says so, leaves it, and looks again
 ##     later;
-##   - **it takes the forward off** once stopped -- and only one it still holds:
-##     a forward whose lease ran out may be somebody else's by then, and Godot's
-##     delete asks nobody whose it is;
+##   - **it takes the forward off** once stopped -- and only one it still holds,
+##     asked for again first: Godot's delete asks nobody whose a forward is, so a
+##     router that answers that another machine holds the port now (after a
+##     restart, say) keeps that one, and one whose lease ran out is never asked
+##     about at all;
 ##   - **it maps no port but the one it was made for, and none in its
 ##     never-list**, whatever is asked of it later: checked where each call is
-##     made.
+##     made. Its search, too, listens on a port of its own drawn from 49152 to
+##     65535 and never one of those -- a forward to that port would hand
+##     miniupnpc, which takes any datagram there for a router's answer, to the
+##     internet.
 ## A process killed in between leaves a timed forward to its lease.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
@@ -57,11 +64,14 @@ extends Node
 ##                    ([method kind_of]) -- so nothing was asked of it;
 ##   `mapped`         forwarded to `internal`, for `lease` seconds or
 ##                    `permanent`;
-##   `address`        the router's public address, `address` of `kind`, the
-##                    first time it is heard and whenever it changes;
+##   `address`        the router's public address, `address` of `kind`, and
+##                    `held`, whether this forward is on the router: the first
+##                    time it is heard, and whenever either changes;
 ##   `conflict`       the router forwards the port elsewhere already -- another
 ##                    machine, or a forward made by hand -- and `internal` is
 ##                    this machine;
+##   `not_ours`       at a stop, the router answered that the port is another
+##                    machine's now, so nothing was taken off;
 ##   `refused`        the router would not forward it: `code`, `name`;
 ##   `renew_failed`   a renewal did not take: `code`, `name`; the forward holds
 ##                    until `until` (Unix time) and is asked again in `retry` s;
@@ -182,9 +192,11 @@ var _renew_failing := false
 var _search_again := false
 ## What the last look found, so the same again says nothing.
 var _last_look := ""
-## This machine as the router sees it, and the router's own public address.
+## This machine as the router sees it, and the router's own public address --
+## and whether this forward was on the router when that was last said.
 var _internal := ""
 var _public := ""
+var _public_held := false
 var _stopped := true
 ## A port it may not map, or a build with no UPnP: it never asks again.
 var _done := false
@@ -353,11 +365,17 @@ func _poll() -> void:
 
 ## One batch of calls, on a thread of its own. A removal names the port this
 ## was made for -- the only one it can have mapped -- whatever [member port]
-## says since.
+## says since. It asks for no time limit only while it holds a forward that has
+## none: a new look asks for the lease first, whatever the last router took.
+## A search is handed the ports it must never listen on: this one's, and its
+## never-list.
 func _ask(kind: StringName) -> void:
+	var avoid := PackedInt32Array([_given])
+	avoid.append_array(_never)
 	_job = Job.new(router, {"kind": kind, "port": _given if kind == &"unmap" else port,
 		"given": _given, "never": _never, "protocol": protocol, "description": description,
-		"lease": lease, "permanent": _permanent, "timeout": discover_timeout})
+		"lease": lease, "permanent": _permanent and _held, "timeout": discover_timeout,
+		"avoid": avoid})
 	_thread = Thread.new()
 	_thread.start(_job.run)
 
@@ -425,7 +443,7 @@ func _looked(got: Dictionary) -> void:
 	_internal = str(got.get("internal", ""))
 	var code := int(got.get("code", NO_GATEWAY))
 	if code == SUCCESS:
-		_hold(now, bool(got.get("permanent", false)))
+		_hold(_asked_at(got, now), bool(got.get("permanent", false)))
 		_look_wait = 0.0
 		_last_look = ""
 		_say(&"mapped", {"internal": _internal, "lease": lease, "permanent": _permanent})
@@ -444,7 +462,7 @@ func _renewed(got: Dictionary) -> void:
 	var now := _now()
 	var code := int(got.get("code", NO_GATEWAY))
 	if code == SUCCESS:
-		_hold(now, bool(got.get("permanent", _permanent)))
+		_hold(_asked_at(got, now), bool(got.get("permanent", _permanent)))
 		_search_again = false
 		if _renew_failing:
 			_renew_failing = false
@@ -465,6 +483,11 @@ func _renewed(got: Dictionary) -> void:
 	_search_again = code == HTTP_ERROR or code == INVALID_RESPONSE or code == SOCKET_ERROR \
 		or code == NO_GATEWAY
 	_renew_wait = renew_retry if _renew_wait <= 0.0 else _renew_wait * 2.0
+	if _permanent:
+		# **Never further apart than one with no time limit is put again**: a
+		# router out for hours is asked again within [member permanent_check]
+		# of coming back, not after a wait that doubled past it.
+		_renew_wait = minf(_renew_wait, permanent_check)
 	_next_renew = now + _renew_wait
 	if not _permanent:
 		_next_renew = minf(_next_renew, _lease_end)
@@ -475,6 +498,10 @@ func _renewed(got: Dictionary) -> void:
 				+ (_lease_end - now)), "permanent": _permanent})
 
 
+## **The removal's answer.** The forward is asked for again first, and taken off
+## only when the router gives it: one it says another machine holds now is
+## left there -- `not_ours` -- and one it will not answer about is left to its
+## lease.
 func _unmapped(got: Dictionary) -> void:
 	var code := int(got.get("code", NO_GATEWAY))
 	var was_permanent := _permanent
@@ -484,18 +511,29 @@ func _unmapped(got: Dictionary) -> void:
 	_last_look = ""
 	if code == SUCCESS:
 		_say(&"removed", {})
+	elif code == CONFLICT and not bool(got.get("reasserted", true)):
+		_say(&"not_ours", {"internal": _internal})
 	else:
 		_say(&"remove_failed", {"code": code, "name": result_name(code),
 			"permanent": was_permanent, "lease": lease})
 
 
-## A forward the router just took, or took again.
-func _hold(now: float, permanent: bool) -> void:
+## **A forward the router just took, or took again** -- its lease counted from
+## [param since], when the router was asked, not from when the answer was
+## taken in: the router's clock started no later, so the forward is never
+## thought held past the router's own end of it.
+func _hold(since: float, permanent: bool) -> void:
 	_held = true
 	_permanent = permanent
-	_lease_end = now + float(lease)
+	_lease_end = since + float(lease)
 	_renew_wait = 0.0
-	_next_renew = now + (permanent_check if permanent else float(lease) * RENEW_AT)
+	_next_renew = since + (permanent_check if permanent else float(lease) * RENEW_AT)
+
+
+## When the call that got [param got] asked the router for the forward it took,
+## on this node's clock -- or [param otherwise], for a router that did not say.
+static func _asked_at(got: Dictionary, otherwise: float) -> float:
+	return float(got["asked_at"]) / 1000.0 if got.has("asked_at") else otherwise
 
 
 func _look_later(now: float) -> void:
@@ -503,12 +541,16 @@ func _look_later(now: float) -> void:
 	_next_look = now + _look_wait
 
 
-## The router's public address, said the first time and whenever it changes.
+## **The router's public address**, said the first time, whenever it changes,
+## and whenever this forward came to be on the router or went since it was
+## last said: an address is a hint for `--reach` only while the port leads
+## here.
 func _heard_address(address: String) -> void:
-	if address.is_empty() or address == _public:
+	if address.is_empty() or (address == _public and _held == _public_held):
 		return
 	_public = address
-	_say(&"address", {"address": address, "kind": kind_of(address)})
+	_public_held = _held
+	_say(&"address", {"address": address, "kind": kind_of(address), "held": _held})
 
 
 func _say(event: StringName, facts: Dictionary) -> void:
@@ -554,7 +596,7 @@ class Job extends RefCounted:
 		var proto := str(ask["protocol"])
 		match StringName(ask["kind"]):
 			&"look":
-				var found: Dictionary = router.discover(int(ask["timeout"]))
+				var found: Dictionary = router.discover(int(ask["timeout"]), ask["avoid"])
 				if StringName(found.get("status", &"none")) != &"ok":
 					return found
 				var out := found.duplicate()
@@ -567,27 +609,40 @@ class Job extends RefCounted:
 					out["external"] = str(router.external_address())
 				return out
 			&"unmap":
-				return {"code": int(router.delete_mapping(which, proto))}
+				# **Asked for again, then taken off**: Godot's delete names a port
+				# and asks nobody whose it is, so a router that answers that the
+				# port is another machine's now (718) -- after it restarted and
+				# gave it away -- keeps that one. Taken off only when the router
+				# gives it back to this machine.
+				var again := _map(which, proto, bool(ask["permanent"]))
+				if int(again["code"]) != SUCCESS:
+					return {"code": int(again["code"]), "reasserted": false}
+				return {"code": int(router.delete_mapping(which, proto)), "reasserted": true}
 		return {}
 
-	## Add the forward -- for the lease, or with no time limit -- and once more
-	## with none when the router takes no other kind.
+	## **Add the forward** -- for the lease, or with no time limit -- and once
+	## more with none when the router takes no other kind. `asked_at` is when
+	## the add that answered was sent, on the main thread's clock: the lease is
+	## counted from there.
 	func _map(which: int, proto: String, permanent: bool) -> Dictionary:
 		var said := str(ask["description"])
 		var seconds := 0 if permanent else int(ask["lease"])
+		var asked_at := Time.get_ticks_msec()
 		var code := int(router.add_mapping(which, proto, said, seconds))
 		if code == PERMANENT_ONLY and not permanent:
 			permanent = true
+			asked_at = Time.get_ticks_msec()
 			code = int(router.add_mapping(which, proto, said, 0))
-		return {"code": code, "permanent": permanent}
+		return {"code": code, "permanent": permanent, "asked_at": asked_at}
 
 
 ## **The router, through Godot's `UPNP`.** Every method blocks -- a search for
 ## seconds, a call for up to miniupnpc's socket timeouts -- so only a [Job], on
 ## its worker thread, calls one. The four a stand-in for it needs:
-##   `discover(timeout_ms)` -> `{status, result, devices}`, and `internal` for
-##     `status` `ok`, `wan` for `reserved`, `network` false with no network;
-##     `status` is `ok`, `reserved`, `offline`, `not_igd`, `none` or `no_upnp`;
+##   `discover(timeout_ms, avoid)` -> `{status, result, devices}`, and
+##     `internal` for `status` `ok`, `wan` for `reserved`, `network` false with
+##     no network; `status` is `ok`, `reserved`, `offline`, `not_igd`, `none` or
+##     `no_upnp`. `avoid` holds the ports the search must never listen on;
 ##   `external_address()` -> the router's public address, or "";
 ##   `add_mapping(port, protocol, description, lease)` -> a result code;
 ##   `delete_mapping(port, protocol)` -> a result code.
@@ -595,17 +650,38 @@ class Upnp extends RefCounted:
 	## A router's root description, read at most this far, for this long.
 	const DESCRIPTION_MAX := 65536
 	const DESCRIPTION_TIMEOUT_MS := 3000
+	## **Where a search listens for the routers' answers**: a port drawn from
+	## IANA's dynamic range for every search, never one in its avoid-list. Left
+	## to the system, it is any ephemeral port -- 32768 to 60999 on Linux, 45772
+	## among them -- and miniupnpc takes whatever datagram reaches it for a
+	## router's answer, fetching the description it names: through a forward of
+	## that port, a stranger's.
+	const SEARCH_PORT_LOW := 49152
+	const SEARCH_PORT_HIGH := 65535
+	## A port already taken fails the search at once with a socket error, and
+	## another is drawn, this many times in all.
+	const SEARCH_TRIES := 3
 
 	var _gateway: Object = null
+	var _draw := RandomNumberGenerator.new()
 
-	func discover(timeout_ms: int) -> Dictionary:
+	func _init() -> void:
+		_draw.randomize()
+
+	func discover(timeout_ms: int, avoid: PackedInt32Array = PackedInt32Array()) -> Dictionary:
 		_gateway = null
 		if not ClassDB.class_exists("UPNP") or not ClassDB.class_exists("UPNPDevice"):
 			return {"status": &"no_upnp", "result": NO_DEVICES, "devices": 0}
 		if not networked():
 			return {"status": &"none", "result": SOCKET_ERROR, "devices": 0, "network": false}
-		var upnp: Object = ClassDB.instantiate("UPNP")
-		var result := int(upnp.discover(timeout_ms, 2, "InternetGatewayDevice"))
+		var upnp: Object = null
+		var result := SOCKET_ERROR
+		for _try in SEARCH_TRIES:
+			upnp = ClassDB.instantiate("UPNP")
+			upnp.discover_local_port = search_port(avoid, _draw)
+			result = int(upnp.discover(timeout_ms, 2, "InternetGatewayDevice"))
+			if result != SOCKET_ERROR:
+				break
 		var count := int(upnp.get_device_count()) if result == SUCCESS else 0
 		if count == 0:
 			return {"status": &"none", "result": result, "devices": 0}
@@ -647,6 +723,19 @@ class Upnp extends RefCounted:
 		if _gateway == null:
 			return NO_GATEWAY
 		return int(_gateway.delete_port_mapping(which, proto))
+
+	## **The port a search listens on**: drawn from [constant SEARCH_PORT_LOW] to
+	## [constant SEARCH_PORT_HIGH] by [param draw], and the next one up -- round
+	## the range -- that is not in [param avoid]. Never 0, which would leave it
+	## to the system.
+	static func search_port(avoid: PackedInt32Array, draw: RandomNumberGenerator) -> int:
+		var span := SEARCH_PORT_HIGH - SEARCH_PORT_LOW + 1
+		var at := draw.randi_range(0, span - 1)
+		for step in span:
+			var candidate := SEARCH_PORT_LOW + (at + step) % span
+			if not avoid.has(candidate):
+				return candidate
+		return SEARCH_PORT_LOW
 
 	## **Whether this machine has a network a router could be on**: an adapter
 	## other than loopback with an IPv4 address that is not loopback,

@@ -577,9 +577,18 @@ router to forward **UDP 45772** to this machine's UDP 45772 -- by UPnP, the way
 a games console does -- whatever the invites: the forward is always there, and
 nothing answers behind it until you mint one (§9.4). It asks for an hour at a
 time and renews every half hour, and a clean stop -- `systemctl stop`, a
-restart, an update -- takes the forward off. A server that is killed or
-crashes leaves it to lapse by itself within the hour. It never asks for 45771,
-and it never takes 45772 from anything else that holds it on the router.
+restart, an update -- takes the forward off: asked for once more first, so
+that a router that has given the port to another machine since (after a
+restart, say) keeps that one, and the log says `left UDP 45772 on the router`.
+A server that is killed or crashes leaves its forward to lapse by itself
+within the hour. It never asks for 45771, and it never takes 45772 from
+anything else that holds it on the router.
+
+A stop takes well under a second when the router answers. One that does not is
+waited for five seconds, then as the process ends for up to fifteen seconds a
+call, twice at most, before the process ends itself -- but under `systemd`,
+SIGTERM comes ten seconds after the stop was asked, whatever is still waiting.
+The `[upnp]` line at the five seconds says which it is.
 
 For the router to hear it:
 
@@ -591,12 +600,17 @@ For the router to hear it:
   multicast search on the LAN, which a NAT or internal Proxmox bridge does not
   carry.
 - **A firewall on the container or the Proxmox host must let the router
-  answer.** The answer to the search is UDP from the router's port 1900 to a
-  high port here, which a firewall's "replies are allowed" rule does not
-  recognise as a reply -- the search went to a multicast address, and the
-  answer comes from the router's own. With `ufw` active: `ufw allow proto udp
-  from 192.0.2.1 port 1900`, with your router's address in place of the
-  placeholder. The shipped nftables rules (§9.6) touch neither.
+  answer.** The search listens for answers on a port of its own, drawn from
+  49152 to 65535 for every search and never 45771 or 45772, and the router
+  answers there by UDP -- from port 1900 most often, but not always -- which a
+  firewall's "replies are allowed" rule does not recognise as a reply: the
+  search went to a multicast address, and the answer comes from the router's
+  own. With `ufw` active: `ufw allow proto udp from 192.0.2.1 to any port
+  49152:65535`, with your router's address in place of the placeholder -- or,
+  plainest, `ufw allow proto udp from 192.0.2.1`. With the Proxmox firewall on
+  for this container (Datacenter, node or container level, with inbound
+  traffic dropped), the same on the host: an inbound rule for UDP from the
+  router's address. The shipped nftables rules (§9.6) touch neither.
 
 It says what happened in lines that start `[upnp]` -- one for each thing that
 happens, not one for each look. When the router takes the forward:
@@ -618,8 +632,8 @@ minutes, saying nothing more until what it finds changes:
 
 | The line says | What it means | What to do |
 |---|---|---|
-| `no router answered` | Nothing on this network answers a UPnP search: UPnP is off, the router has none, or the search never reaches it (the bridge and the firewall, above). | Turn UPnP on, or forward by hand. |
-| `N devices answered, and none is a router that forwards ports` | Other devices -- a TV, a printer -- answered, and the router did not. | Turn UPnP on in the router, or forward by hand. |
+| `no router answered` | No router answered the search. Other devices -- a TV, a printer -- may well have, but only a device that says it is an Internet Gateway Device counts. UPnP is off in the router, most likely; or the router has none; or the search never reaches it, or its answer never gets back (the bridge and the firewall, above). | Turn UPnP on, or forward by hand. |
+| `a router answered the search -- UPnP is on -- but what it says it is could not be read` | A router answered, and the description it pointed to could not be fetched, or does not describe a router that forwards ports: one still starting, or a broken UPnP. | Nothing: it looks again. If the line stays, forward by hand. |
 | `the router already forwards UDP 45772 elsewhere` | Something holds the port on the router: a forward made by hand -- which some routers hold against UPnP even when it leads to this very machine -- or another machine's. The server leaves it be. | If it leads to this machine, friends get in anyway: `--no-upnp` stops the asking. If not, take it off the router. |
 | `the router would not forward UDP 45772 (...)` | The router refused, for the reason in brackets. | Forward by hand. |
 | `the router's own internet address is 100.64.x.x, a shared one` | Carrier-grade NAT: your provider shares one address among many homes. No forward anywhere in the house can reach you. | Ask the provider for a public IPv4 address; or friends call over IPv6 (§9.2), which needs a firewall rule, not a forward. |
@@ -640,7 +654,12 @@ $BIOGENIC --upnp        # the server asks again
 The switch is kept in the server's `user://`, as `--reach` is, so it holds
 across restarts, updates and reinstalls; `--invites` says which way it is set.
 On the service's own command line -- `systemctl edit`, as in §6 --
-`--no-upnp` beside `--stop-file=` holds for that run only, and writes nothing.
+`--no-upnp` beside `--stop-file=` holds for that run only, and writes nothing:
+the jobs and `--invites` name a running server's own `--no-upnp` or `--upnp`
+when they can see it, since it outranks the switch until that server restarts
+without it. **Keep `--stop-file=` on that line**: `--no-upnp` with neither it
+nor `--no-update` beside it is a job, which exits at once and is started again
+every five seconds, and the server never serves. The installer warns of one.
 
 **Keep the router's own page in mind**: its list of forwards shows this one as
 `Biogenic server`, and it is the place to check what the router holds.
@@ -683,7 +702,7 @@ invite opens the internet listener, and the log says so:
 
 ```
 [server] invites: sam added
-[server] internet: listening on port 45772/udp for 1 invite (sam), certificate D6:79:5E:66:34:BD:07:5E. Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+[server] internet: listening on port 45772/udp for 1 invite (sam), certificate D6:79:5E:66:34:BD:07:5E. Friends call 203.0.113.7:45772, which must reach this machine's 45772/udp: the [upnp] lines say whether the router forwards it, and if not, forward it by hand -- the one port to forward (docs/server.md §9.3).
 ```
 
 ### 9.5 List, replace and revoke
@@ -807,6 +826,8 @@ The engine's lines look like these, and none of them is the server failing:
 - `connect: Connection refused` -- the router did not answer where it said it
   would, usually because it restarted: the server searches for it afresh, and
   says so only if the renewal does not take (§9.3).
+- `bind: Address already in use` -- the port a search drew for itself was
+  taken; it draws another at once.
 
 ### 9.8 A new key
 
@@ -834,7 +855,7 @@ line names the certificate the job printed -- that is how you know it took:
 
 ```
 [server] internet: the server's key changed -- every guest on an invite made with the old one is cut, and the listener reopens with the new one
-[server] internet: listening on port 45772/udp for 2 invites (kit, sam), certificate 46:6C:97:79:19:7D:09:E3. Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+[server] internet: listening on port 45772/udp for 2 invites (kit, sam), certificate 46:6C:97:79:19:7D:09:E3. Friends call 203.0.113.7:45772, which must reach this machine's 45772/udp: the [upnp] lines say whether the router forwards it, and if not, forward it by hand -- the one port to forward (docs/server.md §9.3).
 ```
 
 Send each friend their new line (§9.4). Pasted, it replaces the old one on

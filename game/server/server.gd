@@ -57,11 +57,15 @@ extends Node
 ## lost. So the service's `ExecStop=` touches a file first and waits, and this
 ## polls for it: the guests are told the host has gone (a closed ENet peer
 ## reaches the far end in milliseconds, where a vanished one takes ENet's
-## timeout of several seconds), the forward is taken off the router -- waited
-## for [constant UPNP_STOP_WAIT] s at most -- and the process exits 0 before
-## `systemd` needs to send anything. SIGTERM is still the backstop, and a death
-## by SIGTERM is still a clean stop to `systemd`; the forward's lease is its
-## backstop, gone within the hour.
+## timeout of several seconds), the forward is taken off the router, and the
+## process exits 0 before `systemd` needs to send anything -- in well under a
+## second, with a router that answers. One that does not is waited for
+## [constant UPNP_STOP_WAIT] s, then as the process ends for each call still
+## under way, [constant PortForward.EXIT_WAIT_MS] ms at most -- 5 + 15 + 15 s
+## at worst -- and past that the process ends itself. Under `systemd`, SIGTERM
+## comes ten seconds after the stop was asked, whatever is still waiting: still
+## a clean stop to `systemd`, and the forward's lease is the backstop, gone
+## within the hour.
 ##
 ## **Updates** are `updater.gd`'s: every ten minutes, and never with anyone
 ## connected.
@@ -106,10 +110,11 @@ const STOP_LINGER := 0.3
 ## changed, so a mint or a revoke from the command line takes effect within
 ## this -- and a revoked friend is cut within it -- with no restart.
 const INVITES_POLL := 2.0
-## **How long a clean stop waits for the router to take the forward off.** The
-## unit's `ExecStop=` gives the whole stop ten seconds before SIGTERM, and a
-## router on the LAN answers in milliseconds; one that does not in five is
-## left the lease, and says so.
+## **How long a clean stop waits for the router to take the forward off**
+## before it goes on to exit. A router on the LAN answers in milliseconds; one
+## that has not in five is said to, and then waited for as the process ends
+## ([constant PortForward.EXIT_WAIT_MS] a call) -- unless the unit's SIGTERM,
+## ten seconds after the stop was asked, comes first.
 const UPNP_STOP_WAIT := 5.0
 ## What the router's own list of forwards calls this one.
 const UPNP_DESCRIPTION := "Biogenic server"
@@ -275,9 +280,10 @@ func _process(_delta: float) -> void:
 
 
 ## **Put the pond down and go**: the guests are told, the forward is taken off
-## the router -- waited for [constant UPNP_STOP_WAIT] s at most -- then the
-## process exits 0. For a stop, and for an update's restart, which `systemd`
-## turns into a start of the new build.
+## the router -- waited for [constant UPNP_STOP_WAIT] s here, and for a call
+## still under way as the process ends -- then the process exits 0. For a stop,
+## and for an update's restart, which `systemd` turns into a start of the new
+## build.
 func shut_down(code: int = 0) -> void:
 	if _stopping:
 		return
@@ -295,11 +301,14 @@ func shut_down(code: int = 0) -> void:
 		var until := _now() + UPNP_STOP_WAIT
 		while not _forward.is_stopped() and _now() < until:
 			await get_tree().process_frame
-		if not _forward.is_stopped() and _forward.holds():
-			# Its call goes on: the node waits it out as the process ends.
+		if not _forward.is_stopped():
+			# **Said now, not after the wait at the end**: its call goes on, and
+			# the node waits it out as the process ends -- which, from a device
+			# that trickles bytes, is the whole of [constant PortForward.EXIT_WAIT_MS].
 			print("[upnp] " + upnp_said(&"stop_timeout", {"port": _forward.port,
-				"protocol": _forward.protocol, "permanent": _forward.is_permanent(),
-				"lease": _forward.lease, "waited": UPNP_STOP_WAIT}))
+				"protocol": _forward.protocol, "holds": _forward.holds(),
+				"permanent": _forward.is_permanent(), "lease": _forward.lease,
+				"waited": UPNP_STOP_WAIT, "exit_wait_ms": _forward.exit_wait_ms}))
 	await get_tree().create_timer(STOP_LINGER).timeout
 	get_tree().quit(code)
 
@@ -400,9 +409,10 @@ func _internet_status() -> String:
 		return ("listening on port %d/udp for %d invite%s (%s), certificate %s. Friends"
 			% [Invite.PORT, names.size(), "" if names.size() == 1 else "s",
 				", ".join(PackedStringArray(names)), _answering_with]
-			+ " call %s: forward that port, UDP, to this machine's %d/udp -- the one port"
+			+ " call %s, which must reach this machine's %d/udp: the [upnp] lines say"
 			% [InviteBook.reach_said(pond_root, "(no --reach set)"), Invite.PORT]
-			+ " to forward.")
+			+ " whether the router forwards it, and if not, forward it by hand -- the one"
+			+ " port to forward (docs/server.md §9.3).")
 	if names.is_empty():
 		return ("nothing listens for the internet: there are no invites. To let a"
 			+ " friend in from outside, set --reach, then --invite=<name>"
@@ -680,17 +690,17 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 			if not bool(facts.get("network", true)):
 				return ("this machine has no network a router could be on, so %s is not"
 					% what + " forwarded -- %s" % again)
-			return ("no router answered, so %s is not forwarded: turn UPnP on in the router,"
-				% what + " or %s. In a Proxmox container, the router is found only" % by_hand
-				+ " from the LAN bridge (docs/server.md §1) -- %s" % again)
+			return ("no router answered, so %s is not forwarded: UPnP is off in the router," % what
+				+ " most likely -- turn it on, or %s. In a Proxmox container, the" % by_hand
+				+ " router is found only from the LAN bridge, and a firewall must let its"
+				+ " answer in (docs/server.md §9.3) -- %s" % again)
 		&"no_gateway":
 			if StringName(facts.get("why", &"")) == &"offline":
 				return ("the router answered, but says it is not connected to the internet, so"
 					+ " %s is not forwarded -- %s" % [what, again])
-			var devices := int(facts.get("devices", 0))
-			return ("%s answered, and none is a router that forwards ports -- UPnP is off in"
-				% ("1 device" if devices == 1 else "%d devices" % devices) + " the router,"
-				+ " most likely: turn it on, or %s" % by_hand)
+			return ("a router answered the search -- UPnP is on -- but what it says it is could"
+				+ " not be read, or is not a router that forwards ports, so %s is not" % what
+				+ " forwarded: %s; if that goes on, %s" % [again, by_hand])
 		&"cannot_help":
 			return _cannot_reach(str(facts.get("wan", "")),
 				StringName(facts.get("kind", &"unknown")), what)
@@ -711,6 +721,10 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 			var kind := StringName(facts.get("kind", &"unknown"))
 			if kind != &"public":
 				return _cannot_reach(str(facts.get("address", "")), kind, what)
+			if not bool(facts.get("held", true)):
+				return ("the router says this network's public address is %s -- the one for"
+					% str(facts.get("address", "")) + " --reach once %s reaches this" % what
+					+ " machine, which this server's own forward does not (docs/server.md §9.3)")
 			return _address_hint(str(facts.get("address", "")), reach,
 				int(facts.get("port", Invite.PORT)))
 		&"conflict":
@@ -739,6 +753,10 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 				% what + " for the router again")
 		&"removed":
 			return "took the forward of %s off the router" % what
+		&"not_ours":
+			return ("left %s on the router: asked for it again before taking it off, the router"
+				% what + " answered that another machine holds it now -- it gave the port away,"
+				+ " after a restart most likely -- and that one is not this server's to take")
 		&"remove_failed":
 			if bool(facts.get("permanent", false)):
 				return ("could not take the forward of %s off the router (%s), and it has no"
@@ -748,11 +766,20 @@ static func upnp_said(event: StringName, facts: Dictionary, reach: Dictionary = 
 				% [what, str(facts.get("name", "?"))] + " within %s" % _span(lease))
 		&"stop_timeout":
 			var waited := _span(roundi(float(facts.get("waited", UPNP_STOP_WAIT))))
+			var exit_wait := _span(roundi(float(facts.get("exit_wait_ms",
+				PortForward.EXIT_WAIT_MS)) / 1000.0))
+			var goes := ("the process waits for it as it ends, %s at most for each call, and"
+				% exit_wait + " past that ends itself (under systemd, SIGTERM comes sooner)")
+			if not bool(facts.get("holds", false)):
+				return ("the router has not answered within %s, and nothing is forwarded yet:"
+					% waited + " %s" % goes)
 			if bool(facts.get("permanent", false)):
-				return ("the router did not answer within %s, and the forward of %s has no time"
-					% [waited, what] + " limit: it stays until you take it off the router")
-			return ("the router did not answer within %s, so the forward of %s is left to its"
-				% [waited, what] + " lease: it lapses by itself within %s" % _span(lease))
+				return ("the router has not answered within %s: %s. Unless it answers, the" % [
+					waited, goes] + " forward of %s, which has no time limit, stays until" % what
+					+ " you take it off the router")
+			return ("the router has not answered within %s: %s. Unless it answers, the" % [waited,
+				goes] + " forward of %s is left to its lease, and lapses within %s" % [what,
+					_span(lease)])
 	return ""
 
 

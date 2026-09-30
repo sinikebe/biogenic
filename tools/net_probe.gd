@@ -9198,6 +9198,8 @@ const DedicatedServer := preload("res://game/server/server.gd")
 ## Where this section keeps its switches: never a real server's `user://pond`.
 const UPNP_ROOT := "user://net_probe_upnp/"
 const UPNP_RUN_ROOT := "user://net_probe_upnp_run/"
+## A stand-in `/proc`, for reading a running server's own command line.
+const UPNP_PROC_ROOT := "user://net_probe_upnp_proc/"
 ## **Fifty frames a second**, as `invites` runs: nothing here is finer than a
 ## tenth of a second, and a slow search is timed in wall clock.
 const UPNP_FPS := 50
@@ -9216,6 +9218,8 @@ class UpnpRouter extends RefCounted:
 	var internal := "192.0.2.12"
 	var external := "203.0.113.7"
 	var search_ms := 0
+	## How long an add takes to answer, as a router on a slow link would.
+	var add_ms := 0
 	## What adding answers for a lease, and with none; what removing answers.
 	var timed := PortForward.SUCCESS
 	var lasting := PortForward.SUCCESS
@@ -9227,8 +9231,9 @@ class UpnpRouter extends RefCounted:
 	func _init(finds: StringName = &"ok") -> void:
 		status = finds
 
-	func discover(timeout_ms: int) -> Dictionary:
-		_note(["discover", timeout_ms])
+	## Each search written down with the ports it was told never to listen on.
+	func discover(timeout_ms: int, avoid: PackedInt32Array = PackedInt32Array()) -> Dictionary:
+		_note(["discover", timeout_ms, avoid])
 		if search_ms > 0:
 			OS.delay_msec(search_ms)
 		var out := {"status": status, "result": PortForward.NO_DEVICES if status == &"none"
@@ -9245,6 +9250,8 @@ class UpnpRouter extends RefCounted:
 
 	func add_mapping(port: int, protocol: String, said: String, lease: int) -> int:
 		_note(["add", port, protocol, said, lease])
+		if add_ms > 0:
+			OS.delay_msec(add_ms)
 		return timed if lease > 0 else lasting
 
 	func delete_mapping(port: int, protocol: String) -> int:
@@ -9320,6 +9327,10 @@ func _check_upnp() -> void:
 	await _upnp_slow_search()
 	await _upnp_server_switch()
 	await _upnp_server_this_run()
+	await _upnp_lasting_ceiling()
+	await _upnp_search_port()
+	_upnp_running_override()
+	_upnp_words()
 	OS.remove_logger(_upnp_catcher)
 	_upnp_catcher = null
 	for root: String in [UPNP_ROOT, UPNP_RUN_ROOT]:
@@ -9332,11 +9343,14 @@ func _check_upnp() -> void:
 ## **U0: the numbers the forward mirrors are the engine's**: every result code
 ## and gateway status it reads by value, so that it parses where there is no
 ## `UPNP` at all, held to `UPNP` and `UPNPDevice` here -- an engine upgrade that
-## renumbered one fails this, not a router.
+## renumbered or renamed one fails this, not a router.
 func _upnp_numbers() -> void:
 	var wrong: Array[String] = []
 	for each: Array in PortForward.MIRRORED:
-		if ClassDB.class_get_integer_constant(str(each[0]), str(each[1])) != int(each[2]):
+		# `class_get_integer_constant` is 0 for a name the class does not have,
+		# which two of these are anyway: asked whether it has it, first.
+		if not ClassDB.class_has_integer_constant(str(each[0]), str(each[1])) \
+				or ClassDB.class_get_integer_constant(str(each[0]), str(each[1])) != int(each[2]):
 			wrong.append(str(each[1]))
 	_says(ClassDB.class_exists("UPNP") and wrong.is_empty()
 			and PortForward.result_name(PortForward.CONFLICT) == "conflict with other mapping"
@@ -9345,6 +9359,14 @@ func _upnp_numbers() -> void:
 		"upnp U0: the %d result codes and gateway statuses the forward mirrors are the engine's"
 		% PortForward.MIRRORED.size() + ("" if wrong.is_empty() else " -- NOT: "
 			+ ", ".join(wrong)))
+
+
+## How many of [param calls] name [param port], or -1 when any names another.
+func _upnp_only(calls: Array, port: int) -> int:
+	for call: Array in calls:
+		if int(call[1]) != port:
+			return -1
+	return calls.size()
 
 
 ## A forward of [constant Invite.PORT] that never maps [constant Lan.PORT], as
@@ -9366,11 +9388,15 @@ func _upnp_gone(forward: Node) -> void:
 
 
 ## **U1: it maps at start, and U2: takes it off at a stop.** One search, off the
-## main thread; the port, the same outside and in, UDP, for an hour, to this
-## machine as the router sees it; the router's public address said once. Then
-## one removal of exactly that, and nothing asked after it.
+## main thread, told never to listen on this port or the LAN's; the port, the
+## same outside and in, UDP, for an hour, to this machine as the router sees
+## it, the hour counted from when the router was asked -- this one takes a
+## quarter of a second to answer -- not from when it did; the router's public
+## address said once. Then the forward asked for once more and taken off, and
+## nothing asked after it.
 func _upnp_maps_and_removes() -> void:
 	var router := UpnpRouter.new()
+	router.add_ms = 250
 	var events := UpnpEvents.new()
 	var forward := _upnp_forward(router, events)
 	forward.start()
@@ -9379,27 +9405,37 @@ func _upnp_maps_and_removes() -> void:
 	var searches := router.calls("discover")
 	var said: Dictionary = events.first(&"mapped")
 	var address: Dictionary = events.first(&"address")
+	var counted_from := float(forward.get("_lease_end")) - float(PortForward.LEASE)
+	var asked_at := float(adds[0][5]) / 1000.0 if not adds.is_empty() else -INF
+	var avoided: PackedInt32Array = searches[0][2] if not searches.is_empty() \
+		else PackedInt32Array()
 	_says(mapped >= 0.0 and searches.size() == 1
-			and int(searches[0][1]) == PortForward.DISCOVER_TIMEOUT and adds.size() == 1
+			and int(searches[0][1]) == PortForward.DISCOVER_TIMEOUT
+			and avoided.has(Invite.PORT) and avoided.has(Lan.PORT)
+			and absf(counted_from - asked_at) < 0.05 and adds.size() == 1
 			and int(adds[0][1]) == Invite.PORT and str(adds[0][2]) == "UDP"
 			and str(adds[0][3]) == "Biogenic server" and int(adds[0][4]) == PortForward.LEASE
 			and not bool(forward.is_permanent()) and str(said.get("internal", "")) == "192.0.2.12"
 			and str(address.get("address", "")) == "203.0.113.7"
 			and StringName(address.get("kind", &"")) == &"public" and router.on_main == 0,
-		"upnp U1: started, the forward searches once, off the main thread, and maps UDP %d to"
-		% Invite.PORT + " this machine's %s:%d for %d s, %.2f s in, and says the router's"
-		% [said.get("internal", "?"), Invite.PORT, PortForward.LEASE, mapped]
-		+ " public address, %s (%s)" % [address.get("address", "?"), events.names()])
+		"upnp U1: started, the forward searches once, off the main thread and never listening on"
+		+ " %s, and maps UDP %d to this machine's %s:%d for %d s, %.2f s in -- the lease" % [
+			str(avoided), Invite.PORT, said.get("internal", "?"), Invite.PORT, PortForward.LEASE,
+			mapped] + " counted from %.0f ms before the router answered -- and says the" % (
+			(asked_at + 0.25 - counted_from) * 1000.0) + " router's public address, %s (%s)" % [
+			address.get("address", "?"), events.names()])
 	forward.stop()
 	var stopped := await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
 	await _wait(0.3)
 	var removals := router.calls("delete")
+	var all := router.calls()
 	_says(stopped >= 0.0 and removals.size() == 1 and int(removals[0][1]) == Invite.PORT
 			and str(removals[0][2]) == "UDP" and not bool(forward.holds())
-			and events.count(&"removed") == 1 and router.calls().size() == 4
-			and router.on_main == 0,
-		"upnp U2: stopped, it takes exactly that forward off the router, %.2f s later, says so"
-		% stopped + " once, and asks nothing more")
+			and events.count(&"removed") == 1 and all.size() == 5
+			and str(all[3][0]) == "add" and int(all[3][1]) == Invite.PORT
+			and str(all[4][0]) == "delete" and router.on_main == 0,
+		"upnp U2: stopped, it asks for that forward once more and then takes it off the router,"
+		+ " %.2f s later, says so once, and asks nothing more" % stopped)
 	forward.queue_free()
 
 
@@ -9444,7 +9480,10 @@ func _upnp_renews() -> void:
 
 ## **U4: a router that takes no timed lease gets one with no time limit** --
 ## asked once for the hour, refused with 725, then with none -- which is put
-## again with none from then on, and taken off at a stop like any other.
+## again with none from then on, and taken off at a stop like any other, asked
+## for with none once more first. Started again at a router that now takes the
+## hour, it asks for the hour first: no time limit is asked for only while one
+## is held.
 func _upnp_lasting() -> void:
 	var router := UpnpRouter.new()
 	router.timed = PortForward.PERMANENT_ONLY
@@ -9458,19 +9497,32 @@ func _upnp_lasting() -> void:
 	for add: Array in adds:
 		leases.append(int(add[4]))
 	var lasting := bool(forward.is_permanent())
+	var before_stop := router.calls("add").size()
 	forward.stop()
 	await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
+	var at_stop := router.calls("add").slice(before_stop)
+	router.timed = PortForward.SUCCESS
+	var before_start := router.calls("add").size()
+	forward.start()
+	await _limits_until(func() -> bool: return router.calls("add").size() > before_start, 3.0)
+	var anew := router.calls("add").slice(before_start)
 	_says(adds.size() >= 3 and leases[0] == PortForward.LEASE and leases[1] == 0 and leases[2] == 0
 			and lasting and bool(events.first(&"mapped").get("permanent", false))
-			and router.calls("delete").size() == 1 and events.count(&"removed") == 1,
+			and at_stop.size() == 1 and int(at_stop[0][4]) == 0
+			and router.calls("delete").size() == 1 and events.count(&"removed") == 1
+			and not anew.is_empty() and int(anew[0][4]) == PortForward.LEASE,
 		"upnp U4: refused a timed lease (725), it maps with no time limit and puts it again"
-		+ " with none -- leases asked %s -- and a stop takes it off" % str(leases))
-	forward.queue_free()
+		+ " with none -- leases asked %s -- a stop asks for it with none once more" % str(leases)
+		+ " and takes it off, and started again it asks for the hour first")
+	await _upnp_gone(forward)
 
 
 ## **U5: a port the router forwards to another machine is left alone** -- one
-## line, however often it looks again, and no removal at a stop: the forward
-## was never this one's.
+## line, however often it looks again, no removal at a stop, and the public
+## address said without the hint for `--reach`: the forward was never this
+## one's. And a forward this one held, which the router gave to another machine
+## before the stop -- asked for once more at the stop, it answers 718 -- is left
+## there too.
 func _upnp_conflict() -> void:
 	var router := UpnpRouter.new()
 	router.timed = PortForward.CONFLICT
@@ -9485,12 +9537,34 @@ func _upnp_conflict() -> void:
 	await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
 	await _wait(0.2)
 	var line := DedicatedServer.upnp_said(&"conflict", events.first(&"conflict"))
-	_says(looks >= 3 and events.count(&"conflict") == 1 and not bool(forward.holds())
-			and router.calls("delete").is_empty() and line.contains("forwards UDP %d elsewhere"
-				% Invite.PORT) and line.contains("left alone") and line.contains("192.0.2.12"),
-		"upnp U5: with the port forwarded elsewhere, %d looks say so once, and a stop" % looks
-		+ " removes nothing: \"%s...\"" % line.substr(0, 72))
+	var elsewhere: Dictionary = events.first(&"address")
+	var hint := DedicatedServer.upnp_said(&"address", elsewhere)
+	var kept := bool(forward.holds())
 	forward.queue_free()
+	# Held, then given away before the stop.
+	var given := UpnpRouter.new()
+	var held := UpnpEvents.new()
+	var holding := _upnp_forward(given, held)
+	holding.start()
+	await _limits_until(func() -> bool: return bool(holding.holds()), 3.0)
+	given.timed = PortForward.CONFLICT
+	given.lasting = PortForward.CONFLICT
+	holding.stop()
+	await _limits_until(func() -> bool: return bool(holding.is_stopped()), 3.0)
+	var left := DedicatedServer.upnp_said(&"not_ours", held.first(&"not_ours"))
+	holding.queue_free()
+	_says(looks >= 3 and events.count(&"conflict") == 1 and not kept
+			and router.calls("delete").is_empty() and line.contains("forwards UDP %d elsewhere"
+				% Invite.PORT) and line.contains("left alone") and line.contains("192.0.2.12")
+			and not bool(elsewhere.get("held", true)) and not hint.contains("set --reach")
+			and hint.contains("which this server's own forward does not")
+			and given.calls("add").size() == 2 and given.calls("delete").is_empty()
+			and held.count(&"not_ours") == 1 and held.count(&"removed") == 0
+			and left.contains("another machine holds it now"),
+		"upnp U5: with the port forwarded elsewhere, %d looks say so once, a stop removes" % looks
+		+ " nothing, and the public address comes without the hint for --reach; one it held"
+		+ " and the router gave away before the stop is asked for again, answered 718, and"
+		+ " left there: \"%s...\"" % line.substr(0, 60))
 
 
 ## **U6: never the LAN's port.** A forward made for [constant Lan.PORT] asks the
@@ -9536,7 +9610,7 @@ func _upnp_never_the_lan() -> void:
 	_says(asked_for_lan == 0 and events.count(&"forbidden") == 1 and untouched
 			and turned.count(&"forbidden") == 1 and held.count(&"forbidden") == 1
 			and lan_calls == 0 and removed.size() == 1 and int(removed[0][1]) == Invite.PORT
-			and router.calls("add").size() == 1 and guard,
+			and _upnp_only(router.calls("add"), Invite.PORT) == 2 and guard,
 		"upnp U6: UDP %d is never forwarded -- a forward made for it asks the router" % Lan.PORT
 		+ " nothing; one turned to it before it starts, or while it holds %d, is" % Invite.PORT
 		+ " refused where the call is made, and the one holding takes off its own port at a"
@@ -9679,7 +9753,8 @@ func _upnp_server_switch() -> void:
 	await _wait(UPNP_POLL * 3.0)
 	var listing: Array = InviteBook.run(PackedStringArray(["--invites"]), UPNP_ROOT)
 	var said_off := _upnp_lines(from)
-	_says(int(job[0]) == 0 and "\n".join(PackedStringArray(job[1])).contains("upnp: off --")
+	var job_said := "\n".join(PackedStringArray(job[1]))
+	_says(int(job[0]) == 0 and job_said.contains("upnp: off, remembered")
 			and mode == Invite.PRIVATE and InviteBook.upnp_setting(UPNP_ROOT) == 0
 			and off >= 0.0 and off <= UPNP_POLL + 0.5 and router.calls().size() == asked
 			and _upnp_has(said_off, "off (--no-upnp)") and _upnp_has(said_off, "took the forward")
@@ -9729,3 +9804,185 @@ func _upnp_server_this_run() -> void:
 	server.call("shut_down")
 	server.queue_free()
 	await _wait(0.3)
+
+
+## **U13: a forward with no time limit is asked for again no further apart than
+## [member PortForward.permanent_check], however long the router stays away.**
+## Held with none, then refused (501) at every renewal: the waits double from
+## [member PortForward.renew_retry] and stop at the ceiling, where they had
+## doubled on without end -- after a two-hour outage, the next try was hours
+## off while the status line said "forwarded".
+func _upnp_lasting_ceiling() -> void:
+	var router := UpnpRouter.new()
+	router.timed = PortForward.PERMANENT_ONLY
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.permanent_check = 0.5
+	forward.renew_retry = 0.1
+	forward.start()
+	await _limits_until(func() -> bool: return bool(forward.is_permanent()), 3.0)
+	router.lasting = ClassDB.class_get_integer_constant("UPNP", "UPNP_RESULT_ACTION_FAILED")
+	var from := router.calls("add").size()
+	await _limits_until(func() -> bool: return router.calls("add").size() >= from + 7, 5.0)
+	var tries := router.calls("add").slice(from)
+	var gaps: Array[float] = []
+	for i in range(1, tries.size()):
+		gaps.append((float(tries[i][5]) - float(tries[i - 1][5])) / 1000.0)
+	var longest := 0.0
+	for gap: float in gaps:
+		longest = maxf(longest, gap)
+	var shown: PackedStringArray = []
+	for gap: float in gaps:
+		shown.append("%.2f" % gap)
+	_says(tries.size() >= 7 and longest <= 0.5 + 0.15 and gaps.size() >= 5
+			and gaps[gaps.size() - 1] >= 0.45 and bool(forward.holds())
+			and events.count(&"renew_failed") == 1,
+		"upnp U13: refused at every renewal, a forward with no time limit is asked again %s s" % (
+			", ".join(shown)) + " apart -- never further than its 0.5 s ceiling -- and says so"
+		+ " once")
+	await _upnp_gone(forward)
+
+
+## **U14: the search never listens on the forwarded port, or the LAN's.** Its
+## port is drawn from 49152 to 65535 for every search; twenty thousand draws
+## land in that range and never on 45771 or 45772, and a draw that lands on a
+## port it must avoid moves on to the next, round the range. The forward hands
+## the search its own port and its never-list. A search port the forward
+## reached would take any datagram from the internet for a router's answer.
+func _upnp_search_port() -> void:
+	var draw := RandomNumberGenerator.new()
+	draw.seed = 7
+	var avoid := PackedInt32Array([Invite.PORT, Lan.PORT])
+	var outside := 0
+	var ours := 0
+	var low := 65536
+	var high := 0
+	for _i in 20000:
+		var port := PortForward.Upnp.search_port(avoid, draw)
+		if port < PortForward.Upnp.SEARCH_PORT_LOW or port > PortForward.Upnp.SEARCH_PORT_HIGH:
+			outside += 1
+		if avoid.has(port):
+			ours += 1
+		low = mini(low, port)
+		high = maxi(high, port)
+	# Every port of the range but one avoided: the draw finds the one left.
+	var all_but := PackedInt32Array()
+	for port in range(PortForward.Upnp.SEARCH_PORT_LOW, PortForward.Upnp.SEARCH_PORT_HIGH + 1):
+		if port != 60000:
+			all_but.append(port)
+	var cornered := PortForward.Upnp.search_port(all_but, draw)
+	var router := UpnpRouter.new(&"none")
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.start()
+	await _limits_until(func() -> bool: return not router.calls("discover").is_empty(), 3.0)
+	await _upnp_gone(forward)
+	var told: PackedInt32Array = router.calls("discover")[0][2] \
+		if not router.calls("discover").is_empty() else PackedInt32Array()
+	_says(outside == 0 and ours == 0 and cornered == 60000 and told.has(Invite.PORT)
+			and told.has(Lan.PORT) and PortForward.Upnp.SEARCH_PORT_LOW > Invite.PORT
+			and PortForward.Upnp.SEARCH_PORT_LOW > Lan.PORT,
+		"upnp U14: 20000 search ports drawn from %d-%d, none outside it and none %d or %d;" % [
+			low, high, Invite.PORT, Lan.PORT] + " a draw on an avoided port moves on, and the"
+		+ " forward tells its search to avoid %s" % str(told))
+
+
+## **U15: a running server's own `--no-upnp` or `--upnp` is found and named.**
+## Read from `cmdline` files as `ps` reads them -- here under a stand-in
+## `/proc`: the service, run with its own flags, counts; the same binary doing
+## a job, another program, and this process do not. The jobs and `--invites`
+## then say what that server makes of the switch, rather than promising what
+## its command line overrides.
+func _upnp_running_override() -> void:
+	var exe := "/opt/biogenic/biogenic-server.x86_64"
+	var write := func(pid: String, argv: Array) -> void:
+		DirAccess.make_dir_recursive_absolute(UPNP_PROC_ROOT.path_join(pid))
+		var bytes := PackedByteArray()
+		for arg: String in argv:
+			bytes.append_array(arg.to_utf8_buffer())
+			bytes.append(0)
+		var file := FileAccess.open(UPNP_PROC_ROOT.path_join(pid).path_join("cmdline"),
+			FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+	_upnp_proc_wipe()
+	write.call("102", [exe, "--headless", "--", "--invites"])
+	write.call("103", ["/usr/bin/bash", "-c", "--", "--stop-file=/run/biogenic/stop", "--no-upnp"])
+	DirAccess.make_dir_recursive_absolute(UPNP_PROC_ROOT.path_join("self"))
+	var none := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop"])
+	var plain := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop", "--upnp"])
+	var forced := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop", "--no-upnp"])
+	var off := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	var mine := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 101)
+	var missing := InviteBook.running_upnp_override(UPNP_PROC_ROOT.path_join("nowhere"), exe, 999)
+	_upnp_proc_wipe()
+	var off_job := InviteBook._running_takes(false, 1)
+	var on_job := InviteBook._running_takes(true, -1)
+	var unseen := InviteBook._running_takes(false, -2)
+	var plain_job := InviteBook._running_takes(false, 0)
+	var listed := InviteBook.upnp_said(1, -1)
+	var listed_unseen := InviteBook.upnp_said(1, -2)
+	var listed_agree := InviteBook.upnp_said(0, -1)
+	_says(none == -2 and plain == 0 and forced == 1 and off == -1 and mine == -2 and missing == -2
+			and off_job.contains("says --upnp, which holds for its run")
+			and on_job.contains("says --no-upnp, which holds for its run")
+			and unseen.contains("unless its own command line says --upnp")
+			and plain_job == "the running server takes its forward off within seconds."
+			and listed.contains("but the running server's own command line says --no-upnp")
+			and listed_unseen.contains("would hold instead")
+			and listed_agree.begins_with("upnp: off --") and not listed_agree.contains("but"),
+		"upnp U15: a running server's own command line is read from /proc -- %d with" % plain
+		+ " neither,"
+		+ " %d with --upnp, %d with --no-upnp, and %d for a job, another program, this" % [forced,
+			off, none] + " process or no /proc -- and the jobs and --invites say what it makes of"
+		+ " the switch")
+
+
+func _upnp_proc_wipe() -> void:
+	if not DirAccess.dir_exists_absolute(UPNP_PROC_ROOT):
+		return
+	for pid: String in DirAccess.get_directories_at(UPNP_PROC_ROOT):
+		var dir := UPNP_PROC_ROOT.path_join(pid)
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
+	DirAccess.remove_absolute(UPNP_PROC_ROOT)
+
+
+## **U16: the words say what is so.** No router answering is where UPnP being
+## off lands, since Godot keeps only devices that say they are Internet Gateway
+## Devices; a router whose description cannot be read is not called off. The
+## advice for `--reach` tells a switch it cannot read from one set to off. And
+## a stop still waiting on the router says so at once, with the wait it will
+## take and that SIGTERM comes sooner under systemd.
+func _upnp_words() -> void:
+	var what := {"port": Invite.PORT, "protocol": "UDP"}
+	var silent := DedicatedServer.upnp_said(&"no_router", what.merged({"network": true}))
+	var unread := DedicatedServer.upnp_said(&"no_gateway", what.merged({"why": &"not_igd",
+		"devices": 2}))
+	var looking := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": false}))
+	var lasting := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": true,
+		"permanent": true}))
+	var timed := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": true,
+		"permanent": false, "lease": 3600}))
+	var on := InviteBook.forward_advice(Invite.PORT, 1)
+	var off := InviteBook.forward_advice(Invite.PORT, 0)
+	var unreadable := InviteBook.forward_advice(Invite.PORT, -1)
+	var other := InviteBook.forward_advice(50000, 1)
+	_says(silent.contains("UPnP is off in the router, most likely")
+			and unread.contains("UPnP is on") and unread.contains("could not be read")
+			and not unread.contains("UPnP is off")
+			and looking.contains("15 s at most for each call") and looking.contains("SIGTERM")
+			and looking.contains("nothing is forwarded yet")
+			and lasting.contains("stays until you take it off the router")
+			and timed.contains("lapses within an hour")
+			and on.contains("by UPnP") and off.contains("(--no-upnp)")
+			and unreadable.contains("cannot be read") and not unreadable.contains("--no-upnp")
+			and other.contains("is of %d, not of 50000" % Invite.PORT),
+		"upnp U16: the lines say what is so -- no router answering is where UPnP off lands, a"
+		+ " description that cannot be read is not called off, an unreadable switch is not"
+		+ " called --no-upnp, and a stop still waiting says how long, and that SIGTERM comes"
+		+ " sooner")

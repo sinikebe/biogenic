@@ -34,10 +34,12 @@ ExecStart=/opt/biogenic/biogenic-server.x86_64 --headless -- --stop-file=/run/bi
 # Godot does not catch SIGTERM: killed, the guests would only notice when their
 # connections time out, and the server's forward of UDP 45772 would stay on the
 # router until its lease ran out. So a stop asks first -- the server polls for
-# this file, tells its guests, takes its forward off the router (waiting five
-# seconds at most for it to answer), and exits 0 -- and SIGTERM stays the
-# backstop, ten seconds on. $MAINPID is unset when the process has already gone
-# (an update's restart, which takes the forward off itself), and then there is
+# this file, tells its guests, takes its forward off the router, and exits 0,
+# in well under a second when the router answers -- and SIGTERM stays the
+# backstop: ten seconds after the stop was asked, whatever the server is still
+# waiting for (a router that does not answer is waited for longer than that,
+# docs/server.md §9.3). $MAINPID is unset when the process has already gone (an
+# update's restart, which takes the forward off itself), and then there is
 # nothing to ask.
 ExecStop=/bin/sh -c 'if [ -n "$$MAINPID" ]; then touch /run/biogenic/stop; timeout 10 tail --pid="$$MAINPID" -s 0.2 -f /dev/null; fi; exit 0'
 Restart=always
