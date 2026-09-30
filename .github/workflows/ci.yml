@@ -332,10 +332,12 @@ jobs:
         # pause page. Then the drop's own rules, run in the drop: nothing made
         # where a player can see it, containment, growth, the floors, the LOD,
         # determinism, the flocs and remains, one body for every cell, and the
-        # quiet start's push kept clear of the rim. None of it shows in a
-        # render -- a grid that misses one body in ten thousand is a hunter
-        # that never sees you -- and a player would find it an hour into a
-        # run. About forty-five seconds.
+        # quiet start's push kept clear of the rim. And the replay on the drop:
+        # the nearest 48 in stable slots, the flocs told as they land and go,
+        # the killer named, and a drop left untouched by watching it. None of
+        # it shows in a render -- a grid that misses one body in ten thousand
+        # is a hunter that never sees you -- and a player would find it an
+        # hour into a run. About forty-five seconds.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |

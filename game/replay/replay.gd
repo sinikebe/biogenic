@@ -22,6 +22,11 @@ extends Node
 ## Nothing here is freed on a death and nothing here is written to disk. Closing
 ## it is `queue_free()`; the ring dies with the run that made it.
 ##
+## **The water it shows is its own** (docs/design/ocean.md §11): a `Food` made
+## here, holding the recorded bodies, the flocs and the rim, and nothing else.
+## The run's field is the drop, which outlives the run and which the player
+## swims back into after watching, so nothing here ever writes to it.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Panes := preload("res://game/replay/panes.gd")
@@ -82,6 +87,7 @@ var recorder: RecorderNode = null
 var _panes: Panes = null
 var _cell: CellBody = null
 var _motes: MotesField = null
+## **The replay's own field**, never the run's. See [method _water].
 var _food: FoodField = null
 var _genome: GenomeNode = null
 ## The run's bus, found only so the panes can read the player's light setting
@@ -106,6 +112,9 @@ var _sensation_at := 0
 var _mark_at := 0
 var _delta_at := 0
 var _daughters: Array = []
+## The flocs the recording has settled and not cleared, by id: when it said so
+## and `[place, radius, settle, life]` as it said them. Drawn by time.
+var _flocs := {}
 ## **The eye, as the run drew it** (beam-levels.md §8.4-§8.5). It buds off the
 ## levels each delta restores, and it flares when a level it is handed rises --
 ## armed there, and cued by the next recorded beat, exactly as the run does it.
@@ -124,6 +133,7 @@ var _forget := false
 func _ready() -> void:
 	_frame.resize(RecorderNode.STRIDE)
 	_find(get_parent())
+	_food = _water()
 	_panes = Panes.new()
 	_panes.name = "Panes"
 	_panes.watch(_cell, _motes, _food, _genome, _bus)
@@ -171,9 +181,10 @@ func _seek() -> void:
 	_fire_events()
 
 
-## The recorded state, written straight onto the run's own frozen nodes. They
-## are not simulating and never will again: *a run keeps nothing*, and
-## `_wake_up()` builds every one of them afresh.
+## The recorded state, written straight onto the run's own frozen cell, genome
+## and grit, which are not simulating and never will again -- *a run keeps
+## nothing* of its cell, and `_wake_up()` builds every one of them afresh -- and
+## onto this screen's own field, which is the water as the cell had it.
 func _write_state() -> void:
 	if _cell != null:
 		_cell.position = Vector2(_frame[0], _frame[1])
@@ -187,6 +198,7 @@ func _write_state() -> void:
 			var at := RecorderNode.AT_BODIES + i * RecorderNode.BODY_FLOATS
 			_food.restore_body(i, Vector2(_frame[at], _frame[at + 1]),
 				_frame[at + 2], _frame[at + 3], _frame[at + 4])
+		_write_flocs()
 		_food.beams = _read_beams()
 		_food.ping_fronts = _read_ping_fronts()
 		_food.ping_echoes = _read_ping_echoes()
@@ -208,6 +220,9 @@ func _write_state() -> void:
 		# the float is an index and the lerp is stepped, but -1.0 arriving as
 		# -0.9999 would truncate to 0 and put rings on an innocent drifter.
 		_food.restore_hunter(int(roundf(_frame[RecorderNode.AT_HUNTER])))
+		# **And who killed the cell**, on the frames the recording names it,
+		# for the rings `vision.gd` draws when nothing is hunting (§11).
+		_food.restore_killer(int(roundf(_frame[RecorderNode.AT_KILLER])))
 	if _motes != null:
 		for i in RecorderNode.MOTES:
 			var at := RecorderNode.AT_MOTES + i * 2
@@ -218,6 +233,19 @@ func _write_state() -> void:
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
+
+
+## **Every floc the recording has settled, where it lies and as far as it has
+## settled by now**: a floc never moves, and its fade is a function of time, so
+## it was recorded once and is drawn from that every frame -- on the replay's own
+## clock, so a slowed replay settles slowly too.
+func _write_flocs() -> void:
+	var t := _window(_at)
+	for id: int in _flocs:
+		var row: Array = _flocs[id]
+		var floc: Array = row[1]
+		_food.restore_floc(id, floc[0], float(floc[1]), FoodField.floc_settle_after(
+			float(floc[2]), float(floc[3]), t - float(row[0])))
 
 
 ## Which way the `ampulla` was pointing on the body being watched. The slot is
@@ -323,8 +351,8 @@ func _read_division() -> Dictionary:
 	return out
 
 
-## Genomes, layouts, held samples and the two daughters: stepped at the
-## timestamps the recorder wrote them, never interpolated.
+## Genomes, layouts, held samples, the two daughters, the rim and the flocs:
+## stepped at the timestamps the recorder wrote them, never interpolated.
 func _apply_deltas() -> void:
 	var rows: Array = recorder.deltas()
 	while _delta_at < rows.size() and float(rows[_delta_at][0]) <= _window(_at):
@@ -351,6 +379,16 @@ func _apply_deltas() -> void:
 					_food.restore_genome(int(row[2]), row[3])
 			RecorderNode.Delta.DAUGHTERS:
 				_daughters = row[3]
+			RecorderNode.Delta.RIM:
+				var rim: Array = row[3]
+				if _food != null:
+					_food.restore_rim(rim[0], float(rim[1]))
+			RecorderNode.Delta.SETTLE:
+				_flocs[int(row[2])] = [float(row[0]), row[3]]
+			RecorderNode.Delta.CLEAR:
+				_flocs.erase(int(row[2]))
+				if _food != null:
+					_food.clear_floc(int(row[2]))
 			_:
 				pass
 	_watch_levels()
@@ -405,6 +443,10 @@ func _rewind() -> void:
 	_mark_at = 0
 	_delta_at = 0
 	_daughters = []
+	# The window's flocs are settled again from its first deltas.
+	_flocs.clear()
+	if _food != null:
+		_food.clear_flocs()
 	# A seek is not a level-up: the flare goes, and the levels are learned
 	# afresh from the window's first delta.
 	_eye_flare.clear()
@@ -524,7 +566,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 # ---------------------------------------------------------------------------
 # Finding the run's frozen nodes. By type, from the parent, exactly as
-# vision.gd does -- nothing has to hand this screen anything.
+# vision.gd does -- nothing has to hand this screen anything. **Not its field**:
+# the water this screen shows is its own.
 # ---------------------------------------------------------------------------
 
 func _find(root: Node) -> void:
@@ -536,10 +579,25 @@ func _find(root: Node) -> void:
 			if child is RecorderNode:
 				recorder = child as RecorderNode
 				break
-	# The marks layer reads the field's own clock to decide whether a beam is
-	# still true. Here the field is stepped from a recording, so it is told.
-	if _food != null and _food.is_processing():
-		_food.set_process(false)
+
+
+## **The replay's own field** (docs/design/ocean.md §11): the recorded bodies in
+## their slots, the flocs and the rim, and the cell being watched as its player.
+## Never stepped -- every number in it is the recording's -- and the views read
+## it as they read a live one. Its not processing is also what tells the marks
+## layer that a beam in it is not being cast now. The run's own field, the drop
+## the player returns to, is never touched.
+func _water() -> FoodField:
+	var water := FoodField.new()
+	water.name = "Water"
+	water.process_mode = Node.PROCESS_MODE_DISABLED
+	water.open_replay(_cell, RecorderNode.BODIES)
+	add_child(water)
+	water.set_process(false)
+	var rim: Array = recorder.rim() if recorder != null else []
+	if rim.size() == 2:
+		water.restore_rim(rim[0], float(rim[1]))
+	return water
 
 
 func _walk(node: Node) -> void:
@@ -547,8 +605,6 @@ func _walk(node: Node) -> void:
 		_cell = node as CellBody
 	elif _motes == null and node is MotesField:
 		_motes = node as MotesField
-	elif _food == null and node is FoodField:
-		_food = node as FoodField
 	elif _genome == null and node is GenomeNode:
 		_genome = node as GenomeNode
 	elif _bus == null and node is SignalBus:

@@ -8,7 +8,9 @@ extends Node
 ## one seed one drop, flocs, and one body for every cell -- over five minutes
 ## of a drop and on bodies posed in one. 12 is 1b's save. **And the dev app's
 ## frame readout** (§14.2), run for real: CI runs release-stamped, so nothing
-## else here ever runs its frames.
+## else here ever runs its frames. **And 13, the replay on the drop** (§11): the
+## 48 nearest in slots they keep, today's water recorded as it always was, flocs
+## as SETTLE and CLEAR, the killer, and a replay that leaves the drop untouched.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -18,7 +20,10 @@ extends Node
 ## a spawner that hides a peer at a drifter's reach, a body left past the rim, a
 ## growth with no ceiling, a drifter drawn from the venom list, a prey search
 ## that stops too far out, a floc eaten unsettled, a poisoned body that leaves
-## nothing, a body armoured against the player only.
+## nothing, a body armoured against the player only. And 1a-3's: a body that
+## loses its slot while it stays near, newcomers out of the field's order, a
+## floc never cleared, a seal that names no killer, a replay that writes onto
+## the run's own field.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -36,6 +41,7 @@ const FoodField := preload("res://game/normal/food.gd")
 const FrameReadout := preload("res://game/dev/frame_readout.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+const RecorderNode := preload("res://game/replay/recorder.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
@@ -187,6 +193,7 @@ func _ready() -> void:
 	_flocs()
 	await _flocs_fed()
 	_one_body()
+	await _replay()
 	await _readout()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
@@ -1548,6 +1555,459 @@ func _one_body() -> void:
 		kept and taken and darted == [true, true, true] and tasted[0] > 0.05
 		and tasted[1] == 0.0 and bloom[0] == 1.0 and bloom[1] == 0.0)
 	_done(water)
+
+
+# --- 13. The replay on the drop (§11) --------------------------------------------------------
+
+## **A run's recorder, on water stepped by hand**: a still cell, a field and
+## the recorder last, as they are in a run, none of them processing on its own.
+## [method _rig_step] steps the water one fixed frame and has the recorder take
+## it, as the run's frame does. [param drop] false is today's water.
+func _rig(drop: bool, desert := 0.0) -> Array:
+	var rig := Node.new()
+	rig.name = "Rig"
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	cell.process_mode = Node.PROCESS_MODE_DISABLED
+	rig.add_child(cell)
+	var field := WatchedDrop.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.desert = desert
+	rig.add_child(field)
+	var recorder := RecorderNode.new()
+	recorder.process_mode = Node.PROCESS_MODE_DISABLED
+	rig.add_child(recorder)
+	add_child(rig)
+	if drop:
+		field.setup_drop(cell)
+	else:
+		field.setup(cell)
+	field.in_water = false
+	return [rig, field, cell, recorder]
+
+
+func _rig_step(rig: Array, frames: int, move := Vector2.ZERO) -> void:
+	for f in frames:
+		(rig[2] as CellBody).position += move
+		(rig[1] as Node)._process(1.0 / 60.0)
+		(rig[3] as Node)._process(1.0 / 60.0)
+
+
+## Where the recorder's newest frame starts in its ring.
+func _newest(recorder: Node) -> int:
+	var head := int(recorder.get("_head"))
+	return ((head - 1 + RecorderNode.CAPACITY) % RecorderNode.CAPACITY) * RecorderNode.STRIDE
+
+
+## [param x] as the ring holds it.
+func _f32(x: float) -> float:
+	var one := PackedFloat32Array([x])
+	return one[0]
+
+
+## The replay screen over [param recorder]'s sealed ring, as the run raises it:
+## a child of the run, handed the recorder before it enters the tree. Driven by
+## hand from here, one seek at a time.
+func _raise_replay(run: Node, recorder: Node) -> Node:
+	var screen: Node = (load("res://game/replay/replay.tscn") as PackedScene).instantiate()
+	screen.set(&"recorder", recorder)
+	run.add_child(screen)
+	screen.set_process(false)
+	return screen
+
+
+func _seek(screen: Node, at: float) -> void:
+	screen.set(&"_at", at)
+	screen.call(&"_seek")
+
+
+## Every body in [param field] as a row of what the replay could have written.
+func _snapshot(field: Node) -> Array:
+	var out := []
+	for b: Object in field.get("_cells"):
+		out.append([b.get("pos"), b.get("heading"), b.get("radius"), b.get("wound"),
+			(b.get("genome") as Dictionary).duplicate(), b.get("seeded"), b.get("state"),
+			b.get("target"), b.get("id"), b.get("settle"), b.get("hunger")])
+	return out
+
+
+func _replay() -> void:
+	_replay_slots()
+	_replay_bubble()
+	_replay_flocs()
+	_replay_killer()
+	await _replay_run()
+
+
+## **The 48 nearest, each in a slot it keeps** (§11): a drop stepped four
+## seconds with the cell crossing it, and after every frame the slots hold
+## exactly the living bodies nearest the cell within the recorder's reach, at
+## most 48, their places and sizes as the field had them; a body never changes
+## slot while it stays among them; an empty slot is radius 0.
+func _replay_slots() -> void:
+	var rig := _rig(true)
+	var field: WatchedDrop = rig[1]
+	var cell: CellBody = rig[2]
+	var rec: Node = rig[3]
+	var toward: Vector2 = ((field.basin().get(&"center") as Vector2) - cell.position) \
+		.normalized() * 10.0
+	var before := {}
+	var wrong_set := 0
+	var moved := 0
+	var bad := 0
+	var arrivals := 0
+	var filled := 0
+	for f in 240:
+		_rig_step(rig, 1, toward)
+		var cells: Array = field.get("_cells")
+		var keys := PackedInt64Array()
+		for i in cells.size():
+			var b: Object = cells[i]
+			if not b.get("seeded") or b.get("inert"):
+				continue
+			var d2 := (b.get("pos") as Vector2).distance_squared_to(cell.position)
+			if d2 <= RecorderNode.REACH * RecorderNode.REACH:
+				keys.append((int(d2) << RecorderNode.INDEX_BITS) | i)
+		keys.sort()
+		var want := {}
+		for k in mini(keys.size(), RecorderNode.BODIES):
+			want[int((cells[int(keys[k] & RecorderNode.INDEX_MASK)] as Object).get("serial"))] = 1
+		var ring: PackedFloat32Array = rec.get("_ring")
+		var at := _newest(rec)
+		var serials: PackedInt64Array = rec.get("_slot_serial")
+		var indices: PackedInt32Array = rec.get("_slot_index")
+		var now := {}
+		for s in RecorderNode.BODIES:
+			var o := at + RecorderNode.AT_BODIES + s * RecorderNode.BODY_FLOATS
+			if serials[s] < 0:
+				if ring[o + 3] != 0.0:
+					bad += 1
+				continue
+			var b: Object = cells[indices[s]]
+			var p: Vector2 = b.get("pos")
+			if int(b.get("serial")) != serials[s] or ring[o] != _f32(p.x) \
+					or ring[o + 1] != _f32(p.y) or ring[o + 3] != _f32(float(b.get("radius"))):
+				bad += 1
+			now[int(serials[s])] = s
+			if before.has(int(serials[s])):
+				if int(before[int(serials[s])]) != s:
+					moved += 1
+			else:
+				arrivals += 1
+		if now.size() != want.size():
+			wrong_set += 1
+		else:
+			for serial: int in want:
+				if not now.has(serial):
+					wrong_set += 1
+					break
+		filled = now.size()
+		before = now
+	_check(("13. the replay's slots: after each of 240 frames of a cell crossing the drop"
+		+ " the %d slots hold the living bodies nearest it (%d frames wrong), as the field"
+		+ " had them (%d wrong), none changing slot while it stays among them (%d moved),"
+		+ " %d arrivals in all, the last frame %d full") % [RecorderNode.BODIES, wrong_set,
+		bad, moved, arrivals, filled],
+		wrong_set == 0 and bad == 0 and moved == 0 and filled == RecorderNode.BODIES
+		and arrivals > RecorderNode.BODIES + 20)
+	(rig[0] as Node).queue_free()
+
+
+## **Today's water records as it always did** (§11): the bubble a run with a
+## session still plays, its 34 bodies in the slots of their own indices -- with
+## the floats the field had, the hunter as its index, and the rest empty --
+## through a cell crossing it fast enough that its bodies are reseeded.
+func _replay_bubble() -> void:
+	var rig := _rig(false)
+	var field: WatchedDrop = rig[1]
+	var rec: Node = rig[3]
+	var cells: Array = field.get("_cells")
+	var bad := 0
+	var hunted := 0
+	var reseeds := 0
+	var last := PackedInt64Array()
+	for b: Object in cells:
+		last.append(int(b.get("serial")))
+	for f in 240:
+		(rig[2] as CellBody).position += Vector2(12.0, 0.0)
+		field._process(1.0 / 60.0)
+		# Something hunting the cell as the frame is taken, so the hunter's
+		# float is a slot to check.
+		(cells[5] as Object).set("state", FoodField.State.STALK)
+		(cells[5] as Object).set("target", FoodField.TARGET_PLAYER)
+		rec._process(1.0 / 60.0)
+		var ring: PackedFloat32Array = rec.get("_ring")
+		var at := _newest(rec)
+		var indices: PackedInt32Array = rec.get("_slot_index")
+		for s in RecorderNode.BODIES:
+			var o := at + RecorderNode.AT_BODIES + s * RecorderNode.BODY_FLOATS
+			if s >= FoodField.COUNT:
+				if indices[s] >= 0 or ring[o + 3] != 0.0:
+					bad += 1
+				continue
+			var b: Object = cells[s]
+			var p: Vector2 = b.get("pos")
+			# The gape as the recorder has always written it: its tier's
+			# multiplier, held as a float, times the radius.
+			var r := float(b.get("radius"))
+			var gape := _f32(_f32(CellBody.gape_of(GenomeNode.tier_of(b.get("genome"),
+				&"cytostome"), 1.0)) * r)
+			if indices[s] != s or ring[o] != _f32(p.x) or ring[o + 1] != _f32(p.y) \
+					or ring[o + 2] != _f32(float(b.get("heading"))) or ring[o + 3] != _f32(r) \
+					or ring[o + 4] != _f32(float(b.get("wound"))) or ring[o + 5] != gape:
+				bad += 1
+			if int(b.get("serial")) != last[s]:
+				last[s] = int(b.get("serial"))
+				reseeds += 1
+		var hunter := field.hunter()
+		if ring[at + RecorderNode.AT_HUNTER] != float(hunter):
+			bad += 1
+		if hunter >= 0:
+			hunted += 1
+	var body_rows := 0
+	var off_index := 0
+	for row: Array in rec.call(&"deltas"):
+		if int(row[1]) == RecorderNode.Delta.BODY:
+			body_rows += 1
+			if int(row[2]) >= FoodField.COUNT:
+				off_index += 1
+	_check(("13. today's water records as it did: 240 frames, its %d bodies in the slots"
+		+ " of their own indices with the field's floats and the rest empty (%d wrong),"
+		+ " the hunter's float its index on %d frames, %d reseeds, %d genome rows none past"
+		+ " slot %d (%d)") % [FoodField.COUNT, bad, hunted, reseeds, body_rows,
+		FoodField.COUNT - 1, off_index],
+		bad == 0 and hunted == 240 and reseeds > 10
+		and body_rows >= FoodField.COUNT + reseeds and off_index == 0)
+	(rig[0] as Node).queue_free()
+
+
+## **Flocs as SETTLE and CLEAR** (§11): a flake landing near the cell is told
+## once, as it lands, with its place and radius, and once as it is eaten, and it
+## settles by the time since as the field steps it; a cell starving in view is
+## its slot emptying and a SETTLE where it died, already settled -- and the
+## replay's own field has each floc from its SETTLE to its CLEAR, and not
+## outside them.
+func _replay_flocs() -> void:
+	var rig := _rig(true, 3000.0)
+	var field: WatchedDrop = rig[1]
+	var cell: CellBody = rig[2]
+	var rec: Node = rig[3]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	var landed := p + Vector2(300.0, 0.0)
+	_rig_step(rig, 5)
+	var flake := field._spawn_floc(landed, 9.0, false)
+	var flake_id := int((cells[flake] as Object).get("id"))
+	_rig_step(rig, 150)
+	var settled := float((cells[flake] as Object).get("settle"))
+	var clock := float(rec.get("_clock"))
+	field._consume(flake)
+	_rig_step(rig, 5)
+	# A hunter starving 500 off: in a slot, then gone, and its remains where it was.
+	var starving := _pose(field, p + Vector2(-500.0, 0.0), 30.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, 0.0, 1.0)
+	_rig_step(rig, 5)
+	var slot: int = (rec.get("_slot_by_index") as PackedInt32Array)[starving]
+	var died_at: Vector2 = (cells[starving] as Object).get("pos")
+	(cells[starving] as Object).set("starve", Metabolism.STARVE_GRACE - 1e-4)
+	_rig_step(rig, 5)
+	var ring: PackedFloat32Array = rec.get("_ring")
+	var emptied: bool = slot >= 0 and ring[_newest(rec) + RecorderNode.AT_BODIES
+		+ slot * RecorderNode.BODY_FLOATS + 3] == 0.0
+	var landings := 0
+	var predicted := -1.0
+	var clears := 0
+	var clear_t := 0.0
+	var remains := 0
+	var remains_id := -1
+	var remains_t := 0.0
+	for row: Array in rec.call(&"deltas"):
+		var kind := int(row[1])
+		if kind == RecorderNode.Delta.SETTLE:
+			var floc: Array = row[3]
+			if int(row[2]) == flake_id:
+				landings += 1
+				if (floc[0] as Vector2) == landed and float(floc[1]) == 9.0 \
+						and float(floc[2]) < 0.01:
+					predicted = FoodField.floc_settle_after(float(floc[2]), float(floc[3]),
+						clock - float(row[0]))
+			elif (floc[0] as Vector2) == died_at and float(floc[2]) == 1.0 \
+					and is_equal_approx(float(floc[1]), Drop.remains_radius(30.0)):
+				remains += 1
+				remains_id = int(row[2])
+				remains_t = float(row[0])
+		elif kind == RecorderNode.Delta.CLEAR and int(row[2]) == flake_id:
+			clears += 1
+			clear_t = float(row[0])
+	rec.call(&"seal")
+	var screen := _raise_replay(rig[0], rec)
+	var water: Node = screen.get("_food")
+	var origin := float(rec.call(&"origin"))
+	var seen := []
+	for t: float in [clear_t - 0.5, clear_t + 0.05, remains_t - 0.05, remains_t + 0.02]:
+		_seek(screen, maxf(t - origin, 0.0))
+		# The two flocs this check made; the drop's own may be in reach too.
+		var here := []
+		var map: Dictionary = water.get("_replay_flocs")
+		for id: int in [flake_id, remains_id]:
+			if not map.has(id):
+				continue
+			var b: Object = (water.get("_cells") as Array)[int(map[id])]
+			if b.get("seeded"):
+				here.append([id, b.get("pos"), float(b.get("settle"))])
+		seen.append(here)
+	_check(("13. flocs: a flake is told once as it lands (%d) and once as it is eaten (%d),"
+		+ " settled %.4f after 2.5 s against %.4f by time; a cell starving in view empties"
+		+ " its slot (%s) and leaves one SETTLE where it died, settled (%d); the replay's"
+		+ " own field has the flake before its CLEAR and not after (%d, %d), the remains"
+		+ " not before their SETTLE and then settled where it died (%d, %d)") % [landings,
+		clears, settled, predicted, str(emptied), remains, seen[0].size(), seen[1].size(),
+		seen[2].size(), seen[3].size()],
+		landings == 1 and clears == 1 and absf(settled - predicted) < 1e-6 and emptied
+		and remains == 1 and seen[0].size() == 1 and int(seen[0][0][0]) == flake_id
+		and (seen[0][0][1] as Vector2) == landed and seen[1].is_empty()
+		and seen[2].is_empty() and seen[3].size() == 1 and int(seen[3][0][0]) == remains_id
+		and (seen[3][0][1] as Vector2) == died_at and float(seen[3][0][2]) == 1.0)
+	(rig[0] as Node).queue_free()
+
+
+## **Who killed you** (§11): a resting r40 mouth, hunting nobody, half a second
+## in a slot before it is put against the cell and swallows it on contact. The
+## ring names that slot as the killer on every frame since it took it and on none
+## before, and names no hunter on any; the replay's own field answers
+## `killer()` with it on those frames and -1 before them, `hunter()` -1 on all
+## -- and the truth pane's predator rings go round the killer when nothing hunts.
+func _replay_killer() -> void:
+	var rig := _rig(true, 3000.0)
+	var field: WatchedDrop = rig[1]
+	var cell: CellBody = rig[2]
+	var rec: Node = rig[3]
+	var cells: Array = field.get("_cells")
+	cell.heading = 0.0
+	field.in_water = true
+	# The run's order: the death seals the ring before the frame is taken.
+	field.killed.connect(func(_bearing: float) -> void: rec.call(&"seal"))
+	_rig_step(rig, 20)
+	var p := cell.position
+	var far := p + Vector2(0.0, -600.0)
+	var k := _pose(field, far, 40.0, {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1},
+		_facing(far, p), 0.5)
+	_rig_step(rig, 30)
+	var slot: int = (rec.get("_slot_by_index") as PackedInt32Array)[k]
+	var at := p + Vector2(0.0, -(40.0 + cell.radius) * 0.95)
+	(cells[k] as Object).set("pos", at)
+	(cells[k] as Object).set("heading", _facing(at, p))
+	field.refile(k)
+	var tries := 0
+	while bool(rec.get("_recording")) and tries < 10:
+		_rig_step(rig, 1)
+		tries += 1
+	var ring: PackedFloat32Array = rec.get("_ring")
+	var count: int = rec.call(&"frames")
+	var start: int = rec.get("_start")
+	var named := 0
+	var wrong := 0
+	for f in count:
+		var o := ((start + f) % RecorderNode.CAPACITY) * RecorderNode.STRIDE
+		var killer := int(ring[o + RecorderNode.AT_KILLER])
+		if int(ring[o + RecorderNode.AT_HUNTER]) != -1:
+			wrong += 1
+		if f < 20:
+			if killer != -1:
+				wrong += 1
+		elif killer == slot:
+			named += 1
+		else:
+			wrong += 1
+	var screen := _raise_replay(rig[0], rec)
+	var water: Node = screen.get("_food")
+	var vision: Node = (screen.get("_panes") as Node).get("_vision")
+	var answers := []
+	for f: int in [10, 30]:
+		_seek(screen, float(rec.call(&"time_of", f)) + 0.001)
+		answers.append([water.call(&"killer"), water.call(&"hunter"), vision.call(&"_predator")])
+	_check(("13. the killer: a resting mouth swallows the cell on contact (%s, slot %d); the"
+		+ " ring names it on %d frames of %d since it took its slot and wrongly on %d; the"
+		+ " replay's field before it came %s, after %s (killer, hunter, the rings' body)")
+		% [str(int(field.died_of) == FoodField.Cause.SWALLOWED and field.died_to == k), slot,
+		named, count - 20, wrong, str(answers[0]), str(answers[1])],
+		int(field.died_of) == FoodField.Cause.SWALLOWED and field.died_to == k and slot >= 0
+		and named == count - 20 and count > 20 and wrong == 0
+		and answers[0] == [-1, -1, -1] and answers[1] == [slot, -1, slot])
+	(rig[0] as Node).queue_free()
+
+
+## **The drop the player returns to is not the replay's to touch** (§11): a run
+## in the drop starves, its replay is raised through the run's own button,
+## played through its window twice and closed -- and every body in the run's
+## field is as it was, to the bit; the replay drew from a field of its own, round
+## the drop's own rim; and the cell, woken, is back in that same drop with every
+## body still in it and one drifter more, its first.
+func _replay_run() -> void:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 1)
+	run.set("scheme", 0)
+	add_child(run)
+	var rec: Node = run.get("_recorder")
+	for f in 3000:
+		await get_tree().process_frame
+		if float(rec.call(&"span")) >= 2.5:
+			break
+	var food: Node = run.get("_food")
+	var met: Node = run.get("_metabolism")
+	met.call(&"set_hunger", 1.0)
+	met.set("starve_seconds", Metabolism.STARVE_GRACE + 1.0)
+	for f in 3:
+		await get_tree().process_frame
+	var dead := int(run.get("_life")) != 0
+	var before := _snapshot(food)
+	var ids := {}
+	for b: Object in food.get("_cells"):
+		if b.get("seeded"):
+			ids[int(b.get("id"))] = float(b.get("radius"))
+	# The collapse, skipped: the screen is offered once the run is waiting.
+	run.set("_life", 2)
+	run.call(&"_watch")
+	var screen: Node = run.get("_replay")
+	var water: Node = screen.get("_food") if screen != null else null
+	for f in 20:
+		await get_tree().process_frame
+	var span := float(rec.call(&"span"))
+	var own := water != null and water != food and bool(water.call(&"in_drop")) \
+		and (water.call(&"basin").get(&"center") as Vector2) \
+			== (food.call(&"basin").get(&"center") as Vector2)
+	if screen != null:
+		screen.set_process(false)
+		for pass_ in 2:
+			screen.call(&"_rewind")
+			var t := 0.0
+			while t < span:
+				_seek(screen, t)
+				t += 0.2
+	run.call(&"_replay_closed")
+	await get_tree().process_frame
+	var intact := _snapshot(food) == before
+	run.call(&"_wake_up")
+	var back := {}
+	for b: Object in food.get("_cells"):
+		if b.get("seeded"):
+			back[int(b.get("id"))] = float(b.get("radius"))
+	var kept := 0
+	for id: int in ids:
+		if back.has(id) and float(back[id]) == float(ids[id]):
+			kept += 1
+	_check(("13. the drop after a replay: the run died (%s), watched %.1f s of it on a field"
+		+ " of its own round the drop's rim (%s), and closed it -- the run's %d bodies as they"
+		+ " were (%s); woken, back in the drop (%s) with %d of its %d bodies and %d more")
+		% [str(dead), span, str(own), before.size(), str(intact),
+		str(food.call(&"in_drop")), kept, ids.size(), back.size() - ids.size()],
+		dead and span > 2.0 and own and intact and bool(food.call(&"in_drop"))
+		and kept == ids.size() and back.size() == ids.size() + 1)
+	run.queue_free()
+	# A run, its replay and a ring freed: let that settle before the next check
+	# times frames.
+	for f in 10:
+		await get_tree().process_frame
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------

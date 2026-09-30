@@ -1257,6 +1257,12 @@ var anchored := true
 ## player reads them.
 var died_of := 0
 var died_by := 0
+## **In the drop, the body that killed this cell**: the slot of what swallowed it
+## or chewed it through, or of the venomous one it bit, written beside
+## [member died_of]; -1 from every arrival until then, and always in today's
+## water, which never writes it. The replay's recorder reads it once, as it
+## seals the ring, to say which body the killer was (ocean.md §11).
+var died_to := -1
 ## **Which person the last [signal person_touched] or [signal person_died] was
 ## about** -- the slot, written in the instant before either is emitted, so a
 ## listener reads it inside its handler the way the run reads [member died_of].
@@ -1302,7 +1308,6 @@ var _book := {}
 ## and one that comes here has left the drop for good.
 func setup(cell: CellBody) -> void:
 	_drop = null
-	_stash.clear()
 	_cell = cell
 	_pond = false
 	_mirror = false
@@ -2047,6 +2052,8 @@ func _contacts_with(p: Person) -> bool:
 				if not committed:
 					_stat(&"player_swallowed_uncommitted")
 				_fed_on_player(b)
+				if p == null:
+					died_to = i
 				_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
 				return true
 			_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
@@ -2274,6 +2281,7 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		# is told (§5.6).
 		if _drop != null and p == null:
 			_fed_on_player(b)
+			died_to = index
 			_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
 			return true
 		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
@@ -2338,6 +2346,9 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# The death is checked before the meal, and in that order on purpose:
 	# `eaten` is not idempotent and feeding a corpse would be silent.
 	if hurt >= 1.0:
+		# In the drop the body whose venom did it is the killer (§11).
+		if _drop != null and p == null:
+			died_to = index
 		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.POISONED)
 		if p != null:
 			_person_gone(Cause.POISONED, By.WATER, p)
@@ -3550,31 +3561,91 @@ func bodies() -> Array[Body]:
 	return _cells
 
 
+# ---------------------------------------------------------------------------
+# **A field a replay writes into** (docs/design/ocean.md §11, replay.md §3).
+# The replay binds one of these of its own and never the run's: the drop
+# outlives the run and the player goes back into it after watching, so the
+# recording is written onto a field that is nothing but a picture of it. It is
+# never processed; every number in it arrives from the recording, and the views
+# read it exactly as they read a live one.
+# ---------------------------------------------------------------------------
+
+## True for a field [method open_replay] made. Nothing in a run reads it.
+var _replay := false
+## How many recorded bodies it holds. Its flocs are in the slots after them.
+var _replay_slots := 0
+## Each floc the recording has settled and not yet cleared, by its id: its slot.
+var _replay_flocs := {}
+## Who the recording says killed the player, as a slot; -1 for nobody.
+var _killer := -1
+
+
+## **Makes this a replay's field**: [param slots] bodies, every one of them
+## empty until the recording writes it, no rim until [method restore_rim], and
+## [param cell] as the player -- the run's own cell, which the replay writes
+## the recorded player onto. Call it on a field no run owns, and keep that field
+## from processing: nothing here may step.
+func open_replay(cell: CellBody, slots: int) -> void:
+	_cell = cell
+	_replay = true
+	_replay_slots = maxi(slots, 0)
+	_drop = null
+	_pond = false
+	_mirror = false
+	_guests = 1
+	_water = 0
+	in_water = true
+	anchored = false
+	_book.clear()
+	_cells.clear()
+	for i in _replay_slots:
+		_cells.append(Body.new())
+	_replay_flocs.clear()
+	_killer = -1
+	died_to = -1
+	_fresh_senses()
+
+
+## **The drop's rim, written back from a recording**: this field is in the drop
+## from here, with its meniscus at [param center] and [param radius], and every
+## body in it filed in a grid of its own -- which is what the view asks what is
+## on screen. Nothing happens if the rim is already there.
+func restore_rim(center: Vector2, radius: float) -> void:
+	if _drop != null and _drop.meniscus.center == center \
+			and _drop.meniscus.radius == radius:
+		return
+	_drop = Drop.new(center)
+	_drop.meniscus.radius = radius
+	for i in _cells.size():
+		if _cells[i].seeded:
+			_drop.grid.insert(i, _cells[i].pos)
+
+
 ## **Where a body was, written back from a recording.** The one thing in this
-## file that is not simulation, and it is only reachable when the simulation has
-## stopped for good: a run keeps nothing, so the replay scribbles the recorded
-## state onto these bodies and lets `vision.gd` read them exactly as it does
-## now, and `_wake_up()` builds all thirty-four again. §3.
+## file that is not simulation, and it is only ever done to a replay's own field
+## ([method open_replay]): the views read these bodies exactly as they read a
+## live field's.
 ##
 ## It deliberately writes only what the trace carries. Nothing here touches a
 ## state machine, a target, a serial or a clock -- a body being replayed is not
-## deciding anything.
-##
-## **In the drop the water is kept** (§11), so what the replay scribbles over is
-## put aside first and put back when the cell returns ([method _unstash]). The
-## replay proper, with a private field of its own, is phase 1a-3's.
+## deciding anything. **A radius of 0 is nobody**, as a retired slot is in a
+## mirror: the slot is empty, and neither view draws it.
 func restore_body(index: int, pos: Vector2, heading: float, radius: float,
 		wound: float) -> void:
 	if index < 0 or index >= _cells.size():
 		return
-	_stash_body(index)
 	var b := _cells[index]
 	b.pos = pos
 	b.heading = heading
-	b.radius = radius
+	b.radius = maxf(radius, 0.0)
 	b.wound = wound
-	if _drop != null and b.seeded:
+	b.seeded = radius > 0.0
+	if _drop == null:
+		return
+	if b.seeded:
 		_drop.grid.move(index, pos)
+	else:
+		_drop.grid.remove(index)
 
 
 ## **Who was hunting the player, written back from a recording.**
@@ -3586,36 +3657,101 @@ func restore_body(index: int, pos: Vector2, heading: float, radius: float,
 ## the rings never draw at all: the truth pane loses the one instrument that
 ## explains a predation death, in exactly the case it exists for.
 ##
-## So the recording carries the index and this puts it back, on these two fields
+## So the recording carries the slot and this puts it back, on these two fields
 ## and nothing else -- the two [method hunter] reads. [param index] is -1 for
 ## nobody, which is also what a frame with no stalker recorded.
 ##
-## Every other claim on the player is cleared on the way past, because a field
-## frozen at the moment of death still holds whatever was chasing you then, and
-## a replayed frame from twenty seconds earlier must not inherit it.
+## Every other claim on the player is cleared on the way past, because a slot
+## that held a stalker a moment ago may hold another body now, and a replayed
+## frame must not inherit the last one's answer.
 func restore_hunter(index: int) -> void:
 	for i in _cells.size():
 		var b := _cells[i]
 		if i == index:
-			_stash_body(i)
 			b.state = State.STALK
 			b.target = TARGET_PLAYER
 		elif b.state == State.STALK and b.target == TARGET_PLAYER:
-			_stash_body(i)
 			b.state = State.DRIFT
 			b.target = TARGET_NONE
 
 
+## **Who killed the player, written back from a recording** (ocean.md §11):
+## the slot of the body that swallowed or chewed the cell, or of the venomous one
+## it bit, on the frames the recording names it; -1 on every other. [method
+## hunter] answers only for a stalker, and in the drop most deaths by mouth are
+## not a stalker's, so this is what the view draws the predator rings round when
+## nothing is hunting.
+func restore_killer(index: int) -> void:
+	_killer = index if index >= 0 and index < _cells.size() else -1
+
+
+## The slot [method restore_killer] last wrote, when that body is there; -1
+## otherwise, and always in a run's own field, which is never written one.
+func killer() -> int:
+	if _killer < 0 or _killer >= _cells.size() or not _cells[_killer].seeded:
+		return -1
+	return _killer
+
+
 ## The same, for the one part of a body that is not a float. Stepped at the
-## moments the recording says it changed, never interpolated.
+## moments the recording says it changed, never interpolated -- and what the
+## body's organs buy is read again from it, so the view measures its mouth and
+## its armour as the live one did.
 func restore_genome(index: int, genome: Dictionary) -> void:
 	if index < 0 or index >= _cells.size():
 		return
-	_stash_body(index)
-	_cells[index].genome = genome
-	_cells[index].seeded = true
+	var b := _cells[index]
+	b.genome = genome
+	b.inert = false
+	_refresh_body(b)
+
+
+## **A floc, written back from a recording** (ocean.md §11): made in a slot past
+## the recorded bodies the first time its [param id] is seen, and set to lie at
+## [param at], [param radius] across, [param settle] of the way into focus. A
+## floc never moves, and how far it has settled is a function of time, so the
+## replay works [param settle] out and hands it over every frame. The id is the
+## floc's own, which is what its drawn shape is made from.
+func restore_floc(id: int, at: Vector2, radius: float, settle: float) -> void:
+	var index: int = int(_replay_flocs.get(id, -1))
+	if index < 0:
+		index = _replay_slots
+		while index < _cells.size() and _cells[index].seeded:
+			index += 1
+		if index >= _cells.size():
+			_cells.append(Body.new())
+		_replay_flocs[id] = index
+	var b := _cells[index]
+	b.id = id
+	b.inert = true
+	b.drifter = true
+	b.genome = {}
+	b.radius = radius
+	b.pos = at
+	b.settle = clampf(settle, 0.0, 1.0)
+	b.state = State.DRIFT
+	b.target = TARGET_NONE
+	b.seeded = true
 	if _drop != null:
-		_drop.grid.insert(index, _cells[index].pos)
+		_drop.grid.move(index, at)
+
+
+## A floc the recording cleared: eaten, dissolved, or out of the recorder's reach.
+func clear_floc(id: int) -> void:
+	var index: int = int(_replay_flocs.get(id, -1))
+	if index < 0:
+		return
+	_replay_flocs.erase(id)
+	_cells[index].seeded = false
+	_cells[index].radius = 0.0
+	if _drop != null:
+		_drop.grid.remove(index)
+
+
+## Every floc cleared, for a replay starting its window again.
+func clear_flocs() -> void:
+	for id: int in _replay_flocs.keys():
+		clear_floc(id)
 
 
 ## Where the cells currently are. Rebuilt on the spot rather than kept in step,
@@ -3683,11 +3819,13 @@ func gape_at(index: int) -> float:
 ## nearest when there is more than one.
 ##
 ## In the drop it asks the bodies near the cell the frame gathered: a body
-## farther than every sense can reach is hunting nothing it can find.
+## farther than every sense can reach is hunting nothing it can find. A replay's
+## field gathers nothing -- it is never stepped -- and asks every body it holds,
+## which are the recorded ones near the cell.
 func hunter() -> int:
 	var best := -1
 	var best_d := INF
-	for i: int in (_near if _drop != null else _all_ids()):
+	for i: int in (_near if _drop != null and not _replay else _all_ids()):
 		var b := _cells[i]
 		if b.state != State.STALK or b.target != TARGET_PLAYER:
 			continue
@@ -5045,10 +5183,6 @@ var _shore_clock := 0.0
 ## The authored first drifter, and its serial, until the cell first moves.
 var _first_index := -1
 var _first_serial := -1
-## **What a watched replay wrote over**, by slot: put back when the cell
-## returns, because the drop is kept (§11). Phase 1a-3 gives the replay a field
-## of its own and this goes.
-var _stash := {}
 ## **What the drop did**, by name: counts for the probes and the census. Never
 ## read by a rule.
 var stats := {}
@@ -5074,7 +5208,6 @@ func setup_drop(cell: CellBody) -> void:
 	_snap_at = PackedVector2Array()
 	_snap_age = 0.0
 	_book.clear()
-	_stash.clear()
 	_cells.clear()
 	_free.resize(0)
 	_near.resize(0)
@@ -5134,10 +5267,9 @@ func setup_drop(cell: CellBody) -> void:
 ## quiet start in the water it died in -- the same choice a run's start is,
 ## made behind the black -- with the same clearing, its own first drifter and
 ## the grace of a birth. Nothing in the water changes but that: the drop was
-## frozen while the cell was dead, and wakes as it was. What a watched replay
-## wrote over is put back first.
+## frozen while the cell was dead, and wakes as it was. A watched replay wrote
+## nothing here -- it has a field of its own (§11).
 func return_to_drop() -> void:
-	_unstash()
 	in_water = true
 	anchored = true
 	_shift_drop(_cell.position - _start_point())
@@ -5162,9 +5294,10 @@ func drop_age() -> float:
 
 
 ## What a run starts with, at its start: the authored first drifter, held until
-## the cell first moves (§6.4), the grace of a birth, and senses that have
-## heard nothing yet.
+## the cell first moves (§6.4), the grace of a birth, senses that have heard
+## nothing yet, and nothing that has killed it.
 func _arrive() -> void:
+	died_to = -1
 	var at := _drop.meniscus.contain(_cell.position + Vector2(0.0, -FIRST_DISTANCE),
 		DRIFTER_MAX)
 	_first_index = _spawn(at, true, _sensed())
@@ -5852,6 +5985,18 @@ func _age_floc(i: int, b: Body, dt: float) -> void:
 		_consume(i)
 
 
+## **[method _age_floc]'s fade, as a function of time** (ocean.md §11): how far
+## a floc that had settled [param settle] of the way with [param life] seconds
+## left has settled [param seconds] later -- into focus while it has life left,
+## out again after. What a replay draws a floc by, since it records a floc once.
+static func floc_settle_after(settle: float, life: float, seconds: float) -> float:
+	var left := maxf(life, 0.0)
+	if seconds < left:
+		return minf(settle + seconds / Drop.FLOC_SETTLE, 1.0)
+	var top := minf(settle + left / Drop.FLOC_SETTLE, 1.0)
+	return maxf(top - (seconds - left) / Drop.FLOC_SETTLE, 0.0)
+
+
 func _grazed_by_drifter(i: int, b: Body) -> void:
 	var mouth := CellBody.gape_of(0, DRIFTER_MAX)
 	var reach := b.radius + Cilia.mouth_reach(DRIFTER_MAX, mouth) + mouth * Cilia.MOUTH_BITE
@@ -6357,34 +6502,3 @@ func _water_ids() -> PackedInt32Array:
 		for i in _water:
 			_water_idx[i] = i
 	return _water_idx
-
-
-## What a watched replay is about to write over in slot [param index], put aside
-## the first time (the drop only).
-func _stash_body(index: int) -> void:
-	if _drop == null or _stash.has(index):
-		return
-	var b := _cells[index]
-	_stash[index] = [b.pos, b.heading, b.radius, b.wound, b.genome, b.seeded, b.state,
-		b.target, b.target_serial]
-
-
-## Everything a replay wrote over, put back as it was, and filed again.
-func _unstash() -> void:
-	for index: int in _stash:
-		var saved: Array = _stash[index]
-		var b := _cells[index]
-		b.pos = saved[0]
-		b.heading = saved[1]
-		b.radius = saved[2]
-		b.wound = saved[3]
-		b.genome = saved[4]
-		b.seeded = saved[5]
-		b.state = saved[6]
-		b.target = saved[7]
-		b.target_serial = saved[8]
-		if b.seeded:
-			_drop.grid.insert(index, b.pos)
-		else:
-			_drop.grid.remove(index)
-	_stash.clear()

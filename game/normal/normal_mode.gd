@@ -1991,9 +1991,11 @@ func _offer_replay(on: bool) -> void:
 		# that opens on two frames of water is worse than no offer.
 		#
 		# **Withheld while the recording holds a pond** (shared-pond.md §5):
-		# the ring records the first thirty-four slots and no person, and the
-		# replay would bind the live field, which in a pond is still running
-		# for the other player. Phase 3 gives it private nodes and 69 slots.
+		# the ring records the water nearest this cell and no person, so the
+		# friend would be missing from the water the two of them shared. The
+		# replay binds a field of its own since the drop (ocean.md §11); what
+		# a pond still lacks is the person in the recording, which that
+		# document's Phase 3 plans.
 		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS \
 			and not (_ponded or _food.pond_open())
 		return

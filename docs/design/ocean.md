@@ -1884,40 +1884,72 @@ are the host's water, not a guest's word -- so none of it is in the fingerprint.
 
 ## 11. The replay
 
-The recorder keeps sixty seconds of the run as slots, 34 bodies a frame, and the
-replay writes them back onto the run's own `Food` (`replay.md` §3). A drop has
-554 bodies and outlives the run, so both halves change in 1a:
+The recorder kept sixty seconds of the run as slots, 34 bodies a frame, and the
+replay wrote them back onto the run's own `Food` (`replay.md` §3). A drop has
+554 bodies and outlives the run, so both halves changed in 1a:
 
 - **48 recorder slots**, holding the 48 living bodies nearest the player each
-  frame. A body keeps its slot while it stays in the set; a newcomer takes a free
-  one; a freed slot writes radius 0, which both views draw as nothing -- the
-  mirror's convention. 48 covers about 1,770 µm at the drop's density: the frame,
-  dread, scent and the beam. `STRIDE` grows by 84 floats, 322 to 406, and the
-  ring from 4.4 MB to **5.6 MB** (replay.md §3.1's units). Genome deltas key on
-  the body's id.
+  frame, within `LOD_NEAR`, past which no sense reaches (`drop_probe`'s check 7).
+  A body keeps its slot while it stays in the set; a newcomer takes the lowest
+  free one, newcomers in the field's own order; a freed slot writes radius 0,
+  which both views draw as nothing -- the mirror's convention. 48 covers about
+  1,770 µm at the drop's density: the frame, dread, scent and the beam. `STRIDE`
+  grows by 84 floats, 385 to 469 -- the beam's twenty-four rays had already taken
+  it past `replay.md` §3.1's 322 -- and the ring from 5.5 MB to 6.8 MB. Genome
+  deltas key on the body: one is written when a body takes a slot and when it
+  eats, by its serial, which is new for every body the water makes as its id is,
+  and which today's water has too; the row carries the id.
 - **Flocs as timestamped deltas**, SETTLE and CLEAR with place and radius, like
-  the wire's: they never move, and their fade is a function of time. A cell that
-  starves or is poisoned in view is its slot writing radius 0 and a SETTLE where
-  it was, already settled: the replay shows the death as it happened with
-  nothing new recorded. A water cell's hunger is not drawn in either view, so it
-  is not recorded.
+  the wire's: they never move, and their fade is a function of time --
+  `food.gd`'s `floc_settle_after()`, the fade `_age_floc` steps, in closed form.
+  A floc is told as it lands or comes within the same reach, and cleared as it
+  is eaten, dissolves or is left behind. A cell that starves or is poisoned in
+  view is its slot writing radius 0 and a SETTLE where it was, already settled:
+  the replay shows the death as it happened with nothing new recorded. A water
+  cell's hunger is not drawn in either view, so it is not recorded. The fade runs
+  on the recording's clock, which goes on through a division while the water
+  stops, so a floc settling at that moment settles a little early in the replay.
 - **The drop's centre and radius** as one delta at the start of the window.
 - **`AT_HUNTER` records a recorder slot**, not a field index.
-- **And the killer's slot**, `AT_KILLER`: one float, −1 except on the frame of
-  a death, where it is the slot of the body that swallowed or chewed you, or of
-  the venomous one you bit. `hunter()` answers only for a stalker, and
-  from pack 1 most deaths by mouth are by a cell that was not hunting you
-  (§8.3), so without it the truth pane would draw no predator for them -- the
-  defect `replay.md` §4.8.8 fixed for stalkers. Stepped at playback like
-  `AT_HUNTER`; `vision.gd` draws the predator rings for it when `hunter()` has
-  none. `STRIDE` 406 → 407, 14 KB more ring.
+- **And the killer's slot**, `AT_KILLER`: the slot of the body that swallowed or
+  chewed you, or of the venomous one you bit, and −1 on every frame it does not
+  name. `hunter()` answers only for a stalker, and from pack 1 most deaths by
+  mouth are by a cell that was not hunting you (§8.3), so without it the truth
+  pane would draw no predator for them -- the defect `replay.md` §4.8.8 fixed for
+  stalkers. Stepped at playback like `AT_HUNTER`; `vision.gd` draws the predator
+  rings for it when `hunter()` has none. `STRIDE` 469 → 470, 14 KB more ring.
+  **Built otherwise than this section first said**, which was the frame of the
+  death alone: that frame is never on screen and draws nothing if it is. The ring
+  is sealed before the death is captured, and the replay loops as its cursor
+  reaches the last frame, so a stepped float on the last frame is never shown;
+  and a predator ring is drawn only while the cell is within `RING_WINDOW` (130)
+  of crossing it, while at contact the killer's centre is some 60 away, so the
+  nearest of its rings, at 220, is 160 off. So the seal writes the killer's slot
+  over every frame that body held its slot, and its rings are drawn as the cell
+  crossed them.
+  The field says which body it was in `died_to`, beside `died_of`, in the drop
+  only.
 - **The ring is not saved.** It is the last minute of this session: after a
   resume (row 17) it holds only what happened since.
 - **The replay binds a private `Food`** -- 48 slots, the flocs, the rim -- and
   never writes to the run's. Scribbling on the real field was free when a run
   kept nothing; it would now overwrite the drop the player returns to. This is
   the private-node binding `shared-pond.md`'s Phase 3 planned for the pond, done
-  in 1a for single player.
+  in 1a for single player; 1a-2's stash of what a replay wrote over went with it.
+- **Today's water is recorded the same way**, and comes out as it did: a run with
+  a session plays it in 1a, its 34 bodies are always the nearest, and taking
+  slots in the field's own order puts each in the slot of its own index, with the
+  floats the old recorder wrote; slots 34 to 47 stay empty. Its field never names
+  a killer, so its replay is today's. `drop_probe` holds both to the float.
+- **What it costs**: one `capture()` averaged 167 to 186 µs over 25 s of a drop
+  here, a cell swimming in circles, seeds 7 and 12345, against 92 to 103 µs for
+  1a-2's recorder in the same half hour on an idle machine -- about 75 µs more a
+  frame, some 5 % of the drop's own. Its longest capture moved from run to run,
+  1.3 to 2.9 ms against 1.1 to 1.4, at no frame in particular. Most of it is
+  finding the nearest: one grid question out to `LOD_NEAR` and one sort a frame.
+  If the phone gate (§14.2) needs it back, the lever is to choose the nearest
+  every few frames and write the slots every frame; a newcomer is on the edge of
+  the set, far off any pane, so a few frames late is nothing either pane shows.
 
 ---
 
@@ -2097,6 +2129,15 @@ taken out:
     keeps the old file; a smaller `RADIUS` contains; a changed `rules`
     re-derives and logs; a room saved and loaded goes on to the same census as
     one that never stopped.
+13. **The replay** (§11, 1a-3): after every frame of a cell crossing the drop,
+    the slots hold exactly the living bodies nearest it, none changing slot while
+    it stays among them; today's water in the slots of its own indices with the
+    old recorder's floats; a flake told once as it lands and once as it is eaten,
+    settling by time as the field steps it, and a cell starving in view emptying
+    its slot and leaving one SETTLE; a mouth that was not hunting named as the
+    killer on every frame since it took its slot and on none before, and drawn
+    round when nothing hunts; and a replay watched and closed through the run's
+    own button leaving every body in the drop as it was, to the bit.
 
 The existing steps keep passing: the scene boots, the input path (`drive.gd`,
 now in the drop), the Back gesture, the levels probe (whose metabolism checks now
