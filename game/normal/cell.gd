@@ -557,6 +557,41 @@ func reset(keep_place: bool = false) -> void:
 	release()
 
 
+## **This body as plain types**, for a drop kept with its cell in it (ocean.md
+## §9.2, row 17): where it is, which way it points and how it is moving, its
+## size and its wound, and what its tail and its dash are in the middle of --
+## the turn, the drift, the clocks of the next impulse and the next dash, and
+## the effort not yet paid for. Nothing a finger was doing: it comes back let go.
+func body_state() -> Dictionary:
+	return {
+		"at": position,
+		"heading": heading,
+		"velocity": velocity,
+		"radius": radius,
+		"wound": wound,
+		"omega": _omega,
+		"wander": _wander,
+		"impulse": _impulse_timer,
+		"dash": _dash_timer,
+		"effort": _effort,
+	}
+
+
+## Puts back what [method body_state] took, and lets go of anything held.
+func restore_body(state: Dictionary) -> void:
+	position = state["at"]
+	heading = float(state["heading"])
+	velocity = state["velocity"]
+	radius = float(state["radius"])
+	wound = float(state["wound"])
+	_omega = float(state["omega"])
+	_wander = float(state["wander"])
+	_impulse_timer = float(state["impulse"])
+	_dash_timer = float(state["dash"])
+	_effort = float(state["effort"])
+	release()
+
+
 func _process(delta: float) -> void:
 	steer = _read_steer()
 

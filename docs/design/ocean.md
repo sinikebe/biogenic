@@ -1724,6 +1724,34 @@ Godot's `close()` does not report a lost write).
   update restart (§10.3): it has no player's frame to hitch and nobody leaving
   to save on, so a crash costs it at most five minutes of a room's life.
 
+**As built in 1b-1** (`game/normal/drop_save.gd`, 2026-09-30). The file is one
+Dictionary: the header -- `format`, `rules`, and the content version and commit
+that wrote it -- then `drop`, and `cell`, empty after a death. `drop` holds its
+number (the header's seed: drawn once from a generator of its own and kept, for
+the log; the drop is still made from the global stream), age and frame, next
+id, rim, the spawner's debt, the four clocks of the spawner, the floors and the
+shore, whom its water is made for, the free slots, and **every body by its
+slot, one Packed column a field**, which is what makes a column of clocks that
+are mostly zero cost almost nothing. `cell` is the body, both registers of the
+genome by gene name with the queue and the levels, the tank, the generation,
+what the run had told it, the water's part of it -- grace, the dart's and the
+mouth's clocks, a first drifter not yet met -- and **the two daughters a
+division had rolled**, if the app was left while choosing: the division plays
+again from its quickening on return and offers the same two, unless the cell ate
+and wrote its DNA again in that quickening. The save points are the four above
+**and leaving the run** by its own button, which keeps whatever the pause screen
+changed; both halves of Android's backgrounding (`FOCUS_OUT`, `PAUSED`) and a
+desktop window's close; a point reached twice in one frame keeps once. Every
+tool's run keeps nothing (`normal_mode.gd`'s `keep`, emptied by `drive.gd`
+unless it is given `--keep=`), so no render opens on a drop another run left.
+Measured on a drop aged five minutes as §15.7 ages one (522 living, 47 flocs):
+**107,364 bytes raw, 189 a body; 27,320 on disk**; gathering 1.6–3.3 ms and
+writing, reading back and renaming 2.8–3.6 ms, three runs -- the prototype's
+size, a little faster. Loading takes about 10 ms, once, as the run opens. A
+resumed cell comes back **behind the beat of `shared-pond-ux.md` §0.5**, as the
+pond's takeover does: the world fades in, the aperture opens over 0.9 s, and
+the water runs under it while the cell is held.
+
 ### 9.4 Versioning against content packs
 
 A content pack can change any number the drop is made of. So the save carries:
@@ -1741,6 +1769,20 @@ A content pack can change any number the drop is made of. So the save carries:
   spawner converges on a changed density by itself. It is logged, so a tester
   can tell a converted drop from a fresh one.
 - **The content version** that wrote it, for the log only.
+
+**As built in 1b-1.** `rules` is worked out as the run opens, from the
+constants themselves, not pinned beside them: the gene list and `TIER_MAX`,
+`UPKEEP_PER_TIER`, **every `*_BY_TIER` table `cell.gd` has, found by name**, the
+slot ladder, `GROWTH_PER_MEAL` and `DIVIDE_RADIUS`, the metabolism above, and
+`RADIUS` -- so a content pack that moves any of them converts the drop without
+anyone remembering to. The names are sorted as Strings: sorted as the
+StringNames Godot hands them over as, they came out in memory's order, and the
+same build fingerprinted differently from one launch to the next. The
+re-derivation runs on every load, since under the same rules it changes
+nothing; only the log differs -- `your drop, … as you left it`, or `CONVERTED`,
+with what it trimmed and contained. A file that is not a drop this build can
+read -- one it cannot decode, or one that does not hold what its format says --
+is treated as an unknown format: kept as `.old`, never half-loaded.
 
 ---
 
@@ -2128,7 +2170,12 @@ taken out:
     included; an unknown gene survives; an unknown `format` starts fresh and
     keeps the old file; a smaller `RADIUS` contains; a changed `rules`
     re-derives and logs; a room saved and loaded goes on to the same census as
-    one that never stopped.
+    one that never stopped. **1b-1 built all but the room's**, which is 1b-2's
+    with the room: the bodies to the bit through the file's whole path, an
+    unknown gene among them; a real run left by the app pausing and opened again
+    on the same drop to the bit and the same cell -- and the same two daughters;
+    an unknown format; and a changed `rules`, with a body past the rim contained
+    and one past the cap trimmed, and the fingerprint's tables in name order.
 13. **The replay** (§11, 1a-3): after every frame of a cell crossing the drop,
     the slots hold exactly the living bodies nearest it, none changing slot while
     it stays among them; today's water in the slots of its own indices with the

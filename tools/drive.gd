@@ -550,6 +550,22 @@ extends Node
 ##                           cytostome:3,flagellum:2. In the drop the hunter is
 ##                           a body of its own, in a slot nothing else uses
 ##   --census=<seconds>      print the drop's census line on that interval
+##   --keep=<path>           keep the drop at that file, the way the game keeps
+##                           yours at `user://drop.save` (§9): read as the run
+##                           opens, written at every save point. **Without it
+##                           this harness keeps nothing** -- the run neither
+##                           reads nor writes a drop -- so no render opens on a
+##                           drop another run left behind, and none leaves one.
+##                           With it, the run prints the cell and the drop's
+##                           census sum as it opens, which is what a relaunch
+##                           is compared by
+##   --leave-at=<seconds>    leave the app at that time, as a phone does: the
+##                           window loses focus and the activity pauses
+##                           (NOTIFICATION_APPLICATION_FOCUS_OUT, then _PAUSED),
+##                           which is a save point. The cell and the census sum
+##                           are printed as it leaves. The process goes on, as
+##                           a backgrounded app's does until the system kills
+##                           it: end it with the shot or `--quit-after`
 ## One switch per body rule, so the owner's other answers can be played, each
 ## defaulting to the drop's rule: --absorb=<rest a second> (row 11),
 ## --drifter-venom=0|1 (13), --own-speed=0|1 (14), --notice=senses|fixed (5),
@@ -682,6 +698,10 @@ var _field_sets := {}
 ## `--census=`: the drop's census line on this interval.
 var _census := -1.0
 var _census_clock := 0.0
+## `--keep=`: where the run keeps its drop, or "" for a run that keeps none.
+var _keep := ""
+## `--leave-at=`: when the app is left, or -1.
+var _leave_at := -1.0
 ## The slot the posed hunter is in: 0 in today's water, as it always was; in
 ## the drop a body of its own, made in a slot nothing else uses (§15.6).
 var _hunter_slot := 0
@@ -1048,6 +1068,10 @@ func _ready() -> void:
 			_drop_flag = clampi(int(text.trim_prefix("--drop=")), 0, 1)
 		elif text.begins_with("--census="):
 			_census = float(text.trim_prefix("--census="))
+		elif text.begins_with("--keep="):
+			_keep = text.trim_prefix("--keep=")
+		elif text.begins_with("--leave-at="):
+			_leave_at = float(text.trim_prefix("--leave-at="))
 		elif text.begins_with("--start="):
 			_field_sets[&"start_mode"] = StringName(text.trim_prefix("--start="))
 		elif text.begins_with("--notice="):
@@ -1259,6 +1283,11 @@ func _ready() -> void:
 	if _drop_flag >= 0 and &"drop" in run:
 		run.set("drop", _drop_flag)
 		print("[drive] water forced to ", "the drop" if _drop_flag == 1 else "today's")
+	# **A run of this harness keeps no drop** unless told where (ocean.md §9):
+	# the game's default is the player's own file, which a render must neither
+	# open on nor write.
+	if &"keep" in run:
+		run.set("keep", _keep)
 	if not _field_sets.is_empty():
 		var field := run.get_node_or_null(^"Food")
 		if field != null:
@@ -1284,6 +1313,8 @@ func _ready() -> void:
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
 	_genome = _find_script(self, "res://game/normal/genome.gd")
 	_food = _find_script(self, "res://game/normal/food.gd")
+	if _keep != "":
+		print("[drive] %5.2f  opened, keeping at %s: %s" % [_clock, _keep, _kept_text()])
 
 	if _radius > 0.0:
 		var body := _find_node_with(self, &"bearing_to")
@@ -1996,6 +2027,7 @@ func _process(delta: float) -> void:
 	_step_panes()
 	_step_capture_cost(delta)
 	_step_census(delta)
+	_step_leave()
 
 	if _freeze_countdown > 0:
 		_freeze_countdown -= 1
@@ -2302,6 +2334,33 @@ func _step_census(delta: float) -> void:
 		return
 	_census_clock = 0.0
 	print("[drive] %6.2f  %s" % [_clock, _food.call(&"census_line")])
+
+
+## `--leave-at=`: the app left, the two notifications in the order a phone
+## sends them, to the whole tree as the engine sends them.
+func _step_leave() -> void:
+	if _leave_at < 0.0 or _clock < _leave_at:
+		return
+	_leave_at = -1.0
+	print("[drive] %5.2f  leave the app: %s" % [_clock, _kept_text()])
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_PAUSED)
+
+
+## **What a kept run is compared by**: the cell -- where, which way, how big,
+## how hungry, which generation, its DNA and body in slot order -- and the
+## drop's census sum, which hashes every body's place, size and tank.
+func _kept_text() -> String:
+	if _run == null or _food == null or not bool(_food.call(&"in_drop")):
+		return "not in the drop"
+	var body: Node = _run.get("_cell")
+	var line := "cell at %.2f,%.2f heading %.4f r%.2f hunger %.4f generation %d" % [
+		body.position.x, body.position.y, body.heading, body.radius,
+		float(_metabolism.get("hunger")), int(_run.get("_generation"))]
+	if _genome != null:
+		line += " dna %s body %s waiting %s" % [_genome.call(&"layout"),
+			_genome.call(&"body_layout"), _waiting_text()]
+	return line + " | drop sum %s" % str(_food.call(&"census_line")).get_slice("| sum ", 1)
 
 
 func _step_kill() -> void:

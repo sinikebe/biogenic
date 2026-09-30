@@ -65,6 +65,9 @@ const Swell := preload("res://game/mechanics/swell.gd")
 ## for the lines of the gene being read, and draws them.
 const Readout := preload("res://game/mechanics/readout.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
+## **Your drop, kept across launches** (docs/design/ocean.md §9): the file, and
+## what a build does with one another build wrote. This file decides when.
+const DropSave := preload("res://game/normal/drop_save.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -247,6 +250,15 @@ var numbers := -1
 ## is what `tools/drive.gd --drop=` does: `--drop=0` is the reference every
 ## probe compares the drop against, and the identity gate's (§14.4).
 var drop := -1
+
+## **Where this run keeps its drop** (ocean.md §9): the personal drop's file,
+## read as the run opens and written at every moment [method _keep_drop] names
+## -- or empty, for a run that neither reads nor writes one. Set it before the
+## scene enters the tree: `tools/drive.gd` empties it unless it is given
+## `--keep=`, so no render and no probe ever opens on a drop another run left
+## behind, or leaves one; a probe that tests the keeping points it at a file of
+## its own.
+var keep := DropSave.PATH
 
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
@@ -584,6 +596,17 @@ var _said_divide := false
 ## What the two views are drawing this frame. Empty means an ordinary body; see
 ## [method _push_division] for the contract.
 var _division := {}
+## **This run opened on a cell left mid-run** (row 17), which comes back behind
+## a beat (ocean.md §9.1).
+var _resumed := false
+## The process frame the drop was last kept in: a save point reached twice in
+## one frame -- the app paused and unfocused together -- keeps it once.
+var _kept_frame := -1
+## **The two daughters a division had rolled when the app was left** (row 17).
+## The division plays again on return, from its quickening, and offers these
+## two on the same sides -- unless the cell ate in that quickening and wrote its
+## DNA again, when it rolls anew as ever. Used once, at the next pinch.
+var _kept_daughters: Array = []
 
 
 func _ready() -> void:
@@ -636,14 +659,17 @@ func _ready() -> void:
 	# the drop when no session is up, and a run that begins inside one keeps
 	# today's water and today's rules, so the pond and the wire are exactly what
 	# they were. The drop is made first and the grit then hung inside its rim;
-	# today's water keeps its own order, grit first.
+	# today's water keeps its own order, grit first. **The drop is yours, kept**
+	# (§9.1): the one left last time, and the cell in it if it was left mid-run.
+	var resumed := {}
 	if _net == null and drop != 0:
-		_food.setup_drop(_cell)
-		_motes.setup(_cell, _food.basin())
+		resumed = _open_drop()
 	else:
 		_motes.setup(_cell)
 		_food.setup(_cell)
 	_genome.setup(_cell)
+	if not resumed.is_empty():
+		_resume_cell(resumed)
 	_soma.setup(_cell, _genome)
 	# Once, and only here: the marks layer holds the body and the water, and
 	# neither node is ever replaced -- a death and a birth reset those two rather
@@ -756,6 +782,11 @@ func _ready() -> void:
 
 	_begin_onboarding()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
+	# **A cell left mid-run carries on behind the beat a return from a pond has**
+	# (ocean.md §9.1; shared-pond-ux.md §0.5): the world comes in on it and the
+	# aperture opens, as on every new water. Nothing to swap: it is already in.
+	if _resumed:
+		_begin_water_beat(Callable(), 0.0, "", "")
 	if _pond != null:
 		_begin_pond()
 	# The dev app's frame readout (ocean.md §14.2), out of the way while the pause
@@ -771,12 +802,143 @@ func _exit_tree() -> void:
 		_net.set_pond(false, false)
 
 
+# ---------------------------------------------------------------------------
+# Your drop, kept (docs/design/ocean.md §9): opened as it was left, and kept
+# at the moments nobody is watching the water. drop_save.gd is the file.
+# ---------------------------------------------------------------------------
+
+## **The drop this run is in** (§9.1): yours as you left it, if there is one at
+## [member keep] this build can read, or a new one -- then the grit, hung inside
+## its rim. Left mid-run, your cell is put back where it was and what else it
+## was is returned, for [method _resume_cell] once the genome is set up; left
+## after a death, a new cell comes into it at a quiet start (§8.1), as the tap
+## on the black brings one. The log says which, and whether a content pack
+## changed the rules since (§9.4).
+func _open_drop() -> Dictionary:
+	var kept := DropSave.read(keep) if not keep.is_empty() else {}
+	var cell := {}
+	if kept.is_empty():
+		_food.setup_drop(_cell)
+		if not keep.is_empty():
+			print("[drop-save] no drop kept at %s: a new one is made" % keep)
+	else:
+		cell = kept["cell"]
+		if not cell.is_empty():
+			_cell.restore_body(cell["body"])
+		var done := _food.load_drop(_cell, kept["drop"])
+		if cell.is_empty():
+			_food.return_to_drop()
+		else:
+			_food.restore_player(cell["water"])
+		print(DropSave.note(kept, done))
+	_motes.setup(_cell, _food.basin())
+	return cell
+
+
+## **Your cell, as you left it** (row 17): the genome's two registers, its queue
+## and its levels, the tank, the generation, and what the run had already told
+## it -- the free sense, the division's line. Its body and its grace are back
+## already ([method _open_drop]); the beat plays over it once the run is built.
+func _resume_cell(state: Dictionary) -> void:
+	_genome.set_state(state["genome"])
+	_metabolism.set_hunger(float(state["hunger"]))
+	_metabolism.starve_seconds = float(state["starve"])
+	_generation = int(state["generation"])
+	_sense_clock = float(state["sense_clock"])
+	_sensed = bool(state["sensed"])
+	_said_divide = bool(state["said_divide"])
+	_kept_daughters = []
+	for one: Dictionary in state["daughters"]:
+		var order: Array[StringName] = []
+		for gene: String in one["order"]:
+			order.append(StringName(gene))
+		_kept_daughters.append({
+			"tiers": GenomeNode.tiers_from_names(one["tiers"]),
+			"order": order,
+			"body": GenomeNode.tiers_from_names(one["body"]),
+			"mutation": StringName(one["mutation"]),
+		})
+	_resumed = true
+
+
+## A division's two daughters as the drop keeps them, every gene by name; none
+## before the pinch has rolled them.
+static func _daughters_by_name(pair: Array) -> Array:
+	var out: Array = []
+	for one: Dictionary in pair:
+		out.append({
+			"tiers": GenomeNode.tiers_by_name(one["tiers"]),
+			"order": PackedStringArray(one["order"]),
+			"body": GenomeNode.tiers_by_name(one["body"]),
+			"mutation": String(one["mutation"]),
+		})
+	return out
+
+
+## **The pair rolled before the app was left** ([member _kept_daughters]),
+## if the faithful one is still this DNA -- so still the pair this cell would
+## be offered -- and nothing otherwise. Once: the kept pair goes either way.
+func _kept_pair() -> Array:
+	var pair := _kept_daughters
+	_kept_daughters = []
+	if pair.size() != 2:
+		return []
+	for one: Dictionary in pair:
+		if one["mutation"] == &"" and one["tiers"] == _genome.dna() \
+				and one["order"] == _genome.layout():
+			return pair
+	return []
+
+
+## **This run's drop, kept** (§9.3) -- and the cell with it while it is in the
+## water (row 17), none after a death. At a death, on the black; when the pause
+## screen opens; when the app is left or its window closed; and when the run is
+## left. **Never in the middle of play**: nobody is watching the water at any of
+## those moments, so the two or three frames a save costs a phone are never
+## seen, and there is no save on a timer. Twice in one frame is once. Only a
+## drop this run is in alone: a pond keeps nothing until 1b-2, and a tool's run
+## keeps nothing at all ([member keep]). A write that fails leaves the last good
+## drop where it was, and says so.
+func _keep_drop() -> void:
+	if keep.is_empty() or _net != null or not is_node_ready() or not _food.in_drop():
+		return
+	var frame := Engine.get_process_frames()
+	if frame == _kept_frame:
+		return
+	_kept_frame = frame
+	var cell := {}
+	if _life == Life.ALIVE or _life == Life.RETURNING:
+		cell = {
+			"body": _cell.body_state(),
+			"genome": _genome.to_state(),
+			"hunger": _metabolism.hunger,
+			"starve": _metabolism.starve_seconds,
+			"generation": _generation,
+			"sense_clock": _sense_clock,
+			"sensed": _sensed,
+			"said_divide": _said_divide,
+			"daughters": _daughters_by_name(_daughters),
+			"water": _food.player_state(),
+		}
+	var done := DropSave.write(keep, DropSave.compose(_food.drop_state(), cell))
+	if done != OK:
+		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
+			% [keep, error_string(done)])
+
+
 func _process(delta: float) -> void:
 	# **The pond first, before every early return** (shared-pond.md §3): its
 	# intake goes on while this cell is dead, dividing or held, because the
 	# water it is part of does.
 	if _pond != null:
 		_step_pond(delta)
+	elif _water_beat >= 0.0 and not get_tree().paused:
+		# **The beat a resumed cell comes back behind** (ocean.md §9.1), stepped
+		# here as the pond steps its own, and the line with it while it holds.
+		# Held under the pause screen, which stops the tree in single player.
+		_step_water_beat(delta)
+		if _water_beat >= 0.0:
+			_step_onboarding(delta)
 	# **What is simulated is decided from state every frame**, as well as the
 	# moment any of it changes (_update_simulating): no frame can leave a body
 	# running that its state says is still. In single player every change is
@@ -1412,8 +1574,11 @@ func _step_split(delta: float) -> void:
 				_split_clock = 0.0
 				# From the DNA as it stands at the end of the quickening, the
 				# last frame anything can still write it. See [method
-				# _begin_split].
-				_daughters = _make_daughters()
+				# _begin_split]. The two it had rolled before the app was left
+				# come back instead, if that DNA is still theirs.
+				_daughters = _kept_pair()
+				if _daughters.is_empty():
+					_daughters = _make_daughters()
 				# The same call a death makes. The water stops, the body does
 				# not: what is left moving is the division itself.
 				_update_simulating()
@@ -1898,6 +2063,7 @@ func _die(loud: bool, bearing: float) -> void:
 	# daughters drawn under it would be the game contradicting itself twice.
 	_split = Split.NONE
 	_daughters = []
+	_kept_daughters = []
 	_division = {}
 	_hand_division()
 	# **A death ends the water's beat** (shared-pond.md §3): the collapse owns
@@ -1950,6 +2116,10 @@ func _step_death(delta: float) -> void:
 				_vision_cut = true
 				_vision.set_active(false)
 				_life = Life.WAITING
+				# **The drop is kept on the black** (ocean.md §9.3), with no
+				# cell in it: a death is the one clean restart, and the next
+				# launch brings a new cell into the same drop.
+				_keep_drop()
 				# Someone already reached for it mid-collapse. Honour it now
 				# rather than making them tap a second time.
 				if _tap_pending:
@@ -2675,6 +2845,13 @@ func _notification(what: int) -> void:
 			_offer_close(false)
 			_mouse_twin = POINTER_NONE
 			_mouse_twin_next = false
+			# **Leaving the app keeps the drop** (ocean.md §9.3), and the cell
+			# in it (row 17): Android's backgrounding comes before the system
+			# kills an app, and closing the app is a pause.
+			_keep_drop()
+		NOTIFICATION_WM_CLOSE_REQUEST:
+			# The window closed on desktop: the same leaving.
+			_keep_drop()
 
 
 ## **First contact decides the gesture, and this is the function that makes that
@@ -3220,6 +3397,9 @@ func _set_menu(open: bool) -> void:
 		# slot selected, is what pause opens on. The other answer is this.
 		if PAUSE_OPENS_ON_CARDS and _hand() == &"" and not _strip_forks.is_empty():
 			_open_fork(_strip_forks[0], false)
+		# **Opening the pause screen keeps the drop** (ocean.md §9.3), the cell
+		# with it: a moment off the play frame, as every save point is.
+		_keep_drop()
 	else:
 		_reset_fork_view()
 		RunState.save_gain(_bus.gain)
@@ -3228,6 +3408,9 @@ func _set_menu(open: bool) -> void:
 ## Back one step, to the view chooser. The launcher is one more Back from
 ## there, which keeps the whole stack reachable by the same gesture.
 func _leave() -> void:
+	# **Leaving the run keeps the drop** as it is now (ocean.md §9.3): whatever
+	# the pause screen changed since it opened goes with it.
+	_keep_drop()
 	get_tree().paused = false
 	_menu_open = false
 	RunState.save_gain(_bus.gain)

@@ -551,6 +551,69 @@ func restore_levels(state: Dictionary) -> void:
 			grown.set_state(state[gene] as Array)
 
 
+## **This genome as plain types**, every gene by its name (ocean.md §9.2, row
+## 17): the DNA and where each gene sits in it, the body and where each organ is
+## worn -- the two differ a generation in, and neither can be derived from the
+## other -- the slots the body did not earn, the gift not yet placed, every
+## waiting gene with its copies and the seconds it has left, and the lineage's
+## levels. A gene this build does not know is kept by the name it has.
+func to_state() -> Dictionary:
+	var waiting: Array = []
+	for one: Waiting in _waiting:
+		waiting.append([String(one.gene), one.copies, one.left])
+	var levels := {}
+	for gene: StringName in _levels:
+		var grown: Progression = _levels[gene]
+		levels[String(gene)] = [grown.xp, String(grown.path)]
+	return {
+		"dna": tiers_by_name(_dna),
+		"order": PackedStringArray(layout()),
+		"body": tiers_by_name(_body),
+		"worn": PackedStringArray(body_layout()),
+		"bonus": bonus_slots,
+		"gift": String(_gift),
+		"waiting": waiting,
+		"levels": levels,
+	}
+
+
+## Puts back what [method to_state] took: the body expressed as it was worn over
+## the DNA as it was written, then the levels, the bonus slots, the gift and the
+## queue, each clock where it had got to -- which no birth does, since a birth
+## starts every clock full ([method carry]).
+func set_state(state: Dictionary) -> void:
+	var order: Array = []
+	for gene: String in state["order"]:
+		order.append(StringName(gene))
+	var worn: Array = []
+	for gene: String in state["worn"]:
+		worn.append(StringName(gene))
+	express(tiers_from_names(state["dna"]), order, tiers_from_names(state["body"]), worn)
+	restore_levels(state["levels"])
+	bonus_slots = int(state["bonus"])
+	_gift = StringName(state["gift"])
+	for one: Array in state["waiting"]:
+		_waiting.append(Waiting.new(StringName(one[0]), clampi(int(one[1]), 1, TIER_MAX),
+			float(one[2])))
+	_sync_order()
+
+
+## `{gene: tier}` with every gene a String: how a file keeps a genome.
+static func tiers_by_name(tiers: Dictionary) -> Dictionary:
+	var out := {}
+	for gene: Variant in tiers:
+		out[String(gene)] = int(tiers[gene])
+	return out
+
+
+## And back, every name a gene again.
+static func tiers_from_names(named: Dictionary) -> Dictionary:
+	var out := {}
+	for gene: Variant in named:
+		out[StringName(gene)] = int(named[gene])
+	return out
+
+
 ## **Keeps [member _levels] in step with the two registers**: a progression for
 ## every levelled gene either one holds, a fresh one at level 1 for a gene just
 ## arrived, and none for a gene neither holds any more.
