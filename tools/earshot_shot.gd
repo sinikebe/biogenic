@@ -667,9 +667,11 @@ func _server_up() -> bool:
 		return false
 	_stop_file = ProjectSettings.globalize_path("user://earshot_shot.stop")
 	DirAccess.remove_absolute(_stop_file)
+	# `--no-upnp` beside the run's own flags: a screenshot asks no router to
+	# forward anything, and writes no switch down (docs/server.md §9.3).
 	var got := OS.execute_with_pipe(OS.get_executable_path(), PackedStringArray([
 		"--headless", "--path", ProjectSettings.globalize_path("res://"), SERVER_SCENE, "--",
-		"--no-update", "--stop-file=" + _stop_file]), false)
+		"--no-update", "--stop-file=" + _stop_file, "--no-upnp"]), false)
 	if got.is_empty():
 		push_error("[earshot-shot] could not start the server")
 		return false
