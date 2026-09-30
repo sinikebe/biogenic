@@ -307,6 +307,22 @@ extends Node
 ##                           screen, the `watch` offer and the replay itself can
 ##                           each be photographed without waiting minutes for
 ##                           hunger or gambling on a hunter
+##   --watch-at=<seconds>    click the run's own `watch` button at that time, or
+##                           as soon after it as the run offers it -- the replay
+##                           through the input path a player uses. Whatever ends
+##                           the run is said once, with its cause, the killer's
+##                           field slot and the recording's length; and the
+##                           drop's census line is printed as the replay rises,
+##                           as it closes and as the next cell arrives, so a
+##                           replay that wrote into the drop shows in the sum
+##   --release-at=<seconds>  stop holding the bodies --cell= posed: from then on
+##                           they are left where they are, resting, and drift
+##                           with the water. How a mouth that is hunting nobody
+##                           comes to meet the cell, for a contact swallow
+##   --starve-near=<seconds> the water mouth nearest the cell, within the view,
+##                           runs out at that time and dies of hunger on its next
+##                           step, leaving its remains where it was (ocean.md
+##                           §7.4) -- a death in view, for the replay's flocs
 ##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
 ##                           at a known time -- in a pond, after the guest has
 ##                           arrived
@@ -781,6 +797,18 @@ var _arm_at := 0.0
 var _mode := -1
 ## When to starve the cell to death, for photographing what happens next.
 var _kill_at := -1.0
+## When to click `watch`, and whether it was asked for at all; whether the death
+## and each census line are said yet.
+var _watch_at := -1.0
+var _watching := false
+var _watch_down := false
+var _watch_shown := 0
+var _watch_point := Vector2.ZERO
+var _death_said := false
+var _replay_seen := false
+## When the poses stop being held, and when the nearest mouth starves.
+var _release_at := -1.0
+var _starve_near := -1.0
 ## When to raise the two-pane screen over the live run, and the node once it is.
 var _panes_at := -1.0
 var _panes: Node = null
@@ -1128,6 +1156,13 @@ func _ready() -> void:
 			_mouse_lifts.append(float(text.trim_prefix("--mouse-lift=")))
 		elif text.begins_with("--kill-at="):
 			_kill_at = float(text.trim_prefix("--kill-at="))
+		elif text.begins_with("--watch-at="):
+			_watch_at = float(text.trim_prefix("--watch-at="))
+			_watching = true
+		elif text.begins_with("--release-at="):
+			_release_at = float(text.trim_prefix("--release-at="))
+		elif text.begins_with("--starve-near="):
+			_starve_near = float(text.trim_prefix("--starve-near="))
 		elif text.begins_with("--divide-at="):
 			_divide_at = float(text.trim_prefix("--divide-at="))
 		elif text.begins_with("--panes="):
@@ -1955,6 +1990,8 @@ func _process(delta: float) -> void:
 	_step_offer(delta)
 	_step_rects()
 	_step_kill()
+	_step_starve_near()
+	_step_watch()
 	_step_divide()
 	_step_panes()
 	_step_capture_cost(delta)
@@ -2274,6 +2311,84 @@ func _step_kill() -> void:
 	_metabolism.set_hunger(1.0)
 	_metabolism.starve_seconds = _metabolism.STARVE_GRACE + 1.0
 	print("[drive] %5.2f  starved" % _clock)
+
+
+## `--starve-near=`: the living mouth nearest the cell within the view empties,
+## and a tank empty for longer than its grace dies of hunger on its next step.
+func _step_starve_near() -> void:
+	if _starve_near < 0.0 or _clock < _starve_near or _food == null:
+		return
+	_starve_near = -1.0
+	var cell := _find_node_with(_run, &"bearing_to")
+	if cell == null or not bool(_food.call(&"in_drop")):
+		return
+	var bodies: Array = _food.get("_cells")
+	var best := -1
+	var best_d := INF
+	for i: int in _food.call(&"bodies_near", cell.position, 600.0):
+		var b: Object = bodies[i]
+		if b.get("inert") or b.get("drifter") or b.get("person") != null:
+			continue
+		var d := (b.get("pos") as Vector2).distance_to(cell.position)
+		if d < best_d:
+			best_d = d
+			best = i
+	if best < 0:
+		print("[drive] %5.2f  no mouth in view to starve" % _clock)
+		return
+	bodies[best].set("hunger", 1.0)
+	bodies[best].set("starve", Metabolism.STARVE_GRACE)
+	print("[drive] %5.2f  field body %d, %.0f off, starves" % [_clock, best, best_d])
+
+
+## `--watch-at=`: the run's `watch` button, clicked where it is, the frame it is
+## offered at or after that time -- and the death, the replay and the next
+## arrival said, each once, with the drop's census line beside them.
+func _step_watch() -> void:
+	if not _watching or _run == null or _run.get("_life") == null:
+		return
+	var life := int(_run.get("_life"))
+	var water: Node = _food
+	if life != 0 and not _death_said:
+		_death_said = true
+		var recorder: Node = _find_script(self, "res://game/replay/recorder.gd")
+		print("[drive] %5.2f  died: cause %d, killer at field slot %d, %.1f s recorded" % [
+			_clock, int(water.get("died_of")) if water != null else 0,
+			int(water.get("died_to")) if water != null else -1,
+			float(recorder.call(&"span")) if recorder != null else 0.0])
+	var screen: Variant = _run.get("_replay")
+	if screen != null and not _replay_seen:
+		_replay_seen = true
+		print("[drive] %5.2f  replay up; the drop: %s" % [_clock, _census_of(water)])
+	elif screen == null and _replay_seen and life == 2:
+		_replay_seen = false
+		print("[drive] %5.2f  replay closed; the drop: %s" % [_clock, _census_of(water)])
+	if _death_said and life == 0:
+		_death_said = false
+		print("[drive] %5.2f  a new cell; the drop: %s" % [_clock, _census_of(water)])
+	if _watch_at < 0.0 or _clock < _watch_at:
+		return
+	var button: Control = _run.get("_watch_button")
+	if button == null:
+		return
+	if _watch_down:
+		_watch_down = false
+		_watch_at = -1.0
+		_send_mouse_button(_watch_point, false)
+		return
+	# A few frames after it shows, so its container has laid it out where it
+	# is drawn: pressed the frame it appears, it is still where it was hidden.
+	_watch_shown = _watch_shown + 1 if life == 2 and button.is_visible_in_tree() else 0
+	if _watch_shown >= 3:
+		_watch_down = true
+		_watch_point = button.get_global_rect().get_center()
+		_send_mouse_button(_watch_point, true)
+
+
+func _census_of(water: Node) -> String:
+	if water == null or not bool(water.call(&"in_drop")):
+		return "not in the drop"
+	return str(water.call(&"census_line"))
 
 
 ## **The two panes, over a run that is still being played.** Not the replay --
@@ -2949,6 +3064,10 @@ func _parse_pose(spec: String) -> Array:
 func _apply_poses(announce: bool) -> void:
 	var water := _water_food()
 	if _posed.is_empty() or water == null:
+		return
+	if _release_at >= 0.0 and _clock >= _release_at:
+		_posed.clear()
+		print("[drive] %5.2f  posed bodies released" % _clock)
 		return
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:

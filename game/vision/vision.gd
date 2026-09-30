@@ -1776,7 +1776,7 @@ func _draw_thresholds(a: float) -> void:
 			_threshold(points[nearest], nearest_d, FoodField.CORE_RANGE, FOOD_TINT, a)
 
 	if _food_node != null:
-		var hunter := _food_node.hunter()
+		var hunter := _predator()
 		if hunter >= 0:
 			var at: Vector2 = _food_node.points()[hunter]
 			var pd := at.distance_to(_cell.position)
@@ -1801,13 +1801,23 @@ func _draw_drop_thresholds(a: float) -> void:
 		var at: Vector2 = bodies[nearest].pos
 		_threshold(at, nearest_d, FoodField.BEARING_RANGE, FOOD_TINT, a)
 		_threshold(at, nearest_d, FoodField.CORE_RANGE, FOOD_TINT, a)
-	var hunter := _food_node.hunter()
+	var hunter := _predator()
 	if hunter >= 0:
 		var at: Vector2 = bodies[hunter].pos
 		var pd := at.distance_to(_cell.position)
 		_threshold(at, pd, FoodField.DREAD_RANGE, PREDATOR_TINT, a)
 		_threshold(at, pd, FoodField.WAKE_RANGE, PREDATOR_TINT, a)
 		_threshold(at, pd, FoodField.LUNGE_RANGE, PREDATOR_TINT, a)
+
+
+## **Whom the predator rings go round**: whatever is hunting the cell, and when
+## nothing is, the body a replay says killed it (ocean.md §11). In a pond or a
+## run of its own a field names no killer, so there it is only ever the hunter;
+## on the replay's field it is how a death by a mouth that was not hunting you
+## -- most of them, in the drop -- still has its rings in the truth pane.
+func _predator() -> int:
+	var hunter := _food_node.hunter()
+	return hunter if hunter >= 0 else _food_node.killer()
 
 
 func _threshold(centre: Vector2, d: float, radius: float, tint: Color, a: float) -> void:
