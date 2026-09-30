@@ -161,7 +161,8 @@ to ship on its own and be played on the dev app before the next starts:
 Each depends on the one before. A lineage needs a water that keeps it long
 enough to have one; mutation needs births; and the player's screen needs blocks
 that already run the water. Pack 1 settles which rules the water keeps in the
-meantime. For example, water cells die of age until pack 2 gives them division.
+meantime. For example, the spawner makes every new water cell until pack 2
+lets them divide.
 
 ## Standing rules the order obeys
 
