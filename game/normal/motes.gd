@@ -37,15 +37,25 @@ const CULL := 1900.0
 ## close enough that the cell's wander has not yet carried it off the line.
 const FIRST_DISTANCE := 340.0
 
+## How many draws a mote is given to land inside a rim before it is pulled in.
+const INSIDE_TRIES := 8
+
 var _cell: CellBody = null
 var _motes := PackedVector2Array()
 var _first_pending := false
+## **The rim the grit stays inside**, in the drop (docs/design/ocean.md §3.1): a
+## `basin.gd`, or null for today's water, which has none. Grit hangs in the
+## water, never on the dry glass past it -- so at the edge the meniscus is the
+## first thing a cell bumps into.
+var _rim: RefCounted = null
 
 
 ## Seeds the field around [param cell]. Mote 0 is held back until the cell is
-## actually moving.
-func setup(cell: CellBody) -> void:
+## actually moving. [param rim] is the drop's rim, when there is one: seeded
+## after the drop, so the grit is inside it.
+func setup(cell: CellBody, rim: RefCounted = null) -> void:
 	_cell = cell
+	_rim = rim
 	_motes.resize(COUNT)
 	for i in COUNT:
 		_motes[i] = _spawn_point()
@@ -62,6 +72,10 @@ func _process(_delta: float) -> void:
 	if _first_pending and _cell.velocity.length_squared() > 1.0:
 		_first_pending = false
 		_motes[0] = _cell.position + _cell.velocity.normalized() * FIRST_DISTANCE
+		# Not past a rim: heading into the edge, the meniscus is the first
+		# knock, and the grit goes somewhere in the water instead.
+		if _rim != null and not _rim.inside(_motes[0], MOTE_RADIUS):
+			_motes[0] = _spawn_point()
 
 	for i in _motes.size():
 		var offset := _motes[i] - _cell.position
@@ -118,4 +132,14 @@ func _spawn_point() -> Vector2:
 	var angle := randf_range(-PI, PI)
 	var distance := randf_range(RING_MIN, RING_MAX)
 	var origin := _cell.position if _cell != null else Vector2.ZERO
-	return origin + Vector2(cos(angle), sin(angle)) * distance
+	var at := origin + Vector2(cos(angle), sin(angle)) * distance
+	if _rim == null:
+		return at
+	# Inside the rim: the same ring, drawn again a few times, and if the cell is
+	# so near the edge that none lands in the water, the last pulled in to it.
+	for attempt in INSIDE_TRIES:
+		if _rim.inside(at, MOTE_RADIUS):
+			return at
+		angle = randf_range(-PI, PI)
+		at = origin + Vector2(cos(angle), sin(angle)) * distance
+	return _rim.contain(at, MOTE_RADIUS)

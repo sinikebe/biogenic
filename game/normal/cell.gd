@@ -451,6 +451,20 @@ const WANDER_TAU := 2.6
 ## paid in the same seconds of rest, through the same `spend`, so `crista` and
 ## `vacuole` soften both alike.
 const STROKE_COST := 0.0113
+
+
+## **What holding [param speed] against the drag costs a body, in seconds of
+## rest a second**: the speed the drag takes out each second, grossed up by what
+## a stroke loses to spreading, at [constant STROKE_COST] per unit of it. The
+## player's flagellum pays per beat, on the speed each beat adds; a water body
+## swims at a steady speed and pays for holding it -- 0.50 a second at a born
+## cell's 56.5, what the player's flagellum costs it either way
+## (docs/design/ocean.md §5.2). One table, so the water prices a swim from the
+## player's own.
+static func stroke_cost(speed: float) -> float:
+	return maxf(speed, 0.0) * DRAG / SPREAD_LOSS * STROKE_COST
+
+
 ## **Seconds of rest per radian the body turns under steering.** A half turn
 ## costs about 4 s of rest, and turning flat out at tier 1 burns 0.8 of a
 ## resting body's rate on top of everything else. The water's own wander is
@@ -620,7 +634,14 @@ func gape() -> float:
 ## [member radius]; every "how much is that worth" test reads the radius, so
 ## armour never made you a bigger meal.
 func swallow_radius() -> float:
-	return radius * ARMOR_BY_TIER[_tier_index(extra(&"pellicle"))]
+	return swallow_radius_of(radius, extra(&"pellicle"))
+
+
+## [method swallow_radius] for a body that is not this node: its
+## [param body_radius] and its [param pellicle_tier]. In the drop every body's
+## armour is asked this way, a water cell's as a player's (ocean.md §5.7, row 5).
+static func swallow_radius_of(body_radius: float, pellicle_tier: int) -> float:
+	return body_radius * ARMOR_BY_TIER[_tier_index(pellicle_tier)]
 
 
 ## How far this cell's beams reach, 0 for a cell with no ocellus. Which way

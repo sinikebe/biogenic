@@ -38,6 +38,24 @@ extends SceneTree
 ## and how much of the time was spent in the grace, the divisions, and how the
 ## run ended. Excluded from export (`tools/*` on every preset), so none of it
 ## ships.
+##
+## **In the drop** (docs/design/ocean.md §8.3, §15.3) -- a run with no session,
+## unless `--drop=0` -- the bot goes for **the living first and a floc only when
+## nothing alive is on its screen**, what a player does once they know a floc
+## does not grow them, and a body's `pellicle` makes it bigger to the bot's mouth
+## as to every mouth there. Two more players:
+##
+## - `--avoid-venom` passes over a body carrying `toxicyst`, as a full-vision
+##   player who has learnt the organ's colour does;
+## - `--cautious` reads the red lip: it leaves food within CAUTION of a mouth
+##   that could swallow it, and turns away from such a mouth that close ahead.
+##
+## And it prints how a death came -- swallowed, chewed or poisoned --
+## `[forage-near]`, the edible bodies within 700 and 1,400 units, the threats and
+## the dread met along the path every second, `[forage-compete]`, the targets
+## another eater took first, `[forage-times]`, every meal and graze, and the
+## drop's census at the end. `--drop=0` prints today's water's `[forage-living]`
+## the same way (§15.4).
 
 const FoodField := preload("res://game/normal/food.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -65,6 +83,9 @@ var _screen := Vector2.ZERO
 var _ping := false
 var _spent := 0.0
 var _meal_times: Array[float] = []
+## Flocs, which feed and do not grow (the drop's).
+var _graze_times: Array[float] = []
+var _graze_worth := 0.0
 var _worth := 0.0
 var _hunger_seconds := 0.0
 var _grace_seconds := 0.0
@@ -80,6 +101,27 @@ var _echo := Vector2.ZERO
 var _aim := Vector2.ZERO
 var _aiming := false
 var _meals_seen := 0
+## The body the bot is steering at, its id and how many times the bot had fed
+## when it chose it -- so a target another mouth took first is counted.
+var _tgt: Object = null
+var _tgt_id := -1
+var _tgt_fed := 0
+var _cand: Object = null
+var _chases := 0
+var _lost := 0
+## Sampled every second along the path: edible bodies within 700 and 1,400,
+## mouths within 1,400 that could swallow the bot, the dread met, and the
+## living within 1,400.
+var _near_clock := 0.0
+var _near700: Array[int] = []
+var _near1400: Array[int] = []
+var _threat1400: Array[int] = []
+var _dread_samples: Array[float] = []
+var _living1400: Array[int] = []
+var _avoid_venom := false
+var _cautious := false
+## How close a mouth that could swallow the cautious bot may be to its food.
+const CAUTION := 200.0
 
 
 func _initialize() -> void:
@@ -95,6 +137,10 @@ func _initialize() -> void:
 			_screen = Vector2(float(wh[0]), float(wh[1])) * 0.5 / VisionLayer.ZOOM
 		elif a == "--ping":
 			_ping = true
+		elif a == "--avoid-venom":
+			_avoid_venom = true
+		elif a == "--cautious":
+			_cautious = true
 	_drive = (load("res://tools/drive.tscn") as PackedScene).instantiate()
 	root.add_child(_drive)
 
@@ -107,6 +153,7 @@ func _process(delta: float) -> bool:
 		_food = _drive.get("_food")
 		if _food != null:
 			_food.connect(&"eaten", _on_eaten)
+			_food.connect(&"grazed", _on_grazed)
 		if _met != null and _burn:
 			_met.set_hunger(MARK)
 	if _run != null and _met != null and _end == "":
@@ -124,8 +171,15 @@ func _seeking() -> bool:
 func _step(delta: float) -> void:
 	var hunger := float(_met.get("hunger"))
 	if int(_run.get("_life")) != NormalMode.Life.ALIVE:
-		_end = "%s at %.0f s" % [
-			"starved" if hunger >= 1.0 and not _burn else "eaten", _live]
+		var cause := "starved" if hunger >= 1.0 and not _burn else "eaten"
+		match int(_food.get("died_of")) if cause == "eaten" else 0:
+			FoodField.Cause.POISONED:
+				cause = "eaten (poisoned)"
+			FoodField.Cause.CHEWED:
+				cause = "eaten (chewed)"
+			FoodField.Cause.SWALLOWED:
+				cause = "eaten (swallowed)"
+		_end = "%s at %.0f s" % [cause, _live]
 		return
 	var split := int(_run.get("_split"))
 	if split == NormalMode.Split.CHOOSING:
@@ -148,15 +202,56 @@ func _step(delta: float) -> void:
 		_met.set_hunger(MARK)
 		return
 	_hunger_seconds += hunger * delta
+	_near_clock += delta
+	if _near_clock >= 1.0:
+		_near_clock = 0.0
+		_sample_near()
 	if hunger >= 1.0:
 		_grace_seconds += delta
 	if _seeking():
 		_steer(delta)
 
 
+## What was round the bot this second: edible bodies within 700 and 1,400 --
+## settled flocs among them -- the mouths within 1,400 that could swallow it,
+## the dread it felt, and the living within 1,400.
+func _sample_near() -> void:
+	var cell: Node = _run.get("_cell")
+	var at: Vector2 = cell.get("position")
+	var gape: float = cell.call("gape")
+	var swallow: float = cell.call("swallow_radius")
+	var within700 := 0
+	var within1400 := 0
+	var threats := 0
+	var living := 0
+	var bodies: Array = _food.call("bodies")
+	for i: int in _food.call("bodies_near", at, 1400.0):
+		var body: Object = bodies[i]
+		if not bool(body.get("inert")):
+			living += 1
+			if float(_food.call("gape_at", i)) > swallow:
+				threats += 1
+		elif float(body.get("settle")) < 1.0:
+			continue
+		if float(_food.call("swallow_size_of", i)) < gape:
+			within1400 += 1
+			if (body.get("pos") as Vector2).distance_to(at) <= 700.0:
+				within700 += 1
+	_dread_samples.append(float(_food.get("dread_level")))
+	_living1400.append(living)
+	_near700.append(within700)
+	_near1400.append(within1400)
+	_threat1400.append(threats)
+
+
 func _on_eaten(nutrition: float, _gene: StringName, _at: Vector2) -> void:
 	_meal_times.append(_live)
 	_worth += nutrition
+
+
+func _on_grazed(nutrition: float, _at: Vector2) -> void:
+	_graze_times.append(_live)
+	_graze_worth += nutrition
 
 
 func _press(k: int) -> void:
@@ -174,22 +269,61 @@ func _press(k: int) -> void:
 
 
 ## The nearest body [param cell]'s mouth can take within [param reach] and, if
-## the bot has one, on its screen; `Vector2.INF` when there is none.
+## the bot has one, on its screen; `Vector2.INF` when there is none. The living
+## first: a floc (the drop's) only when nothing alive is there.
 func _nearest(cell: Node, reach: float, screen: Vector2) -> Vector2:
 	var at: Vector2 = cell.get("position")
 	var gape: float = cell.call("gape")
 	var best := reach
 	var found := Vector2.INF
-	for body: Object in _food.call("bodies"):
-		if not body.get("seeded") or float(body.get("radius")) >= gape:
+	var best_floc := reach
+	var found_floc := Vector2.INF
+	var picked: Object = null
+	var picked_floc: Object = null
+	var bodies: Array = _food.call("bodies")
+	for i in bodies.size():
+		var body: Object = bodies[i]
+		if not body.get("seeded") or float(_food.call("swallow_size_of", i)) >= gape:
 			continue
 		var off: Vector2 = (body.get("pos") as Vector2) - at
 		if screen != Vector2.ZERO and (absf(off.x) > screen.x or absf(off.y) > screen.y):
 			continue
-		if off.length() < best:
+		if bool(body.get("inert")):
+			if float(body.get("settle")) >= 1.0 and off.length() < best_floc \
+					and not (_cautious and _threat_near(body.get("pos"), cell)):
+				best_floc = off.length()
+				found_floc = body.get("pos")
+				picked_floc = body
+			continue
+		if _avoid_venom and int((body.get("genome") as Dictionary).get(&"toxicyst", 0)) > 0:
+			continue
+		if off.length() < best and not (_cautious and _threat_near(body.get("pos"), cell)):
 			best = off.length()
 			found = body.get("pos")
-	return found
+			picked = body
+	_cand = picked if found != Vector2.INF else picked_floc
+	return found if found != Vector2.INF else found_floc
+
+
+## Whether a mouth that could swallow [param cell] is within CAUTION of
+## [param point]; its place in [member _threat_at].
+var _threat_at := Vector2.INF
+
+
+func _threat_near(point: Vector2, cell: Node) -> bool:
+	var swallow: float = cell.call("swallow_radius")
+	var bodies: Array = _food.call("bodies")
+	var best := CAUTION
+	_threat_at = Vector2.INF
+	for i: int in _food.call("bodies_near", point, CAUTION):
+		var b: Object = bodies[i]
+		if bool(b.get("inert")):
+			continue
+		var d := (b.get("pos") as Vector2).distance_to(point)
+		if d < best and float(_food.call("gape_at", i)) > swallow:
+			best = d
+			_threat_at = b.get("pos")
+	return _threat_at != Vector2.INF
 
 
 func _steer(delta: float) -> void:
@@ -222,7 +356,28 @@ func _steer(delta: float) -> void:
 			_aiming = false
 	else:
 		want = _nearest(cell, _seek, _screen)
+		# Was the last target taken by someone else? Gone, or its slot another
+		# body's, while the bot has not fed since it chose it.
+		var fed := _meal_times.size() + _graze_times.size()
+		if _tgt != null:
+			var gone := not bool(_tgt.get("seeded")) or int(_tgt.get("id")) != _tgt_id
+			if gone and fed == _tgt_fed:
+				_lost += 1
+				_tgt = null
+		if _cand != null and (_cand != _tgt or int(_cand.get("id")) != _tgt_id):
+			_chases += 1
+			_tgt = _cand
+			_tgt_id = int(_cand.get("id"))
+			_tgt_fed = fed
+		elif _cand == null:
+			_tgt = null
 	_look = 0.0
+	if _cautious and _threat_near(at, cell):
+		# A mouth that could swallow it, close: turn away from it first.
+		var off_t := at - _threat_at
+		var diff_t := angle_difference(float(cell.get("heading")), atan2(off_t.x, -off_t.y))
+		_press(1 if diff_t > AIM_SLOP else (-1 if diff_t < -AIM_SLOP else 0))
+		return
 	if want == Vector2.INF:
 		_press(0)
 		return
@@ -232,6 +387,7 @@ func _steer(delta: float) -> void:
 
 
 func _report() -> void:
+	print("[forage-compete] chases %d lost %d" % [_chases, _lost])
 	if _burn:
 		var rate := _spent / maxf(_live, 1e-6)
 		var empty := 1.0 / maxf(rate, 1e-9)
@@ -259,3 +415,40 @@ func _report() -> void:
 		+ " divided %d") % [first, meals, _live, longest, _worth / maxf(meals, 1),
 		_end if _end != "" else "alive", _hunger_seconds / maxf(_live, 1e-6),
 		100.0 * _grace_seconds / maxf(_live, 1e-6), _divisions])
+	var times := PackedStringArray()
+	for when: float in _meal_times:
+		times.append("%.1f" % when)
+	var grazes := PackedStringArray()
+	for when: float in _graze_times:
+		grazes.append("%.1f" % when)
+	var samples := maxf(float(_near700.size()), 1.0)
+	var empty700 := 0
+	var empty1400 := 0
+	var food700 := 0.0
+	var food1400 := 0.0
+	var threats := 0.0
+	var living := 0.0
+	for k in _near700.size():
+		empty700 += 1 if _near700[k] == 0 else 0
+		empty1400 += 1 if _near1400[k] == 0 else 0
+		food700 += _near700[k]
+		food1400 += _near1400[k]
+		threats += _threat1400[k]
+		living += _living1400[k]
+	var dread := 0.0
+	var high := 0
+	for level: float in _dread_samples:
+		dread += level
+		high += 1 if level >= 0.5 else 0
+	print("[forage-living] living<=1400 mean %.2f -> %.2f per million um^2" % [
+		living / samples, living / samples / (PI * 1.4 * 1.4)])
+	print(("[forage-near] food<=700 mean %.2f empty %.0f%% | food<=1400 mean %.2f empty"
+		+ " %.0f%% | threats<=1400 mean %.2f | dread mean %.3f high %.0f%%") % [
+		food700 / samples, 100.0 * empty700 / samples, food1400 / samples,
+		100.0 * empty1400 / samples, threats / samples, dread / samples,
+		100.0 * high / samples])
+	print("[forage-times] meals %s | grazes %s | graze worth %.2f | lived %.1f | end %s" % [
+		",".join(times), ",".join(grazes), _graze_worth, _live,
+		_end if _end != "" else "alive"])
+	if _food != null and bool(_food.call(&"in_drop")):
+		print(_food.call(&"census_line"))
