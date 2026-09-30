@@ -1049,6 +1049,14 @@ func _push_shader() -> void:
 	_shader.set_shader_parameter("world_origin", _camera - _view * 0.5 / ZOOM)
 	_shader.set_shader_parameter("world_per_px", 1.0 / ZOOM)
 	_shader.set_shader_parameter("amount", _amount)
+	# **The drop's edge** (docs/design/ocean.md §3.3): the meniscus line, the
+	# film inside it and dry glass past it. Off in today's water, which has none.
+	var rim: RefCounted = _food_node.basin() if _food_node != null else null
+	_shader.set_shader_parameter("drop_on", 1.0 if rim != null else 0.0)
+	if rim != null:
+		_shader.set_shader_parameter("drop_center", rim.get(&"center"))
+		_shader.set_shader_parameter("drop_radius", float(rim.get(&"radius")))
+		_shader.set_shader_parameter("drop_band", FoodField.Drop.SHALLOWS)
 
 
 func _apply_visibility() -> void:
@@ -1308,11 +1316,6 @@ const CULL_MARGIN := 32.0
 func _draw_cells(a: float) -> void:
 	if _food_node == null:
 		return
-	var points := _food_node.points()
-	var radii := _food_node.radii()
-	var headings := _food_node.headings()
-	var genomes := _food_node.genomes()
-	var wounds := _food_node.wounds()
 	# **The cull** (shared-pond.md §3, Phase 0). Every body in the water used to
 	# be drawn every frame, on screen or not, and that drawing -- not the
 	# simulation -- was the largest cost a second ring of bodies would add.
@@ -1329,6 +1332,20 @@ func _draw_cells(a: float) -> void:
 	if culling:
 		middle = _world.transform.affine_inverse() * (frame * 0.5)
 		half = frame.length() * 0.5 / ZOOM
+	# **In the drop the grid is asked which bodies can reach the frame**
+	# (ocean.md §4.4, §14.1): the dozen on screen, never five arrays rebuilt
+	# over six hundred.
+	if _food_node.in_drop():
+		if not culling:
+			middle = _camera
+			half = _view.length() * 0.5 / ZOOM
+		_draw_drop_cells(a, middle, half)
+		return
+	var points := _food_node.points()
+	var radii := _food_node.radii()
+	var headings := _food_node.headings()
+	var genomes := _food_node.genomes()
+	var wounds := _food_node.wounds()
 	# **In a pond the friend is drawn by [method _draw_peer]**, as a person and
 	# not as a water cell, and a slot nobody is in -- retired, or not sent -- is
 	# nothing at all (shared-pond.md §3).
@@ -1371,6 +1388,78 @@ func _draw_cells(a: float) -> void:
 			_food_node.gape_at(i), _cell.radius, false, _clock, ab,
 			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
 			float(wounds[i]) if i < wounds.size() else 0.0)
+
+
+## **Every body in the drop that can reach the frame**, found by the grid round
+## [param middle] out to [param half] and the widest drawing any body makes,
+## then held to the same exact cull as today's water. A cell is drawn by the one
+## routine every cell is; a floc is not a cell and is drawn as the clump it is.
+##
+## **The bloom weighs a body by the size its mouth measures** (ocean.md §14.1),
+## `pellicle` counted, through the same curve the taste field does -- so it says
+## what the membrane's green band says, and never more.
+func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
+	var bodies := _food_node.bodies()
+	var gape := _cell.gape()
+	var margin := CULL_MARGIN / ZOOM
+	var widest := CellBody.DIVIDE_RADIUS * CULL_REACH
+	for i: int in _food_node.bodies_near(middle, half + widest + margin):
+		var b: Object = bodies[i]
+		var p: Vector2 = b.pos
+		var r := float(b.radius)
+		var reach := half + r * CULL_REACH + margin
+		if p.distance_squared_to(middle) > reach * reach:
+			continue
+		if bool(b.inert):
+			var settle := float(b.settle)
+			# The bloom round a floc and never over it, as round a friend: a
+			# clump that does not hide its middle glowed like a lamp (§7.6).
+			_draw_scent_ring(p, r, FoodField.taste_weight(r, gape) * settle * a)
+			_draw_floc(p, r, settle, int(b.id), a)
+			continue
+		_draw_scent(p, r, FoodField.taste_weight(_food_node.swallow_size_of(i), gape) * a)
+		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
+			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
+			float(b.wound))
+
+
+## **A floc of detritus** (ocean.md §7.6): a clump of five rounded fragments in
+## a warm brown, darker bodies with lighter cores, inside a thin ragged outline
+## -- never a cell's rim and never grit's single shell. Settling, it is a wider,
+## fainter blot that tightens into the clump, as a speck sinking into the focal
+## plane does. Its shape is its id's, so it keeps it.
+const DETRITUS_TINT := Color(0.74, 0.60, 0.36)
+const FLOC_PARTS := 5
+const FLOC_SHELL_STEPS := 18
+
+
+func _draw_floc(at: Vector2, r: float, settle: float, id: int, a: float) -> void:
+	if settle <= 0.0:
+		return
+	var focus := smoothstep(0.0, 1.0, settle)
+	var blur := 1.0 + 1.6 * (1.0 - focus)
+	var alpha := a * (0.25 + 0.75 * focus)
+	var grit := float(id) * 1.37
+	# The out-of-focus blot, fading as it sharpens.
+	_world.draw_circle(at, r * 1.25 * blur,
+		Color(DETRITUS_TINT, 0.10 * alpha * (1.0 - 0.6 * focus)), true)
+	for k in FLOC_PARTS:
+		var angle := TAU * _noise(grit + float(k) * 2.3)
+		var off := r * 0.55 * _noise(grit + float(k) * 5.1) * blur
+		var part := r * (0.30 + 0.25 * _noise(grit + float(k) * 7.7)) * blur
+		var c := at + Vector2(cos(angle), sin(angle)) * off
+		_world.draw_circle(c, part, Color(DETRITUS_TINT.darkened(0.25), 0.34 * alpha), true)
+		_world.draw_circle(c, part * 0.5, Color(DETRITUS_TINT, 0.22 * alpha), true)
+	# The ragged outline round the whole clump, once it is sharp enough to have one.
+	if focus > 0.4:
+		var shell := PackedVector2Array()
+		shell.resize(FLOC_SHELL_STEPS + 1)
+		for k in FLOC_SHELL_STEPS + 1:
+			var t := TAU * float(k % FLOC_SHELL_STEPS) / float(FLOC_SHELL_STEPS)
+			var wobble := 0.80 + 0.35 * _noise(grit + float(k % FLOC_SHELL_STEPS) * 1.9)
+			shell[k] = at + Vector2(cos(t), sin(t)) * r * wobble
+		_world.draw_polyline(shell, Color(DETRITUS_TINT, 0.38 * alpha * focus), 1.3 / ZOOM,
+			true)
 
 
 ## **"I can eat it", drawn loudly enough to be seen.** This is the only mark
@@ -1662,6 +1751,11 @@ func _draw_ping(a: float) -> void:
 ## plot -- that was rendered and it was bad. A ring is a measuring instrument,
 ## so it is shown at the moment of measurement and not otherwise.
 func _draw_thresholds(a: float) -> void:
+	# In the drop the nearest body is asked of the grid, out to where a ring can
+	# still be drawn: six hundred bodies are not walked for one ring.
+	if _food_node != null and _food_node.in_drop():
+		_draw_drop_thresholds(a)
+		return
 	if _food_node != null:
 		var points := _food_node.points()
 		# **Only bodies in the water** (shared-pond.md §3): a retired slot keeps
@@ -1689,6 +1783,31 @@ func _draw_thresholds(a: float) -> void:
 			_threshold(at, pd, FoodField.DREAD_RANGE, PREDATOR_TINT, a)
 			_threshold(at, pd, FoodField.WAKE_RANGE, PREDATOR_TINT, a)
 			_threshold(at, pd, FoodField.LUNGE_RANGE, PREDATOR_TINT, a)
+
+
+## [method _draw_thresholds] in the drop: the same rings off the same bodies,
+## the nearest found among those close enough to put one on screen.
+func _draw_drop_thresholds(a: float) -> void:
+	var bodies := _food_node.bodies()
+	var nearest := -1
+	var nearest_d := INF
+	var reach := maxf(FoodField.BEARING_RANGE, FoodField.CORE_RANGE) + RING_WINDOW
+	for i: int in _food_node.bodies_near(_cell.position, reach):
+		var d := (bodies[i].pos as Vector2).distance_to(_cell.position)
+		if d < nearest_d:
+			nearest_d = d
+			nearest = i
+	if nearest >= 0:
+		var at: Vector2 = bodies[nearest].pos
+		_threshold(at, nearest_d, FoodField.BEARING_RANGE, FOOD_TINT, a)
+		_threshold(at, nearest_d, FoodField.CORE_RANGE, FOOD_TINT, a)
+	var hunter := _food_node.hunter()
+	if hunter >= 0:
+		var at: Vector2 = bodies[hunter].pos
+		var pd := at.distance_to(_cell.position)
+		_threshold(at, pd, FoodField.DREAD_RANGE, PREDATOR_TINT, a)
+		_threshold(at, pd, FoodField.WAKE_RANGE, PREDATOR_TINT, a)
+		_threshold(at, pd, FoodField.LUNGE_RANGE, PREDATOR_TINT, a)
 
 
 func _threshold(centre: Vector2, d: float, radius: float, tint: Color, a: float) -> void:

@@ -11,8 +11,10 @@ render_mode blend_add;
 // every signal it draws is already additive over that base, so adding the water
 // on top composes to the same picture as sliding it underneath would.
 //
-// Cheap by construction: no textures, no derivatives, no branches, no loops.
-// It has to stay affordable under GL Compatibility on a low-end Android GPU.
+// Cheap by construction: no textures, no derivatives, no loops, and one branch,
+// on a uniform -- the drop's edge -- which every fragment of a draw takes the
+// same way. It has to stay affordable under GL Compatibility on a low-end
+// Android GPU.
 
 uniform vec2 rect_px = vec2(1280.0, 720.0);
 // World coordinate under the top-left pixel, and world units per canvas pixel.
@@ -33,6 +35,24 @@ uniform float grid_world = 240.0;
 uniform float grid_level = 0.085;
 uniform float grain_level = 1.0;
 uniform float cloud_level = 0.115;
+
+// The drop (docs/design/ocean.md §3.3): a drop of water on a slide, and past
+// its edge only the slide -- dry glass, the counting grid still etched on it.
+// At the edge the meniscus gathers light into a bright line, with a lit film of
+// thinning water inside it. Off (0) in today's water, which has no edge.
+uniform float drop_on = 0.0;
+uniform vec2 drop_center = vec2(0.0, 0.0);
+uniform float drop_radius = 6000.0;
+uniform float drop_band = 240.0;
+// How bright the film gets at the rim, the line at its peak, and what is left
+// of the grid on dry glass.
+uniform float rim_level = 0.22;
+uniform float line_level = 0.55;
+uniform float glass_grid = 0.45;
+// The line's half-width in canvas pixels, so it is a few pixels wide at any
+// zoom, and its tint: a pale teal, the water's own light.
+uniform float line_px = 2.2;
+uniform vec3 line_tint = vec3(0.62, 0.95, 0.88);
 
 float hash21(vec2 p) {
 	return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123);
@@ -94,6 +114,24 @@ void fragment() {
 		  grid * grid_level
 		+ grain * grain_level
 		+ (cloud - 0.35) * cloud_level) * lit;
+
+	// --- the drop's edge -------------------------------------------------
+	if (drop_on > 0.5) {
+		float px_w = max(world_per_px, 0.0001);
+		float dist = length(w - drop_center);
+		// 0 in the water, 1 on dry glass, across three pixels.
+		float dry = smoothstep(drop_radius - 1.5 * px_w, drop_radius + 1.5 * px_w, dist);
+		// The thinning film: brighter toward the rim, and only inside it.
+		float film = smoothstep(drop_radius - drop_band, drop_radius, dist) * (1.0 - dry);
+		vec3 wet = col + water_tint * film * film * rim_level * lit;
+		vec3 glass = water_tint * grid * grid_level * glass_grid * lit;
+		// The meniscus line. **The square is k * k, never pow(k, 2.0)**: k is
+		// negative inside the rim, and pow of a negative base is undefined in
+		// GLSL ES 3.00 -- one driver draws it, another need not (§3.3).
+		float k = (dist - drop_radius) / (line_px * px_w);
+		float line = exp(-k * k);
+		col = mix(wet, glass, dry) + line_tint * line * line_level * lit;
+	}
 
 	// 8-bit dither, for the same reason the membrane needs one: wide dim
 	// gradients on a near-black field band into hard edges without it.

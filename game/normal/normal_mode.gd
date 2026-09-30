@@ -240,6 +240,14 @@ var scheme := -1
 ## every render after it.
 var numbers := -1
 
+## **Which water this run is in**: -1 to decide in `_ready` -- the drop when no
+## session is up, today's water when one is (docs/design/ocean.md §10.1) -- 0
+## for today's water whatever, 1 for the drop when there is no session. Chosen
+## once for the run. Set it before the scene enters the tree to force it, which
+## is what `tools/drive.gd --drop=` does: `--drop=0` is the reference every
+## probe compares the drop against, and the identity gate's (§14.4).
+var drop := -1
+
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
 @onready var _returns: ReturnsLayer = $Returns
@@ -592,6 +600,11 @@ func _ready() -> void:
 	_food.bitten.connect(_on_bitten)
 	_food.stung.connect(_on_stung)
 	_food.darted.connect(_on_darted)
+	# The drop's two (docs/design/ocean.md §3.1, §7.3): the meniscus is felt as
+	# the knock grit gives, and a floc is a meal with no growth and no gene.
+	# Only a run in the drop emits either, and an unheard connection is free.
+	_food.shored.connect(_on_struck)
+	_food.grazed.connect(_on_grazed)
 	_cell.dashed.connect(_on_dashed)
 	# **The one wire out of this water.** Connected unconditionally: an emit
 	# with nothing on the far end is free, and a branch here would be a branch
@@ -619,8 +632,17 @@ func _ready() -> void:
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
 	_cell.genome = _genome
-	_motes.setup(_cell)
-	_food.setup(_cell)
+	# **The drop, or today's water, chosen once for the run** (ocean.md §10.1):
+	# the drop when no session is up, and a run that begins inside one keeps
+	# today's water and today's rules, so the pond and the wire are exactly what
+	# they were. The drop is made first and the grit then hung inside its rim;
+	# today's water keeps its own order, grit first.
+	if _net == null and drop != 0:
+		_food.setup_drop(_cell)
+		_motes.setup(_cell, _food.basin())
+	else:
+		_motes.setup(_cell)
+		_food.setup(_cell)
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
 	# Once, and only here: the marks layer holds the body and the water, and
@@ -826,6 +848,12 @@ func _process(delta: float) -> void:
 		mini(_cell.extra(&"vacuole"), CellBody.STORE_BY_TIER.size() - 1)]
 	_metabolism.photosynthesis = CellBody.SUN_BY_TIER[
 		mini(_cell.extra(&"plastid"), CellBody.SUN_BY_TIER.size() - 1)]
+	# **In the drop a cell with no `cytostome` absorbs its food from the water**,
+	# as every body there does (ocean.md §5.3, row 11): an income beside the
+	# light, so a player who put a gene over its own mouth lives on as a slow,
+	# cheap body. Today's water keeps today's rule.
+	if _food.in_drop() and _cell.extra(&"cytostome") == 0:
+		_metabolism.photosynthesis += _food.absorb
 	# `crista`: the same efficiency upkeep already carries, for what moving
 	# costs. Then what moving has cost since this was last paid -- every stroke,
 	# a held push and every radian of steering (docs/design/energy.md) -- after
@@ -1620,9 +1648,17 @@ func _be_born() -> void:
 		if unseen_breath and _genome.can_choose(unseen):
 			_pause_breath.arm()
 	_soma.setup(_cell, _genome)
-	_motes.setup(_cell)
+	# Inside the drop's rim, in the drop; `basin()` is null in today's water.
+	_motes.setup(_cell, _food.basin())
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
-	if _food.pond_open():
+	if _food.in_drop():
+		# **In the drop a division regenerates nothing** (ocean.md §8.2): the
+		# daughter is where her mother was, in her mother's water, with a new
+		# cell's organs and grace -- what the pond has always done -- and the
+		# sister is left in it, held inside the rim, a water cell from then on.
+		_food.enter_water()
+		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"])
+	elif _food.pond_open():
 		# **In a pond there is no reseed** (shared-pond.md §1.5, UX §2): the
 		# water this daughter comes back to is the one her mother left, still
 		# moving, and it is the other player's water as much as hers. She comes
@@ -1788,6 +1824,20 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 		_build_genome_strip()
 
 
+## **Something that was not alive, swallowed** (ocean.md §7.3): food, and
+## nothing else. The bar fills by the meal every body's goes through; the body
+## does not grow and no gene arrives, so the flood comes in the plain nutrient
+## colour it takes when none does -- a meal with nothing alive in it, told on
+## the one channel that already names what you ate (§7.5). [param at] stops
+## here, as [method _on_eaten]'s does, but for the view's meal mark.
+func _on_grazed(nutrition: float, at: Vector2) -> void:
+	if not _in_the_water():
+		return
+	_bus.ingest({"gene": &""})
+	_metabolism.feed(nutrition)
+	_vision.mark_meal(nutrition, &"", at)
+
+
 func _on_waked(bearing: float, strength: float) -> void:
 	_bus.shove(bearing, strength)
 
@@ -1867,6 +1917,12 @@ func _die(loud: bool, bearing: float) -> void:
 		_food.leave_water(true)
 		_pond.died(_food.died_of if loud else FoodField.Cause.STARVED,
 			_food.died_by if loud else 0, _cell.position)
+	# **In the drop a cell that starved or was poisoned leaves its remains**
+	# where it died, as every body there does (ocean.md §7.4): the drop outlives
+	# the cell, and the next one may find them. Swallowed or chewed, it fed
+	# whatever finished it and leaves nothing.
+	if _food.in_drop() and (not loud or _food.died_of == FoodField.Cause.POISONED):
+		_food.leave_remains(_cell.position, _cell.radius)
 	# **The ring is sealed here**, before the collapse writes a single frame of
 	# itself into it. What the player is offered is the run, not the dying.
 	_recorder.seal()
@@ -2056,10 +2112,16 @@ func _return(place: Array) -> void:
 		_cell.position = place[0]
 		_cell.heading = float(place[1])
 	_metabolism.reset()
-	_motes.setup(_cell)
-	if pond:
+	if _food.in_drop():
+		# **A return is a born cell at a quiet start in the same drop** (ocean.md
+		# §8.1): the drop is put under it, and the grit hung inside its rim after.
+		_food.return_to_drop()
+		_motes.setup(_cell, _food.basin())
+	elif pond:
+		_motes.setup(_cell)
 		_food.enter_water()
 	else:
+		_motes.setup(_cell)
 		_food.setup(_cell)
 		_ponded = false
 	_genome.setup(_cell)

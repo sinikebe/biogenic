@@ -2,19 +2,23 @@ extends Node
 ## CI probe: **the drop** (docs/design/ocean.md §14.3). The mechanics a finite
 ## water is built on -- the grid, the basin, the replenisher, the snowfall --
 ## against brute force and against their own arithmetic; the drop's own
-## decisions, each on its own; and one tank for every body: the player's
-## metabolism node against the static functions the water will call.
-##
-## Phase 1a-1 builds checks 1, 2, 7 and 10's identity, and the replenish and
-## snow arithmetic. Checks 3 to 6, 8, 9 and 11 need the drop in the water and
-## come with it in 1a-2; 12 is 1b's save. **And the dev app's frame readout** (§14.2), run
-## for real: CI runs release-stamped, so nothing else here ever runs its frames.
+## decisions, each on its own; one tank for every body: the player's metabolism
+## node against the water's own; and **the drop in the water** -- nothing made
+## where it can be seen, nothing past the rim, growth that stops, the floors,
+## one seed one drop, flocs, and one body for every cell -- over five minutes
+## of a drop and on bodies posed in one. 12 is 1b's save. **And the dev app's
+## frame readout** (§14.2), run for real: CI runs release-stamped, so nothing
+## else here ever runs its frames.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
 ## everything past them, a basin that puts a body back on the rim in 32 bits
 ## without pulling it inside, a replenisher whose debt outgrows its shortfall, a
-## Poisson draw cut off at 64, a node that works out its own rate.
+## Poisson draw cut off at 64, a node that works out its own rate. And 1a-2's:
+## a spawner that hides a peer at a drifter's reach, a body left past the rim, a
+## growth with no ceiling, a drifter drawn from the venom list, a prey search
+## that stops too far out, a floc eaten unsettled, a poisoned body that leaves
+## nothing, a body armoured against the player only.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -30,33 +34,13 @@ const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const FrameReadout := preload("res://game/dev/frame_readout.gd")
+const MotesField := preload("res://game/normal/motes.gd")
+const Cilia := preload("res://game/vision/cilia.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
 
 var _failed := 0
-
-
-## **A water body's tank, as the drop will keep one** (§5.2): stepped at
-## whatever rate its distance gives it, with the time it is owed, paying what
-## it did since it was last stepped -- through the same static functions the
-## player's node calls.
-class Tank:
-	var hunger := 0.0
-	var effort := 0.0
-	var upkeep := 1.0
-	var income := 0.0
-	var reserve := 1.0
-	var burn := 1.0
-
-	func step(dt: float) -> void:
-		hunger = clampf(hunger
-			+ dt * Metabolism.rest_rate(upkeep, income, reserve) / Metabolism.HUNGER_SECONDS
-			+ Metabolism.effort_cost(effort, burn, reserve), 0.0, 1.0)
-		effort = 0.0
-
-	func eat(nutrition: float) -> void:
-		hunger = clampf(hunger - Metabolism.meal(nutrition), 0.0, 1.0)
 
 
 ## **A water that takes a known time**: at least [constant BUSY_USEC] of its own
@@ -81,6 +65,112 @@ class BusyWater extends Node:
 		return held
 
 
+## **The drop, watched from inside**: food.gd's own field with a tally on every
+## door a rule passes through -- what the spawner makes, how a body leaves, each
+## swim, each run begun and each run given up, each count of the genes -- so a
+## check reads what happened in every frame of a run and not only at its end.
+## Each hook calls the field's own function; nothing about the drop changes.
+class WatchedDrop extends "res://game/normal/food.gd":
+	var made := 0
+	var made_gape := 0.0
+	var venom_drifters := 0
+	var causes := {}
+	var swims := 0
+	var fast := 0
+	var burst_without := 0
+	var searches := 0
+	var fast_search := 0
+	var runs_begun := 0
+	var blind_runs := 0
+	var given_up := 0
+	var fled := 0
+	var counts := 0
+	var lost_genes := 0
+	var still_short := 0
+	var _short_before: Array[StringName] = []
+
+	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
+			body_radius := 0.0, tiers := {}) -> int:
+		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers)
+		var b: Body = _cells[index]
+		if body_radius <= 0.0:
+			made += 1
+			if b.drifter:
+				venom_drifters += 1 if b.genome.has(&"toxicyst") else 0
+			else:
+				made_gape = maxf(made_gape, _gape(b))
+		return index
+
+	func _drop_lose(index: int, cause: int) -> void:
+		var b: Body = _cells[index]
+		if b.seeded and not b.inert:
+			causes[cause] = int(causes.get(cause, 0)) + 1
+		super._drop_lose(index, cause)
+
+	func _swim(b: Body, delta: float, speed: float) -> void:
+		swims += 1
+		if speed > b.cruise + b.dash_v + 1e-3:
+			fast += 1
+		if b.dash_v > 0.0 and Genome.tier_of(b.genome, &"myoneme") <= 0:
+			burst_without += 1
+		super._swim(b, delta, speed)
+
+	func _drift_in_drop(index: int, b: Body, delta: float) -> void:
+		super._drift_in_drop(index, b, delta)
+		if b.speed > DRIFT_SPEED + 1e-3:
+			searches += 1
+			if b.speed > b.cruise + 1e-3:
+				fast_search += 1
+
+	## A run begins: at something its own senses find, by the tables and not by
+	## the field's own function -- the whole reach of its nose, radar, beam and
+	## palp, a floc by nose, beam or palp alone, its eyespot's for a body big
+	## enough to cast a shadow, and touch.
+	func _start_run(b: Body, target: int, serial: int) -> void:
+		runs_begun += 1
+		var at: Vector2 = _cell.position if target == TARGET_PLAYER else _cells[target].pos
+		var size: float = _cell.radius if target == TARGET_PLAYER else _cells[target].radius
+		var floc: bool = target != TARGET_PLAYER and _cells[target].inert
+		var g := b.genome
+		var smell: float = CellBody.SMELL_RANGE_BY_TIER[Genome.tier_of(g, &"chemocyte")]
+		var ping: float = CellBody.PING_RANGE_BY_TIER[Genome.tier_of(g, &"ampulla")]
+		var beam: float = CellBody.BEAM_RANGE_BY_TIER[Genome.tier_of(g, &"ocellus")]
+		var touch: float = CellBody.TOUCH_RANGE_BY_TIER[Genome.tier_of(g, &"palp")]
+		var eye := SHADOW_RANGE if Genome.tier_of(g, &"stigma") > 0 else 0.0
+		var d := b.pos.distance_to(at)
+		var found := d <= b.radius + size
+		if floc:
+			found = found or d <= maxf(smell, maxf(beam, touch))
+		else:
+			found = found or d <= maxf(maxf(smell, ping), maxf(beam, touch)) \
+				or (d <= eye and size >= SHADOW_MIN_RATIO * b.radius)
+		if not found:
+			blind_runs += 1
+		super._start_run(b, target, serial)
+
+	func _break_off(b: Body) -> void:
+		super._break_off(b)
+		given_up += 1
+		if b.state == State.BREAK or b.calm != REST_MISS:
+			fled += 1
+
+	func _count_genes() -> void:
+		super._count_genes()
+		counts += 1
+		var carriers := {}
+		for b in _cells:
+			if b.seeded and not b.inert:
+				for gene: StringName in b.genome:
+					carriers[gene] = int(carriers.get(gene, 0)) + 1
+		for gene: StringName in DRIFTER_GENES:
+			var n := int(carriers.get(gene, 0))
+			if n == 0:
+				lost_genes += 1
+			if n < Drop.GENE_FLOOR and _short_before.has(gene):
+				still_short += 1
+		_short_before = _gene_short.duplicate()
+
+
 func _ready() -> void:
 	seed(20260930)
 	_grid()
@@ -90,6 +180,13 @@ func _ready() -> void:
 	_drop()
 	_lod()
 	_tank()
+	_spawns()
+	_containment()
+	_five_minutes()
+	_determinism()
+	_flocs()
+	await _flocs_fed()
+	_one_body()
 	await _readout()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
@@ -672,6 +769,28 @@ func _drop() -> void:
 		disc / sqrt(2.0), outside, drop.meniscus.depth(edge_push)],
 		absf(float(within) / 20000.0 - 0.5) <= 0.01 and outside == 0
 		and drop.meniscus.inside(edge_push, 30.0))
+	# **The review's S3**: the rim holds a pushed mouth back, and it must still
+	# end clear of dread's reach of the start. From a start as near the rim as
+	# one may be, mouths all round it at every distance inside dread's reach, of
+	# every size a body can be: each is slid along the rim until it clears.
+	var nearest := INF
+	var held := 0
+	var escaped := 0
+	var worst_start := drop.meniscus.center + Vector2(0.0, -(Drop.RADIUS - Drop.START_INSET))
+	for k in 72:
+		for reach: float in [60.0, 700.0, 1350.0]:
+			for r: float in [13.0, 40.0]:
+				var mouth := worst_start + Vector2.from_angle(TAU * float(k) / 72.0) * reach
+				var put := drop.pushed_clear(worst_start, mouth, FoodField.DREAD_RANGE, r)
+				nearest = minf(nearest, _dist(put, worst_start))
+				if drop.meniscus.depth(put) < Drop.START_PUSH:
+					held += 1
+				if not drop.meniscus.inside(put, r):
+					escaped += 1
+	_check(("S3: from a start %.0f inside the rim, 432 mouths moved out land at least %.0f"
+		+ " from it (dread reaches %.0f), %d of them slid along the rim, %d past it") % [
+		Drop.START_INSET, nearest, FoodField.DREAD_RANGE, held, escaped],
+		nearest >= FoodField.DREAD_RANGE and held > 0 and escaped == 0)
 	# What a new thing is made with: a body made in play is fed, one of a first
 	# fill up to FIRST_HUNGER_MAX; a fallen floc fits a born cell's mouth and lasts
 	# FLOC_LIFE give or take its spread.
@@ -758,10 +877,14 @@ func _lod() -> void:
 
 ## **A water body and the player's metabolism node, with the same genome, fed
 ## the same efforts over the same 60 s, end at the same hunger** -- the node a
-## frame at a time as the run steps it, the water body at the rates its
-## distance would give it: every frame, then every second frame, then on its
-## tick, with the time it is owed.
+## frame at a time as the run steps it, the water body in food.gd's own tank at
+## the rates its distance would give it: every frame, then every second frame,
+## then on its tick, with the time it is owed. The body's terms -- its upkeep,
+## store, burn, and light and absorption -- are the field's own reading of its
+## genome, so they are held to the node's too.
 func _tank() -> void:
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
 	var genomes := [
 		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
 		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"vacuole": 2, &"plastid": 3,
@@ -784,12 +907,8 @@ func _tank() -> void:
 			+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
 		met.burn = CellBody.BURN_BY_TIER[GenomeNode.tier_of(tiers, &"crista")]
 		met.set_hunger(0.3)
-		var tank := Tank.new()
-		tank.hunger = 0.3
-		tank.upkeep = met.upkeep
-		tank.income = met.photosynthesis
-		tank.reserve = met.reserve
-		tank.burn = met.burn
+		var index := _pose(field, Vector2(1500.0, 0.0), 30.0, tiers, 0.0, 0.3)
+		var tank: Object = (field.get("_cells") as Array)[index]
 		var last := -1
 		for f in frames:
 			# What the body did this frame, in seconds of rest: a stroke now and
@@ -805,23 +924,25 @@ func _tank() -> void:
 			# the water feeds it.
 			met.spend(effort)
 			met.call(&"_process", dt)
-			tank.effort += effort
+			tank.set("effort", float(tank.get("effort")) + effort)
 			# A meal every ten seconds, worth three fifths of what is missing, so
 			# neither tank is ever pinned at empty or at full: a pinned tank
 			# would agree with anything.
 			var meal := f > 0 and f % 600 == 0
 			var every := 1 if f < 1200 else (2 if f < 2400 else Drop.LOD_EVERY)
 			if f % every == every - 1 or meal or f == frames - 1:
-				tank.step(float(f - last) * dt)
+				field._tank(index, tank, float(f - last) * dt)
 				last = f
 			if meal:
 				var nutrition := 0.6 * float(met.hunger) / Metabolism.MEAL
 				met.feed(nutrition)
-				tank.eat(nutrition)
+				field._feed_water(tank, nutrition)
 			low = minf(low, met.hunger)
 			high = maxf(high, met.hunger)
-		worst = maxf(worst, absf(float(met.hunger) - tank.hunger))
+		worst = maxf(worst, absf(float(met.hunger) - float(tank.get("hunger"))))
 		met.free()
+		field._drop_lose(index, 0)
+	_done(water)
 	_check(("one tank: 3 genomes, the node a frame at a time and the water body at its"
 		+ " rates, 60 s of the same efforts and meals, end %s apart (hunger ran %.2f"
 		+ " to %.2f, never pinned)") % [String.num_scientific(worst), low, high],
@@ -867,6 +988,566 @@ func _tank() -> void:
 		and is_equal_approx(storeless[0], 1.0 / Metabolism.RESERVE_MIN)
 		and is_equal_approx(storeless[1], 1.0 / Metabolism.RESERVE_MIN)
 		and Metabolism.ABSORB == organ)
+
+
+# --- The drop in the water (§14.3: checks 3 to 6, 8, 9 and 11) ----------------------------
+
+## **A born ghost player and the drop made round it**, stepped by hand one fixed
+## frame at a time: out of the water until a check puts it in, still, and with
+## everything alive within [param desert] of it taken away, so bodies can be
+## posed in the clear. [param sensed] makes the drop for a player that sighted.
+func _water(desert := 0.0, sensed := -1.0) -> Array:
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	var field := WatchedDrop.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.desert = desert
+	field.sensed_override = sensed
+	add_child(field)
+	field.setup_drop(cell)
+	field.in_water = false
+	return [field, cell]
+
+
+func _done(water: Array) -> void:
+	(water[0] as Node).queue_free()
+	(water[1] as Node).free()
+
+
+## A body [param index] of [param field]'s, posed: at [param at], facing
+## [param facing], its tank at [param hunger], resting as long as it is left.
+func _pose(field: Node, at: Vector2, radius: float, tiers: Dictionary, facing := 0.0,
+		hunger := 0.5) -> int:
+	var index: int = field.pose_body(at, radius, tiers)
+	var b: Object = (field.get("_cells") as Array)[index]
+	b.set("heading", facing)
+	b.set("hunger", hunger)
+	b.set("calm", 999.0)
+	return index
+
+
+## The heading from [param from] that points at [param to].
+func _facing(from: Vector2, to: Vector2) -> float:
+	var v := to - from
+	return atan2(v.x, -v.y)
+
+
+## The settled flocs within a unit of [param at] in [param field].
+func _flocs_at(field: Node, at: Vector2) -> Array:
+	var out := []
+	for b: Object in field.get("_cells"):
+		if b.get("seeded") and b.get("inert") and _dist(b.get("pos"), at) < 1.0:
+			out.append(b)
+	return out
+
+
+# --- 3. Nothing is made where it can be seen ---------------------------------------------
+
+## **2,000 bodies made with one player and 2,000 with two, and none inside any
+## player's hide reach for its kind** (§6.3) -- a drifter out of the view and the
+## player's own senses, a peer out of dread's reach as well -- through the
+## field's own door, for a player with a tier-1 radar. Each is taken away again,
+## so the drop stays at its size. **And the first drifter**, held until the cell
+## first moves and then put along that motion, is out of the view both times.
+func _spawns() -> void:
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	field.ping_range = CellBody.PING_RANGE_BY_TIER[1]
+	var hides := [Drop.hide_reach(field.ping_range, FoodField.DREAD_RANGE, false),
+		Drop.hide_reach(field.ping_range, FoodField.DREAD_RANGE, true)]
+	var cells: Array = field.get("_cells")
+	var first: Object = cells[int(field.get("_first_index"))]
+	var held_at := _dist(first.get("pos"), cell.position)
+	var made := [0, 0]
+	var kinds := [0, 0]
+	var inside := 0
+	var outside := 0
+	var players := [PackedVector2Array([cell.position]),
+		PackedVector2Array([cell.position, cell.position + Vector2(2600.0, 1800.0)])]
+	for round in 2:
+		var at: PackedVector2Array = players[round]
+		for k in 2000:
+			var index := field._make_one(at, 0.6, 0.45 if k % 2 == 0 else 0.92)
+			if index < 0:
+				continue
+			made[round] += 1
+			var b: Object = (field.get("_cells") as Array)[index]
+			var peer := 0 if b.get("drifter") else 1
+			kinds[peer] += 1
+			for p: Vector2 in at:
+				if _dist(b.get("pos"), p) < float(hides[peer]):
+					inside += 1
+			if not field.basin().inside(b.get("pos"), Drop.SPAWN_INSET):
+				outside += 1
+			field._drop_lose(index, 0)
+	cell.velocity = Vector2(30.0, -40.0)
+	field.in_water = true
+	field._process(1.0 / 60.0)
+	var placed_at := _dist(first.get("pos"), cell.position)
+	_check(("3. nothing is made where it can be seen: %d and %d bodies made with one player"
+		+ " and with two (%d drifters, %d peers), %d inside a player's hide reach (%.0f for"
+		+ " a drifter, %.0f for a peer), %d past the rim; the first drifter %.0f away"
+		+ " before the cell moves and %.0f after, out of the view's %.0f") % [made[0], made[1],
+		kinds[0], kinds[1], inside, hides[0], hides[1], outside, held_at, placed_at,
+		Drop.VIEW_REACH],
+		made[0] >= 1990 and made[1] >= 1990 and kinds[0] > 500 and kinds[1] > 500
+		and inside == 0 and outside == 0 and held_at >= Drop.VIEW_REACH
+		and placed_at >= Drop.VIEW_REACH)
+	_done(water)
+
+
+# --- 4. Containment ------------------------------------------------------------------------
+
+## **After 1,800 frames no body's centre past `RADIUS - r`, the player's
+## included; no mote past the rim** (§3.1). A run started 120 inside the rim,
+## facing it, the cell pressing straight into it at a stroke's speed the whole
+## time -- knocked at the rim's bearing, and at most once in SHORE_GAP -- with its
+## grit, the authored first mote included, round it. Bodies are looked at every
+## half second, the cell and the grit every frame.
+func _containment() -> void:
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	var field := WatchedDrop.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.start_mode = &"edge"
+	field.edge_gap = 120.0
+	field.grace = 1e6
+	field.contact_swallow = false
+	add_child(field)
+	field.setup_drop(cell)
+	field.in_water = true
+	var motes := MotesField.new()
+	motes.setup(cell, field.basin())
+	var rim: RefCounted = field.basin()
+	var centre: Vector2 = rim.get(&"center")
+	var edge: float = rim.get(&"radius")
+	var knocks: Array = []
+	field.shored.connect(func(bearing: float, _strength: float, _at: Vector2) -> void:
+		knocks.append([float(field.get("_t")), bearing]))
+	# And water bodies that only their own step holds: hungry hunters spread
+	# along the rim away from the cell, a few units inside where they are held,
+	# none touching another or able to eat one, with no sense to find food by --
+	# so they swim straight out to look for it, past the rim in a frame, if
+	# their step did not hold them.
+	var out0 := (cell.position - centre).normalized()
+	for k in 24:
+		var along := out0.rotated(deg_to_rad((5.0 + 2.5 * float(k / 2)) * (1.0 if k % 2 == 0
+			else -1.0)))
+		var hungry := _pose(field, centre + along * (edge - 33.0), 30.0,
+			{&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}, atan2(along.x, -along.y), 0.9)
+		var hb: Object = (field.get("_cells") as Array)[hungry]
+		hb.set("calm", 0.0)
+		hb.set("searching", true)
+	var worst_body := INF
+	var worst_cell := INF
+	var worst_mote := INF
+	var bodies_seen := 0
+	for f in 1800:
+		var out := (cell.position - centre).normalized()
+		cell.heading = atan2(out.x, -out.y)
+		cell.velocity = out * 120.0
+		cell.position += cell.velocity / 60.0
+		field._process(1.0 / 60.0)
+		motes._process(1.0 / 60.0)
+		worst_cell = minf(worst_cell, edge - cell.radius - _dist(cell.position, centre))
+		for p: Vector2 in motes.points():
+			worst_mote = minf(worst_mote, edge - MotesField.MOTE_RADIUS - _dist(p, centre))
+		if f % 30 == 29:
+			for b: Object in field.get("_cells"):
+				if b.get("seeded"):
+					bodies_seen += 1
+					worst_body = minf(worst_body,
+						edge - float(b.get("radius")) - _dist(b.get("pos"), centre))
+	var gap := INF
+	var off_bearing := 0.0
+	for k in knocks.size():
+		off_bearing = maxf(off_bearing, absf(float(knocks[k][1])))
+		if k > 0:
+			gap = minf(gap, float(knocks[k][0]) - float(knocks[k - 1][0]))
+	_check(("4. containment: 1,800 frames of a cell pressing into the rim; of %d looks at"
+		+ " a body the nearest to the rim was %.3f inside where it is held, the cell %.3f"
+		+ " and its grit %.3f; knocked %d times, at most %.1f deg off dead ahead, at"
+		+ " least %.2f s apart (SHORE_GAP %.1f)") % [bodies_seen, worst_body, worst_cell,
+		worst_mote, knocks.size(), rad_to_deg(off_bearing), gap, Drop.SHORE_GAP],
+		worst_body >= -1e-3 and worst_cell >= -1e-3 and worst_mote >= -1e-3
+		and knocks.size() >= 20 and gap >= Drop.SHORE_GAP - 1e-6
+		and off_bearing < deg_to_rad(1.0) and bodies_seen > 30000)
+	motes.free()
+	field.queue_free()
+	cell.free()
+
+
+# --- 5, 6 and 11: five minutes of a drop ----------------------------------------------------
+
+## **Five minutes of a drop made for a fully sighted player** (§14.3), with a
+## still ghost player in it, watched from inside:
+##
+## - 5, growth: no body over DIVIDE_RADIUS, and none *made* with a mouth wider
+##   than ARRIVAL_GAPE_MAX -- a grown one may have it (row 5);
+## - 6, the floors: every drifter gene carried at every count, and a gene found
+##   short back at GENE_FLOOR by the next; a living drifter within the floor's
+##   reach of the still player every second; no drifter made with venom;
+## - 11, one body: every body that left the drop living left by one of the four
+##   causes and nothing else, and every body made is living or left; no swim
+##   faster than its own tail and its dash, no burst without a `myoneme`, a
+##   search at its own speed; no run begun at what its own senses cannot find,
+##   and no miss that ended in a flight.
+func _five_minutes() -> void:
+	var water := _water(0.0, 1.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var biggest := 0.0
+	var at_forty := 0
+	var floor_checks := 0
+	var floor_missed := 0
+	for f in 5 * 60 * 60:
+		field._process(1.0 / 60.0)
+		if f % 60 != 59:
+			continue
+		floor_checks += 1
+		if field._count_drifters_at(cell.position,
+				field._hide_reach(true) + Drop.DRIFTER_FLOOR_SLACK) == 0:
+			floor_missed += 1
+		for b: Object in field.get("_cells"):
+			if b.get("seeded") and not b.get("inert"):
+				biggest = maxf(biggest, float(b.get("radius")))
+				if float(b.get("radius")) >= CellBody.DIVIDE_RADIUS - 1e-3:
+					at_forty += 1
+	var living := 0
+	var venomous := 0
+	for b: Object in field.get("_cells"):
+		if b.get("seeded") and not b.get("inert"):
+			living += 1
+			if b.get("drifter") and (b.get("genome") as Dictionary).has(&"toxicyst"):
+				venomous += 1
+	_check(("5. growth: five minutes of a drop made for a sighted player, the biggest body"
+		+ " r%.2f (DIVIDE_RADIUS %.0f; %d looks at one there), and of %d bodies made the"
+		+ " widest mouth %.2f (ARRIVAL_GAPE_MAX %.0f)") % [biggest, CellBody.DIVIDE_RADIUS,
+		at_forty, field.made, field.made_gape, FoodField.ARRIVAL_GAPE_MAX],
+		biggest <= CellBody.DIVIDE_RADIUS + 1e-4 and at_forty > 0
+		and field.made_gape <= FoodField.ARRIVAL_GAPE_MAX and field.made > 1000)
+	_check(("6. the floors: at %d gene counts a drifter gene carried by nobody %d times and"
+		+ " one still short at the count after %d; a living drifter within the floor's"
+		+ " reach of the still player at %d of %d checks; drifters made with venom %d,"
+		+ " living with it %d") % [field.counts, field.lost_genes, field.still_short,
+		floor_checks - floor_missed, floor_checks, field.venom_drifters, venomous],
+		field.counts >= 140 and field.lost_genes == 0 and field.still_short == 0
+		and floor_missed == 0 and floor_checks >= 300 and field.venom_drifters == 0
+		and venomous == 0)
+	var gone := 0
+	for cause: int in field.causes:
+		gone += int(field.causes[cause])
+	var four := 0
+	for cause: int in [FoodField.Cause.SWALLOWED, FoodField.Cause.CHEWED,
+			FoodField.Cause.STARVED, FoodField.Cause.POISONED]:
+		four += int(field.causes.get(cause, 0))
+	_check(("11. one body, five minutes: %d bodies gone -- %d swallowed, %d chewed, %d"
+		+ " starved, %d poisoned, %d any other way -- and %d made = %d living + %d gone;"
+		+ " %d swims, %d faster than its own tail and dash, %d bursts without a myoneme,"
+		+ " %d searching frames, %d faster than its tail; %d runs begun, %d at what its"
+		+ " senses cannot find; %d given up, %d of them in a flight") % [gone,
+		int(field.causes.get(FoodField.Cause.SWALLOWED, 0)),
+		int(field.causes.get(FoodField.Cause.CHEWED, 0)),
+		int(field.causes.get(FoodField.Cause.STARVED, 0)),
+		int(field.causes.get(FoodField.Cause.POISONED, 0)), gone - four, field.made,
+		living, gone, field.swims, field.fast, field.burst_without, field.searches,
+		field.fast_search, field.runs_begun, field.blind_runs, field.given_up, field.fled],
+		gone - four == 0 and gone > 500 and field.made == living + gone
+		and int(field.causes.get(FoodField.Cause.STARVED, 0)) > 0
+		and field.swims > 10000 and field.fast == 0 and field.burst_without == 0
+		and field.searches > 1000 and field.fast_search == 0 and field.runs_begun > 500
+		and field.blind_runs == 0 and field.given_up > 100 and field.fled == 0)
+	_done(water)
+
+
+# --- 8. Determinism -------------------------------------------------------------------------
+
+## **One seed, one drop** (§14.3): forty seconds of a drop made for a sighted
+## player twice from one seed print the same census line to the byte -- the
+## checksum of every body's place, size and tank included -- and so does the
+## same seed with the near-first prey search off: nearest wins, so the search
+## that looks near first finds the same body (§4.2).
+func _determinism() -> void:
+	var lines: Array[String] = []
+	for near_first: bool in [true, true, false]:
+		seed(8088)
+		var water := _water(0.0, 0.6)
+		var field: WatchedDrop = water[0]
+		field.near_first = near_first
+		for f in 40 * 60:
+			field._process(1.0 / 60.0)
+		lines.append(field.census_line())
+		_done(water)
+	seed(20260930)
+	var sums := PackedStringArray()
+	for line in lines:
+		sums.append(line.get_slice("| sum ", 1))
+	_check(("8. determinism: one seed, forty seconds of a sighted player's drop, twice and"
+		+ " with the near-first search off: census checksums %s, the lines %s") % [
+		", ".join(sums), "the same" if lines[0] == lines[1] and lines[0] == lines[2]
+		else "DIFFERENT"],
+		lines[0] == lines[1] and lines[0] == lines[2] and lines[0].contains("living"))
+
+
+# --- 9. Flocs ---------------------------------------------------------------------------------
+
+## **None edible before it has settled** (§7.2): a floc landing in the player's
+## mouth is taken the frame it has settled and not before, and one held in a
+## resting hunter's mouth too -- and that hunter's graze fed it and grew nothing
+## (§7.3). **Remains** (§7.4) lie where a body died of hunger and of poison, and
+## nowhere a body was swallowed or chewed.
+func _flocs() -> void:
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	cell.heading = 0.0
+	field.in_water = true
+	var got := [-1.0, 0.0, -1.0]
+	field.grazed.connect(func(nutrition: float, _at: Vector2) -> void:
+		if got[0] < 0.0:
+			got[0] = float(field.get("_t"))
+			got[1] = nutrition)
+	var in_mouth := cell.position + Vector2(0.0, -(cell.radius + 6.0))
+	var touching := Cilia.mouth_touches(cell.position, cell.heading, cell.radius, cell.gape(),
+		in_mouth, 9.0)
+	field._spawn_floc(in_mouth, 9.0, false)
+	# A resting hunter 600 off, well inside the view's every-frame reach, a floc
+	# landing where its mouth is: held there, as its mouth drifts.
+	var hunter := _pose(field, cell.position + Vector2(600.0, 0.0), 30.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}, PI * 0.5, 0.6)
+	var hb: Object = cells[hunter]
+	var genes_before := (hb.get("genome") as Dictionary).duplicate()
+	var r_before := float(hb.get("radius"))
+	var held := field._spawn_floc(Vector2.ZERO, 9.0, false)
+	var held_serial := int((cells[held] as Object).get("serial"))
+	var hunger_before := 0.0
+	for f in 8 * 60:
+		if got[2] < 0.0:
+			var h_at: Vector2 = hb.get("pos")
+			var ahead := Vector2(sin(float(hb.get("heading"))), -cos(float(hb.get("heading"))))
+			(cells[held] as Object).set("pos", h_at + ahead * (float(hb.get("radius")) + 6.0))
+			field.refile(held)
+			hunger_before = float(hb.get("hunger"))
+		field._process(1.0 / 60.0)
+		if got[2] < 0.0 and (not (cells[held] as Object).get("seeded")
+				or int((cells[held] as Object).get("serial")) != held_serial):
+			got[2] = float(field.get("_t"))
+		if got[0] >= 0.0 and got[2] >= 0.0:
+			break
+	var hunger_after := float(hb.get("hunger"))
+	var fed: bool = hunger_after < hunger_before - 0.2 and float(hb.get("radius")) == r_before \
+		and hb.get("genome") == genes_before
+	# Remains: a hunter starving out its grace, a biter poisoned by what it bit,
+	# a prey swallowed and a prey chewed apart -- each posed in the clear.
+	var p := cell.position
+	var starving := _pose(field, p + Vector2(-800.0, 400.0), 30.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, 0.0, 1.0)
+	(cells[starving] as Object).set("starve", Metabolism.STARVE_GRACE - 1e-4)
+	var starved_at: Vector2 = (cells[starving] as Object).get("pos")
+	field._tank(starving, cells[starving], 1.0 / 60.0)
+	var biter := _pose(field, p + Vector2(-800.0, -400.0), 30.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var bitten := _pose(field, p + Vector2(-800.0, -350.0), 40.0,
+		{&"cytostome": 1, &"toxicyst": 3})
+	(cells[biter] as Object).set("wound", 0.99)
+	var poisoned_at: Vector2 = (cells[biter] as Object).get("pos")
+	field._mouth_on_drop(biter, cells[biter], bitten, cells[bitten],
+		field._gape(cells[biter]))
+	var swallower := _pose(field, p + Vector2(800.0, 900.0), 40.0,
+		{&"cytostome": 3, &"cirrus": 1, &"flagellum": 1})
+	var swallowed := _pose(field, p + Vector2(800.0, 960.0), 18.0, {&"cirrus": 1})
+	var swallowed_at: Vector2 = (cells[swallowed] as Object).get("pos")
+	field._mouth_on_drop(swallower, cells[swallower], swallowed, cells[swallowed],
+		field._gape(cells[swallower]))
+	var chewer := _pose(field, p + Vector2(-400.0, 1200.0), 30.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var chewed := _pose(field, p + Vector2(-400.0, 1250.0), 40.0,
+		{&"cytostome": 1, &"cirrus": 1})
+	(cells[chewed] as Object).set("wound", 0.99)
+	var chewed_at: Vector2 = (cells[chewed] as Object).get("pos")
+	field._mouth_on_drop(chewer, cells[chewer], chewed, cells[chewed],
+		field._gape(cells[chewer]))
+	var remains := [_flocs_at(field, starved_at).size(), _flocs_at(field, poisoned_at).size(),
+		_flocs_at(field, swallowed_at).size(), _flocs_at(field, chewed_at).size()]
+	var sizes := []
+	for at: Vector2 in [starved_at, poisoned_at]:
+		var found := _flocs_at(field, at)
+		sizes.append(float(found[0].get("radius")) if not found.is_empty() else -1.0)
+	_check(("9. flocs: one landing in the player's mouth is taken at %.2f s, once settled"
+		+ " (FLOC_SETTLE %.0f; the mouth on it %s), worth %.2f; one held in a resting"
+		+ " hunter's at %.2f s, its hunger %.2f -> %.2f and its r%.0f and genes as they"
+		+ " were (%s); remains where a body died of hunger (%d, r%.1f) and of poison (%d,"
+		+ " r%.1f), none where one was swallowed (%d) or chewed (%d)") % [got[0],
+		Drop.FLOC_SETTLE, "yes" if touching else "NO", got[1], got[2], hunger_before,
+		hunger_after, r_before, "yes" if fed else "NO", remains[0], sizes[0], remains[1],
+		sizes[1], remains[2], remains[3]],
+		touching and got[0] >= Drop.FLOC_SETTLE - 1e-3 and got[0] < Drop.FLOC_SETTLE + 0.1
+		and got[2] >= Drop.FLOC_SETTLE - 1e-3 and got[2] < Drop.FLOC_SETTLE + 0.2
+		and absf(got[1] - FoodField._meal_value_for(9.0, cell.radius)) < 1e-6 and fed
+		and remains == [1, 1, 0, 0]
+		and is_equal_approx(sizes[0], Drop.remains_radius(30.0))
+		and is_equal_approx(sizes[1], Drop.remains_radius(30.0)))
+	_done(water)
+
+
+## **A graze feeds and grows nothing**, on the run's own handler (§7.3): the bar
+## falls by the meal every body's goes through, and the body and its genes stay
+## as they were. The run is the real one, in the drop, built headless.
+func _flocs_fed() -> void:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("scheme", 0)
+	add_child(run)
+	await get_tree().process_frame
+	var met: Node = run.get("_metabolism")
+	var cell: CellBody = run.get("_cell")
+	var genome: Node = run.get("_genome")
+	var food: Node = run.get("_food")
+	met.set_hunger(0.6)
+	var radius := cell.radius
+	var tiers: Dictionary = (genome.call(&"tiers") as Dictionary).duplicate()
+	run.call(&"_on_grazed", 0.4, cell.position + Vector2(0.0, -40.0))
+	var after := float(met.get("hunger"))
+	_check(("9. a graze on the run's own handler, in the drop (%s): the bar %.2f -> %.3f"
+		+ " (a meal of 0.40 is %.3f), r%.0f -> r%.0f, genes %s") % [
+		"yes" if food.call(&"in_drop") else "NO", 0.6, after, Metabolism.meal(0.4), radius,
+		cell.radius, "as they were" if genome.call(&"tiers") == tiers else "CHANGED"],
+		bool(food.call(&"in_drop")) and absf(after - (0.6 - Metabolism.meal(0.4))) < 1e-6
+		and cell.radius == radius and genome.call(&"tiers") == tiers)
+	run.queue_free()
+	await get_tree().process_frame
+
+
+# --- 11. One body, posed ---------------------------------------------------------------------
+
+## **One mouth rule for every body** (§5.6, §5.7), each on bodies posed in the
+## clear: a mouth swallows a player that fits on contact, hunting or not (row
+## 15), and is fed by it; `pellicle` makes a body too big for a mouth it would
+## otherwise fit (row 5); venom as today (row 12) -- whatever swallows a venomous
+## player dies of it and leaves remains, and a player swallows a venomous cell
+## safely; a water cell's dart breaks a run at it; and the taste field and the
+## bloom weigh a body by the size its mouth measures.
+func _one_body() -> void:
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	cell.heading = 0.0
+	field.in_water = true
+	var p := cell.position
+	var said := {"killed": 0, "stung": 0, "ate": 0}
+	field.killed.connect(func(_b: float) -> void: said["killed"] += 1)
+	field.stung.connect(func(_b: float) -> void: said["stung"] += 1)
+	field.eaten.connect(func(_n: float, _g: StringName, _a: Vector2) -> void: said["ate"] += 1)
+	var big := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	# Row 15: a resting r40 mouth, not hunting anyone, its mouth on the player.
+	var at := p + Vector2(0.0, -(40.0 + cell.radius) * 0.95)
+	var h := _pose(field, at, 40.0, big, _facing(at, p), 0.5)
+	var hb: Object = cells[h]
+	var mouth_on := Cilia.mouth_touches(at, hb.get("heading"), 40.0, field._gape(hb), p,
+		cell.radius)
+	field.set("_near", field.bodies_near(p, 2500.0))
+	var dead: bool = field._contacts_with(null)
+	var swallow := [dead, said["killed"], int(field.get("died_of")) == FoodField.Cause.SWALLOWED,
+		float(hb.get("hunger")) < 0.5, int(hb.get("meals")) == 1, float(hb.get("calm")),
+		int(hb.get("state")) == FoodField.State.DRIFT]
+	# The switch the other way: only a run swallows, so this one only bites.
+	field.contact_swallow = false
+	var h2 := _pose(field, at + Vector2(0.1, 0.0), 40.0, big, _facing(at, p), 0.5)
+	(cells[h] as Object).set("pos", p + Vector2(3000.0, 0.0))
+	field.refile(h)
+	field.set("_near", field.bodies_near(p, 2500.0))
+	var spared: bool = not field._contacts_with(null) and said["killed"] == 1
+	field.contact_swallow = true
+	cell.wound = 0.0
+	(cells[h2] as Object).set("pos", p + Vector2(3000.0, 300.0))
+	field.refile(h2)
+	# Row 12: a venomous player is spat out alive; what swallowed it dies of it.
+	field.venom_cost = CellBody.VENOM_COST_BY_TIER[3]
+	var v := _pose(field, at, 40.0, big, _facing(at, p), 0.5)
+	var v_at: Vector2 = (cells[v] as Object).get("pos")
+	field.set("_near", field.bodies_near(p, 2500.0))
+	var stung_dead: bool = field._contacts_with(null)
+	var venom_out := [stung_dead, said["stung"], said["killed"],
+		not (cells[v] as Object).get("seeded") or (cells[v] as Object).get("inert"),
+		_flocs_at(field, v_at).size()]
+	field.venom_cost = -1.0
+	# And a player swallows a venomous water cell safely: an r15 one in its mouth.
+	var small_at := p + Vector2(0.0, -(cell.radius + 12.0))
+	var s := _pose(field, small_at, 15.0, {&"cytostome": 1, &"toxicyst": 3}, PI, 0.5)
+	field.set("_near", field.bodies_near(p, 2500.0))
+	var safe: bool = not field._contacts_with(null)
+	var venom_in := [safe, said["ate"], said["killed"], not (cells[s] as Object).get("seeded")]
+	# Row 5: `pellicle` on a water body puts it past a mouth its bare radius fits.
+	var mouth := _pose(field, p + Vector2(-900.0, 0.0), 30.0,
+		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 1})
+	var mb: Object = cells[mouth]
+	var gape: float = field._gape(mb)
+	var armoured := _pose(field, p + Vector2(-900.0, -60.0), 24.0,
+		{&"cirrus": 1, &"pellicle": 3})
+	var bare := _pose(field, p + Vector2(-900.0, 60.0), 24.0, {&"cirrus": 1})
+	field._mouth_on_drop(mouth, mb, armoured, cells[armoured], gape)
+	(mb as Object).set("bite", 0.0)
+	var kept := bool((cells[armoured] as Object).get("seeded")) \
+		and float((cells[armoured] as Object).get("wound")) > 0.0
+	field._mouth_on_drop(mouth, mb, bare, cells[bare], gape)
+	var taken: bool = not (cells[bare] as Object).get("seeded")
+	# The dart: a hunter stalking a cell whose `trichocyst` looks at it, in range.
+	var prey := _pose(field, p + Vector2(900.0, -900.0), 26.0,
+		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"trichocyst": 1}, 0.0)
+	var pb: Object = cells[prey]
+	var arc := float(pb.get("heading")) + float(pb.get("dart_bearing"))
+	var stalker := _pose(field, (pb.get("pos") as Vector2)
+		+ Vector2(sin(arc), -cos(arc)) * 100.0, 30.0, big, 0.0)
+	var sb: Object = cells[stalker]
+	field._start_run(sb, prey, int(pb.get("serial")))
+	sb.set("orienting", false)
+	field._step_stalk(stalker, sb, 1.0 / 60.0)
+	var darted := [int(sb.get("state")) == FoodField.State.DRIFT,
+		is_equal_approx(float(sb.get("calm")), FoodField.REST_MISS),
+		float(pb.get("dart_clock")) > 0.0]
+	# The taste and the bloom, by the size the mouth measures: an r18 body 300
+	# ahead, bare and then with a thick skin that puts it past a born gape.
+	field.smell_range = CellBody.SMELL_RANGE_BY_TIER[1]
+	field.smell_bearing = 0.0
+	var tasted := []
+	var bloom := []
+	for skin: int in [0, 3]:
+		var tiers := {&"cirrus": 1}
+		if skin > 0:
+			tiers[&"pellicle"] = skin
+		var t := _pose(field, p + Vector2(0.0, -300.0), 18.0, tiers)
+		field.set("_near", PackedInt32Array([t]))
+		field._step_sense()
+		tasted.append(float(field.get("taste_level")))
+		bloom.append(FoodField.taste_weight(field.swallow_size_of(t), cell.gape()))
+		field._drop_lose(t, 0)
+	_check(("11. a mouth on the player swallows it on contact, hunting or not (touching %s,"
+		+ " killed %s, swallowed %s), and is fed by it (hunger down %s, a meal %s, resting"
+		+ " %.0f s, %s); with the switch off it only bites (%s)") % [str(mouth_on),
+		str(swallow[0]), str(swallow[2]), str(swallow[3]), str(swallow[4]), swallow[5],
+		"drifting" if swallow[6] else "NOT drifting", str(spared)],
+		mouth_on and swallow[0] and swallow[1] == 1 and swallow[2] and swallow[3]
+		and swallow[4] and is_equal_approx(float(swallow[5]), FoodField.REST_MEAL)
+		and swallow[6] and spared)
+	_check(("11. venom as today: a mouth that swallows a venomous player dies of it"
+		+ " (player dead %s, stung %d, killed %d, the mouth gone %s, remains %d); a player"
+		+ " swallows a venomous cell safely (dead %s, meals %d, killed %d, gone %s)") % [
+		str(venom_out[0]), venom_out[1], venom_out[2], str(venom_out[3]), venom_out[4],
+		str(not venom_in[0]), venom_in[1], venom_in[2], str(venom_in[3])],
+		not venom_out[0] and venom_out[1] == 1 and venom_out[2] == 1 and venom_out[3]
+		and venom_out[4] == 1 and venom_in[0] and venom_in[1] == 1 and venom_in[2] == 1
+		and venom_in[3])
+	_check(("11. pellicle: an r24 body with a tier-3 skin is chewed by a mouth of %.1f"
+		+ " (%s), the same body bare is swallowed (%s); a water cell's dart breaks a run"
+		+ " at it (%s); the taste %.3f bare and %.3f armoured, the bloom %.2f and %.2f")
+		% [gape, str(kept), str(taken), str(darted), tasted[0], tasted[1], bloom[0],
+		bloom[1]],
+		kept and taken and darted == [true, true, true] and tasted[0] > 0.05
+		and tasted[1] == 0.0 and bloom[0] == 1.0 and bloom[1] == 0.0)
+	_done(water)
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------

@@ -510,6 +510,37 @@ extends Node
 ##                           other for that long, on the session's wall clock --
 ##                           the one the held pond and the quiet line keep
 ##
+## **The drop** (docs/design/ocean.md §14.1). A run with no session is in the
+## drop; these are read before the run enters the tree, as `--mode` is:
+##   --drop=0|1              0 plays today's water, the reference every probe
+##                           and the identity gate (§14.4) compare the drop
+##                           against; 1 the drop. A run with a session up --
+##                           `--peer=`, `--pond=host|guest` -- is always today's
+##                           water in 1a, and so is `--pond=<dist>`'s field
+##   --start=quiet|centre|edge
+##                           where the run starts: somewhere quiet (§8.1, the
+##                           game's), the middle, or --edge-gap= inside the rim
+##                           facing it, for the renders
+##   --edge-gap=<units>      default 380
+##   --flocs-near=<n>        n flocs 220-520 units round the start, the last one
+##                           caught settling (§7.6's render)
+##   --desert=<units>        everything alive within it of the start taken away
+##   --age=<seconds>         the drop lives alone that long before the cell
+##                           arrives, then the start is chosen in it
+##   --sensed=<0..1>         the water made for a player this sighted, whatever
+##                           the cell carries
+##   --hunter-genome=<g:t,...>
+##                           what --hunt= and --stalk= pose, default
+##                           cytostome:3,flagellum:2. In the drop the hunter is
+##                           a body of its own, in a slot nothing else uses
+##   --census=<seconds>      print the drop's census line on that interval
+## One switch per body rule, so the owner's other answers can be played, each
+## defaulting to the drop's rule: --absorb=<rest a second> (row 11),
+## --drifter-venom=0|1 (13), --own-speed=0|1 (14), --notice=senses|fixed (5),
+## --contact-swallow=0|1 (15), --armour-swallow=0|1 (5), --first-delay=<s>
+## (16), --flight=none|all (§5.4); and §4's: --lod=0|1, --half-rate=0|1,
+## --near-first=0|1, --skip-still=0|1.
+##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
 ## presets exclude, so none of this ships.
@@ -625,6 +656,21 @@ var _scheme := -1
 ## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
 var _numbers := -1
 var _hunter_gape := 1.40
+## What `--hunt=` and `--stalk=` pose (`--hunter-genome=`).
+var _hunter_genome := {&"cytostome": 3, &"flagellum": 2}
+## `--drop=`: 0 today's water, 1 the drop, -1 the run's own choice.
+var _drop_flag := -1
+## The drop's switches, by the field member each sets, set on the run's field
+## before it enters the tree.
+var _field_sets := {}
+## `--census=`: the drop's census line on this interval.
+var _census := -1.0
+var _census_clock := 0.0
+## The slot the posed hunter is in: 0 in today's water, as it always was; in
+## the drop a body of its own, made in a slot nothing else uses (§15.6).
+var _hunter_slot := 0
+## In the drop, `--cell=`'s index to the body made for it.
+var _pose_slots := {}
 var _prey_radius := -1.0
 var _radius := -1.0
 ## `--sister=` -- a second cell of your own size, placed by the same call a real
@@ -964,6 +1010,24 @@ func _ready() -> void:
 			_prey_radius = float(text.trim_prefix("--prey-radius="))
 		elif text.begins_with("--hunter-gape="):
 			_hunter_gape = float(text.trim_prefix("--hunter-gape="))
+		elif text.begins_with("--hunter-genome="):
+			_hunter_genome = {}
+			for pair in text.trim_prefix("--hunter-genome=").split(",", false):
+				var kv := str(pair).split(":")
+				if kv.size() >= 2:
+					_hunter_genome[StringName(kv[0].strip_edges())] = int(kv[1])
+		elif text.begins_with("--drop="):
+			_drop_flag = clampi(int(text.trim_prefix("--drop=")), 0, 1)
+		elif text.begins_with("--census="):
+			_census = float(text.trim_prefix("--census="))
+		elif text.begins_with("--start="):
+			_field_sets[&"start_mode"] = StringName(text.trim_prefix("--start="))
+		elif text.begins_with("--notice="):
+			_field_sets[&"notice_by_senses"] = text.trim_prefix("--notice=") != "fixed"
+		elif text.begins_with("--flight="):
+			_field_sets[&"flight"] = text.trim_prefix("--flight=") == "all"
+		elif _drop_switch(text):
+			pass
 		elif text.begins_with("--radius="):
 			_radius = float(text.trim_prefix("--radius="))
 		elif text.begins_with("--sister="):
@@ -1152,6 +1216,20 @@ func _ready() -> void:
 
 	var scene: PackedScene = load(scene_path)
 	var run := scene.instantiate()
+	# **Which water, and the drop's switches**, set before the scene enters the
+	# tree, where both are read. `--pond=<dist>` opens a pond in the field
+	# alone, which is today's water's, so it plays today's water.
+	if _pond_dist >= 0.0 and _drop_flag < 0:
+		_drop_flag = 0
+	if _drop_flag >= 0 and &"drop" in run:
+		run.set("drop", _drop_flag)
+		print("[drive] water forced to ", "the drop" if _drop_flag == 1 else "today's")
+	if not _field_sets.is_empty():
+		var field := run.get_node_or_null(^"Food")
+		if field != null:
+			for key: StringName in _field_sets:
+				field.set(key, _field_sets[key])
+			print("[drive] the drop's switches: ", _field_sets)
 	if _mode >= 0:
 		# Set before the scene enters the tree, which is where it is read.
 		run.set("mode", _mode)
@@ -1178,8 +1256,14 @@ func _ready() -> void:
 			body.radius = _radius
 			# The water is seeded around the player's radius, so it has to be
 			# seeded again once that has been forced -- and a pond host's water
-			# opened again, because `setup()` is a single-player water.
-			if _food != null:
+			# opened again, because `setup()` is a single-player water. The drop
+			# is made again round it, and its grit hung inside the new rim.
+			if _food != null and bool(_food.call(&"in_drop")):
+				_food.call(&"setup_drop", body)
+				var motes := _find_script(self, "res://game/normal/motes.gd")
+				if motes != null:
+					motes.call(&"setup", body, _food.call(&"basin"))
+			elif _food != null:
 				_food.setup(body)
 				if _seat == "host":
 					_food.open_pond()
@@ -1268,19 +1352,19 @@ func _ready() -> void:
 			_hunger, _metabolism.beat_period(), _metabolism.beat_amplitude()])
 
 	if _stalk >= 0.0 and _water_food() != null:
-		_make_hunter(0, _hold_point(_stalk, _stalk_at))
-		_stalk_serial = int((_water_food().get("_cells") as Array)[0].get("serial"))
+		_make_hunter(_hunter_slot, _hold_point(_stalk, _stalk_at))
+		_stalk_serial = int((_water_food().get("_cells") as Array)[_hunter_slot].get("serial"))
 		# Before the first frame, not after it: _make_hunter points the mouth at
 		# the player, and the game's own _process runs ahead of this node's, so
 		# a hunter turned away only in _hold_world has already had one frame
 		# nose-on -- which at contact range is one frame too many.
-		_face(0, _stalk_face)
+		_face(_hunter_slot, _stalk_face)
 		print("[drive] hunter parked at %.0f units, bearing %+.0f deg, facing %s" % [
 			_stalk, _stalk_at,
 			"as it likes" if is_nan(_stalk_face) else "%+.0f deg off you" % _stalk_face])
 	if _hunt >= 0.0 and _water_food() != null:
-		_make_hunter(0, _hold_point(_hunt, _stalk_at))
-		_face(0, _stalk_face)
+		_make_hunter(_hunter_slot, _hold_point(_hunt, _stalk_at))
+		_face(_hunter_slot, _stalk_face)
 		print("[drive] hunter released from %.0f units" % _hunt)
 	if _prey_radius > 0.0 and _water_food() != null:
 		var bodies: Array = _water_food().get("_cells")
@@ -1874,6 +1958,7 @@ func _process(delta: float) -> void:
 	_step_divide()
 	_step_panes()
 	_step_capture_cost(delta)
+	_step_census(delta)
 
 	if _freeze_countdown > 0:
 		_freeze_countdown -= 1
@@ -2169,6 +2254,17 @@ func _step_divide() -> void:
 	if cell != null:
 		cell.radius = CellBody.DIVIDE_RADIUS
 		print("[drive] %5.2f  grown to r%.0f -- dividing" % [_clock, cell.radius])
+
+
+## `--census=`: the drop's census line, on the interval, while it runs.
+func _step_census(delta: float) -> void:
+	if _census <= 0.0 or _food == null or not _food.is_processing():
+		return
+	_census_clock += delta
+	if _census_clock < _census:
+		return
+	_census_clock = 0.0
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"census_line")])
 
 
 func _step_kill() -> void:
@@ -2682,7 +2778,18 @@ func _watch_field(delta: float) -> void:
 	if _watch_serial.size() != bodies.size():
 		_watch_serial.resize(bodies.size())
 		_watch_meals.resize(bodies.size())
-	for i in bodies.size():
+	# **In the drop only what is near you is watched**: six hundred bodies eat
+	# somewhere all the time, and a line for every meal in the drop would bury
+	# the ones in the frame.
+	var watched := PackedInt32Array()
+	if bool(_food.call(&"in_drop")):
+		var cell_at: Vector2 = _food.get("_cell").position
+		watched = _food.call(&"bodies_near", cell_at, 1100.0)
+	else:
+		watched.resize(bodies.size())
+		for i in bodies.size():
+			watched[i] = i
+	for i: int in watched:
 		var serial: int = bodies[i].get("serial")
 		var meals: int = bodies[i].get("meals")
 		if serial != _watch_serial[i]:
@@ -2691,7 +2798,7 @@ func _watch_field(delta: float) -> void:
 			continue
 		if meals > _watch_meals[i]:
 			_field_meals += meals - _watch_meals[i]
-			var here: Vector2 = _food.points()[i]
+			var here: Vector2 = bodies[i].get("pos")
 			print("[field] %5.2f  cell %d ate one and is now r%.2f gape %.2f %s  (%.0f units from you)" % [
 				_clock, i, bodies[i].get("radius"), _food.gape_at(i),
 				_genome_text(bodies[i].get("genome")), _away(i)])
@@ -2713,7 +2820,7 @@ func _watch_field(delta: float) -> void:
 		# Its own displacement, not the gap to a player swimming at 56 u/s.
 		# A break-off runs at lunge speed, so fleeing shows up as 570-1100
 		# units in six seconds; drifting shows up as about 54.
-		var moved: float = (mark[2] as Vector2).distance_to(_food.points()[index])
+		var moved: float = (mark[2] as Vector2).distance_to(bodies[index].get("pos"))
 		print("[field] %5.2f  cell %d travelled %4.0f units in the %.0fs after its meal: %s" % [
 			_clock, index, moved, AFTER_MEAL_LOOK,
 			"drifting" if moved < 200.0 else "BOLTED"])
@@ -2753,21 +2860,23 @@ func _hold_world() -> void:
 		# nothing. Solo it runs only when a player's mouth takes its own
 		# stalker, and the pose survives that too.
 		var slot0: Array = water.get("_cells")
-		if not slot0.is_empty() and int(slot0[0].get("serial")) != _stalk_serial:
-			_make_hunter(0, _hold_point(_stalk, _stalk_at))
-			_stalk_serial = int(slot0[0].get("serial"))
-		_place(0, _hold_point(_stalk, _stalk_at))
-		_face(0, _stalk_face)
+		if slot0.size() > _hunter_slot \
+				and int(slot0[_hunter_slot].get("serial")) != _stalk_serial:
+			_make_hunter(_hunter_slot, _hold_point(_stalk, _stalk_at))
+			slot0 = water.get("_cells")
+			_stalk_serial = int(slot0[_hunter_slot].get("serial"))
+		_place(_hunter_slot, _hold_point(_stalk, _stalk_at))
+		_face(_hunter_slot, _stalk_face)
 		# **Held committed as well as held in place.** A parked hunter's aim
 		# point is behind it within a frame or two of contact, so it breaks off
 		# and the pose stops being the thing it claims to be -- and the kill
 		# branch is gated on STALK, so a test of *why* a kill did or did not
 		# land has to keep the state constant and vary only the geometry.
 		var bodies: Array = water.get("_cells")
-		if not bodies.is_empty():
-			bodies[0].set("state", FoodField.State.STALK)
-			_aim_at_me(bodies[0])
-			bodies[0].set("stale", 0.0)
+		if bodies.size() > _hunter_slot:
+			bodies[_hunter_slot].set("state", FoodField.State.STALK)
+			_aim_at_me(bodies[_hunter_slot])
+			bodies[_hunter_slot].set("stale", 0.0)
 	if _food_at >= 0.0 and water != null:
 		# Reaching for a private member is a thing only tools/ is allowed to do.
 		# The bodies are objects rather than packed arrays now, so this writes
@@ -2790,6 +2899,31 @@ func _hold_world() -> void:
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
 	_apply_poses(false)
+
+
+## **The drop's numeric and on/off switches** (the header's last block), by the
+## field member each sets. Returns whether [param text] was one of them; it is
+## then set on the run's field before the run enters the tree.
+func _drop_switch(text: String) -> bool:
+	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
+		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
+		"--first-delay=": &"grace"}
+	const SWITCHES := {"--drifter-venom=": &"drifter_venom", "--own-speed=": &"own_speed",
+		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
+		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
+		"--skip-still=": &"skip_still"}
+	if text.begins_with("--flocs-near="):
+		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
+		return true
+	for prefix: String in FLOATS:
+		if text.begins_with(prefix):
+			_field_sets[FLOATS[prefix]] = float(text.trim_prefix(prefix))
+			return true
+	for prefix: String in SWITCHES:
+		if text.begins_with(prefix):
+			_field_sets[SWITCHES[prefix]] = text.trim_prefix(prefix) == "1"
+			return true
+	return false
 
 
 func _parse_pose(spec: String) -> Array:
@@ -2820,8 +2954,21 @@ func _apply_poses(announce: bool) -> void:
 	if cell == null:
 		return
 	var bodies: Array = water.get("_cells")
+	var in_drop := bool(water.call(&"in_drop"))
 	for pose: Array in _posed:
 		var index: int = pose[0]
+		# **In the drop a posed body is one of its own**, made once through the
+		# door every body comes in by, and made again if the water took it: a
+		# slot index there is any body at all, a floc or a stranger.
+		if in_drop:
+			var made: int = int(_pose_slots.get(index, -1))
+			if made < 0 or made >= bodies.size() or not bool(bodies[made].get("seeded")) \
+					or bool(bodies[made].get("inert")):
+				made = int(water.call(&"pose_body", _hold_point(pose[1], pose[2]),
+					float(pose[3]), pose[4]))
+				_pose_slots[index] = made
+				bodies = water.get("_cells")
+			index = made
 		if index < 0 or index >= bodies.size():
 			continue
 		var b: Object = bodies[index]
@@ -2833,6 +2980,8 @@ func _apply_poses(announce: bool) -> void:
 		b.set("target", FoodField.TARGET_NONE)
 		b.set("calm", 999.0)
 		b.set("pos", _hold_point(pose[1], pose[2]))
+		if in_drop:
+			water.call(&"refresh", index)
 		# Facing the player by default, so the mouth is pointed at the thing it
 		# is being read against -- which is the frame a forager actually gets.
 		# The sixth field turns it away from that, and 180 is the pose the
@@ -3156,6 +3305,13 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	var water := _water_food()
 	if cell == null or water == null:
 		return
+	# **In the drop the hunter is a body of its own**, made through the one door
+	# every body comes in by, in a slot nothing else uses -- not a slot the
+	# opening moves (ocean.md §15.6).
+	var in_drop := bool(water.call(&"in_drop"))
+	if in_drop:
+		index = int(water.call(&"pose_body", at, cell.radius, _hunter_genome))
+		_hunter_slot = index
 	var bodies: Array = water.get("_cells")
 	if index >= bodies.size():
 		return
@@ -3165,7 +3321,7 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	# rather than approximated by a tier -- this is a measuring instrument.
 	b.set("radius", cell.radius)
 	b.set("drifter", false)
-	b.set("genome", {&"cytostome": 3, &"flagellum": 2})
+	b.set("genome", _hunter_genome.duplicate())
 	b.set("pos", at)
 	b.set("state", FoodField.State.STALK)
 	_aim_at_me(b)
@@ -3180,6 +3336,12 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	# Scale the radius so the gape comes out at exactly the multiple asked for.
 	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
 	b.set("radius", cell.radius * _hunter_gape / tier_gape)
+	if in_drop:
+		# What its organs buy, read again for the body written here: its own
+		# tail, its senses, its tank -- a hungry one, so it hunts as it is told.
+		water.call(&"refresh", index)
+		b.set("hunger", 0.5)
+		b.set("orienting", false)
 	print("[drive] hunter %d: r%.1f gape %.1f against your r%.1f" % [
 		index, b.get("radius"), water.gape_at(index), cell.radius])
 
@@ -3208,9 +3370,12 @@ func _aim_at_me(b: Object) -> void:
 
 
 func _place(index: int, at: Vector2) -> void:
-	var bodies: Array = _water_food().get("_cells")
+	var water := _water_food()
+	var bodies: Array = water.get("_cells")
 	if index < bodies.size():
 		bodies[index].set("pos", at)
+		# The drop finds a body through its grid: filed where it now is.
+		water.call(&"refile", index)
 
 
 ## Points field cell [param index] [param away] degrees off facing the player,

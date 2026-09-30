@@ -12,13 +12,13 @@ extends RefCounted
 ## `replenish.gd` and the snow a `snowfall.gd`, all in game/mechanics/ and none
 ## of them knowing it is water. Nor does it draw or run a cell: food.gd's
 ## `_seed_drifter`, `_seed_peer` and `_draw_genome` make the body, to the plan,
-## the gift and the gene pool decided here. Which of the two calls the other is
-## the drop's wiring, in 1a-2.
+## the gift and the gene pool decided here.
 ##
-## **Nothing uses it yet.** Phase 1a-1 lays it down with the mechanics and its
-## probe (tools/drop_probe.gd); 1a-2 builds the drop on it (§14.2). It does not
-## preload food.gd, so food.gd can preload it: a table of food.gd's -- the
-## genes a drifter can carry, the senses -- is passed in by the caller.
+## **food.gd holds one of these for a run in the drop** (its `setup_drop`),
+## and asks it every one of those decisions; a run with a session up plays
+## today's water and never makes one (§10.1). It does not preload food.gd, so
+## food.gd can preload it: a table of food.gd's -- the genes a drifter can
+## carry, the senses -- is passed in by the caller.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
@@ -161,6 +161,11 @@ const FLOC_GROWTH := 0.0
 ## this (§7.4).
 const REMAINS_SHARE := 0.5
 const REMAINS_MAX := 18.0
+## A drop being made for the first time already holds this many settled flocs,
+## anywhere in it: §5.9's thirty at the first census, the prototype's stock at
+## a drop's making, never measured on its own. The snow and the dead keep the
+## count from there.
+const FIRST_FLOCS := 30
 
 # --- Where a run starts (§8.1) --------------------------------------------------
 
@@ -419,10 +424,34 @@ func quiet_start(food_near: Callable, dread_at: Callable) -> Vector2:
 ## [param start] is moved**: straight out from the start to [param reach] --
 ## dread's -- and [constant START_PUSH] more, held inside the rim at its
 ## [param r].
+##
+## **And slid along the rim when the rim holds it back** (the review's S3). A
+## start may be as little as [constant START_INSET] inside the rim, less than
+## the push, so a mouth on the rim's side of it is put back on the circle
+## `RADIUS - r` -- which can still be inside dread's reach of the start. It is
+## slid along that circle, on the side it was on, to the nearest point clear
+## of the start by the whole push. From anywhere a start can be there is one:
+## the far side of the circle is `RADIUS - r` and more from it.
 func pushed_clear(start: Vector2, at: Vector2, reach: float, r: float) -> Vector2:
 	var off := at - start
 	var away := off.normalized() if off.length_squared() > 1e-6 else Vector2.RIGHT
-	return meniscus.contain(start + away * (reach + START_PUSH), r)
+	var clear := reach + START_PUSH
+	var put := meniscus.contain(start + away * clear, r)
+	if put.distance_to(start) >= clear - 1e-3:
+		return put
+	var centre := meniscus.center
+	var ring := maxf(meniscus.radius - maxf(r, 0.0), 0.0)
+	var from := start - centre
+	var s := from.length()
+	if s <= 1e-3 or ring <= 0.0:
+		return put
+	# |start - q|² = s² + ring² - 2 s ring cos(φ) for q on the circle, φ its
+	# angle from the start's own bearing: clear once cos(φ) is at most this.
+	var most := clampf((s * s + ring * ring - clear * clear) / (2.0 * s * ring), -1.0, 1.0)
+	var bearing := from.angle()
+	var side := angle_difference(bearing, (put - centre).angle())
+	var turn := acos(most) * (-1.0 if side < 0.0 else 1.0)
+	return meniscus.contain(centre + Vector2.from_angle(bearing + turn) * ring, r)
 
 
 ## **The drop moves by [param by]**: its rim and its grid with it. Every body

@@ -329,9 +329,13 @@ jobs:
         # 1e-6 -- and the dev app's frame readout, which this release-stamped
         # job would never draw: nothing added to a release build, the dropped
         # share the phone gate reads, and nothing shown or counted under the
-        # pause page. None of it shows in a render -- a grid that misses one
-        # body in ten thousand is a hunter that never sees you -- and a player
-        # would find it an hour into a run. About five seconds.
+        # pause page. Then the drop's own rules, run in the drop: nothing made
+        # where a player can see it, containment, growth, the floors, the LOD,
+        # determinism, the flocs and remains, one body for every cell, and the
+        # quiet start's push kept clear of the rim. None of it shows in a
+        # render -- a grid that misses one body in ten thousand is a hunter
+        # that never sees you -- and a player would find it an hour into a
+        # run. About forty-five seconds.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |
