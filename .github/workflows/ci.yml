@@ -319,6 +319,38 @@ jobs:
             exit 1
           fi
 
+      - name: Check the drop
+        # docs/design/ocean.md §14.3: what the finite water is built on. The
+        # grid against brute force over 10,000 queries, the basin's rim against
+        # the rim sampled, the spawner's debt and the snow's draws against
+        # their own arithmetic, the drop's own decisions one at a time, the LOD
+        # reaches against every sense in the tables, one tank: the player's
+        # metabolism node against the static functions the water calls, to
+        # 1e-6 -- and the dev app's frame readout, which this release-stamped
+        # job would never draw: nothing added to a release build, the dropped
+        # share the phone gate reads, and nothing shown or counted under the
+        # pause page. None of it shows in a render -- a grid that misses one
+        # body in ten thousand is a hunter that never sees you -- and a player
+        # would find it an hour into a run. About five seconds.
+        # Grepped, not trusted to the exit code, for the reason the Back probe
+        # gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 300 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
+          grep -E "^\[drop-probe\]" <<< "$out" || true
+          if ! grep -q "^\[drop-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::the grid, the rim, the spawner, the snow, the tank or the readout is wrong -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the drop probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the LAN session
         # Two sessions in ONE headless process, talking ENet over loopback: a
         # guest through a SceneMultiplayer bound to its own subtree with

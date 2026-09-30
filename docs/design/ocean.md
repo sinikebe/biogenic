@@ -573,10 +573,11 @@ interpreter and its cost is one core's; this Xeon core is roughly four times a
 2020 budget phone's big core (a Cortex-A73/A75 class, Geekbench-6 single core
 around 400 against about 1,600 here), and an interpreter's branchy,
 memory-bound work loses more on small cores than a benchmark does, so four
-becomes six. At six, today's field is 2.7 to 3.1 ms of a 16.7 ms frame on such
-a phone -- by which hour's 453 or 515 µs one takes -- and pass 2's drop in its
-steady state 7.1 to 8.0 ms. **Only the ratio transfers**; a phone is measured
-before 1a ships, by §14.2's gate.
+becomes six. At six, today's field is 2.7 to 3.1 ms of the 16.7 ms a frame has
+at 60 Hz, the most §14.2's gate holds a phone to, on such a phone -- by which
+hour's 453 or 515 µs one takes -- and pass 2's drop in its steady state 7.1 to
+8.0 ms. **Only the ratio transfers**; a phone is measured before 1a ships, by
+§14.2's gate.
 
 **The first pass's variants**, measured in its own hour against today's
 407–521 µs: what the half-rate band, the near-first search and the drop's size
@@ -1109,6 +1110,12 @@ thrown away, and the spawner takes **the thinnest**: the fewest living bodies
 within `SPAWN_SCAN` 800 µm. So the water a player has grazed out is refilled from
 its horizon inward, and a region nobody is in refills too.
 
+Nothing is made within `SPAWN_INSET` 80 µm of the rim, and a drop's first fill
+(§5.8) puts nothing within `FILL_INSET` 60 µm of it. Both numbers are the
+prototype's and were never measured on their own: its `food.gd` draws the
+spawner's points with `_uniform_in_drop(ocean_radius - 80.0)` (`:6176`) and the
+first fill's with `ocean_radius - 60.0` (`:5439`).
+
 Without the ring, and with one hide reach for every kind, the drop starved the
 bot 29 games of 64; with both, on the same prototype, 14, and the edible bodies
 within 1,400 µm of it went from 21 to 26: the player's own grazing had not been
@@ -1142,12 +1149,21 @@ The spawner makes **what is short**:
   once at most at a sighted one's). Genes are never lost, and "there is always a way to
   eat your way to any gene" stops being statistical, venom's way being to chew a
   venomous cell apart. Measured: all 16 genes present at every census of pass 2's
-  thirty-minute runs, as at every one of the first pass's 390.
+  thirty-minute runs, as at every one of the first pass's 390. **Two readings the
+  build made, both kept**: the floor passes venom over when it picks the next
+  drifter's gene, rather than stalling on it; and venom given back through a peer
+  never takes the peer's body plan (`cytostome`, `cirrus`, `flagellum`) or its
+  only sense -- it takes a spare slot, or one slot more when none is spare.
 - **The drifter floor** stays: if no living drifter is within `hide + 600` of a
   player, one is made just past its horizon, ahead of it, at most every
   `DRIFTER_FLOOR_GAP` 10 s. With the ring it has nothing to do: it fired 0 times
   in the first pass's 256 games in the drop, and 0 in pass 2's. It stays as the
-  invariant it always was.
+  invariant it always was. **Its `hide` is the reach for a body with a mouth**,
+  about 1,500 for a born cell, although what it makes is a drifter: the
+  prototype's floor asked `_hide_reach()` with its default. "Just past" is
+  `DRIFTER_FLOOR_NEAR`–`DRIFTER_FLOOR_FAR` 50–350 µm past that reach, the
+  prototype's `randf_range(50.0, 350.0)` (`food.gd:6117`), never measured on its
+  own.
 
 The first drifter a run meets is still placed `FIRST_DISTANCE` 1,000 µm along the
 cell's first motion. It is 51 µm past the view and a born cell has no sense for
@@ -1180,7 +1196,9 @@ this place".
 ### 7.2 How flocs appear, and go
 
 - **Snow falls everywhere at one rate**: `SNOW` 0.072 flakes per million µm² a
-  second, over the whole drop (8 a second).
+  second, over the whole drop (8 a second), none within `SNOW_INSET` 40 µm of the
+  rim -- the prototype's number (`_uniform_in_drop(ocean_radius - 40.0)`,
+  `food.gd:5442`), never measured on its own.
 - **Each flake stays with a chance of `1 − n / (SNOW_SHARE · expected)`**, where n
   counts the living bodies within `SNOW_SCAN` 800 µm, a player included, and
   `expected` is the drop's density over that disc (9.9). A place holding half its
@@ -1963,7 +1981,7 @@ because it touches every tool that reads them.
 | `game/vision/water.gdshader` | `drop_on`, `drop_center`, `drop_radius`, `drop_band`: film, meniscus line, dry glass (§3.3); the line's square as `k * k`, never `pow` |
 | `game/vision/vision.gd` | the four uniforms; `_draw_floc` and the ring bloom; `_draw_cells` asks `bodies_near()` instead of rebuilding five arrays over every body; the scent bloom's weight (`:1362`) on the same swallow radius as the taste |
 | `game/replay/recorder.gd`, `replay.gd`, `panes.gd` | 48 nearest in stable slots, floc and rim deltas, `AT_HUNTER` as a slot, `AT_KILLER`, a private `Food` (§11) |
-| `game/dev/frame_readout.gd` **new**, and a line in `normal_mode.gd` | **1a-1**: the dev app's frame-time readout (§14.2), shown only when the launcher's `BuildInfo.release_branch` is not empty -- the dev app, never a player's: the frame's p50 and p95 and the water's own `_process` p50 over the last ten seconds, and the bodies stepped a frame |
+| `game/dev/frame_readout.gd` **new**, and a line in `normal_mode.gd` | **1a-1**: the dev app's frame-time readout (§14.2), shown only when the launcher's `BuildInfo.release_branch` is not empty -- the dev app, never a player's: the frame's p50, p95 and share dropped (an interval over 1.5 periods of the display's refresh rate or of 60 Hz, whichever is lower: what the phone gate reads) and the water's own `_process` p50 over the last ten seconds, and the bodies stepped a frame |
 | `tools/drive.gd` | `--drop=0\|1`, `--start=quiet\|centre\|edge`, `--edge-gap=`, `--flocs-near=`, `--desert=`, `--age=`, `--hunter-genome=`, §4.4's switches, and one switch per body rule so the owner's other answers can be played (`--absorb=`, `--drifter-venom=`, `--own-speed=`, `--notice=`, `--contact-swallow=`, `--armour-swallow=`, `--first-delay=`, `--flight=`), set on the run before it enters the tree, as `--mode` is |
 | `tools/forage_probe.gd` | grazes, the living-first bot, `--avoid-venom`, `--cautious`, `[forage-near]`, `[forage-compete]`, the cause of death, meal times (§15) |
 | `tools/eco_probe.gd` | new: the drop alone, census and cost, `--empty-room`, `--death-log` (§15) |
@@ -1995,7 +2013,10 @@ Each phase is one pull request into `dev`, played on the dev app before the next
 **The phone gate, before release 1a.** On 1a-2 the owner plays ten minutes on
 the dev app with the readout on: the first five in a new drop, the rest in the
 same drop, which is at its steady state by then (§5.9). **It passes if the
-frame holds sixty a second: its p95 at or under 16.7 ms over the ten minutes.**
+frame holds the display's own rate: at most 5 % of frames dropped over the ten
+minutes, a dropped frame being one whose interval is more than 1.5 times the
+period of the display's refresh rate or of 60 Hz, whichever is lower (the
+readout's `dropped`; its p95 is shown beside it, for information).**
 The readout shows the water's own cost beside the frame, against the baseline
 1a-1 read of today's water, so a failure says whether the water is the cause.
 If it fails, the §4.4 levers in this order, each a content update to the dev app
@@ -2092,8 +2113,12 @@ are not the drop's gate. They still hold everything else:
   files are unused, the readout draws nothing where the release branch is
   empty -- which is how CI and the fingerprints run -- and the player's
   metabolism, now computed through the shared static functions, gives the same
-  numbers: the levels probe's thirty-second death and the fingerprints prove
-  it.
+  numbers. That was checked bit for bit against `dev` once, by the build and
+  again by its review, over 1.2 million calls; the fingerprints cannot show it,
+  because no fingerprint run eats and a hunger pinned at full hides a reordered
+  sum. What CI holds from there is the node against the static functions to
+  1e-6 (`drop_probe`) and the thirty-second death within two frames (the levels
+  probe).
 - **The bubble**, which every run with a session still plays in 1a: the six
   fingerprints with `--drop=0`, `field_diff` against `dev`'s `food.gd`, and the
   render and sensation diffs, all identical. None of §5's rules may reach it.
@@ -2294,10 +2319,10 @@ gathered, written through `open_compressed`, read back and compared, renamed
 1. **The drop is over the frame budget here, and no phone was measured.** In
    its steady state it costs 2.6 times today's field against the 1.5 this
    document set (§4.4) -- pass 2's one body added about a fifth to the first
-   pass's 2.1 -- and the factor of six is an assumption: 7.1 to 8.0 ms of a
-   phone's 16.7 ms frame. §14.2's phone gate decides it before 1a ships, with
-   the levers in order. Skipping a tank that cannot move is built in, and worth
-   about 30 µs here.
+   pass's 2.1 -- and the factor of six is an assumption: 7.1 to 8.0 ms of the
+   16.7 ms frame the gate holds a phone to, 60 Hz at most. §14.2's phone gate
+   decides it before 1a ships, with the levers in order. Skipping a tank that
+   cannot move is built in, and worth about 30 µs here.
 2. **A phone that hosts with a guest was not measured** (§10.2): two anchors,
    twice the near water, two scan lists and the wire. It is the drop's worst
    case and 1b's gate.
