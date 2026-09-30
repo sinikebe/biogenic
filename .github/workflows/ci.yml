@@ -151,10 +151,10 @@ jobs:
         #
         #    server.tscn is reached by neither route: only the Linux Server
         #    export boots it, through `run/main_scene.server`. It is booted here
-        #    with `--no-update`, so it never looks for an update. It does send
+        #    with `--no-update`, so it never looks for an update. It does start
         #    one UPnP search for a router (game/net/port_forward.gd,
-        #    docs/server.md §9.3), which on a runner finds none and says so in
-        #    one line, in four seconds at most.
+        #    docs/server.md §9.3), which takes four seconds to find nothing on
+        #    a runner; the boot ends first, so only its "looking" line prints.
         #
         # Seconds, against an export measured in minutes.
         run: |
@@ -537,7 +537,9 @@ jobs:
         # **And it stops the way systemd stops it**: by the stop file its unit's
         # ExecStop touches, because Godot does not catch SIGTERM (measured: the
         # process dies at once, status 143). A clean stop prints `[server]
-        # stopped` and exits 0. `--no-update` keeps the network out of it.
+        # stopped` and exits 0. `--no-update` keeps the updater off the
+        # network; the one UPnP search the server starts at READY finds no
+        # router here, and the stop waits it out -- four seconds at most.
         #
         # Grepped for SCRIPT ERROR and Parse Error as well, for the reason the
         # scene step above spells out: Godot exits 0 straight through them.
