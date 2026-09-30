@@ -6,11 +6,14 @@ extends Node
 ## node against the water's own; and **the drop in the water** -- nothing made
 ## where it can be seen, nothing past the rim, growth that stops, the floors,
 ## one seed one drop, flocs, and one body for every cell -- over five minutes
-## of a drop and on bodies posed in one. 12 is 1b's save. **And the dev app's
-## frame readout** (§14.2), run for real: CI runs release-stamped, so nothing
-## else here ever runs its frames. **And 13, the replay on the drop** (§11): the
-## 48 nearest in slots they keep, today's water recorded as it always was, flocs
-## as SETTLE and CLEAR, the killer, and a replay that leaves the drop untouched.
+## of a drop and on bodies posed in one. **And the dev app's frame readout**
+## (§14.2), run for real: CI runs release-stamped, so nothing else here ever
+## runs its frames. **And 13, the replay on the drop** (§11): the 48 nearest in
+## slots they keep, today's water recorded as it always was, flocs as SETTLE and
+## CLEAR, the killer, and a replay that leaves the drop untouched. **And 12, the
+## save, as far as 1b-1 needs it** (§9): the bodies to the bit through the file,
+## a real run left and opened again on the same drop and the same cell, an
+## unknown format, and a changed `rules`. The room's census is 1b-2's.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -23,7 +26,10 @@ extends Node
 ## nothing, a body armoured against the player only. And 1a-3's: a body that
 ## loses its slot while it stays near, newcomers out of the field's order, a
 ## floc never cleared, a seal that names no killer, a replay that writes onto
-## the run's own field.
+## the run's own field. And 1b-1's: a load that forgets a mouth's clock, a run
+## that opens on the drop but not on the cell, a daughter pair not kept, an
+## unknown format left where it was, a radius left past the cap, and the
+## fingerprint's tables sorted as StringNames.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -42,6 +48,7 @@ const FrameReadout := preload("res://game/dev/frame_readout.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
+const DropSave := preload("res://game/normal/drop_save.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
@@ -195,6 +202,7 @@ func _ready() -> void:
 	_one_body()
 	await _replay()
 	await _readout()
+	await _save()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -1406,6 +1414,7 @@ func _flocs_fed() -> void:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 0)
 	run.set("scheme", 0)
+	run.set("keep", "")
 	add_child(run)
 	await get_tree().process_frame
 	var met: Node = run.get("_metabolism")
@@ -1947,6 +1956,7 @@ func _replay_run() -> void:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
 	run.set("mode", 1)
 	run.set("scheme", 0)
+	run.set("keep", "")
 	add_child(run)
 	var rec: Node = run.get("_recorder")
 	for f in 3000:
@@ -2008,6 +2018,312 @@ func _replay_run() -> void:
 	# times frames.
 	for f in 10:
 		await get_tree().process_frame
+
+
+# --- 12. The save, as far as 1b-1 needs it (§9, §14.3) -------------------------------------
+
+## **Where these checks keep a drop**: a file of their own, never the player's.
+const KEEP := "user://drop_probe/drop.save"
+
+## **Every field of a body §9.2 names**, read off the body itself -- not off
+## what the save gathered, so a field the save forgot fails here -- and what
+## its genome buys, which a load re-derives rather than reads.
+const KEPT_FIELDS: Array[String] = ["seeded", "id", "parent", "drifter", "inert", "meals",
+	"pos", "heading", "radius", "wound", "age", "last_t", "hunger", "starve", "effort",
+	"bite", "dart_clock", "dash_clock", "dash_v", "settle", "life", "genome"]
+const DERIVED_FIELDS: Array[String] = ["upkeep", "reserve", "income", "burn", "armour",
+	"tox", "cruise", "notice", "notice_floc", "see_big", "dart_bearing"]
+
+
+## Each check begins with nothing kept, and nothing is left kept after them.
+func _save() -> void:
+	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules]:
+		_forget_kept()
+		await check.call()
+	_forget_kept()
+
+
+## **Save, load, the same bodies to the bit** (§14.3 check 12), and **an unknown
+## gene survives**: twenty seconds of a drop, a body posed in it mid-everything
+## -- wounded, its mouth, dart and dash on their clocks, a dash still carrying
+## it, effort unpaid, empty and starving, carrying a gene this build does not
+## know -- through the file's whole path, and loaded into a field of its own.
+## Every slot, every field §9.2 names and what its genome buys, to the bit by
+## their bytes; the free slots in their order, and the drop's clocks.
+func _save_bodies() -> void:
+	var water := _water(0.0, 0.6)
+	var field: WatchedDrop = water[0]
+	for f in 20 * 60:
+		field._process(1.0 / 60.0)
+	var at: Vector2 = field.basin().get(&"center") + Vector2(900.0, 0.0)
+	var posed := _pose(field, at, 30.0, {&"cytostome": 2, &"rhabdom": 2, &"myoneme": 1})
+	var b: Object = (field.get("_cells") as Array)[posed]
+	for value: Array in [["wound", 0.3], ["bite", 0.4], ["dart_clock", 3.5],
+			["dash_clock", 0.7], ["dash_v", 120.0], ["effort", 0.25], ["hunger", 1.0],
+			["starve", 2.5], ["meals", 3], ["parent", 17]]:
+		b.set(value[0], value[1])
+	var wrote := DropSave.write(KEEP, DropSave.compose(field.drop_state(), {}))
+	var tmp_left := FileAccess.file_exists(KEEP.get_basename() + ".tmp")
+	var back := DropSave.read(KEEP)
+	var cell2 := CellBody.new()
+	var field2 := WatchedDrop.new()
+	field2.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(field2)
+	var done: Dictionary = field2.load_drop(cell2, back["drop"]) if not back.is_empty() else {}
+	var ours: Array = field.get("_cells")
+	var theirs: Array = field2.get("_cells")
+	# A slot nobody is in keeps whatever its last body left in it, and is only
+	# ever asked whether it is empty.
+	var differ := 0
+	for i in mini(ours.size(), theirs.size()):
+		var seeded := bool(ours[i].get("seeded"))
+		if seeded != bool(theirs[i].get("seeded")):
+			differ += 1
+		elif seeded and (var_to_bytes(_row(ours[i], KEPT_FIELDS))
+				!= var_to_bytes(_row(theirs[i], KEPT_FIELDS))
+				or var_to_bytes(_row(ours[i], DERIVED_FIELDS))
+				!= var_to_bytes(_row(theirs[i], DERIVED_FIELDS))):
+			differ += 1
+	var drop := ["_t", "_frame", "_next_id", "_free", "_eco_clock", "_gene_clock",
+		"_floor_clock", "_shore_clock", "_living", "_drifters", "_flocs", "drop_seed"]
+	var same_drop := var_to_bytes(_row(field, drop)) == var_to_bytes(_row(field2, drop)) \
+		and var_to_bytes(field.basin().get(&"center")) == var_to_bytes(field2.basin().get(&"center"))
+	var kept_gene := posed < theirs.size() and bool(theirs[posed].get("seeded")) \
+		and int((theirs[posed].get("genome") as Dictionary).get(&"rhabdom", 0)) == 2
+	var bytes := FileAccess.get_file_as_bytes(KEEP).size()
+	_check(("12. save and load: %d slots, %d bodies written (%s, %d B on disk, no .tmp left:"
+		+ " %s) and loaded into a field of their own -- %d slots differ in any field §9.2"
+		+ " names or anything its genome buys, to the bit; the drop's clocks, free slots and"
+		+ " counts %s; a gene this build does not know, rhabdom:2, %s") % [ours.size(),
+		int(done.get("bodies", 0)), error_string(wrote), bytes, str(not tmp_left), differ,
+		"the same" if same_drop else "DIFFERENT", "kept" if kept_gene else "LOST"],
+		wrote == OK and not tmp_left and not back.is_empty() and ours.size() == theirs.size()
+		and differ == 0 and same_drop and kept_gene and int(done.get("bodies", 0)) > 500)
+	# A drop that came out of a file goes on as a drop.
+	field2.in_water = false
+	for f in 120:
+		field2._process(1.0 / 60.0)
+	field2.queue_free()
+	cell2.free()
+	_done(water)
+
+
+## **Your cell, kept** (row 17): a run with nothing kept opens on a new drop;
+## played, and left mid-run -- the app paused, as a phone pauses it -- it keeps
+## the drop and the cell; and the next run opens on that drop to the bit, with
+## that cell in it where it was, its size, both registers by name with a gene
+## this build does not know and a waiting gene on its clock, its tank, its
+## generation, its grace -- behind the beat, and with nothing in its replay. And
+## the two daughters it had been offered are the two its next pinch offers.
+func _save_run() -> void:
+	var run := _kept_run()
+	var food: Node = run.get("_food")
+	var fresh: bool = not bool(run.get("_resumed")) and float(food.call(&"drop_age")) == 0.0 \
+		and bool(food.call(&"in_drop"))
+	for f in 90:
+		await get_tree().process_frame
+	var cell: CellBody = run.get("_cell")
+	var genome: Node = run.get("_genome")
+	var met: Node = run.get("_metabolism")
+	cell.radius = 34.0
+	genome.call(&"express", {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"rhabdom": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"rhabdom"])
+	genome.call(&"integrate", &"stigma")
+	genome.set(&"held_remaining", 20.5)
+	met.call(&"set_hunger", 0.4)
+	run.set("_generation", 3)
+	var pair: Array = run.call(&"_make_daughters")
+	run.set("_daughters", pair)
+	var was := _kept_cell(run)
+	var drop_was: Dictionary = food.call(&"drop_state")
+	var age := float(food.call(&"drop_age"))
+	run.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var kept := FileAccess.file_exists(KEEP)
+	run.queue_free()
+	await get_tree().process_frame
+	var again := _kept_run()
+	var food2: Node = again.get("_food")
+	var resumed := bool(again.get("_resumed"))
+	var same_cell := var_to_bytes(_kept_cell(again)) == var_to_bytes(was)
+	var same_drop := var_to_bytes(food2.call(&"drop_state")) == var_to_bytes(drop_was)
+	var genome2: Node = again.get("_genome")
+	var beat := float(again.get("_water_beat")) >= 0.0
+	var ring := float((again.get("_recorder") as Node).call(&"span"))
+	var same_pair := _same_pair(again.call(&"_kept_pair"), pair)
+	_check(("12. your cell, kept: a run with nothing kept opens on a new drop (%s); left mid-run"
+		+ " at %.1f s by the app pausing, it kept the drop (%s); the next opens on it resumed"
+		+ " (%s), the drop %s to the bit, the cell -- r%.0f, dna %s, waiting %s, hunger %.2f,"
+		+ " generation %d -- %s; behind the beat (%s), its replay %.1f s long; the daughters"
+		+ " it was offered offered again at the pinch (%s)") % [str(fresh),
+		age, str(kept), str(resumed), "the same" if same_drop else "DIFFERENT",
+		(again.get("_cell") as CellBody).radius, genome2.call(&"layout"),
+		genome2.call(&"waiting"), float((again.get("_metabolism") as Node).get("hunger")),
+		int(again.get("_generation")), "as it was" if same_cell else "CHANGED", str(beat), ring,
+		str(same_pair)],
+		fresh and kept and resumed and same_drop and same_cell and beat and ring == 0.0
+		and int((genome2.call(&"dna") as Dictionary).get(&"rhabdom", 0)) == 1 and same_pair)
+	again.queue_free()
+	await get_tree().process_frame
+
+
+## **A format this build does not know starts fresh and keeps the old file**
+## (§9.4): the file is not read but moved aside whole as `.old`, and the run
+## opens on a new drop, which its next save point keeps in its place -- the old
+## file still beside it, as it was: kept once, and not read again.
+func _save_format() -> void:
+	var water := _water()
+	var later := DropSave.compose(water[0].call(&"drop_state"), {})
+	later["format"] = DropSave.FORMAT + 1
+	_done(water)
+	var wrote := DropSave.write(KEEP, later)
+	var old_bytes := FileAccess.get_file_as_bytes(KEEP)
+	var run := _kept_run()
+	var food: Node = run.get("_food")
+	var fresh: bool = not bool(run.get("_resumed")) and float(food.call(&"drop_age")) == 0.0 \
+		and bool(food.call(&"in_drop"))
+	var moved := not FileAccess.file_exists(KEEP) \
+		and FileAccess.get_file_as_bytes(KEEP + ".old") == old_bytes
+	run.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var readable := not DropSave.read(KEEP).is_empty()
+	var once := FileAccess.get_file_as_bytes(KEEP + ".old") == old_bytes
+	_check(("12. an unknown format: a file of format %d (%s) is not read -- moved aside as .old"
+		+ " whole (%s) -- and the run opens on a new drop (%s), which leaving keeps in its"
+		+ " place (%s), the old file still beside it as it was (%s)") % [DropSave.FORMAT + 1,
+		error_string(wrote), str(moved), str(fresh), str(readable), str(once)],
+		wrote == OK and moved and fresh and readable and once and not old_bytes.is_empty())
+	run.queue_free()
+	await get_tree().process_frame
+
+
+## **A changed `rules` re-derives and logs** (§9.4): a drop written under another
+## fingerprint, with a body grown past this build's cap and one past its rim --
+## as a content pack that lowered the cap or shrank the drop would leave it --
+## loads whole: every body re-derived from its genome by name by this build's
+## tables, the big one trimmed to the cap, the far one put back inside, the
+## tanks kept as the share they were; and the log says it was converted, where a
+## load under the same rules says nothing of the kind. **And the fingerprint is
+## the same in every process**: its tables are listed by name, as Strings --
+## sorted as the StringNames they are, they came out in memory's order, which
+## moved from one process to the next.
+func _save_rules() -> void:
+	var names := PackedStringArray()
+	for line: String in DropSave.rules_text().split("\n"):
+		var name := line.get_slice("=", 0)
+		if name.ends_with("_BY_TIER"):
+			names.append(name)
+	var by_name := names.duplicate()
+	by_name.sort()
+	var water := _water(0.0, 0.6)
+	var field: WatchedDrop = water[0]
+	for f in 5 * 60:
+		field._process(1.0 / 60.0)
+	var data := DropSave.compose(field.drop_state(), {})
+	var calm := DropSave.note(data, {"bodies": 1})
+	data["rules"] = "0".repeat(64)
+	var rows: Dictionary = data["drop"]["bodies"]
+	var kinds: PackedByteArray = rows["kind"]
+	var big := -1
+	var far := -1
+	for k in kinds.size():
+		if kinds[k] == 0 and big < 0:
+			big = k
+		elif kinds[k] == 1 and far < 0:
+			far = k
+	var radius: PackedFloat64Array = rows["radius"]
+	radius[big] = CellBody.DIVIDE_RADIUS + 6.0
+	rows["radius"] = radius
+	var at: PackedVector2Array = rows["at"]
+	at[far] = field.basin().get(&"center") + Vector2(Drop.RADIUS + 400.0, 0.0)
+	rows["at"] = at
+	var hunger: PackedFloat64Array = rows["hunger"]
+	hunger[big] = 0.625
+	rows["hunger"] = hunger
+	_done(water)
+	DropSave.write(KEEP, data)
+	var back := DropSave.read(KEEP)
+	var cell2 := CellBody.new()
+	var field2 := WatchedDrop.new()
+	field2.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(field2)
+	var done: Dictionary = field2.load_drop(cell2, back["drop"]) if not back.is_empty() else {}
+	var line := DropSave.note(back, done) if not back.is_empty() else ""
+	print(line)
+	var cells: Array = field2.get("_cells")
+	var slots: PackedInt32Array = rows["slot"]
+	var b: Object = cells[slots[big]]
+	var f: Object = cells[slots[far]]
+	var g: Dictionary = b.get("genome")
+	var derived := is_equal_approx(float(b.get("upkeep")), GenomeNode.upkeep_of(g)) \
+		and float(b.get("cruise")) == CellBody.swim_speed_of(
+			GenomeNode.tier_of(g, &"flagellum"), GenomeNode.tier_of(g, &"axoneme")) \
+		and float(b.get("cruise")) > 0.0 \
+		and float(b.get("reserve")) == CellBody.STORE_BY_TIER[clampi(
+			GenomeNode.tier_of(g, &"vacuole"), 0, 3)]
+	var inside: bool = (field2.basin() as Object).call(&"inside", f.get("pos"), f.get("radius"))
+	_check(("12. a changed rules: a drop written under rules %s loads under %s, every body"
+		+ " re-derived from its genome (%s); a body at r%.0f trimmed to r%.2f, one %.0f past"
+		+ " the rim put back inside (%s), a tank kept at %.3f; the log says %s -- and under"
+		+ " the same rules %s; the fingerprint's %d tables by name (%s)") % [
+		str(back.get("rules", "?")).left(8), DropSave.rules().left(8),
+		str(derived), CellBody.DIVIDE_RADIUS + 6.0, float(b.get("radius")), 400.0, str(inside),
+		float(b.get("hunger")), "CONVERTED" if line.contains("CONVERTED") else "NOTHING",
+		"it does not" if not calm.contains("CONVERTED") else "IT DOES TOO", names.size(),
+		"yes" if names == by_name else "NO: " + ",".join(names.slice(0, 4))],
+		names == by_name and names.size() >= 20
+		and not back.is_empty() and derived and float(b.get("radius")) == CellBody.DIVIDE_RADIUS
+		and inside and float(b.get("hunger")) == 0.625 and int(done.get("trimmed", 0)) == 1
+		and int(done.get("contained", 0)) >= 1 and line.contains("CONVERTED")
+		and not calm.contains("CONVERTED"))
+	field2.queue_free()
+	cell2.free()
+
+
+## A run of the game that keeps its drop at [constant KEEP], in point of view.
+func _kept_run() -> Node:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("scheme", 0)
+	run.set("keep", KEEP)
+	add_child(run)
+	return run
+
+
+## A run's cell as the drop keeps it, read off its nodes.
+func _kept_cell(run: Node) -> Array:
+	var met: Node = run.get("_metabolism")
+	return [(run.get("_cell") as CellBody).call(&"body_state"),
+		(run.get("_genome") as Node).call(&"to_state"), met.get("hunger"),
+		met.get("starve_seconds"), run.get("_generation"), run.get("_sense_clock"),
+		run.get("_sensed"), (run.get("_food") as Node).call(&"player_state")]
+
+
+## Whether two divisions offer the same two daughters, side for side: the same
+## DNA, layout, body and mutation, to their bytes.
+func _same_pair(a: Array, b: Array) -> bool:
+	if a.size() != 2 or b.size() != 2:
+		return false
+	for side in 2:
+		for key: String in ["tiers", "order", "body", "mutation"]:
+			if var_to_bytes(a[side][key]) != var_to_bytes(b[side][key]):
+				return false
+	return true
+
+
+## [param fields] of [param object], in order.
+func _row(object: Object, fields: Array) -> Array:
+	var out := []
+	for name: String in fields:
+		out.append(object.get(name))
+	return out
+
+
+## Nothing of these checks left in `user://`.
+func _forget_kept() -> void:
+	for path: String in [KEEP, KEEP + ".old", KEEP.get_basename() + ".tmp"]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+	if DirAccess.dir_exists_absolute(KEEP.get_base_dir()):
+		DirAccess.remove_absolute(KEEP.get_base_dir())
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------

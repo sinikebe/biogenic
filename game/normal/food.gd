@@ -5138,6 +5138,11 @@ var age_first := 0.0
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
+## **Which drop this is** (§9.2's header): a number drawn when the drop is made
+## and kept with it for its life, for the log. Drawn from a generator of its
+## own, so making a drop draws nothing from the stream `--seed=` seeds; the drop
+## itself is made from that stream, so this seeds nothing.
+var drop_seed := 0
 ## How long the drop has lived, and in how many frames. Only a frame the drop
 ## runs counts: frozen while the cell is dead or dividing, it has not aged.
 var _t := 0.0
@@ -5227,6 +5232,9 @@ func setup_drop(cell: CellBody) -> void:
 	_first_pending = false
 	_first_index = -1
 	_drop = Drop.new(Vector2.ZERO)
+	var numbers := RandomNumberGenerator.new()
+	numbers.randomize()
+	drop_seed = numbers.randi()
 	_drifter_pool = Drop.drifter_genes(DRIFTER_GENES)
 	_gene_short.clear()
 	# A drop being made for the first time is a drop that was already there:
@@ -5364,6 +5372,261 @@ func _age_alone(seconds: float) -> void:
 		_process_drop(1.0 / 60.0)
 	in_water = true
 	anchored = true
+
+
+# --- Kept across launches (§9) -------------------------------------------------------------
+# game/normal/drop_save.gd is the file and says what it holds (its SHAPE); this
+# is the drop gathered into it and made again from it.
+
+## **The drop as plain types** (§9.2): its number, age and frame, its next id,
+## its rim, the spawner's debt and the three floors' and the shore's clocks,
+## whom its water is made for, which slots are free -- and every body by its
+## slot, one column a field, its genome by gene name. **What a body is doing is
+## not in it** -- a chase, a rest, where it was aiming -- so a loaded body starts
+## drifting, as a spawned one does. Empty outside the drop.
+func drop_state() -> Dictionary:
+	if _drop == null:
+		return {}
+	var slot := PackedInt32Array()
+	var ids := PackedInt32Array()
+	var parent := PackedInt32Array()
+	var kind := PackedByteArray()
+	var meals := PackedInt32Array()
+	var at := PackedVector2Array()
+	var heading := PackedFloat64Array()
+	var radius := PackedFloat64Array()
+	var wound := PackedFloat64Array()
+	var age := PackedFloat64Array()
+	var last_t := PackedFloat64Array()
+	var hunger := PackedFloat64Array()
+	var starve := PackedFloat64Array()
+	var effort := PackedFloat64Array()
+	var bite := PackedFloat64Array()
+	var dart := PackedFloat64Array()
+	var dash := PackedFloat64Array()
+	var dash_v := PackedFloat64Array()
+	var settle := PackedFloat64Array()
+	var life := PackedFloat64Array()
+	var genome: Array = []
+	for i in _cells.size():
+		var b := _cells[i]
+		if not b.seeded:
+			continue
+		slot.append(i)
+		ids.append(b.id)
+		parent.append(b.parent)
+		kind.append((1 if b.drifter else 0) | (2 if b.inert else 0))
+		meals.append(b.meals)
+		at.append(b.pos)
+		heading.append(b.heading)
+		radius.append(b.radius)
+		wound.append(b.wound)
+		age.append(b.age)
+		last_t.append(b.last_t)
+		hunger.append(b.hunger)
+		starve.append(b.starve)
+		effort.append(b.effort)
+		bite.append(b.bite)
+		dart.append(b.dart_clock)
+		dash.append(b.dash_clock)
+		dash_v.append(b.dash_v)
+		settle.append(b.settle)
+		life.append(b.life)
+		var genes := {}
+		for gene: StringName in b.genome:
+			genes[String(gene)] = int(b.genome[gene])
+		genome.append(genes)
+	return {
+		"seed": drop_seed,
+		"age": _t,
+		"frame": _frame,
+		"next_id": _next_id,
+		"rim_centre": _drop.meniscus.center,
+		"rim_radius": _drop.meniscus.radius,
+		"debt": _drop.spawner.debt,
+		"widest": _widest_now,
+		"clocks": PackedFloat64Array([_eco_clock, _gene_clock, _floor_clock, _shore_clock]),
+		"made_for": PackedFloat64Array([_cell.radius if _cell != null
+			else CellBody.BASE_RADIUS, _sensed()]),
+		"slots": _cells.size(),
+		"free": _free.duplicate(),
+		"bodies": {"slot": slot, "id": ids, "parent": parent, "kind": kind,
+			"meals": meals, "at": at, "heading": heading, "radius": radius,
+			"wound": wound, "age": age, "last_t": last_t, "hunger": hunger,
+			"starve": starve, "effort": effort, "bite": bite, "dart": dart,
+			"dash": dash, "dash_v": dash_v, "settle": settle, "life": life,
+			"genome": genome},
+	}
+
+
+## **The drop [param state] holds, made again round [param cell]** (§9.4): the
+## drop where it was, every body in its slot with its place, body, tank and
+## clocks, drifting; nobody in it yet -- the caller puts the cell back
+## ([method restore_player]) or brings a new one ([method return_to_drop]).
+##
+## **Every body is re-derived from its genome by name** -- upkeep, gape, speed,
+## reach -- by this build's tables, which are the save's own unless a content
+## pack changed them since: so whatever changed, a radius over this build's cap
+## is trimmed to it and a body past its rim is put back inside, while a tank is
+## kept as the share it was and the spawner converges on a changed density by
+## itself. [param state] must fit drop_save.gd's SHAPE -- its `read` hands over
+## nothing else. Returns how many bodies it put back, and how many of them it
+## trimmed and contained.
+func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
+	_cell = cell
+	_pond = false
+	_mirror = false
+	_guests = 1
+	_water = 0
+	in_water = true
+	anchored = true
+	_snap_at = PackedVector2Array()
+	_snap_age = 0.0
+	_book.clear()
+	_cells.clear()
+	_free.resize(0)
+	_near.resize(0)
+	_stepped.resize(0)
+	stats.clear()
+	_first_pending = false
+	_first_index = -1
+	drop_seed = int(state["seed"])
+	_t = float(state["age"])
+	_frame = int(state["frame"])
+	_next_id = int(state["next_id"])
+	var clocks: PackedFloat64Array = state["clocks"]
+	_eco_clock = clocks[0]
+	_gene_clock = clocks[1]
+	_floor_clock = clocks[2]
+	_shore_clock = clocks[3]
+	_drop = Drop.new(state["rim_centre"])
+	_drop.spawner.debt = float(state["debt"])
+	_drifter_pool = Drop.drifter_genes(DRIFTER_GENES)
+	_widest_now = float(state["widest"])
+	_living = 0
+	_drifters = 0
+	_flocs = 0
+	for i in int(state["slots"]):
+		_cells.append(Body.new())
+	var rows: Dictionary = state["bodies"]
+	var slot: PackedInt32Array = rows["slot"]
+	var ids: PackedInt32Array = rows["id"]
+	var parent: PackedInt32Array = rows["parent"]
+	var kind: PackedByteArray = rows["kind"]
+	var meals: PackedInt32Array = rows["meals"]
+	var at: PackedVector2Array = rows["at"]
+	var heading: PackedFloat64Array = rows["heading"]
+	var radius: PackedFloat64Array = rows["radius"]
+	var wound: PackedFloat64Array = rows["wound"]
+	var age: PackedFloat64Array = rows["age"]
+	var last_t: PackedFloat64Array = rows["last_t"]
+	var hunger: PackedFloat64Array = rows["hunger"]
+	var starve: PackedFloat64Array = rows["starve"]
+	var effort: PackedFloat64Array = rows["effort"]
+	var bite: PackedFloat64Array = rows["bite"]
+	var dart: PackedFloat64Array = rows["dart"]
+	var dash: PackedFloat64Array = rows["dash"]
+	var dash_v: PackedFloat64Array = rows["dash_v"]
+	var settle: PackedFloat64Array = rows["settle"]
+	var life: PackedFloat64Array = rows["life"]
+	var genome: Array = rows["genome"]
+	var trimmed := 0
+	var contained := 0
+	for k in slot.size():
+		var b := _cells[slot[k]]
+		_serial += 1
+		b.serial = _serial
+		b.id = ids[k]
+		b.parent = parent[k]
+		b.drifter = (kind[k] & 1) != 0
+		b.inert = (kind[k] & 2) != 0
+		b.meals = meals[k]
+		b.pos = at[k]
+		b.heading = heading[k]
+		b.radius = radius[k]
+		b.wound = wound[k]
+		b.age = age[k]
+		b.last_t = last_t[k]
+		b.hunger = hunger[k]
+		b.starve = starve[k]
+		b.effort = effort[k]
+		b.bite = bite[k]
+		b.dart_clock = dart[k]
+		b.dash_clock = dash[k]
+		b.dash_v = dash_v[k]
+		b.settle = settle[k]
+		b.life = life[k]
+		# **By name**: a gene this build does not know is kept as the name it is,
+		# and costs and draws as `rhabdom` always has (genome.gd, GENE_ORDER).
+		var genes: Dictionary = genome[k]
+		b.genome = {}
+		for gene: String in genes:
+			b.genome[StringName(gene)] = int(genes[gene])
+		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
+			b.radius = CellBody.DIVIDE_RADIUS
+			trimmed += 1
+		if not _drop.meniscus.inside(b.pos, b.radius):
+			b.pos = _drop.meniscus.contain(b.pos, b.radius)
+			contained += 1
+		b.aim = b.pos
+		b.flee_from = b.pos
+		b.seeded = true
+		_refresh_body(b)
+		if b.inert:
+			_flocs += 1
+		else:
+			_living += 1
+			if b.drifter:
+				_drifters += 1
+		_drop.grid.insert(slot[k], b.pos)
+	# The free slots in the order they would have been reused -- and ahead of
+	# them, reused last, any empty slot the list had lost track of.
+	var listed := {}
+	for i: int in state["free"]:
+		if i >= 0 and i < _cells.size() and not _cells[i].seeded and not listed.has(i):
+			listed[i] = true
+			_free.append(i)
+	for i in range(_cells.size() - 1, -1, -1):
+		if not _cells[i].seeded and not listed.has(i):
+			_free.insert(0, i)
+	_count_genes()
+	died_to = -1
+	_first_hunt = grace
+	_fresh_senses()
+	return {"bodies": slot.size(), "trimmed": trimmed, "contained": contained}
+
+
+## **What the water keeps of the cell in it** (§9.2): its grace (row 16), the
+## clocks of its dart and its bite, and the authored first drifter while the
+## cell has still not moved -- by its id, since its slot is the drop's to
+## reuse. The part of a cell left mid-run that is the field's and not the body's.
+func player_state() -> Dictionary:
+	var first := 0
+	if _first_pending and _first_index >= 0 and _first_index < _cells.size() \
+			and _cells[_first_index].seeded \
+			and _cells[_first_index].serial == _first_serial:
+		first = _cells[_first_index].id
+	return {"grace": _first_hunt, "dart": _dart_clock, "bite": _bite_clock,
+		"first": first}
+
+
+## **The cell left mid-run is back in the drop [method load_drop] made**, where
+## it was: its grace and its clocks as [method player_state] took them, and its
+## first drifter, if it had one waiting, still waiting. Nothing is cleared round
+## it and nothing moved: closing the app was a pause (row 17).
+func restore_player(state: Dictionary) -> void:
+	in_water = true
+	anchored = true
+	_first_hunt = float(state["grace"])
+	_dart_clock = float(state["dart"])
+	_bite_clock = float(state["bite"])
+	var first := int(state["first"])
+	for i in _cells.size():
+		if first > 0 and _cells[i].seeded and _cells[i].id == first:
+			_first_index = i
+			_first_serial = _cells[i].serial
+			_first_pending = true
+			break
 
 
 # --- The frame (§4) ----------------------------------------------------------------------
