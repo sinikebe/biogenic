@@ -100,6 +100,10 @@ if (( dev )); then
 	NET_PORT="45782"
 	WHICH="dev"
 	COMMENT="Biogenic dev server"
+	# What a download or a checksum that fails adds: branch-dev is refreshed in
+	# place, and may be half published.
+	PUBLISHING=" -- branch-dev is refreshed on every push to dev: if one was publishing,"
+	PUBLISHING+=" run this again in a few minutes"
 else
 	NAME="biogenic"
 	UNIT="$KIT_UNIT"
@@ -108,6 +112,7 @@ else
 	NET_PORT="45772"
 	WHICH="latest"
 	COMMENT="Biogenic dedicated server"
+	PUBLISHING=""
 fi
 PREFIX="/opt/$NAME"
 STATE="/var/lib/$NAME"
@@ -165,7 +170,7 @@ derive_dev() {
 		echo "#"
 		sed -E \
 			-e '1{/^#!/d}' \
-			-e 's#^(delete )?table inet biogenic( \{)?$#\1table inet biogenic_dev\2#' \
+			-e 's#^(delete )?table ([a-z0-9]+) biogenic( \{)?$#\1table \2 biogenic_dev\3#' \
 			-e 's#^([[:space:]]+udp dport )4577([12]) #\14578\2 #' \
 			-e "s|^# What the internet may send Biogenic's server|# What the internet may send Biogenic's dev server|" \
 			-e '/^[[:space:]]*#/ s#/etc/biogenic/#/etc/biogenic-dev/#g' \
@@ -173,11 +178,12 @@ derive_dev() {
 			"$rules"
 	} > "$rules_out"
 	# Nothing of the live server's is left: no path, account, user:// or port
-	# in the unit, no table, path or port in the rules.
-	left="$(grep -nE '(/opt|/var/lib|/run|/etc)/biogenic([^-]|$)|=biogenic$|app_userdata/Biogenic|4577[12]' \
+	# in the unit, and no Alias=, which would be the live unit's too; no table
+	# of any family, path or port in the rules.
+	left="$(grep -nE '(/opt|/var/lib|/run|/etc)/biogenic([^-]|$)|=biogenic$|app_userdata/Biogenic|4577[12]|^Alias=' \
 		"$unit_out" || true)"
 	[[ -z "$left" ]] || die "the dev unit made from the release's still names the live server's -- installing nothing:"$'\n'"$left"
-	left="$(grep -nE 'table inet biogenic([^_]|$)|/etc/biogenic([^-]|$)|4577[12]' "$rules_out" || true)"
+	left="$(grep -nE 'table [a-z0-9]+ biogenic([^_]|$)|/etc/biogenic([^-]|$)|4577[12]' "$rules_out" || true)"
 	[[ -z "$left" ]] || die "the dev rules made from the release's still name the live server's -- installing nothing:"$'\n'"$left"
 	# And everything the dev server needs is there: each directive once, and
 	# every rule of the live table's, on the dev ports.
@@ -190,8 +196,8 @@ derive_dev() {
 		[[ "$(grep -cE "$want" "$unit_out")" -eq 1 ]] \
 			|| die "the dev unit made from the release's has no one line matching $want -- installing nothing"
 	done
-	[[ "$(grep -cE '^(delete )?table inet biogenic_dev( \{)?$' "$rules_out")" -eq \
-		"$(grep -cE '^(delete )?table inet biogenic( \{)?$' "$rules")" ]] \
+	[[ "$(grep -cE '^(delete )?table [a-z0-9]+ biogenic_dev( \{)?$' "$rules_out")" -eq \
+		"$(grep -cE '^(delete )?table [a-z0-9]+ biogenic( \{)?$' "$rules")" ]] \
 		&& [[ "$(grep -cE 'udp dport 4578[12] ' "$rules_out")" -eq \
 			"$(grep -cE 'udp dport 4577[12] ' "$rules")" ]] \
 		&& [[ "$(grep -cE 'udp dport 4578[12] ' "$rules_out")" -gt 0 ]] \
@@ -275,15 +281,14 @@ trap 'rm -rf "$work"' EXIT
 say "downloading the $WHICH server from ${BASE}/"
 for file in "$BINARY" "$KIT_UNIT" "$NFT_CONF" SHA256SUMS; do
 	curl -fsSL --retry 3 -o "$work/$file" "$BASE/$file" \
-		|| die "could not download $file from $BASE/ -- is a release with the server published?"
+		|| die "could not download $file from $BASE/ -- is a release with the server published?$PUBLISHING"
 done
 awk -v a="$BINARY" -v b="$KIT_UNIT" -v c="$NFT_CONF" '$2 == a || $2 == b || $2 == c' \
 	"$work/SHA256SUMS" > "$work/wanted.sums"
 [[ "$(wc -l < "$work/wanted.sums")" -eq 3 ]] \
 	|| die "SHA256SUMS does not list $BINARY, $KIT_UNIT and $NFT_CONF; installing nothing"
 (cd "$work" && sha256sum --check --strict --quiet wanted.sums) \
-	|| die "checksum mismatch; installing nothing$( (( dev )) && echo " -- branch-dev is" \
-		"refreshed on every push to dev: if one was publishing, run this again in a few minutes")"
+	|| die "checksum mismatch; installing nothing$PUBLISHING"
 say "the build, the unit and the firewall rules match SHA256SUMS"
 # The rules this server lays down: the release's own, or the dev server's,
 # made from them with its unit -- after the check, so from verified files only.

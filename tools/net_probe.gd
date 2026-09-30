@@ -10208,12 +10208,23 @@ func _channel_sockets() -> void:
 		+ " calls %d and %d and is in at its own server's internet listener -- %s" % [
 			int(dev_invite["port"]), int(live_invite["port"]), str(far_in)])
 	# The LAN listener closed under its guest, as 4.7 closes one whose send
-	# failed: it opens again on its own channel's port, and the guest is back.
+	# failed, with its port held by something else that moment -- as H4 holds
+	# the release channel's: it says so, naming its own channel's port, and
+	# once the port is free it opens on it again, and the guest is back.
 	Channel.posing = "dev"
+	var from := _channel_catcher.lines.size()
 	(dev_host.get("_peer") as ENetMultiplayerPeer).close()
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(BRANCH_PAIR[0]) == OK
 	await _limits_until(func() -> bool:
 		return int(dev_host.gate_counts["lan_closed"]) >= 1 \
-			and int(dev_guest.link) != NetSession.Link.TOGETHER)
+			and int(dev_guest.link) != NetSession.Link.TOGETHER \
+			and _count(_channel_catcher.lines.slice(from), "could not open again") >= 1)
+	squatter.close()
+	await _limits_until(func() -> bool:
+		return float(dev_host.get("_lan_down_since")) < 0.0, 4.0)
+	var taken_said := _count(_channel_catcher.lines.slice(from),
+		"[net] the LAN listener could not open again: port %d is taken" % BRANCH_PAIR[0])
 	var reopened := float(dev_host.get("_lan_down_since")) < 0.0 \
 		and _channel_held(BRANCH_PAIR[0])
 	dev_guest.join("127.0.0.1")
@@ -10232,10 +10243,12 @@ func _channel_sockets() -> void:
 	await _limits_close([phone, friend, live_host, live_guest, live_far])
 	Channel.posing = null
 	var held_after := _channel_holds()
-	_says(reopened and back and phone_up and phone_holds == [true, true, true, false]
-			and friend_in and held_after == [false, false, false, false],
-		"channel K4: a dev server's LAN listener, closed under its guest, opens again on %d"
-		% BRANCH_PAIR[0] + " and the guest is back; a dev phone hosts on %d alone, beside"
+	_says(squatted and taken_said == 1 and reopened and back and phone_up
+			and phone_holds == [true, true, true, false] and friend_in
+			and held_after == [false, false, false, false],
+		"channel K4: a dev server's LAN listener, closed under its guest with %d held" % (
+			BRANCH_PAIR[0]) + " elsewhere, says that port is taken, opens again on it once it"
+		+ " is free, and the guest is back; a dev phone hosts on %d alone, beside"
 		% BRANCH_PAIR[0] + " the live server's %d, and its friend dials it there; and" % (
 			RELEASE_PAIR[0]) + " closed, every port is let go")
 
@@ -10253,21 +10266,34 @@ func _channel_lines(from: int) -> Array[String]:
 ## build, K6 the release channel's. Its LAN listener binds its channel's port
 ## and not the other channel's; its READY, join and listening lines name that
 ## port -- a dev build's saying whose build it is, the release channel's word
-## for word as they always were; its forward asks the router for its channel's
-## internet port, never the LAN's, under its channel's name; and its clean stop
-## takes that forward off.
+## for word as they always were. With an invite in its book, minted to a
+## `--reach` with no port, and its internet port held by something else as it
+## starts, its `internet:` line says that port is taken; free, the next says
+## it listens there, for friends calling that port. Its forward asks the
+## router for its channel's internet port, never the LAN's, under its
+## channel's name; and its clean stop takes that forward off.
 func _channel_server(branch: String) -> void:
 	Channel.posing = branch
 	var dev := not branch.is_empty()
 	var lan: int = BRANCH_PAIR[0] if dev else RELEASE_PAIR[0]
 	var net: int = BRANCH_PAIR[1] if dev else RELEASE_PAIR[1]
 	var other_lan: int = RELEASE_PAIR[0] if dev else BRANCH_PAIR[0]
+	_invites_wipe(CHANNEL_SERVER_ROOT)
+	var minted: Array = InviteBook.run(PackedStringArray(["--reach=203.0.113.7",
+		"--invite=channel"]), CHANNEL_SERVER_ROOT)
+	var identity := InviteBook.load_identity(CHANNEL_SERVER_ROOT)
+	var certificate := InviteBook.fingerprint(identity[2]) if identity.size() == 3 else "?"
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(net) == OK
 	var router := UpnpRouter.new()
 	var from := _channel_catcher.lines.size()
 	var server: Node = await _upnp_server(router, CHANNEL_SERVER_ROOT, PackedStringArray())
 	var forward: Node = server.call("forward")
 	var up := await _limits_until(func() -> bool:
 		return forward != null and bool(forward.holds()), 3.0)
+	squatter.close()
+	var listening := await _limits_until(func() -> bool:
+		return bool(server.session().internet_listening()), 3.0)
 	var held := [_channel_held(lan), _channel_held(other_lan)]
 	server.call("_announce", false)
 	var address := str(server.session().address)
@@ -10279,8 +10305,16 @@ func _channel_server(branch: String) -> void:
 		% Lan.prefix_of(address) + (" in the dev app," if dev else "") + " taps answer, and"
 		+ " taps the ring at %s, in that order. LAN only: do not forward this port." % code)
 	var listening_line := ("[server] listening on %s port %d/udp, code %s -- 0 of %d guests, 0 in"
-		% [address, lan, code, FoodField.GUESTS_MAX] + " the water -- internet: off -- upnp:"
+		% [address, lan, code, FoodField.GUESTS_MAX] + " the water -- internet: 1 invite -- upnp:"
 		+ " forwarded" + (" -- a dev build" if dev else ""))
+	var taken_line := ("[server] internet: not listening for the internet: there are invites, but"
+		+ " port %d/udp is taken, or not free yet. Trying again in %d s." % [net,
+			roundi(UPNP_POLL)])
+	var internet_line := ("[server] internet: listening on port %d/udp for 1 invite (channel),"
+		% net + " certificate %s. Friends call 203.0.113.7:%d, which must reach this" % [
+			certificate, net] + " machine's %d/udp: the [upnp] lines say whether the router" % net
+		+ " forwards it, and if not, forward it by hand -- the one port to forward"
+		+ " (docs/server.md §9.3).")
 	var adds := router.calls("add")
 	var avoided: PackedInt32Array = router.calls("discover")[0][2] \
 		if not router.calls("discover").is_empty() else PackedInt32Array()
@@ -10303,7 +10337,8 @@ func _channel_server(branch: String) -> void:
 	await _wait(0.3)
 	Channel.posing = null
 	_says(up >= 0.0 and held == [true, false] and lines.has(ready_line) and joins
-			and lines.has(listening_line) and asked and forwarded
+			and int(minted[0]) == 0 and squatted and lines.has(taken_line) and listening >= 0.0
+			and lines.has(internet_line) and lines.has(listening_line) and asked and forwarded
 			and never == PackedInt32Array([lan]) and avoided.has(net) and avoided.has(lan)
 			and lines.has("[upnp] looking for the router, to forward UDP %d to this" % net
 				+ " machine for as long as the server runs -- nothing answers there without"
@@ -10313,19 +10348,21 @@ func _channel_server(branch: String) -> void:
 			and router.on_main == 0,
 		"channel %s: %s server listens on %d and not %d, says so in its READY, join and" % [
 			"K5" if dev else "K6", "a dev" if dev else "the release channel's", lan, other_lan]
-		+ " listening lines%s, asks the router for UDP %d as '%s', never %d," % [
-			" -- a dev build's own" if dev else " -- word for word as ever", net, description,
-			lan] + " and takes that forward off at its stop")
+		+ " listening lines%s; with an invite, its internet line says %d is taken while" % [
+			" -- a dev build's own" if dev else " -- word for word as ever", net]
+		+ " held and then that it listens there; it asks the router for UDP %d as '%s'," % [net,
+			description] + " never %d, and takes that forward off at its stop" % lan)
 
 
-## **K7: every sentence that names a port names its channel's -- and on the
-## release channel, word for word what it said before there were two.**
-## `--reach` with no port, and a `reach.cfg` a hand made with none, mean the
-## internet's port; `--reach` and `--invite` refused say it; the advice for the
-## router, the UPnP switch and `--invites` name it; a call from outside the
-## house at the LAN's door is sent to it; the earshot screen shows the LAN's;
-## the forward's line and its name on the router are the channel's; and a job
-## run as root names the channel's service to run it as instead.
+## **K7: every sentence that names a port, or the service's account, names its
+## channel's -- and on the release channel, word for word what it said before
+## there were two.** `--reach` with no port, and a `reach.cfg` a hand made with
+## none, mean the internet's port; `--reach` and `--invite` refused say it; the
+## advice for the router, the UPnP switch and `--invites` name it; a call from
+## outside the house at the LAN's door is sent to it; the earshot screen shows
+## the LAN's; the forward's line and its name on the router are the channel's;
+## and the note a job run as root gives, and the refusal when a job run as root
+## cannot read who owns the book, name the channel's service account.
 func _channel_words() -> void:
 	var release := {
 		"reach": "45772,45772,50000",
@@ -10364,12 +10401,25 @@ func _channel_words() -> void:
 		"account": "biogenic",
 		"description": "Biogenic server",
 		"tag": "|",
+		"root_note": "note: this runs as root, so it keeps root's own book, in %s, which the"
+			% ProjectSettings.globalize_path(CHANNEL_WORDS_ROOT).trim_suffix("/") + " service"
+			+ " never reads. For the service's, run the job as its user: runuser -u biogenic --"
+			+ " env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless --"
+			+ " <job> (docs/server.md §9.1)",
+		"ownership": "refused: this runs as root but could not read who owns the invite files,"
+			+ " so it will not write what the service user might not read back. Run the job as"
+			+ " that user: runuser -u biogenic -- env HOME=/h /x --headless -- --invites (or"
+			+ " sudo -u biogenic, the same way; docs/server.md §9.1)",
 	}
 	# A dev build's: the same sentences on the other pair, and its own names.
 	var branch := {}
 	for key: String in release:
 		branch[key] = str(release[key]).replace("45772", "45782").replace("45771", "45781")
 	branch["account"] = "biogenic-dev"
+	branch["root_note"] = str(release["root_note"]).replace("biogenic -- env HOME=/var/lib/biogenic"
+		+ " /opt/biogenic/", "biogenic-dev -- env HOME=/var/lib/biogenic-dev /opt/biogenic-dev/")
+	branch["ownership"] = str(release["ownership"]).replace("runuser -u biogenic --",
+		"runuser -u biogenic-dev --").replace("sudo -u biogenic,", "sudo -u biogenic-dev,")
 	branch["description"] = "Biogenic server (dev)"
 	branch["tag"] = " -- a dev build: only the dev app finds it| -- a dev build"
 	var wrong: Array[String] = []
@@ -10383,9 +10433,10 @@ func _channel_words() -> void:
 					said.get(key, "")])
 	Channel.posing = null
 	_says(wrong.is_empty(),
-		"channel K7: %d sentences that name a port name their channel's, and the release" % (
-			release.size()) + " channel's are word for word what they were before there were"
-		+ " two" + ("" if wrong.is_empty() else " -- NOT: " + "; ".join(wrong)))
+		"channel K7: %d sentences that name a port or the service's account name their" % (
+			release.size()) + " channel's, and the release channel's are word for word what"
+		+ " they were before there were two" + ("" if wrong.is_empty() else " -- NOT: "
+			+ "; ".join(wrong)))
 
 
 ## Every sentence K7 holds, as this channel says it, from the game's own code.
@@ -10426,6 +10477,9 @@ func _channel_sentences() -> Dictionary:
 	said["receipt"] = str(screen.call("_here_says"))
 	screen.free()
 	said["account"] = InviteBook.service_account()
+	said["root_note"] = InviteBook.root_note(CHANNEL_WORDS_ROOT)
+	said["ownership"] = InviteBook.ownership_refusal(0, {}, PackedStringArray(["--invites"]),
+		"/x", "/h", false)
 	said["description"] = DedicatedServer.upnp_description()
 	said["tag"] = DedicatedServer.channel_said(true) + "|" + DedicatedServer.channel_said(false)
 	return said
@@ -10436,7 +10490,10 @@ func _channel_sentences() -> Dictionary:
 ## two directories, so the server a job asks about is the one started from its
 ## own path: under a stand-in `/proc`, a live service with neither switch and a
 ## dev service with `--no-upnp` -- the live job sees neither, and the dev job
-## its own `--no-upnp`. One started by a relative path is known by its name.
+## its own `--no-upnp`. One started by another path to the same file -- a
+## symlinked directory -- is known by the `exe` link `/proc` keeps, the same
+## after its build was replaced, when the link reads ` (deleted)`; and one
+## started by a relative path is known by its name.
 func _channel_own_server() -> void:
 	var live := "/opt/biogenic/biogenic-server.x86_64"
 	var dev := "/opt/biogenic-dev/biogenic-server.x86_64"
@@ -10461,11 +10518,29 @@ func _channel_own_server() -> void:
 		"--upnp"])
 	var by_name := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
 	_channel_proc_wipe()
-	_says(live_sees == 0 and dev_sees == -1 and by_name == 1,
+	# Started through a symlinked directory: the same file, by its link.
+	var linked := "/srv/pond/biogenic-server.x86_64"
+	write.call("204", [linked, "--headless", "--", "--stop-file=/run/biogenic/stop",
+		"--no-upnp"])
+	var linking := DirAccess.open(CHANNEL_PROC_ROOT.path_join("204"))
+	var link_made := linking != null and linking.create_link(live, "exe") == OK
+	var by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	var dev_by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	write.call("205", [linked, "--headless", "--", "--no-update", "--upnp"])
+	linking = DirAccess.open(CHANNEL_PROC_ROOT.path_join("205"))
+	link_made = link_made and linking != null \
+		and linking.create_link(live + " (deleted)", "exe") == OK
+	var by_deleted := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	_channel_proc_wipe()
+	_says(live_sees == 0 and dev_sees == -1 and by_name == 1 and link_made and by_link == -1
+			and dev_by_link == -2 and by_deleted == 1,
 		"channel K8: beside a dev server run with --no-upnp, a live server's job sees its own"
-		+ " server with neither (%d), the dev server's job its --no-upnp (%d), and" % [
-			live_sees, dev_sees] + " one started by a relative path is known by its name (%d)"
-		% by_name)
+		+ " server with neither (%d), the dev server's job its --no-upnp (%d); one started" % [
+			live_sees, dev_sees] + " through a symlinked directory is known by its /proc link"
+		+ " (%d, and %d to the dev job), and after its build was replaced (%d); one" % [
+			by_link, dev_by_link, by_deleted] + " started by a relative path is known by its"
+		+ " name (%d)" % by_name)
 
 
 func _channel_proc_wipe() -> void:
@@ -10473,6 +10548,8 @@ func _channel_proc_wipe() -> void:
 		return
 	for pid: String in DirAccess.get_directories_at(CHANNEL_PROC_ROOT):
 		var dir := CHANNEL_PROC_ROOT.path_join(pid)
+		# The `exe` link first, by name: one that leads nowhere may not list.
+		DirAccess.remove_absolute(dir.path_join("exe"))
 		for file: String in DirAccess.get_files_at(dir):
 			DirAccess.remove_absolute(dir.path_join(file))
 		DirAccess.remove_absolute(dir)

@@ -377,6 +377,9 @@ every run names the overrides still in effect, and this one by what it does.
 systemctl disable --now biogenic-server
 rm -rf /etc/systemd/system/biogenic-server.service /etc/systemd/system/biogenic-server.service.d
 systemctl daemon-reload
+# First, if you added one (§9.6): take the include line for /etc/biogenic out of
+# /etc/nftables.conf -- otherwise nft -f fails the whole file at boot, and no
+# table in it loads.
 rm -rf /opt/biogenic /var/lib/biogenic /etc/biogenic
 userdel biogenic
 nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
@@ -1182,8 +1185,10 @@ Run it again, the same way, to update what the server cannot: it says
 --purge --dev` does the same from a clean kit, keeping `/var/lib/biogenic-dev`.
 It purges the dev kit alone, and the live server's `--purge` purges the live one
 alone. `branch-dev` is refreshed in place on every push to `dev`, so an install
-that meets one half-published fails its checksum check and installs nothing:
-run it again a few minutes later.
+that meets one half-published fails its download or its checksum check and
+installs nothing: run it again a few minutes later. `--purge --dev` removes the
+dev kit before it downloads, so a purge that meets a half-published
+`branch-dev` leaves the dev server uninstalled until you run it again.
 
 ### 10.2 How it updates
 
@@ -1210,7 +1215,9 @@ For a server at the placeholder `192.0.2.12`:
 **On one machine, the two servers have the same code**: a code carries the
 machine's address, and both are at it. Which one a phone reaches is its app's
 doing. The dev app calls 45781 and finds the dev server; the players' app calls
-45771 and finds the live one. Neither app ever reaches the other's server.
+45771 and finds the live one. Neither app ever finds the other's server by its
+code; an invite calls the server that minted it, whichever app pastes it
+(§10.4).
 
 ### 10.4 Its jobs, and its router port
 
@@ -1246,6 +1253,9 @@ Everything of the dev server's, invites and all, and nothing of the live one's:
 systemctl disable --now biogenic-server-dev
 rm -rf /etc/systemd/system/biogenic-server-dev.service /etc/systemd/system/biogenic-server-dev.service.d
 systemctl daemon-reload
+# First, if you added one (§9.6): take the include line for /etc/biogenic-dev out
+# of /etc/nftables.conf -- otherwise nft -f fails the whole file at boot, and no
+# table in it loads, the live one included.
 rm -rf /opt/biogenic-dev /var/lib/biogenic-dev /etc/biogenic-dev
 userdel biogenic-dev
 nft delete table inet biogenic_dev   # only if you loaded its firewall rules

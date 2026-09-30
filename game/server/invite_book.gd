@@ -141,12 +141,7 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 	if not refusal.is_empty():
 		return [1, [refusal]]
 	if int(whose["uid"]) == 0 or (int(whose["uid"]) < 0 and OS.get_environment("USER") == "root"):
-		var account := service_account()
-		lines.append("note: this runs as root, so it keeps root's own book, in %s, which the"
-			% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
-			+ " job as its user: runuser -u %s -- env HOME=/var/lib/%s" % [account, account]
-			+ " /opt/%s/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)"
-			% account)
+		lines.append(root_note(root))
 	var runs := is_run(args)
 	for job: String in JOBS:
 		if runs and UPNP_JOBS.has(job):
@@ -178,6 +173,19 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 				if not lines.has(said):
 					lines.append(said)
 	return [code, lines]
+
+
+## **The note a job run as root, in its own `user://` under [param root],
+## gives**: that the book it keeps there is root's, which the service never
+## reads -- and the command that runs the job as the service's own user,
+## [method service_account], instead.
+static func root_note(root: String = ROOT) -> String:
+	var account := service_account()
+	return ("note: this runs as root, so it keeps root's own book, in %s, which the"
+		% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
+		+ " job as its user: runuser -u %s -- env HOME=/var/lib/%s" % [account, account]
+		+ " /opt/%s/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)"
+		% account)
 
 
 ## **Who runs this, and who owns what a job would write**: `{uid, owners,
@@ -502,11 +510,13 @@ static func running_upnp_override(proc: String = "/proc", exe: String = "",
 			continue
 		# A /proc file reports length 0: read what is there, not what it says.
 		var argv := _nul_split(file.get_buffer(65536))
-		if argv.is_empty() or not _same_program(str(argv[0]), mine):
+		if argv.is_empty():
 			continue
+		# A run first, which is cheap to see, and then whose: only a server's
+		# own `/proc` link is ever read.
 		var cut := argv.find("--")
 		var own := argv.slice(cut + 1) if cut >= 0 else PackedStringArray()
-		if not is_run(own):
+		if not is_run(own) or not _same_program(str(argv[0]), mine, proc.path_join(entry)):
 			continue
 		if own.has("--no-upnp"):
 			return -1
@@ -516,12 +526,22 @@ static func running_upnp_override(proc: String = "/proc", exe: String = "",
 
 ## **Whether a process started as [param argv0] runs [param exe]**: the same
 ## path, when it was started by a whole one -- as a unit's `ExecStart=` starts
-## it, so `/opt/biogenic-dev/` is never taken for `/opt/biogenic/` -- and the
-## same file name, when it was started by a relative one.
-static func _same_program(argv0: String, exe: String) -> bool:
-	if argv0.is_absolute_path():
-		return argv0.simplify_path() == exe.simplify_path()
-	return argv0.get_file() == exe.get_file()
+## it, so `/opt/biogenic-dev/` is never taken for `/opt/biogenic/` -- or, by
+## another whole path, the same file behind the `exe` link in its [param dir]
+## under `/proc`: a path through a symlinked directory. [param exe] is resolved
+## already -- `OS.get_executable_path()` is -- and the link reads only to the
+## process's own user, which is who runs a job. A running build that was
+## replaced reads ` (deleted)` after its path. Started by a relative path, the
+## same file name.
+static func _same_program(argv0: String, exe: String, dir: String = "") -> bool:
+	if not argv0.is_absolute_path():
+		return argv0.get_file() == exe.get_file()
+	var mine := exe.simplify_path()
+	if argv0.simplify_path() == mine or dir.is_empty():
+		return argv0.simplify_path() == mine
+	var at := DirAccess.open(dir)
+	var real := at.read_link("exe").trim_suffix(" (deleted)") if at != null else ""
+	return not real.is_empty() and real.simplify_path() == mine
 
 
 ## The NUL-separated strings of a `cmdline`.
