@@ -19,12 +19,14 @@ any x86_64 Debian or Ubuntu machine with systemd.
 > (§3; issues #56, #57 and #58, `docs/design/net-hardening.md` parts A and B).
 > **Never forward 45771**, and keep it off the internet at the firewall too
 > (§5): the server's own check is a second line, not the first. A friend
-> outside the house comes in through a second
-> port, UDP 45772, which exists only while you have minted at least one invite:
-> the call is encrypted, the server proves itself with a certificate the invite
-> pins, and the friend proves the invite's secret before anything else is
-> taken (§9; issue #59, part C). With no invites, nothing listens for the
-> internet at all.
+> outside the house comes in through a second port, UDP 45772. **The server
+> asks your router to forward that one to it, by UPnP, for as long as it
+> runs** -- never 45771 -- and `--no-upnp` turns that off (§9.3). But nothing
+> answers on 45772 until you have minted at least one invite: the call is
+> encrypted, the server proves itself with a certificate the invite pins, and
+> the friend proves the invite's secret before anything else is taken (§9;
+> issue #59, part C). With no invites, nothing listens for the internet at
+> all: the forward leads to a port nobody answers.
 
 Every address below is a placeholder from RFC 5737's documentation range,
 `192.0.2.0/24`. Put your own network's numbers in their place.
@@ -42,7 +44,8 @@ its address the same as theirs. The join code carries only the last number: a
 phone that taps it assumes everything before it is its own.
 
 - Bridge the container's `eth0` to your LAN bridge (`vmbr0` on a stock
-  install), not to a NAT or internal one.
+  install), not to a NAT or internal one: the phones find the server there,
+  and the server finds the router there (§9.3).
 - Give it a fixed address, or a DHCP reservation on your router, so that its
   code never changes. For example: the phones get `192.0.2.x` from the router,
   and the container is `192.0.2.12`.
@@ -89,7 +92,8 @@ update it (below). In order, it:
    firewall rules for both ports in `/etc/biogenic/` without loading them (§5,
    §9.6), and names any `systemctl edit` override still in effect;
 6. starts the server -- or restarts it, if the build or the unit changed -- and
-   prints what it says about where it is.
+   prints what it says about where it is, and whether the router took its
+   forward (§9.3).
 
 **Updating.** The server keeps its own build and content current (§4), but
 never the files around it: the unit, the firewall rules, the installer. Those
@@ -121,10 +125,15 @@ It looks like this -- for a server at the placeholder `192.0.2.12`:
 [server] READY -- listening on 192.0.2.12 port 45771/udp, code 1, 7, 12, 12 o'clock
 [server] to join: a phone on this wi-fi (192.0.2.x) opens within earshot, taps answer, and taps the ring at 1, 7, 12, 12 o'clock, in that order. LAN only: do not forward this port.
 [server] internet: nothing listens for the internet: there are no invites. To let a friend in from outside, set --reach, then --invite=<name> (docs/server.md).
+[upnp] looking for the router, to forward UDP 45772 to this machine for as long as the server runs -- nothing answers there without an invite
+[upnp] forwarded UDP 45772 on the router to this machine, 192.0.2.12:45772, for an hour at a time -- renewed every 30 minutes while the server runs, and taken off when it stops
+[upnp] the router says this network's public address is 203.0.113.7 -- set --reach=203.0.113.7 to let friends in (docs/server.md §9.2)
 ```
 
 The third line is about friends outside the house (§9): until you mint an
-invite, it says nothing listens for them.
+invite, it says nothing listens for them. The `[upnp]` lines are the server
+asking your router to forward the internet's port to it, a few seconds after
+READY (§9.3).
 
 The code is four marks on the ring the phone shows under **answer**, written as
 positions on a clock: the ring has twelve, **12 o'clock is the top**, and they go
@@ -269,11 +278,11 @@ at the top). **That check is a second line, not the first** (issue #69):
 
 So keep 45771 off the internet before it gets that far:
 
-- **At the router: never forward 45771.** UDP 45772 is the internet's, and
-  only while there are invites (§9): the one port to forward, and only if you
-  want friends outside the house. If the router hands out IPv6, check that its
-  firewall does not let inbound IPv6 through to the container -- that needs no
-  forward at all.
+- **At the router: never forward 45771** -- the server never asks for it.
+  UDP 45772 is the internet's: the server asks the router to forward it, by
+  UPnP, for as long as it runs (§9.3), and nothing answers there without an
+  invite (§9). If the router hands out IPv6, check that its firewall does not
+  let inbound IPv6 through to the container -- that needs no forward at all.
 - **On the machine: load the rules the installer laid down** at
   `/etc/biogenic/nftables-internet.conf` (§9.6). Their last two drop anything
   that reaches 45771 from outside the home ranges -- loopback, 10/8,
@@ -328,8 +337,9 @@ systemctl disable --now biogenic-server # stop it and keep it stopped
 **Stopping is clean.** Godot does not catch SIGTERM, so the unit's `ExecStop`
 asks first: it leaves a file the server looks for four times a second, and the
 server tells its guests it is going -- each phone takes over its own water at
-once, rather than after a connection timeout -- and exits. SIGTERM is only the
-backstop.
+once, rather than after a connection timeout -- takes its forward off the
+router (§9.3), and exits. SIGTERM is only the backstop; a server that dies by
+it, or crashes, leaves the forward to lapse by itself within the hour.
 
 **Going back to the previous build**, if a new one misbehaves or will not
 start -- `systemctl status biogenic-server` showing it starting over and over,
@@ -448,6 +458,14 @@ nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
   every CI run, with its own mbedTLS 3.6.7 compiled in: `docs/engine.md` says
   what that carries, which advisories were checked against it, and what an
   engine upgrade repeats (issues #78 and #79).
+- It forwards its internet port through Godot's own UPnP (miniupnpc 2.3.3:
+  IGD only, no NAT-PMP and no PCP), in `game/net/port_forward.gd`, which knows
+  nothing of Biogenic but the port it is given. Every call to the router is on
+  a worker thread -- a search with no router answering takes about four
+  seconds, and the pond never waits for it. `tools/net_probe.gd`'s `upnp`
+  section runs it against a stand-in router, and CI's boots of the server
+  search the runner's network for one and find none, which holds their exit
+  up by what is left of those four seconds and prints nothing wrong.
 
 ## 9. Internet play: friends outside the house
 
@@ -516,7 +534,11 @@ address changes. Set it once:
 $BIOGENIC --reach=203.0.113.7            # or --reach=pond.example.net
 ```
 
-It is kept in the server's `user://` and nowhere else. If your router forwards
+It is kept in the server's `user://` and nowhere else. The server's log names
+the public address your router reports -- `[upnp] the router says this
+network's public address is 203.0.113.7 -- set --reach=203.0.113.7 to let
+friends in` (§9.3) -- but the server never sets `--reach` itself: the address
+friends dial is the one you chose. If your router forwards
 a different outside port to 45772, say which: `--reach=pond.example.net:50000`.
 An IPv6 address goes in brackets: `--reach=[2001:db8::7]:45772`. An address
 inside your own network gets a warning, because friends outside can never
@@ -542,16 +564,86 @@ call is named, with why, in the server's status line, `--invites` and
 even when it has an IPv6 one too: a home router forwards a port over IPv4, and
 seldom opens one over IPv6. So IPv6 matters only for a name with no IPv4
 address at all -- and then UDP 45772 must be open over IPv6, to this machine,
-on your router's firewall.
+on your router's firewall: a firewall rule, not a forward, and one the
+server's UPnP does not make.
 
 Every invite carries the address it was minted with, so after changing
 `--reach`, mint again for anybody who has one.
 
-### 9.3 Forward one port
+### 9.3 The one port, on the router
 
-On your router, forward **UDP 45772** -- or the outside port you gave `--reach`
--- to the container's UDP 45772. That is the only port to forward, ever: 45771
-stays inside. If the container runs `ufw`: `ufw allow 45772/udp`.
+**The server forwards it itself.** From its READY until it stops, it asks your
+router to forward **UDP 45772** to this machine's UDP 45772 -- by UPnP, the way
+a games console does -- whatever the invites: the forward is always there, and
+nothing answers behind it until you mint one (§9.4). It asks for an hour at a
+time and renews every half hour, and a clean stop -- `systemctl stop`, a
+restart, an update -- takes the forward off. A server that is killed or
+crashes leaves it to lapse by itself within the hour. It never asks for 45771,
+and it never takes 45772 from anything else that holds it on the router.
+
+For the router to hear it:
+
+- **UPnP must be on in the router.** It is often called "UPnP", "UPnP IGD" or
+  "allow devices to open ports". Godot's UPnP speaks IGD only: a router that
+  offers NAT-PMP or PCP and no IGD -- some Apple and newer routers -- is not
+  found, and needs the forward by hand (below).
+- **The container must be on the LAN bridge** (§1). The router is found by a
+  multicast search on the LAN, which a NAT or internal Proxmox bridge does not
+  carry.
+- **A firewall on the container or the Proxmox host must let the router
+  answer.** The answer to the search is UDP from the router's port 1900 to a
+  high port here, which a firewall's "replies are allowed" rule does not
+  recognise as a reply -- the search went to a multicast address, and the
+  answer comes from the router's own. With `ufw` active: `ufw allow proto udp
+  from 192.0.2.1 port 1900`, with your router's address in place of the
+  placeholder. The shipped nftables rules (§9.6) touch neither.
+
+It says what happened in lines that start `[upnp]` -- one for each thing that
+happens, not one for each look. When the router takes the forward:
+
+```
+[upnp] forwarded UDP 45772 on the router to this machine, 192.0.2.12:45772, for an hour at a time -- renewed every 30 minutes while the server runs, and taken off when it stops
+[upnp] the router says this network's public address is 203.0.113.7 -- set --reach=203.0.113.7 to let friends in (docs/server.md §9.2)
+```
+
+A router that takes no forward with a time limit is given one without -- the
+line says `with no time limit` -- which the server still takes off when it
+stops, but which a killed server leaves on the router until you take it off.
+Renewals are silent; one the router refuses is a line, and so is the renewal
+that takes after it. A renewal the router does not answer at all is asked again
+by a fresh search, since a router that restarted may answer at another port.
+
+**When it cannot**, the line says why, and the server looks again within ten
+minutes, saying nothing more until what it finds changes:
+
+| The line says | What it means | What to do |
+|---|---|---|
+| `no router answered` | Nothing on this network answers a UPnP search: UPnP is off, the router has none, or the search never reaches it (the bridge and the firewall, above). | Turn UPnP on, or forward by hand. |
+| `N devices answered, and none is a router that forwards ports` | Other devices -- a TV, a printer -- answered, and the router did not. | Turn UPnP on in the router, or forward by hand. |
+| `the router already forwards UDP 45772 elsewhere` | Something holds the port on the router: a forward made by hand -- which some routers hold against UPnP even when it leads to this very machine -- or another machine's. The server leaves it be. | If it leads to this machine, friends get in anyway: `--no-upnp` stops the asking. If not, take it off the router. |
+| `the router would not forward UDP 45772 (...)` | The router refused, for the reason in brackets. | Forward by hand. |
+| `the router's own internet address is 100.64.x.x, a shared one` | Carrier-grade NAT: your provider shares one address among many homes. No forward anywhere in the house can reach you. | Ask the provider for a public IPv4 address; or friends call over IPv6 (§9.2), which needs a firewall rule, not a forward. |
+| `the router's own internet address is 10.x.x.x, a private one: two routers in a row` | This router sits behind another, usually the provider's box. The server asks this one for nothing: its forward alone could not reach you. | Forward UDP 45772 on the outer router to this one, and on this one to the server, by hand -- or put the outer one in bridge mode. |
+| `a router answered whose own internet address is not one the internet can call` | One of the two rows above, from a router that would not say which -- miniupnpd, which many routers run, keeps a private address to itself. | As the two rows above. |
+| `the router answered, but says it is not connected to the internet` | Its internet side is down. | Nothing: it looks again. |
+
+**By hand**, forward **UDP 45772** -- or the outside port you gave `--reach` --
+to the container's UDP 45772. That is the only port to forward, ever: 45771
+stays inside. If the container runs `ufw`: `ufw allow 45772/udp`. Then tell
+the server not to ask, so that the two never meet:
+
+```sh
+$BIOGENIC --no-upnp     # the server asks the router for nothing, and a running one takes its forward off within seconds
+$BIOGENIC --upnp        # the server asks again
+```
+
+The switch is kept in the server's `user://`, as `--reach` is, so it holds
+across restarts, updates and reinstalls; `--invites` says which way it is set.
+On the service's own command line -- `systemctl edit`, as in §6 --
+`--no-upnp` beside `--stop-file=` holds for that run only, and writes nothing.
+
+**Keep the router's own page in mind**: its list of forwards shows this one as
+`Biogenic server`, and it is the place to check what the router holds.
 
 ### 9.4 Mint an invite, and send it
 
@@ -604,6 +696,7 @@ $BIOGENIC --revoke=sam       # that invite stops working
 
 ```
 [server] friends call 203.0.113.7:45772; the server listens on 45772/udp for them.
+[server] upnp: on -- the server asks the router to forward 45772/udp to it (--no-upnp turns that off)
 [server] 2 invites:
 [server]   kit -- made 2026-09-20 18:02 UTC, last joined never
 [server]   sam -- made 2026-09-25 14:03 UTC, last joined 2026-09-25 18:10 UTC
@@ -703,6 +796,17 @@ The engine's lines look like these, and none of them is the server failing:
   an invite from another server, or one from before `--new-key`.
 - `ERROR: Parameter "p_mutex->mutex" is null.`, three at a time, whenever the
   internet listener closes: a bug in Godot 4.7's DTLS server, harmless.
+- `ERROR: Couldn't add port mapping.`, `ERROR: Couldn't delete port mapping.`
+  and `ERROR: Couldn't get external IP address.` -- the router said no to the
+  server's forward (§9.3), and the `[upnp]` line straight after says what and
+  why. The first also comes once from a router that takes no forward with a
+  time limit, just before the server asks for one without.
+- `sendto: Network is unreachable` -- UPnP's search found no route for its
+  multicast: the container has an address but no route out of it. The
+  `[upnp]` line after it says no router answered.
+- `connect: Connection refused` -- the router did not answer where it said it
+  would, usually because it restarted: the server searches for it afresh, and
+  says so only if the renewal does not take (§9.3).
 
 ### 9.8 A new key
 
@@ -774,8 +878,10 @@ Nothing needs it on a timer.
 1. **Run the job straight away** -- it is the containment. Within two seconds
    every invite made with the old key is refused, and anybody swimming on one
    is told. Nothing needs stopping first. If you cannot reach the server's
-   shell yet, take the port forward off the router (§9.3) until you can:
-   friends read "no answer" meanwhile, and the LAN plays on.
+   shell yet, turn UPnP off on the router and take the `Biogenic server`
+   forward off it (§9.3) until you can -- with UPnP on, the server would put
+   the forward back within half an hour: friends read "no answer" meanwhile,
+   and the LAN plays on.
 2. **Check that it took.** The job exits 0 and prints the new certificate, and
    the journal says the key changed, then names the same certificate:
    ```sh
@@ -815,10 +921,13 @@ Nothing needs it on a timer.
 What their phone says, and what to look for in `journalctl -u biogenic-server`:
 
 - **"no answer"** -- nothing answered within eight seconds. The port is not
-  forwarded, `--reach` names the wrong address (`--invites` shows it), the
-  server is down, or the friend's network blocks UDP. No `[net]` line: the
-  call never reached the server. The same, from a network that stays silent
-  rather than refusing, when nothing listens (below).
+  forwarded -- the `[upnp]` lines say whether the router took the server's
+  forward, and why not (§9.3) -- `--reach` names the wrong address
+  (`--invites` shows it, and the `[upnp]` line with the router's public
+  address is the one to compare it with), the server is down, or the friend's
+  network blocks UDP. No `[net]` line: the call never reached the server. The
+  same, from a network that stays silent rather than refusing, when nothing
+  listens (below).
 - **"no server there"** -- the address refused the call: nothing listens on
   that port. With no invites the internet listener is closed (`[server]
   internet: nothing listens for the internet`), or the router forwards to the

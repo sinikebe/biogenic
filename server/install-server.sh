@@ -37,10 +37,13 @@
 # not touch firewall rules already loaded. To wipe those too, uninstall first
 # (docs/server.md §6).
 #
-# Nothing here loads a firewall rule or touches your router. The server is for
-# your home LAN until you mint an invite: friends outside the house come in on a
-# second port, by invite only, and docs/server.md §9 says how -- including when
-# to load the firewall rules from step 5.
+# Nothing here loads a firewall rule or touches your router -- but the server it
+# starts asks your router to forward UDP 45772 to it, by UPnP, for as long as it
+# runs (docs/server.md §9.3; --no-upnp turns that off). Nothing answers there
+# until you mint an invite: the server is for your home LAN until then, friends
+# outside the house come in on that second port by invite only, and
+# docs/server.md §9 says how -- including when to load the firewall rules from
+# step 5.
 #
 # BIOGENIC_REPO=owner/name installs from another fork's releases, and
 # BIOGENIC_RELEASE_URL, used as it is, from anywhere curl can read one
@@ -185,6 +188,10 @@ if compgen -G "$OVERRIDES/*.conf" >/dev/null; then
 		say "an override runs the server with --no-update: it will not update itself" \
 			"until you remove it -- systemctl revert $UNIT"
 	fi
+	if grep -qs -- '--no-upnp' "$OVERRIDES"/*.conf; then
+		say "an override runs the server with --no-upnp: it will not ask the router to" \
+			"forward UDP $NET_PORT -- forward it by hand (docs/server.md §9.3)"
+	fi
 fi
 
 # 5b. The firewall rules for both ports, laid down but never loaded: a network
@@ -247,8 +254,27 @@ else
 	ready="$(journalctl -u "$UNIT" -o cat --no-pager 2>/dev/null \
 		| grep -E '^\[server\] (READY|internet)' | tail -2 || true)"
 fi
+# 6b. What the router made of the server's forward (docs/server.md §9.3). It
+#     asks after READY, and a search that finds no router takes about four
+#     seconds, so a few more for its answer -- anything but the line that says
+#     it is looking.
+router=""
+if (( waiting )) && grep -q '^\[server\] READY' <<<"$ready"; then
+	for _ in $(seq 1 10); do
+		router="$(journalctl -u "$UNIT" --since "$since" -o cat --no-pager 2>/dev/null \
+			| grep -E '^\[upnp\] ' | grep -v '^\[upnp\] looking for the router' || true)"
+		[[ -n "$router" ]] && break
+		sleep 1
+	done
+elif ! (( waiting )); then
+	router="$(journalctl -u "$UNIT" -o cat --no-pager 2>/dev/null \
+		| grep -E '^\[upnp\] ' | grep -v '^\[upnp\] looking for the router' | tail -2 || true)"
+fi
 echo
 printf '%s\n' "$ready"
+if [[ -n "$router" ]]; then
+	printf '%s\n' "$router"
+fi
 if (( waiting )) && ! grep -q '^\[server\] READY' <<<"$ready"; then
 	say "the server has not said READY yet; its log: journalctl -u $UNIT -e"
 fi
@@ -260,12 +286,18 @@ Everything it says, as it says it:
   journalctl -u $UNIT -f
 
 It listens on UDP $PORT, for your home network only: never forward that port on
-your router. Friends outside the house come in by invite, on UDP $NET_PORT, which
-listens only once you mint one (docs/server.md §9).
+your router -- the server never asks for it. Friends outside the house come in
+by invite, on UDP $NET_PORT: the server asks your router to forward that one to
+it, by UPnP, for as long as it runs -- its [upnp] lines say whether the router
+did, and if not, forward it by hand (docs/server.md §9.3) -- and nothing answers
+there until you mint an invite (docs/server.md §9).
 EOF
 if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q '^Status: active'; then
 	echo
 	echo "ufw is active here. Let the LAN in, and only the LAN, with something like:"
 	echo "  sudo ufw allow from 192.0.2.0/24 to any port $PORT proto udp"
 	echo "(192.0.2.0/24 is a placeholder: use your own network's range.)"
+	echo "And let the router answer the server's UPnP search, or it finds no router:"
+	echo "  sudo ufw allow proto udp from 192.0.2.1 port 1900"
+	echo "(192.0.2.1 is a placeholder: use your router's address -- docs/server.md §9.3.)"
 fi

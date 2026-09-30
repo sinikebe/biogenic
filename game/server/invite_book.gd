@@ -17,6 +17,8 @@ extends RefCounted
 ##   - `pond/joined.cfg`, when each invite last came in. Only the running server
 ##     writes it, so the two never write one file;
 ##   - `pond/reach.cfg`, the address friends dial (`--reach`);
+##   - `pond/upnp.cfg`, whether the server asks the router to forward
+##     [constant Invite.PORT] to it (`--no-upnp`, `--upnp`); no file is yes;
 ##   - `invites/<label>.txt`, the line to send, `rw-------`, in a directory
 ##     that is `rwx------`.
 ##
@@ -56,7 +58,17 @@ const LABEL_MAX := 24
 const INVITES_MAX := 100
 ## The jobs, after `--`. Each does what it says and exits, without hosting,
 ## without the updater and without binding a port.
-const JOBS := ["--reach=", "--new-key", "--revoke=", "--invite=", "--invites"]
+const JOBS := ["--reach=", "--no-upnp", "--upnp", "--new-key", "--revoke=", "--invite=",
+	"--invites"]
+## **The UPnP switch, as a job**: remembered in `pond/upnp.cfg` (server.gd
+## reads it). Beside the service's own flags it is not a job at all -- see
+## [constant RUN_FLAGS].
+const UPNP_JOBS := ["--no-upnp", "--upnp"]
+## **The service's own flags**, which make a command line a run: beside one of
+## these, `--no-upnp` and `--upnp` hold for that run and write nothing, so an
+## `ExecStart=` given `--no-upnp` runs a server instead of exiting -- and being
+## started again every five seconds, for good.
+const RUN_FLAGS := ["--no-update", "--stop-file="]
 
 
 ## Every path under [param root].
@@ -65,7 +77,7 @@ static func paths(root: String = ROOT) -> Dictionary:
 	return {"pond": pond, "key": pond.path_join("key.pem"),
 		"cert": pond.path_join("cert.pem"), "book": pond.path_join("invites.cfg"),
 		"joined": pond.path_join("joined.cfg"), "reach": pond.path_join("reach.cfg"),
-		"lines": root.path_join("invites")}
+		"upnp": pond.path_join("upnp.cfg"), "lines": root.path_join("invites")}
 
 
 ## The file a label's line is written to.
@@ -74,16 +86,32 @@ static func line_path(label: String, root: String = ROOT) -> String:
 
 
 ## **True when [param args] asks for one of the jobs** rather than a server.
+## `--no-upnp` and `--upnp` beside one of [constant RUN_FLAGS] do not count:
+## there they are the run's own.
 static func is_job(args: PackedStringArray) -> bool:
+	var runs := is_run(args)
 	for arg: String in args:
+		if runs and UPNP_JOBS.has(arg):
+			continue
 		for job: String in JOBS:
 			if arg == job or (job.ends_with("=") and arg.begins_with(job)):
 				return true
 	return false
 
 
+## True when [param args] holds one of the service's own flags
+## ([constant RUN_FLAGS]).
+static func is_run(args: PackedStringArray) -> bool:
+	for arg: String in args:
+		for flag: String in RUN_FLAGS:
+			if arg == flag or (flag.ends_with("=") and arg.begins_with(flag)):
+				return true
+	return false
+
+
 ## **Every job [param args] asks for, in a sensible order** -- the address
-## first, then a new key, then revoking, then minting, then the list -- as
+## first, then the UPnP switch, then a new key, then revoking, then minting,
+## then the list -- as
 ## `[exit code, lines to print]`. 0 when every job did what it was asked, 1 when
 ## one was refused; each refusal is a sentence that names the fix.
 ##
@@ -105,7 +133,10 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 			% _real(root).trim_suffix("/") + " service never reads. For the service's, run the"
 			+ " job as its user: runuser -u biogenic -- env HOME=/var/lib/biogenic"
 			+ " /opt/biogenic/biogenic-server.x86_64 --headless -- <job> (docs/server.md §9.1)")
+	var runs := is_run(args)
 	for job: String in JOBS:
+		if runs and UPNP_JOBS.has(job):
+			continue
 		for arg: String in args:
 			if not (arg == job or (job.ends_with("=") and arg.begins_with(job))):
 				continue
@@ -113,6 +144,10 @@ static func run(args: PackedStringArray, root: String = ROOT) -> Array:
 			match job:
 				"--reach=":
 					got = set_reach(arg.trim_prefix(job), root)
+				"--no-upnp":
+					got = set_upnp(false, root)
+				"--upnp":
+					got = set_upnp(true, root)
 				"--new-key":
 					got = new_key(root)
 				"--revoke=":
@@ -235,9 +270,8 @@ static func set_reach(text: String, root: String = ROOT) -> Array:
 		return [1, ["--reach: could not write %s (error %d)" % [_real(str(paths(root)
 			["reach"])), err]]]
 	var at := Invite.reach_text(str(said["address"]), int(said["port"]))
-	var out: PackedStringArray = ["friends will call %s. Forward UDP %d on your router to"
-		% [at, int(said["port"])] + " this machine's port %d/udp, and nothing else."
-		% Invite.PORT]
+	var out: PackedStringArray = ["friends will call %s. %s" % [at,
+		forward_advice(int(said["port"]), root)]]
 	var near := _near_warning(str(said["address"]))
 	if not near.is_empty():
 		out.append(near)
@@ -335,6 +369,71 @@ static func mint(text: String, root: String = ROOT) -> Array:
 	return [0, out]
 
 
+## **What the owner must do on the router** for friends to reach
+## [param outside], the port `--reach` names: nothing, when the server forwards
+## it itself -- it is [constant Invite.PORT], and the UPnP switch is on -- but
+## the log says whether the router let it; otherwise forward it by hand.
+static func forward_advice(outside: int, root: String = ROOT) -> String:
+	var by_hand := "UDP %d on your router to this machine's port %d/udp, and nothing else" \
+		% [outside, Invite.PORT]
+	if upnp_setting(root) != 1:
+		return "Forward %s -- UPnP is off here (--no-upnp)." % by_hand
+	if outside != Invite.PORT:
+		return ("Forward %s: the server's own forward, by UPnP, is of %d, not of %d."
+			% [by_hand, Invite.PORT, outside])
+	return ("The server asks your router to forward UDP %d to it by itself, by UPnP, and its"
+		% Invite.PORT + " [upnp] lines say whether the router did; if not, forward %s."
+		% by_hand)
+
+
+## **`--no-upnp` and `--upnp`: whether the server asks the router to forward
+## [constant Invite.PORT] to it**, remembered here the way `--reach` is -- in
+## `pond/upnp.cfg`, `rw-------`, and nowhere else -- so it holds across
+## restarts, updates and `install-server.sh --purge`. Off, a forward the running
+## server holds is taken off within seconds; on, it looks for the router within
+## seconds. With no file it is on: the owner's call, "the server should be
+## always exposed" (docs/server.md §9.3).
+static func set_upnp(on: bool, root: String = ROOT) -> Array:
+	var flag := "--upnp" if on else "--no-upnp"
+	var made := Invite.make_private_dir(str(paths(root)["pond"]))
+	if made != OK:
+		return [1, ["%s: could not make %s (error %d)" % [flag, _real(str(paths(root)["pond"])),
+			made]]]
+	var file := ConfigFile.new()
+	file.set_value("upnp", "forward", on)
+	var err := Invite.write_private(str(paths(root)["upnp"]),
+		file.encode_to_text().to_utf8_buffer())
+	if err != OK:
+		return [1, ["%s: could not write %s (error %d)" % [flag, _real(str(paths(root)["upnp"])),
+			err]]]
+	if on:
+		return [0, ["upnp: on -- the server asks the router to forward UDP %d to this machine"
+			% Invite.PORT + " for as long as it runs, and a running server does within seconds:"
+			+ " its [upnp] lines say whether the router did (docs/server.md §9.3)."]]
+	return [0, ["upnp: off -- the server no longer asks the router for anything, and a running"
+		+ " server takes its forward off within seconds. For friends outside the house, forward"
+		+ " UDP %d to this machine by hand (docs/server.md §9.3); --upnp turns it" % Invite.PORT
+		+ " back on."]]
+
+
+## **What the UPnP switch says**: 1 on -- as it is with no file, or one that
+## does not read as a switch -- 0 off, and -1 for a file this user may not open,
+## which the server takes as off, and says so: it may hold an off it cannot see.
+## Read with no error line, however often it is asked.
+static func upnp_setting(root: String = ROOT) -> int:
+	var path := str(paths(root)["upnp"])
+	if not FileAccess.file_exists(path):
+		return 1
+	var file := FileAccess.open(path, FileAccess.READ)
+	if file == null:
+		return -1
+	var setting := ConfigFile.new()
+	if setting.parse(file.get_as_text()) != OK:
+		return 1
+	var forward: Variant = setting.get_value("upnp", "forward", true)
+	return 0 if forward is bool and not forward else 1
+
+
 ## **A warning for an address only the house can reach**: loopback, private,
 ## link-local or carrier-grade NAT -- `Lan.is_local_source` with no address of
 ## its own, so it asks about the ranges alone. Said at minting as well as by
@@ -378,6 +477,10 @@ static func listing(root: String = ROOT) -> Array:
 	var out: PackedStringArray = []
 	out.append("friends call %s; the server listens on %d/udp for them."
 		% [reach_said(root, "(nowhere yet: set --reach)"), Invite.PORT])
+	out.append(("upnp: on -- the server asks the router to forward %d/udp to it (--no-upnp turns"
+		% Invite.PORT + " that off)") if upnp_setting(root) == 1
+		else ("upnp: off -- forward %d/udp to this machine by hand (--upnp turns it back on)"
+			% Invite.PORT))
 	if book.is_empty():
 		out.append("no invites. --invite=<name> makes one.")
 		return [0, out]

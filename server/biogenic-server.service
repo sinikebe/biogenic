@@ -1,5 +1,6 @@
 # Biogenic's dedicated server: the shared pond, on the home LAN -- and, for
-# friends outside the house, by invite on a second port (docs/server.md §9).
+# friends outside the house, by invite on a second port, which the server asks
+# the router to forward to it by UPnP while it runs (docs/server.md §9, §9.3).
 #
 # Installed to /etc/systemd/system/ by install-server.sh, from the same release
 # as the build it runs. See docs/server.md.
@@ -31,10 +32,13 @@ Environment=HOME=/var/lib/biogenic
 RuntimeDirectory=biogenic
 ExecStart=/opt/biogenic/biogenic-server.x86_64 --headless -- --stop-file=/run/biogenic/stop
 # Godot does not catch SIGTERM: killed, the guests would only notice when their
-# connections time out. So a stop asks first -- the server polls for this file,
-# tells its guests, and exits 0 -- and SIGTERM stays the backstop. $MAINPID is
-# unset when the process has already gone (an update's restart), and then
-# there is nothing to ask.
+# connections time out, and the server's forward of UDP 45772 would stay on the
+# router until its lease ran out. So a stop asks first -- the server polls for
+# this file, tells its guests, takes its forward off the router (waiting five
+# seconds at most for it to answer), and exits 0 -- and SIGTERM stays the
+# backstop, ten seconds on. $MAINPID is unset when the process has already gone
+# (an update's restart, which takes the forward off itself), and then there is
+# nothing to ask.
 ExecStop=/bin/sh -c 'if [ -n "$$MAINPID" ]; then touch /run/biogenic/stop; timeout 10 tail --pid="$$MAINPID" -s 0.2 -f /dev/null; fi; exit 0'
 Restart=always
 RestartSec=5
