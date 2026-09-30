@@ -121,10 +121,11 @@ for the genes to synthesise from and on 8 for a reason — a colony needs a
 pressure that a single cell cannot meet, and a second environment is the natural
 place to put one.
 
-**Later — genes decide one bite or chewing, for every cell.** The owner's rule
-for the shared pond (`shared-pond.md`, `multiplayer.md` §10 row 6) is that every
-cell obeys one eating rule, players included. *Which* genes decide whether a
-mouth swallows a body whole or has to chew it apart is left to this phase:
+**Later — genes decide one bite or chewing, for every cell** (the owner calls
+it the gene pass, or the gene phase). The owner's rule for the shared pond
+(`shared-pond.md`, `multiplayer.md` §10 row 6) is that every cell obeys one
+eating rule, players included. *Which* genes decide whether a mouth swallows a
+body whole or has to chew it apart is left to this phase:
 
 - the membrane genes (`pellicle`);
 - the eating gene (`cytostome`);
@@ -132,13 +133,27 @@ mouth swallows a body whole or has to chew it apart is left to this phase:
 
 It is decided once, for every cell equally.
 
-Its first work is the two places where today's rule is not yet the same for
-every cell:
+**Venom comes to it in two variants.** The owner, 2026-09-30, verbatim: "venom
+add a stack of venom while it's biting. The stacks deplete over time, doing
+damage. We could later imagine specialized venoms later. But for now keep it
+simple", and then: "There'll be 2 variants. This is about the difference
+between venomous and poisonous. We'll add both on the gene pass later."
 
-- a water cell swallows a player only from a committed run
-  (`food.gd:1409-1436`);
-- `pellicle` armours a player against a swallow but not a water cell
-  (`food.gd:1467` against `cell.gd:508-509`).
+- **Venomous**: its bite adds stacks of venom to what it bites.
+- **Poisonous**: whatever bites or eats it takes stacks.
+
+The stacks wear off over time and do damage while they last; specialised venoms
+may come after. The two variants replace `toxicyst`'s two effects today: a share
+of each bite back into whatever bites a venomous body, and death to whatever
+swallows a venomous player.
+
+The two places where today's rule was not yet the same for every cell are
+settled in pack 1, in the drop (`ocean.md` §5.7; single player from 1a, the
+shared pond from 1b): a water cell swallows a player on contact, not only from a
+committed run (its row 15), and `pellicle` armours every body against a swallow
+(its row 5). **Venom is the one exception left**: a water cell that swallows a
+venomous player dies of it, while a player swallows a venomous water cell
+safely, until this phase replaces both effects with the two variants.
 
 It depends on the pond only in that the pond must not special-case players, so
 that this rule lands on every cell at once. It is also Phase 6's kind of number:

@@ -44,19 +44,24 @@ for real and shoots §3.4 and §7.6 again.
 stood as recommended; rows 4, 5 and 8 changed the design. Every cell in the drop
 now has one body under one set of rules, the player's: it starves as you do,
 grows as you do, sees and swims with its own organs, and dies of hunger or of
-being eaten (§5). Whether swallowing a venomous cell kills the eater, you
-included, is not decided: it is row 12 of the new calls. The drop is kept, in
-the owner's shape: your own drop on the device, served to friends when you
-host, and a room on the home server that lives on while it is empty (§9, §10).
-The prototype was extended to those rules and everything they move was measured
-again; the first pass's numbers that still stand say so. §17.1 has the eight
-new calls those answers raised.
+being eaten (§5). The drop is kept, in the owner's shape: your own drop on the
+device, served to friends when you host, and a room on the home server that
+lives on while it is empty (§9, §10). The prototype was extended to those rules
+and everything they move was measured again; the first pass's numbers that
+still stand say so. §17.1 has the eight new calls those answers raised.
 
 **Reviewed the same day.** An independent review recomputed the numbers from the
 raw logs and found the owner-facing parts wanting: venom, the courtesies a
 player still gets, and four claims about today's code. Its corrections are in
 place, the forage runs a changed rule touches were run again, and pass 2's own
 noise was measured (§8.3).
+
+**The second round was answered the same day** (§17.1): every call as
+recommended, except venom. The owner kept venom out of pack 1 -- the gene pass
+brings it in two variants, venomous and poisonous, each as stacks that wear off
+over time, hurting while they last (row 12) -- so `toxicyst` works in the drop
+exactly as it does today (§5.6), and the pass-2 prototype's swallow death for
+every mouth is reverted.
 
 "Ocean" is the owner's word. This document calls the place **the drop**, because
 that is what it is under a microscope and because "pond" already names the
@@ -145,21 +150,24 @@ findings sharpen it.
    and a water cell run the player's metabolism -- the same tank, upkeep, stroke,
    turn and meal -- grow to 40 and no further, keep whatever mouth they eat
    their way to, notice only what their own senses reach and are armoured by
-   their own `pellicle`, which row 5 decides; and, as recommended in rows 14 and
-   15, swim only as fast as their own tail and swallow whatever fits on contact.
+   their own `pellicle`, which row 5 decides; and, as rows 14 and 15 decided,
+   swim only as fast as their own tail and swallow whatever fits on contact.
    **A cell dies of hunger or of being eaten -- swallowed or chewed -- and age is
-   gone.** Poison stays as today for a biter, which pays for biting a venomous
-   cell and can die of it; whether a mouth that *swallows* one dies too, yours
-   included, is row 12, recommended yes. What stays different is named: how a
-   water cell decides (hand-written until pack 3), how it was made (the spawner,
-   until pack 2's births), and the 42 s of grace a player gets after a birth
-   (row 16) (§5).
+   gone.** Venom stays exactly as it is today (row 12, answered): whatever bites
+   a venomous body takes a share of the bite back and can die of it, and
+   whatever swallows a venomous *player* dies, while a player swallows a
+   venomous water cell safely. It is the one body rule not yet the same for
+   every cell, until the gene pass brings venomous and poisonous cells, each
+   with stacks that wear off (§5.6, §5.7). What else stays different is named:
+   how a water cell decides (hand-written until pack 3), how it was made (the
+   spawner, until pack 2's births), and the 42 s of grace a player gets after a
+   birth (row 16, kept) (§5).
 5. **A cell with no `cytostome` absorbs its food from the water** (row 11,
-   recommended): the drifters are osmotrophs, never starve, and die only when
+   answered): the drifters are osmotrophs, never starve, and die only when
    something eats them; a player who drops their own becomes one too (§5.3).
 6. **The water makes cells that can live**: every peer has a born cell's mouth,
    `cirrus` and `flagellum` and at least one sense, and no drifter carries venom
-   (row 13, recommended). Growth fills the drop with full-size hunters that
+   (row 13, answered). Growth fills the drop with full-size hunters that
    cannot divide until pack 2: at a newborn's composition about half of them sit
    at r40 and half of the hunters that starve starve there; at a sighted
    player's, about a third, and 38 % (§5.5, §5.8, §5.9).
@@ -182,9 +190,9 @@ findings sharpen it.
 9. **A run starts somewhere quiet** (row 9, answered): the spot, of 64 drawn,
    where a born cell would feel the least dread, with nothing edible within
    400 µm and the most food within 1,100; anything still inside `DREAD_RANGE`
-   that could swallow it is moved out, as today. The first drifter and the free
-   sense are kept, and so, if row 16 agrees, are the 42 s before anything may
-   hunt you; a division no longer regenerates anything (§8.1).
+   that could swallow it is moved out, as today. The first drifter, the free
+   sense and the 42 s before anything may hunt you are kept (row 16, answered);
+   a division no longer regenerates anything (§8.1).
 10. **What the player meets is measured, not tuned** (the owner, §17): with the
     same bot, a new drop loses about as many of the full-vision forage bot's
     games as today's water -- 40 % of 192 against 36 %, inside what the seeds
@@ -195,10 +203,10 @@ findings sharpen it.
     The dials a playtest turns are in §8.5.
 11. **The drop is kept** (row 8, in the owner's words): your drop is saved on the
     device when you die, pause or leave the app, and frozen while you are away;
-    your cell is in it when you come back (row 17, recommended); a phone that
+    your cell is in it when you come back (row 17, answered); a phone that
     hosts serves its own drop and saves it when hosting stops; a guest's drop
     waits for it; and the home server keeps **one room that always lives** (row
-    18, recommended), for about 3 % of a core of this container while it is
+    18, answered), for about 3 % of a core of this container while it is
     empty (§9, §10).
 12. **Pack 1 ships as two releases** (row 10, answered): single player first,
     with no wire change -- a run with a session keeps today's water and today's
@@ -485,11 +493,12 @@ threats to a born cell read lower again**, on the side that costs a player
 nothing, as in the first pass. Those two are the ones to watch, and so are two
 small counts the table folds into "cells eaten", which move outside the seeds'
 spread: **hunters chewed apart**, 49–62 at the full rate against 23–47 with the
-LOD, and **mouths that died swallowing a venomous cell**, 38–47 against 51–57.
-Each is about 1 % of the drop's deaths in those ten minutes, and why the rate
-moves them was not measured. The water alone
-cost p50 5.8 ms a frame without the LOD and 1.0 ms with it, in runs that shared
-the machine with other work: the ratio is the point, not the numbers.
+LOD, and **mouths that died swallowing a venomous cell**, 38–47 against 51–57
+-- a death pack 1 does not keep (§5.6), so only chewing is left to watch. Each
+is about 1 % of the drop's deaths in those ten minutes, and why the rate moves
+them was not measured. The water alone cost p50 5.8 ms a frame without the LOD
+and 1.0 ms with it, in runs that shared the machine with other work: the ratio
+is the point, not the numbers.
 
 ### 4.4 Frame budget
 
@@ -637,20 +646,21 @@ friends, NPC, doesn't matter."*
 So every cell in the drop -- the player, a friend, a water cell -- is **one body
 under one set of body rules**: the same tank and the same prices, the same
 growth and the same mouth, the same senses and the same tail, and the same ways
-to end. A water cell differs from you in three things, all named: **how it
+to end. A water cell differs from you in four things, all named: **how it
 decides** (the hand-written behaviour, which pack 3's blocks replace), **how it
-was made** (the spawner, which pack 2's births take over), and **the 42 s of
+was made** (the spawner, which pack 2's births take over), **the 42 s of
 grace** after a birth, a division or a return, in which nothing may hunt a
 player or a friend and which no water cell gets (`FIRST_DELAY`, row 16: kept
-as recommended, until pack 2 gives every newborn the same).
+until pack 2 gives every newborn the same), and **venom**, whose swallow death
+still protects only a player (row 12: until the gene pass).
 
-**Venom is asked, not assumed** (row 12). Today it works both ways for a
+**Venom stays as it is, for now** (row 12). Today it works both ways for a
 player only: whatever bites a venomous body pays for it and can die of it, for
 every body; whatever *swallows* a venomous player dies; but a player swallows a
 venomous water cell safely. Killing the eater is the opposite of being eaten,
-and for a solo player it would be a death that does not exist today, so the
-owner's "nothing else" does not settle it. §5.6 is built for the recommended
-yes, and no is one switch.
+so the owner's "nothing else" did not settle it, and it was asked. The owner
+kept venom out of pack 1: the gene pass brings it in two variants, venomous and
+poisonous, each as stacks that wear off over time (§5.6).
 
 The first pass bounded the water with age and a ceiling on the mouth (§5.10).
 Both are gone. What bounds the water now is the owner's own rule: a cell that
@@ -713,9 +723,9 @@ time) and can still swallow what fits a gape of 0.58 r. That changes the
 decided call it came from: §9 item 7 weighed the move as "a real and
 interesting mistake or a soft lock", survivable only because the drifter floor
 holds; absorbing, it is neither -- a slow, cheap body that lives on what fits a
-small mouth. It is part of what row 11 decides.
+small mouth. Row 11 answered it so.
 
-The other two answers were weighed and are row 11's alternatives:
+The other two answers were weighed, and row 11 set them aside:
 
 - **Drifters eat the flocs**, which makes the snow the drop's only income and
   the owner's non-living food the base of the food chain. It is the most
@@ -812,46 +822,67 @@ moves the forage bot (§8.3).
 ### 5.6 What kills
 
 Four causes, for every body, and nothing else -- `food.Cause` as it is. The
-owner's rule is the first three; the fourth is today's, with one question in it
-(row 12):
+owner's rule is the first three; the fourth is venom, as it is today (row 12):
 
 | cause | how |
 |---|---|
 | **hunger** | empty for `STARVE_GRACE` 10 s |
 | **swallowed** | a mouth closed on it and it fit: its radius × its `pellicle` armour under the gape |
 | **chewed** | bitten to nothing by a mouth it did not fit |
-| **poisoned** | it bit a venomous body and took the venom back until it was bitten through -- today's rule, for every body -- or, **if row 12 is yes as recommended, it swallowed a venomous body**: every mouth, the player's included |
+| **poisoned** | it bit a venomous body and took the venom back until it was bitten through, for every body; or it swallowed a venomous *player*. Today's rule, kept through pack 1 (row 12) |
 
-**Venom when it is swallowed: recommended the same for everyone** (row 12).
-Three things point that way. `toxicyst`'s line has always said "whatever bites
-you pays, and whatever swallows you dies", and today the second half protects
-only a player; yes makes the gene whole. The owner answered the shared pond's
-eating rule with "All cells obey the same eating rule. No player special case"
-(`multiplayer.md` §10 row 6). And the shared pond already does it between two
-players: a player who swallows a venomous friend is poisoned, as a water cell
-is (`shared-pond.md` §1.3; `food.gd:2211`). What yes
-costs is a death a solo player does not have today -- a venomous cell small
-enough to swallow kills you -- and point of view has no way to tell which cells
-carry venom; full vision draws the organ. The venomous body is spat out alive
-and pays `VENOM_COST_BY_TIER` from its hunger, as the player always has. The
-drop's drifters carry no venom (row 13, §5.8), so the venomous bodies are cells
-with mouths. No is one switch: venom then only makes a biter pay.
+**Venom, as today, until the gene pass** (row 12, answered on 2026-09-30; the
+owner's words are in §17.1). Row 12 asked whether a mouth that swallows a
+venomous cell dies, the player's included. The owner chose neither: venom is
+not reworked in pack 1, and the gene pass brings it in two variants -- a
+**venomous** cell's bite adds stacks of venom to what it bites, and whatever
+bites or eats a **poisonous** cell takes stacks; the stacks wear off over time,
+doing damage while they last. Until then `toxicyst` does exactly what it does
+today:
+
+- **whatever bites a venomous body** takes `VENOM_BITE_BACK_BY_TIER` of each
+  bite back into its own wound, and dies of it when that wound is whole -- every
+  body, as today;
+- **whatever swallows a venomous player dies**, and the player is spat out
+  alive, paying `VENOM_COST_BY_TIER` from its hunger -- a water cell or a friend
+  alike, as the shared pond already does (`shared-pond.md` §1.3;
+  `food.gd:2211`). A venomous water cell is swallowed like any other.
+
+So venom is the one body rule not yet the same for every cell (§5.7), and the
+gene pass replaces both of its effects. The drop's drifters carry no venom
+(row 13, §5.8), so the venomous bodies are cells with mouths, and full vision
+draws the organ.
+
+**What keeping today's venom does to the numbers.** Every run in §4, §5 and §8
+was made with the pass-2 prototype's swallow death for every mouth, which pack
+1 does not have. Under today's rule the drop's water cells stop dying of a
+swallowed venomous cell -- 0.8 to 1.1 a minute at a newborn's composition and
+3.6 to 5.2 at a sighted player's, of the 355 to 635 bodies made a minute (§5.9)
+-- and the forage bot's poisoned games go: three of the 448 in §8.3's first
+table, one in each of the plain bot's first two sets of 64 and one with the bot
+that passes over venom. Run again under today's rule (`--venom-swallow=0`), the
+plain bot's seeds 1–64 lost 64 of 128 against 59, with no game lost to poison:
+the game poisoned at 131 s lived, the one poisoned at 113 s starved at 125 s
+instead, and 21 games ended differently in all, as the whole drop plays out
+differently -- inside what chance moves pass 2's games (§8.3).
 
 **Remains** (row 7): a body that dies of hunger or of poison leaves one floc
 where it died, half its radius, settled (§7.4), the player's included. A body
 swallowed or chewed apart feeds whoever finished it and leaves nothing -- and
 from pack 1 that holds when the body is a player: **the cell that eats you is
 fed by it**, with your radius over its own, growth and your dominant gene, and
-then digests `REST_MEAL` as after any meal. Today it is not: it breaks off
+then digests `REST_MEAL` as after any meal -- unless you carry venom, which
+kills it, as today. Today it is not: it breaks off
 unfed (`food.gd:1868`, `:2078`). The prototype kept today's, and nothing it
 measured depends on it, because a solo run ends at that moment.
 
 ### 5.7 The same rules: the audit
 
 Every place a water cell and a player differ today, and what pack 1 does about
-it. **Body** rules are the same for everyone from pack 1; **behaviour** stays
-hand-written until pack 3, but never by breaking a body rule; **what the water
-makes** is how a new body is born and stays the spawner's (§5.8).
+it. **Body** rules are the same for everyone from pack 1 but one, venom, which
+waits for the gene pass (row 12); **behaviour** stays hand-written until pack
+3, but never by breaking a body rule; **what the water makes** is how a new
+body is born and stays the spawner's (§5.8).
 
 | today | kind | pack 1 | measured |
 |---|---|---|---|
@@ -859,18 +890,18 @@ makes** is how a new body is born and stays the spawner's (§5.8).
 | water cells grow without bound | body | growth stops at 40, as yours does (§5.5) | §5.9 |
 | a water cell's mouth has a ceiling only on what the water makes | body | no ceiling on what it grows, as for yours (row 5) | §5.9 |
 | a water cell notices prey 1,900 µm off whatever its senses (`NOTICE_RANGE`) | body: perception | **its own senses** (row 5, not asked again): the reach of its `chemocyte`, `ampulla`, `ocellus` or `palp` by tier, 150 to 1,900 µm; a `stigma`'s 620 µm for bodies at least 0.8 of its size, which is what a shadow shows; touch only without one | §8.3 |
-| a hunter chasing a player cruises at 1.2× and lunges at 1.7× the player's speed, whatever its own tail; chasing a cell, 1.2× and 1.7× the faster of its own tail and its prey (`_reference_speed`) | body: speed | **its own tail** (row 14): `swim_speed_of(flagellum, axoneme)`, the arithmetic the water already uses to lead a player; a lunge is a `myoneme` dash, at its price and cooldown, or nothing | §8.3, and the chase contract below |
+| a hunter chasing a player cruises at 1.2× and lunges at 1.7× the player's speed, whatever its own tail; chasing a cell, 1.2× and 1.7× the faster of its own tail and its prey (`_reference_speed`) | body: speed | **its own tail** (row 14, answered): `swim_speed_of(flagellum, axoneme)`, the arithmetic the water already uses to lead a player; a lunge is a `myoneme` dash, at its price and cooldown, or nothing | §8.3, and the chase contract below |
 | a hunter snaps its nose onto a far target | body: turning | it turns at its cirrus's rate, paying for it, before the run begins (§5.4) | §5.4 |
-| a water cell swallows a player only from a committed run | body: the mouth | **a mouth swallows what fits on contact, whoever it is** (row 15) | §8.3 |
+| a water cell swallows a player only from a committed run | body: the mouth | **a mouth swallows what fits on contact, whoever it is** (row 15, answered) | §8.3 |
 | `pellicle` armours a player against a swallow, not a water cell | body: the mouth | **every body**: a mouth measures its prey's radius × armour. Row 5 decides it; it was never put to the owner on its own (`shared-pond.md` §0.5 left it to a later phase), and it was not measured the other way | on in every §8.3 row |
-| venom kills whatever swallows a player, not a water cell | body: what kills | every body, the player's mouth included, if row 12 is yes (§5.6) | §8.3 |
+| venom kills whatever swallows a player, not a water cell | body: what kills | **kept as today** (row 12): the one body rule not yet the same for every cell. The gene pass replaces it, and the bite-back, with two variants -- venomous and poisonous -- as stacks that wear off (§5.6) | -- |
 | a water cell that swallows or chews through a player is not fed by it: no meal, no growth, no gene, and it breaks off (`:1868`, `:2078`) | body: the mouth | **fed as by any meal**, then `REST_MEAL` (§5.6, §14.1) | not in the prototype |
 | a water cell's `trichocyst` never fires | body: defence | it breaks a run at it exactly as the player's does: in range, on its arc, then its cooldown | 5 to 12 darts a minute (§5.9) |
 | a drifter's tier-0 mouth never closes | body: the mouth | it swallows a floc that fits (§5.3) | 12 to 21 in thirty minutes |
 | a drifter drifts at 9 µm/s whatever its organs | behaviour | kept: drifting is being carried, and free (§5.2) | -- |
 | rest is a 30–55 s clock after any run | behaviour | rest while fed, hunt when hungry, search when nothing is found (§5.4) | §5.4 |
 | the flight of up to 20 s and the 30–55 s calm after any failed run | behaviour | **gone for every target**: 5 s where it is after any miss, whoever was missed, a run broken by a dart included (§5.4) | §5.4, §8.3 |
-| `FIRST_DELAY`: nothing hunts a player or a friend for 42 s after a birth, a division or a return, and no water cell gets it | behaviour | **the owner's** (row 16), recommended kept until pack 2 gives every newborn the same; the quiet start (row 9) stays either way | §8.3 |
+| `FIRST_DELAY`: nothing hunts a player or a friend for 42 s after a birth, a division or a return, and no water cell gets it | behaviour | **kept** (row 16) until pack 2 gives every newborn the same; the quiet start (row 9) with it | §8.3 |
 | the free sense at 5 s is the player's | what the water makes | every peer the spawner makes carries a sense; a blind one is given one, as you are (§5.8) | §5.4 |
 | peers are a mouth and two to six other organs drawn at random, as many as their radius has slots (3 to 7), with nothing that guarantees a tail, a `cirrus` or a sense; drifters carry any gene | what the water makes | peers carry a born cell's body plan and a sense; drifters carry no venom (§5.8) | §5.4, row 13 |
 | the peer band, the drifter share and the tier weights follow your senses; no arrival's mouth past 40 | what the water makes | kept (§6.4) | -- |
@@ -929,11 +960,11 @@ every choice below is the water's (`genes-and-cilia.md` §9.8), in `drop.gd`:
   while a water cell saw 1,900 µm and swam faster than its prey. Under the
   body's own senses and tail, made that way, 196 to 203 hunters starved in four
   minutes instead of 137 to 158, about half of them without one meal (§5.4).
-- **Drifters carry no venom** (row 13, if row 12 is yes): one gene at tier 1,
-  drawn from the list without `toxicyst`. They are the water's defenceless
-  food, the owner's words for them, and a swallowed venomous cell would kill
-  its eater. A drop down to its last venomous bodies gets venom back through
-  the next peer instead (`GENE_FLOOR`, §6.4).
+- **Drifters carry no venom** (row 13, answered): one gene at tier 1, drawn
+  from the list without `toxicyst`. They are the water's defenceless food, the
+  owner's words for them, under today's venom and the gene pass's alike. A
+  drop down to its last venomous bodies gets venom back through the next peer
+  instead (`GENE_FLOOR`, §6.4).
 - **A new body is fed**: hunger 0. A drop being made for the first time draws
   its tanks at 0–0.4, as a water that was already there.
 - Kept: the peer band round your radius, the drifter share and the tier weights
@@ -960,7 +991,7 @@ water, 30 minutes, a census every five, seeds 1–3; a newborn's composition
 And what flowed through it in the thirty minutes, per minute, the three seeds'
 range:
 
-| composition | bodies made, after the first 555 | drifters eaten | hunters eaten or chewed | hunters starved (at r40) | flocs eaten by the water | swallowed a venomous body and died | darts fired | remains left / snow kept |
+| composition | bodies made, after the first 555 | drifters eaten | hunters eaten or chewed | hunters starved (at r40) | flocs eaten by the water | swallowed a venomous body and died (a rule pack 1 does not have: §5.6) | darts fired | remains left / snow kept |
 |---|---|---|---|---|---|---|---|---|
 | a newborn's | 350–359 | 276–288 | 35–39 | 35–37 (half) | 26–28 | 0.8–1.1 | 5–7 | 36–37 / 1.5–2.1 |
 | a sighted player's | 634–635 | 412–417 | 144–147 | 71 (38 %) | 67–68 | 3.6–5.2 | 11–12 | 75–76 / 1.5–2.2 |
@@ -1340,7 +1371,7 @@ already dreads (`THREAT_LOW` 0.85).
 - The drifter floor, and the ring that refills the player's surroundings (§6.3).
 - The snow, which keeps what falls wherever the player has eaten its
   neighbourhood out, and now the remains of every cell that starves (§7).
-- **`FIRST_DELAY`** is kept whole, as row 16 recommends: nothing may hunt a
+- **`FIRST_DELAY`** is kept whole, as row 16 decided: nothing may hunt a
   player for 42 s after it is born, after a division or after a return. It is
   the rule that makes the forage bot all but unhuntable -- it divides every
   30–45 s -- in the bubble as in the drop: without it, hunters ran at the bot
@@ -1406,7 +1437,10 @@ and almost every one of those is a swallow by a big cell it swam into, not one
 hunting it: of the 51 deaths by a mouth in the venom-aware games, new and aged,
 3 came in a game where anything had run at it at all. That is row 15's contact
 rule, met by a bot that swims into mouths. The dread it met on its way was a
-little lower than today's (0.203 against 0.214).
+little lower than today's (0.203 against 0.214). These runs had the swallow
+death for every mouth, which pack 1 does not keep; under today's venom the
+plain bot's first 128 games lost 64 against 59, inside chance, and none to
+poison (§5.6).
 
 **The aged drop is no harder on average**: the venom-aware bot lost 44 % of an
 aged drop's 128 games against 45 % of a new one's -- 31 against 18 on seeds
@@ -1424,7 +1458,9 @@ and leaves the rest as they were, so its difference is the change's own. A
 change to what every water cell is -- its speed, its senses, venomous drifters
 -- reshapes the whole drop, and a third to a half of the games end differently
 for that alone: the same seeds replayed with another random stream, which
-changes no rule at all, show how far such a row can move by chance.
+changes no rule at all, show how far such a row can move by chance. Every row
+ran with the pass-2 prototype's swallow death for every mouth, which pack 1
+does not keep (§5.6); the three venom rows are the ones that depend on it.
 
 | the drop, with | games | starved | eaten (of them poisoned) | lost, all told | games that end differently | meals | food within 1,400 µm | dread, mean |
 |---|---|---|---|---|---|---|---|---|
@@ -1453,16 +1489,19 @@ aged are not lost to a swallow; in the aged drop the bot starves instead in six
 of the twelve games a swallow would have ended. Both rows are with a thick skin
 protecting every cell either way (§5.7): the contact swallow alone.
 
-**Row 13 is not close.** With drifters as venomous as today and a bot that
-cannot tell which, 42 games in 64 end in poison: about one drifter in nineteen,
-against some fourteen meals a game. That bot is point of view, where nothing on
-the membrane says a drifter carries venom. A bot that sees the venom and never
-steers at it still dies of it in 7 games, swallowing the venomous drifters its
-mouth closes on while it chases another, because a mouth swallows what it
-touches. Row 12 itself costs a full-vision player almost nothing once drifters
-carry none: the bot that swallows every venomous cell it can reach died of it
-once in 64 games, because only cells with mouths carry it and few of those fit
-a born cell.
+**Row 13 was not close**, under the rule it was asked for. With drifters as
+venomous as today, a swallow killing its eater, and a bot that cannot tell
+which, 42 games in 64 ended in poison: about one drifter in nineteen, against
+some fourteen meals a game. That bot is point of view, where nothing on the
+membrane says a drifter carries venom. A bot that sees the venom and never
+steers at it still died of it in 7 games, swallowing the venomous drifters its
+mouth closed on while it chased another, because a mouth swallows what it
+touches. The swallow death itself cost a full-vision player almost nothing once
+drifters carry none -- the bot that swallows every venomous cell it can reach
+died of it once in 64 games -- and pack 1 does not have it (row 12). These
+numbers are the ceiling on what poisonous drifters could cost once the gene
+pass brings them, since a swallow can do no worse than kill; row 13 keeps the
+drifters without venom either way.
 
 **Row 14, and how far a hunter notices you, cannot be told from chance by this
 bot.** Each reshapes every hunter, so a third to a half of the games end
@@ -1588,15 +1627,14 @@ drop, and a device keeps one of each kind at most:
   they could tell -- a drop is at its steady state within about five minutes of
   play (§5.9), so a frozen one is as alive as a caught-up one the moment it
   wakes.
-- **Your cell is in it when you come back** (row 17, recommended). Leaving the
+- **Your cell is in it when you come back** (row 17, answered). Leaving the
   app in the middle of a run saves your cell with the drop -- where it is, its
   size, its genes in their order, its generation and its hunger -- and the next
   launch carries on from there, behind the same beat a return from a pond has.
   Today a run is one session (genes-and-cilia.md §9 item 4: "the arc is one
   session"); with yes, a run can span several, and a death is still the only
   clean restart. The replay is not saved (§11): after a resume it holds only
-  what happened since. With no, the drop is kept and the next launch is a born
-  cell at a quiet place, as after a death.
+  what happened since.
 - **Hosting on a phone: your drop is the pond.** The friends who arrive swim in
   your personal drop, with everything in it, and it goes on living while you
   host. When hosting stops -- you leave, or the last guest does and you stop
@@ -1722,7 +1760,9 @@ New bodies are **made for the players in turn**, as the owner answered in
 `shared-pond.md` §6 row 2. A player out of the water, dividing or dead, stays an
 anchor while it has a body, as today. The rules are the drop's, for both
 players: a guest can be swallowed by a cell that is not hunting it (row 15),
-and dies of a venomous cell it swallows (row 12), exactly as the host can.
+exactly as the host can. Venom is today's (row 12): a water cell or a friend
+that swallows a venomous player dies of it, and a player swallows a venomous
+water cell safely, as in today's pond.
 
 **What a host with a guest costs was not measured**, and it is the drop's worst
 case: two anchors, so twice the water stepped every frame when the two are
@@ -1786,7 +1826,6 @@ it and each room's 3 % of a core are what the owner's "rooms" would add.
 | **CLEAR `0x0A`** (host → guest, reliable): `id u32`, 4 B after the header, 10 in all | a floc eaten, dissolved or out of reach |
 | **ARRIVE carries the drop**: `centre x f32 · y f32 · radius f32`, +12 B: `ARRIVE_SIZE` 15 → 27 | the guest draws the meniscus, contains its own cell, and hears and sees the rim with its own organs |
 | **CONTACT gains `GRAZED` = 7**: the level is the nutrition, no gene | the guest's run feeds without growing |
-| **KILLED's cause `POISONED` now also follows the guest's own mouth**: the host tells it when the guest swallowed a venomous cell | the guest's device must take a death from its own meal: no `ATE` goes first |
 
 A guest on PROTOCOL 4 is refused at HELLO by name, as 1, 2 and 3 are. A guest's
 mirror holds only what it is sent -- at most 60 bodies and the flocs in reach -- so
@@ -1802,15 +1841,15 @@ hunger never crosses the wire: it is the host's water.
   radius its live meals give it. `drop.FLOC_GROWTH` = 0 goes in the fingerprint,
   so a pack that let flocs grow a body changes the protocol.
 - **The eating rule a guest is held to changes**: swallowed without a run (row
-  15), armoured prey (row 5), poisoned by a swallow (row 12). The host decides
-  all three and tells the guest; the referee judges none of them, since a guest
-  never claims a contact. They go in the fingerprint all the same, as one
-  sample each -- a swallow on contact, `_swallow_r` of an armoured water body, a
-  venomous swallow's cause -- so that two builds that disagree on them refuse
-  each other at HELLO rather than one dying of a rule the other does not have.
+  15) and armoured prey (row 5); venom stays today's (row 12). The host decides
+  both and tells the guest; the referee judges neither, since a guest never
+  claims a contact. They go in the fingerprint all the same, as one sample each
+  -- a swallow on contact, `_swallow_r` of an armoured water body -- so that two
+  builds that disagree on them refuse each other at HELLO rather than one dying
+  of a rule the other does not have.
 - **`FIRST_DELAY` is already in the fingerprint** (`food.FIRST_DELAY`, the
-  grace the referee grants a guest's new body). If row 16 is no, it moves, and
-  that is part of the same protocol change.
+  grace the referee grants a guest's new body), and row 16 kept it: it does not
+  move.
 - **The rim**: the host contains the guest's body in its drop as it contains
   everything in its water, and a claim past the rim is held at it -- a clamp, not
   a foul, because an honest guest's own run contains it the same way.
@@ -1848,7 +1887,7 @@ replay writes them back onto the run's own `Food` (`replay.md` §3). A drop has
 - **`AT_HUNTER` records a recorder slot**, not a field index.
 - **And the killer's slot**, `AT_KILLER`: one float, −1 except on the frame of
   a death, where it is the slot of the body that swallowed or chewed you, or of
-  the venomous one you swallowed. `hunter()` answers only for a stalker, and
+  the venomous one you bit. `hunter()` answers only for a stalker, and
   from pack 1 most deaths by mouth are by a cell that was not hunting you
   (§8.3), so without it the truth pane would draw no predator for them -- the
   defect `replay.md` §4.8.8 fixed for stalkers. Stepped at playback like
@@ -1873,11 +1912,12 @@ Not designed here; named so that pack 1 leaves room for them.
 | **a body carries a lineage** (pack 2) | `Body.id`, and room in the save for `parent` and `generation`; 0 in pack 1 |
 | **cells are born from division** (pack 2) | `_spawn()` is the one door every new body comes through -- spawner, sister, first drifter -- so a birth is a spawn with a parent; the spawner fills only up to `SPAWN_SHARE` of the target and backs off by construction (§6.5). **Division is waiting for it at r40**: at a newborn's composition about half the drop's hunters sit there, eating to live and unable to grow, and half of those that starve starve there (§5.5); a daughter is born fed, as a spawned body is (§5.8) |
 | **a body carries a behaviour genome** (pack 3) | `Body.brain`, null in pack 1 (the hand-written state machine); saved by the same rule as genes, by name and version. Its inputs are what pack 1 already gives the hand-written one: its own hunger, what its own senses reach, its own speed and turn (§5.4, §5.7) |
-| **the same blocks drive every body** (pack 3) | decisions are made on the LOD tick, 7.5 a second, near and far alike (§4.3), from the per-body senses the grid answers; `_decide(b)` wraps today's `_look_for_prey` entry so a brain can take its place. What pack 1 keeps as behaviour -- `FIRST_DELAY` if row 16 keeps it, the rests after a meal and a miss, resting while fed -- is the blocks' to keep or drop (§5.7) |
+| **the same blocks drive every body** (pack 3) | decisions are made on the LOD tick, 7.5 a second, near and far alike (§4.3), from the per-body senses the grid answers; `_decide(b)` wraps today's `_look_for_prey` entry so a brain can take its place. What pack 1 keeps as behaviour -- `FIRST_DELAY`, which row 16 kept, the rests after a meal and a miss, resting while fed -- is the blocks' to keep or drop (§5.7) |
 | **a hungry cell dies of it** | **built in pack 1** (row 4): `Body.hunger`, the first pass's reserved field, is live |
 | **the same blocks drive the player** (pack 4) | `cell.gd`'s steering is written from one place a frame, `_read_steer()`; a brain writes `steer` there instead, on the same tick. A player's blocks could let its cell rest, which its flagellum does not today (§5.2) |
 | **an evolving server room** | **built in 1b**: the room lives on while it is empty (§10.3) |
 | **several rooms on one server** | §10.3: a room is a `Food` field with an id; HELLO carries the room wanted; a page after `answered` chooses |
+| **venomous and poisonous** (the gene pass, row 12) | `toxicyst`'s two effects each stay in one place -- the bite-back where a bite lands (`_chew`, `_bitten_by`, `_bite_from`), the swallow death in the mouth rule -- so the gene pass can replace them with stacks without touching the rest. A stack that wears off is an amount a body carries, stepped with it like its hunger, so a far body on the tick takes it the same way (§4.3) |
 | **a water cell's hunger, seen** | nothing draws it in pack 1; `Body.hunger` is there for full vision to read, and whether it shows a hungry hunter, or a death by hunger more gently than in one frame (§7.6), is the UX designer's |
 
 ---
@@ -1917,14 +1957,14 @@ because it touches every tool that reads them.
 | `game/normal/drop.gd` | new: the environment, and what the water makes (§5.8, §13) |
 | `game/normal/metabolism.gd` | the tank's arithmetic as static functions the node and the water share: `rest_rate(upkeep, income, reserve)`, with light and absorption summed into `income` by the caller; `effort_cost(seconds, burn, reserve)`; `meal(nutrition)`; and `ABSORB` 1.0. The node's `_process`, `spend` and `feed` call them, so the player's numbers do not move (§14.4) |
 | `game/normal/cell.gd` | `swallow_radius_of(radius, pellicle_tier)` beside `swallow_radius()`, and `stroke_cost(speed)` -- `speed × DRAG / SPREAD_LOSS × STROKE_COST` -- beside `STROKE_COST`, so the water prices a steady swim from the player's own table |
-| `game/normal/food.gd` | `Body` gains `id`, `hunger`, `starve`, `effort`, `age`, `lag`/`last_t`, `near_frame`, `inert`, `settle`, `life`, `dart_clock`, `dash_v`, `dash_clock`, `orienting`, `searching`, and read-once `notice`, `see_big`, `armour`, `tox`, `dart_bearing`, `reserve`, `sun`, `burn`, `upkeep`; reserved `brain`, `parent`. The drop's path beside the bubble's, chosen once per run: `setup_drop()`, `_process` at three rates by distance (§4.3), every all-pairs pass through the grid and the near-first prey search (§4.2), containment and the shore turn, the spawner, floors and gene floor, the snow and flocs, flocs in contacts and in each sense (§7.5), the rim in the ping, the shadow, the beam and touch (§3.2), the quiet start and its clearing, `enter_water()` on division and return, `put_sister` contained. **One body** (§5): the metabolism per step -- skipped for a tank that cannot move, which changes no number (§4.4) -- and its four deaths with remains; `_swim` paying for speed and turns; a hunter's senses, tail, dash, dart and orienting turn; the one mouth rule in `_mouth_on` and `_contacts_with` -- on contact (row 15), armoured (row 5), venom kills the swallower (row 12), each behind its switch; **a water cell that swallows or chews through a player is fed by it** and rests `REST_MEAL` (§5.6), where today it breaks off unfed (`:1868`, `:2078`); the behaviour of §5.4, with no flight after any miss. **The edible cue follows the mouth**: the taste weight in `_step_sense` (`:2799`) reads the prey's swallow radius, `swallow_radius_of(radius, pellicle)`, not its bare radius, now that armour protects every body -- or the scent would call a cell edible that the mouth cannot take. Signals `shored(bearing, strength, at)` and `grazed(nutrition, at)`; `bodies_near(point, reach)` for the view. **All of it keyed on the drop**: the bubble a session plays in 1a keeps today's rules to the byte (§14.4) |
+| `game/normal/food.gd` | `Body` gains `id`, `hunger`, `starve`, `effort`, `age`, `lag`/`last_t`, `near_frame`, `inert`, `settle`, `life`, `dart_clock`, `dash_v`, `dash_clock`, `orienting`, `searching`, and read-once `notice`, `see_big`, `armour`, `tox`, `dart_bearing`, `reserve`, `sun`, `burn`, `upkeep`; reserved `brain`, `parent`. The drop's path beside the bubble's, chosen once per run: `setup_drop()`, `_process` at three rates by distance (§4.3), every all-pairs pass through the grid and the near-first prey search (§4.2), containment and the shore turn, the spawner, floors and gene floor, the snow and flocs, flocs in contacts and in each sense (§7.5), the rim in the ping, the shadow, the beam and touch (§3.2), the quiet start and its clearing, `enter_water()` on division and return, `put_sister` contained. **One body** (§5): the metabolism per step -- skipped for a tank that cannot move, which changes no number (§4.4) -- and its four deaths with remains; `_swim` paying for speed and turns; a hunter's senses, tail, dash, dart and orienting turn; the one mouth rule in `_mouth_on` and `_contacts_with` -- on contact (row 15) and armoured (row 5), with `toxicyst`'s two effects left exactly as they are (row 12); **a water cell that swallows or chews through a player is fed by it** and rests `REST_MEAL` (§5.6), where today it breaks off unfed (`:1868`, `:2078`); the behaviour of §5.4, with no flight after any miss. **The edible cue follows the mouth**: the taste weight in `_step_sense` (`:2799`) reads the prey's swallow radius, `swallow_radius_of(radius, pellicle)`, not its bare radius, now that armour protects every body -- or the scent would call a cell edible that the mouth cannot take. Signals `shored(bearing, strength, at)` and `grazed(nutrition, at)`; `bodies_near(point, reach)` for the view. **All of it keyed on the drop**: the bubble a session plays in 1a keeps today's rules to the byte (§14.4) |
 | `game/normal/normal_mode.gd` | the drop when `_net` is null in `_ready`; `shored` → `_bus.hit`; `grazed` → feed without growth, the flood with no gene, `mark_meal`; `_be_born` and `_return` enter the drop instead of `setup()`; a starved or poisoned player leaves remains; a player without a `cytostome` absorbs (`ABSORB` into the metabolism's income, as `plastid` is) |
 | `game/normal/motes.gd` | grit inside the rim, the first mote included; seeded after the drop |
 | `game/vision/water.gdshader` | `drop_on`, `drop_center`, `drop_radius`, `drop_band`: film, meniscus line, dry glass (§3.3); the line's square as `k * k`, never `pow` |
 | `game/vision/vision.gd` | the four uniforms; `_draw_floc` and the ring bloom; `_draw_cells` asks `bodies_near()` instead of rebuilding five arrays over every body; the scent bloom's weight (`:1362`) on the same swallow radius as the taste |
 | `game/replay/recorder.gd`, `replay.gd`, `panes.gd` | 48 nearest in stable slots, floc and rim deltas, `AT_HUNTER` as a slot, `AT_KILLER`, a private `Food` (§11) |
 | `game/dev/frame_readout.gd` **new**, and a line in `normal_mode.gd` | **1a-1**: the dev app's frame-time readout (§14.2), shown only when the launcher's `BuildInfo.release_branch` is not empty -- the dev app, never a player's: the frame's p50 and p95 and the water's own `_process` p50 over the last ten seconds, and the bodies stepped a frame |
-| `tools/drive.gd` | `--drop=0\|1`, `--start=quiet\|centre\|edge`, `--edge-gap=`, `--flocs-near=`, `--desert=`, `--age=`, `--hunter-genome=`, §4.4's switches, and one switch per body rule so the owner's other answers can be played (`--absorb=`, `--venom-swallow=`, `--drifter-venom=`, `--own-speed=`, `--notice=`, `--contact-swallow=`, `--armour-swallow=`, `--first-delay=`, `--flight=`), set on the run before it enters the tree, as `--mode` is |
+| `tools/drive.gd` | `--drop=0\|1`, `--start=quiet\|centre\|edge`, `--edge-gap=`, `--flocs-near=`, `--desert=`, `--age=`, `--hunter-genome=`, §4.4's switches, and one switch per body rule so the owner's other answers can be played (`--absorb=`, `--drifter-venom=`, `--own-speed=`, `--notice=`, `--contact-swallow=`, `--armour-swallow=`, `--first-delay=`, `--flight=`), set on the run before it enters the tree, as `--mode` is |
 | `tools/forage_probe.gd` | grazes, the living-first bot, `--avoid-venom`, `--cautious`, `[forage-near]`, `[forage-compete]`, the cause of death, meal times (§15) |
 | `tools/eco_probe.gd` | new: the drop alone, census and cost, `--empty-room`, `--death-log` (§15) |
 | `tools/chase_probe.gd` | new: the chase contract at a hunter's own speed (§5.7, §15.6) |
@@ -2024,13 +2064,13 @@ taken out:
 11. **One body**: over five minutes, every retired living body has one of the
     four causes and nothing else; a mouth swallows a body that fits on contact
     whether it is hunting or not (row 15); `pellicle` makes a body too big for a
-    mouth it would otherwise fit; a mouth that swallows a venomous body dies of
-    it, the player's included (row 12, each as answered); a water cell that
-    swallows the player is fed by it; a hunter never cruises faster than
-    `swim_speed_of` its own organs nor lunges without a `myoneme`; no hunter
-    starts a run at a body beyond its own senses' reach, and none flees after a
-    miss; a water cell's dart breaks a run at it; the taste field and the bloom
-    weigh a body by its swallow radius.
+    mouth it would otherwise fit; venom as today -- a mouth that swallows a
+    venomous player dies of it, a player that swallows a venomous water cell
+    does not (row 12); a water cell that swallows a player without venom is fed
+    by it; a hunter never cruises faster than `swim_speed_of` its own organs nor
+    lunges without a `myoneme`; no hunter starts a run at a body beyond its own
+    senses' reach, and none flees after a miss; a water cell's dart breaks a run
+    at it; the taste field and the bloom weigh a body by its swallow radius.
 12. **1b, the save**: save, load, the same bodies to the bit, hunger and clocks
     included; an unknown gene survives; an unknown `format` starts fresh and
     keeps the old file; a smaller `RADIUS` contains; a changed `rules`
@@ -2073,7 +2113,7 @@ are not the drop's gate. They still hold everything else:
 | water cells that never starve; growth without a bound in `_devour` (`:2541`) | one metabolism for every body, growth stopping at 40, four ways to die (§5) |
 | `NOTICE_RANGE`, `CRUISE_OVER_PREY`, `LUNGE_OVER_PREY`, the nose snapped round | a body's own senses, tail, dash and turn (§5.7) |
 | the flight of up to 20 s and the 30–55 s calm after any failed run | 5 s where it is after any miss (§5.4) |
-| the committed run, and armour and venom against a swallow for players only | one mouth rule for every body, as rows 12 and 15 answer (§5.6, §5.7) |
+| the committed run, and armour against a swallow for players only | one mouth rule for every body (rows 15 and 5); venom as today until the gene pass (row 12; §5.6, §5.7) |
 | a player's killer breaking off unfed (`:1868`, `:2078`) | fed as by any meal (§5.6) |
 | the edible cue on the bare radius (`:2799`, `vision.gd:1362`) | on the swallow radius (§14.1) |
 | peers of a mouth and random others, drifters of any gene | peers made to live, drifters without venom (§5.8) |
@@ -2091,21 +2131,24 @@ compares against it.
 
 ## 15. To measure again
 
-Every probe is in `tools/`, excluded from every export. Headless, `--fixed-fps 60`,
-with the prototype's flags after the `--`; in the build they are `drive.gd`'s
-(§14.1). **Pass 2's rules are one switch in the prototype**, `--same-rules=1`,
-which sets everything in §5 -- the metabolism for every body (`--water-hunger=1
---pay-effort=1 --absorb=1.0`), the behaviour (`--hunt-hunger=0.3 --rest-meal=5
---rest-miss=5 --search=1 --flight=none`), the body rules (`--notice=senses
---own-speed=1 --contact-swallow=1 --armour-swallow=1 --venom-swallow=1
---water-darts=1 --drifter-mouths=1`), what the water makes (`--viable=1
---drifter-venom=0 --spawn-hunger=0`), no age and no ceiling. It goes first; a
-flag after it overrides one piece, which is how every "the other way" row in
-§5.4 and §8 was run; `--first-delay=` moves `FIRST_DELAY` (row 16). **The same
-command three times prints the same lines to the byte**, and so does a later
-build of the prototype on the same command: five runs of seed 5 on three
-builds, 0 bytes apart, and after the review two forage games made on earlier
-builds, again byte for byte.
+Every probe is in `tools/`, excluded from every export. Headless, `--fixed-fps
+60`, with the prototype's flags after the `--`; in the build they are
+`drive.gd`'s (§14.1). **Pass 2's rules are one switch in the prototype**,
+`--same-rules=1`, which sets everything in §5 -- the metabolism for every body
+(`--water-hunger=1 --pay-effort=1 --absorb=1.0`), the behaviour
+(`--hunt-hunger=0.3 --rest-meal=5 --rest-miss=5 --search=1 --flight=none`), the
+body rules (`--notice=senses --own-speed=1 --contact-swallow=1
+--armour-swallow=1 --water-darts=1 --drifter-mouths=1`), what the water makes
+(`--viable=1 --drifter-venom=0 --spawn-hunger=0`), no age and no ceiling. It
+goes first; a flag after it overrides one piece, which is how every "the other
+way" row in §5.4 and §8 was run. **Every run in §4, §5 and §8 also had
+`--venom-swallow=1`**, the swallow death for every mouth, which pack 1 does not
+keep (row 12, §5.6): the prototype no longer sets it, and a run made to match
+those numbers adds it, as `P2` below does. `--first-delay=` moves `FIRST_DELAY`
+(row 16). **The same command three times prints the same lines to the byte**,
+and so does a later build of the prototype on the same command: five runs of
+seed 5 on three builds, 0 bytes apart, and after the review two forage games
+made on earlier builds, again byte for byte.
 
 **The miss rule changed after most runs.** Until the review, `--same-rules=1`
 set `--flight=player`: a run at a player ended in the flight and 5 s of calm.
@@ -2114,7 +2157,7 @@ ran at the bot; the 28 such games across every batch of §8 were run again
 under the new rule, and the rest are the same games to the byte.
 
 ```
-P2 = --ocean --same-rules=1 --density=4.9e-6 --spawn-tau=5 --clear=1 --lod-full=1100 --prey-rings=1
+P2 = --ocean --same-rules=1 --venom-swallow=1 --density=4.9e-6 --spawn-tau=5 --clear=1 --lod-full=1100 --prey-rings=1
 ```
 
 ### 15.1 Cost
@@ -2154,7 +2197,7 @@ each seed with and without it, interleaved.
 
 ```
 godot --headless --path . --fixed-fps 60 -s res://tools/eco_probe.gd -- \
-    --ocean --same-rules=1 --until=300 --every=300 --sensed=0.2 --spawn-tau=5 \
+    --ocean --same-rules=1 --venom-swallow=1 --until=300 --every=300 --sensed=0.2 --spawn-tau=5 \
     --density=4.9e-6 --lod-full=1100 --prey-rings=1 --empty-room --lod-every=8|16
 ```
 
@@ -2166,7 +2209,7 @@ room's ecology at each tick.
 
 ```
 godot --headless --path . --fixed-fps 60 -s res://tools/eco_probe.gd -- \
-    --ocean --same-rules=1 --seed=1 --until=1800 --every=300 --sensed=0.2 \
+    --ocean --same-rules=1 --venom-swallow=1 --seed=1 --until=1800 --every=300 --sensed=0.2 \
     --spawn-tau=5 --density=4.9e-6 --lod-full=1100 --prey-rings=1
 ```
 
@@ -2294,22 +2337,27 @@ gathered, written through `open_compressed`, read back and compared, renamed
    is worth it depends on the server's core, which was not measured.
 9. **Behaviour defaults are pack 3's** (§5.4): the hunt threshold, the rests --
    5 s after a meal and after any miss -- and the search. They were chosen so
-   that the rules work, not tuned, and each is one constant. `FIRST_DELAY` is
-   row 16.
-10. **Built on paper, not in the prototype**: the cell that eats a player is fed
+   that the rules work, not tuned, and each is one constant. `FIRST_DELAY`
+   stays, as row 16 decided.
+10. **Venom waits for the gene pass** (row 12): the one body rule not yet the
+    same for every cell, and the owner's two variants, venomous and poisonous,
+    replace it then (§5.6, `roadmap.md`). The prototype's `tools/dose_probe.gd`
+    duels today's venom against stacks on the game's own bite arithmetic, for
+    when it comes.
+11. **Built on paper, not in the prototype**: the cell that eats a player is fed
     by it (§5.6); the edible cue on the swallow radius (§14.1); the dev app's
     frame readout (§14.2). None of them moves a number measured here -- a solo
     run ends when it is eaten, and the full-vision bot aims by its own rule --
     but each is new code the build must test.
-11. **What a phone's flash takes to write a save** was not measured (§9.3): 5.6
+12. **What a phone's flash takes to write a save** was not measured (§9.3): 5.6
     to 8.5 ms here for the whole save, read-back included, and only ever off
     the play frame.
-12. **The chase probe poses its hunter in body slot 0**, which today's opening
+13. **The chase probe poses its hunter in body slot 0**, which today's opening
     moves (§5.7); its rows compare with each other, not with the documented
     contract. The build's probe should use a slot the opening does not.
-13. **The recorder keeps 48 bodies.** Enough for everything but the farthest
+14. **The recorder keeps 48 bodies.** Enough for everything but the farthest
     echoes, which the ring keeps on their own.
-14. **Moving the seeding tables into `drop.gd`** waits for a second water (§13).
+15. **Moving the seeding tables into `drop.gd`** waits for a second water (§13).
 
 ---
 
@@ -2344,9 +2392,9 @@ and two releases. Three rows changed the design:
 
 - **Row 4**: no age, and no cause of death but hunger and being eaten --
   swallowed or chewed (§5.6). Every cell runs the player's metabolism (§5.2).
-  Poison stays for a biter, as today; whether swallowing a venomous cell kills
-  the eater, you included, is a new call (row 12), because the owner's "nothing
-  else" does not settle it. The first pass deferred hunger because it doubled
+  Venom was asked separately (row 12), because killing the eater is the opposite
+  of being eaten: it stays as it is today through pack 1, and the gene pass
+  brings it in two variants. The first pass deferred hunger because it doubled
   the bot's starvation; built with the rest of §5 it does not: the bot starves
   less often than in today's water -- hunters held to their own senses and tail
   eat a sixth fewer of the drifters (§5.4), and the ones that starve leave food
@@ -2378,41 +2426,61 @@ as a call.
 The first round's answers raised eight new calls, and an independent review of
 this revision asked for three of them (rows 12, 16 and 17). Each is a real
 choice about what the game is; the balance that only play can settle is in
-§8.5's dials instead. "A test player" below is the forage bot of §8.3: it swims
+§8.5's dials instead. All eight were answered on 2026-09-30, the owner's words
+under the table. "A test player" below is the forage bot of §8.3: it swims
 at food without looking out for danger, so it shows what a rule does, not how
 long a person lasts.
 
 | # | Question | Options | What it means |
 |---|---|---|---|
-| 11 | How do the drifters -- the small cells with no mouth organ -- live, now that every cell can starve? | **they soak up food dissolved in the water, enough to live on, and die only when something eats them ✓ recommended** · they eat the clumps of dead matter that fall, and starve where none fall · they starve like any cell, in about 45 seconds, and the water keeps replacing them | Real cells without a mouth live on what is dissolved in the water, or on light. Soaking it up: the drifters you eat are always there, as today. It holds for you too: if you put a gene over your own mouth organ, you soak up food as well, and a newborn's full tank lasts about 55 seconds instead of 30, so that move stops being a trap. Eating the clumps: the falling food becomes the start of the food chain, and drifters crowd where it falls and vanish where it does not. Starving: about six drifters a second die across the drop, and the water fills with hundreds of clumps. |
-| 12 | When a mouth swallows a venomous cell, does the eater die? | **yes, every eater, you included ✓ recommended** · no, venom only makes a biter pay, as it does for you today | Today a cell that swallows you dies of your venom, but you can swallow a venomous cell safely. Yes: venom works the same for everyone, as you asked for playing together ("all cells obey the same eating rule"). You can die swallowing a venomous cell small enough to fit your mouth, and in point of view you cannot tell which cells are venomous; full vision shows it. The test player died that way once in 64 games. No: swallowing is always safe for you and for every cell, and venom only hurts what bites it. |
-| 13 | If row 12 is yes: can the drifters carry venom? | **no: drifters are never venomous; only cells with a mouth organ carry it ✓ recommended** · yes, as today, about one drifter in nineteen | No: every drifter is safe to eat. A venomous cell with a mouth organ that is small enough for you to swallow still kills you: that is the one game in 64 above. Yes: one drifter in nineteen kills you when you swallow it; in full vision you can learn its colour, in point of view you cannot tell. The test player died of venom in 42 games of 64 with venomous drifters, and in 1 without; one that steers round the venomous ones it sees still died of it in 7, swallowing what it bumped into. If row 12 is no, this row changes nothing. |
-| 14 | How fast does a hunter swim after you? | **as fast as its own tail lets it, as you do, from this pack ✓ recommended** · as today until the behaviour pack: always a fifth faster than you, and 70 % faster in its last dash | Today a hunter chasing you is always faster than you, whatever it is made of. With its own tail, a hunter with a better tail than yours is faster, and a worse one cannot catch you if you swim away. A hunter with a tail like yours still catches a cell that does nothing 11 times in 14, and one that turns away escapes 13 times in 14. The test player could not tell the two apart: its 64 games, replayed with nothing changed but chance, move by as much. |
-| 15 | Can a cell swallow you when it is not hunting you? For playing together you answered "keep it for both of you until the gene phase". | **yes, from this pack: any mouth swallows what fits on contact, yours and theirs alike ✓ recommended** · no, keep your answer: only a cell that is hunting you can swallow you, until the gene phase | Today something must be hunting you to swallow you, so a death always comes after a warning you can feel: dread rising, and its strokes. Yes: a big cell that drifts into you can swallow you; dread still warns you it is near, its strokes do not. On the same 64 games, with a thick skin protecting every cell either way, the test player lost 18 in a new drop against 14 with your rule, and 31 against 25 in a drop fifteen minutes old. |
-| 16 | Do hunters leave you alone for 42 seconds after you are born or divide? | **yes, as today, until pack 2 gives every newborn the same ✓ recommended** · no, you are fair game from the first second, like any cell | Today nothing may hunt you for 42 seconds after you are born, divide or come back from a death; the water's cells get no such grace. Yes keeps it for you and your friends. No makes you like any cell: hunters may come for a newborn from its first second, and a cell that divides often is hunted all the time. On the same 64 games the test player lost 28 in a new drop against 18 -- ten more games, each one where a hunter came for it -- and 34 against 31 in a drop fifteen minutes old, where what kills is mostly a big mouth it swims into. |
-| 17 | When you close the app in the middle of a run and come back, is your cell still there? | **yes, you carry on where you left off ✓ recommended** · no, the drop is kept but you start a new run | Yes: closing the app is a pause, and you come back to the same cell, with its size and its genes, where you left it in your drop. Today a run is one sitting: closing the app ends it, and you always start as the basic cell. The replay then only holds what happened since you came back. No: your drop is kept, but opening the app starts a new basic cell in it, as a death does. |
-| 18 | How many rooms does the home server keep, always alive? | **one: the server's own drop, living on while nobody is in it, joined as today ✓ recommended** · several, each living on, and you choose one when you join | One: nothing changes about joining, and the room keeps living for about 3 % of one core of this container while it is empty (measured here, not on the server). Several: each costs as much again, and you need a new page to choose one, which is a design of its own. More rooms can come later without changing the first. |
+| 11 | How do the drifters -- the small cells with no mouth organ -- live, now that every cell can starve? | **they soak up food dissolved in the water, enough to live on, and die only when something eats them ✓ answered** · they eat the clumps of dead matter that fall, and starve where none fall · they starve like any cell, in about 45 seconds, and the water keeps replacing them | Real cells without a mouth live on what is dissolved in the water, or on light. Soaking it up: the drifters you eat are always there, as today. It holds for you too: if you put a gene over your own mouth organ, you soak up food as well, and a newborn's full tank lasts about 55 seconds instead of 30, so that move stops being a trap. Eating the clumps: the falling food becomes the start of the food chain, and drifters crowd where it falls and vanish where it does not. Starving: about six drifters a second die across the drop, and the water fills with hundreds of clumps. |
+| 12 | When a mouth swallows a venomous cell, does the eater die? | yes, every eater, you included (was recommended) · no, venom only makes a biter pay, as it does for you today · **neither in this pack: venom stays as it is today, and the gene pass brings it in two variants -- a venomous cell's bite adds stacks of venom to what it bites, and whatever bites or eats a poisonous cell takes stacks; the stacks wear off over time, doing damage while they last ✓ answered** | Venom stays as it is in this pack: biting a venomous cell hurts you back, a cell that swallows you dies of your venom, and you can swallow a venomous cell safely. Later the gene pass brings two kinds of cell: a venomous one hurts what it bites, a poisonous one hurts what bites or eats it, and the hurt comes as stacks that wear off over time. |
+| 13 | If row 12 is yes: can the drifters carry venom? | **no: drifters are never venomous; only cells with a mouth organ carry it ✓ answered** · yes, as today, about one drifter in nineteen | No: every drifter is safe to eat. A venomous cell with a mouth organ that is small enough for you to swallow still kills you: that is the one game in 64 above. Yes: one drifter in nineteen kills you when you swallow it; in full vision you can learn its colour, in point of view you cannot tell. The test player died of venom in 42 games of 64 with venomous drifters, and in 1 without; one that steers round the venomous ones it sees still died of it in 7, swallowing what it bumped into. If row 12 is no, this row changes nothing. |
+| 14 | How fast does a hunter swim after you? | **as fast as its own tail lets it, as you do, from this pack ✓ answered** · as today until the behaviour pack: always a fifth faster than you, and 70 % faster in its last dash | Today a hunter chasing you is always faster than you, whatever it is made of. With its own tail, a hunter with a better tail than yours is faster, and a worse one cannot catch you if you swim away. A hunter with a tail like yours still catches a cell that does nothing 11 times in 14, and one that turns away escapes 13 times in 14. The test player could not tell the two apart: its 64 games, replayed with nothing changed but chance, move by as much. |
+| 15 | Can a cell swallow you when it is not hunting you? For playing together you answered "keep it for both of you until the gene phase". | **yes, from this pack: any mouth swallows what fits on contact, yours and theirs alike ✓ answered** · no, keep your answer: only a cell that is hunting you can swallow you, until the gene phase | Today something must be hunting you to swallow you, so a death always comes after a warning you can feel: dread rising, and its strokes. Yes: a big cell that drifts into you can swallow you; dread still warns you it is near, its strokes do not. On the same 64 games, with a thick skin protecting every cell either way, the test player lost 18 in a new drop against 14 with your rule, and 31 against 25 in a drop fifteen minutes old. |
+| 16 | Do hunters leave you alone for 42 seconds after you are born or divide? | **yes, as today, until pack 2 gives every newborn the same ✓ answered** · no, you are fair game from the first second, like any cell | Today nothing may hunt you for 42 seconds after you are born, divide or come back from a death; the water's cells get no such grace. Yes keeps it for you and your friends. No makes you like any cell: hunters may come for a newborn from its first second, and a cell that divides often is hunted all the time. On the same 64 games the test player lost 28 in a new drop against 18 -- ten more games, each one where a hunter came for it -- and 34 against 31 in a drop fifteen minutes old, where what kills is mostly a big mouth it swims into. |
+| 17 | When you close the app in the middle of a run and come back, is your cell still there? | **yes, you carry on where you left off ✓ answered** · no, the drop is kept but you start a new run | Yes: closing the app is a pause, and you come back to the same cell, with its size and its genes, where you left it in your drop. Today a run is one sitting: closing the app ends it, and you always start as the basic cell. The replay then only holds what happened since you came back. No: your drop is kept, but opening the app starts a new basic cell in it, as a death does. |
+| 18 | How many rooms does the home server keep, always alive? | **one: the server's own drop, living on while nobody is in it, joined as today ✓ answered** · several, each living on, and you choose one when you join | One: nothing changes about joining, and the room keeps living for about 3 % of one core of this container while it is empty (measured here, not on the server). Several: each costs as much again, and you need a new page to choose one, which is a design of its own. More rooms can come later without changing the first. |
+
+**Answered on 2026-09-30.** The owner, verbatim:
+
+> 12 : venom add a stack of venom while it's biting. The stacks deplete over time, doing damage. We could later imagine specialized venoms later. But for now keep it simple
+> All recommended for the rest
+
+and, asked who takes the stacks -- whatever bites or swallows a venomous cell,
+whatever a venomous cell bites, or both -- and whether a swallowed venomous
+cell is spat out alive:
+
+> 12a and b : There'll be 2 variants. This is about the difference between venomous and poisonous. We'll add both on the gene pass later.
+
+So rows 11 and 13 to 18 stand as recommended, and venom is not reworked in pack
+1: `toxicyst` keeps both of its effects today, and the gene pass brings the
+two variants (`roadmap.md`).
 
 **Row 11** is a rule of the body, keyed on the organ (§5.3). It also changes
 a decided call: genes-and-cilia.md §9 item 7 allowed a player to put a gene
 over their own mouth as "a real and interesting mistake or a soft lock"; with
 absorption it is a slow, cheap body, and neither.
 
-**Row 12** is the owner's "no player special case" (`multiplayer.md` §10 row 6)
-applied to venom, and the shared pond already does it between two players: a
-player who swallows a venomous friend is poisoned (`shared-pond.md` §1.3,
-`food.gd:2211`). Yes keeps `toxicyst`'s line whole -- "whatever bites you pays,
-and whatever swallows you dies" -- where today the second half protects only a
-player. It is asked because killing the eater is the opposite of being eaten,
-and for a solo player it is a death that does not exist today. §5.6 is built
-for yes; no is one switch.
+**Row 12** leaves venom where it is: the one body rule not yet the same for
+every cell (§5.6, §5.7). Whatever bites a venomous body still takes a share of
+the bite back, and whatever swallows a venomous player still dies of it, while
+a player swallows a venomous water cell safely. The pass-2 prototype had made
+the swallow death every mouth's, as the row recommended; that is reverted, and
+§5.6 says what it did to the numbers. The gene pass replaces both effects with
+the owner's two variants: **venomous** -- its bite adds stacks of venom to what
+it bites -- and **poisonous** -- whatever bites or eats it takes stacks; the
+stacks wear off over time, doing damage while they last, and specialised
+venoms may follow.
 
-**Row 13** is what the water makes, not a rule of the body, and it only matters
-if row 12 is yes. **Row 14** reverses a call made for Phase 5 ("the chase stays
-a chase at every tier", genes-and-cilia.md §7.1). **Row 15** is the contact
-swallow alone: it reverses `shared-pond.md` §6 row 3, where "both of you" meant
-the two players; the one-bite-or-chewing phase in roadmap.md then starts from
-one rule instead of an exception.
+**Row 13** is what the water makes, not a rule of the body. It was asked for
+row 12's yes, and it stands: drifters carry no venom, which matters again when
+the gene pass brings poisonous cells; its numbers were measured with the swallow
+death for every mouth (§8.3). **Row 14** reverses a call made for Phase 5 ("the
+chase stays a chase at every tier", genes-and-cilia.md §7.1). **Row 15** is the
+contact swallow alone: it reverses `shared-pond.md` §6 row 3, where "both of
+you" meant the two players; the one-bite-or-chewing phase in roadmap.md then
+starts from one rule instead of an exception, with venom the one left.
 
 **Not asked, because row 5 decides them.** A thick skin (`pellicle`) protects
 every cell from being swallowed, not only a player: it was never put to the
@@ -2422,8 +2490,8 @@ hunter notices you** is its own senses' reach (§5.7); the alternative, today's
 1.9 mm for every hunter, is a dial (§8.5); on the same 64 games it lost the
 test player 33 against 18, which chance alone can do (§8.3).
 
-**Row 16** keeps a player's grace until pack 2's newborns can share it; it is
-also one of the rules the host's referee judges a guest by, so no would change
-the protocol in 1b (§10.5). **Row 17** changes genes-and-cilia.md §9 item 4
-("the arc is one session"): a run can span several sittings, and a death is
-still the only clean restart. **Row 18** needs no answer before 1b.
+**Row 16** keeps a player's grace until pack 2's newborns can share it, and
+leaves the referee's `FIRST_DELAY` where it is (§10.5). **Row 17** changes
+genes-and-cilia.md §9 item 4 ("the arc is one session"): a run can span
+several sittings, and a death is still the only clean restart. **Row 18**: one
+room, from 1b.
