@@ -7589,7 +7589,31 @@ func _check_server() -> void:
 	# chase its slot last ran (`_pond_hunt`): a closest approach left over from
 	# that one ends this run on its first step, and so can a lunge whose aim it
 	# has passed -- measured: held at 300 with a `best` of 137.5 left in it.
-	var held_at: Vector2 = b_home + Vector2(0.0, -(FoodField.COMMIT_RANGE + 90.0))
+	#
+	# **Square to the line between the guests, on whichever side lies deeper in
+	# the drop.** The guests land wherever the room puts them, and 400 to one
+	# side of a guest near the rim is past it: the server holds the body inside,
+	# and the other guest's mirror holds it there -- measured once in 320 runs,
+	# some 200 units from where it was posed, the 197 the rim's arithmetic
+	# gives. An arrival lands inside the rim by its radius and more, so the
+	# deeper side is in the water, or past it by less than the 30 the other
+	# guest is held to below.
+	var hold_off := (b_home - a_home).orthogonal().normalized() \
+		* (FoodField.COMMIT_RANGE + 90.0)
+	var rim: RefCounted = food.basin()
+	var held_at: Vector2 = b_home + hold_off
+	if float(rim.call(&"depth", b_home - hold_off)) > float(rim.call(&"depth", held_at)):
+		held_at = b_home - hold_off
+	# **And in clear water.** The pond is a live drop, and a mouth this wide
+	# posed beside whatever lies there closes on it within a step or two: a
+	# meal, REST_MEAL, off the run for five seconds, so nobody is hunted and the
+	# wait below runs out -- measured in 14 runs of the same 320, before pack 2
+	# and after: 13 bodies swallowed (r30 to r34), and once off the run with no
+	# growth. So nothing within its mouth's reach, and 60 more: seconds of drift
+	# for anything outside, where the wait takes a snapshot or two.
+	var hunter_gape := CellBody.gape_of(3, 30.0)
+	_pond_clear_line(food, held_at, held_at, Cilia.mouth_reach(30.0, hunter_gape)
+		+ hunter_gape * Cilia.MOUTH_BITE + 60.0)
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
@@ -7609,9 +7633,24 @@ func _check_server() -> void:
 		return _hunter_id(b_food) == hunter_id and a_holds.call(), pins)
 	var a_sees_hunter := _hunter_id(a_food)
 	var a_has_it: bool = a_holds.call()
+	# Which of the three, when it fails, and what the server's body was doing.
+	var hunt_off: Array = []
+	if flagged < 0.0:
+		hunt_off.append("the hunted guest's hunter is %d, not %d, after %.0f s; slot 5"
+			% [_hunter_id(b_food), hunter_id, SERVER_UNRELIABLE] + " holds %d, %s, %d"
+			% [int(hunter.id), "stalking" if int(hunter.state) == FoodField.State.STALK
+				else "off the run", int(hunter.meals)] + " meals")
+	if a_sees_hunter != -1:
+		hunt_off.append("the other guest's hunter is %d" % a_sees_hunter)
+	if not a_has_it:
+		var a_slot := int((a_food.get("_mirror_slots") as Dictionary).get(hunter_id, -1))
+		hunt_off.append("the other guest holds %d, %.0f units from where it was posed"
+			% [hunter_id, (a_food.bodies()[a_slot].pos as Vector2).distance_to(held_at)]
+			if a_slot >= 0 else "the other guest holds no %d" % hunter_id)
 	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
 		"server: a hunter on the guest in slot %d is that guest's hunter, and the"
-		% slot_b + " other guest, who is sent the same body, sees no hunter")
+		% slot_b + " other guest, who is sent the same body, sees no hunter"
+		+ ("" if hunt_off.is_empty() else " -- NOT: " + ", ".join(hunt_off)))
 	# Then let in: already on the lunge, and aimed at the guest.
 	var hunter_at: Vector2 = b_home + Vector2(0.0, -56.0)
 	hunter.pos = hunter_at
