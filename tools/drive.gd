@@ -319,6 +319,16 @@ extends Node
 ##                           they are left where they are, resting, and drift
 ##                           with the water. How a mouth that is hunting nobody
 ##                           comes to meet the cell, for a contact swallow
+##   --grow-posed-at=<seconds>
+##                           grow the bodies --cell= posed in the drop to
+##                           DIVIDE_RADIUS then, so each divides on its next tick
+##                           (lineage.md §6.4's frames): one posed at forty would
+##                           divide while it is held, and its daughter be posed
+##                           again. Pass it after --release-at=
+##   --dev-readout           pose the run as the dev app, so the frame readout
+##                           draws -- its generation and families rows among
+##                           them (lineage.md §6.4). A tool's seam: nothing a
+##                           player runs reaches it
 ##   --starve-near=<seconds> the water mouth nearest the cell, within the view,
 ##                           runs out at that time and dies of hunger on its next
 ##                           step, leaving its remains where it was (ocean.md
@@ -575,7 +585,12 @@ extends Node
 ## --drifter-venom=0|1 (13), --own-speed=0|1 (14), --notice=senses|fixed (5),
 ## --contact-swallow=0|1 (15), --armour-swallow=0|1 (5), --first-delay=<s>
 ## (16), --flight=none|all (§5.4); and §4's: --lod=0|1, --half-rate=0|1,
-## --near-first=0|1, --skip-still=0|1.
+## --near-first=0|1, --skip-still=0|1. **And pack 2's** (docs/design/lineage.md
+## §11.1, §12): --births=0|1 (0 is pack 1: nothing divides, a meal grows the body,
+## no sister has a grace, one debt for the whole drop), --mutate=<0..1> (a tool's
+## rate of divisions that change a daughter; the game's is every one),
+## --floor=<share of today's hunters the spawner keeps>, --floor-tau=<seconds it
+## pays them back within>, --newborn-grace=<seconds>.
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -833,6 +848,8 @@ var _replay_seen := false
 ## When the poses stop being held, and when the nearest mouth starves.
 var _release_at := -1.0
 var _starve_near := -1.0
+## `--grow-posed-at=`: when the posed bodies are grown to DIVIDE_RADIUS, or -1.
+var _grow_posed_at := -1.0
 ## When to raise the two-pane screen over the live run, and the node once it is.
 var _panes_at := -1.0
 var _panes: Node = null
@@ -1189,6 +1206,10 @@ func _ready() -> void:
 			_watching = true
 		elif text.begins_with("--release-at="):
 			_release_at = float(text.trim_prefix("--release-at="))
+		elif text.begins_with("--grow-posed-at="):
+			_grow_posed_at = float(text.trim_prefix("--grow-posed-at="))
+		elif text == "--dev-readout":
+			(load("res://game/dev/frame_readout.gd") as Script).set(&"posing", "dev")
 		elif text.begins_with("--starve-near="):
 			_starve_near = float(text.trim_prefix("--starve-near="))
 		elif text.begins_with("--divide-at="):
@@ -3098,6 +3119,30 @@ func _hold_world() -> void:
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
 	_apply_poses(false)
+	_grow_posed()
+
+
+## `--grow-posed-at=`: the bodies `--cell=` posed in the drop grown to
+## DIVIDE_RADIUS, once, so each divides on its next tick -- the frames of a
+## division (lineage.md §6.4). One the water took meanwhile is left alone.
+func _grow_posed() -> void:
+	# Not while frozen: a photograph's water stands still, the posed bodies too.
+	if _grow_posed_at < 0.0 or _clock < _grow_posed_at or get_tree().paused:
+		return
+	_grow_posed_at = -1.0
+	var water := _water_food()
+	if water == null or not bool(water.call(&"in_drop")):
+		return
+	var bodies: Array = water.get("_cells")
+	for index: Variant in _pose_slots:
+		var slot := int(_pose_slots[index])
+		if slot < 0 or slot >= bodies.size() or not bool(bodies[slot].get("seeded")) \
+				or bool(bodies[slot].get("inert")) or bool(bodies[slot].get("drifter")):
+			continue
+		bodies[slot].set("radius", CellBody.DIVIDE_RADIUS)
+		water.call(&"refresh", slot)
+		print("[drive] %5.2f  posed cell %d grown to r%.0f in slot %d, id %d" % [_clock,
+			int(index), CellBody.DIVIDE_RADIUS, slot, int(bodies[slot].get("id"))])
 
 
 ## **The drop's numeric and on/off switches** (the header's last block), by the
@@ -3106,11 +3151,12 @@ func _hold_world() -> void:
 func _drop_switch(text: String) -> bool:
 	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
 		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
-		"--first-delay=": &"grace"}
+		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
+		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
 	const SWITCHES := {"--drifter-venom=": &"drifter_venom", "--own-speed=": &"own_speed",
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
-		"--skip-still=": &"skip_still"}
+		"--skip-still=": &"skip_still", "--births=": &"births"}
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true
