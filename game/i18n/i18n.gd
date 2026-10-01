@@ -35,18 +35,34 @@ extends RefCounted
 ## given, so the words in a scene file (`text = "choose a view"`) would stay
 ## English if the catalog arrived from the screen's `_ready`. The engine chose
 ## the locale before any of this, from the device or from `--language` on the
-## command line, so there is nothing to choose here: a locale with no `.po`
-## falls back to the English the code is written in.
+## command line, and a locale with no `.po` falls back to the English the code is
+## written in.
+##
+## **The player's own choice wins over the device's** (docs/design/settings.md
+## §3.2): the settings sheet's language list calls [method choose], which applies
+## a language at once and keeps it in `user://` through RunState, and
+## [method register] applies the kept one right after the catalogs, so the first
+## game screen is built in it. Not in a process with no screen, so the server and
+## the probes stay English; not when `--language` overrode the device for this run,
+## so a screenshot taken with `--language fr` is French whatever this machine kept;
+## and not when the kept language no longer has a game catalog, when the device's
+## is followed again.
 ##
 ## **The launcher's first screen is built before this script has loaded**: it is the
-## main scene, and no game script is loaded until Play is pressed. So it is English
-## on every start, in any language, and a launcher built again after Play and Back
-## is translated. README.md has the measurement, and what registering earlier would
-## take, which is the owner's call.
+## main scene, and no game script is loaded until Play is pressed. So no catalog is
+## registered and no choice applied yet, and it is English on every start, whatever
+## the device's language or the player's; a launcher built again after Play and
+## Back is in the chosen language. README.md has the measurement. The owner chose
+## to wait for the template to add a startup hook,
+## sinikebe/godot-launcher-template#68, rather than register earlier from this
+## side: once it lands, the hook calls [method register] before the launcher is
+## built (settings.md §8, phase 3).
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd. Preload
 ## it by path, **in every screen the player can open first**, and do not remove
 ## the line for being unused: loading it is the whole of what it does.
+
+const RunState := preload("res://game/run_state.gd")
 
 # --- The words in launcher_config.tres ---------------------------------------------
 # The launcher shows them on its first screen and looks them up in the game's own
@@ -71,6 +87,23 @@ extends RefCounted
 const DIR := "res://game/i18n"
 ## Where the launcher's catalogs are.
 const LAUNCHER_DIR := "res://game/i18n/launcher"
+## The locale of the language the game is written in, which needs no catalog.
+const SOURCE := "en"
+
+## **The name a catalog gives its own language**, in that language, and the row
+## the language list shows for it (docs/design/settings.md §3.1). The engine knows
+## language names only in English, and a table of names in code would break the
+## promise that a language is one file, so each game catalog answers this message
+## with its own name. English shows the message itself. tools/i18n_pot.gd fails a
+## catalog that leaves it empty or answers "English".
+##
+## TRANSLATORS: Not the word for English: the name of this catalog's own language,
+## in that language, as a speaker writes it in a list -- "Français", "Deutsch",
+## "Português (Brasil)". It is this language's row in the game's language list, so
+## a player who reads only this language can find it: keep its own capitals. In
+## 20 px type, on a button 472 px wide.
+## ROOM: 400 px at 20 px
+const OWN_NAME := "English"
 
 ## What was registered, by locale, so a second call has nothing to do.
 static var _registered := PackedStringArray()
@@ -83,8 +116,9 @@ static func _static_init() -> void:
 
 
 ## Registers every `<locale>.po` in [constant DIR] and [constant LAUNCHER_DIR] with
-## the TranslationServer, once, and returns the locales it found. Safe to call
-## again: the second call returns the same list and does nothing.
+## the TranslationServer, once, applies the language the player chose
+## ([method choose]), and returns the locales it found. Safe to call again: the
+## second call returns the same list and does nothing.
 ##
 ## **The file's name is its locale** (`fr.po`, `pt_BR.po`, `pt-BR.po`), and it
 ## wins over the file's own `Language:` header. A `.po` with no header is read by
@@ -97,9 +131,89 @@ static func register() -> PackedStringArray:
 	_done = true
 	if DisplayServer.get_name() == "headless":
 		return _registered
+	# **Whether the engine is following the device.** `--language` never shows in
+	# OS.get_cmdline_args(), but it leaves the locale different from the device's
+	# at this moment, before anything here has set one (measured with fr and de).
+	var device_locale := TranslationServer.standardize_locale(OS.get_locale())
+	var follows_device := TranslationServer.get_locale() == device_locale
 	for dir: String in [DIR, LAUNCHER_DIR]:
 		_register_folder(dir)
+	if follows_device:
+		_apply_chosen()
 	return _registered
+
+
+## **The language the player chose**, set now -- unless there is none, or its
+## game catalog has gone since, and then the device's is left as it is.
+static func _apply_chosen() -> void:
+	var chosen := RunState.load_locale()
+	if chosen.is_empty() or chosen == TranslationServer.get_locale():
+		return
+	for language: Dictionary in languages():
+		if language["locale"] == chosen:
+			TranslationServer.set_locale(chosen)
+			return
+
+
+## **The languages the player can choose**: English and every game catalog in
+## [constant DIR] -- the launcher's alone would put launcher words over an English
+## game -- as `{locale, name}`, each named in its own words ([constant OWN_NAME])
+## and sorted by that name. Read from the files, so it needs no screen: a process
+## that registered nothing lists them all the same.
+static func languages() -> Array[Dictionary]:
+	var out: Array[Dictionary] = [{"locale": SOURCE, "name": OWN_NAME}]
+	var seen := PackedStringArray([SOURCE])
+	if DirAccess.dir_exists_absolute(DIR):
+		for file: String in DirAccess.get_files_at(DIR):
+			var file_name := file.trim_suffix(".remap")
+			if file_name.get_extension() != "po":
+				continue
+			var locale := locale_of(file_name.get_basename())
+			if locale.is_empty() or locale in seen:
+				continue
+			var catalog := load(DIR.path_join(file_name)) as Translation
+			if catalog == null:
+				continue
+			seen.append(locale)
+			out.append({"locale": locale, "name": own_name(catalog, locale)})
+	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
+		return str(a["name"]).naturalnocasecmp_to(str(b["name"])) < 0)
+	return out
+
+
+## **What [param catalog] calls its own language**: its translation of
+## [constant OWN_NAME], or -- when it left that empty, or answered "English" --
+## the engine's English name for [param locale] ("French"), so no two rows ever
+## read the same.
+static func own_name(catalog: Translation, locale: String) -> String:
+	var said := String(catalog.get_message(OWN_NAME)).strip_edges()
+	if said.is_empty() or said.to_lower() == OWN_NAME.to_lower():
+		return TranslationServer.get_locale_name(locale)
+	return said
+
+
+## **The language in use**, as one of [method languages]' locales: the catalog
+## that matches the engine's locale best, which is the one it is translating with,
+## or [constant SOURCE] when none matches at all.
+static func in_use() -> String:
+	var now := TranslationServer.get_locale()
+	var best := SOURCE
+	var best_score := 0
+	for language: Dictionary in languages():
+		var score := TranslationServer.compare_locales(now, str(language["locale"]))
+		if score > best_score:
+			best_score = score
+			best = str(language["locale"])
+	return best
+
+
+## **The player chose [param locale]**: kept, for [method register] to apply on
+## every start, and applied at once. Every node is then told the language changed
+## (`NOTIFICATION_TRANSLATION_CHANGED`), and each screen says its words again.
+static func choose(locale: String) -> void:
+	RunState.save_locale(locale)
+	if TranslationServer.get_locale() != locale:
+		TranslationServer.set_locale(locale)
 
 
 ## One folder's catalogs. A folder that does not exist has none: the launcher's is

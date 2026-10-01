@@ -325,6 +325,10 @@ var keep := DropSave.PATH
 ## (shared-pond-ux.md §6): a child of `resume` so the column never lays it out,
 ## in the 48 px gap above it. Hidden everywhere else.
 @onready var _warn: Label = $Hud/Pause/Center/Columns/Side/Resume/Warn
+## **Settings, from the gear in the pause screen's top-right corner**
+## (docs/design/settings.md §1.1, owner's row 2): the last child of the pause
+## screen, so it hides with it, and Esc reaches it before this node does.
+@onready var _corner: Control = $Hud/Pause/Corner
 ## **The settings stack in a column of their own, left of the genome, and it
 ## was measured rather than preferred** (dna-body.md §7). Full vision's camera
 ## pins the player's own cell to the middle of the screen, behind the scrim.
@@ -502,6 +506,10 @@ var _onboard_hold := 0.0
 ## True while the line on screen is the steering one, which is the only line
 ## that is onboarding rather than a notice.
 var _onboard_steer := false
+## **What the line says, by name**, whose words [method _line_words] has. The line
+## keeps the name and never the words, which would stay in the language they were
+## said in (docs/design/settings.md §3.3). &"" before it has said anything.
+var _onboard_says: StringName = &""
 
 ## Seconds swum this life, against FIRST_SENSE_AT, and whether the free sense
 ## has already been handed over. Both reset with the cell.
@@ -531,13 +539,13 @@ var _menu_open := false
 ## The guest's pond is held: the host has gone quiet, so nothing here moves.
 var _held := false
 ## **The water changes** (UX §0.5): seconds into the beat, or -1 for none. The
-## swap runs at [member _beat_swap_at] seconds, and [member _beat_line] is said
-## once the beat is over.
+## swap runs at [member _beat_swap_at] seconds, and the line
+## [member _beat_says] names is said once the beat is over.
 var _water_beat := -1.0
 var _beat_swap := Callable()
 var _beat_swap_at := 0.0
 var _beat_swapped := false
-var _beat_line := ""
+var _beat_says: StringName = &""
 ## The guest's three ways of waiting for ARRIVE: a run that opened inside the
 ## pond and is held for the round trip, a solo run swapping in, and a tap on the
 ## black.
@@ -547,11 +555,12 @@ var _wake_pending := false
 ## **The host's drop's rim, as its last ARRIVE said** (ocean.md §10.4):
 ## `[center, radius]`, for a swap that waits for the beat's dark middle.
 var _rim: Array = [Vector2.ZERO, 0.0]
-## **The one-slot line queue** (UX §0.4): what waits, since when it may be said,
-## and which fact it reports -- so it is dropped the moment that stops being
-## true. [member _line_shown] is the pond line on the label now, or "".
+## **The one-slot line queue** (UX §0.4): which fact it reports -- so it is
+## dropped the moment that stops being true -- what waits to be said, by name as
+## [member _onboard_says] is, and since when it may be. [member _line_shown] is
+## the fact of the pond line on the label now, or "".
 var _line_key := ""
-var _line_text := ""
+var _line_next: StringName = &""
 var _line_after := 0.0
 var _line_hold := SENSE_LINE_HOLD
 var _line_shown := ""
@@ -843,6 +852,9 @@ func _ready() -> void:
 	_gain_slider.value = _bus.gain
 	_gain_slider.value_changed.connect(_on_gain_changed)
 	_gain_slider.drag_ended.connect(_on_gain_settled)
+	# **Up from `light` is the gear**, the pause column's top, and Down from the
+	# gear comes back (settings.md §1.3).
+	_corner.link_focus(_gain_slider)
 
 	_begin_onboarding()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
@@ -850,7 +862,7 @@ func _ready() -> void:
 	# (ocean.md §9.1; shared-pond-ux.md §0.5): the world comes in on it and the
 	# aperture opens, as on every new water. Nothing to swap: it is already in.
 	if _resumed:
-		_begin_water_beat(Callable(), 0.0, "", "")
+		_begin_water_beat(Callable(), 0.0, "", &"")
 	if _pond != null:
 		_begin_pond()
 	# The dev app's frame readout (ocean.md §14.2), out of the way while the pause
@@ -1696,7 +1708,7 @@ func _step_split(delta: float) -> void:
 				if not _said_divide:
 					_said_divide = true
 					# Hold 0 is "wait for the verb", and the verb is the lean.
-					_say(tr(DIVIDE_LINE), 0.0)
+					_say(&"divide", 0.0)
 		Split.CHOOSING:
 			_hush()
 			_step_choosing(delta)
@@ -2667,11 +2679,8 @@ func _begin_onboarding() -> void:
 		_onboard = Onboard.OFF
 		return
 	_onboard_steer = true
-	# TRANSLATORS: The first line a new player sees, in 18 px type over the water,
-	# teaching how to steer: on a phone, drag a finger; on a keyboard, hold the A
-	# key to turn one way and the D key to turn the other. Keep the key letters
-	# A and D. One short line: about 25 characters.
-	_onboarding.text = tr("drag to turn") if _touch_first() else tr("A · D to turn")
+	_onboard_says = &"steer"
+	_onboarding.text = _line_words(_onboard_says)
 	_onboarding.show()
 	_onboard = Onboard.WAITING
 	_onboard_clock = 0.0
@@ -2685,23 +2694,18 @@ func _begin_onboarding() -> void:
 ## ahead of it. Back and Escape still open the pause screen, the one place a
 ## gene can be written over another. Owner's call 4.
 func _say_sense() -> void:
-	# TRANSLATORS: A notice in 18 px type, for seven seconds, when the cell has
-	# grown a new sense (a gene waiting for a place on its body). "Place it" means
-	# choose where on the body the new organ grows. On a phone the player holds
-	# their finger on their own cell; on a keyboard they hold the E key: keep the
-	# letter e. About 45 characters at most.
-	_say(tr("a sense grew · hold your body to place it") if _touch_first()
-		else tr("a sense grew · hold e to place it"), SENSE_LINE_HOLD)
+	_say(&"sense", SENSE_LINE_HOLD)
 
 
-## Puts [param text] on the line and fades it in from wherever the line already
-## is, so a notice arriving over the steering line is a change of words and not
-## a blink. [param hold] is how long it stays once it is up.
-func _say(text: String, hold: float) -> void:
+## Puts the line [param says] names on the label and fades it in from wherever the
+## line already is, so a notice arriving over the steering line is a change of
+## words and not a blink. [param hold] is how long it stays once it is up.
+func _say(says: StringName, hold: float) -> void:
 	_onboard_steer = false
 	_onboard_from = _onboarding.modulate.a
 	_onboard_hold = hold
-	_onboarding.text = text
+	_onboard_says = says
+	_onboarding.text = _line_words(says)
 	# **Not over the menu** (shared-pond.md §1.7): under B the run goes on with
 	# the menu open, and a sense can arrive under it -- rendered, the line stood
 	# through the scrim behind `resume`. It is still said, and the menu shows it
@@ -2710,6 +2714,47 @@ func _say(text: String, hold: float) -> void:
 	_onboarding.visible = not _menu_open
 	_onboard_clock = 0.0
 	_onboard = Onboard.FADE_IN
+
+
+## **Everything the line can say, by name, in the language of the moment.** The
+## line keeps the name and asks here as it puts the words up, and again whenever
+## the language changes (settings.md §3.3). A name this does not know says
+## nothing.
+func _line_words(says: StringName) -> String:
+	match says:
+		&"steer":
+			# TRANSLATORS: The first line a new player sees, in 18 px type over the
+			# water, teaching how to steer: on a phone, drag a finger; on a keyboard,
+			# hold the A key to turn one way and the D key to turn the other. Keep the
+			# key letters A and D. One short line: about 25 characters.
+			return tr("drag to turn") if _touch_first() else tr("A · D to turn")
+		&"sense":
+			# TRANSLATORS: A notice in 18 px type, for seven seconds, when the cell has
+			# grown a new sense (a gene waiting for a place on its body). "Place it"
+			# means choose where on the body the new organ grows. On a phone the player
+			# holds their finger on their own cell; on a keyboard they hold the E key:
+			# keep the letter e. About 45 characters at most.
+			return tr("a sense grew · hold your body to place it") if _touch_first() \
+				else tr("a sense grew · hold e to place it")
+		&"divide":
+			return tr(DIVIDE_LINE)
+		&"theirs":
+			return tr(LINE_THEIRS)
+		&"yours":
+			return tr(LINE_YOURS)
+		&"died":
+			return tr(LINE_DIED)
+		&"ate":
+			return tr(LINE_ATE)
+		&"quiet":
+			return tr(LINE_QUIET)
+		&"gone":
+			return tr(LINE_GONE)
+		&"cut":
+			return tr(LINE_CUT)
+		&"left":
+			return tr(LINE_LEFT)
+	return ""
 
 
 func _step_onboarding(delta: float) -> void:
@@ -2956,6 +3001,11 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_GO_BACK_REQUEST:
 			if not _back_once():
 				return
+			# **The corner before anything** (settings.md §1.3): the settings
+			# sheet over the pause screen is the top screen, and Android Back
+			# reaches this node before it, as a notification goes parent first.
+			if _corner.close_top():
+				return
 			# Back out of the replay first: it is a screen the player opened,
 			# and the gesture that closes a screen closes the top one.
 			if _replay != null:
@@ -3014,6 +3064,13 @@ func _notification(what: int) -> void:
 		NOTIFICATION_WM_CLOSE_REQUEST:
 			# The window closed on desktop: the same leaving.
 			_keep_drop()
+		NOTIFICATION_TRANSLATION_CHANGED:
+			# Deferred, and it has to be (settings.md §3.3): the tree is still
+			# telling every node, and the genome strip is rebuilt by adding nodes,
+			# which the tree refuses from inside it. The first one comes as the
+			# node enters the tree, before `_ready` has said anything, and is let go.
+			if is_node_ready():
+				_say_again.call_deferred()
 
 
 ## **First contact decides the gesture, and this is the function that makes that
@@ -3176,7 +3233,12 @@ func _unhandled_input(event: InputEvent) -> void:
 		# answered this frame is still a Back, and letting it fall through to
 		# the branches below would restart the run.
 		if _back_once():
-			if _life != Life.ALIVE:
+			# The corner is the pause screen's last child, so an open sheet has
+			# had Esc already; asked again in case the same Back reached it by
+			# the other door.
+			if _corner.close_top():
+				pass
+			elif _life != Life.ALIVE:
 				_leave()
 			# **`Esc` shuts the fork view only; a second one resumes** -- the
 			# rule dna-body.md §8 set for the body held open, for the same
@@ -3565,6 +3627,32 @@ func _set_menu(open: bool) -> void:
 	else:
 		_reset_fork_view()
 		RunState.save_gain(_bus.gain)
+		# **A sheet left open goes with the screen** (settings.md §1.1): a death
+		# or a takeover shuts pause from under it, and it must not still be open
+		# the next time pause is.
+		_corner.close_all()
+
+
+## **Every word this run sets from code, said again** when the language changes
+## (docs/design/settings.md §3.3), which happens with the settings sheet open over
+## the pause screen. The pause screen's scene words translate themselves; the rest
+## were given as `tr()` of a message, which keeps the words and not the message,
+## and stayed French after a switch back to English (measured): the camera and
+## controls buttons, the caption, the three lines under the figure. Called
+## deferred, because the genome strip is built by adding nodes.
+func _say_again() -> void:
+	_update_view_button()
+	_update_scheme_button()
+	if _onboard_says != &"":
+		_onboarding.text = _line_words(_onboard_says)
+	_numbers_toggle.queue_redraw()
+	if not _menu_open:
+		# The rest is built as the pause screen opens, in the language of then.
+		return
+	# The chips draw their words, and the strip says the caption, the hint, the
+	# verb line, the explanation and the numbers again as it is built.
+	_build_genome_strip()
+	_redraw_ways()
 
 
 ## Back one step, to the view chooser. The launcher is one more Back from
@@ -8300,8 +8388,8 @@ const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 var _beat_in := false
 ## The key of the line the beat says when it ends.
 var _beat_key := ""
-## What the pond line on the label says, so a line that replaced it is noticed.
-var _line_shown_text := ""
+## Which pond line is on the label, by name, so a line that replaced it is noticed.
+var _line_shown_says: StringName = &""
 
 
 ## **Is a session up** (shared-pond.md §1.7): the link is together, or this is
@@ -8433,7 +8521,7 @@ func _on_pond_arrived(at: Vector2, heading: float, rim_center: Vector2,
 		_place_arrival(at, heading)
 		_motes.setup(_cell, _food.basin())
 		_update_simulating()
-		_pond_say("theirs", tr(LINE_THEIRS), ONBOARD_DELAY)
+		_pond_say("theirs", &"theirs", ONBOARD_DELAY)
 		return
 	if _swap_pending:
 		_swap_pending = false
@@ -8449,7 +8537,7 @@ func _on_pond_arrived(at: Vector2, heading: float, rim_center: Vector2,
 			_pond.mirror_ended()
 			return
 		_begin_water_beat(_swap_in.bind(at, heading), VisionLayer.FADE_SECONDS,
-			"theirs", tr(LINE_THEIRS))
+			"theirs", &"theirs")
 
 
 ## **The swap, at the beat's dark middle** (§1.6, UX §1): this water becomes a
@@ -8560,7 +8648,7 @@ func _leave_mirror() -> void:
 ## once. Pause is ordinary again, so the menu closes if it was open.
 func _take_over() -> void:
 	var was_in := _food.mirroring()
-	var gone_line := tr(LINE_CUT) if _pond.cut_off() else tr(LINE_GONE)
+	var gone_says: StringName = &"cut" if _pond.cut_off() else &"gone"
 	_pond.mirror_ended()
 	_swap_pending = false
 	if _held:
@@ -8591,9 +8679,9 @@ func _take_over() -> void:
 		# moved again.
 		_leave_mirror()
 		_update_simulating()
-		_pond_say("gone", gone_line)
+		_pond_say("gone", gone_says)
 		return
-	_begin_water_beat(_leave_mirror, 0.0, "gone", gone_line)
+	_begin_water_beat(_leave_mirror, 0.0, "gone", gone_says)
 
 
 ## **Held, or heard again** (UX §5). Held, nothing of this cell moves --
@@ -8627,6 +8715,8 @@ func _update_dim() -> void:
 ## and false while that pond is held (UX §6).
 func _update_warn() -> void:
 	_warn.visible = _menu_open and _session_up() and not _held
+	# The settings sheet covers this warning, so it says it again (settings.md §2).
+	_corner.warn = _warn.visible
 
 
 # --- The water changes (UX §0.5) -----------------------------------------------
@@ -8638,14 +8728,14 @@ func _update_warn() -> void:
 ## [param swap] runs at [param swap_at] seconds: the dark middle for a swap,
 ## at once for a takeover, which must not leave a cell in a water that has gone.
 func _begin_water_beat(swap: Callable, swap_at: float, key: String,
-		line: String) -> void:
+		says: StringName) -> void:
 	_water_beat = 0.0
 	_beat_swap = swap
 	_beat_swap_at = swap_at
 	_beat_swapped = false
 	_beat_in = false
 	_beat_key = key
-	_beat_line = line
+	_beat_says = says
 	_update_simulating()
 	_cell.release()
 	_controls.let_go()
@@ -8676,8 +8766,8 @@ func _end_water_beat() -> void:
 	_water_beat = -1.0
 	if not _beat_in:
 		_vision.set_active(_vision_active())
-	if not _beat_line.is_empty():
-		_pond_say(_beat_key, _beat_line)
+	if _beat_says != &"":
+		_pond_say(_beat_key, _beat_says)
 
 
 func _step_water_beat(delta: float) -> void:
@@ -8701,8 +8791,8 @@ func _step_water_beat(delta: float) -> void:
 	_update_simulating()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.pulse_now()
-	if not _beat_line.is_empty():
-		_pond_say(_beat_key, _beat_line)
+	if _beat_says != &"":
+		_pond_say(_beat_key, _beat_says)
 
 
 # --- The friend, and the line (UX §0.4, §1-§5) ----------------------------------
@@ -8714,7 +8804,7 @@ func _on_friend_entered() -> void:
 	_friend_dead = false
 	if not _friend_ever:
 		_friend_ever = true
-		_pond_say("yours", tr(LINE_YOURS), SignalBus.DEATH_RETURN)
+		_pond_say("yours", &"yours", SignalBus.DEATH_RETURN)
 
 
 ## Either seat: the other player's cell died, and how decides what is drawn
@@ -8727,7 +8817,7 @@ func _on_friend_died(cause: int, _by: int, at: Vector2, eaten_by_me: bool) -> vo
 	elif cause == FoodField.Cause.STARVED:
 		how = VisionLayer.Gone.STARVED
 	_vision.friend_gone(how, at)
-	_pond_say("dead", tr(LINE_ATE) if eaten_by_me else tr(LINE_DIED))
+	_pond_say("dead", &"ate" if eaten_by_me else &"died")
 
 
 ## Host: the guest is gone from this water.
@@ -8735,7 +8825,7 @@ func _on_friend_left() -> void:
 	_friend_dead = false
 	_friend_ever = false
 	_vision.friend_gone(VisionLayer.Gone.LEFT, Vector2.ZERO)
-	_pond_say("left", tr(LINE_LEFT))
+	_pond_say("left", &"left")
 
 
 ## Either seat: the other player has a new body -- back from the black, or born.
@@ -8752,18 +8842,19 @@ func _step_quiet() -> void:
 		if not _quiet_said:
 			_quiet_said = true
 			# No timer: it goes when they are heard.
-			_pond_say("quiet", tr(LINE_QUIET), 0.0, 0.0)
+			_pond_say("quiet", &"quiet", 0.0, 0.0)
 	else:
 		_quiet_said = false
 
 
 ## **Into the one-slot queue**, where the newest wins (UX §0.4). [param key]
-## names the fact it reports; [param delay] is how long before it may be said
-## and [param hold] how long it stays, 0 for until it stops being true.
-func _pond_say(key: String, text: String, delay: float = 0.0,
+## names the fact it reports and [param says] the line ([method _line_words]);
+## [param delay] is how long before it may be said and [param hold] how long it
+## stays, 0 for until it stops being true.
+func _pond_say(key: String, says: StringName, delay: float = 0.0,
 		hold: float = SENSE_LINE_HOLD) -> void:
 	_line_key = key
-	_line_text = text
+	_line_next = says
 	_line_after = _run_clock + delay
 	_line_hold = hold
 
@@ -8790,7 +8881,7 @@ func _line_true(key: String) -> bool:
 ## stops being true.
 func _step_lines() -> void:
 	if not _line_shown.is_empty():
-		if _onboard == Onboard.OFF or _onboarding.text != _line_shown_text:
+		if _onboard == Onboard.OFF or _onboard_says != _line_shown_says:
 			_line_shown = ""
 		elif not _line_true(_line_shown):
 			if _onboard != Onboard.FADE_OUT:
@@ -8821,7 +8912,7 @@ func _step_lines() -> void:
 			_onboard = Onboard.FADE_OUT
 			_line_shown = ""
 		return
-	_say(_line_text, _line_hold)
+	_say(_line_next, _line_hold)
 	_line_shown = _line_key
-	_line_shown_text = _line_text
+	_line_shown_says = _line_next
 	_line_key = ""

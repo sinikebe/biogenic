@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=14 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -12,6 +12,7 @@
 [ext_resource type="PackedScene" path="res://game/perception/returns.tscn" id="10_returns"]
 [ext_resource type="Script" path="res://game/replay/recorder.gd" id="11_recorder"]
 [ext_resource type="Script" path="res://game/normal/controls.gd" id="12_controls"]
+[ext_resource type="PackedScene" path="res://game/menu/corner.tscn" id="13_corner"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -398,6 +399,8 @@ offset_top = -11.0
 offset_right = 112.0
 offset_bottom = 37.0
 focus_mode = 2
+
+[node name="Corner" parent="Hud/Pause" instance=ExtResource("13_corner")]
 
 [node name="Recorder" type="Node" parent="."]
 process_mode = 1

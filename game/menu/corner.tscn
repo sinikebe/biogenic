@@ -1,0 +1,122 @@
+[gd_scene load_steps=5 format=3]
+
+[ext_resource type="Script" path="res://game/menu/corner.gd" id="1_corner"]
+[ext_resource type="Theme" path="res://addons/launcher/theme/launcher_theme.tres" id="2_theme"]
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_sheet"]
+content_margin_left = 24.0
+content_margin_top = 20.0
+content_margin_right = 24.0
+content_margin_bottom = 20.0
+bg_color = Color(0.035, 0.086, 0.078, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.141, 0.302, 0.267, 1)
+corner_radius_top_left = 12
+corner_radius_top_right = 12
+corner_radius_bottom_right = 12
+corner_radius_bottom_left = 12
+
+[sub_resource type="StyleBoxFlat" id="StyleBoxFlat_current"]
+content_margin_left = 52.0
+content_margin_top = 14.0
+content_margin_right = 22.0
+content_margin_bottom = 14.0
+bg_color = Color(0.047, 0.11, 0.098, 1)
+border_width_left = 1
+border_width_top = 1
+border_width_right = 1
+border_width_bottom = 1
+border_color = Color(0.239, 0.863, 0.592, 0.85)
+corner_radius_top_left = 8
+corner_radius_top_right = 8
+corner_radius_bottom_right = 8
+corner_radius_bottom_left = 8
+
+[node name="Corner" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme = ExtResource("2_theme")
+script = ExtResource("1_corner")
+current_box = SubResource("StyleBoxFlat_current")
+
+[node name="Cluster" type="HBoxContainer" parent="."]
+anchors_preset = 1
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -104.0
+offset_top = 48.0
+offset_right = -48.0
+offset_bottom = 104.0
+grow_horizontal = 0
+mouse_filter = 2
+theme_override_constants/separation = 12
+
+[node name="Gear" type="Button" parent="Cluster"]
+custom_minimum_size = Vector2(56, 56)
+
+[node name="Veil" type="ColorRect" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.004, 0.016, 0.014, 0.784)
+
+[node name="Settings" type="CenterContainer" parent="."]
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Settings"]
+custom_minimum_size = Vector2(520, 0)
+theme_override_styles/panel = SubResource("StyleBoxFlat_sheet")
+
+[node name="Box" type="VBoxContainer" parent="Settings/Panel"]
+theme_override_constants/separation = 12
+
+[node name="Title" type="Label" parent="Settings/Panel/Box"]
+theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
+theme_override_font_sizes/font_size = 22
+horizontal_alignment = 1
+
+[node name="Gap" type="Control" parent="Settings/Panel/Box"]
+custom_minimum_size = Vector2(0, 2)
+mouse_filter = 2
+
+[node name="Caption" type="Label" parent="Settings/Panel/Box"]
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.52)
+theme_override_font_sizes/font_size = 16
+
+[node name="Languages" type="ScrollContainer" parent="Settings/Panel/Box"]
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Settings/Panel/Box/Languages"]
+size_flags_horizontal = 3
+theme_override_constants/separation = 8
+
+[node name="Warn" type="Label" parent="Settings/Panel/Box"]
+visible = false
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.82)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
+
+[node name="Gap2" type="Control" parent="Settings/Panel/Box"]
+custom_minimum_size = Vector2(0, 6)
+mouse_filter = 2
+
+[node name="Close" type="Button" parent="Settings/Panel/Box"]
+custom_minimum_size = Vector2(232, 56)
+size_flags_horizontal = 4
