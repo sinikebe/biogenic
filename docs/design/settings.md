@@ -10,8 +10,10 @@ The owner, 2026-10-01:
 > in game and when joining another game"
 
 **Status: designed, prototyped on the real screens, photographed at 1280x720 and
-2400x1080, not built.** The prototype lived in a scratch worktree and is not in the
-repository; §9 says what was shot and what judging changed. This extends
+2400x1080, and built: phase 1 (the language) and phase 2 (the worlds).** The
+prototype lived in a scratch worktree and is not in the repository; §9 says what was
+shot and what judging changed. The owner answered §11 on 2026-10-01: the player's
+word is **world**, and the code's, like `ocean.md`'s, stays **drop**. This extends
 `ocean.md` §9 (the drop is kept), `controls.md` §5 (the scheme chooser),
 `invites-ux.md` §1 (the earshot pages) and `game/i18n/README.md`.
 
@@ -19,8 +21,8 @@ repository; §9 says what was shot and what judging changed. This extends
 
 ## 0. Decided here, in one place
 
-- **One corner, on every screen.** A gear for settings and, where a drop can be
-  chosen, a chip with the drop's name, in the top-right corner, 48 px from the
+- **One corner, on every screen.** A gear for settings and, where a world can be
+  chosen, a chip with the world's name, in the top-right corner, 48 px from the
   edges: the pause tap's mirror. In a game the gear is on the pause screen (§1).
 - **Settings holds the language, and only that, for now.** Light, camera and
   controls stay on the pause screen, where their effect shows as they are set
@@ -28,13 +30,13 @@ repository; §9 says what was shot and what judging changed. This extends
 - **The language list** is English and every game catalog, each named in its own
   language ("Français"). A choice applies at once, without a restart, is saved in
   `user://`, and is applied before the first game screen is built (§3).
-- **Three drops, one selected.** The chip opens "your drops": one tap selects a
-  drop, an empty row is "new drop", and any drop except the one you are in can be
-  deleted (§4, §5).
-- **No player loses a drop.** Today's `user://drop.save` becomes slot 1, at the same
+- **Three worlds, one selected.** The chip opens "your worlds": one tap selects a
+  world, an empty row is "new world", and any world except the one you are in can be
+  deleted (§4, §5). A world is what the code calls a drop (owner row 5).
+- **No player loses a world.** Today's `user://drop.save` becomes slot 1, at the same
   path, untouched. A small index names the slots (§6).
-- **All of it ships as content.** No permission, plugin, project setting or
-  `binary_version` bump is needed, except whatever #68's own sync needs (§8).
+- **Phases 1 and 2 ship as content.** Phase 3, the launcher, needs one project
+  setting -- the game's own autoload -- and so `binary_version` 6 (§1.4, §8).
 
 ---
 
@@ -42,9 +44,9 @@ repository; §9 says what was shot and what judging changed. This extends
 
 ### 1.1 Where it is, screen by screen
 
-| screen | gear | drop chip |
+| screen | gear | world chip |
 |---|---|---|
-| the launcher (the template's) | not until #68; then a `settings` button in its menu (§1.4) | no (owner row 4) |
+| the launcher (the template's) | a `settings` button in its menu (§1.4) | no (owner row 4) |
 | the view chooser, `mode_select` | yes | yes |
 | within earshot, while this phone is or may become the host: CHOOSE, CALLING, and TOGETHER and TROUBLE while `session.hosting` | yes | yes |
 | within earshot as a guest: ANSWERING, and TOGETHER and TROUBLE without `hosting` | yes | no |
@@ -66,9 +68,9 @@ view chooser, which has the gear.
 
 ```
                                         1280 x 720, canvas px
-                                   x 958 ............... 1164   1176 ... 1232
+                                   x 948 ............... 1164   1176 ... 1232
                                    ┌──────────────────────┐   ┌──────────┐
-  y 48                             │ drop  pond water   ⌄ │   │    ⚙     │
+  y 48                             │ world  pond water  ⌄ │   │    ⚙     │
   y 104                            └──────────────────────┘   └──────────┘
 ```
 
@@ -78,7 +80,7 @@ Corner          Control, full rect, mouse IGNORE, theme = addons/launcher/theme/
 │  │            grow_horizontal BEGIN, separation 12, mouse IGNORE
 │  ├─ Chip      Button, 56 tall, as wide as its words up to 340, clip_contents, FOCUS_ALL
 │  │  └─ Inside HBoxContainer, full rect, offset_left 18, offset_right -44, separation 10, IGNORE
-│  │     ├─ Caption  Label 17 px  "drop"
+│  │     ├─ Caption  Label 17 px  "world"
 │  │     └─ Name     Label 17 px, EXPAND, trimmed with an ellipsis, auto-translate off
 │  └─ Gear      Button 56 x 56, no text, tooltip "settings", glyph drawn
 ├─ Veil         ColorRect, full rect, Color(0.004, 0.016, 0.014, 0.784), mouse STOP, hidden
@@ -128,15 +130,15 @@ same as the pause screen's captions, and its name is `Color(0.855, 0.953, 0.933,
   needs no translation and no room.
 - **An outline**, like the game's other strokes, because the filled version read as
   a blob at 1:1.
-- **The chip says `drop` before the name.** The name alone ("pond water ⌄") read as
-  a label, not as a thing to press.
+- **The chip says `world` before the name.** The name alone ("pond water ⌄") read
+  as a label, not as a thing to press.
 
 ### 1.3 Touch, mouse, keyboard
 
-- **Touch:** every target is 56 px tall or more; the drop rows are 68. The chip and
+- **Touch:** every target is 56 px tall or more; the world rows are 68. The chip and
   the gear are 12 px apart, and both only open a menu, so a mis-tap costs one Back.
 - **Mouse:** hover states, and tooltips on the gear ("settings") and the chip ("your
-  drops").
+  worlds").
 - **Keyboard:** the cluster takes focus. Set `focus_neighbor_top` of each screen's
   topmost control to the chip, or to the gear where the chip is hidden, and the
   cluster's `focus_neighbor_bottom` back to that control. On ANSWERING the ring owns
@@ -153,7 +155,18 @@ same as the pause screen's captions, and its name is `Color(0.855, 0.953, 0.933,
     and pause. The corner never listens for Back itself; if it did, one Back would
     close two layers.
 
-### 1.4 The launcher, once #68 lands
+### 1.4 The launcher
+
+**Built with the game's own autoload, not #68** -- the owner, 2026-10-01: "There's no
+problem with installing a new apk". `game/boot.gd`, registered in project.godot as
+`GameBoot` after the template's two autoloads, is the hook §10 asks the template
+for: it preloads `i18n.gd`, so the catalogs register and the saved language
+applies before the launcher's first frame; it hears `custom_button_pressed` on
+every launcher; and while the sheet is up it holds `quit_on_go_back` off, because
+the launcher has no Back of its own and Back there quits the app. Its registration
+is the one change that needs the APK (`binary_version` 6); the script itself, and
+`i18n.gd`, still come from the content pack. Once #68 lands, the hook can move onto
+the template's.
 
 `launcher_config.tres` gets `extra_buttons = PackedStringArray("settings")`, which
 puts a third button between play and quit (rendered). Pressing it emits
@@ -279,9 +292,9 @@ the alternatives.
     `standardize_locale(OS.get_locale())` at that moment (checked with `fr` and `de`),
     so that is the test. `tools/shot.tscn --language fr` therefore still shoots French,
     whatever this machine saved.
-- **The launcher:** its first view stays in the device's language until #68. From its
-  second view on, after Play and Back, it is in the chosen language, because by then
-  the catalogs and the locale are set.
+- **The launcher:** from binary 6, `GameBoot` sets the catalogs and the chosen
+  language before its first frame (§1.4). Before that, its first view followed the
+  device, and only its second, after Play and Back, the chosen language.
 
 ### 3.3 Live: what retranslates itself, and what does not
 
@@ -326,33 +339,36 @@ settings is open. The launcher is the template's (§10).
 
 ---
 
-## 4. Drops
+## 4. Worlds
 
-### 4.1 What a drop is, to the player
+### 4.1 What a world is, to the player
 
-A drop is one world: a drop of water with everything living in it, kept between
-launches (`ocean.md` §9), together with the cell you left in it. You have room for
-three and are in one at a time. The selected drop is the one that:
+A world is a drop of water with everything living in it, kept between launches
+(`ocean.md` §9), together with the cell you left in it. You have room for three and
+are in one at a time. The selected world is the one that:
 
 - a run plays in;
 - a host serves to a friend;
 - a guest's cell comes from, and goes back to.
 
-"drop" is the owner's word, and the fiction's: a drop of pond water under a
-microscope. "water" stays the word for whatever you are swimming in, a friend's
-included (owner row 5).
+**"world" is the player's word** (owner row 5, answered in §11). The code and
+`ocean.md` keep "drop" for the same thing -- `drops.gd`, `drops.cfg`, `drop.save` --
+and so does this document wherever it means the files and the code; wherever it
+means what the player reads, it says world. "water" stays the word for whatever you
+are swimming in, a friend's included.
 
-### 4.2 The chip, and "your drops"
+### 4.2 The chip, and "your worlds"
 
-The chip shows `drop` and the selected drop's name. Pressing it opens the menu under
-it:
+The chip shows `world` and the selected world's name: two labels, so the caption is
+translated and a typed name never is, and a drawn chevron that says it opens (§1.2).
+Pressing it opens the menu under it:
 
 ```
 Drops        Control, full rect, IGNORE
 └─ Panel     PanelContainer, min width 640, anchors (1,0)-(1,0), offset_right -48,
    │         offset_top 112, grow_horizontal BEGIN
    └─ Box    VBoxContainer, separation 10
-      ├─ Caption   Label 16 px Color(0.855, 0.953, 0.933, 0.52)   "your drops"
+      ├─ Caption   Label 16 px Color(0.855, 0.953, 0.933, 0.52)   "your worlds"
       ├─ Row1..3   HBoxContainer, separation 10
       │  ├─ Pick     Button, EXPAND x 68, content_margin_left 52, mark at x 26
       │  │  └─ Lines VBoxContainer, full rect, offsets 52 / -16, centred, IGNORE
@@ -361,7 +377,7 @@ Drops        Control, full rect, IGNORE
       │  ├─ Rename   Button 112 x 68, 15 px, quiet box
       │  └─ Delete   Button 112 x 68, 15 px, quiet box; on the selected row, an empty 112 x 68 Control
       └─ Note      Label 15 px Color(0.318, 0.463, 0.435, 1)
-                   "each drop keeps its own water, and your cell in it"
+                   "each world keeps its own water, and your cell in it"
 ```
 
 It spans x 592..1232, y 112..440 at 1280x720. At 2400x1080 it moves with the right
@@ -369,9 +385,9 @@ edge, to x 912..1552 of 1600. A row's states:
 
 | row | mark at x 26 | box | Name | Stats |
 |---|---|---|---|---|
-| the selected drop | filled dot as §2 | "current", as §2 | its name | its line, §4.3 |
-| another drop | empty ring as §2 | the launcher's Button | its name | its line |
-| an empty slot | a plus, arms 6 px, 2 px, `Color(0.855, 0.953, 0.933, 0.6)` | fill `Color(0.063, 0.141, 0.125, 0.25)`, border `Color(0.141, 0.278, 0.247, 0.8)` | "new drop", alpha 0.82 | none |
+| the selected world | filled dot as §2 | "current", as §2 | its name | its line, §4.3 |
+| another world | empty ring as §2 | the launcher's Button | its name | its line |
+| an empty slot | a plus, arms 6 px, 2 px, `Color(0.855, 0.953, 0.933, 0.6)` | fill `Color(0.063, 0.141, 0.125, 0.25)`, border `Color(0.141, 0.278, 0.247, 0.8)` | "new world", alpha 0.82 | none |
 
 **The quiet box** for rename and delete is the pause screen's toggle slab: fill
 `Color(0.063, 0.141, 0.125, 0.55)`, border `Color(0.12, 0.70, 0.58, 0.30)`, radius 8,
@@ -382,37 +398,40 @@ to. At the launcher's weight, the four of them out-shouted the names (rendered).
 
 **`<generation> · <age>`:**
 
-- **Generation:** the cell's, when a cell waits in the drop, in the pause caption's
+- **Generation:** the cell's, when a cell waits in the world, in the pause caption's
   own words ("fourth generation", "generation 12").
-- **Age:** the drop's, in minutes under an hour, hours under 48, then days: "25
-  minutes old", "2 hours old", "3 days old".
+- **Age:** the world's, in whole minutes under an hour, hours under 48, then days:
+  "25 minutes old", "2 hours old", "3 days old". Under a minute is "1 minute old": a
+  world that has been swum in is never nothing old.
 
 The other cases:
 
-- A drop whose last cell died says only its age.
-- A drop never swum in says "not swum in yet".
+- A world whose last cell died says only its age.
+- A world never swum in says "not swum in yet": it has no file yet, or its last keep
+  left it at no age with no cell.
 - **No row shows families.** The owner answered "not yet" to showing lineage anywhere
   a player looks (`lineage.md` §4, row 21).
 
-The age is the drop's own clock, which only runs while it is played (`ocean.md`
+The age is the world's own clock, which only runs while it is played (`ocean.md`
 §9.1). So "2 hours old" means two hours played in it, which is also what the fiction
 says.
 
 ### 4.4 The rules
 
-- **Select:** a tap on a drop's row selects it and closes the menu, and the chip
-  shows it. It takes one tap because choosing is what the menu is for.
+- **Select:** a tap on a world's row selects it and closes the menu, and the chip
+  shows it. It takes one tap because choosing is what the menu is for; a tap on the
+  world you are in just closes it.
 - **New:** a tap on an empty row opens naming (§5) with the next default name. `make
-  it` makes the drop, selects it, and closes everything. Its water is made the first
+  it` makes the world, selects it, and closes everything. Its water is made the first
   time it is played, as a fresh install's is today.
-- **Rename:** opens naming with the drop's name. `rename` saves it and goes back to
+- **Rename:** opens naming with the world's name. `rename` saves it and goes back to
   the menu, which shows the new name.
 - **Delete:** opens Confirm, below, and on `delete` empties the row and goes back to
   the menu.
-- **The drop you are in cannot be deleted**, so its row has no delete. To start over,
-  make a new drop or pick another, then delete the old one. That way there is always a
-  selected drop, and a mis-tap can never cost the drop you are about to play
-  (owner row 8).
+- **The world you are in cannot be deleted**, so its row has no delete. To start
+  over, make a new world or pick another, then delete the old one. That way there is
+  always a selected world, and a mis-tap can never cost the world you are about to
+  play (owner row 8).
 - **Duplicate names are allowed.** Rows are told apart by their place and their line.
 
 ```
@@ -420,7 +439,7 @@ Confirm      CenterContainer, full rect, IGNORE
 └─ Panel     PanelContainer, min width 560
    └─ Box    VBoxContainer, separation 14
       ├─ Title    Label 22 px Color(0.404, 0.639, 0.588, 1), centred, autowrap, width 512
-      │           "delete %s?" with the drop's name, auto-translate off
+      │           "delete %s?" with the world's name, auto-translate off
       ├─ Line     Label 17 px Color(0.482, 0.686, 0.643, 1), centred, autowrap
       │           "everything living in it, and your cell with it, is gone for good."
       ├─ (gap 4)
@@ -430,24 +449,25 @@ Confirm      CenterContainer, full rect, IGNORE
 ```
 
 This is the earshot screen's "forget this invite?" page, one more time. `keep` is the
-safe answer and has focus. Back means keep.
+safe answer and has focus. Back means keep. While it is up, the chip and the gear
+hide, as they do under naming (§5.1).
 
 ### 4.5 Switching, a run in progress, a pond, the server
 
 - **No run is ever switched under you.** The chip is on no screen a run is played
   from.
-- **Each drop keeps its own cell.** A cell left mid-run is in its drop's file
-  (`ocean.md` §9.1), so switching at the view chooser loses nothing: the other drop
+- **Each world keeps its own cell.** A cell left mid-run is in its world's file
+  (`ocean.md` §9.1), so switching at the view chooser loses nothing: the other world
   waits, frozen, with its cell where it was.
-- **A host serves the selected drop.** Nothing changes here: the run's own drop is
+- **A host serves the selected world.** Nothing changes here: the run's own drop is
   the pond (`ocean.md` §10.2). Changing the selection on CALLING or TOGETHER, before
   the run starts, changes what the friend will swim in.
-- **A guest's cell comes from its selected drop and goes back to it**, marked
+- **A guest's cell comes from its selected world and goes back to it**, marked
   `elsewhere` (`ocean.md` §9.1). The chip is hidden on every guest page, so the
   selection cannot change while joining.
 - **The dedicated server is not affected.** It keeps `user://rooms/1.save`
   (`server.gd`'s `ROOM_PATH`), never builds a screen, and never reads the drop index.
-- **The dev app** has its own `user://`, and so its own three drops.
+- **The dev app** has its own `user://`, and so its own three worlds.
 
 ---
 
@@ -459,7 +479,7 @@ safe answer and has focus. Back means keep.
 Naming       Control, full rect, IGNORE
 └─ Panel     PanelContainer, min width 560, anchors (0.5,0)-(0.5,0), offset_top 48, grow_horizontal BOTH
    └─ Box    VBoxContainer, separation 16
-      ├─ Title    Label 22 px Color(0.404, 0.639, 0.588, 1), centred   "a new drop" / "rename this drop"
+      ├─ Title    Label 22 px Color(0.404, 0.639, 0.588, 1), centred   "a new world" / "rename this world"
       ├─ Field    LineEdit 512 x 60, 22 px, max_length 20, select_all_on_focus,
       │           context menu and emoji menu off, auto-translate off
       └─ Actions  HBoxContainer, centred, separation 24
@@ -479,7 +499,12 @@ Naming       Control, full rect, IGNORE
 | caret | `Color(0.490, 1.0, 0.831, 1)`, 2 px |
 | selection | `Color(0.239, 0.863, 0.592, 0.38)`, selected ink `Color(1, 1, 1, 1)` |
 
-Enter does what Make does; Esc and Back do what Back does.
+Enter does what Make does; Esc and Back do what Back does. **Esc has to be caught
+first:** a LineEdit being typed in keeps Esc for itself and only stops editing on
+it, so the corner reads Esc in `_input`, before the field, while the field has the
+keyboard. **While naming is up, the chip and the gear hide:** the panel shares their
+band at y 48, and the widest chip reaches x 824, under the panel's right edge at
+920.
 
 **The panel is anchored to the top on purpose.** It spans y 48..267 of 720. An
 Android keyboard covers about the bottom half of a landscape phone, so the field and
@@ -495,20 +520,23 @@ has no wrong answer, which an address does. This has not been seen on a device
   it, and `make it` keeps it.
 - **Trimmed** at both ends. An empty name means the default name.
 - **Up to 20 characters** (owner row 7). The widest ordinary name fits whole
-  everywhere. A name of very wide letters is shortened with "…" on the chip (229 px
-  for the name) and in the menu (280 px), never in the field (480 px fits 20 `W` at
-  22 px).
+  everywhere. A name of very wide letters is shortened with "…" on the chip (221 px
+  for the name beside `world`, 210 beside `monde`) and in the menu (280 px), never in
+  the field (480 px fits 20 `W` at 22 px).
 - **A typed name is the player's own words and is never translated.** Every Label and
   LineEdit that shows one has auto-translate off, and nothing passes one to `tr()`.
-  A drop named `play` stays `play` in French; a raw msgid would retranslate itself
+  A world named `play` stays `play` in French; a raw msgid would retranslate itself
   (§3.3).
 - **Default names** (owner row 6) are the water a microscopist takes a drop from:
   `pond water`, `rain barrel`, `hay infusion`, `ditch water`, `birdbath`,
   `tide pool`, `puddle`, `vase water`, `wet moss`, `pepper water` (Leeuwenhoek's,
   1676).
-  - A new drop gets the first one no other drop wears.
-  - A drop that keeps its default stores which one, not the words, so its name
-    follows the language (rendered: `eau de mare`).
+  - A new world gets the first one no other world wears, or is called.
+  - A world that keeps its default stores which one, not the words, and the name is
+    translated each time it is said, so it follows the language (`eau de mare`),
+    and is said again on a change of language like every other word.
+  - Typing a default's own words, in English or in any language the game has a
+    catalog for, keeps the default; so does leaving the offered name as it is.
   - A typed name is stored as typed.
 
 ---
@@ -539,24 +567,37 @@ selected=1          ; the drop a run opens, 1..3
 [1]
 name=""             ; typed, as typed; "" while it wears its default
 default=0           ; which default name
-lived=7800.0        ; the drop's age at its last keep, seconds
+lived=7800.0        ; the drop's age at its last keep, in whole seconds
 generation=4        ; the cell's generation at its last keep; 0 for no cell
 ```
 
 A slot is empty when it has neither a section nor a file. The index is written beside
-itself as `drops.tmp` and renamed over, as a drop is.
+itself as `drops.tmp`, read back and compared with what was meant, and renamed over,
+as a drop is. **The age is kept in whole seconds:** the engine's text reader gives
+back about one double in three a last digit off (7,581 of 20,000 on 4.7.2), which
+failed that comparison, and the menu says nothing finer than a minute.
 
 ### 6.3 Reading it, and the first launch after the update
 
-1. **There is no `drops.cfg`.** Slot 1 is made with default name 0 and selected. If
-   `drop.save` exists, its `lived` and `generation` are read from it once, with a new
-   `DropSave.peek(path)`. `peek()` decodes and checks as `read()` does but **never
-   moves a file aside**; it costs about 10 ms, once. Then the index is written.
+**Reading never writes.** Whatever has to be rebuilt is rebuilt again on every read,
+from the same files the same way, and written with the next change: a selection, a
+name, a delete, or a run's keep. A screen that only shows the worlds, and every tool
+and probe, leaves `drops.cfg` as it found it.
+
+1. **There is no `drops.cfg`.** Every slot with a file is a world, with the next free
+   default name, and the first one there is is selected: slot 1, on a fresh install
+   and on the first launch after the update. Slot 1 is made, with default name 0,
+   only when there is no world at all, so a lost index never puts a new world in the
+   place of one the player has. A file's `lived` and `generation` come from a new
+   `DropSave.peek(path)`, which decodes and checks as `read()` does but **never moves
+   a file aside**. It costs about 2 ms on a desktop for 600 bodies, on every read
+   until the index is written.
 2. **A slot file has no section**, because the index was lost or is older than the
-   file. It gets a section with the next free default name. A drop is never treated
-   as garbage for having no name.
-3. **A section has no file.** That drop has not been swum in yet.
-4. **The index does not read.** It is rebuilt from the files, as in step 2.
+   file. It is read as in step 1, with the next free default name. A world is never
+   treated as garbage for having no name.
+3. **A section has no file.** That world has not been swum in yet.
+4. **The index does not read, or selects a slot that is empty.** It is rebuilt from
+   the files as in step 1, and the first world there is is selected.
 
 ### 6.4 What changes in code
 
@@ -566,9 +607,9 @@ itself as `drops.tmp` and renamed over, as a drop is.
   nothing of either.
 - **`normal_mode.gd`:**
   - `var keep := DropSave.PATH` becomes `var keep := Drops.SELECTED`. That is a
-    marker, which `_open_drop()` resolves to the selected drop's path, and it
-    remembers the slot. Tools still set `keep` to `""` or to a file of their own, so
-    no tool run touches the index.
+    marker, resolved once as the run opens, before `_open_drop()`, to the selected
+    drop's path; the run remembers the slot. Tools still set `keep` to `""` or to a
+    file of their own, so no tool run touches the index.
   - After every successful `_keep_drop()` write to a slot, it calls
     `Drops.note_kept(slot, drop age, cell generation)`. The menu never opens a 30 KB
     drop to say how old it is.
@@ -594,52 +635,56 @@ a `ROOM:` line (README, "Making a string translatable"). Sizes are in px of type
 | `settings` | the sheet's title (22); the gear's tooltip; the launcher's menu button (20, a 300 px button) once #68 lands | 250 px at 20 |
 | `language` | the caption above the list (16) | 472 px at 16 |
 | `close` | the sheet's button (20, 232 wide) | 180 px at 20 |
-| `drop` | the chip's caption before the name (17). A drop is one of the player's three worlds: a drop of water and everything in it | 80 px at 17 |
-| `your drops` | the menu's caption (16); the chip's tooltip | 592 px at 16 |
-| `new drop` | an empty row (20) | 280 px at 20 |
+| `world` | the chip's caption before the name (17). A world is one of the three the player keeps: a drop of water and everything in it | 80 px at 17 |
+| `your worlds` | the menu's caption (16); the chip's tooltip | 592 px at 16 |
+| `new world` | an empty row (20) | 280 px at 20 |
 | `rename` | a row's button (15, 112 wide); naming's confirm (20, 232 wide) | 88 px at 15 |
 | `delete` | a row's button (15); the confirm's button (20, 208 wide) | 88 px at 15 |
-| `a new drop`, `rename this drop` | naming's title (22) | 512 px at 22 |
+| `a new world`, `rename this world` | naming's title (22) | 512 px at 22 |
 | `back` | naming's button (20, 160 wide) | 116 px at 20 |
-| `make it` | naming's confirm (20, 232 wide): make the new drop | 188 px at 20 |
-| `delete %s?` | the confirm's title (22, wraps); `%s` is the drop's name, the player's words or a default | wraps |
+| `make it` | naming's confirm (20, 232 wide): make the new world; "it" is the world | 188 px at 20 |
+| `delete %s?` | the confirm's title (22, wraps); `%s` is the world's name, the player's words or a default | wraps |
 | `everything living in it, and your cell with it, is gone for good.` | under it (17, wraps; a full sentence, with a full stop) | wraps |
-| `each drop keeps its own water, and your cell in it` | the menu's footnote (15) | 592 px at 15 |
+| `each world keeps its own water, and your cell in it` | the menu's footnote (15) | 592 px at 15 |
 | `not swum in yet` | a row's line (15) | the line's 280 |
-| `%d minute old` / `%d minutes old`, `%d hour old` / `%d hours old`, `%d day old` / `%d days old` | plurals; the drop's age, at the end of a row's line | the line's 280 |
-| the ten default names (§5.2) | a `TRANSLATORS` constant: "The water a microscopist takes a drop from; the drop's name until the player types one. A place, short, lowercase" | 220 px at 20 |
+| `%d minute old` / `%d minutes old`, `%d hour old` / `%d hours old`, `%d day old` / `%d days old` | plurals; the world's age, at the end of a row's line | the line's 280 |
+| the ten default names (§5.2) | a `TRANSLATORS` constant: "A world's name until the player types one: a real place a microscopist takes a water sample from. Short, lowercase, at most 20 characters" | 220 px at 20 |
 
 **Reused, with their notes extended:**
 
-- `keep`: the safe answer to deleting a drop, as well as to forgetting an invite. Its
+- `keep`: the safe answer to deleting a world, as well as to forgetting an invite. Its
   room shrinks from about 220 to 164 px at 20, because the button is 208 wide here
   and 264 on the earshot page.
-- `first generation` … `tenth generation` and `generation %d`: also a drop's line.
+- `first generation` … `tenth generation` and `generation %d`: also a world's line.
 - `the water is still moving · you can still be eaten`: also the sheet, in a pond.
 
 **A row's line is built whole**, like the gene numbers lines and the pause caption:
 `<generation> · <age>` in 280 px at 15 px. The English takes at most 260 ("seventh
-generation · 59 minutes old") and the French 261. Add it to the lint's built
+generation · 59 minutes old") and the French 253 (`âgé de`, as `monde` is
+masculine). Add it to the lint's built
 lines (`STATS_ROOM`), composed with each generation phrase and the widest age.
 
-**Phase 2's README** gains a glossary line: "A **drop** is one of the player's three
-worlds: a drop of water with everything living in it, kept between launches, and
-named by the player."
+**Phase 2's README** gains a glossary line: "A **world** is one of the three the
+player keeps: a drop of water with everything living in it, kept between launches,
+and named by the player (the code calls it a drop)." The French is `monde`, which
+is masculine, so its line says `âgé de` and `pas encore exploré`, and naming's
+`make it` is `le créer`.
 
 ---
 
 ## 8. Build phases
 
-**Two pull requests, then a third once #68 lands.** The two are independent. The first
-touches no save, and the second is mostly the save.
+**Three pull requests.** The first touches no save, and the second is mostly the
+save. The third, the launcher, waited for #68 until the owner chose a new APK
+instead; it rides with the second.
 
 | phase | the player gets | what is built | checks before `dev` |
 |---|---|---|---|
 | **1. Language** | "The game's language can be chosen, from every screen and from pause" | `corner.tscn` with the gear only; the settings sheet; Back handling in `mode_select`, `earshot` and `normal_mode`; `RunState` locale; `I18n.register()` applies it; the re-say on every screen (§3.3); `msgid "English"` in `fr.po`; the README | `--lint-all` (with the new `English` rule), `--check`; frames at both sizes: the gear on the view chooser, a far page and pause; the sheet open; after picking Français; **pause after French → English with no French left**; the sheet in a pond (`drive.gd --pond=host`) |
-| **2. Drops** | "Three drops you can name, and a new one whenever you like" | `drops.gd`, `DropSave.peek()`, `keep` → the selected drop, `note_kept`; the chip, the menu, naming and confirm; the chip's rule on earshot | `drop_probe` gains: an existing `drop.save` with no index becomes slot 1 with the same bytes; new, rename and delete round trip; the selected drop cannot be deleted; a lost index is rebuilt; a tool run with `keep` empty never writes `drops.cfg`. Frames: three slots with one empty, naming (new and rename), confirm, French, the widest name, the chip on CHOOSE and its absence on ANSWERING and far |
-| **3. The launcher** | the launcher's own `settings` button, and its first view in the chosen language | after #68 lands and is synced: a game-owned hook script calls `I18n.register()`, then connects the launcher's `custom_button_pressed`; `extra_buttons = ["settings"]` **in the same merge, never before** | if the sync moves `build_info.gd`, bump `binary_version` in that merge (CLAUDE.md). Then an old binary is offered the new APK, never the content with the button: "a new binary wins" (`update_service.gd`). Frames: the launcher with `settings`, and the sheet over it |
+| **2. Worlds** | "Three worlds you can name, and a new one whenever you like" | `drops.gd`, `DropSave.peek()`, `keep` → the selected drop, `note_kept`; the chip, the menu, naming and confirm; the chip's rule on earshot | `drop_probe` gains: an existing `drop.save` with no index becomes slot 1 with the same bytes; new, rename and delete round trip; the selected drop cannot be deleted; a lost index is rebuilt; a tool run with `keep` empty never writes `drops.cfg`. Frames: three slots with one empty, naming (new and rename), confirm, French, the widest name, the chip on CHOOSE and its absence on ANSWERING and far |
+| **3. The launcher** | the launcher's own `settings` button, and its first view in the chosen language | `game/boot.gd`, the `GameBoot` autoload: preloads `I18n`, connects every launcher's `custom_button_pressed`, opens the sheet, holds `quit_on_go_back` off while it is up; `extra_buttons = ["settings"]` **in the same merge, never before**; `binary_version` 6 for the autoload's registration | the Back probe opens the sheet from the launcher's button and closes it by Back and by Esc, the app staying and Back quitting again after; frames: the launcher with `settings`, the sheet over it, a cold start with French saved |
 
-All three ship as content, apart from that one possible bump.
+Phases 1 and 2 ship as content; phase 3 is the one APK.
 
 **Six things the build must not get wrong:**
 
@@ -669,12 +714,12 @@ widest name; and the launcher with `settings`, before and after a live switch.
 | first version | what it looked like | now |
 |---|---|---|
 | a filled gear | a blob at 1:1 | an outline, 2 px |
-| the name alone on the chip | a label, not a button | `drop` in caption ink, then the name |
+| the name alone on the chip | a label, not a button | `world` in caption ink, then the name |
 | panel at 0.949 alpha | `full vision` ghosted behind the title | opaque |
 | rename and delete in launcher buttons | four boxes out-shouted the names | the quiet slab, 15 px |
-| "new drop" over "empty" | it said the same thing twice | "new drop" alone |
+| "new world" over "empty" | it said the same thing twice | "new world" alone |
 | the sheet rebuilt inside the notification | it vanished on a language change | deferred (§3.3) |
-| delete on every row | the drop you are in was one mis-tap from gone | none on the selected row |
+| delete on every row | the world you are in was one mis-tap from gone | none on the selected row |
 | row actions 104 wide | French `renommer` took 78 of 80 px | 112 wide |
 
 **Fits, at both shapes.** At 1280x720 the cluster at its widest starts at x 824. The
@@ -705,7 +750,8 @@ launcher catalog and a live switch to French over the launcher:
   new" and "Update app".
 
 The cause is that those nodes have auto-translate off and are filled once with
-`tr()`. It matters only once #68 lets a game change the language on that screen. The
+`tr()`. It matters now that `GameBoot` lets the player change the language on that
+screen (§1.4): the menu follows at once, the rest on the next start. The
 ask: on `NOTIFICATION_TRANSLATION_CHANGED`, rebuild the tagline, refresh the update
 bar, and say an open overlay again. It could be a comment on #68 or an issue beside
 it.
@@ -728,6 +774,24 @@ it.
 Rows 1 to 4 decide what is built. Rows 5 to 8 are words and limits: the build can start
 on the recommendations, and changing any of them later is a string or a constant.
 
+**Answered 2026-10-01: the recommended option on every row but 5, which is "world".**
+"All recommended except 5 : world"
+
+- **Row 1:** settings holds the language and nothing else. Light, camera and controls
+  stay on the pause screen.
+- **Row 2:** in a game, settings is the gear in the pause screen's top-right corner.
+- **Row 3:** the launcher gets a `settings` button between play and quit (§1.4).
+- **Row 4:** the launcher's own screen shows no world; the chip starts on the view
+  chooser.
+- **Row 5: world.** The player reads `world`, `your worlds`, `new world`, `a new world`
+  and `rename this world`, and French `monde`. The code, its files and `ocean.md`
+  keep "drop" (§4.1), and "water" is still whatever you swim in. It was a string,
+  as promised: the words changed and nothing else did.
+- **Row 6:** water a microscopist would sample, translated, pre-selected so typing
+  replaces it (§5.2).
+- **Row 7:** 20 characters.
+- **Row 8:** any world but the one you are in can be deleted.
+
 ---
 
 ## 12. Left open
@@ -746,5 +810,5 @@ on the recommendations, and changing any of them later is a string or a constant
    the device; one who picks is kept to that choice. A way back is one more row, if
    the owner wants it.
 5. **The death screen and the replay** have no gear, as they have no pause.
-6. **The launcher's first view** follows the device until #68. Until then the chosen
-   language starts at the view chooser.
+6. **The launcher's first view** is in the chosen language from binary 6 (`GameBoot`,
+   §1.4); before it, it followed the device.

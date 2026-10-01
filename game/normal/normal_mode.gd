@@ -72,6 +72,10 @@ const GeneStats := preload("res://game/normal/gene_stats.gd")
 ## **Your drop, kept across launches** (docs/design/ocean.md §9): the file, and
 ## what a build does with one another build wrote. This file decides when.
 const DropSave := preload("res://game/normal/drop_save.gd")
+## **Which of your drops this run is in** (docs/design/settings.md §6): the
+## selected one, unless a tool says otherwise ([member keep]); and the words
+## for a generation, which the pause caption shares with the drop menu.
+const Drops := preload("res://game/normal/drops.gd")
 ## **Your cell's record of descent** (docs/design/lineage.md §4): a general
 ## piece that knows nothing of cells. This file numbers the cell and names its
 ## mother; the drop keeps the record of every other body.
@@ -297,14 +301,18 @@ var numbers := -1
 ## (§14.4).
 var drop := -1
 
-## **Where this run keeps its drop** (ocean.md §9): the personal drop's file,
-## read as the run opens and written at every moment [method _keep_drop] names
-## -- or empty, for a run that neither reads nor writes one. Set it before the
-## scene enters the tree: `tools/drive.gd` empties it unless it is given
-## `--keep=`, so no render and no probe ever opens on a drop another run left
-## behind, or leaves one; a probe that tests the keeping points it at a file of
-## its own.
-var keep := DropSave.PATH
+## **Where this run keeps its drop** (ocean.md §9): read as the run opens and
+## written at every moment [method _keep_drop] names. By default **the selected
+## one of your drops** ([constant Drops.SELECTED], docs/design/settings.md §6.4),
+## which the run resolves to that drop's file as it opens, remembering the slot
+## so each keep can tell the index the drop's age and generation. A file path is
+## that file and nothing else, and empty is a run that neither reads nor writes
+## one -- and neither touches `drops.cfg`. Set it before the scene enters the
+## tree: `tools/drive.gd` empties it unless it is given `--keep=`, so no render
+## and no probe ever opens on a drop another run left behind, or leaves one; a
+## probe that tests the keeping points it at a file of its own, or at the
+## selected drop of a folder of its own ([method Drops.selected_in]).
+var keep := Drops.SELECTED
 
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
@@ -673,6 +681,12 @@ var _kept_frame := -1
 ## §9.1): as `drop_state()` gave it when it joined, taken up again when it
 ## leaves the pond or the link drops. Empty otherwise.
 var _own_drop := {}
+## **Which of your drops this run keeps**, from 1, and the folder they are in
+## (docs/design/settings.md §6.4): what [member keep] named as the run opened.
+## 0 for a run that keeps a file of its own, or nothing, and so never writes
+## the drops' index.
+var _drop_slot := 0
+var _drops_root := ""
 ## **The two daughters a division had rolled when the app was left** (row 17).
 ## The division plays again on return, from its quickening, and offers these
 ## two on the same sides -- unless the cell ate in that quickening and wrote its
@@ -731,7 +745,10 @@ func _ready() -> void:
 	# it, set aside while it swims in its friend's. The drop is made first and
 	# the grit then hung inside its rim; today's water keeps its own order, grit
 	# first. **The drop is yours, kept** (§9.1): the one left last time, and the
-	# cell in it if it was left mid-run.
+	# cell in it if it was left mid-run -- **in the drop you selected**
+	# (settings.md §4.5), which is the one a host serves and a guest's cell
+	# comes from.
+	_resolve_keep()
 	var resumed := {}
 	if drop != 0:
 		resumed = _open_drop()
@@ -883,6 +900,21 @@ func _exit_tree() -> void:
 # at the moments nobody is watching the water. drop_save.gd is the file.
 # ---------------------------------------------------------------------------
 
+## **Which drop [member keep] means, decided once, as the run opens**
+## (docs/design/settings.md §6.4): the selected one of your drops becomes its
+## file, and the run remembers its slot for every keep after. Chosen here and
+## never again, so a run is never switched under you: the drop menu is on no
+## screen a run is played from. A file of a tool's own, or nothing, stays as it
+## was, with no slot -- so no tool's run ever writes `drops.cfg`.
+func _resolve_keep() -> void:
+	var resolved := Drops.resolve(keep)
+	if resolved.is_empty():
+		return
+	keep = str(resolved["path"])
+	_drop_slot = int(resolved["slot"])
+	_drops_root = str(resolved["root"])
+
+
 ## **The drop this run is in** (§9.1): yours as you left it, if there is one at
 ## [member keep] this build can read, or a new one -- then the grit, hung inside
 ## its rim. Left mid-run, your cell is put back where it was and what else it
@@ -990,9 +1022,11 @@ func _kept_pair() -> Array:
 ## is now, `elsewhere`: the next launch brings it back into its own drop at a
 ## quiet place, as leaving the pond does. A tool's run keeps nothing at all
 ## ([member keep]). A write that fails leaves the last good drop where it was,
-## and says so.
+## and says so. **A write that lands tells the drops' index** the drop's age and
+## its cell's generation (docs/design/settings.md §6.4), so the drop menu says
+## them without opening the file.
 func _keep_drop() -> void:
-	if keep.is_empty() or not is_node_ready():
+	if keep.is_empty() or not is_node_ready() or keep.begins_with(Drops.MARK):
 		return
 	var state := {}
 	var elsewhere := false
@@ -1030,6 +1064,13 @@ func _keep_drop() -> void:
 	if done != OK:
 		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
 			% [keep, error_string(done)])
+		return
+	if _drop_slot > 0:
+		var noted := Drops.note_kept(_drop_slot, float(state.get("age", 0.0)),
+			_generation if not cell.is_empty() else 0, _drops_root)
+		if noted != OK:
+			push_warning("[NormalMode] the drops' index did not take drop %d's line (%s)"
+				% [_drop_slot, error_string(noted)])
 
 
 func _process(delta: float) -> void:
@@ -4347,22 +4388,6 @@ const ACT_KEEP := "let go to leave %s where it is"
 ## ROOM: 560 px at 14 px with word
 const ACT_FORK := "tap again to choose how %s grows"
 
-## How deep the lineage is: the only readout of how far into the run the player
-## is, and the nearest thing the game has to a score. It moved from the hint to
-## the caption when the hint took on the odds -- zero pixels either way.
-##
-## **Whole phrases and not an ordinal and a noun**, so a language that makes the
-## ordinal agree with the noun can. Past the tenth the caption counts.
-##
-## TRANSLATORS: Part of the pause screen's caption, in 15 px type: "genome ·
-## first generation". A "generation" is how many times the cell has divided: the
-## first cell is the first generation, its chosen daughter the second. The
-## caption's own wording is "genome · %s", translated separately.
-const GENERATIONS: Array[String] = ["first generation", "second generation",
-	"third generation", "fourth generation", "fifth generation",
-	"sixth generation", "seventh generation", "eighth generation",
-	"ninth generation", "tenth generation"]
-
 ## The second, weaker channel behind the rungs: a gene the body does not wear
 ## draws its word and its organ fainter. Honest about which one does the work.
 const ORGAN_UNEXPRESSED := 0.52
@@ -5356,11 +5381,12 @@ func _select_default() -> void:
 			return
 
 
+## **How deep the lineage is**: the only readout of how far into the run the
+## player is, and the nearest thing the game has to a score. It moved from the
+## hint to the caption when the hint took on the odds -- zero pixels either way.
+## The phrases are drops.gd's, which a drop's line in the drop menu says too.
 func _generation_text() -> String:
-	if _generation >= 1 and _generation <= GENERATIONS.size():
-		return tr(GENERATIONS[_generation - 1])
-	# TRANSLATORS: The generation, counted past the tenth: "generation 12". Keep %d.
-	return tr("generation %d") % _generation
+	return Drops.generation_text(_generation)
 
 
 ## One chip, seated at its arc: its piece of helix, its copies, its word and its

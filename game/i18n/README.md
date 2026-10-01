@@ -18,7 +18,7 @@ screens, and of the pause screen in a run), which is kept and wins from then on
 | `launcher/<locale>.po` | The launcher in one language: `launcher/fr.po`. Made from `launcher.pot`. |
 | `i18n.gd` | Finds both kinds of `.po` and registers them when the first game screen loads, applies the language the player chose, and lists the languages for the settings sheet. |
 | `tools/i18n_pot.gd` | Writes the game's template, checks every catalog, and makes a pseudolocalized stand-in for a language. Never ships. |
-| `tools/launcher_translated.tscn` | The launcher built after the catalogs are registered, for a screenshot (its first view is always English). Never ships. |
+| `tools/launcher_translated.tscn` | The launcher built after the catalogs are registered, for a screenshot. Never ships. |
 
 A language is complete when it has both files, and it can ship with either one, or
 half of either: a message left empty shows in English. **`fr.po` is the first game
@@ -112,9 +112,9 @@ a number the game writes in a brighter tint; its order cannot change.
   Leave button, and `un ping toutes les {} s` became `ping toutes les {} s` (632 px).
 - **What the lint says about it today:**
 
-      [i18n] the lines the game composes, in English: numbers lines at most 550 px of 650, the pause caption at most 543 px of 560
-      [i18n] game/i18n/fr.po: 276 of 278 messages translated, 2 not translated -- reported, not failed
-      [i18n]   built with the game's own code: numbers lines at most 632 px of 650 (the first numbers line of ping (ampulla), at 3 copies), the pause caption at most 533 px of 560
+      [i18n] the lines the game composes, in English: numbers lines at most 550 px of 650, the pause caption at most 543 px of 560, a world's line at most 260 px of 280
+      [i18n] game/i18n/fr.po: 302 of 304 messages translated, 2 not translated -- reported, not failed
+      [i18n]   built with the game's own code: numbers lines at most 632 px of 650 (the first numbers line of ping (ampulla), at 3 copies), the pause caption at most 533 px of 560, a world's line at most 253 px of 280
       [i18n]   in the template, not in the catalog (2):
       [i18n]     "build {build} · updates itself"
       [i18n]     "quit"
@@ -144,7 +144,7 @@ catalogs"); the second is for a pull request that claims a complete language.
 | a placeholder lost, added, retyped or reordered; numbered and plain mixed; a `%` that is not a placeholder | |
 | a control character in a translation, other than a line feed: a raw 0x13 where a dash was meant is invisible in an editor and a box on screen | |
 | text wider than the room a message has, a placeholder measured with the widest word that can stand in it (game catalogs; see **Room**) | |
-| a gene's numbers line, or the pause caption, wider than its room: the game's own code builds them in the language being checked | |
+| a gene's numbers line, the pause caption, or a world's line in the world menu, wider than its room: the game's own code builds them in the language being checked | |
 | a message defined twice, or translated differently by the game's catalog and the launcher's for one language (the engine takes whichever loaded last) | |
 | a catalog none of whose messages is in its template (a launcher file in the game's folder, or the other way round) | |
 | a `.po` anywhere but the two folders (the game never reads it, and `addons/` and `ci/` are wiped by a sync) | |
@@ -232,11 +232,13 @@ The rule: **the English is the message id, and it goes through `tr()`**.
   the same gene twice. `--check` fails on a ROOM with too few or too many words, a word
   it does not know, a line it cannot read, and an English text wider than its own room.
 - **A line the game builds from several messages has no room of its own**: a gene's
-  numbers line and the pause caption. `--lint-all` builds them in each language with
-  the game's code (`gene_stats.gd`: every gene, every copy count, every level and way,
-  every body that changes a number), so a new gene is covered without being named. Their
-  budgets are constants at the top of the tool (`NUMBERS_ROOM`, `CAPTION_ROOM`), with
-  the layout they come from; change them with the layout.
+  numbers line, the pause caption, and a world's line in the world menu (its generation
+  and its age). `--lint-all` builds them in each language with the game's code
+  (`gene_stats.gd`: every gene, every copy count, every level and way, every body that
+  changes a number; `drops.gd`: every generation phrase with the widest age), so a new
+  gene is covered without being named. Their budgets are constants at the top of the
+  tool (`NUMBERS_ROOM`, `CAPTION_ROOM`, `STATS_ROOM`), with the layout they come from;
+  change them with the layout.
 - **Translate the template first, then fill in the values**: `tr("level %d") % n`,
   never `tr("level %d" % n)`.
 - **A whole sentence is one message.** Never join pieces of a sentence that were
@@ -273,10 +275,15 @@ cell **wears** now: a gene is **worn** when the body shows it, **carried** when
 only the DNA holds it. A **copy** is how many times a gene is in the DNA, one to
 three. A **slot** is one of seven places round the body where a gene sits, and to
 **place** a gene is to put it in one; a gene **waiting** has been eaten and not
-placed yet. **Water** is the game world, and a friend's **water** is the shared
-world their phone or server keeps. An **invite** is a one-line message a friend
+placed yet. **Water** is what the cell swims in, and a friend's **water** is the
+one their phone or server keeps. An **invite** is a one-line message a friend
 sends by any chat app, which is pasted into the game once. The **launcher** is the
-app's main menu, which installs updates.
+app's main menu, which installs updates. A **world** is one of the three the
+player keeps: a drop of water with everything living in it, kept between launches,
+and named by the player (the code calls it a drop). **A name the player typed is
+never translated**; a world that has not been named wears one of the game's
+default names (`pond water`, `rain barrel`...), which are translated like any
+other message, and follows the language.
 
 **Room.** Nothing in the game wraps or shrinks: a string that is too long runs into
 its neighbour or off the screen, at 1280 x 720, which is the narrowest the game gets.
@@ -291,18 +298,20 @@ tightest first:
 | a gene's line on the pause screen (what it does) | 440 px, 15 px type | 417 px | 5 % |
 | a gene's short word on a chip | 47 px, 13 px type | 44 px (`venom`) | 6 % |
 | a fork card's two lines | 185 px, 14 px type | 172 px | 7 % |
+| a world's line in the world menu: `<generation> · <age>`, built whole | 280 px, 15 px type | 260 px | 7 % |
 | the tray's "waiting" | 64 px, 15 px type | 54 px | 18 % |
 | a gene's numbers line (two to a gene), built whole | 650 px, 14 px type | 550 px | 18 % |
 | a sentence on the earshot screens, one line | 1180 px, 17 px type | 982 px | 20 % |
 | "numbers", the switch | 80 px, 14 px type | 61 px | 31 % |
 | the replay's `leave` and speed buttons | 64 px, 17 px type | 44 px | 45 % |
 
-The two built-whole rows have no message of their own: a gene's numbers are phrases
+The three built-whole rows have no message of their own: a gene's numbers are phrases
 joined with a middle dot into two lines, centred, and a line of more than 650 px runs
 into the Leave button at its left (the button's edge is 344 px from the line's middle;
 650 px leaves 19 px of air). The pause caption is a label in a column 560 px wide: past
-that the column, and the whole screen, shifts sideways to make room. The lint builds
-both with the game's own code in the language it is checking, so **every phrase counts
+that the column, and the whole screen, shifts sideways to make room. A world's line has
+the 280 px under its name in a menu row; a longer one ends in "…". The lint builds all
+three with the game's own code in the language it is checking, so **every phrase counts
 towards them, and each has to be about as short as its English**. The hint and
 instruction rows under the figure have 560 px (430 px when a level and a gauge share the
 row), and the English takes at most 355 of them, so they are roomy; they are measured
@@ -324,7 +333,7 @@ words (they do not wrap) under twice it.** The lint measures no launcher width.
 - `--lint-all` as above, before anything else.
 - Run each screen with `--language <locale>` at 1280 x 720 and at 2400 x 1080
   (`tools/shot.tscn`; `docs/design/gene-stats.md` section 8 has the poses).
-- **The launcher, translated**: its first view never is (below), so look at it through
+- **The launcher, translated**: look at it through
   `tools/launcher_translated.tscn`, which loads `i18n.gd` as a game screen does and
   then builds the launcher: `godot --path . --language fr --rendering-driver opengl3
   res://tools/shot.tscn -- --scene=res://tools/launcher_translated.tscn
@@ -365,7 +374,18 @@ it changes what this machine's later runs open in**, English included: English i
 then kept on a machine set to another language. Delete the `[app] locale` key to
 follow the device again.
 
-**The launcher's first screen is English on every start.** Measured with a throwaway
+**The launcher's first screen, from binary 6 on.** `game/boot.gd` -- an autoload,
+`GameBoot`, registered in project.godot after the template's two -- preloads
+`i18n.gd`. Autoloads load before the main scene and after BuildInfo has mounted the
+content pack, so the catalogs register and the player's saved language applies
+before the launcher's first frame. The game's own words there -- play, settings, quit
+and the tagline, which `launcher_config.tres` holds -- are in the chosen language from
+a cold start, wherever they are translated; the launcher's own words, its update bar
+and dialogs, wait for a launcher catalog in `game/i18n/launcher/`. The registration
+needed a new APK (`binary_version` 6, the owner, 2026-10-01: "There's no problem
+with installing a new apk"); the script and `i18n.gd` still come from the pack.
+
+**Before binary 6 it was English on every start.** Measured with a throwaway
 launcher catalog (never committed) and `--language fr`: the launcher is the main
 scene, so it is built before any game script has loaded `i18n.gd`; at that moment no
 catalog is registered, and the title block, the play and quit buttons, the update
@@ -377,20 +397,19 @@ language meets an English launcher on each cold start, and a translated one from
 second time it is shown. The language the player chose waits for the same moment: it
 is applied by `I18n.register()`, which has not run while the first launcher is built.
 
-**Waiting on the template, by the owner's choice (2026-10-01).** The launcher's first
-view would translate if the catalogs registered before its scene is built. There
-were three ways: a change to the template's launcher (`I18n.register()` before it
+**How it was decided.** The launcher's first view translates only if the catalogs
+register before its scene is built. There were three ways: a change to the template's launcher (`I18n.register()` before it
 builds), the APK's own project.godot (the APK's copy of the file again), or --
 measured in a scratch copy, not tried from an exported pack, and leaning on the
 template's loading order -- a content-only one: point `launcher_config.tres` at a
 game-owned `extends LauncherConfig` script that preloads `i18n.gd`. BuildInfo loads
 that config right after mounting the pack, so the catalogs register before the
-launcher exists, and the cold-start launcher translated in full. The owner chose the
-first: wait for the template to add a startup hook,
+launcher exists, and the cold-start launcher translated in full. The owner first
+chose to wait for the template to add a startup hook,
 [sinikebe/godot-launcher-template#68](https://github.com/sinikebe/godot-launcher-template/issues/68),
-which also lets the game apply the player's saved language and hear a `settings`
-button on that screen (`docs/design/settings.md` §1.4 and §8). Until it lands, the
-first view stays as described above.
+then, with the settings button wanted on that screen too, the APK's project.godot:
+our own autoload (`docs/design/settings.md` §1.4). #68 stays the cleaner path, and
+`GameBoot` can move onto it once it lands.
 
 ## Not covered
 

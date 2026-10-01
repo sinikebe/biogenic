@@ -24,12 +24,107 @@ msgstr ""
 msgid "English"
 msgstr ""
 
-#. The title of the settings sheet, which opens from a gear in the top-right
-#. corner of every screen; also that gear's tooltip, and, in a later version,
-#. a 300 px button on the launcher's first screen. One lowercase word: the
-#. app's settings (here only the language, for now).
-#. Room: at most 250 px in 20 px type; the English takes 77 px.
+#. The caption at the top of the menu of the player's worlds, in 16 px type;
+#. also the tooltip of the button that opens it. A "world" is one of the three
+#. the player keeps: a drop of water with everything living in it.
+#. Room: at most 592 px in 16 px type; the English takes 92 px.
 #: game/menu/corner.gd
+msgid "your worlds"
+msgstr ""
+
+#. The footnote under the menu of the player's worlds, in 15 px type. "Water"
+#. is what everything in a world swims in; "your cell" is the player's
+#. creature, which waits in the world it was left in.
+#. Room: at most 592 px in 15 px type; the English takes 361 px.
+#: game/menu/corner.gd
+msgid "each world keeps its own water, and your cell in it"
+msgstr ""
+
+#. An empty row in the menu of the player's worlds, in 20 px type: tap it to
+#. make a new world there and name it.
+#. Room: at most 280 px in 20 px type; the English takes 101 px.
+#: game/menu/corner.gd
+msgid "new world"
+msgstr ""
+
+#. A small button on a world's row in the menu of the player's worlds, in 15
+#. px type, 112 px wide: give the world a new name. Also the confirming button
+#. of the naming sheet, in 20 px type, 232 px wide.
+#. Room: at most 88 px in 15 px type; the English takes 57 px.
+#: game/menu/corner.gd
+msgid "rename"
+msgstr ""
+
+#. A small button on a world's row, in 15 px type, 112 px wide: delete the
+#. world (it asks first). Also the confirming button of that question, in 20
+#. px type, 208 px wide.
+#. Room: at most 88 px in 15 px type; the English takes 46 px.
+#: game/menu/corner.gd
+msgid "delete"
+msgstr ""
+
+#. The title of the sheet that names a new world, in 22 px type. A "world" is
+#. one of the three the player keeps: a drop of water with everything living
+#. in it.
+#. Room: at most 512 px in 22 px type; the English takes 129 px.
+#: game/menu/corner.gd
+msgid "a new world"
+msgstr ""
+
+#. The confirming button of the sheet that names a new world, in 20 px type,
+#. 232 px wide: make the new world, with the name typed above. "It" is the
+#. world.
+#. Room: at most 188 px in 20 px type; the English takes 73 px.
+#: game/menu/corner.gd
+msgid "make it"
+msgstr ""
+
+#. The title of the sheet that renames one of the player's worlds, in 22 px
+#. type.
+#. Room: at most 512 px in 22 px type; the English takes 194 px.
+#: game/menu/corner.gd
+msgid "rename this world"
+msgstr ""
+
+#. A button on the naming sheet, in 20 px type, 160 px wide: go back to the
+#. menu of worlds, changing nothing.
+#. Room: at most 116 px in 20 px type; the English takes 46 px.
+#: game/menu/corner.gd
+msgid "back"
+msgstr ""
+
+#. The question asked before a world is deleted, in 22 px type, wrapping onto
+#. two lines if it must. %s is the world's name, in the player's own words or
+#. a default name such as "pond water": keep %s.
+#: game/menu/corner.gd
+#, c-format
+msgid "delete %s?"
+msgstr ""
+
+#. Under that question, in 17 px type, wrapping: what deleting the world does.
+#. A full sentence with a full stop. "It" is the world; "your cell" is the
+#. player's creature, which waits in the world it was left in.
+#: game/menu/corner.gd
+msgid "everything living in it, and your cell with it, is gone for good."
+msgstr ""
+
+#. The safe answer to "delete pond water?" -- keep the world -- on a button
+#. 208 px wide in 20 px type, beside "delete". The same word answers "forget
+#. this invite?" on another screen.
+#. Two buttons answering the question above: keep the invite, or forget it.
+#. "keep" is the safe answer.
+#. Room: at most 164 px in 20 px type; the English takes 47 px.
+#: game/menu/corner.gd game/net/earshot.gd
+msgid "keep"
+msgstr ""
+
+#. The title of the settings sheet, which opens from a gear in the top-right
+#. corner of every screen; also that gear's tooltip, and the 300 px button
+#. between play and quit on the launcher's first screen. One lowercase word:
+#. the app's settings (here only the language, for now).
+#. Setting "extra_buttons" in launcher_config.tres
+#. Room: at most 250 px in 20 px type; the English takes 77 px.
+#: game/menu/corner.gd launcher_config.tres
 msgid "settings"
 msgstr ""
 
@@ -59,6 +154,15 @@ msgstr ""
 #. Room: at most 472 px in 15 px type; the English takes 338 px.
 #: game/menu/corner.gd game/normal/normal_mode.tscn
 msgid "the water is still moving · you can still be eaten"
+msgstr ""
+
+#. The caption on a button in the top-right corner, in 17 px type, before the
+#. name of the world that is selected ("world pond water"). A "world" is one
+#. of the three the player keeps: a drop of water and everything in it, named
+#. by the player. One lowercase word.
+#. Room: at most 80 px in 17 px type; the English takes 47 px.
+#: game/menu/corner.gd
+msgid "world"
 msgstr ""
 
 #. The hint along the bottom edge of the screen, in small type. It names the
@@ -238,12 +342,6 @@ msgstr ""
 #. Room: at most 1180 px in 17 px type; the English takes 450 px.
 #: game/net/earshot.gd
 msgid "you would need your friend's message to paste it back."
-msgstr ""
-
-#. Two buttons answering the question above: keep the invite, or forget it.
-#. "keep" is the safe answer.
-#: game/net/earshot.gd
-msgid "keep"
 msgstr ""
 
 #. A button: delete the invite this device keeps. It asks "forget this
@@ -883,6 +981,263 @@ msgstr ""
 #: game/net/wire.gd
 msgid "refused"
 msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 112 px.
+#: game/normal/drops.gd
+msgid "pond water"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 103 px.
+#: game/normal/drops.gd
+msgid "rain barrel"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 119 px.
+#: game/normal/drops.gd
+msgid "hay infusion"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 110 px.
+#: game/normal/drops.gd
+msgid "ditch water"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 84 px.
+#: game/normal/drops.gd
+msgid "birdbath"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 86 px.
+#: game/normal/drops.gd
+msgid "tide pool"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 68 px.
+#: game/normal/drops.gd
+msgid "puddle"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 105 px.
+#: game/normal/drops.gd
+msgid "vase water"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 92 px.
+#: game/normal/drops.gd
+msgid "wet moss"
+msgstr ""
+
+#. A world's name until the player types one: a real place a microscopist
+#. takes a water sample from ("pond water"). A "world" is one of the three the
+#. player keeps: a drop of water and everything living in it. Short and
+#. lowercase, as a player would name it; at most 20 characters, as a typed
+#. name is. Shown in the top-right corner after the word "world", in 17 px
+#. type, and in the "your worlds" menu, in 20 px type.
+#. Room: at most 220 px in 20 px type; the English takes 131 px.
+#: game/normal/drops.gd
+msgid "pepper water"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "first generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "second generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "third generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "fourth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "fifth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "sixth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "seventh generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "eighth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "ninth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately. Also the
+#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
+#. generation · 2 hours old", where the whole line has 280 px.
+#: game/normal/drops.gd
+msgid "tenth generation"
+msgstr ""
+
+#. A world's line in the "your worlds" menu, in 15 px type, for a world that
+#. has never been played in. A "world" is one of the three the player keeps: a
+#. drop of water and everything living in it.
+#. Room: at most 280 px in 15 px type; the English takes 116 px.
+#: game/normal/drops.gd
+msgid "not swum in yet"
+msgstr ""
+
+#. The generation, counted past the tenth: "generation 12". Keep %d. Also the
+#. start of a world's line in the "your worlds" menu.
+#: game/normal/drops.gd
+#, c-format
+msgid "generation %d"
+msgstr ""
+
+#. The end of a world's line in the "your worlds" menu, in 15 px type: how
+#. long the world has been played, "fourth generation · 25 minutes old". A
+#. world is one of the three the player keeps. Keep %d.
+#. Room: at most 280 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 100 px.
+#: game/normal/drops.gd
+#, c-format
+msgid "%d minute old"
+msgid_plural "%d minutes old"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The same, in hours: "fourth generation · 2 hours old". Keep %d.
+#. Room: at most 280 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/drops.gd
+#, c-format
+msgid "%d hour old"
+msgid_plural "%d hours old"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The same, in days: "fourth generation · 3 days old". Keep %d.
+#. Room: at most 280 px in 15 px type, measured with 999 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/drops.gd
+#, c-format
+msgid "%d day old"
+msgid_plural "%d days old"
+msgstr[0] ""
+msgstr[1] ""
 
 #. How many copies of a gene the cell's DNA holds, in words, at the start of
 #. the odds line ("one copy · 55% of daughters wear it"). One to three; the
@@ -1798,86 +2153,6 @@ msgstr ""
 msgid "tap again to choose how %s grows"
 msgstr ""
 
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "first generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "second generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "third generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "fourth generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "fifth generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "sixth generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "seventh generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "eighth generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "ninth generation"
-msgstr ""
-
-#. Part of the pause screen's caption, in 15 px type: "genome · first
-#. generation". A "generation" is how many times the cell has divided: the
-#. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately.
-#: game/normal/normal_mode.gd
-msgid "tenth generation"
-msgstr ""
-
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
 #. line says which gene it names (its scientific name, never translated). It
@@ -2291,12 +2566,6 @@ msgstr ""
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "genome · %s"
-msgstr ""
-
-#. The generation, counted past the tenth: "generation 12". Keep %d.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "generation %d"
 msgstr ""
 
 #. The name of one of the two ways a levelled gene can grow, as the title of

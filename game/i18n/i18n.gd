@@ -48,15 +48,12 @@ extends RefCounted
 ## and not when the kept language no longer has a game catalog, when the device's
 ## is followed again.
 ##
-## **The launcher's first screen is built before this script has loaded**: it is the
-## main scene, and no game script is loaded until Play is pressed. So no catalog is
-## registered and no choice applied yet, and it is English on every start, whatever
-## the device's language or the player's; a launcher built again after Play and
-## Back is in the chosen language. README.md has the measurement. The owner chose
-## to wait for the template to add a startup hook,
-## sinikebe/godot-launcher-template#68, rather than register earlier from this
-## side: once it lands, the hook calls [method register] before the launcher is
-## built (settings.md §8, phase 3).
+## **The launcher's first screen is built before any game screen**: it is the main
+## scene. So game/boot.gd, the `GameBoot` autoload (binary 6), preloads this script,
+## and the catalogs register and the saved language applies before its first frame.
+## Before binary 6 it was English on every start (README.md has the measurement).
+## sinikebe/godot-launcher-template#68 stays the cleaner path: a startup hook of the
+## template's own, which `GameBoot` can move onto (settings.md §1.4).
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd. Preload
 ## it by path, **in every screen the player can open first**, and do not remove
@@ -163,21 +160,37 @@ static func _apply_chosen() -> void:
 static func languages() -> Array[Dictionary]:
 	var out: Array[Dictionary] = [{"locale": SOURCE, "name": OWN_NAME}]
 	var seen := PackedStringArray([SOURCE])
-	if DirAccess.dir_exists_absolute(DIR):
-		for file: String in DirAccess.get_files_at(DIR):
-			var file_name := file.trim_suffix(".remap")
-			if file_name.get_extension() != "po":
-				continue
-			var locale := locale_of(file_name.get_basename())
-			if locale.is_empty() or locale in seen:
-				continue
-			var catalog := load(DIR.path_join(file_name)) as Translation
-			if catalog == null:
-				continue
-			seen.append(locale)
-			out.append({"locale": locale, "name": own_name(catalog, locale)})
+	for found: Dictionary in catalogs():
+		var locale := str(found["locale"])
+		if locale in seen:
+			continue
+		seen.append(locale)
+		out.append({"locale": locale, "name": own_name(found["catalog"] as Translation, locale)})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a["name"]).naturalnocasecmp_to(str(b["name"])) < 0)
+	return out
+
+
+## **Every game catalog in [constant DIR]**, as `{locale, catalog}`, in the order
+## the folder lists them: what [method languages] names, and where a drop's default
+## name is looked up in every language the game has (drops.gd). Read from the
+## files, as [method languages] is, so a process that registered nothing -- the
+## server, a probe -- finds the same ones.
+static func catalogs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not DirAccess.dir_exists_absolute(DIR):
+		return out
+	for file: String in DirAccess.get_files_at(DIR):
+		var file_name := file.trim_suffix(".remap")
+		if file_name.get_extension() != "po":
+			continue
+		var locale := locale_of(file_name.get_basename())
+		if locale.is_empty():
+			continue
+		var catalog := load(DIR.path_join(file_name)) as Translation
+		if catalog == null:
+			continue
+		out.append({"locale": locale, "catalog": catalog})
 	return out
 
 

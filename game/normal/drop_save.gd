@@ -37,8 +37,10 @@ const Drop := preload("res://game/normal/drop.gd")
 ## content pack that changes a number changes [method rules] instead.
 const FORMAT := 1
 
-## **Your drop: one per device** (§9.1). The dev app has its own package id and
-## so its own `user://`: the owner's drop there never touches a player's.
+## **Your first drop** (§9.1): the one every device had before there were three,
+## and slot 1 of game/normal/drops.gd, which keeps the other two beside it. The
+## dev app has its own package id and so its own `user://`: the owner's drops
+## there never touch a player's.
 const PATH := "user://drop.save"
 
 ## **What a file of this format holds**, key by key, and each value's type. A
@@ -346,12 +348,7 @@ static func write(path: String, data: Dictionary) -> Error:
 static func read(path: String) -> Dictionary:
 	if not FileAccess.file_exists(path):
 		return {}
-	var data: Variant = null
-	var file := FileAccess.open_compressed(path, FileAccess.READ,
-		FileAccess.COMPRESSION_ZSTD)
-	if file != null:
-		data = file.get_var()
-		file.close()
+	var data: Variant = _decoded(path)
 	var why := unusable(data)
 	if why.is_empty():
 		return data
@@ -360,6 +357,39 @@ static func read(path: String) -> Dictionary:
 	print("[drop-save] %s is %s: kept as %s, and a new drop is made" % [path, why,
 		old if moved == OK else "nothing (%s)" % error_string(moved)])
 	return {}
+
+
+## **What the drop at [param path] would say about itself, read and never
+## moved** (docs/design/settings.md §6.3): `{lived, generation}` -- the drop's
+## age in seconds, and its cell's generation, 0 when no cell was left in it --
+## or an empty Dictionary for none, and for one this build cannot use. Decoded
+## and checked as [method read] does, but **a file it cannot use stays where it
+## is**: only a run that is about to play a drop may set its file aside, and
+## the drop menu, which asks this of a drop its index does not name, is not one.
+## It costs a whole decode -- 2 ms on a desktop for a drop of 600 bodies, more on
+## a phone -- so it is asked only of a file the index does not name, and the
+## index keeps the answer from its next write on.
+static func peek(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var data: Variant = _decoded(path)
+	if not unusable(data).is_empty():
+		return {}
+	var drop: Dictionary = data["drop"]
+	var cell: Dictionary = data["cell"]
+	return {"lived": float(drop["age"]),
+		"generation": int(cell["generation"]) if not cell.is_empty() else 0}
+
+
+## The one value the file at [param path] holds, or null when it would not open.
+static func _decoded(path: String) -> Variant:
+	var data: Variant = null
+	var file := FileAccess.open_compressed(path, FileAccess.READ,
+		FileAccess.COMPRESSION_ZSTD)
+	if file != null:
+		data = file.get_var()
+		file.close()
+	return data
 
 
 ## **Why [param data] cannot be loaded by this build**, or "" when it can: the
