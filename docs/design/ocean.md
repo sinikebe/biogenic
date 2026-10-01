@@ -144,8 +144,9 @@ findings sharpen it.
    every second frame (§4). **In its steady state it costs 2.6 times today's
    field here** -- 2.5 in a new drop's first minute, and the first pass's drop,
    measured in the same hour, 2.1 -- over the 1.5 this document set itself. A
-   frame-time readout on the dev app, on the owner's phone, decides whether that
-   is too much before 1a ships (§4.4, §14.2).
+   frame-time readout on the dev app, on the owner's phone, decided whether that
+   is too much before 1a ships (§4.4, §14.2): it is not, for the phone drops at
+   most 0.1 % of its frames.
 4. **One body for every cell** (rows 4 and 5, answered). The player, a friend
    and a water cell run the player's metabolism -- the same tank, upkeep, stroke,
    turn and meal -- grow to 40 and no further, keep whatever mouth they eat
@@ -212,6 +213,8 @@ findings sharpen it.
     with no wire change -- a run with a session keeps today's water and today's
     rules -- then the shared pond and the server on the drop, which is
     `Wire.PROTOCOL` 5 and a new `Wire.RULES`, plus saving (§10, §14).
+    **Overtaken on 2026-10-01**: both were on `dev` before the first went out,
+    so pack 1 ships as one release, when the owner runs it (§14.2).
 13. **The mechanics are generic** (§13): a spatial grid, a basin with an edge, a
     replenisher and a snowfall in `game/mechanics/`, knowing points and counts;
     the metabolism's arithmetic in one place that the player and the water both
@@ -606,7 +609,9 @@ a quarter of the cost at 12 mm and nearly half at 16. The density is what
 fairness asked for (§6.1), so fewer bodies is not the lever. In order:
 
 1. **Measure a phone** (§14.2's gate). Whether the rest of a frame leaves a
-   budget phone 8 ms for the water is not knowable here (§16).
+   budget phone 8 ms for the water is not knowable here (§16). **Measured on
+   2026-10-01: the owner's phone holds its 60 Hz in the drop** (§14.2), with
+   nothing but what the build does from the start.
 2. **A tank that cannot move is not stepped**, which the build does from the
    start (§14.1): a drifting drifter absorbs what its upkeep costs and does
    nothing that is paid for, so its hunger cannot change until it eats, and
@@ -2165,6 +2170,10 @@ ships: the density (§6.1) and the reach of the near water are the next levers,
 and both change what the player meets. The owner's phone is one phone; a slower
 one is the first thing a player's report would show.
 
+**Measured on 2026-10-01: it passes.** In play on the dev app, the owner's phone
+read `dropped` 0 % of 60 Hz, now and then 0.1 %, against the 5 % the gate
+allows. None of the three levers was needed.
+
 **The host's gate, before release 1b**: the same ten minutes on a phone that
 hosts, with a guest in the drop, apart and together -- the drop's worst case,
 which was not measured here (§4.4).
@@ -2173,6 +2182,12 @@ which was not measured here (§4.4).
 1a still meets a phone or a server on 1a in today's pond, and a player on 1a is
 not refused by anyone else on 1a. 1b is the protocol change, and it goes out when
 the pond on the drop has been played by two phones on the dev app.
+
+**Overtaken on 2026-10-01: one release.** 1b-1 and 1b-2 landed on `dev` before
+release 1a went out, and the release skill ships everything on `dev` at once.
+The owner: *"Don't bother for the release. I'll run the release skill when
+everything is ready."* So pack 1 reaches players in one release, when the owner
+runs it, and the network change goes out with it.
 
 **`binary_version`: no bump in either.** Everything is GDScript, one shader, and
 scenes: content, delivered as a pack.
@@ -2465,13 +2480,15 @@ gathered, written through `open_compressed`, read back and compared, renamed
 
 ## 16. Left open
 
-1. **The drop is over the frame budget here, and no phone was measured.** In
+1. **The drop is over the frame budget here, and one phone was measured.** In
    its steady state it costs 2.6 times today's field against the 1.5 this
    document set (§4.4) -- pass 2's one body added about a fifth to the first
    pass's 2.1 -- and the factor of six is an assumption: 7.1 to 8.0 ms of the
    16.7 ms frame the gate holds a phone to, 60 Hz at most. §14.2's phone gate
-   decides it before 1a ships, with the levers in order. Skipping a tank that
-   cannot move is built in, and worth about 30 µs here.
+   passed on the owner's phone on 2026-10-01 -- 0 % dropped, now and then
+   0.1 % -- with no lever pulled. What is left open is a slower phone, and a
+   player's report is where it would show first. Skipping a tank that cannot
+   move is built in, and worth about 30 µs here.
 2. **A phone that hosts with a guest was not measured** (§10.2): two anchors,
    twice the near water, two scan lists and the wire. It is the drop's worst
    case and 1b's gate.
@@ -2550,7 +2567,7 @@ The first round, as it was put and as it was answered on 2026-09-30.
 | 7 | Do cells that die leave food? | **yes: a cell that dies of age or poison leaves a small clump where it died ✓ answered** · no | Death feeds the water, so a place where cells died is a place with food. A cell that is eaten leaves nothing: whoever ate it got it. |
 | 8 | Is the ocean kept between runs? | only while the app is open · **saved on the phone, and the same ocean continues next time ✓ answered** · a new one every time you die, as today | Evolution in the next packs needs many generations. If the ocean is thrown away, its cells can't improve. Saved, the ocean you come back to is the one you left, and the home server can keep one of its own. It is saved when you die, pause or leave the app. In testing an old ocean was as kind to a newborn as a new one on average, but some old oceans were harder than others. |
 | 9 | Where does a run start? | **somewhere quiet, chosen for a newborn ✓ answered** · always the middle · anywhere | Quiet: out of 64 places, the one where the fewest cells could eat a newborn, the nearest counting most, with food nearby but not right on top of you; and if a hunter is still in range, it is moved away before you arrive. The middle is always the same place and just as dangerous as it happens to be. Anywhere can start you next to a hunter. |
-| 10 | Ship it all at once, or in two? | one release · **two: the ocean alone first, then playing together and saving ✓ answered** | Two: the first release changes nothing about playing with a friend, so nobody is locked out of anyone's game; the second changes the network version and needs both phones updated. One: everything at once, and a bigger thing to test before any player gets it. |
+| 10 | Ship it all at once, or in two? | one release · **two: the ocean alone first, then playing together and saving ✓ answered**, overtaken on 2026-10-01 by one release (§14.2) | Two: the first release changes nothing about playing with a friend, so nobody is locked out of anyone's game; the second changes the network version and needs both phones updated. One: everything at once, and a bigger thing to test before any player gets it. |
 
 **Answered on 2026-09-30.** The owner, verbatim:
 
