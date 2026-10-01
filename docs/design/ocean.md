@@ -144,8 +144,9 @@ findings sharpen it.
    every second frame (§4). **In its steady state it costs 2.6 times today's
    field here** -- 2.5 in a new drop's first minute, and the first pass's drop,
    measured in the same hour, 2.1 -- over the 1.5 this document set itself. A
-   frame-time readout on the dev app, on the owner's phone, decides whether that
-   is too much before 1a ships (§4.4, §14.2).
+   frame-time readout on the dev app, on the owner's phone, decided whether that
+   is too much before 1a ships (§4.4, §14.2): it is not, for the phone drops at
+   most 0.1 % of its frames.
 4. **One body for every cell** (rows 4 and 5, answered). The player, a friend
    and a water cell run the player's metabolism -- the same tank, upkeep, stroke,
    turn and meal -- grow to 40 and no further, keep whatever mouth they eat
@@ -606,7 +607,9 @@ a quarter of the cost at 12 mm and nearly half at 16. The density is what
 fairness asked for (§6.1), so fewer bodies is not the lever. In order:
 
 1. **Measure a phone** (§14.2's gate). Whether the rest of a frame leaves a
-   budget phone 8 ms for the water is not knowable here (§16).
+   budget phone 8 ms for the water is not knowable here (§16). **Measured on
+   2026-10-01: the owner's phone holds its 60 Hz in the drop** (§14.2), with
+   nothing but what the build does from the start.
 2. **A tank that cannot move is not stepped**, which the build does from the
    start (§14.1): a drifting drifter absorbs what its upkeep costs and does
    nothing that is paid for, so its hunger cannot change until it eats, and
@@ -2165,6 +2168,10 @@ ships: the density (§6.1) and the reach of the near water are the next levers,
 and both change what the player meets. The owner's phone is one phone; a slower
 one is the first thing a player's report would show.
 
+**Measured on 2026-10-01: it passes.** In play on the dev app, the owner's phone
+read `dropped` 0 % of 60 Hz, now and then 0.1 %, against the 5 % the gate
+allows. None of the three levers was needed.
+
 **The host's gate, before release 1b**: the same ten minutes on a phone that
 hosts, with a guest in the drop, apart and together -- the drop's worst case,
 which was not measured here (§4.4).
@@ -2465,13 +2472,15 @@ gathered, written through `open_compressed`, read back and compared, renamed
 
 ## 16. Left open
 
-1. **The drop is over the frame budget here, and no phone was measured.** In
+1. **The drop is over the frame budget here, and one phone was measured.** In
    its steady state it costs 2.6 times today's field against the 1.5 this
    document set (§4.4) -- pass 2's one body added about a fifth to the first
    pass's 2.1 -- and the factor of six is an assumption: 7.1 to 8.0 ms of the
    16.7 ms frame the gate holds a phone to, 60 Hz at most. §14.2's phone gate
-   decides it before 1a ships, with the levers in order. Skipping a tank that
-   cannot move is built in, and worth about 30 µs here.
+   passed on the owner's phone on 2026-10-01 -- 0 % dropped, now and then
+   0.1 % -- with no lever pulled. What is left open is a slower phone, and a
+   player's report is where it would show first. Skipping a tank that cannot
+   move is built in, and worth about 30 µs here.
 2. **A phone that hosts with a guest was not measured** (§10.2): two anchors,
    twice the near water, two scan lists and the wire. It is the drop's worst
    case and 1b's gate.
