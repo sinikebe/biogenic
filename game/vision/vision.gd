@@ -1418,9 +1418,14 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 			_draw_floc(p, r, settle, int(b.id), a)
 			continue
 		_draw_scent(p, r, FoodField.taste_weight(_food_node.swallow_size_of(i), gape) * a)
+		# **A division coming** (lineage.md §6.4): every cell's nucleus doubles
+		# from DIVIDE_WARN_RADIUS as yours does, read off the radius -- which the
+		# wire and the replay already carry -- since every body at forty divides.
+		var double := smoothstep(CellBody.DIVIDE_WARN_RADIUS, CellBody.DIVIDE_RADIUS, r) \
+			if _food_node.births else 0.0
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
-			float(b.wound))
+			float(b.wound), double)
 
 
 ## **A floc of detritus** (ocean.md §7.6): a clump of five rounded fragments in

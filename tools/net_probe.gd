@@ -3958,7 +3958,9 @@ func _check_run() -> void:
 # Every field is a [WatchedFood], which counts any seed, retirement or meal
 # that touches the person's slot -- the one thing §1.2 says can never happen to
 # a person -- and the last check below is that nothing did, across everything
-# the section put the water through.
+# the section put the water through. **Since pack 2 the host's water divides**
+# (docs/design/lineage.md §8), and a guest's mirror is held to that too: a
+# mother leaves it and her two daughters arrive, by id, with no new message.
 # ---------------------------------------------------------------------------
 
 const POND_STEP := 1.0 / 60.0
@@ -4048,6 +4050,7 @@ func _check_pond_field() -> void:
 	_drop_pond_anchors()
 	_drop_pond_mirror()
 	_drop_pond_kept()
+	_drop_pond_births()
 	var touched := 0
 	for field: Node in _pond_fields:
 		touched += int(field.get("touched_person"))
@@ -5167,6 +5170,104 @@ func _drop_pond_kept() -> void:
 		"pond-field, the drop: kept mid-pond, %d bodies, %d where the other player is"
 		% [slots.size(), there] + " (none, and not their slot: %s), their slot empty" % kept_person
 		+ " loaded, and a chase of them kept as a chase of nobody (%d)" % chase)
+
+
+## **The host's water divides, and the guest's mirror sees it** (lineage.md §8,
+## §11.3): births are the host's water, and the wire carries them as it carries
+## any body coming into reach -- no new field, no new message. A host's drop
+## with the other player in it, a mouth beside them posed a meal short of
+## DIVIDE_RADIUS, and a guest's mirror fed the host's own snapshots and GENOMEs
+## by id, as in [method _drop_pond_mirror]. Ten frames on the mouth is grown to
+## forty, and on the frame the host divides it the mirror loses the mother's id
+## and holds her two daughters' -- each at half her area, where the host has her,
+## under her own genome -- with **no foul**: every frame the mirror holds exactly
+## the bodies sent, each with its genome, and nothing the host did reached the
+## other player's slot.
+func _drop_pond_births() -> void:
+	var host := _pond_drop_rig(87, 30.0, POND_SENSES)
+	var at := _drop_point(host, 500.0)
+	_pond_person(host, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var from := at + Vector2(250.0, 0.0)
+	var mother := _pond_pose(host, 9, CellBody.DIVIDE_RADIUS - CellBody.GROWTH_PER_MEAL,
+		{&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"ampulla": 1}, from,
+		_pond_face(from, at))
+	var mother_id := int(mother.id)
+	var mirror := _pond_rig(87, 28.0, POND_SENSES)
+	mirror.become_mirror()
+	var rim: Array = host.rim()
+	mirror.mirror_rim(rim[0], float(rim[1]))
+	var versions := {}
+	var problems: Array[String] = []
+	var held_mother := -1
+	var left := -1
+	var arrived := -1
+	var daughters: Array[int] = []
+	var as_sent := 0
+	for frame in 40:
+		# Grown to forty on the tenth frame, as a meal would, if the water has not
+		# already fed it there: it divides on its next tick.
+		if frame == 10 and bool(mother.seeded) and int(mother.id) == mother_id:
+			mother.radius = CellBody.DIVIDE_RADIUS
+			host.refresh(9)
+		host._process(POND_STEP)
+		var pb: Object = host.bodies()[FoodField.PERSON_SLOT]
+		var mirror_cell: Object = mirror.get("_cell")
+		mirror_cell.position = pb.pos
+		var entries: Array = host.pond_entries(true)
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals, (host.bodies()[slot].genome as Dictionary)
+					.duplicate())
+		mirror.apply_pond(0.0, entries)
+		# As it lands: every body sent, by id, with its genome and where the host has
+		# it -- before the mirror carries it on by its own clock.
+		var slots: Dictionary = mirror.get("_mirror_slots")
+		var sent := 0
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			sent += 1
+			var m := int(slots.get(int(entry[FoodField.Entry.ID]), -1))
+			if m < 0 or mirror.bodies()[m].genome != host.bodies()[slot].genome \
+					or (mirror.bodies()[m].pos as Vector2) != (host.bodies()[slot].pos as Vector2):
+				problems.append("frame %d body %d" % [frame, int(entry[FoodField.Entry.ID])])
+		if slots.size() != sent:
+			problems.append("frame %d holds %d bodies for %d" % [frame, slots.size(), sent])
+		mirror.call("_step_mirror", POND_STEP)
+		if slots.has(mother_id):
+			held_mother = frame
+		elif held_mother >= 0 and left < 0:
+			left = frame
+			for b: Object in host.bodies():
+				if bool(b.seeded) and int(b.parent) == mother_id:
+					daughters.append(int(b.id))
+			var both := daughters.size() == 2
+			for id: int in daughters:
+				both = both and slots.has(id)
+			arrived = frame if both else -1
+			for id: int in daughters:
+				var m := int(slots.get(id, -1))
+				if m >= 0 and is_equal_approx(float(mirror.bodies()[m].radius),
+						CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)):
+					as_sent += 1
+	var touched := int(host.get("touched_person"))
+	_says(problems.is_empty() and held_mother >= 0 and left == held_mother + 1
+			and arrived == left and as_sent == 2 and touched == 0,
+		"pond-field, the drop: the host's water divides and the guest's mirror sees it -- the"
+		+ " mother (id %d) held until frame %d, gone at frame %d, and her daughters %s"
+		% [mother_id, held_mother, left, str(daughters)]
+		+ " there from frame %d, %d of them at r%.2f under their own genomes; every frame"
+		% [arrived, as_sent, CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)]
+		+ " exactly the bodies sent, %d fouls, and the other player's slot touched %d times"
+		% [problems.size(), touched]
+		+ ("" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))))
 
 
 ## **Which body is hunting this cell, by its id on the wire** -- a host's and a

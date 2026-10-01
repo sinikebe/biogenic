@@ -12,7 +12,10 @@ extends RefCounted
 ## adds `shortfall * dt / tau` to a debt, and every whole unit of it is one to
 ## make, at most [member burst] a call. So a population losing `k` a second
 ## settles `k * tau` short of its target -- the drop's 95 % and 91 % (§6.2) --
-## and one that stops losing refills along `1 - exp(-t / tau)`.
+## and one that stops losing refills along `1 - exp(-t / tau)`. **The shortfall
+## may be the caller's own** ([method due_for]): a population made of kinds,
+## each kept to a count of its own, owes the sum of their shortfalls
+## (docs/design/lineage.md §5).
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
@@ -34,18 +37,26 @@ func _init(size := 0, seconds := 5.0, most := 8) -> void:
 
 
 ## **How many to make now**, for a population of [param living] after
-## [param dt] seconds. Nothing is owed at or over the target, and what is owed
-## never exceeds the shortfall, so a debt that could not be paid -- nowhere to
-## put anything -- does not pile up.
+## [param dt] seconds: [method due_for] on its shortfall against [member target].
 func due(living: int, dt: float) -> int:
-	var short := target - living
-	if short <= 0:
+	return due_for(float(target - living), dt)
+
+
+## **How many to make now, on a shortfall the caller has worked out**:
+## [param short] units owed after [param dt] seconds. A caller that keeps
+## several kinds each to a count of its own sums their shortfalls here -- one
+## it wants paid back faster weighed up by the ratio of the two taus -- and
+## decides itself which kind each one made is. Nothing is owed without a
+## shortfall, and what is owed never exceeds the shortfall, so a debt that could
+## not be paid -- nowhere to put anything -- does not pile up.
+func due_for(short: float, dt: float) -> int:
+	if not (short > 0.0):
 		debt = 0.0
 		return 0
 	if tau <= 0.0:
-		debt = float(short)
+		debt = short
 	else:
-		debt = minf(debt + float(short) * maxf(dt, 0.0) / tau, float(short))
+		debt = minf(debt + short * maxf(dt, 0.0) / tau, short)
 	var n := mini(floori(debt), burst)
 	debt -= float(n)
 	return n

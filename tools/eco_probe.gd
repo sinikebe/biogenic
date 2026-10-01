@@ -17,7 +17,9 @@ extends SceneTree
 ## - the drop's own switches, as `tools/drive.gd` takes them: `--lod=`,
 ##   `--half-rate=`, `--near-first=`, `--skip-still=`, `--own-speed=`,
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
-##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-venom=`.
+##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-venom=`; and pack 2's
+##   (docs/design/lineage.md §12): `--births=0|1` (0 is pack 1), `--mutate=`,
+##   `--floor=`, `--floor-tau=`, `--newborn-grace=`.
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
@@ -79,6 +81,16 @@ func _initialize() -> void:
 			sets[&"flight"] = v == "all"
 		elif a.begins_with("--absorb="):
 			sets[&"absorb"] = float(v)
+		elif a.begins_with("--births="):
+			sets[&"births"] = v == "1"
+		elif a.begins_with("--mutate="):
+			sets[&"mutate"] = float(v)
+		elif a.begins_with("--floor="):
+			sets[&"floor_share"] = float(v)
+		elif a.begins_with("--floor-tau="):
+			sets[&"floor_tau"] = float(v)
+		elif a.begins_with("--newborn-grace="):
+			sets[&"newborn_grace"] = float(v)
 		else:
 			for name: String in ["lod", "half-rate", "near-first", "skip-still", "own-speed",
 					"contact-swallow", "armour-swallow", "drifter-venom"]:

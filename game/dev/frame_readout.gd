@@ -7,6 +7,9 @@ extends CanvasLayer
 ## took, as a median over the same ten seconds; and how many bodies the water
 ## stepped a frame. What 1a-1 reads of today's water is the baseline the drop is
 ## read against, so a frame that fails says whether the water is the cause.
+## **And, since the water divides** (docs/design/lineage.md §4), its hunters'
+## mean generation and how many families they come from: the water evolving,
+## in the dev app and nowhere a player looks.
 ##
 ## **Why dropped and not the p95.** A frame is timed from one to the next, so
 ## vsync is in it: a phone holding a steady 60 reads a p95 a little over 16.7 ms
@@ -89,8 +92,8 @@ const PITCH := 19.0
 const FONT_SIZE_WIDE := 16
 const PITCH_WIDE := 21.0
 const WIDE := 1400.0
-## The frame's three rows and the water's two, told apart by this much more
-## between them.
+## The frame's three rows, the water's two and its families' two, told apart
+## by this much more between them.
 const GROUP_GAP := 5.0
 const WORD := Color(0.855, 0.953, 0.933, 0.42)
 const VALUE := Color(0.855, 0.953, 0.933, 0.70)
@@ -243,8 +246,12 @@ func water_now() -> PackedFloat32Array:
 
 ## **The rows, as they are now**: a frame's median, its 95th percentile and
 ## the share dropped at the rate it is held to -- named after it where there is
-## room; the water's median, and the bodies it stepped. A figure with nothing
-## behind it yet is a dash.
+## room; the water's median, and the bodies it stepped; **and, for a water that
+## keeps a record of its families** (docs/design/lineage.md §4, §6.4), the
+## hunters' mean generation and how many of the water's founders they descend
+## from, so the owner can watch the water evolve while playing it. A figure with
+## nothing behind it yet is a dash: a friend's drop, seen from inside it, keeps
+## no record here.
 func _figures() -> Array:
 	var frames := frames_now()
 	var water_ms := water_now()
@@ -252,13 +259,19 @@ func _figures() -> Array:
 	var hz := refresh_rate()
 	var share := dropped(frames, hz)
 	var against := " of %d Hz" % roundi(hz) if _wide() else ""
-	return [
+	var rows := [
 		["frame", _rank(frames, 0.5, 1), "ms", false],
 		["p95", _rank(frames, 0.95, 1), "ms", false],
 		["dropped", figure(share, 1) if share >= 0.0 else "–", "%" + against, false],
 		["water", _rank(water_ms, 0.5, 2), "ms", true],
 		["stepped", str(stepped) if stepped >= 0 else "–", "", false],
 	]
+	if is_instance_valid(water) and water.has_method(&"lineage_counts"):
+		var counts: Array = water.call(&"lineage_counts")
+		var known := counts.size() == 2
+		rows.append(["generation", figure(float(counts[0]), 1) if known else "–", "", true])
+		rows.append(["families", str(int(counts[1])) if known else "–", "", false])
+	return rows
 
 
 ## **The share of [param intervals] dropped**, in percent: those longer than

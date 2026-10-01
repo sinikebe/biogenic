@@ -1048,12 +1048,14 @@ class Body:
 	var lineage := 0
 	## **The DNA** (§3.2): what it writes by eating and what its daughters are
 	## made of, `{gene: copies}`, beside [member genome], the body it was born
-	## wearing. The two are equal for a body the water makes. **Pack 2's second
-	## register is dormant**: a meal writes both ([method _grow]), so they stay
-	## equal for every body but a sister, who carries the daughter she was.
+	## wearing. The two are equal for a body the water makes. **A meal in the
+	## drop writes the DNA alone** ([method _grow]): the body is fixed at birth,
+	## as yours is, and what it eats reaches its daughters ([method _divide]).
 	var dna := {}
-	## **The newborn grace** (§3.4): seconds left in which no mouth may begin a
-	## run at it. Kept with the drop; nothing gives it or reads it yet.
+	## **The newborn grace** (§3.4): seconds left in which no mouth begins a run
+	## at it -- [member newborn_grace] for every daughter, water or sister, and
+	## none for a body the water makes. Not armour: a mouth it touches still
+	## swallows it ([method _look_in_drop]).
 	var grace := 0.0
 
 
@@ -5523,6 +5525,10 @@ const FIRST_INSET := 200.0
 const AHEAD_TRIES := 12
 const AHEAD_SPREAD := 0.35
 const AHEAD_WIDEN := 0.25
+## What [method _make_one] returns when nothing is short (lineage.md §5): a unit
+## the spawner owed that births have already paid. Not -1, which is nowhere to
+## put a body that was wanted.
+const NOTHING_SHORT := -2
 
 # --- Switches (§14.1): one per body rule, so the owner's other answers can be
 # played, and §4.4's. Set by tools/drive.gd before the run enters the tree, as
@@ -5568,6 +5574,25 @@ var edge_gap := 380.0
 var flocs_near := 0
 var desert := 0.0
 var age_first := 0.0
+# --- Pack 2's rules, one switch each (docs/design/lineage.md §11.1, §12), set by
+# tools/drive.gd and tools/eco_probe.gd as the ones above are. Nothing in the game
+# writes them, and each reads as the drop's rule as it stands.
+## **Bodies divide** (§2-§5): a water body at DIVIDE_RADIUS divides on its tick,
+## a meal writes its DNA and not its body, every newborn has the grace, and the
+## spawner keeps the food to its count and today's hunters as a floor. **Off is
+## pack 1, to the census line**: nothing divides, a meal grows the body as well,
+## no sister has a grace and the spawner keeps the whole drop at its size.
+var births := true
+## **A tool's rate**: the share of divisions in which one daughter is changed.
+## The game has none -- every division changes one, as yours does (row 19) --
+## and only `--mutate=` plays another (§3.3).
+var mutate := 1.0
+## The share of today's hunters the spawner keeps at least (§5): SPAWN_SHARE.
+var floor_share := Drop.SPAWN_SHARE
+## Seconds within which the hunters' shortfall is paid back (§5): FLOOR_TAU.
+var floor_tau := Drop.FLOOR_TAU
+## Seconds of grace every newborn gets (§3.4): the player's FIRST_DELAY.
+var newborn_grace := FIRST_DELAY
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -6552,8 +6577,15 @@ func _step_drop_bodies() -> void:
 		i += Drop.LOD_EVERY
 
 
-## One body, with the time it is owed: its tank, then what it does, then held
+## One body, with the time it is owed: its grace, its tank, then what it does --
+## or, at DIVIDE_RADIUS on its tick, two daughters where it was -- then held
 ## inside the rim and filed again if it crossed a bucket line.
+##
+## **A body at DIVIDE_RADIUS divides on its tick** (lineage.md §2.1), the 7.5
+## times a second every mouth decides, near the player or far from it: the first
+## tick it is at forty, whatever it was doing -- a run, a rest after the meal
+## that grew it, a search. Nothing makes it wait. A tank that ran out first is a
+## death, and there is nobody left to divide.
 func _step_one(i: int, b: Body, tick: int) -> void:
 	var dt := _t - b.last_t
 	b.last_t = _t
@@ -6564,7 +6596,12 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 		return
 	b.look = (i % Drop.LOD_EVERY) == tick
 	b.age += dt
+	if b.grace > 0.0:
+		b.grace = maxf(b.grace - dt, 0.0)
 	if _tank(i, b, dt):
+		return
+	if births and b.look and not b.drifter and b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+		_divide(i, b)
 		return
 	_step_body(i, dt)
 	var m := _drop.meniscus
@@ -6615,15 +6652,18 @@ func _feed_water(b: Body, nutrition: float) -> void:
 ##
 ## **The meal is written to the DNA** (lineage.md §3.2), by the rule the
 ## player's lapsed sample follows: a copy more of a gene it carries, up to three,
-## or a new one into a free slot, or lost. **And, while pack 2's second register
-## is dormant, to the body as well**, as it always was -- so the water plays as
-## it did, and a body whose DNA is its body keeps the two equal.
+## or a new one into a free slot, or lost. **Never to the body**, which is fixed
+## at birth, as yours is: what it eats reaches its daughters, and it hunts and
+## pays and is drawn as what it was born wearing. Where nothing divides --
+## [member births] off, which is pack 1, and today's water -- the body grows the
+## organ as well, as it always did.
 func _grow(b: Body, gene: StringName) -> void:
 	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
 	b.meals += 1
 	var slots := CellBody.slots_for(b.radius)
 	Genome.integrate_into(b.dna, gene, slots)
-	Genome.integrate_into(b.genome, gene, slots)
+	if not (births and _drop != null):
+		Genome.integrate_into(b.genome, gene, slots)
 	_refresh_body(b)
 	_changes += 1
 
@@ -6732,6 +6772,12 @@ func _decide(index: int, b: Body) -> void:
 ## player, a body or a settled floc, asked of the grid -- the buckets within
 ## PREY_NEAR first, and the whole reach only when nothing that near answered,
 ## since nearest wins and anything nearer lay in those buckets.
+##
+## **Nothing in its grace is a run's beginning** (lineage.md §3.4): the player
+## for FIRST_DELAY after a birth, a division or a return, the other players for
+## theirs, and every newborn in the water -- a daughter, water or sister -- for
+## [member newborn_grace]. It is not armour: what a mouth touches is decided by
+## the contacts, and a newborn that drifts into one that fits is swallowed.
 func _look_in_drop(index: int, b: Body, reach: float) -> void:
 	var gape := _gape(b)
 	var best := TARGET_NONE
@@ -6772,7 +6818,7 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 			if j == index:
 				continue
 			var other := _cells[j]
-			if not other.seeded:
+			if not other.seeded or other.grace > 0.0:
 				continue
 			var d := b.pos.distance_to(other.pos)
 			if not (d <= maxf(reach, b.radius + other.radius) and d < best_d):
@@ -7203,10 +7249,19 @@ func _ecology(dt: float) -> void:
 		_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	# **The shortfall, paid back over SPAWN_TAU** (§6.2), one body at a time,
 	# each at the thinnest of its candidate places (§6.3), made for the players
-	# in turn.
-	var due := _drop.spawner.due(_living, dt)
+	# in turn. **Since bodies divide, each kind's own** (lineage.md §5): the food
+	# against its count over SPAWN_TAU, the hunters against today's count within
+	# [member floor_tau], and venom whenever it is short -- summed into the one
+	# debt, and each body made the kind that is short ([method _make_one]). A
+	# unit owed when nothing is short any more is not a body: births made it.
+	var due := _drop.spawner.due_for(_shortfall(), dt) if births \
+		else _drop.spawner.due(_living, dt)
 	for k in due:
-		if _make_one(players, reaches) < 0:
+		var made := _make_one(players, reaches)
+		if made == NOTHING_SHORT:
+			_stat(&"spawn_left_to_births")
+			continue
+		if made < 0:
 			_drop.spawner.refund(due - k)
 			_stat(&"spawn_no_room")
 			break
@@ -7254,13 +7309,35 @@ func _ecology(dt: float) -> void:
 ## and [param reaches] how far each one's senses reach; with nobody there, it is
 ## made for the players [member _made_for] keeps, in turn, anywhere. -1 if there
 ## was nowhere to put it.
+##
+## **Since bodies divide, it makes only what is short** (lineage.md §5): a
+## venomous peer while the drop is down to its last venom, whatever the count;
+## a drifter while the food is under its own count; a peer while the hunters are
+## under today's; and otherwise nothing -- [constant NOTHING_SHORT] -- since
+## above the floor how many hunters there are is how many their families feed.
+## **The food goes first.** The two are one debt, and the hunters' part of it
+## is weighed up to be paid back within [member floor_tau]: a hunter short
+## pays back five times what a drifter short does, so the hunters take the
+## difference and stand about a second of deaths under today's count, where the
+## food made last would stand five seconds of them under its own.
 func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var turns := maxi(_made_for.size() / 2, 1)
 	var turn := posmod(_turn, turns)
-	_turn = Drop.next_turn(turn, turns)
 	var mine := _made_for[2 * turn]
 	var sensed := _made_for[2 * turn + 1]
-	var drifter := Drop.wants_drifter(_living, _drifters, _drifter_share(sensed))
+	var drifter := false
+	var venom := false
+	if births:
+		var share := _made_share()
+		venom = _venom_short()
+		if not venom:
+			drifter = float(_drifters) < Drop.food_count(share)
+			if not drifter \
+					and float(_living - _drifters) >= Drop.hunter_floor(share, floor_share):
+				return NOTHING_SHORT
+	else:
+		drifter = Drop.wants_drifter(_living, _drifters, _drifter_share(sensed))
+	_turn = Drop.next_turn(turn, turns)
 	var hides := PackedFloat32Array()
 	for k in players.size():
 		hides.append(Drop.hide_reach(reaches[k], DREAD_RANGE, not drifter))
@@ -7269,7 +7346,40 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var pick := Replenish.thinnest(candidates, _thinness)
 	if pick < 0:
 		return -1
-	return _spawn(candidates[pick], drifter, sensed, false, 0.0, {}, mine)
+	var index := _spawn(candidates[pick], drifter, sensed, false, 0.0, {}, mine)
+	if births:
+		_stat(&"made_for_food" if drifter else (&"made_for_venom" if venom
+			else &"made_for_floor"))
+	return index
+
+
+## **What the spawner owes now, since bodies divide** (lineage.md §5): the
+## food's shortfall against its count, the hunters' under today's count weighed
+## up by the spawner's tau over [member floor_tau] -- so the one debt pays it
+## back that much sooner -- and one more while venom is short.
+func _shortfall() -> float:
+	var share := _made_share()
+	var food := maxf(Drop.food_count(share) - float(_drifters), 0.0)
+	var hunters := maxf(Drop.hunter_floor(share, floor_share) - float(_living - _drifters),
+		0.0)
+	return food + hunters * _drop.spawner.tau / maxf(floor_tau, 1e-3) \
+		+ (1.0 if _venom_short() else 0.0)
+
+
+## **The drifter share of the water the spawner keeps**: the share each player
+## it is made for calls for, averaged over them -- one player's own, alone.
+func _made_share() -> float:
+	var turns := maxi(_made_for.size() / 2, 1)
+	var sum := 0.0
+	for k in turns:
+		sum += _drifter_share(_made_for[2 * k + 1] if 2 * k + 1 < _made_for.size() else 0.0)
+	return sum / float(turns)
+
+
+## Whether the drop is down to its last venomous bodies, which only a peer
+## brings back (row 13; a tool's `--drifter-venom=1` lets a drifter carry it).
+func _venom_short() -> bool:
+	return not drifter_venom and _gene_short.has(Drop.VENOM)
 
 
 ## A drifter [param reach] from a player at [param from], ahead of its
@@ -7373,11 +7483,79 @@ func _record_onto(b: Body, record: PackedInt32Array) -> void:
 ## the daughter she was -- and is the child of [param mother]: its id her
 ## parent, its generation and one, its line. With no DNA she carries what she
 ## wears, and with no record she stays the founder [method _spawn] made her: a
-## guest's sister, whom SISTER brings with neither (§8).
+## guest's sister, whom SISTER brings with neither (§8). **And she has a
+## newborn's grace** (§3.4), as every daughter does -- a guest's too, who is
+## no less newborn for arriving without her record.
 func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array) -> void:
 	if not dna.is_empty():
 		b.dna = dna.duplicate()
 	_record_onto(b, Descent.child(b.id, mother))
+	b.grace = newborn_grace if births else 0.0
+
+
+## **A water cell divides** (lineage.md §3.1): the player's division with nobody
+## to choose -- the one place a water body becomes two.
+##
+## 1. **The mother leaves the water with no cause.** A division is not a death:
+##    nothing swallowed, chewed, starved or poisoned her, so she leaves no remains
+##    and adds no `Cause`, and whatever was chasing her has nothing to chase.
+## 2. **Two DNAs** ([method Drop.daughter_dna]): hers, and hers with one
+##    mutation, every division, as yours are (row 19). A coin says which daughter
+##    carries which, as on the choosing screen.
+## 3. **Two bodies**: each daughter wears what her own roll of her DNA expresses
+##    (`Genome.expressed`, the mouth always worn), and one who wears no sense is
+##    given one at tier 1 -- the grant every peer and every daughter of yours
+##    gets (`Drop.give_sense`) -- on her body and in her DNA.
+## 4. **Side by side, touching** (descent.gd's `split`): at half her area, either
+##    side of where she was across her heading, held inside the rim, both facing
+##    her way. Not nose to tail, where the back one's mouth would sit on her
+##    sister. Each comes in by the one door every body does, fed, with a new id,
+##    her mother's child, and the newborn grace.
+##
+## **Both stay**: the water does the choosing. Returns the two daughters' slots.
+func _divide(i: int, b: Body) -> PackedInt32Array:
+	var mother := Descent.of(b.id, b.parent, b.generation, b.lineage)
+	var at := b.pos
+	var heading := b.heading
+	var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
+	var pair: Array = Drop.daughter_dna(b.dna) if mutate >= 1.0 or randf() < mutate \
+		else [b.dna.duplicate(), b.dna.duplicate(), &""]
+	_stat(&"divisions")
+	_stat(StringName("divided_" + (String(pair[2]) if pair[2] != &"" else "faithfully")))
+	var carried: Array = [pair[0], pair[1]] if randf() < 0.5 else [pair[1], pair[0]]
+	var points := Descent.split(at, _forward(heading).orthogonal(), r)
+	# She was stepped this frame and her daughters were not: neither mouth closes,
+	# nor pushes, before the next frame -- the first takes her slot, which is the
+	# last one stepped.
+	if not _stepped.is_empty() and _stepped[_stepped.size() - 1] == i:
+		_stepped.resize(_stepped.size() - 1)
+	_drop_lose(i, 0)
+	var daughters := PackedInt32Array()
+	for k in 2:
+		var dna: Dictionary = carried[k]
+		var body := Genome.expressed(dna)
+		if Drop.give_sense(body, SENSE_GENES, randi()):
+			for gene: StringName in SENSE_GENES:
+				if body.has(gene) and not dna.has(gene):
+					dna[gene] = int(body[gene])
+			_stat(&"born_gifted")
+		var j := _spawn(_drop.meniscus.contain(points[k], r), false, 0.0, false, r, body)
+		var d := _cells[j]
+		d.heading = heading
+		d.dna = dna
+		_record_onto(d, Descent.child(d.id, mother))
+		d.grace = newborn_grace
+		# Her own first step is the next frame's, whichever pass would have
+		# reached her slot in this one.
+		d.near_frame = _frame
+		# Born, not made: the census's `spawned` is what the spawner and the
+		# other doors made.
+		_stat(&"spawned", -1)
+		_stat(&"born")
+		if Genome.tier_of(body, &"flagellum") <= 0:
+			_stat(&"born_tailless")
+		daughters.append(j)
+	return daughters
 
 
 ## **A floc** at [param at], of [param body_radius]: settled already -- remains,
@@ -7809,10 +7987,38 @@ func lineage_line() -> String:
 		means.append("%s %.2f" % [String(gene).left(4), float(tiers.get(gene, 0)) / m])
 	return ("[lineage] t %.0f  hunters %d, born %d  generation mean %.2f max %d  families %d"
 		+ " (largest %d)  dna apart %d  | cruise %.1f notice %.0f mouth %.2f upkeep %.2f"
-		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | worn %s"
-		+ "  | commonest %s") % [_t, n, born, float(generations) / m, deepest, families.size(),
-		largest, apart, cruise / m, notice / m, mouth / m, upkeep / m, float(worn) / m,
-		float(carried) / m, tails, sighted, big, " ".join(means), " ; ".join(commonest)]
+		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | divisions %d"
+		+ " (trade %d drift %d faithfully %d), daughters %d: tailless %d, given a sense %d"
+		+ "  | the spawner's peers %d (for the floor %d, for venom %d), drifters %d, left to"
+		+ " births %d  | worn %s  | commonest %s") % [_t, n, born, float(generations) / m,
+		deepest, families.size(), largest, apart, cruise / m, notice / m, mouth / m,
+		upkeep / m, float(worn) / m, float(carried) / m, tails, sighted, big,
+		_n(&"divisions"), _n(&"divided_trade"), _n(&"divided_drift"),
+		_n(&"divided_faithfully"), _n(&"born"), _n(&"born_tailless"), _n(&"born_gifted"),
+		_n(&"made_for_floor") + _n(&"made_for_venom"), _n(&"made_for_floor"),
+		_n(&"made_for_venom"), _n(&"made_for_food"), _n(&"spawn_left_to_births"),
+		" ".join(means), " ; ".join(commonest)]
+
+
+## **The water's families, for the dev app's readout** (lineage.md §4, §6.4):
+## `[the hunters' mean generation, how many founders they descend from]` -- or
+## nothing where the water keeps no record (today's water, a friend's drop seen
+## from inside it, a replay) or holds no hunter. Asking moves nothing.
+func lineage_counts() -> Array:
+	if not owns_drop():
+		return []
+	var n := 0
+	var generations := 0
+	var families := {}
+	for b in _cells:
+		if not b.seeded or b.inert or b.drifter or b.person != null:
+			continue
+		n += 1
+		generations += b.generation
+		families[b.lineage] = true
+	if n == 0:
+		return []
+	return [float(generations) / float(n), families.size()]
 
 
 func _n(what: StringName) -> int:

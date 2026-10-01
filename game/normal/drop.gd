@@ -90,9 +90,16 @@ const SPAWN_TAU := 5.0
 const SPAWN_TICK := 0.5
 ## ...and no more than this many bodies a tick.
 const SPAWN_BURST := 8
-## The share of the population the spawner keeps up: all of it in pack 1.
-## Pack 2's births lower it, and the spawner backs off by construction (§6.5).
+## **The share of today's hunters the spawner keeps at least** (lineage.md
+## §2.2, §5): all of them. In pack 1 it was the share of the whole population
+## the spawner kept up; since bodies divide (pack 2) it is **a floor** -- the
+## owner's "at least as many as today" -- under which a peer is made, and over
+## which the hunters are what their families feed ([method hunter_floor]).
 const SPAWN_SHARE := 1.0
+## **The floor is paid back within this many seconds** (lineage.md §5), where
+## the food keeps [constant SPAWN_TAU]: daughters die fast, and a floor paid
+## back over five seconds stood about five seconds of deaths under today's count.
+const FLOOR_TAU := 1.0
 ## Candidate points drawn for each new body, and the thinnest taken...
 const SPAWN_TRIES := 12
 ## ...by how many living bodies lie within this of it.
@@ -189,7 +196,9 @@ const VENOM := &"veneneux"
 var meniscus: Basin = null
 ## Which bodies are near a place, over the square round the drop.
 var grid: SpaceGrid = null
-## The spawner's debt, against the drop's population.
+## The spawner's debt: against the drop's population in pack 1, and since
+## bodies divide against the food's shortfall and the hunters' under their
+## floor, summed (lineage.md §5).
 var spawner: Replenish = null
 ## The snow.
 var snow: Snowfall = null
@@ -264,9 +273,26 @@ static func made_hunger(first_fill: bool) -> float:
 ## **Whether the next body is a drifter**: when the living drop's share of
 ## drifters is under [param share], the share the players' senses call for --
 ## asked of the standing drop rather than of each arrival, because hunters eat
-## drifters faster than anything else dies.
+## drifters faster than anything else dies. Pack 1's spawner, which made every
+## body; pack 2's keeps each kind to its own count below.
 static func wants_drifter(living: int, drifters: int, share: float) -> bool:
 	return float(drifters) < share * float(maxi(living, 1))
+
+
+## **The food's count** (lineage.md §5): the drifters the spawner keeps, their
+## [param share] of [method target] -- 457 at a newborn's composition and 354 at
+## a sighted player's -- **whatever the hunters number**. Drifters never divide,
+## so the spawner makes every one.
+static func food_count(share: float) -> float:
+	return share * float(target())
+
+
+## **The hunters' floor** (lineage.md §2.2, §5): today's count -- what pack 1's
+## spawner kept, `(1 - share) * target()`, 96.4 at a newborn's composition and
+## 200.5 at a sighted player's -- times [param keep], [constant SPAWN_SHARE] in
+## the game. Under it the spawner makes a peer; over it births decide.
+static func hunter_floor(share: float, keep := SPAWN_SHARE) -> float:
+	return (1.0 - share) * float(target()) * keep
 
 
 ## **The genes the drop is down to its last carriers of**: every one of
@@ -337,6 +363,18 @@ static func drifter_genes(genes: Array[StringName]) -> Array[StringName]:
 		if gene != VENOM:
 			pool.append(gene)
 	return pool
+
+
+## **What a water cell's two daughters are made of** (lineage.md §3.1, §3.3,
+## row 19): `[faithful, changed, kind]` -- one her [param dna] as it is, the
+## other with one mutation, **every division**, by the player's own
+## `Genome.mutated`, called as the choosing screen calls it. A water cell has
+## no slot layout, so of the player's three kinds a shift has nothing to move
+## and `kind` is a trade or a drift. Which daughter is which is the caller's
+## coin. Draws from the global stream: a division is the simulation's.
+static func daughter_dna(dna: Dictionary) -> Array:
+	var rolled: Array = Genome.mutated(dna, [])
+	return [dna.duplicate(), rolled[0], rolled[2]]
 
 
 ## **Venom back through a peer**, when the floor wants it: [constant VENOM] at

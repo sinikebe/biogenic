@@ -62,8 +62,10 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 ## In hand
 
 **The evolving water**, below under "Next". Pack 1, the drop, is built and on
-`dev`, and reaches players when the owner runs the release (`ocean.md`). Pack 2
-is designed and waits for the owner's answers (`lineage.md`).
+`dev`, and reaches players when the owner runs the release (`ocean.md`). Pack 2,
+water cells that divide, is built to the owner's answers in two phases -- the
+record (2-1) and the division (2-2) -- each played on the dev app before the
+release (`lineage.md`).
 
 ## What the ending is for
 
