@@ -32,13 +32,38 @@ Two deaths, a growth curve, and the `radius` comparison that decides what eats
 what. `docs/design/food-and-predators.md`. Depends on 3 because the escape
 window and the wake bearings could not have been measured blind.
 
-## In hand
-
 **5 — Genes and cilia.** A genome with a fixed number of slots, filled by what
 you eat and worn on the outside as cilia; a starting cell that is already full,
 so specialising means giving something up. `docs/design/genes-and-cilia.md`.
 Depends on 4 because the gene rides on `food.eaten` and the slot count rides on
-the `radius` that meals grow.
+the `radius` that meals grow. Its lifecycle -- a cell divides and you take one
+of the daughters -- and what decides who eats whom are `lifecycle.md`,
+`choosing.md` and `edibility.md`.
+
+**Shipped beside the phases**, each because the owner asked for it:
+
+- **Playing together.** Two cells in one water: on one wi-fi with a phone as
+  host, on a home server, and from far away by invite. `multiplayer.md`,
+  `shared-pond.md`, `shared-pond-ux.md`, `net-hardening.md`, `invites-ux.md`,
+  and `docs/server.md`.
+- **The senses and the beam.** A ping that bounces and fades, a nose that
+  saturates, and a beam that levels up and grows two ways. `three-senses.md`,
+  `ping-as-outline.md`, `beam-levels.md`.
+- **The genome on screen.** The body with a slot at each part, the DNA strand,
+  gene levels, and a gene you move or place without pausing. `dna-body.md`,
+  `dna-strand.md`, `moving-a-gene.md`, `gene-lines-and-the-pause-target.md`.
+- **Steering and the HUD.** Three ways to steer, and a HUD made of the
+  organism. `controls.md`, `diegetic-hud.md`.
+- **Energy.** Swimming and turning cost energy, and a cell starves in about
+  thirty seconds. `energy.md`.
+- **Gene stats and the replay.** Every gene's numbers on demand, and the run
+  watched back after a death, at up to 4x. `gene-stats.md`, `replay.md`.
+
+## In hand
+
+**The evolving water**, below under "Next". Pack 1, the drop, is built and on
+`dev`, and reaches players when the owner runs the release (`ocean.md`). Pack 2
+is designed and waits for the owner's answers (`lineage.md`).
 
 ## What the ending is for
 
@@ -169,7 +194,7 @@ to ship on its own and be played on the dev app before the next starts:
 1. **A real ocean.** A finite drop of water that keeps its cells, rules that
    spawn cells where there are too few, and food that isn't alive.
    `docs/design/ocean.md`.
-2. **Water cells divide**, passing on their genes.
+2. **Water cells divide**, passing on their genes. `docs/design/lineage.md`.
 3. **Behaviour blocks with mutation** replace the hand-written AI.
 4. **The player's own block screen**, built from the same blocks.
 
