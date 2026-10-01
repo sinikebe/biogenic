@@ -1,8 +1,8 @@
-# Biogenic message catalog template.
+# Biogenic: the French (fr) catalog.
 #
-# Written by tools/i18n_pot.gd from the game's source: do not edit it by hand.
-# Run the tool again instead; game/i18n/README.md says how, and how to make a
-# language from this file.
+# Translated by hand from biogenic.pot, the template tools/i18n_pot.gd writes.
+# When the template changes, carry its new and changed messages over here and
+# run --lint-po; game/i18n/README.md says how.
 #
 msgid ""
 msgstr ""
@@ -37,13 +37,13 @@ msgstr "échap pour retourner au launcher"
 #. button 320 px wide: about 40 characters at most.
 #: game/mode_select.gd
 msgid "a friend far away, who sent you one"
-msgstr "un ami loin, qui vous a envoyé une invitation"
+msgstr "un ami au loin, qui vous en a envoyé une"
 
 #. Same note, for the case where the button's own name does not mention an
 #. invite, so the note says how instead. About 45 characters at most.
 #: game/mode_select.gd
 msgid "a friend far away, by the invite they sent"
-msgstr "un ami loin, via l'invitation envoyée"
+msgstr "un ami au loin, par son invitation"
 
 #. The heading of the screen where a game is started, in 17 px type. The
 #. player chooses how the water is drawn for this game: a "view".
@@ -162,7 +162,7 @@ msgstr "arrêter"
 #. other player is showing, in order, to dial them.
 #: game/net/earshot.gd
 msgid "tap their code"
-msgstr "entrez leur code"
+msgstr "entrez son code"
 
 #. A button: undo the last tap of the code, one step back.
 #: game/net/earshot.gd
@@ -209,7 +209,7 @@ msgstr "coller l'invitation"
 #. device keeps.
 #: game/net/earshot.gd
 msgid "paste new"
-msgstr "coller nouvelle"
+msgstr "coller une autre"
 
 #. A button: leave this screen and go back.
 #. The replay's last button: close the replay and go back to the game. The
@@ -673,7 +673,7 @@ msgstr "le serveur de votre ami a refusé ce que ce jeu a envoyé. prenez la mis
 #. Room: at most 1180 px in 17 px type; the English takes 109 px.
 #: game/net/invite.gd game/net/net_session.gd
 msgid "they hung up"
-msgstr "ils ont raccroché"
+msgstr "l'autre a raccroché"
 
 #. A heading of two to four words in large type, then one sentence that says
 #. what to do, on a single line in 17 px type. Lowercase, plain words. The
@@ -746,8 +746,8 @@ msgstr "l'adresse vers laquelle ce code pointe n'est pas accessible depuis cet a
 #, c-format
 msgid "quiet for %d second"
 msgid_plural "quiet for %d seconds"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "silencieux depuis %d seconde"
+msgstr[1] "silencieux depuis %d secondes"
 
 #. A heading and a sentence under it: nothing answered the code that was
 #. tapped in. "Showing it" means the friend's phone is still displaying the
@@ -810,7 +810,7 @@ msgstr "l'un de ces jeux est plus ancien que l'autre — le leur. prenez la mise
 #. Room: at most 1180 px in 17 px type; the English takes 69 px.
 #: game/net/net_session.gd game/normal/normal_mode.gd
 msgid "they left"
-msgstr "ils sont partis"
+msgstr "votre ami est parti"
 
 #. A heading and a sentence under it: the other player left, and this phone
 #. goes back to showing its four-mark code for the next call.
@@ -965,7 +965,7 @@ msgstr "nage à environ {} µm par seconde"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a beat every {}–{} s"
-msgstr "un battement toutes les {}{} s"
+msgstr "un battement toutes les {}–{} s"
 
 #. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
 #. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
@@ -988,7 +988,7 @@ msgstr "battre coûte {} s par seconde, {} s par battement"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "feels bodies over {} × your size"
-msgstr "détecte les corps jusqu'à {} × votre taille"
+msgstr "détecte les corps de plus de {} × votre taille"
 
 #. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
 #. large bodies. "A bearing to within {}" means the direction of a body is
@@ -1040,7 +1040,7 @@ msgstr "sent la nourriture jusqu'à {} µm"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} as strong behind it"
-msgstr "{} fois plus fort derrière"
+msgstr "{} de l'intensité à l'arrière"
 
 #. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
 #. every body it meets. "The nearest {} answer" means the {} closest bodies
@@ -1066,7 +1066,7 @@ msgstr "un ping toutes les {} s"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "the nearest {} answer"
-msgstr "la réponse la plus proche à {}"
+msgstr "les {} plus proches répondent"
 
 #. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
 #. every body it meets. "The nearest {} answer" means the {} closest bodies
@@ -1078,7 +1078,7 @@ msgstr "la réponse la plus proche à {}"
 #. line takes 540 px.
 #: game/normal/gene_stats.gd
 msgid "stopped by any body"
-msgstr "bloqué par n'importe quel corps"
+msgstr "arrêté par tout corps"
 
 #. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
 #. every body it meets. "The nearest {} answer" means the {} closest bodies
@@ -1102,7 +1102,7 @@ msgstr "{} traverse un corps"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "holding on adds up to {} µm a second"
-msgstr "s'accrocher ajoute jusqu'à {} µm par seconde"
+msgstr "rester appuyé ajoute jusqu'à {} µm par seconde"
 
 #. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
 #. on the water pushes the cell instead of only steering it.
@@ -1172,7 +1172,7 @@ msgstr "chaque bond coûte {} s"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a dart at a hunter within {} µm, {} either side"
-msgstr "un dart vers un prédateur à {} µm, {} de chaque côté"
+msgstr "un dard contre un prédateur à moins de {} µm, {} de chaque côté"
 
 #. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
 #. {} × your size" means a hunting mouth must be that much wider than the cell
@@ -1184,7 +1184,7 @@ msgstr "un dart vers un prédateur à {} µm, {} de chaque côté"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "to a mouth you are {} × your size"
-msgstr "vers une bouche de {} × votre taille"
+msgstr "pour une bouche, vous faites {} × votre taille"
 
 #. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
 #. {} × your size" means a hunting mouth must be that much wider than the cell
@@ -1209,7 +1209,7 @@ msgstr "les morsures infligent {} de moins"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a biter takes back {} of its bite"
-msgstr "un mordant récupère {} de sa morsure"
+msgstr "qui vous mord subit {} de sa morsure"
 
 #. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
 #. has to give part of its bite back, and a body that swallows the cell dies
@@ -1221,7 +1221,7 @@ msgstr "un mordant récupère {} de sa morsure"
 #. line takes 540 px.
 #: game/normal/gene_stats.gd
 msgid "a swallower dies, and you are spat out"
-msgstr "un avaleur meurt, et vous êtes recraché"
+msgstr "qui vous avale meurt, et vous êtes recraché"
 
 #. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
 #. has to give part of its bite back, and a body that swallows the cell dies
@@ -1268,7 +1268,7 @@ msgstr "un réservoir plein contient {} s, pas {}"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "everything burns {} less"
-msgstr "tout coûte {} s de moins"
+msgstr "tout coûte {} de moins"
 
 #. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
 #. beams of light that mark whatever they strike. The number of rays is the
@@ -1317,8 +1317,8 @@ msgstr "{} rayon"
 #, python-brace-format
 msgid "{} ray sweeping {}"
 msgid_plural "{} rays sweeping {}"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{} rayon balayant {}"
+msgstr[1] "{} rayons balayant {}"
 
 #. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
 #. beams of light that mark whatever they strike. The number of rays is the
@@ -1351,8 +1351,8 @@ msgstr "toutes les directions éclairées en {} s"
 #, python-brace-format
 msgid "{} ray across {}, one every {}"
 msgid_plural "{} rays across {}, one every {}"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{} rayon sur {}, un tous les {}"
+msgstr[1] "{} rayons sur {}, un tous les {}"
 
 #. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
 #. beams of light that mark whatever they strike. The number of rays is the
@@ -1369,8 +1369,8 @@ msgstr[1] ""
 #, python-brace-format
 msgid "{} ray across {}"
 msgid_plural "{} rays across {}"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "{} rayon sur {}"
+msgstr[1] "{} rayons sur {}"
 
 #. The last item of a gene's costs line: what wearing the gene costs the cell.
 #. "Wearing" a gene is having it as an organ. "Burns {} s a second" is energy
@@ -1407,8 +1407,8 @@ msgstr "le porter coûte {} s par seconde"
 #, python-brace-format
 msgid "level {} after {} strike"
 msgid_plural "level {} after {} strikes"
-msgstr[0] ""
-msgstr[1] ""
+msgstr[0] "niveau {} après {} impact"
+msgstr[1] "niveau {} après {} impacts"
 
 #. The odds line (14 px type) when the numbers switch is on: the copies of the
 #. gene in words (see "one copy"), a middle dot, then whether a daughter cell
@@ -1451,7 +1451,7 @@ msgstr "{} µm de large"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a full tank: {} s, {} s drifting"
-msgstr "un réservoir plein : {} s, {} s de dérive"
+msgstr "réservoir : {} s, {} s en dérive"
 
 #. A hint in 18 px type over the water, the first time the player's cell
 #. divides in two. The two daughters are on screen, one each side, and the
@@ -1459,7 +1459,7 @@ msgstr "un réservoir plein : {} s, {} s de dérive"
 #. phone, the A and D keys on a keyboard). "Them" is the two daughters.
 #: game/normal/normal_mode.gd
 msgid "lean into one of them"
-msgstr "penchez-vous vers l'un d'eux"
+msgstr "penchez-vous vers l'une d'elles"
 
 #. The pause screen's "camera" button, which flips between two ways of drawing
 #. the water. `north up`: the world stays still and the cell turns in it.
@@ -1488,7 +1488,7 @@ msgstr "nord en haut"
 #. Button "Toggle" in game/normal/normal_mode.tscn
 #: game/normal/normal_mode.gd game/normal/normal_mode.tscn
 msgid "anywhere"
-msgstr "n'importe où"
+msgstr "partout"
 
 #. The pause screen's "controls" button, which cycles through three ways of
 #. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
@@ -1497,7 +1497,7 @@ msgstr "n'importe où"
 #. button sizes to its text and the whole left column grows with it.
 #: game/normal/normal_mode.gd
 msgid "stick"
-msgstr "manette"
+msgstr "joystick"
 
 #. The pause screen's "controls" button, which cycles through three ways of
 #. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
@@ -1506,7 +1506,7 @@ msgstr "manette"
 #. button sizes to its text and the whole left column grows with it.
 #: game/normal/normal_mode.gd
 msgid "pads"
-msgstr "pavés"
+msgstr "boutons"
 
 #. The first line a new player sees, in 18 px type over the water, teaching
 #. how to steer: on a phone, drag a finger; on a keyboard, hold the A key to
@@ -1550,7 +1550,7 @@ msgstr "un sens a grandi · maintenez E pour le placer"
 #. Room: at most 64 px in 15 px type; the English takes 54 px.
 #: game/normal/normal_mode.gd
 msgid "waiting"
-msgstr "en attente"
+msgstr "attente"
 
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
@@ -1615,7 +1615,7 @@ msgstr "%s quitte votre ADN"
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna · level %d ends with this body"
-msgstr "%s quitte votre ADN · le niveau %d se termine avec ce corps"
+msgstr "%s quitte votre ADN · ce corps garde le niveau %d"
 
 #. Same, for a levelled gene the body does not wear. %s is the gene's short
 #. word, %d the level.
@@ -1715,7 +1715,7 @@ msgstr "appuyez à nouveau pour choisir comment %s grandit"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "first generation"
-msgstr "première génération"
+msgstr "1re génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1723,7 +1723,7 @@ msgstr "première génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "second generation"
-msgstr "deuxième génération"
+msgstr "2e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1731,7 +1731,7 @@ msgstr "deuxième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "third generation"
-msgstr "troisième génération"
+msgstr "3e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1739,7 +1739,7 @@ msgstr "troisième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "fourth generation"
-msgstr "quatrième génération"
+msgstr "4e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1747,7 +1747,7 @@ msgstr "quatrième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "fifth generation"
-msgstr "cinquième génération"
+msgstr "5e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1755,7 +1755,7 @@ msgstr "cinquième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "sixth generation"
-msgstr "sixième génération"
+msgstr "6e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1763,7 +1763,7 @@ msgstr "sixième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "seventh generation"
-msgstr "septième génération"
+msgstr "7e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1771,7 +1771,7 @@ msgstr "septième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "eighth generation"
-msgstr "huitième génération"
+msgstr "8e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1779,7 +1779,7 @@ msgstr "huitième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "ninth generation"
-msgstr "neuvième génération"
+msgstr "9e génération"
 
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
@@ -1787,7 +1787,7 @@ msgstr "neuvième génération"
 #. caption's own wording is "genome · %s", translated separately.
 #: game/normal/normal_mode.gd
 msgid "tenth generation"
-msgstr "dixième génération"
+msgstr "10e génération"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1798,7 +1798,7 @@ msgstr "dixième génération"
 #. Room: at most 47 px in 13 px type; the English takes 21 px.
 #: game/normal/normal_mode.gd
 msgid "eat"
-msgstr "manger"
+msgstr "mange"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1809,7 +1809,7 @@ msgstr "manger"
 #. Room: at most 47 px in 13 px type; the English takes 28 px.
 #: game/normal/normal_mode.gd
 msgid "turn"
-msgstr "tournant"
+msgstr "tourne"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1820,7 +1820,7 @@ msgstr "tournant"
 #. Room: at most 47 px in 13 px type; the English takes 33 px.
 #: game/normal/normal_mode.gd
 msgid "swim"
-msgstr "nageoire"
+msgstr "nage"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1842,7 +1842,7 @@ msgstr "œil"
 #. Room: at most 47 px in 13 px type; the English takes 36 px.
 #: game/normal/normal_mode.gd
 msgid "beam"
-msgstr "faisceau"
+msgstr "rayon"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1853,7 +1853,7 @@ msgstr "faisceau"
 #. Room: at most 47 px in 13 px type; the English takes 31 px.
 #: game/normal/normal_mode.gd
 msgid "push"
-msgstr "pousseur"
+msgstr "pousse"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1864,7 +1864,7 @@ msgstr "pousseur"
 #. Room: at most 47 px in 13 px type; the English takes 37 px.
 #: game/normal/normal_mode.gd
 msgid "touch"
-msgstr "toucher"
+msgstr "touche"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -1941,7 +1941,7 @@ msgstr "réserve"
 #. Room: at most 47 px in 13 px type; the English takes 31 px.
 #: game/normal/normal_mode.gd
 msgid "burn"
-msgstr "combustion"
+msgstr "brûle"
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
 #. short lowercase word, a verb or a noun for what the gene does. The `entry`
@@ -2047,7 +2047,7 @@ msgstr "sent la nourriture, plus fort où votre nez est pointé"
 #. Room: at most 440 px in 15 px type; the English takes 356 px.
 #: game/normal/normal_mode.gd
 msgid "a pulse that answers off everything, not just food"
-msgstr "une impulsion qui rebondit sur tout, pas seulement la nourriture"
+msgstr "un écho de tout, pas seulement de la nourriture"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2059,7 +2059,7 @@ msgstr "une impulsion qui rebondit sur tout, pas seulement la nourriture"
 #. Room: at most 440 px in 15 px type; the English takes 341 px.
 #: game/normal/normal_mode.gd
 msgid "holding on pushes you, instead of only steering"
-msgstr "s'accrocher vous pousse, au lieu de simplement diriger"
+msgstr "rester appuyé vous pousse, au lieu de seulement diriger"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2095,7 +2095,7 @@ msgstr "appuyez pour un bond de vitesse, payé en faim"
 #. Room: at most 440 px in 15 px type; the English takes 290 px.
 #: game/normal/normal_mode.gd
 msgid "a dart at whatever closes in on that side"
-msgstr "un dart vers tout ce qui approche de ce côté"
+msgstr "un dard contre tout ce qui approche de ce côté"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2107,7 +2107,7 @@ msgstr "un dart vers tout ce qui approche de ce côté"
 #. Room: at most 440 px in 15 px type; the English takes 371 px.
 #: game/normal/normal_mode.gd
 msgid "thicker skin, so bites take less and fewer mouths fit"
-msgstr "une peau plus épaisse, donc les morsures infligent moins et moins de bouches tiennent"
+msgstr "une peau plus épaisse, plus dure à mordre et à avaler"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2131,7 +2131,7 @@ msgstr "ce qui vous mord paie, et ce qui vous avale meurt"
 #. Room: at most 440 px in 15 px type; the English takes 365 px.
 #: game/normal/normal_mode.gd
 msgid "makes a little of its own food, so you starve slower"
-msgstr "produit un peu de sa propre nourriture, donc vous affamez moins vite"
+msgstr "produit un peu de sa nourriture, la faim vient moins vite"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2143,7 +2143,7 @@ msgstr "produit un peu de sa propre nourriture, donc vous affamez moins vite"
 #. Room: at most 440 px in 15 px type; the English takes 363 px.
 #: game/normal/normal_mode.gd
 msgid "a bigger tank, so hunger takes longer to reach you"
-msgstr "un réservoir plus grand, donc la faim met plus de temps à vous atteindre"
+msgstr "un réservoir plus grand, donc la faim tarde à venir"
 
 #. What a gene does, in one line shown after the gene's scientific name and a
 #. middle dot: "cytostome · a wider mouth swallows bigger things whole".
@@ -2155,7 +2155,7 @@ msgstr "un réservoir plus grand, donc la faim met plus de temps à vous atteind
 #. Room: at most 440 px in 15 px type; the English takes 350 px.
 #: game/normal/normal_mode.gd
 msgid "burns cleaner, so everything you carry costs less"
-msgstr "brûle plus proprement, donc tout ce que vous portez coûte moins"
+msgstr "brûle mieux, donc tout ce que vous portez coûte moins"
 
 #. As the gene lines above, for a gene that can grow in two ways and has been
 #. given one: what it does now. The `entry` line gives the gene and the way.
@@ -2208,7 +2208,7 @@ msgstr "génome · %s"
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "generation %d"
-msgstr "génération %d"
+msgstr "%de génération"
 
 #. The name of one of the two ways a levelled gene can grow, as the title of
 #. its card (20 px type on a card 200 px wide) and inside sentences such as
@@ -2243,7 +2243,7 @@ msgstr "balayer"
 #. Room: at most 185 px in 14 px type; the English takes 164 px.
 #: game/normal/normal_mode.gd
 msgid "every ray lit, all the time"
-msgstr "tous les rayons éclairés, tout le temps"
+msgstr "rayons toujours allumés"
 
 #. Two short lines on a card, in 14 px type, centred: the first what that way
 #. is good at, the second what it is bad at. **At most 185 px each** -- the
@@ -2254,7 +2254,7 @@ msgstr "tous les rayons éclairés, tout le temps"
 #. Room: at most 185 px in 14 px type; the English takes 171 px.
 #: game/normal/normal_mode.gd
 msgid "small things slip between"
-msgstr "les petites choses passent entre"
+msgstr "les petits se faufilent"
 
 #. Two short lines on a card, in 14 px type, centred: the first what that way
 #. is good at, the second what it is bad at. **At most 185 px each** -- the
@@ -2265,7 +2265,7 @@ msgstr "les petites choses passent entre"
 #. Room: at most 185 px in 14 px type; the English takes 148 px.
 #: game/normal/normal_mode.gd
 msgid "no gaps between rays"
-msgstr "pas d'espaces entre les rayons"
+msgstr "aucun angle mort"
 
 #. Two short lines on a card, in 14 px type, centred: the first what that way
 #. is good at, the second what it is bad at. **At most 185 px each** -- the
@@ -2276,7 +2276,7 @@ msgstr "pas d'espaces entre les rayons"
 #. Room: at most 185 px in 14 px type; the English takes 172 px.
 #: game/normal/normal_mode.gd
 msgid "shows where things were"
-msgstr "montre où se trouvaient les choses"
+msgstr "montre ce qui était là"
 
 #. One line in 15 px type after the way's name and a middle dot, saying what
 #. that way does as the gene levels up. Same limit as the gene lines
@@ -2317,7 +2317,7 @@ msgstr "coûte moins à garder"
 #. Room: at most 185 px in 14 px type; the English takes 155 px.
 #: game/normal/normal_mode.gd
 msgid "costs the same to keep"
-msgstr "coûte le même à garder"
+msgstr "coûte autant à garder"
 
 #. The hint under the figure while the two cards are up, in 14 px type. A gene
 #. reached its fork (where it can grow one of two ways) but the choice was not
@@ -2354,7 +2354,7 @@ msgstr "appuyez à nouveau pour choisir %s · définitivement"
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "costs the same to keep as %s"
-msgstr "coûte le même à garder que %s"
+msgstr "coûte autant à garder que %s"
 
 #. As above: this way costs more than the other. %s is the other way's name.
 #: game/normal/normal_mode.gd
@@ -2389,42 +2389,42 @@ msgstr "transporté"
 #. just joined the friend's world.
 #: game/normal/normal_mode.gd
 msgid "you are in their water"
-msgstr "vous êtes dans leur eau"
+msgstr "vous êtes dans l'eau de votre ami"
 
 #. The friend has just joined the player's own world.
 #: game/normal/normal_mode.gd
 msgid "they are in your water"
-msgstr "ils sont dans votre eau"
+msgstr "votre ami est dans votre eau"
 
 #. The friend's cell died; it comes back (is reborn) near the player.
 #: game/normal/normal_mode.gd
 msgid "they died · they come back near you"
-msgstr "ils sont morts · ils reviennent près de vous"
+msgstr "votre ami est mort · il revient près de vous"
 
 #. The player's cell ate the friend's cell; it comes back (is reborn) near the
 #. player.
 #: game/normal/normal_mode.gd
 msgid "you ate them · they come back near you"
-msgstr "vous les avez mangés · ils reviennent près de vous"
+msgstr "vous l'avez mangé · il revient près de vous"
 
 #. The friend's phone has stopped sending anything for a few seconds (screen
 #. off, in a pocket, or a bad connection).
 #: game/normal/normal_mode.gd
 msgid "their phone went quiet"
-msgstr "leur téléphone est devenu silencieux"
+msgstr "le téléphone de votre ami ne répond plus"
 
 #. The friend's world has ended (they left it), and the player carries on in
 #. their own world instead.
 #: game/normal/normal_mode.gd
 msgid "their water is gone · this one is yours"
-msgstr "leur eau a disparu · celle-ci est à vous"
+msgstr "l'eau de votre ami a disparu · celle-ci est à vous"
 
 #. As the line above, but the friend's phone ended the connection because of a
 #. fault, rather than the friend leaving: the player carries on in their own
 #. world.
 #: game/normal/normal_mode.gd
 msgid "cut off from their water · this one is yours"
-msgstr "déconnecté de leur eau · celle-ci est à vous"
+msgstr "coupé de l'eau de votre ami · celle-ci est à vous"
 
 #. A button, 232 px wide in 20 px type, in the middle of the screen after the
 #. cell dies: watch a replay of its last seconds. A verb, in the imperative;
