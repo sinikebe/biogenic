@@ -182,10 +182,11 @@ func _ready() -> void:
 		Invite.forget()
 
 	var packed: PackedScene = load(FAR_SCREEN if _far_page else SCREEN)
-	_screen = packed.instantiate()
-	get_tree().root.add_child.call_deferred(_screen)
-	await _screen.ready
-	get_tree().current_scene = _screen
+	var scene := packed.instantiate()
+	get_tree().root.add_child.call_deferred(scene)
+	await scene.ready
+	get_tree().current_scene = scene
+	_screen = _earshot_in(scene)
 	await _settle(0.4)
 
 	match page:
@@ -445,7 +446,7 @@ func _into_far() -> bool:
 	await _touch(chooser.get_node(^"Center/Column/Company/FarBlock/Far"))
 	if not await _until_scene(FAR_SCREEN):
 		return false
-	_screen = get_tree().current_scene as Control
+	_screen = _earshot_in(get_tree().current_scene)
 	await _pause(0.4)
 	await _park_mouse()
 	return true
@@ -897,3 +898,9 @@ func _settle(seconds: float) -> void:
 	while spent < seconds:
 		await get_tree().process_frame
 		spent += 1.0 / 60.0
+
+
+## **The earshot screen in [param scene]**: the scene itself, or, for `far.tscn`,
+## the earshot instance it holds with `far` set.
+func _earshot_in(scene: Node) -> Control:
+	return (scene.get_node("Earshot") if scene.has_node("Earshot") else scene) as Control
