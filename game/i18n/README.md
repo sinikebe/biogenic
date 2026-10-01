@@ -338,15 +338,20 @@ version stamp at the bottom is not text anyone translates). So a player in anoth
 language meets an English launcher on each cold start, and a translated one from the
 second time it is shown.
 
-**Not done: that is the owner's call.** The launcher's first view would translate if
-the catalogs registered before its scene is built. That is a change to the
-template's launcher (`I18n.register()` before it builds), or the APK's own
-project.godot (the APK's copy of the file again), or -- measured in a scratch copy,
-not tried from an exported pack, and leaning on the template's loading order -- a
-content-only one: point `launcher_config.tres` at a game-owned
-`extends LauncherConfig` script that preloads `i18n.gd`. BuildInfo loads that
-config right after mounting the pack, so the catalogs register before the launcher
-exists, and the cold-start launcher translated in full.
+**Waiting on the template, by the owner's choice (2026-10-01).** The launcher's first
+view would translate if the catalogs registered before its scene is built. There
+were three ways: a change to the template's launcher (`I18n.register()` before it
+builds), the APK's own project.godot (the APK's copy of the file again), or --
+measured in a scratch copy, not tried from an exported pack, and leaning on the
+template's loading order -- a content-only one: point `launcher_config.tres` at a
+game-owned `extends LauncherConfig` script that preloads `i18n.gd`. BuildInfo loads
+that config right after mounting the pack, so the catalogs register before the
+launcher exists, and the cold-start launcher translated in full. The owner chose the
+first: wait for the template to add a startup hook,
+[sinikebe/godot-launcher-template#68](https://github.com/sinikebe/godot-launcher-template/issues/68),
+which also lets the game apply the player's saved language and hear a `settings`
+button on that screen (`docs/design/settings.md` §1.4 and §8). Until it lands, the
+first view stays as described above.
 
 ## Not covered
 
