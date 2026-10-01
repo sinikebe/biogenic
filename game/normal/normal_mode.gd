@@ -1925,7 +1925,7 @@ func _on_darted(bearing: float) -> void:
 	_bus.shove(bearing, 0.7)
 
 
-## `veneneux`. Il vous a avalé et en est mort, et vous payez pour ça.
+## `veneneux`. It swallowed you and died of it, and you are starving for it.
 ##
 ## Paid as the dash is, in seconds of rest through `spend` (gene-stats.md §11,
 ## call 2). `venom_cost` keeps its values, which are all the host ever asks of
@@ -4062,7 +4062,7 @@ const WORDS := {
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
 	&"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
-	&"veneneux": "venin", &"plastid": "sun", &"vacuole": "store",
+	&"veneneux": "venom", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
@@ -4104,7 +4104,7 @@ const EXPLAINS := {
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
 	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
-	&"veneneux": "quiconque vous mord paie, et quiconque vous avale meurt",
+	&"veneneux": "whatever bites you pays, and whatever swallows you dies",
 	&"plastid": "makes a little of its own food, so you starve slower",
 	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
 	&"crista": "burns cleaner, so everything you carry costs less",

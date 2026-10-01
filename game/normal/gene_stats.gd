@@ -153,11 +153,11 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 				Readout.item("bites take {} less", [1.0 - 1.0 / armour], [U.SHARE])],
 				[wear]]
 		&"veneneux":
-			# Les mêmes secondes de repos, à la même échelle, que le dash ci-dessus.
-			return [[Readout.item("un mordant subit {} de sa morsure",
-					[CellBody.VENENEUX_BITE_BACK_BY_TIER[t]], [U.SHARE]),
-				Readout.item("un avaleur meurt, et vous êtes recraché")],
-				[Readout.item("être recraché coûte {} s", [CellBody.VENENEUX_COST_BY_TIER[t]
+			# The same seconds of rest, scaled the same way, as the dash above.
+			return [[Readout.item("a biter takes back {} of its bite",
+					[CellBody.VENOM_BITE_BACK_BY_TIER[t]], [U.SHARE]),
+				Readout.item("a swallower dies, and you are spat out")],
+				[Readout.item("being spat out burns {} s", [CellBody.VENOM_COST_BY_TIER[t]
 					* MetabolismNode.HUNGER_SECONDS * burn], [U.ENERGY]), wear]]
 		&"plastid":
 			# Not scaled by `crista`: metabolism.gd takes the sun off the bill

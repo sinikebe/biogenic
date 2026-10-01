@@ -78,8 +78,8 @@ signal killed(bearing: float)
 ## *contact, there*. A wound is learnt by being bitten at a bearing enough
 ## times, which is the same way everything else in this game is learnt.
 signal bitten(bearing: float, strength: float)
-## `veneneux`: elle vous a avalé et en est morte. Vous êtes vivant, à un angle et
-## un prix que la partie paie en faim.
+## `veneneux`: it swallowed you and died of it. You are alive, at a bearing and
+## a price the run pays out of hunger.
 signal stung(bearing: float)
 ## `trichocyst`: the dart went off and something hunting you broke away.
 signal darted(bearing: float)
@@ -2090,7 +2090,7 @@ func _contacts_with(p: Person) -> bool:
 		var committed := b.state == State.STALK and _hunts(b, p)
 		if its_mouth and swallows_player(committed, _drop != null and contact_swallow,
 				_armoured(p), _gape(b)):
-			# **`veneneux`. Il vous a avalé et en est mort.** La seule chose dans le
+			# **`veneneux`. It got you and it dies of it.** The one thing in the
 			# game that undoes a death, and it is not free: the run pays for it
 			# in hunger, which is the channel every other cost is paid in. The
 			# body that swallowed you is reseeded, or retired in a pond -- it is
@@ -2354,8 +2354,8 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		if p != null:
 			_person_gone(Cause.CHEWED, By.WATER, p)
 		return true
-	# `veneneux` de l'autre côté : mordre un corps veneneux coûte à la bouche une
-	# part de ce qu'elle vient de faire, et assez de ces morsures peuvent la tuer.
+	# `veneneux` from the other end: biting a venomous body costs the mouth a
+	# share of what it just did, and enough of them kill it.
 	b.wound = clampf(b.wound + CellBody.venom_back(
 		_cell.extra(&"veneneux") if p == null else Genome.tier_of(pb.genome, &"veneneux"),
 		damage), 0.0, 1.0)
