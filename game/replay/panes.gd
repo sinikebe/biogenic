@@ -75,7 +75,17 @@ const BACK_COLOR := Color(0.023, 0.055, 0.05, 1.0)
 ## **The legend, and it is also the thesis.** The feature does not work if the
 ## player has to be told which pane is which, so the two captions say it in the
 ## player's own terms rather than in the project's.
+##
+## TRANSLATORS: The two captions of the replay screen, which shows the same few
+## seconds twice, side by side. The left half is what the player's cell sensed (its
+## feelings, drawn as in the game); the right half is what was really there (the
+## true picture of the water). Each is a small caption in 16 px type, centred over
+## its half of the screen, which is 640 px wide at the narrowest. This one is the
+## left half.
+## ROOM: 600 px at 16 px
 const FELT_TEXT := "what you felt"
+## TRANSLATORS: The right half's caption: what was really there.
+## ROOM: 600 px at 16 px
 const TRUTH_TEXT := "what was there"
 ## **Louder than the transport, because the captions are the thesis and the
 ## transport is chrome.** Measured off a 2400x1080 render: at 15px and 0.45
@@ -355,8 +365,8 @@ func _build() -> void:
 	_sill = _rule("Sill", SILL_COLOR)
 	legend.add_child(_sill)
 	legend.add_child(_seam)
-	_felt_caption = _caption(FELT_TEXT)
-	_truth_caption = _caption(TRUTH_TEXT)
+	_felt_caption = _caption(tr(FELT_TEXT))
+	_truth_caption = _caption(tr(TRUTH_TEXT))
 	legend.add_child(_felt_caption)
 	legend.add_child(_truth_caption)
 	add_child(legend)

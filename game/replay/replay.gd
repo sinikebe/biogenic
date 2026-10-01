@@ -79,6 +79,11 @@ const ROW_TOP := 32.0
 ## quarter is a still, and there is a pause button for that; faster than four
 ## crosses a life in eight seconds, which is a blur.
 const SPEEDS: Array[float] = [1.0, 2.0, 4.0, 0.25, 0.5]
+## TRANSLATORS: The replay's speed button: how fast the replay plays, as a
+## multiple of real time ("2x" is twice as fast, "1/4x" a quarter as fast). The
+## same in almost every language; change the "x" only if your language writes a
+## multiplication sign differently.
+## ROOM: 64 px at 17 px
 const SPEED_TEXT: Array[String] = ["1x", "2x", "4x", "1/4x", "1/2x"]
 
 ## Set by the run before this scene enters the tree.
@@ -475,11 +480,19 @@ func _build_transport() -> void:
 	_blocker.mouse_filter = Control.MOUSE_FILTER_STOP
 	_ui.add_child(_blocker)
 
-	_play_button = _button("pause", PLAY_WIDTH)
+	# TRANSLATORS: The replay's first button: "pause" while the replay plays, "play"
+	# while it is paused. The word is what pressing the button does. The button is
+	# fixed, so a long word runs into the speed button beside it.
+	# ROOM: 80 px at 17 px
+	_play_button = _button(tr("pause"), PLAY_WIDTH)
 	_play_button.pressed.connect(_toggle_play)
-	_speed_button = _button(SPEED_TEXT[0], SPEED_WIDTH)
+	_speed_button = _button(tr(SPEED_TEXT[0]), SPEED_WIDTH)
 	_speed_button.pressed.connect(_cycle_speed)
-	_leave_button = _button("leave", LEAVE_WIDTH)
+	# TRANSLATORS: The replay's last button: close the replay and go back to the
+	# game. The same word is the pause screen's button that leaves the game. The
+	# replay's button is the narrower: a long word runs into the speed button.
+	# ROOM: 64 px at 17 px
+	_leave_button = _button(tr("leave"), LEAVE_WIDTH)
 	_leave_button.pressed.connect(_close)
 	for control: Button in [_play_button, _speed_button, _leave_button]:
 		_ui.add_child(control)
@@ -540,12 +553,16 @@ func _relayout() -> void:
 
 func _toggle_play() -> void:
 	_playing = not _playing
-	_play_button.text = "pause" if _playing else "play"
+	# TRANSLATORS: The replay's first button: "pause" while the replay plays, "play"
+	# while it is paused. The word is what pressing the button does. The button is
+	# fixed, so a long word runs into the speed button beside it.
+	# ROOM: 80 px at 17 px
+	_play_button.text = tr("pause") if _playing else tr("play")
 
 
 func _cycle_speed() -> void:
 	_speed = (_speed + 1) % SPEEDS.size()
-	_speed_button.text = SPEED_TEXT[_speed]
+	_speed_button.text = tr(SPEED_TEXT[_speed])
 
 
 func _close() -> void:

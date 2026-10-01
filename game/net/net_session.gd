@@ -861,9 +861,14 @@ func _process(_delta: float) -> void:
 		if not _invite.is_empty() and _reaching_by_invite(now):
 			return
 		if _invite.is_empty() and now - _reach_at >= REACH_TIMEOUT:
-			_give_up(Link.FAILED, "no answer",
-				"both of you have to be on the same wi-fi -- and on some"
-				+ " networks that is still not enough to reach across.")
+			# TRANSLATORS: A heading, and under it a sentence, shown on the
+			# screen of the phone that dialled a four-mark code and got no
+			# answer. A "cell" is the player's creature. The sentence is shown
+			# in 17 px type on one line: about 110 characters at most.
+			# ROOM: 1180 px at 17 px
+			_give_up(Link.FAILED, tr("no answer"),
+				tr("both of you have to be on the same wi-fi -- and on some"
+				+ " networks that is still not enough to reach across."))
 			return
 		if not _invite.is_empty() and now - _reach_at >= INVITE_REACH_TIMEOUT:
 			_invite_gives_up(Link.FAILED, &"no_answer")
@@ -962,12 +967,20 @@ func host(guests: int = 1) -> bool:
 	# own /24 ([method _admit]).
 	address = Lan.local_address() if guests_max > 1 else Lan.hosting_address()
 	if not hostable(address, guests_max):
-		_give_up(Link.FAILED, "no wi-fi here",
-			"this device is not on a network two cells could share.")
+		# TRANSLATORS: A heading and a sentence under it: this phone is not
+		# connected to a wi-fi network, so it cannot call or answer. "Cells" are
+		# the players' creatures; two of them need one network to meet on.
+		# ROOM: 1180 px at 17 px
+		_give_up(Link.FAILED, tr("no wi-fi here"),
+			tr("this device is not on a network two cells could share."))
 		return false
 	if not _open_lan():
-		_give_up(Link.FAILED, "could not listen",
-			"something else on this device is already using the water.")
+		# TRANSLATORS: A heading and a sentence under it: the game could not open
+		# the connection it needs, because something else on the device holds it.
+		# "The water" is the game's word for the shared connection.
+		# ROOM: 1180 px at 17 px
+		_give_up(Link.FAILED, tr("could not listen"),
+			tr("something else on this device is already using the water."))
 		return false
 	if is_inside_tree() and not get_tree().process_frame.is_connected(_on_tree_frame):
 		get_tree().process_frame.connect(_on_tree_frame)
@@ -1154,14 +1167,18 @@ func join(at: String) -> bool:
 	guests_max = 1
 	address = at
 	if at.is_empty():
-		_give_up(Link.FAILED, "no wi-fi here",
-			"this device is not on a network two cells could share.")
+		# ROOM: 1180 px at 17 px
+		_give_up(Link.FAILED, tr("no wi-fi here"),
+			tr("this device is not on a network two cells could share."))
 		return false
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(at, Lan.channel_port())
 	if err != OK:
-		_give_up(Link.FAILED, "could not reach",
-			"the address that code points at is not one this device can call.")
+		# TRANSLATORS: A heading and a sentence under it: the four-mark code the
+		# player tapped in leads to an address this phone cannot dial.
+		# ROOM: 1180 px at 17 px
+		_give_up(Link.FAILED, tr("could not reach"),
+			tr("the address that code points at is not one this device can call."))
 		return false
 	_peer = peer
 	_api.multiplayer_peer = peer
@@ -1797,8 +1814,12 @@ func peers_say() -> String:
 	if quiet < 0.0:
 		return ""
 	if quiet >= SILENCE:
-		return "quiet for %d seconds" % int(quiet)
-	return "within earshot"
+		# TRANSLATORS: Under the ring while the other phone has sent nothing for
+		# a while. %d is the number of seconds, six or more.
+		return tr_n("quiet for %d second", "quiet for %d seconds", int(quiet)) % int(quiet)
+	# TRANSLATORS: The feature's name: two phones near enough to hear each other.
+	# Shown under the ring while the other phone is heard.
+	return tr("within earshot")
 
 
 # ---------------------------------------------------------------------------
@@ -1976,9 +1997,13 @@ func _on_connection_failed() -> void:
 		if link == Link.REACHING and _diag == null:
 			_diagnose()
 		return
-	_give_up(Link.FAILED, "no answer",
-		"nothing is listening at that code. check your friend is still"
-		+ " showing it.")
+	# TRANSLATORS: A heading and a sentence under it: nothing answered the code
+	# that was tapped in. "Showing it" means the friend's phone is still
+	# displaying the four marks.
+	# ROOM: 1180 px at 17 px
+	_give_up(Link.FAILED, tr("no answer"),
+		tr("nothing is listening at that code. check your friend is still"
+		+ " showing it."))
 
 
 func _on_server_disconnected() -> void:
@@ -1989,7 +2014,10 @@ func _on_server_disconnected() -> void:
 	if not _invite.is_empty():
 		_invite_gives_up(Link.FAILED, &"hung_up")
 		return
-	_give_up(Link.FAILED, "they hung up", "the other cell left the water.")
+	# TRANSLATORS: A heading and a sentence under it: the other player's phone
+	# ended the call. "Left the water" means left the shared game.
+	# ROOM: 1180 px at 17 px
+	_give_up(Link.FAILED, tr("they hung up"), tr("the other cell left the water."))
 
 
 func _on_peer_packet(id: int, frame: PackedByteArray) -> void:
@@ -2064,7 +2092,10 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 			barred = _bar(str(peer["address"]), VIA_NET, BAR_FIRST)
 		_refuse(id, Wire.REFUSE_PROTOCOL, " -- barred %d s" % roundi(barred)
 			if barred > 0.0 else "")
-		_say("different versions", _skew_says(theirs))
+		# TRANSLATORS: A heading, and a sentence under it that names the fix.
+		# The two phones run different versions of the game, so they cannot play
+		# together until the older one updates.
+		_say(tr("different versions"), _skew_says(theirs))
 		return
 	if int(peer.get("via", VIA_LAN)) == VIA_NET:
 		# **Then who are you** (part C): a fresh nonce, and the one thing this
@@ -2166,7 +2197,7 @@ func _take_welcome(id: int, frame: PackedByteArray) -> void:
 		if not _invite.is_empty():
 			_invite_gives_up(Link.REFUSED, _skew_key(theirs))
 		else:
-			_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
+			_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs))
 		_drop_link()
 		return
 	# **The id, learned twice and never assumed.** `peer_connected` reported it
@@ -2213,10 +2244,13 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		_drop_link()
 		return
 	if reason == Wire.REFUSE_PROTOCOL:
-		_give_up(Link.REFUSED, "different versions", _skew_says(theirs))
+		_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs))
 	elif reason == Wire.REFUSE_FULL:
-		_give_up(Link.REFUSED, "already two",
-			"that cell is already swimming with somebody.")
+		# TRANSLATORS: A heading and a sentence under it: the phone that was called
+		# already has a second player with it, and a pond holds only two.
+		# ROOM: 1180 px at 17 px
+		_give_up(Link.REFUSED, tr("already two"),
+			tr("that cell is already swimming with somebody."))
 	elif reason == Wire.REFUSE_BROKEN:
 		# **Cut for sending what the host would not take** (net-hardening.md
 		# A.4): frames it could not read, or far more of them than any body
@@ -2226,22 +2260,40 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		# a call straight back would only be hung up on at the door: the
 		# sentence says when. A build that predates this reason reads the line
 		# below instead.
+		# TRANSLATORS: The sentence under a heading (see Wire.reason_says): the
+		# other phone cut the call because this game sent it things it could not
+		# read. About 110 characters at most.
+		# ROOM: 1180 px at 17 px
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
-			"the other end would not take what this game sent. update both from"
-			+ " the launcher, then call again in a minute.")
+			tr("the other end would not take what this game sent. update both from"
+			+ " the launcher, then call again in a minute."))
 	else:
+		# TRANSLATORS: The sentence under a heading (see Wire.reason_says): the
+		# other phone ended the call without saying why.
+		# ROOM: 1180 px at 17 px
 		_give_up(Link.REFUSED, Wire.reason_says(reason),
-			"the other end hung up.")
+			tr("the other end hung up."))
 	_drop_link()
 
 
 ## The sentence a player gets for the one failure that cannot be retried into
 ## working. It has to name the fix, because nothing on this screen is the fix.
 func _skew_says(theirs: int) -> String:
-	var mine := _speaks()
-	var who := "yours" if mine < theirs else "theirs"
-	return ("one of these games is older than the other -- %s. take the update"
-		+ " from the launcher, restart, and call again.") % who
+	if _speaks() < theirs:
+		# TRANSLATORS: Two whole sentences rather than one with a word dropped in, so
+		# each can be put in the right order for your language. Shown under the
+		# heading "different versions", in 17 px type on one line (about 125
+		# characters at most). This one: the player's own game is the older one.
+		# "Take the update from the launcher" means: open the app's main menu,
+		# which installs the update.
+		# ROOM: 1180 px at 17 px
+		return tr("one of these games is older than the other -- yours. take the update"
+			+ " from the launcher, restart, and call again.")
+	# TRANSLATORS: The same sentence for the other case: the other player's game is
+	# the older one.
+	# ROOM: 1180 px at 17 px
+	return tr("one of these games is older than the other -- theirs. take the update"
+		+ " from the launcher, restart, and call again.")
 
 
 ## The same question for a call by invite, as an `Invite.SAYS` key: this game
@@ -2941,7 +2993,10 @@ func _lost_guest() -> void:
 	_pond_bytes = 0
 	heard.clear()
 	if link == Link.TOGETHER:
-		_say("they left", "the other cell went. show the code again.")
+		# TRANSLATORS: A heading and a sentence under it: the other player left,
+		# and this phone goes back to showing its four-mark code for the next call.
+		# ROOM: 1180 px at 17 px
+		_say(tr("they left"), tr("the other cell went. show the code again."))
 		_set_link(Link.LISTENING)
 
 

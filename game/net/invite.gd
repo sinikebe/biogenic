@@ -101,6 +101,16 @@ enum Read {
 ## **What the screens call the way in** -- the chooser's button and the far
 ## page's heading (docs/design/invites-ux.md §11, row 1: the owner's to name).
 ## The server's mint line tells the friend to tap it.
+##
+## **In English here, on purpose, and translated where a screen shows it**
+## (`tr(Invite.DOOR_NAME)`): the server's own console says it to its owner, and
+## game/mode_select.gd decides which note goes under the button by reading it.
+##
+## TRANSLATORS: What the game calls the way in to a friend's game far away, by an
+## invite the friend sent. It is the name of a button on the screen where a game
+## is started (320 px wide, 20 px type) and the heading of the screen behind it.
+## A short phrase: about 25 characters at most.
+## ROOM: 290 px at 20 px
 const DOOR_NAME := "by invite"
 
 ## **Every sentence a player is shown about an invite or an internet call**:
@@ -110,6 +120,12 @@ const DOOR_NAME := "by invite"
 ## A session calling by invite sets its `trouble` and `because` from here and
 ## nowhere else, and says which key in `trouble_key`: the screen picks its
 ## first button by it.
+##
+## TRANSLATORS: A heading of two to four words in large type, then one sentence
+## that says what to do, on a single line in 17 px type. Lowercase, plain words.
+## The "friend" owns a server that keeps the shared game world, "the water", and
+## sent the "invite" the player pasted.
+## ROOM: 1180 px at 17 px
 const SAYS := {
 	# Pasting (§6.2): shown on the far page, never by the session.
 	&"not_found": ["no invite copied",
@@ -174,7 +190,9 @@ static func channel_port() -> int:
 
 ## `[heading, sentence]` for [param key] in [constant SAYS].
 static func says(key: StringName) -> Array:
-	return SAYS.get(key, SAYS[&"no_answer"])
+	var known: StringName = key if SAYS.has(key) else &"no_answer"
+	return [String(TranslationServer.translate(SAYS[known][0])),
+		String(TranslationServer.translate(SAYS[known][1]))]
 
 
 ## `[heading, sentence]` for what [method parse] said, or empty for [constant

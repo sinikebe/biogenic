@@ -13,6 +13,10 @@ extends Control
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## **Loading this is what registers the game's languages** (game/i18n/README.md),
+## and it has to happen before this scene's nodes exist, which is why it is a
+## preload and not a call. Not unused: do not remove it.
+const I18n := preload("res://game/i18n/i18n.gd")
 const RunState := preload("res://game/run_state.gd")
 ## Preloaded for one call and one constant. This screen is the boundary of a
 ## session: everything on the far side of Play is either in one or is not, and
@@ -41,6 +45,27 @@ const LAUNCHER_SCENE := "res://addons/launcher/launcher.tscn"
 const OPTION_SIZE := Vector2(460.0, 64.0)
 const COMPANION_SIZE := Vector2(320.0, 52.0)
 
+# --- The words in mode_select.tscn ---------------------------------------------
+# A scene's text is translated by the Control that shows it, and the template reads
+# it from the scene file; a scene has no place for a note, so the notes are here.
+#
+# TRANSLATORS "choose a view": The heading of the screen where a game is started, in
+# 17 px type. The player chooses how the water is drawn for this game: a "view".
+#
+# TRANSLATORS "full vision": A button, 460 px wide in 20 px type: the view that draws
+# the water the cell swims in, and the membrane (the cell's skin, which senses) over it.
+#
+# TRANSLATORS "the water the cell is swimming in, and the membrane over it": A note in
+# 15 px type under the "full vision" button, on one line: about 60 characters at most.
+#
+# TRANSLATORS "point of view": A button, 460 px wide in 20 px type: the view that shows
+# only what the cell itself can feel, as if the player were inside it.
+#
+# TRANSLATORS "only what the cell itself can feel": A note in 15 px type under the
+# "point of view" button: about 40 characters at most.
+#
+# TRANSLATORS "a friend on the same wi-fi": A note in 15 px type under the "within
+# earshot" button, which is 320 px wide: about 35 characters at most.
 @onready var _full: Button = $Center/Column/FullBlock/Full
 @onready var _pov: Button = $Center/Column/PovBlock/Pov
 @onready var _net: Button = $Center/Column/Company/NetBlock/Net
@@ -66,7 +91,12 @@ func _ready() -> void:
 	_net.pressed.connect(_company.bind(EARSHOT_SCENE))
 	_far.pressed.connect(_company.bind(FAR_SCENE))
 
-	_hint.text = "back returns to the launcher" if _touch_first() else "esc returns to the launcher"
+	# TRANSLATORS: The hint along the bottom edge of the screen, in small type. It
+	# names the key that goes back, and the key differs by device: `back` is the
+	# Android Back button or gesture, `esc` is the Escape key. The launcher is the
+	# app's main menu, the screen with the play button.
+	_hint.text = tr("back returns to the launcher") if _touch_first() \
+		else tr("esc returns to the launcher")
 
 	for button: Button in [_full, _pov]:
 		button.custom_minimum_size = OPTION_SIZE
@@ -87,7 +117,7 @@ func _ready() -> void:
 	# **The owner has not named the way in yet** (invites-ux.md §11): the button
 	# and the far page's heading both read Invite.DOOR_NAME, so a rename is one
 	# constant.
-	_far.text = Invite.DOOR_NAME
+	_far.text = tr(Invite.DOOR_NAME)
 	_far_note.text = far_note(Invite.DOOR_NAME)
 
 	# **Down from point of view lands on within earshot.** The pair sits
@@ -109,10 +139,20 @@ func _ready() -> void:
 
 ## **The note under the far button** (invites-ux.md §6.1). "by invite" already
 ## says how, so its note says who; any other name gets the how in its note.
+##
+## [param door] is the way in's name **in English, as `Invite.DOOR_NAME` has it**:
+## which note to give is decided by reading it, and a translated name would be
+## read for a word it does not have. The note comes back translated.
 static func far_note(door: String) -> String:
 	if door.contains("invite"):
-		return "a friend far away, who sent you one"
-	return "a friend far away, by the invite they sent"
+		# TRANSLATORS: A note in 15 px type under a button. The button is "by invite"
+		# (the way to reach a friend's game by an invite they sent you), so this
+		# says who: someone who is not in the same house, and who sent you an
+		# invite. Under a button 320 px wide: about 40 characters at most.
+		return TranslationServer.translate("a friend far away, who sent you one")
+	# TRANSLATORS: Same note, for the case where the button's own name does not
+	# mention an invite, so the note says how instead. About 45 characters at most.
+	return TranslationServer.translate("a friend far away, by the invite they sent")
 
 
 func _notification(what: int) -> void:

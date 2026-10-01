@@ -356,6 +356,26 @@ jobs:
             exit 1
           fi
 
+      - name: Check the translation template
+        # Every sentence a player reads goes through tr(), and
+        # game/i18n/biogenic.pot is the list a translator works from
+        # (game/i18n/README.md). A sentence added without writing the template
+        # again reaches no language, and nothing on screen says so: the check
+        # fails while the template is stale, or while a tr() holds something
+        # it cannot read. Grepped, not trusted to the exit code, for the
+        # reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --check 2>&1) || true
+          grep -E "^\[i18n\]" <<< "$out" || true
+          if ! grep -q "^\[i18n\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::game/i18n/biogenic.pot is stale or a tr() cannot be read -- run res://tools/i18n_pot.tscn -- --write"
+            exit 1
+          fi
+
       - name: Check the LAN session
         # Two sessions in ONE headless process, talking ENet over loopback: a
         # guest through a SceneMultiplayer bound to its own subtree with
