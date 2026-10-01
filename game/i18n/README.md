@@ -18,7 +18,7 @@ screens, and of the pause screen in a run), which is kept and wins from then on
 | `launcher/<locale>.po` | The launcher in one language: `launcher/fr.po`. Made from `launcher.pot`. |
 | `i18n.gd` | Finds both kinds of `.po` and registers them when the first game screen loads, applies the language the player chose, and lists the languages for the settings sheet. |
 | `tools/i18n_pot.gd` | Writes the game's template, checks every catalog, and makes a pseudolocalized stand-in for a language. Never ships. |
-| `tools/launcher_translated.tscn` | The launcher built after the catalogs are registered, for a screenshot (its first view is always English). Never ships. |
+| `tools/launcher_translated.tscn` | The launcher built after the catalogs are registered, for a screenshot. Never ships. |
 
 A language is complete when it has both files, and it can ship with either one, or
 half of either: a message left empty shows in English. **`fr.po` is the first game
@@ -333,7 +333,7 @@ words (they do not wrap) under twice it.** The lint measures no launcher width.
 - `--lint-all` as above, before anything else.
 - Run each screen with `--language <locale>` at 1280 x 720 and at 2400 x 1080
   (`tools/shot.tscn`; `docs/design/gene-stats.md` section 8 has the poses).
-- **The launcher, translated**: its first view never is (below), so look at it through
+- **The launcher, translated**: look at it through
   `tools/launcher_translated.tscn`, which loads `i18n.gd` as a game screen does and
   then builds the launcher: `godot --path . --language fr --rendering-driver opengl3
   res://tools/shot.tscn -- --scene=res://tools/launcher_translated.tscn
@@ -374,7 +374,18 @@ it changes what this machine's later runs open in**, English included: English i
 then kept on a machine set to another language. Delete the `[app] locale` key to
 follow the device again.
 
-**The launcher's first screen is English on every start.** Measured with a throwaway
+**The launcher's first screen, from binary 6 on.** `game/boot.gd` -- an autoload,
+`GameBoot`, registered in project.godot after the template's two -- preloads
+`i18n.gd`. Autoloads load before the main scene and after BuildInfo has mounted the
+content pack, so the catalogs register and the player's saved language applies
+before the launcher's first frame. The game's own words there -- play, settings, quit
+and the tagline, which `launcher_config.tres` holds -- are in the chosen language from
+a cold start, wherever they are translated; the launcher's own words, its update bar
+and dialogs, wait for a launcher catalog in `game/i18n/launcher/`. The registration
+needed a new APK (`binary_version` 6, the owner, 2026-10-01: "There's no problem
+with installing a new apk"); the script and `i18n.gd` still come from the pack.
+
+**Before binary 6 it was English on every start.** Measured with a throwaway
 launcher catalog (never committed) and `--language fr`: the launcher is the main
 scene, so it is built before any game script has loaded `i18n.gd`; at that moment no
 catalog is registered, and the title block, the play and quit buttons, the update
@@ -386,20 +397,19 @@ language meets an English launcher on each cold start, and a translated one from
 second time it is shown. The language the player chose waits for the same moment: it
 is applied by `I18n.register()`, which has not run while the first launcher is built.
 
-**Waiting on the template, by the owner's choice (2026-10-01).** The launcher's first
-view would translate if the catalogs registered before its scene is built. There
-were three ways: a change to the template's launcher (`I18n.register()` before it
+**How it was decided.** The launcher's first view translates only if the catalogs
+register before its scene is built. There were three ways: a change to the template's launcher (`I18n.register()` before it
 builds), the APK's own project.godot (the APK's copy of the file again), or --
 measured in a scratch copy, not tried from an exported pack, and leaning on the
 template's loading order -- a content-only one: point `launcher_config.tres` at a
 game-owned `extends LauncherConfig` script that preloads `i18n.gd`. BuildInfo loads
 that config right after mounting the pack, so the catalogs register before the
-launcher exists, and the cold-start launcher translated in full. The owner chose the
-first: wait for the template to add a startup hook,
+launcher exists, and the cold-start launcher translated in full. The owner first
+chose to wait for the template to add a startup hook,
 [sinikebe/godot-launcher-template#68](https://github.com/sinikebe/godot-launcher-template/issues/68),
-which also lets the game apply the player's saved language and hear a `settings`
-button on that screen (`docs/design/settings.md` §1.4 and §8). Until it lands, the
-first view stays as described above.
+then, with the settings button wanted on that screen too, the APK's project.godot:
+our own autoload (`docs/design/settings.md` §1.4). #68 stays the cleaner path, and
+`GameBoot` can move onto it once it lands.
 
 ## Not covered
 

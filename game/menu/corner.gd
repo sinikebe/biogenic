@@ -41,6 +41,10 @@ extends Control
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## **Everything the corner had open is closed**: by Back, Esc, `close`, the veil, or
+## a screen closing it. game/boot.gd hears it to let Back quit the launcher again.
+signal closed
+
 const I18n := preload("res://game/i18n/i18n.gd")
 const Drops := preload("res://game/normal/drops.gd")
 
@@ -385,6 +389,7 @@ func _shut(give_focus_back: bool) -> void:
 			back_to.grab_focus()
 	_opener = null
 	_layer_opener = null
+	closed.emit()
 
 
 ## **A press on the veil closes the top layer** -- the press of a finger, or of a
@@ -864,9 +869,9 @@ func _on_delete() -> void:
 ## this is called from `_ready` and, deferred, on every change of language.
 func _say() -> void:
 	# TRANSLATORS: The title of the settings sheet, which opens from a gear in the
-	# top-right corner of every screen; also that gear's tooltip, and, in a later
-	# version, a 300 px button on the launcher's first screen. One lowercase word:
-	# the app's settings (here only the language, for now).
+	# top-right corner of every screen; also that gear's tooltip, and the 300 px
+	# button between play and quit on the launcher's first screen. One lowercase
+	# word: the app's settings (here only the language, for now).
 	# ROOM: 250 px at 20 px
 	var settings := tr("settings")
 	_title.text = settings

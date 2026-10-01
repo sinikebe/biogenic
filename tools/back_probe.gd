@@ -127,6 +127,35 @@ func _run() -> void:
 	_check("Back quits again now the launcher owns the screen",
 		get_tree().quit_on_go_back)
 
+	# **Settings from the launcher's own menu** (settings.md §1.4): the
+	# "settings" button launcher_config.tres lists between play and quit, heard
+	# by game/boot.gd, opens the sheet over the launcher. The launcher has no Back
+	# of its own, so Back there quits the app -- and with the sheet up it must
+	# only close the sheet: the probe pressing Back with the guard missing would
+	# quit, and never print ALL PASS.
+	var boot := get_tree().root.get_node_or_null(^"GameBoot")
+	_check("the game's hook is loaded before the launcher", boot != null)
+	for door: String in ["Back", "Esc"]:
+		var button := _launcher_button("settings")
+		_check("the launcher lists settings (%s)" % door, button != null)
+		if boot == null or button == null:
+			break
+		button.pressed.emit()
+		await _settle()
+		_check("settings opens the sheet over the launcher (%s)" % door,
+			bool(boot.call(&"is_sheet_open")) and _scene_path() == LAUNCHER)
+		_check("and Back stops quitting while it is up (%s)" % door,
+			not get_tree().quit_on_go_back)
+		if door == "Back":
+			_press_back()
+		else:
+			await _press_esc()
+		await _settle()
+		_check("%s closes the sheet and the app stays" % door,
+			not bool(boot.call(&"is_sheet_open")) and _scene_path() == LAUNCHER)
+		_check("and Back quits from the launcher again (%s)" % door,
+			get_tree().quit_on_go_back)
+
 	_forget_drops()
 	if _failed == 0:
 		print("[back-probe] ALL PASS")
@@ -341,6 +370,18 @@ func _press_esc() -> void:
 		Input.parse_input_event(key)
 		await get_tree().process_frame
 	await _settle()
+
+
+## The launcher's menu button whose label, as launcher_config.tres spells it, is
+## [param label] -- the Button translates it only as it draws.
+func _launcher_button(label: String) -> Button:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return null
+	for found: Node in scene.find_children("*", "Button", true, false):
+		if (found as Button).text == label and (found as Button).is_visible_in_tree():
+			return found as Button
+	return null
 
 
 ## Both halves, in the engine's order -- see the note at the top.

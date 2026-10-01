@@ -35,8 +35,8 @@ word is **world**, and the code's, like `ocean.md`'s, stays **drop**. This exten
   deleted (§4, §5). A world is what the code calls a drop (owner row 5).
 - **No player loses a world.** Today's `user://drop.save` becomes slot 1, at the same
   path, untouched. A small index names the slots (§6).
-- **All of it ships as content.** No permission, plugin, project setting or
-  `binary_version` bump is needed, except whatever #68's own sync needs (§8).
+- **Phases 1 and 2 ship as content.** Phase 3, the launcher, needs one project
+  setting -- the game's own autoload -- and so `binary_version` 6 (§1.4, §8).
 
 ---
 
@@ -46,7 +46,7 @@ word is **world**, and the code's, like `ocean.md`'s, stays **drop**. This exten
 
 | screen | gear | world chip |
 |---|---|---|
-| the launcher (the template's) | not until #68; then a `settings` button in its menu (§1.4) | no (owner row 4) |
+| the launcher (the template's) | a `settings` button in its menu (§1.4) | no (owner row 4) |
 | the view chooser, `mode_select` | yes | yes |
 | within earshot, while this phone is or may become the host: CHOOSE, CALLING, and TOGETHER and TROUBLE while `session.hosting` | yes | yes |
 | within earshot as a guest: ANSWERING, and TOGETHER and TROUBLE without `hosting` | yes | no |
@@ -155,7 +155,18 @@ same as the pause screen's captions, and its name is `Color(0.855, 0.953, 0.933,
     and pause. The corner never listens for Back itself; if it did, one Back would
     close two layers.
 
-### 1.4 The launcher, once #68 lands
+### 1.4 The launcher
+
+**Built with the game's own autoload, not #68** -- the owner, 2026-10-01: "There's no
+problem with installing a new apk". `game/boot.gd`, registered in project.godot as
+`GameBoot` after the template's two autoloads, is the hook §10 asks the template
+for: it preloads `i18n.gd`, so the catalogs register and the saved language
+applies before the launcher's first frame; it hears `custom_button_pressed` on
+every launcher; and while the sheet is up it holds `quit_on_go_back` off, because
+the launcher has no Back of its own and Back there quits the app. Its registration
+is the one change that needs the APK (`binary_version` 6); the script itself, and
+`i18n.gd`, still come from the content pack. Once #68 lands, the hook can move onto
+the template's.
 
 `launcher_config.tres` gets `extra_buttons = PackedStringArray("settings")`, which
 puts a third button between play and quit (rendered). Pressing it emits
@@ -281,9 +292,9 @@ the alternatives.
     `standardize_locale(OS.get_locale())` at that moment (checked with `fr` and `de`),
     so that is the test. `tools/shot.tscn --language fr` therefore still shoots French,
     whatever this machine saved.
-- **The launcher:** its first view stays in the device's language until #68. From its
-  second view on, after Play and Back, it is in the chosen language, because by then
-  the catalogs and the locale are set.
+- **The launcher:** from binary 6, `GameBoot` sets the catalogs and the chosen
+  language before its first frame (§1.4). Before that, its first view followed the
+  device, and only its second, after Play and Back, the chosen language.
 
 ### 3.3 Live: what retranslates itself, and what does not
 
@@ -663,16 +674,17 @@ is masculine, so its line says `âgé de` and `pas encore exploré`, and naming'
 
 ## 8. Build phases
 
-**Two pull requests, then a third once #68 lands.** The two are independent. The first
-touches no save, and the second is mostly the save.
+**Three pull requests.** The first touches no save, and the second is mostly the
+save. The third, the launcher, waited for #68 until the owner chose a new APK
+instead; it rides with the second.
 
 | phase | the player gets | what is built | checks before `dev` |
 |---|---|---|---|
 | **1. Language** | "The game's language can be chosen, from every screen and from pause" | `corner.tscn` with the gear only; the settings sheet; Back handling in `mode_select`, `earshot` and `normal_mode`; `RunState` locale; `I18n.register()` applies it; the re-say on every screen (§3.3); `msgid "English"` in `fr.po`; the README | `--lint-all` (with the new `English` rule), `--check`; frames at both sizes: the gear on the view chooser, a far page and pause; the sheet open; after picking Français; **pause after French → English with no French left**; the sheet in a pond (`drive.gd --pond=host`) |
 | **2. Worlds** | "Three worlds you can name, and a new one whenever you like" | `drops.gd`, `DropSave.peek()`, `keep` → the selected drop, `note_kept`; the chip, the menu, naming and confirm; the chip's rule on earshot | `drop_probe` gains: an existing `drop.save` with no index becomes slot 1 with the same bytes; new, rename and delete round trip; the selected drop cannot be deleted; a lost index is rebuilt; a tool run with `keep` empty never writes `drops.cfg`. Frames: three slots with one empty, naming (new and rename), confirm, French, the widest name, the chip on CHOOSE and its absence on ANSWERING and far |
-| **3. The launcher** | the launcher's own `settings` button, and its first view in the chosen language | after #68 lands and is synced: a game-owned hook script calls `I18n.register()`, then connects the launcher's `custom_button_pressed`; `extra_buttons = ["settings"]` **in the same merge, never before** | if the sync moves `build_info.gd`, bump `binary_version` in that merge (CLAUDE.md). Then an old binary is offered the new APK, never the content with the button: "a new binary wins" (`update_service.gd`). Frames: the launcher with `settings`, and the sheet over it |
+| **3. The launcher** | the launcher's own `settings` button, and its first view in the chosen language | `game/boot.gd`, the `GameBoot` autoload: preloads `I18n`, connects every launcher's `custom_button_pressed`, opens the sheet, holds `quit_on_go_back` off while it is up; `extra_buttons = ["settings"]` **in the same merge, never before**; `binary_version` 6 for the autoload's registration | the Back probe opens the sheet from the launcher's button and closes it by Back and by Esc, the app staying and Back quitting again after; frames: the launcher with `settings`, the sheet over it, a cold start with French saved |
 
-All three ship as content, apart from that one possible bump.
+Phases 1 and 2 ship as content; phase 3 is the one APK.
 
 **Six things the build must not get wrong:**
 
@@ -738,7 +750,8 @@ launcher catalog and a live switch to French over the launcher:
   new" and "Update app".
 
 The cause is that those nodes have auto-translate off and are filled once with
-`tr()`. It matters only once #68 lets a game change the language on that screen. The
+`tr()`. It matters now that `GameBoot` lets the player change the language on that
+screen (§1.4): the menu follows at once, the rest on the next start. The
 ask: on `NOTIFICATION_TRANSLATION_CHANGED`, rebuild the tagline, refresh the update
 bar, and say an open overlay again. It could be a comment on #68 or an issue beside
 it.
@@ -797,5 +810,5 @@ on the recommendations, and changing any of them later is a string or a constant
    the device; one who picks is kept to that choice. A way back is one more row, if
    the owner wants it.
 5. **The death screen and the replay** have no gear, as they have no pause.
-6. **The launcher's first view** follows the device until #68. Until then the chosen
-   language starts at the view chooser.
+6. **The launcher's first view** is in the chosen language from binary 6 (`GameBoot`,
+   §1.4); before it, it followed the device.

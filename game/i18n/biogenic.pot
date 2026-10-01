@@ -119,11 +119,12 @@ msgid "keep"
 msgstr ""
 
 #. The title of the settings sheet, which opens from a gear in the top-right
-#. corner of every screen; also that gear's tooltip, and, in a later version,
-#. a 300 px button on the launcher's first screen. One lowercase word: the
-#. app's settings (here only the language, for now).
+#. corner of every screen; also that gear's tooltip, and the 300 px button
+#. between play and quit on the launcher's first screen. One lowercase word:
+#. the app's settings (here only the language, for now).
+#. Setting "extra_buttons" in launcher_config.tres
 #. Room: at most 250 px in 20 px type; the English takes 77 px.
-#: game/menu/corner.gd
+#: game/menu/corner.gd launcher_config.tres
 msgid "settings"
 msgstr ""
 

@@ -48,15 +48,12 @@ extends RefCounted
 ## and not when the kept language no longer has a game catalog, when the device's
 ## is followed again.
 ##
-## **The launcher's first screen is built before this script has loaded**: it is the
-## main scene, and no game script is loaded until Play is pressed. So no catalog is
-## registered and no choice applied yet, and it is English on every start, whatever
-## the device's language or the player's; a launcher built again after Play and
-## Back is in the chosen language. README.md has the measurement. The owner chose
-## to wait for the template to add a startup hook,
-## sinikebe/godot-launcher-template#68, rather than register earlier from this
-## side: once it lands, the hook calls [method register] before the launcher is
-## built (settings.md §8, phase 3).
+## **The launcher's first screen is built before any game screen**: it is the main
+## scene. So game/boot.gd, the `GameBoot` autoload (binary 6), preloads this script,
+## and the catalogs register and the saved language applies before its first frame.
+## Before binary 6 it was English on every start (README.md has the measurement).
+## sinikebe/godot-launcher-template#68 stays the cleaner path: a startup hook of the
+## template's own, which `GameBoot` can move onto (settings.md §1.4).
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd. Preload
 ## it by path, **in every screen the player can open first**, and do not remove
