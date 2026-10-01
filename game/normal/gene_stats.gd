@@ -152,7 +152,7 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 			return [[Readout.item("to a mouth you are {} × your size", [armour], [U.TIMES]),
 				Readout.item("bites take {} less", [1.0 - 1.0 / armour], [U.SHARE])],
 				[wear]]
-		&"toxicyst":
+		&"veneneux":
 			# The same seconds of rest, scaled the same way, as the dash above.
 			return [[Readout.item("a biter takes back {} of its bite",
 					[CellBody.VENOM_BITE_BACK_BY_TIER[t]], [U.SHARE]),

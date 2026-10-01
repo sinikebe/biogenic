@@ -735,10 +735,10 @@ func _check_pond_wire() -> void:
 		% [Wire.POND_MAX, over.size()] + " refused")
 
 	# The nine events, each against its decoder.
-	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"toxicyst": 1,
+	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"veneneux": 1,
 		&"ampulla": 2}
 	var order: Array = [&"cytostome", &"", &"cirrus", &"flagellum", &"ampulla", &"",
-		&"toxicyst"]
+		&"veneneux"]
 	var enter := Wire.event(9, Wire.EVENT_ENTER, Wire.enter_payload(28.28))
 	var arrive := Wire.event(10, Wire.EVENT_ARRIVE,
 		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0, Vector2(-1234.5, 777.25), 6000.0))
@@ -748,7 +748,7 @@ func _check_pond_wire() -> void:
 		Wire.genome_payload(3000000001, 4, worn))
 	var ate := Wire.event(13, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.ATE, Vector2(3.5, -4.5), 0.93, FoodField.By.FRIEND,
-		&"toxicyst"))
+		&"veneneux"))
 	var killed := Wire.event(14, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.KILLED, Vector2(-8.0, 2.0), 0.0, FoodField.By.WATER, &"",
 		FoodField.Cause.POISONED))
@@ -810,7 +810,7 @@ func _check_pond_wire() -> void:
 	_says(c.size() == 6 and int(c[0]) == FoodField.Contact.ATE
 			and (c[1] as Vector2).is_equal_approx(Vector2(3.5, -4.5))
 			and is_equal_approx(float(c[2]), 0.93) and int(c[3]) == FoodField.By.FRIEND
-			and c[4] == &"toxicyst" and int(c[5]) == 0
+			and c[4] == &"veneneux" and int(c[5]) == 0
 			and k.size() == 6 and int(k[5]) == FoodField.Cause.POISONED
 			and k[4] == &"" and b.size() == 6 and is_equal_approx(float(b[2]), 0.37)
 			and d.size() == 3 and int(d[0]) == FoodField.Cause.CHEWED
@@ -4224,11 +4224,11 @@ func _pond_swallow_rule() -> void:
 
 	# The same mouth, not committed -- they have just arrived, so nothing may
 	# commit to them yet -- only bites. Astern, through two tiers of pellicle
-	# and into two of toxicyst, so every term of the bite is in the number.
+	# and into two of veneneux, so every term of the bite is in the number.
 	field = _pond_rig(12, 30.0, POND_SENSES)
 	field.open_pond()
 	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
-		&"pellicle": 2, &"toxicyst": 2}
+		&"pellicle": 2, &"veneneux": 2}
 	_pond_person(field, at, 28.0, armoured)
 	said = _pond_listen(field)
 	from = at + Vector2(0.0, 54.0)
@@ -4257,7 +4257,7 @@ func _pond_swallow_rule() -> void:
 	field = _pond_rig(13, 30.0, POND_SENSES)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1,
-		&"toxicyst": 1})
+		&"veneneux": 1})
 	said = _pond_listen(field)
 	from = at + Vector2(0.0, -54.0)
 	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
@@ -4349,7 +4349,7 @@ func _pond_to_the_death() -> void:
 	# This cell swallows a venomous friend: it is poisoned, and they are stung.
 	var field := _pond_rig(81, 30.0, big)
 	field.open_pond()
-	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"toxicyst": 1})
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"veneneux": 1})
 	var said := _pond_listen(field)
 	field._process(POND_STEP)
 	_says(not _pond_said(said, "killed").is_empty()
@@ -4362,7 +4362,7 @@ func _pond_to_the_death() -> void:
 		+ " POISONED by the friend -- and the friend is stung, not eaten")
 
 	# The friend swallows this venomous cell: they are poisoned, it is stung.
-	field = _pond_rig(82, 30.0, {&"cytostome": 1, &"cirrus": 1, &"toxicyst": 1},
+	field = _pond_rig(82, 30.0, {&"cytostome": 1, &"cirrus": 1, &"veneneux": 1},
 		Vector2.ZERO, PI)
 	field.venom_cost = CellBody.VENOM_COST_BY_TIER[1]
 	field.open_pond()
@@ -4415,7 +4415,7 @@ func _pond_to_the_death() -> void:
 	field = _pond_rig(85, 30.0, big)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
-		&"pellicle": 3, &"toxicyst": 3})
+		&"pellicle": 3, &"veneneux": 3})
 	field.bodies()[FoodField.PERSON_SLOT].wound = 0.99
 	(field.get("_cell") as Object).set("wound", 0.999)
 	said = _pond_listen(field)
@@ -4453,7 +4453,7 @@ func _pond_to_the_death() -> void:
 	field.open_pond()
 	(field.get("_cell") as Object).set("wound", 0.999)
 	var ahead := Vector2(0.0, -72.0)
-	_pond_pose(field, 5, 44.0, {&"cytostome": 1, &"pellicle": 3, &"toxicyst": 3},
+	_pond_pose(field, 5, 44.0, {&"cytostome": 1, &"pellicle": 3, &"veneneux": 3},
 		ahead, 0.0)
 	field._process(POND_STEP)
 	var poisoned: Array = [int(field.died_of), int(field.died_by)]

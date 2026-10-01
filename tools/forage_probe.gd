@@ -45,7 +45,7 @@ extends SceneTree
 ## does not grow them, and a body's `pellicle` makes it bigger to the bot's mouth
 ## as to every mouth there. Two more players:
 ##
-## - `--avoid-venom` passes over a body carrying `toxicyst`, as a full-vision
+## - `--avoid-venom` passes over a body carrying `veneneux`, as a full-vision
 ##   player who has learnt the organ's colour does;
 ## - `--cautious` reads the red lip: it leaves food within CAUTION of a mouth
 ##   that could swallow it, and turns away from such a mouth that close ahead.
@@ -295,7 +295,7 @@ func _nearest(cell: Node, reach: float, screen: Vector2) -> Vector2:
 				found_floc = body.get("pos")
 				picked_floc = body
 			continue
-		if _avoid_venom and int((body.get("genome") as Dictionary).get(&"toxicyst", 0)) > 0:
+		if _avoid_venom and int((body.get("genome") as Dictionary).get(&"veneneux", 0)) > 0:
 			continue
 		if off.length() < best and not (_cautious and _threat_near(body.get("pos"), cell)):
 			best = off.length()

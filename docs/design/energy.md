@@ -265,7 +265,7 @@ drifting and ×1.78 steering a third of the time. Two prices are shares of the
 bar, not seconds of rest, and kept their share: the dash (6, 4.5 and 3.2 %,
 which is now 2.2, 1.6 and 1.2 s of rest; at tier 1 that is almost exactly what
 a stroke of the same speed costs, 2.16 s against 2.15 s) and
-`toxicyst`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
+`veneneux`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
 `Wire.PROTOCOL` or `Wire.RULES` change (§1.3), and it ships as a content pack.
 
 > **Seconds of rest since, 2026-09-29** (`gene-stats.md` §11, call 2). The dash

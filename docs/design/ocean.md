@@ -59,7 +59,7 @@ noise was measured (§8.3).
 **The second round was answered the same day** (§17.1): every call as
 recommended, except venom. The owner kept venom out of pack 1 -- the gene pass
 brings it in two variants, venomous and poisonous, each as stacks that wear off
-over time, hurting while they last (row 12) -- so `toxicyst` works in the drop
+over time, hurting while they last (row 12) -- so `veneneux` works in the drop
 exactly as it does today (§5.6), and the pass-2 prototype's swallow death for
 every mouth is reverted.
 
@@ -843,7 +843,7 @@ venomous cell dies, the player's included. The owner chose neither: venom is
 not reworked in pack 1, and the gene pass brings it in two variants -- a
 **venomous** cell's bite adds stacks of venom to what it bites, and whatever
 bites or eats a **poisonous** cell takes stacks; the stacks wear off over time,
-doing damage while they last. Until then `toxicyst` does exactly what it does
+doing damage while they last. Until then `veneneux` does exactly what it does
 today:
 
 - **whatever bites a venomous body** takes `VENOM_BITE_BACK_BY_TIER` of each
@@ -967,7 +967,7 @@ every choice below is the water's (`genes-and-cilia.md` §9.8), in `drop.gd`:
   body's own senses and tail, made that way, 196 to 203 hunters starved in four
   minutes instead of 137 to 158, about half of them without one meal (§5.4).
 - **Drifters carry no venom** (row 13, answered): one gene at tier 1, drawn
-  from the list without `toxicyst`. They are the water's defenceless food, the
+  from the list without `veneneux`. They are the water's defenceless food, the
   owner's words for them, under today's venom and the gene pass's alike. A
   drop down to its last venomous bodies gets venom back through the next peer
   instead (`GENE_FLOOR`, §6.4).
@@ -2072,7 +2072,7 @@ Not designed here; named so that pack 1 leaves room for them.
 | **the same blocks drive the player** (pack 4) | `cell.gd`'s steering is written from one place a frame, `_read_steer()`; a brain writes `steer` there instead, on the same tick. A player's blocks could let its cell rest, which its flagellum does not today (§5.2) |
 | **an evolving server room** | **built in 1b**: the room lives on while it is empty (§10.3) |
 | **several rooms on one server** | §10.3: a room is a `Food` field with an id; HELLO carries the room wanted; a page after `answered` chooses |
-| **venomous and poisonous** (the gene pass, row 12) | `toxicyst`'s two effects each stay in one place -- the bite-back where a bite lands (`_chew`, `_bitten_by`, `_bite_from`), the swallow death in the mouth rule -- so the gene pass can replace them with stacks without touching the rest. A stack that wears off is an amount a body carries, stepped with it like its hunger, so a far body on the tick takes it the same way (§4.3) |
+| **venomous and poisonous** (the gene pass, row 12) | `veneneux`'s two effects each stay in one place -- the bite-back where a bite lands (`_chew`, `_bitten_by`, `_bite_from`), the swallow death in the mouth rule -- so the gene pass can replace them with stacks without touching the rest. A stack that wears off is an amount a body carries, stepped with it like its hunger, so a far body on the tick takes it the same way (§4.3) |
 | **a water cell's hunger, seen** | nothing draws it in pack 1; `Body.hunger` is there for full vision to read, and whether it shows a hungry hunter, or a death by hunger more gently than in one frame (§7.6), is the UX designer's |
 
 ---
@@ -2112,7 +2112,7 @@ because it touches every tool that reads them.
 | `game/normal/drop.gd` | new: the environment, and what the water makes (§5.8, §13) |
 | `game/normal/metabolism.gd` | the tank's arithmetic as static functions the node and the water share: `rest_rate(upkeep, income, reserve)`, with light and absorption summed into `income` by the caller; `effort_cost(seconds, burn, reserve)`; `meal(nutrition)`; and `ABSORB` 1.0. The node's `_process`, `spend` and `feed` call them, so the player's numbers do not move (§14.4) |
 | `game/normal/cell.gd` | `swallow_radius_of(radius, pellicle_tier)` beside `swallow_radius()`, and `stroke_cost(speed)` -- `speed × DRAG / SPREAD_LOSS × STROKE_COST` -- beside `STROKE_COST`, so the water prices a steady swim from the player's own table |
-| `game/normal/food.gd` | `Body` gains `id`, `hunger`, `starve`, `effort`, `age`, `lag`/`last_t`, `near_frame`, `inert`, `settle`, `life`, `dart_clock`, `dash_v`, `dash_clock`, `orienting`, `searching`, and read-once `notice`, `see_big`, `armour`, `tox`, `dart_bearing`, `reserve`, `sun`, `burn`, `upkeep`; reserved `brain`, `parent`. The drop's path beside the bubble's, chosen once per run: `setup_drop()`, `_process` at three rates by distance (§4.3), every all-pairs pass through the grid and the near-first prey search (§4.2), containment and the shore turn, the spawner, floors and gene floor, the snow and flocs, flocs in contacts and in each sense (§7.5), the rim in the ping, the shadow, the beam and touch (§3.2), the quiet start and its clearing, `enter_water()` on division and return, `put_sister` contained. **One body** (§5): the metabolism per step -- skipped for a tank that cannot move, which changes no number (§4.4) -- and its four deaths with remains; `_swim` paying for speed and turns; a hunter's senses, tail, dash, dart and orienting turn; the one mouth rule in `_mouth_on` and `_contacts_with` -- on contact (row 15) and armoured (row 5), with `toxicyst`'s two effects left exactly as they are (row 12); **a water cell that swallows or chews through a player is fed by it** and rests `REST_MEAL` (§5.6), where today it breaks off unfed (`:1868`, `:2078`); the behaviour of §5.4, with no flight after any miss. **The edible cue follows the mouth**: the taste weight in `_step_sense` (`:2799`) reads the prey's swallow radius, `swallow_radius_of(radius, pellicle)`, not its bare radius, now that armour protects every body -- or the scent would call a cell edible that the mouth cannot take. Signals `shored(bearing, strength, at)` and `grazed(nutrition, at)`; `bodies_near(point, reach)` for the view. **All of it keyed on the drop**: the bubble a session plays in 1a keeps today's rules to the byte (§14.4) |
+| `game/normal/food.gd` | `Body` gains `id`, `hunger`, `starve`, `effort`, `age`, `lag`/`last_t`, `near_frame`, `inert`, `settle`, `life`, `dart_clock`, `dash_v`, `dash_clock`, `orienting`, `searching`, and read-once `notice`, `see_big`, `armour`, `tox`, `dart_bearing`, `reserve`, `sun`, `burn`, `upkeep`; reserved `brain`, `parent`. The drop's path beside the bubble's, chosen once per run: `setup_drop()`, `_process` at three rates by distance (§4.3), every all-pairs pass through the grid and the near-first prey search (§4.2), containment and the shore turn, the spawner, floors and gene floor, the snow and flocs, flocs in contacts and in each sense (§7.5), the rim in the ping, the shadow, the beam and touch (§3.2), the quiet start and its clearing, `enter_water()` on division and return, `put_sister` contained. **One body** (§5): the metabolism per step -- skipped for a tank that cannot move, which changes no number (§4.4) -- and its four deaths with remains; `_swim` paying for speed and turns; a hunter's senses, tail, dash, dart and orienting turn; the one mouth rule in `_mouth_on` and `_contacts_with` -- on contact (row 15) and armoured (row 5), with `veneneux`'s two effects left exactly as they are (row 12); **a water cell that swallows or chews through a player is fed by it** and rests `REST_MEAL` (§5.6), where today it breaks off unfed (`:1868`, `:2078`); the behaviour of §5.4, with no flight after any miss. **The edible cue follows the mouth**: the taste weight in `_step_sense` (`:2799`) reads the prey's swallow radius, `swallow_radius_of(radius, pellicle)`, not its bare radius, now that armour protects every body -- or the scent would call a cell edible that the mouth cannot take. Signals `shored(bearing, strength, at)` and `grazed(nutrition, at)`; `bodies_near(point, reach)` for the view. **All of it keyed on the drop**: the bubble a session plays in 1a keeps today's rules to the byte (§14.4) |
 | `game/normal/normal_mode.gd` | the drop when `_net` is null in `_ready`; `shored` → `_bus.hit`; `grazed` → feed without growth, the flood with no gene, `mark_meal`; `_be_born` and `_return` enter the drop instead of `setup()`; a starved or poisoned player leaves remains; a player without a `cytostome` absorbs (`ABSORB` into the metabolism's income, as `plastid` is) |
 | `game/normal/motes.gd` | grit inside the rim, the first mote included; seeded after the drop |
 | `game/vision/water.gdshader` | `drop_on`, `drop_center`, `drop_radius`, `drop_band`: film, meniscus line, dry glass (§3.3); the line's square as `k * k`, never `pow` |
@@ -2213,7 +2213,7 @@ taken out:
    (a grown one may have it: row 5).
 6. **The floors**: every gene in `DRIFTER_GENES` carried by at least
    `GENE_FLOOR` living bodies at every count; a living drifter within the floor
-   reach of a still player at every check; no drifter carries `toxicyst`.
+   reach of a still player at every check; no drifter carries `veneneux`.
 7. **The LOD reaches past the senses**: `LOD_NEAR ≥ max(PING_RANGE_BY_TIER) +`
    the widest body the cap allows `+` slack, and `≥` every other reach in the
    tables (scent, dread, the beam at its longest level, touch); `LOD_FULL ≥` the
@@ -2645,7 +2645,7 @@ cell is spat out alive:
 > 12a and b : There'll be 2 variants. This is about the difference between venomous and poisonous. We'll add both on the gene pass later.
 
 So rows 11 and 13 to 18 stand as recommended, and venom is not reworked in pack
-1: `toxicyst` keeps both of its effects today, and the gene pass brings the
+1: `veneneux` keeps both of its effects today, and the gene pass brings the
 two variants (`roadmap.md`).
 
 **Row 11** is a rule of the body, keyed on the organ (§5.3). It also changes

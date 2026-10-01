@@ -183,7 +183,7 @@ const START_PUSH := 100.0
 
 ## The gene no drifter carries (row 13): the drop's defenceless food is never
 ## venomous, and a drop short of it gets it back through the next peer.
-const VENOM := &"toxicyst"
+const VENOM := &"veneneux"
 
 ## The meniscus: a disc of [constant RADIUS] round wherever the drop is.
 var meniscus: Basin = null

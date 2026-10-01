@@ -589,7 +589,7 @@ for the same reason the pause screen says the odds out loud.
 **One row, shared, not one per side.** The sixteen lines are about the gene, and
 both strands carry the same gene at five or six of seven loci, so a per-side line
 would be the same sentence twice in most frames. The arithmetic agrees: the
-longest line, `toxicyst`, measures **519 px** with its organ; two of them
+longest line, `veneneux`, measures **519 px** with its organ; two of them
 centred under daughters 264 px apart overlap by 255 px. Which strand is being
 read is carried by the lit lens, on the thing the finger just touched.
 
@@ -791,7 +791,7 @@ xvfb-run -a -s "-screen 0 1280x720x24" ~/godot/godot --path . \
     --rendering-driver opengl3 --fixed-fps 60 res://tools/shot.tscn -- \
     --scene=res://tools/drive.tscn --out=/tmp/x.png --size=1280x720 \
     --wait=6.0 --seed=12345 --mode=0 --radius=40 \
-    --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,stigma:1:3,ampulla:2:4,pellicle:1:5,toxicyst:2:6
+    --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,stigma:1:3,ampulla:2:4,pellicle:1:5,veneneux:2:6
 ```
 
 Every clause earns its place:
@@ -836,7 +836,7 @@ above the signal, and two runs that differ can look identical in it. (Every
 | the densest DNA — seven genes, 3/3/3/2/2/1/1 | passes; three rungs at 8 px inside a 36 px lens are countable |
 | the widest genome — `cytostome 3, cirrus 3, flagellum 3` | passes; **30–34 px** ink-to-ink, starboard side, across both views and both shapes, and it does not move over the beat (§3.4) |
 | a locus selected, port and starboard | passes; lens, loud word, organ, name, line and hint all land |
-| the longest line, `toxicyst`, 519 px | passes; 19 px clear of the strands' lowest ink |
+| the longest line, `veneneux`, 519 px | passes; 19 px clear of the strands' lowest ink |
 | hover, desktop, while a different locus is selected | passes; the line follows the cursor, the selection keeps its lens |
 | **press a locus and hold 3 s** | passes — still CHOOSING, nothing on the bus |
 | **press a locus, finger jitters 2 px** | passes — still CHOOSING |

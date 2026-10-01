@@ -678,7 +678,7 @@ G    = --genome=cytostome:2,cirrus:1,flagellum:3,ocellus:1:3 --radius=34 --esc-a
 W    = G without --esc-at: in the water
 F5   = --level=ocellus:5 --earn=0.5:ocellus:100     fork open, two banked, half a level on
 CH   = --seed=12345 --radius=40 --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,
-       ocellus:1:3,ampulla:2:4,pellicle:1:5,toxicyst:2:6    choosing.md §10.1, beam at 3
+       ocellus:1:3,ampulla:2:4,pellicle:1:5,veneneux:2:6    choosing.md §10.1, beam at 3
 OPEN = --touch=1.5:938,204    ARM = --touch=2.0:898,358    TAKE = --touch=2.6:898,358
 PEAK = --arm-at=2.0 --freeze-on=beat --freeze-after=0.15
 ```

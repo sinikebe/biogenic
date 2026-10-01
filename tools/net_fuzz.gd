@@ -641,7 +641,7 @@ func _tiers() -> Dictionary:
 
 static func _tiers_from(rng: RandomNumberGenerator) -> Dictionary:
 	var genes := [&"cytostome", &"cirrus", &"flagellum", &"ampulla", &"ocellus",
-		&"stigma", &"chemocyte", &"pellicle", &"toxicyst"]
+		&"stigma", &"chemocyte", &"pellicle", &"veneneux"]
 	var out := {}
 	for i in rng.randi_range(1, 6):
 		out[genes[rng.randi_range(0, genes.size() - 1)]] = rng.randi_range(0, 3)

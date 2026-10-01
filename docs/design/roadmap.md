@@ -168,7 +168,7 @@ between venomous and poisonous. We'll add both on the gene pass later."
 - **Poisonous**: whatever bites or eats it takes stacks.
 
 The stacks wear off over time and do damage while they last; specialised venoms
-may come after. The two variants replace `toxicyst`'s two effects today: a share
+may come after. The two variants replace `veneneux`'s two effects today: a share
 of each bite back into whatever bites a venomous body, and death to whatever
 swallows a venomous player.
 
