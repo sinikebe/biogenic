@@ -70,7 +70,7 @@ const HUES := {
 	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
 	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
 	&"pellicle": Color(0.36, 0.88, 0.96),    # armor, 186 deg
-	&"toxicyst": Color(0.34, 1.00, 0.52),    # venom, 128 deg
+	&"veneneux": Color(0.34, 1.00, 0.52),    # venin, 128 deg
 	&"plastid": Color(1.00, 0.86, 0.26),     # sun, 52 deg
 	&"vacuole": Color(0.44, 0.58, 1.00),     # store, 232 deg
 	&"crista": Color(0.86, 0.50, 0.22),      # burn, 26 deg, darker than palp
@@ -101,7 +101,7 @@ const EARNED_COUNT := {
 	&"myoneme": 5,
 	&"trichocyst": 3,
 	&"pellicle": 7,
-	&"toxicyst": 6,
+	&"veneneux": 6,
 	# 8 is the ceiling, found by rendering: a tier-3 tuft multiplies the count
 	# by 1.70, and above about 14 strokes a 24-degree arc closes up into a solid
 	# flag and stops being a texture -- the same failure the oral mat documents.

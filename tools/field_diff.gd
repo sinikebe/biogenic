@@ -103,7 +103,7 @@ const POND_FIELD_KEYS: Array[StringName] = [&"in_water", &"anchored", &"died_of"
 	&"_stamp", &"_anchor_ids", &"_anchor_at", &"_snap_at", &"_snap_age", &"_book",
 	&"smell_bearing", &"ping_bearing", &"dart_bearing", &"dart_range"]
 const PERSON_GENES: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum",
-	&"pellicle", &"toxicyst", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
+	&"pellicle", &"veneneux", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
 
 
 func _initialize() -> void:
@@ -179,7 +179,7 @@ func _wire(food: Node, log: Array, cell: Node) -> void:
 			cell.radius = minf(cell.radius + NewCell.GROWTH_PER_MEAL,
 				NewCell.DIVIDE_RADIUS)
 			var tiers: Dictionary = cell.genome.t
-			for gene: StringName in [&"pellicle", &"toxicyst", &"cytostome"]:
+			for gene: StringName in [&"pellicle", &"veneneux", &"cytostome"]:
 				tiers[gene] = (int(tiers.get(gene, 0)) + 1) % 4)
 	food.waked.connect(func(b: float, s: float) -> void: log.append(["waked", b, s]))
 	food.killed.connect(func(b: float) -> void: log.append(["killed", b]))
@@ -232,7 +232,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 		var g := {}
 		if not d[&"drifter"] or rng.randf() < 0.15:
 			g[&"cytostome"] = rng.randi_range(0, 3)
-		for gene: StringName in [&"pellicle", &"toxicyst", &"flagellum", &"cirrus", &"chemocyte"]:
+		for gene: StringName in [&"pellicle", &"veneneux", &"flagellum", &"cirrus", &"chemocyte"]:
 			if rng.randf() < 0.45:
 				g[gene] = rng.randi_range(1, 3)
 		if g.is_empty():
@@ -298,7 +298,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 		&"flagellum": rng.randi_range(0, 3)}
 	if kind == "growing":
 		ct[&"cytostome"] = 3
-	for gene: StringName in [&"pellicle", &"toxicyst", &"axoneme", &"chemocyte", &"ampulla", &"ocellus", &"palp", &"trichocyst"]:
+	for gene: StringName in [&"pellicle", &"veneneux", &"axoneme", &"chemocyte", &"ampulla", &"ocellus", &"palp", &"trichocyst"]:
 		if rng.randf() < 0.4:
 			ct[gene] = rng.randi_range(1, 3)
 	st[&"cell_tiers"] = ct

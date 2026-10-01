@@ -181,9 +181,10 @@ const START_FOOD := 1100.0
 ## of the start is moved straight out to that reach and this much more.
 const START_PUSH := 100.0
 
-## The gene no drifter carries (row 13): the drop's defenceless food is never
-## venomous, and a drop short of it gets it back through the next peer.
-const VENOM := &"toxicyst"
+## Le gène qu'aucun drifter ne porte (ligne 13) : la nourriture sans défense
+## du drop n'est jamais veneneuse, et un drop en manque le récupère via le
+## prochain pair.
+const VENOM := &"veneneux"
 
 ## The meniscus: a disc of [constant RADIUS] round wherever the drop is.
 var meniscus: Basin = null

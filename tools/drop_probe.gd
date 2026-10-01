@@ -109,7 +109,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		if body_radius <= 0.0:
 			made += 1
 			if b.drifter:
-				venom_drifters += 1 if b.genome.has(&"toxicyst") else 0
+				venom_drifters += 1 if b.genome.has(&"veneneux") else 0
 			else:
 				made_gape = maxf(made_gape, _gape(b))
 		return index
@@ -1241,7 +1241,7 @@ func _five_minutes() -> void:
 	for b: Object in field.get("_cells"):
 		if b.get("seeded") and not b.get("inert"):
 			living += 1
-			if b.get("drifter") and (b.get("genome") as Dictionary).has(&"toxicyst"):
+			if b.get("drifter") and (b.get("genome") as Dictionary).has(&"veneneux"):
 				venomous += 1
 	_check(("5. growth: five minutes of a drop made for a sighted player, the biggest body"
 		+ " r%.2f (DIVIDE_RADIUS %.0f; %d looks at one there), and of %d bodies made the"
@@ -1372,7 +1372,7 @@ func _flocs() -> void:
 	var biter := _pose(field, p + Vector2(-800.0, -400.0), 30.0,
 		{&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
 	var bitten := _pose(field, p + Vector2(-800.0, -350.0), 40.0,
-		{&"cytostome": 1, &"toxicyst": 3})
+		{&"cytostome": 1, &"veneneux": 3})
 	(cells[biter] as Object).set("wound", 0.99)
 	var poisoned_at: Vector2 = (cells[biter] as Object).get("pos")
 	field._mouth_on_drop(biter, cells[biter], bitten, cells[bitten],
@@ -1499,7 +1499,7 @@ func _one_body() -> void:
 	field.venom_cost = -1.0
 	# And a player swallows a venomous water cell safely: an r15 one in its mouth.
 	var small_at := p + Vector2(0.0, -(cell.radius + 12.0))
-	var s := _pose(field, small_at, 15.0, {&"cytostome": 1, &"toxicyst": 3}, PI, 0.5)
+	var s := _pose(field, small_at, 15.0, {&"cytostome": 1, &"veneneux": 3}, PI, 0.5)
 	field.set("_near", field.bodies_near(p, 2500.0))
 	var safe: bool = not field._contacts_with(null)
 	var venom_in := [safe, said["ate"], said["killed"], not (cells[s] as Object).get("seeded")]

@@ -87,7 +87,7 @@ separation, vision and the recorder, the remote player is simply a `Body`. A
 speed, from a new `cell.gd` static `swim_speed_of(flagellum, axoneme)` that
 `swim_speed()` (`:580-582`) also calls; dart range and cooldown from
 `trichocyst` and its bearing from the worn order via `Cilia.slot_bearing`; venom
-cost from `toxicyst`; and `first_hunt`, `dart_clock`, `in_water` and `quiet`.
+cost from `veneneux`; and `first_hunt`, `dart_clock`, `in_water` and `quiet`.
 
 **Heard two ways, by one law** (#45, `ping-as-outline.md` §2.2). Your own pulse
 comes back off their body, out and back, like any body's. Their *call* crosses

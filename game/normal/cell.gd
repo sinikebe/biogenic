@@ -66,10 +66,10 @@ const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 ## Seconds between bites from one mouth. One mouth, one bite, whatever it is
 ## resting against -- so a cell wedged between two others does not chew both.
 const BITE_GAP := 0.85
-## `toxicyst` / venom, from the other end. Swallowing a venomous cell already
+## `veneneux` / venin. Avaler une cellule veneneuse tue le prédateur ;
 ## kills the swallower; *biting* one costs this share of the damage just dealt,
 ## which makes venom the answer to being gnawed as well as to being eaten.
-const VENOM_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
+const VENENEUX_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
 
 ## Where on a body a bite lands, and therefore how much of it lands. The nose is
 ## 1.0 because that is where the target's own mouth is and where it is thickest;
@@ -395,14 +395,14 @@ const TOUCH_RANGE_BY_TIER: Array[float] = [0.0, 150.0, 230.0, 330.0]
 const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
 const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 
-## `toxicyst` / venom. What surviving being eaten costs, in hunger. A cell that
-## swallows you dies of it and you are spat out starving.
+## `veneneux` / venin. Ce que survivre à être mangé coûte, en faim. Une cellule
+## qui vous avale meurt et vous êtes recraché en état de famine.
 ##
 ## A share of a born cell's tank, paid as seconds of rest through `spend` as
 ## the dash is, so `crista` and `vacuole` soften it too (gene-stats.md §11,
 ## call 2). The values are wire.gd's to guard; the host only asks whether this
 ## is `>= 0`, and how it is paid is each device's own hunger.
-const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
+const VENENEUX_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
 
 ## `statocyst` / level used to be named here: it bought no number, only a lobe
 ## on the membrane at a bearing that did not turn with the body. The owner
@@ -868,9 +868,9 @@ static func flank(theta: float) -> float:
 	return lerpf(FLANK_AHEAD, FLANK_ASTERN, 0.5 - 0.5 * cos(theta))
 
 
-## What a venomous body does back to the mouth that just bit it.
-static func venom_back(toxicyst_tier: int, damage: float) -> float:
-	return damage * VENOM_BITE_BACK_BY_TIER[_tier_index(toxicyst_tier)]
+## Ce qu'un corps veneneux rend à la bouche qui vient de le mordre.
+static func venom_back(veneneux_tier: int, damage: float) -> float:
+	return damage * VENENEUX_BITE_BACK_BY_TIER[_tier_index(veneneux_tier)]
 
 
 ## A wound knitting up over [param delta] seconds. Every body in the water uses

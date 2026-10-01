@@ -88,7 +88,7 @@ const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
 	&"ocellus", &"chemocyte", &"ampulla",
 	&"axoneme", &"palp", &"myoneme",
-	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
+	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"]
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
 ## You are not an empty vessel; you are mediocre at three things. §1.

@@ -605,7 +605,7 @@ func _gene_stats() -> void:
 		and is_equal_approx(stored_dash[0], dash / tank))
 	var s04 := GeneStats.context({&"crista": 2, &"vacuole": 3})
 	var said_dash: float = GeneStats.lines(&"myoneme", 1, 0, &"", s04)[1][0]["values"][0]
-	var said_venom: float = GeneStats.lines(&"toxicyst", 3, 0, &"", s04)[1][0]["values"][0]
+	var said_venom: float = GeneStats.lines(&"veneneux", 3, 0, &"", s04)[1][0]["values"][0]
 	_check("and the numbers say what is paid: `each dash burns %s s`, `being spat out"
 		% Readout.format(said_dash, Readout.Unit.ENERGY) + " burns %s s`"
 		% Readout.format(said_venom, Readout.Unit.ENERGY),

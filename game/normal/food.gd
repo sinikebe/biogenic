@@ -78,8 +78,8 @@ signal killed(bearing: float)
 ## *contact, there*. A wound is learnt by being bitten at a bearing enough
 ## times, which is the same way everything else in this game is learnt.
 signal bitten(bearing: float, strength: float)
-## `toxicyst`: it swallowed you and died of it. You are alive, at a bearing and
-## a price the run pays out of hunger.
+## `veneneux`: elle vous a avalé et en est morte. Vous êtes vivant, à un angle et
+## un prix que la partie paie en faim.
 signal stung(bearing: float)
 ## `trichocyst`: the dart went off and something hunting you broke away.
 signal darted(bearing: float)
@@ -290,7 +290,7 @@ const GENE_WEIGHTS := {
 	&"chemocyte": 4, &"ampulla": 3,
 	&"ocellus": 2, &"axoneme": 2,
 	&"palp": 2, &"myoneme": 2,
-	&"trichocyst": 2, &"pellicle": 2, &"toxicyst": 2,
+	&"trichocyst": 2, &"pellicle": 2, &"veneneux": 2,
 	&"plastid": 2, &"vacuole": 2, &"crista": 2,
 }
 ## Everything a drifter can be, and therefore everything the player can ever
@@ -314,7 +314,7 @@ const GENE_WEIGHTS := {
 const DRIFTER_GENES: Array[StringName] = [
 	&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 	&"ocellus", &"axoneme", &"palp", &"myoneme",
-	&"trichocyst", &"pellicle", &"toxicyst", &"plastid", &"vacuole", &"crista"]
+	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"]
 ## How likely each tier is in the peer band, weighted so most cells are
 ## mediocre and a few are terrifying. Index 0 is unused: every peer has at least
 ## tier 1 of whatever it carries.
@@ -1018,7 +1018,7 @@ class Body:
 	var see_big := 0.0
 	## `pellicle`'s multiple on its radius, as a mouth measures it (row 5).
 	var armour := 1.0
-	## `toxicyst` tier; and where its `trichocyst` is worn, as a body-relative
+	## `veneneux` tier; and where its `trichocyst` is worn, as a body-relative
 	## bearing.
 	var tox := 0
 	var dart_bearing := 0.0
@@ -1064,7 +1064,7 @@ class Person:
 	var dart_cooldown := 0.0
 	var dart_bearing := 0.0
 	var dart_clock := 0.0
-	## `toxicyst`, as the field's own `venom_cost` for this cell: negative is
+	## `veneneux`, as the field's own `venom_cost` for this cell: negative is
 	## no venom.
 	var venom_cost := -1.0
 	## Its own [constant FIRST_DELAY], granted at every arrival.
@@ -1251,7 +1251,7 @@ var dart_cooldown := 0.0
 ## a dart in a rear slot is the answer to being flanked and placement becomes a
 ## defensive decision. Meaningless while [member dart_range] is 0.
 var dart_bearing := 0.0
-## `toxicyst`. Negative means the cell has no venom and a kill is a kill.
+## `veneneux`. Negative means the cell has no venom and a kill is a kill.
 var venom_cost := -1.0
 var _dart_clock := 0.0
 ## The player's own mouth, reloading. Here and not on the cell for the same
@@ -1935,7 +1935,7 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 #      mouth on it, body too big       -> a bite, and bites accumulate
 #
 #    A body bitten to nothing comes apart and feeds whoever finished it. That
-#    makes `pellicle` a real defence (it divides the bite) and `toxicyst` a real
+#    makes `pellicle` a real defence (it divides the bite) and `veneneux` a real
 #    punishment (it charges the biter a share of what it just did), using the
 #    two genes that already meant exactly those things.
 #
@@ -2090,7 +2090,7 @@ func _contacts_with(p: Person) -> bool:
 		var committed := b.state == State.STALK and _hunts(b, p)
 		if its_mouth and swallows_player(committed, _drop != null and contact_swallow,
 				_armoured(p), _gape(b)):
-			# **`toxicyst`. It got you and it dies of it.** The one thing in the
+			# **`veneneux`. Il vous a avalé et en est mort.** La seule chose dans le
 			# game that undoes a death, and it is not free: the run pays for it
 			# in hunger, which is the channel every other cost is paid in. The
 			# body that swallowed you is reseeded, or retired in a pond -- it is
@@ -2286,7 +2286,7 @@ func _chew(b: Body, other: Body) -> float:
 	b.bite = CellBody.BITE_GAP
 	other.wound = clampf(other.wound + damage, 0.0, 1.0)
 	b.wound = clampf(b.wound + CellBody.venom_back(
-		Genome.tier_of(other.genome, &"toxicyst"), damage), 0.0, 1.0)
+		Genome.tier_of(other.genome, &"veneneux"), damage), 0.0, 1.0)
 	return other.wound
 
 
@@ -2354,10 +2354,10 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		if p != null:
 			_person_gone(Cause.CHEWED, By.WATER, p)
 		return true
-	# `toxicyst` from the other end: biting a venomous body costs the mouth a
-	# share of what it just did, and enough of them kill it.
+	# `veneneux` de l'autre côté : mordre un corps veneneux coûte à la bouche une
+	# part de ce qu'elle vient de faire, et assez de ces morsures peuvent la tuer.
 	b.wound = clampf(b.wound + CellBody.venom_back(
-		_cell.extra(&"toxicyst") if p == null else Genome.tier_of(pb.genome, &"toxicyst"),
+		_cell.extra(&"veneneux") if p == null else Genome.tier_of(pb.genome, &"veneneux"),
 		damage), 0.0, 1.0)
 	if b.wound >= 1.0:
 		_consume(index, Cause.POISONED)
@@ -2399,7 +2399,7 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# on their own device, from the place.
 	var felt_at := _cell.bearing_to(at) if p == null else 0.0
 	b.wound = clampf(b.wound + damage, 0.0, 1.0)
-	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"toxicyst"), damage)
+	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"veneneux"), damage)
 	var hurt := 0.0
 	if p == null:
 		_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
@@ -2532,7 +2532,7 @@ func _chewed_by_friend(p: Person, me: Person = null) -> bool:
 		_lose(me, Cause.CHEWED, By.FRIEND)
 		return true
 	var back := CellBody.venom_back(
-		_cell.extra(&"toxicyst") if me == null else Genome.tier_of(mb.genome, &"toxicyst"),
+		_cell.extra(&"veneneux") if me == null else Genome.tier_of(mb.genome, &"veneneux"),
 		damage)
 	pb.wound = clampf(pb.wound + back, 0.0, 1.0)
 	_tell(me, Contact.BITTEN, there, _felt(damage), By.FRIEND, &"")
@@ -2566,7 +2566,7 @@ func _chew_friend(p: Person, me: Person = null) -> void:
 	else:
 		mb.bite = CellBody.BITE_GAP
 	pb.wound = clampf(pb.wound + damage, 0.0, 1.0)
-	var back := CellBody.venom_back(Genome.tier_of(pb.genome, &"toxicyst"), damage)
+	var back := CellBody.venom_back(Genome.tier_of(pb.genome, &"veneneux"), damage)
 	var hurt := 0.0
 	if me == null:
 		_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
@@ -4110,7 +4110,7 @@ func _derive_person(pb: Body) -> void:
 	p.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[dart]
 	var slot := pb.order.find(&"trichocyst")
 	p.dart_bearing = Cilia.slot_bearing(slot) if slot >= 0 else 0.0
-	var venom := clampi(Genome.tier_of(tiers, &"toxicyst"), 0,
+	var venom := clampi(Genome.tier_of(tiers, &"veneneux"), 0,
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	p.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
 	# The body carries it too, so a sense that weighs every body by the size a
@@ -6602,7 +6602,7 @@ func _refresh_body(b: Body) -> void:
 	b.income = b.sun + (absorb if Genome.tier_of(g, &"cytostome") == 0 else 0.0)
 	b.burn = CellBody.BURN_BY_TIER[clampi(Genome.tier_of(g, &"crista"), 0, 3)]
 	b.armour = CellBody.ARMOR_BY_TIER[clampi(Genome.tier_of(g, &"pellicle"), 0, 3)]
-	b.tox = clampi(Genome.tier_of(g, &"toxicyst"), 0, 3)
+	b.tox = clampi(Genome.tier_of(g, &"veneneux"), 0, 3)
 	b.cruise = CellBody.swim_speed_of(Genome.tier_of(g, &"flagellum"),
 		Genome.tier_of(g, &"axoneme"))
 	var smell: float = CellBody.SMELL_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"chemocyte"), 0, 3)]
@@ -7336,7 +7336,7 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 
 
 ## **Venom back through a peer** (§6.4): a drop down to its last venomous
-## bodies gives the next peer `toxicyst`, since no drifter may carry it.
+## bodies gives the next peer `veneneux`, since no drifter may carry it.
 func _give_venom_back(b: Body) -> void:
 	if drifter_venom or not _gene_short.has(Drop.VENOM) \
 			or Genome.tier_of(b.genome, Drop.VENOM) > 0:

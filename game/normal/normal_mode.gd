@@ -1066,7 +1066,7 @@ func _process(delta: float) -> void:
 	# genome and cilia.gd's arc table. A rear dart answers a flank, which is what
 	# makes `trichocyst` a placement decision instead of a radius.
 	_food.dart_bearing = _slot_bearing_of(&"trichocyst")
-	var venom := mini(_cell.extra(&"toxicyst"),
+	var venom := mini(_cell.extra(&"veneneux"),
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
 	_aim_beam(delta)
@@ -1925,7 +1925,7 @@ func _on_darted(bearing: float) -> void:
 	_bus.shove(bearing, 0.7)
 
 
-## `toxicyst`. It swallowed you and died of it, and you are starving for it.
+## `veneneux`. Il vous a avalé et en est mort, et vous payez pour ça.
 ##
 ## Paid as the dash is, in seconds of rest through `spend` (gene-stats.md §11,
 ## call 2). `venom_cost` keeps its values, which are all the host ever asks of
@@ -4062,7 +4062,7 @@ const WORDS := {
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
 	&"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
-	&"toxicyst": "venom", &"plastid": "sun", &"vacuole": "store",
+	&"veneneux": "venin", &"plastid": "sun", &"vacuole": "store",
 	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
 }
 
@@ -4104,7 +4104,7 @@ const EXPLAINS := {
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
 	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
-	&"toxicyst": "whatever bites you pays, and whatever swallows you dies",
+	&"veneneux": "quiconque vous mord paie, et quiconque vous avale meurt",
 	&"plastid": "makes a little of its own food, so you starve slower",
 	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
 	&"crista": "burns cleaner, so everything you carry costs less",
