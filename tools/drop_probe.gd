@@ -103,8 +103,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var _short_before: Array[StringName] = []
 
 	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
-			body_radius := 0.0, tiers := {}) -> int:
-		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers)
+			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
+		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
 		var b: Body = _cells[index]
 		if body_radius <= 0.0:
 			made += 1
@@ -1082,8 +1082,15 @@ func _spawns() -> void:
 		PackedVector2Array([cell.position, cell.position + Vector2(2600.0, 1800.0)])]
 	for round in 2:
 		var at: PackedVector2Array = players[round]
+		var reaches := PackedFloat32Array()
+		for p: Vector2 in at:
+			reaches.append(field.ping_range)
 		for k in 2000:
-			var index := field._make_one(at, 0.6, 0.45 if k % 2 == 0 else 0.92)
+			# Made for a player who sees everything and for one who sees
+			# nothing, in turn: the two drifter shares, 0.45 and 0.92.
+			field.set("_made_for", PackedFloat64Array([cell.radius, 1.0 if k % 2 == 0
+				else 0.0]))
+			var index := field._make_one(at, reaches)
 			if index < 0:
 				continue
 			made[round] += 1
@@ -2020,7 +2027,7 @@ func _replay_run() -> void:
 		await get_tree().process_frame
 
 
-# --- 12. The save, as far as 1b-1 needs it (§9, §14.3) -------------------------------------
+# --- 12. The save (§9, §14.3): 1b-1's four, and the room's (1b-2) --------------------------
 
 ## **Where these checks keep a drop**: a file of their own, never the player's.
 const KEEP := "user://drop_probe/drop.save"
@@ -2037,7 +2044,7 @@ const DERIVED_FIELDS: Array[String] = ["upkeep", "reserve", "income", "burn", "a
 
 ## Each check begins with nothing kept, and nothing is left kept after them.
 func _save() -> void:
-	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules]:
+	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules, _save_room]:
 		_forget_kept()
 		await check.call()
 	_forget_kept()
@@ -2106,6 +2113,58 @@ func _save_bodies() -> void:
 	field2.queue_free()
 	cell2.free()
 	_done(water)
+
+
+## **A room kept and loaded goes on as one that never stopped** (§14.3 check 12,
+## the room's case; §10.3): the server's room made anew and left to live with
+## nobody in it -- every body on its tick -- for forty seconds, then kept through
+## the file's whole path and loaded into a room of its own. From there both live
+## thirty seconds more on the same random stream, and their census lines must
+## match to the byte: the same population, the same deaths and meals, and the
+## same sum of every body's place, size and tank. Whatever the file forgot that
+## the drop reads -- a chase, a clock, the grid's order, the floor's short genes
+## -- moves the second one off the first.
+func _save_room() -> void:
+	seed(20261001)
+	var cell := CellBody.new()
+	var room := WatchedDrop.new()
+	room.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(room)
+	room.open_dedicated(cell)
+	for f in 40 * 60:
+		room._process(1.0 / 60.0)
+	var runs := 0
+	for b: Object in room.get("_cells"):
+		if b.get("seeded") and int(b.get("state")) == FoodField.State.STALK:
+			runs += 1
+	var wrote := DropSave.write(KEEP, DropSave.compose(room.drop_state(), {}))
+	var back := DropSave.read(KEEP)
+	var cell2 := CellBody.new()
+	var room2 := WatchedDrop.new()
+	room2.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(room2)
+	var done: Dictionary = room2.open_dedicated(cell2, back["drop"]) if not back.is_empty() \
+		else {}
+	seed(4242)
+	for f in 30 * 60:
+		room._process(1.0 / 60.0)
+	var ours: String = room.census_line()
+	seed(4242)
+	for f in 30 * 60:
+		room2._process(1.0 / 60.0)
+	var theirs: String = room2.census_line()
+	var age := room2.drop_age()
+	_check(("12. a room kept and loaded (%s, %d bodies, %d of them on a run as it was kept) goes"
+		+ " on as one that never stopped: after 30 s more on the same stream the two census"
+		+ " lines are %s -- %s") % [error_string(wrote), int(done.get("bodies", 0)), runs,
+		"the same" if ours == theirs else "DIFFERENT", ours if ours == theirs
+			else ours + " AGAINST " + theirs],
+		wrote == OK and not back.is_empty() and runs > 0 and ours == theirs
+		and is_equal_approx(age, 70.0) and int(done.get("bodies", 0)) > 500)
+	room.queue_free()
+	room2.queue_free()
+	cell.free()
+	cell2.free()
 
 
 ## **Your cell, kept** (row 17): a run with nothing kept opens on a new drop;

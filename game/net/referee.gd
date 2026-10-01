@@ -34,6 +34,9 @@ extends RefCounted
 
 const CellBody := preload("res://game/normal/cell.gd")
 const FoodField := preload("res://game/normal/food.gd")
+## The rim's arithmetic (ocean.md §10.5): a guest's body is held inside the
+## host's drop as everything in it is.
+const Basin := preload("res://game/mechanics/basin.gd")
 
 # --- The rules, by the name the log and the tools call them ------------------
 const MOVE := "movement"
@@ -238,6 +241,9 @@ class Budget extends RefCounted:
 ## Set from [constant REENTRY_KEEPS_WOUND]; a seam so the probe can hold both
 ## settings to their rule, and nothing else ever sets it.
 var reentry_keeps_wound := REENTRY_KEEPS_WOUND
+## **The host's drop's rim** (ocean.md §10.5), or null for a host in today's
+## water: [method set_rim].
+var rim: Basin = null
 
 # --- For the host, and for tools -------------------------------------------------
 ## **The fouls not yet handed to the ledger**, as `[rule, weight, why]`, oldest
@@ -353,6 +359,15 @@ func _init(now: float) -> void:
 	enters = Budget.new(1.0 / ENTER_EVERY, ENTER_BANK, 0.0, now)
 	bodies = Budget.new(PERSON_RATE, PERSON_BANK, 0.0, now)
 	_grant = [true, 0.0, FoodField.FIRST_DELAY, now]
+
+
+## **The drop the guest swims in**: its rim at [param center], [param radius]
+## across, or none for a radius of 0. A claim past it is held at it -- a clamp,
+## never a foul, because an honest guest's own run holds its cell the same way --
+## and a sister near it is placed where the rim puts her.
+func set_rim(center: Vector2, radius: float) -> void:
+	rim = Basin.new(center, radius) if radius > 0.0 and is_finite(radius) \
+		and center.is_finite() else null
 
 
 ## Every foul since the last call, oldest first; empties the queue.
@@ -633,6 +648,8 @@ func judge_sister(now: float, at: Vector2, radius: float, present: bool) -> Arra
 			_foul(SISTER, WEIGHT_SISTER_OFF, "sister: %.0f units from where her mother"
 				% far + " was last, where she could be %.0f -- put there" % could, now)
 			at = _claim_at + _toward(at - _claim_at) * could
+			if rim != null:
+				at = rim.contain(at, DAUGHTER_RADIUS)
 	_division_open = false
 	_sister_taken = true
 	_birth_open = true
@@ -660,8 +677,11 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 	# A distance that overflows float32 -- past about 1.8e19 -- is off the ring,
 	# and [method _toward] still finds her direction (#102).
 	var apart := at.distance_to(mother)
-	if ring and not (absf(apart - SISTER_DISTANCE) <= SISTER_RING):
+	if ring and not (absf(apart - SISTER_DISTANCE) <= SISTER_RING) \
+			and not _rim_holds(at, mother):
 		place = mother + _toward(at - mother) * SISTER_DISTANCE
+		if rim != null:
+			place = rim.contain(place, DAUGHTER_RADIUS)
 		off = true
 	if off and ring:
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f, %.0f units from her mother --"
@@ -671,6 +691,18 @@ func _sister_placed(now: float, at: Vector2, radius: float, mother: Vector2,
 		_foul(SISTER, WEIGHT_SISTER_OFF, "sister: r%.2f -- made r%.2f" % [radius,
 			DAUGHTER_RADIUS], now)
 	return [place, size]
+
+
+## **A sister the rim held back** (ocean.md §10.5): the guest's run puts her
+## where the rim puts a daughter left SISTER_DISTANCE to her side -- anywhere on
+## the circle a daughter's centre keeps to that is no further than the ring from
+## her mother -- so a point there, within SISTER_RING, is where she was left.
+func _rim_holds(at: Vector2, mother: Vector2) -> bool:
+	if rim == null:
+		return false
+	var circle := rim.radius - DAUGHTER_RADIUS
+	return absf(at.distance_to(rim.center) - circle) <= SISTER_RING \
+		and at.distance_to(mother) <= SISTER_DISTANCE + SISTER_RING
 
 
 ## **A DIED**: `[]` when there is no body to take out -- a death the host made
@@ -825,6 +857,9 @@ func claim(now: float, at: Vector2, heading: float, radius: float,
 			% at.distance_to(_frozen), now)
 	_applied_at = _applied_at.move_toward(towards,
 		_follow.take(_applied_at.distance_to(towards), now))
+	# **Held inside the drop** (ocean.md §10.5): a clamp and not a foul.
+	if rim != null:
+		_applied_at = rim.contain(_applied_at, size)
 	if began_out:
 		_frozen = _applied_at
 	# Which way.

@@ -1669,6 +1669,15 @@ drop, and a device keeps one of each kind at most:
 The dev app has its own package id and its own saves (CLAUDE.md), so the
 owner's drop on the dev app never touches a player's.
 
+**As built in 1b-2.** A host's drop is kept at every save point while it hosts,
+as when it is alone, and **a guest is never in the file**: no body where they
+are, their slot empty, and a chase of them kept as a chase of nobody. A guest's
+own drop is set aside as the pond swaps in, kept to its file then, and taken up
+again at a quiet place behind the beat when it leaves the pond, whichever way
+it leaves. A save point reached while a guest -- the app paused or closed --
+keeps the drop set aside and the cell marked as elsewhere, so the next launch
+opens the player's own drop and puts the cell at a quiet place in it.
+
 ### 9.2 What pack 1 lays down now, even before it saves
 
 Every piece of state a save needs has a home in 1a, so 1b adds a file and not a
@@ -1690,6 +1699,17 @@ format:
   same reason: a retired gene loads as a name the build does not know, kept
   and inert, exactly as `rhabdom` is today. A run in progress (a chase, a
   rest) is not saved: a loaded body starts drifting, as a spawned one does.
+
+**As built in 1b-2: a run in progress is saved after all.** A room saved and
+loaded has to go on to the same census as one that never stopped (§14.3 check
+12), and a drop whose bodies all start drifting on load does not: with the runs
+left out, the census lines 30 s after a load differed. So the file keeps each
+body's run -- its state, its target by id (a player's as nobody), its lunge,
+orient and search, ten clocks and two points -- and the grid's order, each
+gene's shortfall, the drop's counters and whose turn the spawner is on. They
+are optional keys, not a new `format`: a 1b-1 file still loads, its bodies
+drifting as before. A player's own drop is kept the same way, so it too wakes
+mid-chase.
 
 ### 9.3 The file
 
@@ -1828,6 +1848,18 @@ water cell safely, as in today's pond.
 case: two anchors, so twice the water stepped every frame when the two are
 apart, two scan lists, and the wire, on a phone. It is 1b's gate (§14.2).
 
+**As built in 1b-2.** The other player -- a phone host's one guest, or each of a
+server's two -- is a body in the person slots, 68 and 69, whatever lived there
+moved to a slot of its own as they arrive. A person is not in the grid, so every
+pass that needs them asks for them by name: the LOD's anchors, the prey search,
+the contacts (each person keeps a list of the bodies near enough for a mouth
+either way), separation and the senses. The rules are the drop's for everyone:
+a water mouth swallows a person that fits on contact, hunting or not, and is fed
+by them; a person's mouth on a settled floc grazes it -- `GRAZED`, food and no
+growth; a person that starves or is poisoned leaves remains. The spawner makes
+for each player in turn and keeps whom it made the water for; the drifter floor
+is kept round each player, and the snow counts every player in the water.
+
 ### 10.3 The home server: a room that always lives
 
 **One room in 1b** (row 18): the server's own drop, `user://rooms/1.save`,
@@ -1870,6 +1902,17 @@ the same room, saved the same way, simply running rules that pass things on.
 - **What a room costs with people in it** is what a phone host's drop costs: the
   drop and one scan list per player (§4.4).
 
+**As built in 1b-2** (`game/server/server.gd`): `user://rooms/1.save`, written
+by `drop_save.gd` as a player's drop is; made and kept at once on a first start
+and loaded on every start after -- `[server] room: loaded from … as it was kept`,
+or `CONVERTED` -- then kept every 300 s and before every stop, an update's
+restart included. Its guests are never in the file. A guest who arrives in an
+empty room is put at a quiet place. The rate is the far rate, `LOD_EVERY` 8:
+the room is the same drop whether anyone is in it or not. **Measured on the
+exported server** in this container, waiting with nobody in it: 4.6–4.9 % of
+one core and 129 MB, against 2.2–2.3 % and 124 MB for the build before the
+room -- the room's own 2.6 %, about the 3 % above.
+
 **More rooms are later**, and pack 1 leaves them room without designing them: a
 room is a `Food` field with an id; the server would hold several and route each
 guest to one; HELLO would carry the room wanted, an invite a default room, and
@@ -1891,6 +1934,13 @@ A guest on PROTOCOL 4 is refused at HELLO by name, as 1, 2 and 3 are. A guest's
 mirror holds only what it is sent -- at most 60 bodies and the flocs in reach -- so
 a guest costs what it costs today; the host carries the drop. Water cells'
 hunger never crosses the wire: it is the host's water.
+
+**As built in 1b-2** (`game/net/wire.gd`, `pond.gd`), as the table says. The
+send set is every body hunting the guest, then the nearest by the host's own
+key, sixty in all; the genome book is keyed on (id, meals); SETTLE goes as a
+floc comes into the guest's reach and CLEAR as it leaves it or goes. Today's
+water, which only a tool opens now (`normal_mode.gd`'s `drop = 0`), keys its
+entries on its serials under the same cap.
 
 ### 10.5 What the referee must learn, and `Wire.RULES`
 
@@ -1916,6 +1966,14 @@ hunger never crosses the wire: it is the host's water.
   `drop.contain` goes in the fingerprint by a sample value, as `cell.mended` does.
 - **The sister** near the rim is placed where `drop.contain(mother + side · 560)`
   puts her, so `judge_sister` accepts that point ± `SISTER_RING`.
+
+**As built in 1b-2.** `Wire.RULES` moved from `25e18f09…` to `46913eab…`. The
+fingerprint gained `drop.FLOC_GROWTH`, a sample of the rim's `contain`, and one
+sample each of `food.swallows_player` and `food.armoured_size` -- static
+functions the field itself calls, so each sample is the rule and not a copy of
+it. The referee holds a claim past the rim at it with no foul, and takes a
+sister where the rim held her -- on the circle a daughter's centre keeps to, no
+further than the ring from her mother -- with none.
 
 So 1b is **`Wire.PROTOCOL` 5 and a new `Wire.RULES` in the same commit**, and
 `net_probe`'s `referee` section fails until both are done, as CLAUDE.md requires.
@@ -2176,6 +2234,9 @@ taken out:
     on the same drop to the bit and the same cell -- and the same two daughters;
     an unknown format; and a changed `rules`, with a body past the rim contained
     and one past the cap trimmed, and the fingerprint's tables in name order.
+    **1b-2 built the room's**: a room made alone and 40 s on, kept through the
+    file's whole path and loaded, and both 30 s more on one stream -- the same
+    census line.
 13. **The replay** (§11, 1a-3): after every frame of a cell crossing the drop,
     the slots hold exactly the living bodies nearest it, none changing slot while
     it stays among them; today's water in the slots of its own indices with the

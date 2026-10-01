@@ -511,6 +511,10 @@ func _take_event(type: int, frame: PackedByteArray) -> Array:
 			return Wire.take_died(frame)
 		Wire.EVENT_SISTER:
 			return Wire.take_sister(frame)
+		Wire.EVENT_SETTLE:
+			return Wire.take_settle(frame)
+		Wire.EVENT_CLEAR:
+			return Wire.take_clear(frame)
 	return []
 
 
@@ -526,8 +530,8 @@ static func _body_why(body: Array) -> String:
 
 
 ## **A snapshot, held to what [method Wire.take_pond] promises**: every value
-## finite, no more bodies than a snapshot holds, each in a slot that is one, and
-## a person's motion one a body could have.
+## finite, no more bodies than a snapshot holds, the person and only the person
+## by the person's id, and a person's motion one a body could have.
 static func _pond_why(pond: Array) -> String:
 	var why := _finite_why(pond)
 	if not why.is_empty():
@@ -536,9 +540,10 @@ static func _pond_why(pond: Array) -> String:
 	if bodies.size() > Wire.POND_BODIES_MAX:
 		return "%d bodies, past %d" % [bodies.size(), Wire.POND_BODIES_MAX]
 	for body: Array in bodies:
-		var slot := int(body[Wire.Entry.SLOT])
-		if slot < 0 or slot >= Wire.POND_BODIES_MAX:
-			return "a body in slot %d" % slot
+		var id := int(body[Wire.Entry.ID])
+		var person := (int(body[Wire.Entry.FLAGS]) & Wire.POND_IS_PERSON) != 0
+		if id < 0 or id > 0xFFFFFFFF or (id == Wire.PERSON_ID) != person:
+			return "a body of id %d%s" % [id, " flagged as the person" if person else ""]
 		why = _motion_why(body[Wire.Entry.VELOCITY], float(body[Wire.Entry.TURNING]))
 		if not why.is_empty():
 			return why
@@ -578,7 +583,7 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 	var at := Vector2(_rng.randf_range(-5000.0, 5000.0), _rng.randf_range(-5000.0, 5000.0))
 	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.DIVIDE_RADIUS)
 	var tiers := _tiers()
-	var choice := _rng.randi_range(0, 13)
+	var choice := _rng.randi_range(0, 15)
 	match choice:
 		0:
 			return Wire.hello(_rng.randi_range(0, 9))
@@ -604,14 +609,20 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		8:
 			return Wire.event(seq, Wire.EVENT_ARRIVE, Wire.arrive_payload(at,
-				_rng.randf_range(-PI, PI)))
+				_rng.randf_range(-PI, PI), at * 0.5, _rng.randf_range(0.0, 8000.0)))
 		9:
 			return Wire.event(seq, Wire.EVENT_PERSON, Wire.person_payload(_rng.randf() < 0.5,
 				tiers, tiers.keys()))
 		10:
 			return Wire.event(seq, Wire.EVENT_GENOME, Wire.genome_payload(
-				_rng.randi_range(0, 68), _rng.randi_range(0, 0xFFFF), _rng.randi_range(0, 40),
-				tiers))
+				_rng.randi_range(1, 0x7FFFFFFF), _rng.randi_range(0, 40), tiers))
+		13:
+			return Wire.event(seq, Wire.EVENT_SETTLE, Wire.settle_payload(
+				_rng.randi_range(1, 0x7FFFFFFF), at, _rng.randf_range(8.0, 18.0), _rng.randf(),
+				_rng.randf_range(0.0, 150.0)))
+		14:
+			return Wire.event(seq, Wire.EVENT_CLEAR, Wire.clear_payload(
+				_rng.randi_range(1, 0x7FFFFFFF)))
 		11:
 			return Wire.event(seq, Wire.EVENT_CONTACT, Wire.contact_payload(
 				_rng.randi_range(1, 6), at, _rng.randf(), _rng.randi_range(1, 2),
@@ -641,8 +652,8 @@ func _pond_bodies() -> Array:
 	var bodies: Array = []
 	for i in _rng.randi_range(0, 12):
 		var person := _rng.randf() < 0.2
-		bodies.append([i, _rng.randi_range(0, 0xFFFF), _rng.randi_range(0, 40),
-			Wire.POND_IS_PERSON if person else 0,
+		bodies.append([Wire.PERSON_ID if person else _rng.randi_range(1, 0x7FFFFFFF),
+			_rng.randi_range(0, 40), Wire.POND_IS_PERSON if person else 0,
 			Vector2(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-3000.0, 3000.0)),
 			_rng.randf_range(-PI, PI), _rng.randf_range(4.0, 40.0), _rng.randf(),
 			_rng.randf_range(0.0, 400.0), Vector2(_rng.randf_range(-300.0, 300.0),
@@ -2168,7 +2179,7 @@ func _referee_plan(seed: int, run: int) -> Array:
 	var plan: Array = []
 	for step in REFEREE_STEPS:
 		var dt := _f32([0.0, 0.016, 0.05, 0.5, 3.0, 12.0][rng.randi_range(0, 5)])
-		var what := rng.randi_range(0, 9)
+		var what := rng.randi_range(0, 10)
 		var at := Vector2(_wild(rng, 5000.0), _wild(rng, 5000.0))
 		match what:
 			0:
@@ -2200,6 +2211,11 @@ func _referee_plan(seed: int, run: int) -> Array:
 				plan.append([dt, "left", _f32(rng.randf()), _f32(rng.randf_range(0.0, 42.0))])
 			9:
 				plan.append([dt, "stalled", _f32(rng.randf_range(0.0, 20.0))])
+			10:
+				# **The host's drop** (ocean.md §10.5): a rim, somewhere, of any
+				# size a host could have -- or none.
+				plan.append([dt, "rim", Vector2(_wild(rng, 2000.0), _wild(rng, 2000.0)),
+					_f32([0.0, 6000.0, 50.0, rng.randf_range(0.0, 9000.0)][rng.randi_range(0, 3)])])
 	return plan
 
 
@@ -2247,7 +2263,7 @@ static func _referee_read(code: String) -> Array:
 					f[9] == "1"])
 			"enter":
 				plan.append([dt, what, _f32(float(f[2]))])
-			"arrive", "sister":
+			"arrive", "sister", "rim":
 				plan.append([dt, what, Vector2(float(f[2]), float(f[3])), _f32(float(f[4]))])
 			"person":
 				var tiers := {}
@@ -2345,6 +2361,8 @@ func _referee_run(plan: Array, only: Array) -> Array:
 					here = false
 			"stalled":
 				ref.stalled(float(step[2]))
+			"rim":
+				ref.set_rim(step[2], float(step[3]))
 		ref.take_fouls()
 		judged += 1
 		if why.is_empty() and _catcher.errors() > errors:

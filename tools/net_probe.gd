@@ -47,8 +47,8 @@ extends Node
 ##
 ## **And the dedicated server** (`game/server/`, docs/server.md): the real
 ## server scene with two guests, each a real run of the game on this build's
-## own guest code -- which is exactly the PROTOCOL 4 guest a phone that has
-## never heard of a server runs -- arriving, mirroring each other as the friend,
+## own guest code -- which is exactly the guest a phone that has never heard
+## of a server runs -- arriving, mirroring each other as the friend,
 ## eating each other, being eaten by the water, leaving, and being told when
 ## the server stops. Then its update loop's decisions, against a fake release
 ## feed and a loopback HTTP server, with no network.
@@ -610,30 +610,35 @@ func _check_pond_wire() -> void:
 		if not Wire.Entry.has(key) or int(Wire.Entry[key]) != int(FoodField.Entry[key]):
 			same = false
 	_says(same and Wire.Entry.size() == FoodField.Entry.size()
+			and FoodField.ENTRY_SLOT == Wire.Entry.size()
 			and Wire.POND_STALKING == FoodField.FLAG_STALKING
 			and Wire.POND_IS_PERSON == FoodField.FLAG_PERSON
 			and Wire.POND_IN_WATER == FoodField.FLAG_IN_WATER
-			and Wire.POND_BODIES_MAX == FoodField.POND_SLOTS
+			and Wire.SEND_MAX == FoodField.SEND_MAX
+			and Wire.POND_BODIES_MAX == FoodField.SEND_MAX + 1
+			and Wire.PERSON_ID == FoodField.PERSON_ID
 			and Wire.CONTACT_ATE == FoodField.Contact.ATE
-			and Wire.CONTACT_KILLED == FoodField.Contact.KILLED,
-		"pond wire: the snapshot's entry order, its flags, its slot count and"
-		+ " the contact numbers are the field's own")
+			and Wire.CONTACT_KILLED == FoodField.Contact.KILLED
+			and Wire.CONTACT_GRAZED == FoodField.Contact.GRAZED,
+		"pond wire: the snapshot's entry order, its flags, its send set, the"
+		+ " person's id and the contact numbers are the field's own")
 
-	# **The budget, at its worst**: sixty-eight water cells and the other
-	# player, every one of them sent. One ENet datagram under the MTU.
+	# **The budget, at its worst** (ocean.md §10.4): the send set's sixty water
+	# bodies and the other player, every one of them sent, ids past 16 bits.
+	# One ENet datagram under the MTU.
 	var bodies: Array = []
-	for i in FoodField.PERSON_SLOT:
-		bodies.append([i, 60000 + i, i % 7, Wire.POND_STALKING if i % 5 == 0 else 0,
+	for i in Wire.SEND_MAX:
+		bodies.append([70001 + 977 * i, i % 7, Wire.POND_STALKING if i % 5 == 0 else 0,
 			Vector2(-3000.5 + 91.25 * i, 1777.75 - 13.5 * i), -3.0 + 0.09 * i,
 			4.0 + 0.61 * i, float(i % 11) / 10.0, 2.0 * float(i % 90), Vector2.ZERO,
 			0.0])
-	bodies.append([FoodField.PERSON_SLOT, 65535, 255,
+	bodies.append([Wire.PERSON_ID, 255,
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var whole := Wire.pond(123456, 0.62, bodies)
-	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1262,
-		"pond wire: sixty-eight cells and a person make %d bytes, the budget's"
-		% whole.size() + " 1,262 -- one datagram under ENet's 1,392")
+	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1179,
+		"pond wire: sixty water bodies and a person make %d bytes, the budget's"
+		% whole.size() + " 1,179 -- one datagram under ENet's 1,392")
 	var said := Wire.take_pond(whole)
 	var exact := said.size() == 3 and int(said[0]) == 123456 \
 		and absf(float(said[1]) - 0.62) <= 0.5 / 255.0 \
@@ -645,8 +650,7 @@ func _check_pond_wire() -> void:
 			var got: Array = said[2][k]
 			worst_heading = maxf(worst_heading, absf(angle_difference(
 				float(got[Wire.Entry.HEADING]), float(sent[Wire.Entry.HEADING]))))
-			if int(got[Wire.Entry.SLOT]) != int(sent[Wire.Entry.SLOT]) \
-					or int(got[Wire.Entry.SERIAL]) != int(sent[Wire.Entry.SERIAL]) & 0xFFFF \
+			if int(got[Wire.Entry.ID]) != int(sent[Wire.Entry.ID]) \
 					or int(got[Wire.Entry.MEALS]) != int(sent[Wire.Entry.MEALS]) \
 					or int(got[Wire.Entry.FLAGS]) != int(sent[Wire.Entry.FLAGS]) \
 					or not (got[Wire.Entry.AT] as Vector2).is_equal_approx(sent[Wire.Entry.AT]) \
@@ -662,7 +666,7 @@ func _check_pond_wire() -> void:
 						float(sent[Wire.Entry.TURNING])):
 				exact = false
 	_says(exact and worst_heading <= TAU / float(Wire.BEARING_STEPS) * 0.5 + 1e-4,
-		"pond wire: every body round-trips -- slot, serial, meals, flags, place"
+		"pond wire: every body round-trips -- id, meals, flags, place"
 		+ " exactly, radius to 1/64, wound to 1/255, speed to 2 u/s, heading to"
 		+ " half a step (worst %.4f rad) -- and the person's motion exactly"
 		% worst_heading)
@@ -676,22 +680,25 @@ func _check_pond_wire() -> void:
 			break
 	var longer := whole.duplicate()
 	longer.append(0)
-	var bad_slot := whole.duplicate()
-	bad_slot[Wire.POND_HEADER] = Wire.POND_BODIES_MAX
+	var bad_id := whole.duplicate()
+	bad_id.encode_u32(Wire.POND_HEADER, Wire.PERSON_ID)
+	var bad_person := whole.duplicate()
+	bad_person.encode_u32(whole.size() - Wire.POND_PERSON, 42)
 	var bad_place := whole.duplicate()
-	bad_place.encode_float(Wire.POND_HEADER + 5, NAN)
+	bad_place.encode_float(Wire.POND_HEADER + 6, NAN)
 	var bad_motion := whole.duplicate()
 	bad_motion.encode_float(whole.size() - 12, INF)
 	var too_many := whole.duplicate()
 	too_many[6] = Wire.POND_BODIES_MAX + 1
 	_says(refuses and Wire.take_pond(longer).is_empty()
-			and Wire.take_pond(bad_slot).is_empty()
+			and Wire.take_pond(bad_id).is_empty()
+			and Wire.take_pond(bad_person).is_empty()
 			and Wire.take_pond(bad_place).is_empty()
 			and Wire.take_pond(bad_motion).is_empty()
 			and Wire.take_pond(too_many).is_empty(),
 		"pond wire: a snapshot is refused whole at every truncation, one byte"
-		+ " long, with a slot past 68, a place or a motion that is not finite,"
-		+ " or a count past 69")
+		+ " long, with a water body under the person's id or the person under a"
+		+ " body's, a place or a motion that is not finite, or a count past 61")
 	# And never written: a body the reader would refuse is left out, and a
 	# motion no body could have goes as none.
 	var rotten: Array = bodies.slice(0, 3)
@@ -706,14 +713,13 @@ func _check_pond_wire() -> void:
 		"pond wire: a body the reader would refuse is never written, and an"
 		+ " impossible motion goes as none")
 	# **Never past the budget, whatever the writer is handed** (review): sixty-
-	# nine bodies all flagged as people were 2,078 bytes, which ENet sends as
+	# one bodies all flagged as people would be 1,899 bytes, which ENet sends as
 	# fragments -- one lost, the whole snapshot lost. The writer leaves out what
 	# would not fit, and the reader refuses a longer frame outright, however
 	# well formed.
 	var people: Array = []
 	for i in Wire.POND_BODIES_MAX:
 		var one: Array = (bodies[bodies.size() - 1] as Array).duplicate()
-		one[Wire.Entry.SLOT] = i
 		people.append(one)
 	var capped := Wire.pond(7, 0.0, people)
 	var capped_said := Wire.take_pond(capped)
@@ -724,22 +730,22 @@ func _check_pond_wire() -> void:
 	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 3
 			and (capped_said[2] as Array).size() == fits
 			and over.size() > Wire.POND_MAX and Wire.take_pond(over).is_empty(),
-		"pond wire: sixty-nine people are written as the %d that fit, %d bytes of"
+		"pond wire: sixty-one people are written as the %d that fit, %d bytes of"
 		% [fits, capped.size()] + " %d; one more, well formed at %d bytes, is"
 		% [Wire.POND_MAX, over.size()] + " refused")
 
-	# The seven events, each against its decoder.
+	# The nine events, each against its decoder.
 	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"toxicyst": 1,
 		&"ampulla": 2}
 	var order: Array = [&"cytostome", &"", &"cirrus", &"flagellum", &"ampulla", &"",
 		&"toxicyst"]
 	var enter := Wire.event(9, Wire.EVENT_ENTER, Wire.enter_payload(28.28))
 	var arrive := Wire.event(10, Wire.EVENT_ARRIVE,
-		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0))
+		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0, Vector2(-1234.5, 777.25), 6000.0))
 	var person_frame := Wire.event(11, Wire.EVENT_PERSON,
 		Wire.person_payload(true, worn, order))
 	var genome := Wire.event(12, Wire.EVENT_GENOME,
-		Wire.genome_payload(67, 70001, 4, worn))
+		Wire.genome_payload(3000000001, 4, worn))
 	var ate := Wire.event(13, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.ATE, Vector2(3.5, -4.5), 0.93, FoodField.By.FRIEND,
 		&"toxicyst"))
@@ -752,6 +758,11 @@ func _check_pond_wire() -> void:
 		FoodField.Cause.CHEWED, FoodField.By.FRIEND, Vector2(-44.5, 90.0)))
 	var sister := Wire.event(17, Wire.EVENT_SISTER, Wire.sister_payload(
 		Vector2(700.0, -3.0), -1.25, 28.28, worn))
+	var settle := Wire.event(18, Wire.EVENT_SETTLE, Wire.settle_payload(4000000123,
+		Vector2(-812.5, 4410.25), 12.75, 0.4, 97.25))
+	var clear := Wire.event(19, Wire.EVENT_CLEAR, Wire.clear_payload(4000000123))
+	var grazed := Wire.event(20, Wire.EVENT_CONTACT, Wire.contact_payload(
+		FoodField.Contact.GRAZED, Vector2(10.5, -2.0), 0.62, FoodField.By.WATER))
 	var e := Wire.take_enter(enter)
 	var a := Wire.take_arrive(arrive)
 	var p := Wire.take_person(person_frame)
@@ -761,22 +772,41 @@ func _check_pond_wire() -> void:
 	var b := Wire.take_contact(bit)
 	var d := Wire.take_died(died)
 	var s := Wire.take_sister(sister)
+	var st := Wire.take_settle(settle)
+	var cl := Wire.take_clear(clear)
+	var gr := Wire.take_contact(grazed)
 	var step := TAU / float(Wire.BEARING_STEPS)
 	_says(enter.size() == Wire.ENTER_SIZE and arrive.size() == Wire.ARRIVE_SIZE
 			and died.size() == Wire.DIED_SIZE and bit.size() == Wire.CONTACT_SIZE
-			and killed.size() == Wire.CONTACT_SIZE + 1,
+			and killed.size() == Wire.CONTACT_SIZE + 1
+			and settle.size() == Wire.SETTLE_SIZE and clear.size() == Wire.CLEAR_SIZE
+			and grazed.size() == Wire.CONTACT_SIZE
+			and Wire.ARRIVE_SIZE == 27 and Wire.SETTLE_SIZE == 22 and Wire.CLEAR_SIZE == 10,
 		"pond wire: ENTER %d, ARRIVE %d, DIED %d and CONTACT %d bytes, as §2 says"
 		% [enter.size(), arrive.size(), died.size(), bit.size()]
-		+ " (KILLED one more, for its cause)")
+		+ " (KILLED one more, for its cause); SETTLE %d and CLEAR %d, and ARRIVE with"
+		% [settle.size(), clear.size()] + " its rim, as ocean.md §10.4 says")
 	_says(e.size() == 1 and is_equal_approx(float(e[0]), 28.28)
-			and a.size() == 2 and (a[0] as Vector2).is_equal_approx(Vector2(560.5, -12.25))
+			and a.size() == 4 and (a[0] as Vector2).is_equal_approx(Vector2(560.5, -12.25))
 			and absf(angle_difference(float(a[1]), 1.0)) <= step * 0.5
+			and (a[2] as Vector2).is_equal_approx(Vector2(-1234.5, 777.25))
+			and is_equal_approx(float(a[3]), 6000.0)
 			and p.size() == 3 and bool(p[0]) and p[1] == worn and p[2] == order
-			and g.size() == 4 and int(g[0]) == 67 and int(g[1]) == 70001 & 0xFFFF
-			and int(g[2]) == 4 and g[3] == worn,
-		"pond wire: ENTER, ARRIVE, PERSON and GENOME round-trip -- the worn"
-		+ " genome by name, with its empty slots, and a serial past 16 bits as"
-		+ " its low 16")
+			and g.size() == 3 and int(g[0]) == 3000000001 and int(g[1]) == 4
+			and g[2] == worn,
+		"pond wire: ENTER, ARRIVE with the drop's rim, PERSON and GENOME round-trip --"
+		+ " the worn genome by name, with its empty slots, and a body's id past 31"
+		+ " bits whole")
+	_says(st.size() == 5 and int(st[0]) == 4000000123
+			and (st[1] as Vector2).is_equal_approx(Vector2(-812.5, 4410.25))
+			and is_equal_approx(float(st[2]), 12.75)
+			and absf(float(st[3]) - 0.4) <= 0.5 / Wire.POND_WOUND_SCALE
+			and absf(float(st[4]) - 97.25) <= 0.5 / Wire.SETTLE_LIFE_SCALE
+			and cl.size() == 1 and int(cl[0]) == 4000000123
+			and gr.size() == 6 and int(gr[0]) == FoodField.Contact.GRAZED
+			and is_equal_approx(float(gr[2]), 0.62) and gr[4] == &"",
+		"pond wire: SETTLE carries a floc's id, place, size, settle and life, CLEAR"
+		+ " its id, and a GRAZED CONTACT its nutrition and no gene")
 	_says(c.size() == 6 and int(c[0]) == FoodField.Contact.ATE
 			and (c[1] as Vector2).is_equal_approx(Vector2(3.5, -4.5))
 			and is_equal_approx(float(c[2]), 0.93) and int(c[3]) == FoodField.By.FRIEND
@@ -791,7 +821,8 @@ func _check_pond_wire() -> void:
 			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn,
 		"pond wire: CONTACT carries an ATE's gene and a KILLED's cause, and DIED"
 		+ " and SISTER round-trip")
-	var events := [enter, arrive, person_frame, genome, ate, killed, bit, died, sister]
+	var events := [enter, arrive, person_frame, genome, ate, killed, bit, died, sister,
+		settle, clear, grazed]
 	var cut_ok := true
 	for frame: PackedByteArray in events:
 		for cut in frame.size():
@@ -801,14 +832,17 @@ func _check_pond_wire() -> void:
 					and Wire.take_genome(short).is_empty()
 					and Wire.take_contact(short).is_empty()
 					and Wire.take_died(short).is_empty()
-					and Wire.take_sister(short).is_empty()):
+					and Wire.take_sister(short).is_empty()
+					and Wire.take_settle(short).is_empty()
+					and Wire.take_clear(short).is_empty()):
 				cut_ok = false
 		var long := frame.duplicate()
 		long.append(0)
 		if not (Wire.take_enter(long).is_empty() and Wire.take_arrive(long).is_empty()
 				and Wire.take_person(long).is_empty() and Wire.take_genome(long).is_empty()
 				and Wire.take_contact(long).is_empty() and Wire.take_died(long).is_empty()
-				and Wire.take_sister(long).is_empty()):
+				and Wire.take_sister(long).is_empty() and Wire.take_settle(long).is_empty()
+				and Wire.take_clear(long).is_empty()):
 			cut_ok = false
 	_says(cut_ok, "pond wire: every event is refused at every truncation and one"
 		+ " byte long, by every decoder")
@@ -1251,14 +1285,15 @@ func _check_link() -> void:
 
 func _check_skew() -> void:
 	# **No older protocol is a hypothetical.** 1 is the LAN build that first
-	# shipped, 2 is the one that drew the friend half a second late, and 3 is
-	# the one with a friend who cannot eat you and no pond; all of them are on
-	# somebody's phone right now, because updates are opt-in, and a 3 reads a
-	# POND frame as a kind it has never heard of. The one from the future is
-	# still worth its two seconds: the host cannot tell which side is behind,
-	# and does not need to.
-	for theirs: int in [Wire.PROTOCOL - 3, Wire.PROTOCOL - 2, Wire.PROTOCOL - 1,
-			Wire.PROTOCOL + 1]:
+	# shipped, 2 is the one that drew the friend half a second late, 3 is the
+	# one with a friend who cannot eat you and no pond, and 4 is today's water
+	# shared, whose snapshot is keyed on a slot; all of them are on somebody's
+	# phone right now, because updates are opt-in, and a 4 reads a protocol-5
+	# snapshot's ids as slots (ocean.md §10.4). So every one of them is refused
+	# by name, 4 included. The one from the future is still worth its two
+	# seconds: the host cannot tell which side is behind, and does not need to.
+	var older: Array = range(1, Wire.PROTOCOL)
+	for theirs: int in older + [Wire.PROTOCOL + 1]:
 		await _one_skew(theirs)
 
 
@@ -1450,16 +1485,16 @@ func _limits_edges() -> void:
 		order.append(StringName(String.chr(97 + i).repeat(Wire.NAME_MAX)))
 	var long_gene := StringName("z".repeat(Wire.NAME_MAX))
 	var bodies: Array = []
-	for i in FoodField.PERSON_SLOT:
-		bodies.append([i, 60000 + i, i % 7, 0, Vector2(91.25 * i, -13.5 * i), 0.09 * i,
+	for i in Wire.SEND_MAX:
+		bodies.append([60000 + i, i % 7, 0, Vector2(91.25 * i, -13.5 * i), 0.09 * i,
 			4.0 + 0.61 * i, 0.1, 2.0 * float(i % 90), Vector2.ZERO, 0.0])
-	bodies.append([FoodField.PERSON_SLOT, 65535, 255,
+	bodies.append([Wire.PERSON_ID, 255,
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var at := Vector2(700.0, -3.0)
 	var person_max := Wire.person_payload(true, genes, order)
 	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes)
-	var genome_max := Wire.genome_payload(67, 65535, 255, genes)
+	var genome_max := Wire.genome_payload(0xFFFFFFFF, 255, genes)
 	var contact_max := Wire.contact_payload(FoodField.Contact.ATE, at, 0.9,
 		FoodField.By.FRIEND, long_gene)
 	# `[name, frame, least, most, the host sends it, a guest sends it]` -- the
@@ -1477,14 +1512,14 @@ func _limits_edges() -> void:
 			true, true],
 		["ENTER", Wire.event(1, Wire.EVENT_ENTER, Wire.enter_payload(26.0)),
 			Wire.ENTER_SIZE, Wire.ENTER_SIZE, false, true],
-		["ARRIVE", Wire.event(1, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 1.0)),
-			Wire.ARRIVE_SIZE, Wire.ARRIVE_SIZE, true, false],
+		["ARRIVE", Wire.event(1, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 1.0,
+			Vector2.ZERO, 6000.0)), Wire.ARRIVE_SIZE, Wire.ARRIVE_SIZE, true, false],
 		["PERSON, smallest", Wire.event(1, Wire.EVENT_PERSON,
 			Wire.person_payload(false, {}, [])), Wire.PERSON_MIN, Wire.PERSON_MAX, true, true],
 		["PERSON, largest", Wire.event(1, Wire.EVENT_PERSON, person_max),
 			Wire.PERSON_MIN, Wire.PERSON_MAX, true, true],
 		["GENOME, smallest", Wire.event(1, Wire.EVENT_GENOME,
-			Wire.genome_payload(0, 0, 0, {})), Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
+			Wire.genome_payload(1, 0, {})), Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
 		["GENOME, largest", Wire.event(1, Wire.EVENT_GENOME, genome_max),
 			Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
 		["CONTACT, smallest", Wire.event(1, Wire.EVENT_CONTACT, Wire.contact_payload(
@@ -1500,6 +1535,10 @@ func _limits_edges() -> void:
 			false, true],
 		["SISTER, largest", Wire.event(1, Wire.EVENT_SISTER, sister_max),
 			Wire.SISTER_MIN, Wire.SISTER_MAX, false, true],
+		["SETTLE", Wire.event(1, Wire.EVENT_SETTLE, Wire.settle_payload(9, at, 12.0, 1.0,
+			120.0)), Wire.SETTLE_SIZE, Wire.SETTLE_SIZE, true, false],
+		["CLEAR", Wire.event(1, Wire.EVENT_CLEAR, Wire.clear_payload(9)),
+			Wire.CLEAR_SIZE, Wire.CLEAR_SIZE, true, false],
 		["POND, smallest", Wire.pond(1, 0.0, []), Wire.POND_HEADER, Wire.POND_MAX,
 			true, false],
 		["POND, largest", Wire.pond(1, 0.5, bodies), Wire.POND_HEADER, Wire.POND_MAX,
@@ -1530,7 +1569,7 @@ func _limits_edges() -> void:
 		and Wire.SISTER_MAX == sister_max.size() + Wire.EVENT_HEADER \
 		and Wire.GENOME_MAX == genome_max.size() + Wire.EVENT_HEADER \
 		and Wire.CONTACT_MAX == contact_max.size() + Wire.EVENT_HEADER \
-		and Wire.POND_MAX == (cases[17][1] as PackedByteArray).size() \
+		and Wire.POND_MAX == (cases[cases.size() - 1][1] as PackedByteArray).size() \
 		and Wire.GUEST_FRAME_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
 		and at_bound.size() == cases.size()
 	var later := not Wire.known(0x7E, 0) and not Wire.known(Wire.KIND_EVENT, 0x7F) \
@@ -1680,7 +1719,7 @@ func _limits_direction() -> void:
 	var guest: Node = await _limits_guest("LimitsDirectionGuest")
 	var gid: int = guest.my_id()
 	guest._to(int(guest.get("_host_id")), Wire.pond(1, 0.0, []))
-	guest.send_event(Wire.EVENT_GENOME, Wire.genome_payload(3, 1, 0, {}))
+	guest.send_event(Wire.EVENT_GENOME, Wire.genome_payload(3, 0, {}))
 	await _limits_until(func() -> bool: return int(host.gate_counts["malformed"]) >= 2)
 	var peer: Dictionary = (host.get("_peers") as Dictionary).get(gid, {})
 	var points: float = host.points_of(gid)
@@ -2158,7 +2197,7 @@ func _limits_queues() -> void:
 	node.hosting = false
 	node.guests_max = 1
 	var host_peer: Dictionary = peer.call(1)
-	var genome := Wire.genome_payload(1, 1, 0, genes)
+	var genome := Wire.genome_payload(1, 0, genes)
 	for seq in 600:
 		node._take_event(host_peer, Wire.event(seq, Wire.EVENT_GENOME, genome))
 	var guest_kept := (node.pond_events as Array).size()
@@ -2427,6 +2466,7 @@ func _check_referee() -> void:
 	_referee_reentry()
 	_referee_once()
 	_referee_gaps()
+	_referee_rim()
 	for node: Node in _ref_nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -2501,6 +2541,23 @@ func _rules_text() -> String:
 	put.call("food.Contact", FoodField.Contact)
 	put.call("food.Cause", FoodField.Cause)
 	put.call("food.By", FoodField.By)
+	# **The drop** (ocean.md §10.5): a floc feeds and grows nobody, so a graze is
+	# never a meal to the referee; the rim holds a body in -- by a sample value,
+	# as `cell.mended` is -- which is where a claim past it is held and a sister
+	# near it is put; and the two eating rules a guest is held to, which the host
+	# decides and the referee never judges, one sample each, so two builds that
+	# disagree on them refuse each other at HELLO: a mouth swallows a player
+	# that fits on contact, hunting or not (row 15), and `pellicle` makes a body
+	# bigger to a mouth (row 5).
+	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
+	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
+		Referee.DAUGHTER_RADIUS)
+	put.call("drop.contain(7000,125;r28.28).x", held.x)
+	put.call("drop.contain(7000,125;r28.28).y", held.y)
+	put.call("food.swallows_player(not hunting, on contact)",
+		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
+	put.call("food.armoured_size(r30, pellicle 2)",
+		FoodField.armoured_size(30.0, CellBody.ARMOR_BY_TIER[2], FoodField.ARMOUR_SWALLOW))
 	# normal_mode.gd: the sister's ring and the free senses.
 	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
 	put.call("run.FIRST_SENSES", NormalMode.FIRST_SENSES)
@@ -2979,6 +3036,65 @@ func _referee_dividing() -> void:
 		+ " back in undivided fouls; a daughter's frame waits %.0f s for her sister"
 		% Referee.BIRTH_WAIT + " and fouls only then; one fed before her sister lands"
 		+ " is expected at what she was fed")
+
+
+## **The host's drop's rim, at its referee** (ocean.md §10.5): a claim past the
+## rim is held at it -- a clamp, never a foul, since an honest guest's own run
+## holds its cell there too -- and a sister the rim held back is taken where the
+## guest's run put her, unfouled, when the same sister with no rim is fouled;
+## one off the ring and off the rim is put on the ring, inside it, and fouled.
+func _referee_rim() -> void:
+	var centre := Vector2(1234.0, -567.0)
+	var rim := FoodField.Drop.new(centre).meniscus
+	# A claim 25 units past the edge, at walking pace.
+	var edge := centre + Vector2(rim.radius - CellBody.BASE_RADIUS - 10.0, 0.0)
+	var walker := _ref_arrived(0.0, edge)
+	walker.set_rim(centre, rim.radius)
+	var past := edge + Vector2(25.0, 0.0)
+	var held: Array = walker.claim(0.3, past, 0.0, CellBody.BASE_RADIUS, Vector2(80.0, 0.0),
+		0.0, false)
+	var walker_said := walker.take_fouls()
+	var at := held[0] as Vector2
+	# A division 140 from the edge; her side of her mother is past the rim.
+	var mother := centre + Vector2(rim.radius - 140.0, 0.0)
+	var side := Vector2(0.6, 0.8)
+	var kept := rim.contain(mother + side * Referee.SISTER_DISTANCE, Referee.DAUGHTER_RADIUS)
+	var ref := _ref_near_rim(mother, centre, rim.radius)
+	var taken := ref.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
+	var taken_said := ref.take_fouls()
+	var bare := _ref_near_rim(mother, centre, 0.0)
+	bare.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
+	var bare_said := _ref_rules(bare.take_fouls())
+	# Off the ring and off the rim: 300 out, on her side.
+	var stray := _ref_near_rim(mother, centre, rim.radius)
+	var put := stray.judge_sister(3.0, mother + side * 300.0, Referee.DAUGHTER_RADIUS, true)
+	var stray_said := stray.take_fouls()
+	_says(walker_said.is_empty() and rim.inside(at, CellBody.BASE_RADIUS)
+			and at.distance_to(rim.contain(past, CellBody.BASE_RADIUS)) < 0.01
+			and taken.size() == 2 and (taken[0] as Vector2).distance_to(kept) < 0.01
+			and taken_said.is_empty() and bare_said == [Referee.SISTER]
+			and put.size() == 2 and (put[0] as Vector2).distance_to(kept) < 0.5
+			and rim.inside(put[0], Referee.DAUGHTER_RADIUS)
+			and _ref_rules(stray_said) == [Referee.SISTER]
+			and float(stray_said[0][1]) == Referee.WEIGHT_SISTER_OFF,
+		"referee, the drop: a claim %.0f past the rim is held %.1f inside it with %d"
+		% [past.distance_to(centre) - rim.radius + CellBody.BASE_RADIUS,
+			rim.radius - CellBody.BASE_RADIUS - at.distance_to(centre), walker_said.size()]
+		+ " fouls; a sister the rim held back, %.0f from her mother, is taken there with"
+		% kept.distance_to(mother) + " %d fouls (%s with no rim); one off the ring and"
+		% [taken_said.size(), bare_said] + " the rim is put on the ring inside it and"
+		+ " fouled %s" % [_ref_rules(stray_said)])
+
+
+## A referee, its rim at [param centre] [param radius] across (0 for none),
+## whose guest is at r40 and out of the water at [param at], from 2.5 s.
+func _ref_near_rim(at: Vector2, centre: Vector2, radius: float) -> Referee:
+	var ref := _ref_arrived(0.0, at)
+	ref.set_rim(centre, radius)
+	ref.credit_meals(4)
+	ref.claim(2.0, at, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	ref.claim(2.5, at, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	return ref
 
 
 ## A referee whose guest is at r40 and out of the water at the origin, from 2.5 s.
@@ -3540,8 +3656,10 @@ func _check_run() -> void:
 	# **Before it enters the tree**, which is where `normal_mode.gd` reads it.
 	# Forced rather than inherited: the view is remembered in `user://`, so a
 	# probe that took whatever was last chosen would assert about the marker on
-	# some machines and about nothing on others.
+	# some machines and about nothing on others. And it keeps no drop: the
+	# game's default is the player's own file (ocean.md §9).
 	run.mode = 1
+	run.keep = ""
 	get_tree().root.add_child.call_deferred(run)
 	await run.ready
 	await get_tree().process_frame
@@ -3811,6 +3929,7 @@ func _check_run() -> void:
 	# only ever heard.
 	var blind: Node = load(RUN_SCENE).instantiate()
 	blind.mode = 0
+	blind.keep = ""
 	get_tree().root.add_child.call_deferred(blind)
 	await blind.ready
 	other.report_body(Vector2(0.0, -260.0), 0.0, 29.0)
@@ -3896,6 +4015,20 @@ class WatchedFood extends "res://game/normal/food.gd":
 			touched_person += 1
 		super._devour(b, prey)
 
+	# **The drop's doors** (ocean.md §10.2): a body made into a person's slot,
+	# or one leaving it as water, is the same thing happening to a person.
+	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
+			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
+		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
+		if _pond and _is_person_slot(index):
+			touched_person += 1
+		return index
+
+	func _drop_lose(index: int, cause: int) -> void:
+		if _pond and _is_person_slot(index):
+			touched_person += 1
+		super._drop_lose(index, cause)
+
 
 var _pond_nodes: Array[Node] = []
 var _pond_fields: Array = []
@@ -3911,10 +4044,14 @@ func _check_pond_field() -> void:
 	_pond_out_of_water()
 	_pond_mirror()
 	_pond_housekeeping()
+	_drop_pond_rules()
+	_drop_pond_anchors()
+	_drop_pond_mirror()
+	_drop_pond_kept()
 	var touched := 0
 	for field: Node in _pond_fields:
 		touched += int(field.get("touched_person"))
-	_says(touched == 0 and _pond_fields.size() >= 10,
+	_says(touched == 0 and _pond_fields.size() >= 14,
 		"pond-field: slot 68 never reached _seed, _seed_for, _retire or _devour"
 		+ " in %d fields (%d times)" % [_pond_fields.size(), touched])
 	for node: Node in _pond_nodes:
@@ -3994,9 +4131,14 @@ func _pond_flank(heading: float, target: Vector2, mouth: Vector2) -> float:
 
 
 ## Water slot [param i], made into a calm body of [param radius] wearing
-## [param tiers] at [param at], facing [param heading].
+## [param tiers] at [param at], facing [param heading]. **In the drop** a new
+## body, with an id of its own, comes into that slot by the drop's own door
+## (`pose_at`), and is filed where it is: a body written by hand over another
+## would keep that one's id, and the guest's mirror its genome.
 func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 		at: Vector2, heading: float) -> Object:
+	if field.owns_drop():
+		field.pose_at(i, at, radius, tiers)
 	var b: Object = field.bodies()[i]
 	b.radius = radius
 	b.genome = tiers.duplicate()
@@ -4011,7 +4153,20 @@ func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 	b.bite = 0.0
 	b.aim = at
 	b.flee_from = at
+	if field.owns_drop():
+		# Fed, and resting on nothing: a posed body neither starves nor dashes.
+		b.hunger = 0.0
+		field.refresh(i)
 	return b
+
+
+## Water slot [param i] out of the water: retired in today's water, taken out
+## of the drop by its own bookkeeping there.
+func _pond_retire(field: Node, i: int) -> void:
+	if field.owns_drop():
+		field.take_out(i)
+	else:
+		field.call("_retire", i)
 
 
 ## ...on a run at the person, committed -- the one in [param slot], on a
@@ -4609,15 +4764,14 @@ func _pond_mirror() -> void:
 		var entries: Array = host.pond_entries(false)
 		sent_max = maxi(sent_max, entries.size())
 		for entry: Array in entries:
-			var slot := int(entry[FoodField.Entry.SLOT])
-			if slot == FoodField.PERSON_SLOT:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
 				continue
-			var sig := int(entry[FoodField.Entry.SERIAL]) * 1000 \
-				+ int(entry[FoodField.Entry.MEALS])
-			if versions.get(slot, -1) != sig:
-				versions[slot] = sig
-				mirror.apply_genome(slot, int(entry[FoodField.Entry.SERIAL]),
-					int(entry[FoodField.Entry.MEALS]),
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals,
 					(host.bodies()[slot].genome as Dictionary).duplicate())
 		mirror.apply_pond(host_cell.wound, entries)
 		# The organs alone: this cell's own push-out was the host's to make,
@@ -4631,9 +4785,9 @@ func _pond_mirror() -> void:
 		if host.hunter() >= 0:
 			hunted += 1
 		returns += (host.pings as Array).size()
-		if host.hunter() != mirror.hunter() and mismatch.is_empty():
-			mismatch = "-- frame %d hunter %d against %d" % [frame, host.hunter(),
-				mirror.hunter()]
+		if _hunter_id(host) != _hunter_id(mirror) and mismatch.is_empty():
+			mismatch = "-- frame %d hunter %d against %d" % [frame, _hunter_id(host),
+				_hunter_id(mirror)]
 	_says(mismatch.is_empty() and worst <= 1e-6 and hunted > 500 and returns > 0,
 		("pond-field: the mirror returns the host's taste, dread, shadow, touch,"
 		+ " beams, ping returns and hunter() within 1e-6 for %d frames (worst %s;"
@@ -4643,20 +4797,24 @@ func _pond_mirror() -> void:
 
 	# A hunter the host loses leaves the mirror's hunt in the same snapshot: a
 	# retired body is not sent, and a mirror that kept its last STALK would go
-	# on answering hunter() for nothing.
-	var was_hunted: bool = host.hunter() == 7 and mirror.hunter() == 7
+	# on answering hunter() for nothing. The mirror holds it in a slot of its
+	# own, found by the body's id (protocol 5).
+	var gone_id := int(host.call("_wire_id", host.bodies()[7]))
+	var gone_at := int((mirror.get("_mirror_slots") as Dictionary).get(gone_id, -1))
+	var was_hunted: bool = host.hunter() == 7 and mirror.hunter() == gone_at \
+		and gone_at >= 0
 	host.call("_retire", 7)
 	mirror.apply_pond(host_cell.wound, host.pond_entries(false))
-	_says(was_hunted and host.hunter() == mirror.hunter()
-			and mirror.hunter() != 7,
+	_says(was_hunted and _hunter_id(host) == _hunter_id(mirror)
+			and mirror.hunter() != gone_at,
 		"pond-field: a hunter the host retires leaves the mirror's hunter() with"
-		+ " the next snapshot (%d on both)" % mirror.hunter())
+		+ " the next snapshot (%d on both)" % _hunter_id(mirror))
 	# And it is drawn as nothing there, as on the host: the view reads points()
 	# and radii() and never `seeded`, so a radius left behind is a ghost.
-	_says(not bool(mirror.bodies()[7].seeded) and float(mirror.radii()[7]) == 0.0
-			and float(host.radii()[7]) == 0.0,
+	_says(gone_at >= 0 and not bool(mirror.bodies()[gone_at].seeded)
+			and float(mirror.radii()[gone_at]) == 0.0 and float(host.radii()[7]) == 0.0,
 		"pond-field: a body the host stops sending has radius 0 on the mirror,"
-		+ " as on the host (%s against %s)" % [str(mirror.radii()[7]),
+		+ " as on the host (%s against %s)" % [str(mirror.radii()[maxi(gone_at, 0)]),
 			str(host.radii()[7])])
 
 	# And between snapshots it carries: a water body on along its heading at
@@ -4746,6 +4904,283 @@ func _pond_housekeeping() -> void:
 		"pond-field: a mirror starts empty, and leaving it is 34 fresh cells alone")
 
 
+# --- The pond on the drop (ocean.md §10.2, protocol 5) --------------------------
+
+## **A host's own drop, opened as a pond**: made round a cell of [param radius]
+## wearing [param tiers] as a run makes one, with the organs set as a run sets
+## them, and the pond opened on it. The cell is at the drop's quiet start.
+func _pond_drop_rig(from_seed: int, radius: float, tiers: Dictionary) -> Node:
+	seed(from_seed)
+	var genome := StubGenome.new()
+	genome.body = tiers.duplicate()
+	var cell: Node = CellBody.new()
+	cell.genome = genome
+	cell.radius = radius
+	var field: Node = WatchedFood.new()
+	field.setup_drop(cell)
+	field.smell_range = cell.smell_range()
+	field.smell_bearing = 0.0
+	field.ping_range = cell.ping_range()
+	field.ping_period = cell.ping_period()
+	field.ping_through = cell.ping_through()
+	field.ping_tier = cell.ping_tier()
+	field.open_pond()
+	_pond_nodes.append_array([genome, cell, field])
+	_pond_fields.append(field)
+	return field
+
+
+## A point inside [param field]'s rim [param away] units from its cell: along
+## the line from the cell through the middle, or the middle itself.
+func _drop_point(field: Node, away: float) -> Vector2:
+	var rim: RefCounted = field.basin()
+	var centre: Vector2 = rim.get(&"center")
+	var from: Vector2 = field.get("_cell").position
+	var dir := (centre - from).normalized() if from.distance_to(centre) > 1.0 \
+		else Vector2.RIGHT
+	return from + dir * away
+
+
+## **The drop's rules for the other player** (ocean.md §10.2, rows 15 and 5): a
+## water mouth that is not hunting them swallows them on contact when they fit,
+## as it does the host, and is fed by them -- a meal and a unit of growth -- and
+## the slot empties that frame; and their mouth on a settled floc grazes it,
+## said to them as GRAZED with its worth, and they do not grow.
+func _drop_pond_rules() -> void:
+	var field := _pond_drop_rig(81, 30.0, POND_SENSES)
+	var at := _drop_point(field, 700.0)
+	_pond_person(field, at, CellBody.BASE_RADIUS, {&"cytostome": 1, &"cirrus": 1,
+		&"flagellum": 1})
+	var said := _pond_listen(field)
+	var from := at + Vector2(0.0, -54.0)
+	var b := _pond_pose(field, 5, 30.0, {&"cytostome": 3, &"flagellum": 1}, from,
+		_pond_face(from, at))
+	b.hunger = 0.8
+	var gape := CellBody.gape_of(3, 30.0)
+	var reaches := Cilia.mouth_touches(b.pos, b.heading, 30.0, gape, at, CellBody.BASE_RADIUS)
+	field._process(POND_STEP)
+	var died := _pond_said(said, "died")
+	_says(reaches and int(b.state) != FoodField.State.STALK and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED and field.person() == null
+			and not bool(field.bodies()[FoodField.PERSON_SLOT].seeded)
+			and is_equal_approx(float(b.radius), 30.0 + CellBody.GROWTH_PER_MEAL)
+			and int(b.meals) == 1 and float(b.hunger) < 0.8,
+		"pond-field, the drop: a mouth not hunting the other player swallows them on"
+		+ " contact (row 15), is fed by them -- r%.0f and a meal, hunger %.2f from 0.80 --"
+		% [float(b.radius), float(b.hunger)] + " and their slot is empty that frame")
+
+	field = _pond_drop_rig(82, 30.0, POND_SENSES)
+	at = _drop_point(field, 700.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	said = _pond_listen(field)
+	var floc := int(field.call("_spawn_floc", at + Vector2(0.0, -(28.0 + 4.0)), 8.0, true))
+	var floc_id := int(field.bodies()[floc].id)
+	field._process(POND_STEP)
+	var grazed := _pond_said(said, "touched", FoodField.Contact.GRAZED)
+	var fb: Object = field.bodies()[floc]
+	_says(not grazed.is_empty() and is_equal_approx(float(grazed[3]),
+			clampf(8.0 / 28.0, FoodField.MEAL_MIN, FoodField.MEAL_MAX))
+			and _pond_said(said, "touched", FoodField.Contact.ATE).is_empty()
+			and not (bool(fb.seeded) and int(fb.id) == floc_id)
+			and is_equal_approx(float(field.bodies()[FoodField.PERSON_SLOT].radius), 28.0),
+		"pond-field, the drop: the other player's mouth on a settled floc grazes it --"
+		+ " GRAZED at %.2f of a meal, no ATE, the floc gone and r28 still"
+		% (float(grazed[3]) if not grazed.is_empty() else -1.0))
+
+
+## **Every player is an anchor, and the send set is the nearest sixty** (ocean.md
+## §10.2, §10.4): a body beside the other player and far from the host is stepped
+## every frame, as one beside the host is; and their snapshot is every body
+## hunting them, wherever it is, and then the nearest of the rest within reach,
+## sixty in all -- never a floc, never a person.
+func _drop_pond_anchors() -> void:
+	var field := _pond_drop_rig(83, 30.0, POND_SENSES)
+	var at := _drop_point(field, FoodField.Drop.LOD_NEAR * 1.5)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var near := _pond_pose(field, 6, 15.0, {}, at + Vector2(150.0, 0.0), 0.0)
+	var every := 0
+	for frame in 16:
+		field._process(POND_STEP)
+		if int(near.stepped) == int(field.get("_frame")):
+			every += 1
+	# A hunter of theirs past the send reach, and the snapshot they are sent.
+	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var far := _pond_pose(field, 7, 30.0, {&"cytostome": 3, &"flagellum": 1},
+		at + (at - (field.get("_cell").position as Vector2)).normalized() * -2500.0, 0.0)
+	far.state = FoodField.State.STALK
+	far.target = FoodField.PERSON_SLOT
+	far.target_serial = pb.serial
+	var entries: Array = field.pond_entries(true)
+	var sent := {}
+	var worst := 0.0
+	var fair := true
+	var hunter_in := false
+	for entry: Array in entries:
+		var slot := int(entry[FoodField.ENTRY_SLOT])
+		if slot < 0:
+			continue
+		var b: Object = field.bodies()[slot]
+		sent[slot] = true
+		if bool(b.inert) or b.person != null:
+			fair = false
+		if slot == 7:
+			hunter_in = (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) != 0
+		else:
+			worst = maxf(worst, (b.pos as Vector2).distance_to(pb.pos) - float(b.radius))
+	var nearer_left := 0
+	for i in field.bodies().size():
+		var b: Object = field.bodies()[i]
+		if not bool(b.seeded) or bool(b.inert) or b.person != null or sent.has(i):
+			continue
+		if (b.pos as Vector2).distance_to(pb.pos) - float(b.radius) < worst - 1.0 / 16.0:
+			nearer_left += 1
+	_says(every == 16 and hunter_in and fair and sent.size() <= FoodField.SEND_MAX
+			and nearer_left == 0 and entries.size() == sent.size() + 1,
+		"pond-field, the drop: a body beside the other player, %.0f from the host, is"
+		% at.distance_to(field.get("_cell").position) + " stepped %d of 16 frames;" % every
+		+ " their snapshot is %d water bodies, their hunter 2,500 off in it, none of"
+		% sent.size() + " the rest nearer than its farthest (%.0f), no floc and no person"
+		% worst)
+
+
+## **The guest's mirror, on the host's drop** (ocean.md §10.4): fed the host's
+## own snapshots for the other player, their bodies' genomes by id, the flocs in
+## their reach as SETTLE and CLEAR, and the rim -- it holds exactly the bodies
+## sent, each under its id with its genome, and exactly the flocs in reach, each
+## settling by the mirror's own clock; and its cell, put past the rim, is held
+## inside it and knocked.
+func _drop_pond_mirror() -> void:
+	var host := _pond_drop_rig(84, 30.0, POND_SENSES)
+	var at := _drop_point(host, 400.0)
+	_pond_person(host, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	# A floc landing in their reach, still settling.
+	var landing := int(host.call("_spawn_floc", at + Vector2(160.0, 90.0), 10.0, false))
+	var landing_id := int(host.bodies()[landing].id)
+	var mirror := _pond_rig(84, 28.0, POND_SENSES)
+	mirror.become_mirror()
+	var rim: Array = host.rim()
+	mirror.mirror_rim(rim[0], float(rim[1]))
+	var versions := {}
+	var told := {}
+	var problems: Array[String] = []
+	var settling := [-1.0, -1.0]
+	for frame in 90:
+		host._process(POND_STEP)
+		var pb: Object = host.bodies()[FoodField.PERSON_SLOT]
+		var mirror_cell: Object = mirror.get("_cell")
+		mirror_cell.position = pb.pos
+		var entries: Array = host.pond_entries(true)
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals, (host.bodies()[slot].genome as Dictionary)
+					.duplicate())
+		mirror.apply_pond(0.0, entries)
+		var now := {}
+		for f: Array in host.flocs_in_reach(pb.pos):
+			now[int(f[0])] = true
+			if not told.has(int(f[0])):
+				told[int(f[0])] = true
+				mirror.mirror_floc(int(f[0]), f[1], float(f[2]), float(f[3]), float(f[4]))
+		for id: int in told.keys():
+			if not now.has(id):
+				told.erase(id)
+				mirror.mirror_unfloc(id)
+		mirror.call("_step_mirror", POND_STEP)
+		# Exactly what was sent, by id, with its genome.
+		var slots: Dictionary = mirror.get("_mirror_slots")
+		var flocs: Dictionary = mirror.get("_mirror_flocs")
+		var sent := 0
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			sent += 1
+			var m := int(slots.get(int(entry[FoodField.Entry.ID]), -1))
+			if m < 0 or mirror.bodies()[m].genome != host.bodies()[slot].genome:
+				problems.append("frame %d body %d" % [frame, int(entry[FoodField.Entry.ID])])
+		if slots.size() != sent or flocs.size() != now.size():
+			problems.append("frame %d holds %d bodies and %d flocs for %d and %d"
+				% [frame, slots.size(), flocs.size(), sent, now.size()])
+		if flocs.has(landing_id):
+			var m := int((flocs[landing_id] as Array)[0])
+			if frame == 10:
+				settling[0] = float(mirror.bodies()[m].settle)
+			elif frame == 70:
+				settling[1] = float(mirror.bodies()[m].settle)
+	# Its own cell, put past the rim.
+	var knocks := [0]
+	mirror.shored.connect(func(_b: float, _s: float, _at: Vector2) -> void: knocks[0] += 1)
+	var cell: Object = mirror.get("_cell")
+	var basin: RefCounted = mirror.basin()
+	var centre: Vector2 = basin.get(&"center")
+	cell.position = centre + Vector2(float(basin.get(&"radius")) + 50.0, 0.0)
+	cell.velocity = Vector2(80.0, 0.0)
+	mirror.call("_step_mirror", POND_STEP)
+	var held: bool = basin.call(&"inside", cell.position, float(cell.radius))
+	_says(problems.is_empty() and settling[0] >= 0.0 and settling[1] > settling[0]
+			and held and knocks[0] == 1,
+		"pond-field, the drop: the guest's mirror holds exactly the bodies sent, by id and"
+		+ " with their genomes, and the flocs in reach (settling %.2f to %.2f by its own"
+		% [settling[0], settling[1]] + " clock); its cell past the rim is held inside and"
+		+ " knocked %d time%s%s" % [knocks[0], "" if knocks[0] == 1 else "s",
+			"" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))])
+
+
+## **A drop kept while it is a pond keeps nobody** (ocean.md §9.1): the other
+## player is never in the file -- no body where they are, their slot empty
+## loaded -- and a chase of them is kept as a chase of nobody.
+func _drop_pond_kept() -> void:
+	var field := _pond_drop_rig(85, 30.0, POND_SENSES)
+	var at := _drop_point(field, 600.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+	for frame in 30:
+		field._process(POND_STEP)
+	var hunter := _pond_pose(field, 8, 30.0, {&"cytostome": 3, &"flagellum": 1},
+		pb.pos + Vector2(0.0, 400.0), 0.0)
+	hunter.state = FoodField.State.STALK
+	hunter.target = FoodField.PERSON_SLOT
+	hunter.target_serial = pb.serial
+	var state: Dictionary = field.drop_state()
+	var rows: Dictionary = state["bodies"]
+	var there := 0
+	for p: Vector2 in rows["at"] as PackedVector2Array:
+		if p.distance_to(pb.pos) < 0.5:
+			there += 1
+	var slots: PackedInt32Array = rows["slot"]
+	# A phone's pond has one person, in slot 68; the slot after it is water.
+	var kept_person := slots.has(FoodField.PERSON_SLOT)
+	var chase := -99
+	var at_row := slots.find(8)
+	if at_row >= 0:
+		chase = int((state["runs"]["target"] as PackedInt64Array)[at_row])
+	var solo := _pond_drop_rig(86, 30.0, POND_SENSES)
+	solo.load_drop(solo.get("_cell"), state)
+	_says(there == 0 and not kept_person and chase == FoodField.TARGET_NONE
+			and not bool(solo.bodies()[FoodField.PERSON_SLOT].seeded),
+		"pond-field, the drop: kept mid-pond, %d bodies, %d where the other player is"
+		% [slots.size(), there] + " (none, and not their slot: %s), their slot empty" % kept_person
+		+ " loaded, and a chase of them kept as a chase of nobody (%d)" % chase)
+
+
+## **Which body is hunting this cell, by its id on the wire** -- a host's and a
+## mirror's slots for one body differ (protocol 5), its id does not. -1 for
+## none.
+func _hunter_id(field: Node) -> int:
+	var h: int = field.hunter()
+	if h < 0:
+		return -1
+	if field.mirroring():
+		return int(field.bodies()[h].id)
+	return int(field.call("_wire_id", field.bodies()[h]))
+
+
 ## The largest difference between what the two fields report this frame, over
 ## every sense the mirror is held to; INF for a shape that differs at all.
 func _pond_differ(a: Node, b: Node) -> float:
@@ -4800,24 +5235,32 @@ func _pond_differ(a: Node, b: Node) -> float:
 class PondWatchedFood extends "res://game/normal/food.gd":
 	var sisters: Array = []
 	## **Every snapshot this water built for the guest**, newest last and the
-	## last 64 kept: `[count, entries, water, the guest's place, its serial]`,
-	## where `water` is each body as it stood at that instant -- `[seeded, place,
-	## radius, serial, meals, genome, state, target, target serial]`. The mirror
-	## check finds the one the guest applied by its sequence, and so never
-	## compares a mirror with water a frame later than the water it was sent.
+	## last 64 kept: `[count, entries, water, the guest's place]`, where `water`
+	## is every water body that could be in it as it stood at that instant --
+	## within the send reach and a margin, or hunting the guest -- as `[slot,
+	## id, place, radius, meals, genome, hunting the guest]`. The mirror check
+	## finds the one the guest applied by its sequence, and so never compares a
+	## mirror with water a frame later than the water it was sent.
 	var built: Array = []
 	var built_count := 0
 
 	func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 		var out: Array = super.pond_entries(for_person, reach)
 		if for_person:
+			var pb := _cells[PERSON_SLOT]
 			var water: Array = []
-			for b in _cells:
-				water.append([b.seeded, b.pos, b.radius, b.serial, b.meals,
-					b.genome.duplicate(), b.state, b.target, b.target_serial])
+			for i in _cells.size():
+				var b := _cells[i]
+				if not b.seeded or b.inert or b.person != null:
+					continue
+				var hunting := b.state == State.STALK and b.target == PERSON_SLOT \
+					and b.target_serial == pb.serial
+				if not hunting and b.pos.distance_to(pb.pos) - b.radius > reach + 100.0:
+					continue
+				water.append([i, _wire_id(b), b.pos, b.radius, b.meals,
+					b.genome.duplicate(), hunting])
 			built_count += 1
-			built.append([built_count, out, water, _cells[PERSON_SLOT].pos,
-				_cells[PERSON_SLOT].serial])
+			built.append([built_count, out, water, pb.pos])
 			if built.size() > 64:
 				built.pop_front()
 		return out
@@ -4847,7 +5290,9 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 			var pb := _cells[PERSON_SLOT]
 			if pb.person != null:
 				clear = minf(clear, sb.pos.distance_to(pb.pos) - sb.radius - pb.radius)
-		sisters.append({"slot": slot, "was_free": slot >= 0 and seeded[slot] == 0,
+		sisters.append({"slot": slot,
+			"was_free": slot >= 0 and (slot >= seeded.size() or seeded[slot] == 0),
+			"appended": slot >= before.size(),
 			"changed": changed, "at": at, "radius": body_radius,
 			"host_at": _cell.position, "clear": clear, "moved": moved})
 		return slot
@@ -4940,16 +5385,17 @@ func _check_pond() -> void:
 	var pins := [host_pin, guest_pin]
 
 	# ----------------------------------------------------------------------
-	# **The mirror** (§2's send set): every host body within 1,900 of the
-	# guest, surface to centre, is in the guest's water within a unit of where
-	# the host has it, with the genome of its (serial, meals); none farther.
+	# **The mirror** (§2's send set; ocean.md §10.4): the host's send set for
+	# the guest -- every body hunting it, then the nearest within 1,900, surface
+	# to centre, sixty in all -- is in the guest's water within a unit of where
+	# the host has it, with the genome of its (id, meals); nothing else.
 	#
 	# **Held exactly, so a loaded runner cannot fail it and a broken mirror
 	# cannot pass it**: against the snapshot the guest applied, found by its
 	# sequence among the ones the host recorded building. The send set is the
 	# host's own bodies at the instant it was built; each body sent is in the
 	# mirror at the place sent, carried by the snapshot's age along its
-	# heading, with the genome of its (serial, meals); nothing else is there.
+	# heading, with the genome of its (id, meals); nothing else is there.
 	# Put the carry back at the frame's start, or halve the send reach, and
 	# this fails.
 	#
@@ -4970,9 +5416,9 @@ func _check_pond() -> void:
 	var exact: Array = _pond_mirror_exact(host_food, guest_food, guest_pond, host_net)
 	var mirror: Array = _pond_mirror_error(host_food, guest_food, host_cell)
 	_says(int(exact[0]) > 5 and (exact[1] as Array).is_empty(),
-		"pond: %d host bodies within 1,900 of the guest are mirrored exactly as"
+		"pond: the %d host bodies of the guest's send set are mirrored exactly as"
 		% int(exact[0]) + " the snapshot it applied said, carried by its age,"
-		+ " with (serial, meals) genomes and nothing else%s; live, %.3f units"
+		+ " with (id, meals) genomes and nothing else%s; live, %.3f units"
 		% ["" if (exact[1] as Array).is_empty() else " -- NOT: " + ", ".join(
 			exact[1] as Array), float(mirror[1])]
 		+ " off the host's water now (latency: net_lag's), the host itself"
@@ -5009,7 +5455,7 @@ func _check_pond() -> void:
 	var felt := await _pond_until(func() -> bool:
 		chew_pin.call()
 		return not hits.is_empty(), 1.0, pins)
-	host_food.call("_retire", 3)
+	_pond_retire(host_food, 3)
 	# **The wound rides the next snapshot's header**, a frame or more behind
 	# the bite on the reliable channel: waited for, not slept past -- 0.12 s
 	# was not one snapshot on a saturated runner. Both ends mend by the same
@@ -5090,6 +5536,58 @@ func _check_pond() -> void:
 		% gifted + " as the gift, with no foul")
 
 	# ----------------------------------------------------------------------
+	# **A graze on the guest's side** (ocean.md §10.4, §10.5): a floc settling
+	# on the guest's lip is told to it -- SETTLE -- and held in its mirror;
+	# settled, the host's water says GRAZED, and the guest is fed by it and does
+	# not grow, nor does the host's referee expect it to; and the floc gone is
+	# told -- CLEAR.
+	# ----------------------------------------------------------------------
+	var guest_meta: Node = guest_run.get("_metabolism")
+	var hunger_was := float(guest_meta.hunger)
+	var grazes: Array = []
+	guest_food.grazed.connect(func(worth: float, _at: Vector2) -> void:
+		grazes.append([worth, float(guest_meta.hunger)]))
+	guest_meta.set_hunger(0.8)
+	var graze_r := float(guest_cell.radius)
+	var lip := graze_r * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \
+		+ float(guest_cell.gape()) * Cilia.GAPE_BULGE
+	var told_were := int(host_pond.get("flocs_told"))
+	var cleared_were := int(host_pond.get("flocs_cleared"))
+	var expected_was := float(host_ref.get("expected")) if host_ref != null else NAN
+	var fouls_before := int(host_ref.call("fouled")) if host_ref != null else -1
+	var floc := int(host_food.call("_spawn_floc", landed + Vector2(0.0, -lip), 6.0, false))
+	var floc_id := int(host_food.bodies()[floc].id)
+	host_food.bodies()[floc].settle = 0.9
+	var in_mirror := [false]
+	var grazed_in := await _pond_until(func() -> bool:
+		if (guest_food.get("_mirror_flocs") as Dictionary).has(floc_id):
+			in_mirror[0] = true
+		return not grazes.is_empty(), 2.0, pins)
+	var cleared := await _pond_until(func() -> bool:
+		return not (guest_food.get("_mirror_flocs") as Dictionary).has(floc_id), 1.0, pins)
+	var worth := float(grazes[0][0]) if not grazes.is_empty() else -1.0
+	var fed_to := float(grazes[0][1]) if not grazes.is_empty() else -1.0
+	guest_meta.set_hunger(hunger_was)
+	_says(in_mirror[0] and grazed_in >= 0.0 and cleared >= 0.0
+			and int(host_pond.get("flocs_told")) > told_were
+			and int(host_pond.get("flocs_cleared")) > cleared_were
+			and absf(worth - clampf(6.0 / graze_r, FoodField.MEAL_MIN, FoodField.MEAL_MAX))
+				<= 1.0 / 255.0
+			and fed_to >= 0.0 and fed_to < 0.8
+			and is_equal_approx(float(guest_cell.radius), graze_r)
+			and is_equal_approx(float(host_food.bodies()[FoodField.PERSON_SLOT].radius),
+				graze_r)
+			and host_ref != null and float(host_ref.get("expected")) == expected_was
+			and int(host_ref.call("fouled")) == fouls_before,
+		"pond: a floc settling on the guest's lip is told (SETTLE) and held in its"
+		+ " mirror (%s); settled, it is GRAZED at %.2f of a meal %.0f ms later, the"
+		% [in_mirror[0], worth, grazed_in * 1000.0] + " guest fed to hunger %.2f from"
+		% fed_to + " 0.80 and still r%.2f, the host's referee expecting r%.2f and no"
+		% [float(guest_cell.radius), float(host_ref.get("expected")) if host_ref != null
+			else NAN] + " foul, and the floc gone told (CLEAR) %.0f ms after"
+		% (cleared * 1000.0))
+
+	# ----------------------------------------------------------------------
 	# **Pause stops nothing (B)**, on both seats at once: the tree never
 	# pauses, the warning is up, KEY_D moves no cell, and a hunter still eats
 	# the cell whose menu is open.
@@ -5116,6 +5614,13 @@ func _check_pond() -> void:
 		+ " the warning is up on both")
 	_says(steer_host == 0.0 and steer_guest == 0.0,
 		"pond: KEY_D held with the menu up leaves both cells' steer at 0")
+	# A settled floc behind the guest, told to it and held in its mirror before
+	# it dies -- for the return below.
+	var behind := int(host_food.call("_spawn_floc", guest_cell.position
+		+ Vector2(0.0, 160.0), 6.0, true))
+	var behind_id := int(host_food.bodies()[behind].id)
+	var behind_held := await _pond_until(func() -> bool:
+		return (guest_food.get("_mirror_flocs") as Dictionary).has(behind_id), 1.0, pins)
 	var died_at := [-1.0, false, 0]
 	var on_died := func(_cause: int, _by: int, _at: Vector2) -> void:
 		died_at[0] = _now()
@@ -5142,6 +5647,8 @@ func _check_pond() -> void:
 	host_run.call("_toggle_pause")
 	_says(not bool(guest_run.get("_menu_open")) and not get_tree().paused,
 		"pond: the death closed the guest's menu, and nothing ever paused")
+	# The floc goes while the guest is in the black, where nothing is sent it.
+	host_food.call("take_out", behind)
 
 	# **Back from the black into the pond** (owner's row A): tapped during the
 	# collapse, it asks the host where, and lands near its friend.
@@ -5158,6 +5665,24 @@ func _check_pond() -> void:
 			host_cell.position))
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
+	# **Back, it holds only the flocs there are** (ocean.md §10.4): the one
+	# that went in the black is not in its mirror, and every one it holds is
+	# the host's, told again since the arrival.
+	await _pond_until(func() -> bool: return false, 0.3, pins)
+	var held_flocs: Dictionary = guest_food.get("_mirror_flocs")
+	var ghosts := 0
+	for id: int in held_flocs:
+		var real := false
+		for b: Object in host_food.bodies():
+			if bool(b.seeded) and bool(b.inert) and int(b.id) == id:
+				real = true
+				break
+		ghosts += 0 if real else 1
+	_says(behind_held >= 0.0 and not held_flocs.has(behind_id) and ghosts == 0,
+		"pond: a floc held in the guest's mirror and gone while it was in the black"
+		+ " is not in it when it is back (%s), and %d of the %d flocs it holds"
+		% [not held_flocs.has(behind_id), ghosts, held_flocs.size()]
+		+ " are ones the host no longer has")
 
 	# ----------------------------------------------------------------------
 	# **Either player can eat the other.** The host grows a mouth and the
@@ -5331,13 +5856,13 @@ func _check_pond() -> void:
 	var spots: Array[Vector2] = [left_host, left_guest]
 	var keep_clear := func() -> void:
 		var bodies: Array = host_food.bodies()
-		for i in FoodField.PERSON_SLOT:
+		for i in bodies.size():
 			var b: Object = bodies[i]
-			if not b.seeded:
+			if not b.seeded or b.person != null:
 				continue
 			for spot: Vector2 in spots:
 				if (b.pos as Vector2).distance_to(spot) < float(b.radius) + 90.0:
-					host_food.call("_retire", i)
+					_pond_retire(host_food, i)
 					break
 	await _pond_until(func() -> bool:
 		keep_clear.call()
@@ -5380,7 +5905,10 @@ func _check_pond() -> void:
 	var clear_of := true
 	var shifted: Array[String] = []
 	for sister: Dictionary in sisters:
-		if not bool(sister["was_free"]) or sister["changed"] != [int(sister["slot"])] \
+		# **A new slot in the drop is a slot too** (ocean.md §4): one past the
+		# end, which had no serial to change.
+		var renumbered: Array = [] if bool(sister["appended"]) else [int(sister["slot"])]
+		if not bool(sister["was_free"]) or sister["changed"] != renumbered \
 				or not is_equal_approx(float(sister["radius"]), daughter):
 			clean = false
 		if float(sister["clear"]) < FoodField.SISTER_CLEAR - 0.01:
@@ -5573,8 +6101,8 @@ func _check_pond() -> void:
 
 	# ----------------------------------------------------------------------
 	# **A closed host is a takeover** (§1.8): within 0.1 s the guest swims in
-	# 34 fresh cells of its own, keeping its body, genome, generation and
-	# hunger.
+	# its own drop again -- the one it set aside as it joined, frozen, taken up
+	# again (ocean.md §9.1) -- keeping its body, genome, generation and hunger.
 	# ----------------------------------------------------------------------
 	await _pond_until(func() -> bool: return false, 0.2, pins)
 	# Half a bar, so a takeover that lost the hunger -- back to fed, or to
@@ -5585,15 +6113,18 @@ func _check_pond() -> void:
 	guest_met.set_hunger(0.5)
 	var kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers().duplicate(),
 		int(guest_run.get("_generation")), float(guest_met.hunger)]
+	var own: Dictionary = guest_run.get("_own_drop")
+	var own_seed := int(own.get("seed", -1))
+	var own_age := float(own.get("age", -1.0))
 	var closed_at := _now()
 	host_net.close()
 	var took := await _pond_until(func() -> bool: return not guest_food.mirroring(),
 		1.0, [guest_pin])
 	var took_frames := _pond_frames
-	var fresh: bool = guest_food.bodies().size() == FoodField.COUNT
-	for body: Object in guest_food.bodies():
-		if not body.seeded:
-			fresh = false
+	var fresh: bool = not own.is_empty() and guest_food.owns_drop() \
+		and int(guest_food.drop_seed) == own_seed and guest_food.drop_age() >= own_age \
+		and guest_food.drop_age() < own_age + 1.0 \
+		and (guest_run.get("_own_drop") as Dictionary).is_empty()
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
 		int(guest_run.get("_generation")), float(guest_met.hunger)]
 	# Kept, less what the body spent while the host went: the second the wait
@@ -5607,9 +6138,10 @@ func _check_pond() -> void:
 			and kept[1] == now_kept[1] and int(kept[2]) == int(now_kept[2])
 			and gained > -0.01 and gained < spent_max + 0.01,
 		"pond: the host closes and the guest takes over %d frames later (0.1 s"
-		% took_frames + " at 60 fps is %d; %.0f ms here) in %d fresh cells,"
-		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0,
-			guest_food.bodies().size()]
+		% took_frames + " at 60 fps is %d; %.0f ms here) in its own drop again, as it"
+		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0]
+		+ " set it aside (drop %d, %.1f s old then, %d bodies now),"
+		% [own_seed, own_age, guest_food.drop_bodies()]
 		+ " keeping r%.2f, its genome, generation %d and hunger %.2f (set to %.2f)"
 		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3]), float(kept[3])])
 	guest_met.set_hunger(own_hunger)
@@ -5652,7 +6184,8 @@ func _check_pond() -> void:
 	# swimming alone.
 	guest_run.set("_swap_pending", true)
 	guest_run.set("_split", NormalMode.Split.QUICKEN)
-	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
+	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0,
+		Vector2.ZERO, 0.0)
 	var dropped: bool = float(guest_run.get("_water_beat")) < 0.0 \
 		and not bool(guest_run.get("_swap_pending")) and not guest_food.mirroring() \
 		and not bool(guest_pond.in_pond)
@@ -5661,7 +6194,8 @@ func _check_pond() -> void:
 		+ " beat, no mirror, not in the pond")
 	guest_run.set("_swap_pending", true)
 	guest_run.set("_menu_open", true)
-	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
+	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0,
+		Vector2.ZERO, 0.0)
 	var dropped_menu: bool = float(guest_run.get("_water_beat")) < 0.0 \
 		and not bool(guest_run.get("_swap_pending")) and not guest_food.mirroring() \
 		and not bool(guest_pond.in_pond)
@@ -5809,7 +6343,7 @@ func _check_pond_referee() -> void:
 			chewer.heading = _pond_face(chewer_at, at)
 		return int(bites[0]) > 0, 1.0, guest, body, host_pin)
 	host_food.person_touched.disconnect(on_touch)
-	host_food.call("_retire", 3)
+	_pond_retire(host_food, 3)
 	body[3] = false
 	var pb: Object = host_food.bodies()[FoodField.PERSON_SLOT]
 	_says(fed >= 0.0 and kept_in and bitten >= 0.0 and float(pb.wound) > 0.0
@@ -5944,16 +6478,29 @@ func _check_pond_referee() -> void:
 	var heard := await _ref_until(func() -> bool: return not marks.is_empty(), 1.0, guest,
 		body, host_pin)
 	var shouts := int(ref.judged["shout"])
+	# **The host's own organ held quiet through the window**, so every mark in it
+	# is a friend's call: its pulse, and the echoes of one already out, are
+	# marks too -- and in the drop the rim answers every one (ocean.md §3.2).
+	var quiet := func() -> void:
+		host_food.set("_ping_clock", 1000.0)
+		(host_food.get("_echoes") as Array).clear()
+	quiet.call()
 	marks.clear()
 	points = _ref_points(host_net)
 	guest.shout((body[0] as Vector2) + Vector2(3000.0, 0.0), CellBody.BASE_RADIUS, 1100.0)
-	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts, 1.0, guest,
-		body, host_pin)
-	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return int(ref.judged["shout"]) > shouts, 1.0, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return false, 0.55, guest, body, host_pin)
 	guest.shout(body[0], CellBody.BASE_RADIUS, 1500.0)
-	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts + 1, 1.0,
-		guest, body, host_pin)
-	await _ref_until(func() -> bool: return false, 0.2, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return int(ref.judged["shout"]) > shouts + 1, 1.0, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return false, 0.2, guest, body, host_pin)
 	_says(back and heard >= 0.0 and marks.is_empty()
 			and is_equal_approx(_ref_points(host_net) - points, 2.0 * Referee.WEIGHT_SHOUT),
 		"pond referee R10: an honest call is marked on the host's membrane; one from"
@@ -6045,6 +6592,9 @@ func _pond_run_scene(net: Node, watched: bool) -> Node:
 	var run: Node = load(RUN_SCENE).instantiate()
 	run.set("mode", 1)
 	run.set("scheme", 0)
+	# **A probe's run keeps no drop** (ocean.md §9): the game's default is the
+	# player's own file, which two runs in one process would share.
+	run.set("keep", "")
 	if watched:
 		run.get_node(^"Food").set_script(PondWatchedFood)
 	return run
@@ -6146,14 +6696,14 @@ func _pond_feed(host_food: Node, cell: Node, pins: Array) -> int:
 ## [param from] to [param to], so a glide along it meets nothing.
 func _pond_clear_line(food: Node, from: Vector2, to: Vector2, reach: float) -> void:
 	var bodies: Array = food.bodies()
-	for i in FoodField.PERSON_SLOT:
+	for i in bodies.size():
 		var b: Object = bodies[i]
-		if not bool(b.seeded):
+		if not bool(b.seeded) or b.person != null:
 			continue
 		var p: Vector2 = b.pos
 		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, from, to)) \
 				< reach + float(b.radius):
-			food.call("_retire", i)
+			_pond_retire(food, i)
 
 
 ## **What the referees in [param referees] judged, and how near they came to a
@@ -6202,37 +6752,32 @@ func _pond_snapshots(seconds: float, frames: int) -> int:
 func _pond_mirror_error(host_food: Node, guest_food: Node, host_cell: Node) -> Array:
 	var host_bodies: Array = host_food.bodies()
 	var mirror: Array = guest_food.bodies()
-	var guest_at: Vector2 = host_bodies[FoodField.PERSON_SLOT].pos
-	var person_serial := int(host_bodies[FoodField.PERSON_SLOT].serial)
+	var slots: Dictionary = guest_food.get("_mirror_slots")
 	var sent := 0
 	var worst := 0.0
-	var too_far := 0
 	var wrong := 0
 	var missing := 0
-	for i in FoodField.PERSON_SLOT:
-		var hb: Object = host_bodies[i]
-		var mb: Object = mirror[i]
-		var reach: float = (hb.pos as Vector2).distance_to(guest_at) - float(hb.radius)
-		var hunting := int(hb.state) == FoodField.State.STALK \
-			and int(hb.target) == FoodField.PERSON_SLOT \
-			and int(hb.target_serial) == person_serial
-		if not hb.seeded:
-			if mb.seeded:
-				too_far += 1
+	var ids := {}
+	for entry: Array in host_food.pond_entries(true):
+		var slot := int(entry[FoodField.ENTRY_SLOT])
+		if slot < 0:
 			continue
-		# A body within a hair of the edge may be either side of it by the
-		# frame the two are compared in.
-		if absf(reach - FoodField.SEND_REACH) < 2.0 and not hunting:
+		var id := int(entry[FoodField.Entry.ID])
+		ids[id] = true
+		sent += 1
+		var m := int(slots.get(id, -1))
+		if m < 0 or not bool(mirror[m].seeded):
+			missing += 1
 			continue
-		if reach <= FoodField.SEND_REACH or hunting:
-			sent += 1
-			if not mb.seeded or int(mb.serial) != int(hb.serial) & 0xFFFF:
-				missing += 1
-				continue
-			worst = maxf(worst, (mb.pos as Vector2).distance_to(hb.pos))
-			if int(mb.meals) != int(hb.meals) or mb.genome != hb.genome:
-				wrong += 1
-		elif mb.seeded:
+		var hb: Object = host_bodies[slot]
+		worst = maxf(worst, (mirror[m].pos as Vector2).distance_to(hb.pos))
+		if int(mirror[m].meals) != int(hb.meals) or mirror[m].genome != hb.genome:
+			wrong += 1
+	# In the mirror and not in the host's send set now: one frame of lag can
+	# leave a body at the set's edge either side of it, so this is reported.
+	var too_far := 0
+	for id: int in slots:
+		if not ids.has(id):
 			too_far += 1
 	var self_off: float = (mirror[FoodField.PERSON_SLOT].pos as Vector2).distance_to(
 		host_cell.position)
@@ -6244,12 +6789,12 @@ func _pond_mirror_error(host_food: Node, guest_food: Node, host_cell: Node) -> A
 ## checked, problems]`, no problems meaning all of it held. The host's watched
 ## field recorded that snapshot and the water it was built from, found here by
 ## the sequence the guest applied. The send set is worked out again from that
-## water -- every seeded body within SEND_REACH of the guest, surface to
-## centre, or hunting it, and nothing else -- and each body sent must be in the
-## mirror under its (serial, meals), at the place sent (float32 both ways, so
-## exact), heading and speed to half a wire step, carried from there by the
-## snapshot's age along that heading, with the genome that body wore. A slot
-## not sent must be empty.
+## water (ocean.md §10.4) -- every body hunting the guest, then the rest whose
+## surface lies within SEND_REACH of it, nearest first, SEND_MAX in all -- and
+## each body sent must be in the mirror under its id and meals, at the place
+## sent (float32 both ways, so exact), heading and speed to half a wire step,
+## carried from there by the snapshot's age along that heading, with the genome
+## that body wore. Nothing else may be in the mirror but its flocs and the host.
 func _pond_mirror_exact(host_food: Node, guest_food: Node, guest_pond: Object,
 		host_net: Node) -> Array:
 	var problems: Array[String] = []
@@ -6266,52 +6811,68 @@ func _pond_mirror_exact(host_food: Node, guest_food: Node, guest_pond: Object,
 	var entries: Array = record[1]
 	var water: Array = record[2]
 	var you: Vector2 = record[3]
-	var person_serial := int(record[4])
 	var sent := {}
 	for entry: Array in entries:
-		sent[int(entry[FoodField.Entry.SLOT])] = entry
-	for i in FoodField.PERSON_SLOT:
-		var w: Array = water[i]
-		var should := false
-		if bool(w[0]):
-			var hunting := int(w[6]) == FoodField.State.STALK \
-				and int(w[7]) == FoodField.PERSON_SLOT and int(w[8]) == person_serial
-			should = hunting \
-				or (w[1] as Vector2).distance_to(you) - float(w[2]) <= FoodField.SEND_REACH
-		if should != sent.has(i):
-			problems.append("slot %d %s" % [i, "left out" if should else "sent"])
+		if int(entry[FoodField.ENTRY_SLOT]) >= 0:
+			sent[int(entry[FoodField.Entry.ID])] = entry
+	# The set it should have been, from the water it was built from.
+	var should := {}
+	var near: Array = []
+	var by_id := {}
+	for w: Array in water:
+		by_id[int(w[1])] = w
+		if bool(w[6]):
+			should[int(w[1])] = true
+		else:
+			var gap: float = (w[2] as Vector2).distance_to(you) - float(w[3])
+			if gap <= FoodField.SEND_REACH:
+				# The host's own order: the surface gap to a sixteenth of a unit,
+				# then the slot.
+				near.append([(int(clampf(gap, 0.0, 1.0e6) * 16.0) << 24) | int(w[0]),
+					int(w[1])])
+	near.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+	for each: Array in near:
+		if should.size() >= FoodField.SEND_MAX:
+			break
+		should[int(each[1])] = true
+	for id: int in should:
+		if not sent.has(id):
+			problems.append("body %d left out" % id)
+	for id: int in sent:
+		if not should.has(id):
+			problems.append("body %d sent" % id)
 	var mirror: Array = guest_food.bodies()
+	var slots: Dictionary = guest_food.get("_mirror_slots")
 	var snap_at: PackedVector2Array = guest_food.get("_snap_at")
 	var ahead := minf(float(guest_food.get("_snap_age")), FoodField.CARRY_MAX)
 	var step := TAU / float(Wire.BEARING_STEPS)
 	var checked := 0
-	for i in FoodField.PERSON_SLOT:
-		var mb: Object = mirror[i]
-		if not sent.has(i):
-			if bool(mb.seeded):
-				problems.append("slot %d in the mirror, not sent" % i)
-			continue
-		var entry: Array = sent[i]
+	for id: int in slots:
+		if not sent.has(id):
+			problems.append("body %d in the mirror, not sent" % id)
+	for id: int in sent:
+		var entry: Array = sent[id]
+		var m := int(slots.get(id, -1))
 		checked += 1
-		if not bool(mb.seeded) \
-				or int(mb.serial) != int(entry[FoodField.Entry.SERIAL]) & 0xFFFF \
-				or int(mb.meals) != int(entry[FoodField.Entry.MEALS]):
-			problems.append("slot %d not the body sent" % i)
+		if m < 0 or not bool(mirror[m].seeded) \
+				or int(mirror[m].meals) != int(entry[FoodField.Entry.MEALS]):
+			problems.append("body %d not in the mirror as sent" % id)
 			continue
+		var mb: Object = mirror[m]
 		var heading := float(mb.heading)
 		var speed := float(mb.speed)
-		if not snap_at[i].is_equal_approx(entry[FoodField.Entry.AT]) \
+		if not snap_at[m].is_equal_approx(entry[FoodField.Entry.AT]) \
 				or absf(angle_difference(heading, float(entry[FoodField.Entry.HEADING]))) \
 					> step * 0.5 + 1e-4 \
 				or absf(speed - float(entry[FoodField.Entry.SPEED])) \
 					> Wire.POND_SPEED_STEP * 0.5 + 1e-3:
-			problems.append("slot %d not where it was sent" % i)
-		var carried: Vector2 = snap_at[i] + Vector2(sin(heading), -cos(heading)) \
+			problems.append("body %d not where it was sent" % id)
+		var carried: Vector2 = snap_at[m] + Vector2(sin(heading), -cos(heading)) \
 			* (speed * ahead)
 		if (mb.pos as Vector2).distance_to(carried) > 1e-3:
-			problems.append("slot %d not carried by its age" % i)
-		if mb.genome != (water[i] as Array)[5]:
-			problems.append("slot %d wears another genome" % i)
+			problems.append("body %d not carried by its age" % id)
+		if by_id.has(id) and mb.genome != (by_id[id] as Array)[5]:
+			problems.append("body %d wears another genome" % id)
 	return [checked, problems]
 
 
@@ -6606,7 +7167,7 @@ func _read_throttles() -> void:
 # ---------------------------------------------------------------------------
 # **The dedicated host** (`game/server/`): the pond with no cell of its own and
 # two guests, each of whom is told the other is the friend. The guests are two
-# real runs of the game on this build's own guest code -- which is PROTOCOL 4's
+# real runs of the game on this build's own guest code -- which is a phone's
 # guest code, unchanged, exactly what a phone that has never heard of a server
 # runs -- so everything here is a phone joining a server.
 #
@@ -6631,6 +7192,10 @@ var _server_waited := 0.0
 const Updater := preload("res://game/server/updater.gd")
 ## For its `State` values only, which the fake service below answers in.
 const ServiceScript := preload("res://addons/launcher/update_service.gd")
+const DropSave := preload("res://game/normal/drop_save.gd")
+## **The section's own room** (ocean.md §10.3), where no real server keeps one:
+## made at its start, kept at its stop, loaded by the next start, and gone after.
+const SERVER_ROOM := "user://net_probe_room/1.save"
 
 
 func _check_server() -> void:
@@ -6648,6 +7213,9 @@ func _check_server() -> void:
 	server.set("pond_root", "user://net_probe_no_invites/")
 	# A router of the probe's own that finds nothing: this section asks none.
 	server.set("upnp_router", UpnpRouter.new(&"none"))
+	# A room of the probe's own, never there before it starts.
+	_server_room_gone()
+	server.set("room_path", SERVER_ROOM)
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -6655,11 +7223,14 @@ func _check_server() -> void:
 	var food: Node = server.food()
 	var pond: Object = server.pond()
 	_says(int(net.link) == NetSession.Link.LISTENING and food.pond_open()
+			and food.in_drop() and int(food.drop_bodies()) > FoodField.COUNT
 			and not bool(food.in_water) and not bool(food.anchored)
-			and (food.bodies() as Array).size()
-				== FoodField.PERSON_SLOT + FoodField.GUESTS_MAX,
-		"server: listening, its water open with %d slots and no cell of its own"
-		% (food.bodies() as Array).size() + " in it")
+			and food.person(FoodField.PERSON_SLOT) == null
+			and food.person(FoodField.PERSON_SLOT + 1) == null
+			and int(server.get("rooms_kept")) == 1 and FileAccess.file_exists(SERVER_ROOM),
+		"server: listening, its room open as the pond -- a drop of %d bodies, made"
+		% int(food.drop_bodies()) + " and kept at once (%d), with no cell of its own"
+		% int(server.get("rooms_kept")) + " in it and nobody in either guest's slot")
 	_watch_throttle(true)
 
 	var a_net: Node = await _session("ServerGuestA")
@@ -6892,7 +7463,7 @@ func _check_server() -> void:
 			chewer.pos = chewer_at
 			chewer.heading = _pond_face(chewer_at, b_home)
 		return not b_bites.is_empty(), 1.5, pins)
-	food.call("_retire", 3)
+	_pond_retire(food, 3)
 	b_food.bitten.disconnect(on_b_bitten)
 	var wounds := [0.0, 0.0]
 	var agreed := await _server_until(func() -> bool:
@@ -6926,13 +7497,17 @@ func _check_server() -> void:
 	# behind the one hunted -- and its mirror can hold an older body in slot 5
 	# somewhere else. So the wait is for the hunted guest's hunter and for the
 	# posed body, where it was posed, in the other guest's water.
+	# Each mirror holds it under its id (protocol 5), in a slot of its own.
+	var hunter_id := int(hunter.id)
+	var a_holds := func() -> bool:
+		var m := int((a_food.get("_mirror_slots") as Dictionary).get(hunter_id, -1))
+		return m >= 0 and (a_food.bodies()[m].pos as Vector2).distance_to(held_at) < 30.0
 	var flagged := await _server_until(func() -> bool:
 		hunter.pos = held_at
 		hunter.heading = _pond_face(held_at, b_home)
-		return int(b_food.hunter()) == 5 and bool(a_food.bodies()[5].seeded) \
-			and (a_food.bodies()[5].pos as Vector2).distance_to(held_at) < 30.0, pins)
-	var a_sees_hunter := int(a_food.hunter())
-	var a_has_it: bool = bool(a_food.bodies()[5].seeded)
+		return _hunter_id(b_food) == hunter_id and a_holds.call(), pins)
+	var a_sees_hunter := _hunter_id(a_food)
+	var a_has_it: bool = a_holds.call()
 	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
 		"server: a hunter on the guest in slot %d is that guest's hunter, and the"
 		% slot_b + " other guest, who is sent the same body, sees no hunter")
@@ -6995,22 +7570,24 @@ func _check_server() -> void:
 		"server: the freed slot %d takes the next guest, who lands %.1f units"
 		% [slot_b, d_apart] + " from the one still swimming, and is its friend")
 
-	# **With nobody left, the water goes with them**: every cell retired, so an
-	# empty server simulates nothing -- where a guest who is only dead keeps
-	# theirs, because they are coming back to it.
+	# **With nobody left, the room lives on** (ocean.md §10.3): its guests go
+	# out of it, and its cells hunt, grow and starve on with nobody watching --
+	# the drop's clock runs, and its bodies are still there.
 	a_net.close()
 	d_net.close()
 	var emptied := await _pond_until(func() -> bool:
-		if not (net.guests() as Array).is_empty() or food.person(slot_a) != null \
-				or food.person(slot_b) != null:
-			return false
-		for i in FoodField.PERSON_SLOT:
-			if bool(food.bodies()[i].seeded):
-				return false
-		return true, 2.0, [])
-	_says(emptied >= 0.0,
-		"server: when the last guest leaves, the water goes with them -- no cell"
-		+ " is left to simulate on an empty server")
+		return (net.guests() as Array).is_empty() and food.person(slot_a) == null \
+			and food.person(slot_b) == null, 2.0, [])
+	var age_empty := float(food.drop_age())
+	var stepped_from := int(food.get("_frame"))
+	await _pond_until(func() -> bool: return false, 0.5, [])
+	var lived := float(food.drop_age()) - age_empty
+	var stepped := int(food.get("_frame")) - stepped_from
+	_says(emptied >= 0.0 and food.pond_open() and int(food.drop_bodies()) > FoodField.COUNT
+			and lived > 0.3 and stepped > 10,
+		"server: when the last guest leaves, the room lives on -- %.2f s of its life"
+		% lived + " and %d steps in half a second with nobody in it, %d bodies"
+		% [stepped, int(food.drop_bodies())])
 	a_run.queue_free()
 	d_run.queue_free()
 
@@ -7034,18 +7611,22 @@ func _check_server() -> void:
 	await _pond_until(func() -> bool:
 		return (bool((e_run.get("_pond") as Object).in_pond)
 			and bool((f_run.get("_pond") as Object).in_pond)), 3.0, [])
-	var fresh := 0
-	for i in FoodField.PERSON_SLOT:
-		fresh += 1 if bool(food.bodies()[i].seeded) else 0
+	var fresh := int(food.drop_bodies())
+	var kept_before := int(server.get("rooms_kept"))
 	server.shut_down()
+	var stopped_age := float(food.drop_age())
+	var kept_at_stop := int(server.get("rooms_kept")) - kept_before
 	var taken := await _pond_until(func() -> bool:
 		return not e_food.mirroring() and not f_food.mirroring(), 1.5, [])
 	var taken_frames := _pond_frames
 	_says(fresh >= FoodField.COUNT and taken >= 0.0
 			and taken_frames <= _pond_budget(0.2),
-		"server: the next two arrive in %d fresh cells; stopped, both take over" % fresh
-		+ " their own water %d frames later (%.0f ms here) -- told, not timed out"
+		"server: the next two arrive in the room, %d bodies; stopped, both take over"
+		% fresh + " their own water %d frames later (%.0f ms here) -- told, not timed out"
 		% [taken_frames, taken * 1000.0])
+	var stop_kept := DropSave.read(SERVER_ROOM)
+	var stop_rows: Dictionary = (stop_kept.get("drop", {}) as Dictionary).get("bodies", {})
+	var stop_bodies := (stop_rows.get("slot", PackedInt32Array()) as PackedInt32Array).size()
 
 	e_run.queue_free()
 	f_run.queue_free()
@@ -7053,6 +7634,29 @@ func _check_server() -> void:
 	f_net.close()
 	server.queue_free()
 	await _wait(0.3)
+	# **The next start takes the room up where the stop kept it** (§10.3).
+	var again: Node = load(SERVER_SCENE).instantiate()
+	for seam: String in ["check_updates", "own_frame_rate", "quits"]:
+		again.set(seam, false)
+	again.set("pond_root", "user://net_probe_no_invites/")
+	again.set("upnp_router", UpnpRouter.new(&"none"))
+	again.set("room_path", SERVER_ROOM)
+	get_tree().root.add_child.call_deferred(again)
+	await again.ready
+	var again_food: Node = again.food()
+	var loaded_age := float(again_food.drop_age())
+	var loaded_bodies := int(again_food.drop_bodies())
+	_says(kept_at_stop == 1 and stop_bodies > FoodField.COUNT
+			and absf(loaded_age - stopped_age) < 0.001 and loaded_bodies == stop_bodies
+			and int(again.get("rooms_kept")) == 0 and again_food.pond_open(),
+		"server: stopped, it kept its room first (%d bodies, %.1f s old); the next"
+		% [stop_bodies, stopped_age] + " start loads it -- %d bodies, %.1f s old --"
+		% [loaded_bodies, loaded_age] + " and keeps nothing new until it is due")
+	again.set("room_path", "")
+	again.shut_down()
+	again.queue_free()
+	await _wait(0.2)
+	_server_room_gone()
 	_watch_throttle(false)
 	_says(_throttle_reads > 0
 			and _throttle_lowest == ENetPacketPeer.PACKET_THROTTLE_SCALE,
@@ -7081,6 +7685,16 @@ func _check_server() -> void:
 		+ " its longest wait on an unreliable frame %.2f s, of %.0f"
 		% [_server_waited, SERVER_UNRELIABLE])
 	Engine.max_fps = ceiling
+
+
+## The section's room, and what a save leaves beside it, gone -- and its folder.
+func _server_room_gone() -> void:
+	for path: String in [SERVER_ROOM, SERVER_ROOM.get_basename() + ".tmp",
+			SERVER_ROOM + ".old"]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+	if DirAccess.dir_exists_absolute(SERVER_ROOM.get_base_dir()):
+		DirAccess.remove_absolute(SERVER_ROOM.get_base_dir())
 
 
 ## [method _pond_until] for anything an unreliable frame carries: given
@@ -8764,6 +9378,8 @@ func _invites_server() -> void:
 	server.set("pond_root", root)
 	server.set("invites_poll", INVITES_POLL)
 	server.set("upnp_router", UpnpRouter.new(&"none"))
+	# No room kept: this user dir's `rooms/1.save` is not the probe's to write.
+	server.set("room_path", "")
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -9721,6 +10337,8 @@ func _upnp_server(router: UpnpRouter, root: String, args: PackedStringArray) -> 
 	server.set("invites_poll", UPNP_POLL)
 	server.set("upnp_router", router)
 	server.set("job_args", args)
+	# No room kept: this user dir's `rooms/1.save` is not the probe's to write.
+	server.set("room_path", "")
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	return server

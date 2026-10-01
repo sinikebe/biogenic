@@ -109,7 +109,10 @@ const SHAPE := {
 ## [constant DAUGHTER]; none before the pinch), and the water's part of it: its
 ## grace, the clocks of its dart and its bite, and the authored first drifter it
 ## had not met yet. What a guest's cell already carries across the wire, and a
-## little more.
+## little more. **And, when it is there, `elsewhere`** (1b-2): true for a cell
+## left while it swam in a friend's drop (ocean.md §9.1), whose place is not in
+## this one -- it comes back into this drop at a quiet place, as a guest does
+## that leaves the pond.
 const CELL := {
 	"body": {
 		"at": TYPE_VECTOR2,
@@ -147,6 +150,32 @@ const CELL := {
 		"first": TYPE_INT,
 	},
 }
+
+## **What a file of this format may also hold** (1b-2 on), and a file without
+## them loads as 1b-1's did -- every body drifting, the floor counted again, the
+## grid filed by place -- so no drop kept before them is set aside. With them, a
+## drop goes on exactly as one that never stopped (ocean.md §14.3 check 12):
+## `runs`, one entry a body in the order of `bodies` -- its run's state, whom at
+## by id (-1 nobody, -2 the player), its three switches, `RUN_CLOCKS` clocks
+## and two points -- the genes the floor is short of, the grid as `[ids,
+## buckets]`, the census's counts and whose turn it is. Each is checked as
+## [constant SHAPE] is when it is there: one that does not hold what it says
+## makes the file unreadable, never half-loaded.
+const RUNS := {
+	"state": TYPE_PACKED_BYTE_ARRAY,
+	"target": TYPE_PACKED_INT64_ARRAY,
+	"flags": TYPE_PACKED_BYTE_ARRAY,
+	"clocks": TYPE_PACKED_FLOAT64_ARRAY,
+	"points": TYPE_PACKED_VECTOR2_ARRAY,
+}
+const EXTRA := {
+	"gene_short": TYPE_PACKED_STRING_ARRAY,
+	"grid": TYPE_ARRAY,
+	"stats": TYPE_DICTIONARY,
+	"turn": TYPE_INT,
+}
+## A run's clocks, a body's worth: food.gd's RUN_CLOCKS.
+const RUN_CLOCKS := 10
 
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
@@ -326,6 +355,8 @@ static func unusable(data: Variant) -> String:
 		bad = _misfit(file["cell"], CELL, "cell.")
 	if bad.is_empty():
 		bad = _bad_bodies(file["drop"])
+	if bad.is_empty():
+		bad = _bad_extra(file["drop"])
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
 		bad = _bad_cell(file["cell"])
 	return "" if bad.is_empty() else "format %d but unreadable (%s)" % [FORMAT, bad]
@@ -374,7 +405,42 @@ static func _bad_bodies(drop: Dictionary) -> String:
 	return ""
 
 
+## What 1b-2 added, when it is there: every part the type it says, and the runs
+## one entry a body.
+static func _bad_extra(drop: Dictionary) -> String:
+	var n: int = (drop["bodies"]["slot"] as PackedInt32Array).size()
+	for key: String in EXTRA:
+		if drop.has(key) and typeof(drop[key]) != int(EXTRA[key]):
+			return "drop.%s is the wrong type" % key
+	if drop.has("runs"):
+		if not drop["runs"] is Dictionary:
+			return "drop.runs is not a dictionary"
+		var runs: Dictionary = drop["runs"]
+		var bad := _misfit(runs, RUNS, "drop.runs.")
+		if not bad.is_empty():
+			return bad
+		if (runs["state"] as PackedByteArray).size() != n \
+				or (runs["target"] as PackedInt64Array).size() != n \
+				or (runs["flags"] as PackedByteArray).size() != n \
+				or (runs["clocks"] as PackedFloat64Array).size() != n * RUN_CLOCKS \
+				or (runs["points"] as PackedVector2Array).size() != n * 2:
+			return "drop.runs is not one run a body"
+	if drop.has("grid"):
+		var grid: Array = drop["grid"]
+		if grid.size() != 2 or typeof(grid[0]) != TYPE_PACKED_INT32_ARRAY \
+				or typeof(grid[1]) != TYPE_PACKED_INT32_ARRAY \
+				or (grid[0] as PackedInt32Array).size() != (grid[1] as PackedInt32Array).size():
+			return "drop.grid is not ids and their buckets"
+	if drop.has("stats"):
+		for what: Variant in drop["stats"]:
+			if typeof(what) != TYPE_STRING or typeof(drop["stats"][what]) != TYPE_INT:
+				return "drop.stats is not names to counts"
+	return ""
+
+
 static func _bad_cell(cell: Dictionary) -> String:
+	if cell.has("elsewhere") and typeof(cell["elsewhere"]) != TYPE_BOOL:
+		return "cell.elsewhere is the wrong type"
 	var pair: Array = cell["daughters"]
 	if not pair.is_empty() and pair.size() != 2:
 		return "cell.daughters is not two daughters"

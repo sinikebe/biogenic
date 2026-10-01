@@ -71,12 +71,23 @@ extends RefCounted
 ## would never answer an ENTER at all. So the number moves, and 1, 2 and 3 are
 ## all refused by name, with the sentence that names the update.
 ##
+## **5: the pond is the host's drop** (docs/design/ocean.md §10.4). A drop has
+## more bodies than a byte counts and keeps each one for its life, so a POND
+## entry is keyed on the body's id, a u32 that outlives any slot, where it was a
+## slot and a serial; the send set is the sixty nearest and every hunter of the
+## guest; flocs, which never move, are told once as they come into reach
+## ([constant EVENT_SETTLE]) and once as they go ([constant EVENT_CLEAR]); an
+## ARRIVE carries the drop's rim, and a CONTACT can say `GRAZED`. Every one of
+## those is a change in the meaning of bytes a 4 writes and reads, and the drop's
+## rules are the referee's too -- so the number moves with `RULES`, and a 4 is
+## refused at HELLO by name, as 1, 2 and 3 are.
+##
 ## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
 ## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER` or the bite tables (`BITE_BY_TIER`,
 ## `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`, `VENOM_COST_BY_TIER`, `bite_damage`,
 ## `venom_back`) must bump this number**, or a host on one pack and a guest on
 ## another share a pond whose contacts one of them misjudges.
-const PROTOCOL := 4
+const PROTOCOL := 5
 ## **The rules a host's referee judges a guest by, fingerprinted**
 ## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
 ## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
@@ -93,7 +104,7 @@ const PROTOCOL := 4
 ## of cut in the middle of a game. `tools/net_probe.gd` recomputes this from the
 ## real constants (`_rules_text`, run by `_referee_rules` in its `referee`
 ## section) and fails until both are done.
-const RULES := "25e18f0962700b580703e27180776d95cbba1a80bc71f3baad6bed12f2d3dfbe"
+const RULES := "46913eab9d0b76a01b5ee460f0eb534b3692698553b4be378046e2620f576c8e"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
@@ -166,6 +177,15 @@ const EVENT_CONTACT := 0x06
 const EVENT_DIED := 0x07
 ## Guest to host: the daughter the guest declined, to be left in the water.
 const EVENT_SISTER := 0x08
+## **Host to guest: a floc in the guest's reach** (ocean.md §10.4): where it
+## lies, how big it is, how far it has settled and how long it has left. A floc
+## never moves, and how far it has settled is a function of time, so it is told
+## once -- as it comes into reach, or lands in it -- and not twenty times a
+## second in every snapshot. Protocol 5.
+const EVENT_SETTLE := 0x09
+## Host to guest: a floc told by [constant EVENT_SETTLE] is gone -- eaten,
+## dissolved, or out of the guest's reach. Protocol 5.
+const EVENT_CLEAR := 0x0A
 
 # --- Why a host hangs up. Byte 3 of a refusal. ------------------------------
 ## The two builds do not speak the same protocol. The one case that matters,
@@ -304,11 +324,16 @@ const STATE_POND := 1 << 2
 ## body drawn 50 pixels across, which is under a pixel of the thing it turns.
 const BEARING_STEPS := 256
 
-# --- The POND snapshot (shared-pond.md §2) -----------------------------------
+# --- The POND snapshot (shared-pond.md §2, ocean.md §10.4) -------------------
 ## `kind | seq(u32) | your_wound(u8, /255) | count(u8) | reserved(u8)`.
 const POND_HEADER := 8
-## One body: `slot(u8) | serial(u16) | meals(u8) | flags(u8) | x(f32) | y(f32)
-## | heading(u8) | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
+## One body: `id(u32) | meals(u8) | flags(u8) | x(f32) | y(f32) | heading(u8)
+## | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
+##
+## **Keyed on the body's id** (protocol 5): a drop has more bodies than a byte
+## counts, and an id is the body's for its whole life where a slot is reused.
+## The person -- the host's own cell, or a server's other guest -- is id
+## [constant PERSON_ID] and flagged [constant POND_IS_PERSON].
 ##
 ## **Floats only where a quantity has no bounds**, which is the rule the state
 ## frame was written to: a place has none, so it is float32; a heading is a
@@ -317,17 +342,24 @@ const POND_HEADER := 8
 ## 255th is the precision the acceptance holds it to; a speed is under 510
 ## units a second (a tier-3 lunge is 322), and 2 units a second of error
 ## carried for the mirror's 0.2 s at most is 0.4 units.
-const POND_BODY := 18
+const POND_BODY := 19
 ## A person adds `vx(f32) | vy(f32) | turning(f32)`: the motion the mirror
 ## carries them by, which is the state frame's own motion, for the same reason.
 const POND_PERSON := POND_BODY + 12
-## How many bodies one snapshot may carry: two waters' worth and the person --
-## `food.gd`'s POND_SLOTS, written out because this file loads nothing.
-const POND_BODIES_MAX := 69
-## **The worst case, and the reason it is one datagram.** Sixty-eight cells and
-## the host: 8 + 68 x 18 + 30 = 1,262 bytes, under ENet's 1,392-byte MTU, so a
+## **The send set: the sixty water bodies nearest the guest, and every one
+## hunting it wherever it is** (ocean.md §10.4) -- `food.gd`'s SEND_MAX, written
+## out because this file loads nothing. 58 lie within 1,940 units on average at
+## the drop's density, more in a thick patch.
+const SEND_MAX := 60
+## How many bodies one snapshot may carry: the send set and the person.
+const POND_BODIES_MAX := SEND_MAX + 1
+## **The worst case, and the reason it is one datagram.** Sixty water bodies and
+## the person: 8 + 60 x 19 + 31 = 1,179 bytes, under ENet's 1,392-byte MTU, so a
 ## snapshot is never fragmented and a lost fragment can never cost a whole one.
 const POND_MAX := POND_HEADER + (POND_BODIES_MAX - 1) * POND_BODY + POND_PERSON
+## The person's id in a snapshot: no water body has it, since a drop numbers
+## its bodies from 1 and today's water its serials from 1.
+const PERSON_ID := 0
 ## The POND flag bits: stalking the recipient, the person, and the person in
 ## the water. `food.gd`'s FLAG_STALKING, FLAG_PERSON and FLAG_IN_WATER, which
 ## the probe holds to these.
@@ -343,8 +375,10 @@ const POND_SPEED_STEP := 2.0
 ## `food.gd`'s `Entry` enum, so a snapshot goes from `pond_entries()` to these
 ## bytes and from these bytes to `apply_pond()` with no copy in between. This
 ## file loads nothing, so the order is written out and the probe checks the two
-## agree. `VELOCITY` and `TURNING` read zero for a water cell.
-enum Entry { SLOT, SERIAL, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
+## agree. `VELOCITY` and `TURNING` read zero for a water cell. An entry may carry
+## more after `TURNING` -- the host's own slot for the body -- and none of it is
+## written.
+enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 	VELOCITY, TURNING }
 
 # --- Genomes, by name (shared-pond.md §2, multiplayer.md §4.7) ---------------
@@ -363,17 +397,33 @@ const NAME_MAX := 16
 const TIER_TOP := 3
 ## `kind | seq | type | radius(f32)`.
 const ENTER_SIZE := EVENT_HEADER + 4
-## `kind | seq | type | x(f32) | y(f32) | heading(u8)`.
-const ARRIVE_SIZE := EVENT_HEADER + 9
+## `kind | seq | type | x(f32) | y(f32) | heading(u8) | rim x(f32) | rim y(f32)
+## | rim radius(f32)`: where the host put the body, and **the drop it is in**
+## (ocean.md §10.4) -- its meniscus, which the guest draws, holds its own cell
+## inside and hears and sees with its own organs. A rim of radius 0 is none: a
+## host playing today's water.
+const ARRIVE_SIZE := EVENT_HEADER + 21
 ## `kind | seq | type | cause(u8) | by(u8) | x(f32) | y(f32)`.
 const DIED_SIZE := EVENT_HEADER + 10
 ## `kind | seq | type | what(u8) | x(f32) | y(f32) | level(f32) | by(u8)`, and
 ## then the gene's name for ATE or the cause for KILLED.
 const CONTACT_SIZE := EVENT_HEADER + 14
 ## CONTACT's `what` values that carry a tail: food.gd's Contact.ATE and
-## Contact.KILLED, written out for the same reason as [enum Entry].
+## Contact.KILLED, written out for the same reason as [enum Entry] -- and the
+## one that carries none but is new in protocol 5, Contact.GRAZED: the guest
+## swallowed a floc, and `level` is the nutrition.
 const CONTACT_ATE := 5
 const CONTACT_KILLED := 6
+const CONTACT_GRAZED := 7
+## SETTLE: `kind | seq | type | id(u32) | x(f32) | y(f32) | radius(u8, x4)
+## | settle(u8, /255) | life(u16, /100 s)`. A floc is 8 to 18 units across, so a
+## quarter unit is under a pixel; its settle is 0..1 like a wound; its life is
+## under three minutes, to the hundredth of a second.
+const SETTLE_SIZE := EVENT_HEADER + 16
+const SETTLE_RADIUS_SCALE := 4.0
+const SETTLE_LIFE_SCALE := 100.0
+## CLEAR: `kind | seq | type | id(u32)`.
+const CLEAR_SIZE := EVENT_HEADER + 4
 
 # --- What a frame may weigh (net-hardening.md A.3) ----------------------------
 ## **Every size here is derived from the writers above**, and `tools/
@@ -405,9 +455,9 @@ const ORDER_BYTES_MAX := 1 + ORDER_MAX * (1 + NAME_MAX)
 ## nothing worn, 272 at the most the format holds. A real one is at most 182.
 const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1
 const PERSON_MAX := EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
-## GENOME: slot, serial and meals, then a genome. 11 to 155.
-const GENOME_MIN := EVENT_HEADER + 4 + 1
-const GENOME_MAX := EVENT_HEADER + 4 + TIERS_MAX
+## GENOME: the body's id and meals, then a genome. 12 to 156.
+const GENOME_MIN := EVENT_HEADER + 5 + 1
+const GENOME_MAX := EVENT_HEADER + 5 + TIERS_MAX
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
 const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## SISTER: a place, a heading, a radius and a genome. 20 to 164.
@@ -556,7 +606,7 @@ static func shout(seq: int, at: Vector2, radius: float,
 ## the host last bit it.
 ##
 ## **This end never writes what the other end refuses**: a body whose place,
-## heading or radius is not finite, or whose slot is not a slot, is left out
+## heading or radius is not finite, or whose id is not a u32, is left out
 ## rather than sent, and a motion no body could have goes as none -- the state
 ## frame's own rule. Past [constant POND_BODIES_MAX] bodies the rest are left
 ## out; the send set is built to fit, so that is a guard and not a policy.
@@ -565,8 +615,8 @@ static func shout(seq: int, at: Vector2, radius: float,
 ## budget is one datagram: an unreliable packet over ENet's MTU does not fail,
 ## it goes out as fragments, and a lost fragment loses the whole snapshot. The
 ## send set holds one person at most, so it always fits; a body that would take
-## the frame past the budget -- sixty-nine bodies all flagged as people, say,
-## which would be 2,078 bytes -- is left out instead, like any other body this
+## the frame past the budget -- sixty-one bodies all flagged as people, say,
+## which would be 1,899 bytes -- is left out instead, like any other body this
 ## end will not send, and the reader refuses a longer frame outright.
 static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 	var keep: Array = []
@@ -583,11 +633,11 @@ static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 		if not is_finite(float(entry[Entry.HEADING])) \
 				or not is_finite(float(entry[Entry.RADIUS])):
 			continue
-		var slot := int(entry[Entry.SLOT])
-		if slot < 0 or slot >= POND_BODIES_MAX:
+		var id := int(entry[Entry.ID])
+		var person := (int(entry[Entry.FLAGS]) & POND_IS_PERSON) != 0
+		if id < 0 or id > 0xFFFFFFFF or (id == PERSON_ID) != person:
 			continue
-		var takes := POND_PERSON if (int(entry[Entry.FLAGS]) & POND_IS_PERSON) != 0 \
-			else POND_BODY
+		var takes := POND_PERSON if person else POND_BODY
 		if size + takes > POND_MAX:
 			continue
 		keep.append(entry)
@@ -602,19 +652,18 @@ static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 	var at := POND_HEADER
 	for entry: Array in keep:
 		var flags := int(entry[Entry.FLAGS]) & 0xFF
-		out[at] = int(entry[Entry.SLOT])
-		_put_u16(out, at + 1, int(entry[Entry.SERIAL]) & 0xFFFF)
-		out[at + 3] = clampi(int(entry[Entry.MEALS]), 0, 255)
-		out[at + 4] = flags
+		_put_u32(out, at, int(entry[Entry.ID]))
+		out[at + 4] = clampi(int(entry[Entry.MEALS]), 0, 255)
+		out[at + 5] = flags
 		var place: Vector2 = entry[Entry.AT]
-		out.encode_float(at + 5, place.x)
-		out.encode_float(at + 9, place.y)
-		_put_bearing(out, at + 13, float(entry[Entry.HEADING]))
-		_put_u16(out, at + 14, clampi(roundi(maxf(float(entry[Entry.RADIUS]), 0.0)
+		out.encode_float(at + 6, place.x)
+		out.encode_float(at + 10, place.y)
+		_put_bearing(out, at + 14, float(entry[Entry.HEADING]))
+		_put_u16(out, at + 15, clampi(roundi(maxf(float(entry[Entry.RADIUS]), 0.0)
 			* POND_RADIUS_SCALE), 0, 0xFFFF))
-		out[at + 16] = _unit_byte(float(entry[Entry.WOUND]))
+		out[at + 17] = _unit_byte(float(entry[Entry.WOUND]))
 		var speed := float(entry[Entry.SPEED])
-		out[at + 17] = clampi(roundi(speed / POND_SPEED_STEP), 0, 255) \
+		out[at + 18] = clampi(roundi(speed / POND_SPEED_STEP), 0, 255) \
 			if is_finite(speed) else 0
 		at += POND_BODY
 		if (flags & POND_IS_PERSON) == 0:
@@ -654,13 +703,19 @@ static func enter_payload(radius: float) -> PackedByteArray:
 	return out
 
 
-## ARRIVE: where the host put it, and which way it points.
-static func arrive_payload(at: Vector2, heading: float) -> PackedByteArray:
+## ARRIVE: where the host put it, which way it points, and the drop's rim --
+## [param rim_center] and [param rim_radius], 0 for a water with none.
+static func arrive_payload(at: Vector2, heading: float,
+		rim_center: Vector2 = Vector2.ZERO, rim_radius: float = 0.0) -> PackedByteArray:
 	var out := PackedByteArray()
-	out.resize(9)
+	out.resize(21)
 	out.encode_float(0, at.x if is_finite(at.x) else 0.0)
 	out.encode_float(4, at.y if is_finite(at.y) else 0.0)
 	_put_bearing(out, 8, heading if is_finite(heading) else 0.0)
+	var rimmed := rim_center.is_finite() and is_finite(rim_radius) and rim_radius > 0.0
+	out.encode_float(9, rim_center.x if rimmed else 0.0)
+	out.encode_float(13, rim_center.y if rimmed else 0.0)
+	out.encode_float(17, rim_radius if rimmed else 0.0)
 	return out
 
 
@@ -675,15 +730,40 @@ static func person_payload(new_body: bool, tiers: Dictionary,
 
 
 ## GENOME: one water body's genome, keyed by the version the mirror's book
-## files it under. The serial crosses as sixteen bits, like POND's.
-static func genome_payload(slot: int, serial: int, meals: int,
-		tiers: Dictionary) -> PackedByteArray:
+## files it under: the body's id, as POND carries it, and its meals.
+static func genome_payload(id: int, meals: int, tiers: Dictionary) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(5)
+	_put_u32(out, 0, id)
+	out[4] = clampi(meals, 0, 255)
+	out.append_array(_tiers_bytes(tiers))
+	return out
+
+
+## SETTLE: a floc [param id] at [param at], [param radius] across, [param settle]
+## of the way into focus with [param life] seconds before it begins to dissolve.
+## What the wire cannot carry is carried as its nearest: a place that is not
+## finite as the origin, the rest clamped to their bytes.
+static func settle_payload(id: int, at: Vector2, radius: float, settle: float,
+		life: float) -> PackedByteArray:
+	var out := PackedByteArray()
+	out.resize(16)
+	_put_u32(out, 0, id)
+	out.encode_float(4, at.x if is_finite(at.x) else 0.0)
+	out.encode_float(8, at.y if is_finite(at.y) else 0.0)
+	out[12] = clampi(roundi(radius * SETTLE_RADIUS_SCALE), 0, 255) \
+		if is_finite(radius) else 0
+	out[13] = _unit_byte(settle)
+	_put_u16(out, 14, clampi(roundi(life * SETTLE_LIFE_SCALE), 0, 0xFFFF)
+		if is_finite(life) else 0)
+	return out
+
+
+## CLEAR: the floc [param id] is gone.
+static func clear_payload(id: int) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(4)
-	out[0] = clampi(slot, 0, 255)
-	_put_u16(out, 1, serial & 0xFFFF)
-	out[3] = clampi(meals, 0, 255)
-	out.append_array(_tiers_bytes(tiers))
+	_put_u32(out, 0, id)
 	return out
 
 
@@ -922,6 +1002,10 @@ static func _span(kind: int, type: int, from_host: bool) -> Vector2i:
 					return Vector2i(DIED_SIZE, DIED_SIZE)
 				EVENT_SISTER:
 					return never if from_host else Vector2i(SISTER_MIN, SISTER_MAX)
+				EVENT_SETTLE:
+					return Vector2i(SETTLE_SIZE, SETTLE_SIZE) if from_host else never
+				EVENT_CLEAR:
+					return Vector2i(CLEAR_SIZE, CLEAR_SIZE) if from_host else never
 	return never
 
 
@@ -947,10 +1031,10 @@ static func take_shout(frame: PackedByteArray) -> Array:
 ## `[seq, your_wound, bodies]` out of a POND frame, each body an Array indexed
 ## by [enum Entry] -- or an empty array, and the whole frame refused, for a
 ## short or overlong frame, one past [constant POND_MAX] bytes whatever it
-## holds, a count past [constant POND_BODIES_MAX], a slot
-## that is not one, a non-finite float, or a motion no body could have. A
-## snapshot is superseded fifty milliseconds later, so refusing one costs one
-## frame of a stream that sends twenty.
+## holds, a count past [constant POND_BODIES_MAX], a person that is not
+## [constant PERSON_ID] or a water body that is, a non-finite float, or a motion
+## no body could have. A snapshot is superseded fifty milliseconds later, so
+## refusing one costs one frame of a stream that sends twenty.
 static func take_pond(frame: PackedByteArray) -> Array:
 	if frame.size() < POND_HEADER or frame.size() > POND_MAX \
 			or frame[0] != KIND_POND:
@@ -963,19 +1047,19 @@ static func take_pond(frame: PackedByteArray) -> Array:
 	for _i in count:
 		if at + POND_BODY > frame.size():
 			return []
-		var slot: int = frame[at]
-		if slot >= POND_BODIES_MAX:
+		var id := _take_u32(frame, at)
+		var flags: int = frame[at + 5]
+		if (id == PERSON_ID) != ((flags & POND_IS_PERSON) != 0):
 			return []
-		var flags: int = frame[at + 4]
-		var x := frame.decode_float(at + 5)
-		var y := frame.decode_float(at + 9)
+		var x := frame.decode_float(at + 6)
+		var y := frame.decode_float(at + 10)
 		if not (is_finite(x) and is_finite(y)):
 			return []
-		var entry: Array = [slot, _take_u16(frame, at + 1), int(frame[at + 3]),
-			flags, Vector2(x, y), _take_bearing(frame, at + 13),
-			float(_take_u16(frame, at + 14)) / POND_RADIUS_SCALE,
-			float(frame[at + 16]) / POND_WOUND_SCALE,
-			float(frame[at + 17]) * POND_SPEED_STEP, Vector2.ZERO, 0.0]
+		var entry: Array = [id, int(frame[at + 4]),
+			flags, Vector2(x, y), _take_bearing(frame, at + 14),
+			float(_take_u16(frame, at + 15)) / POND_RADIUS_SCALE,
+			float(frame[at + 17]) / POND_WOUND_SCALE,
+			float(frame[at + 18]) * POND_SPEED_STEP, Vector2.ZERO, 0.0]
 		at += POND_BODY
 		if (flags & POND_IS_PERSON) != 0:
 			if at + 12 > frame.size():
@@ -1004,7 +1088,8 @@ static func take_enter(frame: PackedByteArray) -> Array:
 	return [radius]
 
 
-## `[at, heading]` out of an ARRIVE, or empty.
+## `[at, heading, rim_center, rim_radius]` out of an ARRIVE, or empty. A rim
+## that is not finite, or not above nothing, reads as none: radius 0.
 static func take_arrive(frame: PackedByteArray) -> Array:
 	if not _is_event(frame, EVENT_ARRIVE, ARRIVE_SIZE):
 		return []
@@ -1012,7 +1097,13 @@ static func take_arrive(frame: PackedByteArray) -> Array:
 	var y := frame.decode_float(EVENT_HEADER + 4)
 	if not (is_finite(x) and is_finite(y)):
 		return []
-	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8)]
+	var rim := Vector2(frame.decode_float(EVENT_HEADER + 9),
+		frame.decode_float(EVENT_HEADER + 13))
+	var reach := frame.decode_float(EVENT_HEADER + 17)
+	if not rim.is_finite() or not is_finite(reach) or reach <= 0.0:
+		rim = Vector2.ZERO
+		reach = 0.0
+	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), rim, reach]
 
 
 ## `[new_body, tiers, order]` out of a PERSON, or empty.
@@ -1029,16 +1120,36 @@ static func take_person(frame: PackedByteArray) -> Array:
 	return [frame[EVENT_HEADER] != 0, tiers[0], order[0]]
 
 
-## `[slot, serial, meals, tiers]` out of a GENOME, or empty.
+## `[id, meals, tiers]` out of a GENOME, or empty.
 static func take_genome(frame: PackedByteArray) -> Array:
-	if frame.size() < EVENT_HEADER + 4 or frame[0] != KIND_EVENT \
+	if frame.size() < EVENT_HEADER + 5 or frame[0] != KIND_EVENT \
 			or frame[5] != EVENT_GENOME:
 		return []
-	var tiers := _take_tiers(frame, EVENT_HEADER + 4)
+	var tiers := _take_tiers(frame, EVENT_HEADER + 5)
 	if tiers.is_empty() or int(tiers[1]) != frame.size():
 		return []
-	return [int(frame[EVENT_HEADER]), _take_u16(frame, EVENT_HEADER + 1),
-		int(frame[EVENT_HEADER + 3]), tiers[0]]
+	return [_take_u32(frame, EVENT_HEADER), int(frame[EVENT_HEADER + 4]), tiers[0]]
+
+
+## `[id, at, radius, settle, life]` out of a SETTLE, or empty.
+static func take_settle(frame: PackedByteArray) -> Array:
+	if not _is_event(frame, EVENT_SETTLE, SETTLE_SIZE):
+		return []
+	var x := frame.decode_float(EVENT_HEADER + 4)
+	var y := frame.decode_float(EVENT_HEADER + 8)
+	if not (is_finite(x) and is_finite(y)):
+		return []
+	return [_take_u32(frame, EVENT_HEADER), Vector2(x, y),
+		float(frame[EVENT_HEADER + 12]) / SETTLE_RADIUS_SCALE,
+		float(frame[EVENT_HEADER + 13]) / POND_WOUND_SCALE,
+		float(_take_u16(frame, EVENT_HEADER + 14)) / SETTLE_LIFE_SCALE]
+
+
+## `[id]` out of a CLEAR, or empty.
+static func take_clear(frame: PackedByteArray) -> Array:
+	if not _is_event(frame, EVENT_CLEAR, CLEAR_SIZE):
+		return []
+	return [_take_u32(frame, EVENT_HEADER)]
 
 
 ## `[what, at, level, by, gene, cause]` out of a CONTACT, or empty. `gene` is
