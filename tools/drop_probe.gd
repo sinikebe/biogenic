@@ -22,7 +22,15 @@ extends Node
 ## to its own count whatever the hunters number, no run at a body in its grace,
 ## a meal that writes the DNA alone (lineage 1 to 6); one seed one drop with
 ## births (7); a room kept and loaded going on dividing (8); the sister's grace
-## (9); and the dev app's readout counting generations and families.
+## (9); and the dev app's readout counting generations and families. **And your
+## drops** (docs/design/settings.md §6, §8 phase 2): a run plays the selected one
+## and its keep writes the drop's line into the index; the first launch after the
+## update finds today's `drop.save` as slot 1, the same bytes; a save this build
+## cannot read is never set aside by reading; a lost or unreadable index is
+## rebuilt from the files; new, rename and delete round the index; switching the
+## selected drop switches the water and the cell; delete never takes the drop you
+## are in, nor leaves its files; a tool's run never touches the drops; and a
+## default name is said in the language of the moment, a typed one never.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -49,6 +57,14 @@ extends Node
 ## to the grace, a meal that writes the body too, a daughters' coin no seed
 ## reaches, a load that forgets the grace, a sister born without one, a meal that
 ## writes the DNA alone with births off, and a readout without its families.
+## And your drops': slot 1 moved by the migration, a peek that sets a file aside,
+## a read that writes the index, a lost index that forgets the files, a tool's run
+## that keeps the selected drop, a run that always plays slot 1, the drop you are
+## in deletable, a delete that leaves its `.tmp` and `.save.old`, a menu that
+## offers delete on the drop you are in, a keep that does not tell the index, a
+## default said only in English, a default's French kept as a typed name, its
+## English kept as one in French, a new drop offered a default another wears in
+## French, and a naming field left in the language it opened in.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -68,6 +84,7 @@ const MotesField := preload("res://game/normal/motes.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
+const Drops := preload("res://game/normal/drops.gd")
 const Descent := preload("res://game/mechanics/descent.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
@@ -462,6 +479,7 @@ func _ready() -> void:
 	await _readout()
 	await _readout_families()
 	await _save()
+	await _drops()
 	await _sister_lineage()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
@@ -2906,6 +2924,520 @@ func _forget_kept() -> void:
 			DirAccess.remove_absolute(path)
 	if DirAccess.dir_exists_absolute(KEEP.get_base_dir()):
 		DirAccess.remove_absolute(KEEP.get_base_dir())
+
+
+# --- Your drops (docs/design/settings.md §6, §8 phase 2) --------------------------------
+
+## **Where these checks keep their drops**: a folder of their own, so its index
+## and its three files are never the player's.
+const DROPS_ROOT := "user://drop_probe_drops"
+const CORNER := "res://game/menu/corner.tscn"
+## The French catalog, which drops 9 registers for itself: a probe has no screen,
+## so the game registers none (game/i18n/i18n.gd).
+const FRENCH := "res://game/i18n/fr.po"
+
+## **The two drops the checks are made of**, each kept by a real run of the game
+## through the index: `{bytes, seed, age, slot}` -- the file as the run wrote it,
+## the water's seed, its age, and the slot the run resolved.
+var _drop_a := {}
+var _drop_b := {}
+
+
+## Each check begins with an empty folder, and nothing is left in it after them.
+func _drops() -> void:
+	_forget_drops()
+	await _drops_kept()
+	for check: Callable in [_drops_first_launch, _drops_unusable_first, _drops_lost_index,
+			_drops_round_trip, _drops_switch, _drops_delete, _drops_tool_run, _drops_said]:
+		_forget_drops()
+		await check.call()
+	_forget_drops()
+
+
+## **drops 1. A run keeps the selected drop and tells the index** (§6.4): a run
+## whose `keep` is the selected drop of a folder with no index plays slot 1, at
+## that folder's `drop.save`, and its keep writes the file and the drop's line --
+## its age and its cell's generation -- into a new `drops.cfg`. A new drop in
+## slot 2 is selected, the next run plays it from `drop_2.save`, and its keep
+## gives slot 2 its own line, slot 1's as it was.
+func _drops_kept() -> void:
+	var marker := Drops.selected_in(DROPS_ROOT)
+	var first := await _drops_run(marker)
+	var resolved := [int(first.get("_drop_slot")), str(first.get("keep"))]
+	first.set("_generation", 3)
+	# A clock of hours and a fraction: the index keeps whole seconds.
+	(first.get("_food") as Node).set("_t", 7832.6)
+	first.notification(NOTIFICATION_APPLICATION_PAUSED)
+	_drop_a = _drop_kept(first, 1)
+	first.queue_free()
+	await get_tree().process_frame
+	var made := Drops.make(2, "", DROPS_ROOT)
+	var second := await _drops_run(marker)
+	second.set("_generation", 5)
+	(second.get("_food") as Node).set("_t", 1501.25)
+	second.notification(NOTIFICATION_APPLICATION_PAUSED)
+	_drop_b = _drop_kept(second, 2)
+	second.queue_free()
+	await get_tree().process_frame
+	var index := Drops.read(DROPS_ROOT)
+	var one := Drops.entry_of(index, 1)
+	var two := Drops.entry_of(index, 2)
+	_check(("drops 1. a run plays the selected drop and its keep tells the index: slot %d at"
+		+ " %s, kept with its line -- %.1f s old in the index for %.2f, generation %d (\"%s\");"
+		+ " a new drop in slot 2 selected (%s), played from slot %d, its line %.1f s and"
+		+ " generation %d (\"%s\"), slot 1's untouched; two waters (seeds %d and %d)") % [
+		resolved[0], str(resolved[1]).get_file(), float(one["lived"]), float(_drop_a["age"]),
+		int(one["generation"]), Drops.line_of(one), error_string(made), int(_drop_b["slot"]),
+		float(two["lived"]), int(two["generation"]), Drops.line_of(two), int(_drop_a["seed"]),
+		int(_drop_b["seed"])],
+		resolved == [1, DROPS_ROOT.path_join("drop.save")] and made == OK
+		and not (_drop_a["bytes"] as PackedByteArray).is_empty()
+		and not (_drop_b["bytes"] as PackedByteArray).is_empty()
+		and int(_drop_a["slot"]) == 1 and int(_drop_b["slot"]) == 2
+		and float(one["lived"]) == 7832.0 and float(_drop_a["age"]) == 7832.6
+		and int(one["generation"]) == 3 and Drops.line_of(one) == "third generation · 2 hours old"
+		and float(two["lived"]) == 1501.0 and int(two["generation"]) == 5
+		and Drops.line_of(two) == "fifth generation · 25 minutes old"
+		and int(index["selected"]) == 2 and int(_drop_a["seed"]) != int(_drop_b["seed"]))
+
+
+## **drops 2. The first launch after the update** (§6.3, step 1): a `drop.save`
+## with no index is slot 1, selected, called by default name 0, its line read
+## from the file -- **and the file is the same bytes**, nothing beside it, no
+## index written by reading. The first change writes the index, the line in it,
+## and the file is still the same bytes. Slot 1 of the player's own drops is
+## `DropSave.PATH`, today's drop, exactly.
+func _drops_first_launch() -> void:
+	var path := Drops.path_of(1, DROPS_ROOT)
+	_put(path, _drop_a["bytes"])
+	var index := Drops.read(DROPS_ROOT)
+	var one := Drops.entry_of(index, 1)
+	var same: bool = FileAccess.get_file_as_bytes(path) == _drop_a["bytes"]
+	var alone := not FileAccess.file_exists(path + ".old") \
+		and not FileAccess.file_exists(path.get_basename() + ".tmp")
+	var unwritten := not FileAccess.file_exists(DROPS_ROOT.path_join(Drops.INDEX))
+	var chose := Drops.select(1, DROPS_ROOT)
+	var config := ConfigFile.new()
+	var loaded := config.load(DROPS_ROOT.path_join(Drops.INDEX))
+	var section := loaded == OK and int(config.get_value("1", "default", -1)) == 0 \
+		and str(config.get_value("1", "name", "?")) == "" \
+		and int(config.get_value("1", "generation", -1)) == 3 \
+		and float(config.get_value("1", "lived", -1.0)) == floorf(float(_drop_a["age"]))
+	var still: bool = FileAccess.get_file_as_bytes(path) == _drop_a["bytes"]
+	_check(("drops 2. the first launch after the update: a drop.save with no index is slot 1"
+		+ " (%s), selected (%d), \"%s\", %s -- read from the file, which is the same bytes (%s)"
+		+ " with nothing set beside it (%s), and no index written by reading (%s); the first"
+		+ " change (%s) writes the index with that line in it (%s), the file still the same"
+		+ " bytes (%s); the player's slot 1 is %s") % [str(not bool(one["empty"])),
+		int(index["selected"]), Drops.name_of(one), Drops.line_of(one), str(same), str(alone),
+		str(unwritten), error_string(chose), str(section), str(still), Drops.path_of(1)],
+		not bool(one["empty"]) and bool(one["file"]) and int(index["selected"]) == 1
+		and Drops.name_of(one) == Drops.DEFAULT_NAMES[0] and int(one["generation"]) == 3
+		and float(one["lived"]) == float(_drop_a["age"]) and same and alone and unwritten
+		and chose == OK and section and still and Drops.path_of(1) == DropSave.PATH
+		and bool(Drops.entry_of(index, 2)["empty"]) and bool(Drops.entry_of(index, 3)["empty"]))
+
+
+## **drops 3. A drop this build cannot read is not set aside by the menu**
+## (§6.3): another build's format at `drop.save`, with no index, is still slot 1,
+## "not swum in yet" -- `DropSave.peek` reads it and leaves it where it is, the
+## same bytes, nothing beside it. Only a run about to play a drop moves one.
+func _drops_unusable_first() -> void:
+	var water := _water()
+	var later := DropSave.compose(water[0].call(&"drop_state"), {})
+	later["format"] = DropSave.FORMAT + 1
+	_done(water)
+	var path := Drops.path_of(1, DROPS_ROOT)
+	DirAccess.make_dir_recursive_absolute(DROPS_ROOT)
+	var wrote := DropSave.write(path, later)
+	var bytes := FileAccess.get_file_as_bytes(path)
+	var index := Drops.read(DROPS_ROOT)
+	var one := Drops.entry_of(index, 1)
+	var peeked := DropSave.peek(path)
+	var same: bool = FileAccess.get_file_as_bytes(path) == bytes and not bytes.is_empty()
+	var alone := not FileAccess.file_exists(path + ".old")
+	_check(("drops 3. a drop.save of format %d (%s) with no index is slot 1 (%s), \"%s\"; peeked"
+		+ " as nothing (%s) and left where it is, the same bytes (%s), nothing set beside it (%s)")
+		% [DropSave.FORMAT + 1, error_string(wrote), str(not bool(one["empty"])),
+		Drops.line_of(one), str(peeked.is_empty()), str(same), str(alone)],
+		wrote == OK and not bool(one["empty"]) and bool(one["file"]) and peeked.is_empty()
+		and Drops.line_of(one) == "not swum in yet" and same and alone)
+
+
+## **drops 4. A lost index is rebuilt from the files** (§6.3, steps 2 and 4):
+## three named drops, slot 2 selected, slot 3 never swum in. With the index gone,
+## and again with it unreadable, every file is a drop again -- default names in
+## slot order, each line read from its file -- slot 3, which had no file, is
+## empty, and slot 1 is selected. An index older than a file -- it names slot 1
+## only -- gives that file the first default nobody shows, and its line.
+func _drops_lost_index() -> void:
+	_put(Drops.path_of(1, DROPS_ROOT), _drop_a["bytes"])
+	_put(Drops.path_of(2, DROPS_ROOT), _drop_b["bytes"])
+	var named := [Drops.rename(1, "my pond", DROPS_ROOT), Drops.rename(2, "my barrel", DROPS_ROOT),
+		Drops.make(3, "spare", DROPS_ROOT), Drops.select(2, DROPS_ROOT)]
+	var had := Drops.read(DROPS_ROOT)
+	var index_path := DROPS_ROOT.path_join(Drops.INDEX)
+	var seen: Array[String] = []
+	var rebuilt := true
+	for how: String in ["gone", "unreadable"]:
+		if how == "gone":
+			DirAccess.remove_absolute(index_path)
+		else:
+			_put(index_path, PackedByteArray([0xff, 0xfe, 0x5b, 0x00, 0x3d, 0x0a, 0x5b]))
+		var index := Drops.read(DROPS_ROOT)
+		var one := Drops.entry_of(index, 1)
+		var two := Drops.entry_of(index, 2)
+		seen.append("%s: %s / %s, %s / %s, %s, selected %d" % [how, Drops.name_of(one),
+			Drops.line_of(one), Drops.name_of(two), Drops.line_of(two),
+			"slot 3 empty" if bool(Drops.entry_of(index, 3)["empty"]) else "SLOT 3 KEPT",
+			int(index["selected"])])
+		rebuilt = rebuilt and Drops.name_of(one) == Drops.DEFAULT_NAMES[0] \
+			and Drops.name_of(two) == Drops.DEFAULT_NAMES[1] \
+			and int(one["generation"]) == 3 and int(two["generation"]) == 5 \
+			and float(one["lived"]) == float(_drop_a["age"]) \
+			and float(two["lived"]) == float(_drop_b["age"]) \
+			and bool(Drops.entry_of(index, 3)["empty"]) and int(index["selected"]) == 1
+	var older := ConfigFile.new()
+	older.set_value("drops", "selected", 1)
+	older.set_value("1", "name", "my pond")
+	older.set_value("1", "default", 0)
+	older.set_value("1", "lived", 12.0)
+	older.set_value("1", "generation", 3)
+	older.save(index_path)
+	var index := Drops.read(DROPS_ROOT)
+	var two := Drops.entry_of(index, 2)
+	var orphan := not bool(two["empty"]) and int(two["default"]) == 0 \
+		and int(two["generation"]) == 5 and Drops.name_of(Drops.entry_of(index, 1)) == "my pond"
+	seen.append("older: slot 2 %s / %s" % [Drops.name_of(two), Drops.line_of(two)])
+	_check("drops 4. a lost index is rebuilt from the files: named %s, selected %d; %s" % [
+		", ".join(named.map(func(e: int) -> String: return error_string(e))),
+		int(had["selected"]), "; ".join(seen)],
+		named.all(func(e: int) -> bool: return e == OK) and int(had["selected"]) == 2
+		and Drops.name_of(Drops.entry_of(had, 3)) == "spare" and rebuilt and orphan)
+
+
+## **drops 5. New, rename and delete, round the index** (§4.4, §5.2): a new drop
+## takes the first default no other drop shows, or the name typed -- trimmed, cut
+## to NAME_MAX, no control characters -- and is selected; a slot that holds a
+## drop cannot be made again; a name emptied, or set to the default's own words,
+## is the default again; and the drop you are in cannot be deleted.
+func _drops_round_trip() -> void:
+	var fresh := Drops.read(DROPS_ROOT)
+	var typed := Drops.make(2, "  my\tnew drop  ", DROPS_ROOT)
+	var again := Drops.make(2, "twice", DROPS_ROOT)
+	var plain := Drops.make(3, "", DROPS_ROOT)
+	var index := Drops.read(DROPS_ROOT)
+	var two := Drops.entry_of(index, 2)
+	var three := Drops.entry_of(index, 3)
+	var names := [Drops.name_of(Drops.entry_of(index, 1)), Drops.name_of(two), Drops.name_of(three)]
+	var long := Drops.rename(3, "a name much longer than twenty", DROPS_ROOT)
+	var cut := Drops.name_of(Drops.entry_of(Drops.read(DROPS_ROOT), 3))
+	Drops.rename(3, "   ", DROPS_ROOT)
+	var emptied := Drops.entry_of(Drops.read(DROPS_ROOT), 3)
+	Drops.rename(2, Drops.DEFAULT_NAMES[1], DROPS_ROOT)
+	var own_words := Drops.entry_of(Drops.read(DROPS_ROOT), 2)
+	var locked := Drops.delete(3, DROPS_ROOT)
+	var gone := Drops.delete(2, DROPS_ROOT)
+	var after := Drops.read(DROPS_ROOT)
+	_check(("drops 5. new, rename and delete: a fresh folder has slot 1 (%s) selected (%d); new"
+		+ " drops %s and %s, the same slot again %s; named %s, the new one \"%s\" -- %s, selected"
+		+ " %d; a long name kept as \"%s\" (%s); emptied, \"%s\"; the default's words kept as"
+		+ " the default (%s); the drop you are in not deleted (%s), another deleted (%s)") % [
+		Drops.name_of(Drops.entry_of(fresh, 1)), int(fresh["selected"]), error_string(typed),
+		error_string(plain), error_string(again), str(names), Drops.name_of(three),
+		Drops.line_of(three), int(index["selected"]), cut, error_string(long),
+		Drops.name_of(emptied), str(str(own_words["name"]).is_empty()), error_string(locked),
+		error_string(gone)],
+		int(fresh["selected"]) == 1 and not bool(Drops.entry_of(fresh, 1)["empty"])
+		and typed == OK and again == ERR_ALREADY_EXISTS and plain == OK
+		and names == [Drops.DEFAULT_NAMES[0], "my new drop", Drops.DEFAULT_NAMES[1]]
+		and Drops.line_of(three) == "not swum in yet" and int(index["selected"]) == 3
+		and long == OK and cut == "a name much longer t" and cut.length() == Drops.NAME_MAX
+		and str(emptied["name"]).is_empty() and Drops.name_of(emptied) == Drops.DEFAULT_NAMES[1]
+		and str(own_words["name"]).is_empty() and locked == ERR_LOCKED and gone == OK
+		and bool(Drops.entry_of(after, 2)["empty"]) and not bool(Drops.entry_of(after, 3)["empty"])
+		and int(after["selected"]) == 3)
+
+
+## **drops 6. Switching the selected drop switches the water and the cell**
+## (§4.5): with drop A in slot 1 and drop B in slot 2, a run with slot 1 selected
+## opens A's water and A's cell; with slot 2 selected, B's. That run's keep
+## writes B's file and B's line, and leaves A's file and line as they were.
+func _drops_switch() -> void:
+	_put(Drops.path_of(1, DROPS_ROOT), _drop_a["bytes"])
+	_put(Drops.path_of(2, DROPS_ROOT), _drop_b["bytes"])
+	var marker := Drops.selected_in(DROPS_ROOT)
+	var chose_one := Drops.select(1, DROPS_ROOT)
+	var one := await _drops_run(marker)
+	var got_one := _drops_opened(one)
+	one.queue_free()
+	await get_tree().process_frame
+	var chose_two := Drops.select(2, DROPS_ROOT)
+	var two := await _drops_run(marker)
+	var got_two := _drops_opened(two)
+	two.set("_generation", 6)
+	two.notification(NOTIFICATION_APPLICATION_PAUSED)
+	two.queue_free()
+	await get_tree().process_frame
+	var index := Drops.read(DROPS_ROOT)
+	var a_same: bool = FileAccess.get_file_as_bytes(Drops.path_of(1, DROPS_ROOT)) == _drop_a["bytes"]
+	var b_kept: bool = FileAccess.get_file_as_bytes(Drops.path_of(2, DROPS_ROOT)) != _drop_b["bytes"]
+	_check(("drops 6. switching the selected drop: slot 1 selected (%s) opens %s, slot 2 (%s)"
+		+ " opens %s -- [slot, seed, generation, resumed], against A's seed %d and B's %d; B's"
+		+ " keep wrote B's file (%s) and line (generation %d), A's file the same bytes (%s) and"
+		+ " its line generation %d") % [error_string(chose_one), str(got_one),
+		error_string(chose_two), str(got_two), int(_drop_a["seed"]), int(_drop_b["seed"]),
+		str(b_kept), int(Drops.entry_of(index, 2)["generation"]), str(a_same),
+		int(Drops.entry_of(index, 1)["generation"])],
+		chose_one == OK and chose_two == OK
+		and got_one == [1, int(_drop_a["seed"]), 3, true]
+		and got_two == [2, int(_drop_b["seed"]), 5, true]
+		and b_kept and a_same and int(Drops.entry_of(index, 2)["generation"]) == 6
+		and int(Drops.entry_of(index, 1)["generation"]) == 3)
+
+
+## **drops 7. Deleting empties a slot, files and all, and never the drop you are
+## in** (§4.4, §6.4, owner's row 8): asked to, the index refuses the selected
+## drop and leaves its file; another goes with its `.tmp` and `.save.old`, the
+## selected one's file untouched. **And the menu**: the drop you are in has no
+## delete -- an empty box holds its place -- and a confirm asked for it does not
+## open; an emptied row says "new world", which names and makes a drop there and
+## selects it; then the other row's own delete, through the confirm, removes its
+## file.
+func _drops_delete() -> void:
+	var one := Drops.path_of(1, DROPS_ROOT)
+	var two := Drops.path_of(2, DROPS_ROOT)
+	_put(one, _drop_a["bytes"])
+	_put(two, _drop_b["bytes"])
+	_put(one.get_basename() + ".tmp", PackedByteArray([1, 2, 3]))
+	_put(one + ".old", PackedByteArray([4, 5, 6]))
+	Drops.select(2, DROPS_ROOT)
+	var refused := Drops.delete(2, DROPS_ROOT)
+	var kept: bool = FileAccess.get_file_as_bytes(two) == _drop_b["bytes"] \
+		and not bool(Drops.entry_of(Drops.read(DROPS_ROOT), 2)["empty"])
+	var done := Drops.delete(1, DROPS_ROOT)
+	var index := Drops.read(DROPS_ROOT)
+	var gone := not FileAccess.file_exists(one) and not FileAccess.file_exists(one + ".old") \
+		and not FileAccess.file_exists(one.get_basename() + ".tmp") \
+		and bool(Drops.entry_of(index, 1)["empty"])
+	var other: bool = FileAccess.get_file_as_bytes(two) == _drop_b["bytes"] \
+		and int(index["selected"]) == 2
+	# The menu, on the same folder.
+	var corner: Control = (load(CORNER) as PackedScene).instantiate()
+	corner.set("drops_root", DROPS_ROOT)
+	add_child(corner)
+	await get_tree().process_frame
+	corner.call(&"open_drops")
+	await get_tree().process_frame
+	var rows := "Drops/Panel/Box/Row%d/"
+	var no_delete := not (corner.get_node(rows % 2 + "Delete") as Control).visible \
+		and (corner.get_node(rows % 2 + "Hold") as Control).visible \
+		and (corner.get_node(rows % 2 + "Rename") as Control).visible
+	var new_row := (corner.get_node(rows % 1 + "Pick/Lines/Name") as Label).text == "new world" \
+		and not (corner.get_node(rows % 1 + "Rename") as Control).visible \
+		and not (corner.get_node(rows % 1 + "Delete") as Control).visible
+	corner.call(&"open_confirm", 2)
+	var no_confirm: bool = corner.get("_open") == corner.get_node(^"Drops")
+	(corner.get_node(rows % 1 + "Pick") as Button).pressed.emit()
+	var naming: bool = corner.get("_open") == corner.get_node(^"Naming")
+	var offered := (corner.get_node(^"Naming/Panel/Box/Field") as LineEdit).text
+	(corner.get_node(^"Naming/Panel/Box/Actions/Make") as Button).pressed.emit()
+	var made := Drops.read(DROPS_ROOT)
+	var remade := not bool(Drops.entry_of(made, 1)["empty"]) and int(made["selected"]) == 1 \
+		and not bool(corner.call(&"is_open"))
+	corner.call(&"open_drops")
+	await get_tree().process_frame
+	var delete_two := corner.get_node(rows % 2 + "Delete") as Button
+	var offers := delete_two.visible
+	delete_two.pressed.emit()
+	var asked: bool = corner.get("_open") == corner.get_node(^"Confirm")
+	(corner.get_node(^"Confirm/Panel/Box/Actions/Delete") as Button).pressed.emit()
+	var deleted: bool = not FileAccess.file_exists(two) \
+		and bool(Drops.entry_of(Drops.read(DROPS_ROOT), 2)["empty"]) \
+		and corner.get("_open") == corner.get_node(^"Drops")
+	corner.queue_free()
+	await get_tree().process_frame
+	_check(("drops 7. delete: the drop you are in refused (%s) and its file kept (%s); another"
+		+ " deleted (%s) with its .tmp and .save.old (%s), the selected one untouched (%s); the"
+		+ " menu shows no delete for the drop you are in (%s) and opens no confirm for it (%s);"
+		+ " the emptied row says new world (%s), names \"%s\" (%s) and makes it, selected (%s);"
+		+ " then the other row's delete (%s) asks (%s) and removes its file (%s)") % [
+		error_string(refused), str(kept), error_string(done), str(gone), str(other),
+		str(no_delete), str(no_confirm), str(new_row), offered, str(naming), str(remade),
+		str(offers), str(asked), str(deleted)],
+		refused == ERR_LOCKED and kept and done == OK and gone and other and no_delete
+		and no_confirm and new_row and naming and offered == Drops.DEFAULT_NAMES[0] and remade
+		and offers and asked and deleted)
+
+
+## **drops 8. A tool's run never touches the drops** (§6.4): a run with `keep`
+## empty, as every tool's is, paused (a keep), left mid-run by the app pausing (a
+## keep), writes no `drops.cfg` and no drop -- the player's own `user://` exactly
+## as it was, whatever this machine holds -- and resolves no slot. A run keeping a
+## file of its own writes that file and no index beside it.
+func _drops_tool_run() -> void:
+	var watched: Array[String] = [Drops.ROOT.path_join(Drops.INDEX),
+		Drops.ROOT.path_join(Drops.INDEX_TMP)]
+	for slot in range(1, Drops.SLOTS + 1):
+		watched.append(Drops.path_of(slot))
+	var before := _states(watched)
+	var run := await _drops_run("")
+	var slot := int(run.get("_drop_slot"))
+	run.call(&"_set_menu", true)
+	await get_tree().process_frame
+	run.call(&"_set_menu", false)
+	run.notification(NOTIFICATION_APPLICATION_PAUSED)
+	run.queue_free()
+	await get_tree().process_frame
+	var own := DROPS_ROOT.path_join("own.save")
+	DirAccess.make_dir_recursive_absolute(DROPS_ROOT)
+	var keeper := await _drops_run(own)
+	var own_slot := int(keeper.get("_drop_slot"))
+	keeper.notification(NOTIFICATION_APPLICATION_PAUSED)
+	keeper.queue_free()
+	await get_tree().process_frame
+	var after := _states(watched)
+	var untouched := before == after
+	var own_kept := FileAccess.file_exists(own) \
+		and not FileAccess.file_exists(DROPS_ROOT.path_join(Drops.INDEX))
+	var said := PackedStringArray()
+	for state: Array in after:
+		said.append("%s %s" % [str(state[0]).get_file(), "%d B" % (state[2] as PackedByteArray).size()
+			if bool(state[1]) else "absent"])
+	_check(("drops 8. a tool's run never touches the drops: keep empty, paused and left, resolved"
+		+ " slot %d, and the player's drops.cfg and drops are as they were (%s: %s); a run keeping"
+		+ " a file of its own (slot %d) wrote it with no index beside it (%s)") % [slot,
+		str(untouched), ", ".join(said), own_slot, str(own_kept)],
+		slot == 0 and own_slot == 0 and untouched and own_kept)
+
+
+## **drops 9. A default name is said in the language of the moment; a typed one
+## never is** (§5.2, §7): with French registered and chosen, the drop wearing the
+## first default is called by its French in the index, on the chip, in the menu
+## and in the naming field, while the drop the player named keeps their words.
+## Renamed with the field untouched, or with the default's English, it goes on
+## wearing its default; a new drop is offered the next default in French, never
+## one another drop wears. Back in English, the naming field still open, the
+## chip and the menu say their English again, the typed name unchanged; and the
+## French typed in English keeps the default too. The French expected is the
+## catalog's own, so a better translation never breaks this.
+func _drops_said() -> void:
+	Drops.make(2, "my drop", DROPS_ROOT)
+	Drops.select(1, DROPS_ROOT)
+	var french := load(FRENCH) as Translation
+	var english: Array[String] = [Drops.DEFAULT_NAMES[0], Drops.DEFAULT_NAMES[1]]
+	var said: Array[String] = [String(french.get_message(english[0])),
+		String(french.get_message(english[1]))]
+	var before := TranslationServer.get_locale()
+	french.locale = "fr"
+	TranslationServer.add_translation(french)
+	TranslationServer.set_locale("fr")
+	var index := Drops.read(DROPS_ROOT)
+	var named := [Drops.name_of(Drops.entry_of(index, 1)), Drops.name_of(Drops.entry_of(index, 2))]
+	var corner: Control = (load(CORNER) as PackedScene).instantiate()
+	corner.set("drops_root", DROPS_ROOT)
+	add_child(corner)
+	await get_tree().process_frame
+	var chip := corner.get_node(^"Cluster/Chip/Inside/Name") as Label
+	var field := corner.get_node(^"Naming/Panel/Box/Field") as LineEdit
+	var make := corner.get_node(^"Naming/Panel/Box/Actions/Make") as Button
+	var rows := "Drops/Panel/Box/Row%d/"
+	var on_chip := chip.text
+	corner.call(&"open_drops")
+	await get_tree().process_frame
+	var in_menu := [(corner.get_node(rows % 1 + "Pick/Lines/Name") as Label).text,
+		(corner.get_node(rows % 2 + "Pick/Lines/Name") as Label).text]
+	(corner.get_node(rows % 1 + "Rename") as Button).pressed.emit()
+	var offered := field.text
+	make.pressed.emit()
+	var untouched := str(Drops.entry_of(Drops.read(DROPS_ROOT), 1)["name"])
+	(corner.get_node(rows % 1 + "Rename") as Button).pressed.emit()
+	field.text = english[0]
+	make.pressed.emit()
+	var in_english := str(Drops.entry_of(Drops.read(DROPS_ROOT), 1)["name"])
+	(corner.get_node(rows % 3 + "Pick") as Button).pressed.emit()
+	var offered_new := field.text
+	TranslationServer.set_locale("en")
+	await get_tree().process_frame
+	await get_tree().process_frame
+	var field_back := field.text
+	corner.call(&"close_top")
+	await get_tree().process_frame
+	var back := [chip.text, (corner.get_node(rows % 1 + "Pick/Lines/Name") as Label).text,
+		(corner.get_node(rows % 2 + "Pick/Lines/Name") as Label).text]
+	var typed_french := Drops.rename(1, said[0], DROPS_ROOT)
+	var french_kept := str(Drops.entry_of(Drops.read(DROPS_ROOT), 1)["name"])
+	corner.queue_free()
+	TranslationServer.remove_translation(french)
+	TranslationServer.set_locale(before)
+	await get_tree().process_frame
+	_check(("drops 9. a default name is said in the language of the moment, a typed one never:"
+		+ " in French slot 1 is \"%s\" in the index, \"%s\" on the chip, %s in the menu; renamed"
+		+ " from \"%s\" untouched it keeps its default (%s), and from its English too (%s); a new"
+		+ " world is offered \"%s\"; back in English the open field says \"%s\", the chip and the"
+		+ " menu %s; and the French typed in English (%s) keeps the default (%s)") % [
+		named[0], on_chip, str(in_menu), offered, str(untouched.is_empty()),
+		str(in_english.is_empty()), offered_new, field_back, str(back),
+		error_string(typed_french), str(french_kept.is_empty())],
+		not said[0].is_empty() and said[0] != english[0] and not said[1].is_empty()
+		and said[1] != english[1] and named == [said[0], "my drop"] and on_chip == said[0]
+		and in_menu == [said[0], "my drop"] and offered == said[0] and untouched.is_empty()
+		and in_english.is_empty() and offered_new == said[1] and field_back == english[1]
+		and back == [english[0], english[0], "my drop"] and typed_french == OK
+		and french_kept.is_empty())
+
+
+## A run of the game with [param keep], in point of view, given a few frames.
+func _drops_run(keep: String) -> Node:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("scheme", 0)
+	run.set("keep", keep)
+	add_child(run)
+	for f in 30:
+		await get_tree().process_frame
+	return run
+
+
+## What [param run] opened: `[slot, seed, generation, resumed]`.
+func _drops_opened(run: Node) -> Array:
+	return [int(run.get("_drop_slot")), int((run.get("_food") as Node).get("drop_seed")),
+		int(run.get("_generation")), bool(run.get("_resumed"))]
+
+
+## A kept drop, read off [param run] right after its keep, in slot [param slot].
+func _drop_kept(run: Node, slot: int) -> Dictionary:
+	var food: Node = run.get("_food")
+	return {"bytes": FileAccess.get_file_as_bytes(Drops.path_of(slot, DROPS_ROOT)),
+		"seed": int(food.get("drop_seed")), "age": float(food.call(&"drop_age")),
+		"slot": int(run.get("_drop_slot"))}
+
+
+## `[path, exists, bytes, modified]` for each of [param paths].
+func _states(paths: Array[String]) -> Array:
+	var out: Array = []
+	for path: String in paths:
+		var here := FileAccess.file_exists(path)
+		out.append([path, here, FileAccess.get_file_as_bytes(path) if here else PackedByteArray(),
+			FileAccess.get_modified_time(path) if here else 0])
+	return out
+
+
+func _put(path: String, bytes: PackedByteArray) -> void:
+	DirAccess.make_dir_recursive_absolute(path.get_base_dir())
+	var file := FileAccess.open(path, FileAccess.WRITE)
+	if file != null:
+		file.store_buffer(bytes)
+		file.close()
+
+
+## Nothing of these checks left in `user://`.
+func _forget_drops() -> void:
+	if not DirAccess.dir_exists_absolute(DROPS_ROOT):
+		return
+	for file: String in DirAccess.get_files_at(DROPS_ROOT):
+		DirAccess.remove_absolute(DROPS_ROOT.path_join(file))
+	DirAccess.remove_absolute(DROPS_ROOT)
 
 
 # --- Lineage (docs/design/lineage.md §11.3: pack 2's checks 8, 9 and 10, as 2-1 has them) --

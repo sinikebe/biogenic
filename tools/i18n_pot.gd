@@ -63,9 +63,10 @@ extends Node
 ## the text is measured with the widest gene word the catalog has in place of the
 ## first `%s` and `99` in place of the `%d`. A `with` word is the name of a table of
 ## words (FILL_TABLES) or the text itself, which has a digit in it. And where several
-## messages are drawn as one line -- a gene's numbers, the pause caption -- no one of
-## them has the room, so `--lint-all` builds those lines with the game's own code,
-## in the language being checked, and measures them (see SCREENS below).
+## messages are drawn as one line -- a gene's numbers, the pause caption, a world's line
+## in the world menu -- no one of them has the room, so `--lint-all` builds those lines
+## with the game's own code, in the language being checked, and measures them (see
+## SCREENS below).
 ##
 ## **What it refuses** (`--check` exits 1): a `tr()` of something it cannot read --
 ## a variable, a call -- unless the expression names a constant that is marked as
@@ -139,6 +140,13 @@ const NUMBERS_ROOM := 650
 const NUMBERS_SIZE := 14
 const CAPTION_ROOM := 560
 const CAPTION_SIZE := 15
+## **A world's line in "your worlds"** (docs/design/settings.md §4.3, §7): its generation
+## and its age joined with a middle dot (game/normal/drops.gd's `line`, where a world is a
+## drop), under the world's name at 15 px. The menu is 640 px; less its margins, the row's two 112 px buttons and
+## their gaps, and the row's 52 px for the mark and 16 at the right, 280 are left, and a
+## longer line ends in "…".
+const STATS_ROOM := 280
+const STATS_SIZE := 15
 ## The scripts that build those lines, loaded only when a game catalog is being checked.
 const SCREEN_SCRIPTS := {
 	"stats": "res://game/normal/gene_stats.gd",
@@ -146,6 +154,7 @@ const SCREEN_SCRIPTS := {
 	"genome": "res://game/normal/genome.gd",
 	"cell": "res://game/normal/cell.gd",
 	"i18n": "res://game/i18n/i18n.gd",
+	"drops": "res://game/normal/drops.gd",
 }
 
 enum K { IDENT, STR, NAME, NUM, PUNCT }
@@ -1193,8 +1202,8 @@ func _msgids_of(pot: String) -> Dictionary:
 ## translation (a raw 0x13 where a dash was meant is invisible in an editor and a
 ## box on screen); text wider than the room a message has (`ROOM:`, game catalogs
 ## only), measured with the widest word that can stand in a placeholder; a gene's
-## numbers line or the pause caption wider than its room, built with the game's own
-## code in the language being checked (SCREENS); a message defined twice, or
+## numbers line, the pause caption or a world's line wider than its room, built with the
+## game's own code in the language being checked (SCREENS); a message defined twice, or
 ## differently in two catalogs of one language; a catalog none of whose messages is in
 ## its template (a launcher catalog in the game's folder, or the other way round); a
 ## `.po` in any other folder, which the game never reads; a game catalog that does not
@@ -1567,9 +1576,9 @@ func _load_engine(path: String) -> Translation:
 
 
 ## **Builds the lines the game composes from several messages** -- a gene's numbers, the
-## pause caption -- in the language of [param translation], with the game's own code, and
-## measures each against its room (SCREENS). Returns what it found, for the report; ""
-## when the game's scripts would not load, which is a problem of its own.
+## pause caption, a world's line -- in the language of [param translation], with the game's
+## own code, and measures each against its room (SCREENS). Returns what it found, for the
+## report; "" when the game's scripts would not load, which is a problem of its own.
 func _lint_screens(result: Dictionary, shown: String, locale: String, translation: Translation) -> String:
 	if _english_screens().is_empty():
 		_problem(result, shown, ("the lines the game composes could not be measured: gene_stats.gd, or a"
@@ -1602,10 +1611,16 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("the pause caption with the numbers on is %d px wide in %d px type; the room is"
 			+ " %d px, and a wider label makes the whole pause screen wider: \"%s\"") % [
 				ceili(caption), CAPTION_SIZE, CAPTION_ROOM, _short(String(lead[1]) + String(rest[1]))], true)
+	var line: Array = now["line"]
+	if float(line[0]) > STATS_ROOM:
+		_problem(result, shown, ("a world's line in \"your worlds\" is %d px wide in %d px type; the room is"
+			+ " %d px, and a longer line ends in \"…\": \"%s\"") % [ceili(float(line[0])), STATS_SIZE,
+				STATS_ROOM, _short(String(line[1]))], true)
 	var rows: Array = now["numbers"]
 	var tightest := String((rows[0] as Array)[2]) if not rows.is_empty() else "none"
 	return ("built with the game's own code: numbers lines at most %d px of %d (%s), the pause caption"
-		+ " at most %d px of %d") % [ceili(widest), NUMBERS_ROOM, tightest, ceili(caption), CAPTION_ROOM]
+		+ " at most %d px of %d, a world's line at most %d px of %d") % [ceili(widest), NUMBERS_ROOM,
+		tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM]
 
 
 ## The composed lines in English, measured once, with the line that says so; a line that
@@ -1634,15 +1649,22 @@ func _english_screens() -> Dictionary:
 			+ " type; the room is %d px: \"%s\"") % [
 				ceili(caption), CAPTION_SIZE, CAPTION_ROOM, String(lead[1]) + String(rest[1])])
 		_english_problems += 1
+	var line: Array = now["line"]
+	if float(line[0]) > STATS_ROOM:
+		print("[i18n] PROBLEM English: a world's line is %d px wide in %d px type; the room is %d px: \"%s\"" % [
+			ceili(float(line[0])), STATS_SIZE, STATS_ROOM, String(line[1])])
+		_english_problems += 1
 	print(("[i18n] the lines the game composes, in English: numbers lines at most %d px of %d,"
-		+ " the pause caption at most %d px of %d") % [ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM])
+		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d") % [ceili(widest),
+		NUMBERS_ROOM, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM])
 	return _english
 
 
 ## **Builds every line the game composes**, in the language the TranslationServer is set to,
 ## and returns the widest of each kind: `numbers`, one `[width, text, label]` per gene and
 ## line, widest first; `lead`, the widest `genome · <generation>`; `rest`, the widest
-## numbers clause after it. They are made by the game's own functions (gene_stats.gd) for
+## numbers clause after it; `line`, the widest world's line ([method _widest_drop_line]).
+## They are made by the game's own functions (gene_stats.gd, drops.gd) for
 ## every gene at every copy count, every level and way of a levelled gene, and every body
 ## that changes a number -- so a new gene, or a new tier, is covered without being named.
 ## Empty when a script, or a constant it needs, is missing.
@@ -1733,7 +1755,43 @@ func _measure_screens() -> Dictionary:
 							var wide := _width_of(text, CAPTION_SIZE)
 							if wide > float(rest[0]):
 								rest = [wide, text]
-	return {"numbers": numbers, "lead": lead, "rest": rest}
+	var line := _widest_drop_line()
+	if line.is_empty():
+		return {}
+	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line}
+
+
+## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the
+## game's own `Drops.line`: every generation phrase -- none, the ten, and the counted one at
+## 99 -- with the widest age it says, found over every count of minutes, hours and days
+## (to 999) the game uses. Empty when drops.gd will not load.
+func _widest_drop_line() -> Array:
+	var drops := _script("drops")
+	if drops == null:
+		return []
+	var ages: Array[float] = []
+	for minutes in range(1, 60):
+		ages.append(minutes * 60.0 + 30.0)
+	for hours in range(1, 48):
+		ages.append(hours * 3600.0 + 60.0)
+	for days in range(2, 1000):
+		ages.append(days * 86400.0 + 60.0)
+	var widest_age := 0.0
+	var lived := ages[0]
+	for seconds: float in ages:
+		var wide := _width_of(String(drops.call(&"age_text", seconds)), STATS_SIZE)
+		if wide > widest_age:
+			widest_age = wide
+			lived = seconds
+	var generations: Array = range(0, 11)
+	generations.append(99)
+	var widest: Array = [0.0, ""]
+	for generation: int in generations:
+		var text := String(drops.call(&"line", generation, lived))
+		var wide := _width_of(text, STATS_SIZE)
+		if wide > float(widest[0]):
+			widest = [wide, text]
+	return widest
 
 
 ## [param soft] says the problem is only about how the text looks (too wide, a stray

@@ -163,21 +163,37 @@ static func _apply_chosen() -> void:
 static func languages() -> Array[Dictionary]:
 	var out: Array[Dictionary] = [{"locale": SOURCE, "name": OWN_NAME}]
 	var seen := PackedStringArray([SOURCE])
-	if DirAccess.dir_exists_absolute(DIR):
-		for file: String in DirAccess.get_files_at(DIR):
-			var file_name := file.trim_suffix(".remap")
-			if file_name.get_extension() != "po":
-				continue
-			var locale := locale_of(file_name.get_basename())
-			if locale.is_empty() or locale in seen:
-				continue
-			var catalog := load(DIR.path_join(file_name)) as Translation
-			if catalog == null:
-				continue
-			seen.append(locale)
-			out.append({"locale": locale, "name": own_name(catalog, locale)})
+	for found: Dictionary in catalogs():
+		var locale := str(found["locale"])
+		if locale in seen:
+			continue
+		seen.append(locale)
+		out.append({"locale": locale, "name": own_name(found["catalog"] as Translation, locale)})
 	out.sort_custom(func(a: Dictionary, b: Dictionary) -> bool:
 		return str(a["name"]).naturalnocasecmp_to(str(b["name"])) < 0)
+	return out
+
+
+## **Every game catalog in [constant DIR]**, as `{locale, catalog}`, in the order
+## the folder lists them: what [method languages] names, and where a drop's default
+## name is looked up in every language the game has (drops.gd). Read from the
+## files, as [method languages] is, so a process that registered nothing -- the
+## server, a probe -- finds the same ones.
+static func catalogs() -> Array[Dictionary]:
+	var out: Array[Dictionary] = []
+	if not DirAccess.dir_exists_absolute(DIR):
+		return out
+	for file: String in DirAccess.get_files_at(DIR):
+		var file_name := file.trim_suffix(".remap")
+		if file_name.get_extension() != "po":
+			continue
+		var locale := locale_of(file_name.get_basename())
+		if locale.is_empty():
+			continue
+		var catalog := load(DIR.path_join(file_name)) as Translation
+		if catalog == null:
+			continue
+		out.append({"locale": locale, "catalog": catalog})
 	return out
 
 

@@ -268,6 +268,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _go_to(page: int) -> void:
 	_page = page
 	_clock = 0.0
+	# Before the words and the focus, which link Up to the chip where it shows.
+	_corner.show_drop = _shows_drop()
 	# Only ANSWERING has anything on the ring to press.
 	_ring.focus_mode = Control.FOCUS_ALL if page == Page.ANSWERING else Control.FOCUS_NONE
 	_said_after = _after
@@ -496,6 +498,17 @@ func _focus_page() -> void:
 			([_first, _second, _third][focus] as Button).grab_focus()
 		_:
 			_first.grab_focus()
+
+
+## **Whether the drop chip shows** (docs/design/settings.md §1.1): while this
+## phone is, or may become, the host -- CHOOSE, CALLING, and TOGETHER and TROUBLE
+## while it hosts -- because the drop a host serves is the one selected, and
+## changing it before the run starts changes what the friend will swim in. Never
+## on a guest's page, so the drop a guest's cell comes from cannot change while
+## it joins; never on a far page, which is always a guest's.
+func _shows_drop() -> bool:
+	var session: Node = _session if _session != null and is_instance_valid(_session) else null
+	return not far and (session == null or bool(session.hosting))
 
 
 ## The page a visit starts on, and comes back to when a call stops.
