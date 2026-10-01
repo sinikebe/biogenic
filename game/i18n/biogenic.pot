@@ -1,0 +1,2561 @@
+# Biogenic message catalog template.
+#
+# Written by tools/i18n_pot.gd from the game's source: do not edit it by hand.
+# Run the tool again instead; game/i18n/README.md says how, and how to make a
+# language from this file.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: Biogenic\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Language: \n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+"X-Generator: tools/i18n_pot.gd\n"
+
+#. The hint along the bottom edge of the screen, in small type. It names the
+#. key that goes back, and the key differs by device: `back` is the Android
+#. Back button or gesture, `esc` is the Escape key. The launcher is the app's
+#. main menu, the screen with the play button.
+#: game/mode_select.gd
+msgid "back returns to the launcher"
+msgstr ""
+
+#. The hint along the bottom edge of the screen, in small type. It names the
+#. key that goes back, and the key differs by device: `back` is the Android
+#. Back button or gesture, `esc` is the Escape key. The launcher is the app's
+#. main menu, the screen with the play button.
+#. Label "Hint" in game/mode_select.tscn
+#: game/mode_select.gd game/mode_select.tscn
+msgid "esc returns to the launcher"
+msgstr ""
+
+#. A note in 15 px type under a button. The button is "by invite" (the way to
+#. reach a friend's game by an invite they sent you), so this says who:
+#. someone who is not in the same house, and who sent you an invite. Under a
+#. button 320 px wide: about 40 characters at most.
+#: game/mode_select.gd
+msgid "a friend far away, who sent you one"
+msgstr ""
+
+#. Same note, for the case where the button's own name does not mention an
+#. invite, so the note says how instead. About 45 characters at most.
+#: game/mode_select.gd
+msgid "a friend far away, by the invite they sent"
+msgstr ""
+
+#. The heading of the screen where a game is started, in 17 px type. The
+#. player chooses how the water is drawn for this game: a "view".
+#. Label "Heading" in game/mode_select.tscn
+#: game/mode_select.tscn
+msgid "choose a view"
+msgstr ""
+
+#. Two buttons that choose how the shared game is drawn: the first shows the
+#. water the cell swims in and the membrane over it, the second shows only
+#. what the cell itself can feel. Also the two options on the screen where a
+#. game is started.
+#. A button, 460 px wide in 20 px type: the view that draws the water the cell
+#. swims in, and the membrane (the cell's skin, which senses) over it.
+#. Button "Full" in game/mode_select.tscn
+#: game/mode_select.tscn game/net/earshot.gd
+msgid "full vision"
+msgstr ""
+
+#. A note in 15 px type under the "full vision" button, on one line: about 60
+#. characters at most.
+#. Label "FullNote" in game/mode_select.tscn
+#: game/mode_select.tscn
+msgid "the water the cell is swimming in, and the membrane over it"
+msgstr ""
+
+#. The second of the two buttons above: the view that shows only what the cell
+#. itself can feel.
+#. A button, 460 px wide in 20 px type: the view that shows only what the cell
+#. itself can feel, as if the player were inside it.
+#. Button "Pov" in game/mode_select.tscn
+#: game/mode_select.tscn game/net/earshot.gd
+msgid "point of view"
+msgstr ""
+
+#. A note in 15 px type under the "point of view" button: about 40 characters
+#. at most.
+#. Label "PovNote" in game/mode_select.tscn
+#: game/mode_select.tscn
+msgid "only what the cell itself can feel"
+msgstr ""
+
+#. The name of this feature and the heading of its first screen: two phones on
+#. the same wi-fi finding each other, near enough to hear one another. Also a
+#. button on the screen before this one, and the line under the heading once
+#. the two are connected.
+#. The feature's name: two phones near enough to hear each other. Shown under
+#. the ring while the other phone is heard.
+#. Button "Net" in game/mode_select.tscn
+#. Label "Heading" in game/net/earshot.tscn
+#: game/mode_select.tscn game/net/earshot.gd game/net/earshot.tscn game/net/net_session.gd
+msgid "within earshot"
+msgstr ""
+
+#. A note in 15 px type under the "within earshot" button, which is 320 px
+#. wide: about 35 characters at most.
+#. Label "NetNote" in game/mode_select.tscn
+#: game/mode_select.tscn
+msgid "a friend on the same wi-fi"
+msgstr ""
+
+#. The small grey line under the sentence on the "by invite" page while no
+#. invite has been pasted yet. An invite is a one-line message that a friend
+#. sends you in any chat app: you copy it, paste it into the game, and the
+#. game keeps it on this device for every later visit. About 45 characters.
+#: game/net/earshot.gd
+msgid "you paste it once · this device keeps it"
+msgstr ""
+
+#. Shown once the call is answered. A friend's "water" is the pond (the shared
+#. game world) their server keeps; "hear" is the game's word for being
+#. connected. About 35 characters.
+#: game/net/earshot.gd
+msgid "you can hear your friend's water"
+msgstr ""
+
+#. A "cell" is the player's creature. One player calls (shows a code) and the
+#. other answers (taps it in). Shown in 17 px type on one line, centred on the
+#. screen.
+#. Room: at most 1180 px in 17 px type; the English takes 338 px.
+#: game/net/earshot.gd
+msgid "two cells on one wi-fi, one of them calling"
+msgstr ""
+
+#. A button: start a call, so the other phone can answer it.
+#. Button "First" in game/net/earshot.tscn
+#: game/net/earshot.gd game/net/earshot.tscn
+msgid "call"
+msgstr ""
+
+#. A button: answer the call the other phone is making.
+#. Button "Second" in game/net/earshot.tscn
+#: game/net/earshot.gd game/net/earshot.tscn
+msgid "answer"
+msgstr ""
+
+#. A heading above a ring of marks: the other player is to be shown these
+#. marks, and taps them in on their phone. "this" is the code.
+#: game/net/earshot.gd
+msgid "show this"
+msgstr ""
+
+#. Under the ring while the call is ringing. "answer" as in answering a phone
+#. call.
+#. Room: at most 1180 px in 17 px type; the English takes 178 px.
+#: game/net/earshot.gd
+msgid "waiting for an answer"
+msgstr ""
+
+#. A button: hang up; stop calling.
+#: game/net/earshot.gd
+msgid "stop"
+msgstr ""
+
+#. A heading above a ring of twelve places: the player taps the four marks the
+#. other player is showing, in order, to dial them.
+#: game/net/earshot.gd
+msgid "tap their code"
+msgstr ""
+
+#. A button: undo the last tap of the code, one step back.
+#: game/net/earshot.gd
+msgid "back one"
+msgstr ""
+
+#. A heading: the other player has picked up; the two phones are connected.
+#: game/net/earshot.gd
+msgid "answered"
+msgstr ""
+
+#. A heading, when a call ends and the game has no more precise reason: nobody
+#. picked up. The reason, in a sentence, is shown under it.
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. A heading, and under it a sentence, shown on the screen of the phone that
+#. dialled a four-mark code and got no answer. A "cell" is the player's
+#. creature. The sentence is shown in 17 px type on one line: about 110
+#. characters at most.
+#. A heading and a sentence under it: nothing answered the code that was
+#. tapped in. "Showing it" means the friend's phone is still displaying the
+#. four marks.
+#. entry: no_answer
+#. Room: at most 1180 px in 17 px type; the English takes 86 px.
+#: game/net/earshot.gd game/net/invite.gd game/net/net_session.gd
+msgid "no answer"
+msgstr ""
+
+#. A button: try the same call again.
+#: game/net/earshot.gd
+msgid "again"
+msgstr ""
+
+#. A button: paste the invite from the clipboard. The invite is a one-line
+#. message a friend sent you. Keep it short: the button is 264 px wide, in 20
+#. px type.
+#: game/net/earshot.gd
+msgid "paste invite"
+msgstr ""
+
+#. A button: paste a newer invite from the clipboard, to replace the one this
+#. device keeps.
+#: game/net/earshot.gd
+msgid "paste new"
+msgstr ""
+
+#. A button: leave this screen and go back.
+#. The replay's last button: close the replay and go back to the game. The
+#. same word is the pause screen's button that leaves the game. The replay's
+#. button is the narrower: a long word runs into the speed button.
+#. Button "Leave" in game/normal/normal_mode.tscn
+#. Room: at most 64 px in 17 px type; the English takes 44 px.
+#: game/net/earshot.gd game/normal/normal_mode.tscn game/replay/replay.gd
+msgid "leave"
+msgstr ""
+
+#. Under the ring while a call to a friend's server is ringing. A friend's
+#. "water" is the pond (shared game world) their server keeps.
+#. Room: at most 1180 px in 17 px type; the English takes 213 px.
+#: game/net/earshot.gd
+msgid "calling your friend's water"
+msgstr ""
+
+#. A question: delete the invite this device keeps?
+#: game/net/earshot.gd
+msgid "forget this invite?"
+msgstr ""
+
+#. The consequence, under the question. It is a full sentence with a full
+#. stop, unlike the lines around it.
+#. Room: at most 1180 px in 17 px type; the English takes 450 px.
+#: game/net/earshot.gd
+msgid "you would need your friend's message to paste it back."
+msgstr ""
+
+#. Two buttons answering the question above: keep the invite, or forget it.
+#. "keep" is the safe answer.
+#: game/net/earshot.gd
+msgid "keep"
+msgstr ""
+
+#. A button: delete the invite this device keeps. It asks "forget this
+#. invite?" first.
+#: game/net/earshot.gd
+msgid "forget"
+msgstr ""
+
+#. Instruction, in 17 px type on one line. An invite is a one-line message a
+#. friend sends you in a chat app: copy it there, then paste it into the game
+#. with the button below.
+#. Room: at most 1180 px in 17 px type; the English takes 446 px.
+#: game/net/earshot.gd
+msgid "copy the invite your friend sent you, then paste it here"
+msgstr ""
+
+#. Under the heading when an invite is kept. A friend's "water" is the pond
+#. (shared game world) their server keeps.
+#. Room: at most 1180 px in 17 px type; the English takes 300 px.
+#: game/net/earshot.gd
+msgid "your friend's water, from their invite"
+msgstr ""
+
+#. A full sentence in 17 px type: the friend's server refused this invite
+#. earlier in this session. "paste a new one" means paste a newer invite,
+#. which the friend must send.
+#. Room: at most 1180 px in 17 px type; the English takes 501 px.
+#: game/net/earshot.gd
+msgid "your friend's server turned this invite away. paste a new one."
+msgstr ""
+
+#. Shown when the four marks tapped in do not form a valid code (a mistap).
+#. The player is asked to tap the code in again.
+#. Room: at most 1180 px in 17 px type; the English takes 248 px.
+#: game/net/earshot.gd
+msgid "that is not a code. tap it again."
+msgstr ""
+
+#. One word under the ring: the game is reaching out to the other phone now
+#. that the whole code is in. Shown while it connects.
+#: game/net/earshot.gd
+msgid "reaching"
+msgstr ""
+
+#. A small grey line: this device is not connected to any network, so it has
+#. no address to show. Not a sentence; about 15 characters.
+#: game/net/earshot.gd
+msgid "no network here"
+msgstr ""
+
+#. The hint along the bottom edge, in 14 px type. It names the key that does
+#. the thing, and the key differs by device: `back` is the Android Back button
+#. or gesture, `esc` the Escape key, `ctrl+v` the paste shortcut. Translate
+#. the verb ("leaves" = leaves this screen); key names may be written as they
+#. are labelled on your keyboards.
+#. The same hint, on every other page: the key leaves this screen.
+#: game/net/earshot.gd
+msgid "back leaves"
+msgstr ""
+
+#. The hint along the bottom edge, in 14 px type. It names the key that does
+#. the thing, and the key differs by device: `back` is the Android Back button
+#. or gesture, `esc` the Escape key, `ctrl+v` the paste shortcut. Translate
+#. the verb ("leaves" = leaves this screen); key names may be written as they
+#. are labelled on your keyboards.
+#: game/net/earshot.gd
+msgid "ctrl+v pastes · esc leaves"
+msgstr ""
+
+#. The same hint, on the question "forget this invite?": the key goes back and
+#. keeps the invite.
+#: game/net/earshot.gd
+msgid "back keeps it"
+msgstr ""
+
+#. The same hint, on the question "forget this invite?": the key goes back and
+#. keeps the invite.
+#: game/net/earshot.gd
+msgid "esc keeps it"
+msgstr ""
+
+#. The same hint, on every other page: the key leaves this screen.
+#. Label "Hint" in game/net/earshot.tscn
+#: game/net/earshot.gd game/net/earshot.tscn
+msgid "esc leaves"
+msgstr ""
+
+#. A small grey line when a paste failed: the invite the device already kept
+#. is still there. %s is that invite's address and port, as in "192.0.2.7 ·
+#. 45772" -- keep %s as it is.
+#: game/net/earshot.gd
+#, c-format
+msgid "still kept: %s"
+msgstr ""
+
+#. The result of a paste: the invite on the clipboard is the one the device
+#. already keeps. A short sentence under the heading.
+#: game/net/earshot.gd
+msgid "that invite is already kept"
+msgstr ""
+
+#. The result of a paste: the invite was read and saved on this device. Under
+#. the heading, with its address and port below.
+#: game/net/earshot.gd
+msgid "invite kept"
+msgstr ""
+
+#. The result of a paste: a newer invite was read and replaced the one this
+#. device kept.
+#: game/net/earshot.gd
+msgid "new invite kept"
+msgstr ""
+
+#. The result of "forget": the invite was deleted from this device.
+#: game/net/earshot.gd
+msgid "invite forgotten"
+msgstr ""
+
+#. What the game calls the way in to a friend's game far away, by an invite
+#. the friend sent. It is the name of a button on the screen where a game is
+#. started (320 px wide, 20 px type) and the heading of the screen behind it.
+#. A short phrase: about 25 characters at most.
+#. Room: at most 290 px in 20 px type; the English takes 83 px.
+#: game/net/invite.gd
+msgid "by invite"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_found
+#. Room: at most 1180 px in 17 px type; the English takes 131 px.
+#: game/net/invite.gd
+msgid "no invite copied"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_found
+#. Room: at most 1180 px in 17 px type; the English takes 428 px.
+#: game/net/invite.gd
+msgid "copy your friend's whole message, then paste again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: damaged
+#. Room: at most 1180 px in 17 px type; the English takes 127 px.
+#: game/net/invite.gd
+msgid "invite damaged"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: damaged
+#. Room: at most 1180 px in 17 px type; the English takes 742 px.
+#: game/net/invite.gd
+msgid "some of it was lost or changed on the way. copy all of it, or ask your friend to send it again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: unknown_version
+#. Room: at most 1180 px in 17 px type; the English takes 153 px.
+#: game/net/invite.gd
+msgid "your game is older"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: unknown_version
+#. Room: at most 1180 px in 17 px type; the English takes 653 px.
+#: game/net/invite.gd
+msgid "this invite needs the update. take it from the launcher, restart, and paste again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_kept
+#. Room: at most 1180 px in 17 px type; the English takes 120 px.
+#: game/net/invite.gd
+msgid "invite not kept"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_kept
+#. Room: at most 1180 px in 17 px type; the English takes 617 px.
+#: game/net/invite.gd
+msgid "this device would not save the invite. free up some space, then paste again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: no_invite
+#. Room: at most 1180 px in 17 px type; the English takes 102 px.
+#: game/net/invite.gd
+msgid "no invite yet"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: no_invite
+#. Room: at most 1180 px in 17 px type; the English takes 341 px.
+#: game/net/invite.gd
+msgid "paste the invite your friend sent you first."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: could_not_call
+#. Room: at most 1180 px in 17 px type; the English takes 110 px.
+#: game/net/invite.gd
+msgid "could not call"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: could_not_call
+#. Room: at most 1180 px in 17 px type; the English takes 555 px.
+#: game/net/invite.gd
+msgid "this device could not start the call. check it is online, then call again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: no_such_place
+#. Room: at most 1180 px in 17 px type; the English takes 187 px.
+#: game/net/invite.gd
+msgid "nowhere by that name"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: no_such_place
+#. Room: at most 1180 px in 17 px type; the English takes 691 px.
+#: game/net/invite.gd
+msgid "check this device is online. if it is, ask your friend to check the address in their invite."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: no_answer
+#. Room: at most 1180 px in 17 px type; the English takes 827 px.
+#: game/net/invite.gd
+msgid "nothing answered at the invite's address. ask your friend if their server is up, or try another network."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_running
+#. Room: at most 1180 px in 17 px type; the English takes 127 px.
+#: game/net/invite.gd
+msgid "no server there"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_running
+#. Room: at most 1180 px in 17 px type; the English takes 870 px.
+#: game/net/invite.gd
+msgid "the address answered, but no server is listening. ask your friend to check theirs is running, then call again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_this_pond
+#. Room: at most 1180 px in 17 px type; the English takes 143 px.
+#: game/net/invite.gd
+msgid "a different server"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: not_this_pond
+#. Room: at most 1180 px in 17 px type; the English takes 747 px.
+#: game/net/invite.gd
+msgid "something else answers at that address now. ask your friend for a new invite, then paste it."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: invite_refused
+#. Room: at most 1180 px in 17 px type; the English takes 183 px.
+#: game/net/invite.gd
+msgid "invite no longer works"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: invite_refused
+#. Room: at most 1180 px in 17 px type; the English takes 735 px.
+#: game/net/invite.gd
+msgid "it was taken back or replaced. ask your friend for a new one, paste it, and call in a minute."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. A heading, and a sentence under it that names the fix. The two phones run
+#. different versions of the game, so they cannot play together until the
+#. older one updates.
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#. entry: game_older
+#. entry: server_older
+#. Room: at most 1180 px in 17 px type; the English takes 146 px.
+#: game/net/invite.gd game/net/net_session.gd game/net/wire.gd
+msgid "different versions"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: game_older
+#. Room: at most 1180 px in 17 px type; the English takes 844 px.
+#: game/net/invite.gd
+msgid "your game is older than your friend's server. take the update from the launcher, restart, and call again."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: server_older
+#. Room: at most 1180 px in 17 px type; the English takes 860 px.
+#: game/net/invite.gd
+msgid "your friend's server is older, and updates itself once nobody is swimming there. call again in ten minutes."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. A heading and a sentence under it: the phone that was called already has a
+#. second player with it, and a pond holds only two.
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#. entry: already_two
+#. Room: at most 1180 px in 17 px type; the English takes 97 px.
+#: game/net/invite.gd game/net/net_session.gd game/net/wire.gd
+msgid "already two"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: already_two
+#. Room: at most 1180 px in 17 px type; the English takes 650 px.
+#: game/net/invite.gd
+msgid "two cells are already in your friend's water. call again when one of them leaves."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#. entry: cut_off
+#. Room: at most 1180 px in 17 px type; the English takes 54 px.
+#: game/net/invite.gd game/net/wire.gd
+msgid "cut off"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: cut_off
+#. Room: at most 1180 px in 17 px type; the English takes 982 px.
+#: game/net/invite.gd
+msgid "your friend's server would not take what this game sent. take the update from the launcher, then call again in a minute."
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. A heading and a sentence under it: the other player's phone ended the call.
+#. "Left the water" means left the shared game.
+#. entry: hung_up
+#. Room: at most 1180 px in 17 px type; the English takes 109 px.
+#: game/net/invite.gd game/net/net_session.gd
+msgid "they hung up"
+msgstr ""
+
+#. A heading of two to four words in large type, then one sentence that says
+#. what to do, on a single line in 17 px type. Lowercase, plain words. The
+#. "friend" owns a server that keeps the shared game world, "the water", and
+#. sent the "invite" the player pasted.
+#. entry: hung_up
+#. Room: at most 1180 px in 17 px type; the English takes 469 px.
+#: game/net/invite.gd
+msgid "your friend's server closed the call. call again in a minute."
+msgstr ""
+
+#. A heading, and under it a sentence, shown on the screen of the phone that
+#. dialled a four-mark code and got no answer. A "cell" is the player's
+#. creature. The sentence is shown in 17 px type on one line: about 110
+#. characters at most.
+#. Room: at most 1180 px in 17 px type; the English takes 859 px.
+#: game/net/net_session.gd
+msgid "both of you have to be on the same wi-fi -- and on some networks that is still not enough to reach across."
+msgstr ""
+
+#. A heading and a sentence under it: this phone is not connected to a wi-fi
+#. network, so it cannot call or answer. "Cells" are the players' creatures;
+#. two of them need one network to meet on.
+#. Room: at most 1180 px in 17 px type; the English takes 103 px.
+#: game/net/net_session.gd
+msgid "no wi-fi here"
+msgstr ""
+
+#. A heading and a sentence under it: this phone is not connected to a wi-fi
+#. network, so it cannot call or answer. "Cells" are the players' creatures;
+#. two of them need one network to meet on.
+#. Room: at most 1180 px in 17 px type; the English takes 431 px.
+#: game/net/net_session.gd
+msgid "this device is not on a network two cells could share."
+msgstr ""
+
+#. A heading and a sentence under it: the game could not open the connection
+#. it needs, because something else on the device holds it. "The water" is the
+#. game's word for the shared connection.
+#. Room: at most 1180 px in 17 px type; the English takes 127 px.
+#: game/net/net_session.gd
+msgid "could not listen"
+msgstr ""
+
+#. A heading and a sentence under it: the game could not open the connection
+#. it needs, because something else on the device holds it. "The water" is the
+#. game's word for the shared connection.
+#. Room: at most 1180 px in 17 px type; the English takes 462 px.
+#: game/net/net_session.gd
+msgid "something else on this device is already using the water."
+msgstr ""
+
+#. A heading and a sentence under it: the four-mark code the player tapped in
+#. leads to an address this phone cannot dial.
+#. Room: at most 1180 px in 17 px type; the English takes 128 px.
+#: game/net/net_session.gd
+msgid "could not reach"
+msgstr ""
+
+#. A heading and a sentence under it: the four-mark code the player tapped in
+#. leads to an address this phone cannot dial.
+#. Room: at most 1180 px in 17 px type; the English takes 503 px.
+#: game/net/net_session.gd
+msgid "the address that code points at is not one this device can call."
+msgstr ""
+
+#. Under the ring while the other phone has sent nothing for a while. %d is
+#. the number of seconds, six or more.
+#: game/net/net_session.gd
+#, c-format
+msgid "quiet for %d second"
+msgid_plural "quiet for %d seconds"
+msgstr[0] ""
+msgstr[1] ""
+
+#. A heading and a sentence under it: nothing answered the code that was
+#. tapped in. "Showing it" means the friend's phone is still displaying the
+#. four marks.
+#. Room: at most 1180 px in 17 px type; the English takes 556 px.
+#: game/net/net_session.gd
+msgid "nothing is listening at that code. check your friend is still showing it."
+msgstr ""
+
+#. A heading and a sentence under it: the other player's phone ended the call.
+#. "Left the water" means left the shared game.
+#. Room: at most 1180 px in 17 px type; the English takes 230 px.
+#: game/net/net_session.gd
+msgid "the other cell left the water."
+msgstr ""
+
+#. A heading and a sentence under it: the phone that was called already has a
+#. second player with it, and a pond holds only two.
+#. Room: at most 1180 px in 17 px type; the English takes 373 px.
+#: game/net/net_session.gd
+msgid "that cell is already swimming with somebody."
+msgstr ""
+
+#. The sentence under a heading (see Wire.reason_says): the other phone cut
+#. the call because this game sent it things it could not read. About 110
+#. characters at most.
+#. Room: at most 1180 px in 17 px type; the English takes 905 px.
+#: game/net/net_session.gd
+msgid "the other end would not take what this game sent. update both from the launcher, then call again in a minute."
+msgstr ""
+
+#. The sentence under a heading (see Wire.reason_says): the other phone ended
+#. the call without saying why.
+#. Room: at most 1180 px in 17 px type; the English takes 190 px.
+#: game/net/net_session.gd
+msgid "the other end hung up."
+msgstr ""
+
+#. Two whole sentences rather than one with a word dropped in, so each can be
+#. put in the right order for your language. Shown under the heading
+#. "different versions", in 17 px type on one line (about 125 characters at
+#. most). This one: the player's own game is the older one. "Take the update
+#. from the launcher" means: open the app's main menu, which installs the
+#. update.
+#. Room: at most 1180 px in 17 px type; the English takes 899 px.
+#: game/net/net_session.gd
+msgid "one of these games is older than the other -- yours. take the update from the launcher, restart, and call again."
+msgstr ""
+
+#. The same sentence for the other case: the other player's game is the older
+#. one.
+#. Room: at most 1180 px in 17 px type; the English takes 900 px.
+#: game/net/net_session.gd
+msgid "one of these games is older than the other -- theirs. take the update from the launcher, restart, and call again."
+msgstr ""
+
+#. A heading and a sentence under it: the other player left, and this phone
+#. goes back to showing its four-mark code for the next call.
+#. The friend left the player's world.
+#. Room: at most 1180 px in 17 px type; the English takes 69 px.
+#: game/net/net_session.gd game/normal/normal_mode.gd
+msgid "they left"
+msgstr ""
+
+#. A heading and a sentence under it: the other player left, and this phone
+#. goes back to showing its four-mark code for the next call.
+#. Room: at most 1180 px in 17 px type; the English takes 336 px.
+#: game/net/net_session.gd
+msgid "the other cell went. show the code again."
+msgstr ""
+
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#: game/net/wire.gd
+msgid "no greeting"
+msgstr ""
+
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#: game/net/wire.gd
+msgid "no invite it could prove"
+msgstr ""
+
+#. Each is a heading of a few words above a sentence, on the screen of the
+#. phone whose call the other end ended. At most about 30 characters.
+#: game/net/wire.gd
+msgid "refused"
+msgstr ""
+
+#. How many copies of a gene the cell's DNA holds, in words, at the start of
+#. the odds line ("one copy · 55% of daughters wear it"). One to three; the
+#. numbers are spelled out on purpose.
+#: game/normal/gene_stats.gd
+msgid "one copy"
+msgstr ""
+
+#. How many copies of a gene the cell's DNA holds, in words, at the start of
+#. the odds line ("one copy · 55% of daughters wear it"). One to three; the
+#. numbers are spelled out on purpose.
+#: game/normal/gene_stats.gd
+msgid "two copies"
+msgstr ""
+
+#. How many copies of a gene the cell's DNA holds, in words, at the start of
+#. the odds line ("one copy · 55% of daughters wear it"). One to three; the
+#. numbers are spelled out on purpose.
+#: game/normal/gene_stats.gd
+msgid "three copies"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "swallows whole under {} × your size"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "bites take {} head-on, {} from behind"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+msgid "its biggest meal fills you"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "its biggest meal is worth {} s"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a half turn in {} s"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "the turn builds over {} s"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "turning burns {} s a second, {} s a half turn"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "swims about {} µm a second"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a beat every {}–{} s"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "beating burns {} s a second, {} s a beat"
+msgstr ""
+
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "feels bodies over {} × your size"
+msgstr ""
+
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "out to {} µm"
+msgstr ""
+
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a bearing to within {}"
+msgstr ""
+
+#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
+#. compares what it smells behind the cell with what it smells in front, as a
+#. percentage.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "smells food out to {} µm"
+msgstr ""
+
+#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
+#. compares what it smells behind the cell with what it smells in front, as a
+#. percentage.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} as strong behind it"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a ping every {} s"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "the nearest {} answer"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+msgid "stopped by any body"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} passes a body"
+msgstr ""
+
+#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
+#. on the water pushes the cell instead of only steering it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "holding on adds up to {} µm a second"
+msgstr ""
+
+#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
+#. on the water pushes the cell instead of only steering it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "pushing burns {} s a second"
+msgstr ""
+
+#. The touch gene (`palp`, shown as `touch`): it feels what is against the
+#. cell with no light at all.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "feels a body within {} µm of your skin"
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a burst of {} µm a second, about {} µm in all"
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
+#. that closes in on that side of the body. "{} either side" is the angle, in
+#. degrees, to each side of straight ahead that it covers.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "again after {} s"
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "each dash burns {} s"
+msgstr ""
+
+#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
+#. that closes in on that side of the body. "{} either side" is the angle, in
+#. degrees, to each side of straight ahead that it covers.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a dart at a hunter within {} µm, {} either side"
+msgstr ""
+
+#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
+#. {} × your size" means a hunting mouth must be that much wider than the cell
+#. to swallow it, because of the skin.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "to a mouth you are {} × your size"
+msgstr ""
+
+#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
+#. {} × your size" means a hunting mouth must be that much wider than the cell
+#. to swallow it, because of the skin.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "bites take {} less"
+msgstr ""
+
+#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
+#. has to give part of its bite back, and a body that swallows the cell dies
+#. while the cell is spat out alive, which costs the cell some energy ("burns
+#. {} s").
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a biter takes back {} of its bite"
+msgstr ""
+
+#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
+#. has to give part of its bite back, and a body that swallows the cell dies
+#. while the cell is spat out alive, which costs the cell some energy ("burns
+#. {} s").
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+msgid "a swallower dies, and you are spat out"
+msgstr ""
+
+#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
+#. has to give part of its bite back, and a body that swallows the cell dies
+#. while the cell is spat out alive, which costs the cell some energy ("burns
+#. {} s").
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "being spat out burns {} s"
+msgstr ""
+
+#. The light-eating gene (`plastid`, shown as `sun`): the cell makes a little
+#. food of its own from light.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "makes {} s of food every second"
+msgstr ""
+
+#. The bigger-tank gene (`vacuole`, shown as `store`): the cell can keep more
+#. food, so hunger takes longer to arrive. "A full tank holds {} s, not {}"
+#. compares with the tank of a cell without it, in seconds of food.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a full tank holds {} s, not {}"
+msgstr ""
+
+#. The cleaner-burning gene (`crista`, shown as `burn`): everything the cell
+#. carries costs less energy to keep.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "everything burns {} less"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "reaches {} µm"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} ray"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} ray sweeping {}"
+msgid_plural "{} rays sweeping {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "every bearing lit within {} s"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} ray across {}, one every {}"
+msgid_plural "{} rays across {}, one every {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} ray across {}"
+msgid_plural "{} rays across {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The last item of a gene's costs line: what wearing the gene costs the cell.
+#. "Wearing" a gene is having it as an organ. "Burns {} s a second" is energy
+#. used, in seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+msgid "free to wear"
+msgstr ""
+
+#. The last item of a gene's costs line: what wearing the gene costs the cell.
+#. "Wearing" a gene is having it as an organ. "Burns {} s a second" is energy
+#. used, in seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "wearing it burns {} s a second"
+msgstr ""
+
+#. The last item of the beam's costs line: the next level, and how many
+#. "strikes" earn it. A strike is one different body touched by the beam in
+#. one second. The English has a singular for one strike and a plural for any
+#. other number: give the forms your language needs.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "level {} after {} strike"
+msgid_plural "level {} after {} strikes"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The odds line (14 px type) when the numbers switch is on: the copies of the
+#. gene in words (see "one copy"), a middle dot, then whether a daughter cell
+#. wears the gene. %s is "one copy", "two copies" or "three copies", already
+#. translated: keep it first. About 50 characters at most.
+#: game/normal/gene_stats.gd
+#, c-format
+msgid "%s · a daughter always wears it"
+msgstr ""
+
+#. The same line when the chance is not certain. The first %s is the copies in
+#. words, as above; the second is a percentage such as "55%", so the line
+#. reads "one copy · 55% of daughters wear it". Keep both %s in this order.
+#: game/normal/gene_stats.gd
+#, c-format
+msgid "%s · %s of daughters wear it"
+msgstr ""
+
+#. Two items added to the pause screen's caption when the numbers switch is
+#. on: the cell's width, and its food tank in seconds, then how long the food
+#. lasts while the cell just drifts ("a full tank: 36 s, 12 s drifting"). The
+#. whole caption is a small line in 15 px type.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "{} µm across"
+msgstr ""
+
+#. Two items added to the pause screen's caption when the numbers switch is
+#. on: the cell's width, and its food tank in seconds, then how long the food
+#. lasts while the cell just drifts ("a full tank: 36 s, 12 s drifting"). The
+#. whole caption is a small line in 15 px type.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of about 650 px; the longest English
+#. line takes 540 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a full tank: {} s, {} s drifting"
+msgstr ""
+
+#. A hint in 18 px type over the water, the first time the player's cell
+#. divides in two. The two daughters are on screen, one each side, and the
+#. player chooses which one to carry on as by leaning toward it (a drag on a
+#. phone, the A and D keys on a keyboard). "Them" is the two daughters.
+#: game/normal/normal_mode.gd
+msgid "lean into one of them"
+msgstr ""
+
+#. The pause screen's "camera" button, which flips between two ways of drawing
+#. the water. `north up`: the world stays still and the cell turns in it.
+#. `forward up`: the world turns round the cell, so the way the cell is facing
+#. is always up the screen. Keep each to about 12 characters: the button sizes
+#. to its text and the whole left column grows with it.
+#: game/normal/normal_mode.gd
+msgid "forward up"
+msgstr ""
+
+#. The pause screen's "camera" button, which flips between two ways of drawing
+#. the water. `north up`: the world stays still and the cell turns in it.
+#. `forward up`: the world turns round the cell, so the way the cell is facing
+#. is always up the screen. Keep each to about 12 characters: the button sizes
+#. to its text and the whole left column grows with it.
+#. Button "Toggle" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.gd game/normal/normal_mode.tscn
+msgid "north up"
+msgstr ""
+
+#. The pause screen's "controls" button, which cycles through three ways of
+#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
+#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
+#. the corners. One lowercase word each, about 10 characters at most: the
+#. button sizes to its text and the whole left column grows with it.
+#. Button "Toggle" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.gd game/normal/normal_mode.tscn
+msgid "anywhere"
+msgstr ""
+
+#. The pause screen's "controls" button, which cycles through three ways of
+#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
+#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
+#. the corners. One lowercase word each, about 10 characters at most: the
+#. button sizes to its text and the whole left column grows with it.
+#: game/normal/normal_mode.gd
+msgid "stick"
+msgstr ""
+
+#. The pause screen's "controls" button, which cycles through three ways of
+#. steering with a thumb. `anywhere`: drag anywhere on the water, nothing is
+#. drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in
+#. the corners. One lowercase word each, about 10 characters at most: the
+#. button sizes to its text and the whole left column grows with it.
+#: game/normal/normal_mode.gd
+msgid "pads"
+msgstr ""
+
+#. The first line a new player sees, in 18 px type over the water, teaching
+#. how to steer: on a phone, drag a finger; on a keyboard, hold the A key to
+#. turn one way and the D key to turn the other. Keep the key letters A and D.
+#. One short line: about 25 characters.
+#: game/normal/normal_mode.gd
+msgid "drag to turn"
+msgstr ""
+
+#. The first line a new player sees, in 18 px type over the water, teaching
+#. how to steer: on a phone, drag a finger; on a keyboard, hold the A key to
+#. turn one way and the D key to turn the other. Keep the key letters A and D.
+#. One short line: about 25 characters.
+#. Label "Onboarding" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.gd game/normal/normal_mode.tscn
+msgid "A · D to turn"
+msgstr ""
+
+#. A notice in 18 px type, for seven seconds, when the cell has grown a new
+#. sense (a gene waiting for a place on its body). "Place it" means choose
+#. where on the body the new organ grows. On a phone the player holds their
+#. finger on their own cell; on a keyboard they hold the E key: keep the
+#. letter e. About 45 characters at most.
+#: game/normal/normal_mode.gd
+msgid "a sense grew · hold your body to place it"
+msgstr ""
+
+#. A notice in 18 px type, for seven seconds, when the cell has grown a new
+#. sense (a gene waiting for a place on its body). "Place it" means choose
+#. where on the body the new organ grows. On a phone the player holds their
+#. finger on their own cell; on a keyboard they hold the E key: keep the
+#. letter e. About 45 characters at most.
+#: game/normal/normal_mode.gd
+msgid "a sense grew · hold e to place it"
+msgstr ""
+
+#. A small caption, in 15 px type, beside the row of genes that are waiting
+#. for a place on the body: genes the cell has just eaten and not yet placed.
+#. One lowercase word. Four chips fit on a row beside it; a wider word makes
+#. the fourth wrap onto the next row.
+#. Room: at most 64 px in 15 px type; the English takes 54 px.
+#: game/normal/normal_mode.gd
+msgid "waiting"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
+#. and shares it with a level and a gauge.
+#: game/normal/normal_mode.gd
+msgid "one copy · a daughter may not wear it"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
+#. and shares it with a level and a gauge.
+#: game/normal/normal_mode.gd
+msgid "two copies · a daughter probably wears it"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
+#. and shares it with a level and a gauge.
+#: game/normal/normal_mode.gd
+msgid "three copies · a daughter always wears it"
+msgstr ""
+
+#. The hint (see the copies line above) for the mouth gene, which every
+#. daughter always wears. At most about 50 characters.
+#: game/normal/normal_mode.gd
+msgid "the mouth · a daughter always wears it"
+msgstr ""
+
+#. The hint under an empty place on the body: nothing is there, so nothing can
+#. be passed on to a daughter from it. At most about 50 characters.
+#: game/normal/normal_mode.gd
+msgid "an empty slot · nothing to pass on from here"
+msgstr ""
+
+#. The hint while the player is about to write a waiting gene over one that is
+#. already in the DNA. %s is the short word of the gene that would be lost
+#. (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
+#. this cell keeps the organ for the rest of its life, though its daughters
+#. will not inherit it. At most about 55 characters with a word in place of
+#. %s.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s leaves your dna · your body keeps it"
+msgstr ""
+
+#. The same hint for a gene the DNA carries but the body does not wear, so
+#. there is no second half. %s is the gene's short word.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s leaves your dna"
+msgstr ""
+
+#. As the hint above, for a gene that has a level (it grows with use). The
+#. first %s is the gene's short word, the %d the level. Keep both, in this
+#. order. 355 px at most, in 14 px type: about 55 characters.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s leaves your dna · level %d ends with this body"
+msgstr ""
+
+#. Same, for a levelled gene the body does not wear. %s is the gene's short
+#. word, %d the level.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s leaves your dna · its level %d is lost"
+msgstr ""
+
+#. A gene's level, a whole number that grows with use: "level 7". Keep %d.
+#. Shown in 14 px type at the start of the hint row.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "level %d"
+msgstr ""
+
+#. All the `ACT_` lines are one line of instructions in 14 px type, centred
+#. under the figure, telling the player what the next tap or release will do.
+#. A "slot" is one of seven places round the cell's body where a gene sits;
+#. "place" a gene means put it in a slot; "your daughters may wear it" means
+#. the cells this one divides into may show the gene as an organ. About 50
+#. characters at most (the row is 560 px wide). This one: a gene is waiting,
+#. none is chosen.
+#: game/normal/normal_mode.gd
+msgid "tap a slot · your daughters may wear it"
+msgstr ""
+
+#. A slot is chosen for the waiting gene; a second tap confirms.
+#: game/normal/normal_mode.gd
+msgid "tap again to place"
+msgstr ""
+
+#. The two %s are the short words of two genes, such as `eat` and `ping`: the
+#. first is the waiting gene, the second the gene it would replace in the DNA.
+#. Keep both %s, in this order.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to write %s over %s"
+msgstr ""
+
+#. While the player drags a waiting gene over an empty slot; letting go places
+#. it there. %s is the gene's short word, such as `eat`.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to place %s here"
+msgstr ""
+
+#. While dragging a waiting gene over a slot that already holds a gene:
+#. letting go only selects it, and a second tap writes over it. The two %s are
+#. short gene words: the one being dragged, then the one it would replace.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go, then tap again to place %s over %s"
+msgstr ""
+
+#. Under a gene that is already in a slot: it can be dragged to another slot.
+#: game/normal/normal_mode.gd
+msgid "drag it to another slot"
+msgstr ""
+
+#. While dragging a gene that is not over any slot. %s is its short word, such
+#. as `eat`; "put it there" means into a slot.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s · let go over a slot to put it there"
+msgstr ""
+
+#. While dragging a gene over an empty slot of the body. %s is its short word.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to move %s here"
+msgstr ""
+
+#. While dragging a gene over a slot that holds another: letting go swaps
+#. them. The two %s are the two genes' short words.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to swap %s and %s"
+msgstr ""
+
+#. While dragging a gene back over the slot it came from: letting go cancels
+#. the move. %s is the gene's short word.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to leave %s where it is"
+msgstr ""
+
+#. For a gene that can grow in two different ways (the player picks one, for
+#. good). %s is the gene's short word, such as `beam`.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to choose how %s grows"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "first generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "second generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "third generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "fourth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "fifth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "sixth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "seventh generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "eighth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "ninth generation"
+msgstr ""
+
+#. Part of the pause screen's caption, in 15 px type: "genome · first
+#. generation". A "generation" is how many times the cell has divided: the
+#. first cell is the first generation, its chosen daughter the second. The
+#. caption's own wording is "genome · %s", translated separately.
+#: game/normal/normal_mode.gd
+msgid "tenth generation"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cytostome
+#. Room: at most 47 px in 13 px type; the English takes 21 px.
+#: game/normal/normal_mode.gd
+msgid "eat"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cirrus
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/normal/normal_mode.gd
+msgid "turn"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: flagellum
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/normal/normal_mode.gd
+msgid "swim"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: stigma
+#. Room: at most 47 px in 13 px type; the English takes 22 px.
+#: game/normal/normal_mode.gd
+msgid "see"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ocellus
+#. Room: at most 47 px in 13 px type; the English takes 36 px.
+#: game/normal/normal_mode.gd
+msgid "beam"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: axoneme
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/normal_mode.gd
+msgid "push"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: palp
+#. Room: at most 47 px in 13 px type; the English takes 37 px.
+#: game/normal/normal_mode.gd
+msgid "touch"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: myoneme
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/normal_mode.gd
+msgid "dash"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: trichocyst
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/normal_mode.gd
+msgid "sting"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: pellicle
+#. Room: at most 47 px in 13 px type; the English takes 40 px.
+#: game/normal/normal_mode.gd
+msgid "armor"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: veneneux
+#. Room: at most 47 px in 13 px type; the English takes 44 px.
+#: game/normal/normal_mode.gd
+msgid "venom"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: plastid
+#. Room: at most 47 px in 13 px type; the English takes 23 px.
+#: game/normal/normal_mode.gd
+msgid "sun"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: vacuole
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/normal/normal_mode.gd
+msgid "store"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: crista
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/normal_mode.gd
+msgid "burn"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: chemocyte
+#. Room: at most 47 px in 13 px type; the English takes 34 px.
+#: game/normal/normal_mode.gd
+msgid "smell"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ampulla
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/normal/normal_mode.gd
+msgid "ping"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cytostome
+#. Room: at most 440 px in 15 px type; the English takes 321 px.
+#: game/normal/normal_mode.gd
+msgid "a wider mouth swallows bigger things whole"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cirrus
+#. Room: at most 440 px in 15 px type; the English takes 304 px.
+#: game/normal/normal_mode.gd
+msgid "turns you faster, and sooner after you ask"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: flagellum
+#. Room: at most 440 px in 15 px type; the English takes 278 px.
+#: game/normal/normal_mode.gd
+msgid "your tail beats harder, and more often"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: stigma
+#. Room: at most 440 px in 15 px type; the English takes 342 px.
+#: game/normal/normal_mode.gd
+msgid "feels the shadow of anything big, however dark"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ocellus
+#. Room: at most 440 px in 15 px type; the English takes 357 px.
+#: game/normal/normal_mode.gd
+msgid "a ray out of that side, marking whatever it strikes"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: chemocyte
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
+#: game/normal/normal_mode.gd
+msgid "smells food, strongest where your nose is pointed"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ampulla
+#. Room: at most 440 px in 15 px type; the English takes 356 px.
+#: game/normal/normal_mode.gd
+msgid "a pulse that answers off everything, not just food"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: axoneme
+#. Room: at most 440 px in 15 px type; the English takes 341 px.
+#: game/normal/normal_mode.gd
+msgid "holding on pushes you, instead of only steering"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: palp
+#. Room: at most 440 px in 15 px type; the English takes 316 px.
+#: game/normal/normal_mode.gd
+msgid "feels what is against you, with no light at all"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: myoneme
+#. Room: at most 440 px in 15 px type; the English takes 308 px.
+#: game/normal/normal_mode.gd
+msgid "tap for a burst of speed, paid for in hunger"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: trichocyst
+#. Room: at most 440 px in 15 px type; the English takes 290 px.
+#: game/normal/normal_mode.gd
+msgid "a dart at whatever closes in on that side"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: pellicle
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/normal/normal_mode.gd
+msgid "thicker skin, so bites take less and fewer mouths fit"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: veneneux
+#. Room: at most 440 px in 15 px type; the English takes 417 px.
+#: game/normal/normal_mode.gd
+msgid "whatever bites you pays, and whatever swallows you dies"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: plastid
+#. Room: at most 440 px in 15 px type; the English takes 365 px.
+#: game/normal/normal_mode.gd
+msgid "makes a little of its own food, so you starve slower"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: vacuole
+#. Room: at most 440 px in 15 px type; the English takes 363 px.
+#: game/normal/normal_mode.gd
+msgid "a bigger tank, so hunger takes longer to reach you"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: crista
+#. Room: at most 440 px in 15 px type; the English takes 350 px.
+#: game/normal/normal_mode.gd
+msgid "burns cleaner, so everything you carry costs less"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/extend
+#. Room: at most 470 px in 15 px type; the English takes 363 px.
+#: game/normal/normal_mode.gd
+msgid "a fan of rays out of that side, one more every level"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/sweep
+#. Room: at most 470 px in 15 px type; the English takes 345 px.
+#: game/normal/normal_mode.gd
+msgid "three rays sweeping that side, faster every level"
+msgstr ""
+
+#. The line for an empty slot on the body, in 15 px type, in the place where a
+#. gene's line goes. An "organ" is what a gene makes the cell grow; "this
+#. side" is the side of the body the slot is on. No longer than the English
+#. (368 px, 51 characters).
+#. Room: at most 520 px in 15 px type; the English takes 368 px.
+#: game/normal/normal_mode.gd
+msgid "nothing here yet · an organ here grows on this side"
+msgstr ""
+
+#. The label of the pause screen's switch that shows the exact numbers behind
+#. each gene (how fast, how far, what it costs). One lowercase word, drawn in
+#. 14 px type on a slab 96 px wide.
+#. Room: at most 80 px in 14 px type; the English takes 61 px.
+#: game/normal/normal_mode.gd
+msgid "numbers"
+msgstr ""
+
+#. The caption above the figure on the pause screen, in 15 px type: the word
+#. for the cell's whole set of genes, then a middle dot and %s, which is the
+#. generation ("first generation"). Keep %s. With the numbers switch on, more
+#. is added after it, and the whole caption has 560 px: beyond that the whole
+#. pause screen shifts to make room, so keep this short.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "genome · %s"
+msgstr ""
+
+#. The generation, counted past the tenth: "generation 12". Keep %d.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "generation %d"
+msgstr ""
+
+#. The name of one of the two ways a levelled gene can grow, as the title of
+#. its card (20 px type on a card 200 px wide) and inside sentences such as
+#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
+#. adds one more ray between the ones there are, so the fan fills in and never
+#. widens; `sweep` = the three rays swing from side to side, faster each
+#. level. One lowercase word, about 12 characters at most.
+#. entry: extend
+#. Room: at most 180 px in 20 px type; the English takes 24 px.
+#: game/normal/normal_mode.gd
+msgid "fill"
+msgstr ""
+
+#. The name of one of the two ways a levelled gene can grow, as the title of
+#. its card (20 px type on a card 200 px wide) and inside sentences such as
+#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
+#. adds one more ray between the ones there are, so the fan fills in and never
+#. widens; `sweep` = the three rays swing from side to side, faster each
+#. level. One lowercase word, about 12 characters at most.
+#. entry: sweep
+#. Room: at most 180 px in 20 px type; the English takes 62 px.
+#: game/normal/normal_mode.gd
+msgid "sweep"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: extend
+#. Room: at most 185 px in 14 px type; the English takes 164 px.
+#: game/normal/normal_mode.gd
+msgid "every ray lit, all the time"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: extend
+#. Room: at most 185 px in 14 px type; the English takes 171 px.
+#: game/normal/normal_mode.gd
+msgid "small things slip between"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: sweep
+#. Room: at most 185 px in 14 px type; the English takes 148 px.
+#: game/normal/normal_mode.gd
+msgid "no gaps between rays"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: sweep
+#. Room: at most 185 px in 14 px type; the English takes 172 px.
+#: game/normal/normal_mode.gd
+msgid "shows where things were"
+msgstr ""
+
+#. One line in 15 px type after the way's name and a middle dot, saying what
+#. that way does as the gene levels up. Same limit as the gene lines
+#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
+#. line gives the way.
+#. entry: extend
+#. Room: at most 470 px in 15 px type; the English takes 255 px.
+#: game/normal/normal_mode.gd
+msgid "a new ray every level, filling the fan"
+msgstr ""
+
+#. One line in 15 px type after the way's name and a middle dot, saying what
+#. that way does as the gene levels up. Same limit as the gene lines
+#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
+#. line gives the way.
+#. entry: sweep
+#. Room: at most 470 px in 15 px type; the English takes 288 px.
+#: game/normal/normal_mode.gd
+msgid "your three rays swing, faster every level"
+msgstr ""
+
+#. The last line on a way's card, in 14 px type: what keeping that way costs
+#. the cell in energy, compared with the other way. "To keep" means to carry
+#. the gene as it grows. **At most 185 px**: the card is 200 px wide and
+#. nothing wraps. This one: it costs more.
+#. Room: at most 185 px in 14 px type; the English takes 129 px.
+#: game/normal/normal_mode.gd
+msgid "costs more to keep"
+msgstr ""
+
+#. As above: it costs less.
+#. Room: at most 185 px in 14 px type; the English takes 119 px.
+#: game/normal/normal_mode.gd
+msgid "costs less to keep"
+msgstr ""
+
+#. As above: the two ways cost the same.
+#. Room: at most 185 px in 14 px type; the English takes 155 px.
+#: game/normal/normal_mode.gd
+msgid "costs the same to keep"
+msgstr ""
+
+#. The hint under the figure while the two cards are up, in 14 px type. A gene
+#. reached its fork (where it can grow one of two ways) but the choice was not
+#. made yet, so the levels so far count as one level until the player chooses.
+#. %d is that level: keep %d.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "works as level %d until you choose"
+msgstr ""
+
+#. The same hint at the fork itself: whichever way is chosen, it only starts
+#. at the next level.
+#: game/normal/normal_mode.gd
+msgid "both ways start at the next level"
+msgstr ""
+
+#. The line of instructions under the figure while the two cards are up and
+#. none is chosen: a "way" is one of the two cards.
+#: game/normal/normal_mode.gd
+msgid "tap a way to choose it"
+msgstr ""
+
+#. A card is chosen; a second tap takes it, and the choice cannot be undone.
+#. %s is the way's name (see the cards' titles). Keep %s.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to choose %s · for good"
+msgstr ""
+
+#. The hint under the figure while the two cards are up and a way is hovered
+#. or chosen, in 14 px type: what that way costs the cell in energy, compared
+#. with the other way. %s is the other way's name (see the cards' titles):
+#. keep %s. This one: they cost the same.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "costs the same to keep as %s"
+msgstr ""
+
+#. As above: this way costs more than the other. %s is the other way's name.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "costs more to keep than %s"
+msgstr ""
+
+#. As above: this way costs less than the other. %s is the other way's name.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "costs less to keep than %s"
+msgstr ""
+
+#. One word at the start of the hint line under the two daughters' strands of
+#. DNA, in 14 px type: whether this daughter's body wears the gene (shows it
+#. as an organ) or only carries it in her DNA, to pass on. The line reads like
+#. "worn · level 7 · one copy · a daughter may not wear it". This one: the
+#. gene is worn. About 12 characters at most.
+#: game/normal/normal_mode.gd
+msgid "worn"
+msgstr ""
+
+#. As above: the gene is carried but not worn.
+#: game/normal/normal_mode.gd
+msgid "carried"
+msgstr ""
+
+#. All eight `LINE_` strings are one-line notices in 18 px type over the
+#. water, a few seconds each, in a game shared with a friend. "Their" and
+#. "they" are the friend; "water" is the game world (a pond) that one of the
+#. two phones hosts. About 50 characters at most. This one: the player has
+#. just joined the friend's world.
+#: game/normal/normal_mode.gd
+msgid "you are in their water"
+msgstr ""
+
+#. The friend has just joined the player's own world.
+#: game/normal/normal_mode.gd
+msgid "they are in your water"
+msgstr ""
+
+#. The friend's cell died; it comes back (is reborn) near the player.
+#: game/normal/normal_mode.gd
+msgid "they died · they come back near you"
+msgstr ""
+
+#. The player's cell ate the friend's cell; it comes back (is reborn) near the
+#. player.
+#: game/normal/normal_mode.gd
+msgid "you ate them · they come back near you"
+msgstr ""
+
+#. The friend's phone has stopped sending anything for a few seconds (screen
+#. off, in a pocket, or a bad connection).
+#: game/normal/normal_mode.gd
+msgid "their phone went quiet"
+msgstr ""
+
+#. The friend's world has ended (they left it), and the player carries on in
+#. their own world instead.
+#: game/normal/normal_mode.gd
+msgid "their water is gone · this one is yours"
+msgstr ""
+
+#. As the line above, but the friend's phone ended the connection because of a
+#. fault, rather than the friend leaving: the player carries on in their own
+#. world.
+#: game/normal/normal_mode.gd
+msgid "cut off from their water · this one is yours"
+msgstr ""
+
+#. A button, 232 px wide in 20 px type, in the middle of the screen after the
+#. cell dies: watch a replay of its last seconds. A verb, in the imperative;
+#. about 12 characters at most.
+#. Button "Button" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "watch"
+msgstr ""
+
+#. A caption, in 15 px type, above the pause screen's slider for how bright
+#. the water is drawn. One lowercase word, about 12 characters at most.
+#. Label "Caption" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "light"
+msgstr ""
+
+#. A caption above the pause screen's button that flips between two ways of
+#. turning the picture (see "north up" and "forward up"). One lowercase word,
+#. about 12 characters at most.
+#. Label "Caption" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "camera"
+msgstr ""
+
+#. A caption above the pause screen's button that cycles through three ways of
+#. steering (see "anywhere", "stick" and "pads"). One lowercase word, about 12
+#. characters at most.
+#. Label "Caption" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "controls"
+msgstr ""
+
+#. A button on the pause screen: close it and go on playing. About 12
+#. characters at most.
+#. Button "Resume" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "resume"
+msgstr ""
+
+#. A warning in 15 px type just above "resume" on the pause screen, on one
+#. line (at most about 60 characters), shown only in a game shared with a
+#. friend: pausing does not stop the shared world, so the player's cell can
+#. still be eaten while the screen is open.
+#. Label "Warn" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "the water is still moving · you can still be eaten"
+msgstr ""
+
+#. A caption in 15 px type above the cell's body on the pause screen: the
+#. cell's whole set of genes (its DNA). The code replaces it with "genome ·
+#. first generation" and the like, translated separately; this word is the one
+#. in the scene. One lowercase word, about 12 characters at most.
+#. Label "Caption" in game/normal/normal_mode.tscn
+#: game/normal/normal_mode.tscn
+msgid "genome"
+msgstr ""
+
+#. The two captions of the replay screen, which shows the same few seconds
+#. twice, side by side. The left half is what the player's cell sensed (its
+#. feelings, drawn as in the game); the right half is what was really there
+#. (the true picture of the water). Each is a small caption in 16 px type,
+#. centred over its half of the screen, which is 640 px wide at the narrowest.
+#. This one is the left half.
+#. Room: at most 600 px in 16 px type; the English takes 102 px.
+#: game/replay/panes.gd
+msgid "what you felt"
+msgstr ""
+
+#. The right half's caption: what was really there.
+#. Room: at most 600 px in 16 px type; the English takes 120 px.
+#: game/replay/panes.gd
+msgid "what was there"
+msgstr ""
+
+#. The replay's speed button: how fast the replay plays, as a multiple of real
+#. time ("2x" is twice as fast, "1/4x" a quarter as fast). The same in almost
+#. every language; change the "x" only if your language writes a
+#. multiplication sign differently.
+#. Room: at most 64 px in 17 px type; the English takes 20 px.
+#: game/replay/replay.gd
+msgid "1x"
+msgstr ""
+
+#. The replay's speed button: how fast the replay plays, as a multiple of real
+#. time ("2x" is twice as fast, "1/4x" a quarter as fast). The same in almost
+#. every language; change the "x" only if your language writes a
+#. multiplication sign differently.
+#. Room: at most 64 px in 17 px type; the English takes 20 px.
+#: game/replay/replay.gd
+msgid "2x"
+msgstr ""
+
+#. The replay's speed button: how fast the replay plays, as a multiple of real
+#. time ("2x" is twice as fast, "1/4x" a quarter as fast). The same in almost
+#. every language; change the "x" only if your language writes a
+#. multiplication sign differently.
+#. Room: at most 64 px in 17 px type; the English takes 20 px.
+#: game/replay/replay.gd
+msgid "4x"
+msgstr ""
+
+#. The replay's speed button: how fast the replay plays, as a multiple of real
+#. time ("2x" is twice as fast, "1/4x" a quarter as fast). The same in almost
+#. every language; change the "x" only if your language writes a
+#. multiplication sign differently.
+#. Room: at most 64 px in 17 px type; the English takes 36 px.
+#: game/replay/replay.gd
+msgid "1/4x"
+msgstr ""
+
+#. The replay's speed button: how fast the replay plays, as a multiple of real
+#. time ("2x" is twice as fast, "1/4x" a quarter as fast). The same in almost
+#. every language; change the "x" only if your language writes a
+#. multiplication sign differently.
+#. Room: at most 64 px in 17 px type; the English takes 36 px.
+#: game/replay/replay.gd
+msgid "1/2x"
+msgstr ""
+
+#. The replay's first button: "pause" while the replay plays, "play" while it
+#. is paused. The word is what pressing the button does. The button is fixed,
+#. so a long word runs into the speed button beside it.
+#. Room: at most 80 px in 17 px type; the English takes 50 px.
+#: game/replay/replay.gd
+msgid "pause"
+msgstr ""
+
+#. The replay's first button: "pause" while the replay plays, "play" while it
+#. is paused. The word is what pressing the button does. The button is fixed,
+#. so a long word runs into the speed button beside it.
+#. Room: at most 80 px in 17 px type; the English takes 35 px.
+#: game/replay/replay.gd
+msgid "play"
+msgstr ""

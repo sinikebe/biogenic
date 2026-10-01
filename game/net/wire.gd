@@ -1217,19 +1217,26 @@ static func take_sister(frame: PackedByteArray) -> Array:
 	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), radius, tiers[0]]
 
 
+## **The short heading a refusal is told as**, on the screen of the phone that was
+## refused and in the server's log. Translated here, in the one place both read:
+## a process with no screen -- the server -- has no catalog, so its log stays
+## English (game/i18n/i18n.gd).
+##
+## TRANSLATORS: Each is a heading of a few words above a sentence, on the screen
+## of the phone whose call the other end ended. At most about 30 characters.
 static func reason_says(reason: int) -> String:
 	match reason:
 		REFUSE_PROTOCOL:
-			return "different versions"
+			return TranslationServer.translate("different versions")
 		REFUSE_FULL:
-			return "already two"
+			return TranslationServer.translate("already two")
 		REFUSE_SILENT:
-			return "no greeting"
+			return TranslationServer.translate("no greeting")
 		REFUSE_BROKEN:
-			return "cut off"
+			return TranslationServer.translate("cut off")
 		REFUSE_INVITE:
-			return "no invite it could prove"
-	return "refused"
+			return TranslationServer.translate("no invite it could prove")
+	return TranslationServer.translate("refused")
 
 
 # ---------------------------------------------------------------------------

@@ -28,6 +28,10 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const ReturnsLayer := preload("res://game/perception/returns.gd")
 const RunState := preload("res://game/run_state.gd")
+## **Loading this is what registers the game's languages** (game/i18n/README.md),
+## and it has to happen before this scene's nodes exist, which is why it is a
+## preload and not a call. Not unused: do not remove it.
+const I18n := preload("res://game/i18n/i18n.gd")
 ## The last sixty seconds of the run, kept in memory by the last child of this
 ## node. **Preloaded for the type only**, and it is safe to preload precisely
 ## because the recorder knows nothing about this file: the replay *screen* is
@@ -71,6 +75,38 @@ const DropSave := preload("res://game/normal/drop_save.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
+
+# --- The words in normal_mode.tscn ---------------------------------------------
+# A scene's text is translated by the Control that shows it, and the template reads
+# it from the scene file; a scene has no place for a note, so the notes are here.
+#
+# TRANSLATORS "watch": A button, 232 px wide in 20 px type, in the middle of the
+# screen after the cell dies: watch a replay of its last seconds. A verb, in the
+# imperative; about 12 characters at most.
+#
+# TRANSLATORS "light": A caption, in 15 px type, above the pause screen's slider for
+# how bright the water is drawn. One lowercase word, about 12 characters at most.
+#
+# TRANSLATORS "camera": A caption above the pause screen's button that flips between
+# two ways of turning the picture (see "north up" and "forward up"). One lowercase
+# word, about 12 characters at most.
+#
+# TRANSLATORS "controls": A caption above the pause screen's button that cycles
+# through three ways of steering (see "anywhere", "stick" and "pads"). One lowercase
+# word, about 12 characters at most.
+#
+# TRANSLATORS "resume": A button on the pause screen: close it and go on playing.
+# About 12 characters at most.
+#
+# TRANSLATORS "the water is still moving · you can still be eaten": A warning in 15 px
+# type just above "resume" on the pause screen, on one line (at most about 60
+# characters), shown only in a game shared with a friend: pausing does not stop the
+# shared world, so the player's cell can still be eaten while the screen is open.
+#
+# TRANSLATORS "genome": A caption in 15 px type above the cell's body on the pause
+# screen: the cell's whole set of genes (its DNA). The code replaces it with "genome
+# · first generation" and the like, translated separately; this word is the one in
+# the scene. One lowercase word, about 12 characters at most.
 
 ## The opening belongs to the beat alone, so the line waits its turn.
 const ONBOARD_DELAY := 2.2
@@ -208,6 +244,11 @@ const DIVIDE_FADE_DIM := 0.34
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const SISTER_DISTANCE := 560.0
 ## The one line, at the first division of a run only.
+##
+## TRANSLATORS: A hint in 18 px type over the water, the first time the player's
+## cell divides in two. The two daughters are on screen, one each side, and the
+## player chooses which one to carry on as by leaning toward it (a drag on a
+## phone, the A and D keys on a keyboard). "Them" is the two daughters.
 const DIVIDE_LINE := "lean into one of them"
 
 # --- The offer (docs/design/replay.md §4.5) ---------------------------------
@@ -1630,7 +1671,7 @@ func _step_split(delta: float) -> void:
 				if not _said_divide:
 					_said_divide = true
 					# Hold 0 is "wait for the verb", and the verb is the lean.
-					_say(DIVIDE_LINE, 0.0)
+					_say(tr(DIVIDE_LINE), 0.0)
 		Split.CHOOSING:
 			_hush()
 			_step_choosing(delta)
@@ -2427,7 +2468,12 @@ func _toggle_camera() -> void:
 
 
 func _update_view_button() -> void:
-	_view_button.text = "forward up" if _camera_locked else "north up"
+	# TRANSLATORS: The pause screen's "camera" button, which flips between two
+	# ways of drawing the water. `north up`: the world stays still and the cell
+	# turns in it. `forward up`: the world turns round the cell, so the way the
+	# cell is facing is always up the screen. Keep each to about 12 characters:
+	# the button sizes to its text and the whole left column grows with it.
+	_view_button.text = tr("forward up") if _camera_locked else tr("north up")
 
 
 # ---------------------------------------------------------------------------
@@ -2447,6 +2493,12 @@ func _update_view_button() -> void:
 
 ## The word on the button, and the whole of the chooser's vocabulary. Each says
 ## what is on screen; `anywhere` also states the rule it names.
+##
+## TRANSLATORS: The pause screen's "controls" button, which cycles through three
+## ways of steering with a thumb. `anywhere`: drag anywhere on the water, nothing
+## is drawn. `stick`: a drawn joystick in one corner. `pads`: drawn buttons in the
+## corners. One lowercase word each, about 10 characters at most: the button sizes
+## to its text and the whole left column grows with it.
 const SCHEME_WORDS: Array[String] = ["anywhere", "stick", "pads"]
 
 
@@ -2472,7 +2524,7 @@ func _cycle_scheme() -> void:
 
 
 func _update_scheme_button() -> void:
-	_feel_button.text = SCHEME_WORDS[clampi(scheme, 0, SCHEME_WORDS.size() - 1)]
+	_feel_button.text = tr(SCHEME_WORDS[clampi(scheme, 0, SCHEME_WORDS.size() - 1)])
 
 
 ## True while the water itself is the control. The one test anything outside
@@ -2549,7 +2601,11 @@ func _begin_onboarding() -> void:
 		_onboard = Onboard.OFF
 		return
 	_onboard_steer = true
-	_onboarding.text = "drag to turn" if _touch_first() else "A · D to turn"
+	# TRANSLATORS: The first line a new player sees, in 18 px type over the water,
+	# teaching how to steer: on a phone, drag a finger; on a keyboard, hold the A
+	# key to turn one way and the D key to turn the other. Keep the key letters
+	# A and D. One short line: about 25 characters.
+	_onboarding.text = tr("drag to turn") if _touch_first() else tr("A · D to turn")
 	_onboarding.show()
 	_onboard = Onboard.WAITING
 	_onboard_clock = 0.0
@@ -2563,8 +2619,13 @@ func _begin_onboarding() -> void:
 ## ahead of it. Back and Escape still open the pause screen, the one place a
 ## gene can be written over another. Owner's call 4.
 func _say_sense() -> void:
-	_say("a sense grew · hold your body to place it" if _touch_first()
-		else "a sense grew · hold e to place it", SENSE_LINE_HOLD)
+	# TRANSLATORS: A notice in 18 px type, for seven seconds, when the cell has
+	# grown a new sense (a gene waiting for a place on its body). "Place it" means
+	# choose where on the body the new organ grows. On a phone the player holds
+	# their finger on their own cell; on a keyboard they hold the E key: keep the
+	# letter e. About 45 characters at most.
+	_say(tr("a sense grew · hold your body to place it") if _touch_first()
+		else tr("a sense grew · hold e to place it"), SENSE_LINE_HOLD)
 
 
 ## Puts [param text] on the line and fades it in from wherever the line already
@@ -3901,6 +3962,12 @@ const WAIT_AIR := 3.0
 ## gains an underline in its own hue.
 const WAIT_DIM := 0.55
 ## The tray's caption, in the voice of every other caption on this column.
+##
+## TRANSLATORS: A small caption, in 15 px type, beside the row of genes that are
+## waiting for a place on the body: genes the cell has just eaten and not yet
+## placed. One lowercase word. Four chips fit on a row beside it; a wider word makes
+## the fourth wrap onto the next row.
+## ROOM: 64 px at 15 px
 const WAIT_CAPTION := "waiting"
 const CAPTION_TINT := Color(0.855, 0.953, 0.933, 0.45)
 const CAPTION_SIZE := 15
@@ -3937,6 +4004,12 @@ const ARM_TIMEOUT_MS := 4000
 ## player is already reading, which is the whole of "the chance must be legible
 ## before, not announced after". The pips draw the level; this line says why it
 ## matters, which is the owner's call 2 (dna-body.md §13).
+##
+## TRANSLATORS: The hint under the figure, in 14 px type, about the gene being
+## read: how many copies of it the cell's DNA holds (one to three) and so how
+## likely a daughter cell is to wear it (to show it as an organ). The copies are
+## words, not digits, on purpose. At most about 50 characters: the row is 560 px
+## wide and shares it with a level and a gauge.
 const HINT_CHANCE: Array[String] = [
 	"",
 	"one copy · a daughter may not wear it",
@@ -3945,8 +4018,14 @@ const HINT_CHANCE: Array[String] = [
 ]
 ## The mouth is the one gene that always expresses (genome.gd's
 ## ALWAYS_EXPRESSED), so it says so instead of quoting odds it does not obey.
+##
+## TRANSLATORS: The hint (see the copies line above) for the mouth gene, which
+## every daughter always wears. At most about 50 characters.
 const HINT_CERTAIN := "the mouth · a daughter always wears it"
 ## The choosing screen reads this one as well, under an empty locus of its own.
+##
+## TRANSLATORS: The hint under an empty place on the body: nothing is there, so
+## nothing can be passed on to a daughter from it. At most about 50 characters.
 const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## **Armed over a gene, the hint says what the next tap costs** instead of what
 ## the gene is worth. Reading *a daughter always wears it* about the gene the
@@ -3954,18 +4033,35 @@ const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## (dna-body.md §6). The second clause is only true of an organ this body
 ## actually wears, so a gene the DNA carries and the body does not says the
 ## first half and stops.
+##
+## TRANSLATORS: The hint while the player is about to write a waiting gene over
+## one that is already in the DNA. %s is the short word of the gene that would be
+## lost (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
+## this cell keeps the organ for the rest of its life, though its daughters will
+## not inherit it. At most about 55 characters with a word in place of %s.
 const HINT_LOSES := "%s leaves your dna · your body keeps it"
+## TRANSLATORS: The same hint for a gene the DNA carries but the body does not
+## wear, so there is no second half. %s is the gene's short word.
 const HINT_LOSES_CARRIED := "%s leaves your dna"
 ## **And over a gene that levels, the warning names the level** (beam-levels.md
 ## §8.2). The body keeps a gene it wears, level and all, for this life; its
 ## daughters never get it. At most 355 px.
+##
+## TRANSLATORS: As the hint above, for a gene that has a level (it grows with
+## use). The first %s is the gene's short word, the %d the level. Keep both,
+## in this order. 355 px at most, in 14 px type: about 55 characters.
 const HINT_LOSES_LEVEL := "%s leaves your dna · level %d ends with this body"
+## TRANSLATORS: Same, for a levelled gene the body does not wear. %s is the
+## gene's short word, %d the level.
 const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
 
 ## **The level, in front of the odds** (§8.2): `level 7 ▰▰▱ · two copies · a
 ## daughter probably wears it`. The level is what a daughter inherits and the
 ## copies are whether she wears it -- decision 5 of beam-levels.md §0 in one
 ## line. The banked level, never the one held at the fork.
+##
+## TRANSLATORS: A gene's level, a whole number that grows with use: "level 7".
+## Keep %d. Shown in 14 px type at the start of the hint row.
 const HINT_LEVEL := "level %d"
 ## **A gauge and not a number**, because experience means nothing to a player
 ## and `progress()` is already a fraction: a 36 x 4 bar at y 9 in its own
@@ -4013,20 +4109,46 @@ const HINT_ROW_HEIGHT := 20.0
 ## **The queue has no clause here any more**: #118 added `· 2 more after it`
 ## because the strand could only show the head. The tray is the queue, on
 ## screen, so the count would be a sentence about a picture directly above it.
+##
+## TRANSLATORS: All the `ACT_` lines are one line of instructions in 14 px type,
+## centred under the figure, telling the player what the next tap or release will
+## do. A "slot" is one of seven places round the cell's body where a gene sits;
+## "place" a gene means put it in a slot; "your daughters may wear it" means the
+## cells this one divides into may show the gene as an organ. About 50 characters
+## at most (the row is 560 px wide). This one: a gene is waiting, none is chosen.
 const ACT_ARM := "tap a slot · your daughters may wear it"
+## TRANSLATORS: A slot is chosen for the waiting gene; a second tap confirms.
 const ACT_COMMIT := "tap again to place"
 ## Armed over a gene, the verb names both genes: what the tap writes and what it
 ## writes over. `tap again to place` alone read as harmless over `eat`.
+##
+## TRANSLATORS: The two %s are the short words of two genes, such as `eat` and
+## `ping`: the first is the waiting gene, the second the gene it would replace in
+## the DNA. Keep both %s, in this order.
 const ACT_COMMIT_OVER := "tap again to write %s over %s"
 ## **A waiting gene carried out of the tray** lands on an empty slot when it is
 ## let go -- nothing is evicted and a move can still take it anywhere, so one
 ## gesture is enough (owner's call 6). Over a gene it only arms: the drop is the
 ## first tap, and the eviction still needs the second.
+##
+## TRANSLATORS: While the player drags a waiting gene over an empty slot; letting
+## go places it there. %s is the gene's short word, such as `eat`.
 const ACT_DROP := "let go to place %s here"
+## TRANSLATORS: While dragging a waiting gene over a slot that already holds a
+## gene: letting go only selects it, and a second tap writes over it. The two %s
+## are short gene words: the one being dragged, then the one it would replace.
 const ACT_DROP_OVER := "let go, then tap again to place %s over %s"
+## TRANSLATORS: Under a gene that is already in a slot: it can be dragged to
+## another slot.
 const ACT_MOVE := "drag it to another slot"
+## TRANSLATORS: While dragging a gene that is not over any slot. %s is its short
+## word, such as `eat`; "put it there" means into a slot.
 const ACT_CARRY := "%s · let go over a slot to put it there"
+## TRANSLATORS: While dragging a gene over an empty slot of the body. %s is its
+## short word.
 const ACT_LAND := "let go to move %s here"
+## TRANSLATORS: While dragging a gene over a slot that holds another: letting go
+## swaps them. The two %s are the two genes' short words.
 const ACT_SWAP := "let go to swap %s and %s"
 ## **Letting go where you picked up is a real answer, not a missed drop.** It
 ## is the first thing a nervous player tries -- lift a gene, think better of
@@ -4036,17 +4158,33 @@ const ACT_SWAP := "let go to swap %s and %s"
 ## in the gene's own hue, which is that gene coming home); this is the sentence
 ## for it, and it fires while the finger is still down, which is when the
 ## player is still deciding.
+##
+## TRANSLATORS: While dragging a gene back over the slot it came from: letting go
+## cancels the move. %s is the gene's short word.
 const ACT_KEEP := "let go to leave %s where it is"
 ## **A slot whose fork is open, selected with nothing in hand**: its second tap
 ## brings up the two ways (beam-levels.md §8.3), and this is the one line that
 ## says so. It is what pause opens on when a fork waits and no gene does.
+##
+## TRANSLATORS: For a gene that can grow in two different ways (the player picks
+## one, for good). %s is the gene's short word, such as `beam`.
 const ACT_FORK := "tap again to choose how %s grows"
 
 ## How deep the lineage is: the only readout of how far into the run the player
 ## is, and the nearest thing the game has to a score. It moved from the hint to
 ## the caption when the hint took on the odds -- zero pixels either way.
-const ORDINALS: Array[String] = ["first", "second", "third", "fourth", "fifth",
-	"sixth", "seventh", "eighth", "ninth", "tenth"]
+##
+## **Whole phrases and not an ordinal and a noun**, so a language that makes the
+## ordinal agree with the noun can. Past the tenth the caption counts.
+##
+## TRANSLATORS: Part of the pause screen's caption, in 15 px type: "genome ·
+## first generation". A "generation" is how many times the cell has divided: the
+## first cell is the first generation, its chosen daughter the second. The
+## caption's own wording is "genome · %s", translated separately.
+const GENERATIONS: Array[String] = ["first generation", "second generation",
+	"third generation", "fourth generation", "fifth generation",
+	"sixth generation", "seventh generation", "eighth generation",
+	"ninth generation", "tenth generation"]
 
 ## The second, weaker channel behind the rungs: a gene the body does not wear
 ## draws its word and its organ fainter. Honest about which one does the work.
@@ -4057,6 +4195,13 @@ const WORD_UNEXPRESSED := 0.42
 ## instantly at arm's length; nine letters of Greek are not, on the one screen
 ## whose whole job is a quick decision. §5.2, and the nine-character ceiling it
 ## sets is why a new gene needs a short word as well as a real organ name.
+##
+## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
+## dots: one short lowercase word, a verb or a noun for what the gene does. The
+## `entry` line says which gene it names (its scientific name, never translated).
+## It has to be short: prefer the shortest everyday word. The same words appear
+## inside sentences such as "let go to swap eat and ping".
+## ROOM: 47 px at 13 px
 const WORDS := {
 	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
@@ -4091,6 +4236,14 @@ const WORDS := {
 ## every gene two names on purpose; a name no player ever meets is a convention
 ## for the compiler, and CLAUDE.md's *realism is a tool* is the argument that
 ## `ampulla` is worth meeting.
+##
+## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
+## name and a middle dot: "cytostome · a wider mouth swallows bigger things
+## whole". Lowercase, plain words, no numbers. It has little room: it meets the
+## "numbers" switch at its right, so a translation should be no longer than the
+## English. "That side" is the side of the body where the gene's slot is. The
+## `entry` line says which gene.
+## ROOM: 440 px at 15 px
 const EXPLAINS := {
 	&"cytostome": "a wider mouth swallows bigger things whole",
 	&"cirrus": "turns you faster, and sooner after you ask",
@@ -4114,6 +4267,12 @@ const EXPLAINS := {
 ## for the choice, and the choosing screen's line for a daughter who inherits
 ## it. 464 and 446 px with the name in front. A fork still open reads as no
 ## path yet: the gene's own line above.
+##
+## TRANSLATORS: As the gene lines above, for a gene that can grow in two ways and
+## has been given one: what it does now. The `entry` line gives the gene and the
+## way. Same limit: no longer than the English, which is 464 px at most with the
+## gene's name in front.
+## ROOM: 470 px at 15 px
 const EXPLAINS_PATH := {
 	&"ocellus": {
 		&"extend": "a fan of rays out of that side, one more every level",
@@ -4123,6 +4282,12 @@ const EXPLAINS_PATH := {
 ## An empty slot has no gene to explain, so it explains the one thing it does
 ## have: a side of the body. The tether from it is what "this side" refers to,
 ## and on the choosing screen, which reads this line too, the dart is.
+##
+## TRANSLATORS: The line for an empty slot on the body, in 15 px type, in the place
+## where a gene's line goes. An "organ" is what a gene makes the cell grow; "this
+## side" is the side of the body the slot is on. No longer than the English (368
+## px, 51 characters).
+## ROOM: 520 px at 15 px
 const EXPLAIN_EMPTY := "nothing here yet · an organ here grows on this side"
 ## Loud enough to be the thing you are reading, quieter than the word on the
 ## chip: caption 0.45, hint 0.38, slot word 0.66, this 0.62.
@@ -4404,7 +4569,7 @@ func _update_hint() -> void:
 	# travelling gene and priced the hole.
 	var gene := _reading()
 	if gene == &"":
-		_set_hint(HINT_EMPTY)
+		_set_hint(tr(HINT_EMPTY))
 		return
 	if slot >= 0 and slot == _armed and _dragging == SLOT_NONE \
 			and _hand() != &"" and _gene_at(slot) != &"":
@@ -4414,14 +4579,14 @@ func _update_hint() -> void:
 		# line is a warning, and what it warns about is the number.
 		var grown := _genome.progression(under)
 		if grown != null:
-			_set_hint((HINT_LOSES_LEVEL if worn else HINT_LOSES_LEVEL_CARRIED)
+			_set_hint((tr(HINT_LOSES_LEVEL) if worn else tr(HINT_LOSES_LEVEL_CARRIED))
 				% [_word(under), grown.level()])
 		else:
-			_set_hint((HINT_LOSES if worn else HINT_LOSES_CARRIED)
+			_set_hint((tr(HINT_LOSES) if worn else tr(HINT_LOSES_CARRIED))
 				% _word(under))
 		return
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
-		_set_hint(HINT_CERTAIN, gene)
+		_set_hint(tr(HINT_CERTAIN), gene)
 		return
 	# **[method _copies_of] and never the bare DNA tier**, because a waiting
 	# gene is worth the copies it waited with, not none. A slot always carries
@@ -4436,7 +4601,8 @@ func _update_hint() -> void:
 func _odds(copies: int) -> String:
 	if _show_numbers:
 		return GeneStats.odds_text(copies)
-	return HINT_CHANCE[clampi(copies, 0, HINT_CHANCE.size() - 1)]
+	var at := clampi(copies, 0, HINT_CHANCE.size() - 1)
+	return tr(HINT_CHANCE[at]) if at > 0 else ""
 
 
 ## **The row under the figure, whole** (beam-levels.md §8.2): [param text], and
@@ -4460,7 +4626,7 @@ func _set_hint(text: String, gene: StringName = &"") -> void:
 	if not levelled:
 		_genome_hint.text = text
 		return
-	_hint_level.text = HINT_LEVEL % grown.level()
+	_hint_level.text = tr(HINT_LEVEL) % grown.level()
 	_hint_gauge.queue_redraw()
 	_genome_hint.text = "· " + text if text != "" else ""
 
@@ -4473,8 +4639,8 @@ func _set_hint(text: String, gene: StringName = &"") -> void:
 func _update_act() -> void:
 	# The fork's cards: pick a way, then take it (beam-levels.md §8.3).
 	if _fork_open():
-		_genome_act.text = ACT_CHOOSE_WAY % _path_title(_way_path(_way_armed)) \
-			if _way_armed >= 0 else ACT_PICK_WAY
+		_genome_act.text = tr(ACT_CHOOSE_WAY) % _path_title(_way_path(_way_armed)) \
+			if _way_armed >= 0 else tr(ACT_PICK_WAY)
 		return
 	# A gene in the air outranks the gene in hand: the line reports the gesture
 	# that is actually happening.
@@ -4488,22 +4654,22 @@ func _update_act() -> void:
 			# Out of the tray: a drop on an empty slot places it, a drop on a
 			# gene arms that slot for the second tap.
 			if _hovered < 0:
-				_genome_act.text = ACT_CARRY % _word(flying)
+				_genome_act.text = tr(ACT_CARRY) % _word(flying)
 			elif under == &"":
-				_genome_act.text = ACT_DROP % _word(flying)
+				_genome_act.text = tr(ACT_DROP) % _word(flying)
 			else:
-				_genome_act.text = ACT_DROP_OVER % [_word(flying), _word(under)]
+				_genome_act.text = tr(ACT_DROP_OVER) % [_word(flying), _word(under)]
 			return
 		if _hovered == _dragging:
 			# Back over the slot it came out of: a drop here is refused by
 			# [method _slot_can_drop] and the gene simply stays, which is the
 			# gesture's own cancel and now says so.
-			_genome_act.text = ACT_KEEP % _word(flying)
+			_genome_act.text = tr(ACT_KEEP) % _word(flying)
 		elif _hovered >= 0:
-			_genome_act.text = ACT_SWAP % [_word(flying), _word(under)] \
-				if under != &"" else ACT_LAND % _word(flying)
+			_genome_act.text = tr(ACT_SWAP) % [_word(flying), _word(under)] \
+				if under != &"" else tr(ACT_LAND) % _word(flying)
 		else:
-			_genome_act.text = ACT_CARRY % _word(flying)
+			_genome_act.text = tr(ACT_CARRY) % _word(flying)
 		return
 	var hand := _hand()
 	if hand != &"":
@@ -4511,26 +4677,26 @@ func _update_act() -> void:
 		# selected and not placeable, so it must not promise a second tap that
 		# does nothing.
 		if _armed < 0:
-			_genome_act.text = ACT_ARM
+			_genome_act.text = tr(ACT_ARM)
 			return
 		var under := _gene_at(_armed)
-		_genome_act.text = ACT_COMMIT if under == &"" \
-			else ACT_COMMIT_OVER % [_word(hand), _word(under)]
+		_genome_act.text = tr(ACT_COMMIT) if under == &"" \
+			else tr(ACT_COMMIT_OVER) % [_word(hand), _word(under)]
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	# **The selected slot's fork is open, so its second tap opens the cards.**
 	# Only the selected one: a slot being hovered has not had its first tap.
 	if slot >= 0 and slot == _armed and _forks_at(slot):
-		_genome_act.text = ACT_FORK % _word(_gene_at(slot))
+		_genome_act.text = tr(ACT_FORK) % _word(_gene_at(slot))
 		return
-	_genome_act.text = ACT_MOVE if _movable(slot) else ""
+	_genome_act.text = tr(ACT_MOVE) if _movable(slot) else ""
 
 
 ## The plain word a gene is read by on this surface. A gene this build has no
 ## word for -- a later phase's, arriving over an older binary in a content pack
 ## -- falls back to its own name rather than to nothing.
 func _word(gene: StringName) -> String:
-	return String(WORDS.get(gene, String(gene)))
+	return tr(WORDS[gene]) if WORDS.has(gene) else String(gene)
 
 
 ## How many copies [param gene] is read at on this surface: the DNA's for a gene
@@ -4610,7 +4776,7 @@ func _update_explain() -> void:
 		_explain_name.text = ""
 		# Two different silences: no slot chosen says nothing at all; a chosen
 		# empty slot still has a side of the body to explain.
-		_explain_says.text = "" if slot == SLOT_NONE else EXPLAIN_EMPTY
+		_explain_says.text = "" if slot == SLOT_NONE else tr(EXPLAIN_EMPTY)
 		return
 	_explain_name.text = String(gene)
 	_explain_name.add_theme_color_override("font_color",
@@ -4619,8 +4785,9 @@ func _update_explain() -> void:
 	# line until a way is hovered or armed, and then that way, by its name.
 	var way := _way_reading()
 	if _fork_open() and way >= 0:
-		_explain_name.text = _path_title(_way_path(way))
-		_explain_says.text = "· " + String(PATH_SAYS.get(_way_path(way), ""))
+		var path := _way_path(way)
+		_explain_name.text = _path_title(path)
+		_explain_says.text = "· " + (tr(PATH_SAYS[path]) if PATH_SAYS.has(path) else "")
 		return
 	# A gene this build has no line for -- a later phase's, arriving over an
 	# older binary in a content pack -- shows its name and says nothing, rather
@@ -4637,8 +4804,8 @@ func _explains(gene: StringName) -> String:
 	var grown := _genome.progression(gene)
 	var taken: Dictionary = EXPLAINS_PATH.get(gene, {})
 	if grown != null and taken.has(grown.path):
-		return String(taken[grown.path])
-	return String(EXPLAINS.get(gene, ""))
+		return tr(EXPLAINS_PATH[gene][grown.path])
+	return tr(EXPLAINS[gene]) if EXPLAINS.has(gene) else ""
 
 
 # --- A gene's numbers (docs/design/gene-stats.md) -----------------------------
@@ -4674,6 +4841,10 @@ const NUMBERS_DIM := 0.85
 ## about placing genes, a `+` reads as *add a copy*.
 const TOGGLE_SLAB := Rect2(0.0, 9.0, 96.0, 30.0)
 const TOGGLE_CORNER := 6
+## TRANSLATORS: The label of the pause screen's switch that shows the exact
+## numbers behind each gene (how fast, how far, what it costs). One lowercase
+## word, drawn in 14 px type on a slab 96 px wide.
+## ROOM: 80 px at 14 px
 const TOGGLE_WORD := "numbers"
 const TOGGLE_WORD_SIZE := 14
 ## The chips' focus mark: an underline, under the slab.
@@ -4816,12 +4987,13 @@ func _draw_numbers_toggle() -> void:
 	node.draw_style_box(_toggle_boxes[state], TOGGLE_SLAB)
 	var font := node.get_theme_default_font()
 	if font != null:
-		var width := font.get_string_size(TOGGLE_WORD, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+		var word := tr(TOGGLE_WORD)
+		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 			TOGGLE_WORD_SIZE).x
 		var centre := TOGGLE_SLAB.get_center()
 		var base := centre.y + (font.get_ascent(TOGGLE_WORD_SIZE)
 			- font.get_descent(TOGGLE_WORD_SIZE)) * 0.5
-		node.draw_string(font, Vector2(centre.x - width * 0.5, base), TOGGLE_WORD,
+		node.draw_string(font, Vector2(centre.x - width * 0.5, base), word,
 			HORIZONTAL_ALIGNMENT_LEFT, -1.0, TOGGLE_WORD_SIZE,
 			Color(TOGGLE_INK, float(TOGGLE_STATES[state][3])))
 	if node.has_focus():
@@ -4888,7 +5060,12 @@ func _update_numbers() -> void:
 ## body's size, what its full tank holds and how long that lasts drifting -- in
 ## the caption's own size and tint, so it is still a caption.
 func _update_caption() -> void:
-	var caption := "genome · %s" % _generation_text()
+	# TRANSLATORS: The caption above the figure on the pause screen, in 15 px
+	# type: the word for the cell's whole set of genes, then a middle dot and %s,
+	# which is the generation ("first generation"). Keep %s. With the numbers
+	# switch on, more is added after it, and the whole caption has 560 px: beyond
+	# that the whole pause screen shifts to make room, so keep this short.
+	var caption := tr("genome · %s") % _generation_text()
 	if _show_numbers:
 		caption += Readout.SEP + Readout.plain(GeneStats.cell_items(_cell.radius,
 			_genome.tiers(), _genome.upkeep()))
@@ -5003,9 +5180,10 @@ func _select_default() -> void:
 
 
 func _generation_text() -> String:
-	if _generation >= 1 and _generation <= ORDINALS.size():
-		return "%s generation" % ORDINALS[_generation - 1]
-	return "generation %d" % _generation
+	if _generation >= 1 and _generation <= GENERATIONS.size():
+		return tr(GENERATIONS[_generation - 1])
+	# TRANSLATORS: The generation, counted past the tenth: "generation 12". Keep %d.
+	return tr("generation %d") % _generation
 
 
 ## One chip, seated at its arc: its piece of helix, its copies, its word and its
@@ -5068,7 +5246,7 @@ func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
 func _make_tray_caption() -> Control:
 	var caption := Label.new()
 	caption.name = "Caption"
-	caption.text = WAIT_CAPTION
+	caption.text = tr(WAIT_CAPTION)
 	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	caption.custom_minimum_size = Vector2(0.0, WAIT_SIZE.y)
 	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -6076,14 +6254,35 @@ func _latch_tray() -> void:
 ## a ray between the ones there are, so the fan fills in and never widens.
 ## `extension`, the owner's own word, can read as a longer beam, and neither way
 ## is longer.
+##
+## TRANSLATORS: The name of one of the two ways a levelled gene can grow, as the
+## title of its card (20 px type on a card 200 px wide) and inside sentences such
+## as "tap again to choose sweep · for good". The beam gene: `fill` = each level
+## adds one more ray between the ones there are, so the fan fills in and never
+## widens; `sweep` = the three rays swing from side to side, faster each level.
+## One lowercase word, about 12 characters at most.
+## ROOM: 180 px at 20 px
 const PATH_TITLES := {&"extend": "fill", &"sweep": "sweep"}
 ## What each way is good and bad at: one clause each, no numbers, in the gene
 ## lines' voice.
+##
+## TRANSLATORS: Two short lines on a card, in 14 px type, centred: the first what
+## that way is good at, the second what it is bad at. **At most 185 px each** --
+## the card is 200 px wide and nothing wraps -- and the longest English line is
+## 172 px (about 25 characters). The `entry` line gives the way. "Rays" are the
+## beams of light the gene fires.
+## ROOM: 185 px at 14 px
 const PATH_LINES := {
 	&"extend": ["every ray lit, all the time", "small things slip between"],
 	&"sweep": ["no gaps between rays", "shows where things were"],
 }
 ## What a way does as it grows, after its name on the explanation line.
+##
+## TRANSLATORS: One line in 15 px type after the way's name and a middle dot,
+## saying what that way does as the gene levels up. Same limit as the gene lines
+## elsewhere: no longer than the English (288 px, 41 characters). The `entry`
+## line gives the way.
+## ROOM: 470 px at 15 px
 const PATH_SAYS := {
 	&"extend": "a new ray every level, filling the fan",
 	&"sweep": "your three rays swing, faster every level",
@@ -6091,17 +6290,38 @@ const PATH_SAYS := {
 ## **What a way costs is read off the prices, never written down.** X and Y are
 ## balance numbers the owner judges by playing (beam-levels.md §5); if they
 ## ever move so far that the two ways trade places, the words trade with them.
+##
+## TRANSLATORS: The last line on a way's card, in 14 px type: what keeping that
+## way costs the cell in energy, compared with the other way. "To keep" means to
+## carry the gene as it grows. **At most 185 px**: the card is 200 px wide and
+## nothing wraps. This one: it costs more.
+## ROOM: 185 px at 14 px
 const COST_MORE := "costs more to keep"
+## TRANSLATORS: As above: it costs less.
+## ROOM: 185 px at 14 px
 const COST_LESS := "costs less to keep"
+## TRANSLATORS: As above: the two ways cost the same.
+## ROOM: 185 px at 14 px
 const COST_SAME := "costs the same to keep"
 ## The hint while the cards are up: what the banked levels do until a way is
 ## taken -- and at the fork itself, why a choice changes nothing yet -- and, a
 ## way hovered or armed, what it costs beside the other.
+##
+## TRANSLATORS: The hint under the figure while the two cards are up, in 14 px
+## type. A gene reached its fork (where it can grow one of two ways) but the
+## choice was not made yet, so the levels so far count as one level until the
+## player chooses. %d is that level: keep %d.
 const HINT_WORKS_AS := "works as level %d until you choose"
+## TRANSLATORS: The same hint at the fork itself: whichever way is chosen, it
+## only starts at the next level.
 const HINT_BOTH_NEXT := "both ways start at the next level"
-const HINT_COSTS := "%s than %s"
 ## The verbs: arming is harmless, and taking is for good.
+##
+## TRANSLATORS: The line of instructions under the figure while the two cards
+## are up and none is chosen: a "way" is one of the two cards.
 const ACT_PICK_WAY := "tap a way to choose it"
+## TRANSLATORS: A card is chosen; a second tap takes it, and the choice cannot be
+## undone. %s is the way's name (see the cards' titles). Keep %s.
 const ACT_CHOOSE_WAY := "tap again to choose %s · for good"
 
 ## **Owner's call 3** (§8.9), answered on 2026-09-29 with the recommended
@@ -6574,7 +6794,7 @@ func _way_path(way: int) -> StringName:
 ## A way's name, from [constant PATH_TITLES]; a path this build has no word for
 ## is read by its own name rather than by nothing.
 func _path_title(path: StringName) -> String:
-	return String(PATH_TITLES.get(path, String(path)))
+	return tr(PATH_TITLES[path]) if PATH_TITLES.has(path) else String(path)
 
 
 ## **The way the lines below describe**: the one the mouse is over, then the one
@@ -6770,21 +6990,53 @@ func _fork_hint() -> String:
 		return ""
 	var way := _way_reading()
 	if way >= 0 and grown.paths.size() == 2:
-		return HINT_COSTS % [_cost_words(way), _path_title(_way_path(1 - way))]
+		return _cost_beside(way)
 	if grown.level() > grown.fork_level:
-		return HINT_WORKS_AS % grown.fork_level
-	return HINT_BOTH_NEXT
+		return tr(HINT_WORKS_AS) % grown.fork_level
+	return tr(HINT_BOTH_NEXT)
 
 
 ## What way [param way] costs beside the other, at the level the cards draw --
-## out of the gene's own prices.
-func _cost_words(way: int) -> String:
+## out of the gene's own prices -- as 1 for dearer, -1 for cheaper and 0 for the
+## same.
+func _cost_order(way: int) -> int:
 	var at := _way_level()
 	var mine := CellBody.levelled_upkeep(_fork_gene, at, _way_path(way))
 	var theirs := CellBody.levelled_upkeep(_fork_gene, at, _way_path(1 - way))
 	if is_equal_approx(mine, theirs):
-		return COST_SAME
-	return COST_MORE if mine > theirs else COST_LESS
+		return 0
+	return 1 if mine > theirs else -1
+
+
+## What way [param way] costs beside the other, as the card says it.
+func _cost_words(way: int) -> String:
+	match _cost_order(way):
+		0:
+			return tr(COST_SAME)
+		1:
+			return tr(COST_MORE)
+	return tr(COST_LESS)
+
+
+## **The same comparison as a whole sentence**, for the hint, with the other way
+## named in it: three sentences and not a phrase and a "than", because the
+## comparative is built differently in other languages.
+func _cost_beside(way: int) -> String:
+	var other := _path_title(_way_path(1 - way))
+	match _cost_order(way):
+		0:
+			# TRANSLATORS: The hint under the figure while the two cards are up and a
+			# way is hovered or chosen, in 14 px type: what that way costs the cell
+			# in energy, compared with the other way. %s is the other way's name (see
+			# the cards' titles): keep %s. This one: they cost the same.
+			return tr("costs the same to keep as %s") % other
+		1:
+			# TRANSLATORS: As above: this way costs more than the other. %s is the
+			# other way's name.
+			return tr("costs more to keep than %s") % other
+	# TRANSLATORS: As above: this way costs less than the other. %s is the other
+	# way's name.
+	return tr("costs less to keep than %s") % other
 
 
 ## **One card**: the slab, opaque; the organ and the beam this way gives,
@@ -6809,13 +7061,14 @@ func _draw_way(card: Control, way: int) -> void:
 	_draw_way_beam(card, way, tone, ink)
 	var font := card.get_theme_default_font()
 	if font != null:
-		var lines: Array = PATH_LINES.get(path, ["", ""])
 		_draw_centred(card, font, _path_title(path), WAY_TITLE_BASE,
 			WAY_TITLE_SIZE, Color(tone, WAY_TITLE_ALPHA * ink))
-		_draw_centred(card, font, String(lines[0]), WAY_PRO_BASE, WAY_LINE_SIZE,
-			Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
-		_draw_centred(card, font, String(lines[1]), WAY_CON_BASE, WAY_LINE_SIZE,
-			Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+		# A path this build has no lines for draws none, as it always did.
+		var has_lines := PATH_LINES.has(path)
+		_draw_centred(card, font, tr(PATH_LINES[path][0]) if has_lines else "",
+			WAY_PRO_BASE, WAY_LINE_SIZE, Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+		_draw_centred(card, font, tr(PATH_LINES[path][1]) if has_lines else "",
+			WAY_CON_BASE, WAY_LINE_SIZE, Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
 		_draw_centred(card, font, _cost_words(way), WAY_COST_BASE,
 			WAY_LINE_SIZE, Color(PALE, WAY_COST_ALPHA * ink))
 	if card.has_focus():
@@ -7462,7 +7715,14 @@ const CHOOSE_SAYS_H := 58.0
 ## cannot say **whether this daughter got it**, and that is the register the
 ## rung shape is already drawing -- said out loud for the same reason the pause
 ## screen says the odds out loud.
+##
+## TRANSLATORS: One word at the start of the hint line under the two daughters'
+## strands of DNA, in 14 px type: whether this daughter's body wears the gene
+## (shows it as an organ) or only carries it in her DNA, to pass on. The line
+## reads like "worn · level 7 · one copy · a daughter may not wear it". This one:
+## the gene is worn. About 12 characters at most.
 const CHOOSE_WORN := "worn"
+## TRANSLATORS: As above: the gene is carried but not worn.
 const CHOOSE_CARRIED := "carried"
 
 ## Which locus is lit, as `[side, slot]`, and which one the mouse is over.
@@ -7702,8 +7962,8 @@ func _choose_say() -> void:
 		_choose_name.text = ""
 		# A locus with nothing in it still has a direction to explain, which is
 		# what the dart under it is for.
-		_choose_line.text = "" if slot < 0 else EXPLAIN_EMPTY
-		_choose_hint.text = "" if slot < 0 else HINT_EMPTY
+		_choose_line.text = "" if slot < 0 else tr(EXPLAIN_EMPTY)
+		_choose_hint.text = "" if slot < 0 else tr(HINT_EMPTY)
 		return
 	_choose_name.text = String(gene)
 	_choose_name.add_theme_color_override("font_color",
@@ -7713,8 +7973,8 @@ func _choose_say() -> void:
 	# path yet.
 	var says := _explains(gene)
 	_choose_line.text = "" if says.is_empty() else "· " + says
-	var register := CHOOSE_WORN if _choose_worn else CHOOSE_CARRIED
-	var odds := HINT_CERTAIN if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
+	var register := tr(CHOOSE_WORN) if _choose_worn else tr(CHOOSE_CARRIED)
+	var odds := tr(HINT_CERTAIN) if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
 		else _odds(int(found[1]))
 	# **The level goes in the line, not on the strands** (§8.6): both daughters
 	# carry the same level for every gene they share, so a mark on both strands
@@ -7722,7 +7982,7 @@ func _choose_say() -> void:
 	# it`; the widest, 400 px, centres clear of both blocks.
 	var level := _choose_level(gene)
 	if level > 0:
-		_choose_hint.text = "%s · %s · %s" % [register, HINT_LEVEL % level, odds]
+		_choose_hint.text = "%s · %s · %s" % [register, tr(HINT_LEVEL) % level, odds]
 	else:
 		_choose_hint.text = "%s · %s" % [register, odds]
 
@@ -7796,8 +8056,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 			tint = Color(PALE, WORD_UNEXPRESSED)
 		node.draw_string(font,
 			Vector2(CHOOSE_WORD_X, mid + CHOOSE_WORD_LIFT),
-			String(WORDS.get(gene, String(gene))), HORIZONTAL_ALIGNMENT_LEFT,
-			-1.0, LABEL_SIZE, tint)
+			_word(gene), HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, tint)
 
 	# **The mutation, marked on both strands at every locus where the two DNAs
 	# disagree** (§6). Not because comparison is too much work -- `lifecycle.md`
@@ -7906,16 +8165,35 @@ func _on_choose_unhover(side: int, slot: int) -> void:
 
 ## The eight lines (UX §0.4), each a fact about another person no sense can
 ## carry.
+##
+## TRANSLATORS: All eight `LINE_` strings are one-line notices in 18 px type over
+## the water, a few seconds each, in a game shared with a friend. "Their" and
+## "they" are the friend; "water" is the game world (a pond) that one of the two
+## phones hosts. About 50 characters at most. This one: the player has just joined
+## the friend's world.
 const LINE_THEIRS := "you are in their water"
+## TRANSLATORS: The friend has just joined the player's own world.
 const LINE_YOURS := "they are in your water"
+## TRANSLATORS: The friend's cell died; it comes back (is reborn) near the player.
 const LINE_DIED := "they died · they come back near you"
+## TRANSLATORS: The player's cell ate the friend's cell; it comes back (is reborn)
+## near the player.
 const LINE_ATE := "you ate them · they come back near you"
+## TRANSLATORS: The friend's phone has stopped sending anything for a few
+## seconds (screen off, in a pocket, or a bad connection).
 const LINE_QUIET := "their phone went quiet"
+## TRANSLATORS: The friend's world has ended (they left it), and the player carries
+## on in their own world instead.
 const LINE_GONE := "their water is gone · this one is yours"
 ## The same moment when the host did not go but hung up on this game -- its gate
 ## or its referee (net-hardening.md B), `REFUSE_BROKEN` -- so a player who was
 ## cut is not told the host left.
+##
+## TRANSLATORS: As the line above, but the friend's phone ended the connection
+## because of a fault, rather than the friend leaving: the player carries on in
+## their own world.
 const LINE_CUT := "cut off from their water · this one is yours"
+## TRANSLATORS: The friend left the player's world.
 const LINE_LEFT := "they left"
 ## A born cell's layout, for the body a guest asks to arrive as from the black:
 ## genome.gd's own reset, written out because the body has not been reset yet.
@@ -8058,7 +8336,7 @@ func _on_pond_arrived(at: Vector2, heading: float, rim_center: Vector2,
 		_place_arrival(at, heading)
 		_motes.setup(_cell, _food.basin())
 		_update_simulating()
-		_pond_say("theirs", LINE_THEIRS, ONBOARD_DELAY)
+		_pond_say("theirs", tr(LINE_THEIRS), ONBOARD_DELAY)
 		return
 	if _swap_pending:
 		_swap_pending = false
@@ -8074,7 +8352,7 @@ func _on_pond_arrived(at: Vector2, heading: float, rim_center: Vector2,
 			_pond.mirror_ended()
 			return
 		_begin_water_beat(_swap_in.bind(at, heading), VisionLayer.FADE_SECONDS,
-			"theirs", LINE_THEIRS)
+			"theirs", tr(LINE_THEIRS))
 
 
 ## **The swap, at the beat's dark middle** (§1.6, UX §1): this water becomes a
@@ -8179,7 +8457,7 @@ func _leave_mirror() -> void:
 ## once. Pause is ordinary again, so the menu closes if it was open.
 func _take_over() -> void:
 	var was_in := _food.mirroring()
-	var gone_line := LINE_CUT if _pond.cut_off() else LINE_GONE
+	var gone_line := tr(LINE_CUT) if _pond.cut_off() else tr(LINE_GONE)
 	_pond.mirror_ended()
 	_swap_pending = false
 	if _held:
@@ -8333,7 +8611,7 @@ func _on_friend_entered() -> void:
 	_friend_dead = false
 	if not _friend_ever:
 		_friend_ever = true
-		_pond_say("yours", LINE_YOURS, SignalBus.DEATH_RETURN)
+		_pond_say("yours", tr(LINE_YOURS), SignalBus.DEATH_RETURN)
 
 
 ## Either seat: the other player's cell died, and how decides what is drawn
@@ -8346,7 +8624,7 @@ func _on_friend_died(cause: int, _by: int, at: Vector2, eaten_by_me: bool) -> vo
 	elif cause == FoodField.Cause.STARVED:
 		how = VisionLayer.Gone.STARVED
 	_vision.friend_gone(how, at)
-	_pond_say("dead", LINE_ATE if eaten_by_me else LINE_DIED)
+	_pond_say("dead", tr(LINE_ATE) if eaten_by_me else tr(LINE_DIED))
 
 
 ## Host: the guest is gone from this water.
@@ -8354,7 +8632,7 @@ func _on_friend_left() -> void:
 	_friend_dead = false
 	_friend_ever = false
 	_vision.friend_gone(VisionLayer.Gone.LEFT, Vector2.ZERO)
-	_pond_say("left", LINE_LEFT)
+	_pond_say("left", tr(LINE_LEFT))
 
 
 ## Either seat: the other player has a new body -- back from the black, or born.
@@ -8371,7 +8649,7 @@ func _step_quiet() -> void:
 		if not _quiet_said:
 			_quiet_said = true
 			# No timer: it goes when they are heard.
-			_pond_say("quiet", LINE_QUIET, 0.0, 0.0)
+			_pond_say("quiet", tr(LINE_QUIET), 0.0, 0.0)
 	else:
 		_quiet_said = false
 
