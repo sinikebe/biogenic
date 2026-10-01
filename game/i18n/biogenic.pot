@@ -864,8 +864,8 @@ msgstr ""
 #. when the bitten body faces the mouth, "from behind" when it turns away.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "swallows whole under {} × your size"
@@ -877,8 +877,8 @@ msgstr ""
 #. when the bitten body faces the mouth, "from behind" when it turns away.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "bites take {} head-on, {} from behind"
@@ -890,8 +890,8 @@ msgstr ""
 #. when the bitten body faces the mouth, "from behind" when it turns away.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 msgid "its biggest meal fills you"
 msgstr ""
@@ -902,8 +902,8 @@ msgstr ""
 #. when the bitten body faces the mouth, "from behind" when it turns away.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "its biggest meal is worth {} s"
@@ -914,8 +914,8 @@ msgstr ""
 #. seconds of the food tank, each second.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a half turn in {} s"
@@ -926,8 +926,8 @@ msgstr ""
 #. seconds of the food tank, each second.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "the turn builds over {} s"
@@ -938,8 +938,8 @@ msgstr ""
 #. seconds of the food tank, each second.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "turning burns {} s a second, {} s a half turn"
@@ -949,8 +949,8 @@ msgstr ""
 #. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "swims about {} µm a second"
@@ -960,8 +960,8 @@ msgstr ""
 #. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a beat every {}–{} s"
@@ -971,8 +971,8 @@ msgstr ""
 #. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "beating burns {} s a second, {} s a beat"
@@ -983,8 +983,8 @@ msgstr ""
 #. known to within that many degrees.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "feels bodies over {} × your size"
@@ -999,8 +999,8 @@ msgstr ""
 #. much of the pulse goes on past a body in its way.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "out to {} µm"
@@ -1011,8 +1011,8 @@ msgstr ""
 #. known to within that many degrees.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a bearing to within {}"
@@ -1023,8 +1023,8 @@ msgstr ""
 #. percentage.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "smells food out to {} µm"
@@ -1035,8 +1035,8 @@ msgstr ""
 #. percentage.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} as strong behind it"
@@ -1048,8 +1048,8 @@ msgstr ""
 #. much of the pulse goes on past a body in its way.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a ping every {} s"
@@ -1061,8 +1061,8 @@ msgstr ""
 #. much of the pulse goes on past a body in its way.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "the nearest {} answer"
@@ -1074,8 +1074,8 @@ msgstr ""
 #. much of the pulse goes on past a body in its way.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 msgid "stopped by any body"
 msgstr ""
@@ -1086,8 +1086,8 @@ msgstr ""
 #. much of the pulse goes on past a body in its way.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} passes a body"
@@ -1097,8 +1097,8 @@ msgstr ""
 #. on the water pushes the cell instead of only steering it.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "holding on adds up to {} µm a second"
@@ -1108,8 +1108,8 @@ msgstr ""
 #. on the water pushes the cell instead of only steering it.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "pushing burns {} s a second"
@@ -1119,8 +1119,8 @@ msgstr ""
 #. cell with no light at all.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "feels a body within {} µm of your skin"
@@ -1130,8 +1130,8 @@ msgstr ""
 #. burst. "Again after {} s" is the wait before the next one.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a burst of {} µm a second, about {} µm in all"
@@ -1144,8 +1144,8 @@ msgstr ""
 #. degrees, to each side of straight ahead that it covers.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "again after {} s"
@@ -1155,8 +1155,8 @@ msgstr ""
 #. burst. "Again after {} s" is the wait before the next one.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "each dash burns {} s"
@@ -1167,8 +1167,8 @@ msgstr ""
 #. degrees, to each side of straight ahead that it covers.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a dart at a hunter within {} µm, {} either side"
@@ -1179,8 +1179,8 @@ msgstr ""
 #. to swallow it, because of the skin.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "to a mouth you are {} × your size"
@@ -1191,8 +1191,8 @@ msgstr ""
 #. to swallow it, because of the skin.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "bites take {} less"
@@ -1204,8 +1204,8 @@ msgstr ""
 #. {} s").
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a biter takes back {} of its bite"
@@ -1217,8 +1217,8 @@ msgstr ""
 #. {} s").
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 msgid "a swallower dies, and you are spat out"
 msgstr ""
@@ -1229,8 +1229,8 @@ msgstr ""
 #. {} s").
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "being spat out burns {} s"
@@ -1240,8 +1240,8 @@ msgstr ""
 #. food of its own from light.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "makes {} s of food every second"
@@ -1252,8 +1252,8 @@ msgstr ""
 #. compares with the tank of a cell without it, in seconds of food.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a full tank holds {} s, not {}"
@@ -1263,8 +1263,8 @@ msgstr ""
 #. carries costs less energy to keep.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "everything burns {} less"
@@ -1279,8 +1279,8 @@ msgstr ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "reaches {} µm"
@@ -1295,8 +1295,8 @@ msgstr ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} ray"
@@ -1311,8 +1311,8 @@ msgstr ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} ray sweeping {}"
@@ -1329,8 +1329,8 @@ msgstr[1] ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "every bearing lit within {} s"
@@ -1345,8 +1345,8 @@ msgstr ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} ray across {}, one every {}"
@@ -1363,8 +1363,8 @@ msgstr[1] ""
 #. has covered every direction of the fan within that many seconds.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} ray across {}"
@@ -1377,8 +1377,8 @@ msgstr[1] ""
 #. used, in seconds of the food tank, each second.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 msgid "free to wear"
 msgstr ""
@@ -1388,8 +1388,8 @@ msgstr ""
 #. used, in seconds of the food tank, each second.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "wearing it burns {} s a second"
@@ -1401,8 +1401,8 @@ msgstr ""
 #. other number: give the forms your language needs.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "level {} after {} strike"
@@ -1413,7 +1413,10 @@ msgstr[1] ""
 #. The odds line (14 px type) when the numbers switch is on: the copies of the
 #. gene in words (see "one copy"), a middle dot, then whether a daughter cell
 #. wears the gene. %s is "one copy", "two copies" or "three copies", already
-#. translated: keep it first. About 50 characters at most.
+#. translated: keep it first. A level and a gauge may share the row, which is
+#. 560 px wide.
+#. Room: at most 430 px in 14 px type, measured with your widest copies phrase
+#. in place of the placeholders; the English takes 275 px.
 #: game/normal/gene_stats.gd
 #, c-format
 msgid "%s · a daughter always wears it"
@@ -1422,6 +1425,8 @@ msgstr ""
 #. The same line when the chance is not certain. The first %s is the copies in
 #. words, as above; the second is a percentage such as "55%", so the line
 #. reads "one copy · 55% of daughters wear it". Keep both %s in this order.
+#. Room: at most 430 px in 14 px type, measured with your widest copies phrase
+#. and 80% in place of the placeholders; the English takes 263 px.
 #: game/normal/gene_stats.gd
 #, c-format
 msgid "%s · %s of daughters wear it"
@@ -1433,8 +1438,8 @@ msgstr ""
 #. whole caption is a small line in 15 px type.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "{} µm across"
@@ -1446,8 +1451,8 @@ msgstr ""
 #. whole caption is a small line in 15 px type.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
 #. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of about 650 px; the longest English
-#. line takes 540 px.
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a full tank: {} s, {} s drifting"
@@ -1543,10 +1548,14 @@ msgstr ""
 msgid "a sense grew · hold e to place it"
 msgstr ""
 
-#. A small caption, in 15 px type, beside the row of genes that are waiting
-#. for a place on the body: genes the cell has just eaten and not yet placed.
-#. One lowercase word. Four chips fit on a row beside it; a wider word makes
-#. the fourth wrap onto the next row.
+#. A small caption, in 15 px type, at the start of the row of chips that wait
+#. for the player. Two kinds of chip wait there: genes the cell has just eaten
+#. and not yet placed on its body, and, after them, a gene's fork, which waits
+#. for the player to choose how that gene grows (today the beam's, between
+#. `fill` and `sweep`). **The same word captions both**, so it must say only
+#. that they wait: not "to place", which is wrong for a fork. One lowercase
+#. word. Four chips fit on a row beside it; a wider word makes the fourth wrap
+#. onto the next row.
 #. Room: at most 64 px in 15 px type; the English takes 54 px.
 #: game/normal/normal_mode.gd
 msgid "waiting"
@@ -1555,8 +1564,9 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
-#. and shares it with a level and a gauge.
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 256 px.
 #: game/normal/normal_mode.gd
 msgid "one copy · a daughter may not wear it"
 msgstr ""
@@ -1564,8 +1574,9 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
-#. and shares it with a level and a gauge.
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 279 px.
 #: game/normal/normal_mode.gd
 msgid "two copies · a daughter probably wears it"
 msgstr ""
@@ -1573,20 +1584,23 @@ msgstr ""
 #. The hint under the figure, in 14 px type, about the gene being read: how
 #. many copies of it the cell's DNA holds (one to three) and so how likely a
 #. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. At most about 50 characters: the row is 560 px wide
-#. and shares it with a level and a gauge.
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 275 px.
 #: game/normal/normal_mode.gd
 msgid "three copies · a daughter always wears it"
 msgstr ""
 
 #. The hint (see the copies line above) for the mouth gene, which every
-#. daughter always wears. At most about 50 characters.
+#. daughter always wears. The row may be shared with a level and a gauge.
+#. Room: at most 430 px in 14 px type; the English takes 263 px.
 #: game/normal/normal_mode.gd
 msgid "the mouth · a daughter always wears it"
 msgstr ""
 
 #. The hint under an empty place on the body: nothing is there, so nothing can
-#. be passed on to a daughter from it. At most about 50 characters.
+#. be passed on to a daughter from it.
+#. Room: at most 560 px in 14 px type; the English takes 301 px.
 #: game/normal/normal_mode.gd
 msgid "an empty slot · nothing to pass on from here"
 msgstr ""
@@ -1595,8 +1609,9 @@ msgstr ""
 #. already in the DNA. %s is the short word of the gene that would be lost
 #. (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
 #. this cell keeps the organ for the rest of its life, though its daughters
-#. will not inherit it. At most about 55 characters with a word in place of
-#. %s.
+#. will not inherit it. The row is 560 px wide, with a word in place of %s.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 293 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna · your body keeps it"
@@ -1604,6 +1619,8 @@ msgstr ""
 
 #. The same hint for a gene the DNA carries but the body does not wear, so
 #. there is no second half. %s is the gene's short word.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 157 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna"
@@ -1611,7 +1628,9 @@ msgstr ""
 
 #. As the hint above, for a gene that has a level (it grows with use). The
 #. first %s is the gene's short word, the %d the level. Keep both, in this
-#. order. 355 px at most, in 14 px type: about 55 characters.
+#. order.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. 99 in place of the placeholders; the English takes 355 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna · level %d ends with this body"
@@ -1619,13 +1638,18 @@ msgstr ""
 
 #. Same, for a levelled gene the body does not wear. %s is the gene's short
 #. word, %d the level.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. 99 in place of the placeholders; the English takes 282 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna · its level %d is lost"
 msgstr ""
 
 #. A gene's level, a whole number that grows with use: "level 7". Keep %d.
-#. Shown in 14 px type at the start of the hint row.
+#. Shown in 14 px type at the start of the hint row, before a gauge and the
+#. hint itself, which share the row's 560 px with it.
+#. Room: at most 70 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 52 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "level %d"
@@ -1635,14 +1659,15 @@ msgstr ""
 #. under the figure, telling the player what the next tap or release will do.
 #. A "slot" is one of seven places round the cell's body where a gene sits;
 #. "place" a gene means put it in a slot; "your daughters may wear it" means
-#. the cells this one divides into may show the gene as an organ. About 50
-#. characters at most (the row is 560 px wide). This one: a gene is waiting,
-#. none is chosen.
+#. the cells this one divides into may show the gene as an organ. The row is
+#. 560 px wide. This one: a gene is waiting, none is chosen.
+#. Room: at most 560 px in 14 px type; the English takes 261 px.
 #: game/normal/normal_mode.gd
 msgid "tap a slot · your daughters may wear it"
 msgstr ""
 
 #. A slot is chosen for the waiting gene; a second tap confirms.
+#. Room: at most 560 px in 14 px type; the English takes 120 px.
 #: game/normal/normal_mode.gd
 msgid "tap again to place"
 msgstr ""
@@ -1650,6 +1675,8 @@ msgstr ""
 #. The two %s are the short words of two genes, such as `eat` and `ping`: the
 #. first is the waiting gene, the second the gene it would replace in the DNA.
 #. Keep both %s, in this order.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 249 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to write %s over %s"
@@ -1657,6 +1684,8 @@ msgstr ""
 
 #. While the player drags a waiting gene over an empty slot; letting go places
 #. it there. %s is the gene's short word, such as `eat`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 180 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to place %s here"
@@ -1665,24 +1694,31 @@ msgstr ""
 #. While dragging a waiting gene over a slot that already holds a gene:
 #. letting go only selects it, and a second tap writes over it. The two %s are
 #. short gene words: the one being dragged, then the one it would replace.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 330 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go, then tap again to place %s over %s"
 msgstr ""
 
 #. Under a gene that is already in a slot: it can be dragged to another slot.
+#. Room: at most 560 px in 14 px type; the English takes 148 px.
 #: game/normal/normal_mode.gd
 msgid "drag it to another slot"
 msgstr ""
 
 #. While dragging a gene that is not over any slot. %s is its short word, such
 #. as `eat`; "put it there" means into a slot.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 267 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s · let go over a slot to put it there"
 msgstr ""
 
 #. While dragging a gene over an empty slot of the body. %s is its short word.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 181 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to move %s here"
@@ -1690,6 +1726,8 @@ msgstr ""
 
 #. While dragging a gene over a slot that holds another: letting go swaps
 #. them. The two %s are the two genes' short words.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 220 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to swap %s and %s"
@@ -1697,6 +1735,8 @@ msgstr ""
 
 #. While dragging a gene back over the slot it came from: letting go cancels
 #. the move. %s is the gene's short word.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 218 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to leave %s where it is"
@@ -1704,6 +1744,8 @@ msgstr ""
 
 #. For a gene that can grow in two different ways (the player picks one, for
 #. good). %s is the gene's short word, such as `beam`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 259 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to choose how %s grows"
@@ -2322,7 +2364,9 @@ msgstr ""
 #. The hint under the figure while the two cards are up, in 14 px type. A gene
 #. reached its fork (where it can grow one of two ways) but the choice was not
 #. made yet, so the levels so far count as one level until the player chooses.
-#. %d is that level: keep %d.
+#. %d is that level: keep %d. A level and a gauge share the row.
+#. Room: at most 430 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 229 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "works as level %d until you choose"
@@ -2330,18 +2374,22 @@ msgstr ""
 
 #. The same hint at the fork itself: whichever way is chosen, it only starts
 #. at the next level.
+#. Room: at most 430 px in 14 px type; the English takes 218 px.
 #: game/normal/normal_mode.gd
 msgid "both ways start at the next level"
 msgstr ""
 
 #. The line of instructions under the figure while the two cards are up and
 #. none is chosen: a "way" is one of the two cards.
+#. Room: at most 560 px in 14 px type; the English takes 148 px.
 #: game/normal/normal_mode.gd
 msgid "tap a way to choose it"
 msgstr ""
 
 #. A card is chosen; a second tap takes it, and the choice cannot be undone.
 #. %s is the way's name (see the cards' titles). Keep %s.
+#. Room: at most 560 px in 14 px type, measured with your widest way name in
+#. place of the placeholders; the English takes 247 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to choose %s · for good"
@@ -2350,19 +2398,25 @@ msgstr ""
 #. The hint under the figure while the two cards are up and a way is hovered
 #. or chosen, in 14 px type: what that way costs the cell in energy, compared
 #. with the other way. %s is the other way's name (see the cards' titles):
-#. keep %s. This one: they cost the same.
+#. keep %s. This one: they cost the same. A level and a gauge share the row.
+#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. place of the placeholders; the English takes 221 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "costs the same to keep as %s"
 msgstr ""
 
 #. As above: this way costs more than the other. %s is the other way's name.
+#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. place of the placeholders; the English takes 211 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "costs more to keep than %s"
 msgstr ""
 
 #. As above: this way costs less than the other. %s is the other way's name.
+#. Room: at most 430 px in 14 px type, measured with your widest way name in
+#. place of the placeholders; the English takes 200 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "costs less to keep than %s"
@@ -2555,7 +2609,29 @@ msgstr ""
 #. The replay's first button: "pause" while the replay plays, "play" while it
 #. is paused. The word is what pressing the button does. The button is fixed,
 #. so a long word runs into the speed button beside it.
+#. A button on the launcher's first screen, the first of the menu in the
+#. middle of it, in 20 px type: it starts the game. One lowercase word, an
+#. imperative. The same word is the replay's play button. (The launcher is the
+#. app's main menu, the screen before the game.)
+#. Setting "play_text" in launcher_config.tres
 #. Room: at most 80 px in 17 px type; the English takes 35 px.
-#: game/replay/replay.gd
+#: game/replay/replay.gd launcher_config.tres
 msgid "play"
+msgstr ""
+
+#. A small line under the game's title on the launcher's first screen, in 17
+#. px type. {build} is the number of the game's latest content update, put in
+#. by the app: keep {build} exactly as it is, once. "Updates itself" means the
+#. app downloads and installs its updates by itself.
+#. Setting "tagline" in launcher_config.tres
+#: launcher_config.tres
+#, python-brace-format
+msgid "build {build} · updates itself"
+msgstr ""
+
+#. A button on the launcher's first screen, under "play", in 20 px type: it
+#. closes the app. One lowercase word, an imperative.
+#. Setting "quit_text" in launcher_config.tres
+#: launcher_config.tres
+msgid "quit"
 msgstr ""

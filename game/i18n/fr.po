@@ -2,7 +2,7 @@
 #
 # Translated by hand from biogenic.pot, the template tools/i18n_pot.gd writes.
 # When the template changes, carry its new and changed messages over here and
-# run --lint-po; game/i18n/README.md says how.
+# run --lint-all; game/i18n/README.md says how.
 #
 msgid ""
 msgstr ""
@@ -1053,7 +1053,7 @@ msgstr "{} de l'intensité à l'arrière"
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "a ping every {} s"
-msgstr "un ping toutes les {} s"
+msgstr "ping toutes les {} s"
 
 #. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
 #. every body it meets. "The nearest {} answer" means the {} closest bodies
