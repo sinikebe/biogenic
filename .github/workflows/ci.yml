@@ -376,6 +376,42 @@ jobs:
             exit 1
           fi
 
+      - name: Check the translation catalogs
+        # A language is a .po file: game/i18n/<locale>.po for the game and
+        # game/i18n/launcher/<locale>.po for the launcher's own screens
+        # (game/i18n/README.md). A catalog that is merely incomplete is fine,
+        # but one that is BROKEN is a crash or a wrong sentence on a phone: a
+        # placeholder lost, which the game's % turns into a script error; a
+        # plural message with the wrong number of forms, which makes the engine
+        # drop the whole language without a word; a control character where a
+        # dash was meant; text wider than the room it has -- a message with a
+        # placeholder measured with the widest word that can stand in it, and a
+        # gene's numbers line or the pause caption built in that language by the
+        # game's own code. This fails on those. It only REPORTS what is
+        # untranslated or stale, because the template moves ahead of every
+        # catalog whenever a sentence is reworded or the launcher is synced, the
+        # game then shows that sentence in English, which works, and failing
+        # here would hold up the launcher-sync pull request, which nobody is
+        # there to fix. It passes while there is no catalog at all. Grepped, not
+        # trusted to the exit code, for the reason the Back probe gives, and the
+        # same guard against a script error that skipped a check.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --lint-all 2>&1) || true
+          grep -E "^\[i18n\]" <<< "$out" || true
+          if ! grep -q "^\[i18n\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a translation catalog is broken -- run res://tools/i18n_pot.tscn -- --lint-all and fix its PROBLEM lines (game/i18n/README.md)"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the catalog lint hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the LAN session
         # Two sessions in ONE headless process, talking ENet over loopback: a
         # guest through a SceneMultiplayer bound to its own subtree with

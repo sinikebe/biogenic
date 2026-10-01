@@ -4029,10 +4029,13 @@ const WAIT_AIR := 3.0
 const WAIT_DIM := 0.55
 ## The tray's caption, in the voice of every other caption on this column.
 ##
-## TRANSLATORS: A small caption, in 15 px type, beside the row of genes that are
-## waiting for a place on the body: genes the cell has just eaten and not yet
-## placed. One lowercase word. Four chips fit on a row beside it; a wider word makes
-## the fourth wrap onto the next row.
+## TRANSLATORS: A small caption, in 15 px type, at the start of the row of chips
+## that wait for the player. Two kinds of chip wait there: genes the cell has just
+## eaten and not yet placed on its body, and, after them, a gene's fork, which waits
+## for the player to choose how that gene grows (today the beam's, between `fill`
+## and `sweep`). **The same word captions both**, so it must say only that they
+## wait: not "to place", which is wrong for a fork. One lowercase word. Four chips
+## fit on a row beside it; a wider word makes the fourth wrap onto the next row.
 ## ROOM: 64 px at 15 px
 const WAIT_CAPTION := "waiting"
 const CAPTION_TINT := Color(0.855, 0.953, 0.933, 0.45)
@@ -4074,8 +4077,9 @@ const ARM_TIMEOUT_MS := 4000
 ## TRANSLATORS: The hint under the figure, in 14 px type, about the gene being
 ## read: how many copies of it the cell's DNA holds (one to three) and so how
 ## likely a daughter cell is to wear it (to show it as an organ). The copies are
-## words, not digits, on purpose. At most about 50 characters: the row is 560 px
-## wide and shares it with a level and a gauge.
+## words, not digits, on purpose. The row is 560 px wide and a level and a gauge
+## share it, which leaves the text 430 px.
+## ROOM: 430 px at 14 px
 const HINT_CHANCE: Array[String] = [
 	"",
 	"one copy · a daughter may not wear it",
@@ -4086,12 +4090,14 @@ const HINT_CHANCE: Array[String] = [
 ## ALWAYS_EXPRESSED), so it says so instead of quoting odds it does not obey.
 ##
 ## TRANSLATORS: The hint (see the copies line above) for the mouth gene, which
-## every daughter always wears. At most about 50 characters.
+## every daughter always wears. The row may be shared with a level and a gauge.
+## ROOM: 430 px at 14 px
 const HINT_CERTAIN := "the mouth · a daughter always wears it"
 ## The choosing screen reads this one as well, under an empty locus of its own.
 ##
 ## TRANSLATORS: The hint under an empty place on the body: nothing is there, so
-## nothing can be passed on to a daughter from it. At most about 50 characters.
+## nothing can be passed on to a daughter from it.
+## ROOM: 560 px at 14 px
 const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## **Armed over a gene, the hint says what the next tap costs** instead of what
 ## the gene is worth. Reading *a daughter always wears it* about the gene the
@@ -4104,21 +4110,25 @@ const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## one that is already in the DNA. %s is the short word of the gene that would be
 ## lost (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
 ## this cell keeps the organ for the rest of its life, though its daughters will
-## not inherit it. At most about 55 characters with a word in place of %s.
+## not inherit it. The row is 560 px wide, with a word in place of %s.
+## ROOM: 560 px at 14 px with word
 const HINT_LOSES := "%s leaves your dna · your body keeps it"
 ## TRANSLATORS: The same hint for a gene the DNA carries but the body does not
 ## wear, so there is no second half. %s is the gene's short word.
+## ROOM: 560 px at 14 px with word
 const HINT_LOSES_CARRIED := "%s leaves your dna"
 ## **And over a gene that levels, the warning names the level** (beam-levels.md
 ## §8.2). The body keeps a gene it wears, level and all, for this life; its
-## daughters never get it. At most 355 px.
+## daughters never get it. The English takes 355 px of the row's 560.
 ##
 ## TRANSLATORS: As the hint above, for a gene that has a level (it grows with
 ## use). The first %s is the gene's short word, the %d the level. Keep both,
-## in this order. 355 px at most, in 14 px type: about 55 characters.
+## in this order.
+## ROOM: 560 px at 14 px with word, 99
 const HINT_LOSES_LEVEL := "%s leaves your dna · level %d ends with this body"
 ## TRANSLATORS: Same, for a levelled gene the body does not wear. %s is the
 ## gene's short word, %d the level.
+## ROOM: 560 px at 14 px with word, 99
 const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
 
 ## **The level, in front of the odds** (§8.2): `level 7 ▰▰▱ · two copies · a
@@ -4127,7 +4137,9 @@ const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
 ## line. The banked level, never the one held at the fork.
 ##
 ## TRANSLATORS: A gene's level, a whole number that grows with use: "level 7".
-## Keep %d. Shown in 14 px type at the start of the hint row.
+## Keep %d. Shown in 14 px type at the start of the hint row, before a gauge and
+## the hint itself, which share the row's 560 px with it.
+## ROOM: 70 px at 14 px with 99
 const HINT_LEVEL := "level %d"
 ## **A gauge and not a number**, because experience means nothing to a player
 ## and `progress()` is already a fraction: a 36 x 4 bar at y 9 in its own
@@ -4180,10 +4192,12 @@ const HINT_ROW_HEIGHT := 20.0
 ## centred under the figure, telling the player what the next tap or release will
 ## do. A "slot" is one of seven places round the cell's body where a gene sits;
 ## "place" a gene means put it in a slot; "your daughters may wear it" means the
-## cells this one divides into may show the gene as an organ. About 50 characters
-## at most (the row is 560 px wide). This one: a gene is waiting, none is chosen.
+## cells this one divides into may show the gene as an organ. The row is 560 px
+## wide. This one: a gene is waiting, none is chosen.
+## ROOM: 560 px at 14 px
 const ACT_ARM := "tap a slot · your daughters may wear it"
 ## TRANSLATORS: A slot is chosen for the waiting gene; a second tap confirms.
+## ROOM: 560 px at 14 px
 const ACT_COMMIT := "tap again to place"
 ## Armed over a gene, the verb names both genes: what the tap writes and what it
 ## writes over. `tap again to place` alone read as harmless over `eat`.
@@ -4191,6 +4205,7 @@ const ACT_COMMIT := "tap again to place"
 ## TRANSLATORS: The two %s are the short words of two genes, such as `eat` and
 ## `ping`: the first is the waiting gene, the second the gene it would replace in
 ## the DNA. Keep both %s, in this order.
+## ROOM: 560 px at 14 px with word, word
 const ACT_COMMIT_OVER := "tap again to write %s over %s"
 ## **A waiting gene carried out of the tray** lands on an empty slot when it is
 ## let go -- nothing is evicted and a move can still take it anywhere, so one
@@ -4199,22 +4214,28 @@ const ACT_COMMIT_OVER := "tap again to write %s over %s"
 ##
 ## TRANSLATORS: While the player drags a waiting gene over an empty slot; letting
 ## go places it there. %s is the gene's short word, such as `eat`.
+## ROOM: 560 px at 14 px with word
 const ACT_DROP := "let go to place %s here"
 ## TRANSLATORS: While dragging a waiting gene over a slot that already holds a
 ## gene: letting go only selects it, and a second tap writes over it. The two %s
 ## are short gene words: the one being dragged, then the one it would replace.
+## ROOM: 560 px at 14 px with word, word
 const ACT_DROP_OVER := "let go, then tap again to place %s over %s"
 ## TRANSLATORS: Under a gene that is already in a slot: it can be dragged to
 ## another slot.
+## ROOM: 560 px at 14 px
 const ACT_MOVE := "drag it to another slot"
 ## TRANSLATORS: While dragging a gene that is not over any slot. %s is its short
 ## word, such as `eat`; "put it there" means into a slot.
+## ROOM: 560 px at 14 px with word
 const ACT_CARRY := "%s · let go over a slot to put it there"
 ## TRANSLATORS: While dragging a gene over an empty slot of the body. %s is its
 ## short word.
+## ROOM: 560 px at 14 px with word
 const ACT_LAND := "let go to move %s here"
 ## TRANSLATORS: While dragging a gene over a slot that holds another: letting go
 ## swaps them. The two %s are the two genes' short words.
+## ROOM: 560 px at 14 px with word, word
 const ACT_SWAP := "let go to swap %s and %s"
 ## **Letting go where you picked up is a real answer, not a missed drop.** It
 ## is the first thing a nervous player tries -- lift a gene, think better of
@@ -4227,6 +4248,7 @@ const ACT_SWAP := "let go to swap %s and %s"
 ##
 ## TRANSLATORS: While dragging a gene back over the slot it came from: letting go
 ## cancels the move. %s is the gene's short word.
+## ROOM: 560 px at 14 px with word
 const ACT_KEEP := "let go to leave %s where it is"
 ## **A slot whose fork is open, selected with nothing in hand**: its second tap
 ## brings up the two ways (beam-levels.md §8.3), and this is the one line that
@@ -4234,6 +4256,7 @@ const ACT_KEEP := "let go to leave %s where it is"
 ##
 ## TRANSLATORS: For a gene that can grow in two different ways (the player picks
 ## one, for good). %s is the gene's short word, such as `beam`.
+## ROOM: 560 px at 14 px with word
 const ACT_FORK := "tap again to choose how %s grows"
 
 ## How deep the lineage is: the only readout of how far into the run the player
@@ -6376,18 +6399,22 @@ const COST_SAME := "costs the same to keep"
 ## TRANSLATORS: The hint under the figure while the two cards are up, in 14 px
 ## type. A gene reached its fork (where it can grow one of two ways) but the
 ## choice was not made yet, so the levels so far count as one level until the
-## player chooses. %d is that level: keep %d.
+## player chooses. %d is that level: keep %d. A level and a gauge share the row.
+## ROOM: 430 px at 14 px with 99
 const HINT_WORKS_AS := "works as level %d until you choose"
 ## TRANSLATORS: The same hint at the fork itself: whichever way is chosen, it
 ## only starts at the next level.
+## ROOM: 430 px at 14 px
 const HINT_BOTH_NEXT := "both ways start at the next level"
 ## The verbs: arming is harmless, and taking is for good.
 ##
 ## TRANSLATORS: The line of instructions under the figure while the two cards
 ## are up and none is chosen: a "way" is one of the two cards.
+## ROOM: 560 px at 14 px
 const ACT_PICK_WAY := "tap a way to choose it"
 ## TRANSLATORS: A card is chosen; a second tap takes it, and the choice cannot be
 ## undone. %s is the way's name (see the cards' titles). Keep %s.
+## ROOM: 560 px at 14 px with way
 const ACT_CHOOSE_WAY := "tap again to choose %s · for good"
 
 ## **Owner's call 3** (§8.9), answered on 2026-09-29 with the recommended
@@ -7094,14 +7121,18 @@ func _cost_beside(way: int) -> String:
 			# TRANSLATORS: The hint under the figure while the two cards are up and a
 			# way is hovered or chosen, in 14 px type: what that way costs the cell
 			# in energy, compared with the other way. %s is the other way's name (see
-			# the cards' titles): keep %s. This one: they cost the same.
+			# the cards' titles): keep %s. This one: they cost the same. A level and a
+			# gauge share the row.
+			# ROOM: 430 px at 14 px with way
 			return tr("costs the same to keep as %s") % other
 		1:
 			# TRANSLATORS: As above: this way costs more than the other. %s is the
 			# other way's name.
+			# ROOM: 430 px at 14 px with way
 			return tr("costs more to keep than %s") % other
 	# TRANSLATORS: As above: this way costs less than the other. %s is the other
 	# way's name.
+	# ROOM: 430 px at 14 px with way
 	return tr("costs less to keep than %s") % other
 
 
