@@ -5266,13 +5266,13 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 		return out
 
 	func place_sister(at: Vector2, heading: float, body_radius: float,
-			tiers: Dictionary) -> int:
+			tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> int:
 		var before := PackedInt64Array()
 		var seeded := PackedByteArray()
 		for b in _cells:
 			before.append(b.serial)
 			seeded.append(1 if b.seeded else 0)
-		var slot := super.place_sister(at, heading, body_radius, tiers)
+		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother)
 		var changed: Array[int] = []
 		for i in mini(_cells.size(), before.size()):
 			if _cells[i].serial != before[i]:

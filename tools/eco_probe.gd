@@ -19,9 +19,12 @@ extends SceneTree
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
 ##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-venom=`.
 ##
-## Prints `[census]` lines, `[eco] cost p50 .. p90 ..` for each window, and the
-## drop's counters at the end. The census samples dread from a stream of its own,
-## so asking never moves the drop, and a seed prints the same lines every time.
+## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
+## hunters' generations, families and what they have become
+## (docs/design/lineage.md §4, §6.1) -- `[eco] cost p50 .. p90 ..` for each
+## window, and the drop's counters at the end. The census samples dread from a
+## stream of its own, so asking never moves the drop, and a seed prints the same
+## lines every time.
 ## Excluded from export (`tools/*` on every preset), so none of it ships.
 
 const CellBody := preload("res://game/normal/cell.gd")
@@ -98,6 +101,7 @@ func _initialize() -> void:
 	print("[eco] seed %d  sensed %.2f  %s  switches %s" % [seed_value, sensed,
 		"an empty room" if empty else "a ghost player, anchored", sets])
 	print(food.census_line())
+	print(food.lineage_line())
 
 
 func _process(_delta: float) -> bool:
@@ -110,6 +114,7 @@ func _process(_delta: float) -> bool:
 	if clock >= every - 1e-6:
 		clock = 0.0
 		print(food.census_line())
+		print(food.lineage_line())
 		var sorted := costs.duplicate()
 		sorted.sort()
 		print("[eco] cost p50 %d us  p90 %d us  over %d frames  stepped %d a frame"

@@ -177,6 +177,31 @@ const EXTRA := {
 ## A run's clocks, a body's worth: food.gd's RUN_CLOCKS.
 const RUN_CLOCKS := 10
 
+## **What `drop.bodies` may also hold** (pack 2, docs/design/lineage.md §4):
+## every body's lineage, a column a field like the rest -- its generation, the
+## founder its line began with, its newborn grace, and its DNA, a genome by gene
+## name or empty where the DNA is the body. **And what `cell` may hold**: the
+## cell's own record, its id, its mother's and its line's. A file without them
+## loads as one written before pack 2 -- every body a founder, generation 1, its
+## own line, its DNA its body and no grace -- and a pack-1 build reading one
+## with them loads the rest, as it never asks for them. Each is checked as
+## [constant SHAPE] is when it is there, and every column one entry a body.
+##
+## `grace` is a clock, so it is kept as every clock here is, in 64 bits: a
+## countdown kept in 32 comes back a few millionths off, and a grace that ends
+## a frame early or late is a drop that does not go on as it was kept.
+const LINEAGE := {
+	"generation": TYPE_PACKED_INT32_ARRAY,
+	"lineage": TYPE_PACKED_INT32_ARRAY,
+	"grace": TYPE_PACKED_FLOAT64_ARRAY,
+	"dna": TYPE_ARRAY,
+}
+const CELL_LINEAGE := {
+	"id": TYPE_INT,
+	"parent": TYPE_INT,
+	"lineage": TYPE_INT,
+}
+
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
 ## -- empty for the faithful one.
@@ -402,6 +427,25 @@ static func _bad_bodies(drop: Dictionary) -> String:
 			return "a body's genome is not gene names to tiers"
 	if (drop["clocks"] as PackedFloat64Array).size() != 4:
 		return "drop.clocks is not four clocks"
+	return _bad_lineage(bodies, n)
+
+
+## What pack 2 added to the bodies, when it is there: each column the type it
+## says and one entry a body, and every DNA gene names to copies -- or empty,
+## the body's own.
+static func _bad_lineage(bodies: Dictionary, n: int) -> String:
+	for key: String in LINEAGE:
+		if not bodies.has(key):
+			continue
+		if typeof(bodies[key]) != int(LINEAGE[key]):
+			return "drop.bodies.%s is the wrong type" % key
+		var entries: int = bodies[key].size()
+		if entries != n:
+			return "drop.bodies.%s has %d entries for %d bodies" % [key, entries, n]
+	if bodies.has("dna"):
+		for dna: Variant in bodies["dna"]:
+			if not _is_genes(dna):
+				return "a body's DNA is not gene names to copies"
 	return ""
 
 
@@ -441,6 +485,9 @@ static func _bad_extra(drop: Dictionary) -> String:
 static func _bad_cell(cell: Dictionary) -> String:
 	if cell.has("elsewhere") and typeof(cell["elsewhere"]) != TYPE_BOOL:
 		return "cell.elsewhere is the wrong type"
+	for key: String in CELL_LINEAGE:
+		if cell.has(key) and typeof(cell[key]) != int(CELL_LINEAGE[key]):
+			return "cell.%s is the wrong type" % key
 	var pair: Array = cell["daughters"]
 	if not pair.is_empty() and pair.size() != 2:
 		return "cell.daughters is not two daughters"

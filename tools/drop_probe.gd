@@ -13,7 +13,10 @@ extends Node
 ## CLEAR, the killer, and a replay that leaves the drop untouched. **And 12, the
 ## save, as far as 1b-1 needs it** (§9): the bodies to the bit through the file,
 ## a real run left and opened again on the same drop and the same cell, an
-## unknown format, and a changed `rules`. The room's census is 1b-2's.
+## unknown format, and a changed `rules`. The room's census is 1b-2's. **And
+## pack 2's, so far** (docs/design/lineage.md §11.3, 2-1): the lineage kept to
+## the bit and a file without it loaded as founders, the sister a daughter in
+## full, and the identity gate -- with nothing dividing, `dev`'s census lines.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -29,7 +32,12 @@ extends Node
 ## the run's own field. And 1b-1's: a load that forgets a mouth's clock, a run
 ## that opens on the drop but not on the cell, a daughter pair not kept, an
 ## unknown format left where it was, a radius left past the cap, and the
-## fingerprint's tables sorted as StringNames.
+## fingerprint's tables sorted as StringNames. And pack 2's first, 2-1's: a save
+## that drops the DNA, a grace kept in 32 bits, a DNA kept out of its order, a
+## 1b body or cell come back with no line, a column read without being checked,
+## a cell's record not kept, a sister who is the daughter's child, carries only
+## her body or, in a pond, nothing at all, a meal that writes only the DNA, and
+## a sister who wears what she carries.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -49,6 +57,7 @@ const MotesField := preload("res://game/normal/motes.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
+const Descent := preload("res://game/mechanics/descent.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
@@ -101,10 +110,13 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var lost_genes := 0
 	var still_short := 0
 	var _short_before: Array[StringName] = []
+	## The slot the last body came in by: a sister, which nothing returns.
+	var last_spawned := -1
 
 	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
 		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
+		last_spawned = index
 		var b: Body = _cells[index]
 		if body_radius <= 0.0:
 			made += 1
@@ -197,12 +209,14 @@ func _ready() -> void:
 	_containment()
 	_five_minutes()
 	_determinism()
+	_identity()
 	_flocs()
 	await _flocs_fed()
 	_one_body()
 	await _replay()
 	await _readout()
 	await _save()
+	await _sister_lineage()
 	print("[drop-probe] ALL PASS" if _failed == 0
 		else "[drop-probe] FAILED %d" % _failed)
 	get_tree().quit(0 if _failed == 0 else 1)
@@ -2044,7 +2058,8 @@ const DERIVED_FIELDS: Array[String] = ["upkeep", "reserve", "income", "burn", "a
 
 ## Each check begins with nothing kept, and nothing is left kept after them.
 func _save() -> void:
-	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules, _save_room]:
+	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules, _save_room,
+			_save_lineage, _save_cell_lineage]:
 		_forget_kept()
 		await check.call()
 	_forget_kept()
@@ -2191,6 +2206,8 @@ func _save_run() -> void:
 	genome.set(&"held_remaining", 20.5)
 	met.call(&"set_hunger", 0.4)
 	run.set("_generation", 3)
+	run.set("_parent", 4242)
+	run.set("_lineage", 77)
 	var pair: Array = run.call(&"_make_daughters")
 	run.set("_daughters", pair)
 	var was := _kept_cell(run)
@@ -2347,13 +2364,15 @@ func _kept_run() -> Node:
 	return run
 
 
-## A run's cell as the drop keeps it, read off its nodes.
+## A run's cell as the drop keeps it, read off its nodes -- its record of
+## descent among them (lineage.md §4).
 func _kept_cell(run: Node) -> Array:
 	var met: Node = run.get("_metabolism")
 	return [(run.get("_cell") as CellBody).call(&"body_state"),
 		(run.get("_genome") as Node).call(&"to_state"), met.get("hunger"),
 		met.get("starve_seconds"), run.get("_generation"), run.get("_sense_clock"),
-		run.get("_sensed"), (run.get("_food") as Node).call(&"player_state")]
+		run.get("_sensed"), (run.get("_food") as Node).call(&"player_state"),
+		run.call(&"_record")]
 
 
 ## Whether two divisions offer the same two daughters, side for side: the same
@@ -2383,6 +2402,362 @@ func _forget_kept() -> void:
 			DirAccess.remove_absolute(path)
 	if DirAccess.dir_exists_absolute(KEEP.get_base_dir()):
 		DirAccess.remove_absolute(KEEP.get_base_dir())
+
+
+# --- Lineage (docs/design/lineage.md §11.3: pack 2's checks 8, 9 and 10, as 2-1 has them) --
+
+## **A body's lineage and the body beside it**, read off the body itself: what
+## pack 2 keeps of every body, and what it wears.
+const LINEAGE_FIELDS: Array[String] = ["id", "parent", "generation", "lineage", "grace", "dna",
+	"genome"]
+
+
+## **lineage 8, the save: the bodies** (§4). Twenty seconds of a drop, then a
+## sister left in it -- wearing less than she carries, a gene this build does
+## not know among what she carries, the child of a record three generations
+## deep in a line that is not her mother's id -- and a body posed mid-grace: its
+## grace a countdown 32 bits cannot hold, its DNA its body's genes in another
+## order, which a mutation draws by, and a record of its own. Through the file's
+## whole path and into a field of its own, every body's id, parent, generation,
+## line, grace, DNA and body come back to the bit, and the file's DNA column is
+## empty but for those two, the only bodies whose DNA is not their body. **A 1b
+## file** -- the same drop without the four columns, nobody anybody's daughter
+## -- is read, and every body comes back a founder: generation 1, its own line,
+## its DNA its body, no grace. **And a column that does not hold what it says**
+## -- one entry short, a DNA that is not gene names to copies, a grace in 32
+## bits -- makes the file unreadable, never half-loaded.
+func _save_lineage() -> void:
+	var water := _water(0.0, 0.6)
+	var field: WatchedDrop = water[0]
+	for f in 20 * 60:
+		field._process(1.0 / 60.0)
+	var mother := Descent.of(field.take_id(), 4242, 3, 77)
+	field.put_sister(PI * 0.5, 560.0, CellBody.daughter_radius(),
+		{&"cytostome": 1, &"flagellum": 1},
+		{&"cytostome": 2, &"flagellum": 1, &"chemocyte": 3, &"kinety": 1}, mother)
+	var sister := field.last_spawned
+	var at: Vector2 = field.basin().get(&"center") + Vector2(900.0, 0.0)
+	var posed := _pose(field, at, 30.0, {&"cytostome": 2, &"rhabdom": 2, &"myoneme": 1})
+	var b: Object = (field.get("_cells") as Array)[posed]
+	for value: Array in [["grace", 42.0 - 61.0 / 60.0], ["generation", 9], ["lineage", 31],
+			["parent", 17], ["dna", {&"rhabdom": 2, &"myoneme": 1, &"cytostome": 2}]]:
+		b.set(value[0], value[1])
+	var data := DropSave.compose(field.drop_state(), {})
+	var wrote := DropSave.write(KEEP, data)
+	var back := DropSave.read(KEEP)
+	var cell2 := CellBody.new()
+	var field2 := WatchedDrop.new()
+	field2.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(field2)
+	if not back.is_empty():
+		field2.load_drop(cell2, back["drop"])
+	var ours: Array = field.get("_cells")
+	var theirs: Array = field2.get("_cells")
+	var kept := 0
+	var differ := 0
+	for i in mini(ours.size(), theirs.size()):
+		if not bool(ours[i].get("seeded")):
+			continue
+		kept += 1
+		if not bool(theirs[i].get("seeded")) or var_to_bytes(_row(ours[i], LINEAGE_FIELDS)) \
+				!= var_to_bytes(_row(theirs[i], LINEAGE_FIELDS)):
+			differ += 1
+	var carried := 0
+	for one: Dictionary in data["drop"]["bodies"]["dna"]:
+		carried += 0 if one.is_empty() else 1
+	var her: Object = theirs[sister] if sister < theirs.size() else null
+	var daughter := her != null and int(her.get("parent")) == mother[Descent.ID] \
+		and int(her.get("generation")) == 4 and int(her.get("lineage")) == 77 \
+		and int((her.get("dna") as Dictionary).get(&"kinety", 0)) == 1 \
+		and (her.get("genome") as Dictionary).size() == 2
+	field2.queue_free()
+	cell2.free()
+	# **The same drop as 1b wrote it**: no lineage, and nobody anybody's daughter.
+	var old := DropSave.compose(field.drop_state(), {})
+	var rows: Dictionary = old["drop"]["bodies"]
+	for key: String in DropSave.LINEAGE:
+		rows.erase(key)
+	var nobody := PackedInt32Array()
+	nobody.resize((rows["parent"] as PackedInt32Array).size())
+	rows["parent"] = nobody
+	var wrote_old := DropSave.write(KEEP, old)
+	var back_old := DropSave.read(KEEP)
+	var cell3 := CellBody.new()
+	var field3 := WatchedDrop.new()
+	field3.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(field3)
+	if not back_old.is_empty():
+		field3.load_drop(cell3, back_old["drop"])
+	var founders := 0
+	var others := 0
+	for one: Object in field3.get("_cells"):
+		if not bool(one.get("seeded")):
+			continue
+		if int(one.get("generation")) == 1 and int(one.get("lineage")) == int(one.get("id")) \
+				and int(one.get("parent")) == 0 and float(one.get("grace")) == 0.0 \
+				and var_to_bytes(one.get("dna")) == var_to_bytes(one.get("genome")):
+			founders += 1
+		else:
+			others += 1
+	field3.queue_free()
+	cell3.free()
+	# **And three columns that do not hold what they say.**
+	var whys := PackedStringArray()
+	for spoil in 3:
+		var spoilt := DropSave.compose(field.drop_state(), {})
+		var columns: Dictionary = spoilt["drop"]["bodies"]
+		match spoil:
+			0:
+				var short: PackedInt32Array = columns["generation"]
+				short.resize(short.size() - 1)
+				columns["generation"] = short
+			1:
+				(columns["dna"] as Array)[0] = {"cytostome": "two"}
+			2:
+				columns["grace"] = PackedFloat32Array(Array(columns["grace"]))
+		var why := DropSave.unusable(spoilt)
+		whys.append(why if not why.is_empty() else "READ")
+	_done(water)
+	_check(("lineage 8. the save, the bodies: %d written (%s) and loaded into a field of their"
+		+ " own, %d differing in id, parent, generation, line, grace, DNA or body, to the bit;"
+		+ " the DNA column carries %d, the rest the body's own; the sister back as generation"
+		+ " 4 of line 77, her mother's id her parent, carrying a gene this build does not"
+		+ " know (%s); a 1b file without the columns (%s) loads %d bodies as founders and %d"
+		+ " not; spoilt, the file is unreadable: %s") % [kept, error_string(wrote), differ,
+		carried, str(daughter), error_string(wrote_old), founders, others, "; ".join(whys)],
+		wrote == OK and not back.is_empty() and ours.size() == theirs.size() and differ == 0
+		and kept > 500 and carried == 2 and daughter and wrote_old == OK
+		and not back_old.is_empty() and founders == kept and others == 0
+		and not whys.has("READ"))
+
+
+## **lineage 8, the save: your cell** (§4). A run's first cell is generation 1,
+## nobody's daughter and the first of its own line, numbered by its drop's
+## count; left mid-run with a record three generations deep and opened again,
+## it comes back with that record; **and a cell kept before pack 2**, without
+## one, comes back with one started from the drop's count -- a line of its own,
+## at the generation it had, which the player has seen. A cell whose id is not
+## a number makes the file unreadable.
+func _save_cell_lineage() -> void:
+	var run := _kept_run()
+	var food: Node = run.get("_food")
+	var first: PackedInt32Array = run.call(&"_record")
+	var count := int(food.get("_next_id"))
+	var clash := false
+	for b: Object in food.get("_cells"):
+		if bool(b.get("seeded")) and int(b.get("id")) == first[Descent.ID]:
+			clash = true
+	var founded := first == Descent.founder(count - 1) and count > 500 and not clash
+	run.set("_generation", 5)
+	run.set("_parent", 4242)
+	run.set("_lineage", 77)
+	var was: PackedInt32Array = run.call(&"_record")
+	run.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var kept := DropSave.read(KEEP)
+	run.queue_free()
+	await get_tree().process_frame
+	var again := _kept_run()
+	var back: PackedInt32Array = again.call(&"_record")
+	again.queue_free()
+	await get_tree().process_frame
+	# **The same file as pack 1 kept it**: no record on the cell, no lineage on
+	# the bodies.
+	var old: Dictionary = kept.duplicate(true)
+	if not old.is_empty():
+		for key: String in DropSave.CELL_LINEAGE:
+			(old["cell"] as Dictionary).erase(key)
+		for key: String in DropSave.LINEAGE:
+			(old["drop"]["bodies"] as Dictionary).erase(key)
+	var wrote := DropSave.write(KEEP, old)
+	var next := int(old.get("drop", {}).get("next_id", -1))
+	var older := _kept_run()
+	var started: PackedInt32Array = older.call(&"_record")
+	var resumed := bool(older.get("_resumed"))
+	older.queue_free()
+	await get_tree().process_frame
+	var bad: Dictionary = kept.duplicate(true)
+	if not bad.is_empty():
+		bad["cell"]["id"] = "seven"
+	var why := DropSave.unusable(bad)
+	_check(("lineage 8. the save, your cell: a run's first is %s -- the drop's next id, nobody's,"
+		+ " generation 1, its own line (%s); left as %s and opened again it is %s; kept"
+		+ " before pack 2 (%s) it comes back %s (%s), a line of its own from the drop's next"
+		+ " id, %d, at the generation it had; an id that is not a number: %s") % [str(first),
+		str(founded), str(was), str(back), error_string(wrote), str(started),
+		"resumed" if resumed else "NOT RESUMED", next, why if not why.is_empty() else "READ"],
+		founded and not kept.is_empty() and back == was and wrote == OK and resumed
+		and started == Descent.of(next, 0, 5, next) and not why.is_empty())
+
+
+## **lineage 9, the sister** (§4, §11.3 check 9). A run in its drop, its cell
+## three generations deep in a line that is not its own id, divides by the
+## game's own birth (`_be_born`), handed two daughters -- the declined one
+## wearing less than she carries -- and the sister left in the water wears the
+## declined daughter's body and carries her DNA, and is the child of the cell
+## both divided from: its id her parent, its generation and one, its line. The
+## daughter you become has that same record and an id of her own, neither of
+## them any body's. **In a pond** the host's sister is the same, and a guest's,
+## whom SISTER brings with what she wears and nothing more, is the founder of a
+## line of her own, carrying what she wears.
+func _sister_lineage() -> void:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("scheme", 0)
+	run.set("keep", "")
+	add_child(run)
+	var food: Node = run.get("_food")
+	run.set("_generation", 3)
+	run.set("_parent", 4242)
+	run.set("_lineage", 77)
+	var mother: PackedInt32Array = run.call(&"_record")
+	var declined := {"tiers": {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 2},
+		"order": [&"cytostome", &"cirrus", &"flagellum", &"chemocyte"],
+		"body": {&"cytostome": 2, &"flagellum": 1}, "mutation": &"trade"}
+	var chosen := {"tiers": {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
+		"order": [&"cytostome", &"cirrus", &"flagellum"],
+		"body": {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, "mutation": &""}
+	run.set("_daughters", [chosen, declined])
+	run.set("_chosen", 0)
+	run.call(&"_be_born")
+	var you: PackedInt32Array = run.call(&"_record")
+	var ids := {}
+	var sisters: Array[Object] = []
+	for b: Object in food.get("_cells"):
+		if not bool(b.get("seeded")):
+			continue
+		ids[int(b.get("id"))] = true
+		if not bool(b.get("inert")) and int(b.get("parent")) == mother[Descent.ID]:
+			sisters.append(b)
+	var her: Object = sisters[0] if sisters.size() == 1 else null
+	var hers := Descent.of(int(her.get("id")), int(her.get("parent")),
+		int(her.get("generation")), int(her.get("lineage"))) if her != null \
+		else PackedInt32Array()
+	var wears := her != null and var_to_bytes(her.get("genome")) == var_to_bytes(declined["body"])
+	var carries := her != null and var_to_bytes(her.get("dna")) == var_to_bytes(declined["tiers"])
+	var child := Descent.child(you[Descent.ID], mother)
+	var yours_right := you == child and you[Descent.ID] != mother[Descent.ID] \
+		and not ids.has(you[Descent.ID])
+	var hers_right := her != null and hers == Descent.child(hers[Descent.ID], mother) \
+		and hers[Descent.ID] != you[Descent.ID] and hers[Descent.ID] != mother[Descent.ID]
+	run.queue_free()
+	await get_tree().process_frame
+	# **In a pond**: the host's own sister, and a guest's from the wire.
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	field.open_pond()
+	field.put_sister(PI * 0.5, 560.0, CellBody.daughter_radius(), declined["body"],
+		declined["tiers"], mother)
+	var cells: Array = field.get("_cells")
+	var host: Object = cells[field.last_spawned]
+	var host_right := bool(field.pond_open()) and int(host.get("parent")) == mother[Descent.ID] \
+		and int(host.get("generation")) == mother[Descent.GENERATION] + 1 \
+		and int(host.get("lineage")) == mother[Descent.LINEAGE] \
+		and var_to_bytes(host.get("dna")) == var_to_bytes(declined["tiers"])
+	var slot: int = field.place_sister(cell.position + Vector2(-560.0, 0.0), 0.0,
+		CellBody.daughter_radius(), declined["body"])
+	var guest: Object = cells[slot] if slot >= 0 else null
+	var guest_right := guest != null and int(guest.get("parent")) == 0 \
+		and int(guest.get("generation")) == 1 and int(guest.get("lineage")) == int(guest.get("id")) \
+		and var_to_bytes(guest.get("dna")) == var_to_bytes(guest.get("genome")) \
+		and var_to_bytes(guest.get("genome")) == var_to_bytes(declined["body"])
+	_done(water)
+	_check(("lineage 9. the sister: of %s, the cell you were, you are %s (%s) and she is %s (%s),"
+		+ " %d of her; she wears the declined daughter's body (%s) and carries her DNA (%s);"
+		+ " in a pond the host's sister is the same (%s), and a guest's, from SISTER, the"
+		+ " founder of a line of her own carrying what she wears (%s)") % [str(mother), str(you),
+		str(yours_right), str(hers), str(hers_right), sisters.size(), str(wears), str(carries),
+		str(host_right), str(guest_right)],
+		sisters.size() == 1 and yours_right and hers_right and wears and carries and host_right
+		and guest_right)
+
+
+## The sister the identity gate leaves (lineage 10): what she wears, and -- on
+## a build that keeps it -- what she carries besides.
+const IDENTITY_BODY := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+const IDENTITY_DNA := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
+## **`dev`'s census lines** for [method _identity_lines]' scenario, recorded on
+## `dev` at 7f06cf7 -- pack 1, the commit pack 2 began from -- in this project's
+## container (Godot 4.7.2, Ubuntu 24.04, glibc 2.39, x86-64), which is what CI
+## runs on. **A rule of the drop changed on purpose changes them**: re-record
+## them then from this check's own output, which prints both sides of a line
+## that differs -- and say so in the commit, because that is the change.
+const IDENTITY_LINES: Array[String] = [
+	"[census] t 30  living 531 (drifters 437, hunters 94)  flocs 31  | hunters at r40 11, mean r 30.8, hunger 0.51  | could swallow r26/r34/r40 44/15/11  dread 0.78/0.40/0.26  genes 16  | spawned 663  died: swallowed 127 chewed 0 starved 5 (r40 0) poisoned 0  | grazed by the water 5, by drifters 0, dissolved 0, snow kept 1, remains 5  | runs 273 at you 0 misses 132 darts 1 dashes 20  floors: gene 0+0 drifter 0  | sum 2919193787",
+	"[census] t 60  living 532 (drifters 439, hunters 93)  flocs 43  | hunters at r40 31, mean r 32.9, hunger 0.45  | could swallow r26/r34/r40 56/19/16  dread 0.87/0.40/0.24  genes 16  | spawned 832  died: swallowed 271 chewed 2 starved 27 (r40 1) poisoned 0  | grazed by the water 16, by drifters 0, dissolved 0, snow kept 2, remains 27  | runs 534 at you 0 misses 250 darts 5 dashes 50  floors: gene 0+0 drifter 0  | sum 642420395",
+	"[census] t 30  living 506 (drifters 322, hunters 184)  flocs 40  | hunters at r40 20, mean r 30.5, hunger 0.45  | could swallow r26/r34/r40 116/44/27  dread 1.82/0.72/0.46  genes 16  | spawned 773  died: swallowed 249 chewed 2 starved 16 (r40 0) poisoned 0  | grazed by the water 11, by drifters 0, dissolved 0, snow kept 5, remains 16  | runs 508 at you 0 misses 217 darts 9 dashes 11  floors: gene 0+0 drifter 0  | sum 3550468869",
+	"[census] t 60  living 509 (drifters 325, hunters 184)  flocs 46  | hunters at r40 58, mean r 32.5, hunger 0.50  | could swallow r26/r34/r40 123/63/52  dread 2.30/1.14/0.72  genes 16  | spawned 1077  died: swallowed 517 chewed 3 starved 48 (r40 3) poisoned 0  | grazed by the water 40, by drifters 1, dissolved 0, snow kept 9, remains 48  | runs 1085 at you 0 misses 509 darts 12 dashes 39  floors: gene 0+0 drifter 0  | sum 1127331418",
+	"[census] t 30  living 543 (drifters 499, hunters 44)  flocs 38  | hunters at r40 3, mean r 30.2, hunger 0.50  | could swallow r26/r34/r40 21/2/0  dread 0.30/0.04/0.00  genes 16  | spawned 605  died: swallowed 57 chewed 0 starved 5 (r40 0) poisoned 0  | grazed by the water 0, by drifters 0, dissolved 0, snow kept 3, remains 5  | runs 124 at you 0 misses 68 darts 2 dashes 0  floors: gene 0+2 drifter 0  | sum 2851272202",
+]
+
+
+## **lineage 10, the identity gate** (§11.2, §11.3 check 10): with nothing
+## dividing, the drop's census lines are `dev`'s to the byte on the same seeds
+## -- the same population, the same deaths and meals, and the same sum of every
+## body's place, size and tank -- so a player can notice nothing of 2-1.
+func _identity() -> void:
+	var lines := _identity_lines()
+	seed(20260930)
+	var differ := 0
+	for k in maxi(lines.size(), IDENTITY_LINES.size()):
+		var ours: String = lines[k] if k < lines.size() else "(none)"
+		var theirs: String = IDENTITY_LINES[k] if k < IDENTITY_LINES.size() else "(none)"
+		if ours != theirs:
+			differ += 1
+			print("[drop-probe] lineage 10, line %d, this build: %s" % [k + 1, ours])
+			print("[drop-probe] lineage 10, line %d, dev:        %s" % [k + 1, theirs])
+	var sums := PackedStringArray()
+	for line in lines:
+		sums.append(line.get_slice("| sum ", 1))
+	_check(("lineage 10. the identity gate: with nothing dividing, %d census lines -- a newborn's"
+		+ " drop and a sighted player's, 60 s each, and the empty room, 30 s -- with your id"
+		+ " taken from the drop's count and a sister carrying more than she wears, against"
+		+ " dev's on the same seeds: %s (sums %s)") % [lines.size(),
+		"the same to the byte" if differ == 0 else "%d DIFFER" % differ, ", ".join(sums)],
+		differ == 0 and lines.size() == 5)
+
+
+## **The identity gate's scenario** (lineage 10): a newborn's drop and a sighted
+## player's, each from its own seed, 60 s with a census every 30 s, and the
+## server's empty room from a third, 30 s. Your cell takes its id from the
+## drop's count first, which moves every id after it, and 30 s in a sister is
+## left wearing [constant IDENTITY_BODY] and carrying [constant IDENTITY_DNA],
+## the child of your record. `dev` ran it with neither -- no id taken, and a
+## sister who was her body and nothing more -- so neither may move a thing.
+func _identity_lines() -> Array[String]:
+	var lines: Array[String] = []
+	for each: Array in [[1, 0.2], [2, 0.6]]:
+		seed(int(each[0]))
+		var cell := CellBody.new()
+		cell.radius = CellBody.BASE_RADIUS
+		var field := FoodField.new()
+		field.process_mode = Node.PROCESS_MODE_DISABLED
+		field.sensed_override = float(each[1])
+		add_child(field)
+		field.setup_drop(cell)
+		field.in_water = false
+		var yours := Descent.founder(field.take_id())
+		for f in 60 * 60:
+			field._process(1.0 / 60.0)
+			if f == 30 * 60 - 1:
+				field.put_sister(PI * 0.5, 560.0, CellBody.daughter_radius(), IDENTITY_BODY,
+					IDENTITY_DNA, yours)
+			if f % (30 * 60) == 30 * 60 - 1:
+				lines.append(field.census_line())
+		field.free()
+		cell.free()
+	seed(3)
+	var nobody := CellBody.new()
+	var room := FoodField.new()
+	room.process_mode = Node.PROCESS_MODE_DISABLED
+	add_child(room)
+	room.open_dedicated(nobody)
+	for f in 30 * 60:
+		room._process(1.0 / 60.0)
+	lines.append(room.census_line())
+	room.free()
+	nobody.free()
+	return lines
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------
