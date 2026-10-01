@@ -156,6 +156,50 @@ func query(at: Vector2, reach: float, out: PackedInt32Array) -> void:
 				i = _next[i]
 
 
+## **Every filed id, bucket by bucket, in the order a query hands them back**,
+## as `[ids, buckets]`: two packed arrays of one entry an id. What a query
+## answers, and in which order, is this and nothing else -- so a caller that
+## keeps it and gives it back to [method restore] gets a grid that answers every
+## query as this one does, whatever moves made it.
+func state() -> Array:
+	var ids := PackedInt32Array()
+	var buckets := PackedInt32Array()
+	for c in _head.size():
+		var i := _head[c]
+		while i >= 0:
+			ids.append(i)
+			buckets.append(c)
+			i = _next[i]
+	return [ids, buckets]
+
+
+## **The grid [method state] gave, again**: every id forgotten, then each
+## filed in the bucket it was, in the order it was. False, and nothing filed,
+## for a state that does not fit this grid -- a bucket past its square, an id
+## below zero or twice, the two arrays of different lengths -- so the caller
+## files by place instead.
+func restore(ids: PackedInt32Array, buckets: PackedInt32Array) -> bool:
+	if ids.size() != buckets.size():
+		return false
+	var seen := {}
+	for k in ids.size():
+		if ids[k] < 0 or seen.has(ids[k]) or buckets[k] < 0 or buckets[k] >= _head.size():
+			return false
+		seen[ids[k]] = true
+	_head.fill(-1)
+	_where.fill(-1)
+	# Each list is pushed on at its head, so the last of a bucket goes in first.
+	for k in range(ids.size() - 1, -1, -1):
+		var id := ids[k]
+		if id >= _where.size():
+			_grow(id + 1)
+		var c := buckets[k]
+		_next[id] = _head[c]
+		_head[c] = id
+		_where[id] = c
+	return true
+
+
 func _grow(capacity: int) -> void:
 	var old := _where.size()
 	var room := maxi(capacity, old * 2)

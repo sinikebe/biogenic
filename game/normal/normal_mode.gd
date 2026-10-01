@@ -243,12 +243,13 @@ var scheme := -1
 ## every render after it.
 var numbers := -1
 
-## **Which water this run is in**: -1 to decide in `_ready` -- the drop when no
-## session is up, today's water when one is (docs/design/ocean.md §10.1) -- 0
-## for today's water whatever, 1 for the drop when there is no session. Chosen
-## once for the run. Set it before the scene enters the tree to force it, which
-## is what `tools/drive.gd --drop=` does: `--drop=0` is the reference every
-## probe compares the drop against, and the identity gate's (§14.4).
+## **Which water this run is in**: -1 to decide in `_ready` -- the drop, with a
+## session up or without one (docs/design/ocean.md §10.2: a host's drop is the
+## pond, and a guest's waits for it) -- 0 for today's water whatever, 1 for the
+## drop. Chosen once for the run. Set it before the scene enters the tree to
+## force it, which is what `tools/drive.gd --drop=` does: `--drop=0` is the
+## reference every probe compares the drop against, and the identity gate's
+## (§14.4).
 var drop := -1
 
 ## **Where this run keeps its drop** (ocean.md §9): the personal drop's file,
@@ -498,6 +499,9 @@ var _beat_line := ""
 var _entering_held := false
 var _swap_pending := false
 var _wake_pending := false
+## **The host's drop's rim, as its last ARRIVE said** (ocean.md §10.4):
+## `[center, radius]`, for a swap that waits for the beat's dark middle.
+var _rim: Array = [Vector2.ZERO, 0.0]
 ## **The one-slot line queue** (UX §0.4): what waits, since when it may be said,
 ## and which fact it reports -- so it is dropped the moment that stops being
 ## true. [member _line_shown] is the pond line on the label now, or "".
@@ -602,6 +606,10 @@ var _resumed := false
 ## The process frame the drop was last kept in: a save point reached twice in
 ## one frame -- the app paused and unfocused together -- keeps it once.
 var _kept_frame := -1
+## **A guest's own drop, set aside while it swims in a friend's** (ocean.md
+## §9.1): as `drop_state()` gave it when it joined, taken up again when it
+## leaves the pond or the link drops. Empty otherwise.
+var _own_drop := {}
 ## **The two daughters a division had rolled when the app was left** (row 17).
 ## The division plays again on return, from its quickening, and offers these
 ## two on the same sides -- unless the cell ate in that quickening and wrote its
@@ -655,14 +663,14 @@ func _ready() -> void:
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
 	_cell.genome = _genome
-	# **The drop, or today's water, chosen once for the run** (ocean.md §10.1):
-	# the drop when no session is up, and a run that begins inside one keeps
-	# today's water and today's rules, so the pond and the wire are exactly what
-	# they were. The drop is made first and the grit then hung inside its rim;
-	# today's water keeps its own order, grit first. **The drop is yours, kept**
-	# (§9.1): the one left last time, and the cell in it if it was left mid-run.
+	# **The drop, or today's water, chosen once for the run** (ocean.md §10.2):
+	# the drop, session or none -- a host's is the pond, and a guest's waits for
+	# it, set aside while it swims in its friend's. The drop is made first and
+	# the grit then hung inside its rim; today's water keeps its own order, grit
+	# first. **The drop is yours, kept** (§9.1): the one left last time, and the
+	# cell in it if it was left mid-run.
 	var resumed := {}
-	if _net == null and drop != 0:
+	if drop != 0:
 		resumed = _open_drop()
 	else:
 		_motes.setup(_cell)
@@ -826,7 +834,9 @@ func _open_drop() -> Dictionary:
 		if not cell.is_empty():
 			_cell.restore_body(cell["body"])
 		var done := _food.load_drop(_cell, kept["drop"])
-		if cell.is_empty():
+		# **A cell left while it swam in a friend's drop** (§9.1) comes back
+		# into this one as a guest leaving the pond does: at a quiet place.
+		if cell.is_empty() or bool(cell.get("elsewhere", false)):
 			_food.return_to_drop()
 		else:
 			_food.restore_player(cell["water"])
@@ -892,15 +902,31 @@ func _kept_pair() -> Array:
 
 ## **This run's drop, kept** (§9.3) -- and the cell with it while it is in the
 ## water (row 17), none after a death. At a death, on the black; when the pause
-## screen opens; when the app is left or its window closed; and when the run is
-## left. **Never in the middle of play**: nobody is watching the water at any of
-## those moments, so the two or three frames a save costs a phone are never
-## seen, and there is no save on a timer. Twice in one frame is once. Only a
-## drop this run is in alone: a pond keeps nothing until 1b-2, and a tool's run
-## keeps nothing at all ([member keep]). A write that fails leaves the last good
-## drop where it was, and says so.
+## screen opens; when the app is left or its window closed; when the run is
+## left; and, as a guest, **before joining a friend** (§9.1), whose drop it then
+## swims in. **Never in the middle of play**: nobody is watching the water at
+## any of those moments, so the two or three frames a save costs a phone are
+## never seen, and there is no save on a timer. Twice in one frame is once.
+##
+## **A host keeps the drop it serves** -- so hosting stopping, by leaving the
+## run or the app, keeps it as the host's drop again, with whatever the friends
+## ate, grew or left behind (§9.1); the friend is never in the file. **A guest
+## in a friend's drop keeps its own**, set aside as it joined, and the cell it
+## is now, `elsewhere`: the next launch brings it back into its own drop at a
+## quiet place, as leaving the pond does. A tool's run keeps nothing at all
+## ([member keep]). A write that fails leaves the last good drop where it was,
+## and says so.
 func _keep_drop() -> void:
-	if keep.is_empty() or _net != null or not is_node_ready() or not _food.in_drop():
+	if keep.is_empty() or not is_node_ready():
+		return
+	var state := {}
+	var elsewhere := false
+	if _food.owns_drop():
+		state = _food.drop_state()
+	elif not _own_drop.is_empty():
+		state = _own_drop
+		elsewhere = true
+	if state.is_empty():
 		return
 	var frame := Engine.get_process_frames()
 	if frame == _kept_frame:
@@ -920,7 +946,9 @@ func _keep_drop() -> void:
 			"daughters": _daughters_by_name(_daughters),
 			"water": _food.player_state(),
 		}
-	var done := DropSave.write(keep, DropSave.compose(_food.drop_state(), cell))
+		if elsewhere:
+			cell["elsewhere"] = true
+	var done := DropSave.write(keep, DropSave.compose(state, cell))
 	if done != OK:
 		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
 			% [keep, error_string(done)])
@@ -1816,23 +1844,23 @@ func _be_born() -> void:
 	# Inside the drop's rim, in the drop; `basin()` is null in today's water.
 	_motes.setup(_cell, _food.basin())
 	var side := -PI * 0.5 if _chosen == 1 else PI * 0.5
-	if _food.in_drop():
+	if _food.pond_open():
+		# **In a pond there is no reseed** (shared-pond.md §1.5, UX §2): the
+		# water this daughter comes back to is the one her mother left, still
+		# moving, and it is the other player's water as much as hers. She comes
+		# back into it with a new cell's organs and grace, and the sister goes
+		# into a free slot -- by SISTER, from a guest, because a guest's water
+		# is the host's. In the drop, held inside its rim either way.
+		_food.enter_water()
+		_leave_sister(side, other["body"])
+		_pond.person_changed(true)
+	elif _food.in_drop():
 		# **In the drop a division regenerates nothing** (ocean.md §8.2): the
 		# daughter is where her mother was, in her mother's water, with a new
 		# cell's organs and grace -- what the pond has always done -- and the
 		# sister is left in it, held inside the rim, a water cell from then on.
 		_food.enter_water()
 		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"])
-	elif _food.pond_open():
-		# **In a pond there is no reseed** (shared-pond.md §1.5, UX §2): the
-		# water this daughter comes back to is the one her mother left, still
-		# moving, and it is the other player's water as much as hers. She comes
-		# back into it with a new cell's organs and grace, and the sister goes
-		# into a free slot -- by SISTER, from a guest, because a guest's water
-		# is the host's.
-		_food.enter_water()
-		_leave_sister(side, other["body"])
-		_pond.person_changed(true)
 	else:
 		# **The field is reseeded.** The water around you was sized to a
 		# 40-unit body and the newborn is 28; the field is a treadmill already,
@@ -2284,14 +2312,21 @@ func _return(place: Array) -> void:
 		_cell.position = place[0]
 		_cell.heading = float(place[1])
 	_metabolism.reset()
-	if _food.in_drop():
+	if pond:
+		# **In a pond the water is nobody's to move** (ocean.md §10.2): a host
+		# with no friend to come back near comes back at a quiet place in its
+		# drop -- the cell goes there, behind the black, and nothing else moves
+		# but what a quiet start clears -- and everyone else where the pond says.
+		if place.is_empty() and _pond.hosting and _food.owns_drop() \
+				and _food.person() == null:
+			_cell.position = _food.quiet_place()
+		_motes.setup(_cell, _food.basin())
+		_food.enter_water()
+	elif _food.in_drop():
 		# **A return is a born cell at a quiet start in the same drop** (ocean.md
 		# §8.1): the drop is put under it, and the grit hung inside its rim after.
 		_food.return_to_drop()
 		_motes.setup(_cell, _food.basin())
-	elif pond:
-		_motes.setup(_cell)
-		_food.enter_water()
 	else:
 		_motes.setup(_cell)
 		_food.setup(_cell)
@@ -7919,6 +7954,7 @@ func _begin_pond() -> void:
 		return
 	if not _pond.together() or not _net.peer_pond_open():
 		return
+	_set_own_drop_aside()
 	_food.become_mirror()
 	_pond.mirror_began()
 	_ponded = true
@@ -7991,30 +8027,36 @@ func _enter_timed_out() -> void:
 	if _entering_held:
 		# No answer: the run opens alone (§1.6).
 		_entering_held = false
-		_food.leave_mirror()
+		_leave_mirror()
 		_ponded = false
 		_update_simulating()
 	elif _wake_pending:
 		# A tap nobody answered swims on alone, as a solo return does.
 		_wake_pending = false
-		_food.leave_mirror()
+		_leave_mirror()
 		_return([])
 	else:
 		# A swap nobody answered is tried again at the next ordinary frame.
 		_swap_pending = false
 
 
-## **The host put this cell in its water** (§1.6).
-func _on_pond_arrived(at: Vector2, heading: float) -> void:
+## **The host put this cell in its water** (§1.6) -- and in its drop, whose rim
+## [param rim_center] and [param rim_radius] the mirror is given as it begins,
+## and the grit is hung inside (ocean.md §10.4).
+func _on_pond_arrived(at: Vector2, heading: float, rim_center: Vector2,
+		rim_radius: float) -> void:
+	_rim = [rim_center, rim_radius]
 	if _wake_pending:
 		_wake_pending = false
 		_pond.in_pond = true
+		_food.mirror_rim(rim_center, rim_radius)
 		_return([at, heading])
 		return
 	if _entering_held:
 		_entering_held = false
+		_food.mirror_rim(rim_center, rim_radius)
 		_place_arrival(at, heading)
-		_motes.setup(_cell)
+		_motes.setup(_cell, _food.basin())
 		_update_simulating()
 		_pond_say("theirs", LINE_THEIRS, ONBOARD_DELAY)
 		return
@@ -8037,13 +8079,18 @@ func _on_pond_arrived(at: Vector2, heading: float) -> void:
 
 ## **The swap, at the beat's dark middle** (§1.6, UX §1): this water becomes a
 ## mirror of the host's and the cell is placed where the host put it, keeping
-## its body, its genome, its generation and its hunger.
+## its body, its genome, its generation and its hunger. **Its own drop is kept
+## and set aside first** (ocean.md §9.1) -- joining is a save point -- to be
+## taken up again when it leaves.
 func _swap_in(at: Vector2, heading: float) -> void:
+	_keep_drop()
+	_set_own_drop_aside()
 	_food.become_mirror()
 	_pond.mirror_began()
 	_ponded = true
+	_food.mirror_rim(_rim[0], float(_rim[1]))
 	_place_arrival(at, heading)
-	_motes.setup(_cell)
+	_motes.setup(_cell, _food.basin())
 
 
 func _place_arrival(at: Vector2, heading: float) -> void:
@@ -8063,6 +8110,7 @@ func _enter_from_black() -> void:
 	if _wake_pending:
 		return
 	if not _food.mirroring():
+		_set_own_drop_aside()
 		_food.become_mirror()
 		_pond.mirror_began()
 		_food.leave_water(true)
@@ -8087,19 +8135,47 @@ func _home_after_black() -> Array:
 
 
 ## **The declined daughter, in a pond** (§1.5): a host leaves her in its own
-## water, in a free slot; a guest's water is the host's, so it asks the host to.
+## water, in a free slot; a guest's water is the host's, so it asks the host to
+## -- where the drop's rim puts her, if her side of her mother is past it
+## (ocean.md §10.5): the host's referee takes her there.
 func _leave_sister(bearing: float, body: Dictionary) -> void:
 	if _pond.hosting:
 		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body)
 		return
 	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-	_pond.sister(_cell.position + dir * SISTER_DISTANCE, atan2(dir.x, -dir.y),
-		_cell.radius, body)
+	var at := _cell.position + dir * SISTER_DISTANCE
+	var rim: RefCounted = _food.basin()
+	if rim != null:
+		at = rim.call(&"contain", at, _cell.radius)
+	_pond.sister(at, atan2(dir.x, -dir.y), _cell.radius, body)
 
 
-## **The host is gone, and this water is yours** (§1.8, UX §5): fresh water
-## round this cell, which keeps its body, its genome, its generation and its
-## hunger -- `leave_mirror()` is the same `setup()` every new water is. Said
+## **Set this run's own drop aside** (ocean.md §9.1), before it becomes a
+## mirror of a friend's: as `drop_state()` gives it, frozen, to be taken up
+## again by [method _leave_mirror]. Nothing when it has none of its own -- a
+## run in today's water, or one already set aside.
+func _set_own_drop_aside() -> void:
+	if _food.owns_drop():
+		_own_drop = _food.set_aside()
+
+
+## **Out of the friend's water, into this run's own** (ocean.md §9.1): the drop
+## set aside as it joined, taken up again with this cell at a quiet place in it
+## -- or, with none set aside, fresh water round it, as today. The grit is hung
+## inside whatever rim it now has.
+func _leave_mirror() -> void:
+	var own := _own_drop
+	_own_drop = {}
+	var done := _food.leave_mirror(own)
+	if not own.is_empty():
+		print("[drop-save] back in your own drop: %d bodies, %.0f s old"
+			% [int(done.get("bodies", 0)), _food.drop_age()])
+	_motes.setup(_cell, _food.basin())
+
+
+## **The host is gone, and this water is yours** (§1.8, UX §5): this cell's own
+## drop again, set aside as it joined (ocean.md §9.1), or fresh water round it
+## -- and it keeps its body, its genome, its generation and its hunger. Said
 ## once. Pause is ordinary again, so the menu closes if it was open.
 func _take_over() -> void:
 	var was_in := _food.mirroring()
@@ -8112,13 +8188,13 @@ func _take_over() -> void:
 		_set_menu(false)
 	if _entering_held:
 		_entering_held = false
-		_food.leave_mirror()
+		_leave_mirror()
 		_ponded = false
 		_update_simulating()
 		return
 	if _wake_pending:
 		_wake_pending = false
-		_food.leave_mirror()
+		_leave_mirror()
 		_return([])
 		return
 	if not was_in:
@@ -8132,11 +8208,11 @@ func _take_over() -> void:
 		# is, _update_simulating() reads off the cell: before, this stopped the
 		# water outright and left a returning cell alive in a water that never
 		# moved again.
-		_food.leave_mirror()
+		_leave_mirror()
 		_update_simulating()
 		_pond_say("gone", gone_line)
 		return
-	_begin_water_beat(_food.leave_mirror, 0.0, "gone", gone_line)
+	_begin_water_beat(_leave_mirror, 0.0, "gone", gone_line)
 
 
 ## **Held, or heard again** (UX §5). Held, nothing of this cell moves --

@@ -151,10 +151,9 @@ jobs:
         #
         #    server.tscn is reached by neither route: only the Linux Server
         #    export boots it, through `run/main_scene.server`. It is booted here
-        #    with `--no-update`, so it never looks for an update. It does start
-        #    one UPnP search for a router (game/net/port_forward.gd,
-        #    docs/server.md §9.3), which takes four seconds to find nothing on
-        #    a runner; the boot ends first, so only its "looking" line prints.
+        #    with `--no-update`, so it never looks for an update, and with
+        #    `--no-upnp`, so it never asks any network for a router
+        #    (game/net/port_forward.gd, docs/server.md §9.3).
         #
         # Seconds, against an export measured in minutes.
         run: |
@@ -166,7 +165,7 @@ jobs:
                        "res://game/net/far.tscn" \
                        "res://game/normal/normal_mode.tscn" \
                        "res://game/replay/replay.tscn" \
-                       "res://game/server/server.tscn -- --no-update"; do
+                       "res://game/server/server.tscn -- --no-update --no-upnp"; do
             name="${scene:-main scene (launcher)}"
             echo "--- booting $name"
             # shellcheck disable=SC2086

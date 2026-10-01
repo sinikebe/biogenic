@@ -153,6 +153,12 @@ const CARRY_MAX := 0.2
 ## [method _cast_ping] measures it. Scent, dread, beams and the frame all lie
 ## inside it, so nothing outside it can change a sense.
 const SEND_REACH := 1900.0
+## **...and no more than this many of them, nearest first** (ocean.md §10.4),
+## with every body hunting the guest in whatever the count: 58 lie within
+## [constant SEND_REACH] on average at the drop's density, and a snapshot of
+## sixty and the person is one datagram. wire.gd's SEND_MAX, which the probe
+## holds to this.
+const SEND_MAX := 60
 ## How far clear of a player a sister is put, surface to surface, when the
 ## place she was meant for is on them: pond.gd's own ARRIVAL_CLEAR.
 const SISTER_CLEAR := 20.0
@@ -166,8 +172,11 @@ const BOOK_MAX := 4 * POND_SLOTS
 ## What happened to a person, on [signal person_touched] and into
 ## [method hear_contact]. The numbers are the wire's (shared-pond.md §2's
 ## CONTACT), so they are written out rather than left to count.
+## `GRAZED` is a floc swallowed, in the drop (ocean.md §7.3, §10.4): food, and
+## no growth and no gene, so it is never a meal to the referee.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6 }
+enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6,
+	GRAZED = 7 }
 ## How a person died, on [signal person_died]. `POISONED` is the venom in
 ## something it swallowed or bit, which §2's three-cause DIED did not name.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
@@ -180,11 +189,36 @@ enum By { WATER = 1, FRIEND = 2 }
 ## `PERSON + k` is the person in `PERSON_SLOT + k`.
 enum Anchor { LOCAL = 0, PERSON = 1 }
 
+## **Whether a water mouth swallows a player it is on** (rows 15 and 5): from a
+## run at them ([param committed]), or on contact alone where [param on_contact]
+## -- the drop's rule -- and only a body its [param gape] takes, [param size]
+## being theirs as a mouth measures it, `pellicle` and all.
+static func swallows_player(committed: bool, on_contact: bool, size: float,
+		gape: float) -> bool:
+	return (committed or on_contact) and size < gape
+
+
+## **How big a body of [param radius] is to a mouth** (row 5): its radius times
+## the [param armour] its `pellicle` gives it -- `ARMOR_BY_TIER` -- where
+## [param armoured]; its bare radius otherwise.
+static func armoured_size(radius: float, armour: float, armoured: bool) -> float:
+	return radius * armour if armoured else radius
+
+
 ## One body in a snapshot, as [method pond_entries] builds it and
 ## [method apply_pond] reads it: an Array indexed by these. `VELOCITY` and
-## `TURNING` are the person's alone and read zero for a water cell.
-enum Entry { SLOT, SERIAL, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
+## `TURNING` are the person's alone and read zero for a water cell. `ID` is the
+## body's id on the wire (ocean.md §10.4): in the drop its own, which it keeps
+## for its life; in today's water its serial, which is as unique and as never
+## reused; and the person's is [constant PERSON_ID].
+enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 	VELOCITY, TURNING }
+## **Past the wire's fields, the host's own slot for the body** -- what
+## `pond.gd` finds its genome by. Never written; -1 for the person.
+const ENTRY_SLOT := Entry.TURNING + 1
+## The person's id in a snapshot. No water body has it: the drop numbers its
+## bodies from 1, and today's water its serials.
+const PERSON_ID := 0
 ## [enum Entry] `FLAGS`, bit by bit -- the wire's POND flags (§2).
 const FLAG_STALKING := 1
 const FLAG_PERSON := 2
@@ -1294,9 +1328,20 @@ var _anchor_at := PackedVector2Array()
 ## The mirror's last snapshot: where each slot was, and how long ago.
 var _snap_at := PackedVector2Array()
 var _snap_age := 0.0
-## The mirror's genomes by body version, `serial * 1000 + meals` -- the
-## recorder's own signature -- so one can arrive before or after its body.
+## The mirror's genomes by body version -- the body's id and its meals
+## ([method _book_key]) -- so one can arrive before or after its body.
 var _book := {}
+## **The mirror's bodies by their id on the wire** (ocean.md §10.4): the slot
+## each came into this mirror in, kept while it is sent; and its flocs, by id,
+## as `[slot, settle, life, told at]`; and the slots either left.
+var _mirror_slots := {}
+var _mirror_flocs := {}
+var _mirror_free := PackedInt32Array()
+## The mirror's own clock: how far a floc has settled since it was told.
+var _mirror_t := 0.0
+## The bodies a snapshot's send set, or the flocs in a guest's reach, are
+## chosen from: one grid answer, never shared with another pass.
+var _send_ids := PackedInt32Array()
 
 
 ## Seeds the water around [param cell]. Cell 0 is held back until the cell is
@@ -1964,9 +2009,12 @@ func _contacts_with(p: Person) -> bool:
 	var made_at := _changes
 	var made_for := NAN
 	var near := 0.0
-	# In the drop, the bodies near this cell the frame gathered; in today's
-	# water, every water slot in order, as it always was.
-	var scan := _near if _drop != null else _water_ids()
+	# In the drop, the bodies near this player the frame gathered -- this
+	# cell's, or the person's own; in today's water, every water slot in order,
+	# as it always was.
+	var scan := _water_ids()
+	if _drop != null:
+		scan = _near if p == null else _person_near[p.slot - PERSON_SLOT]
 	for i: int in scan:
 		var b := _cells[i]
 		if not b.seeded:
@@ -1990,13 +2038,19 @@ func _contacts_with(p: Person) -> bool:
 			continue
 		# **A floc** (the drop's): no mouth, so only this one's matters, and it
 		# is food and nothing else -- once it has settled and if it fits (§7.3).
+		# The other player's graze is theirs to eat: said to them as GRAZED.
 		if b.inert:
-			if p == null and b.settle >= 1.0 and b.radius < my_gape \
-					and Cilia.mouth_touches(at, _cell.heading, r, my_gape, b.pos, b.radius):
+			if b.settle >= 1.0 and b.radius < my_gape \
+					and Cilia.mouth_touches(at, _cell.heading if p == null else pb.heading,
+						r, my_gape, b.pos, b.radius):
 				var worth := _meal_value_for(b.radius, r)
 				var where := b.pos
-				_stat(&"player_grazed")
-				grazed.emit(worth, where)
+				if p == null:
+					_stat(&"player_grazed")
+					grazed.emit(worth, where)
+				else:
+					_stat(&"friend_grazed")
+					_tell(p, Contact.GRAZED, where, worth, By.WATER, &"")
 				_consume(i)
 			continue
 		# **The whole of the fix, and it is two lines.** Its mouth on me, and my
@@ -2034,8 +2088,8 @@ func _contacts_with(p: Person) -> bool:
 		# contact, whoever it is, as this cell's own always has. Dread still
 		# warns of it, because dread never depended on the run.
 		var committed := b.state == State.STALK and _hunts(b, p)
-		if its_mouth and (committed or (_drop != null and contact_swallow)) \
-				and _armoured(p) < _gape(b):
+		if its_mouth and swallows_player(committed, _drop != null and contact_swallow,
+				_armoured(p), _gape(b)):
 			# **`toxicyst`. It got you and it dies of it.** The one thing in the
 			# game that undoes a death, and it is not free: the run pays for it
 			# in hunger, which is the channel every other cost is paid in. The
@@ -2047,14 +2101,19 @@ func _contacts_with(p: Person) -> bool:
 				_consume(i, Cause.POISONED)
 				continue
 			# **In the drop the cell that eats you is fed by it** (§5.6), before
-			# the death is told: after it, nothing may touch the field.
+			# the death is told: after it, nothing may touch the field. The
+			# other player likewise, and then out of their slot.
 			if _drop != null:
 				if not committed:
 					_stat(&"player_swallowed_uncommitted")
-				_fed_on_player(b)
 				if p == null:
+					_fed_on_player(b)
 					died_to = i
+					_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
+					return true
+				_fed_on(b, pb.radius, Genome.dominant_of(pb.genome))
 				_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
+				_person_gone(Cause.SWALLOWED, By.WATER, p)
 				return true
 			_tell(p, Contact.KILLED, b.pos, 0.0, By.WATER, &"", Cause.SWALLOWED)
 			_break_off(b)
@@ -2283,6 +2342,11 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 			_fed_on_player(b)
 			died_to = index
 			_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
+			return true
+		if _drop != null:
+			_fed_on(b, pb.radius, Genome.dominant_of(pb.genome))
+			_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
+			_person_gone(Cause.CHEWED, By.WATER, p)
 			return true
 		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.CHEWED)
 		if b.state == State.STALK:
@@ -3013,8 +3077,9 @@ func _step_sense() -> void:
 	var smelt_rest := 0.0
 
 	# In the drop, the bodies near this cell the frame gathered: nothing past
-	# them reaches any sense (§4.2). In today's water, every body.
-	var scan := _near if _drop != null else _all_ids()
+	# them reaches any sense (§4.2) -- and in a pond the people in the water.
+	# In today's water, every body.
+	var scan := _sense_ids()
 	for i: int in scan:
 		var b := _cells[i]
 		if not b.seeded:
@@ -3168,7 +3233,7 @@ func _step_beams() -> void:
 		return
 	var origin := _cell.position
 	var near: Array[int] = []
-	for i: int in (_near if _drop != null else _all_ids()):
+	for i: int in _sense_ids():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
@@ -3403,7 +3468,7 @@ func _cast_ping() -> void:
 	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
 	var origin := _cell.position + dir * _cell.radius
 	var found: Array = []
-	for i: int in (_near if _drop != null else _all_ids()):
+	for i: int in _sense_ids():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
@@ -3517,7 +3582,7 @@ func _step_touch() -> void:
 	var best := INF
 	var at := Vector2.ZERO
 	# A floc is touched too (§7.5): it is there.
-	for i: int in (_near if _drop != null else _all_ids()):
+	for i: int in _sense_ids():
 		var b := _cells[i]
 		if not b.seeded:
 			continue
@@ -3851,8 +3916,15 @@ func hunting() -> bool:
 ## **The host's water becomes a pond**: two waters' worth of slots, and a slot
 ## for the other player, empty until [method place_person]. Nothing already in
 ## the water moves or changes. Never called solo.
+##
+## **In the drop the pond is the drop** (ocean.md §10.2): the host's own, with
+## everything in it, and the other player's body in [constant PERSON_SLOT] as
+## everywhere -- see [method _open_drop_pond].
 func open_pond() -> void:
 	if _pond or _cell == null:
+		return
+	if _drop != null:
+		_open_drop_pond(1)
 		return
 	_pond = true
 	# The authored first arrival is single-player authoring: it moves slot 0 in
@@ -3869,15 +3941,36 @@ func open_pond() -> void:
 	_changes += 1
 
 
-## **A dedicated host's water** (`game/server/`): an empty pond with a slot for
-## each of [constant GUESTS_MAX] guests and no body of its own. [param cell]
-## stands in for the cell every rule here reads, and it is out of the water and
-## no anchor for good -- every rule that asks about "this cell" asks
-## [member in_water] or [member anchored] first -- so the water is its guests'
-## alone. Nothing is seeded until one arrives (§1.4 with no anchor: the water
-## waits), and when the last guest leaves the host lets it go
-## ([method empty_water]), so an empty server simulates nothing.
-func open_dedicated(cell: CellBody) -> void:
+## **A dedicated host's water** (`game/server/`): **the room** (ocean.md
+## §10.3) -- a drop that is nobody's, loaded from [param state] as drop_save.gd
+## reads one, or made anew when it is empty -- with a slot for each of
+## [constant GUESTS_MAX] guests and no body of its own. [param cell] stands in
+## for the cell every rule here reads, and it is out of the water and no anchor
+## for good -- every rule that asks about "this cell" asks [member in_water] or
+## [member anchored] first -- so the water is its guests' alone. **It lives while
+## nobody is in it**: with no anchor, every body is on its tick (§4.3), and
+## [method empty_water] lets nothing go. Returns what [method load_drop] said,
+## or nothing for a room made anew.
+func open_dedicated(cell: CellBody, state: Dictionary = {}) -> Dictionary:
+	var done := {}
+	if state.is_empty():
+		_make_room(cell)
+	else:
+		done = load_drop(cell, state)
+	in_water = false
+	anchored = false
+	_first_pending = false
+	_first_hunt = FIRST_DELAY
+	_open_drop_pond(GUESTS_MAX)
+	_fresh_senses()
+	return done
+
+
+## **Today's water, as a dedicated host kept it before the room** -- an empty
+## pond that seeds round whoever arrives and lets its water go when the last
+## guest leaves. Nothing ships it: a tool's reference for the bubble.
+func open_bubble_dedicated(cell: CellBody) -> void:
+	_drop = null
 	_cell = cell
 	_pond = true
 	_mirror = false
@@ -3904,8 +3997,11 @@ func open_dedicated(cell: CellBody) -> void:
 ## retired, so an empty server simulates nothing and the next guest meets water
 ## made for them. A guest who is only dead keeps theirs -- they are coming back
 ## to it -- so this is for the last one leaving, and never for a phone's pond.
+##
+## **The room lets nothing go** (ocean.md §10.3): a drop lives on with nobody
+## in it, so in the drop this does nothing at all.
 func empty_water() -> void:
-	if not _pond or _mirror:
+	if not _pond or _mirror or _drop != null:
 		return
 	for i in _water:
 		if _cells[i].seeded:
@@ -3952,6 +4048,10 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 		velocity = Vector2.ZERO
 	if not is_finite(turning):
 		turning = 0.0
+	# **Held inside the drop's rim** (ocean.md §10.5), as everything in it is:
+	# an honest guest's own run contains its cell the same way.
+	if _drop != null:
+		at = _drop.meniscus.contain(at, body_radius)
 	var pb := _cells[slot]
 	if pb.person == null:
 		pb.person = Person.new()
@@ -4013,6 +4113,9 @@ func _derive_person(pb: Body) -> void:
 	var venom := clampi(Genome.tier_of(tiers, &"toxicyst"), 0,
 		CellBody.VENOM_COST_BY_TIER.size() - 1)
 	p.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
+	# The body carries it too, so a sense that weighs every body by the size a
+	# mouth measures -- the drop's taste (§14.1) -- weighs a person as one.
+	pb.armour = p.armour
 
 
 ## The other player has left the water, dividing, or come back into it. Out
@@ -4088,6 +4191,14 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 	if not _pond or _mirror or _cell == null:
 		return -1
 	at = _clear_of_players(at, body_radius)
+	# **In the drop she comes in by the one door every body does**, held inside
+	# the rim, a water cell from then on -- as the host's own sister does.
+	if _drop != null:
+		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, _sensed(),
+			false, body_radius, tiers)
+		_cells[index].heading = heading
+		_stat(&"sisters")
+		return index
 	var slot := _free_slot()
 	if slot < 0:
 		slot = _farthest_spare()
@@ -4190,7 +4301,10 @@ func _farthest_spare() -> int:
 ## arrive by [method apply_pond], their genomes by [method apply_genome] and
 ## every contact by [method hear_contact], and this field simulates nothing but
 ## what its own cell senses. The water it had is gone -- this is UX §0.5's beat
-## -- and so is everything its organs were still listening for.
+## -- and so is everything its organs were still listening for. **A drop it was
+## in is the caller's to set aside first** (ocean.md §9.1): `drop_state()`,
+## taken up again by [method leave_mirror]. The host's rim comes with its
+## ARRIVE ([method mirror_rim]); until then this mirror is in no drop.
 func become_mirror() -> void:
 	if _cell == null:
 		return
@@ -4200,6 +4314,7 @@ func become_mirror() -> void:
 	_first_pending = false
 	in_water = true
 	anchored = true
+	_drop = null
 	_cells.clear()
 	for i in POND_SLOTS:
 		_cells.append(Body.new())
@@ -4208,30 +4323,80 @@ func become_mirror() -> void:
 	_snap_at.resize(POND_SLOTS)
 	_snap_age = 0.0
 	_book.clear()
+	_mirror_slots.clear()
+	_mirror_flocs.clear()
+	_mirror_free.resize(0)
+	for i in range(PERSON_SLOT - 1, -1, -1):
+		_mirror_free.append(i)
+	_mirror_t = 0.0
+	_near.resize(0)
+	_stepped.resize(0)
 	_fresh_senses()
 	_changes += 1
 
 
+## **The drop the host's water is** (ocean.md §10.4), from its ARRIVE: this
+## mirror's meniscus at [param center] and [param radius] -- drawn, holding this
+## cell inside it, and heard and seen with this cell's own organs -- and every
+## body it holds filed in a grid of its own, which is what the view asks what is
+## on screen. A radius of 0 is a host in today's water: no rim.
+func mirror_rim(center: Vector2, radius: float) -> void:
+	if not _mirror:
+		return
+	if not (radius > 0.0) or not is_finite(radius) or not center.is_finite():
+		_drop = null
+		return
+	if _drop != null and _drop.meniscus.center == center \
+			and _drop.meniscus.radius == radius:
+		return
+	_drop = Drop.new(center)
+	_drop.meniscus.radius = radius
+	for i in _cells.size():
+		if i != PERSON_SLOT and _cells[i].seeded:
+			_drop.grid.insert(i, _cells[i].pos)
+
+
+## **The host's rim, for its ARRIVE**: `[center, radius]`, radius 0 for today's
+## water.
+func rim() -> Array:
+	if _drop == null:
+		return [Vector2.ZERO, 0.0]
+	return [_drop.meniscus.center, _drop.meniscus.radius]
+
+
 ## **The host is gone, and this water is yours** (§1.8): a fresh single-player
 ## water round this cell, which is [method setup] -- what every new water has
-## always been. The body, the genome, the generation and the hunger are not this
-## node's, and nothing here touches them.
-func leave_mirror() -> void:
-	if _mirror:
+## always been -- or, given [param state], **your own drop, taken up again**
+## (ocean.md §9.1): as it was set aside, with this cell come back into it at a
+## quiet place ([method return_to_drop]). The body, the genome, the generation
+## and the hunger are not this node's, and nothing here touches them. Returns
+## what [method load_drop] said, or nothing.
+func leave_mirror(state: Dictionary = {}) -> Dictionary:
+	if not _mirror:
+		return {}
+	_mirror_slots.clear()
+	_mirror_flocs.clear()
+	if state.is_empty():
 		setup(_cell)
+		return {}
+	var done := load_drop(_cell, state)
+	return_to_drop()
+	return done
 
 
-## **One snapshot of this water, as a mirror reads it** (§2's POND): an Array
-## per body, indexed by [enum Entry].
+## **One snapshot of this water, as a mirror reads it** (§2's POND, ocean.md
+## §10.4): an Array per body, indexed by [enum Entry], with this field's own slot
+## for it after them at [constant ENTRY_SLOT].
 ##
 ## [param for_person] true is the snapshot for the guest: "stalking you" means
 ## stalking them, the send set is measured from them, and the person in it is
 ## this cell. False is a snapshot for a mirror of this very cell, which is how
 ## Phase 1 proves the mirror senses exactly what the field does.
 ##
-## The send set is every body whose surface lies within [param reach] of the
-## recipient **and every body hunting them, wherever it is**, so that the
-## mirror's [method hunter] always agrees with the host's.
+## The send set is [method _send_set]'s: every body hunting the recipient,
+## wherever it is, so that the mirror's [method hunter] always agrees with the
+## host's, and the nearest of the rest whose surface lies within [param reach]
+## -- [constant SEND_MAX] in all.
 func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 	var out: Array = []
 	if not _pond or _mirror or _cell == null:
@@ -4239,39 +4404,30 @@ func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 	var pb := _cells[PERSON_SLOT]
 	if for_person and pb.person == null:
 		return out
-	var you := pb.pos if for_person else _cell.position
-	for i in _water:
-		var b := _cells[i]
-		if not b.seeded:
-			continue
-		var stalking := b.state == State.STALK and (
-			(b.target == PERSON_SLOT and b.target_serial == pb.serial) if for_person
-			else b.target == TARGET_PLAYER)
-		if not stalking and b.pos.distance_to(you) - b.radius > reach:
-			continue
-		out.append([i, b.serial, b.meals, FLAG_STALKING if stalking else 0,
-			b.pos, b.heading, b.radius, b.wound, b.speed, Vector2.ZERO, 0.0])
 	if for_person:
+		out = _send_set(pb.pos, PERSON_SLOT, pb.serial, reach)
 		if anchored:
-			out.append([PERSON_SLOT, 0, 0,
+			out.append([PERSON_ID, 0,
 				FLAG_PERSON | (FLAG_IN_WATER if in_water else 0),
 				_cell.position, _cell.heading, _cell.radius, _cell.wound,
-				_cell.velocity.length(), _cell.velocity, _cell.heading_rate()])
-	elif pb.person != null:
-		out.append([PERSON_SLOT, pb.serial, pb.meals,
+				_cell.velocity.length(), _cell.velocity, _cell.heading_rate(), -1])
+		return out
+	out = _send_set(_cell.position, TARGET_PLAYER, 0, reach)
+	if pb.person != null:
+		out.append([PERSON_ID, pb.meals,
 			FLAG_PERSON | (FLAG_IN_WATER if pb.person.in_water else 0),
 			pb.pos, pb.heading, pb.radius, pb.wound, pb.person.velocity.length(),
-			pb.person.velocity, pb.person.turning])
+			pb.person.velocity, pb.person.turning, -1])
 	return out
 
 
 ## **A dedicated host's snapshot for the guest in [param slot]** -- the same
 ## send set, measured from them, and "stalking you" meaning stalking them; and
-## the other guest, if there is one with a body, **as the person, in
-## [constant PERSON_SLOT]** whichever slot they have here, with serial and meals
-## 0 -- exactly the entry a phone host writes for its own cell. So a guest of a
-## dedicated host mirrors its friend where a guest of a phone mirrors the host,
-## and PROTOCOL 4 clients need nothing new (`game/server/`).
+## the other guest, if there is one with a body, **as the person** -- id
+## [constant PERSON_ID], whichever slot they have here, meals 0 -- exactly the
+## entry a phone host writes for its own cell. So a guest of a dedicated host
+## mirrors its friend where a guest of a phone mirrors the host, and needs
+## nothing a phone's guest does not (`game/server/`).
 func pond_entries_for(slot: int, reach: float = SEND_REACH) -> Array:
 	var out: Array = []
 	if not _pond or _mirror or not _is_person_slot(slot) or _cells.size() <= slot:
@@ -4279,71 +4435,149 @@ func pond_entries_for(slot: int, reach: float = SEND_REACH) -> Array:
 	var pb := _cells[slot]
 	if pb.person == null:
 		return out
-	var you := pb.pos
-	for i in _water:
-		var b := _cells[i]
-		if not b.seeded:
-			continue
-		var stalking := b.state == State.STALK and b.target == slot \
-			and b.target_serial == pb.serial
-		if not stalking and b.pos.distance_to(you) - b.radius > reach:
-			continue
-		out.append([i, b.serial, b.meals, FLAG_STALKING if stalking else 0,
-			b.pos, b.heading, b.radius, b.wound, b.speed, Vector2.ZERO, 0.0])
+	out = _send_set(pb.pos, slot, pb.serial, reach)
 	for k in _guests:
 		var ob := _cells[PERSON_SLOT + k]
 		if PERSON_SLOT + k == slot or ob.person == null:
 			continue
-		out.append([PERSON_SLOT, 0, 0,
+		out.append([PERSON_ID, 0,
 			FLAG_PERSON | (FLAG_IN_WATER if ob.person.in_water else 0),
 			ob.pos, ob.heading, ob.radius, ob.wound, ob.person.velocity.length(),
-			ob.person.velocity, ob.person.turning])
+			ob.person.velocity, ob.person.turning, -1])
 		break
+	return out
+
+
+## **The water bodies one snapshot carries**, for a recipient at [param you]
+## whom a hunt names as [param target] -- a person's slot, or TARGET_PLAYER for
+## this cell -- and, for a person, [param serial]. Every body hunting it goes
+## first, wherever it is; then the rest whose surface lies within [param reach],
+## nearest surface first, ties by slot; [constant SEND_MAX] in all. Never a
+## person, and never a floc: a floc is told once, by SETTLE ([method flocs_in_reach]).
+func _send_set(you: Vector2, target: int, serial: int, reach: float) -> Array:
+	var out: Array = []
+	var keys := PackedInt64Array()
+	var scan := _water_ids()
+	if _drop != null:
+		_send_ids.resize(0)
+		_drop.grid.query(you, reach + _widest_now + Drop.GRID_SLACK, _send_ids)
+		scan = _send_ids
+	for i: int in scan:
+		var b := _cells[i]
+		if not b.seeded or b.inert or b.person != null or _stalks(b, target, serial):
+			continue
+		var gap := b.pos.distance_to(you) - b.radius
+		if not (gap <= reach):
+			continue
+		keys.append((int(clampf(gap, 0.0, 1.0e6) * 16.0) << 24) | i)
+	# **Every hunter, wherever it is**: a run outlives the send reach.
+	var every := _cells.size() if _drop != null else _water
+	for i in every:
+		var b := _cells[i]
+		if b.seeded and not b.inert and b.person == null and _stalks(b, target, serial):
+			out.append(_entry_of(i, true))
+			if out.size() >= SEND_MAX:
+				return out
+	keys.sort()
+	for key: int in keys:
+		if out.size() >= SEND_MAX:
+			break
+		out.append(_entry_of(key & 0xFFFFFF, false))
+	return out
+
+
+## Whether [param b] is on a run at the recipient a hunt names as [param target]
+## (and, for a person, [param serial]).
+func _stalks(b: Body, target: int, serial: int) -> bool:
+	return b.state == State.STALK and b.target == target \
+		and (target == TARGET_PLAYER or b.target_serial == serial)
+
+
+## One water body's snapshot entry, [param stalking] the recipient or not.
+func _entry_of(i: int, stalking: bool) -> Array:
+	var b := _cells[i]
+	return [_wire_id(b), b.meals, FLAG_STALKING if stalking else 0,
+		b.pos, b.heading, b.radius, b.wound, b.speed, Vector2.ZERO, 0.0, i]
+
+
+## **A body's id on the wire** (ocean.md §10.4): in the drop the id it keeps for
+## its life; in today's water its serial, which is as unique and never reused.
+func _wire_id(b: Body) -> int:
+	return b.id if _drop != null else b.serial
+
+
+## **The flocs within [param reach] of [param point]**, surface to point, as
+## SETTLE tells them: `[id, place, radius, settle, life]` each. Only the drop has
+## flocs; a mirror's are the host's, and it is asked nothing.
+func flocs_in_reach(point: Vector2, reach: float = SEND_REACH) -> Array:
+	var out: Array = []
+	if _drop == null or _mirror or not point.is_finite():
+		return out
+	_send_ids.resize(0)
+	_drop.grid.query(point, reach + Drop.REMAINS_MAX + Drop.GRID_SLACK, _send_ids)
+	for i: int in _send_ids:
+		var b := _cells[i]
+		if b.seeded and b.inert and b.pos.distance_to(point) - b.radius <= reach:
+			out.append([b.id, b.pos, b.radius, b.settle, b.life])
 	return out
 
 
 ## **A snapshot of the host's water arrives** (mirror only). Every body in it is
 ## put where the host had it, and carried on from there along its heading at the
 ## speed it was swimming -- for at most [constant CARRY_MAX], after which it
-## holds -- and the person by the closed form of the water's drag. A slot that
-## is not in the snapshot leaves this water: out of the send set is out of every
-## sense. [param your_wound] is this cell's own wound as the host last bit it
-## (§0.1); this cell mends it itself until the next one.
+## holds -- and the person by the closed form of the water's drag. A body keeps
+## the slot it came into this mirror in for as long as it is sent, found by its
+## id; one that is not in the snapshot leaves this water, and its slot is free:
+## out of the send set is out of every sense. [param your_wound] is this cell's
+## own wound as the host last bit it (§0.1); this cell mends it itself until the
+## next one. A floc is not in a snapshot: SETTLE and CLEAR tell those.
 func apply_pond(your_wound: float, entries: Array) -> void:
 	if not _mirror:
 		return
 	if is_finite(your_wound):
 		_cell.wound = clampf(your_wound, 0.0, 1.0)
-	var sent := PackedByteArray()
-	sent.resize(POND_SLOTS)
+	var sent := {}
+	var person_sent := false
 	for entry: Array in entries:
 		if entry.size() <= Entry.TURNING:
 			continue
-		var slot := int(entry[Entry.SLOT])
-		if slot < 0 or slot >= POND_SLOTS:
-			continue
+		var id := int(entry[Entry.ID])
 		var flags := int(entry[Entry.FLAGS])
 		var is_person := (flags & FLAG_PERSON) != 0
-		if is_person != (slot == PERSON_SLOT):
+		if is_person != (id == PERSON_ID):
 			continue
-		sent[slot] = 1
-		var b := _cells[slot]
 		if is_person:
-			_mirror_person(b, entry, (flags & FLAG_IN_WATER) != 0)
+			person_sent = true
+			_mirror_person(_cells[PERSON_SLOT], entry, (flags & FLAG_IN_WATER) != 0)
 			continue
-		var serial := int(entry[Entry.SERIAL])
+		if sent.has(id) or _mirror_flocs.has(id):
+			continue
+		sent[id] = true
+		var slot := int(_mirror_slots.get(id, -1))
+		var b: Body = null
+		if slot < 0:
+			slot = _mirror_take_slot()
+			_mirror_slots[id] = slot
+			b = _cells[slot]
+			# **A new body in this slot**: a new serial, so the view and the
+			# recorder know it for another body, and nothing of the last.
+			_serial += 1
+			b.serial = _serial
+			b.id = id
+			b.inert = false
+			b.meals = -1
+			b.genome = {}
+		b = _cells[slot]
 		var meals := int(entry[Entry.MEALS])
-		if serial != b.serial or meals != b.meals:
+		if meals != b.meals:
 			# A new body version: its genome, if it has already come, and
-			# otherwise nothing -- an unknown genome is inert in every rule --
-			# unless this is the same body grown, which keeps what it had.
-			var sig := serial * 1000 + meals
-			if _book.has(sig):
-				b.genome = _book[sig]
-			elif serial != b.serial:
-				b.genome = {}
-			b.serial = serial
+			# otherwise what it had -- an unknown genome is inert in every rule,
+			# and the same body grown keeps what it had until its GENOME lands.
+			var key := _book_key(id, meals)
+			if _book.has(key):
+				b.genome = _book[key]
 			b.meals = meals
+			_mirror_refresh(b)
 		b.pos = entry[Entry.AT]
 		b.heading = float(entry[Entry.HEADING])
 		b.radius = float(entry[Entry.RADIUS])
@@ -4356,25 +4590,28 @@ func apply_pond(your_wound: float, entries: Array) -> void:
 		b.state = State.STALK if stalking else State.DRIFT
 		b.target = TARGET_PLAYER if stalking else TARGET_NONE
 		_snap_at[slot] = b.pos
+		if _drop != null:
+			_drop.grid.move(slot, b.pos)
 	# Out of the snapshot is out of this water, and out of every hunt too: a
 	# body the host retired stops being sent, and one left in STALK here would
 	# go on answering [method hunter] for a hunter that no longer exists.
 	#
 	# **And it is drawn as nothing: radius 0, as the host's [method _retire]
-	# leaves it.** `vision.gd` reads `points()` and `radii()` and never
-	# `seeded`, so a body eaten near the guest and refilled on the host beyond
-	# the send reach would otherwise stay drawn where it died, a ghost in full
-	# vision. The next snapshot that carries the slot writes its radius back.
-	for slot in POND_SLOTS:
-		if sent[slot] == 0:
-			var b := _cells[slot]
-			b.seeded = false
-			b.radius = 0.0
-			b.speed = 0.0
-			b.state = State.DRIFT
-			b.target = TARGET_NONE
-			if slot == PERSON_SLOT:
-				b.person = null
+	# leaves it.** A view that reads `points()` and `radii()` never asks
+	# `seeded`, so a body eaten near the guest would otherwise stay drawn where
+	# it died, a ghost in full vision.
+	for id: int in _mirror_slots.keys():
+		if not sent.has(id):
+			_mirror_release(int(_mirror_slots[id]))
+			_mirror_slots.erase(id)
+	if not person_sent:
+		var pb := _cells[PERSON_SLOT]
+		pb.seeded = false
+		pb.radius = 0.0
+		pb.speed = 0.0
+		pb.state = State.DRIFT
+		pb.target = TARGET_NONE
+		pb.person = null
 	_snap_age = 0.0
 	_changes += 1
 
@@ -4391,7 +4628,6 @@ func _mirror_person(pb: Body, entry: Array, wet: bool) -> void:
 	p.turning = float(entry[Entry.TURNING])
 	p.age = 0.0
 	p.in_water = wet
-	pb.serial = int(entry[Entry.SERIAL])
 	pb.meals = int(entry[Entry.MEALS])
 	pb.pos = p.at
 	pb.heading = p.facing
@@ -4402,19 +4638,126 @@ func _mirror_person(pb: Body, entry: Array, wet: bool) -> void:
 
 
 ## **A body version's genome** (mirror only), as GENOME carries it once per
-## version: remembered by `serial * 1000 + meals`, and worn at once if that body
-## is already here -- so it can arrive before its body or after it.
-func apply_genome(slot: int, serial: int, meals: int, tiers: Dictionary) -> void:
+## version: remembered by the body's id and its meals, and worn at once if that
+## body is already here at that version -- so it can arrive before its body or
+## after it.
+func apply_genome(id: int, meals: int, tiers: Dictionary) -> void:
 	if not _mirror:
 		return
-	_book[serial * 1000 + meals] = tiers
+	_book[_book_key(id, meals)] = tiers
 	while _book.size() > BOOK_MAX:
 		_book.erase(_book.keys()[0])
-	if slot >= 0 and slot < _water:
+	var slot := int(_mirror_slots.get(id, -1))
+	if slot >= 0:
 		var b := _cells[slot]
-		if b.serial == serial and b.meals == meals:
+		if b.meals == meals:
 			b.genome = tiers
+			_mirror_refresh(b)
 			_changes += 1
+
+
+## **A floc in this guest's reach, told by the host** (ocean.md §10.4): made
+## in a slot of its own the first time its id is heard, and lying at
+## [param at], [param radius] across, [param settle] of the way into focus with
+## [param life] seconds left -- from which this mirror's own clock works out how
+## far it has settled at every frame since, as the host's floc does
+## ([method floc_settle_after]). A floc never moves. Mirror only.
+func mirror_floc(id: int, at: Vector2, radius: float, settle: float,
+		life: float) -> void:
+	if not _mirror or id == PERSON_ID or not at.is_finite():
+		return
+	var slot := -1
+	if _mirror_flocs.has(id):
+		slot = int((_mirror_flocs[id] as Array)[0])
+	elif _mirror_slots.has(id):
+		return
+	else:
+		slot = _mirror_take_slot()
+		_serial += 1
+		_cells[slot].serial = _serial
+	_mirror_flocs[id] = [slot, clampf(settle, 0.0, 1.0), maxf(life, 0.0), _mirror_t]
+	var b := _cells[slot]
+	b.id = id
+	b.inert = true
+	b.drifter = true
+	b.genome = {}
+	b.meals = 0
+	b.radius = maxf(radius, 0.0)
+	b.pos = at
+	b.heading = 0.0
+	b.wound = 0.0
+	b.speed = 0.0
+	b.settle = clampf(settle, 0.0, 1.0)
+	b.life = maxf(life, 0.0)
+	b.state = State.DRIFT
+	b.target = TARGET_NONE
+	b.seeded = true
+	_refresh_body(b)
+	_snap_at[slot] = at
+	if _drop != null:
+		_drop.grid.move(slot, at)
+	_changes += 1
+
+
+## A floc told by [method mirror_floc] is gone: eaten, dissolved, or out of
+## reach. Mirror only.
+func mirror_unfloc(id: int) -> void:
+	if not _mirror or not _mirror_flocs.has(id):
+		return
+	_mirror_release(int((_mirror_flocs[id] as Array)[0]))
+	_mirror_flocs.erase(id)
+	_changes += 1
+
+
+## **Every floc this mirror holds, gone** -- at an arrival, where the host starts
+## telling this cell's flocs afresh (ocean.md §10.4). What it told before then
+## and never took back -- eaten or dissolved while this cell was in the black,
+## or left behind where it died -- is nothing this mirror should keep. Mirror
+## only.
+func mirror_forget_flocs() -> void:
+	if not _mirror:
+		return
+	for id: int in _mirror_flocs.keys():
+		mirror_unfloc(id)
+
+
+## The mirror's genome book's key for body [param id] at [param meals] meals.
+static func _book_key(id: int, meals: int) -> int:
+	return (id << 8) | (meals & 0xFF)
+
+
+## A free slot for a body or floc coming into this mirror: one a body left,
+## or a new one past the person's. Never [constant PERSON_SLOT].
+func _mirror_take_slot() -> int:
+	if not _mirror_free.is_empty():
+		var slot := _mirror_free[_mirror_free.size() - 1]
+		_mirror_free.resize(_mirror_free.size() - 1)
+		return slot
+	_cells.append(Body.new())
+	_snap_at.resize(_cells.size())
+	return _cells.size() - 1
+
+
+## A body or floc leaves this mirror: nobody, drawn as nothing, and its slot
+## free for the next.
+func _mirror_release(slot: int) -> void:
+	var b := _cells[slot]
+	b.seeded = false
+	b.radius = 0.0
+	b.speed = 0.0
+	b.inert = false
+	b.state = State.DRIFT
+	b.target = TARGET_NONE
+	if _drop != null:
+		_drop.grid.remove(slot)
+	_mirror_free.append(slot)
+
+
+## What a mirrored body's organs buy, read again when its genome changes -- its
+## mouth and its armour, which the drop's senses and the view weigh it by.
+func _mirror_refresh(b: Body) -> void:
+	b.drifter = Genome.tier_of(b.genome, &"cytostome") == 0
+	_refresh_body(b)
 
 
 ## **A contact, told to this cell** (§1.3): the shipped signal, with the bearing
@@ -4422,7 +4765,7 @@ func apply_genome(slot: int, serial: int, meals: int, tiers: Dictionary) -> void
 ## never does (§0.2), because only this device knows which way its cell is
 ## facing now. The field's own contacts with this cell are told through here as
 ## well, so the run's handlers cannot tell a pond from single player.
-## [param level] is the strength, or the nutrition for `ATE`. For `KILLED`,
+## [param level] is the strength, or the nutrition for `ATE` and `GRAZED`. For `KILLED`,
 ## [param by] and [param cause] become [member died_by] and [member died_of]
 ## before [signal killed] goes, which is how the run learns its own cause of
 ## death (shared-pond.md §3); for anything else they change nothing here.
@@ -4439,6 +4782,10 @@ func hear_contact(what: int, at: Vector2, level: float = 0.0,
 			darted.emit(_cell.bearing_to(at))
 		Contact.ATE:
 			eaten.emit(level, gene, at)
+		# **A floc the host's water let this cell graze** (ocean.md §10.4): food
+		# and no growth, as this cell's own graze is in its own drop.
+		Contact.GRAZED:
+			grazed.emit(level, at)
 		Contact.KILLED:
 			died_of = cause
 			died_by = by
@@ -4489,10 +4836,15 @@ func _hunted_person(b: Body) -> Person:
 
 
 ## The other player died here: out of the slot, then said -- so a listener that
-## brings them straight back finds it empty. [param p] is which of them.
+## brings them straight back finds it empty. [param p] is which of them. **In
+## the drop one that starved or was poisoned leaves its remains** (ocean.md
+## §7.4), as every body there does.
 func _person_gone(cause: int, by: int, p: Person) -> void:
 	var at := _cells[p.slot].pos
+	var r := _cells[p.slot].radius
 	remove_person(p.slot)
+	if cause == Cause.STARVED or cause == Cause.POISONED:
+		leave_remains(at, r)
 	touched_slot = p.slot
 	person_died.emit(cause, by, at)
 
@@ -4525,6 +4877,9 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	if p.first_hunt > 0.0:
 		p.first_hunt -= delta
 	_carry_person(pb, p.age)
+	# Carried, and held inside the drop's rim, as their own run holds them.
+	if _drop != null:
+		pb.pos = _drop.meniscus.contain(pb.pos, pb.radius)
 	p.age += delta
 
 
@@ -4543,7 +4898,10 @@ func _carry_person(pb: Body, t: float) -> void:
 
 ## **A mirror's frame**: carry what the host sent, push this cell out of it, and
 ## sense it. Nothing here steps a body, seeds one or eats one -- all of that is
-## the host's, and arrives.
+## the host's, and arrives. **In the host's drop** this cell is held inside the
+## rim and knocked by it, as in its own (ocean.md §10.4), a floc settles by this
+## mirror's own clock, and every body here is what the senses scan: the send set
+## is what reaches them.
 func _step_mirror(delta: float) -> void:
 	# **Carried to the end of this frame, not to its start.** A snapshot is the
 	# host's water as the host's last frame ended, and it is applied before this
@@ -4553,19 +4911,42 @@ func _step_mirror(delta: float) -> void:
 	# hunter at 60 frames a second -- in every frame, on a link with no latency
 	# at all.
 	_snap_age += delta
+	_mirror_t += delta
 	var ahead := minf(_snap_age, CARRY_MAX)
-	for i in _water:
+	for id: int in _mirror_slots:
+		var i := int(_mirror_slots[id])
 		var b := _cells[i]
 		if b.seeded:
 			b.pos = _snap_at[i] + _forward(b.heading) * (b.speed * ahead)
+			if _drop != null:
+				_drop.grid.move(i, b.pos)
+	for id: int in _mirror_flocs:
+		var told: Array = _mirror_flocs[id]
+		var since := _mirror_t - float(told[3])
+		var b := _cells[int(told[0])]
+		b.settle = floc_settle_after(float(told[1]), float(told[2]), since)
+		b.life = maxf(float(told[2]) - since, 0.0)
 	var pb := _cells[PERSON_SLOT]
 	if pb.person != null:
 		_carry_person(pb, ahead)
+	# **What the senses scan is everything here** -- the send set and the flocs
+	# in reach, and the person -- gathered as the host gathers what is near.
+	_near.resize(0)
+	for i in _cells.size():
+		if _cells[i].seeded:
+			_near.append(i)
 	if not in_water:
 		return
-	for b in _cells:
-		if b.seeded:
+	if _drop != null:
+		_shore_clock = maxf(_shore_clock - delta, 0.0)
+		_contain_player(true)
+	for i: int in _near:
+		var b := _cells[i]
+		# A floc is not solid: a cell swims over it (ocean.md §7.5).
+		if b.seeded and not b.inert:
 			_push_local(b, false)
+	if _drop != null:
+		_contain_player(false)
 	_step_organs(delta)
 
 
@@ -4778,7 +5159,13 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 	# then on -- and held inside the rim if her side of her mother is past it.
 	if _drop != null and _cell != null:
 		var side := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-		var at := _drop.meniscus.contain(_cell.position + side * distance, body_radius)
+		var at := _cell.position + side * distance
+		# **In a pond, as a guest's sister is** ([method place_sister]): never on
+		# the other player, and inside the rim.
+		if _pond:
+			place_sister(at, _angle_of(side, 0.0), body_radius, tiers)
+			return
+		at = _drop.meniscus.contain(at, body_radius)
 		var index := _spawn(at, false, _sensed(), false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
 		_stat(&"sisters")
@@ -5081,6 +5468,18 @@ func _angle_of(v: Vector2, fallback: float) -> float:
 
 ## A beam's `body` when what it stopped on was the meniscus: no body at all.
 const EDGE_BODY := -3
+## How many of a body's run's clocks a kept drop holds, one after another:
+## calm, stale, aim, lost, rush, best, break, stroke, wander and speed.
+const RUN_CLOCKS := 10
+## **The two eating rules a guest in a shared drop is held to** (ocean.md §10.5,
+## rows 15 and 5), as the build ships them: a mouth swallows a player that fits
+## on contact, hunting or not; and `pellicle` makes every body bigger to a mouth.
+## The host decides both and tells the guest, so the referee judges neither --
+## but net_probe fingerprints a sample of each into `Wire.RULES`, through
+## [method swallows_player] and [method armoured_size], which the field itself
+## decides by, so two builds that disagree on them refuse each other at HELLO.
+const CONTACT_SWALLOW := true
+const ARMOUR_SWALLOW := true
 ## **Where the authored first drifter may be placed**: not within this of the
 ## rim, so a run that starts moving toward the edge meets it toward the middle
 ## instead. The prototype's number, never measured on its own.
@@ -5107,9 +5506,9 @@ var own_speed := true
 ## NOTICE_RANGE whatever it carries.
 var notice_by_senses := true
 ## Row 15: a mouth swallows a player that fits on contact. Off, only from a run.
-var contact_swallow := true
+var contact_swallow := CONTACT_SWALLOW
 ## Row 5: `pellicle` armours every body against a swallow. Off, a player only.
-var armour_swallow := true
+var armour_swallow := ARMOUR_SWALLOW
 ## Row 16: nothing may hunt the player for this long after a birth, a division
 ## or a return.
 var grace := FIRST_DELAY
@@ -5191,6 +5590,23 @@ var _first_serial := -1
 ## **What the drop did**, by name: counts for the probes and the census. Never
 ## read by a rule.
 var stats := {}
+# --- The pond on the drop (ocean.md §10.2) -------------------------------------
+## **What this cell's senses scan in a pond on the drop**: the bodies near it,
+## and the people in the water -- who are never in the grid, because no water
+## rule may treat one as a water body.
+var _seen := PackedInt32Array()
+## The bodies near each person this frame, by [constant GUESTS_MAX]'s index:
+## what their contacts and the water giving way to them scan.
+var _person_near: Array[PackedInt32Array] = [PackedInt32Array(), PackedInt32Array()]
+## Where every player with a body is, this frame: the anchors of the LOD.
+var _anchors_now := PackedVector2Array()
+## **Whom the water is made for** (§10.3): `[radius, sensed]` for each player
+## it was last made for, in turn -- the players while anyone is in it, and kept
+## with the drop, so an empty room keeps the water its visitors had. Empty is a
+## newborn's.
+var _made_for := PackedFloat64Array()
+## Whose turn the next body is made for, among them (§10.2).
+var _turn := 0
 
 
 # --- Made once a run, entered at every birth ----------------------------------------
@@ -5204,39 +5620,8 @@ var stats := {}
 ## [method return_to_drop]).
 func setup_drop(cell: CellBody) -> void:
 	_cell = cell
-	_pond = false
-	_mirror = false
-	_guests = 1
-	_water = 0
-	in_water = true
-	anchored = true
-	_snap_at = PackedVector2Array()
-	_snap_age = 0.0
-	_book.clear()
-	_cells.clear()
-	_free.resize(0)
-	_near.resize(0)
-	_stepped.resize(0)
-	stats.clear()
-	_t = 0.0
-	_frame = 0
-	_living = 0
-	_drifters = 0
-	_flocs = 0
-	_next_id = 1
-	_widest_now = 0.0
-	_eco_clock = 0.0
-	_gene_clock = 0.0
-	_floor_clock = 0.0
-	_shore_clock = 0.0
-	_first_pending = false
-	_first_index = -1
-	_drop = Drop.new(Vector2.ZERO)
-	var numbers := RandomNumberGenerator.new()
-	numbers.randomize()
-	drop_seed = numbers.randi()
-	_drifter_pool = Drop.drifter_genes(DRIFTER_GENES)
-	_gene_short.clear()
+	_reset_drop()
+	_made_for = PackedFloat64Array([_cell.radius, _sensed()])
 	# A drop being made for the first time is a drop that was already there:
 	# every body drawn by the share the player's senses call for, its tank at
 	# any level up to FIRST_HUNGER_MAX (§5.8), and some flocs already settled.
@@ -5285,9 +5670,228 @@ func return_to_drop() -> void:
 	_arrive()
 
 
-## Whether this run is in the drop.
+## Whether this run is in the drop -- its own, or, as a guest, the host's
+## (a mirror with the host's rim).
 func in_drop() -> bool:
 	return _drop != null
+
+
+## **Whether the drop this field holds is its own to keep** -- a solo run's, a
+## host's, a room -- and not a mirror of the host's or a replay's picture.
+func owns_drop() -> bool:
+	return _drop != null and not _mirror and not _replay
+
+
+## **The drop, as it is to be set aside or kept** (ocean.md §9.1): its
+## [method drop_state], or nothing when this field has no drop of its own.
+func set_aside() -> Dictionary:
+	return drop_state() if owns_drop() else {}
+
+
+# --- The pond on the drop (§10.2), and the room (§10.3) ---------------------------------
+
+## **The drop becomes a pond**: [param guests] people, each in a slot from
+## [constant PERSON_SLOT] on, as in every pond -- so the view, the wire's end
+## and every rule that reaches for a person reach the same place. Whatever the
+## drop kept in those slots moves to one of its own first ([method _move_body]),
+## and they are never handed to a body the drop makes while the pond is open.
+## The authored first drifter is single player's: it is where it was.
+func _open_drop_pond(guests: int) -> void:
+	_pond = true
+	_mirror = false
+	_guests = guests
+	_first_pending = false
+	while _cells.size() < PERSON_SLOT + _guests:
+		_cells.append(Body.new())
+	for k in _guests:
+		var slot := PERSON_SLOT + k
+		var at := _free.find(slot)
+		while at >= 0:
+			_free.remove_at(at)
+			at = _free.find(slot)
+		if _cells[slot].seeded:
+			_move_body(slot, _cells.size())
+		else:
+			_drop.grid.remove(slot)
+			_cells[slot] = Body.new()
+	_changes += 1
+
+
+## **A body moves from slot [param from] to [param to]** -- appended when
+## [param to] is past the end -- and a fresh nobody takes its place: filed again
+## in the grid, and every run at it, the authored first drifter and a killer
+## named to the recorder following it there. Its serial goes with it, so a chase
+## of it carries on.
+func _move_body(from: int, to: int) -> void:
+	var b := _cells[from]
+	if to >= _cells.size():
+		_cells.append(b)
+		to = _cells.size() - 1
+	else:
+		_cells[to] = b
+	_cells[from] = Body.new()
+	_drop.grid.remove(from)
+	_drop.grid.insert(to, b.pos)
+	for other in _cells:
+		if other.target == from:
+			other.target = to
+	if _first_index == from:
+		_first_index = to
+	if died_to == from:
+		died_to = to
+
+
+## **A room made anew** (§10.3): the drop's population anywhere in it, drawn
+## for a newborn -- nobody has visited it -- and its first flocs, round the
+## origin. Nobody arrives: no start, no clearing, no first drifter.
+func _make_room(cell: CellBody) -> void:
+	_cell = cell
+	_reset_drop()
+	_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
+	var share := _drifter_share(0.0)
+	for k in Drop.target():
+		_spawn(_drop.uniform_point(Drop.FILL_INSET), randf() < share, 0.0, true, 0.0, {},
+			CellBody.BASE_RADIUS)
+	for k in Drop.FIRST_FLOCS:
+		_spawn_floc(_drop.uniform_point(Drop.SNOW_INSET), Drop.floc_radius(), true)
+	_count_genes()
+	died_to = -1
+
+
+## Everything a drop being made starts from: no pond, no mirror, nobody in its
+## slots, its clocks and counts at nothing, a new rim round the origin and a
+## number of its own.
+func _reset_drop() -> void:
+	_pond = false
+	_mirror = false
+	_guests = 1
+	_water = 0
+	in_water = true
+	anchored = true
+	_snap_at = PackedVector2Array()
+	_snap_age = 0.0
+	_book.clear()
+	_cells.clear()
+	_free.resize(0)
+	_near.resize(0)
+	_stepped.resize(0)
+	stats.clear()
+	_t = 0.0
+	_frame = 0
+	_living = 0
+	_drifters = 0
+	_flocs = 0
+	_next_id = 1
+	_widest_now = 0.0
+	_eco_clock = 0.0
+	_gene_clock = 0.0
+	_floor_clock = 0.0
+	_shore_clock = 0.0
+	_first_pending = false
+	_first_index = -1
+	_turn = 0
+	_made_for = PackedFloat64Array()
+	_drop = Drop.new(Vector2.ZERO)
+	var numbers := RandomNumberGenerator.new()
+	numbers.randomize()
+	drop_seed = numbers.randi()
+	_drifter_pool = Drop.drifter_genes(DRIFTER_GENES)
+	_gene_short.clear()
+
+
+## **Where every player with a body is this frame** -- this cell, while it is an
+## anchor, and each person in the pond: the anchors of the LOD (§10.2).
+func _anchor_points() -> PackedVector2Array:
+	_anchors_now.resize(0)
+	if anchored:
+		_anchors_now.append(_cell.position)
+	if _pond and not _mirror:
+		for k in _guests:
+			var pb := _cells[PERSON_SLOT + k]
+			if pb.person != null:
+				_anchors_now.append(pb.pos)
+	return _anchors_now
+
+
+## **What each player's senses and contacts are asked of this frame**: the
+## people in the water join this cell's scan ([member _seen]), and each person
+## gets the bodies near enough for a mouth either way ([member _person_near]).
+func _gather_people() -> void:
+	_seen.resize(0)
+	_seen.append_array(_near)
+	for k in _guests:
+		_person_near[k].resize(0)
+		var pb := _cells[PERSON_SLOT + k]
+		if pb.person == null:
+			continue
+		if pb.seeded:
+			_seen.append(PERSON_SLOT + k)
+		var reach := sqrt(_player_bound(pb.radius, _gape(pb), _widest_now))
+		_drop.grid.query(pb.pos, reach + Drop.GRID_SLACK, _person_near[k])
+
+
+## What this cell's senses scan: every body in today's water; in the drop the
+## bodies the frame gathered near it -- and the people in the water, in a pond.
+func _sense_ids() -> PackedInt32Array:
+	if _drop == null:
+		return _all_ids()
+	return _seen if _pond and not _mirror else _near
+
+
+## **The water gives way to a person** (the drop's [method _push_person]):
+## its half of every overlap with the bodies near them, held inside the rim.
+## Their own half, and their knock, happen on their device.
+func _push_person_drop(k: int) -> void:
+	var pb := _cells[PERSON_SLOT + k]
+	if pb.person == null or not pb.seeded:
+		return
+	var m := _drop.meniscus
+	for i: int in _person_near[k]:
+		var b := _cells[i]
+		if not b.seeded or b.inert:
+			continue
+		var offset := pb.pos - b.pos
+		var d := offset.length()
+		var overlap := b.radius + pb.radius - d
+		if overlap <= 0.0:
+			continue
+		var normal := offset / d if d > 0.001 else -_forward(b.heading)
+		b.pos = m.contain(b.pos - normal * (overlap * (1.0 - _give_way(b.radius, pb.radius))
+			* PUSH_SHARE), b.radius)
+
+
+## **How far a person's senses reach**, for the spawner's hide reach round
+## them: the widest of the nose, the radar and the beam their tiers carry.
+func _person_senses(pb: Body) -> float:
+	var g := pb.genome
+	return maxf(maxf(
+		CellBody.SMELL_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"chemocyte"), 0, 3)],
+		CellBody.PING_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ampulla"), 0, 3)]),
+		CellBody.BEAM_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ocellus"), 0, 3)])
+
+
+## **A quiet place in this drop for a born cell** (§8.1), without moving the
+## drop or anything in it but what could swallow a born cell there: where a
+## guest arrives in a room nobody is in (§10.3). Nobody watches an empty room,
+## so the clearing is seen by no one.
+func quiet_place() -> Vector2:
+	if _drop == null:
+		return Vector2.ZERO
+	var at := _drop.quiet_start(_food_for_born, _dread_for_born)
+	var mine := CellBody.swallow_radius_of(CellBody.BASE_RADIUS, 0)
+	_count_ids.resize(0)
+	_drop.grid.query(at, DREAD_RANGE + Drop.GRID_SLACK, _count_ids)
+	for i: int in _count_ids:
+		var b := _cells[i]
+		if not b.seeded or b.inert or b.person != null or _gape(b) <= mine:
+			continue
+		if b.pos.distance_to(at) >= DREAD_RANGE:
+			continue
+		b.pos = _drop.pushed_clear(at, b.pos, DREAD_RANGE, b.radius)
+		b.aim = b.pos
+		b.flee_from = b.pos
+		_drop.grid.move(i, b.pos)
+	return at
 
 
 ## **The drop's rim**, a `basin.gd`, for whoever keeps things inside it -- the
@@ -5299,6 +5903,11 @@ func basin() -> RefCounted:
 ## **How long the drop has lived**, in the seconds it has run.
 func drop_age() -> float:
 	return _t
+
+
+## **How many bodies the drop holds**: the living and the flocs, never a person.
+func drop_bodies() -> int:
+	return _living + _flocs if owns_drop() else 0
 
 
 ## What a run starts with, at its start: the authored first drifter, held until
@@ -5381,9 +5990,16 @@ func _age_alone(seconds: float) -> void:
 ## **The drop as plain types** (§9.2): its number, age and frame, its next id,
 ## its rim, the spawner's debt and the three floors' and the shore's clocks,
 ## whom its water is made for, which slots are free -- and every body by its
-## slot, one column a field, its genome by gene name. **What a body is doing is
-## not in it** -- a chase, a rest, where it was aiming -- so a loaded body starts
-## drifting, as a spawned one does. Empty outside the drop.
+## slot, one column a field, its genome by gene name. Empty outside the drop.
+##
+## **And, since 1b-2, what every body is doing** (`runs`: a chase and whom at,
+## by id, a rest, where it was aiming and every clock of it), which genes the
+## floor is short of, the grid as a query finds it, the census's counts and
+## whose turn it is -- everything a drop reads that the bodies do not say -- so
+## a drop kept and loaded goes on as one that never stopped (ocean.md §14.3
+## check 12, the room's case). The people in a pond are nobody's to keep: they
+## are left out, and a chase of one is kept as a chase of nobody, which ends on
+## its next step as it would have.
 func drop_state() -> Dictionary:
 	if _drop == null:
 		return {}
@@ -5408,9 +6024,14 @@ func drop_state() -> Dictionary:
 	var settle := PackedFloat64Array()
 	var life := PackedFloat64Array()
 	var genome: Array = []
+	var run_state := PackedByteArray()
+	var run_target := PackedInt64Array()
+	var run_flags := PackedByteArray()
+	var run_clocks := PackedFloat64Array()
+	var run_points := PackedVector2Array()
 	for i in _cells.size():
 		var b := _cells[i]
-		if not b.seeded:
+		if not b.seeded or b.person != null:
 			continue
 		slot.append(i)
 		ids.append(b.id)
@@ -5436,6 +6057,20 @@ func drop_state() -> Dictionary:
 		for gene: StringName in b.genome:
 			genes[String(gene)] = int(b.genome[gene])
 		genome.append(genes)
+		run_state.append(b.state)
+		run_target.append(_run_target_id(b))
+		run_flags.append((1 if b.lunging else 0) | (2 if b.orienting else 0)
+			| (4 if b.searching else 0))
+		run_clocks.append_array([b.calm, b.stale, b.aim_clock, b.lost, b.rush, b.best,
+			b.break_clock, b.stroke, b.wander, b.speed])
+		run_points.append(b.aim)
+		run_points.append(b.flee_from)
+	var counts := {}
+	for what: StringName in stats:
+		counts[String(what)] = int(stats[what])
+	var short := PackedStringArray()
+	for gene: StringName in _gene_short:
+		short.append(String(gene))
 	return {
 		"seed": drop_seed,
 		"age": _t,
@@ -5446,8 +6081,7 @@ func drop_state() -> Dictionary:
 		"debt": _drop.spawner.debt,
 		"widest": _widest_now,
 		"clocks": PackedFloat64Array([_eco_clock, _gene_clock, _floor_clock, _shore_clock]),
-		"made_for": PackedFloat64Array([_cell.radius if _cell != null
-			else CellBody.BASE_RADIUS, _sensed()]),
+		"made_for": _made_for_now(),
 		"slots": _cells.size(),
 		"free": _free.duplicate(),
 		"bodies": {"slot": slot, "id": ids, "parent": parent, "kind": kind,
@@ -5456,13 +6090,55 @@ func drop_state() -> Dictionary:
 			"starve": starve, "effort": effort, "bite": bite, "dart": dart,
 			"dash": dash, "dash_v": dash_v, "settle": settle, "life": life,
 			"genome": genome},
+		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
+			"clocks": run_clocks, "points": run_points},
+		"gene_short": short,
+		"grid": _drop.grid.state(),
+		"stats": counts,
+		"turn": _turn,
 	}
+
+
+## **Whom the water is made for, as the drop keeps it** (§10.3): the players in
+## it now, or the last it was made for.
+func _made_for_now() -> PackedFloat64Array:
+	var tunes := PackedFloat64Array()
+	if anchored and _cell != null:
+		tunes.append_array([_cell.radius, _sensed()])
+	if _pond and not _mirror:
+		for k in _guests:
+			var pb := _cells[PERSON_SLOT + k]
+			if pb.person != null:
+				tunes.append_array([pb.radius, _anchor_sensed(Anchor.PERSON + k)])
+	if tunes.is_empty():
+		tunes = _made_for.duplicate()
+	if tunes.size() < 2:
+		tunes = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
+	return tunes
+
+
+## **Whom a body's run is at, as a file keeps it**: the id of the water body it
+## chases, [constant TARGET_PLAYER] for this cell, and [constant TARGET_NONE]
+## for nobody -- or for a body the file does not keep: a person, or one gone
+## since the run began, whose chase ends on its next step either way.
+func _run_target_id(b: Body) -> int:
+	if b.target == TARGET_PLAYER:
+		return TARGET_PLAYER
+	if b.target < 0 or b.target >= _cells.size():
+		return TARGET_NONE
+	var prey := _cells[b.target]
+	if not prey.seeded or prey.person != null or prey.serial != b.target_serial:
+		return TARGET_NONE
+	return prey.id
 
 
 ## **The drop [param state] holds, made again round [param cell]** (§9.4): the
 ## drop where it was, every body in its slot with its place, body, tank and
-## clocks, drifting; nobody in it yet -- the caller puts the cell back
-## ([method restore_player]) or brings a new one ([method return_to_drop]).
+## clocks -- and, from a file that keeps them (1b-2 on), what each was doing,
+## the floor's short genes, the grid's order and the counts, so it goes on as it
+## would have; from one that does not, drifting. Nobody in it yet -- the caller
+## puts the cell back ([method restore_player]) or brings a new one
+## ([method return_to_drop]).
 ##
 ## **Every body is re-derived from its genome by name** -- upkeep, gape, speed,
 ## reach -- by this build's tables, which are the save's own unless a content
@@ -5490,6 +6166,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	stats.clear()
 	_first_pending = false
 	_first_index = -1
+	_turn = int(state.get("turn", 0))
+	_made_for = PackedFloat64Array(state["made_for"])
+	if _made_for.size() < 2 or _made_for.size() % 2 != 0:
+		_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	drop_seed = int(state["seed"])
 	_t = float(state["age"])
 	_frame = int(state["frame"])
@@ -5565,7 +6245,11 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
 			b.radius = CellBody.DIVIDE_RADIUS
 			trimmed += 1
-		if not _drop.meniscus.inside(b.pos, b.radius):
+		# Held inside by the test the running drop holds a body by (see
+		# [method _step_one]), so a body it left on the rim is not moved by a
+		# hair here: only a rim that is smaller than the one it was kept under.
+		var room := _drop.meniscus.radius - b.radius
+		if b.pos.distance_squared_to(_drop.meniscus.center) > room * room:
 			b.pos = _drop.meniscus.contain(b.pos, b.radius)
 			contained += 1
 		b.aim = b.pos
@@ -5579,6 +6263,7 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 			if b.drifter:
 				_drifters += 1
 		_drop.grid.insert(slot[k], b.pos)
+	_load_runs(state, slot)
 	# The free slots in the order they would have been reused -- and ahead of
 	# them, reused last, any empty slot the list had lost track of.
 	var listed := {}
@@ -5589,11 +6274,78 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	for i in range(_cells.size() - 1, -1, -1):
 		if not _cells[i].seeded and not listed.has(i):
 			_free.insert(0, i)
-	_count_genes()
+	# **What a drop reads that its bodies do not say**, where the file keeps it
+	# (1b-2): the genes the floor was short of at its last count, the census's
+	# counts, and the grid as its queries found the bodies -- in which order,
+	# too, which is what the passes that step, push and eat go by. The grid only
+	# for a drop loaded as it was kept: one a conversion moved is filed anew.
+	if state.has("gene_short"):
+		_gene_short.clear()
+		for gene: String in state["gene_short"]:
+			_gene_short.append(StringName(gene))
+	else:
+		_count_genes()
+	if state.has("stats"):
+		for what: String in state["stats"]:
+			stats[StringName(what)] = int(state["stats"][what])
+	if state.has("grid") and trimmed == 0 and contained == 0:
+		var grid: Array = state["grid"]
+		var filed := PackedInt32Array(grid[0])
+		var sorted_filed := filed.duplicate()
+		sorted_filed.sort()
+		var sorted_slots := slot.duplicate()
+		sorted_slots.sort()
+		if sorted_filed == sorted_slots:
+			_drop.grid.restore(filed, PackedInt32Array(grid[1]))
 	died_to = -1
 	_first_hunt = grace
 	_fresh_senses()
 	return {"bodies": slot.size(), "trimmed": trimmed, "contained": contained}
+
+
+## **What every body was doing, as [param state] keeps it** (1b-2 on), for the
+## bodies in [param slots]: its run's state, whom at -- found again by id --
+## its three switches, its clocks and where it was aiming and fleeing from. A
+## file without it leaves every body drifting, as 1b-1's did.
+func _load_runs(state: Dictionary, slots: PackedInt32Array) -> void:
+	if not state.has("runs"):
+		return
+	var runs: Dictionary = state["runs"]
+	var run_state: PackedByteArray = runs["state"]
+	var run_target: PackedInt64Array = runs["target"]
+	var run_flags: PackedByteArray = runs["flags"]
+	var clocks: PackedFloat64Array = runs["clocks"]
+	var points: PackedVector2Array = runs["points"]
+	var by_id := {}
+	for i: int in slots:
+		by_id[_cells[i].id] = i
+	for k in slots.size():
+		var b := _cells[slots[k]]
+		b.state = run_state[k]
+		var target := run_target[k]
+		b.target = TARGET_NONE
+		b.target_serial = 0
+		if target == TARGET_PLAYER:
+			b.target = TARGET_PLAYER
+		elif target > 0 and by_id.has(target):
+			b.target = int(by_id[target])
+			b.target_serial = _cells[b.target].serial
+		b.lunging = (run_flags[k] & 1) != 0
+		b.orienting = (run_flags[k] & 2) != 0
+		b.searching = (run_flags[k] & 4) != 0
+		var c := k * RUN_CLOCKS
+		b.calm = clocks[c]
+		b.stale = clocks[c + 1]
+		b.aim_clock = clocks[c + 2]
+		b.lost = clocks[c + 3]
+		b.rush = clocks[c + 4]
+		b.best = clocks[c + 5]
+		b.break_clock = clocks[c + 6]
+		b.stroke = clocks[c + 7]
+		b.wander = clocks[c + 8]
+		b.speed = clocks[c + 9]
+		b.aim = points[2 * k]
+		b.flee_from = points[2 * k + 1]
 
 
 ## **What the water keeps of the cell in it** (§9.2): its grace (row 16), the
@@ -5646,15 +6398,32 @@ func _process_drop(delta: float) -> void:
 		_first_hunt -= delta
 	_dart_clock = maxf(_dart_clock - delta, 0.0)
 	_bite_clock = maxf(_bite_clock - delta, 0.0)
+	# **The people first, in a pond** (§10.2): carried to where they are now,
+	# so every chase this frame leads the place they are, as this cell has
+	# already moved by the time this node runs.
+	if _pond:
+		for k in _guests:
+			_step_person(delta, PERSON_SLOT + k)
 	_step_drop_bodies()
 	_near.resize(0)
 	if anchored:
 		_drop.grid.query(_cell.position, _scan_reach() + _widest_now + Drop.GRID_SLACK,
 			_near)
+	if _pond:
+		_gather_people()
 	# Contact first, then separation, for the reason today's frame gives; and
-	# a death stops the frame where it lands, as it does there.
+	# a death stops the frame where it lands, as it does there -- **but not in a
+	# pond**, where the water goes on for the other player, and this cell leaves
+	# it instead (shared-pond.md §1.5).
 	if in_water and _contacts_with(null):
-		return
+		if not _pond:
+			return
+		_lose_local()
+	if _pond:
+		for k in _guests:
+			_contacts_person(PERSON_SLOT + k)
+		if _guests > 1:
+			_guests_meet()
 	_contacts_drop()
 	_separate_drop()
 	if in_water:
@@ -5676,23 +6445,28 @@ func _process_drop(delta: float) -> void:
 func _step_drop_bodies() -> void:
 	var tick := _frame % Drop.LOD_EVERY
 	_stepped.resize(0)
+	# A person is stepped as a person ([method _step_person]), never as water.
 	if not lod:
 		for i in _cells.size():
-			if _cells[i].seeded:
+			if _cells[i].seeded and _cells[i].person == null:
 				_step_one(i, _cells[i], tick)
 		return
-	var p := _cell.position
+	# **Every player is an anchor** (§10.2): near means near any of them.
+	var anchors := _anchor_points()
 	_lod_ids.resize(0)
-	if anchored:
-		_drop.grid.query(p, Drop.LOD_NEAR + Drop.GRID_SLACK, _lod_ids)
+	for a: Vector2 in anchors:
+		_drop.grid.query(a, Drop.LOD_NEAR + Drop.GRID_SLACK, _lod_ids)
 	var near2 := Drop.LOD_NEAR * Drop.LOD_NEAR
 	var full2 := Drop.LOD_FULL * Drop.LOD_FULL
 	var half := _frame % 2
 	for i: int in _lod_ids:
 		var b := _cells[i]
-		if not b.seeded:
+		# Asked twice, by two players, it is stepped once.
+		if not b.seeded or b.near_frame == _frame:
 			continue
-		var d2 := b.pos.distance_squared_to(p)
+		var d2 := INF
+		for a: Vector2 in anchors:
+			d2 = minf(d2, b.pos.distance_squared_to(a))
 		if d2 > near2:
 			continue
 		b.near_frame = _frame
@@ -5706,7 +6480,7 @@ func _step_drop_bodies() -> void:
 	var n := _cells.size()
 	while i < n:
 		var b := _cells[i]
-		if b.seeded and b.near_frame != _frame \
+		if b.seeded and b.near_frame != _frame and b.person == null \
 				and (not b.drifter or ((i / Drop.LOD_EVERY) % Drop.LOD_SLOW) == slow):
 			_step_one(i, b, tick)
 		i += Drop.LOD_EVERY
@@ -5783,8 +6557,14 @@ func _grow(b: Body, gene: StringName) -> void:
 ## **The cell that eats you is fed by it** (§5.6): your size against its own,
 ## a unit of growth and your dominant gene, then REST_MEAL as after any meal.
 func _fed_on_player(b: Body) -> void:
-	_feed_water(b, _meal_value_for(_cell.radius, b.radius))
-	_grow(b, _local_dominant())
+	_fed_on(b, _cell.radius, _local_dominant())
+
+
+## [method _fed_on_player] for any player: one of [param radius], most made of
+## [param gene] -- this cell, or the other player in a pond.
+func _fed_on(b: Body, radius: float, gene: StringName) -> void:
+	_feed_water(b, _meal_value_for(radius, b.radius))
+	_grow(b, gene)
 	_rest(b, REST_MEAL)
 	_stat(&"ate_player")
 
@@ -5792,7 +6572,7 @@ func _fed_on_player(b: Body) -> void:
 ## How big [param b] is to a mouth: its radius, times its `pellicle`'s armour
 ## (row 5).
 func _swallow_r(b: Body) -> float:
-	return b.radius * b.armour if armour_swallow else b.radius
+	return armoured_size(b.radius, b.armour, armour_swallow)
 
 
 ## **Where the run stops**: no target, and this long before its hunger decides
@@ -5890,6 +6670,24 @@ func _look_in_drop(index: int, b: Body, reach: float) -> void:
 				and _senses_find(b, d, _cell.radius, false):
 			best = TARGET_PLAYER
 			best_d = d
+	# **The other players, in a pond, by the same rule** (§10.2): nothing
+	# before their own grace, their armoured body against this mouth, and only
+	# what this body's own senses find. This cell, tested first, keeps a tie.
+	if _pond:
+		for k in _guests:
+			var slot := PERSON_SLOT + k
+			var pb := _cells[slot]
+			var p := pb.person
+			if p == null or not pb.seeded or p.first_hunt > 0.0:
+				continue
+			if not _worth_committing_to(b, gape, pb.radius * p.armour, pb.wound):
+				continue
+			var d := b.pos.distance_to(pb.pos)
+			if d <= maxf(reach, b.radius + pb.radius) and d < best_d \
+					and _senses_find(b, d, pb.radius, false):
+				best = slot
+				best_serial = pb.serial
+				best_d = d
 	var full := maxf(reach, b.radius + _widest_now)
 	var passes := 2 if (near_first and full > Drop.PREY_NEAR) else 1
 	for pass_k in passes:
@@ -6157,6 +6955,15 @@ func _separate_drop() -> void:
 				_push_local(b, true)
 				# A body the cell shoulders at the rim is held there too.
 				b.pos = m.contain(b.pos, b.radius)
+		# **Each device moves only what it owns** (shared-pond.md §1.2): the
+		# other player gives way on their own device, by the same area share.
+		if _pond:
+			for k in _guests:
+				if _cells[PERSON_SLOT + k].seeded:
+					_push_local(_cells[PERSON_SLOT + k], false)
+	if _pond:
+		for k in _guests:
+			_push_person_drop(k)
 	for i: int in _stepped:
 		var b := _cells[i]
 		if not b.seeded or b.inert:
@@ -6281,7 +7088,7 @@ func _grazed_by_drifter(i: int, b: Body) -> void:
 ## **Remains** (§7.4): the floc a player that starved or was poisoned leaves
 ## where it died, as every body does. The drop outlives the cell.
 func leave_remains(at: Vector2, body_radius: float) -> void:
-	if _drop == null:
+	if _drop == null or _mirror or _replay:
 		return
 	_spawn_floc(at, Drop.remains_radius(body_radius), true)
 	_stat(&"remains")
@@ -6291,16 +7098,41 @@ func leave_remains(at: Vector2, body_radius: float) -> void:
 
 ## Twice a second: the spawner, the gene floor, the drifter floor and the snow.
 func _ecology(dt: float) -> void:
+	# **Every player, and what the water is made for** (§10.2, §10.3): this cell
+	# while it has a body, and each person in a pond -- where each is, which way
+	# it faces, how far its senses reach, and its radius and sight for a body
+	# made for it. With nobody in, the players it was last made for.
 	var players := PackedVector2Array()
+	var facing := PackedFloat32Array()
+	var reaches := PackedFloat32Array()
+	var wet: Array[bool] = []
+	var tunes := PackedFloat64Array()
 	if anchored:
 		players.append(_cell.position)
-	var sensed := _sensed()
-	var share := _drifter_share(sensed)
+		facing.append(_cell.heading)
+		reaches.append(maxf(maxf(smell_range, ping_range), beam_range))
+		wet.append(in_water)
+		tunes.append_array([_cell.radius, _sensed()])
+	if _pond and not _mirror:
+		for k in _guests:
+			var pb := _cells[PERSON_SLOT + k]
+			if pb.person == null:
+				continue
+			players.append(pb.pos)
+			facing.append(pb.heading)
+			reaches.append(_person_senses(pb))
+			wet.append(pb.seeded)
+			tunes.append_array([pb.radius, _anchor_sensed(Anchor.PERSON + k)])
+	if not tunes.is_empty():
+		_made_for = tunes
+	elif _made_for.size() < 2:
+		_made_for = PackedFloat64Array([CellBody.BASE_RADIUS, 0.0])
 	# **The shortfall, paid back over SPAWN_TAU** (§6.2), one body at a time,
-	# each at the thinnest of its candidate places (§6.3).
+	# each at the thinnest of its candidate places (§6.3), made for the players
+	# in turn.
 	var due := _drop.spawner.due(_living, dt)
 	for k in due:
-		if _make_one(players, sensed, share) < 0:
+		if _make_one(players, reaches) < 0:
 			_drop.spawner.refund(due - k)
 			_stat(&"spawn_no_room")
 			break
@@ -6309,56 +7141,69 @@ func _ecology(dt: float) -> void:
 		_gene_clock = 0.0
 		_count_genes()
 	# **The drifter floor** (§6.4): no living drifter within the hide reach and
-	# DRIFTER_FLOOR_SLACK more of the player, and one is made just past its
-	# horizon, ahead of it. With the ring it has nothing to do; it stays as the
-	# invariant it always was.
+	# DRIFTER_FLOOR_SLACK more of a player, and one is made just past its
+	# horizon, ahead of it -- per player (§10.2), one a tick. With the ring it
+	# has nothing to do; it stays as the invariant it always was.
 	_floor_clock = maxf(_floor_clock - dt, 0.0)
-	if anchored and _floor_clock <= 0.0:
-		var hide := _hide_reach(true)
-		if _count_drifters_at(_cell.position, hide + Drop.DRIFTER_FLOOR_SLACK) == 0:
+	if _floor_clock <= 0.0:
+		for k in players.size():
+			var hide := Drop.hide_reach(reaches[k], DREAD_RANGE, true)
+			if _count_drifters_at(players[k], hide + Drop.DRIFTER_FLOOR_SLACK) != 0:
+				continue
 			_floor_clock = Drop.DRIFTER_FLOOR_GAP
-			if _spawn_ahead(hide + randf_range(Drop.DRIFTER_FLOOR_NEAR,
-					Drop.DRIFTER_FLOOR_FAR), sensed) >= 0:
+			if _spawn_ahead(players[k], facing[k], hide + randf_range(
+					Drop.DRIFTER_FLOOR_NEAR, Drop.DRIFTER_FLOOR_FAR), tunes[2 * k + 1]) >= 0:
 				_stat(&"drifter_floor")
+			break
 	# **The snow** (§7.2): flakes fall everywhere at one rate, and each stays
-	# with a chance that falls as the living round it -- the player among them --
-	# rise toward the drop's share.
+	# with a chance that falls as the living round it -- the players among them
+	# -- rise toward the drop's share.
 	var area := PI * _drop.meniscus.radius * _drop.meniscus.radius
 	var expected := Drop.snow_expected()
 	var scan2 := Drop.SNOW_SCAN * Drop.SNOW_SCAN
 	for k in _drop.snow.falls(area, dt):
 		var at := _drop.uniform_point(Drop.SNOW_INSET)
 		var here := _count_living_at(at, Drop.SNOW_SCAN)
-		if anchored and in_water and _cell.position.distance_squared_to(at) <= scan2:
-			here += 1
+		for j in players.size():
+			if wet[j] and players[j].distance_squared_to(at) <= scan2:
+				here += 1
 		if _drop.snow.keeps(float(here), expected):
 			_spawn_floc(at, Drop.floc_radius(), false)
 			_stat(&"snow_kept")
 
 
-## **One body, made where it cannot be seen** (§6.3, §6.4): a drifter if the
-## standing drop is short of the share [param share], a peer if not; placed at
-## the thinnest of drop.gd's candidates, every one of them out of every
-## player's hide reach for its kind. [param players] are where they are. -1 if
-## there was nowhere to put it.
-func _make_one(players: PackedVector2Array, sensed: float, share: float) -> int:
-	var drifter := Drop.wants_drifter(_living, _drifters, share)
+## **One body, made where it cannot be seen** (§6.3, §6.4), **for the player
+## whose turn it is** (§10.2): a drifter if the standing drop is short of the
+## share that player's sight calls for, a peer if not, drawn for their radius and
+## sight; placed at the thinnest of drop.gd's candidates, every one of them out
+## of every player's hide reach for its kind. [param players] are where they are
+## and [param reaches] how far each one's senses reach; with nobody there, it is
+## made for the players [member _made_for] keeps, in turn, anywhere. -1 if there
+## was nowhere to put it.
+func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
+	var turns := maxi(_made_for.size() / 2, 1)
+	var turn := posmod(_turn, turns)
+	_turn = Drop.next_turn(turn, turns)
+	var mine := _made_for[2 * turn]
+	var sensed := _made_for[2 * turn + 1]
+	var drifter := Drop.wants_drifter(_living, _drifters, _drifter_share(sensed))
 	var hides := PackedFloat32Array()
 	for k in players.size():
-		hides.append(_hide_reach(not drifter))
-	var candidates := _drop.spawn_candidates(players, hides, 0)
+		hides.append(Drop.hide_reach(reaches[k], DREAD_RANGE, not drifter))
+	var candidates := _drop.spawn_candidates(players, hides,
+		turn if turn < players.size() else 0)
 	var pick := Replenish.thinnest(candidates, _thinness)
 	if pick < 0:
 		return -1
-	return _spawn(candidates[pick], drifter, sensed)
+	return _spawn(candidates[pick], drifter, sensed, false, 0.0, {}, mine)
 
 
-## A drifter [param reach] from the cell, ahead of it where the drop allows.
-func _spawn_ahead(reach: float, sensed: float) -> int:
+## A drifter [param reach] from a player at [param from], ahead of its
+## [param heading] where the drop allows.
+func _spawn_ahead(from: Vector2, heading: float, reach: float, sensed: float) -> int:
 	for attempt in AHEAD_TRIES:
 		var spread := AHEAD_SPREAD + AHEAD_WIDEN * float(attempt)
-		var at := _cell.position + _forward(_cell.heading
-			+ randf_range(-1.0, 1.0) * spread) * reach
+		var at := from + _forward(heading + randf_range(-1.0, 1.0) * spread) * reach
 		if _drop.meniscus.inside(at, Drop.SPAWN_INSET):
 			return _spawn(at, true, sensed)
 	return -1
@@ -6367,11 +7212,12 @@ func _spawn_ahead(reach: float, sensed: float) -> int:
 ## **The one door every new body comes in by** (§12) -- the spawner, the first
 ## fill, the floors, a sister, the first drifter -- so a birth, in pack 2, is a
 ## spawn with a parent. A drifter, or a peer made to live for a player of
-## [param sensed] (§5.8); or, given [param body_radius] and [param tiers], that
-## body: a sister, or one a tool poses. Fed, unless it is part of a drop's
-## first [param fill]. Returns its slot.
+## [param sensed] (§5.8) and of radius [param mine] -- this cell's, unless
+## given; or, given [param body_radius] and [param tiers], that body: a sister,
+## or one a tool poses. Fed, unless it is part of a drop's first [param fill].
+## Returns its slot.
 func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
-		body_radius := 0.0, tiers := {}) -> int:
+		body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
 	var index := _free_slot_drop()
 	var b := _cells[index]
 	_renew(b)
@@ -6402,7 +7248,9 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 	elif drifter:
 		_seed_drifter(b)
 	else:
-		_seed_peer(b, _cell.radius if _cell != null else CellBody.BASE_RADIUS, sensed)
+		if mine <= 0.0:
+			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
+		_seed_peer(b, mine, sensed)
 		_give_venom_back(b)
 	b.pos = at
 	b.aim = at
@@ -6670,6 +7518,35 @@ func pose_body(at: Vector2, body_radius: float, tiers: Dictionary) -> int:
 	if _drop == null:
 		return -1
 	return _spawn(at, false, _sensed(), false, body_radius, tiers)
+
+
+## **A body for a tool in slot [param index]**, which a probe names: whatever
+## lived there leaves the drop, and a new body -- a new id -- comes in by the one
+## door every body does, at [param at] with [param body_radius] and
+## [param tiers]. Never a person's slot. Returns the slot, or -1. Nothing in the
+## game calls this.
+func pose_at(index: int, at: Vector2, body_radius: float, tiers: Dictionary) -> int:
+	if not owns_drop() or index < 0 or _is_person_slot(index):
+		return -1
+	while _cells.size() <= index:
+		_cells.append(Body.new())
+		_free.insert(0, _cells.size() - 1)
+	if _cells[index].seeded:
+		_drop_lose(index, 0)
+	else:
+		var was := _free.find(index)
+		if was >= 0:
+			_free.remove_at(was)
+		_free.append(index)
+	return _spawn(at, false, _sensed(), false, body_radius, tiers)
+
+
+## **A body a tool takes out of the drop** -- gone, as a floc eaten is: no cause,
+## no remains. Nothing in the game calls this.
+func take_out(index: int) -> void:
+	if owns_drop() and index >= 0 and index < _cells.size() \
+			and not _is_person_slot(index) and _cells[index].seeded:
+		_drop_lose(index, 0)
 
 
 ## **One line about the whole drop**, for the probes: its population, what it

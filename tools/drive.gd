@@ -530,9 +530,12 @@ extends Node
 ## drop; these are read before the run enters the tree, as `--mode` is:
 ##   --drop=0|1              0 plays today's water, the reference every probe
 ##                           and the identity gate (§14.4) compare the drop
-##                           against; 1 the drop. A run with a session up --
-##                           `--peer=`, `--pond=host|guest` -- is always today's
-##                           water in 1a, and so is `--pond=<dist>`'s field
+##                           against; 1 the drop. A run with a session up is
+##                           in the drop too (§10.2): with `--pond=host|guest`
+##                           the host's drop is the pond and the guest's own is
+##                           set aside, and the far seat is in the same water
+##                           as this one and keeps nothing. `--pond=<dist>`'s
+##                           field is always today's water
 ##   --start=quiet|centre|edge
 ##                           where the run starts: somewhere quiet (§8.1, the
 ##                           game's), the middle, or --edge-gap= inside the rim
@@ -1326,6 +1329,10 @@ func _ready() -> void:
 			# is made again round it, and its grit hung inside the new rim.
 			if _food != null and bool(_food.call(&"in_drop")):
 				_food.call(&"setup_drop", body)
+				# A host's drop is the pond (§10.2), and a drop made again is
+				# nobody's pond until it is opened again.
+				if _seat == "host":
+					_food.open_pond()
 				var motes := _find_script(self, "res://game/normal/motes.gd")
 				if motes != null:
 					motes.call(&"setup", body, _food.call(&"basin"))
@@ -1624,6 +1631,13 @@ func _open_far_seat(scene: PackedScene) -> void:
 	var far := scene.instantiate()
 	far.set("mode", 0)
 	far.set("scheme", 0)
+	# **In this run's water, keeping nothing** (ocean.md §9, §10.2): the game's
+	# default is the player's own file, which the far seat must neither open on
+	# nor write -- whatever `--keep=` gives this one.
+	if _drop_flag >= 0 and &"drop" in far:
+		far.set("drop", _drop_flag)
+	if &"keep" in far:
+		far.set("keep", "")
 	_far_view.add_child(far)
 	NetSession.current = _seat_session(far_seat)
 	add_child(_far_view)
@@ -1636,7 +1650,10 @@ func _open_far_seat(scene: PackedScene) -> void:
 		cell.set("steering_off", true)
 	if _friend_radius > 0.0 and cell != null and food != null:
 		cell.radius = _friend_radius
-		food.setup(cell)
+		if bool(food.call(&"in_drop")):
+			food.call(&"setup_drop", cell)
+		else:
+			food.setup(cell)
 		if far_seat == "host":
 			food.open_pond()
 	if _friend_genome != "" and genome != null:

@@ -71,6 +71,9 @@ const Lan := preload("res://game/net/lan.gd")
 const Wire := preload("res://game/net/wire.gd")
 const Invite := preload("res://game/net/invite.gd")
 const InviteBook := preload("res://game/server/invite_book.gd")
+## For the file its room is kept in (ocean.md §10.3), which a far page's server
+## writes as the real one does.
+const DedicatedServer := preload("res://game/server/server.gd")
 const Earshot := preload("res://game/net/earshot.gd")
 
 ## **The harness's own key and certificate**, kept between runs: every invite
@@ -106,6 +109,9 @@ var _stop_file := ""
 var _kept_before: Variant = null
 var _reach_before: Variant = null
 var _key_before := true
+## The server's room as it was, or null for none: the real server keeps one
+## at every start and stop (ocean.md §10.3), and this is this machine's.
+var _room_before: Variant = null
 var _minted := false
 var _far_page := false
 ## The lines minted for the real server: its good invite and a revoked one.
@@ -657,6 +663,7 @@ func _server_up() -> bool:
 	var where := InviteBook.paths()
 	_key_before = FileAccess.file_exists(str(where["key"]))
 	_reach_before = _bytes_or_null(str(where["reach"]))
+	_room_before = _bytes_or_null(DedicatedServer.ROOM_PATH)
 	_minted = true
 	var minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
 		"--invite=" + LABEL, "--invite=" + LABEL_GONE]))
@@ -730,7 +737,8 @@ func _drain_server() -> void:
 
 
 ## **This machine as it was**: the kept invite, and the server's book --
-## the label revoked, `--reach` as it was, and a key this run made, gone.
+## the label revoked, `--reach` as it was, its room as it was, and a key this
+## run made, gone.
 func _put_back() -> void:
 	if _far_page:
 		if _kept_before == null:
@@ -746,6 +754,17 @@ func _put_back() -> void:
 		DirAccess.remove_absolute(str(where["reach"]))
 	else:
 		Invite.write_private(str(where["reach"]), _reach_before)
+	# The room: as it was, or gone with the folder this run made for it.
+	var room := DedicatedServer.ROOM_PATH
+	if _room_before == null:
+		for path: String in [room, room.get_basename() + ".tmp"]:
+			DirAccess.remove_absolute(path)
+		DirAccess.remove_absolute(room.get_base_dir())
+	else:
+		var file := FileAccess.open(room, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(_room_before)
+			file.close()
 	if not _key_before and InviteBook.entries().is_empty():
 		for what: String in ["key", "cert", "book", "joined"]:
 			DirAccess.remove_absolute(str(where[what]))

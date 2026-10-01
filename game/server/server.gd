@@ -2,12 +2,12 @@ extends Node
 ## **The dedicated server: the shared pond, with nobody hosting it from a phone.**
 ##
 ## A headless process that keeps the water for two guests, on the home LAN, on
-## the same port and the same PROTOCOL 4 a phone host speaks -- so a phone
+## the same port and the same protocol a phone host speaks -- so a phone
 ## joins it exactly as it joins a friend, with the four taps of the code this
 ## prints. It has no cell of its own: its field's cell is out of the water and
-## no anchor for good, the water is seeded round whoever is in it, and each
-## guest is told the other one is the friend (`game/net/pond.gd`, `food.gd`'s
-## `open_dedicated()`).
+## no anchor for good, its water is its room -- one drop, which lives whether
+## anyone is in it or not (below) -- and each guest is told the other one is
+## the friend (`game/net/pond.gd`, `food.gd`'s `open_dedicated()`).
 ##
 ## **It boots straight here.** An exported Godot 4.7 release build cannot be
 ## told which scene to run (multiplayer.md §4.4: `--scene` and friends are
@@ -68,6 +68,15 @@ extends Node
 ## a clean stop to `systemd`, and the forward's lease is the backstop, gone
 ## within the hour.
 ##
+## **The room** (docs/design/ocean.md §10.3): the server's own drop, one of
+## them, nobody's personal drop. Made on the first start and kept at
+## [constant ROOM_PATH], loaded on every start after; **it lives while nobody is
+## in it** -- its cells hunt, grow, starve and are replaced whether anyone is
+## watching or not -- and it is kept every [constant ROOM_KEEP_EVERY] seconds
+## and before every stop, the update's restart among them, so a crash costs it
+## at most five minutes of its life. A guest arrives beside the other one, as
+## ever, or at a quiet place when the room is empty.
+##
 ## **Updates** are `updater.gd`'s: every ten minutes, and never with anyone
 ## connected.
 ##
@@ -94,6 +103,16 @@ const InviteBook := preload("res://game/server/invite_book.gd")
 const Invite := preload("res://game/net/invite.gd")
 const PortForward := preload("res://game/net/port_forward.gd")
 const Channel := preload("res://game/net/channel.gd")
+const DropSave := preload("res://game/normal/drop_save.gd")
+
+## **Where the room is kept** (ocean.md §10.3): the server's own `user://`,
+## beside its invites. One room, `1`; more rooms are later, and would be more
+## files beside it.
+const ROOM_PATH := "user://rooms/1.save"
+## **How often the room is kept while it runs**: a crash costs it at most this
+## much of its life. Nobody is watching a server's frame, so the save's few
+## milliseconds hitch nothing a player sees.
+const ROOM_KEEP_EVERY := 300.0
 
 ## **Sixty frames a second, not as many as the core will run.** The field is
 ## stepped at the game's own rate -- what the phones step theirs at -- and a
@@ -141,6 +160,10 @@ var own_frame_rate := true
 var quits := true
 var pond_root := InviteBook.ROOT
 var invites_poll := INVITES_POLL
+## Where this server keeps its room -- [constant ROOM_PATH], or a test's own
+## file; empty keeps none, and makes the room anew at every start.
+var room_path := ROOM_PATH
+var room_keep_every := ROOM_KEEP_EVERY
 var job_args := PackedStringArray()
 var upnp_router: Object = null
 
@@ -194,6 +217,9 @@ var _upnp_this_run := 0
 ## The switch as last looked at: 1 on, 0 off, -1 unreadable, -2 not yet.
 var _upnp_setting := -2
 var _next_upnp := 0.0
+## When the room is next kept, and how many times it has been.
+var _next_room_keep := 0.0
+var rooms_kept := 0
 
 
 func _ready() -> void:
@@ -237,7 +263,7 @@ func _ready() -> void:
 	_food = FoodField.new()
 	_food.name = "Food"
 	add_child(_food)
-	_food.open_dedicated(_cell)
+	_open_room()
 
 	_net = NetSession.new()
 	_net.name = "NetSession"
@@ -271,6 +297,8 @@ func _process(_delta: float) -> void:
 			return
 	if _stopping:
 		return
+	if not room_path.is_empty() and now >= _next_room_keep:
+		keep_room("every %d s" % roundi(room_keep_every))
 	if not _listening:
 		if now >= _next_listen:
 			_listen()
@@ -297,6 +325,11 @@ func _process(_delta: float) -> void:
 func shut_down(code: int = 0) -> void:
 	if _stopping:
 		return
+	# **The room is kept before anything else goes** (ocean.md §10.3): its
+	# guests are nobody the file keeps, and a stop is the one moment it is sure
+	# to be written.
+	if not room_path.is_empty() and _food != null:
+		keep_room("before stopping")
 	_stopping = true
 	var guests: int = _net.guests().size() if _net != null else 0
 	if _net != null:
@@ -321,6 +354,59 @@ func shut_down(code: int = 0) -> void:
 				"waited": UPNP_STOP_WAIT, "exit_wait_ms": _forward.exit_wait_ms}))
 	await get_tree().create_timer(STOP_LINGER).timeout
 	get_tree().quit(code)
+
+
+## **The room, loaded or made** (ocean.md §10.3): the drop kept at
+## [member room_path] if there is one this build can read -- converted, and
+## said, if a content pack changed its rules since -- and otherwise a new one,
+## made for a newborn and kept at once, so it is the room from its first start.
+func _open_room() -> void:
+	var kept := DropSave.read(room_path) if not room_path.is_empty() else {}
+	var started := Time.get_ticks_usec()
+	if kept.is_empty():
+		_food.open_dedicated(_cell)
+		print("[server] room: a new one is made -- %d bodies (%.0f ms)%s" % [
+			_food.drop_bodies(), float(Time.get_ticks_usec() - started) / 1000.0,
+			"" if not room_path.is_empty() else ", kept nowhere"])
+		if not room_path.is_empty():
+			keep_room("made")
+		return
+	var done := _food.open_dedicated(_cell, kept["drop"])
+	var line := "[server] room: loaded from %s -- %d bodies, %.0f s old (%.0f ms)" % [
+		room_path, int(done.get("bodies", 0)), _food.drop_age(),
+		float(Time.get_ticks_usec() - started) / 1000.0]
+	if DropSave.converted(kept):
+		line += ", CONVERTED from rules %s: every body re-derived, %d trimmed, %d put back" \
+			% [str(kept.get("rules", "")).left(12), int(done.get("trimmed", 0)),
+				int(done.get("contained", 0))] + " inside the rim"
+	else:
+		line += ", as it was kept"
+	print(line)
+	_next_room_keep = _now() + room_keep_every
+
+
+## **The room, kept at [member room_path]** (ocean.md §10.3): every body and
+## everything it is doing -- its guests are nobody's to keep -- written beside
+## the last good file, read back and put over it. [param why] is said with it.
+## Returns whether it was.
+func keep_room(why: String) -> bool:
+	_next_room_keep = _now() + room_keep_every
+	if room_path.is_empty() or _food == null or not _food.owns_drop():
+		return false
+	var started := Time.get_ticks_usec()
+	var state := _food.drop_state()
+	var done := DropSave.write(room_path, DropSave.compose(state, {}))
+	var ms := float(Time.get_ticks_usec() - started) / 1000.0
+	if done != OK:
+		print("[server] room: NOT kept (%s): %s -- the last good one stands"
+			% [why, error_string(done)])
+		return false
+	rooms_kept += 1
+	print("[server] room: kept (%s) -- %d bodies, %.0f s old, %d guest%s in it (%.1f ms)"
+		% [why, (state["bodies"]["slot"] as PackedInt32Array).size(), _food.drop_age(),
+			_pond.guests_in_water() if _pond != null else 0,
+			"" if _pond != null and _pond.guests_in_water() == 1 else "s", ms])
+	return true
 
 
 ## The field and the session, for tools.

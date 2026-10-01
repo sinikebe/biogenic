@@ -35,8 +35,10 @@ Every address below is a placeholder from RFC 5737's documentation range,
 
 In Proxmox, create a container from a **Debian 12** (or Ubuntu 24.04) template.
 Unprivileged is fine. The server is small: measured on the exported build, it
-sits at about 100 MB of memory and 1% of one core while it waits, so 1 core,
-512 MB and a 2 GB disk leave plenty of room.
+sits at about 130 MB of memory and 5 % of one core while it waits, so 1 core,
+512 MB and a 2 GB disk leave plenty of room. Most of that is its room, which
+lives with nobody in it (§8): on the same machine the build before the room
+waited at 2.2 % of a core, and this one at 4.6 to 4.9 %.
 
 The one setting that matters is the network. The container must be **on the
 same network as the phones, and on the same /24** -- the first three numbers of
@@ -246,8 +248,8 @@ one `[server] update:` line in its log.
 - **The restart waits for an empty pond**: nobody connected, and no phone in
   the house connecting, for thirty seconds. A caller from the internet counts
   once it has proved its invite, and not before, so a stranger knocking on 45772
-  cannot hold an update off. Then the server exits and systemd starts it
-  again (`Restart=always`). **It never restarts with a player connected**, so an
+  cannot hold an update off. Then the server keeps its room (§8), exits, and
+  systemd starts it again (`Restart=always`). **It never restarts with a player connected**, so an
   update can wait for as long as somebody is swimming.
 - A check or download that fails changes nothing, and is tried again ten
   minutes later.
@@ -339,9 +341,9 @@ systemctl disable --now biogenic-server # stop it and keep it stopped
 
 **Stopping is clean.** Godot does not catch SIGTERM, so the unit's `ExecStop`
 asks first: it leaves a file the server looks for four times a second, and the
-server tells its guests it is going -- each phone takes over its own water at
-once, rather than after a connection timeout -- takes its forward off the
-router (§9.3), and exits. SIGTERM is only the backstop; a server that dies by
+server keeps its room (§8), tells its guests it is going -- each phone takes
+over its own water at once, rather than after a connection timeout -- takes its
+forward off the router (§9.3), and exits. SIGTERM is only the backstop; a server that dies by
 it, or crashes, leaves the forward to lapse by itself within the hour.
 
 **Going back to the previous build**, if a new one misbehaves or will not
@@ -450,7 +452,19 @@ nft delete table inet biogenic   # only if you loaded the firewall rules (§9.6)
 - It hosts the pond with no cell of its own (`game/net/pond.gd`,
   `game/normal/food.gd`'s `open_dedicated()`): each guest is sent the other as
   the friend, in the slot where a phone host puts itself, so a phone joins it
-  on PROTOCOL 4 with no code it did not already have.
+  on the protocol a phone host speaks, with no code it did not already have.
+- **Its water is its room** (`docs/design/ocean.md` §10.3): one drop of its
+  own, nobody's personal drop, kept in its `user://` as `rooms/1.save` --
+  `/var/lib/biogenic/.local/share/godot/app_userdata/Biogenic/rooms/1.save`.
+  Made on the first start and loaded on every start after, **it lives while
+  nobody is in it**: its cells hunt, grow, starve and are replaced whether
+  anyone is watching or not. It is kept every five minutes and before every
+  stop, an update's restart included, so a crash costs it at most five minutes;
+  its guests are never in the file. The log says which it did --
+  `[server] room: a new one is made`, `room: loaded from … as it was kept`, or
+  `CONVERTED` when a content pack changed its rules since -- and each keep, with
+  how long it took. Deleting the file, with the server stopped, gives the next
+  start a new room.
 - Its log is flushed a line at a time (`run/flush_stdout_on_print.server`):
   without that, measured, nothing it printed reached the journal until the
   buffer filled, and a kill lost it all.
