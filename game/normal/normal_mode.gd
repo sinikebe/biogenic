@@ -72,6 +72,10 @@ const GeneStats := preload("res://game/normal/gene_stats.gd")
 ## **Your drop, kept across launches** (docs/design/ocean.md §9): the file, and
 ## what a build does with one another build wrote. This file decides when.
 const DropSave := preload("res://game/normal/drop_save.gd")
+## **Your cell's record of descent** (docs/design/lineage.md §4): a general
+## piece that knows nothing of cells. This file numbers the cell and names its
+## mother; the drop keeps the record of every other body.
+const Descent := preload("res://game/mechanics/descent.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -608,6 +612,15 @@ var _split_clock := 0.0
 ## How deep into the run the lineage is. Reset by death and by nothing else:
 ## **a run keeps nothing; a lineage keeps everything.**
 var _generation := 1
+## **The rest of this cell's record** (docs/design/lineage.md §4), kept with the
+## drop and drawn nowhere: its id, from its own drop's count at every birth and
+## return ([method _take_id]); its mother's, 0 for a run's first cell; and the id
+## its line began with. [member _generation] is the fourth. Its sister has the
+## same mother, generation and line, so the cell left behind founds a family
+## that is yours.
+var _id := 0
+var _parent := 0
+var _lineage := 0
 ## The two of them, port first: `{"tiers": {}, "order": [], "mutation": &""}`.
 ## Which is on which side is random, so the choice is made by reading rather
 ## than by remembering.
@@ -719,6 +732,8 @@ func _ready() -> void:
 	_genome.setup(_cell)
 	if not resumed.is_empty():
 		_resume_cell(resumed)
+	else:
+		_found_line()
 	_soma.setup(_cell, _genome)
 	# Once, and only here: the marks layer holds the body and the water, and
 	# neither node is ever replaced -- a death and a birth reset those two rather
@@ -890,11 +905,18 @@ func _open_drop() -> Dictionary:
 ## and its levels, the tank, the generation, and what the run had already told
 ## it -- the free sense, the division's line. Its body and its grace are back
 ## already ([method _open_drop]); the beat plays over it once the run is built.
+##
+## **And its record** (lineage.md §4), where the save keeps one. A cell kept
+## before pack 2 has none, and starts one here from this drop's count: a line of
+## its own at the generation it had, which the player has seen and which stays.
 func _resume_cell(state: Dictionary) -> void:
 	_genome.set_state(state["genome"])
 	_metabolism.set_hunger(float(state["hunger"]))
 	_metabolism.starve_seconds = float(state["starve"])
 	_generation = int(state["generation"])
+	_id = int(state["id"]) if state.has("id") else _take_id()
+	_parent = int(state.get("parent", Descent.NOBODY))
+	_lineage = int(state.get("lineage", _id))
 	_sense_clock = float(state["sense_clock"])
 	_sensed = bool(state["sensed"])
 	_said_divide = bool(state["said_divide"])
@@ -981,6 +1003,9 @@ func _keep_drop() -> void:
 			"hunger": _metabolism.hunger,
 			"starve": _metabolism.starve_seconds,
 			"generation": _generation,
+			"id": _id,
+			"parent": _parent,
+			"lineage": _lineage,
 			"sense_clock": _sense_clock,
 			"sensed": _sensed,
 			"said_divide": _said_divide,
@@ -1842,7 +1867,11 @@ func _side_shed(side: int) -> float:
 func _be_born() -> void:
 	var pick: Dictionary = _daughters[_chosen]
 	var other: Dictionary = _daughters[1 - _chosen]
-	_generation += 1
+	# **Both daughters are their mother's** (lineage.md §4): this one a new id
+	# from the drop's count, the next generation, the same line -- and her
+	# sister, numbered as she comes into the water, is the same mother's child.
+	var mother := _record()
+	_set_record(Descent.child(_take_id(), mother))
 	# A new body, not a starving one: the mother spent herself. Her place and
 	# her heading are kept, so nothing about the frame jumps.
 	_cell.reset(true)
@@ -1893,15 +1922,17 @@ func _be_born() -> void:
 		# into a free slot -- by SISTER, from a guest, because a guest's water
 		# is the host's. In the drop, held inside its rim either way.
 		_food.enter_water()
-		_leave_sister(side, other["body"])
+		_leave_sister(side, other["body"], other["tiers"], mother)
 		_pond.person_changed(true)
 	elif _food.in_drop():
 		# **In the drop a division regenerates nothing** (ocean.md §8.2): the
 		# daughter is where her mother was, in her mother's water, with a new
 		# cell's organs and grace -- what the pond has always done -- and the
-		# sister is left in it, held inside the rim, a water cell from then on.
+		# sister is left in it, held inside the rim, a water cell from then on:
+		# wearing the body she rolled and carrying the DNA she was made of.
 		_food.enter_water()
-		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"])
+		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"],
+			other["tiers"], mother)
 	else:
 		# **The field is reseeded.** The water around you was sized to a
 		# 40-unit body and the newborn is 28; the field is a treadmill already,
@@ -1932,6 +1963,40 @@ func _be_born() -> void:
 	_update_simulating()
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 	_bus.pulse_now()
+
+
+# --- Your cell's record (docs/design/lineage.md §4): kept, drawn nowhere -----------
+
+## This cell's record, as descent.gd keeps one.
+func _record() -> PackedInt32Array:
+	return Descent.of(_id, _parent, _generation, _lineage)
+
+
+func _set_record(record: PackedInt32Array) -> void:
+	_id = record[Descent.ID]
+	_parent = record[Descent.PARENT]
+	_generation = record[Descent.GENERATION]
+	_lineage = record[Descent.LINEAGE]
+
+
+## **A cell the water did not have**: a run's first, or a new one after a death
+## -- generation 1, nobody's daughter, the first of its own line.
+func _found_line() -> void:
+	_set_record(Descent.founder(_take_id()))
+
+
+## **An id for this cell from its own drop's count**: the drop it swims in, or
+## -- a guest in a friend's -- its own, set aside, whose count goes on there, so
+## the id is still unique in the drop the cell comes back to. 0 with no drop of
+## its own: today's water keeps no record.
+func _take_id() -> int:
+	if _food.owns_drop():
+		return _food.take_id()
+	if _own_drop.has("next_id"):
+		var id := int(_own_drop["next_id"])
+		_own_drop["next_id"] = id + 1
+		return id
+	return 0
 
 
 func _on_impulsed(strength: float) -> void:
@@ -2377,10 +2442,11 @@ func _return(place: Array) -> void:
 	_forget_eye()
 	# A new cell is a born cell, and a born cell has no senses: the five-second
 	# clock starts again, and so does the line that announces it. **A run keeps
-	# nothing** -- and that has to include the leg-up and the lineage.
+	# nothing** -- and that has to include the leg-up and the lineage: generation
+	# 1, the first of a new line, numbered by the drop it now swims in.
 	_sense_clock = 0.0
 	_sensed = false
-	_generation = 1
+	_found_line()
 	_said_divide = false
 	_update_simulating()
 	_apply_mode()
@@ -8416,9 +8482,15 @@ func _home_after_black() -> Array:
 ## water, in a free slot; a guest's water is the host's, so it asks the host to
 ## -- where the drop's rim puts her, if her side of her mother is past it
 ## (ocean.md §10.5): the host's referee takes her there.
-func _leave_sister(bearing: float, body: Dictionary) -> void:
+##
+## **A host's sister carries [param dna] and is [param mother]'s child**
+## (lineage.md §4). SISTER says what she wears and nothing more -- no protocol
+## change in pack 2 (§8) -- so a guest's arrives in the host's drop the founder
+## of a line of her own, carrying what she wears.
+func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
+		mother: PackedInt32Array) -> void:
 	if _pond.hosting:
-		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body)
+		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body, dna, mother)
 		return
 	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
 	var at := _cell.position + dir * SISTER_DISTANCE

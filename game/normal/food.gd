@@ -43,6 +43,9 @@ const Cilia := preload("res://game/vision/cilia.gd")
 ## run in the drop holds one [Drop]; today's water holds none.
 const Drop := preload("res://game/normal/drop.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
+## **Lineage** (docs/design/lineage.md §4): a body's record of descent, which
+## the drop keeps on every body and draws nowhere.
+const Descent := preload("res://game/mechanics/descent.gd")
 ## The arithmetic of a tank, which every body in the drop runs as the player's
 ## node does (§5.2). Its static functions only: this file never makes the node.
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -1032,9 +1035,26 @@ class Body:
 	var upkeep := 1.0
 	## Its own tail's speed: what it cruises at, and searches at (row 14).
 	var cruise := 0.0
-	## **Reserved** (§12): a behaviour genome for pack 3, a parent for pack 2.
+	## **Reserved** (§12): a behaviour genome for pack 3.
 	var brain: Variant = null
+	# --- Lineage (docs/design/lineage.md §4): kept with the drop, drawn nowhere.
+	# [member id] above, these three and [member dna] are a body's record and what
+	# it passes on, written as it comes in by [method _spawn].
+	## The id of the body it was born of; 0 for one the water made.
 	var parent := 0
+	## 1 for a body the water made; a daughter is her mother's and one.
+	var generation := 1
+	## The id of the founder its line began with -- its own, for a founder.
+	var lineage := 0
+	## **The DNA** (§3.2): what it writes by eating and what its daughters are
+	## made of, `{gene: copies}`, beside [member genome], the body it was born
+	## wearing. The two are equal for a body the water makes. **Pack 2's second
+	## register is dormant**: a meal writes both ([method _grow]), so they stay
+	## equal for every body but a sister, who carries the daughter she was.
+	var dna := {}
+	## **The newborn grace** (§3.4): seconds left in which no mouth may begin a
+	## run at it. Kept with the drop; nothing gives it or reads it yet.
+	var grace := 0.0
 
 
 ## **What a body lacks, for the body that is another player** (§1.2): how it
@@ -4186,8 +4206,14 @@ func enter_water() -> void:
 ## in place of the body farthest from every anchor that is neither a drifter nor
 ## hunting a player. For this cell's own birth through [method put_sister], and
 ## for the other player's through SISTER. Returns the slot she took, or -1.
+##
+## **In the drop she is a daughter** (lineage.md §4), wearing [param tiers] and
+## carrying [param dna], the child of [param mother] -- see [method _born_of].
+## **A guest's sister** comes by SISTER, which says what she wears and nothing
+## more, so she arrives as the founder of a line of her own with her DNA equal
+## to her body (§8): the one place a newborn's genes are not all passed on.
 func place_sister(at: Vector2, heading: float, body_radius: float,
-		tiers: Dictionary) -> int:
+		tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> int:
 	if not _pond or _mirror or _cell == null:
 		return -1
 	at = _clear_of_players(at, body_radius)
@@ -4197,6 +4223,7 @@ func place_sister(at: Vector2, heading: float, body_radius: float,
 		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, _sensed(),
 			false, body_radius, tiers)
 		_cells[index].heading = heading
+		_born_of(_cells[index], dna, mother)
 		_stat(&"sisters")
 		return index
 	var slot := _free_slot()
@@ -5152,8 +5179,14 @@ func _anchor_sensed(anchor: int) -> float:
 ## **In a pond she takes a free slot** rather than slot 1 (shared-pond.md
 ## §1.5), which may be anybody's: nothing is reseeded at a birth in a pond, and
 ## the body in slot 1 is somebody's cell in somebody's water.
+##
+## **In the drop she is a daughter in full** (lineage.md §4): [param tiers] is
+## the body she wears, [param dna] the DNA she carries -- the declined
+## daughter's, her body where it is empty -- and [param mother] the record of
+## the cell she and you divided from, so her parent is your mother's id and her
+## family is yours ([method _born_of]). Today's water keeps no record.
 func put_sister(bearing: float, distance: float, body_radius: float,
-		tiers: Dictionary) -> void:
+		tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> void:
 	# **In the drop she comes in by the one door every body does** (§8.2,
 	# §12): [method _spawn], born fed, a water cell under every rule of §5 from
 	# then on -- and held inside the rim if her side of her mother is past it.
@@ -5163,11 +5196,12 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 		# **In a pond, as a guest's sister is** ([method place_sister]): never on
 		# the other player, and inside the rim.
 		if _pond:
-			place_sister(at, _angle_of(side, 0.0), body_radius, tiers)
+			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother)
 			return
 		at = _drop.meniscus.contain(at, body_radius)
 		var index := _spawn(at, false, _sensed(), false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
+		_born_of(_cells[index], dna, mother)
 		_stat(&"sisters")
 		return
 	if _cell == null or _cells.size() < 2:
@@ -5175,7 +5209,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 	if _pond:
 		var side := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
 		place_sister(_cell.position + side * distance, _angle_of(side, 0.0),
-			body_radius, tiers)
+			body_radius, tiers, dna, mother)
 		return
 	var index := 1
 	# Seeded first, so every clock, counter and serial on that slot is reset by
@@ -6000,12 +6034,21 @@ func _age_alone(seconds: float) -> void:
 ## check 12, the room's case). The people in a pond are nobody's to keep: they
 ## are left out, and a chase of one is kept as a chase of nobody, which ends on
 ## its next step as it would have.
+##
+## **And, since pack 2, every body's lineage** (lineage.md §4): its generation,
+## its line, its grace, and its DNA by gene name -- empty where the DNA is the
+## body, as it is for every body the water makes, so the column costs a body
+## that has not diverged nothing but an empty entry.
 func drop_state() -> Dictionary:
 	if _drop == null:
 		return {}
 	var slot := PackedInt32Array()
 	var ids := PackedInt32Array()
 	var parent := PackedInt32Array()
+	var generation := PackedInt32Array()
+	var lineage := PackedInt32Array()
+	var graces := PackedFloat64Array()
+	var dna: Array = []
 	var kind := PackedByteArray()
 	var meals := PackedInt32Array()
 	var at := PackedVector2Array()
@@ -6036,6 +6079,14 @@ func drop_state() -> Dictionary:
 		slot.append(i)
 		ids.append(b.id)
 		parent.append(b.parent)
+		generation.append(b.generation)
+		lineage.append(b.lineage)
+		graces.append(b.grace)
+		# The DNA is the body when the two hold the same genes at the same copies
+		# **in the same order** -- which a load makes again by copying the body --
+		# since the order is what a mutation draws from.
+		dna.append({} if b.dna == b.genome and b.dna.keys() == b.genome.keys()
+			else Genome.tiers_by_name(b.dna))
 		kind.append((1 if b.drifter else 0) | (2 if b.inert else 0))
 		meals.append(b.meals)
 		at.append(b.pos)
@@ -6089,7 +6140,8 @@ func drop_state() -> Dictionary:
 			"wound": wound, "age": age, "last_t": last_t, "hunger": hunger,
 			"starve": starve, "effort": effort, "bite": bite, "dart": dart,
 			"dash": dash, "dash_v": dash_v, "settle": settle, "life": life,
-			"genome": genome},
+			"genome": genome, "generation": generation, "lineage": lineage,
+			"grace": graces, "dna": dna},
 		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
 			"clocks": run_clocks, "points": run_points},
 		"gene_short": short,
@@ -6210,6 +6262,13 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	var settle: PackedFloat64Array = rows["settle"]
 	var life: PackedFloat64Array = rows["life"]
 	var genome: Array = rows["genome"]
+	# **The lineage, where the file keeps it** (pack 2, lineage.md §4). A file
+	# from before has none, and every body in it comes back a founder: generation
+	# 1, its own line, its DNA its body and no grace -- as the water made them all.
+	var generation: PackedInt32Array = rows.get("generation", PackedInt32Array())
+	var lineage: PackedInt32Array = rows.get("lineage", PackedInt32Array())
+	var graces: PackedFloat64Array = rows.get("grace", PackedFloat64Array())
+	var dna: Array = rows.get("dna", [])
 	var trimmed := 0
 	var contained := 0
 	for k in slot.size():
@@ -6218,6 +6277,9 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		b.serial = _serial
 		b.id = ids[k]
 		b.parent = parent[k]
+		b.generation = generation[k] if not generation.is_empty() else 1
+		b.lineage = lineage[k] if not lineage.is_empty() else b.id
+		b.grace = graces[k] if not graces.is_empty() else 0.0
 		b.drifter = (kind[k] & 1) != 0
 		b.inert = (kind[k] & 2) != 0
 		b.meals = meals[k]
@@ -6242,6 +6304,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		b.genome = {}
 		for gene: String in genes:
 			b.genome[StringName(gene)] = int(genes[gene])
+		# An empty entry is a DNA that is the body: copied, so in the body's order.
+		var carried: Dictionary = dna[k] if not dna.is_empty() else {}
+		b.dna = b.genome.duplicate() if carried.is_empty() \
+			else Genome.tiers_from_names(carried)
 		if not b.inert and b.radius > CellBody.DIVIDE_RADIUS:
 			b.radius = CellBody.DIVIDE_RADIUS
 			trimmed += 1
@@ -6546,10 +6612,18 @@ func _feed_water(b: Body, nutrition: float) -> void:
 ## **Growth, as the player grows** (§5.5): a unit of radius a meal to
 ## DIVIDE_RADIUS and no further, and the meal's gene into the slots that radius
 ## has. The mouth keeps whatever it grows (row 5).
+##
+## **The meal is written to the DNA** (lineage.md §3.2), by the rule the
+## player's lapsed sample follows: a copy more of a gene it carries, up to three,
+## or a new one into a free slot, or lost. **And, while pack 2's second register
+## is dormant, to the body as well**, as it always was -- so the water plays as
+## it did, and a body whose DNA is its body keeps the two equal.
 func _grow(b: Body, gene: StringName) -> void:
 	b.radius = minf(b.radius + CellBody.GROWTH_PER_MEAL, CellBody.DIVIDE_RADIUS)
 	b.meals += 1
-	Genome.integrate_into(b.genome, gene, CellBody.slots_for(b.radius))
+	var slots := CellBody.slots_for(b.radius)
+	Genome.integrate_into(b.dna, gene, slots)
+	Genome.integrate_into(b.genome, gene, slots)
 	_refresh_body(b)
 	_changes += 1
 
@@ -7215,6 +7289,9 @@ func _spawn_ahead(from: Vector2, heading: float, reach: float, sensed: float) ->
 ## [param sensed] (§5.8) and of radius [param mine] -- this cell's, unless
 ## given; or, given [param body_radius] and [param tiers], that body: a sister,
 ## or one a tool poses. Fed, unless it is part of a drop's first [param fill].
+## **Every one a founder** (lineage.md §4): a new id, generation 1, its own
+## lineage and its DNA equal to its body, with no grace -- what the water makes
+## was already there. A sister is made a daughter after ([method _born_of]).
 ## Returns its slot.
 func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 		body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
@@ -7240,7 +7317,8 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 	b.stepped = -1
 	b.last_t = _t
 	b.brain = null
-	b.parent = 0
+	_record_onto(b, Descent.founder(b.id))
+	b.grace = 0.0
 	if body_radius > 0.0:
 		b.drifter = tiers.is_empty()
 		b.radius = body_radius
@@ -7252,6 +7330,8 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
 		_seed_peer(b, mine, sensed)
 		_give_venom_back(b)
+	# Expressed whole, as a run's first cell is: after venom, which is worn.
+	b.dna = b.genome.duplicate()
 	b.pos = at
 	b.aim = at
 	b.flee_from = at
@@ -7265,6 +7345,41 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 	return index
 
 
+# --- Lineage (docs/design/lineage.md §4): a record on every body, drawn nowhere --------
+
+## **An id from the drop's count for a body it did not make: the player's
+## cell**, at every birth and return, so that the cell is in the record as every
+## body is and its sister can name it as her parent. 0 outside a drop of this
+## field's own -- today's water, a friend's drop, a replay -- none of which keeps
+## a record. Moves nothing else: no rule reads an id.
+func take_id() -> int:
+	if not owns_drop():
+		return 0
+	var id := _next_id
+	_next_id += 1
+	return id
+
+
+## [param record], a descent.gd one numbered for [param b], written onto it:
+## whose it is, its generation and its line. Its id is the drop's, given as it
+## came in.
+func _record_onto(b: Body, record: PackedInt32Array) -> void:
+	b.parent = record[Descent.PARENT]
+	b.generation = record[Descent.GENERATION]
+	b.lineage = record[Descent.LINEAGE]
+
+
+## **A sister, made a daughter** (lineage.md §4): she carries [param dna] --
+## the daughter she was -- and is the child of [param mother]: its id her
+## parent, its generation and one, its line. With no DNA she carries what she
+## wears, and with no record she stays the founder [method _spawn] made her: a
+## guest's sister, whom SISTER brings with neither (§8).
+func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array) -> void:
+	if not dna.is_empty():
+		b.dna = dna.duplicate()
+	_record_onto(b, Descent.child(b.id, mother))
+
+
 ## **A floc** at [param at], of [param body_radius]: settled already -- remains,
 ## or a drop's first -- or [param settled] false, a flake just landed.
 func _spawn_floc(at: Vector2, body_radius: float, settled: bool) -> int:
@@ -7276,6 +7391,11 @@ func _spawn_floc(at: Vector2, body_radius: float, settled: bool) -> int:
 	b.inert = true
 	b.drifter = true
 	b.genome = {}
+	# Nobody's daughter and nothing to pass on, but a record like every body's,
+	# so a slot it reuses keeps nothing of the body that was there.
+	b.dna = {}
+	_record_onto(b, Descent.founder(b.id))
+	b.grace = 0.0
 	b.radius = body_radius
 	b.settle = 1.0 if settled else 0.0
 	b.life = Drop.floc_life()
@@ -7614,6 +7734,85 @@ func census_line() -> String:
 		_n(&"runs"), _n(&"runs_at_player"), _n(&"misses"), _n(&"water_darts"),
 		_n(&"water_dashes"), _n(&"gene_floor"), _n(&"gene_floor_peer"), _n(&"drifter_floor"),
 		hash(sums)]
+
+
+## **The drop's families, in one line** (lineage.md §4, §6.1), for the probes,
+## beside [method census_line] and never in it: the hunters -- how many were
+## born rather than made, their generation, how many founders they descend from
+## and the largest family, and how many carry a DNA that is not their body --
+## and what they have become: their cruise, reach, mouth and upkeep, the genes
+## they wear and carry, how many have a tail, a sense, or are at r40; then each
+## gene's mean tier worn, and the three commonest bodies. Asking moves nothing.
+func lineage_line() -> String:
+	if _drop == null or _mirror:
+		return "[lineage] not in a drop of its own"
+	var n := 0
+	var born := 0
+	var generations := 0
+	var deepest := 0
+	var families := {}
+	var apart := 0
+	var cruise := 0.0
+	var notice := 0.0
+	var mouth := 0.0
+	var upkeep := 0.0
+	var worn := 0
+	var carried := 0
+	var tails := 0
+	var sighted := 0
+	var big := 0
+	var tiers := {}
+	var kinds := {}
+	for b in _cells:
+		if not b.seeded or b.inert or b.drifter or b.person != null:
+			continue
+		n += 1
+		if b.generation > 1:
+			born += 1
+		generations += b.generation
+		deepest = maxi(deepest, b.generation)
+		families[b.lineage] = int(families.get(b.lineage, 0)) + 1
+		if b.dna != b.genome:
+			apart += 1
+		cruise += b.cruise
+		notice += b.notice
+		mouth += Genome.tier_of(b.genome, &"cytostome")
+		upkeep += b.upkeep
+		worn += b.genome.size()
+		carried += b.dna.size()
+		if Genome.tier_of(b.genome, &"flagellum") > 0:
+			tails += 1
+		if b.notice > 0.0 or b.see_big > 0.0:
+			sighted += 1
+		if b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
+			big += 1
+		var parts := PackedStringArray()
+		for gene: StringName in Genome.GENE_ORDER:
+			var tier := Genome.tier_of(b.genome, gene)
+			if tier > 0:
+				tiers[gene] = int(tiers.get(gene, 0)) + tier
+				parts.append("%s:%d" % [gene, tier])
+		var kind := ",".join(parts)
+		kinds[kind] = int(kinds.get(kind, 0)) + 1
+	var largest := 0
+	for line: int in families:
+		largest = maxi(largest, int(families[line]))
+	var common: Array = kinds.keys()
+	common.sort_custom(func(x: String, y: String) -> bool:
+		return int(kinds[x]) > int(kinds[y]) or (int(kinds[x]) == int(kinds[y]) and x < y))
+	var commonest := PackedStringArray()
+	for k in mini(3, common.size()):
+		commonest.append("%dx %s" % [int(kinds[common[k]]), common[k]])
+	var m := float(maxi(n, 1))
+	var means := PackedStringArray()
+	for gene: StringName in Genome.GENE_ORDER:
+		means.append("%s %.2f" % [String(gene).left(4), float(tiers.get(gene, 0)) / m])
+	return ("[lineage] t %.0f  hunters %d, born %d  generation mean %.2f max %d  families %d"
+		+ " (largest %d)  dna apart %d  | cruise %.1f notice %.0f mouth %.2f upkeep %.2f"
+		+ " genes worn %.2f carried %.2f  tails %d sighted %d at r40 %d  | worn %s"
+		+ "  | commonest %s") % [_t, n, born, float(generations) / m, deepest, families.size(),
+		largest, apart, cruise / m, notice / m, mouth / m, upkeep / m, float(worn) / m,
+		float(carried) / m, tails, sighted, big, " ".join(means), " ; ".join(commonest)]
 
 
 func _n(what: StringName) -> int:
