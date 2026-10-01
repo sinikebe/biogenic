@@ -2,5 +2,20 @@
 
 [ext_resource type="PackedScene" path="res://game/net/earshot.tscn" id="1_earshot"]
 
-[node name="Earshot" instance=ExtResource("1_earshot")]
+[node name="Far" type="Control"]
+layout_mode = 3
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Earshot" parent="." instance=ExtResource("1_earshot")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
 far = true

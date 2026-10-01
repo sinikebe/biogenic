@@ -623,6 +623,28 @@ jobs:
           ~/godot/godot --headless --path . --export-pack "Windows Desktop" build/content/content-windows.pck
           ~/godot/godot --headless --path . --export-pack "Linux Server" build/content/content-linux.pck
 
+      - name: Check the exported scenes lay out as the source does
+        # **What ships is the export, not this tree.** The exporter re-saves every
+        # scene in binary, and for an instanced or inherited Control it can write
+        # an override the text never had (`anchors_preset = 0`, `layout_mode =
+        # 0`). On 2026-10-01 that drew the settings gear past the left edge of
+        # every phone's screen, and had piled the whole "by invite" screen into
+        # its top-left corner since it shipped. Meanwhile every run from the
+        # tree, every probe and every screenshot looked right. This reloads every
+        # scene under game/ from the Android content pack, the one the phones
+        # download, and compares each Control's layout with the tree's
+        # (tools/export_layout_probe.gd). Grepped, not trusted to the exit code,
+        # as the steps above are.
+        run: |
+          set -uo pipefail
+          out=$(timeout 180 ~/godot/godot --headless --path . --script res://tools/export_layout_probe.gd -- --pack=build/content/content-android.pck 2>&1) || true
+          grep -E "^\[export-layout\]" <<< "$out" || true
+          if ! grep -q "^\[export-layout\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out" || true
+            echo "::error::an exported scene lays out differently from its source -- give the instanced node the layout the Godot editor writes (layout_mode and its anchors); tools/export_layout_probe.gd says why"
+            exit 1
+          fi
+
       - name: Smoke-boot the Linux server
         # **The exported binary, not the editor**, because the thing that makes
         # it a server is only true of an export: an official 4.7 release

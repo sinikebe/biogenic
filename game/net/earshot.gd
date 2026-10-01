@@ -15,7 +15,9 @@ extends Control
 ## cell saying *here* in the only vocabulary the fiction has.
 ##
 ## **And from far away, by invite** (docs/design/invites-ux.md). The same scene,
-## opened as `far.tscn`, which sets [member far] and nothing else: the friend
+## opened as `far.tscn`, which holds it with [member far] set and nothing else:
+## an instance, not an inherited scene, because the exporter zeroes every layout
+## an inherited scene takes from its base (tools/export_layout_probe.gd). The friend
 ## pastes the one line the owner's server minted, this device keeps it, and
 ## every visit after that is call and then a view. A far visit never reaches
 ## CHOOSE, CALLING or ANSWERING, and the household never sees a far page. Its
@@ -114,8 +116,9 @@ const NOTHING_KEPT := "you paste it once · this device keeps it"
 const FAR_HEARD := "you can hear your friend's water"
 
 ## **Which screen this is for the whole visit**: the LAN's, from
-## `earshot.tscn`, or the far one, from `far.tscn`, which sets this and nothing
-## else. Read, never written, so there is no static to forget to clear.
+## `earshot.tscn`, or the far one, from `far.tscn`, which holds this scene with
+## this set and nothing else. Read, never written, so there is no static to
+## forget to clear.
 @export var far := false
 
 @onready var _heading: Label = $Heading

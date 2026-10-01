@@ -36,6 +36,7 @@ corner_radius_bottom_right = 8
 corner_radius_bottom_left = 8
 
 [node name="Corner" type="Control"]
+layout_mode = 3
 anchors_preset = 15
 anchor_right = 1.0
 anchor_bottom = 1.0
@@ -47,6 +48,7 @@ script = ExtResource("1_corner")
 current_box = SubResource("StyleBoxFlat_current")
 
 [node name="Cluster" type="HBoxContainer" parent="."]
+layout_mode = 1
 anchors_preset = 1
 anchor_left = 1.0
 anchor_right = 1.0
@@ -59,9 +61,11 @@ mouse_filter = 2
 theme_override_constants/separation = 12
 
 [node name="Gear" type="Button" parent="Cluster"]
+layout_mode = 2
 custom_minimum_size = Vector2(56, 56)
 
 [node name="Veil" type="ColorRect" parent="."]
+layout_mode = 1
 visible = false
 anchors_preset = 15
 anchor_right = 1.0
@@ -71,6 +75,7 @@ grow_vertical = 2
 color = Color(0.004, 0.016, 0.014, 0.784)
 
 [node name="Settings" type="CenterContainer" parent="."]
+layout_mode = 1
 visible = false
 anchors_preset = 15
 anchor_right = 1.0
@@ -80,43 +85,53 @@ grow_vertical = 2
 mouse_filter = 2
 
 [node name="Panel" type="PanelContainer" parent="Settings"]
+layout_mode = 2
 custom_minimum_size = Vector2(520, 0)
 theme_override_styles/panel = SubResource("StyleBoxFlat_sheet")
 
 [node name="Box" type="VBoxContainer" parent="Settings/Panel"]
+layout_mode = 2
 theme_override_constants/separation = 12
 
 [node name="Title" type="Label" parent="Settings/Panel/Box"]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.404, 0.639, 0.588, 1)
 theme_override_font_sizes/font_size = 22
 horizontal_alignment = 1
 
 [node name="Gap" type="Control" parent="Settings/Panel/Box"]
+layout_mode = 2
 custom_minimum_size = Vector2(0, 2)
 mouse_filter = 2
 
 [node name="Caption" type="Label" parent="Settings/Panel/Box"]
+layout_mode = 2
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.52)
 theme_override_font_sizes/font_size = 16
 
 [node name="Languages" type="ScrollContainer" parent="Settings/Panel/Box"]
+layout_mode = 2
 follow_focus = true
 horizontal_scroll_mode = 0
 
 [node name="Rows" type="VBoxContainer" parent="Settings/Panel/Box/Languages"]
+layout_mode = 2
 size_flags_horizontal = 3
 theme_override_constants/separation = 8
 
 [node name="Warn" type="Label" parent="Settings/Panel/Box"]
+layout_mode = 2
 visible = false
 theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.82)
 theme_override_font_sizes/font_size = 15
 horizontal_alignment = 1
 
 [node name="Gap2" type="Control" parent="Settings/Panel/Box"]
+layout_mode = 2
 custom_minimum_size = Vector2(0, 6)
 mouse_filter = 2
 
 [node name="Close" type="Button" parent="Settings/Panel/Box"]
+layout_mode = 2
 custom_minimum_size = Vector2(232, 56)
 size_flags_horizontal = 4
