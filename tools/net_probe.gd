@@ -5807,7 +5807,7 @@ func _check_pond() -> void:
 		return int(guest_run.get("_life")) == NormalMode.Life.DYING, 2.0,
 		[host_pin, [guest_cell, in_mouth, 0.0, POND_GLIDE]])
 	host_food.eaten.disconnect(on_eaten)
-	var said_ate: String = str(host_run.get("_line_text"))
+	var said_ate: String = _line_of(host_run)
 	_says(eaten >= 0.0 and bool(host_ate[0])
 			and int(guest_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(guest_food.died_by) == FoodField.By.FRIEND
@@ -5853,10 +5853,10 @@ func _check_pond() -> void:
 	_says(host_down >= 0.0 and bool(guest_ate[0])
 			and int(host_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(host_food.died_by) == FoodField.By.FRIEND
-			and str(guest_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(guest_run) == NormalMode.LINE_ATE,
 		"pond: and the guest swallows the host -- the host told its own cause,"
 		+ " SWALLOWED by the friend, and the guest told '%s'"
-		% str(guest_run.get("_line_text")))
+		% _line_of(guest_run))
 
 	# ----------------------------------------------------------------------
 	# **The host's black does not stop the pond** (owner's row A): 3 s of it,
@@ -7074,6 +7074,13 @@ func _says(passed: bool, what: String) -> void:
 	print("[net-probe] FAIL %s" % what)
 
 
+## **The pond line [param run] has queued**, in words. The run keeps a line by name
+## and says it in the language of the moment (docs/design/settings.md §3.3); with
+## no screen, that is the English the lines are written in.
+func _line_of(run: Node) -> String:
+	return str(run.call(&"_line_words", run.get(&"_line_next")))
+
+
 ## Waits for a link to reach a state, or gives up, so a broken handshake is a
 ## failing assertion rather than a job that runs until the runner kills it.
 func _until_link(session: Node, want: int) -> void:
@@ -7482,15 +7489,15 @@ func _check_server() -> void:
 	var b_slot_empty: bool = food.person(slot_b) == null
 	await _pond_until(func() -> bool:
 		return (bool(a_ate[0])
-			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [a_pin])
+			and _line_of(a_run) == NormalMode.LINE_ATE), 1.0, [a_pin])
 	a_food.eaten.disconnect(on_a_eaten)
 	_says(b_down >= 0.0 and bool(a_ate[0]) and b_slot_empty
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(b_food.died_by) == FoodField.By.FRIEND
-			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(a_run) == NormalMode.LINE_ATE,
 		"server: the first guest swallows the second -- a meal for the first and"
 		+ " '%s' said to it; SWALLOWED by the friend for the second, and its"
-		% str(a_run.get("_line_text")) + " slot empty on the server")
+		% _line_of(a_run) + " slot empty on the server")
 
 	b_run.set("_tap_pending", true)
 	var b_back := await _pond_until(func() -> bool:
@@ -7527,12 +7534,12 @@ func _check_server() -> void:
 	var a_slot_empty: bool = food.person(slot_a) == null
 	await _pond_until(func() -> bool:
 		return (bool(b_ate[0])
-			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [b_pin])
+			and _line_of(b_run) == NormalMode.LINE_ATE), 1.0, [b_pin])
 	b_food.eaten.disconnect(on_b_eaten)
 	_says(a_down >= 0.0 and bool(b_ate[0]) and a_slot_empty
 			and int(a_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(a_food.died_by) == FoodField.By.FRIEND
-			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(b_run) == NormalMode.LINE_ATE,
 		"server: and the second swallows the first, with the same outcome on"
 		+ " both, the other way round")
 
@@ -7659,14 +7666,14 @@ func _check_server() -> void:
 	hunter.lunging = true
 	var hunted := await _server_until(func() -> bool:
 		return (int(b_run.get("_life")) != NormalMode.Life.ALIVE
-			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED), [a_pin])
+			and _line_of(a_run) == NormalMode.LINE_DIED), [a_pin])
 	_says(hunted >= 0.0 and food.person(slot_b) == null
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(b_food.died_by) == FoodField.By.WATER
-			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED,
+			and _line_of(a_run) == NormalMode.LINE_DIED,
 		"server: a committed hunter swallows the guest in slot %d -- SWALLOWED by"
 		% slot_b + " the water -- and the other guest is told '%s'"
-		% str(a_run.get("_line_text")))
+		% _line_of(a_run))
 	b_run.set("_tap_pending", true)
 	await _pond_until(func() -> bool:
 		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])

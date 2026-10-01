@@ -14,6 +14,40 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n > 1);\n"
 "X-Generator: tools/i18n_pot.gd\n"
 
+#. Not the word for English: the name of this catalog's own language, in that
+#. language, as a speaker writes it in a list -- "Français", "Deutsch",
+#. "Português (Brasil)". It is this language's row in the game's language
+#. list, so a player who reads only this language can find it: keep its own
+#. capitals. In 20 px type, on a button 472 px wide.
+#. Room: at most 400 px in 20 px type; the English takes 69 px.
+#: game/i18n/i18n.gd
+msgid "English"
+msgstr "Français"
+
+#. The title of the settings sheet, which opens from a gear in the top-right
+#. corner of every screen; also that gear's tooltip, and, in a later version,
+#. a 300 px button on the launcher's first screen. One lowercase word: the
+#. app's settings (here only the language, for now).
+#. Room: at most 250 px in 20 px type; the English takes 77 px.
+#: game/menu/corner.gd
+msgid "settings"
+msgstr "réglages"
+
+#. A caption in 16 px type above the list of languages on the settings sheet.
+#. One lowercase word.
+#. Room: at most 472 px in 16 px type; the English takes 71 px.
+#: game/menu/corner.gd
+msgid "language"
+msgstr "langue"
+
+#. A button at the bottom of the settings sheet: close the sheet and go back
+#. to the screen under it. One lowercase word, in 20 px type on a button 232
+#. px wide.
+#. Room: at most 180 px in 20 px type; the English takes 49 px.
+#: game/menu/corner.gd
+msgid "close"
+msgstr "fermer"
+
 #. The hint along the bottom edge of the screen, in small type. It names the
 #. key that goes back, and the key differs by device: `back` is the Android
 #. Back button or gesture, `esc` is the Escape key. The launcher is the app's
@@ -2464,12 +2498,16 @@ msgstr "contrôles"
 msgid "resume"
 msgstr "reprendre"
 
+#. Also shown on the settings sheet, in 15 px type, when it is opened from the
+#. pause screen of a game shared with a friend: it covers the pause screen's
+#. own warning, so it says it again.
 #. A warning in 15 px type just above "resume" on the pause screen, on one
 #. line (at most about 60 characters), shown only in a game shared with a
 #. friend: pausing does not stop the shared world, so the player's cell can
 #. still be eaten while the screen is open.
 #. Label "Warn" in game/normal/normal_mode.tscn
-#: game/normal/normal_mode.tscn
+#. Room: at most 472 px in 15 px type; the English takes 338 px.
+#: game/menu/corner.gd game/normal/normal_mode.tscn
 msgid "the water is still moving · you can still be eaten"
 msgstr "l'eau bouge encore · vous pouvez encore être mangé"
 

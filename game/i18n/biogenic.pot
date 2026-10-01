@@ -14,6 +14,53 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: tools/i18n_pot.gd\n"
 
+#. Not the word for English: the name of this catalog's own language, in that
+#. language, as a speaker writes it in a list -- "Français", "Deutsch",
+#. "Português (Brasil)". It is this language's row in the game's language
+#. list, so a player who reads only this language can find it: keep its own
+#. capitals. In 20 px type, on a button 472 px wide.
+#. Room: at most 400 px in 20 px type; the English takes 69 px.
+#: game/i18n/i18n.gd
+msgid "English"
+msgstr ""
+
+#. The title of the settings sheet, which opens from a gear in the top-right
+#. corner of every screen; also that gear's tooltip, and, in a later version,
+#. a 300 px button on the launcher's first screen. One lowercase word: the
+#. app's settings (here only the language, for now).
+#. Room: at most 250 px in 20 px type; the English takes 77 px.
+#: game/menu/corner.gd
+msgid "settings"
+msgstr ""
+
+#. A caption in 16 px type above the list of languages on the settings sheet.
+#. One lowercase word.
+#. Room: at most 472 px in 16 px type; the English takes 71 px.
+#: game/menu/corner.gd
+msgid "language"
+msgstr ""
+
+#. A button at the bottom of the settings sheet: close the sheet and go back
+#. to the screen under it. One lowercase word, in 20 px type on a button 232
+#. px wide.
+#. Room: at most 180 px in 20 px type; the English takes 49 px.
+#: game/menu/corner.gd
+msgid "close"
+msgstr ""
+
+#. Also shown on the settings sheet, in 15 px type, when it is opened from the
+#. pause screen of a game shared with a friend: it covers the pause screen's
+#. own warning, so it says it again.
+#. A warning in 15 px type just above "resume" on the pause screen, on one
+#. line (at most about 60 characters), shown only in a game shared with a
+#. friend: pausing does not stop the shared world, so the player's cell can
+#. still be eaten while the screen is open.
+#. Label "Warn" in game/normal/normal_mode.tscn
+#. Room: at most 472 px in 15 px type; the English takes 338 px.
+#: game/menu/corner.gd game/normal/normal_mode.tscn
+msgid "the water is still moving · you can still be eaten"
+msgstr ""
+
 #. The hint along the bottom edge of the screen, in small type. It names the
 #. key that goes back, and the key differs by device: `back` is the Android
 #. Back button or gesture, `esc` is the Escape key. The launcher is the app's
@@ -174,6 +221,37 @@ msgstr ""
 msgid "answered"
 msgstr ""
 
+#. Under the ring while a call to a friend's server is ringing. A friend's
+#. "water" is the pond (shared game world) their server keeps.
+#. Room: at most 1180 px in 17 px type; the English takes 213 px.
+#: game/net/earshot.gd
+msgid "calling your friend's water"
+msgstr ""
+
+#. A question: delete the invite this device keeps?
+#: game/net/earshot.gd
+msgid "forget this invite?"
+msgstr ""
+
+#. The consequence, under the question. It is a full sentence with a full
+#. stop, unlike the lines around it.
+#. Room: at most 1180 px in 17 px type; the English takes 450 px.
+#: game/net/earshot.gd
+msgid "you would need your friend's message to paste it back."
+msgstr ""
+
+#. Two buttons answering the question above: keep the invite, or forget it.
+#. "keep" is the safe answer.
+#: game/net/earshot.gd
+msgid "keep"
+msgstr ""
+
+#. A button: delete the invite this device keeps. It asks "forget this
+#. invite?" first.
+#: game/net/earshot.gd
+msgid "forget"
+msgstr ""
+
 #. A heading, when a call ends and the game has no more precise reason: nobody
 #. picked up. The reason, in a sentence, is shown under it.
 #. A heading of two to four words in large type, then one sentence that says
@@ -221,37 +299,6 @@ msgstr ""
 msgid "leave"
 msgstr ""
 
-#. Under the ring while a call to a friend's server is ringing. A friend's
-#. "water" is the pond (shared game world) their server keeps.
-#. Room: at most 1180 px in 17 px type; the English takes 213 px.
-#: game/net/earshot.gd
-msgid "calling your friend's water"
-msgstr ""
-
-#. A question: delete the invite this device keeps?
-#: game/net/earshot.gd
-msgid "forget this invite?"
-msgstr ""
-
-#. The consequence, under the question. It is a full sentence with a full
-#. stop, unlike the lines around it.
-#. Room: at most 1180 px in 17 px type; the English takes 450 px.
-#: game/net/earshot.gd
-msgid "you would need your friend's message to paste it back."
-msgstr ""
-
-#. Two buttons answering the question above: keep the invite, or forget it.
-#. "keep" is the safe answer.
-#: game/net/earshot.gd
-msgid "keep"
-msgstr ""
-
-#. A button: delete the invite this device keeps. It asks "forget this
-#. invite?" first.
-#: game/net/earshot.gd
-msgid "forget"
-msgstr ""
-
 #. Instruction, in 17 px type on one line. An invite is a one-line message a
 #. friend sends you in a chat app: copy it there, then paste it into the game
 #. with the button below.
@@ -275,17 +322,17 @@ msgstr ""
 msgid "your friend's server turned this invite away. paste a new one."
 msgstr ""
 
+#. One word under the ring: the game is reaching out to the other phone now
+#. that the whole code is in. Shown while it connects.
+#: game/net/earshot.gd
+msgid "reaching"
+msgstr ""
+
 #. Shown when the four marks tapped in do not form a valid code (a mistap).
 #. The player is asked to tap the code in again.
 #. Room: at most 1180 px in 17 px type; the English takes 248 px.
 #: game/net/earshot.gd
 msgid "that is not a code. tap it again."
-msgstr ""
-
-#. One word under the ring: the game is reaching out to the other phone now
-#. that the whole code is in. Shown while it connects.
-#: game/net/earshot.gd
-msgid "reaching"
 msgstr ""
 
 #. A small grey line: this device is not connected to any network, so it has
@@ -2516,15 +2563,6 @@ msgstr ""
 #. Button "Resume" in game/normal/normal_mode.tscn
 #: game/normal/normal_mode.tscn
 msgid "resume"
-msgstr ""
-
-#. A warning in 15 px type just above "resume" on the pause screen, on one
-#. line (at most about 60 characters), shown only in a game shared with a
-#. friend: pausing does not stop the shared world, so the player's cell can
-#. still be eaten while the screen is open.
-#. Label "Warn" in game/normal/normal_mode.tscn
-#: game/normal/normal_mode.tscn
-msgid "the water is still moving · you can still be eaten"
 msgstr ""
 
 #. A caption in 15 px type above the cell's body on the pause screen: the

@@ -126,6 +126,9 @@ const FAR_HEARD := "you can hear your friend's water"
 @onready var _second: Button = $Buttons/Second
 @onready var _third: Button = $Buttons/Third
 @onready var _hint: Label = $Hint
+## **Settings, from the gear in the top-right corner** (docs/design/settings.md
+## §1): the last child, so Esc reaches it before this screen does.
+@onready var _corner: Control = $Corner
 
 var _page := Page.CHOOSE
 var _session: Node = null
@@ -143,9 +146,18 @@ var _leaving := false
 ## one that no longer reads.
 var _kept: Dictionary = {}
 ## **What the last press on FAR did**, which FAR says until a press changes the
-## page (§3): `[heading, line, receipt, which button has the focus]`, the
-## button counted from 0. Empty when the last press said nothing.
-var _after: Array = []
+## page (§3): `{says, focus, receipt}` -- which sentence ([method _after_words]
+## has them), the button counted from 0 that takes the focus, and the address and
+## port it is about. **Which sentence and not its words**, so a change of language
+## says it again (docs/design/settings.md §3.3). Set by the press, taken by the
+## page change into [member _said_after], and empty when the press said nothing.
+var _after: Dictionary = {}
+## What the page on screen says the last press did: the [member _after] the page
+## change took, said by [method _say_page] -- again, in another language, if the
+## language changes under it.
+var _said_after: Dictionary = {}
+## **The four taps did not make a code**, which ANSWERING says until the next tap.
+var _misdialled := false
 ## Whether TROUBLE's first button pastes (`not_this_pond`, `invite_refused` and
 ## `no_invite`) rather than calling again, on a far visit.
 var _trouble_pastes := false
@@ -195,11 +207,23 @@ func _process(delta: float) -> void:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		if _page == Page.FORGET:
-			_go_to(Page.FAR)
-			return
-		_back()
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# **The corner first** (settings.md §1.3): Android Back reaches this
+			# screen before the sheet over it, so a sheet that is open is what Back
+			# closes, and the page stays.
+			if _corner.close_top():
+				return
+			if _page == Page.FORGET:
+				_go_to(Page.FAR)
+				return
+			_back()
+		NOTIFICATION_TRANSLATION_CHANGED:
+			# Deferred: the tree is still telling every node, and nothing may be
+			# changed under it. The first one comes as the node enters the tree,
+			# before `_ready` has said anything, and is let go.
+			if is_node_ready():
+				_say_page.call_deferred()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -215,6 +239,10 @@ func _unhandled_input(event: InputEvent) -> void:
 	if not event.is_action_pressed(&"ui_cancel"):
 		return
 	get_viewport().set_input_as_handled()
+	# The corner is the last child, so an open sheet has had Esc already; asked
+	# again in case the same Back reached it by the other door.
+	if _corner.close_top():
+		return
 	if _page == Page.ANSWERING and not _taps.is_empty():
 		_undo_tap()
 		return
@@ -230,14 +258,39 @@ func _unhandled_input(event: InputEvent) -> void:
 # The pages.
 # ---------------------------------------------------------------------------
 
+## **A page change**: the page, its clock, where the keyboard goes, and its words.
+## What the last press did is taken here, and only here ([member _said_after]);
+## the words are [method _say_page]'s, which a change of language calls again on
+## its own.
 func _go_to(page: int) -> void:
 	_page = page
 	_clock = 0.0
 	# Only ANSWERING has anything on the ring to press.
 	_ring.focus_mode = Control.FOCUS_ALL if page == Page.ANSWERING else Control.FOCUS_NONE
+	_said_after = _after
+	_after = {}
+	if page == Page.FAR:
+		_kept = Invite.kept()
+	if page == Page.TROUBLE:
+		# **The first button is the way out of this trouble** (§6.3): a new
+		# invite for a server that no longer takes this one or is not the one it
+		# names, the first invite when there is none, and the same call again for
+		# everything a wait or an update fixes.
+		var key := _trouble_key()
+		_trouble_pastes = far and (key == &"not_this_pond" or key == &"invite_refused"
+			or key == &"no_invite")
+	_say_page()
+	_focus_page()
+	_ring.queue_redraw()
+
+
+## **The page's words, and nothing else** (docs/design/settings.md §3.3): no
+## focus, no clock, and what the last press did is read, never taken. So a change
+## of language says a page again and leaves everything on it where it was.
+func _say_page() -> void:
 	# Shown by the far pages that have three things to offer, and by no other.
 	_button(_third, "")
-	match page:
+	match _page:
 		Page.CHOOSE:
 			# TRANSLATORS: The name of this feature and the heading of its first
 			# screen: two phones on the same wi-fi finding each other, near enough
@@ -254,7 +307,6 @@ func _go_to(page: int) -> void:
 			_button(_first, tr("call"))
 			# TRANSLATORS: A button: answer the call the other phone is making.
 			_button(_second, tr("answer"))
-			_first.grab_focus()
 		Page.CALLING:
 			# TRANSLATORS: A heading above a ring of marks: the other player is to be
 			# shown these marks, and taps them in on their phone. "this" is the code.
@@ -267,7 +319,6 @@ func _go_to(page: int) -> void:
 			# TRANSLATORS: A button: hang up; stop calling.
 			_button(_first, tr("stop"))
 			_button(_second, "")
-			_first.grab_focus()
 		Page.ANSWERING:
 			# TRANSLATORS: A heading above a ring of twelve places: the player taps
 			# the four marks the other player is showing, in order, to dial them.
@@ -276,7 +327,6 @@ func _go_to(page: int) -> void:
 			# TRANSLATORS: A button: undo the last tap of the code, one step back.
 			_button(_first, tr("back one"))
 			_button(_second, "")
-			_ring.grab_focus()
 			_say_taps()
 		Page.TOGETHER:
 			# TRANSLATORS: A heading: the other player has picked up; the two phones
@@ -292,50 +342,10 @@ func _go_to(page: int) -> void:
 			# TRANSLATORS: The second of the two buttons above: the view that shows
 			# only what the cell itself can feel.
 			_button(_second, tr("point of view"))
-			var last := RunState.load_mode()
-			var start: Button = _second if last == RunState.Mode.POV else _first
-			start.grab_focus()
 		Page.TROUBLE:
-			var said := ""
-			var why := ""
-			var key: StringName = &""
-			if _session != null and is_instance_valid(_session):
-				said = _session.trouble
-				why = _session.because
-				key = _session.trouble_key
-			# TRANSLATORS: A heading, when a call ends and the game has no more
-			# precise reason: nobody picked up. The reason, in a sentence, is
-			# shown under it.
-			_heading.text = said if not said.is_empty() else tr("no answer")
-			_line.text = why
-			if far:
-				# **The first button is the way out of this trouble** (§6.3): a
-				# new invite for a server that no longer takes this one or is not
-				# the one it names, the first invite when there is none, and the
-				# same call again for everything a wait or an update fixes.
-				_trouble_pastes = key == &"not_this_pond" or key == &"invite_refused" \
-					or key == &"no_invite"
-				_receipt.text = _receipt_of(_kept)
-				# TRANSLATORS: A button: try the same call again.
-				var fix := tr("again")
-				if key == &"no_invite":
-					# TRANSLATORS: A button: paste the invite from the clipboard. The
-					# invite is a one-line message a friend sent you. Keep it short:
-					# the button is 264 px wide, in 20 px type.
-					fix = tr("paste invite")
-				elif _trouble_pastes:
-					# TRANSLATORS: A button: paste a newer invite from the clipboard,
-					# to replace the one this device keeps.
-					fix = tr("paste new")
-				_button(_first, fix)
-			else:
-				_receipt.text = ""
-				_button(_first, tr("again"))
-			# TRANSLATORS: A button: leave this screen and go back.
-			_button(_second, tr("leave"))
-			_first.grab_focus()
+			_say_trouble()
 		Page.FAR:
-			_go_to_far()
+			_say_far()
 		Page.FAR_CALLING:
 			_heading.text = tr(Invite.DOOR_NAME)
 			# TRANSLATORS: Under the ring while a call to a friend's server is ringing.
@@ -345,7 +355,6 @@ func _go_to(page: int) -> void:
 			_receipt.text = _receipt_of(_kept)
 			_button(_first, tr("stop"))
 			_button(_second, "")
-			_first.grab_focus()
 		Page.FORGET:
 			# TRANSLATORS: A question: delete the invite this device keeps?
 			_heading.text = tr("forget this invite?")
@@ -358,23 +367,68 @@ func _go_to(page: int) -> void:
 			# invite, or forget it. "keep" is the safe answer.
 			_button(_first, tr("keep"))
 			_button(_second, tr("forget"))
-			_first.grab_focus()
 	_say_hint()
-	_ring.queue_redraw()
 
 
-## **FAR: the kept invite, or the way to one.** A returning friend's page is
-## call, with the address it calls; a first visit's is paste invite. What the
-## last press did replaces the Heading, Line and Receipt until a press changes
-## the page, and an invite its server turned away this run says so before
-## anybody presses call -- call would only go straight to the same refusal.
-func _go_to_far() -> void:
-	_kept = Invite.kept()
+## **TROUBLE's words**: the session's sentence for how the call ended. On a call
+## by invite it is said again from its key, because the session keeps the words it
+## was given, in the language of that moment; the LAN's are the session's own, and
+## stay as it said them.
+func _say_trouble() -> void:
+	var said := ""
+	var why := ""
+	if _session != null and is_instance_valid(_session):
+		said = _session.trouble
+		why = _session.because
+	var key := _trouble_key()
+	if far and Invite.SAYS.has(key):
+		var again := Invite.says(key)
+		said = str(again[0])
+		why = str(again[1])
+	# TRANSLATORS: A heading, when a call ends and the game has no more
+	# precise reason: nobody picked up. The reason, in a sentence, is
+	# shown under it.
+	_heading.text = said if not said.is_empty() else tr("no answer")
+	_line.text = why
+	if far:
+		_receipt.text = _receipt_of(_kept)
+		# TRANSLATORS: A button: try the same call again.
+		var fix := tr("again")
+		if key == &"no_invite":
+			# TRANSLATORS: A button: paste the invite from the clipboard. The
+			# invite is a one-line message a friend sent you. Keep it short:
+			# the button is 264 px wide, in 20 px type.
+			fix = tr("paste invite")
+		elif _trouble_pastes:
+			# TRANSLATORS: A button: paste a newer invite from the clipboard,
+			# to replace the one this device keeps.
+			fix = tr("paste new")
+		_button(_first, fix)
+	else:
+		_receipt.text = ""
+		_button(_first, tr("again"))
+	# TRANSLATORS: A button: leave this screen and go back.
+	_button(_second, tr("leave"))
+
+
+## Which of `Invite.SAYS` the session's trouble is, or &"" for none: a LAN call,
+## or a session that has gone.
+func _trouble_key() -> StringName:
+	if _session == null or not is_instance_valid(_session):
+		return &""
+	return _session.trouble_key
+
+
+## **FAR's words: the kept invite, or the way to one.** A returning friend's page
+## is call, with the address it calls; a first visit's is paste invite. What the
+## last press did replaces the Heading, Line and Receipt until a press changes the
+## page, and an invite its server turned away this run says so before anybody
+## presses call -- call would only go straight to the same refusal.
+func _say_far() -> void:
 	# TRANSLATORS: What the game calls the way in to a friend's game far away, by an
 	# invite they sent. It is a button on the screen where a game is started, and
 	# the heading of this screen. Keep it short: the button is 320 px wide at 20 px.
 	_heading.text = tr(Invite.DOOR_NAME)
-	var focus := 0
 	if _kept.is_empty():
 		# TRANSLATORS: Instruction, in 17 px type on one line. An invite is a
 		# one-line message a friend sends you in a chat app: copy it there, then
@@ -401,14 +455,44 @@ func _go_to_far() -> void:
 			# paste a newer invite, which the friend must send.
 			# ROOM: 1180 px at 17 px
 			_line.text = tr("your friend's server turned this invite away. paste a new one.")
-			focus = 1
-	if not _after.is_empty():
-		_heading.text = str(_after[0])
-		_line.text = str(_after[1])
-		_receipt.text = str(_after[2])
-		focus = int(_after[3])
-		_after = []
-	([_first, _second, _third][focus] as Button).grab_focus()
+	if not _said_after.is_empty():
+		var words := _after_words(_said_after)
+		_heading.text = str(words[0])
+		_line.text = str(words[1])
+		_receipt.text = str(words[2])
+
+
+## **Where the keyboard goes as a page opens** -- not while the settings sheet is
+## open over it, which keeps the keyboard until it closes and then hands it to
+## the gear, one Down from here.
+func _focus_page() -> void:
+	# **Up from the buttons is the gear** (settings.md §1.3) -- except on
+	# ANSWERING, where the ring above them owns the arrows and the corner is
+	# reached by Tab, the mouse or a finger. The ring's own Up goes nowhere.
+	if _page == Page.ANSWERING:
+		for button: Button in [_first, _second, _third]:
+			button.focus_neighbor_top = NodePath()
+		_ring.focus_neighbor_top = _ring.get_path_to(_ring)
+	else:
+		_corner.link_focus(_first, [_second, _third])
+	if _corner.is_open():
+		return
+	match _page:
+		Page.ANSWERING:
+			_ring.grab_focus()
+		Page.TOGETHER:
+			var last := RunState.load_mode()
+			var start: Button = _second if last == RunState.Mode.POV else _first
+			start.grab_focus()
+		Page.FAR:
+			var focus := 0
+			if not _kept.is_empty() and NetSession.turned_away(_kept):
+				focus = 1
+			if not _said_after.is_empty():
+				focus = int(_said_after.get("focus", 0))
+			([_first, _second, _third][focus] as Button).grab_focus()
+		_:
+			_first.grab_focus()
 
 
 ## The page a visit starts on, and comes back to when a call stops.
@@ -521,6 +605,7 @@ func _answer() -> void:
 	_open_session()
 	_taps = PackedInt32Array()
 	_cursor = 0
+	_misdialled = false
 	_go_to(Page.ANSWERING)
 
 
@@ -561,6 +646,7 @@ func _stop() -> void:
 func _tap(digit: int) -> void:
 	if _page != Page.ANSWERING or _taps.size() >= Lan.DIGITS:
 		return
+	_misdialled = false
 	_taps.append(digit)
 	_cursor = digit
 	if _taps.size() < Lan.DIGITS:
@@ -572,15 +658,11 @@ func _tap(digit: int) -> void:
 		# The check digit earning its tap: a mis-tap dies here, in front of the
 		# player, instead of two seconds later as "no answer".
 		_taps = PackedInt32Array()
-		# TRANSLATORS: Shown when the four marks tapped in do not form a valid
-		# code (a mistap). The player is asked to tap the code in again.
-		# ROOM: 1180 px at 17 px
-		_line.text = tr("that is not a code. tap it again.")
+		_misdialled = true
+		_say_taps()
 		_ring.queue_redraw()
 		return
-	# TRANSLATORS: One word under the ring: the game is reaching out to the other
-	# phone now that the whole code is in. Shown while it connects.
-	_line.text = tr("reaching")
+	_say_taps()
 	_ring.queue_redraw()
 	# An empty address is handed straight to `join`, which owns the sentence for
 	# a device that has no network to be on. The screen does not write the
@@ -596,12 +678,21 @@ func _undo_tap() -> void:
 	_ring.queue_redraw()
 
 
+## ANSWERING's line: the dots, a code that did not read, or the call going out.
 func _say_taps() -> void:
-	if _session != null and is_instance_valid(_session) \
-			and int(_session.link) == NetSession.Link.REACHING:
+	if _taps.size() >= Lan.DIGITS or (_session != null and is_instance_valid(_session)
+			and int(_session.link) == NetSession.Link.REACHING):
 		# The taps are all in and the socket is out looking. Saying so beats
 		# four filled dots, which look like a screen that has stopped.
+		# TRANSLATORS: One word under the ring: the game is reaching out to the other
+		# phone now that the whole code is in. Shown while it connects.
 		_line.text = tr("reaching")
+		return
+	if _misdialled:
+		# TRANSLATORS: Shown when the four marks tapped in do not form a valid
+		# code (a mistap). The player is asked to tap the code in again.
+		# ROOM: 1180 px at 17 px
+		_line.text = tr("that is not a code. tap it again.")
 		return
 	var dots := ""
 	for i in Lan.DIGITS:
@@ -687,45 +778,72 @@ func _paste() -> void:
 	# empties it afterwards: the invite is still in the chat anyway.
 	var read := Invite.parse(DisplayServer.clipboard_get())
 	var before := Invite.kept()
+	# The paste button keeps the focus after a paste that changed nothing, so
+	# trying again is the same press: paste invite with nothing kept, paste new
+	# with an invite kept.
+	var paste_button := 0 if before.is_empty() else 1
 	if int(read["read"]) != Invite.Read.OK:
-		var said := Invite.says_read(int(read["read"]))
-		# TRANSLATORS: A small grey line when a paste failed: the invite the device
-		# already kept is still there. %s is that invite's address and port, as in
-		# "192.0.2.7 · 45772" -- keep %s as it is.
-		var still := "" if before.is_empty() else tr("still kept: %s") % _receipt_of(before)
-		# The paste button keeps the focus, so trying again is the same press.
-		_after = [str(said[0]), str(said[1]), still, 0 if before.is_empty() else 1]
+		_after = {"read": int(read["read"]), "receipt": _receipt_of(before),
+			"focus": paste_button}
 	elif not before.is_empty() and str(before["line"]) == str(read["line"]):
 		# A re-minted invite looks the same on screen as the one it replaces, so
 		# the same one pasted again has to say so.
-		# TRANSLATORS: The result of a paste: the invite on the clipboard is the one
-		# the device already keeps. A short sentence under the heading.
-		_after = [tr(Invite.DOOR_NAME), tr("that invite is already kept"),
-			_receipt_of(before), 1]
+		_after = {"says": &"already_kept", "receipt": _receipt_of(before), "focus": 1}
 	elif Invite.keep(read):
-		if before.is_empty():
-			# TRANSLATORS: The result of a paste: the invite was read and saved on
-			# this device. Under the heading, with its address and port below.
-			_after = [tr(Invite.DOOR_NAME), tr("invite kept"), _receipt_of(read), 0]
-		else:
-			# TRANSLATORS: The result of a paste: a newer invite was read and
-			# replaced the one this device kept.
-			_after = [tr(Invite.DOOR_NAME), tr("new invite kept"), _receipt_of(read), 1]
+		# The first invite kept puts the keyboard on call; a newer one, on paste new.
+		_after = {"says": &"kept" if before.is_empty() else &"replaced",
+			"receipt": _receipt_of(read), "focus": 0 if before.is_empty() else 1}
 	else:
 		# `user://` would not take the file (invites-ux.md §6.2, row 4): the
 		# kept invite is as it was -- `Invite.write_private` replaces it only
 		# once the new one reads back -- and the press is the same to try again.
-		var kept := "" if before.is_empty() else tr("still kept: %s") % _receipt_of(before)
-		var said := Invite.says(&"not_kept")
-		_after = [said[0], said[1], kept, 0 if before.is_empty() else 1]
+		_after = {"says": &"not_kept", "receipt": _receipt_of(before),
+			"focus": paste_button}
 	_go_to(Page.FAR)
 
 
 func _forget() -> void:
 	Invite.forget()
-	# TRANSLATORS: The result of "forget": the invite was deleted from this device.
-	_after = [tr(Invite.DOOR_NAME), tr("invite forgotten"), tr(NOTHING_KEPT), 0]
+	_after = {"says": &"forgotten", "receipt": "", "focus": 0}
 	_go_to(Page.FAR)
+
+
+## **What a press on FAR did, in the language of the moment** (§3):
+## `[heading, line, receipt]` for [param after], one of [member _after]'s.
+func _after_words(after: Dictionary) -> Array:
+	var receipt := str(after.get("receipt", ""))
+	var says := StringName(after.get("says", &""))
+	var said: Array = []
+	if after.has("read"):
+		said = Invite.says_read(int(after["read"]))
+	elif Invite.SAYS.has(says):
+		said = Invite.says(says)
+	if not said.is_empty():
+		# A paste that changed nothing: the invite the device already kept is
+		# still there, and the line under the sentence says which.
+		# TRANSLATORS: A small grey line when a paste failed: the invite the device
+		# already kept is still there. %s is that invite's address and port, as in
+		# "192.0.2.7 · 45772" -- keep %s as it is.
+		var still := "" if receipt.is_empty() else tr("still kept: %s") % receipt
+		return [str(said[0]), str(said[1]), still]
+	match says:
+		&"already_kept":
+			# TRANSLATORS: The result of a paste: the invite on the clipboard is the
+			# one the device already keeps. A short sentence under the heading.
+			return [tr(Invite.DOOR_NAME), tr("that invite is already kept"), receipt]
+		&"kept":
+			# TRANSLATORS: The result of a paste: the invite was read and saved on
+			# this device. Under the heading, with its address and port below.
+			return [tr(Invite.DOOR_NAME), tr("invite kept"), receipt]
+		&"replaced":
+			# TRANSLATORS: The result of a paste: a newer invite was read and
+			# replaced the one this device kept.
+			return [tr(Invite.DOOR_NAME), tr("new invite kept"), receipt]
+		&"forgotten":
+			# TRANSLATORS: The result of "forget": the invite was deleted from this
+			# device.
+			return [tr(Invite.DOOR_NAME), tr("invite forgotten"), tr(NOTHING_KEPT)]
+	return [tr(Invite.DOOR_NAME), "", receipt]
 
 
 ## **`address · port`**: the address as the owner typed it, a name or an IP,

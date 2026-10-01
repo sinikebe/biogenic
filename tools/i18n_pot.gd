@@ -18,8 +18,9 @@ extends Node
 ## `game/i18n/launcher/<locale>.po` against the launcher's, which the launcher
 ## template ships as addons/launcher/launcher.pot -- and fails on what would break
 ## the game or mistranslate it (a placeholder lost, a plural message with the wrong
-## number of forms, a control character, text wider than its room) while only
-## reporting what is untranslated or stale; `--strict` fails on those too. It
+## number of forms, a control character, text wider than its room, a game catalog
+## that does not name its own language) while only reporting what is untranslated
+## or stale; `--strict` fails on those too. It
 ## passes with no catalog at all. `--pseudo=<file>` writes a template as a language
 ## of its own, every message run once through Godot's pseudolocalizer (accents, 30 %
 ## longer, in brackets), to find what will not fit before a real language exists; it
@@ -75,7 +76,8 @@ extends Node
 ## that says `i18n-ok:` and why: for the few places that translate what their
 ## callers hand them, which the callers' own literals have already listed. And the
 ## other way round: a constant marked with `TRANSLATORS:` that no `tr()` names is
-## listed for a translator and shown in English -- the commonest way to miss one.
+## listed for a translator and shown in English -- the commonest way to miss one. (A
+## catalog's `get_message()` names one too: it looks a message up as `tr()` does.)
 ##
 ## Excluded from export (`tools/*` on every preset), so none of it ships.
 
@@ -626,6 +628,19 @@ func _read_calls(path: String, toks: Toks, from: int, to: int, notes: Array[Stri
 				kind = "readout"
 			"text", "tooltip_text", "placeholder_text", "title":
 				_read_assignment(path, toks, i, to, notes)
+				continue
+			"get_message":
+				# **One catalog asked for one message**, as i18n.gd asks each game
+				# catalog for its own name: `catalog.get_message(OWN_NAME)`. A marked
+				# constant handed to it is looked up by its English, exactly as a tr()
+				# looks it up, so it is named as a tr() would name it. Nothing is
+				# listed from the call: the constant lists itself.
+				if before == "." and i + 1 < to and toks.text[i + 1] == "(":
+					var looked := _args(toks, i + 1, to)
+					if not looked.is_empty():
+						for k in range(looked[0][0], looked[0][1]):
+							if toks.kind[k] == K.IDENT:
+								_named_in_calls[toks.text[k]] = true
 				continue
 			_:
 				continue
@@ -1182,7 +1197,9 @@ func _msgids_of(pot: String) -> Dictionary:
 ## code in the language being checked (SCREENS); a message defined twice, or
 ## differently in two catalogs of one language; a catalog none of whose messages is in
 ## its template (a launcher catalog in the game's folder, or the other way round); a
-## `.po` in any other folder, which the game never reads.
+## `.po` in any other folder, which the game never reads; a game catalog that does not
+## name its own language -- its translation of "English" missing, empty, fuzzy or still
+## "English" -- which the game's language list shows it under ([method _lint_own_name]).
 ##
 ## **What is only reported** (and fails under `--strict`): a message left
 ## untranslated or marked fuzzy, which the game shows in English; a message the
@@ -1360,6 +1377,9 @@ func _lint_catalog(path: String, template: Dictionary, set: Dictionary) -> Dicti
 	var screens := ""
 	if loaded != null and bool(set["rooms"]) and int(result["hard"]) == 0:
 		screens = _lint_screens(result, shown, locale, loaded)
+	# The name the game's language list shows this language under.
+	if set["name"] == "game":
+		_lint_own_name(result, shown, locale, catalog)
 
 	# What it says about itself.
 	var line := "%s: %d of %d messages translated" % [shown, translated, wanted.size()]
@@ -1385,6 +1405,45 @@ func _lint_catalog(path: String, template: Dictionary, set: Dictionary) -> Dicti
 		if not stale.is_empty():
 			_problem(result, shown, "--strict: %d stale message(s)" % stale.size())
 	return result
+
+
+## **A game catalog names its own language, in that language.** The game's
+## language list (docs/design/settings.md §3.1) shows every game catalog under its
+## translation of i18n.gd's OWN_NAME, the msgid "English" -- which is not the word
+## for English, but "Français", "Deutsch": the name a player who reads only that
+## language looks for. So it fails, unlike any other untranslated message, when it
+## is missing, empty or fuzzy -- the list would show the engine's English name
+## instead ("French") -- and when it says "English", which reads the same as the
+## English row. Only about how the list looks, so the game's own code still runs on
+## the catalog.
+func _lint_own_name(result: Dictionary, shown: String, locale: String, catalog: Dictionary) -> void:
+	var script := _script("i18n")
+	var own := String(_script_const(script, "OWN_NAME")) if script != null \
+		and _script_const(script, "OWN_NAME") != null else "English"
+	var said := ""
+	var fuzzy := false
+	var where := shown
+	for e: Dictionary in catalog["entries"]:
+		if e["ctx"] != "" or e["id"] != own:
+			continue
+		where = "%s:%d" % [shown, e["line"]]
+		var forms: Array = e["forms"]
+		fuzzy = bool(e["fuzzy"])
+		if not forms.is_empty():
+			said = String(forms[0]).strip_edges()
+		break
+	if said.is_empty() or fuzzy:
+		var why := "is not translated" if said.is_empty() else "is marked fuzzy, which the engine ignores"
+		_problem(result, where, ("\"%s\" %s. It is not the word for English: it is the name of this"
+			+ " catalog's own language, in that language (\"Français\", \"Deutsch\"), and the game's"
+			+ " language list shows the language under it. Without it the list says \"%s\", the engine's"
+			+ " English name, which a player who reads only this language may not find")
+			% [own, why, TranslationServer.get_locale_name(locale)], true)
+	elif said.to_lower() == own.to_lower():
+		_problem(result, where, ("\"%s\" -> \"%s\": it is not the word for English but the name of this"
+			+ " catalog's own language, in that language (\"Français\", \"Deutsch\"). The game's language"
+			+ " list shows the language under it, and \"%s\" reads the same as the English row")
+			% [own, said, said], true)
 
 
 ## One message of a catalog against its template's. Returns what it is:

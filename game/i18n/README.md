@@ -5,7 +5,10 @@ Godot's gettext translation with **the English itself as the message id**: there
 are no keys. A language is **one file per catalog**, and there are two catalogs:
 the game's own words, and the words of the launcher's screens (the app's main
 menu, which is the template's and has a template of its own). The device's
-language picks the file, and English is the fallback.
+language picks the file, and English is the fallback -- until the player picks a
+language from the settings sheet (the gear in the top-right corner of the game's
+screens, and of the pause screen in a run), which is kept and wins from then on
+(**The language the player chose**).
 
 | File | What it is |
 |---|---|
@@ -13,7 +16,7 @@ language picks the file, and English is the fallback.
 | `<locale>.po` | The game in one language: `fr.po` (French, the first), `pt_BR.po`. Written by hand, from the template. |
 | `addons/launcher/launcher.pot` | The launcher's template, written by the template repository and replaced by every launcher sync. Copy it; do not edit it. |
 | `launcher/<locale>.po` | The launcher in one language: `launcher/fr.po`. Made from `launcher.pot`. |
-| `i18n.gd` | Finds both kinds of `.po` and registers them when the first game screen loads. |
+| `i18n.gd` | Finds both kinds of `.po` and registers them when the first game screen loads, applies the language the player chose, and lists the languages for the settings sheet. |
 | `tools/i18n_pot.gd` | Writes the game's template, checks every catalog, and makes a pseudolocalized stand-in for a language. Never ships. |
 | `tools/launcher_translated.tscn` | The launcher built after the catalogs are registered, for a screenshot (its first view is always English). Never ships. |
 
@@ -41,12 +44,18 @@ exists yet.
 3. Translate: fill every `msgstr` (and `msgstr[0]`, `msgstr[1]`... for a plural).
    Read the `#.` notes: they say where a message appears, what its placeholders
    are, and how much room it has. The game's voice is lowercase; the launcher's is
-   not (below).
+   not (below). **Start with `msgid "English"`: it is not the word for English but
+   the language's own name, in itself and with its own capitals** -- `Deutsch`,
+   `Português (Brasil)` -- because it is the language's row in the settings sheet's
+   list, where a player who reads only this language has to find it. The lint fails
+   the file until it is translated, and fails `English` itself.
 4. `godot --headless --path . res://tools/i18n_pot.tscn -- --lint-all` until it says
    `ALL PASS` (what it checks is below).
 5. Look at it: `godot --path . --language de` (any run takes `--language`; so does
-   `tools/shot.tscn`). Every screen has to be looked at: see **Room**.
-6. Commit the file. **That is all.** No registration, no project setting.
+   `tools/shot.tscn`), or pick it from the settings sheet. Every screen has to be
+   looked at: see **Room**.
+6. Commit the file. **That is all.** No registration, no project setting: the
+   language is in the settings sheet's list as soon as the file is in the folder.
 
 **The launcher.** The same, with these differences:
 
@@ -90,6 +99,8 @@ a number the game writes in a brighter tint; its order cannot change.
   French counts 0 and 1 as singular, so its rule is `n > 1` and not the template's
   `n != 1`. Its five plural messages (rays, strikes, seconds) each have `msgstr[0]`
   and `msgstr[1]`, with every `{}` kept.
+- **It names itself**: `msgid "English"` is `msgstr "Français"`, with its capital,
+  which is how the settings sheet lists it.
 - **The words that have to fit** are short: a chip has 47 px, so the gene words are
   `mange`, `tourne`, `nage`, ...; the tray's caption `attente` ("waiting") is a word
   that also suits a fork's chip, because the template's note says the same word
@@ -102,7 +113,7 @@ a number the game writes in a brighter tint; its order cannot change.
 - **What the lint says about it today:**
 
       [i18n] the lines the game composes, in English: numbers lines at most 550 px of 650, the pause caption at most 543 px of 560
-      [i18n] game/i18n/fr.po: 272 of 274 messages translated, 2 not translated -- reported, not failed
+      [i18n] game/i18n/fr.po: 276 of 278 messages translated, 2 not translated -- reported, not failed
       [i18n]   built with the game's own code: numbers lines at most 632 px of 650 (the first numbers line of ping (ampulla), at 3 copies), the pause caption at most 533 px of 560
       [i18n]   in the template, not in the catalog (2):
       [i18n]     "build {build} · updates itself"
@@ -137,6 +148,7 @@ catalogs"); the second is for a pull request that claims a complete language.
 | a message defined twice, or translated differently by the game's catalog and the launcher's for one language (the engine takes whichever loaded last) | |
 | a catalog none of whose messages is in its template (a launcher file in the game's folder, or the other way round) | |
 | a `.po` anywhere but the two folders (the game never reads it, and `addons/` and `ci/` are wiped by a sync) | |
+| a game catalog whose `English` is missing, empty, fuzzy or still `English`: it is the name the settings sheet lists the language under, in that language, and without it a player who reads only that language may not find their own | |
 
 **Why a stale catalog is only reported.** The template moves ahead of every catalog
 whenever a sentence is reworded or the launcher is synced, and the game then shows
@@ -232,6 +244,18 @@ The rule: **the English is the message id, and it goes through `tr()`**.
   one message for each wording (`"... yours. ..."` and `"... theirs. ..."`, not one
   sentence with a word dropped in). A line of fragments joined with ` · ` is a
   list, not a sentence, and is fine.
+- **Text set from code does not follow a change of language; say it again.** The
+  player can change the language with a screen open (the settings sheet), and a
+  Control keeps the words it was given, not the message: `label.text = tr("x")` set
+  in French stays French after a switch to English (measured,
+  docs/design/settings.md §3.3). A scene's own `text = "x"` follows by itself. So a
+  screen sets its words in one function -- `_say()` in mode_select.gd, `_say_page()`
+  in earshot.gd, `_say_again()` in normal_mode.gd -- called from `_ready()` and again
+  on `NOTIFICATION_TRANSLATION_CHANGED`, **always with `call_deferred()`**: the
+  engine sends that notification while it walks the tree, which refuses a node added
+  from inside it, and a node hears one as it enters the tree, before `_ready()`, so
+  guard with `is_node_ready()`. Something kept to be said later is kept as *which*
+  sentence (a name, a key) and translated as it is shown, never kept translated.
 - **Never decide anything by reading translated text**, and never `tr()` a string
   that goes to a log: a server's console says what it said before.
 - **Not translated**: a gene's scientific name (`cytostome`, `veneneux`, ...: they
@@ -327,6 +351,20 @@ comparisons stay English on a machine set to any language. The one setting
 project.godot carries is `internationalization/locale/fallback`, `en`: the engine's
 own default, written down, so it never needs a new APK.
 
+**The language the player chose.** The gear in the top-right corner of every game
+screen -- in a run, of the pause screen -- opens the settings sheet, whose list is
+English and every game catalog, each named in its own words (its `msgid "English"`).
+A choice applies at once, with the sheet still open, and is kept in
+`user://normal_mode.cfg` as `[app] locale`. `I18n.register()` applies the kept one
+right after registering the catalogs, so the first game screen is built in it --
+except in a process with no screen; when `--language` was given, so
+`tools/shot.tscn --language fr` shoots French whatever this machine kept; and when
+that language's game catalog has gone, when the device's is followed again. A player
+who never opens the list keeps following the device. **Picking a language to look at
+it changes what this machine's later runs open in**, English included: English is
+then kept on a machine set to another language. Delete the `[app] locale` key to
+follow the device again.
+
 **The launcher's first screen is English on every start.** Measured with a throwaway
 launcher catalog (never committed) and `--language fr`: the launcher is the main
 scene, so it is built before any game script has loaded `i18n.gd`; at that moment no
@@ -336,7 +374,8 @@ bar and its buttons all read English. Once the player has pressed Play and come 
 every launcher string is translated, `play`, `quit` and the tagline included (the
 version stamp at the bottom is not text anyone translates). So a player in another
 language meets an English launcher on each cold start, and a translated one from the
-second time it is shown.
+second time it is shown. The language the player chose waits for the same moment: it
+is applied by `I18n.register()`, which has not run while the first launcher is built.
 
 **Waiting on the template, by the owner's choice (2026-10-01).** The launcher's first
 view would translate if the catalogs registered before its scene is built. There

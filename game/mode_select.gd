@@ -72,6 +72,9 @@ const COMPANION_SIZE := Vector2(320.0, 52.0)
 @onready var _far: Button = $Center/Column/Company/FarBlock/Far
 @onready var _far_note: Label = $Center/Column/Company/FarBlock/FarNote
 @onready var _hint: Label = $Hint
+## **Settings, from the gear in the top-right corner** (docs/design/settings.md
+## §1): the last child, so Esc reaches it before this screen does.
+@onready var _corner: Control = $Corner
 
 var _leaving := false
 
@@ -91,13 +94,6 @@ func _ready() -> void:
 	_net.pressed.connect(_company.bind(EARSHOT_SCENE))
 	_far.pressed.connect(_company.bind(FAR_SCENE))
 
-	# TRANSLATORS: The hint along the bottom edge of the screen, in small type. It
-	# names the key that goes back, and the key differs by device: `back` is the
-	# Android Back button or gesture, `esc` is the Escape key. The launcher is the
-	# app's main menu, the screen with the play button.
-	_hint.text = tr("back returns to the launcher") if _touch_first() \
-		else tr("esc returns to the launcher")
-
 	for button: Button in [_full, _pov]:
 		button.custom_minimum_size = OPTION_SIZE
 		button.focus_mode = Control.FOCUS_ALL
@@ -114,11 +110,7 @@ func _ready() -> void:
 	for button: Button in [_net, _far]:
 		button.custom_minimum_size = COMPANION_SIZE
 		button.focus_mode = Control.FOCUS_ALL
-	# **The owner has not named the way in yet** (invites-ux.md §11): the button
-	# and the far page's heading both read Invite.DOOR_NAME, so a rename is one
-	# constant.
-	_far.text = tr(Invite.DOOR_NAME)
-	_far_note.text = far_note(Invite.DOOR_NAME)
+	_say()
 
 	# **Down from point of view lands on within earshot.** The pair sits
 	# symmetrically under it, so the automatic pick is a tie, and a tie-break is
@@ -129,12 +121,32 @@ func _ready() -> void:
 	_far.focus_neighbor_top = _far.get_path_to(_pov)
 	_net.focus_neighbor_right = _net.get_path_to(_far)
 	_far.focus_neighbor_left = _far.get_path_to(_net)
+	# **Up from full vision is the gear**, and Down from the gear comes back.
+	_corner.link_focus(_full)
 
 	# The remembered choice is the focused one, so the keyboard path is one key
 	# and the returning player can see what they picked last time.
 	var last := RunState.load_mode()
 	var start: Button = _pov if last == RunState.Mode.POV else _full
 	start.grab_focus()
+
+
+## **Every word this screen sets from code**, said again whenever the language
+## changes (docs/design/settings.md §3.3). The words in the scene file translate
+## themselves; these were given as `tr()` of a message, which keeps the words and
+## not the message, so they would stay in the language they were said in.
+func _say() -> void:
+	# TRANSLATORS: The hint along the bottom edge of the screen, in small type. It
+	# names the key that goes back, and the key differs by device: `back` is the
+	# Android Back button or gesture, `esc` is the Escape key. The launcher is the
+	# app's main menu, the screen with the play button.
+	_hint.text = tr("back returns to the launcher") if _touch_first() \
+		else tr("esc returns to the launcher")
+	# **The owner has not named the way in yet** (invites-ux.md §11): the button
+	# and the far page's heading both read Invite.DOOR_NAME, so a rename is one
+	# constant.
+	_far.text = tr(Invite.DOOR_NAME)
+	_far_note.text = far_note(Invite.DOOR_NAME)
 
 
 ## **The note under the far button** (invites-ux.md §6.1). "by invite" already
@@ -156,8 +168,20 @@ static func far_note(door: String) -> String:
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_back()
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# **The corner first** (settings.md §1.3): Android Back reaches this
+			# screen before the sheet over it, so a sheet that is open is what Back
+			# closes, and the view chooser stays.
+			if _corner.close_top():
+				return
+			_back()
+		NOTIFICATION_TRANSLATION_CHANGED:
+			# Deferred: the tree is still telling every node, and nothing may be
+			# changed under it. The first one comes as the node enters the tree,
+			# before `_ready` has said anything, and is let go.
+			if is_node_ready():
+				_say.call_deferred()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -165,6 +189,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Marked handled before leaving: by the time _back() returns this node
 		# may already be out of the tree and get_viewport() null.
 		get_viewport().set_input_as_handled()
+		# The corner is the last child, so an open sheet has had Esc already;
+		# asked again in case the same Back reached it by the other door.
+		if _corner.close_top():
+			return
 		_back()
 
 

@@ -15,11 +15,20 @@ extends Node
 ## reparents itself to the tree root and outlives the transition, which is the
 ## only vantage point from which "the flag came back" can be seen at all.
 ##
+## **And the settings sheet is what Back closes first** (docs/design/settings.md
+## §1.3), on the view chooser, the earshot screen and the pause screen. Android
+## Back reaches a screen before the sheet over it, because a notification goes
+## parent first, so each screen asks the corner before doing what Back does --
+## and a Back that closed the sheet must not also leave the chooser, the earshot
+## page or the pause screen. Esc reaches the corner first, and is checked too.
+##
 ## Prints one line per check and `ALL PASS` only if every one held. CI asserts on
 ## that marker rather than on the exit code: Godot exits 0 even after a parse
 ## error, and a tree that quits mid-probe never reaches the final print either.
 
 const MODE_SELECT := "res://game/mode_select.tscn"
+const EARSHOT := "res://game/net/earshot.tscn"
+const NORMAL := "res://game/normal/normal_mode.tscn"
 const LAUNCHER := "res://addons/launcher/launcher.tscn"
 
 ## Frames to let a deferred scene change flush and the new scene reach `_ready`.
@@ -56,6 +65,24 @@ func _run() -> void:
 	_check("the chooser has taken Back off the tree",
 		not get_tree().quit_on_go_back)
 
+	# **The sheet before the screen**, by both doors.
+	await _sheet_first("the view chooser", MODE_SELECT)
+
+	# The earshot screen: the sheet first, then Back is the way back out.
+	get_tree().change_scene_to_file(EARSHOT)
+	await _settle()
+	_check("the earshot screen is on screen", _scene_path() == EARSHOT)
+	await _sheet_first("the earshot screen", EARSHOT)
+	_press_back()
+	await _settle()
+	_check("then Back leaves the earshot screen for the view chooser",
+		_scene_path() == MODE_SELECT)
+
+	await _pause_sheet()
+
+	get_tree().change_scene_to_file(MODE_SELECT)
+	await _settle()
+	_check("the view chooser is on screen again", _scene_path() == MODE_SELECT)
 	_press_back()
 	await _settle()
 
@@ -80,6 +107,110 @@ func _run() -> void:
 func _settle() -> void:
 	for _i in SETTLE_FRAMES:
 		await get_tree().process_frame
+
+
+## **On [param screen], the sheet closes first**: opened from the corner, it is
+## what Back closes, and then what Esc closes, and the screen at [param path]
+## stays where it was each time.
+func _sheet_first(screen: String, path: String) -> void:
+	var corner := _corner()
+	_check("%s carries the corner" % screen, corner != null)
+	if corner == null:
+		return
+	corner.call(&"open_settings")
+	await _settle()
+	_check("the settings sheet opens over %s" % screen, bool(corner.call(&"is_open")))
+	_press_back()
+	await _settle()
+	_check("Back closes the sheet over %s" % screen,
+		is_instance_valid(corner) and not bool(corner.call(&"is_open")))
+	_check("and %s stays on screen" % screen, _scene_path() == path)
+	_check("and does not start leaving: Back still does not quit",
+		not get_tree().quit_on_go_back)
+	if not is_instance_valid(corner):
+		# Back left the screen with the sheet: failed above, and nothing is left
+		# to press Esc on.
+		return
+	corner.call(&"open_settings")
+	await _settle()
+	await _press_esc()
+	_check("Esc closes the sheet over %s" % screen,
+		is_instance_valid(corner) and not bool(corner.call(&"is_open")))
+	_check("and %s stays on screen after Esc" % screen, _scene_path() == path)
+
+
+## **The pause screen**: a run with nothing kept, paused by Esc, the sheet opened
+## over it. Back closes the sheet and leaves pause open; the next Back resumes.
+## And pause closing takes an open sheet with it, so it is not still open the
+## next time pause is (settings.md §1.1).
+func _pause_sheet() -> void:
+	var tree := get_tree()
+	var old := tree.current_scene
+	# Built by hand rather than by path, so `keep` is set before the run reads it:
+	# a probe must not open or write the player's own drop.
+	var run := (load(NORMAL) as PackedScene).instantiate()
+	run.set(&"keep", "")
+	tree.root.add_child(run)
+	tree.current_scene = run
+	if old != null:
+		old.queue_free()
+	await _settle()
+	await _press_esc()
+	_check("Esc opens the pause screen", bool(run.get(&"_menu_open")))
+	var corner := _corner()
+	_check("the pause screen carries the corner", corner != null)
+	if corner == null:
+		return
+	corner.call(&"open_settings")
+	await _settle()
+	_check("the settings sheet opens over the pause screen", bool(corner.call(&"is_open")))
+	_press_back()
+	await _settle()
+	_check("Back closes the sheet over the pause screen", not bool(corner.call(&"is_open")))
+	_check("and the pause screen stays open", bool(run.get(&"_menu_open")))
+	if not bool(run.get(&"_menu_open")):
+		# Back went through the sheet to the screen under it: failed above, and
+		# the rest would be asked of a screen that is not there.
+		return
+	corner.call(&"open_settings")
+	await _settle()
+	await _press_esc()
+	_check("Esc closes the sheet over the pause screen", not bool(corner.call(&"is_open")))
+	_check("and the pause screen stays open after Esc", bool(run.get(&"_menu_open")))
+	_press_back()
+	await _settle()
+	_check("the next Back resumes", not bool(run.get(&"_menu_open")))
+	await _press_esc()
+	corner.call(&"open_settings")
+	await _settle()
+	run.call(&"_set_menu", false)
+	await _settle()
+	_check("pause closing from under the sheet closes the sheet",
+		not bool(corner.call(&"is_open")))
+
+
+## The current scene's corner: the screen's last child, or the pause screen's.
+func _corner() -> Node:
+	var scene := get_tree().current_scene
+	if scene == null:
+		return null
+	for path: NodePath in [^"Corner", ^"Hud/Pause/Corner"]:
+		var found := scene.get_node_or_null(path)
+		if found != null:
+			return found
+	return null
+
+
+## Escape down and up, through the input path, as a keyboard sends it.
+func _press_esc() -> void:
+	for down: bool in [true, false]:
+		var key := InputEventKey.new()
+		key.keycode = KEY_ESCAPE
+		key.physical_keycode = KEY_ESCAPE
+		key.pressed = down
+		Input.parse_input_event(key)
+		await get_tree().process_frame
+	await _settle()
 
 
 ## Both halves, in the engine's order -- see the note at the top.
