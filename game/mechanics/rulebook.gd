@@ -67,7 +67,8 @@ class Vocabulary:
 	var claims := {}
 	var every := 0
 	## Each owner a table declares, to its bit: what [method worn] sets for a
-	## body that has that owner, and what a rule needs of it.
+	## body that has that owner, and what a rule needs of it. An int holds 63 of
+	## them; the game declares nine.
 	var owners := {}
 
 
