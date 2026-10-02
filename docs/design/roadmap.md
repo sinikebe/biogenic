@@ -77,14 +77,14 @@ The water learns slowly under pack 3's rules, and it stays that way. The owner,
 part over time."*
 
 **Pack 4, your own programs, is designed** (`automation.md` for the rules of the
-game, `automation-ux.md` for the screen). It was revised to the owner's answers
-to rows 27 to 37 and waits on rows 38 to 42. It is built in four phases:
+game, `automation-ux.md` for the screen), to the owner's answers to rows 27 to
+42. Divisions never change a player's programs (row 40): they change by hand
+alone. It is built in three phases:
 
-- a tail at level 2 can be held still, by hand and by instinct, for every cell
-  (4-1);
+- a tail with two copies can be held still, by hand and by instinct, for every
+  cell (4-1);
 - programs, the library and the autopilot (4-2);
-- your division changes a program (4-3);
-- a friend's daughter carries her instincts (4-4, a protocol change).
+- a friend's daughter carries her instincts (4-3, a protocol change).
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from

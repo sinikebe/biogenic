@@ -28,6 +28,15 @@ Holding the tail still is a level-2 tail ability for every cell: `hold still`
 holds it and is offered only to a body with a level-2 tail, and `rest` holds it
 too only at level 2 (§9.1, item 3).
 
+Rows 38 to 42 were answered the same day, all as recommended but one:
+
+> 40 : no mutation to programs made by players. 100% manual.
+> Rest as recommended
+
+So a level-2 tail is a tail with two copies (38), the programs that are on share
+eight instincts (39), the hold pad and the words stand as designed (41, 42), and
+**no division ever changes a player's program** (40, §2.8).
+
 `automation.md` owns the rules: what an instinct reads and does, how programs
 merge, when they run, the save and the wire. **This document owns the screen**:
 the library and the program on the pause screen, the autopilot icon, the hand's
@@ -80,8 +89,8 @@ two landed together; §9.1 lists where they meet, settled.
 7. **No keyboard is needed.** Programs get automatic names (`program 2`, `water
    cell`). `rename` opens the corner's own naming sheet, the one worlds use, and
    is optional.
-8. **French fits everywhere** (§8). The tightest line is an `Explain` of 822 of
-   856 px.
+8. **French fits everywhere** (§8). The tightest line is `rest`'s `Explain`, 816
+   of 856 px.
 9. **Content only**: scenes, GDScript and words. Keys are read raw, so
    `project.godot` is not touched and `binary_version` does not move. No `addons/`,
    no `ci/`.
@@ -151,7 +160,7 @@ Hud/Pause                       Control (existing)
 │  │  ├─ Title                  Label 16 px, Color(0.855, 0.953, 0.933, 0.80): "programs", or the program's name
 │  │  ├─ Switch                 Control 64 x 48, FOCUS_ALL, STOP: in a program only (§3.1)
 │  │  ├─ Note                   Label 15 px, CAPTION Color(0.855, 0.953, 0.933, 0.45), or WARN (§7.1)
-│  │  └─ Places                 Control 160 x 56, IGNORE: the library only, under row 39 (§2.8)
+│  │  └─ Places                 Control 160 x 56, IGNORE: the library only (row 39, §2.8)
 │  ├─ Library                   VBoxContainer, separation 10, IGNORE; (rows_x, 120), width rows_w
 │  │  └─ Row0..Row7             Control rows_w x 48: a program, the add row, or an empty place
 │  ├─ Program                   VBoxContainer, the same place, hidden: a program's instinct rows (§3)
@@ -245,8 +254,9 @@ back right now*, and the two could not be told apart (§10).
 | `rename`, `copy` | 128 x 48 each, 8 apart: fill `FILL` 0.35, 1 px `TEAL` 0.22, 15 px `PALE` 0.70 |
 | `delete this program` | 264 x 48, styled the same |
 
-At its tallest, with §2.8's change, the inspector is 406 of 420 px. Under the
-rows:
+At its tallest, a program that moves all four triggers, the inspector is about
+398 of 420 px: 360 rendered with three trigger lines, plus a fourth line of 30
+and its gap of 8. Under the rows:
 
 - **`Explain`** gives the program's name in `PALE` 0.95, then its place in the
   order: `· runs first of the 3 that are on`, `· runs after “flee”, before
@@ -333,45 +343,39 @@ Rendered: `library_empty_en_1280x720`, `library_empty_fr_2400x1080`.
 - **The autopilot beside `resume`** is disabled (§5.3). `Act` reads `tap + to
   write your first program`.
 
-### 2.8 What `automation.md`'s new rows add
+### 2.8 Rows 38 to 40, answered
 
-The mechanics' revision opens three calls of its own. The screen above works
-under either answer to each. Under the recommended answers it adds the following.
-Rendered: `library_more_*` and `editor_change_*`. The library frames of §2.1 to
-§2.7 run ten instincts at once, which the first of these would not allow;
-`library_more_*` is the same page under it.
+Rendered: `library_more_*`, `badge_pips_*`. The library frames of §2.1 to §2.7 run
+ten instincts at once, which row 39 does not allow; `library_more_*` is the same
+page under it.
 
-- **Eight instincts in all, shared by the programs that are on.** The library's
-  head ends with **the places**: `6 of 8` in 14 px `CAPTION`, then eight slots,
-  each 10 x 16 with radius 3, 4 apart, 108 px in all, right-aligned to the head.
-  A taken slot is `LIT` 0.40. The selected program's slots are `LIT` 0.95, which
-  answers *how many are taken, and by what*. A free slot is outlined 1 px `PALE`
-  0.30. A program that is off and does not fit says so in its count, `7 instincts
-  · no room`. A tap on its switch changes nothing, and `Hint` says `no room:
-  “water cell” needs 7 places, 2 are free · switch a program off first`. Inside a
-  program that is on, the add row goes once the eight are full, and the empty
-  place under the last instinct says `the 8 places are full: switch a program off,
-  or remove an instinct` (not rendered).
-- **A division's change goes into the program, with one undo.** The changed
-  instinct wears **the choosing screen's caret** (`choosing.md` §6): a solid
-  triangle 9 x 12, in the row's left margin at x −14..−5, in the sense's hue. The
-  program's library row wears it too, in `PALE` 0.85. The inspector says
-  `changed at your last division` in `WARN`, and offers `undo the change`
-  (264 x 48, quiet) above `delete this program`. On the changed test or part,
-  `Hint` says `changed at your last division: rising → falling`. Any edit keeps
-  the change, and the caret goes.
-- **Level 2 as the tail's second copy.** The badge on a part that waits for a
-  level (§4.2) then shows the genome page's two copy marks instead of the numeral
-  `2`, and the words say `two copies of your tail`. The player counts copies as
-  dots on the genome page, and a numeral would name a level that page does not
-  show for the tail. Not rendered: the frames show the numeral.
+- **Row 39: eight instincts in all, shared by the programs that are on.** The
+  library's head ends with **the places**: `6 of 8` in 14 px `CAPTION`, then eight
+  slots, each 10 x 16 with radius 3, 4 apart, 108 px in all, right-aligned to the
+  head. A taken slot is `LIT` 0.40. The selected program's slots are `LIT` 0.95,
+  which answers *how many are taken, and by what*. A free slot is outlined 1 px
+  `PALE` 0.30. A program that is off and does not fit says so in its count,
+  `7 instincts · no room`. A tap on its switch changes nothing, and `Hint` says
+  `no room: “water cell” needs 7 places, 2 are free · switch a program off first`.
+  Inside a program that is on, the add row goes once the eight are full, and the
+  empty place under the last instinct says `the 8 places are full: switch a
+  program off, or remove an instinct` (not rendered).
+- **Row 40: a program changes only by hand.** No division changes a program you
+  wrote, so the page has no mark for a change and no undo of one, and the
+  choosing screen shows nothing new for your programs.
+- **Row 38: a level-2 tail is a tail with two copies.** The badge on a part that
+  waits for its organ's copies (§4.2) is the genome page's own pips: two discs and
+  a room dot, `●●•`, read exactly as that page reads a gene's copies. A numeral
+  would name a level the genome page does not show for the tail. The words name
+  copies too: `hold still needs two copies of your tail` (§8). Rendered as a
+  component on the page's colours, not over the run: `badge_pips_*`.
 
 ---
 
 ## 3. A program
 
 Rendered: `editor_*`, `editor_tail1_*`, `editor_never_*`, `editor_new_*`,
-`editor_change_*`, `editor_pond_fr`.
+`editor_pond_fr`.
 
 ### 3.1 Its head
 
@@ -403,7 +407,7 @@ The states. The ones in bold are new; the rest stand as they were.
 | reported, no report passed | the sense's edge at its hue 0.60; arc 1.2 px `PALE` 0.10, head 0.28 | `waiting: your ping hears it, the test is not met` |
 | quiet | the same, the sense at rest | `waiting: your ping reports nothing` |
 | asleep: an organ it needs is not worn | everything at x 0.42 | `asleep: your body does not wear push` |
-| **asleep: its part waits for a level** | everything at x 0.42 | `asleep: your tail is not at level 2 yet` |
+| **asleep: its part waits for its organ's copies** | everything at x 0.42 | `asleep: needs two copies of your tail` |
 | unreadable | one wide chip, its saved line at 0.42 | `this version cannot read this instinct · it is kept` |
 | half-built | blanks dashed, no arc | `pick what it does · until then it does nothing` |
 | the program off | everything at rest, waiting style | the head says it (§7.1) |
@@ -417,7 +421,7 @@ flicker.
 
 The action that holds the tail still, `hold still` (`flagellum.hold`,
 `automation.md` §4.2), takes the flagellum's hue and the hold mark (§6.2) at 0.30
-scale: a 19 px stroke running into a 14 px bar, and the level badge. The page and
+scale: a 19 px stroke running into a 14 px bar, and the pips badge (§4.2). The page and
 the pad use one picture. `rest` keeps the cell's egg: it stops everything you can,
 at every level, and holds the tail too only at level 2 (§9.1, item 3). **The
 frames were drawn before the two documents settled**, and show `rest` wearing the
@@ -438,7 +442,7 @@ beats unless something holds it, so nothing needs a starting `always -> swim`
 
 ## 4. Editing an instinct
 
-Unchanged from the landed spec, apart from the level badge in §4.2.
+Unchanged from the landed spec, apart from the badge in §4.2.
 
 ### 4.1 Selection is editing
 
@@ -466,13 +470,16 @@ selection's sentence back.
 - **What cannot fit is dimmed to 0.35 and inert**: `turn toward` and `turn away`
   under a sense with no bearing, and the reverse. Tapping one says why on `Hint`,
   for example `turn toward needs a sense that says where`.
-- **A part that waits for a level is offered dimmed and badged** (rows 29 and 37,
-  `automation.md` §4.3). It is dimmed to 0.35 and inert, and at its right end it
-  carries an 18 x 18 badge, radius 4, edged 1 px in its organ's hue at 0.55,
-  holding `2` in 12 px. That is the level it waits for, written the way the genome
-  page writes a level. Tapping it says `rest needs your tail at level 2` on
-  `Hint`. In `what you can do` it is dimmed and badged the same way. Rendered:
-  `editor_tail1_*`.
+- **A part that waits for its organ's copies is offered dimmed and badged** (rows
+  29, 37 and 38, `automation.md` §4.3). It is dimmed to 0.35 and inert. In the
+  cell's top-right corner it carries **the genome page's pips** for the copies it
+  needs, drawn by that page's `_draw_pips` in its organ's hue at ink 0.85: a disc
+  of `PIP_R` 3.4 per copy, `PIP_PITCH` 10 apart, and a room dot of r 1.6 at
+  `PALE` 0.30 after them. The first disc's centre is at (cw − 33.4, 10), so the
+  pips span x 91..117, y 6..13 of a 128 x 48 cell: above the word, never on it,
+  because the French `fige la queue` runs to x 123. Tapping the cell says `hold
+  still needs two copies of your tail` on `Hint`. In `what you can do` the word
+  is dimmed and the pips follow it, `PIP_GAP` 7 after. Rendered: `badge_pips_*`.
 - **Changing the sense** keeps the tests the new sense can carry, matched by value
   name, and drops the rest.
 - **`push`** adds a row of two cells under the grid when it is the current
@@ -635,8 +642,8 @@ Rendered: `play_*`, `zoom_icon_and_pads`.
   pad stays dark (`automation.md` §4.2).
 - **Under `anywhere`**, `controls.gd` stops being invisible for this one pad.
   `_live(HOLD)` is true under every scheme, and `cell.gd` asks `controls.press()`
-  before it claims its single pointer, as it does under the drawn schemes. Row 41 asks
-  whether `anywhere` should draw anything at all.
+  before it claims its single pointer, as it does under the drawn schemes. Row 41
+  was answered that it does (§12).
 - **The scheme chooser's preview** (`controls.md` §5.1) draws the pad where it
   will be, so the preview still explains the scheme.
 
@@ -702,7 +709,9 @@ rendered here; the build shoots it.
 
 ## 8. Words, and their room
 
-The names are the owner's (row 42). This is the recommended set, in the game's
+The names are the owner's, and row 42 took this set as listed. Row 38 then moved
+the three hold sentences from *level 2* to *two copies* (§2.8), and row 40 took the
+change's words out. The set is in the game's
 register: lowercase, `vous` in French, and names inside a sentence wearing their
 language's quotes, “flee” and « fuite ». French figures are measured off the mock.
 
@@ -718,10 +727,10 @@ language's quotes, “flee” and « fuite ». French figures are measured off t
 | places (`Explain`) | runs first of the %d that are on; runs after %s, before %s; runs last, after %s; the only program on; off: the autopilot skips it; empty: open it to give it instincts | passe en premier des %d actifs; passe après %s, avant %s; passe en dernier, après %s; le seul programme actif; coupé : le pilote automatique l'ignore; vide : ouvrez-le pour lui donner des instincts | ≤ 856 at 15 |
 | sheets | rename this program; its %d instincts are gone for good. (`delete %s?`, `keep`, `delete`, `back` and `rename` exist) | renommer ce programme; ses %d instincts disparaissent pour de bon. | the sheets' own rooms |
 | autopilot | autopilot · hand your cell to your programs. tap it again, or steer, to take it back. | pilote automatique · confiez votre cellule à vos programmes. touchez-le encore, ou dirigez, pour la reprendre. | 790 of 856 at 15 |
-| rest | rest · stop steering, pushing and dashing, and drift. with your tail at level 2, it holds still too. | repos · cesser de se diriger, de pousser et de bondir, et dériver. avec une queue au niveau 2, elle s'immobilise aussi. | the lint's, at the build (§9.3) |
-| the hold, `flagellum.hold` | hold still · hold your tail still and keep steering, for free. needs your tail at level 2. | fige la queue · garder la queue immobile et continuer à se diriger, gratuitement. demande une queue au niveau 2. | **822 of 856 at 15, the tightest line** |
-| §2.8 | %d of 8; no room; changed at your last division; undo the change; no room: %s needs %d places, %d are free · switch a program off first; the 8 places are full: switch a program off, or remove an instinct | %d sur 8; pas de place; changé à votre dernière division; annuler le changement; pas de place : %s demande %d places, %d sont libres · coupez d'abord un programme; les 8 places sont prises : coupez un programme, ou retirez un instinct | 653 at 14 |
-| hints | held back: %s, above, already steers; never acts: %s, above, always swims; held back now: …; %s never moves your tail: %s, above, always swims; asleep: your tail is not at level 2 yet; hold still needs your tail at level 2; turn a program on to use the autopilot | retenu : %s, au-dessus, dirige déjà; n'agit jamais : %s, au-dessus, nage toujours; retenu en ce moment : …; %s ne mène jamais votre queue : %s, au-dessus, nage toujours; endormi : votre queue n'est pas encore au niveau 2; « fige la queue » demande une queue au niveau 2; activez un programme pour utiliser le pilote automatique | ≤ 856 at 14, longest about 584 |
+| rest | rest · stop steering, pushing and dashing, and drift. with two copies of your tail, hold it still too. | repos · cesser de se diriger, de pousser et de bondir, et dériver. avec deux copies de la queue, l'immobiliser aussi. | **816 of 856 at 15, the tightest line** |
+| the hold, `flagellum.hold` | hold still · hold your tail still and keep steering, for free. needs two copies of your tail. | fige la queue · immobiliser la queue et continuer à se diriger, gratuitement. demande deux copies de la queue. | 797 |
+| the places (row 39) | %d of 8; no room; no room: %s needs %d places, %d are free · switch a program off first; the 8 places are full: switch a program off, or remove an instinct | %d sur 8; pas de place; pas de place : %s demande %d places, %d sont libres · coupez d'abord un programme; les 8 places sont prises : coupez un programme, ou retirez un instinct | 653 at 14 |
+| hints | held back: %s, above, already steers; never acts: %s, above, always swims; held back now: …; %s never moves your tail: %s, above, always swims; asleep: needs two copies of your tail; hold still needs two copies of your tail; turn a program on to use the autopilot | retenu : %s, au-dessus, dirige déjà; n'agit jamais : %s, au-dessus, nage toujours; retenu en ce moment : …; %s ne mène jamais votre queue : %s, au-dessus, nage toujours; endormi : demande deux copies de la queue; « fige la queue » demande deux copies de la queue; activez un programme pour utiliser le pilote automatique | ≤ 856 at 14, longest about 584 |
 | head lines | §7.1 | l'eau bouge encore · vos programmes mènent votre cellule; coupé : ce programme ne fait rien tant que vous ne l'activez pas; ce que fait votre cellule en pilote automatique · le plus haut l'emporte; le premier instinct qui convient, en partant du haut, l'emporte | the library's French note ends at 621 of 856 |
 | acts | tap a program to see it · drag a program up to let it win; let go to move this program here; tap + to write your first program; tap + to give this program its first instinct | touchez un programme pour le voir · glissez-le vers le haut pour qu'il l'emporte; lâchez pour placer ce programme ici; touchez + pour écrire votre premier programme; touchez + pour donner un premier instinct à ce programme | ≤ 856 at 14 |
 
@@ -778,8 +787,8 @@ screen agrees with it on these points:
 4. **A new program starts empty** (its §3.6). Agreed. The landed list's starting
    `always -> body.swim` would have left every program below it with a tail that
    never acts.
-5. **Its three new calls** (rows 38 to 40 as it numbers them): §2.8 is what the
-   page adds under each recommended answer, rendered.
+5. **Rows 38 to 40, answered** (§2.8): 38 and 39 as recommended. 40 the other
+   way: no division changes a player's program, so the page has nothing for it.
 6. **The dry run** while the water waits (§7.1), and a half-built instinct
    belonging to the page alone, are the screen's own.
 
@@ -833,18 +842,21 @@ frame again (§9.3).
 | `library_drag_fr_1280x720`, `library_drag_en_2400x1080` | passes. `careful` rides above the finger toward the gap over `water cell`, and its source is hollow |
 | `library_rename_fr_1280x720`, `library_rename_en_2400x1080` | passes. The corner's own naming sheet at the top, its name selected |
 | `library_delete_en_1280x720`, `library_delete_fr_2400x1080` | passes. The corner's own confirm, a world's question |
-| `library_more_en_1280x720`, `library_more_fr_{1280x720,2400x1080}` | passes. §2.8: `6 of 8` with `hunter`'s three slots bright; `water cell` with no room; `hunter`'s caret and its undo. French: the note ends 70 px before the places. The inspector fills 406 of 420 |
+| `library_more_en_1280x720`, `library_more_fr_{1280x720,2400x1080}` | passes for row 39: `6 of 8` with `hunter`'s three slots bright, and `water cell` with no room. French: the note ends 70 px before the places. **Its caret, `changed at your last division`, `undo the change` and the change's `Hint` are void under row 40**; without them the inspector is 322 of 420 |
 | `editor_{en,fr}_{1280x720,2400x1080}` | passes. `water cell`, its beam row held back by “flee”, `rest` wearing the hold mark, the autopilot on beside `resume` |
-| `editor_tail1_fr_1280x720`, `editor_tail1_en_2400x1080` | passes. Under a level-1 tail both rests are asleep, and `rest` in the choices is dimmed and badged `2`. Drawn before §9.1 item 3 settled: it is `hold still` that sleeps and is badged, and `rest` stays awake |
+| `editor_tail1_fr_1280x720`, `editor_tail1_en_2400x1080` | passes. Under a level-1 tail both rests are asleep, and `rest` in the choices is dimmed and badged `2`. Drawn before §9.1 item 3 settled: it is `hold still` that sleeps and is badged, and `rest` stays awake. Its numeral is now the pips (`badge_pips_*`) |
+| `badge_pips_{en,fr}_{1280x720,2400x1080}` | passes. A component render on the page's colours, not over the run: the inspector's choices with `hold still` dimmed and `●●•` in its corner, clear of `fige la queue`; the same pips after the word in `what you can do`; the genome page's `swim ●••` beside them, which is what a player matches them against |
 | `editor_never_en_1280x720`, `editor_never_fr_2400x1080` | passes. `careful`'s one row ends in a pale T-bar, the `Hint` says why, and the switch sits at x 124 after a short name |
 | `editor_new_en_1280x720`, `editor_new_fr_2400x1080` | passes. A new program, off, with the invitation and the vocabulary. French fills 404 of 420 |
-| `editor_change_en_1280x720`, `editor_change_fr_2400x1080` | passes. The changed test with the caret in its sense's hue, and `undo the change` above `remove this test` |
 | `editor_pond_fr_1280x720` | passes. The head warns that your programs have your cell |
 | `genome_chip_four_fr_1280x720`, `genome_chip_five_en_1280x720`, `genome_chip_fr_2400x1080` | passes. `programmes ›` clears a tray of four by 16 px |
 | `play_pov_pads_on_*`, `play_fv_stick_on_*`, `play_fv_anywhere_on_*` | passes. On, in both views and under all three schemes. It is the brightest control in point of view, and §9.3's glance decides whether it is too bright |
 | `play_pov_stick_off_*`, `play_pov_anywhere_off_1280x720`, `play_fv_pads_off_held_*` | passes. Off, it is as quiet as the pause tap. The hold pad, held, is lit |
 | `play_pov_anywhere_taken_*` | passes. The hold pad pressed while the autopilot drove: the T-bar shown at once, its light half fallen |
 | `zoom_icon_and_pads_2400x1080` | passes. On, taken and off, then the hold pad alone and beside push and dash, at device pixels |
+
+`editor_change_*` showed a division's change and its undo. Row 40 removes both, so
+it no longer passes for anything.
 
 **What judging changed** (frames in `shots/iterations/`; the two first versions
 that later renders overwrote, the tile-glyph columns and the dumbbell, were drawn
@@ -863,24 +875,21 @@ again for the record as `*_FIRST`):
 | the hold pad under `anywhere` at the right edge's middle | a good side button | a top-centre punch-hole lands there in landscape; it moved to where `pads` puts it |
 | a frame of the autopilot on with the hold pad held | a state row 36 forbids | removed |
 | a new program's `Hint` repeating that it is off | said twice | only the head says it |
-| `undo the change` beside `delete` | `annuler le changement` overflowed its half | both full width |
+| the badge as a numeral `2` at the cell's right end | in French, `fige la queue` runs to x 123 and the badge sat at x 101..119, on the word; found while folding row 38 | the genome page's pips, in the cell's top-right corner |
 
 ---
 
 ## 11. Left open
 
-1. **The choosing screen's change mark** (`automation.md` §6.4, phase 4-3) is not
-   designed. §2.8's caret is the same mark, so the choosing screen has its
-   vocabulary.
-2. **Undo** after `remove` or `delete`. Only a division's change has one (§2.8).
-3. **An instinct switched off on its own**, as Final Fantasy XII's gambits had.
+1. **Undo** after `remove` or `delete`.
+2. **An instinct switched off on its own**, as Final Fantasy XII's gambits had.
    Programs half answer it: put the instinct in a program of its own and switch
    that program off.
-4. **The replay's line** (§7.3) is not rendered.
-5. **Keyboard focus and mouse hover** are specified but not rendered.
-6. **Cutouts.** The autopilot has the gear's exposure in a top corner
+3. **The replay's line** (§7.3) is not rendered.
+4. **Keyboard focus and mouse hover** are specified but not rendered.
+5. **Cutouts.** The autopilot has the gear's exposure in a top corner
    (`settings.md` §12). Nothing here reads `DisplayServer.get_display_safe_area()`.
-7. **Under `anywhere`**, whether the hold pad catches a steering thumb is a
+6. **Under `anywhere`**, whether the hold pad catches a steering thumb is a
    playtest question. **Watch for** a tail that stops when a player meant to
    steer.
 
@@ -890,16 +899,14 @@ again for the record as `*_FIRST`):
 
 ## 12. Owner's calls
 
-The screen's two new calls are asked in `automation.md` §17.2, in one table with
-the mechanics': **row 41**, how an `anywhere` player holds the tail still, and
-**row 42**, the new words. Rows 28, 31, 32 and 35 were the screen's in the first
-table (§17.1 there).
+**All answered; nothing is open for the owner.** The screen's two calls were asked
+in `automation.md` §17.2, in one table with the mechanics', and answered on
+2026-10-02 as recommended:
 
-**Under the table.** Row 41's pad sits three pad widths in from the bottom-right
-corner, beyond a resting thumb. The first place tried, the right edge's middle,
-is where most phones' cameras sit in landscape. The second finger is how many
-touch games hide a modifier. Here the screen would never show it, and the game
-has so far drawn every control it reads. *Hold versus tap* for the pad is not
-asked: holding is push's rule, and a long hold is the autopilot's job (§6.1).
-Row 42's French uses `pilote automatique` in sentences only. The icon carries no
-word. *hold still* names `flagellum.hold` (§9.1, item 3).
+- **row 41**: an `anywhere` player holds the tail still with a pad, drawn only once
+  the tail reaches level 2, where `pads` puts it (§6.1);
+- **row 42**: the words as listed (§8).
+
+Rows 28, 31, 32 and 35 were the screen's in the first table (§17.1 there). The
+pad's place, and why it is held rather than tapped, are argued in §6.1. In French,
+`pilote automatique` appears in sentences only; the icon carries no word.
