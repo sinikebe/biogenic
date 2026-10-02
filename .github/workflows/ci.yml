@@ -352,10 +352,10 @@ jobs:
         # it shows in a render -- a grid that misses one body in ten thousand
         # is a hunter that never sees you -- and a player would find it an
         # hour into a run. About three and a half minutes here since pack 3's
-        # rules (3-1), which read every hunter's senses, and about five and a
-        # half since pack 4's tail (4-1), which runs a pack-3 drop of its own
-        # beside the new water: 319 s measured on a quiet machine, against
-        # the 600 s timeout below.
+        # rules (3-1), which read every hunter's senses, and about four since
+        # pack 4's tail (4-1), which runs a pack-3 drop of its own beside the
+        # new water: 235 s here at 4-1, and 319 s on a quiet local machine,
+        # against the 600 s timeout below.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |
@@ -487,9 +487,10 @@ jobs:
         # stand-in router, and about six in `channel`, at up to 50. Its pond
         # timings are counted in frames, not wall milliseconds, so a loaded
         # runner slows the step without failing it. It prints its own frame
-        # count -- 16,226 to 16,532 in three runs since pack 4's tail (4-1),
-        # whose pond and server sections run again with a guest holding its
-        # tail; 15,070 with `channel`'s 240, as it was 15,070 with
+        # count -- 17,071 here since pack 4's tail (4-1), whose pond and
+        # server sections run again with a guest holding its tail, and 16,226
+        # to 16,532 in three runs on a quiet local machine; 15,070 with
+        # `channel`'s 240, as it was 15,070 with
         # `upnp`'s 800 before `channel`, against 14,300 to 14,750 measured
         # eight times before that -- so the margin on 20000 is visible in the
         # log.

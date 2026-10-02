@@ -639,8 +639,9 @@ the text above, or found something:
 - **`net_probe`**: the pond's mirror check now records the coming-for-you test
   itself, within reach, because a resting one-copy hunter swims on and so comes
   for the guest; the server's hunter stage clears and spares the other guest's
-  water. Three runs alone: 16,226 to 16,532 frames against 20,000. `drop_probe`:
-  319 s alone, against its 600 s timeout.
+  water. On CI at 4-1: 17,071 frames against 20,000, and `drop_probe` 235 s
+  against its 600 s timeout; locally, alone, 16,226 to 16,532 frames and 319 s.
+  The frame margin is the one to watch as 4-2 adds sections.
 - **The replay's held tail** is 4-2's (§18.1).
 - **Seen, and left for 4-2's pause work**: on the pause screen at 1280x720 under
   `pads`, the genome caption's second line runs about 20 px over the dimmed hold
