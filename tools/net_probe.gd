@@ -34,7 +34,11 @@ extends Node
 ## **And the pond, played** (shared-pond.md §5, Phase 2): two sessions and two
 ## real runs of the game, one hosting the water and one mirroring it, put
 ## through every lifecycle the pond has -- arriving, eating and being eaten,
-## the black, dividing, a quiet host and a closed one.
+## the black, dividing, a quiet host and a closed one. **And a held tail**
+## (automation.md §18.3 check 7): a guest whose tail has two copies holds it
+## still and lets it go, in the pond and on the server, slowly and as fast as a
+## hand can, and the host's referee calls no foul -- on rules whose fingerprint,
+## `Wire.RULES`, the tail did not move.
 ##
 ## **How late the marker is, as a distribution, is `tools/net_lag.gd`'s job**,
 ## not this file's -- it takes minutes. What this file keeps is the one number
@@ -2439,6 +2443,10 @@ class RefStick extends Node:
 	func pushing() -> bool:
 		return true
 
+	## The hold pad (automation-ux.md §6.1), never held here: R2 swims flat out.
+	func holding() -> bool:
+		return false
+
 	func press(_index: int, _at: Vector2) -> int:
 		return NONE
 
@@ -4172,6 +4180,22 @@ func _pond_retire(field: Node, i: int) -> void:
 		field.call("_retire", i)
 
 
+## **Every water body but [param keep_id] coming for the person in [param slot]**,
+## taken out of [param field]: for a check about whose hunter one posed body is,
+## in a room whose own hunters swim (automation.md §5.3).
+func _pond_spare(field: Node, slot: int, keep_id: int) -> void:
+	var bodies: Array = field.bodies()
+	var p: Object = (bodies[slot] as Object).get("person")
+	if p == null:
+		return
+	for i in bodies.size():
+		var b: Object = bodies[i]
+		if not bool(b.seeded) or bool(b.inert) or b.person != null or int(b.id) == keep_id:
+			continue
+		if bool(field.call(&"_coming_for_player", b, p)):
+			_pond_retire(field, i)
+
+
 ## ...on a run at the person, committed -- the one in [param slot], on a
 ## dedicated host that has two -- and with nothing of the chase the slot last
 ## ran carried into this one.
@@ -5342,9 +5366,14 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 	## last 64 kept: `[count, entries, water, the guest's place]`, where `water`
 	## is every water body that could be in it as it stood at that instant --
 	## within the send reach and a margin, or hunting the guest -- as `[slot,
-	## id, place, radius, meals, genome, hunting the guest]`. The mirror check
-	## finds the one the guest applied by its sequence, and so never compares a
-	## mirror with water a frame later than the water it was sent.
+	## id, place, radius, meals, genome, hunting the guest]`. **On rules,
+	## "hunting" is what the send set puts first** (`_send_coming`): coming for
+	## the guest, within the reach. Under row 37 (automation.md §5.3) a resting
+	## hunter of one copy swims, so one is often coming for the guest from past
+	## the sixty nearest -- and a run's state, which no body on rules is in, never
+	## named it. The mirror check finds the one the guest applied by its
+	## sequence, and so never compares a mirror with water a frame later than the
+	## water it was sent.
 	var built: Array = []
 	var built_count := 0
 
@@ -5359,6 +5388,9 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 					continue
 				var hunting := b.state == State.STALK and b.target == PERSON_SLOT \
 					and b.target_serial == pb.serial
+				if _ruled():
+					hunting = pb.person != null and b.pos.distance_to(pb.pos) - b.radius \
+						<= reach and _coming_for_player(b, pb.person)
 				if not hunting and b.pos.distance_to(pb.pos) - b.radius > reach + 100.0:
 					continue
 				water.append([i, _wire_id(b), b.pos, b.radius, b.meals,
@@ -5490,9 +5522,10 @@ func _check_pond() -> void:
 
 	# ----------------------------------------------------------------------
 	# **The mirror** (§2's send set; ocean.md §10.4): the host's send set for
-	# the guest -- every body hunting it, then the nearest within 1,900, surface
-	# to centre, sixty in all -- is in the guest's water within a unit of where
-	# the host has it, with the genome of its (id, meals); nothing else.
+	# the guest -- every body hunting it, or on rules every body within reach
+	# coming for it, then the nearest within 1,900, surface to centre, sixty in
+	# all -- is in the guest's water within a unit of where the host has it,
+	# with the genome of its (id, meals); nothing else.
 	#
 	# **Held exactly, so a loaded runner cannot fail it and a broken mirror
 	# cannot pass it**: against the snapshot the guest applied, found by its
@@ -5829,9 +5862,11 @@ func _check_pond() -> void:
 	# the pond, grown alone, and back in by an arrival. A worn body never
 	# changes mid-life, so the host's referee keeps the old one if a guest says
 	# otherwise -- which is what this used to do, and what R7 now holds it to.
+	# **And a second copy of its tail** (automation.md §5.2), which it can hold
+	# still: below, it does, in the host's water.
 	var genome_guest: Node = guest_run.get_node(^"Genome")
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [host_pin])
+		&"flagellum": 2}, [&"cytostome", &"cirrus", &"flagellum"], [host_pin])
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -5842,6 +5877,25 @@ func _check_pond() -> void:
 	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null,
 		"pond: the guest leaves the pond, grows a tier-3 mouth alone and swims back"
 		+ " in %.2f s, and the host takes the body it arrives with" % reentry)
+
+	# **The guest holds its tail still, and lets it go** (automation.md §10.2,
+	# §18.3 check 7): a motion no guest made before 4-1, swum free in the host's
+	# water -- strokes that stop while its hand holds the tail and come back on
+	# their own clock -- for the host's referee to judge. Its last word is the
+	# section's end: no foul on either honest guest.
+	var swum: Array = await _hold_tail_free(guest_cell, host_food, host_cell.position,
+		[host_pin])
+	_says(int(swum[0]) >= 1 and int(swum[1]) == 0 and int(swum[2]) > 90
+			and float(swum[5]) >= float(swum[6]) - 0.1
+			and int(guest_run.get("_life")) == NormalMode.Life.ALIVE
+			and bool(guest_pond.in_pond) and host_food.person() != null,
+		"pond: the guest, its tail at two copies, swims free in the host's water and holds"
+		+ " it still %d frames, let go %d strokes and %d while held, %s, %.1f units in %.1f s"
+		% [int(swum[2]), int(swum[0]), int(swum[1]), _gap_said(swum), float(swum[3]),
+		float(swum[4])])
+	guest_home = guest_cell.position
+	guest_pin = [guest_cell, guest_home, 0.0]
+	pins = [host_pin, guest_pin]
 	var guest_ate := [false]
 	var on_guest_eaten := func(_n: float, _g: StringName, _a: Vector2) -> void:
 		guest_ate[0] = true
@@ -6779,6 +6833,84 @@ func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array) -> f
 	return _now() - from if back >= 0.0 else -1.0
 
 
+## **A guest's tail of two copies, held still and let go** (automation.md §5.2,
+## §10.2; §18.3 check 7): the one motion 4-1 gives a guest that none made before.
+## [param cell] is let swim free the way it was pinned facing -- turned by nothing
+## but the water, as a hand that holds only its tail turns it -- through water
+## cleared of every body round it, so nothing takes it meanwhile, while its hand
+## holds the tail by `↓`'s action for a second, lets go until a stroke beats on
+## the clock it kept, holds and lets go twice more, and then flips its hold every
+## frame for 120 frames, the fastest a hand can: a tail that beat at once when let
+## go would stroke on every other frame, far past the speed and the turn the
+## host's referee allows. [param pins] hold the rest, and [param other], the one
+## other cell, is an arrival's distance off, past any swim this takes -- or the
+## strokes say -1. Every other cell in this process wears one copy, so the key
+## holds nothing of theirs. `[strokes, strokes while held, frames held, units
+## swum, seconds, the closest two strokes in seconds, the tier's shortest gap]`.
+func _hold_tail_free(cell: Node, water: Node, other: Vector2, pins: Array) -> Array:
+	var at: Vector2 = cell.position
+	var ahead := Vector2(sin(float(cell.heading)), -cos(float(cell.heading)))
+	_pond_clear_line(water, at - ahead * 300.0, at + ahead * 600.0, 600.0)
+	var strokes := [0, 0]
+	var beats := PackedFloat64Array()
+	var on_stroke := func(_strength: float) -> void:
+		strokes[0] += 1
+		beats.append(_clock())
+		if Input.is_action_pressed(&"ui_down"):
+			strokes[1] += 1
+	cell.impulsed.connect(on_stroke)
+	var held := [0]
+	var watch := func() -> bool:
+		if bool(cell.call(&"tail_held")):
+			held[0] += 1
+		return false
+	var from := _now()
+	Input.action_press(&"ui_down")
+	await _pond_until(watch, 1.0, pins)
+	Input.action_release(&"ui_down")
+	var beat: int = strokes[0]
+	await _pond_until(func() -> bool:
+		watch.call()
+		return strokes[0] > beat, 3.2, pins)
+	for k in 2:
+		Input.action_press(&"ui_down")
+		await _pond_until(watch, 0.4, pins)
+		Input.action_release(&"ui_down")
+		await _pond_until(watch, 0.2, pins)
+	for k in 120:
+		if k % 2 == 0:
+			Input.action_press(&"ui_down")
+		else:
+			Input.action_release(&"ui_down")
+		var ticks := [0]
+		await _pond_until(func() -> bool:
+			ticks[0] += 1
+			if ticks[0] > 1:
+				watch.call()
+			return ticks[0] > 1, 1.0, pins)
+	Input.action_release(&"ui_down")
+	await _pond_until(watch, 0.2, pins)
+	cell.impulsed.disconnect(on_stroke)
+	var closest := INF
+	for n in range(1, beats.size()):
+		closest = minf(closest, beats[n] - beats[n - 1])
+	# It never came near the other cell: what this asks is the referee's word on
+	# a hold, not a meeting.
+	if (cell.position as Vector2).distance_to(other) < 200.0:
+		strokes[0] = -1
+	return [strokes[0], strokes[1], held[0], at.distance_to(cell.position), _now() - from,
+		closest, float(cell.call(&"impulse_gap_min"))]
+
+
+## How close [method _hold_tail_free]'s strokes came, said against the tier's
+## shortest gap.
+func _gap_said(swum: Array) -> String:
+	if is_inf(float(swum[5])):
+		return "no two to compare (shortest gap %.2f s)" % float(swum[6])
+	return "the closest two %.2f s apart (shortest gap %.2f s)" % [float(swum[5]),
+		float(swum[6])]
+
+
 ## **Feeds the guest [param cell] to r40 on real meals in the host's water**,
 ## one morsel at a time on the lip of its mouth -- facing north, as pinned --
 ## each one an ATE the host decides and the guest grows by. A wide mouth takes
@@ -7429,8 +7561,9 @@ func _check_server() -> void:
 	# (B.5) -- a worn body never changes mid-life, and the server's referee would
 	# keep the old one.
 	var b_genome: Node = b_run.get_node(^"Genome")
+	# And a second copy of its tail (automation.md §5.2), which it holds still below.
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 1, &"palp": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp"],
+		&"flagellum": 2, &"palp": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp"],
 		[a_pin])
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
@@ -7473,6 +7606,22 @@ func _check_server() -> void:
 		% b_sees.distance_to(a_home) + " first wearing the palp the second grew"
 		+ " -- in water of %d and %d cells; largest snapshot %d B"
 		% [water_a, water_b, int(pond.pond_bytes_max)])
+
+	# **The second guest holds its tail still, and lets it go** (automation.md
+	# §10.2, §18.3 check 7), swum free in the room: the server's referee judges it,
+	# and the section ends on its word -- no foul on any of its guests.
+	var b_swum: Array = await _hold_tail_free(b_cell, food, a_cell.position, [a_pin])
+	_says(int(b_swum[0]) >= 1 and int(b_swum[1]) == 0 and int(b_swum[2]) > 90
+			and float(b_swum[5]) >= float(b_swum[6]) - 0.1
+			and int(b_run.get("_life")) == NormalMode.Life.ALIVE
+			and food.person(slot_b) != null,
+		"server: the second guest, its tail at two copies, swims free in the room and"
+		+ " holds it still %d frames, let go %d strokes and %d while held, %s, %.1f units in"
+		% [int(b_swum[2]), int(b_swum[0]), int(b_swum[1]), _gap_said(b_swum),
+		float(b_swum[3])] + " %.1f s" % float(b_swum[4]))
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
 
 	# **The server decides a meeting of the two, and both hear it.** The guest
 	# in slot 68 is this cell's side of the players' rule on a dedicated host,
@@ -7632,6 +7781,13 @@ func _check_server() -> void:
 	var hunter_gape := CellBody.gape_of(3, 30.0)
 	_pond_clear_line(food, held_at, held_at, Cilia.mouth_reach(30.0, hunter_gape)
 		+ hunter_gape * Cilia.MOUTH_BITE + 60.0)
+	# **And nothing else coming for the other guest** (automation.md §5.3). The
+	# room is a live drop, and under row 37 a hunter of one copy swims even at
+	# rest, so one aimed at the other guest by chance would be that guest's
+	# hunter -- once in this probe's first runs on the tail. So the water round it
+	# is cleared, and while this waits a body that comes for it all the same is
+	# taken out: what is asked is whose hunter the posed one is, not the room's.
+	_pond_clear_line(food, a_home, a_home, 1000.0)
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
@@ -7653,7 +7809,9 @@ func _check_server() -> void:
 	var flagged := await _server_until(func() -> bool:
 		hunter.pos = held_at
 		hunter.heading = _pond_face(held_at, b_home)
-		return _hunter_id(b_food) == hunter_id and a_holds.call(), pins)
+		_pond_spare(food, slot_a, hunter_id)
+		return _hunter_id(b_food) == hunter_id and a_holds.call() \
+			and _hunter_id(a_food) == -1, pins)
 	var a_sees_hunter := _hunter_id(a_food)
 	var a_has_it: bool = a_holds.call()
 	# Which of the three, when it fails, and what the server's body was doing.

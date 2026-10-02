@@ -2666,11 +2666,15 @@ func _floating() -> bool:
 ## 1.5 s later is a target the player has to find twice at the one beat in a run
 ## that cannot be replayed.
 func _update_controls() -> void:
+	# **The hold pad is drawn under every scheme** (automation-ux.md §6.1), from
+	# the moment the tail can be held still: under `anywhere` the one control
+	# there is, so that scheme's screen stays empty until then.
+	var hold := _cell.can_hold()
 	# The pond's still moments behave as a pinch does (UX §0.5, §5): the
 	# steering control stays drawn and dead, and the action pads go.
-	_controls.update(not _floating() and _life == Life.ALIVE,
+	_controls.update((not _floating() or hold) and _life == Life.ALIVE,
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
-		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0)
+		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0, hold)
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause

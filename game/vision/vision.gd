@@ -389,6 +389,9 @@ var eye := {}
 ## touch a dozen call sites in a shipped file for a beat that does not need it.
 const DIVIDE_SPREAD := 160.0
 var _clock := 0.0
+## **Your tail's own clock** (cilia.gd's `step_tail`): a held tail is drawn
+## still, as the point-of-view figure draws it (automation.md §8.1).
+var _tail := Vector2.ZERO
 var _camera := Vector2.ZERO
 var _view := Vector2(1280.0, 720.0)
 ## **Forward is always up.** The world turns instead of the cell. Off by
@@ -617,6 +620,7 @@ func _process(delta: float) -> void:
 		return
 
 	_clock += delta
+	_tail = Cilia.step_tail(_tail, _cell != null and _cell.tail_held(), delta)
 	_beat = maxf(_beat - delta / BEAT_DECAY, 0.0)
 	_age(_kicks, 2, delta, KICK_LIFE)
 	_age(_hits, 3, delta, HIT_LIFE)
@@ -1881,7 +1885,7 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye)
+		0.0, false, eye, _tail)
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)

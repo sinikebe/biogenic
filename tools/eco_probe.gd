@@ -23,7 +23,10 @@ extends SceneTree
 ##   (docs/design/behaviour.md §12.1): `--rules=0|1`, 0 being pack 2's hand-written
 ##   hunter -- the reference the rules are measured against -- and
 ##   `--rule-change=0|1`, 0 being phase 3-1's water, whose rules never change at
-##   a division.
+##   a division; and pack 4's (docs/design/automation.md §5.4):
+##   `--water-tail=pack3|row37`, `pack3` being pack 3's water, where a body swims
+##   only while a swim rule fires, and `row37` the game's, where every tail that
+##   swims beats unless it is held.
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
@@ -102,6 +105,8 @@ func _initialize() -> void:
 			sets[&"rules"] = v == "1"
 		elif a.begins_with("--rule-change="):
 			sets[&"rule_change"] = v == "1"
+		elif a.begins_with("--water-tail="):
+			sets[&"tails_beat"] = v != "pack3"
 		else:
 			for name: String in ["lod", "half-rate", "near-first", "skip-still", "own-speed",
 					"contact-swallow", "armour-swallow", "drifter-venom"]:

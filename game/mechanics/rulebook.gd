@@ -8,15 +8,16 @@ extends RefCounted
 ##
 ## **What it knows**: declared inputs -- whether one carries a bearing, and the
 ## values it carries, each of a kind -- and declared outputs -- the triggers each
-## claims, what it needs and the options it takes; the kinds and their ladders;
-## the four tests. **Choosing** ([method choose]): from the top, one winner per
-## trigger, each input read at most once a tick through a callable the caller
-## hands over. **Text** ([method parse], [method text_of]): a list to and from
-## its lines by declared name, a name it does not know kept as a rule that never
-## fires and written back as it came. **One change** ([method changed], §6.2):
-## a new list one small step from a list, drawn from a vocabulary's parts and
-## the global stream; and what two lists say, compared ([method same_rule],
-## [method key_of]).
+## claims, what it needs and the options it takes; the level a part waits for,
+## where its declaration names one (docs/design/automation.md §4.3); the kinds
+## and their ladders; the four tests. **Choosing** ([method choose]): from the
+## top, one winner per trigger, each input read at most once a tick through a
+## callable the caller hands over. **Text** ([method parse], [method text_of]):
+## a list to and from its lines by declared name, a name it does not know kept
+## as a rule that never fires and written back as it came. **One change**
+## ([method changed], §6.2): a new list one small step from a list, drawn from a
+## vocabulary's parts and the global stream; and what two lists say, compared
+## ([method same_rule], [method key_of]).
 ##
 ## **What it does not know**: a gene, a cell, a sense or the water. Every name it
 ## reads comes out of the declaration tables it is handed ([method vocabulary]),
@@ -86,10 +87,17 @@ class Vocabulary:
 	## what [constant EVERY] claims.
 	var claims := {}
 	var every := 0
-	## Each owner a table declares, to its bit: what [method worn] sets for a
-	## body that has that owner, and what a rule needs of it. An int holds 63 of
-	## them; the game declares nine.
+	## Each owner a table declares, to the bit of its parts at the first level:
+	## what [method worn] sets for a body that has that owner, and what a rule
+	## needs of it. An int holds 63 bits; the game uses eleven.
 	var owners := {}
+	## **The parts an owner brings at a level above the first** (automation.md
+	## §4.3): owner to `{level: bit}`, one bit for each owner-and-level a table
+	## declares. [method worn] sets it for a body whose owner works at that level
+	## or more, so a part declared at level 2 is there from its owner's level 2.
+	var levels := {}
+	## Every bit [member levels] holds: the parts that wait for a level.
+	var levelled := 0
 
 
 ## One declared input. Its reports are Arrays of its values in [member values]'
@@ -101,6 +109,11 @@ class InputDecl:
 	var bearing := false
 	var values: Array[StringName] = []
 	var kinds: Array[StringName] = []
+	## The level its owner must work at for it to be there -- 1 unless its
+	## declaration says `"level"` -- and the vocabulary's bit for that
+	## owner-and-level: what a rule reading it needs.
+	var level := 1
+	var bit := 0
 
 	## Where [param value] sits in a report, or -1.
 	func at(value: StringName) -> int:
@@ -127,6 +140,10 @@ class OutputDecl:
 	var claims := 0
 	var needs := &""
 	var options: Array[float] = []
+	## The level its owner must work at, and that owner-and-level's bit, as an
+	## input's ([member InputDecl.level]).
+	var level := 1
+	var bit := 0
 
 
 ## One test of one rule: which value, where it sits in a report, of which kind,
@@ -212,20 +229,29 @@ static var _always: Array = [[]]
 
 ## **A vocabulary from declaration tables** (§3.1): each table maps an owner's
 ## name -- a gene, or a part every body has -- to `{"in": [...], "out": [...]}`,
-## each input `{"name", "bearing", "values": {value: kind}}` and each output
-## `{"name", "claims", "needs"?, "options"?}`. A later table's owner of the same
-## name adds to the earlier's. Triggers are numbered as they are first claimed.
+## each input `{"name", "bearing", "values": {value: kind}, "level"?}` and each
+## output `{"name", "claims", "needs"?, "options"?, "level"?}`. A later table's
+## owner of the same name adds to the earlier's. Triggers are numbered as they
+## are first claimed.
+##
+## **A part with a `"level"`** (automation.md §4.3) is there only while its
+## owner works at that level or more: its owner-and-level has a bit of its own,
+## numbered after every bit before it, so a part at a level moves no bit a list
+## was read with. An owner's first bit is its first level's, whatever its parts.
 static func vocabulary(tables: Array) -> Vocabulary:
 	var vocab := Vocabulary.new()
 	var claiming: Array = []
+	var bits := 0
 	for table: Dictionary in tables:
 		for owner: Variant in table:
 			var parts: Dictionary = table[owner]
-			if not vocab.owners.has(StringName(owner)):
-				vocab.owners[StringName(owner)] = 1 << vocab.owners.size()
+			var named := StringName(owner)
+			if not vocab.owners.has(named):
+				vocab.owners[named] = 1 << bits
+				bits += 1
 			for one: Dictionary in parts.get("in", []):
 				var input := InputDecl.new()
-				input.owner = StringName(owner)
+				input.owner = named
 				input.name = StringName("%s.%s" % [owner, one["name"]])
 				input.bearing = bool(one.get("bearing", false))
 				if input.bearing:
@@ -235,14 +261,20 @@ static func vocabulary(tables: Array) -> Vocabulary:
 				for value: Variant in values:
 					input.values.append(StringName(value))
 					input.kinds.append(StringName(values[value]))
+				input.level = maxi(int(one.get("level", 1)), 1)
+				bits = _level_bit(vocab, named, input.level, bits)
+				input.bit = _bit_of(vocab, named, input.level)
 				vocab.inputs[input.name] = input
 			for one: Dictionary in parts.get("out", []):
 				var output := OutputDecl.new()
-				output.owner = StringName(owner)
+				output.owner = named
 				output.name = StringName("%s.%s" % [owner, one["name"]])
 				output.needs = StringName(one.get("needs", &""))
 				for option: Variant in one.get("options", []):
 					output.options.append(float(option))
+				output.level = maxi(int(one.get("level", 1)), 1)
+				bits = _level_bit(vocab, named, output.level, bits)
+				output.bit = _bit_of(vocab, named, output.level)
 				vocab.outputs[output.name] = output
 				claiming.append([output, one.get("claims", [])])
 	for pair: Array in claiming:
@@ -260,14 +292,48 @@ static func vocabulary(tables: Array) -> Vocabulary:
 	return vocab
 
 
+## [param owner]'s bit at [param level] in [param vocab], made the next bit --
+## [param bits] -- when it is the first part declared there. Returns how many
+## bits there are now.
+static func _level_bit(vocab: Vocabulary, owner: StringName, level: int, bits: int) -> int:
+	if level <= 1:
+		return bits
+	var at: Dictionary = vocab.levels.get(owner, {})
+	if not at.has(level):
+		at[level] = 1 << bits
+		vocab.levels[owner] = at
+		vocab.levelled |= 1 << bits
+		bits += 1
+	return bits
+
+
+## The bit a part of [param owner]'s at [param level] needs.
+static func _bit_of(vocab: Vocabulary, owner: StringName, level: int) -> int:
+	if level <= 1:
+		return int(vocab.owners[owner])
+	return int((vocab.levels[owner] as Dictionary)[level])
+
+
 ## **The owners a body has, as bits** for [method choose]: each of [param vocab]'s
-## that [param parts] holds above zero -- what the body wears, a gene to its
-## tier -- or that [param always] holds, what every body has.
+## that [param parts] holds above zero -- what the body wears, a gene to the
+## level it works at -- or that [param always] holds, what every body has, at
+## the first level unless [param parts] says more. **And each part at a level**
+## (automation.md §4.3), from the level its owner works at: a gene's worn copies
+## for a water cell, the level `genome.gd`'s `level_of` answers for the player,
+## a DNA's copies for what a change may draw.
 static func worn(vocab: Vocabulary, parts: Dictionary, always: Dictionary) -> int:
 	var mask := 0
 	for owner: StringName in vocab.owners:
-		if always.has(owner) or int(parts.get(owner, 0)) > 0:
-			mask |= int(vocab.owners[owner])
+		var level := int(parts.get(owner, 0))
+		if always.has(owner):
+			level = maxi(level, 1)
+		if level <= 0:
+			continue
+		mask |= int(vocab.owners[owner])
+		var at: Dictionary = vocab.levels.get(owner, {})
+		for need: int in at:
+			if level >= need:
+				mask |= int(at[need])
 	return mask
 
 
@@ -365,9 +431,9 @@ static func rule_from(line: String, vocab: Vocabulary) -> Rule:
 	rule.output = output.name
 	rule.out_owner = output.owner
 	rule.claims = output.claims
-	rule.needs = int(vocab.owners[output.owner])
+	rule.needs = output.bit
 	if input != null:
-		rule.needs |= int(vocab.owners[input.owner])
+		rule.needs |= input.bit
 	var rest := words.size() - arrow - 2
 	if output.options.is_empty():
 		if rest != 0:
@@ -807,9 +873,10 @@ static func _readable(rule: Rule, vocab: Vocabulary) -> bool:
 		and (rule.input == ALWAYS or vocab.inputs.has(rule.input))
 
 
-## **The inputs that could stand in for [param rule]'s**: every input of an owner
-## in [param owners], and [constant ALWAYS], but its own -- and only those with a
-## bearing when its output needs one. With [param one], the first found.
+## **The inputs that could stand in for [param rule]'s**: every input whose
+## owner-and-level is in [param owners], and [constant ALWAYS], but its own --
+## and only those with a bearing when its output needs one. With [param one],
+## the first found.
 static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 		one := false) -> Array[StringName]:
 	var output := vocab.outputs[rule.output] as OutputDecl
@@ -821,7 +888,7 @@ static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 			return out
 	for name: StringName in vocab.inputs:
 		var input := vocab.inputs[name] as InputDecl
-		if name != rule.input and (owners & int(vocab.owners[input.owner])) != 0 \
+		if name != rule.input and (owners & input.bit) != 0 \
 				and (input.bearing or not bearing):
 			out.append(name)
 			if one:
@@ -829,9 +896,9 @@ static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 	return out
 
 
-## **The outputs that could stand in for [param rule]'s**: every output of an
-## owner in [param owners] but its own, and only those that need no bearing when
-## its input carries none. With [param one], the first found.
+## **The outputs that could stand in for [param rule]'s**: every output whose
+## owner-and-level is in [param owners] but its own, and only those that need no
+## bearing when its input carries none. With [param one], the first found.
 static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 		one := false) -> Array[StringName]:
 	var input := vocab.inputs.get(rule.input) as InputDecl
@@ -839,7 +906,7 @@ static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
 	var out: Array[StringName] = []
 	for name: StringName in vocab.outputs:
 		var output := vocab.outputs[name] as OutputDecl
-		if name != rule.output and (owners & int(vocab.owners[output.owner])) != 0 \
+		if name != rule.output and (owners & output.bit) != 0 \
 				and (output.needs != BEARING or bearing):
 			out.append(name)
 			if one:
@@ -964,10 +1031,11 @@ static func _clause_copy(clause: Clause) -> Clause:
 
 
 ## [param rule] made whole after a change, as [method rule_from] would make it
-## from its line: the owners it needs and the line itself.
+## from its line: the owners it needs, at the level each part needs, and the
+## line itself.
 static func _finish(rule: Rule, vocab: Vocabulary) -> void:
 	rule.inert = false
-	rule.needs = int(vocab.owners[rule.out_owner])
+	rule.needs = (vocab.outputs[rule.output] as OutputDecl).bit
 	if rule.input != ALWAYS:
-		rule.needs |= int(vocab.owners[rule.in_owner])
+		rule.needs |= (vocab.inputs[rule.input] as InputDecl).bit
 	rule.text = line_of(rule)
