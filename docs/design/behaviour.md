@@ -578,6 +578,24 @@ organs a family has never had. And what a family can learn still grows with
 what it eats, because a meal writes new genes into the DNA (`lineage.md`
 §3.2).
 
+**As built in 3-2**, where this spec was silent:
+- the DNA is the daughter's own final DNA, after her mutation and the sense
+  gift;
+- only newly drawn inputs and outputs are held to it, so an inherited rule for
+  an organ the DNA lacks can still be nudged in place;
+- a replaced input gets no test or one test, by a coin;
+- "replace a test" picks evenly among swapping in another test, removing one
+  and adding one;
+- a size test's ladder is its two references, the mouth and the body;
+- a step read from a file that is off its ladder nudges onto the nearest rung;
+- under the tool's `--mutate` below 1, the rules change only when the DNA's
+  roll fires, and under `--rules=0` nothing changes and nothing is drawn.
+
+`Drop.daughter_behaviours` takes the vocabulary and the owners beside the list,
+so neither `drop.gd` nor `rulebook.gd` names a gene. The readout counts lists by
+what they say, so a line whose changes come back round to the founders' rules
+counts as unchanged.
+
 ### 6.4 What the water makes, the sister, the player
 
 - **The spawner's founders carry the founders' rules** (row 22). The founders
@@ -949,7 +967,16 @@ whether one behaviour takes over the whole room.
 8. **Drifters decide nothing**, and a guest's sister arrives on the founders'
    rules until SISTER carries hers.
 9. **The cost on a phone** (§9) is several times the estimate here, and is the
-   dev app readout's to judge.
+   dev app readout's to judge. 3-2 adds nothing measurable a frame: a change
+   costs 44 to 61 µs at a division, about 1 µs a frame on average.
+10. **The water learns slowly under rules.** Hunters on their senses eat about
+    40 % less than pack 2's (§5.3), so few reach `DIVIDE_RADIUS` and divide. In
+    the build's shot of a drop aged fifteen minutes, the mean generation was
+    1.4, against pack 2's 23 to 26 (`lineage.md` §6.1), and 79 % of hunters were
+    still on the founders' rules. At five minutes, seed 1, 71 % to 85 % were.
+    Learning needs divisions. The levers are founders that hunt better, so
+    more hunters grow and divide, or a cheaper division, which is a rule the
+    referee copies.
 
 ---
 
