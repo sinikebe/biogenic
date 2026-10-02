@@ -2928,3 +2928,1845 @@ msgstr "pause"
 #: game/replay/replay.gd
 msgid "play"
 msgstr "jouer"
+
+#. The name of a sense or an action on a small chip of the player's
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), or of a value a sense reports. Lowercase, one or two short
+#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
+#. steer to or from where the sense says it is. "tumble": a sudden turn to a
+#. random side, as swimming bacteria do. "swim": keep the tail beating.
+#. "rest": stop moving on purpose and drift with the water.
+#. entry: body.hit
+#. Room: at most 112 px in 15 px type; the English takes 20 px.
+#: game/normal/cell.gd
+msgid "hit"
+msgstr "coup"
+
+#. The name of a sense or an action on a small chip of the player's
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), or of a value a sense reports. Lowercase, one or two short
+#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
+#. steer to or from where the sense says it is. "tumble": a sudden turn to a
+#. random side, as swimming bacteria do. "swim": keep the tail beating.
+#. "rest": stop moving on purpose and drift with the water.
+#. entry: body.turn-toward
+#. Room: at most 112 px in 15 px type; the English takes 88 px.
+#: game/normal/cell.gd
+msgid "turn toward"
+msgstr "tourne vers"
+
+#. The name of a sense or an action on a small chip of the player's
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), or of a value a sense reports. Lowercase, one or two short
+#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
+#. steer to or from where the sense says it is. "tumble": a sudden turn to a
+#. random side, as swimming bacteria do. "swim": keep the tail beating.
+#. "rest": stop moving on purpose and drift with the water.
+#. entry: body.turn-away
+#. Room: at most 112 px in 15 px type; the English takes 74 px.
+#: game/normal/cell.gd
+msgid "turn away"
+msgstr "se détourne"
+
+#. The name of a sense or an action on a small chip of the player's
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), or of a value a sense reports. Lowercase, one or two short
+#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
+#. steer to or from where the sense says it is. "tumble": a sudden turn to a
+#. random side, as swimming bacteria do. "swim": keep the tail beating.
+#. "rest": stop moving on purpose and drift with the water.
+#. entry: body.turn-random
+#. Room: at most 112 px in 15 px type; the English takes 52 px.
+#: game/normal/cell.gd
+msgid "tumble"
+msgstr "culbute"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell: "strength", how hard a bite
+#. was. Lowercase, one short word.
+#. entry: strength
+#. Room: at most 70 px in 14 px type; the English takes 58 px.
+#: game/normal/cell.gd
+msgid "strength"
+msgstr "force"
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: body.hit
+#. Room: at most 856 px in 15 px type; the English takes 446 px.
+#: game/normal/cell.gd
+msgid "hit · a bite landing on you: where it came from, and how hard."
+msgstr ""
+"coup · une morsure qui vous atteint : d'où elle vient, et à quelle force."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: body.turn-toward
+#. Room: at most 856 px in 15 px type; the English takes 353 px.
+#: game/normal/cell.gd
+msgid "turn toward · steer for where the sense says it is."
+msgstr "tourne vers · se diriger là où le sens dit que c'est."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: body.turn-away
+#. Room: at most 856 px in 15 px type; the English takes 395 px.
+#: game/normal/cell.gd
+msgid "turn away · steer away from where the sense says it is."
+msgstr "se détourne · s'éloigner de là où le sens dit que c'est."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: body.turn-random
+#. Room: at most 856 px in 15 px type; the English takes 365 px.
+#: game/normal/cell.gd
+msgid "tumble · a quarter to a half turn, to a random side."
+msgstr "culbute · un quart à un demi-tour, d'un côté au hasard."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: body.swim
+#. Room: at most 856 px in 15 px type; the English takes 431 px.
+#: game/normal/cell.gd
+msgid "swim · keep your tail beating, so nothing below holds it still."
+msgstr ""
+"nage · garder la queue qui bat, pour que rien en dessous ne l'immobilise."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same word as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your tail" is the cell's flagellum,
+#. which swims; "two copies" means the gene is carried twice in the cell's
+#. DNA, which is what lets the tail be held still; "below" means the instincts
+#. lower in the list.
+#. entry: strength
+#. Room: at most 856 px in 15 px type; the English takes 429 px.
+#: game/normal/cell.gd
+msgid "strength · how hard the bite was, from a graze to a full bite."
+msgstr "force · la force de la morsure, d'une éraflure à une pleine morsure."
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: ocellus.beam
+#. Room: at most 112 px in 15 px type; the English takes 41 px.
+#: game/normal/genome.gd
+msgctxt "sense"
+msgid "beam"
+msgstr "rayon"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: ampulla.echo
+#. Room: at most 112 px in 15 px type; the English takes 35 px.
+#: game/normal/genome.gd
+msgctxt "sense"
+msgid "echo"
+msgstr "écho"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: chemocyte.smell
+#. Room: at most 112 px in 15 px type; the English takes 39 px.
+#: game/normal/genome.gd
+msgctxt "sense"
+msgid "smell"
+msgstr "odeur"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: stigma.shadow
+#. Room: at most 112 px in 15 px type; the English takes 57 px.
+#: game/normal/genome.gd
+msgctxt "sense"
+msgid "shadow"
+msgstr "ombre"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: palp.touch
+#. Room: at most 112 px in 15 px type; the English takes 42 px.
+#: game/normal/genome.gd
+msgctxt "sense"
+msgid "touch"
+msgstr "contact"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: distance
+#. Room: at most 70 px in 14 px type; the English takes 57 px.
+#: game/normal/genome.gd
+msgid "distance"
+msgstr "distance"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: size
+#. Room: at most 70 px in 14 px type; the English takes 26 px.
+#: game/normal/genome.gd
+msgid "size"
+msgstr "taille"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "level": how full or empty; "seconds": how long ago.
+#. entry: level
+#. Room: at most 70 px in 14 px type; the English takes 32 px.
+#: game/normal/genome.gd game/normal/metabolism.gd
+msgid "level"
+msgstr "niveau"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: closeness
+#. Room: at most 70 px in 14 px type; the English takes 65 px.
+#: game/normal/genome.gd
+msgid "closeness"
+msgstr "proximité"
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: ocellus.beam
+#. Room: at most 856 px in 15 px type; the English takes 562 px.
+#: game/normal/genome.gd
+msgid ""
+"beam · the nearest thing each ray of your beam stops on: where, and how "
+"far."
+msgstr ""
+"rayon · la chose la plus proche où s'arrête chaque trait de votre rayon : "
+"où, et à quelle distance."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: ampulla.echo
+#. Room: at most 856 px in 15 px type; the English takes 605 px.
+#: game/normal/genome.gd
+msgid ""
+"echo · what your ping hears back: where it came from, how far, and how big "
+"it rings."
+msgstr ""
+"écho · ce que votre sonar entend revenir : d'où, à quelle distance, et "
+"quelle taille il sonne."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: chemocyte.smell
+#. Room: at most 856 px in 15 px type; the English takes 528 px.
+#: game/normal/genome.gd
+msgid ""
+"smell · how strongly food your mouth could take smells, along your nose."
+msgstr ""
+"odeur · l'odeur de ce que votre bouche pourrait prendre, le long de votre "
+"nez."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: stigma.shadow
+#. Room: at most 856 px in 15 px type; the English takes 528 px.
+#: game/normal/genome.gd
+msgid ""
+"shadow · the shade of anything your size or bigger: where, and how dark."
+msgstr ""
+"ombre · l'ombre de tout ce qui est de votre taille ou plus grand : où, et "
+"combien sombre."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: palp.touch
+#. Room: at most 856 px in 15 px type; the English takes 474 px.
+#: game/normal/genome.gd
+msgid "touch · the nearest thing against your skin: where, and how close."
+msgstr ""
+"contact · la chose la plus proche contre votre peau : où, et à quel point."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: myoneme.dash
+#. Room: at most 856 px in 15 px type; the English takes 399 px.
+#: game/normal/genome.gd
+msgid "dash · a burst forward, on its cooldown, paid in hunger."
+msgstr "bond · un élan vers l'avant, à son rythme, payé en faim."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: axoneme.push
+#. Room: at most 856 px in 15 px type; the English takes 426 px.
+#: game/normal/genome.gd
+msgid "push · thrust while this holds, at half or full, paid as you go."
+msgstr ""
+"pousse · pousser tant que ceci tient, à moitié ou à fond, payé au fur et à "
+"mesure."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: distance
+#. Room: at most 856 px in 15 px type; the English takes 204 px.
+#: game/normal/genome.gd
+msgid "distance · how far away it is."
+msgstr "distance · à quelle distance c'est."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: size
+#. Room: at most 856 px in 15 px type; the English takes 448 px.
+#: game/normal/genome.gd
+msgid "size · how big it rings, against your mouth or your whole body."
+msgstr ""
+"taille · la taille de ce qu'il sonne, comparée à votre bouche ou à tout "
+"votre corps."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: level
+#. Room: at most 856 px in 15 px type; the English takes 311 px.
+#: game/normal/genome.gd
+msgid "level · how strong it is, from nothing to full."
+msgstr "niveau · sa force, de rien à plein."
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: closeness
+#. Room: at most 856 px in 15 px type; the English takes 483 px.
+#: game/normal/genome.gd
+msgid "closeness · how near it is, from the edge of your reach to your skin."
+msgstr ""
+"proximité · à quel point c'est près, du bord de votre portée à votre peau."
+
+#. The automatic name of a program the player made and has not named: "program
+#. 2". A "program" is a list of the cell's "instincts" (rules the player
+#. writes); %d is the lowest number no other program uses. Lowercase.
+#. Room: at most 234 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 84 px.
+#: game/normal/library.gd
+#, c-format
+msgid "program %d"
+msgstr "programme %d"
+
+#. The automatic name of a copy of the program the water's own cells are born
+#. with: "water cell". Lowercase.
+#. Room: at most 234 px in 15 px type; the English takes 71 px.
+#: game/normal/library.gd
+msgid "water cell"
+msgstr "cellule de l'eau"
+
+#. A name with a number after it, for a second copy of something: "water cell
+#. 2", "flee 2". %s is the name, %d the lowest number not in use.
+#. Room: at most 234 px in 15 px type, measured with water cell 9 and 99 in
+#. place of the placeholders; the English takes 104 px.
+#: game/normal/library.gd
+#, c-format
+msgid "%s %d"
+msgstr "%s %d"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules the
+#. player writes: "when <a sense reports something> -> <do this>"). Lowercase,
+#. one short word. "hunger": how empty the cell's tank is; "meal": the time
+#. since the cell last ate.
+#. entry: metabolism.hunger
+#. Room: at most 112 px in 15 px type; the English takes 53 px.
+#: game/normal/metabolism.gd
+msgid "hunger"
+msgstr "faim"
+
+#. The name of a sense on a small chip of the player's "instincts" (rules the
+#. player writes: "when <a sense reports something> -> <do this>"). Lowercase,
+#. one short word. "hunger": how empty the cell's tank is; "meal": the time
+#. since the cell last ate.
+#. entry: metabolism.fed
+#. Room: at most 112 px in 15 px type; the English takes 36 px.
+#: game/normal/metabolism.gd
+msgid "meal"
+msgstr "repas"
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "level": how full or empty; "seconds": how long ago.
+#. entry: seconds
+#. Room: at most 70 px in 14 px type; the English takes 55 px.
+#: game/normal/metabolism.gd
+msgid "seconds"
+msgstr "secondes"
+
+#. Explains one sense or value of the player's "instincts", on one line under
+#. them: its name (the same word as on its chip), a middle dot, then what it
+#. is, lowercase. "Your tank" is how much food the cell has left; "the beat
+#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. entry: metabolism.hunger
+#. Room: at most 856 px in 15 px type; the English takes 369 px.
+#: game/normal/metabolism.gd
+msgid "hunger · how empty your tank is: the beat you feel."
+msgstr ""
+"faim · à quel point votre réserve est vide : le battement que vous sentez."
+
+#. Explains one sense or value of the player's "instincts", on one line under
+#. them: its name (the same word as on its chip), a middle dot, then what it
+#. is, lowercase. "Your tank" is how much food the cell has left; "the beat
+#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. entry: metabolism.fed
+#. Room: at most 856 px in 15 px type; the English takes 527 px.
+#: game/normal/metabolism.gd
+msgid ""
+"meal · how long since you last ate: a cell, a floc, or one you chewed "
+"apart."
+msgstr ""
+"repas · depuis combien de temps vous avez mangé : une cellule, un flocon, "
+"ou une que vous avez mâchée."
+
+#. Explains one sense or value of the player's "instincts", on one line under
+#. them: its name (the same word as on its chip), a middle dot, then what it
+#. is, lowercase. "Your tank" is how much food the cell has left; "the beat
+#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. entry: seconds
+#. Room: at most 856 px in 15 px type; the English takes 256 px.
+#: game/normal/metabolism.gd
+msgid "seconds · how long ago, in seconds."
+msgstr "secondes · il y a combien de temps, en secondes."
+
+#. The name of the one sense every cell has on the chip of an "instinct" (a
+#. rule the player writes): it always reports, so an instinct on it always
+#. acts unless one above it holds it back. Lowercase.
+#. entry: always
+#. Room: at most 112 px in 15 px type; the English takes 50 px.
+#: game/normal/program_words.gd
+msgid "always"
+msgstr "toujours"
+
+#. The name of a value a sense reports, which an "instinct" can test, on a
+#. small choice cell: "bearing", how far off the cell's nose the thing is.
+#. Lowercase, one short word.
+#. entry: bearing
+#. Room: at most 70 px in 14 px type; the English takes 52 px.
+#: game/normal/program_words.gd
+msgid "bearing"
+msgstr "angle"
+
+#. Explains one sense or value of the player's "instincts", on one line under
+#. them: its name (the same word as on its chip), a middle dot, then what it
+#. is, lowercase. "Nothing above acts": no instinct higher in the list acts on
+#. the same thing.
+#. entry: always
+#. Room: at most 856 px in 15 px type; the English takes 516 px.
+#: game/normal/program_words.gd
+msgid "always · always there: for what your cell does when nothing above acts."
+msgstr ""
+"toujours · toujours là : pour ce que fait votre cellule quand rien "
+"au-dessus n'agit."
+
+#. Explains one sense or value of the player's "instincts", on one line under
+#. them: its name (the same word as on its chip), a middle dot, then what it
+#. is, lowercase. "Nothing above acts": no instinct higher in the list acts on
+#. the same thing.
+#. entry: bearing
+#. Room: at most 856 px in 15 px type; the English takes 360 px.
+#: game/normal/program_words.gd
+msgid "bearing · how far off your nose it is, to either side."
+msgstr "angle · à quel angle de votre nez c'est, d'un côté ou de l'autre."
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: level
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 103 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "below %s"
+msgstr "moins de %s"
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: level
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 103 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "above %s"
+msgstr "plus de %s"
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: seconds
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 103 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "under %s"
+msgstr "moins de %s"
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: seconds
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 92 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "over %s"
+msgstr "plus de %s"
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: distance
+#. entry: bearing
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 105 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "within %s"
+msgstr "à moins de %s"
+
+#. A test an "instinct" puts to a value, on a chip, in the kind's own words;
+#. %s is the step: "below 30%", "under 5 s", "within 350 µm", "within 60°".
+#. Lowercase. Move %s where your language wants it.
+#. entry: distance
+#. entry: bearing
+#. Room: at most 140 px in 14 px type, measured with 1450 µm in place of the
+#. placeholders; the English takes 113 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "beyond %s"
+msgstr "à plus de %s"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: level
+#. entry: seconds
+#. Room: at most 96 px in 14 px type; the English takes 38 px.
+#: game/normal/program_words.gd
+msgid "rising"
+msgstr "monte"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: level
+#. entry: seconds
+#. Room: at most 96 px in 14 px type; the English takes 42 px.
+#: game/normal/program_words.gd
+msgid "falling"
+msgstr "baisse"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: distance
+#. Room: at most 96 px in 14 px type; the English takes 76 px.
+#: game/normal/program_words.gd
+msgid "going away"
+msgstr "s'éloigne"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: distance
+#. Room: at most 96 px in 14 px type; the English takes 64 px.
+#: game/normal/program_words.gd
+msgid "closing in"
+msgstr "s'approche"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: bearing
+#. Room: at most 96 px in 14 px type; the English takes 90 px.
+#: game/normal/program_words.gd
+msgid "moving aside"
+msgstr "s'écarte"
+
+#. A test of change an "instinct" puts to a value, on a chip, in the kind's
+#. own words: since the last moment (a quarter of a second before) it rose or
+#. fell, went away or came closer, moved off the cell's nose or back toward
+#. it. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: bearing
+#. Room: at most 96 px in 14 px type; the English takes 96 px.
+#: game/normal/program_words.gd
+msgid "moving ahead"
+msgstr "se recentre"
+
+#. A test an "instinct" puts to the size of something it senses, on a chip; %s
+#. is "my mouth" or "me", what it is measured against: "smaller than my mouth"
+#. (small enough to swallow whole). Lowercase.
+#. Room: at most 184 px in 14 px type, measured with your wider of "my mouth"
+#. and "me" in place of the placeholders; the English takes 159 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "smaller than %s"
+msgstr "plus petit que %s"
+
+#. A test an "instinct" puts to the size of something it senses, on a chip; %s
+#. is "my mouth" or "me", what it is measured against: "smaller than my mouth"
+#. (small enough to swallow whole). Lowercase.
+#. Room: at most 184 px in 14 px type, measured with your wider of "my mouth"
+#. and "me" in place of the placeholders; the English takes 151 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "bigger than %s"
+msgstr "plus grand que %s"
+
+#. A test of change an "instinct" puts to the size of something it senses, on
+#. a chip: since the last moment it grew or shrank. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: size
+#. Room: at most 96 px in 14 px type; the English takes 55 px.
+#: game/normal/program_words.gd
+msgid "growing"
+msgstr "grossit"
+
+#. A test of change an "instinct" puts to the size of something it senses, on
+#. a chip: since the last moment it grew or shrank. Lowercase.
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: size
+#. Room: at most 96 px in 14 px type; the English takes 64 px.
+#: game/normal/program_words.gd
+msgid "shrinking"
+msgstr "rapetisse"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: level
+#. Room: at most 96 px in 14 px type; the English takes 41 px.
+#: game/normal/program_words.gd
+msgid "below"
+msgstr "moins de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: level
+#. Room: at most 96 px in 14 px type; the English takes 41 px.
+#: game/normal/program_words.gd
+msgid "above"
+msgstr "plus de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: seconds
+#. Room: at most 96 px in 14 px type; the English takes 41 px.
+#: game/normal/program_words.gd
+msgid "under"
+msgstr "moins de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: seconds
+#. Room: at most 96 px in 14 px type; the English takes 31 px.
+#: game/normal/program_words.gd
+msgid "over"
+msgstr "plus de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: distance
+#. entry: bearing
+#. Room: at most 96 px in 14 px type; the English takes 43 px.
+#: game/normal/program_words.gd
+msgid "within"
+msgstr "à moins de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: distance
+#. entry: bearing
+#. Room: at most 96 px in 14 px type; the English takes 51 px.
+#: game/normal/program_words.gd
+msgid "beyond"
+msgstr "à plus de"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: size
+#. Room: at most 96 px in 14 px type; the English takes 86 px.
+#: game/normal/program_words.gd
+msgid "smaller than"
+msgstr "plus petit que"
+
+#. One of four choices for the test an "instinct" puts to a value, on a cell
+#. 128 px wide: the comparison alone, without its step. Lowercase.
+#. entry: size
+#. Room: at most 96 px in 14 px type; the English takes 78 px.
+#: game/normal/program_words.gd
+msgid "bigger than"
+msgstr "plus grand que"
+
+#. What the size of something an "instinct" senses is measured against: "my
+#. mouth" (the cell's own mouth: smaller than it is small enough to swallow
+#. whole) or "me" (the cell's whole body). Lowercase.
+#. entry: mouth
+#. Room: at most 96 px in 14 px type; the English takes 70 px.
+#: game/normal/program_words.gd
+msgid "my mouth"
+msgstr "ma bouche"
+
+#. What the size of something an "instinct" senses is measured against: "my
+#. mouth" (the cell's own mouth: smaller than it is small enough to swallow
+#. whole) or "me" (the cell's whole body). Lowercase.
+#. entry: body
+#. Room: at most 96 px in 14 px type; the English takes 22 px.
+#: game/normal/program_words.gd
+msgid "me"
+msgstr "moi"
+
+#. A value with its unit: a share as a percentage ("30%"), seconds ("5 s"),
+#. micrometres ("350 µm"), degrees ("60°"). %d and %s are the number. Keep the
+#. unit; space it as your language does ("30 %" in French).
+#. entry: level
+#. Room: at most 60 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 29 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "%d%%"
+msgstr "%d %%"
+
+#. A value with its unit: a share as a percentage ("30%"), seconds ("5 s"),
+#. micrometres ("350 µm"), degrees ("60°"). %d and %s are the number. Keep the
+#. unit; space it as your language does ("30 %" in French).
+#. entry: seconds
+#. Room: at most 60 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 27 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "%s s"
+msgstr "%s s"
+
+#. A value with its unit: a share as a percentage ("30%"), seconds ("5 s"),
+#. micrometres ("350 µm"), degrees ("60°"). %d and %s are the number. Keep the
+#. unit; space it as your language does ("30 %" in French).
+#. entry: distance
+#. Room: at most 60 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 42 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "%s µm"
+msgstr "%s µm"
+
+#. A value with its unit: a share as a percentage ("30%"), seconds ("5 s"),
+#. micrometres ("350 µm"), degrees ("60°"). %d and %s are the number. Keep the
+#. unit; space it as your language does ("30 %" in French).
+#. entry: bearing
+#. Room: at most 60 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 22 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "%s°"
+msgstr "%s°"
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full".
+#. Lowercase, one short word.
+#. Room: at most 60 px in 14 px type; the English takes 26 px.
+#: game/normal/program_words.gd
+msgid "half"
+msgstr "moitié"
+
+#. How hard a "push" instinct pushes: at "half" its strength or "full".
+#. Lowercase, one short word.
+#. Room: at most 60 px in 14 px type; the English takes 22 px.
+#: game/normal/program_words.gd
+msgid "full"
+msgstr "à fond"
+
+#. A program's name inside a sentence, in your language's quotation marks:
+#. “flee” (French « fuite »). %s is the name the player gave it.
+#. Room: at most 234 px in 14 px type, measured with program 99 in place of
+#. the placeholders; the English takes 90 px.
+#: game/normal/program_words.gd
+#, c-format
+msgid "“%s”"
+msgstr "« %s »"
+
+#. The words on the chip under the settings gear that turns the pause screen's
+#. pages, in 17 px type. "programs ›" turns to the player's programs: lists of
+#. "instincts", rules the player writes for the cell's autopilot. "genome ›"
+#. turns back to the genome. "‹ programs" goes from one program back to the
+#. list of them. Keep each arrow on its side. Lowercase.
+#. entry: programs
+#. Room: at most 108 px in 17 px type; the English takes 90 px.
+#: game/normal/programs_page.gd
+msgid "programs ›"
+msgstr "programmes ›"
+
+#. The words on the chip under the settings gear that turns the pause screen's
+#. pages, in 17 px type. "programs ›" turns to the player's programs: lists of
+#. "instincts", rules the player writes for the cell's autopilot. "genome ›"
+#. turns back to the genome. "‹ programs" goes from one program back to the
+#. list of them. Keep each arrow on its side. Lowercase.
+#. entry: genome
+#. Room: at most 108 px in 17 px type; the English takes 77 px.
+#: game/normal/programs_page.gd
+msgid "genome ›"
+msgstr "génome ›"
+
+#. The words on the chip under the settings gear that turns the pause screen's
+#. pages, in 17 px type. "programs ›" turns to the player's programs: lists of
+#. "instincts", rules the player writes for the cell's autopilot. "genome ›"
+#. turns back to the genome. "‹ programs" goes from one program back to the
+#. list of them. Keep each arrow on its side. Lowercase.
+#. entry: back
+#. Room: at most 108 px in 17 px type; the English takes 90 px.
+#: game/normal/programs_page.gd
+msgid "‹ programs"
+msgstr "‹ programmes"
+
+#. The title of the pause screen's page of programs, at its top left in 16 px
+#. type: a "program" is a named list of the cell's "instincts", rules the
+#. player writes that drive the cell on autopilot. Lowercase.
+#. Room: at most 140 px in 16 px type; the English takes 75 px.
+#: game/normal/programs_page.gd
+msgid "programs"
+msgstr "programmes"
+
+#. The line beside the title of the page of programs, in 15 px type. "On
+#. autopilot": while the player has handed the cell to the programs. "The
+#. higher program wins": when two programs that are on want the same thing,
+#. the one higher in the list gets it. Lowercase.
+#. Room: at most 560 px in 15 px type; the English takes 424 px.
+#: game/normal/programs_page.gd
+msgid "what your cell does on autopilot · the higher program wins"
+msgstr ""
+"ce que fait votre cellule en pilote automatique · le plus haut l'emporte"
+
+#. The line beside a program's name at the top of its page, in 15 px type: of
+#. the program's "instincts" (rules: "when a sense reports something -> do
+#. this"), the first one from the top whose test is met decides. Lowercase.
+#. Room: at most 560 px in 15 px type; the English takes 317 px.
+#: game/normal/programs_page.gd
+msgid "the first instinct that fits, from the top, wins"
+msgstr "le premier instinct qui convient, en partant du haut, l'emporte"
+
+#. The same line, for a program switched off. Lowercase.
+#. Room: at most 560 px in 15 px type; the English takes 360 px.
+#: game/normal/programs_page.gd
+msgid "off: this program does nothing until you turn it on"
+msgstr "coupé : ce programme ne fait rien tant que vous ne l'activez pas"
+
+#. The same line, in a game shared with a friend, where the water keeps moving
+#. under the pause screen, while the autopilot drives the player's cell: the
+#. player's programs are steering it as they read. Lowercase.
+#. Room: at most 560 px in 15 px type; the English takes 396 px.
+#: game/normal/programs_page.gd
+msgid "the water is still moving · your programs have your cell"
+msgstr "l'eau bouge encore · vos programmes mènent votre cellule"
+
+#. What a program's row says when it holds no "instincts" (rules) yet. One
+#. lowercase word, in 14 px type.
+#. Room: at most 90 px in 14 px type; the English takes 44 px.
+#: game/normal/programs_page.gd
+msgid "empty"
+msgstr "vide"
+
+#. After the count on a program's row ("7 instincts · no room"): the program
+#. is off and cannot be turned on, because the programs that are on share
+#. eight places for their instincts and too few are free. Lowercase.
+#. Room: at most 80 px in 14 px type; the English takes 58 px.
+#: game/normal/programs_page.gd
+msgid "no room"
+msgstr "pas de place"
+
+#. The places the programs that are on share, at the top right of the page of
+#. programs in 14 px type, before eight small boxes: "6 of 8" places taken.
+#. The first %d is how many are taken, the second how many there are.
+#. Room: at most 52 px in 14 px type, measured with 8 and 8 in place of the
+#. placeholders; the English takes 37 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "%d of %d"
+msgstr "%d sur %d"
+
+#. The two buttons that make a program, in the list of programs, in 15 px
+#. type. "new program": an empty one. "copy a water cell's program": a copy of
+#. the program the cells living in the water are born with. Lowercase.
+#. entry: new
+#. Room: at most 308 px in 15 px type; the English takes 98 px.
+#: game/normal/programs_page.gd
+msgid "new program"
+msgstr "nouveau programme"
+
+#. The two buttons that make a program, in the list of programs, in 15 px
+#. type. "new program": an empty one. "copy a water cell's program": a copy of
+#. the program the cells living in the water are born with. Lowercase.
+#. entry: copy
+#. Room: at most 308 px in 15 px type; the English takes 199 px.
+#: game/normal/programs_page.gd
+msgid "copy a water cell's program"
+msgstr "copier le programme d'une cellule de l'eau"
+
+#. The row that adds an "instinct" (a rule) to a program, in 15 px type, after
+#. a plus sign. Lowercase.
+#. Room: at most 400 px in 15 px type; the English takes 108 px.
+#: game/normal/programs_page.gd
+msgid "add an instinct"
+msgstr "ajouter un instinct"
+
+#. Said in the empty place under a program's last "instinct" (rule) when the
+#. programs that are on already use all the places they share: %d is how many
+#. there are (8). Lowercase, in 14 px type.
+#. Room: at most 830 px in 14 px type, measured with 8 in place of the
+#. placeholders; the English takes 431 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "the %d places are full: switch a program off, or remove an instinct"
+msgstr ""
+"les %d places sont prises : coupez un programme, ou retirez un instinct"
+
+#. The words of the inspector, the panel at the right of the page of programs,
+#. with a program selected: "on · 7 instincts" or "off · 2 instincts" under
+#. its name, in 14 px type; %s is the count. "On": the autopilot runs this
+#. program; "off": it skips it. Lowercase.
+#. entry: on
+#. Room: at most 264 px in 14 px type, measured with 99 instincts in place of
+#. the placeholders; the English takes 106 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "on · %s"
+msgstr "actif · %s"
+
+#. The words of the inspector, the panel at the right of the page of programs,
+#. with a program selected: "on · 7 instincts" or "off · 2 instincts" under
+#. its name, in 14 px type; %s is the count. "On": the autopilot runs this
+#. program; "off": it skips it. Lowercase.
+#. entry: off
+#. Room: at most 264 px in 14 px type, measured with 99 instincts in place of
+#. the placeholders; the English takes 107 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "off · %s"
+msgstr "coupé · %s"
+
+#. The inspector's buttons for a program, in 15 px type: "open ›" shows its
+#. instincts (a button 264 px wide); "rename" and "copy" (128 px wide each);
+#. "delete this program" (264 px wide). Lowercase.
+#. entry: open
+#. Room: at most 100 px in 15 px type; the English takes 46 px.
+#: game/normal/programs_page.gd
+msgid "open ›"
+msgstr "ouvrir ›"
+
+#. The inspector's buttons for a program, in 15 px type: "open ›" shows its
+#. instincts (a button 264 px wide); "rename" and "copy" (128 px wide each);
+#. "delete this program" (264 px wide). Lowercase.
+#. entry: copy
+#. Room: at most 100 px in 15 px type; the English takes 34 px.
+#: game/normal/programs_page.gd
+msgid "copy"
+msgstr "copier"
+
+#. The inspector's button that deletes the selected program, after asking, in
+#. 15 px type on a button 264 px wide. Lowercase.
+#. Room: at most 230 px in 15 px type; the English takes 143 px.
+#: game/normal/programs_page.gd
+msgid "delete this program"
+msgstr "supprimer ce programme"
+
+#. The four things a program can move, each the name of a column of the list
+#. of programs and of a line of the inspector, in 14 px type: "steering"
+#. (turning), "tail" (the tail beating or held still), "dash" (a burst
+#. forward), "push" (thrust held on). Nouns, lowercase, one short word each.
+#. entry: steering
+#. Room: at most 90 px in 14 px type; the English takes 56 px.
+#: game/normal/programs_page.gd
+msgctxt "trigger"
+msgid "steering"
+msgstr "direction"
+
+#. The four things a program can move, each the name of a column of the list
+#. of programs and of a line of the inspector, in 14 px type: "steering"
+#. (turning), "tail" (the tail beating or held still), "dash" (a burst
+#. forward), "push" (thrust held on). Nouns, lowercase, one short word each.
+#. entry: swimming
+#. Room: at most 90 px in 14 px type; the English takes 22 px.
+#: game/normal/programs_page.gd
+msgctxt "trigger"
+msgid "tail"
+msgstr "queue"
+
+#. The four things a program can move, each the name of a column of the list
+#. of programs and of a line of the inspector, in 14 px type: "steering"
+#. (turning), "tail" (the tail beating or held still), "dash" (a burst
+#. forward), "push" (thrust held on). Nouns, lowercase, one short word each.
+#. entry: dash
+#. Room: at most 90 px in 14 px type; the English takes 33 px.
+#: game/normal/programs_page.gd
+msgctxt "trigger"
+msgid "dash"
+msgstr "bond"
+
+#. The four things a program can move, each the name of a column of the list
+#. of programs and of a line of the inspector, in 14 px type: "steering"
+#. (turning), "tail" (the tail beating or held still), "dash" (a burst
+#. forward), "push" (thrust held on). Nouns, lowercase, one short word each.
+#. entry: push
+#. Room: at most 90 px in 14 px type; the English takes 34 px.
+#: game/normal/programs_page.gd
+msgctxt "trigger"
+msgid "push"
+msgstr "poussée"
+
+#. Where a program stands on one of the four things it moves, after that
+#. thing's name in the inspector ("steering · first"), in 14 px type. "first":
+#. no program above it moves that. "after %s": the program named (in quotation
+#. marks) is above it and moves that too, so it wins. "never": a program above
+#. it always moves that, so this one never can. "asleep": the cell does not
+#. wear the organ this program needs for it. Lowercase.
+#. entry: first
+#. Room: at most 140 px in 14 px type; the English takes 28 px.
+#: game/normal/programs_page.gd
+msgid "first"
+msgstr "en premier"
+
+#. Where a program stands on one of the four things it moves, after that
+#. thing's name in the inspector ("steering · first"), in 14 px type. "first":
+#. no program above it moves that. "after %s": the program named (in quotation
+#. marks) is above it and moves that too, so it wins. "never": a program above
+#. it always moves that, so this one never can. "asleep": the cell does not
+#. wear the organ this program needs for it. Lowercase.
+#. entry: never
+#. Room: at most 140 px in 14 px type; the English takes 39 px.
+#: game/normal/programs_page.gd
+msgid "never"
+msgstr "jamais"
+
+#. Where a program stands on one of the four things it moves, after that
+#. thing's name in the inspector ("steering · first"), in 14 px type. "first":
+#. no program above it moves that. "after %s": the program named (in quotation
+#. marks) is above it and moves that too, so it wins. "never": a program above
+#. it always moves that, so this one never can. "asleep": the cell does not
+#. wear the organ this program needs for it. Lowercase.
+#. entry: asleep
+#. Room: at most 140 px in 14 px type; the English takes 44 px.
+#: game/normal/programs_page.gd
+msgid "asleep"
+msgstr "endormi"
+
+#. The same, "after %s": the program named by %s (in quotation marks) is above
+#. it and moves that thing too, so it wins. Lowercase.
+#. Room: at most 180 px in 14 px type, measured with “program 99” in place of
+#. the placeholders; the English takes 126 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "after %s"
+msgstr "après %s"
+
+#. The line under the list of programs that says where the selected program
+#. runs, after its name and a middle dot, in 15 px type: %d is how many
+#. programs are on, %s a program's name in quotation marks. "Off": the
+#. autopilot skips a program that is off; "empty": it holds no instincts yet.
+#. Lowercase.
+#. entry: only
+#. Room: at most 600 px in 15 px type; the English takes 149 px.
+#: game/normal/programs_page.gd
+msgid "the only program on"
+msgstr "le seul programme actif"
+
+#. The line under the list of programs that says where the selected program
+#. runs, after its name and a middle dot, in 15 px type: %d is how many
+#. programs are on, %s a program's name in quotation marks. "Off": the
+#. autopilot skips a program that is off; "empty": it holds no instincts yet.
+#. Lowercase.
+#. entry: off
+#. Room: at most 600 px in 15 px type; the English takes 177 px.
+#: game/normal/programs_page.gd
+msgid "off: the autopilot skips it"
+msgstr "coupé : le pilote automatique l'ignore"
+
+#. The line under the list of programs that says where the selected program
+#. runs, after its name and a middle dot, in 15 px type: %d is how many
+#. programs are on, %s a program's name in quotation marks. "Off": the
+#. autopilot skips a program that is off; "empty": it holds no instincts yet.
+#. Lowercase.
+#. entry: empty
+#. Room: at most 600 px in 15 px type; the English takes 237 px.
+#: game/normal/programs_page.gd
+msgid "empty: open it to give it instincts"
+msgstr "vide : ouvrez-le pour lui donner des instincts"
+
+#. The same line, for a program that runs first: %d is how many programs are
+#. on. Lowercase.
+#. Room: at most 600 px in 15 px type, measured with 8 in place of the
+#. placeholders; the English takes 210 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "runs first of the %d that are on"
+msgstr "passe en premier des %d actifs"
+
+#. The same line, for a program between two others that are on: each %s is a
+#. program's name in quotation marks. Lowercase.
+#. Room: at most 600 px in 15 px type, measured with “program 99” and “program
+#. 99” in place of the placeholders; the English takes 327 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "runs after %s, before %s"
+msgstr "passe après %s, avant %s"
+
+#. The same line, for a program that runs last: %s is the program just above
+#. it, in quotation marks. Lowercase.
+#. Room: at most 600 px in 15 px type, measured with “program 99” in place of
+#. the placeholders; the English takes 206 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "runs last, after %s"
+msgstr "passe en dernier, après %s"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: steer
+#. Room: at most 200 px in 14 px type; the English takes 96 px.
+#: game/normal/programs_page.gd
+msgid "already steers"
+msgstr "dirige déjà"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: swim
+#. Room: at most 200 px in 14 px type; the English takes 97 px.
+#: game/normal/programs_page.gd
+msgid "already swims"
+msgstr "nage déjà"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: hold
+#. Room: at most 200 px in 14 px type; the English takes 151 px.
+#: game/normal/programs_page.gd
+msgid "already holds your tail"
+msgstr "fige déjà la queue"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: rest
+#. Room: at most 200 px in 14 px type; the English takes 88 px.
+#: game/normal/programs_page.gd
+msgid "already rests"
+msgstr "se repose déjà"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: dash
+#. Room: at most 200 px in 14 px type; the English takes 102 px.
+#: game/normal/programs_page.gd
+msgid "already dashes"
+msgstr "bondit déjà"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: push
+#. Room: at most 200 px in 14 px type; the English takes 103 px.
+#: game/normal/programs_page.gd
+msgid "already pushes"
+msgstr "pousse déjà"
+
+#. What a program's instinct does when another program's, or one above it in
+#. the same program, holds it back, as a phrase finishing a sentence (see the
+#. messages it is used in): "already steers", "already swims", "already holds
+#. your tail" (keeps the tail still), "already rests", "already dashes",
+#. "already pushes", "already acts". Lowercase.
+#. entry: act
+#. Room: at most 200 px in 14 px type; the English takes 82 px.
+#: game/normal/programs_page.gd
+msgid "already acts"
+msgstr "agit déjà"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: steer
+#. Room: at most 200 px in 14 px type; the English takes 91 px.
+#: game/normal/programs_page.gd
+msgid "always steers"
+msgstr "dirige toujours"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: swim
+#. Room: at most 200 px in 14 px type; the English takes 92 px.
+#: game/normal/programs_page.gd
+msgid "always swims"
+msgstr "nage toujours"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: hold
+#. Room: at most 200 px in 14 px type; the English takes 147 px.
+#: game/normal/programs_page.gd
+msgid "always holds your tail"
+msgstr "fige toujours la queue"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: rest
+#. Room: at most 200 px in 14 px type; the English takes 83 px.
+#: game/normal/programs_page.gd
+msgid "always rests"
+msgstr "se repose toujours"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: dash
+#. Room: at most 200 px in 14 px type; the English takes 97 px.
+#: game/normal/programs_page.gd
+msgid "always dashes"
+msgstr "bondit toujours"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: push
+#. Room: at most 200 px in 14 px type; the English takes 98 px.
+#: game/normal/programs_page.gd
+msgid "always pushes"
+msgstr "pousse toujours"
+
+#. The same, for an instinct that holds every one below it back whatever
+#. happens: "always steers", "always swims"... Lowercase.
+#. entry: act
+#. Room: at most 200 px in 14 px type; the English takes 77 px.
+#: game/normal/programs_page.gd
+msgid "always acts"
+msgstr "agit toujours"
+
+#. Said under an "instinct" (a rule of a program) that is held back on this
+#. moment, in 14 px type. %s finishes the sentence: "already steers", "already
+#. swims"... Lowercase.
+#. Room: at most 856 px in 14 px type, measured with your widest "already
+#. steers" phrase in place of the placeholders; the English takes 343 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "held back: an instinct above %s"
+msgstr "retenu : un instinct au-dessus %s"
+
+#. The same, when the instinct holding it back belongs to another program,
+#. higher in the list: the first %s is its name in quotation marks, the second
+#. finishes the sentence ("already steers"). Lowercase.
+#. Room: at most 856 px in 14 px type, measured with “program 99” and your
+#. widest "already steers" phrase in place of the placeholders; the English
+#. takes 369 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "held back: %s, above, %s"
+msgstr "retenu : %s, au-dessus, %s"
+
+#. Said under an instinct that can never act, because one above it acts
+#. whatever happens and wants the same thing: %s finishes the sentence,
+#. "always swims", "always steers"... Lowercase.
+#. Room: at most 856 px in 14 px type, measured with your widest "always
+#. swims" phrase in place of the placeholders; the English takes 343 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "never acts: an instinct above %s"
+msgstr "n'agit jamais : un instinct au-dessus %s"
+
+#. The same, when that instinct belongs to a program higher in the list: the
+#. first %s is its name in quotation marks. Lowercase.
+#. Room: at most 856 px in 14 px type, measured with “program 99” and your
+#. widest "always swims" phrase in place of the placeholders; the English
+#. takes 369 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "never acts: %s, above, %s"
+msgstr "n'agit jamais : %s, au-dessus, %s"
+
+#. Said under the list of programs: one of the selected program's instincts is
+#. held back at this moment by a program higher in the list, named (in
+#. quotation marks) by %s; the second %s finishes the sentence ("already
+#. steers"). Lowercase.
+#. Room: at most 856 px in 14 px type, measured with “program 99” and your
+#. widest "already steers" phrase in place of the placeholders; the English
+#. takes 401 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "held back now: %s, above, %s"
+msgstr "retenu en ce moment : %s, au-dessus, %s"
+
+#. Said under the list of programs: the selected program (the first %s, in
+#. quotation marks) can never move one thing -- the second %s, "steering",
+#. "tail", "dash" or "push" -- because a program above it (the third %s)
+#. always does; the fourth %s finishes the sentence, "always swims".
+#. Lowercase.
+#. Room: at most 856 px in 14 px type, measured with “program 99”, your widest
+#. of "steering", "tail", "dash" and "push", “program 99” and your widest
+#. "always swims" phrase in place of the placeholders; the English takes 572
+#. px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "%s never moves your %s: %s, above, %s"
+msgstr "%s ne mène jamais votre %s : %s, au-dessus, %s"
+
+#. Said when a program cannot be turned on: the programs that are on share
+#. eight places for their instincts. The first %s is its name in quotation
+#. marks, the %d's how many places it needs and how many are free. Lowercase.
+#. Room: at most 856 px in 14 px type, measured with “program 99”, 8 and 8 in
+#. place of the placeholders; the English takes 511 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "no room: %s needs %d places, %d are free · switch a program off first"
+msgstr ""
+"pas de place : %s demande %d places, %d sont libres · coupez d'abord un "
+"programme"
+
+#. The states of an "instinct" (a rule), said under the list of them when one
+#. is selected, in 14 px type. "acting now": it is what the cell is doing.
+#. "waiting": its sense reports nothing, or what it reports does not pass the
+#. instinct's test; %s is the sense's name. "this version cannot read this
+#. instinct": it was written by a later version of the game, and is kept as it
+#. is. "pick what it does": a new instinct still needs its sense or its
+#. action. Lowercase.
+#. entry: acting
+#. Room: at most 856 px in 14 px type; the English takes 74 px.
+#: game/normal/programs_page.gd
+msgid "acting now"
+msgstr "agit en ce moment"
+
+#. The states of an "instinct" (a rule), said under the list of them when one
+#. is selected, in 14 px type. "acting now": it is what the cell is doing.
+#. "waiting": its sense reports nothing, or what it reports does not pass the
+#. instinct's test; %s is the sense's name. "this version cannot read this
+#. instinct": it was written by a later version of the game, and is kept as it
+#. is. "pick what it does": a new instinct still needs its sense or its
+#. action. Lowercase.
+#. entry: unread
+#. Room: at most 856 px in 14 px type; the English takes 316 px.
+#: game/normal/programs_page.gd
+msgid "this version cannot read this instinct · it is kept"
+msgstr "cette version ne peut pas lire cet instinct · il est gardé"
+
+#. The states of an "instinct" (a rule), said under the list of them when one
+#. is selected, in 14 px type. "acting now": it is what the cell is doing.
+#. "waiting": its sense reports nothing, or what it reports does not pass the
+#. instinct's test; %s is the sense's name. "this version cannot read this
+#. instinct": it was written by a later version of the game, and is kept as it
+#. is. "pick what it does": a new instinct still needs its sense or its
+#. action. Lowercase.
+#. entry: half
+#. Room: at most 856 px in 14 px type; the English takes 297 px.
+#: game/normal/programs_page.gd
+msgid "pick what it does · until then it does nothing"
+msgstr "choisissez ce qu'il fait · d'ici là il ne fait rien"
+
+#. The same, for an instinct whose sense, named by %s ("echo", "smell"),
+#. reports nothing at this moment, or reports something that does not pass the
+#. instinct's test. Lowercase.
+#. entry: quiet
+#. Room: at most 856 px in 14 px type, measured with your widest sense word in
+#. place of the placeholders; the English takes 219 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "waiting: %s reports nothing"
+msgstr "en attente : %s ne signale rien"
+
+#. The same, for an instinct whose sense, named by %s ("echo", "smell"),
+#. reports nothing at this moment, or reports something that does not pass the
+#. instinct's test. Lowercase.
+#. entry: failed
+#. Room: at most 856 px in 14 px type, measured with your widest sense word in
+#. place of the placeholders; the English takes 295 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "waiting: %s reports, the test is not met"
+msgstr "en attente : %s signale, le test n'est pas rempli"
+
+#. Said of an instinct that cannot act because the cell does not wear the
+#. organ it needs; %s is the sense's or the action's name ("push"). Lowercase.
+#. Room: at most 856 px in 14 px type, measured with your widest action word
+#. in place of the placeholders; the English takes 281 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "asleep: your body does not wear %s"
+msgstr "endormi : votre corps ne porte pas %s"
+
+#. Said when the player picks a turn under a sense that does not say where
+#. things are (or such a sense under a turn): %s is the turn's name, "turn
+#. toward" or "turn away". Lowercase.
+#. Room: at most 856 px in 14 px type, measured with your widest word of the
+#. body's own in place of the placeholders; the English takes 291 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "%s needs a sense that says where"
+msgstr "%s demande un sens qui dit où"
+
+#. The autopilot: a button that hands the player's cell to their programs. Its
+#. line under the page, when it is pointed at: its name, a middle dot, what it
+#. does. "Steer": the player's own steering takes the cell back. Lowercase.
+#. Room: at most 856 px in 15 px type; the English takes 580 px.
+#: game/normal/programs_page.gd
+msgid ""
+"autopilot · hand your cell to your programs. tap it again, or steer, to "
+"take it back."
+msgstr ""
+"pilote automatique · confiez votre cellule à vos programmes. touchez-le "
+"encore, ou dirigez, pour la reprendre."
+
+#. What the page says when the autopilot button is pressed, in 14 px type.
+#. "dead": no program is on, so it cannot be used. "on": your programs will
+#. have your cell when you resume the game ("pond": in a game shared with a
+#. friend, where the water keeps moving, they have it already). "off": your
+#. cell is yours again. Lowercase.
+#. entry: dead
+#. Room: at most 856 px in 14 px type; the English takes 262 px.
+#: game/normal/programs_page.gd
+msgid "turn a program on to use the autopilot"
+msgstr "activez un programme pour utiliser le pilote automatique"
+
+#. What the page says when the autopilot button is pressed, in 14 px type.
+#. "dead": no program is on, so it cannot be used. "on": your programs will
+#. have your cell when you resume the game ("pond": in a game shared with a
+#. friend, where the water keeps moving, they have it already). "off": your
+#. cell is yours again. Lowercase.
+#. entry: on
+#. Room: at most 856 px in 14 px type; the English takes 412 px.
+#: game/normal/programs_page.gd
+msgid "autopilot on: your programs have your cell when you resume"
+msgstr ""
+"pilote automatique activé : vos programmes mènent votre cellule quand vous "
+"reprenez"
+
+#. What the page says when the autopilot button is pressed, in 14 px type.
+#. "dead": no program is on, so it cannot be used. "on": your programs will
+#. have your cell when you resume the game ("pond": in a game shared with a
+#. friend, where the water keeps moving, they have it already). "off": your
+#. cell is yours again. Lowercase.
+#. entry: pond
+#. Room: at most 856 px in 14 px type; the English takes 288 px.
+#: game/normal/programs_page.gd
+msgid "autopilot on: your programs have your cell"
+msgstr "pilote automatique activé : vos programmes mènent votre cellule"
+
+#. What the page says when the autopilot button is pressed, in 14 px type.
+#. "dead": no program is on, so it cannot be used. "on": your programs will
+#. have your cell when you resume the game ("pond": in a game shared with a
+#. friend, where the water keeps moving, they have it already). "off": your
+#. cell is yours again. Lowercase.
+#. entry: off
+#. Room: at most 856 px in 14 px type; the English takes 205 px.
+#: game/normal/programs_page.gd
+msgid "autopilot off: your cell is yours"
+msgstr "pilote automatique coupé : votre cellule est à vous"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: library
+#. Room: at most 856 px in 14 px type; the English takes 371 px.
+#: game/normal/programs_page.gd
+msgid "tap a program to see it · drag a program up to let it win"
+msgstr ""
+"touchez un programme pour le voir · glissez-le vers le haut pour qu'il "
+"l'emporte"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: library_drag
+#. Room: at most 856 px in 14 px type; the English takes 222 px.
+#: game/normal/programs_page.gd
+msgid "let go to move this program here"
+msgstr "lâchez pour placer ce programme ici"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: library_empty
+#. Room: at most 856 px in 14 px type; the English takes 219 px.
+#: game/normal/programs_page.gd
+msgid "tap + to write your first program"
+msgstr "touchez + pour écrire votre premier programme"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: program
+#. Room: at most 856 px in 14 px type; the English takes 503 px.
+#: game/normal/programs_page.gd
+msgid ""
+"tap a block to change it · drag an instinct up or down to change which wins"
+msgstr ""
+"touchez un bloc pour le changer · glissez un instinct pour changer qui "
+"l'emporte"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: program_empty
+#. Room: at most 856 px in 14 px type; the English takes 279 px.
+#: game/normal/programs_page.gd
+msgid "tap + to give this program its first instinct"
+msgstr "touchez + pour donner un premier instinct à ce programme"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: program_drag
+#. Room: at most 856 px in 14 px type; the English takes 214 px.
+#: game/normal/programs_page.gd
+msgid "let go to move this instinct here"
+msgstr "lâchez pour placer cet instinct ici"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: stay
+#. Room: at most 856 px in 14 px type; the English takes 182 px.
+#: game/normal/programs_page.gd
+msgid "let go to leave it where it is"
+msgstr "lâchez pour le laisser où il est"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: sense
+#. Room: at most 856 px in 14 px type; the English takes 214 px.
+#: game/normal/programs_page.gd
+msgid "pick what this instinct listens to"
+msgstr "choisissez ce que cet instinct écoute"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: action
+#. Room: at most 856 px in 14 px type; the English takes 163 px.
+#: game/normal/programs_page.gd
+msgid "pick what your cell does"
+msgstr "choisissez ce que fait votre cellule"
+
+#. The line of help at the bottom of the page of programs, in 14 px type,
+#. saying what can be done now. A "program" is a list of "instincts"; an
+#. instinct is a rule ("when a sense reports something -> do this"), built of
+#. blocks: its sense, its tests and its action. "+" is the button that adds
+#. one. Lowercase.
+#. entry: test
+#. Room: at most 856 px in 14 px type; the English takes 238 px.
+#: game/normal/programs_page.gd
+msgid "tap a choice · it takes effect at once"
+msgstr "touchez un choix · il agit tout de suite"
+
+#. The inspector, the panel at the right of the page, explaining what a
+#. program and an instinct are when there is nothing to edit yet. "head" is
+#. its title in 17 px type; "nothing" says a program is still empty; the two
+#. explanations wrap in 14 px type in a panel 264 px wide; "senses" and
+#. "actions" head the lists of words the player's cell can use. Lowercase.
+#. entry: none
+#. Room: at most 264 px in 17 px type; the English takes 136 px.
+#: game/normal/programs_page.gd
+msgid "no programs yet"
+msgstr "aucun programme"
+
+#. The inspector, the panel at the right of the page, explaining what a
+#. program and an instinct are when there is nothing to edit yet. "head" is
+#. its title in 17 px type; "nothing" says a program is still empty; the two
+#. explanations wrap in 14 px type in a panel 264 px wide; "senses" and
+#. "actions" head the lists of words the player's cell can use. Lowercase.
+#. entry: new
+#. Room: at most 264 px in 17 px type; the English takes 101 px.
+#: game/normal/programs_page.gd
+msgid "new instinct"
+msgstr "nouvel instinct"
+
+#. The inspector, the panel at the right of the page, explaining what a
+#. program and an instinct are when there is nothing to edit yet. "head" is
+#. its title in 17 px type; "nothing" says a program is still empty; the two
+#. explanations wrap in 14 px type in a panel 264 px wide; "senses" and
+#. "actions" head the lists of words the player's cell can use. Lowercase.
+#. entry: value
+#. Room: at most 264 px in 17 px type; the English takes 85 px.
+#: game/normal/programs_page.gd
+msgid "test what?"
+msgstr "tester quoi ?"
+
+#. Under that title, in 14 px type in a panel 264 px wide: a program holds no
+#. instincts yet; then what the cell can sense and do, each a caption over a
+#. list of words. Lowercase.
+#. entry: nothing
+#. Room: at most 264 px in 14 px type; the English takes 107 px.
+#: game/normal/programs_page.gd
+msgid "nothing in it yet"
+msgstr "rien dedans pour l'instant"
+
+#. Under that title, in 14 px type in a panel 264 px wide: a program holds no
+#. instincts yet; then what the cell can sense and do, each a caption over a
+#. list of words. Lowercase.
+#. entry: senses
+#. Room: at most 264 px in 14 px type; the English takes 133 px.
+#: game/normal/programs_page.gd
+msgid "what you can sense"
+msgstr "ce que vous sentez"
+
+#. Under that title, in 14 px type in a panel 264 px wide: a program holds no
+#. instincts yet; then what the cell can sense and do, each a caption over a
+#. list of words. Lowercase.
+#. entry: actions
+#. Room: at most 264 px in 14 px type; the English takes 112 px.
+#: game/normal/programs_page.gd
+msgid "what you can do"
+msgstr "ce que vous faites"
+
+#. Explanations in the inspector, wrapping over several lines of 14 px type in
+#. a panel 264 px wide (at most nine lines). "library": what a program is and
+#. how the autopilot uses them. "program": what an instinct is. Lowercase,
+#. full sentences.
+#. entry: library
+#: game/normal/programs_page.gd
+msgid ""
+"a program is a list of instincts: when a sense reports something, your cell "
+"acts. turn programs on, then the autopilot, and they drive your cell. the "
+"higher program wins."
+msgstr ""
+"un programme est une liste d'instincts : quand un sens signale quelque "
+"chose, votre cellule agit. activez des programmes, puis le pilote "
+"automatique, et ils mènent votre cellule. le plus haut l'emporte."
+
+#. Explanations in the inspector, wrapping over several lines of 14 px type in
+#. a panel 264 px wide (at most nine lines). "library": what a program is and
+#. how the autopilot uses them. "program": what an instinct is. Lowercase,
+#. full sentences.
+#. entry: program
+#: game/normal/programs_page.gd
+msgid ""
+"an instinct is something your cell does by itself on autopilot: when a "
+"sense reports something, it acts. the first instinct that fits, from the "
+"top, wins."
+msgstr ""
+"un instinct est ce que votre cellule fait seule en pilote automatique : "
+"quand un sens signale quelque chose, elle agit. le premier instinct qui "
+"convient, en partant du haut, l'emporte."
+
+#. The inspector's remove buttons, in 15 px type on a button 264 px wide: take
+#. this test, or the whole instinct, out of the program. Lowercase.
+#. entry: test
+#. Room: at most 230 px in 15 px type; the English takes 118 px.
+#: game/normal/programs_page.gd
+msgid "remove this test"
+msgstr "retirer ce test"
+
+#. The inspector's remove buttons, in 15 px type on a button 264 px wide: take
+#. this test, or the whole instinct, out of the program. Lowercase.
+#. entry: instinct
+#. Room: at most 230 px in 15 px type; the English takes 145 px.
+#: game/normal/programs_page.gd
+msgid "remove this instinct"
+msgstr "retirer cet instinct"
+
+#. What the selected test's sense reports at this moment, under the ladder
+#. that sets the test, in 14 px type: %s is the reading -- "350 µm", "62%",
+#. "smaller than my mouth", several joined with commas -- or "nothing".
+#. Lowercase.
+#. Room: at most 264 px in 14 px type, measured with 1450 µm 1450 µm in place
+#. of the placeholders; the English takes 156 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "now: %s"
+msgstr "en ce moment : %s"
+
+#. What a sense reports when it reports nothing at all, in "now: nothing".
+#. Lowercase.
+#. Room: at most 180 px in 14 px type; the English takes 53 px.
+#: game/normal/programs_page.gd
+msgid "nothing"
+msgstr "rien"
+
+#. What a count of seconds since something happened reports when it has not
+#. happened yet -- "meal" for a cell that has not eaten -- in "now: not yet".
+#. Lowercase.
+#. Room: at most 180 px in 14 px type; the English takes 48 px.
+#: game/normal/programs_page.gd
+msgid "not yet"
+msgstr "pas encore"
+
+#. The title of the sheet that renames one of the player's programs (lists of
+#. the cell's "instincts"), in 22 px type.
+#. Room: at most 512 px in 22 px type; the English takes 226 px.
+#: game/normal/programs_page.gd
+msgid "rename this program"
+msgstr "renommer ce programme"
+
+#. Under "delete <name>?" for a program with no instincts: nothing is lost. A
+#. full sentence.
+#: game/normal/programs_page.gd
+msgid "it holds no instincts: nothing is lost."
+msgstr "il ne contient aucun instinct : rien n'est perdu."
+
+#. How many "instincts" (rules) a program holds, on its row in 14 px type: "1
+#. instinct", "7 instincts". Lowercase.
+#. Room: at most 90 px in 14 px type, measured with 7 in place of the
+#. placeholders; the English takes 63 px.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "%d instinct"
+msgid_plural "%d instincts"
+msgstr[0] "%d instinct"
+msgstr[1] "%d instincts"
+
+#. Under "delete <name>?", in 17 px type, wrapping: the program's instincts
+#. are deleted with it; %d is how many. A full sentence.
+#: game/normal/programs_page.gd
+#, c-format
+msgid "its %d instinct is gone for good."
+msgid_plural "its %d instincts are gone for good."
+msgstr[0] "son %d instinct disparaît pour de bon."
+msgstr[1] "ses %d instincts disparaissent pour de bon."

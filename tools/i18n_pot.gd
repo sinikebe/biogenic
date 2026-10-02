@@ -50,7 +50,12 @@ extends Node
 ## A `# TRANSLATORS:` comment on the lines directly above a statement (or in the
 ## doc comment of a constant, or above a `func`, for every message in it) is
 ## written into the template as an extracted comment for the translator, up to the
-## first empty comment line. Text that lives in a scene file has no statement to
+## first empty comment line. **A constant's words can carry a context**, as `tr()`'s
+## second argument does: a `## CONTEXT: <word>` line beside its TRANSLATORS one puts
+## every string of the constant under that `msgctxt`, for a word another message
+## already spells the same way and a language says differently (an organ's name
+## on the genome page and the sense it reports on an instinct). The code then
+## translates it with that context. Text that lives in a scene file has no statement to
 ## hang a comment on, so a comment can name its message instead --
 ## `# TRANSLATORS "choose a view": ...` -- in any script.
 ##
@@ -120,12 +125,22 @@ const LIST_AT_MOST := 40
 ## English where the catalog has not translated it), and when it fills two placeholders of
 ## one message, its two widest, because one line never names the same gene twice. Any other
 ## word after `with` is the text itself and has a digit in it: `99`, `80%`.
-const FILL_TABLES := {"word": "WORDS", "way": "PATH_TITLES", "copies": "COPIES"}
+const FILL_TABLES := {"word": "WORDS", "way": "PATH_TITLES", "copies": "COPIES",
+	"sense": "GENE_SENSES", "action": "GENE_SAYS", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
+	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES"}
 ## How the template says each table's entry, the first time and when it comes again.
 const FILL_SAYS := {
 	"word": ["your widest gene word", "your second widest"],
 	"way": ["your widest way name", "your other way name"],
 	"copies": ["your widest copies phrase", "your second widest"],
+	"sense": ["your widest sense word", "your second widest"],
+	"action": ["your widest action word", "your second widest"],
+	"body": ["your widest word of the body's own", "your second widest"],
+	"ref": ["your wider of \"my mouth\" and \"me\"", "the other"],
+	"trigger": ["your widest of \"steering\", \"tail\", \"dash\" and \"push\"",
+		"your second widest"],
+	"already": ["your widest \"already steers\" phrase", "your second widest"],
+	"always": ["your widest \"always swims\" phrase", "your second widest"],
 }
 
 ## **The lines the game composes from several messages and draws as one** (SCREENS):
@@ -147,6 +162,15 @@ const CAPTION_SIZE := 15
 ## longer line ends in "…".
 const STATS_ROOM := 280
 const STATS_SIZE := 15
+## **An instinct's row on the programs page** (docs/design/automation-ux.md §8,
+## `ROW_ROOM`): for every sense, its widest test on each value it carries and the
+## widest action, laid out as the page lays them at 1280 -- a row 856 px wide --
+## must leave this much of the arc between them, or the row reads as chips with no
+## nerve. And each line of the inspector's triggers, a trigger's word and where a
+## program stands on it after a default name, fits the inspector's 234 px at 14.
+## Both are measured by the page's own code (`programs_page.gd`).
+const ROW_ROOM := 40
+const TRIGGER_LINE_ROOM := 234
 ## The scripts that build those lines, loaded only when a game catalog is being checked.
 const SCREEN_SCRIPTS := {
 	"stats": "res://game/normal/gene_stats.gd",
@@ -155,6 +179,7 @@ const SCREEN_SCRIPTS := {
 	"cell": "res://game/normal/cell.gd",
 	"i18n": "res://game/i18n/i18n.gd",
 	"drops": "res://game/normal/drops.gd",
+	"programs": "res://game/normal/programs_page.gd",
 }
 
 enum K { IDENT, STR, NAME, NUM, PUNCT }
@@ -167,6 +192,8 @@ const READOUT_NOTE := "A phrase of a gene's numbers, in 14 px type; {} is a numb
 ## its type size and its `with` words, apart by FIELD.
 const ROOM_MARK := "\u0001ROOM "
 const FIELD := "\u0002"
+## And a `CONTEXT:` line, once read.
+const CONTEXT_MARK := "\u0001CONTEXT "
 
 ## One file's code as tokens, kept in parallel arrays: a run of a thousand lines is
 ## tens of thousands of them, and an object each would be slow to make.
@@ -434,8 +461,17 @@ func _notes_above(toks: Toks, at: int, path: String = "") -> Array[String]:
 	var open := false
 	var room := RegEx.new()
 	room.compile(r"^ROOM:\s*(\d+)\s*px\s+at\s+(\d+)\s*px(?:\s+with\s+(\S.*?))?\s*$")
+	var context := RegEx.new()
+	context.compile(r"^CONTEXT:\s*(\S+)\s*$")
 	for k in above.size():
 		var body := above[k].lstrip("#").strip_edges()
+		var said := context.search(body)
+		if said != null:
+			if open:
+				notes.append(current)
+				open = false
+			notes.append(CONTEXT_MARK + said.get_string(1))
+			continue
 		var m := room.search(body)
 		if m != null:
 			if open:
@@ -606,7 +642,15 @@ func _read_const(path: String, toks: Toks, from: int, to: int, notes: Array[Stri
 			if not pairs.has(keys[0]):
 				pairs[keys[0]] = whole
 			_const_pairs[table] = pairs
-		_add(whole, "", "", path, notes, auto, "const")
+		_add(whole, _context_of(notes), "", path, notes, auto, "const")
+
+
+## The context a constant's `CONTEXT:` line gives its strings, or "".
+func _context_of(notes: Array[String]) -> String:
+	for note in notes:
+		if note.begins_with(CONTEXT_MARK):
+			return note.trim_prefix(CONTEXT_MARK)
+	return ""
 
 
 ## The calls in one statement that ask for a translation.
@@ -827,6 +871,8 @@ func _add(id: String, ctx: String, plural: String, path: String, notes: Array[St
 	if not ref in entry["refs"]:
 		entry["refs"].append(ref)
 	for note in notes:
+		if note.begins_with(CONTEXT_MARK):
+			continue
 		if note.begins_with(ROOM_MARK):
 			var at := note.trim_prefix(ROOM_MARK).split(FIELD)
 			var fills: Array = []
@@ -1616,11 +1662,23 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("a world's line in \"your worlds\" is %d px wide in %d px type; the room is"
 			+ " %d px, and a longer line ends in \"…\": \"%s\"") % [ceili(float(line[0])), STATS_SIZE,
 				STATS_ROOM, _short(String(line[1]))], true)
+	var row: Array = now["row"]
+	if float(row[0]) < ROW_ROOM:
+		_problem(result, shown, ("an instinct's row on the programs page leaves %d px of arc on %s"
+			+ " with its widest tests and action; it needs at least %d px, or the row reads as chips"
+			+ " with nothing joining them") % [floori(float(row[0])), row[1], ROW_ROOM], true)
+	var trigger: Array = now["trigger"]
+	if float(trigger[0]) > TRIGGER_LINE_ROOM:
+		_problem(result, shown, ("a line of the programs inspector's triggers is %d px wide in 14 px"
+			+ " type; the room is %d px: \"%s\"") % [ceili(float(trigger[0])), TRIGGER_LINE_ROOM,
+			_short(String(trigger[1]))], true)
 	var rows: Array = now["numbers"]
 	var tightest := String((rows[0] as Array)[2]) if not rows.is_empty() else "none"
 	return ("built with the game's own code: numbers lines at most %d px of %d (%s), the pause caption"
-		+ " at most %d px of %d, a world's line at most %d px of %d") % [ceili(widest), NUMBERS_ROOM,
-		tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM]
+		+ " at most %d px of %d, a world's line at most %d px of %d, an instinct's row %d px of arc"
+		+ " (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [ceili(widest),
+		NUMBERS_ROOM, tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
+		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM]
 
 
 ## The composed lines in English, measured once, with the line that says so; a line that
@@ -1654,9 +1712,21 @@ func _english_screens() -> Dictionary:
 		print("[i18n] PROBLEM English: a world's line is %d px wide in %d px type; the room is %d px: \"%s\"" % [
 			ceili(float(line[0])), STATS_SIZE, STATS_ROOM, String(line[1])])
 		_english_problems += 1
+	var row: Array = now["row"]
+	if float(row[0]) < ROW_ROOM:
+		print("[i18n] PROBLEM English: an instinct's row leaves %d px of arc on %s; it needs %d" % [
+			floori(float(row[0])), row[1], ROW_ROOM])
+		_english_problems += 1
+	var trigger: Array = now["trigger"]
+	if float(trigger[0]) > TRIGGER_LINE_ROOM:
+		print("[i18n] PROBLEM English: a trigger line is %d px wide; the room is %d px: \"%s\"" % [
+			ceili(float(trigger[0])), TRIGGER_LINE_ROOM, String(trigger[1])])
+		_english_problems += 1
 	print(("[i18n] the lines the game composes, in English: numbers lines at most %d px of %d,"
-		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d") % [ceili(widest),
-		NUMBERS_ROOM, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM])
+		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, an instinct's"
+		+ " row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [
+		ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
+		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM])
 	return _english
 
 
@@ -1758,7 +1828,13 @@ func _measure_screens() -> Dictionary:
 	var line := _widest_drop_line()
 	if line.is_empty():
 		return {}
-	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line}
+	var page := _script("programs")
+	if page == null:
+		return {}
+	var row: Array = page.call(&"row_room", ThemeDB.fallback_font)
+	var trigger: Array = page.call(&"trigger_line_room", ThemeDB.fallback_font)
+	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line, "row": row,
+		"trigger": trigger}
 
 
 ## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the

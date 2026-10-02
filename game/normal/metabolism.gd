@@ -119,6 +119,59 @@ const DECLARES := {
 	]},
 }
 
+## **What the metabolism's parts are called** (docs/design/automation.md §13.1),
+## beside [constant DECLARES], by qualified name: the words the programs page puts
+## on a part's chip. Read through [method words_of].
+##
+## TRANSLATORS: The name of a sense on a small chip of the player's "instincts"
+## (rules the player writes: "when <a sense reports something> -> <do this>").
+## Lowercase, one short word. "hunger": how empty the cell's tank is; "meal": the
+## time since the cell last ate.
+## ROOM: 112 px at 15 px
+const METABOLISM_SAYS := {
+	&"metabolism.hunger": "hunger",
+	&"metabolism.fed": "meal",
+}
+## **What the values they report are called**, by value name.
+##
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell. Lowercase, one short word.
+## "level": how full or empty; "seconds": how long ago.
+## ROOM: 70 px at 14 px
+const METABOLISM_VALUES := {
+	&"level": "level",
+	&"seconds": "seconds",
+}
+## **The line that explains each of them**: the chip's word, a middle dot, and
+## what it is, in plain words.
+##
+## TRANSLATORS: Explains one sense or value of the player's "instincts", on one
+## line under them: its name (the same word as on its chip), a middle dot, then
+## what it is, lowercase. "Your tank" is how much food the cell has left; "the
+## beat you feel" is the heartbeat the game plays, which slows as the tank empties.
+## ROOM: 856 px at 15 px
+const METABOLISM_EXPLAINS := {
+	&"metabolism.hunger": "hunger · how empty your tank is: the beat you feel.",
+	&"metabolism.fed": "meal · how long since you last ate: a cell, a floc, or one you"
+		+ " chewed apart.",
+	&"seconds": "seconds · how long ago, in seconds.",
+}
+
+
+## **A part's words, in the language of the moment** (automation.md §13.1), for
+## the parts [constant DECLARES] names and the values they report: `{"says": its
+## chip, "explains": its line}`, a key absent where there are none -- as
+## `genome.gd` and `cell.gd` answer for theirs.
+static func words_of(part: StringName) -> Dictionary:
+	var out := {}
+	if METABOLISM_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(METABOLISM_SAYS[part]))
+	elif METABOLISM_VALUES.has(part):
+		out["says"] = String(TranslationServer.translate(METABOLISM_VALUES[part]))
+	if METABOLISM_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(METABOLISM_EXPLAINS[part]))
+	return out
+
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
 ## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
