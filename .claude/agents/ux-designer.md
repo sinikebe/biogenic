@@ -41,9 +41,10 @@ not look like a different product when Play is pressed.
 - **GL Compatibility renderer.** No Forward+ only features — that rules out
   volumetric fog, SDFGI, and most compute-shader effects. Shaders must compile
   under GL Compatibility.
-- **Content ships as a `.pck`.** Art and scenes are cheap to update; anything
-  needing a new binary (new permissions, native plugins, icon changes) is
-  expensive. Prefer designs that stay on the content side.
+- **Content ships as a `.pck`.** New permissions, native plugins and icon
+  changes need a new APK instead. A new APK is no reason to hold back
+  (`CLAUDE.md`, "Never hesitate to change the APK"): pick the better design,
+  and say when it needs one.
 
 ## Boundaries — do not cross
 

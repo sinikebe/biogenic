@@ -61,11 +61,20 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 
 ## In hand
 
-**The evolving water**, below under "Next". Pack 1, the drop, is built and on
-`dev`, and reaches players when the owner runs the release (`ocean.md`). Pack 2,
-water cells that divide, is built to the owner's answers in two phases -- the
-record (2-1) and the division (2-2) -- each played on the dev app before the
-release (`lineage.md`).
+**The evolving water**, below under "Next". Packs 1 and 2 are built and on
+`dev`: the drop (`ocean.md`), and water cells that divide, built to the owner's
+answers in two phases -- the record (2-1) and the division (2-2)
+(`lineage.md`). The owner played pack 2 on the dev app on 2026-10-02, with
+nothing to fix. Pack 3, behaviour blocks, is designed to the owner's answers
+(`behaviour.md`, rows 22 to 24). It is built in two phases: first cells hunt by
+rules over their own senses (3-1), then their rules change at every division
+(3-2).
+
+**Beside them, on `dev` for the same release:** the game in French, a settings
+menu with a language picker, three named worlds, and the settings reachable from
+the launcher (`settings.md`).
+
+All of it reaches players together, when the owner runs the release.
 
 ## What the ending is for
 
@@ -198,6 +207,7 @@ to ship on its own and be played on the dev app before the next starts:
    `docs/design/ocean.md`.
 2. **Water cells divide**, passing on their genes. `docs/design/lineage.md`.
 3. **Behaviour blocks with mutation** replace the hand-written AI.
+   `docs/design/behaviour.md`.
 4. **The player's own block screen**, built from the same blocks.
 
 Each depends on the one before. A lineage needs a water that keeps it long
@@ -211,8 +221,9 @@ lets them divide.
 - **Nothing is built before the thing it is evidence about.** Full vision exists
   to catch the membrane lying, so it came after the membrane; a third view
   exists to show what perception has bought, so it comes after genes.
-- **Content is cheaper than structure.** A phase that needs a new `.pck` beats a
-  phase that needs a new binary, every time; see `CLAUDE.md`.
+- **A new binary is no reason to pick a worse phase.** The owner, 2026-10-02:
+  never hesitate to change the APK and publish it (`CLAUDE.md`). A phase says
+  whether it needs a new binary, and bumps `binary_version` when it does.
 - **Each phase leaves its own headroom.** Phase 1 specced four glow lobes and
   two pressure lobes for senses that did not exist; Phase 4 reserved slot 3 for
   the edible predator, and Phase 5 handed it straight back unspent; Phase 5
