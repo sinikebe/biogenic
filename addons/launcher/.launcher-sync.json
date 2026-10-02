@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "356b476b0d7e45a9f814459ae1cb59972d0f3015",
-  "subject": "Merge pull request #72 from sinikebe/68-a-game-s-launcher-translations-can-t-be-updated-by-a-content-pack",
-  "synced_at": "2026-10-02T06:23:30Z"
+  "commit": "b72db3f8d175b9b29dca3ff55171c9e14c9bb8f5",
+  "subject": "Keep the update prompt's buttons on screen however long its notes (#76)",
+  "synced_at": "2026-10-02T15:26:01Z"
 }
