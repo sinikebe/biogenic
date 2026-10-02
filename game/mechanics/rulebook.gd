@@ -562,20 +562,22 @@ static func changed(list: Behaviour, vocab: Vocabulary, owners: int, weights: Di
 	var rules := list.rules
 	var n := rules.size()
 	var nudges := _nudges(list, vocab)
-	var replaceable := PackedInt32Array()
+	# Whether any rule can be replaced: which ones, only once a replace is drawn.
+	var replace := false
 	for k in n:
-		if not _replaceable_parts(rules[k], vocab, owners).is_empty():
-			replaceable.append(k)
+		if _can_replace(rules[k], vocab, owners):
+			replace = true
+			break
 	var swaps := PackedInt32Array()
 	for k in n - 1:
 		if not same_rule(rules[k], rules[k + 1]):
 			swaps.append(k)
-	var can := {NUDGE: not nudges.is_empty(), REPLACE: not replaceable.is_empty(),
+	var can := {NUDGE: not nudges.is_empty(), REPLACE: replace,
 		SWAP: not swaps.is_empty(), COPY: n >= 1 and n < most, DROP: n >= 2}
 	var total := 0.0
-	for kind: Variant in weights:
-		if bool(can.get(kind, false)):
-			total += maxf(float(weights[kind]), 0.0)
+	for named: Variant in weights:
+		if bool(can.get(named, false)):
+			total += maxf(float(weights[named]), 0.0)
 	if total <= 0.0:
 		return [list, &""]
 	# The weights' own order, which is the caller's table's: a draw past the last
@@ -597,6 +599,10 @@ static func changed(list: Behaviour, vocab: Vocabulary, owners: int, weights: Di
 			var at: Array = nudges[randi() % nudges.size()]
 			out.rules[int(at[0])] = _nudged(rules[int(at[0])], int(at[1]), vocab)
 		REPLACE:
+			var replaceable := PackedInt32Array()
+			for at in n:
+				if _can_replace(rules[at], vocab, owners):
+					replaceable.append(at)
 			var k := replaceable[randi() % replaceable.size()]
 			out.rules[k] = _replaced(rules[k], vocab, owners)
 		SWAP:
@@ -761,45 +767,73 @@ static func _step_along(ladder: Array, value: float, up: bool) -> float:
 	return below
 
 
-## **What a replace can change in [param rule]**: its input, when another input
-## could stand in for it; a test, when its input carries a value; its output,
-## when another output could. Nothing in a rule this build cannot read, nor in
-## one read by another vocabulary than [param vocab].
-static func _replaceable_parts(rule: Rule, vocab: Vocabulary, owners: int) -> Array[StringName]:
+## **What a replace can change in [param rule]**, given what could stand in for
+## its input ([param inputs], [method _inputs_for]) and its output
+## ([param outputs], [method _outputs_for]): its input, when another input
+## could; a test, when its input carries a value; its output, when another
+## output could. Nothing in a rule this build cannot read, nor in one read by
+## another vocabulary than [param vocab].
+static func _replaceable_parts(rule: Rule, vocab: Vocabulary, inputs: Array[StringName],
+		outputs: Array[StringName]) -> Array[StringName]:
 	var out: Array[StringName] = []
-	if rule.inert or not vocab.outputs.has(rule.output) \
-			or (rule.input != ALWAYS and not vocab.inputs.has(rule.input)):
+	if not _readable(rule, vocab):
 		return out
-	if not _inputs_for(rule, vocab, owners).is_empty():
+	if not inputs.is_empty():
 		out.append(INPUT_PART)
 	if rule.input != ALWAYS and not (vocab.inputs[rule.input] as InputDecl).values.is_empty():
 		out.append(TEST_PART)
-	if not _outputs_for(rule, vocab, owners).is_empty():
+	if not outputs.is_empty():
 		out.append(OUTPUT_PART)
 	return out
 
 
+## **Whether a replace can change [param rule] at all**: what
+## [method _replaceable_parts] says, asked the short way -- a test can always be
+## added or taken away where its input carries a value, and otherwise the first
+## input or output that could stand in will do.
+static func _can_replace(rule: Rule, vocab: Vocabulary, owners: int) -> bool:
+	if not _readable(rule, vocab):
+		return false
+	if rule.input != ALWAYS and not (vocab.inputs[rule.input] as InputDecl).values.is_empty():
+		return true
+	return not _inputs_for(rule, vocab, owners, true).is_empty() \
+		or not _outputs_for(rule, vocab, owners, true).is_empty()
+
+
+## Whether [param rule] is one [param vocab] reads: not inert, and its input and
+## output both its.
+static func _readable(rule: Rule, vocab: Vocabulary) -> bool:
+	return not rule.inert and vocab.outputs.has(rule.output) \
+		and (rule.input == ALWAYS or vocab.inputs.has(rule.input))
+
+
 ## **The inputs that could stand in for [param rule]'s**: every input of an owner
 ## in [param owners], and [constant ALWAYS], but its own -- and only those with a
-## bearing when its output needs one.
-static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int) -> Array[StringName]:
+## bearing when its output needs one. With [param one], the first found.
+static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+		one := false) -> Array[StringName]:
 	var output := vocab.outputs[rule.output] as OutputDecl
 	var bearing := output.needs == BEARING
 	var out: Array[StringName] = []
 	if rule.input != ALWAYS and not bearing:
 		out.append(ALWAYS)
+		if one:
+			return out
 	for name: StringName in vocab.inputs:
 		var input := vocab.inputs[name] as InputDecl
 		if name != rule.input and (owners & int(vocab.owners[input.owner])) != 0 \
 				and (input.bearing or not bearing):
 			out.append(name)
+			if one:
+				return out
 	return out
 
 
 ## **The outputs that could stand in for [param rule]'s**: every output of an
 ## owner in [param owners] but its own, and only those that need no bearing when
-## its input carries none.
-static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int) -> Array[StringName]:
+## its input carries none. With [param one], the first found.
+static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+		one := false) -> Array[StringName]:
 	var input := vocab.inputs.get(rule.input) as InputDecl
 	var bearing := input != null and input.bearing
 	var out: Array[StringName] = []
@@ -808,18 +842,21 @@ static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int) -> Array[St
 		if name != rule.output and (owners & int(vocab.owners[output.owner])) != 0 \
 				and (output.needs != BEARING or bearing):
 			out.append(name)
+			if one:
+				return out
 	return out
 
 
 ## [param rule] with one part replaced (§6.2): which part by a draw among those
 ## that can be, then what stands in for it.
 static func _replaced(rule: Rule, vocab: Vocabulary, owners: int) -> Rule:
-	var parts := _replaceable_parts(rule, vocab, owners)
+	var inputs := _inputs_for(rule, vocab, owners)
+	var outputs := _outputs_for(rule, vocab, owners)
+	var parts := _replaceable_parts(rule, vocab, inputs, outputs)
 	var part := parts[randi() % parts.size()]
 	var next := _copy_of(rule)
 	match part:
 		INPUT_PART:
-			var inputs := _inputs_for(rule, vocab, owners)
 			next.input = inputs[randi() % inputs.size()]
 			next.in_owner = &""
 			next.clauses.clear()
@@ -832,7 +869,6 @@ static func _replaced(rule: Rule, vocab: Vocabulary, owners: int) -> Rule:
 		TEST_PART:
 			_retested(next, vocab.inputs[rule.input] as InputDecl)
 		OUTPUT_PART:
-			var outputs := _outputs_for(rule, vocab, owners)
 			var output := vocab.outputs[outputs[randi() % outputs.size()]] as OutputDecl
 			next.output = output.name
 			next.out_owner = output.owner

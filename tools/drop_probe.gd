@@ -107,8 +107,9 @@ extends Node
 ## its rules, and a dart forgotten before it is felt. And its second phase's: a
 ## nudge that steps past the end of its ladder, a replace that can draw the part
 ## it replaces, a swap of two equal rules, a copy with no room, a list dropped to
-## nothing, two tests on one value, a turn on an input with no bearing, a change
-## drawn from every gene there is, weights the draw ignores, a list written
+## nothing, two tests on one value, a turn on an input with no bearing, a test
+## written without the value it names, a change drawn from every gene there is,
+## weights the draw ignores, a list written
 ## through, both daughters changed, the faithful daughter changed, nothing
 ## changed, a door that keeps a slot's last rules, a change no seed reaches, a
 ## switch that still draws, a vocabulary deaf to a gene's declaration, a change
