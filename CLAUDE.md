@@ -75,6 +75,13 @@ not need mutation sweeps, repeated review rounds or evidence dossiers: the dev
 app is where it gets played. The thorough pass belongs to the release, before
 `main`.
 
+**A design is not measured in a prototype either.** The owner, 2026-10-02, on
+pack 3: *"Don't measure in prototypes. I'll playtest."* A spec is written from
+the code and from numbers earlier specs already measured. Where a number would
+need a prototype, the spec gives a starting value, the reason for it, and what
+to watch for when playing. The checks that keep the build honest go in its
+build plan, and the build runs them.
+
 Bump `binary_version` in `version.json` in the same commit when a change cannot
 ship as a content pack: an engine upgrade, a new permission, a native plugin, a
 new icon, or a launcher sync that moves `build_info.gd` (see below). Everything

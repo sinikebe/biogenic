@@ -917,8 +917,11 @@ on an idle machine.
    and a family that carries its `flagellum` at one copy has daughters without
    it. A quarter to over a third of all daughters were born tailless, and after
    thirty minutes 38 to 50 % of a newborn's drop's hunters wore no tail, 12 to
-   27 % of a sighted player's. Such a hunter moves on its `axoneme`, or
-   drifts. It is the player's rule. Watch it.
+   27 % of a sighted player's. Such a hunter still swims, on the strokes
+   every cell has: about 41 µm/s, against a one-copy tail's 56.5, and faster
+   with an `axoneme`. It is the player's rule. Watch it. *(Corrected
+   2026-10-02: this said such a hunter moved on its `axoneme` or drifted.
+   `CellBody.speed_for(0)` is 40.7 µm/s.)*
 7. **A guest's sister carries what she wears** (§8), until the protocol next
    moves.
 8. **What one generation is.** A water cell divides about 30 s after it was
