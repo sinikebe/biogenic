@@ -1105,6 +1105,84 @@ class Person:
 	var slot := PERSON_SLOT
 
 
+## **Whoever is sensing** (docs/design/behaviour.md §12.1): the player on this
+## device or any body in the water, by its place, heading, size, mouth and the
+## arcs its organs are worn on. **Every sense in this file is one function of
+## one of these** and of the bodies its organ reaches -- the nose, the beam, the
+## shadow, the touch and the call -- so the player's membrane and a water cell
+## read the water by one arithmetic, and neither is handed anything the other
+## is not (§3.2: no magic). Plain data, refilled where it is used.
+##
+## What a sense finds comes back on it too, beside what it was asked with: a
+## reading belongs to whoever took it.
+class Observer:
+	var pos := Vector2.ZERO
+	## Radians clockwise from world north, and the two directions it makes --
+	## built exactly as `cell.gd`'s `forward()` and `starboard()` build theirs,
+	## so a bearing from here is the cell's own `bearing_to`, to the bit.
+	var heading := 0.0
+	var forward := Vector2(0.0, -1.0)
+	var starboard := Vector2(1.0, 0.0)
+	var radius := 0.0
+	## How wide its mouth opens: what its nose weighs a body by.
+	var gape := 0.0
+	## Its own body as a mouth measures it, its `pellicle` and its wound: what
+	## the player's dread is felt against, and nothing else reads them.
+	var swallow := 0.0
+	var pellicle := 0
+	var wound := 0.0
+	## `chemocyte`: how far the nose reaches and the arc it is worn on.
+	var smell_range := 0.0
+	var smell_bearing := 0.0
+	## `palp`.
+	var touch_range := 0.0
+	## `ocellus`: each ray's bearing, the arc a sweeping one crossed, how far the
+	## rays reach, and where the fan points and how far it spreads.
+	var beam_range := 0.0
+	var beam_bearings := PackedFloat32Array()
+	var beam_arcs := PackedFloat32Array()
+	var beam_fan_mid := 0.0
+	var beam_fan_half := -1.0
+	## `ampulla`: how far a call carries, where on the skin it leaves, how much
+	## of it a body in the way lets through, and the organ's tier.
+	var ping_range := 0.0
+	var ping_bearing := 0.0
+	var ping_through := 0.0
+	var ping_tier := 0
+	## Its own slot, which none of its senses ever reports; -1 for the player on
+	## this device, who is in no slot of the water's.
+	var slot := -1
+	# --- What [method _feel] found.
+	## The nose's reading, 0..1, and the scent of everything edible it summed on
+	## the way (the player's `concentration`).
+	var smell := 0.0
+	var scent := 0.0
+	## Light blocked, summed, and the direction it is blocked from.
+	var shade := 0.0
+	var shade_pull := Vector2.ZERO
+	## The player's dread, and the worst threat in it (§3.4: no water cell
+	## feels either).
+	var dread := 0.0
+	var worst := 0.0
+	# --- What [method _touch_of] found.
+	var touched := false
+	var touch := 0.0
+	var touch_bearing := 0.0
+
+	## Puts it at [param at], facing [param toward].
+	func face(at: Vector2, toward: float) -> void:
+		pos = at
+		heading = toward
+		forward = Vector2(sin(toward), -cos(toward))
+		starboard = Vector2(cos(toward), sin(toward))
+
+	## The body-relative bearing of [param point]: `cell.gd`'s `bearing_to`, from
+	## here.
+	func bearing_to(point: Vector2) -> float:
+		var offset := point - pos
+		return atan2(offset.dot(starboard), offset.dot(forward))
+
+
 ## Total scent concentration at the cell, 0..1. What the water is like, and no
 ## longer what the beat is: it was the other half of metabolism's beat mapping
 ## until 2026-09-29. Kept because the dev tools dump and diff it with the rest
@@ -1279,6 +1357,14 @@ var _dart_clock := 0.0
 ## The player's own mouth, reloading. Here and not on the cell for the same
 ## reason [member _dart_clock] is: the encounter lives in this file.
 var _bite_clock := 0.0
+## **The player on this device as an observer**, refilled by
+## [method _player_eye] for every sense it takes (behaviour.md §12.1).
+var _eye := Observer.new()
+## **The player on this device as the water finds it**: its place, size and
+## armour, as a body that is in no slot -- never in [member _cells] and never
+## in the grid -- refilled before the water senses, and handed to a water
+## cell's senses as [constant TARGET_PLAYER] (behaviour.md §12.1).
+var _me := Body.new()
 
 var _cell: CellBody = null
 var _cells: Array[Body] = []
@@ -3080,12 +3166,86 @@ func _retire(index: int) -> void:
 # bearing in it at all, and a scalar with no bearing in it.
 # ---------------------------------------------------------------------------
 
+## **The player on this device, as an observer** (behaviour.md §12.1): its body
+## off the cell, and its organs as the run wrote them this frame -- what every
+## sense of the membrane is asked through.
+func _player_eye() -> Observer:
+	var o := _eye
+	o.face(_cell.position, _cell.heading)
+	o.radius = _cell.radius
+	o.gape = _cell.gape()
+	o.swallow = _cell.swallow_radius()
+	o.pellicle = _cell.extra(&"pellicle")
+	o.wound = _cell.wound
+	o.smell_range = smell_range
+	o.smell_bearing = smell_bearing
+	o.touch_range = touch_range
+	o.beam_range = beam_range
+	o.beam_bearings = beam_bearings
+	o.beam_arcs = beam_arcs
+	o.beam_fan_mid = beam_fan_mid
+	o.beam_fan_half = beam_fan_half
+	o.ping_range = ping_range
+	o.ping_bearing = ping_bearing
+	o.ping_through = ping_through
+	o.ping_tier = ping_tier
+	o.slot = -1
+	return o
+
+
+## **How big body [param b] is to a mouth**, as a nose weighs it: its radius
+## with its `pellicle` counted (row 5) -- and the player on this device
+## ([member _me]) as its own cell measures itself, as every mouth here does.
+func _size_to_mouth(b: Body) -> float:
+	return _cell.swallow_radius() if b == _me else _swallow_r(b)
+
+
+## **The player's nose, shadow and dread**, through [method _feel] -- the one
+## function every observer smells and sees by -- over the bodies the frame
+## gathered round the cell, written where the run reads them. The shadow's
+## bearing is left where it was when the last shadow faded.
 func _step_sense() -> void:
+	var o := _player_eye()
+	# In the drop, the bodies near this cell the frame gathered: nothing past
+	# them reaches any sense (§4.2) -- and in a pond the people in the water.
+	# In today's water, every body.
+	_feel(o, _sense_ids(), true, true, true)
+	concentration = minf(o.scent, 1.0)
+	# **There is no bearing here any more, and that is the change.** A cell with
+	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
+	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
+	# you have not grown is silent" true at the source as well as at the two
+	# gates downstream of it.
+	taste_level = o.smell
+	shadow = minf(o.shade, 1.0)
+	# Deliberately left where it was when the last shadow faded rather than
+	# snapped to dead ahead: the lobe is already dark at strength 0, and a
+	# bearing that resets would swing the amber round to the nose on its way
+	# out -- a movement the player would read as something passing in front of
+	# them, at the moment nothing is.
+	if shadow > 0.0 and o.shade_pull.length_squared() > 0.0:
+		shadow_bearing = o.bearing_to(o.pos + o.shade_pull)
+	threat = o.worst
+	dread_level = minf(o.dread, 1.0) * DREAD_CAP
+
+
+## **What an observer smells, the shadow it stands in, and -- for the player
+## alone -- its dread** (behaviour.md §12.1), over the bodies in [param scan]:
+## one pass, as the player's membrane has always made it, read off the observer
+## and those bodies and nothing else. [param smell] asks the nose, [param shade]
+## the eyespot, and [param fear] the dread only a player's membrane feels: no
+## organ reports another cell's mouth, so no water cell is ever asked it (§3.4).
+## What it finds is written on [param o]; a sense not asked is left at nothing.
+##
+## [param scan] holds slots, and [constant TARGET_PLAYER] for the player on this
+## device as a water cell finds it ([member _me]). The observer's own slot is
+## passed over.
+func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: bool) -> void:
 	var total := 0.0
 	var dread := 0.0
 	var worst := 0.0
-	var gape := _cell.gape()
-	var shade := 0.0
+	var gape := o.gape
+	var shaded := 0.0
 	var shade_pull := Vector2.ZERO
 	# **What the nose picks up, which is not the same sum again.** Restricted to
 	# sources inside [member smell_range] and weighted by how nearly each one
@@ -3098,15 +3258,13 @@ func _step_sense() -> void:
 	var smelt_top := 0.0
 	var smelt_rest := 0.0
 
-	# In the drop, the bodies near this cell the frame gathered: nothing past
-	# them reaches any sense (§4.2) -- and in a pond the people in the water.
-	# In today's water, every body.
-	var scan := _sense_ids()
 	for i: int in scan:
-		var b := _cells[i]
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
-		var offset := b.pos - _cell.position
+		var offset := b.pos - o.pos
 		var d := offset.length()
 
 		# Taste, over everything I can eat, weighted so a body crossing my gape
@@ -3116,28 +3274,30 @@ func _step_sense() -> void:
 		# protects it from every mouth there, so the scent weighs it by the size
 		# the mouth measures -- or it would call edible a cell the mouth cannot
 		# take. A floc smells in as it settles, never in a step (§7.2).
-		var edible := taste_weight(b.radius if _drop == null else _swallow_r(b), gape)
-		if b.inert:
-			edible *= b.settle
-		if edible > 0.0:
-			var c := scent(d) * edible
-			if c > 0.0:
-				total += c
-				if d < smell_range:
-					# The whole of "orientation should count": a cosine lobe
-					# about the arc the organ is worn on, never falling below
-					# SMELL_BEHIND. A cone with a tier-scaled width was measured
-					# and buys under 2% of swing -- three-senses.md §7.4.
-					var lobe := 0.5 + 0.5 * cos(angle_difference(
-						smell_bearing, _cell.bearing_to(b.pos)))
-					var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
-					# Loudest and rest, in one pass and with no sort: the new
-					# maximum demotes the old one into the tail.
-					if w > smelt_top:
-						smelt_rest += smelt_top
-						smelt_top = w
-					else:
-						smelt_rest += w
+		if smell:
+			var edible := taste_weight(b.radius if _drop == null else _size_to_mouth(b), gape)
+			if b.inert:
+				edible *= b.settle
+			if edible > 0.0:
+				var c := scent(d) * edible
+				if c > 0.0:
+					total += c
+					if d < o.smell_range:
+						# The whole of "orientation should count": a cosine lobe
+						# about the arc the organ is worn on, never falling below
+						# SMELL_BEHIND. A cone with a tier-scaled width was
+						# measured and buys under 2% of swing -- three-senses.md
+						# §7.4.
+						var lobe := 0.5 + 0.5 * cos(angle_difference(
+							o.smell_bearing, o.bearing_to(b.pos)))
+						var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
+						# Loudest and rest, in one pass and with no sort: the new
+						# maximum demotes the old one into the tail.
+						if w > smelt_top:
+							smelt_rest += smelt_top
+							smelt_top = w
+						else:
+							smelt_rest += w
 
 		# A floc is smell and nothing more: no mass to cast a shadow and no
 		# mouth to dread (§7.5).
@@ -3149,16 +3309,19 @@ func _step_sense() -> void:
 		# blocking the light really do block more of it than one, and a summed
 		# vector moves continuously where a pick-the-biggest would jump the
 		# bearing across the screen the frame two shadows swapped rank.
-		var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
-			b.radius / maxf(_cell.radius, 0.001))
-		if mass > 0.0 and d < SHADOW_RANGE:
-			var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
-				0.0, 1.0)
-			var blocked := mass * near
-			if blocked > 0.0:
-				shade += blocked
-				shade_pull += offset / maxf(d, 0.001) * blocked
+		if shade:
+			var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
+				b.radius / maxf(o.radius, 0.001))
+			if mass > 0.0 and d < SHADOW_RANGE:
+				var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
+					0.0, 1.0)
+				var blocked := mass * near
+				if blocked > 0.0:
+					shaded += blocked
+					shade_pull += offset / maxf(d, 0.001) * blocked
 
+		if not fear:
+			continue
 		# Dread, over **every** body, with no question asked that has a yes/no
 		# answer -- see THREAT_LOW for the three steps that gating this put into
 		# the one readout §7.0 exists to protect. A body too small-mouthed to
@@ -3168,7 +3331,7 @@ func _step_sense() -> void:
 		# Nine seconds of closing still separate the first dread from the first
 		# wake: ten seconds of the water simply being wrong, then a direction.
 		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
-			_gape(b) / maxf(_cell.swallow_radius(), 0.001))
+			_gape(b) / maxf(o.swallow, 0.001))
 		worst = maxf(worst, level)
 		if level > 0.0:
 			dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE),
@@ -3182,68 +3345,46 @@ func _step_sense() -> void:
 		if d >= CHEW_RANGE:
 			continue
 		var rate := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
-			_gape(b), _cell.radius, _cell.extra(&"pellicle"), PI) \
+			_gape(b), o.radius, o.pellicle, PI) \
 			/ CellBody.BITE_GAP
 		if rate <= 0.0:
 			continue
 		var urgency := clampf(rate * CHEW_FULL_SECONDS, 0.0, 1.0)
 		dread += CHEW_SHARE * urgency \
 			* clampf((CHEW_RANGE - d) / (CHEW_RANGE - DREAD_CORE), 0.0, 1.0) \
-			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * _cell.wound)
+			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * o.wound)
 
 	# **The meniscus bends the light away** (§3.2): a curved surface is a lens,
 	# and the stretch of it nearest the cell reads to an eyespot as a shadow at
 	# its bearing, EDGE_SHADOW of a body's at the closest, falling to nothing
 	# at SHADOW_RANGE. Summed with the bodies' like one more, so it moves the
 	# lobe as continuously as they do. The drop only.
-	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position)
+	if shade and _drop != null:
+		var edge := _drop.meniscus.depth(o.pos)
 		if edge < SHADOW_RANGE:
 			var blocked := Drop.EDGE_SHADOW * clampf((SHADOW_RANGE - edge)
 				/ (SHADOW_RANGE - SHADOW_CORE), 0.0, 1.0)
-			shade += blocked
-			shade_pull += (_drop.meniscus.nearest_rim(_cell.position) - _cell.position) \
+			shaded += blocked
+			shade_pull += (_drop.meniscus.nearest_rim(o.pos) - o.pos) \
 				.normalized() * blocked
 
-	concentration = minf(total, 1.0)
-	# **There is no bearing here any more, and that is the change.** A cell with
-	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
-	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
-	# you have not grown is silent" true at the source as well as at the two
-	# gates downstream of it. `s` is 0 there, and `0 / (0 + K)` is 0, so the
-	# saturation costs that guarantee nothing.
-	#
+	o.scent = total
 	# **A receptor saturates; it does not clip.** The clamp that used to be on
 	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
 	# above 1.0 its slope is zero, and a readout with no slope in it is a
-	# readout a forager cannot climb. See [constant SMELL_HALF].
+	# readout a forager cannot climb. See [constant SMELL_HALF]. A nose with no
+	# reach sums nothing, and `0 / (0 + K)` is 0.
 	var s := smelt_top + SMELL_TAIL * smelt_rest
-	taste_level = s / (s + SMELL_HALF)
-	shadow = minf(shade, 1.0)
-	# Deliberately left where it was when the last shadow faded rather than
-	# snapped to dead ahead: the lobe is already dark at strength 0, and a
-	# bearing that resets would swing the amber round to the nose on its way
-	# out -- a movement the player would read as something passing in front of
-	# them, at the moment nothing is.
-	if shadow > 0.0 and shade_pull.length_squared() > 0.0:
-		shadow_bearing = _cell.bearing_to(_cell.position + shade_pull)
-	threat = worst
-	dread_level = minf(dread, 1.0) * DREAD_CAP
+	o.smell = s / (s + SMELL_HALF)
+	o.shade = shaded
+	o.shade_pull = shade_pull
+	o.worst = worst
+	o.dread = dread
 
 
-## **The beams.** Each ray cast against every body near it: the nearest surface
-## along the ray, or nothing.
-##
-## **Bodies nowhere near the fan are skipped first**, by one range test and one
-## angle test against [member beam_fan_mid] and [member beam_fan_half]. Past the
-## fork there can be twenty rays, and twenty rays against 34 bodies is 680 ray
-## tests a frame (three-senses.md §3.4); most of the water is behind or beside a
-## 100-degree fan. A body that passes is tested exactly as it always was, so the
-## answer does not change.
-##
-## **A sweeping ray is cast across the whole arc it crossed this frame**, in
-## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
-## nearest hit in that arc (beam-levels.md §4.3).
+## **The player's beams**, through [method _beams_of] -- the one function every
+## observer's rays are cast by -- over the bodies the frame gathered round the
+## cell: [member beams] answered, and [member beam_touched] counted.
 ##
 ## Deliberately blind to the motes: they are inert dust with no chemistry and no
 ## genome, and a beam that stopped on grit would spend the one clear signal the
@@ -3253,50 +3394,79 @@ func _step_beams() -> void:
 	beam_touched.clear()
 	if beam_range <= 0.0 or beam_bearings.is_empty() or _cell == null:
 		return
-	var origin := _cell.position
+	_beams_of(_player_eye(), _sense_ids(), beams, true)
+
+
+## **An observer's beams** (behaviour.md §12.1): each of its rays cast against
+## the bodies in [param scan] its fan can reach -- the nearest surface along the
+## ray, or nothing -- appended to [param out] as `[bearing, distance, hit,
+## body]`, index-matched to its bearings. [param touches] is the player's beam
+## experience: every body a ray stops on goes into [member beam_touched], and no
+## other observer's ever does.
+##
+## **Bodies nowhere near the fan are skipped first**, by one range test and one
+## angle test against the fan's middle and half-width. Past the fork there can
+## be twenty rays, and twenty rays against 34 bodies is 680 ray tests a frame
+## (three-senses.md §3.4); most of the water is behind or beside a 100-degree
+## fan. A body that passes is tested exactly as it always was, so the answer
+## does not change.
+##
+## **A sweeping ray is cast across the whole arc it crossed this frame**, in
+## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
+## nearest hit in that arc (beam-levels.md §4.3).
+func _beams_of(o: Observer, scan: PackedInt32Array, out: Array, touches: bool) -> void:
+	if o.beam_range <= 0.0 or o.beam_bearings.is_empty():
+		return
+	var origin := o.pos
 	var near: Array[int] = []
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
 		var to := b.pos - origin
 		var d := to.length()
-		if d - b.radius > beam_range:
+		if d - b.radius > o.beam_range:
 			continue
-		if beam_fan_half >= 0.0 and d > b.radius:
-			var at := atan2(to.dot(_cell.starboard()), to.dot(_cell.forward()))
+		if o.beam_fan_half >= 0.0 and d > b.radius:
+			var at := atan2(to.dot(o.starboard), to.dot(o.forward))
 			var reach := asin(clampf(b.radius / d, 0.0, 1.0))
-			if absf(angle_difference(beam_fan_mid, at)) \
-					> beam_fan_half + reach + BEAM_SLACK:
+			if absf(angle_difference(o.beam_fan_mid, at)) \
+					> o.beam_fan_half + reach + BEAM_SLACK:
 				continue
 		near.append(i)
-	var sweeping := beam_arcs.size() == beam_bearings.size() * 2
-	for k in beam_bearings.size():
-		var bearing := beam_bearings[k]
+	var sweeping := o.beam_arcs.size() == o.beam_bearings.size() * 2
+	for k in o.beam_bearings.size():
+		var bearing := o.beam_bearings[k]
 		if not sweeping:
-			beams.append(_cast_beam(origin, bearing, near))
+			out.append(_cast_ray(o, origin, bearing, near, touches))
 			continue
-		var low := beam_arcs[2 * k]
-		var span := angle_difference(low, beam_arcs[2 * k + 1])
+		var low := o.beam_arcs[2 * k]
+		var span := angle_difference(low, o.beam_arcs[2 * k + 1])
 		var steps := maxi(int(ceilf(absf(span) / BEAM_SUBSTEP)), 1)
-		var best: Array = [bearing, beam_range, false, -1]
+		var best: Array = [bearing, o.beam_range, false, -1]
 		for s in steps + 1:
-			var ray := _cast_beam(origin, low + span * float(s) / float(steps), near)
+			var ray := _cast_ray(o, origin, low + span * float(s) / float(steps), near,
+				touches)
 			if bool(ray[2]) and (not bool(best[2]) or float(ray[1]) < float(best[1])):
 				best = ray
-		beams.append(best)
+		out.append(best)
 
 
-## **One ray**: the nearest surface of the bodies in [param near] along
-## [param bearing], as `[bearing, distance, hit, body]`. Whatever it stops on is
-## counted as touched.
-func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
-	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-	var best := beam_range
+## **One ray** of [param o]'s: the nearest surface of the bodies in [param near]
+## along [param bearing], as `[bearing, distance, hit, body]` -- `body` the slot
+## it stopped on, [constant EDGE_BODY] for the rim, [constant TARGET_PLAYER] for
+## the player on this device, -1 for nothing. With [param touches], whatever it
+## stops on is counted as touched.
+func _cast_ray(o: Observer, origin: Vector2, bearing: float, near: Array[int],
+		touches: bool) -> Array:
+	var dir := o.forward * cos(bearing) + o.starboard * sin(bearing)
+	var best := o.beam_range
 	var found := false
 	var body := -1
 	for i: int in near:
-		var b := _cells[i]
+		var b := _cells[i] if i >= 0 else _me
 		var to := b.pos - origin
 		var along := to.dot(dir)
 		if along <= 0.0 or along - b.radius > best:
@@ -3318,7 +3488,8 @@ func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
 			best = edge
 			found = true
 			body = EDGE_BODY
-	if found and body >= 0 and not _cells[body].inert and not beam_touched.has(body):
+	if touches and found and body >= 0 and not _cells[body].inert \
+			and not beam_touched.has(body):
 		beam_touched.append(body)
 	return [bearing, best, found, body]
 
@@ -3481,17 +3652,32 @@ static func ping_level(path: float, reach: float) -> float:
 ##
 ## What they multiply into is [method ping_level] over the echo's whole path,
 ## out and back.
+##
+## **The player's call**, through [method _call_of], the one function every
+## observer calls by: its returns go into [member _echoes], where they fly home.
 func _cast_ping() -> void:
+	_call_of(_player_eye(), _sense_ids(), _echoes)
+
+
+## **An observer's call** (behaviour.md §12.1): the returns its pulse would
+## bring home off the bodies in [param scan], appended to [param out] as `[due,
+## at, level, width, hold]` -- seconds until it lands, the place it came off,
+## how loud, how wide the organ reports it and how long it rings -- as
+## [method _cast_ping] above describes. Read off the observer and those bodies
+## and nothing else.
+func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 	# Clamped here and not trusted: the run writes it every frame, and a headless
 	# boot casts a pulse before the first write lands.
-	var tier := clampi(ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
+	var tier := clampi(o.ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
 	if PING_RETURNS_BY_TIER[tier] <= 0:
 		return
-	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
-	var origin := _cell.position + dir * _cell.radius
+	var dir := o.forward * cos(o.ping_bearing) + o.starboard * sin(o.ping_bearing)
+	var origin := o.pos + dir * o.radius
 	var found: Array = []
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
 		# A floc is far smaller than the wave: a speck does not echo, and the
@@ -3502,8 +3688,8 @@ func _cast_ping() -> void:
 		# been: moving the origin is about what the pulse can *see*, not about
 		# how far it carries or how a return fades, and a range that changed
 		# with the slot would make one slot strictly the best place for a radar.
-		var d := b.pos.distance_to(_cell.position) - b.radius
-		if d >= ping_range:
+		var d := b.pos.distance_to(o.pos) - b.radius
+		if d >= o.ping_range:
 			continue
 		found.append([maxf(d, 0.0), b.pos, b.radius])
 	# **The meniscus answers** (the drop, §3.2): the largest reflector a pulse
@@ -3511,9 +3697,9 @@ func _cast_ping() -> void:
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
 	# and the returns' cap take their share of it exactly as of a body's.
 	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position)
-		if edge < ping_range:
-			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(_cell.position),
+		var edge := _drop.meniscus.depth(o.pos)
+		if edge < o.ping_range:
+			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
 				Drop.EDGE_ECHO_RADIUS])
 	if found.is_empty():
 		return
@@ -3523,7 +3709,7 @@ func _cast_ping() -> void:
 		var at: Vector2 = found[i][1]
 		# **Out and back**: to the near edge and home again, so the wave has
 		# travelled `2d` by the time the organ hears it.
-		var level := ping_level(2.0 * float(found[i][0]), ping_range)
+		var level := ping_level(2.0 * float(found[i][0]), o.ping_range)
 		var path := at - origin
 		var reach := path.length()
 		# The hull. A body touching the organ has no direction to be on either
@@ -3531,7 +3717,7 @@ func _cast_ping() -> void:
 		# lands mid-fade, which is the only honest answer to "which side".
 		var open := smoothstep(-PING_GRAZE, PING_GRAZE,
 			path.normalized().dot(dir))
-		level *= lerpf(ping_through, 1.0, open)
+		level *= lerpf(o.ping_through, 1.0, open)
 		# Everything nearer is in the way, and "nearer" is measured from the
 		# cell while the path is measured from the organ -- so the two orders
 		# are not quite the same order, and `for j in i` can skip a body that
@@ -3568,7 +3754,7 @@ func _cast_ping() -> void:
 			if radius_j <= 0.0:
 				continue
 			var clear := clampf((to_j - axis * along).length() / radius_j, 0.0, 1.0)
-			level *= lerpf(ping_through, 1.0, clear)
+			level *= lerpf(o.ping_through, 1.0, clear)
 		if level <= PING_SILENT:
 			continue
 		# The two readings beside the level, out of numbers this loop already
@@ -3590,38 +3776,60 @@ func _cast_ping() -> void:
 		# and the echo takes as long again to get home.
 		var flight := 2.0 * d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
-		_echoes.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
+		out.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --
 ## 1 against the skin, 0 at the edge of reach. No light, no chemistry, no size:
 ## touching something tells you it is there and nothing else, which is exactly
 ## what makes it worth a slot to a cell that cannot see.
+##
+## **The player's touch**, through [method _touch_of], the one function every
+## observer touches by. The bearing is left where it was while nothing is near.
 func _step_touch() -> void:
 	touch_level = 0.0
 	if touch_range <= 0.0 or _cell == null:
 		return
+	var o := _player_eye()
+	_touch_of(o, _sense_ids())
+	if not o.touched:
+		return
+	touch_level = o.touch
+	touch_bearing = o.touch_bearing
+
+
+## **What an observer touches** (behaviour.md §12.1): the nearest surface of the
+## bodies in [param scan] -- and of the rim -- within its `palp`'s reach of its
+## skin, as a closeness and a bearing on [param o], or nothing.
+func _touch_of(o: Observer, scan: PackedInt32Array) -> void:
+	o.touched = false
+	o.touch = 0.0
+	if o.touch_range <= 0.0:
+		return
 	var best := INF
 	var at := Vector2.ZERO
 	# A floc is touched too (§7.5): it is there.
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
-		var d := b.pos.distance_to(_cell.position) - b.radius - _cell.radius
+		var d := b.pos.distance_to(o.pos) - b.radius - o.radius
 		if d < best:
 			best = d
 			at = b.pos
 	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is.
 	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position) - _cell.radius
+		var edge := _drop.meniscus.depth(o.pos) - o.radius
 		if edge < best:
 			best = edge
-			at = _drop.meniscus.nearest_rim(_cell.position)
-	if best >= touch_range:
+			at = _drop.meniscus.nearest_rim(o.pos)
+	if best >= o.touch_range:
 		return
-	touch_level = clampf(1.0 - maxf(best, 0.0) / touch_range, 0.0, 1.0)
-	touch_bearing = _cell.bearing_to(at)
+	o.touched = true
+	o.touch = clampf(1.0 - maxf(best, 0.0) / o.touch_range, 0.0, 1.0)
+	o.touch_bearing = o.bearing_to(at)
 
 
 ## Concentration contributed by one source at distance [param d].
