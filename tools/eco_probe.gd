@@ -21,13 +21,16 @@ extends SceneTree
 ##   (docs/design/lineage.md §12): `--births=0|1` (0 is pack 1), `--mutate=`,
 ##   `--floor=`, `--floor-tau=`, `--newborn-grace=`; and pack 3's
 ##   (docs/design/behaviour.md §12.1): `--rules=0|1`, 0 being pack 2's hand-written
-##   hunter -- the reference the rules are measured against.
+##   hunter -- the reference the rules are measured against -- and
+##   `--rule-change=0|1`, 0 being phase 3-1's water, whose rules never change at
+##   a division.
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
 ## (docs/design/lineage.md §4, §6.1) -- and its `[behaviour]` line -- how its
-## hunters' rules fire and what they are doing (behaviour.md §12.1) --
-## `[eco] cost p50 .. p90 ..` for each
+## hunters' rules fire and what they are doing, and last how many behaviours
+## they carry, the share still on the founders' rules and the changes made at
+## division (behaviour.md §12.1, §7.3) -- `[eco] cost p50 .. p90 ..` for each
 ## window, and the drop's counters at the end. The census samples dread from a
 ## stream of its own, so asking never moves the drop, and a seed prints the same
 ## lines every time.
@@ -97,6 +100,8 @@ func _initialize() -> void:
 			sets[&"newborn_grace"] = float(v)
 		elif a.begins_with("--rules="):
 			sets[&"rules"] = v == "1"
+		elif a.begins_with("--rule-change="):
+			sets[&"rule_change"] = v == "1"
 		else:
 			for name: String in ["lod", "half-rate", "near-first", "skip-still", "own-speed",
 					"contact-swallow", "armour-swallow", "drifter-venom"]:

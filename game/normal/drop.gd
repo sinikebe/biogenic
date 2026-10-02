@@ -26,6 +26,7 @@ const Basin := preload("res://game/mechanics/basin.gd")
 const SpaceGrid := preload("res://game/mechanics/space_grid.gd")
 const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
+const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Genome := preload("res://game/normal/genome.gd")
 
 # --- Size and shape (§2) -----------------------------------------------------
@@ -217,8 +218,15 @@ const FOUNDERS: Array[String] = [
 	"always -> axoneme.push 0.5",
 ]
 ## **The most rules a list holds** (behaviour.md §6.2): one phone screen (§11).
-## Only a change at division reads it, which is pack 3's next phase.
+## A change at division never copies a rule past it.
 const MOST_RULES := 8
+## **The kinds of change at a division, by weight** (behaviour.md §6.2, §6.5),
+## by rulebook.gd's names for them: mostly the small step -- a test's value or a
+## push's strength one place along its ladder -- then a part replaced, which is
+## where new rules come from, and the three that reorder, grow and shrink a
+## list. Starting values, for the playtest: a water that never changes wants
+## more replace, and one that cannot keep a way of hunting more nudge.
+const CHANGES := {&"nudge": 5.0, &"replace": 2.0, &"swap": 1.0, &"copy": 1.0, &"drop": 1.0}
 
 ## The meniscus: a disc of [constant RADIUS] round wherever the drop is.
 var meniscus: Basin = null
@@ -403,6 +411,22 @@ static func drifter_genes(genes: Array[StringName]) -> Array[StringName]:
 static func daughter_dna(dna: Dictionary) -> Array:
 	var rolled: Array = Genome.mutated(dna, [])
 	return [dna.duplicate(), rolled[0], rolled[2]]
+
+
+## **What a water cell's two daughters' rules are** (behaviour.md §6.1-§6.3):
+## `[faithful, changed, kind]` -- one her mother's [param list] as it is, the
+## other with one change of [constant CHANGES]' kinds, no longer than
+## [constant MOST_RULES], drawing anything new from [param vocab]'s parts whose
+## owners [param owners] holds: the body's, the metabolism's and every gene the
+## changed daughter's DNA carries, worn or not (`Rulebook.worn` over her DNA). The
+## daughter whose DNA [method daughter_dna] changed is the one who carries the
+## changed list, and the caller's coin says which daughter that is. `kind` is
+## rulebook.gd's word for the change, empty for a list nothing can change. Draws
+## from the global stream: a division is the simulation's.
+static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabulary,
+		owners: int) -> Array:
+	var rolled: Array = Rulebook.changed(list, vocab, owners, CHANGES, MOST_RULES)
+	return [list, rolled[0], rolled[1]]
 
 
 ## **Venom back through a peer**, when the floor wants it: [constant VENOM] at

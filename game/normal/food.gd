@@ -5962,13 +5962,19 @@ var floor_tau := Drop.FLOOR_TAU
 ## Seconds of grace every newborn gets (§3.4): the player's FIRST_DELAY.
 var newborn_grace := FIRST_DELAY
 # --- Pack 3's (docs/design/behaviour.md §12.1), set by tools/drive.gd and
-# tools/eco_probe.gd as the ones above are. Nothing in the game writes it.
+# tools/eco_probe.gd as the ones above are. Nothing in the game writes them.
 ## **The water's cells decide by the rules they carry** (§4, §5): every hunter
 ## reads its rules, on its tick, over what its own senses report, and acts
 ## through the triggers its body has. **Off is pack 2, to the byte** (§12.3
 ## check 1): today's hand-written hunter, which once it has found its prey knows
 ## where it is -- the reference `--rules=0` plays. Today's water never reads it.
 var rules := true
+## **Every division changes one daughter's rules** (§6): the daughter whose DNA
+## changed carries her mother's list with one change. **Off is phase 3-1, to the
+## byte** (§12.3 check 6): both daughters carry their mother's list and nothing
+## is drawn for it -- what `--rule-change=0` plays. Read only while [member rules]
+## is on.
+var rule_change := true
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -6050,6 +6056,9 @@ static var _vocabulary: Rulebook.Vocabulary = null
 ## **The founders' rules** (drop.gd's FOUNDERS), read once against it: what a
 ## body whose `brain` is null carries.
 static var _founders: Rulebook.Behaviour = null
+## Declaration tables a tool added to the game's own ([method declare]): none,
+## in the game.
+static var _declared: Array = []
 ## **Each declared input to what reads it for a body, and each declared output
 ## to what performs it** (§3.5 step 3) -- the one place a name meets an organ.
 ## Made on first use ([method _wire]).
@@ -7557,16 +7566,32 @@ const FIRED: Array[StringName] = [&"fired_1", &"fired_2", &"fired_3", &"fired_4"
 
 
 ## **Every input and output a body's rules can name** (behaviour.md §3): the
-## body's, the metabolism's and the genes', made once a process.
+## body's, the metabolism's and the genes' -- and any a tool declared
+## ([method declare]) -- made once a process.
 static func vocabulary() -> Rulebook.Vocabulary:
 	if _vocabulary == null:
-		_vocabulary = Rulebook.vocabulary([CellBody.DECLARES, Metabolism.DECLARES,
-			Genome.DECLARES])
+		var tables: Array = [CellBody.DECLARES, Metabolism.DECLARES, Genome.DECLARES]
+		tables.append_array(_declared)
+		_vocabulary = Rulebook.vocabulary(tables)
 		for owner: StringName in CellBody.DECLARES:
 			_everybody[owner] = true
 		for owner: StringName in Metabolism.DECLARES:
 			_everybody[owner] = true
 	return _vocabulary
+
+
+## **A tool's seam: genes of its own, declared** (behaviour.md §3.5, §12.3 check
+## 8) -- [param tables] in `genome.gd`'s DECLARES shape, read after the game's
+## own, as a new gene's entry there would be. The vocabulary and the founders'
+## rules are made again at once; a list read before keeps the bits it was read
+## with, so a tool declares before it makes the water it plays, and declares
+## nothing again before it plays another. Its organs' readers and triggers it
+## wires itself, as a subclass's `_wire`. Nothing in the game calls this.
+static func declare(tables: Array) -> void:
+	_declared = tables.duplicate()
+	_vocabulary = null
+	_founders = null
+	founders()
 
 
 ## **The founders' rules** (drop.gd's FOUNDERS, behaviour.md §5.1), read once.
@@ -8720,22 +8745,29 @@ func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array) -> void:
 ##    her way. Not nose to tail, where the back one's mouth would sit on her
 ##    sister. Each comes in by the one door every body does, fed, with a new id,
 ##    her mother's child, and the newborn grace.
+## 5. **Her rules** (behaviour.md §6.1-§6.3): the daughter who carries the
+##    changed DNA also carries her mother's list with one change
+##    (`Drop.daughter_behaviours`), drawn from what the body, the metabolism and
+##    every gene of her own DNA declare; her sister carries her mother's list
+##    itself, shared -- null for the founders'. Only on rules with
+##    [member rule_change] on; otherwise both carry it and nothing is drawn.
 ##
 ## **Both stay**: the water does the choosing. Returns the two daughters' slots.
 func _divide(i: int, b: Body) -> PackedInt32Array:
 	var mother := Descent.of(b.id, b.parent, b.generation, b.lineage)
 	var at := b.pos
 	var heading := b.heading
-	# **Her rules** (behaviour.md §6): in this phase both daughters carry them as
-	# they are -- the list itself, shared, null for the founders'. A change at
-	# division is the next phase's.
 	var brain: Variant = b.brain
 	var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
-	var pair: Array = Drop.daughter_dna(b.dna) if mutate >= 1.0 or randf() < mutate \
+	var changes := mutate >= 1.0 or randf() < mutate
+	var pair: Array = Drop.daughter_dna(b.dna) if changes \
 		else [b.dna.duplicate(), b.dna.duplicate(), &""]
 	_stat(&"divisions")
 	_stat(StringName("divided_" + (String(pair[2]) if pair[2] != &"" else "faithfully")))
-	var carried: Array = [pair[0], pair[1]] if randf() < 0.5 else [pair[1], pair[0]]
+	var coin := randf() < 0.5
+	var carried: Array = [pair[0], pair[1]] if coin else [pair[1], pair[0]]
+	# The daughter the coin gave the changed DNA, who carries the changed rules.
+	var changed := 1 if coin else 0
 	var points := Descent.split(at, _forward(heading).orthogonal(), r)
 	# She was stepped this frame and her daughters were not: neither mouth closes,
 	# nor pushes, before the next frame -- the first takes her slot, which is the
@@ -8757,6 +8789,12 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 		d.heading = heading
 		d.dna = dna
 		d.brain = brain
+		if k == changed and changes and rules and rule_change:
+			var rolled: Array = Drop.daughter_behaviours(founders() if brain == null else brain,
+				vocabulary(), Rulebook.worn(vocabulary(), dna, _everybody))
+			if rolled[2] != &"":
+				d.brain = rolled[1]
+				_stat(StringName("rules_" + String(rolled[2])))
 		_record_onto(d, Descent.child(d.id, mother))
 		d.grace = newborn_grace
 		# Her own first step is the next frame's, whichever pass would have
@@ -9235,6 +9273,45 @@ func lineage_counts() -> Array:
 	return [float(generations) / float(n), families.size()]
 
 
+## **The water's behaviours, for the dev app's readout** (behaviour.md §7.3):
+## `[how many different lists its hunters carry, the share of them on the
+## founders' rules, in percent]` -- or nothing where the water keeps no record
+## (today's water, a friend's drop seen from inside it, a replay), where its
+## hunters run pack 2's hand-written hunter ([member rules] off), or where it
+## holds no hunter. **Two lists are one behaviour when they say the same**
+## (rulebook.gd's `key_of`): a family shares one list, and a line whose changes
+## have come back round to the founders' rules is on them again. Asking moves
+## nothing.
+func behaviour_counts() -> Array:
+	if not owns_drop() or not rules:
+		return []
+	# The hunters on each list a family shares, by the list itself; then what
+	# each of those lists says, once a list.
+	var n := 0
+	var unchanged := 0
+	var on := {}
+	for b in _cells:
+		if not b.seeded or b.inert or b.drifter or b.person != null:
+			continue
+		n += 1
+		if b.brain == null:
+			unchanged += 1
+		else:
+			on[b.brain] = int(on.get(b.brain, 0)) + 1
+	if n == 0:
+		return []
+	var theirs := Rulebook.key_of(founders())
+	var lists := {}
+	if unchanged > 0:
+		lists[theirs] = true
+	for list: Variant in on:
+		var key := Rulebook.key_of(list)
+		lists[key] = true
+		if key == theirs:
+			unchanged += int(on[list])
+	return [lists.size(), 100.0 * float(unchanged) / float(n)]
+
+
 ## **One line on how the water's hunters behave** (behaviour.md §12.1), beside
 ## the lineage line, for `tools/eco_probe.gd` and `tools/drive.gd`: its hunters,
 ## how many of them are on the founders' rules and how many lists the rest
@@ -9242,6 +9319,13 @@ func lineage_counts() -> Array:
 ## wearing a nose, a radar and a laser; the darts the water fired, the stuns and
 ## your wakes; and what its hunters are doing now. With [member rules] off,
 ## that it runs pack 2's hunter. Asking moves nothing.
+##
+## **And, last, what the rules' changes have made of it** (phase 3-2, §7.3): how
+## many behaviours its hunters carry and the share still on the founders' rules,
+## as the dev app's readout counts them ([method behaviour_counts]) -- lists that
+## say the same as one, where the counts before it go by the list each family
+## shares -- and the changes made at division, by kind. Last, so that phase
+## 3-1's line is this one's beginning, to the byte, with the changes off.
 func behaviour_line() -> String:
 	if _drop == null or _mirror:
 		return "[behaviour] not in a drop of its own"
@@ -9273,13 +9357,23 @@ func behaviour_line() -> String:
 	var fired := PackedStringArray()
 	for k in Drop.FOUNDERS.size():
 		fired.append(str(_n(FIRED[k])))
+	var kinds := behaviour_counts()
+	var changed := 0
+	var each := PackedStringArray()
+	for kind: StringName in Drop.CHANGES:
+		var made := _n(StringName("rules_" + String(kind)))
+		changed += made
+		each.append("%s %d" % [kind, made])
 	return ("[behaviour] t %.0f  hunters %d: on the founders' rules %d, other lists %d"
 		+ "  | founders' rules fired %s  | meals of hunters with a nose %d, radar %d,"
 		+ " laser %d  | water darts %d, stuns %d, your wakes %d  | now holding a heading"
-		+ " %d, resting %d, swimming %d, pushing %d, stunned %d, echoes in flight %d") % [
+		+ " %d, resting %d, swimming %d, pushing %d, stunned %d, echoes in flight %d"
+		+ "  | behaviours %d, unchanged %s  | rules changed %d: %s") % [
 		_t, n, on_founders, lists.size(), "/".join(fired), _n(&"meals_nose"),
 		_n(&"meals_radar"), _n(&"meals_laser"), _n(&"water_darts"), _n(&"stuns"),
-		_n(&"wakes"), holding, resting, swimming, pushing, stunned, echoes]
+		_n(&"wakes"), holding, resting, swimming, pushing, stunned, echoes,
+		int(kinds[0]) if kinds.size() == 2 else 0,
+		"%.1f %%" % float(kinds[1]) if kinds.size() == 2 else "-", changed, ", ".join(each)]
 
 
 func _n(what: StringName) -> int:

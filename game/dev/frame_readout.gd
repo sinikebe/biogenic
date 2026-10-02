@@ -9,7 +9,10 @@ extends CanvasLayer
 ## read against, so a frame that fails says whether the water is the cause.
 ## **And, since the water divides** (docs/design/lineage.md §4), its hunters'
 ## mean generation and how many families they come from: the water evolving,
-## in the dev app and nowhere a player looks.
+## in the dev app and nowhere a player looks. **And, since its rules change at
+## every division** (docs/design/behaviour.md §7.3), how many behaviours its
+## hunters carry and the share of them still on the founders' rules: the water
+## learning, in the same place.
 ##
 ## **Why dropped and not the p95.** A frame is timed from one to the next, so
 ## vsync is in it: a phone holding a steady 60 reads a p95 a little over 16.7 ms
@@ -92,8 +95,8 @@ const PITCH := 19.0
 const FONT_SIZE_WIDE := 16
 const PITCH_WIDE := 21.0
 const WIDE := 1400.0
-## The frame's three rows, the water's two and its families' two, told apart
-## by this much more between them.
+## The frame's three rows, the water's two, its families' two and its
+## behaviours' two, told apart by this much more between them.
 const GROUP_GAP := 5.0
 const WORD := Color(0.855, 0.953, 0.933, 0.42)
 const VALUE := Color(0.855, 0.953, 0.933, 0.70)
@@ -249,7 +252,10 @@ func water_now() -> PackedFloat32Array:
 ## room; the water's median, and the bodies it stepped; **and, for a water that
 ## keeps a record of its families** (docs/design/lineage.md §4, §6.4), the
 ## hunters' mean generation and how many of the water's founders they descend
-## from, so the owner can watch the water evolve while playing it. A figure with
+## from, so the owner can watch the water evolve while playing it; **and, for a
+## water whose cells carry rules** (docs/design/behaviour.md §7.3), how many
+## different lists of rules its hunters carry and the share of them still on the
+## founders' seven, in percent, so the owner can watch it learn. A figure with
 ## nothing behind it yet is a dash: a friend's drop, seen from inside it, keeps
 ## no record here.
 func _figures() -> Array:
@@ -271,6 +277,11 @@ func _figures() -> Array:
 		var known := counts.size() == 2
 		rows.append(["generation", figure(float(counts[0]), 1) if known else "–", "", true])
 		rows.append(["families", str(int(counts[1])) if known else "–", "", false])
+	if is_instance_valid(water) and water.has_method(&"behaviour_counts"):
+		var kinds: Array = water.call(&"behaviour_counts")
+		var known := kinds.size() == 2
+		rows.append(["behaviours", str(int(kinds[0])) if known else "–", "", true])
+		rows.append(["unchanged", figure(float(kinds[1]), 1) if known else "–", "%", false])
 	return rows
 
 

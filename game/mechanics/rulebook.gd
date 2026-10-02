@@ -13,12 +13,16 @@ extends RefCounted
 ## trigger, each input read at most once a tick through a callable the caller
 ## hands over. **Text** ([method parse], [method text_of]): a list to and from
 ## its lines by declared name, a name it does not know kept as a rule that never
-## fires and written back as it came.
+## fires and written back as it came. **One change** ([method changed], §6.2):
+## a new list one small step from a list, drawn from a vocabulary's parts and
+## the global stream; and what two lists say, compared ([method same_rule],
+## [method key_of]).
 ##
 ## **What it does not know**: a gene, a cell, a sense or the water. Every name it
 ## reads comes out of the declaration tables it is handed ([method vocabulary]),
 ## and what an input reports or an output does is the caller's (food.gd's
-## wiring). One mutation, §6.2's change, is pack 3's next phase.
+## wiring). Which parts a change may draw, how the kinds of change are weighed
+## and how long a list may grow are the caller's too (drop.gd's).
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
@@ -54,6 +58,22 @@ const ARROW := "->"
 ## reference, and rising or falling since the last tick.
 enum Test { BELOW, ABOVE, RISING, FALLING }
 const TEST_WORDS: Array[String] = ["below", "above", "rising", "falling"]
+
+## **The kinds of change** (§6.2), each by the name a caller weighs it by
+## ([method changed]): one test's step or one output's option one place along
+## its ladder; one rule's input, one of its tests or its output replaced; two
+## neighbouring rules swapped; a rule copied in directly under itself; a rule
+## dropped.
+const NUDGE := &"nudge"
+const REPLACE := &"replace"
+const SWAP := &"swap"
+const COPY := &"copy"
+const DROP := &"drop"
+## What a replace replaces in a rule: its input, with fresh tests; one of its
+## tests -- another in its place, one added or one removed; or its output.
+const INPUT_PART := &"input"
+const TEST_PART := &"test"
+const OUTPUT_PART := &"output"
 
 
 ## **Everything a body's rules can name**, by qualified name `owner.name`: every
@@ -147,7 +167,8 @@ class Rule:
 
 ## **A behaviour** (§2.1): an ordered list of rules. Shared, never written
 ## through: a body that carries one carries the list itself, and a change makes
-## a new one.
+## a new one ([method changed]), which shares every rule it did not change --
+## so a rule is never written through either.
 class Behaviour:
 	var rules: Array[Rule] = []
 	## Each rule's input as a slot every rule of the list reading that input
@@ -156,6 +177,10 @@ class Behaviour:
 	## asking a dictionary. Made on the list's first choice ([method index]).
 	var slots := PackedInt32Array()
 	var inputs := 0
+	## **What it says, as one string** ([method key_of]), made on first asking
+	## and kept, since the list never changes.
+	var key := ""
+	var keyed := false
 
 	func size() -> int:
 		return rules.size()
@@ -504,3 +529,445 @@ static func measure(kind: StringName, value: float) -> float:
 	if kind == BEARING:
 		return absf(rad_to_deg(value))
 	return value
+
+
+# --- One change (§6.2, §6.3) ---------------------------------------------------------
+
+## **One change to [param list]** (§6.2): `[the changed list, its kind]`. The
+## kind is drawn by [param weights] -- a kind's name to its weight -- among the
+## kinds that can change this list, then what it changes is drawn; every draw
+## from the global stream, which the caller's seed seeds. [param most] is the
+## most rules a list holds.
+##
+## **What a change may draw** (§6.3): [param vocab]'s parts whose owner is in
+## [param owners] -- [method worn]'s bits -- and the rulebook's own
+## [constant ALWAYS]. A rule already in the list may read or drive a part from
+## outside them: it is changed where it is, and only what is drawn new is held
+## to them.
+##
+## **Every change is valid and changes something** (§6.2). A nudge moves a
+## test's step, or an output's option, to the next rung up or down its ladder,
+## and at the end of the ladder goes the other way. A replace draws a part other
+## than the one it replaces. A swap is of two neighbouring rules that differ. A
+## copy needs room under [param most]; a drop and a swap need two rules. A rule
+## keeps at most one test on each value its input carries, and an output that
+## needs a bearing keeps an input that carries one. A rule this build cannot
+## read is never changed inside, only swapped, copied or dropped whole.
+##
+## **Nothing is written through**: the change is a new list sharing every rule
+## it did not change, and the rule it changed is a new rule. A list nothing can
+## change -- one with no rules -- comes back itself, with no kind.
+static func changed(list: Behaviour, vocab: Vocabulary, owners: int, weights: Dictionary,
+		most: int) -> Array:
+	var rules := list.rules
+	var n := rules.size()
+	var nudges := _nudges(list, vocab)
+	# Whether any rule can be replaced: which ones, only once a replace is drawn.
+	var replace := false
+	for k in n:
+		if _can_replace(rules[k], vocab, owners):
+			replace = true
+			break
+	var swaps := PackedInt32Array()
+	for k in n - 1:
+		if not same_rule(rules[k], rules[k + 1]):
+			swaps.append(k)
+	var can := {NUDGE: not nudges.is_empty(), REPLACE: replace,
+		SWAP: not swaps.is_empty(), COPY: n >= 1 and n < most, DROP: n >= 2}
+	var total := 0.0
+	for named: Variant in weights:
+		if bool(can.get(named, false)):
+			total += maxf(float(weights[named]), 0.0)
+	if total <= 0.0:
+		return [list, &""]
+	# The weights' own order, which is the caller's table's: a draw past the last
+	# boundary by a rounding error lands on the last kind that can change it.
+	var pick := randf() * total
+	var kind := &""
+	for each: Variant in weights:
+		var weight := maxf(float(weights[each]), 0.0)
+		if not bool(can.get(each, false)) or weight <= 0.0:
+			continue
+		kind = StringName(each)
+		if pick < weight:
+			break
+		pick -= weight
+	var out := Behaviour.new()
+	out.rules.assign(rules)
+	match kind:
+		NUDGE:
+			var at: Array = nudges[randi() % nudges.size()]
+			out.rules[int(at[0])] = _nudged(rules[int(at[0])], int(at[1]), vocab)
+		REPLACE:
+			var replaceable := PackedInt32Array()
+			for at in n:
+				if _can_replace(rules[at], vocab, owners):
+					replaceable.append(at)
+			var k := replaceable[randi() % replaceable.size()]
+			out.rules[k] = _replaced(rules[k], vocab, owners)
+		SWAP:
+			var k := swaps[randi() % swaps.size()]
+			out.rules[k] = rules[k + 1]
+			out.rules[k + 1] = rules[k]
+		COPY:
+			var k := randi() % n
+			out.rules.insert(k + 1, rules[k])
+		DROP:
+			out.rules.remove_at(randi() % n)
+	return [out, kind]
+
+
+## **Whether two rules say the same**: the same input, the same test on each
+## value -- in whatever order they are written, and whether or not a test names
+## its input's only value -- the same output and the same option. Two rules this
+## build cannot read say the same when their lines are the same.
+static func same_rule(a: Rule, b: Rule) -> bool:
+	if a == b:
+		return true
+	if a.inert or b.inert:
+		return a.inert and b.inert and a.text == b.text
+	if a.input != b.input or a.output != b.output or a.clauses.size() != b.clauses.size():
+		return false
+	if is_nan(a.option) != is_nan(b.option) or (not is_nan(a.option) and a.option != b.option):
+		return false
+	for clause: Clause in a.clauses:
+		var matched := false
+		for other: Clause in b.clauses:
+			if other.value == clause.value:
+				matched = _same_clause(clause, other)
+				break
+		if not matched:
+			return false
+	return true
+
+
+## **Whether two lists say the same**, rule by rule ([method same_rule]).
+static func same(a: Behaviour, b: Behaviour) -> bool:
+	if a == b:
+		return true
+	if a.rules.size() != b.rules.size():
+		return false
+	for k in a.rules.size():
+		if not same_rule(a.rules[k], b.rules[k]):
+			return false
+	return true
+
+
+## **What [param list] says, as one string**: equal for two lists that say the
+## same ([method same]) and different otherwise, which is what lets a caller
+## count how many different lists there are. Made on first asking and kept on
+## the list, which never changes.
+static func key_of(list: Behaviour) -> String:
+	if not list.keyed:
+		var lines := PackedStringArray()
+		for rule: Rule in list.rules:
+			lines.append(_said(rule))
+		list.key = "\n".join(lines)
+		list.keyed = true
+	return list.key
+
+
+## One rule as [method key_of] writes it: every test naming its value, in the
+## order its input carries them; a rule this build cannot read as its line.
+static func _said(rule: Rule) -> String:
+	if rule.inert:
+		return "? " + rule.text
+	var tests: Array = []
+	for clause: Clause in rule.clauses:
+		var words := "%s %s" % [clause.value, TEST_WORDS[clause.test]]
+		if clause.test == Test.BELOW or clause.test == Test.ABOVE:
+			words += " " + (String(clause.ref) if clause.kind == SIZE else number(clause.step))
+		tests.append([clause.at, words])
+	tests.sort_custom(func(x: Array, y: Array) -> bool: return int(x[0]) < int(y[0]))
+	var said := String(rule.input)
+	for test: Array in tests:
+		said += " " + String(test[1])
+	said += " %s %s" % [ARROW, rule.output]
+	if not is_nan(rule.option):
+		said += " " + number(rule.option)
+	return said
+
+
+## Whether two tests put the same value to the same test against the same step
+## or reference.
+static func _same_clause(a: Clause, b: Clause) -> bool:
+	if a.value != b.value or a.test != b.test:
+		return false
+	if a.test == Test.BELOW or a.test == Test.ABOVE:
+		return a.step == b.step and a.ref == b.ref
+	return true
+
+
+## **The rungs a test of [param kind] is put against**: its ladder, or for a
+## size the references the body knows of itself. None for a kind the rulebook
+## does not know, whose tests can only rise or fall.
+static func _rungs(kind: StringName) -> Array:
+	if kind == SIZE:
+		return REFERENCES
+	return LADDERS.get(kind, [])
+
+
+## **Every step a nudge can move in [param list]**: `[rule, test]` for each test
+## against a step or a reference with a ladder to move along, and `[rule, -1]`
+## for each output that takes more than one option.
+static func _nudges(list: Behaviour, vocab: Vocabulary) -> Array:
+	var out: Array = []
+	for k in list.rules.size():
+		var rule := list.rules[k]
+		if rule.inert:
+			continue
+		for c in rule.clauses.size():
+			var clause := rule.clauses[c]
+			if (clause.test == Test.BELOW or clause.test == Test.ABOVE) \
+					and _rungs(clause.kind).size() >= 2:
+				out.append([k, c])
+		var output := vocab.outputs.get(rule.output) as OutputDecl
+		if output != null and not is_nan(rule.option) and output.options.size() >= 2:
+			out.append([k, -1])
+	return out
+
+
+## [param rule] with test [param c] -- or, at -1, its option -- one rung up or
+## down, by a coin: the other way at the end of the ladder (§6.2).
+static func _nudged(rule: Rule, c: int, vocab: Vocabulary) -> Rule:
+	var up := randf() < 0.5
+	var next := _copy_of(rule)
+	if c < 0:
+		var output := vocab.outputs[rule.output] as OutputDecl
+		next.option = _step_along(output.options, rule.option, up)
+	else:
+		var clause := _clause_copy(rule.clauses[c])
+		if clause.kind == SIZE:
+			var at := REFERENCES.find(clause.ref)
+			var to := at + (1 if up else -1)
+			if to < 0 or to >= REFERENCES.size():
+				to = at - (1 if up else -1)
+			clause.ref = REFERENCES[clampi(to, 0, REFERENCES.size() - 1)]
+		else:
+			clause.step = _step_along(_rungs(clause.kind), clause.step, up)
+		next.clauses[c] = clause
+	_finish(next, vocab)
+	return next
+
+
+## **The next rung of [param ladder] past [param value]**, up or down: the
+## nearest above it or below it -- so a value between two rungs, as a file may
+## keep one, moves onto one -- and the other way where there is none.
+static func _step_along(ladder: Array, value: float, up: bool) -> float:
+	var above := INF
+	var below := -INF
+	for rung: Variant in ladder:
+		var at := float(rung)
+		if at > value and at < above:
+			above = at
+		if at < value and at > below:
+			below = at
+	if (up and above < INF) or below == -INF:
+		return above
+	return below
+
+
+## **What a replace can change in [param rule]**, given what could stand in for
+## its input ([param inputs], [method _inputs_for]) and its output
+## ([param outputs], [method _outputs_for]): its input, when another input
+## could; a test, when its input carries a value; its output, when another
+## output could. Nothing in a rule this build cannot read, nor in one read by
+## another vocabulary than [param vocab].
+static func _replaceable_parts(rule: Rule, vocab: Vocabulary, inputs: Array[StringName],
+		outputs: Array[StringName]) -> Array[StringName]:
+	var out: Array[StringName] = []
+	if not _readable(rule, vocab):
+		return out
+	if not inputs.is_empty():
+		out.append(INPUT_PART)
+	if rule.input != ALWAYS and not (vocab.inputs[rule.input] as InputDecl).values.is_empty():
+		out.append(TEST_PART)
+	if not outputs.is_empty():
+		out.append(OUTPUT_PART)
+	return out
+
+
+## **Whether a replace can change [param rule] at all**: what
+## [method _replaceable_parts] says, asked the short way -- a test can always be
+## added or taken away where its input carries a value, and otherwise the first
+## input or output that could stand in will do.
+static func _can_replace(rule: Rule, vocab: Vocabulary, owners: int) -> bool:
+	if not _readable(rule, vocab):
+		return false
+	if rule.input != ALWAYS and not (vocab.inputs[rule.input] as InputDecl).values.is_empty():
+		return true
+	return not _inputs_for(rule, vocab, owners, true).is_empty() \
+		or not _outputs_for(rule, vocab, owners, true).is_empty()
+
+
+## Whether [param rule] is one [param vocab] reads: not inert, and its input and
+## output both its.
+static func _readable(rule: Rule, vocab: Vocabulary) -> bool:
+	return not rule.inert and vocab.outputs.has(rule.output) \
+		and (rule.input == ALWAYS or vocab.inputs.has(rule.input))
+
+
+## **The inputs that could stand in for [param rule]'s**: every input of an owner
+## in [param owners], and [constant ALWAYS], but its own -- and only those with a
+## bearing when its output needs one. With [param one], the first found.
+static func _inputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+		one := false) -> Array[StringName]:
+	var output := vocab.outputs[rule.output] as OutputDecl
+	var bearing := output.needs == BEARING
+	var out: Array[StringName] = []
+	if rule.input != ALWAYS and not bearing:
+		out.append(ALWAYS)
+		if one:
+			return out
+	for name: StringName in vocab.inputs:
+		var input := vocab.inputs[name] as InputDecl
+		if name != rule.input and (owners & int(vocab.owners[input.owner])) != 0 \
+				and (input.bearing or not bearing):
+			out.append(name)
+			if one:
+				return out
+	return out
+
+
+## **The outputs that could stand in for [param rule]'s**: every output of an
+## owner in [param owners] but its own, and only those that need no bearing when
+## its input carries none. With [param one], the first found.
+static func _outputs_for(rule: Rule, vocab: Vocabulary, owners: int,
+		one := false) -> Array[StringName]:
+	var input := vocab.inputs.get(rule.input) as InputDecl
+	var bearing := input != null and input.bearing
+	var out: Array[StringName] = []
+	for name: StringName in vocab.outputs:
+		var output := vocab.outputs[name] as OutputDecl
+		if name != rule.output and (owners & int(vocab.owners[output.owner])) != 0 \
+				and (output.needs != BEARING or bearing):
+			out.append(name)
+			if one:
+				return out
+	return out
+
+
+## [param rule] with one part replaced (§6.2): which part by a draw among those
+## that can be, then what stands in for it.
+static func _replaced(rule: Rule, vocab: Vocabulary, owners: int) -> Rule:
+	var inputs := _inputs_for(rule, vocab, owners)
+	var outputs := _outputs_for(rule, vocab, owners)
+	var parts := _replaceable_parts(rule, vocab, inputs, outputs)
+	var part := parts[randi() % parts.size()]
+	var next := _copy_of(rule)
+	match part:
+		INPUT_PART:
+			next.input = inputs[randi() % inputs.size()]
+			next.in_owner = &""
+			next.clauses.clear()
+			var input := vocab.inputs.get(next.input) as InputDecl
+			if input != null:
+				next.in_owner = input.owner
+				# **Fresh tests**: none, or one on a value it carries -- by a coin.
+				if not input.values.is_empty() and randf() < 0.5:
+					next.clauses.append(_fresh(input, randi() % input.values.size()))
+		TEST_PART:
+			_retested(next, vocab.inputs[rule.input] as InputDecl)
+		OUTPUT_PART:
+			var output := vocab.outputs[outputs[randi() % outputs.size()]] as OutputDecl
+			next.output = output.name
+			next.out_owner = output.owner
+			next.claims = output.claims
+			next.option = NAN if output.options.is_empty() \
+				else output.options[randi() % output.options.size()]
+	_finish(next, vocab)
+	return next
+
+
+## **One of [param rule]'s tests replaced** (§6.2), in place: another in its
+## place -- on its value or on one its input carries untested -- or one added on
+## a value untested, or one removed; by a draw among those that can be.
+static func _retested(rule: Rule, input: InputDecl) -> void:
+	var free: Array[int] = []
+	for at in input.values.size():
+		var tested := false
+		for clause: Clause in rule.clauses:
+			tested = tested or clause.at == at
+		if not tested:
+			free.append(at)
+	var ways: Array[int] = []
+	if not rule.clauses.is_empty():
+		ways.append_array([0, 1])
+	if not free.is_empty():
+		ways.append(2)
+	match ways[randi() % ways.size()]:
+		0:
+			var c := randi() % rule.clauses.size()
+			var was := rule.clauses[c]
+			var places := free.duplicate()
+			places.append(was.at)
+			var fresh := _fresh(input, places[randi() % places.size()])
+			while _same_clause(fresh, was):
+				fresh = _fresh(input, places[randi() % places.size()])
+			rule.clauses[c] = fresh
+		1:
+			rule.clauses.remove_at(randi() % rule.clauses.size())
+		2:
+			rule.clauses.append(_fresh(input, free[randi() % free.size()]))
+
+
+## **A test drawn afresh** on [param input]'s value at [param at]: any of the
+## four, against a rung of its ladder drawn as well -- or only rising or
+## falling, for a kind with no ladder. Written the shortest way: its value named
+## unless it is the only one its input carries besides a bearing.
+static func _fresh(input: InputDecl, at: int) -> Clause:
+	var clause := Clause.new()
+	clause.value = input.values[at]
+	clause.at = at
+	clause.kind = input.kinds[at]
+	clause.degrees = clause.kind == BEARING
+	clause.named = input.lone() != clause.value
+	var rungs := _rungs(clause.kind)
+	clause.test = (randi() % 4 if not rungs.is_empty() else 2 + randi() % 2) as Test
+	if clause.test == Test.BELOW or clause.test == Test.ABOVE:
+		var rung: Variant = rungs[randi() % rungs.size()]
+		if clause.kind == SIZE:
+			clause.ref = StringName(rung)
+		else:
+			clause.step = float(rung)
+	return clause
+
+
+## A new rule with [param rule]'s parts, its tests a new array of the same
+## tests: changed and finished by the caller.
+static func _copy_of(rule: Rule) -> Rule:
+	var next := Rule.new()
+	next.text = rule.text
+	next.inert = rule.inert
+	next.input = rule.input
+	next.in_owner = rule.in_owner
+	next.clauses.assign(rule.clauses)
+	next.output = rule.output
+	next.out_owner = rule.out_owner
+	next.claims = rule.claims
+	next.needs = rule.needs
+	next.option = rule.option
+	return next
+
+
+static func _clause_copy(clause: Clause) -> Clause:
+	var next := Clause.new()
+	next.value = clause.value
+	next.at = clause.at
+	next.kind = clause.kind
+	next.test = clause.test
+	next.step = clause.step
+	next.ref = clause.ref
+	next.named = clause.named
+	next.degrees = clause.degrees
+	return next
+
+
+## [param rule] made whole after a change, as [method rule_from] would make it
+## from its line: the owners it needs and the line itself.
+static func _finish(rule: Rule, vocab: Vocabulary) -> void:
+	rule.inert = false
+	rule.needs = int(vocab.owners[rule.out_owner])
+	if rule.input != ALWAYS:
+		rule.needs |= int(vocab.owners[rule.in_owner])
+	rule.text = line_of(rule)
