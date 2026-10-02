@@ -5713,6 +5713,8 @@ func _readout_families() -> void:
 			"behaviours", "unchanged"]
 		and tail.call(rows) == ["3.0", "4"] and counts == [3.0, 4] and bool(rows[5][3])
 		and not bool(rows[6][3]) and tail.call(away) == ["–", "–"])
+	# At least two hunters in each quarter. How many hunters there are is the
+	# drop's own draw, which nothing here seeds: 33 on one CI runner, over 40 here.
 	var share := 100.0 * float(unchanged) / float(maxi(h, 1))
 	_check(("the readout's behaviours (behaviour.md §7.3): over its %d hunters, a quarter each on"
 		+ " the founders' rules, a list of their own, that list written another way and the"
@@ -5721,7 +5723,7 @@ func _readout_families() -> void:
 		if rows.size() == 9 else "-", str(last.call(rows)[1]) if rows.size() == 9 else "-",
 		str(last.call(rows)[2]) if rows.size() == 9 else "-", str(kinds),
 		str(last.call(away).slice(0, 2))],
-		h >= 40 and kinds.size() == 2 and int(kinds[0]) == 2
+		h >= 8 and kinds.size() == 2 and int(kinds[0]) == 2
 		and absf(float(kinds[1]) - share) < 1e-9
 		and last.call(rows) == ["2", FrameReadout.figure(share, 1), "%"] and bool(rows[7][3])
 		and not bool(rows[8][3]) and last.call(away).slice(0, 2) == ["–", "–"])
