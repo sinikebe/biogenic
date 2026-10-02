@@ -117,6 +117,10 @@ var _sensation_at := 0
 var _mark_at := 0
 var _delta_at := 0
 var _daughters: Array = []
+## **Your programs and what drove your cell** (automation.md §11), as the
+## recording last said: the programs that were on, and `[drives, held, mask]`.
+var _programs: Array = []
+var _acts: Array = [false, false, 0]
 ## The flocs the recording has settled and not cleared, by id: when it said so
 ## and `[place, radius, settle, life]` as it said them. Drawn by time.
 var _flocs := {}
@@ -394,6 +398,15 @@ func _apply_deltas() -> void:
 				_flocs.erase(int(row[2]))
 				if _food != null:
 					_food.clear_floc(int(row[2]))
+			RecorderNode.Delta.PROGRAMS:
+				_programs = row[3]
+				_panes.set_programs(_programs)
+			RecorderNode.Delta.ACTS:
+				_acts = row[3]
+				# **The held tail, drawn still** by both views, as it was.
+				if _cell != null:
+					_cell.restore_held(bool(_acts[1]))
+				_panes.set_acts(_acts)
 			_:
 				pass
 	_watch_levels()
@@ -448,6 +461,13 @@ func _rewind() -> void:
 	_mark_at = 0
 	_delta_at = 0
 	_daughters = []
+	_programs = []
+	_acts = [false, false, 0]
+	if _cell != null:
+		_cell.restore_held(false)
+	if _panes != null:
+		_panes.set_programs(_programs)
+		_panes.set_acts(_acts)
 	# The window's flocs are settled again from its first deltas.
 	_flocs.clear()
 	if _food != null:

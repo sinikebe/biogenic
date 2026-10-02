@@ -198,8 +198,18 @@ const PRUNE_ABOVE := 512
 # poisoned in view is its slot emptying and a SETTLE where it was, already
 # settled, so the replay shows the death as it happened with nothing new
 # recorded. The drop's centre and radius are one RIM, at the start.
+#
+# **And your programs** (docs/design/automation.md §11): your instincts move
+# nothing that is not already recorded, but *why* has to be recorded to be
+# drawn. PROGRAMS is the programs that are on, in order, `[name, lines]` each --
+# at the start of the window and at every edit, switch and reorder -- and ACTS
+# is `[the autopilot drives, the tail is held, a mask of the instincts that acted
+# on the last tick, by their place in the merged list]`, whenever any of them
+# changes: at most 7.5 a second. A run with nothing on records ACTS only for the
+# hand's holds. Both are dictionaries' worth in a row, so [constant STRIDE] does
+# not move.
 
-enum Delta { PLAYER, BODY, DAUGHTERS, RIM, SETTLE, CLEAR }
+enum Delta { PLAYER, BODY, DAUGHTERS, RIM, SETTLE, CLEAR, PROGRAMS, ACTS }
 
 ## Measured, not estimated. §4.6 asks for `Time.get_ticks_usec()` around
 ## [method capture] as a rolling maximum and refuses to let the estimate be
@@ -249,6 +259,11 @@ var _deltas: Array = []
 var _player_seen := false
 var _player_sig := 0
 var _had_daughters := false
+## The programs last written, and the last `[drives, held, mask]` as one int:
+## what a PROGRAMS and an ACTS are changes from. Nothing on and nothing held is
+## where a run starts, and writes nothing.
+var _programs_kept: Array = []
+var _acts_kept := 0
 ## `CellBody.GAPE_BY_TIER[cytostome]` per slot, refreshed only when the genome
 ## in it changes. See the note at the write site.
 var _gape_scale := PackedFloat32Array()
@@ -688,6 +703,28 @@ func _watch_state() -> void:
 					"order": (one["order"] as Array).duplicate(),
 				})
 		_deltas.append([_clock, Delta.DAUGHTERS, 0, pair])
+	_watch_programs()
+
+
+## **Your programs, and what drove your cell** (automation.md §11): read off the
+## cell -- whether the autopilot has it, whether its tail is held -- and off the
+## instincts it is handed, which say what is on and what acted.
+func _watch_programs() -> void:
+	if _cell == null:
+		return
+	var instincts: RefCounted = _cell.instincts
+	if instincts != null:
+		var on: Array = instincts.get(&"programs")
+		if on != _programs_kept:
+			_programs_kept = on.duplicate(true)
+			_deltas.append([_clock, Delta.PROGRAMS, 0, _programs_kept.duplicate(true)])
+	var driving: bool = _cell.autopilot
+	var held: bool = _cell.tail_held()
+	var mask := int(instincts.get(&"acted")) if driving and instincts != null else 0
+	var acts := (1 if driving else 0) | (2 if held else 0) | (mask << 2)
+	if acts != _acts_kept:
+		_acts_kept = acts
+		_deltas.append([_clock, Delta.ACTS, 0, [driving, held, mask]])
 
 
 ## One integer for the whole genome: the body, the DNA, where the genes sit on
@@ -878,6 +915,8 @@ func _forget() -> void:
 	_player_seen = false
 	_player_sig = 0
 	_had_daughters = false
+	_programs_kept = []
+	_acts_kept = 0
 	# -1 is impossible for a real body: serial and meals are both non-negative.
 	_slot_serial.fill(-1)
 	_slot_index.fill(-1)

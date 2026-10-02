@@ -3668,6 +3668,7 @@ func _check_run() -> void:
 	# game's default is the player's own file (ocean.md §9).
 	run.mode = 1
 	run.keep = ""
+	run.library_at = ""
 	get_tree().root.add_child.call_deferred(run)
 	await run.ready
 	await get_tree().process_frame
@@ -3938,6 +3939,7 @@ func _check_run() -> void:
 	var blind: Node = load(RUN_SCENE).instantiate()
 	blind.mode = 0
 	blind.keep = ""
+	blind.library_at = ""
 	get_tree().root.add_child.call_deferred(blind)
 	await blind.ready
 	other.report_body(Vector2(0.0, -260.0), 0.0, 29.0)
@@ -6761,6 +6763,7 @@ func _pond_run_scene(net: Node, watched: bool) -> Node:
 	# **A probe's run keeps no drop** (ocean.md §9): the game's default is the
 	# player's own file, which two runs in one process would share.
 	run.set("keep", "")
+	run.set("library_at", "")
 	if watched:
 		run.get_node(^"Food").set_script(PondWatchedFood)
 	return run
