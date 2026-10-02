@@ -366,10 +366,12 @@ input also reported last tick, it aims ahead of the bearing by three times how
 far the bearing drifted since. Three is the textbook navigation constant, and a
 starting value. A target whose bearing holds steady is on a collision course,
 which is how a pursuer intercepts without knowing where its prey is. A bearing
-that jumps belongs to a new target and is aimed at straight. Leading works only
-for senses that report a bearing every tick: the shadow, the touch, and a beam
-while its rays stay on the target. A smell has no bearing, and an echo comes
-back only once a call.
+that jumps by more than 30° (`LEAD_JUMP`) belongs to a new target and is aimed at
+straight. Leading works only for senses that report a bearing every tick: the
+shadow, the touch, and a beam while its rays stay on the target. A smell has no
+bearing, and an echo comes back only once a call. As built, a beam reports its
+ray's bearing rather than the target's centre, so a laser hunter turning while
+its ray stays on the target can over-lead.
 
 **A random turn** draws its heading when the rule starts firing and keeps it
 while the rule keeps firing, so a run of falling smell is one tumble, not a
@@ -395,6 +397,12 @@ darted, as today.
 rests for 5 s (`REST_MISS`). With no run to break, a dart now stuns what it
 hits: the body rests for 5 s with its rules unread, and feels the dart as a
 `hit` at its bearing. That is the effect today's darts have.
+
+**The grace protects nothing on rules** (row 25, answered). Today no run begins
+at a body in its grace: the player for `FIRST_DELAY` after a birth or a return,
+and every daughter for `newborn_grace`. No sense reports a grace, so a hunter
+whose senses find a newborn, you included, can come for it at once. Both
+constants stay for pack 2's reference (`--rules=0`).
 
 ### 4.4 Where a gene goes
 
@@ -535,8 +543,8 @@ with.
 
 **The cost is that the changed daughter carries two changes.** `lineage.md`
 §3.3 measured what changes cost a family at every division: without the newborn
-grace the families wore out, and with it they held. The grace stays. This is the
-first thing to watch (§13).
+grace the families wore out, and with it they held. On rules the grace protects
+nothing (row 25, §4.3), so this is the first thing to watch (§13).
 
 ### 6.2 The change
 
@@ -596,6 +604,7 @@ None of these was measured. Each one is where the playtest starts.
 | the most rules | 8 | one phone screen (§11) | families stuck at eight, unable to copy |
 | the ladders | §3.1 | about the same proportion at each step, and plain for pack 4 | -- |
 | leading | three times the bearing's drift | the textbook navigation constant | hunters that overshoot, or still trail behind you |
+| a new target | a bearing that jumps more than 30° (`LEAD_JUMP`) | the spec named no number; the build chose it | laser hunters that over-lead while their ray stays on you |
 | a random turn | 90° to 180° to a random side | a tumble, or the avoiding reaction | cells spinning in place |
 | coming for you | within 35° of its heading | half today's `LOCK_CONE_DEG` | darts spent on cells passing by |
 | a dart's stun | 5 s | today's rest after a dart | -- |
@@ -672,6 +681,12 @@ percent. Only the dev app draws them, and they are not translated.
   and what a body was doing (its steering heading, its stun, the time since it
   ate, and its echoes in flight), with clocks kept in 64 bits as every clock is.
   Each is checked when present, as pack 2's columns are, and `FORMAT` stays 1.
+  As built, the columns also carry its last actions, its push, its tumble, the
+  hit it felt, its call's clock and its rules' memory, because a drop saved and
+  loaded has to go on as one that never stopped. The time it ate is kept as the
+  drop clock's time of its last meal, so the round trip is exact to the bit. A
+  list of an unknown version loads as the founders' rules rather than making
+  the file unreadable.
 - **Old saves.** A pack-2 file loads every hunter on the founders' rules, with
   `fed` set from its `calm`, so a body resting after a meal or a miss rests on.
   A pack-2 build reading a pack-3 file loads the rest and runs its own
@@ -691,8 +706,9 @@ percent. Only the dev app draws them, and they are not translated.
   is away. A dedicated server, the last to update, loads its pack-2 room with
   every hunter on the founders' rules and its genes as they were.
 - **Nothing new goes on the wire.** The "stalking you" bit in each POND entry
-  now means "coming for you" (§4.3), computed by the host for each guest as
-  today. A water cell's call is heard by nobody, and only a player's call
+  now means "coming for you" (§4.3), computed by the host for each guest, for
+  the bodies within the send reach (1,900 µm). Pack 2 flagged every hunter on a
+  run at the guest, wherever it was. A water cell's call is heard by nobody, and only a player's call
   crosses the wire, as today (§14).
 - **The referee judges a guest, never a water cell**, and nothing it copies
   moves. None of `HUNT_AT`, `REST_MEAL`, `REST_MISS`, `COMMIT_RANGE` or
@@ -708,8 +724,17 @@ new is recorded. The hunter slot reads "coming for you".
 
 ## 9. Cost
 
-**Reasoned from the code, not measured.** The dev app's frame readout, in its
-`water` and `stepped` rows, is where the owner will see it.
+**Measured as built, in phase 3-1, on this container.** After one optimisation
+pass, the drop's frame went from 1.80 ms to 2.39 ms at a 0.6 composition, and
+from 2.31 ms to 3.39 ms at 1.0. That is +0.6 to +1.1 ms, several times the
+estimate below. It is mostly GDScript call overhead, about 13 µs for each of 24
+to 37 decisions a frame, plus the scent sums. At `ocean.md` §4.4's assumed
+factor of six, a phone pays +3.5 to +6.5 ms. Pack 1's phone gate read 0 %
+dropped frames, and the dev app's `dropped` and `water` rows decide whether that
+still holds. A further optimisation pass is the lever. `drop_probe` now takes
+about 200 s, and CI's timeout for it is 600 s.
+
+What follows is the design's estimate, reasoned from the code before the build.
 
 - **Today**, each hungry hunter makes one prey search on its tick, out to its
   senses' reach, and each hunter on a run is stepped through stalk, aim and
@@ -923,6 +948,8 @@ whether one behaviour takes over the whole room.
    the levers are how often rules change, and which daughter carries the change.
 8. **Drifters decide nothing**, and a guest's sister arrives on the founders'
    rules until SISTER carries hers.
+9. **The cost on a phone** (§9) is several times the estimate here, and is the
+   dev app readout's to judge.
 
 ---
 
@@ -965,7 +992,7 @@ So rows 22 to 24 stand as recommended, and the three rules reshaped the design:
   with rules off, that a water cell reads what your organs would, and the rest
   of §12.3.
 
-**No new rows.** Everything this revision raised is decided by the owner's
+**No new rows in the revision.** Everything it raised is decided by the owner's
 answer or by an answered row. The player's own dread and wake, and whether
 pack 4's blocks may stop your flagellum, are the owner's calls later (§11, §14),
 not this pack's.
@@ -980,3 +1007,16 @@ senses, never from what it cannot know (row 23); nothing new is drawn (row 24).
 puts them (§4.4), because a layout needs the wire and the replay first; and
 "coming for you" replaces "on a run at you" (§4.3), so your wake and your dart
 keep working, from cells that come at you.
+
+### 15.1 Raised by the build, answered
+
+Phase 3-1 found that the grace no longer protects anything (§4.3): it stopped a
+run from starting, and there are no runs. Put and answered on 2026-10-02:
+
+| # | Question | Options | What it means |
+|---|---|---|---|
+| 25 | Now that hunters follow only their senses, what protects a newborn, you included, in its first 42 seconds? | **nothing: newborns are sensed like any other cell ✓ answered** · hunters' senses can't find a newborn for 42 s · a newborn can't be swallowed for 42 s | Nothing: a hunter that senses you can come for you the moment you're born, but it is a weaker hunter than pack 2's, with no lead and no lunge. Can't be found: closest to today's 42 s of safety, but a hunter you bump into can still swallow you. Can't be swallowed: newborns are completely safe for 42 s, which is stronger than today. |
+
+The owner, verbatim: *"25 as recommended"*. `lineage.md` §3.3 found that
+families wore out without the grace when every division changes a daughter, so
+it is the first thing to watch when 3-2 turns the rules' changes on (§13).
