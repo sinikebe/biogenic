@@ -9285,20 +9285,30 @@ func lineage_counts() -> Array:
 func behaviour_counts() -> Array:
 	if not owns_drop() or not rules:
 		return []
-	var theirs := Rulebook.key_of(founders())
+	# The hunters on each list a family shares, by the list itself; then what
+	# each of those lists says, once a list.
 	var n := 0
 	var unchanged := 0
-	var lists := {}
+	var on := {}
 	for b in _cells:
 		if not b.seeded or b.inert or b.drifter or b.person != null:
 			continue
 		n += 1
-		var key := theirs if b.brain == null else Rulebook.key_of(b.brain)
-		lists[key] = true
-		if key == theirs:
+		if b.brain == null:
 			unchanged += 1
+		else:
+			on[b.brain] = int(on.get(b.brain, 0)) + 1
 	if n == 0:
 		return []
+	var theirs := Rulebook.key_of(founders())
+	var lists := {}
+	if unchanged > 0:
+		lists[theirs] = true
+	for list: Variant in on:
+		var key := Rulebook.key_of(list)
+		lists[key] = true
+		if key == theirs:
+			unchanged += int(on[list])
 	return [lists.size(), 100.0 * float(unchanged) / float(n)]
 
 
