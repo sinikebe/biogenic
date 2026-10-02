@@ -45,12 +45,21 @@ Rows 28, 31, 33, 34 and 35 stand as recommended. Two calls the answers raised
 were put next, and the owner answered both as recommended the same day:
 **row 36**, touching the steering controls while the autopilot drives takes the
 cell back and switches the autopilot off; and **row 37**, holding the tail still
-is a level-2 ability of every cell, the water's included. Three calls the
-answers open are new: rows 38 to 40 (§17.2).
+is a level-2 ability of every cell, the water's included. Five more were put
+after them, rows 38 to 42 (§17.2).
+
+**Revised again the same day to those answers** (§17.2). Rows 38, 39, 41 and 42
+stand as recommended, and the owner confirmed how this document reads rows 36
+and 37 (§17.3). Row 40 asked where a division's change to your programs goes,
+and the owner chose neither option: *"no mutation to programs made by players.
+100% manual."* So **no division changes your programs; only your hand does**
+(§6). The phase that changed them is gone, and the wire is now phase 4-3
+(§18.2). Phase 4-1 is unchanged.
 
 The owner's standing rules bind it: *"all cells follow the same rules. Me,
 friends, NPC, doesn't matter."* -- row 19, *"every division. No specific
-treatment between NPCs and players"* -- *"A cell dies of hunger, nothing else.
+treatment between NPCs and players"*, which row 40 sets aside for your programs
+and for nothing else (§6) -- *"A cell dies of hunger, nothing else.
 Unless it gets eaten by another one."* -- and, on pack 3's blocks, *"blocks can
 only contain things coming from enabled senses [...] No magic info. The cell has
 inputs and produces output that acts on available triggers (turn, dash)"* and
@@ -113,7 +122,9 @@ names are the owner's; your division changes your rules under row 19; your
 sister carries your rules, and a guest's needs SISTER to carry them; no block
 reads dread or the wake. In code: `Body.brain` (a water body's list, null for the
 founders'), `put_sister` (no list yet), `Drop.daughter_behaviours`, and SISTER,
-which carries her body and nothing else (`wire.gd`'s `sister_payload`).
+which carries her body and nothing else (`wire.gd`'s `sister_payload`). Row 40
+has since answered one of them the other way: no division changes your
+programs (§6).
 
 ---
 
@@ -139,38 +150,37 @@ which carries her body and nothing else (`wire.gd`'s `sister_payload`).
    trigger, so a program above wins a contradiction (§3). **One library, the
    player's**, for all three worlds, outliving every death.
 5. **Your cell runs eight instincts in all**, as every cell does: the programs
-   you switch on share them (row 39, recommended) (§3.4).
+   you switch on share them (row 39) (§3.4).
 6. **A tail at level 2 can be held still**, by the hand and by an instinct alike
    (row 29). A new output, `flagellum.hold`, declared by the flagellum at level 2;
    `body.rest` holds the tail too at level 2; a new control for the hand at level
    2. **A level-1 tail beats on its own, for every body that swims** (row 37):
    the water's one-copy hunters can no longer stop swimming. A drifter is still
-   carried (§5). Level 2 means two copies (row 38, recommended).
+   carried (§5). Level 2 means two copies (row 38).
 7. **A new library is empty, and an empty library changes nothing, to the
    byte** (row 28). The page offers a new program or a copy of the water's seven
    (§3.6).
-8. **Your division changes one daughter's instincts**, the one whose genes
-   changed (row 19): one change to one of the programs that are on, chosen by its
-   share of their instincts. Choose her, and the change goes into that program,
-   which keeps its old version for one undo (row 40, recommended). **Your sister
+8. **No division changes your programs** (row 40: *"100% manual"*). Both
+   daughters run them as they are, and only your hand edits them. **Your sister
    carries the instincts your cell ran into the water**, the founders' when none
-   was on (§6).
+   was on. There she is a water cell, and her line's instincts change at its own
+   divisions, as every water cell's do (§6).
 9. **What you must see** (§8): the autopilot's icon and whether it drives, in both
    views; a held tail drawn still; the hold's control when the tail reaches level
    2; on the page, the library, every instinct's state and what wins a
-   contradiction; the change on the choosing screen; all of it in the replay.
+   contradiction; all of it in the replay.
    **Nothing in the water says which instinct acts** (row 32).
 10. **Saved**: the library in a file of its own, `user://library.save`; the cell's
-    part in its world's file, optional keys: `FORMAT` stays 1 (§9).
+    part in its world's file, one optional key: `FORMAT` stays 1 (§9).
 11. **The shared pond** (§10): your instincts run on your device, and the host's
     referee judges the motion they make, which never leaves your hand's envelope.
-    **`Wire.RULES` stays `46913eab…`.** From phase 4-4 a friend's sister carries
+    **`Wire.RULES` stays `46913eab…`.** From phase 4-3 a friend's sister carries
     her DNA and her instincts: **`Wire.PROTOCOL` 6** (row 33).
 12. **Generic** (§13): `rulebook.gd` learns three things any caller can use and
     nothing about a player; the player's wiring and the library are files of
     their own, and the words sit beside the declarations.
-13. **Content only, in four phases** (§18.2): the tail, then programs and the
-    autopilot, then division, then the wire. No `binary_version` bump.
+13. **Content only, in three phases** (§18.2): the tail, then programs and the
+    autopilot, then the wire. No `binary_version` bump.
 
 ---
 
@@ -250,10 +260,11 @@ hand is not doing". Row 36 sets it aside; it stays a hook (§14).
 
 - **A division keeps the autopilot as it was.** From the pinch the cell is not
   simulated and nothing drives it; the lean is the hand's, as always (no input
-  reports a daughter). The daughter you take is your cell going on, so if the
-  autopilot was on, she is on it from her first tick. A finger still down from
-  the lean is let go at the birth (`_cell.reset(true)` calls `release()`), so it
-  does not switch the autopilot off; the next press does.
+  reports a daughter). The daughter you take is your cell going on, with the
+  same programs (row 40), so if the autopilot was on, she is on it from her
+  first tick. A finger still down from the lean is let go at the birth
+  (`_cell.reset(true)` calls `release()`), so it does not switch the autopilot
+  off; the next press does.
 - **A death switches it off.** A new cell starts with your hand, and you switch
   the autopilot on when you choose to.
 - **Alone, the pause stops everything**, the autopilot with it. **In a pond the
@@ -324,8 +335,8 @@ winner for each trigger, the first instinct that fits. So:
 
 ### 3.4 How many run at once
 
-**Eight instincts in all, as every cell** (row 39, recommended). The programs you
-switch on share the eight a water cell holds (`Drop.MOST_RULES`):
+**Eight instincts in all, as every cell** (row 39, answered as recommended). The
+programs you switch on share the eight a water cell holds (`Drop.MOST_RULES`):
 
 - **A program that would not fit cannot be switched on**, and an instinct cannot
   be added to a program that is on when the eight are full. The page says why and
@@ -337,12 +348,6 @@ switch on share the eight a water cell holds (`Drop.MOST_RULES`):
   a water cell can run, your sister takes into the water exactly what your cell
   ran (§6.3), and the cost on a phone stays pack 3's (§12).
 
-**If row 39 is answered the other way**, eight in each program and as many
-programs as are on: your cell may run up to 64, `LIBRARY_MOST` times eight. Your
-sister then takes the first eight, in the order your cell read them, and the
-rest stays with you. `Rulebook.choose` reads any length; one decision of 64
-rules is still one body's work (§12).
-
 ### 3.5 One library, the player's
 
 The owner's words decide it: *"Players have a library of programs."* **One
@@ -353,9 +358,8 @@ library for the whole device**, in a file of its own beside the worlds' index
   under the autopilot. Instincts for organs it was not born with are asleep until
   a daughter grows them.
 - **A new world starts with your library**, and only its water is new.
-- **A division writes into it** (§6.2): a program you run in one world is the
-  same program in the others, changes included. That is the price of one
-  library, and the reason its old version is kept for one undo.
+- **Only your hand writes into it** (row 40). No division changes a program, so
+  a program is what you last wrote, the same in every world.
 - **The dev app has its own** (`CLAUDE.md`: its own `user://`), and a tool's run
   touches none (§9).
 
@@ -386,8 +390,8 @@ empty, and an empty program does nothing.
   program (`automation-ux.md`).
 - **Switching off every program, or emptying the last one on, switches the
   autopilot off**: it has nothing to run, and its icon goes.
-- **A program that is off is only kept.** It is not run, not changed at a
-  division, not carried by your sister.
+- **A program that is off is only kept.** It is not run and not carried by your
+  sister.
 
 ---
 
@@ -496,7 +500,8 @@ level with no code but its declaration (§13).
   of a level; 1, 2, 3, 5, 8, 13, 21, 34 s; 50 to 1,450 µm; 15° to 150°), or a size
   against your mouth or your body (`REFERENCES`). The player builds in the space
   evolution steps along, so a program of yours and a water cell's list are the
-  same kind of thing, and a division's nudge moves your value one rung.
+  same kind of thing: once your sister takes yours into the water, her line's
+  nudges move its values one rung at a time.
 - **A turn needs an input with a bearing**; a push takes 0.5 or 1. An instinct
   that is not whole is in no program. Any instinct the page makes must come back
   the same through its line (`Rulebook.rule_from`, `line_of`).
@@ -544,15 +549,14 @@ both the hand and the instincts ask (`level_of(&"flagellum") >= HOLD_LEVEL`).
   with it beating (`energy.md` §2: the flagellum costs 0.70 of rest at tier 2, and
   a tier-2 gene adds 0.18 of upkeep). Arithmetic, not measured.
 
-**What level 2 is** is row 38: **two copies of the tail**, recommended, which is
-what `level_of` already answers for every gene but the beam, and what a water
-cell's level is. A cell is born wearing them: you eat a cell whose dominant gene
-is the tail (`Genome.dominant_of`), the copy is written to your DNA, and a
-daughter of yours wears both copies when her expression roll passes, 0.80 at two
-copies (`genome.gd`'s `EXPRESS_CHANCE`). The other answer makes the flagellum
-earn levels by swimming, as the beam earns them by use (`cell.gd`'s
-`LEVELLED`), so a tail could learn to stop within one life; that needs a
-progression for the tail, and the water would still go by its copies.
+**What level 2 is** is row 38, answered as recommended: **two copies of the
+tail**, which is what `level_of` already answers for every gene but the beam,
+and what a water cell's level is. A cell is born wearing them: you eat a cell
+whose dominant gene is the tail (`Genome.dominant_of`), the copy is written to
+your DNA, and a daughter of yours wears both copies when her expression roll
+passes, 0.80 at two copies (`genome.gd`'s `EXPRESS_CHANCE`). The other option,
+a tail that earns its levels by swimming as the beam earns them by use
+(`cell.gd`'s `LEVELLED`), was set aside; it stays a hook (§14).
 
 ### 5.3 Every body that swims (row 37)
 
@@ -595,7 +599,7 @@ arithmetic be empty in 72 to 100 s and dead ten seconds later: the answer row 11
 weighed and set aside, whose two-minute trial measured 6.5 drifters a second
 dying and ten times the flocs (`ocean.md` §5.3, `--drifters-starve=1`). So row
 37's "every cell" is read as **every cell that swims**: the player, and every
-water cell with a mouth (§17.3).
+water cell with a mouth. The owner confirmed that reading (§17.3).
 
 ### 5.4 Pack 3's water, kept as a tool's reference
 
@@ -614,53 +618,33 @@ to a list when it enters the water.
 
 ## 6. Division
 
-### 6.1 Which daughter, and which program
+### 6.1 The owner's answer
 
-`_make_daughters` already rolls a faithful DNA and a changed one, and puts them
-on sides by a coin (`normal_mode.gd`). **The daughter with the changed DNA also
-carries one change to your instincts** (row 19): pack 3's change exactly, made
-to one of the programs that are on.
+Row 40 was put as *when a division changes one of your programs and you choose
+that daughter, where does the change go?* The owner, 2026-10-02, chose neither
+option: *"no mutation to programs made by players. 100% manual."* So **no
+division changes your programs. They change by your hand and by nothing else.**
 
-1. **Which program**: one of those that are on, chosen by its share of their
-   instincts, so every instinct your cell runs is equally likely to be where the
-   change lands. One draw from the global stream that `--seed=` seeds.
-2. **The change**: `Drop.daughter_behaviours(program, vocabulary, owners, most)`,
-   the water's call, drawn from what the body, the metabolism and every gene in
-   the daughter's DNA declare, each at the level her DNA carries (§4.3). `most`
-   is the program's size plus the places free in your cell's eight, so a copy
-   never takes your cell past eight (row 39). `daughter_behaviours` gains `most`
-   as an optional parameter, `Drop.MOST_RULES` by default, so the water's call
-   is unchanged.
-3. **Her sister**, the faithful daughter, carries your programs as they are.
+That sets aside, for your programs only, what §17.1 had settled without asking
+(*"Not asked, because row 19 decides it"*). Row 19 still holds for everything
+else at your division: your DNA changes as it always has, and so do the
+instincts of every water cell, your sister's line included (§6.3). It also fits
+what the library already was: the player's, not the cell's (§7). Heredity
+changes the cell, and it does not reach into what the player wrote.
 
-- **With nothing on, nothing is drawn.** No program, no change, and the division
-  draws exactly what pack 3's did: the same daughters from the same seed (check
-  24).
-- **The change is rolled at the pinch with the DNA**, from your programs as they
-  stand then. A division left while choosing keeps it, and offers the same two on
-  return while the programs it was rolled from are still as they were; otherwise
-  it is rolled again (§9).
-- **Programs that are off are never changed.** They are kept, not run (§3.7).
-- **Swaps stay inside a program.** The order between programs is the player's;
-  evolution changes instincts and their order within a program, never the
-  library's.
+### 6.2 Your daughters
 
-### 6.2 Where the change goes
-
-**Choose the changed daughter, and the change goes into the program itself**
-(row 40, recommended). The program you run is the one your daughter carries, as
-for every cell; it is the same program in your other worlds (§3.5).
-
-- **The program keeps its old version**, the lines it had before the division
-  changed it, for **one undo**: one tap puts them back. Editing the program by
-  hand, or undoing, lets the old version go.
-- **Choose the faithful daughter**, and nothing in your library changes.
-- **You see the change before you choose** (§6.4), and on the page after, until
-  you keep it by editing or undo it.
-
-The other answer to row 40 puts the change into a copy of the program, added to
-the library beside it and switched on in its place, so what you wrote is never
-touched; the library then fills with variants, eight at most.
+- **Neither daughter's instincts change.** `_make_daughters` rolls a faithful DNA
+  and a changed one, and puts them on sides by a coin, as today
+  (`normal_mode.gd`). Nothing about your instincts is drawn, so a division with
+  programs on draws exactly what `dev` draws: the same two daughters from the
+  same seed (check 18).
+- **The daughter you take is your cell going on**, with your library, its
+  switches and the autopilot as they were (§2.4). Her body may wear an organ
+  yours did not, and an instinct asleep for want of it then wakes (§4.1): a
+  change in the body, not in the program.
+- **A division left while choosing** comes back as today (`_kept_pair`). It holds
+  nothing of your programs, so there is nothing more to keep.
 
 ### 6.3 Your sister
 
@@ -670,29 +654,25 @@ cell ran:
 | what was on | your sister carries |
 |---|---|
 | nothing | the founders' rules, as every sister did in pack 3 (`Body.brain` null) |
-| programs | **one list**: the programs that were on, merged in the library's order, with her change if she is the changed daughter. Eight at most (row 39) |
+| programs | **one list**: the programs that were on, merged in the library's order, **as they were**. Eight at most (row 39) |
 
-So your instincts enter the water's families. A sister whose list hunts well
-divides, and her line passes it on, changed at every division. In the water a
-list is a list: the programs' boundaries and names stay with you. Nothing of this
-is shown (row 21 stands); `behaviours` and `unchanged` on the dev readout count
-her list with the rest.
+**From then on she is a water cell, and her list is hers.** At her own
+divisions her line's instincts change as every water cell's do (row 19,
+`Drop.daughter_behaviours` on the changed daughter), and nothing of that comes
+back to your library. So the water is the one place your instincts evolve: a
+sister whose list hunts well divides, and her line passes it on, changed a
+little at every division. In the water a list is a list: the programs'
+boundaries and names stay with you. Nothing of this is shown (row 21 stands);
+`behaviours` and `unchanged` on the dev readout count her list with the rest.
 
-**A guest's sister** carries the founders' rules until phase 4-4 (§10.3).
+**A guest's sister** carries the founders' rules until phase 4-3 (§10.3).
 
-### 6.4 What the choosing screen must show
+### 6.4 The choosing screen
 
-Named here. The screen's mark is designed with phase 4-3 (`automation-ux.md`):
-
-- **Which daughter's instincts changed, in which program, and the change, in the
-  instincts' own words**: a value moved one rung, a test, an input or an output
-  replaced, two instincts swapped, one copied below itself, or one removed.
-- **Computed by comparing the two programs**, never by asking which kind of
-  change was drawn: the same principle as the DNA's caret (`choosing.md` §6), so
-  the mark stays right whatever kinds of change a later pack adds.
-- **That her sister carries yours as they are.**
-- **Nothing new when nothing is on**: the screen is today's.
-- The choice stays a lean (`choosing.md` §4); nothing here is a new gesture.
+**Nothing new.** Both daughters run the same programs, so there is nothing about
+instincts to choose between. The screen shows their DNA and their bodies, as
+today, and the choice stays a lean (`choosing.md` §4). The mark that showed a
+changed program, in the design before row 40, is gone (§18.4).
 
 ---
 
@@ -703,8 +683,8 @@ next cell is a new cell at generation 1, with a born body and a born DNA
 (`_return`), its tail at one copy, and the autopilot off (§2.4).
 
 **Each world keeps its water and its cell; the library is the same in all
-three** (§3.5). A world's file keeps only the cell's part: the time since it
-ate, and a division left while choosing (§9).
+three** (§3.5). A world's file keeps only the cell's new part: the time since
+it ate (§9).
 
 ---
 
@@ -762,12 +742,11 @@ taking the control back can be a matter of life".
 5. **What each of your senses reports now**, for setting a test against. Alone
    the water waits while the page is open, so these are the last frame's.
 6. **Why a switch or an addition was refused**: the eight are full (§3.4).
-7. **The change your last division made**, until you keep it or undo it (§6.2).
-8. **The autopilot**, the same switch as the icon.
+7. **The autopilot**, the same switch as the icon.
 
 ### 8.3 On the choosing screen
 
-§6.4.
+Nothing new: both daughters run the same programs (§6.4).
 
 ### 8.4 In the replay
 
@@ -796,13 +775,13 @@ library.
  "programs": [                     # in the library's order: the priority
    {"name": "…",                   # as typed; "" while it wears its default
     "lines": PackedStringArray,    # its instincts, in behaviour.md §5.1's text
-    "on": bool,
-    "before": PackedStringArray},  # optional: its lines before the last
- ...]}                             # division changed it, for one undo
+    "on": bool},
+ ...]}
 ```
 
-- **Written** when the page closes with a change, and when a division commits a
-  change into a program. A few hundred bytes compressed: no hitch in a pond.
+- **Written** when the page closes with a change, and only then: no division,
+  birth or death writes it (row 40). A few hundred bytes compressed: no hitch in
+  a pond.
 - **A name this build does not know**, a gene from a later content pack, loads
   as an instinct that never fires and is written back as it came (`rulebook.gd`'s
   inert rule).
@@ -817,12 +796,14 @@ library.
 
 ### 9.2 The cell's part: in its world's file
 
-Optional keys, each checked when present: **`FORMAT` stays 1**.
+One optional key, checked when present: **`FORMAT` stays 1**.
 
 | key | what | when absent |
 |---|---|---|
 | `cell.fed` | seconds since the cell last ate | never ate |
-| `cell.daughters[k].change` | for the changed daughter of a division left while choosing: which program, its lines before and after (phase 4-3) | no change kept; rolled again |
+
+A division left while choosing is kept as it is today (`daughters`, `_kept_pair`):
+nothing of your programs is in it (§6.2).
 
 - **Not kept**: the autopilot's state (§2.4), the heading the instincts held,
   their random turn, their memory and an unfelt hit. A resumed cell comes back
@@ -841,7 +822,7 @@ Optional keys, each checked when present: **`FORMAT` stays 1**.
 | | host | guest | dedicated server |
 |---|---|---|---|
 | your programs | run on your device under your autopilot, read your senses in your water | run on your device, read your senses on the mirror (`_step_organs` runs there) | has no cell and no programs |
-| your sister | in your water, with your merged list (`put_sister`) | by SISTER: the founders' until 4-4, then her DNA and her list | places each guest's sister; from 4-4 with her list |
+| your sister | in your water, with your merged list (`put_sister`) | by SISTER: the founders' until 4-3, then her DNA and her list | places each guest's sister; from 4-3 with her list |
 | the open menu | nothing pauses; if the autopilot is on, it drives | the same | -- |
 | the water's tails | under row 37, the host's water: one-copy hunters swim through their rests | mirrored from the host | its room's water, the same rule |
 
@@ -860,15 +841,15 @@ your hand's new hold ask for nothing a hand could not before:
 
 `HOLD_LEVEL`, `HOLD_BAND` and the autopilot are not values the referee judges
 by, and the water it never judges. **So `Wire.RULES` stays `46913eab…`, and
-phases 4-1 to 4-3 need no protocol change**: `net_probe --referee-only` passes
-unchanged. Mixed builds play together until 4-4; whose water's tails swim through
+phases 4-1 and 4-2 need no protocol change**: `net_probe --referee-only` passes
+unchanged. Mixed builds play together until 4-3; whose water's tails swim through
 their rests is the host's build's, and whose sister carries what is each phone's.
 
 **Repeat the false-positive runs anyway** (`net-hardening.md`): a guest whose hand
 holds its tail, or whose autopilot drives, makes motion no guest made before.
 Checks 7 and 23.
 
-### 10.3 SISTER carries her DNA and her instincts: phase 4-4, PROTOCOL 6
+### 10.3 SISTER carries her DNA and her instincts: phase 4-3, PROTOCOL 6
 
 Row 33, answered as recommended. Today a guest's sister arrives in the host's
 water with only her worn body, so she carries the founders' rules and a DNA equal
@@ -914,13 +895,12 @@ a frame do not change:
 
 | delta | payload | recorded |
 |---|---|---|
-| `Delta.PROGRAMS` | the programs that are on, in order: their names and lines | at the start of the window, and at every edit, switch, reorder and birth |
+| `Delta.PROGRAMS` | the programs that are on, in order: their names and lines | at the start of the window, and at every edit, switch and reorder |
 | `Delta.ACTS` | whether the autopilot drives, whether the tail is held, and a mask of the instincts that acted on the last tick, by their place in the merged list | whenever any of them changes: at most 7.5 a second, usually far fewer |
 
-The mask is an `int`: eight bits under row 39's recommendation, 64 under the
-other answer. `DAUGHTERS` is unchanged: the replay does not show the strands
-(`choosing.md` row 3), and so does not show the change to your programs either.
-The replay's `what you felt` pane draws the held tail still, and
+The mask is an `int` of eight bits (row 39). `DAUGHTERS` is unchanged, and a
+division changes no program (row 40), so nothing new is recorded at one. The
+replay's `what you felt` pane draws the held tail still, and
 `automation-ux.md` says how it shows the rest (§8.4). A run with nothing on
 records `ACTS` only for the hand's holds.
 
@@ -935,8 +915,7 @@ Reasoned from the code. **Unmeasured.**
   mostly GDScript call overhead (behaviour.md §9). One more decision is about 1.6
   µs a frame on average here; at `ocean.md` §4.4's assumed factor of six, about 10
   µs a frame on a phone, 80 µs on the frame that ticks. Against pack 3's +3.5 to
-  +6.5 ms a frame on a phone, it is lost in the noise. Under row 39's other
-  answer the list can be 64 long: still one body, one decision a tick.
+  +6.5 ms a frame on a phone, it is lost in the noise.
 - **No new sensing.** Your instincts read the reports your membrane's frame
   already took (§4.1). The one addition is keeping your call's returns until they
   ring out: at most five, once a call.
@@ -946,11 +925,11 @@ Reasoned from the code. **Unmeasured.**
   the same step with a different pace and one more `stroke_cost` added. Nothing is
   read or decided more often.
 - **Your sister**: one more list among as many as there are hunters (behaviour.md
-  §7.1), and eight at most under row 39.
+  §7.1), and eight at most (row 39).
 - **The library**: a file of a few hundred bytes, written off the play frame.
 - **The replay**: a small dictionary when who drives, the hold or what fired
   changes.
-- **The wire, from 4-4**: up to 1.3 KB once per guest division.
+- **The wire, from 4-3**: up to 1.3 KB once per guest division.
 - **The page**: `automation-ux.md`'s to cost.
 
 Where it shows: the dev app's frame readout, `dropped` and `water`. Nothing here
@@ -964,13 +943,13 @@ it already pays.
 | file | knows | does not know |
 |---|---|---|
 | `game/mechanics/rulebook.gd` | as pack 3, plus three things for any caller: **an optional output of `choose`**, each rule's state on the tick (acted, held back by a claim above, asleep, quiet, reported but failed, unreadable); **a part's level**, `"level": n` in a declaration, an owner-and-level bit, and `worn` taking levels; and **`merged(lists)`**, lists read one after another as one, sharing their rules | a player, a hand, a program, a library, a screen |
-| `game/normal/library.gd` **new** | the library: programs with names, lines, switches and old versions, in order; `LIBRARY_MOST`; the eight in all; the merged list; which program a division changes, and keeping or undoing it; the file | how a list is read or changed |
+| `game/normal/library.gd` **new** | the library: programs with names, lines and switches, in order; `LIBRARY_MOST`; the eight in all; the merged list; the file | how a list is read or changed; a division |
 | `game/normal/own_rules.gd` **new** | **the player's wiring**: each declared input to the report of your organ's frame, each output to your body; the tick; the autopilot's handover. The instincts' fields are a `food.gd` `Body`'s (held heading, claims, tumble, memory, hit), run by the water's own triggers, with the dash wired to your cell's | how a list is chosen or changed |
 | `game/normal/cell.gd` | `HOLD_LEVEL`, `HOLD_BAND`; the hand's hold; the hand's presses, for taking back; reads the claims for the steer, the tail's clock, the push's strength and the dash; `steering_off` silences the hand only | how a rule wins |
 | `game/normal/food.gd` | one report function per input, shared; the pending hit at `hear_contact`'s `BITTEN`; your call's returns kept as a water cell's are; `put_sister` and `place_sister` take a list; `tails_beat` and the held tail in `_move_ruled` and `_under_power` | the page, the hand, the library |
-| `game/normal/drop.gd` | `MOST_RULES`, `CHANGES`, `daughter_behaviours` with `most` | the player |
+| `game/normal/drop.gd` | `MOST_RULES`, `CHANGES` and `daughter_behaviours`, as pack 3 left them: the water's alone (row 40) | the player |
 | `genome.gd`, `cell.gd`, `metabolism.gd` | **the words** for each part they declare, beside `DECLARES` (§13.1); `flagellum.hold` at `HOLD_LEVEL` | the page's layout |
-| `game/normal/normal_mode.gd` | the run: the autopilot's state, builds and ticks the merged list, hands lists on at a division and into your sister, keeps the cell's part in the save | rule arithmetic |
+| `game/normal/normal_mode.gd` | the run: the autopilot's state, builds and ticks the merged list, hands it to your sister, keeps the cell's part in the save | rule arithmetic |
 | the page, the icon, the hold's control | `automation-ux.md` | rule arithmetic |
 
 ### 13.1 Words for the chips
@@ -983,8 +962,8 @@ carries `TRANSLATORS:`, which is how `tools/i18n_pot.gd` takes a table of words
 into the template. `DECLARES` itself holds plain strings that are not words
 (`"in"`, `"name"`), so it must not carry the comment. The rulebook's own words,
 `always`, the four tests, `mouth` and `body`, and the units, live with the page.
-**Which words is the owner's**: `automation-ux.md` §7 proposes them (row 35,
-answered as recommended), and the hold's word joins that set.
+**Which words is the owner's**: `automation-ux.md` §8 lists them (rows 35 and
+42, answered as recommended), the hold's word among them.
 
 Adding a gene with a sense and a trigger is behaviour.md §3.5's three steps plus
 two: its words beside its declaration, and its report registered for the player
@@ -1002,16 +981,18 @@ Hooks, not designs.
 - **The hand alongside the autopilot**, if a later playtest asks for it: the
   hand claims only the triggers it works, and the instincts keep the rest. Row 36
   set it aside for now; `own_rules.gd` already holds the claims per trigger.
-- **A tail that levels by use** (row 38's other answer): an entry in `LEVELLED`
-  and a rule for what a stroke earns.
+- **A tail that levels by use** (the option row 38 set aside): an entry in
+  `LEVELLED` and a rule for what a stroke earns.
 - **More at a level**: any gene can bring a sense or a trigger at level 2 or 3,
   as the tail's hold does, with no code but its declaration (§4.3).
 - **A rule that holds a list** (behaviour.md §2.1): a tree one level deep. A
   program is already a named list; a program that calls one is the next step.
 - **Sharing a program**: with a friend by invite. Lines by declared name are
   already the wire's and the save's form.
-- **Your family, shown** (row 21): your sister's line carries your instincts, and
-  the record (`id`, `parent`, `lineage`) is there to mark it.
+- **Your family, shown** (row 21): your sister's line carries your instincts and,
+  since row 40, is the one place they evolve. The record (`id`, `parent`,
+  `lineage`) is there to mark it, and a list her line evolved could be copied
+  into your library by your own hand, which keeps row 40's *"100% manual"*.
 - **The water's rules, shown** (row 24): the rulebook's per-rule state serves a
   water cell as well.
 - **Every held tail drawn still**, the water's too: a POND entry's speed already
@@ -1031,11 +1012,10 @@ None of these was measured. Each is where the playtest starts.
 | `HOLD_BAND` | 1.3 rad, 75° | the cirrus's lag times its rate is 0.66 to 0.69 rad at every tier, and a band of about twice that settles with a few degrees of overshoot (§4.2) | instinct turns that overshoot and swing back (widen), or creep onto the heading (narrow) |
 | the tick | every eighth frame, `Drop.LOD_EVERY` | the water's, so a turn's lead, `rising` and `falling` mean the same in both bodies | -- |
 | a program | 8 instincts, `Drop.MOST_RULES` | one phone screen, and a water cell's list | wanting a ninth |
-| the library | 8 programs, `LIBRARY_MOST` | one page of rows, as a program is | a full library of variants or near-copies |
+| the library | 8 programs, `LIBRARY_MOST` | one page of rows, as a program is | wanting a ninth program |
 | running at once | 8 instincts in all (row 39) | a water cell's, so a sister carries exactly what ran | programs you cannot switch on together |
 | a test's value | a rung of its ladder | the space the water's changes step along | wanting a value between two rungs |
-| the change at your division | `drop.gd`'s `CHANGES`, one change, on one program by its share | the water's (row 19) | changes you always undo |
-| `RULE_BYTES_MAX` (4-4) | 128 bytes | the longest instinct today, an echo with three tests driving a push, is about 90 | -- |
+| `RULE_BYTES_MAX` (4-3) | 128 bytes | the longest instinct today, an echo with three tests driving a push, is about 90 | -- |
 
 **Balance notes, recorded and not acted on.** The hand and the instincts both
 hold a level-2 tail, so neither outlives the other by standing still; the first
@@ -1059,13 +1039,11 @@ on a held tail. None is pulled: balance waits for players.
    on the dev readout, and the census, are where it shows.
 3. **A held tail drawn beating**, for the water's resting cells, until a later
    pass draws it still (§14).
-4. **A division changes a program in every world** (§3.5). One undo answers a
-   change you do not want; whether players want more is the playtest's.
-5. **What the water does with players' lists**: a server's room, from 4-4, takes
+4. **What the water does with players' lists**: a server's room, from 4-3, takes
    every guest's sister's list into its families. Whether one player's list takes
    over a room is the playtest's.
-6. **A keyboard-only Windows player**, the hold's control on `anywhere`, and the
-   room the choosing screen has for one more line: `automation-ux.md`'s.
+5. **A keyboard-only Windows player**: `automation-ux.md`'s. The hold's control
+   on `anywhere` is row 41's pad.
 
 ---
 
@@ -1093,6 +1071,12 @@ across the documents. The screen's calls were in the same table: rows 28, 31,
 instincts**, the one whose genes changed, as the water's do. Row 19: *"every
 division. No specific treatment between NPCs and players"*.
 
+**Decided otherwise on 2026-10-02, by the owner's answer to row 40**: no
+division changes a player's programs (§6.1). The paragraph above stays as what
+was written then. For the player's programs, the owner has now made the call it
+said was not needed. Row 19 still holds for the player's DNA and for every water
+cell.
+
 **Answered on 2026-10-02.** The owner, verbatim:
 
 > 27 : auto pilot trigger on screen with an icon. Available even outside the menu since taking the control back can be a matter of life.
@@ -1111,9 +1095,9 @@ So, row by row:
 | 30 | **yes, as a library of programs, several on at once, with a priority order** | §3, §6, §9: programs, the library, the merged list, and what a division and your sister do with them |
 | 31 | as recommended | the page of the pause screen, beside the genome |
 | 32 | **nothing in the water**, the third option | §8: no thread; the page and the replay show what acted |
-| 33 | as recommended | §10.3, now phase 4-4 |
+| 33 | as recommended | §10.3, now phase 4-3 |
 | 34 | as recommended | an *instinct* is one line; *program*, *library* and *autopilot* are the owner's words |
-| 35 | as recommended | `automation-ux.md` §7's set, with a word for the hold |
+| 35 | as recommended | `automation-ux.md`'s set (§8 there now), with a word for the hold |
 
 **Rows 36 and 37**, which these answers raised, were put the same day.
 **Answered on 2026-10-02**, verbatim: *"36 and 37 as recommended"*.
@@ -1123,7 +1107,10 @@ So, row by row:
 | 36 | **touching the steering controls while the autopilot drives takes the cell back at once and switches the autopilot off** | §2.3: a new press of any control the hand drives the cell with, on every scheme; the autopilot stays off until the icon or the key |
 | 37 | **holding the tail still is a level-2 tail ability for every cell, the water's included** | §5.3: every swimming body's level-1 tail beats on its own, and the water's one-copy hunters swim through their rests; pack 3's water stays a tool's reference behind `tails_beat` (§5.4) |
 
-### 17.2 New calls, opened by the answers
+### 17.2 Rows 38 to 42: as they were put, and as they were answered
+
+Opened by the answers to rows 27 to 37, and put to the owner on 2026-10-02, as
+follows. Rows 41 and 42 are the screen's.
 
 | # | Question | Options | What it means |
 |---|---|---|---|
@@ -1149,32 +1136,53 @@ So, row by row:
 - **41 and 42** are the screen's (`automation-ux.md` §12, where the pad's place
   is argued).
 
-### 17.3 Precision the answers may need
+**Answered on 2026-10-02.** The owner, verbatim:
 
-Two answered rows are read here in one particular way, and each reading is
-worth the owner's confirmation:
+> 40 : no mutation to programs made by players. 100% manual.
+> Rest as recommended
 
-- **Row 36, "the steering controls"**: read as every control the hand drives the
-  cell with, steering, the push, the dash and the hold (§2.3), because under
-  `anywhere` one finger is all of them. Read as steering alone, a dash pad or a
-  push key pressed under the autopilot would need an answer of its own: fire and
-  leave the autopilot on, or do nothing.
-- **Row 37, "every cell"**: read as every cell that swims. Drifters, which have
-  no mouth and decide nothing, stay carried: if they swam they would starve, which
-  is the answer row 11 set aside (§5.3).
+So, row by row:
 
-And row 29's *"lvl 2"* is row 38.
+| # | answered | what it changed |
+|---|---|---|
+| 38 | as recommended: **the tail's second copy** | nothing: §5.2 was written to it, and phase 4-1 builds it |
+| 39 | as recommended: **eight in all** | §3.4 and §11: what the other option would have needed goes; the replay's mask is eight bits |
+| 40 | **neither option: no division changes a player's programs, which change only by the player's hand** | §6: both daughters run your programs as they are, and your sister carries the merged list unchanged, a water cell from then on. The undo, the choosing screen's mark, `before` and `cell.daughters[k].change` go, and so does the phase that built them: the wire is phase 4-3 (§18.2). It overrides, for the player's programs, §17.1's *"not asked, because row 19 decides it"* |
+| 41 | as recommended: **a pad, drawn once the tail reaches level 2** | nothing here: `automation-ux.md` §12, and phase 4-1 already builds it |
+| 42 | as recommended: **the words `automation-ux.md` lists** (§8 there; the row as put says §7) | the set stands. The two that named a division's change, *changed at your last division* and *undo the change*, have nothing left to name (`automation-ux.md`'s to drop) |
+
+The two readings of §17.3 were confirmed with these answers.
+
+### 17.3 How the answers are read
+
+Two answered rows were read here in one particular way, and **the owner
+confirmed both on 2026-10-02**, with the answers to rows 38 to 42:
+
+- **Row 36, "the steering controls"**: every control the hand drives the cell
+  with, steering, the push, the dash and the hold (§2.3), because under
+  `anywhere` one finger is all of them.
+- **Row 37, "every cell"**: every cell that swims. Drifters, which have no mouth
+  and decide nothing, stay carried: if they swam they would starve, which is the
+  answer row 11 set aside (§5.3).
+
+Row 29's *"lvl 2"* is row 38's second copy.
+
+**Row 40, "programs made by players"**, is read as the programs in the player's
+library, and this document takes that reading as its position. Your sister's
+list leaves them when she does: from her birth it is a water cell's, and her
+line's divisions change it under row 19 (§6.3), while nothing changes the
+programs you keep. Read the other way, as every list a player ever wrote, her
+line would be the one family in the water whose instincts never change.
 
 **Settled here, not asked**, because the owner's words or an answered row decide
 them: one library for all worlds (*"Players have a library"*); the order between
-programs is the player's, and a division only changes instincts within one;
-the change lands on one program by its share of instincts; the autopilot is off
-at every new cell, kept through a division and not saved; its icon is there only
-while there is something to run (`controls.md` §1.1); your instincts read only
-your organs ("No magic info"); a test's value is a ladder's rung; your instincts
-never choose a daughter (no sense reports one); a stun stops every tail; a
-resting player coasts under its own drag; and `Wire.RULES` does not move (the
-referee judges motion, and nothing here makes any a hand could not).
+programs is the player's, and your sister carries them merged in that order; the
+autopilot is off at every new cell, kept through a division and not saved; its
+icon is there only while there is something to run (`controls.md` §1.1); your
+instincts read only your organs ("No magic info"); a test's value is a ladder's
+rung; your instincts never choose a daughter (no sense reports one); a stun stops
+every tail; a resting player coasts under its own drag; and `Wire.RULES` does not
+move (the referee judges motion, and nothing here makes any a hand could not).
 
 ---
 
@@ -1201,14 +1209,12 @@ referee judges motion, and nothing here makes any a hand could not).
 | the page, the library on it, the icon | `automation-ux.md`'s files | 4-2 |
 | `game/normal/drop_save.gd` | `cell.fed`, checked when present | 4-2 |
 | `game/replay/recorder.gd`, `replay.gd`, `panes.gd` | `Delta.PROGRAMS` and `Delta.ACTS`, and the held tail drawn from them | 4-2 |
-| `game/normal/drop.gd` | `daughter_behaviours(..., most := MOST_RULES)` | 4-3 |
-| `game/normal/normal_mode.gd`, `library.gd`, `drop_save.gd` | `_make_daughters` rolls the change on one program; the commit writes it with its old version; `_kept_pair` checks the programs; `cell.daughters[k].change` | 4-3 |
-| `game/net/wire.gd`, `pond.gd` | SISTER with her DNA and her list; `RULE_BYTES_MAX`; `PROTOCOL := 6` with a paragraph in the style of 4 and 5; the host places her with both | 4-4 |
+| `game/net/wire.gd`, `pond.gd` | SISTER with her DNA and her list; `RULE_BYTES_MAX`; `PROTOCOL := 6` with a paragraph in the style of 4 and 5; the host places her with both | 4-3 |
 | `game/i18n/biogenic.pot`, the French catalog | every new word, through `tr()` | each |
 | `tools/drive.gd` | `--program=<lines, ;-separated>` (repeatable, in order), `--program=founders`, `--program-off=<n>`, `--autopilot` or `--autopilot-at=<s>`, `--library=`; with any of them, who drives, the hold and what acted on lines of their own, so a run without them traces as `dev` does. `forage_probe` wraps `drive.tscn` and takes them unchanged | 4-2 |
 | `.github/workflows/ci.yml` | one step beside "Check the input path": check 8's three seeded runs against the pinned hash. Repository furniture, in neither the pack nor the binary | 4-2 |
 | `tools/drop_probe.gd` | the checks of §18.3 | each |
-| `tools/net_probe.gd`, `tools/net_fuzz.gd` | checks 7, 23 and 28 to 31; the fuzz corpus gains SISTER frames | 4-1, 4-2, 4-4 |
+| `tools/net_probe.gd`, `tools/net_fuzz.gd` | checks 7, 23 and 24 to 27; the fuzz corpus gains SISTER frames | 4-1, 4-2, 4-3 |
 
 **Nothing** changes in `addons/launcher/` or `ci/`. **No new input action is
 needed**: the autopilot's key and the hold's key are polled as `cell.gd` polls
@@ -1217,18 +1223,25 @@ bump, and no reason to avoid it (`CLAUDE.md`). **`binary_version` does not
 move.** Every phase is GDScript, scenes and translations: a content pack.
 `Wire.RULES` stays `46913eab…`.
 
+**What row 40 took out of the build**: `drop.gd`, `_make_daughters` and
+`_kept_pair` do not change. `daughter_behaviours` needs no `most`: no change is
+ever drawn for a player's program, and your sister's list is at most eight (row
+39), which is what the water's call already assumes when her line divides. The
+library's `before`, the undo, the choosing screen's mark and
+`cell.daughters[k].change` are not built.
+
 ### 18.2 Phases
 
 Each phase is one pull request into `dev`, played on the dev app before the next
-starts. **The wire moves from the first design's 4-3 to 4-4**, and the tail comes
-first.
+starts. The tail comes first. **Revised 2026-10-02, after row 40**: the phase in
+which your division changed your programs is gone, and the wire, which was 4-4,
+is 4-3. Phase 4-1 is as it was.
 
 | phase | contents | what the owner can try |
 |---|---|---|
 | **4-1** | the tail: `HOLD_LEVEL`, the hand's hold, `flagellum.hold`, `rest` at level 2, the water's tails under row 37 with pack 3's kept behind `tails_beat`, the held tail drawn still; checks 1 to 7 | grow a two-copy tail and hold it; watch the water's one-copy hunters swim on after their meals |
-| **4-2** | programs and the autopilot: the library, the page, the icon and its key, the merged list and its order, the save, the replay, your sister carrying your list (single player and host); checks 8 to 23 | write programs, switch them on, tap the icon and watch; take back; die and come back with your library; relaunch; switch worlds |
-| **4-3** | your division changes your programs: the change on one program, the choosing screen's mark, the undo, the kept pair; checks 24 to 27 | divide with programs on, read the change, keep it, undo it |
-| **4-4** | a friend's sister carries their DNA and instincts: SISTER, `PROTOCOL` 6; checks 28 to 31 | divide in a friend's water, and in the server's room |
+| **4-2** | programs and the autopilot: the library, the page, the icon and its key, the merged list and its order, the save, the replay, a division that leaves your programs as they are, your sister carrying your list (single player and host); checks 8 to 23 | write programs, switch them on, tap the icon and watch; take back; divide on the autopilot and go on; die and come back with your library; relaunch; switch worlds |
+| **4-3** | a friend's sister carries their DNA and instincts: SISTER, `PROTOCOL` 6; checks 24 to 27 | divide in a friend's water, and in the server's room |
 | the release | | whenever the owner runs it |
 
 **Why the tail comes first.** It is the one change to the water, it needs no
@@ -1310,7 +1323,11 @@ each of which must fail with its rule taken out.
     instinct that never fires and is written back as it came; a file this build
     cannot read is moved aside once and the library starts empty; the same
     library opens in every world and after every death; a tool's run writes none.
-18. **Your sister** carries the merged list her cell ran (host and single
+18. **A division, and your sister** (row 40). Posed at one seed, a division with
+    programs on and one with none roll the same two daughters, and leave the
+    global stream at the same place: nothing is drawn for your instincts. The
+    daughter you take runs the same merged list, and the library and its file
+    are untouched. Your sister carries the merged list as it was (host and single
     player), and the founders' when nothing was on.
 19. **Determinism.** One seed with the autopilot on, run twice, prints the same
     trace.
@@ -1330,36 +1347,20 @@ each of which must fail with its rule taken out.
     holding, swimming, pushing at half and full, dashing, and flipping hold and
     swim every tick, and still no foul.
 
-**Phase 4-3, division:**
+**Phase 4-3, in `net_probe`:**
 
-24. **A division.** With programs on, the changed daughter's merged list is one
-    change from yours, inside one program, chosen by its share; a copy never takes
-    her past eight; her sister carries yours; with nothing on nothing is drawn,
-    so a seeded division rolls `dev`'s daughters.
-25. **Kept and undone.** Choosing the changed daughter writes the change into
-    the program and keeps its old version; one undo puts it back; a hand edit lets
-    the old version go; choosing the faithful one changes nothing.
-26. **Left while choosing.** A save made while choosing keeps the change, and the
-    division offers the same two on return while the programs are as they were,
-    and rolls again when they are not.
-27. **The mark** is computed by comparing the two programs: a nudge, a replace, a
-    swap, a copy and a drop each mark what changed (the choosing screen renders
-    it).
-
-**Phase 4-4, in `net_probe`:**
-
-28. **SISTER carries her DNA and her list**: a guest's declined daughter arrives
+24. **SISTER carries her DNA and her list**: a guest's declined daughter arrives
     in the host's water with both; with count 0, the founders'.
-29. **Refusals**: nine instincts, a line of 129 bytes, an empty line, a byte
+25. **Refusals**: nine instincts, a line of 129 bytes, an empty line, a byte
     outside the alphabet, or trailing bytes, and the SISTER is refused whole.
-30. **The handshake**: protocols 1 to 5 refused by name; the referee section
+26. **The handshake**: protocols 1 to 5 refused by name; the referee section
     unchanged.
-31. **The server's room** keeps a guest's sister's list through a save and a
+27. **The server's room** keeps a guest's sister's list through a save and a
     load.
 
 ### 18.4 What it replaces
 
-| pack 3, and pack 4's first design | now |
+| pack 3, and pack 4's earlier designs | now |
 |---|---|
 | `_read_steer()` reads the hand alone | the hand, or the held heading while the autopilot drives |
 | the first design: letting go hands the cell to your rules, `HAND_LETS_GO` 0.5 s | the autopilot, switched by an icon or a key; a new press of the hand takes back |
@@ -1368,8 +1369,8 @@ each of which must fail with its rule taken out.
 | `body.swim`, `body.rest` | `swim` keeps the tail beating; `rest` holds it only at level 2; `flagellum.hold`, new, at level 2 |
 | the first design: one list, in the world's file | a library of programs, `user://library.save`, for every world and every life |
 | your sister carries the founders' rules | she carries what her cell ran; the founders' when nothing was on |
-| the choosing screen shows the DNA | the DNA and the change to one of your programs |
-| a guest's sister carries her worn body (`PROTOCOL` 5) | her body, her DNA and her list (`PROTOCOL` 6, phase 4-4) |
+| the design before row 40: your division changes one of your programs, with one undo | no division changes your programs; only your hand does, and the choosing screen is today's |
+| a guest's sister carries her worn body (`PROTOCOL` 5) | her body, her DNA and her list (`PROTOCOL` 6, phase 4-3) |
 | the replay records what moved | what moved, when the autopilot drove, the held tail, and which instinct acted |
 
 ---
@@ -1397,14 +1398,14 @@ it off.
 **Across lives, launches and worlds**: your library there after a death, after a
 relaunch, and the same in each world.
 
-**In phase 4-3**: whether the change at a division reads on the choosing screen;
-whether you keep changes, take the sister, or undo them; whether a program
-changed in one world surprises you in another; and whether a change ever teaches
-you something you would not have tried.
+**At your divisions**: whether going on under the autopilot through a division
+feels seamless, and whether choosing a daughter by her body alone still reads as
+a real choice when both run the same programs (row 40).
 
 **In a pond**: the autopilot driving while the menu is open; a friend on the
-autopilot moving smoothly on your screen; and, after 4-4, whether a friend's
+autopilot moving smoothly on your screen; and, after 4-3, whether a friend's
 daughters behave like them.
 
-**Over days, in the server's room (after 4-4)**: whether players' lists spread
-through the water, and whether one takes it over.
+**Over days, in the server's room (after 4-3)**: whether players' lists spread
+through the water and change in their sisters' lines, and whether one takes it
+over.
