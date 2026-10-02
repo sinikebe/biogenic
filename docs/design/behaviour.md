@@ -17,41 +17,54 @@ below is either a starting value, given with its reason, or a measurement that
 `ocean.md` or `lineage.md` already holds, cited where it is used. Code
 references are to `dev` at `f62ef20`.
 
+**Revised the same day to the owner's answers** (§15). Rows 22 to 24 stand as
+recommended, and three rules reshaped the design:
+
+- a rule reads only what the body's own senses report: no magic information;
+- it acts only through the triggers a body has, such as turning and dashing;
+- the blocks are modular: every gene declares what it senses and what it
+  triggers, so a new gene brings its own blocks.
+
 The owner's standing rules bind it as they bound pack 2: *"all cells follow the
 same rules. Me, friends, NPC, doesn't matter."* -- *"A cell dies of hunger,
 nothing else. Unless it gets eaten by another one."* -- *"Don't go too far with
 ensuring a player lives as long as today. I'll playtest it and tell you how we
 can fix that."* -- and row 19, *"every division. No specific treatment between
-NPCs and players"*. So behaviour only decides when and how a body uses the
-organs it has. A division changes one daughter's behaviour as it changes her
-genes. The player's survival is the playtest's to judge.
+NPCs and players"*.
 
 ---
 
 ## 0. What packs 1 and 2 left
 
-**One hand-written behaviour for every mouth.** In the drop, a water cell with
-a `cytostome` decides on its tick, 7.5 times a second near the player or far
-from it (`ocean.md` §4.3), in `food.gd`'s `_decide(index, b)`, and only while it
-is not on a run:
+**One hand-written hunter for every mouth.** In the drop, a water cell with a
+`cytostome` decides on its tick, 7.5 times a second near the player or far from
+it (`ocean.md` §4.3), in `food.gd`'s `_decide(index, b)`, while it is not on a
+run:
 
-- it **rests** while it is digesting or fed. That means `calm > 0` (5 s after a
-  meal, `REST_MEAL`, or after a miss, `REST_MISS`) or `hunger < HUNT_AT` 0.3.
-  Resting, it drifts with the water at 9 µm/s, which is free, and still turns on
-  anything it can eat that touches it (`_look_in_drop` with reach 0);
-- otherwise it **hunts** the nearest thing it can eat that its own senses find
-  (`_look_in_drop` at its senses' reach). The hunt is a committed run: it turns
-  to face the prey at its `cirrus`'s rate (`ORIENT_SECONDS` 8 at most), stalks,
-  intercepts, dashes on its `myoneme` inside `LUNGE_RANGE`, and is committed
-  inside `COMMIT_RANGE`, until a meal or a miss;
+- it **rests** while digesting or fed: `calm > 0` (5 s after a meal,
+  `REST_MEAL`, or after a miss, `REST_MISS`) or `hunger < HUNT_AT` 0.3;
+- otherwise it **hunts** the nearest thing it can eat within its senses' reach
+  (`_look_in_drop`). The hunt is a committed run: it turns to face the prey,
+  stalks it, intercepts it, dashes on its `myoneme` inside `LUNGE_RANGE`
+  220 µm, and is committed inside `COMMIT_RANGE`, until a meal or a miss;
 - otherwise it **searches**: it swims along a wandering heading at its own
-  tail's speed, and pays for it.
+  speed.
 
-Drifters decide nothing. `ocean.md` §5.4 has what each piece is worth. §16 item
-9 there left the defaults to this pack, "chosen so that the rules work, not
-tuned". `CALM_*` and the flight after a miss belong to today's water
-(`--drop=0`, a tool's reference) and to the tool switch `--flight=all`. The
-drop's own rules never read them, and this pack leaves them as they are.
+**What today's hunter knows that its organs do not tell it.** Its senses only
+gate the moment it finds its prey: `_senses_find` is a reach check
+(`d ≤ notice`, `notice_floc` or `see_big`). From then on:
+
+- it knows the prey fits its mouth (`_worth_committing_to`);
+- for the whole run it steers on the prey's true position and velocity
+  (`_intercept`, `_lead`).
+
+So a hunter that only smells knows your exact place and speed once it has
+found you. The owner's answer rules out all of that (§15).
+
+Drifters decide nothing. `ocean.md` §5.4 has what each piece of today's hunter
+is worth. `CALM_*` and the flight after a miss belong to today's water
+(`--drop=0`, a tool's reference) and to the tool switch `--flight=all`, and this
+pack leaves them as they are.
 
 **The hooks** (`ocean.md` §12, `lineage.md` §10):
 
@@ -66,48 +79,49 @@ drop's own rules never read them, and this pack leaves them as they are.
 
 ## 1. Decided, in one place
 
-1. **A behaviour is an ordered list of rules**, at most eight. Each rule reads
-   *when <reading> <above|below> <value> → <action>*. The list is read from the
-   top on the body's tick, while it is not on a hunt. The first rule whose test
-   passes and whose action has something to act on is what the body does until
-   the next tick. Final Fantasy XII's gambits are the model (§2).
-2. **A rule reads only what the body's own organs give it** (§3): its hunger,
-   how long since it ate and since a chase failed, how near the nearest food its
-   senses find is, and how near the nearest mouth it dreads is. No rule names an
-   organ. An organ the body lacks gives nothing, so the same rule reaches as far
-   as the body's organs do.
-3. **A rule does only what the organs can** (§4): rest, search at a share of its
-   own speed, hunt the nearest or the biggest food, or flee. A hunt is today's
-   run, unchanged, and once begun it runs to a meal or a miss.
-4. **Today's behaviour is five rules** (§5). Every body the water makes, every
-   sister and every body in an old save carries it (row 22, recommended). Read
-   as rules,
-   today's water plays exactly as it does now, and the build checks that to the
-   byte (§12.3).
-5. **Every division changes one daughter's behaviour**: the daughter whose DNA
-   it changes. She gets one small change: a value nudged, a part replaced, two
-   rules swapped, or a rule copied or dropped (§6). Her sister carries her
-   mother's behaviour and DNA unchanged. This is row 19's rule, and the water
-   has no rate of its own.
-6. **Cells can learn to flee** a mouth that could swallow them (row 23,
-   recommended).
-7. **Where a gene goes stays the body's.** A water cell's meal takes the first
-   free slot, as in pack 2, so its mutation is still never a shift (§4.4).
-8. **Drifters decide nothing**, as today. They never grow, so they never
-   divide, and a behaviour could never pass on from one.
-9. **Players see nothing new except how the water behaves** (row 24,
-   recommended). The dev app's readout counts it in two new rows, `behaviours`
-   and `as today` (§7.3).
-10. **Saved by name and version** (§8). A pack-2 drop loads every hunter on
-    today's behaviour.
-11. **No protocol change.** The referee judges guests, never a water cell's
-    behaviour, and nothing it copies moves. `Wire.PROTOCOL` stays 5 and
-    `Wire.RULES` stays `46913eab…` (§8).
-12. **The list and the change are generic mechanics**, in
-    `game/mechanics/rulebook.gd`. The vocabulary's names are `drop.gd`'s, and
-    what each reading and action means in the water is `food.gd`'s (§10).
-13. **Two phases, no binary change**: today's behaviour as rules first, then
-    behaviour that changes (§12).
+1. **A behaviour is an ordered list of rules**, at most eight. A rule reads
+   *when <input> [is …] → <output>*: one of the body's declared inputs, up to
+   one test on each value that input carries, and one of its declared outputs
+   (§3, §4).
+2. **Inputs are only what the body's own senses report, in the form the senses
+   report it** (§3.2): a bearing, a level, a distance, a size. That is exactly
+   what the same organ gives the player. The body's own state counts too: its
+   hunger, and how long since it ate. Nothing about another body's mouth,
+   genome, intent, position or speed can be an input.
+3. **Outputs are the triggers a body has** (§3.3): turn toward a sensed bearing,
+   turn away from one, turn at random, swim, rest, dash on a `myoneme`, push on
+   an `axoneme`. A cell runs away with an ordinary rule, such as *when my laser
+   touches something ahead → turn away* (row 23). There is no flee action.
+4. **The blocks are modular** (§3.5). Every gene declares its inputs and
+   outputs in one table in `genome.gd`. The body and the metabolism declare
+   theirs the same way. A body's vocabulary is whatever it carries. A new gene
+   that declares a sense and a trigger is usable in rules, by mutation, in the
+   save and on pack 4's screen, with no block written by hand.
+5. **Read from the top, with one winner for each trigger** (§4.1). On each tick
+   a rule fires when its tests pass and no rule above it has already claimed
+   the trigger it drives. So a cell can steer, swim and dash in one tick, as a
+   real cell's organs work at once.
+6. **Hunting is rules over senses** (§5). Today's run goes. A hunter turns
+   toward what a sense reports and holds that heading. It leads its prey only
+   by how a sensed bearing drifts from one tick to the next: constant-bearing
+   pursuit.
+7. **The water's first cells hunt with today's hunting, re-derived under these
+   rules** (row 22): seven rules (§5). It cannot be exactly today's, and §5.3
+   says what that changes for the player.
+8. **Every division changes one daughter's rules**: the daughter whose DNA it
+   changes, by one small change (§6). A change draws on what the body, its
+   metabolism and the genes in its DNA declare.
+9. **"Hunting you" becomes "coming for you"** (§4.3) for your wake, every dart,
+   full vision's rings, the replay and the pond's flag. A dart now stuns what
+   it hits for 5 s.
+10. **Players see nothing new except how the water behaves** (row 24). The dev
+    app's readout gains two rows, `behaviours` and `unchanged` (§7.3).
+11. **Saved by declared name** (§8). A pack-2 drop loads every hunter on the
+    founders' rules.
+12. **No protocol change** (§8). `Wire.PROTOCOL` stays 5 and `Wire.RULES` stays
+    `46913eab…`.
+13. **Two phases, no binary change** (§12): first cells sense and hunt by rules,
+    then their rules change at division.
 
 ---
 
@@ -115,224 +129,447 @@ drop's own rules never read them, and this pack leaves them as they are.
 
 ### 2.1 Four candidates
 
-A behaviour has to do three things:
+A behaviour has to:
 
-- run for every hunter in a drop, on a phone, 7.5 times a second. In pack 2 a
+- run for every hunter in the drop, on a phone, 7.5 times a second. In pack 2 a
   newborn's drop held up to 158 hunters and a sighted player's about 200
   (`lineage.md` §2.2);
 - change in small steps that usually leave it working;
 - be built by a player in pack 4, on a 1600×720 landscape canvas, with 48 px
-  targets, in the game's plain words.
+  targets, in the game's plain words;
+- grow with the genes: a new gene's sense or trigger has to become a block
+  without anyone writing one.
 
-It also has to hold today's behaviour exactly, or the change cannot be checked
-(§12.3).
-
-| candidate | what a decision costs | a small change | can a player build it | today's behaviour, exactly |
+| candidate | what a decision costs | a small change | can a player build it | a new gene's sense or trigger |
 |---|---|---|---|---|
-| **an ordered list of when → do rules** (Final Fantasy XII's gambits) | at most eight tests. A costly reading, such as a prey search, is made only when a rule reaches it | a value nudged, two rules swapped, or one rule copied, replaced or dropped. The rest of the list stays as it was | yes: one row per rule, two chips to a row, eight rows to a screen. Console players learned it in 2006 | yes: five rules (§5) |
-| a behaviour tree | a walk of the tree, about the same | replacing a subtree changes a whole branch, and trees grow without use (genetic programming's "bloat") | depth needs panning, and "selector" and "sequence" are not plain words | yes, but only as a tree whose root is the list above |
-| weighted steering (context steering, Braitenberg's vehicles) | a sum over stimuli, cheap | smooth: a weight moves a little | a weight is not a plain word, and what a sum will do is hard to foresee | no. Today's hunt is a committed run in phases, and the player's dodge lives in those phases (`food-and-predators.md` §5.4.1) |
-| a small neural net | about a hundred multiply-adds a decision, in GDScript | smooth | nobody can build or read one | only approximately |
+| **an ordered list of when → do rules** (Final Fantasy XII's gambits) | at most eight rules, and a sense is read only when a rule reaches it | a value nudged, a test or a part replaced, two rules swapped, a rule copied or dropped | yes: one row per rule, a few chips to a row, eight rows to a screen. Console players learned it in 2006 | becomes a chip: something a rule can read, or do |
+| a behaviour tree | a walk of the tree, about the same | replacing a subtree changes a whole branch, and trees grow without use (genetic programming's "bloat") | depth needs panning, and "selector" and "sequence" are not plain words | becomes a leaf |
+| weighted steering (context steering, Braitenberg's vehicles) | a sum over stimuli, cheap | smooth: a weight moves a little | a weight is not a plain word, and what a sum will do is hard to foresee | a sense becomes a weight, but a trigger that is not a direction, such as a dash, has no place in a sum |
+| a small neural net | about a hundred multiply-adds a decision, in GDScript | smooth | nobody can build or read one | an input or output neuron that nobody can read |
 
-**The list wins.** It is the only candidate a player can build that also holds
-today's behaviour exactly, and it changes in steps that mostly keep it working.
+**The list wins.** It is the only candidate a player can build and read, it
+changes in steps that mostly keep it working, and a declared sense or trigger
+drops straight into it.
 
 - **The tree** loses on the screen. Nothing is lost by passing it over: a list
   is a tree one level deep, so pack 4 can later let a rule hold a list.
-- **Steering** loses the regression check and the dodge. It lives on inside
-  one action: a flee steers away from a bearing.
+- **Steering** loses the screen and the dash. It lives on inside one output:
+  turning toward a bearing holds that bearing steady (§4.2).
 - **A net** loses everything a player would touch.
 
-Robotics calls this shape subsumption: behaviours in priority order, a higher
-one suppressing those below it ([Brooks, *IEEE J. Robotics and Automation*
-1986](https://doi.org/10.1109/JRA.1986.1087032)).
+Robotics calls this shape subsumption: layers in priority order, each driving
+an actuator and suppressing the layers below it
+([Brooks, *IEEE J. Robotics and Automation* 1986](https://doi.org/10.1109/JRA.1986.1087032)).
+§4.1's "one winner for each trigger" is that reading.
 
 ### 2.2 The real mechanisms are the blocks
 
 Real ciliates and bacteria behave through a handful of named mechanisms
 (Fraenkel and Gunn, *The Orientation of Animals*, 1940; Jennings, *Behavior of
-the Lower Organisms*, 1906). Each one is already an action or a reading here:
+the Lower Organisms*, 1906). Each one is a rule over a declared input and
+trigger:
 
-| mechanism | what a real cell does | here |
+| mechanism | what a real cell does | as a rule |
 |---|---|---|
-| positive taxis (chemo-, photo-, thigmo-) | steers up a stimulus toward its source | **hunt**: turns onto food that its nose, eye, radar or palp found, and closes |
-| negative taxis | steers away from a noxious stimulus | **flee**, when a sense gives it a bearing |
-| the avoiding reaction (*Paramecium*) | on a bad stimulus, backs off, turns to a new heading at random, and swims on | **flee** with no bearing. A body whose senses do not reach the danger feels it only as dread, and turns sharply to a random side |
-| orthokinesis | swims faster or slower with the strength of a stimulus, or with how starved it is (starved ciliates swim faster: `ocean.md` §5.4) | **search** at a share of its own speed, chosen by hunger |
-| run-and-tumble (*E. coli*) | runs straight, tumbles to a random heading, and tumbles less while things get better ([Berg and Brown, *Nature* 1972](https://www.nature.com/articles/239500a0)) | **search**: a run along a heading that the water turns at random |
-| satiation | a fed cell slows down and stops feeding | **rest** while fed or digesting |
+| positive taxis (chemo-, photo-, thigmo-) | steers toward a stimulus's source | *when an echo or a beam reports something → turn toward it*, and swim |
+| negative taxis | steers away from a noxious stimulus | *when a shadow, a beam hit or a touch is reported → turn away from it* |
+| the avoiding reaction (*Paramecium*) | when struck, backs off and swims on at a new heading chosen at random | *when hit → turn at random* |
+| run-and-tumble (*E. coli*) | runs straight, tumbles to a random heading, and tumbles less while things get better ([Berg and Brown, *Nature* 1972](https://www.nature.com/articles/239500a0)) | *when the smell is falling → turn at random*, and swim |
+| orthokinesis | swims faster or slower with the strength of a stimulus, or with how starved it is (`ocean.md` §5.4: starved ciliates swim faster) | *when hunger is above x → push* |
+| satiation | a fed cell stops feeding and slows down | *when fed → rest* |
+| constant-bearing pursuit | keeps the prey's bearing steady, which puts it on a collision course: the interception rule pursuers use | *turn toward* leads a bearing that drifts (§4.2) |
 
 Nothing in the vocabulary is invented. What the game adds is the order. A real
 cell's mechanisms run in parallel and their effects add up. Here the first rule
-that fits wins, because a player can read an order and cannot read a sum.
+for each trigger wins, because a player can read an order and cannot read a
+sum.
 
 ---
 
-## 3. What a rule reads
+## 3. What the blocks are: what each part declares
 
-| reading | what it is | where it comes from | values (the ladder a change steps along) |
-|---|---|---|---|
-| `always` | nothing: the rule always passes | -- | -- |
-| `hunger` | the tank: 0 is fed, 1 is empty | the body. The player feels it as the beat | 10 % to 90 %, in tenths |
-| `since a meal` | seconds since its last meal: a cell, a floc, or you | the body | 1, 2, 3, 5, 8, 13, 21, 34 s |
-| `since a miss` | seconds since one of its hunts ended without a meal | the body | the same |
-| `food` | how near the nearest thing it can eat is, among what its senses find: 1 when touching, falling to 0 at the edge of its senses' reach, and 0 when nothing is found | its senses, as today: `chemocyte`, `ampulla`, `ocellus`, `palp`, and `stigma` for a body big enough to cast a shadow. Touch, without any of them | 10 % to 90 % |
-| `danger` | how near the nearest mouth is that could swallow it, armour counted, you included: 1 when touching, 0 at 1,400 µm (`DREAD_RANGE`) | the membrane, as dread is the player's. Every body feels it. None knows its bearing without a sense that reaches it | 10 % to 90 % |
+### 3.1 A declaration
 
-**A rule tests a number. Where a thing is goes to the action that needs it.** A
-hunt turns onto its prey, and a flee turns away from its danger. The run inside
-a hunt is today's, and leads its prey as today's does. No rule ever reads a
-position.
+Every gene that senses or triggers anything declares it once, in a table beside
+`GENE_ORDER`:
 
-**A sense the body lacks.** No reading names an organ, so no rule can name one
-the body lacks. An organ it lacks simply gives nothing:
-
-- a body with no sense finds food only by touch;
-- it feels danger only as dread, with no bearing to flee by, so its flee is the
-  avoiding reaction.
-
-The same rule, in a daughter that gains a nose, reaches 1,100 µm. That is
-where behaviour and genes meet. A family whose rules hunt from afar lives by
-its senses, and a family whose rules wait for food to touch it does not need
-them.
-
-There are no organ-named readings because today the water's senses are one
-reach (`Body.notice`). Five organ-named readings would put five times the
-vocabulary on a phone screen, for a choice the water does not make. Pack 4 can
-add one ("when my radar hears…") if its screen wants it (§11).
-
-**Its own speed and turn are not readings.** They are what its actions set, so
-no rule has a use for them that the actions do not already have.
-
-**Each reading is read at most once a tick, and only when a rule reaches it.**
-`food` is one prey search: the same search today's decision makes. `danger` is
-one grid question out to 1,400 µm. The others are fields of the body.
-
----
-
-## 4. What a rule does
-
-| action | what the body does | what it needs | the organs it uses |
-|---|---|---|---|
-| `rest` | drifts with the water at 9 µm/s, for free, and turns off the shore as today. It turns on anything it can eat that touches it. This is today's look with reach 0: "calm suppresses seeking, not opportunity" | -- | the contact |
-| `search` at ¼, ½, ¾ or full | swims at that share of its own speed along a heading that wanders at random, paying for every stroke | -- | `flagellum` and `axoneme`, as today's search |
-| `hunt` the nearest or the biggest | today's run, at the nearest food its senses find or at the biggest one that fits its mouth (ties go to the nearest) | food found | `cirrus`, tail, `myoneme`, mouth: today's run |
-| `flee` | swims away from the danger at its own speed, turning at its `cirrus`'s rate and paying for both. It dashes on its `myoneme` when the danger is within lunge range (220 µm). If no sense reaches the danger, it does the avoiding reaction instead: a new heading 90° to 180° to a random side, held for as long as the rule keeps firing | danger felt | tail, `cirrus`, `myoneme` |
-
-**A rule whose action has nothing to act on is passed over**: a hunt with no
-food found, or a flee with no danger felt. That is Final Fantasy XII's rule for
-a gambit with no target. A body none of whose rules fires rests.
-
-### 4.1 A hunt runs to its end
-
-Rules are read when the body is free, as today's `_decide` is. Once a hunt
-begins, it runs to a meal or a miss, and its run is today's: `ORIENT_SECONDS`,
-`COMMIT_RANGE`, `LOCK_SECONDS`, `LUNGE_RANGE` and the break-off are untouched.
-
-**The chase contract stays out of evolution's reach.** A cell can learn when to
-hunt and whom, but never how a pass is made. So a newborn that turns away and
-commits still escapes a hunter without an `axoneme` as often as it does in
-pack 2 (`lineage.md` §6.2: 10 times in 14).
-
-A hunter on a run cannot flee. A rule that breaks off a run would be a later
-addition (§14).
-
-### 4.2 What it costs a body
-
-Every action is paid at the player's prices, as today (`ocean.md` §5.2). Rest
-is free. A search or a flee pays for its strokes and its turns, and a dash pays
-its price. Behaviour buys nothing the organs do not.
-
-### 4.3 The darts, the ping, the push
-
-These are not actions. A `trichocyst` fires on its own, as the player's does; a
-ping keeps its organ's own period; a water cell's speed already counts its
-`axoneme`. The player's tap to dash is a decision, and pack 4 adds `dash` to the
-actions when the player's blocks need it.
-
-### 4.4 Where a gene goes stays the body's, in this pack
-
-`lineage.md` §10 offered this: a water cell's meal takes the first free slot,
-and where a gene goes is behaviour. **It stays the body's in pack 3**, for
-three reasons:
-
-- **It is a meal's decision, not a tick's.** It would need a second kind of
-  rule for one choice.
-- **A layout would quietly cut pack 2's gene changes.** A water cell's arcs
-  matter only to its dart and to its drawing, so a layout would make the
-  player's shift a mutation that changes almost nothing in the water.
-  `Genome.mutated` tries shift, trade and drift in a random order and takes the
-  first that applies. So at least a third of the water's gene changes would
-  become shifts, which would quietly reduce the change at every division that
-  pack 2's water is being played with.
-- **It is the player's choice on the pause screen.** If pack 4 makes it a
-  block, the water takes the same block, a layout, and shift with it.
-
----
-
-## 5. Today's behaviour as rules
-
-### 5.1 The five rules
-
-| # | when | do | today's code |
-|---|---|---|---|
-| 1 | since a meal below 5 s | rest | `calm > 0` after `REST_MEAL` |
-| 2 | since a miss below 5 s | rest | `calm > 0` after `REST_MISS` |
-| 3 | hunger below 30 % | rest | `hunger < HUNT_AT` |
-| 4 | always | hunt the nearest | `_look_in_drop` at its senses' reach, then `_start_run` |
-| 5 | always | search at full speed | `searching`, at `_cruise_speed` |
-
-In plain words: *rest for five seconds after eating or after missing. Rest
-while less than a third hungry. Otherwise hunt the nearest food you sense.
-Otherwise search.* Three of the eight places are free.
-
-The save and the logs write it by name (§8):
-
-```
-since-meal below 5 -> rest
-since-miss below 5 -> rest
-hunger below 0.3 -> rest
-always -> hunt nearest
-always -> search full
+```gdscript
+# genome.gd: what each gene gives a body's rules (behaviour.md §3).
+# The body's own parts (cell.gd) and the metabolism's (metabolism.gd)
+# are declared in the same shape.
+const DECLARES := {
+	&"ocellus": {"in": [{"name": &"beam", "bearing": true,
+		"values": {&"distance": &"distance"}}]},
+	&"ampulla": {"in": [{"name": &"echo", "bearing": true,
+		"values": {&"distance": &"distance", &"size": &"size"}}]},
+	&"chemocyte": {"in": [{"name": &"smell", "bearing": false,
+		"values": {&"level": &"level"}}]},
+	&"stigma": {"in": [{"name": &"shadow", "bearing": true,
+		"values": {&"level": &"level"}}]},
+	&"palp": {"in": [{"name": &"touch", "bearing": true,
+		"values": {&"closeness": &"level"}}]},
+	&"myoneme": {"out": [{"name": &"dash", "claims": [&"dash"]}]},
+	&"axoneme": {"out": [{"name": &"push", "claims": [&"push"],
+		"options": [0.5, 1.0]}]},
+}
 ```
 
-`HUNT_AT`, `REST_MEAL` and `REST_MISS` stop being constants of the water. They
-become these values, carried and changed by each body. `ORIENT_SECONDS` and
-`COMMIT_RANGE` stay with the hunt.
+**An input** has a name, says whether it carries a bearing, and lists the
+values it carries, each of a kind. **An output** has a name, says which
+triggers it claims, and may need a bearing (a turn does) or take an option (a
+push's strength).
 
-### 5.2 Why it plays exactly as today
+**The kinds are `rulebook.gd`'s** and are the same for every input, each with
+the ladder a change steps along:
 
-Read as rules, the five rules make the same calls as `_decide` in the same
-order, so they make the same random draws:
+| kind | ladder | why |
+|---|---|---|
+| level, 0 to 1 | 10 % to 90 %, in tenths | plain, and the same everywhere |
+| seconds | 1, 2, 3, 5, 8, 13, 21, 34 | about the same proportion at each step |
+| distance, in µm | 50, 80, 130, 220, 350, 560, 900, 1,450 | the same proportion, with today's lunge range (220) on it |
+| bearing, in degrees off the nose to either side | 15, 30, 45, 60, 90, 120, 150 | "within 30°" or "in my front half" (within 90°) |
+| size | the body's own size, or its mouth's gape, as the caller hands them over | a comparison against what the body knows of itself |
 
-- rules 1 to 3 read fields of the body and draw nothing;
-- a rest makes today's look with reach 0;
-- rule 4 makes today's look at the senses' reach and starts today's run. That
-  run's one draw is the stroke;
-- rule 5 sets `searching`, as `_decide` does when its look found nothing.
+**A test** is one value against a step or a reference: below, above, rising or
+falling since the last tick. An input's bearing, where it has one, counts as one
+of its values. A rule without tests fires whenever its input reports anything.
+An input that reports several things at once, such as a call's returns or a
+fan's rays, is filtered by the tests, and the output acts on the nearest report
+that passes.
 
-Two details carry it to the bit:
+### 3.2 Inputs, from the senses as they are
 
-- **The rests' two clocks.** Today a single `calm` counts down from 5 s after
-  either a meal or a miss. Here a body keeps two countdowns, `meal_clock` and
-  `miss_clock`:
-  - each is set to 5 s where `_rest` sets `calm` today;
-  - each is stepped down at the top of the body's step by the time the body is
-    owed, and is never clamped;
-  - "since a meal below *T*" is tested on the countdown, as
-    `meal_clock > 5 − T`. At today's 5 s that is `meal_clock > 0`: the same
-    subtractions from the same 5.0 as `calm > 0`;
-  - the later event's clock is always the larger of the two, so "either one
-    below 5 s" is exactly `calm > 0`;
-  - every new body, founder or daughter, starts both clocks at −10⁶ s, meaning
-    never, where `_renew` sets `calm` to 0 today.
-- **The thresholds are the constants' own floats.** The ladders are literal
-  tables, so `0.3` is the literal `0.3` and not `3 × 0.1`. A full-speed search
-  multiplies by nothing.
+Each of these is what the organ already reports to the player's membrane, read
+from the same code. A water cell reads it the same way, from where it is and
+with its own organs.
 
-Proving it is the build's job: §12.3's first check runs the drop with today's
-hand-written decision and with the five rules, and compares the census lines to
-the byte.
+| input | declared by | carries | what it reports, in the code |
+|---|---|---|---|
+| `smell` | `chemocyte` | a level, no bearing | the scent of everything its mouth could take, within its smell reach (1,100 to 1,600 µm by tier), weighted by how nearly each source lies along the organ's own arc (`_step_sense`). Its rise and fall are what a nose has to steer by |
+| `echo` | `ampulla` | a bearing, a distance and a size | its own call, once a round trip (every 8.8, 12 or 15.2 s by tier), up to 3, 4 or 5 returns, blind behind its own arc at tier 1 (`_cast_ping`). A return's bearing is to where the body was. Its distance comes from when it came back, its size from how long it rings (`ping-as-outline.md` §3). Each return is reported for as long as it rings |
+| `beam` | `ocellus` | a bearing and a distance | the nearest thing its rays stop on (one, two or three rays by tier, 620 to 1,240 µm) along the organ's arc: a cell, a floc or the rim (`_step_beams`). What it hit is not reported |
+| `shadow` | `stigma` | a bearing and a level | light blocked by bodies at least about its own size (from 0.8 of its radius) within 620 µm, and by the rim, summed with a bearing (`_step_sense`) |
+| `touch` | `palp` | a bearing and a closeness | the nearest thing within 150 to 330 µm of its skin, the rim included (`_step_touch`) |
+| `hit` | the body | a bearing and a strength | a bite or a dart landing on its membrane. The player feels a bite as a `hit` |
+| `hunger` | the metabolism | a level | its tank. The player feels it as the beat |
+| `fed` | the metabolism | seconds | how long since its last meal: a cell, a floc or you |
+
+### 3.3 Outputs, the triggers a body has
+
+The player's own controls are steer, push and dash (`cell.gd`), and the
+flagellum beats on its own (`energy.md`). A water cell can turn, swim or drift,
+and dash (`food.gd`). These are the triggers, declared by what owns them:
+
+| output | declared by | does | claims | needs |
+|---|---|---|---|---|
+| `turn toward` | the body | sets the heading it steers for on the input's bearing (§4.2) | steering | an input with a bearing |
+| `turn away` | the body | sets the opposite heading | steering | an input with a bearing |
+| `turn at random` | the body | sets a heading 90° to 180° to a random side | steering | -- |
+| `swim` | the body | beats its flagellum, at its tail's speed, paying for it | swimming | -- |
+| `rest` | the body | stops everything: the water carries it at 9 µm/s, for free | every trigger | -- |
+| `dash` | `myoneme` | a burst forward, on its cooldown, paying for it | dash | the organ worn |
+| `push` at half or full | `axoneme` | the axoneme's thrust while the rule holds, paying for it | push | the organ worn |
+
+**What stays automatic, and why.** These organs act on their own, for the
+player and for the water alike, so they declare no output:
+
+- the `trichocyst` dart fires on its own, as the player's always has: "the
+  design has no second control to spend" (`food.gd`);
+- the ping calls on its own clock (`cell.gd`, the round trip);
+- the beam is always on;
+- the mouth swallows or bites whatever it touches (row 15).
+
+The `cirrus` and the `flagellum` declare nothing either. Every body turns and
+swims (their tier 0 has a rate), and these genes only make the body's own
+triggers faster. `pellicle`, `veneneux`, `plastid`, `vacuole` and `crista` are
+passive.
+
+### 3.4 What no rule can read
+
+- **Dread.** It is the player's membrane summing every mouth that could
+  swallow or chew you (`THREAT_LOW`, `THREAT_HIGH` and `CHEW_*` against your
+  radius, over every body within `DREAD_RANGE`). No organ reports another
+  cell's mouth, so no rule reads it.
+- **The wake.** You feel it only from a cell coming for you, and that test
+  reads the other cell's mouth too (§4.3).
+- **Anything about another body that no sense reports**: its mouth, genome,
+  hunger, intent, or exact position and speed.
+- **Comparisons against the body's own known traits are allowed.** "An echo
+  smaller than my mouth" compares a size the echo carries with the body's own
+  gape. The smell already counts only what the body's mouth could take, and
+  the shadow only bodies about its own size or bigger: both are the organs as
+  the player has them.
+- **The clocks.** `fed` is kept: a body knows it has eaten, because it is
+  digesting. "Since a miss" is dropped: a miss was a run that ended without a
+  meal, there are no runs any more, and nothing tells a body that a chase
+  failed.
+
+### 3.5 How a gene brings its own blocks
+
+To add a gene with a new sense and a new trigger:
+
+1. Name it in `genome.gd`'s `GENE_ORDER` and give it its tier tables in
+   `cell.gd`, as for every gene today.
+2. Write its entry in `DECLARES`: each input with its name, its bearing and its
+   values' kinds, and each output with its name, its claims, its needs and its
+   options.
+3. Write the organ. That is one function that computes each input for any body
+   (the same function serves the player's membrane and a water cell), and one
+   that performs each output. Register both under the declared names in
+   `food.gd`, and from pack 4 in the player's run.
+
+Nothing else changes. Rules can read and drive the gene, mutation draws it for
+bodies whose DNA carries it, the save keeps it by name, and pack 4's screen
+lists it. The organ always had to be written. The block never has to be.
+
+**Where the declarations live, and why.** In `genome.gd`, one entry per gene,
+beside `GENE_ORDER`:
+
+- `genome.gd` is where a gene exists. `GENE_ORDER` is the list a drift
+  mutation draws from, so adding a gene already means editing it;
+- the declaration is data (names, shapes, ladders) that ships in a content pack
+  like any GDScript;
+- one file per gene, as a resource, was weighed and rejected, because nothing
+  else in the game is defined per gene and it would add a loader;
+- the body's own parts are `cell.gd`'s, the body every cell runs, and the
+  metabolism's are `metabolism.gd`'s, which owns the tank.
+
+**The owner's example, worked through.** *"Turn away when laser touches
+something in front of it."*
+
+1. `genome.gd` declares `ocellus` → `beam`, with a bearing and a distance (§3.1).
+2. `food.gd` wires `ocellus.beam` to the player's own ray cast, run from any
+   body: from where the body is, along its `ocellus` arc. It reports the
+   nearest thing its rays stop on, as a bearing and a distance.
+3. The rule, as the save writes it: `ocellus.beam bearing below 90 ->
+   body.turn-away`. In plain words: *when my laser touches something in my
+   front half, turn away from it.*
+4. On a tick, the rulebook reaches the rule and asks for `ocellus.beam`. Say the
+   rays stop on a body 300 µm off, at about 54° to starboard, the front diagonal
+   where a water cell's first extra organ sits. 54 is below 90, so the rule
+   fires. It claims steering, and the body sets its heading 180° from that
+   bearing and turns there at its `cirrus`'s rate, paying for the turn.
+5. A body without an `ocellus` gets no reports on `ocellus.beam`, so the rule
+   is passed over. It waits, inherited, for a daughter who grows one.
+6. In pack 4 the same line is a row on the player's screen, wired by the
+   player's run to the player's own beam.
+
+The founders' fourth rule (§5.1) reads the same input and turns the other way.
+Which one a family keeps is up to evolution.
+
+---
+
+## 4. How a body runs its rules
+
+### 4.1 Each tick, from the top
+
+A water cell reads its rules on its tick, 7.5 times a second near you or far
+away, as today (`ocean.md` §4.3). Going down the list, a rule fires when all of
+these hold:
+
+- its input reports something now;
+- every test passes;
+- its output is one the body has (the declaring gene is worn);
+- none of the triggers the output claims was claimed by a rule above it this
+  tick.
+
+The output then acts on the nearest report that passed, and claims its
+triggers.
+
+**One winner for each trigger.**
+
+- A turn claims steering.
+- A swim claims swimming.
+- A dash claims the dash, and a push claims the push.
+- A rest claims all of them.
+
+So a list can make a cell steer toward an echo, swim and dash in the same tick,
+as its organs do, and a rest above the rest of the list stops everything. For
+each trigger it is still an order, the first rule wins, so the list reads the
+same way it did.
+
+**A trigger no rule claims** does what the body does on its own: no new heading
+(§4.2), no swimming (the water carries it at 9 µm/s, for free), no dash and no
+push. A body none of whose rules fire just drifts.
+
+### 4.2 Steering
+
+**A turn sets a heading, and the body holds it.** A turn output sets the heading
+the body steers for: the sensed bearing, its opposite, or a random one. On every
+step the body turns toward that heading at its own `cirrus`'s rate, paying
+`TURN_COST` per radian. It keeps doing so until a later tick's turn sets another
+heading or a rest clears it. So an echo that rings for half a second still turns
+the body all the way round, toward where the echo came from.
+
+**Leading by the bearing's drift.** When a turn toward an input finds that the
+input also reported last tick, it aims ahead of the bearing by how far the
+bearing drifted since then, three times over. Three is the textbook navigation
+constant, and it is a starting value. A target whose bearing holds steady is on
+a collision course, which is how a pursuer intercepts without knowing where its
+prey is. A bearing that jumps belongs to a new target, and is aimed at
+straight.
+
+Leading works only for senses that report a bearing on every tick: the shadow,
+the touch, and a beam while its rays stay on the target. It does not work for
+smell, which has no bearing, or for an echo, which comes back only once a call.
+
+**A random turn** draws its heading when the rule starts firing, and keeps it
+while the rule keeps firing. A run of falling smell is one tumble, not a spin.
+The draw comes from the global stream that `--seed=` seeds.
+
+**With no turn claimed, the heading is the water's**: the free wander every body
+has, and the turn a drifting body makes away from the shore (`ocean.md` §3.1).
+A swimming body slides along the rim.
+
+### 4.3 What "hunting you" becomes
+
+Five things read today's run, and each needs a new meaning now that there is no
+run:
+
+- your wake: the strokes you feel of a cell hunting you;
+- every `trichocyst`, which fires at a run coming at its body;
+- full vision's predator rings;
+- the replay's hunter slot;
+- the pond's "stalking you" flag.
+
+Each of them now reads **a cell coming for you**. That is a cell that:
+
+- is swimming;
+- has you within 35° of its heading (half today's `LOCK_CONE_DEG`);
+- has a mouth that could swallow or chew you (`_worth_committing_to`, today's
+  test for starting a run).
+
+The last condition is the same knowledge your dread has. Like dread, it is your
+membrane and your organs reading the water, never an input to a rule (§14).
+The player is never darted, as today.
+
+**A dart stuns.** Today a dart breaks off a run at its body, and the hunter
+rests for 5 s (`REST_MISS`). There is no run to break any more, so a dart now
+stuns what it hits: the body rests for 5 s with its rules unread, and feels the
+dart as a `hit` at its bearing. That is the effect today's darts have.
+
+### 4.4 Where a gene goes
+
+**A water cell's senses stay where the default order puts them.** Under these
+rules, where an organ sits matters: the beam's rays and the nose's lobe follow
+its arc, and the ping leaves from it (`three-senses.md`).
+
+A water cell has no layout of its own. Its organs sit in default order
+(`Cilia.default_order`): the mouth ahead, the `cirrus` and the tail on their
+home arcs, and everything else on the four diagonals, about 54° and 132° to
+either side, in the order it came. A meal still takes the first free slot.
+
+Giving the water a layout, and with it the player's shift (row 19), is the
+natural next step, but not this pack's. The guest's mirror and the replay draw a
+water cell in default order, because neither the wire nor the recorder carries a
+layout. A moved organ would be drawn where it is not. This waits for the next
+protocol change (§14).
+
+### 4.5 What it costs a body
+
+Every trigger is paid at the player's prices (`ocean.md` §5.2):
+
+- swimming at its tail's speed pays for its strokes;
+- a push pays the `axoneme`'s thrust, as yours does;
+- a turn pays per radian;
+- a dash pays its price;
+- drifting is free.
+
+Today a water cell swims with half of its `axoneme`'s push folded into its
+speed (`swim_speed_of`, `PUSH_CHASE_SHARE`). That push is now the `axoneme`'s
+own trigger. The founders push at half strength while they swim (§5.1), which
+is the same speed.
+
+---
+
+## 5. The founders: today's hunting, re-derived
+
+### 5.1 The seven rules
+
+What every body the water makes carries (row 22):
+
+| # | when | do | what it stands in for today |
+|---|---|---|---|
+| 1 | `fed` below 5 s | rest | `calm > 0` after `REST_MEAL` |
+| 2 | `hunger` below 30 % | rest | `hunger < HUNT_AT` |
+| 3 | an `echo` smaller than my mouth | turn toward it | the run, for a cell with an `ampulla` |
+| 4 | a `beam` hit | turn toward it | the run, for a cell with an `ocellus` |
+| 5 | the `smell`, falling | turn at random | the run, for a cell with a `chemocyte` |
+| 6 | always | swim | the search, at `_cruise_speed` |
+| 7 | always | push at half | the half push folded into `_cruise_speed` |
+
+In plain words: *rest for five seconds after eating, and while less than a third
+hungry. Otherwise turn toward an echo of something smaller than my mouth;
+otherwise toward whatever my laser touches; otherwise, when the smell of food
+fades, turn at random. Swim, and push at half strength.*
+
+As the save writes it:
+
+```
+metabolism.fed below 5 -> body.rest
+metabolism.hunger below 0.3 -> body.rest
+ampulla.echo size below mouth -> body.turn-toward
+ocellus.beam -> body.turn-toward
+chemocyte.smell level falling -> body.turn-random
+always -> body.swim
+always -> axoneme.push 0.5
+```
+
+Rules 3 to 5 compete for steering, in that order. Rules for organs a founder
+lacks are passed over, and wait, inherited, for a daughter who grows the organ.
+One of the eight places is free.
+
+`HUNT_AT` and `REST_MEAL` stop being constants of the water. They become values
+in each body's rules, carried and changed. `REST_MISS`, `ORIENT_SECONDS`,
+`COMMIT_RANGE` and the rest of the run go from the drop. They stay for today's
+water (`--drop=0`) and for the tool's reference (`--rules=0`, §12).
+
+### 5.2 What each founder does with the senses it has
+
+- **A nose** (`chemocyte`): it swims, and turns at random whenever the smell of
+  food it could swallow fades. That is run-and-tumble, and it climbs toward
+  food without ever knowing where the food is.
+- **A radar** (`ampulla`): at each echo from something smaller than its mouth,
+  it turns toward where the echo came from and swims there. Between calls (8.8
+  to 15.2 s by tier) it holds that heading.
+- **A laser** (`ocellus`): it turns toward whatever its rays stop on (a cell, a
+  floc, you or the rim) and swims there. The rays sit on a diagonal arc, so the
+  target leaves the beam as the body turns: it aims once, then swims at where
+  the target was.
+- **An eyespot** (`stigma`) or **a palp** alone: no founder rule reads them. It
+  swims, and eats whatever it bumps into.
+- **No founder dashes.** Today's lunge needs prey to be close and ahead at the
+  same moment, and no founder sense reports both together. A family can learn
+  it, for example with *an echo smaller than my mouth, within 30°, nearer than
+  220 µm → dash*.
+
+### 5.3 What changes for the player
+
+"Today's hunting" can no longer be exactly today's. In plain words:
+
+- **No hunter knows where you are until a sense tells it, and none leads you by
+  your true speed.**
+  - Nose hunters never chase you as such. They climb the scent of everything
+    they could eat, and you are part of that scent.
+  - Radar hunters aim at you once per call, at where you were.
+  - Laser hunters turn onto you whenever a ray touches you, whether or not they
+    can eat you.
+- **The dodge changes.** Today a hunter commits inside 310 µm and runs straight,
+  so turning away at that point escapes it. Now a hunter steers every tick by
+  what it senses. You lose a radar hunter by turning between its calls, and a
+  laser hunter by leaving its beam. One that follows your shadow or your touch
+  stays on you. Pack 2's measured chase no longer holds: there, a newborn that
+  turned away escaped a hunter without an `axoneme` 10 times in 14
+  (`lineage.md` §6.2).
+- **At first, some hunters never chase anything.** A hunter that senses only by
+  eyespot or palp has no hunting rule, although its mouth still swallows
+  whatever it bumps into. No founder lunges.
+- **A cell cannot tell that you are dangerous.** It turns away only from what
+  its senses report: a shadow, an echo bigger than itself, a beam hit, a touch,
+  a bite. So it may run from a big harmless cell and swim straight into a small
+  one with a big mouth, including you.
+- **A hunter that turns onto you but cannot eat you is food**, if your mouth
+  can take it.
 
 ---
 
@@ -342,84 +579,89 @@ the byte.
 
 `_divide` already makes a faithful DNA and a changed one (`Drop.daughter_dna`),
 and tosses a coin for which daughter gets which. **The daughter who gets the
-changed DNA also gets a changed behaviour**: `Rulebook.mutated` applied to her
-mother's, which makes one change. Her sister carries her mother's DNA and
-behaviour, unchanged.
+changed DNA also gets changed rules**: one change to her mother's. Her sister
+carries her mother's DNA and rules unchanged.
 
 So every division leaves one faithful daughter, as row 19 has it for the
 player, and a family always has a line that is exactly its mother's. The two
 other ways to place the change are both worse:
 
-- **the behaviour's change on the other daughter**: no line would stay
-  faithful;
-- **one change that is either genes or behaviour, by a coin**: the gene change
+- putting the rules' change on the other daughter: no line would stay faithful;
+- one change that is either genes or rules, by a coin: the gene change that
   pack 2's water is being played with would be halved.
 
-**The cost is that the changed daughter now carries two changes**, so she is
-more likely to be the worse for it. `lineage.md` §3.3 measured what changes cost
-a family when they come at every division. Without the newborn grace, the
-families wore out; with it, they held. The grace stays. This is the first thing
-to watch (§13).
+**The cost is that the changed daughter carries two changes.** `lineage.md`
+§3.3 measured what changes cost a family when they come at every division:
+without the newborn grace the families wore out, and with it they held. The
+grace stays. This is the first thing to watch (§13).
 
 ### 6.2 The change
 
 One change, drawn from the global stream that `--seed=` seeds, as
-`Genome.mutated`'s is. It is drawn by weight from the kinds that can apply to
-the behaviour:
+`Genome.mutated`'s is, weighted by kind:
 
 | kind | what it does | weight | why |
 |---|---|---|---|
-| nudge | moves one rule's value or option one step up or down its ladder | 5 | the small step: 30 % becomes 20 % or 40 %, 5 s becomes 3 or 8 |
-| replace | replaces one rule's reading (drawing a new test and value) or its action (drawing a new option) with another | 2 | where new rules come from |
+| nudge | one test's step, or one output's option, moves one place up or down its ladder | 5 | the small step: 30 % becomes 20 % or 40 %, and 220 µm becomes 130 or 350 |
+| replace | one rule's input (with fresh tests), one of its tests (another test, or one added or removed), or its output becomes another | 2 | where new rules come from |
 | swap | two neighbouring rules change places | 1 | order is half of what a list means |
-| copy | copies a rule in directly under itself | 1 | gene duplication. A copy under its original never fires, and is free to change later |
-| drop | removes a rule | 1 | lets the list shrink |
+| copy | a rule is copied in directly under itself | 1 | gene duplication. A copy under its original never fires, and is free to change later |
+| drop | a rule is removed | 1 | lets the list shrink |
 
-Every change changes something:
+Every change must be valid, and must change something:
 
-- a nudge at the end of its ladder goes the other way;
-- a replace always draws a different part;
-- a swap of two equal rules is drawn again.
+- at most one test on each value an input carries;
+- a turn needs an input with a bearing;
+- at most **eight rules**, the most one phone screen shows (§11), and at least
+  one;
+- a nudge at the end of a ladder goes the other way, a replace draws a
+  different part, and a swap of two equal rules is drawn again.
 
-A copy needs room, because a list holds at most **eight rules**, the most one
-phone screen shows (§11). A drop and a swap need at least two rules.
+Nothing is protected. A change can leave a body that never hunts, and such a
+body still eats whatever its mouth touches. Its sister is a copy of its mother.
 
-Nothing is protected. A change can leave a body that never hunts, for example
-by dropping rule 4 or swapping rule 5 above it. Such a body still eats whatever
-its mouth touches, and lives or dies by that. Its sister is a copy of its
-mother.
+### 6.3 What a change draws from
 
-### 6.3 What the water makes, the sister, the player
+**The parts declared by the body, by its metabolism, and by every gene in its
+DNA**, whether the body wears that gene or only carries it. The reasons:
 
-- **The spawner's founders carry today's behaviour** (row 22, recommended). A
-  drop starts as today's, and only its daughters change. The founders made to
-  hold the floor keep bringing today's behaviour back. So a sighted player's
-  water, where a third of the hunters are the spawner's (`lineage.md` §6.1),
-  will change least.
-- **The player's sister carries today's behaviour.** The player has no rules in
-  pack 3; from pack 4 the sister carries the player's. A guest's sister carries
-  today's too, because SISTER carries her body and nothing else (`lineage.md`
-  §8).
-- **A `Body.brain` of null means today's behaviour.** So a founder, a sister, a
-  body a tool poses and a body from an old save all carry it without a copy. A
+- **Co-evolution.** A rule for an organ the DNA carries but the body does not
+  wear can come alive in a daughter who expresses it (copies are a chance:
+  55 %, 80 % or 100 %). Rules and genes then travel together.
+- **No dead weight.** Drawing from every gene in the game would spend places on
+  organs a family has never had.
+- **The lineage's reach still grows.** A meal still writes new genes into the
+  DNA (`lineage.md` §3.2), so what a family can learn grows with what it eats.
+
+### 6.4 What the water makes, the sister, the player
+
+- **The spawner's founders carry the founders' rules** (row 22). The founders
+  made to hold the floor keep bringing them back. So a sighted player's water,
+  where a third of the hunters are the spawner's (`lineage.md` §6.1), will
+  change least.
+- **The player's sister carries the founders' rules.** The player has no rules
+  in pack 3, and from pack 4 the sister carries the player's. A guest's sister
+  also carries the founders' rules, because SISTER carries her body and nothing
+  else (`lineage.md` §8).
+- **A `Body.brain` of null means the founders' rules.** So a founder, a sister,
+  a posed body and a body from an old save all carry them without a copy. A
   change writes a new list, and a faithful daughter shares her mother's.
-- **The player divides as today.** What pack 4 does to the player's rules is
-  §11's question.
 
-### 6.4 Starting values
+### 6.5 Starting values
 
-None of these was measured. Each is where the playtest starts.
+None of these was measured. Each one is where the playtest starts.
 
 | | starting value | why | watch for |
 |---|---|---|---|
-| today's behaviour's values | 5 s, 5 s and 30 % | today's constants, so a new drop is today's | -- |
+| the founders' values | 5 s, 30 %, push at half | today's `REST_MEAL`, `HUNT_AT` and cruise speed | -- |
 | how often | at every division, on the daughter whose DNA changed | row 19 | hunters that stop hunting; families thinning while the spawner makes more of the hunters |
 | the kinds | nudge 5, replace 2, swap 1, copy 1, drop 1 | mostly small changes | a water that never changes (raise replace), or one that cannot keep a way of hunting (raise nudge) |
 | the most rules | 8 | one phone screen (§11) | families stuck at eight, unable to copy |
-| the ladders | seconds from 1 to 34 in Fibonacci steps; hunger, food and danger in tenths | a nudge is about the same proportion anywhere on the ladder, and the numbers stay plain for pack 4 | -- |
-| how far danger is felt | 1,400 µm, the player's `DREAD_RANGE` | a water cell's membrane feels what yours does | -- |
-| flee with no bearing | a new heading 90° to 180° to a random side | the avoiding reaction | cells spinning near danger |
-| search speeds | ¼, ½, ¾ or full | kinesis in four steps | -- |
+| the ladders | §3.1 | about the same proportion at each step, and plain for pack 4 | -- |
+| leading | three times the bearing's drift | the textbook navigation constant | hunters that overshoot, or still trail behind you |
+| a random turn | 90° to 180° to a random side | a tumble, or the avoiding reaction | cells spinning in place |
+| coming for you | within 35° of its heading | half today's `LOCK_CONE_DEG` | darts spent on cells passing by |
+| a dart's stun | 5 s | today's rest after a dart | -- |
 
 ---
 
@@ -427,78 +669,67 @@ None of these was measured. Each is where the playtest starts.
 
 ### 7.1 What the water can learn
 
-None of this was measured. These are what the vocabulary lets a family find,
-each a few changes away from today's behaviour:
+None of this was measured. These are what the vocabulary lets a family find, a
+few changes away from the founders' rules:
 
-- **Hunting sooner or later**: rule 3's 30 % nudged. Hunting sooner means more
-  danger, and more strokes to pay for.
-- **No rest after a miss**: rule 2 dropped, or nudged down to 1 s. Today a
-  hunter that misses you rests 5 s, and comes again only if it is still hungry
-  and you are still the nearest thing it can eat (`ocean.md` §5.4). Without
-  the rest, it comes again at once. This is the change a player would feel
-  first.
-- **The biggest prey**: rule 4's option replaced. You are bigger than the
-  drifters (r26 to r40, against r13 to r21). A hunter whose mouth fits you and
-  that hunts the biggest food goes for you over the food around you. This is the
-  learning the owner asked for, aimed at you.
-- **Slower searching**: cheaper, so a hungry hunter lasts longer but finds less.
-- **Waiting**: a rest in place of the search, and a hunt only of food that is
-  near (*food above 80 % → hunt*). Cheap, and lives where food drifts to it.
-- **Running**: a rule like *danger above 50 % → flee*, reached by a copy and two
-  replaces. Hunters that run from bigger mouths, including yours once you are
-  big enough to eat them (row 23).
+- **Hunting sooner or later**: rule 2's 30 % nudged. Sooner means more danger,
+  and more strokes to pay for.
+- **A lunge**: a dash rule on an echo or a beam hit that is near and ahead.
+  This is the change a player would feel first.
+- **The other way round**: *a beam hit → turn away* in place of rule 4. That is
+  the owner's example. Cells that steer clear of anything their laser touches,
+  you included.
+- **Running from what they sense**: turning away from a shadow, an echo bigger
+  than themselves, a touch or a hit (row 23).
+- **Pushing harder or not at all**: rule 7's option nudged to full, or the rule
+  dropped.
+- **Waiting**: a rest in place of rule 6, with a turn toward what comes near.
+  Cheap, and it lives where food drifts to it.
 
 **What to watch for that would be bad:**
 
-- a family that never hunts and still holds the water. Waiting could do it at a
-  newborn's composition, where there are 4.7 drifters for each hunter
-  (`lineage.md` §6.1);
-- a family that flees from everything and starves;
+- a family that never hunts and still holds the water;
+- a family that runs from everything and starves;
+- cells that spin with random turns;
 - the opposite of learning: changes piling up faster than they are sorted out
-  (`lineage.md` §3.3's mutational meltdown), until hunters forget how to hunt.
+  (`lineage.md` §3.3's mutational meltdown).
 
-**Nothing new runs away** (`lineage.md` §13.2). A behaviour is at most eight
-rules, and there are at most as many behaviours as hunters. What behaviour can
-change is how many hunters the food feeds. A family that rests more lives
-longer, and each extra hunter costs about 45 µs a frame on a phone
-(`lineage.md` §7). The dev readout's `stepped` row shows it.
+**Nothing new runs away** (`lineage.md` §13.2). A list is at most eight rules,
+and there are at most as many lists as hunters. What behaviour can change is how
+many hunters the food feeds, and each hunter costs about 45 µs a frame on a
+phone (`lineage.md` §7). The dev readout's `stepped` row shows it.
 
-**How many behaviours hold the water.** Behaviour rides with families. Where
-the genes converge, a handful of behaviours and their near variants should
-converge with them: 3 to 12 families held a newborn's water after thirty
-minutes in pack 2 (`lineage.md` §13.5). At a sighted player's composition, the
-spawner's third keeps today's behaviour common.
+**How many behaviours hold the water.** Behaviour rides with families, and in
+pack 2, 3 to 12 families held a newborn's water after thirty minutes
+(`lineage.md` §13.5). So a handful of lists and their near variants should hold
+it. At a sighted player's composition, the spawner's third keeps the founders'
+rules common.
 
 ### 7.2 Would a person notice?
 
 A generation is about 30 s (`lineage.md` §13.8). So a newborn's drop is 23 to
 26 generations deep at fifteen minutes and 43 to 50 at thirty, and its deepest
-lines reach 60 to 66 (`lineage.md` §6.1, §13.8). Every division changes one of
-its two daughters. A line 25 generations deep has therefore come through up to
-25 changes, and about half that if changed daughters live as well as faithful
-ones.
+lines reach 60 to 66 (`lineage.md` §6.1, §13.8). A line 25 generations deep has
+come through up to 25 changes, and about half that if changed daughters live as
+well as faithful ones.
 
-A person would see cells, not rules: one that comes back the moment you dodge
-it, one that leaves the drifters to come for you, one that sits still, one that
-turns and runs (§13). At a sighted player's composition, 5 to 6 generations
-deep at fifteen minutes, there is much less to see.
+What a person would see is cells, not rules: one that lunges as you pass, one
+that steers clear of you, one that sits still. At a sighted player's
+composition there is much less to see. The founders themselves are already
+different from pack 2's hunters (§5.3), and the owner will notice that first,
+in phase 3-1.
 
 ### 7.3 What is drawn
 
-**Nothing new** (row 24, recommended). A behaviour shows as motion in both
-views. Full vision shows a cell turn and run. Point of view feels a hunter's
-wake as today, and only a hunt raises a wake.
+**Nothing new** (row 24). A behaviour shows as motion in both views. The dev
+app's frame readout gains two rows in its own grammar, under `generation` and
+`families`:
 
-The dev app's frame readout gains two rows in its own grammar, under
-`generation` and `families`:
+- `behaviours`: how many different lists the hunters carry;
+- `unchanged`: the share of hunters still on the founders' seven rules, in
+  percent.
 
-- `behaviours`: how many different behaviours the hunters carry;
-- `as today`: the share of hunters still running today's five rules, in percent.
-
-Only the dev app draws them, and they are not translated. Marking what a cell is
-doing in full vision (resting, hunting or fleeing) would be a screen of its own,
-for the UX designer, and the replay's recorder would have to keep each slot's
-action (§8).
+Only the dev app draws them, and they are not translated.
 
 ---
 
@@ -506,52 +737,55 @@ action (§8).
 
 **Saves.**
 
-- **Saved by name and version** (`ocean.md` §12). `drop` gains an optional
+- **Saved by declared name** (`ocean.md` §12). `drop` gains an optional
   `behaviours` entry, `{"version": 1, "lists": [...]}`, each list its rules in
   the text of §5.1.
-- `drop.bodies` gains two optional columns:
-  - `behaviour`: one int a body. −1 means today's, which covers drifters,
-    flocs and every body still running it. Any other value is an index into
-    the lists, so a family that shares one list is saved once;
-  - `since`: a body's two countdowns, in 64 bits, as every clock is kept.
-- Each is checked when present, as pack 2's columns are, and `FORMAT` stays 1.
-- **Old saves.** A pack-2 file has none of them. Every body loads on today's
-  behaviour, with both countdowns set from its `calm`, so it goes on resting
-  exactly as it was. A pack-2 build reading a pack-3 file loads everything else
-  and runs its own hand-written behaviour.
-- **A name this build does not know**, such as a reading or action that a later
-  content pack added, loads as a rule that never fires. It is kept by its name
-  and written back as it came, as a retired gene is (`genome.gd`,
-  `GENE_ORDER`).
-- **A room that runs for days** adds nothing that grows. A list has at most
-  eight rules, and there is at most one list a hunter. The size was not
-  measured: a list is at most eight short lines, and there are fewer lists than
-  hunters. For scale, pack 2's four lineage columns, one entry a body each,
-  added 3.3 KB to a compressed save (`lineage.md` §4).
+- `drop.bodies` gains optional columns:
+  - `behaviour`: one int per body. −1 is the founders' rules, which covers
+    drifters, flocs and every body still on them. Any other value is an index
+    into the lists, so a family that shares a list is saved once;
+  - what a body was doing: its steering heading, its stun, the time since it
+    ate, and its echoes in flight. The clocks are kept in 64 bits, as every
+    clock is.
+- Each column is checked when present, as pack 2's are, and `FORMAT` stays 1.
+- **Old saves.** A pack-2 file has none of these. Every hunter loads on the
+  founders' rules, with `fed` set from its `calm`: a body resting after a meal
+  or a miss rests on as if it had eaten. A pack-2 build reading a pack-3 file
+  loads everything else and runs its own hand-written hunter.
+- **A name this build does not know**, such as a gene from a later content pack,
+  loads as a rule that never fires. It is kept by its name and written back as
+  it came, as a retired gene is (`genome.gd`, `GENE_ORDER`).
+- **A room that runs for days** adds nothing that grows: at most eight rules a
+  list, at most one list per hunter. The size was not measured. For scale, pack
+  2's four lineage columns, one entry per body each, added 3.3 KB to a
+  compressed save (`lineage.md` §4).
 
 **The shared pond and the server.**
 
-- **Behaviour is the host's water.** A host's drop and the server's room run the
-  rules and change them at each division. A guest's mirror draws bodies from
+- **Behaviour is the host's water.** A host's drop and the server's room read
+  the rules and change them at division. A guest's mirror draws bodies from
   snapshots and decides nothing. A guest's own drop is set aside while it is
-  away. **Nothing goes on the wire.** A guest's sister arrives running today's
-  behaviour.
+  away.
+- **Nothing new goes on the wire.**
+  - The "stalking you" bit in each POND entry now means "coming for you" (§4.3),
+    computed by the host for each guest, as it computes that bit today.
+  - A water cell's call is heard by nobody, not even another player. Only a
+    player's call crosses the wire, as today (§14).
 - **The referee judges a guest, never a water cell**, and nothing it copies
   moves: growth, division, the daughter, the sister ring, the gift, the speed
   and turn tables, the ping, `FIRST_DELAY` and the causes of death are all
-  unchanged. None of `HUNT_AT`, `REST_MEAL`, `REST_MISS`, `ORIENT_SECONDS` or
-  `COMMIT_RANGE` is in `net_probe`'s `_rules_text()`. **`Wire.PROTOCOL` stays 5
+  unchanged. None of `HUNT_AT`, `REST_MEAL`, `REST_MISS`, `COMMIT_RANGE` or
+  `LOCK_CONE_DEG` is in `net_probe`'s `_rules_text()`. **`Wire.PROTOCOL` stays 5
   and `Wire.RULES` stays `46913eab…`.** The build runs `net_probe
   --referee-only` to show it (§12.3).
 - **Mixed builds play together.** Whether the water learns depends on the
   host's build.
 - **The dedicated server** is the last to update, at an empty room's restart.
-  Its pack-2 room loads every hunter on today's behaviour with its genes as
-  they were, and from then on its behaviour changes too.
+  Its pack-2 room loads every hunter on the founders' rules with its genes as
+  they were, and from then on its rules change too.
 
-**The replay** records what moved, and a behaviour shows as motion, so nothing
-new is recorded. A hunt is today's run, so `AT_HUNTER` and `AT_KILLER` stay as
-they are.
+**The replay** records what moved, so nothing new is recorded. A behaviour
+shows as motion. The hunter slot reads "coming for you".
 
 ---
 
@@ -560,28 +794,31 @@ they are.
 **Reasoned from the code, not measured.** The dev app's frame readout, in its
 `water` and `stepped` rows, is where the owner will see it.
 
-- **Today's behaviour costs what today's decision costs, plus a few hundred
-  interpreted operations a frame.** A hunter decides when it is free, on its
-  tick. With 100 to 200 hunters, that is at most 13 to 25 decisions a frame.
-  - Today's `_decide` makes two comparisons and one prey search.
-  - The five rules make at most five tests, each a field of the body, and the
-    same prey search.
-  - The prey search is the real cost: pass 2 timed hunters looking for prey at
-    88 µs a frame here (`ocean.md` §4.4).
-  - The tests are an estimate of the order of 50 µs a frame here, and 0.3 ms on
-    a phone at `ocean.md` §4.4's assumed factor of six.
-  - The rulebook takes the cheap readings in an array, and asks for each costly
-    one at most once a decision, so today's behaviour makes exactly the
-    searches today's decision makes.
-- **Changed behaviours can cost more**, and only in families that use them.
-  `danger` is one more grid question out to 1,400 µm, for each decision that
-  reaches it. `hunt the biggest` is a prey search with no early stop. If every
-  hunter read danger at every decision, the water would pay about one more
-  prey search a decision: of the order of 0.1 ms a frame here and 0.5 ms on a
-  phone. For scale, pack 2's water was put at 8 to 10 ms of a phone's 16.7
-  (`lineage.md` §7).
-- **A division** copies nothing for the faithful daughter, and makes one list of
-  at most forty ints for the other.
+- **Today**, each hungry hunter makes one prey search on its tick, out to its
+  senses' reach. Each hunter on a run is also stepped through stalk, aim and
+  intercept on every frame it is stepped. Pass 2 timed these at 88 µs a frame
+  for hunters looking for prey and 67 µs for hunters on a run (`ocean.md`
+  §4.4).
+- **Now**, each hunter reads on its tick the senses its rules reach, each at
+  most once, and only for organs it wears:
+  - `smell` is a scent sum out to its smell reach, about one of today's prey
+    searches;
+  - `beam` is one to three rays against the bodies within 620 to 1,240 µm;
+  - `shadow` and `touch` are short-range questions to the grid;
+  - `echo` costs nothing on the tick: one cast every 8.8 to 15.2 s, with at most
+    five returns;
+  - `hit`, `hunger` and `fed` are fields of the body.
+- **The founders' rules reach one or two of these** when hungry: their senses,
+  and nothing for organs they lack. Nothing is stepped through a run any more:
+  between ticks a body only turns toward the heading it holds.
+- **Estimate**: about what today's search and run cost together. Where a hunter
+  reads two senses, the extra is up to one more prey search per decision: of
+  the order of 0.1 ms a frame here, and 0.5 ms on a phone at `ocean.md` §4.4's
+  assumed factor of six. The rule tests themselves add of the order of 50 µs a
+  frame here. For scale, pack 2's water was put at 8 to 10 ms of a phone's
+  16.7 ms frame (`lineage.md` §7).
+- **A division** copies nothing for the faithful daughter, and makes one list
+  of at most eight short rules for the other.
 - **`binary_version` is unchanged.** It is all GDScript, a content pack.
 
 ---
@@ -590,13 +827,15 @@ they are.
 
 | file | knows | does not know |
 |---|---|---|
-| `game/mechanics/rulebook.gd` **new** | a list of rules, five ints each: reading, test, step on the reading's ladder, action and option. **Choosing**: from the top, the first rule whose reading passes its test and whose action's need is above zero. The readings come in an array, with the costly ones asked of a callable at most once each. **One change** (§6.2), under a vocabulary of ladder lengths, option counts and needs that it is handed. The cap. Text to and from a list, given the names | cells, food, danger, the water |
-| `game/normal/drop.gd` | **this water's vocabulary**: the names of the readings and actions, their ladders and options, each action's need, the cap, the kinds' weights, `BEHAVIOUR_VERSION`, and today's behaviour as the five lines of §5.1. Also `daughter_behaviours(list)`, which returns `[faithful, changed, kind]`, beside `daughter_dna` | how a list is read or changed |
-| `game/normal/food.gd` | what each reading means for a body (`food`, `danger`, the two clocks); what each action does (the rest, the search at its share, `_start_run` at the nearest or the biggest, the flee); `_decide` reading the body's list; `_divide` handing lists on; the save's columns; the census's behaviour line | the arithmetic of a list |
+| `game/mechanics/rulebook.gd` **new** | declared inputs (bearing or not, values of a kind), outputs (the triggers they claim, their needs, their options), the kinds and their ladders, and tests. **Choosing**: from the top, one winner per trigger, with each input read at most once a tick through a callable the caller hands it. **One change** (§6.2) from a vocabulary it is handed. A list to and from text by declared names, with unknown names kept inert | genes, cells, senses, the water |
+| `game/normal/genome.gd` | `DECLARES`: each gene's inputs and outputs (§3.1) | how a sense is computed |
+| `game/normal/cell.gd`, `game/normal/metabolism.gd` | the body's own parts (`hit`, the turns, swim, rest) and the metabolism's (`hunger`, `fed`); the dart's stun beside the dart's tables | how a list is read |
+| `game/normal/drop.gd` | this water's choices: the founders' rules (§5.1), the kinds' weights, the cap of eight, and `daughter_behaviours(list)` → `[faithful, changed, kind]` beside `daughter_dna` | how a list is read or changed |
+| `game/normal/food.gd` | the wiring: each declared name to the function that reads it for a body, or performs it. Every sense is one function of an observer that serves your membrane and a water cell alike. Also the body's heading, swim, push, dash and rest; "coming for you"; `_decide` reading the body's list; `_divide` handing lists on; the save's columns | the arithmetic of a list |
 
-A second water writes its own vocabulary in its own environment file. A second
-kind of body, the player in pack 4, reads the same lists through the same
-`rulebook.gd`.
+A second water writes its own founders' rules in its own environment file. A
+second kind of body, the player in pack 4, reads the same lists through the
+same `rulebook.gd`, with its own wiring.
 
 ---
 
@@ -604,31 +843,28 @@ kind of body, the player in pack 4, reads the same lists through the same
 
 Named here, not designed.
 
-- **The same rules drive the player through `_read_steer()`.** The player is not
-  a water body: it moves by impulses, steering, push and dash (`cell.gd`). So
-  each action needs a player's form:
-  - rest is no steering, and, if the owner wants it, a flagellum that stops,
-    which `ocean.md` §5.2 left to the player's own blocks;
-  - search steers by a wander;
-  - hunt steers onto the intercept today's run computes;
-  - flee steers away.
-
-  The readings are the same functions, asked for the player's body. The field
-  already treats a person as a body.
+- **The player's blocks are the same inputs and triggers**: what the player's
+  own genes declare, plus the body's and the metabolism's parts. The player's
+  run wires them to the player's organs, which already post exactly these
+  sensations to the membrane. Pack 4's screen lists what the player's genes
+  declare and nothing else.
+- **The triggers map onto `_read_steer()` and the controls.** The turns become
+  steering, push becomes the push and dash the dash. Swim and rest drive the
+  flagellum, which today beats on its own (`energy.md`). That is the one
+  trigger the player's hand lacks, and whether blocks may stop it is the
+  owner's call then.
 - **A screen holds eight rules.** On 1600×720, a rule is one row of 48 px
-  targets: a handle, a *when* chip and a *do* chip. Eight rows with 12 px
+  chips: an input, up to three tests and an output. Eight rows with 12 px
   between them fit in under 480 px of the 720.
-- **The vocabulary is ten chips**: six readings and four actions, with their
-  values. Every name is the owner's to choose, and goes through `tr()`.
+- **The names are the owner's**, and they go through `tr()`. The chips come from
+  the declarations, so a new gene needs words, not a new screen.
 - **Your division changes your rules** under row 19. One daughter keeps your
   rules and the other carries one change, so the choosing screen would show
   both. Row 19 decides it; pack 4 confirms it with the owner once the screen
   exists.
 - **Your sister carries your rules.** A guest's sister would need SISTER to
   carry them, which is the next protocol change.
-- **Additions pack 4 may want**: `dash` as an action, organ-named readings, the
-  player's own speed, a rule that breaks off a hunt, and a rule for where a gene
-  goes.
+- **No block reads dread or the wake** (§3.4).
 
 ---
 
@@ -639,17 +875,20 @@ Named here, not designed.
 | file | change |
 |---|---|
 | `game/mechanics/rulebook.gd` | new (§10) |
-| `game/normal/drop.gd` | the vocabulary, today's behaviour, and `daughter_behaviours` (§10) |
-| `game/normal/food.gd` | `Body.brain` put to use (null is today's), and `meal_clock` and `miss_clock` beside it. `_rest` split into a meal and a miss, each setting its own clock (and `calm`, for the reference). `_decide` reads the list. The hand-written decision is kept as `_decide_by_hand` behind a tool switch. `_look_in_drop` split into a find and a start, plus a search for the biggest. The flee and the search's share go in `_drift_in_drop`. `_divide` hands the changed daughter `Drop.daughter_behaviours`. `drop_state` and `load_drop` gain the columns. A behaviour line beside the lineage line, and `behaviour_counts()` for the readout |
+| `game/normal/genome.gd` | `DECLARES` (§3.1) |
+| `game/normal/cell.gd`, `game/normal/metabolism.gd` | the body's and the metabolism's declarations; `DART_STUN` 5 s |
+| `game/normal/drop.gd` | the founders' rules, the kinds' weights, the cap, `daughter_behaviours` |
+| `game/normal/food.gd` | **Every sense as one function of an observer**: the player's smell, beam, shadow, touch and ping run from any body's place, heading, size, mouth and organ arcs. The player's membrane gets exactly what it gets today. **The water**: a ping clock and echoes in flight for each water cell with an `ampulla`; the readers and triggers registered by declared name; `Body.brain` put to use (null is the founders'); a held heading, the swim, the push, the dash, the rest and the stun; `fed`; `_decide` reading the list. The run is kept only for `--drop=0` and `--rules=0`. "Coming for you" for the wake, the darts, `hunter()` and the pond flag. `_divide` hands the changed daughter `Drop.daughter_behaviours`. `drop_state` and `load_drop` gain the columns. A behaviour line beside the lineage line, and `behaviour_counts()` for the readout |
+| `game/normal/normal_mode.gd` | the player's senses through the shared functions, posting what they post today |
 | `game/normal/drop_save.gd` | the optional entries, each checked when present |
-| `game/dev/frame_readout.gd` | `behaviours` and `as today`, in the dev app only |
-| `tools/eco_probe.gd`, `tools/drive.gd` | `--blocks=0` (today's hand-written decision, the reference), `--behaviour-change=0` (no change at division), `--founders=today\|varied\|random` and `--flee=0` (the other answers to rows 22 and 23), and the behaviour line |
+| `game/dev/frame_readout.gd` | `behaviours` and `unchanged`, in the dev app only |
+| `tools/eco_probe.gd`, `tools/drive.gd` | `--rules=0` (pack 2's hunter and everything §12.4 replaces: the reference), `--rule-change=0` (no change at division), the behaviour line |
 | `tools/drop_probe.gd` | the checks in §12.3 |
 
 **Nothing** changes in `addons/launcher/`, `ci/` or `project.godot`.
 
 **No player-facing text.** Nothing new goes through `tr()` or into
-`game/i18n/biogenic.pot`. The readout's rows are the dev app's, and are not
+`game/i18n/biogenic.pot`. The readout's rows belong to the dev app and are not
 translated.
 
 ### 12.2 Phases
@@ -659,8 +898,8 @@ one starts.
 
 | phase | contents | what the owner can try |
 |---|---|---|
-| **3-1** | today's behaviour as rules: the rulebook, the whole vocabulary, every body on today's five rules, the two clocks, the save's entries, the identity check, and the checks on the actions | nothing new: the water plays as it does now |
-| **3-2** | behaviour that changes: one change at every division, the readout's two rows, and the checks on the change and on determinism | a water that learns. Play it new, then come back after fifteen minutes and after an hour |
+| **3-1** | cells sense and hunt by rules: the declarations, the rulebook, every sense shared with the player, the triggers, the founders' rules on every hunter, "coming for you", the dart's stun, the save's entries, and checks 1 to 3, 7, 9 and 10 | a water whose hunters know only what their senses tell them. Nothing learns yet |
+| **3-2** | the rules change at division: the change, the readout's two rows, and checks 4 to 6 and 8 | a water that learns. Play it new, then come back after fifteen minutes and after an hour |
 | the release | | whenever the owner runs it |
 
 No `Wire.PROTOCOL` change, and no `binary_version` bump.
@@ -670,70 +909,93 @@ No `Wire.PROTOCOL` change, and no `binary_version` bump.
 `drop_probe`'s "Check the drop" step gains these checks. Each must fail with its
 rule taken out.
 
-1. **Today's behaviour plays as today, to the byte.** Run the drop with
-   `--blocks=0`, and again with the rules and no change
-   (`--behaviour-change=0`). The census and lineage lines must be equal. In CI:
-   seed 1, five minutes, at a newborn's composition and at a sighted player's.
-   By the builder, once before 3-1 merges: seeds 1 to 3, thirty minutes. This is
-   the regression guarantee, and the gate for 3-1.
-2. **The five rules choose what `_decide` chooses**, over a table of body
-   states: each clock either side of 0, hunger either side of 0.3, and food
-   touching, found, or not found.
-3. **Every change is valid.** Make ten thousand changes, starting from today's
-   behaviour and from random lists. Each result must have one to eight rules,
-   every value on its ladder and every option its action's. Each must differ
-   from its parent, and each must survive the text round trip.
-4. **A division.** The daughter whose DNA changed carries a behaviour one change
-   away from her mother's. Her sister carries her mother's. Founders, sisters
-   and posed bodies carry today's.
-5. **The actions keep to the organs.** A search and a flee move at the body's
-   own speed. A dash happens only with a `myoneme`. Food is found only within
-   the senses' reach, or by touch without them. A flee whose senses do not
-   reach its danger turns at random.
+1. **With rules off, it is pack 2, to the byte.** This pins sharing the senses
+   between the player and the water:
+   - `--rules=0`: the drop's census and lineage lines equal `dev`'s;
+   - the membrane's trace from a seeded `drive.gd` run equals `dev`'s;
+   - in CI: seed 1, five minutes, at both compositions.
+2. **A water cell reads what your organs would.** Pose a water cell and the
+   player alike (place, heading, size, genome, arcs). Their smell, beam,
+   shadow, touch and echoes must be equal to the float.
+3. **No magic.** An input of a gene the body does not wear never reports. No
+   reader is handed anything but its observer and the bodies its organ
+   reaches, which check 2 holds it to.
+4. **Every change is valid.** Make ten thousand changes, starting from the
+   founders' rules and from random lists. Each result must hold to §6.2's
+   limits, differ from its parent, and survive the text round trip.
+5. **A division.** The daughter whose DNA changed carries rules one change away
+   from her mother's. Her sister carries her mother's. Founders, sisters and
+   posed bodies carry the founders' rules.
 6. **Determinism.** One seed run twice with changes on gives the same lines.
 7. **The save.**
    - A round trip with the new entries is exact to the bit.
-   - A pack-2 file loads on today's behaviour and goes on to the same census as
-     one that never stopped (`ocean.md` §14.3 check 12).
+   - A pack-2 file loads on the founders' rules and goes on to the same census
+     as one that never stopped (`ocean.md` §14.3 check 12).
    - An unknown name loads as a rule that never fires, and is written back as it
      came.
+8. **Modular.** A test gene declared only in the probe, with one new input and
+   one new output and its reader and trigger registered by the probe, must be:
+   - in the vocabulary of a body that carries it;
+   - drawn by mutation;
+   - read by a rule, and acted on;
+   - saved and loaded by name.
+
+   All with no change to `rulebook.gd`, `drop.gd`, `drop_save.gd` or any list.
+9. **The founders hunt.** In five minutes of the drop, each founder rule fires,
+   and hunters that have each of the nose, the radar and the laser eat at least
+   once. This checks that the rules are alive, not how well they hunt.
+10. **Coming for you.** With posed bodies:
+    - the wake and the dart fire for a cell swimming at you within 35° whose
+      mouth could take you;
+    - they do not fire for one swimming past you, or for one too small to eat
+      you;
+    - a dart stuns for 5 s.
 
 `net_probe`: the referee section passes unchanged, and so does `pond-field` with
-the host's water running on rules.
+the host's water on rules.
 
 ### 12.4 What it replaces
 
 | pack 2 | pack 3 |
 |---|---|
-| one hand-written decision for every mouth (`_decide`) | each hunter's own rules, read by `rulebook.gd`; today's decision kept as a tool's reference |
-| `HUNT_AT`, `REST_MEAL`, `REST_MISS` | values in each body's rules, inherited and changed |
-| one `calm` after a meal or a miss | two countdowns: since a meal, and since a miss |
-| every water cell decides alike | a division changes one daughter's behaviour, together with her genes |
-| always the nearest prey | the nearest or the biggest |
-| a hunter never flees | it can learn to (row 23) |
-| `Body.brain` reserved and null | a behaviour; null means today's |
+| `_decide` and the run, for every mouth | each hunter's rules over its senses; pack 2's hunter kept as a tool's reference (`--rules=0`) |
+| finds the nearest thing it can eat within reach, then leads it on its true place and speed | turns toward what a sense reports, and leads only by a sensed bearing's drift |
+| `HUNT_AT`, `REST_MEAL` | values in each body's rules |
+| `REST_MISS` | gone, because there is no miss. Its 5 s is now a dart's stun |
+| one `calm` after a meal or a miss | `fed`: the time since its last meal |
+| cruise with half the push folded in | swim, plus push as a trigger (the founders push at half) |
+| a lunge on every run | a dash when a rule says so |
+| a hunter never runs | it can turn away from what a sense reports (row 23) |
+| "hunting you" means on a run at you | "coming for you" (§4.3) |
+| a dart breaks off a run: 5 s of rest | a dart stuns: 5 s with its rules unread |
+| `Body.brain` reserved and null | a behaviour; null means the founders' |
 
 ---
 
 ## 13. What to watch in the playtest
 
-**At fifteen minutes**, in a new drop, as a newborn:
+**In phase 3-1, before anything learns:**
 
-- `as today` on the readout shows how much of the water no longer behaves as it
-  did. Expect it to fall. If it stays near 100 %, nothing is learning.
-- A hunter that comes straight back after you dodge it. Today's hunters rest
-  five seconds after a miss.
-- A hunter that leaves the drifters to come for you.
-- Hunters sitting still, which swallow you when you bump into them.
-- Hunters that run from you once you are big (row 23).
+- whether hunters still find food, or starve while they wander;
+- laser hunters turning onto you, or onto the rim;
+- radar hunters coming in at where you were;
+- nose hunters zig-zagging their way up to food;
+- whether you are caught more or less often than in pack 2, and how you escape.
 
-**At an hour**:
+**In phase 3-2, at fifteen minutes**, in a new drop, as a newborn:
+
+- `unchanged` on the readout should fall. If it stays near 100 %, nothing is
+  learning;
+- a hunter that lunges as you pass;
+- cells that steer clear of you, or of each other;
+- hunters sitting still, which swallow you when you bump into them.
+
+**At an hour:**
 
 - `behaviours` on the readout. A handful means a water that settled on what
-  works. Dozens means one that is still trying, or that cannot keep anything.
-- Hunters that drift and never chase, and still fill the water.
-- Whether you are caught more or less often than in pack 2, and at what size.
-- The `water` row against pack 2's: the cost of families that read danger.
+  works. Dozens means one that is still trying, or cannot keep anything;
+- families that never chase and still fill the water;
+- the `water` row against pack 2's.
 
 **In the server's room, over days**: whether it keeps changing or settles, and
 whether one behaviour takes over the whole room.
@@ -743,60 +1005,90 @@ whether one behaviour takes over the whole room.
 ## 14. Left open
 
 1. **Nothing here was measured**, by the owner's choice. Whether behaviour
-   evolves within fifteen minutes or an hour, what it evolves toward, the
-   danger to the player and the cost on a phone are all for the playtest.
-2. **A hunter on a run cannot flee** (§4.1). A rule that breaks off a run would
-   be a later addition, and would be the first thing to change the chase.
-3. **The changed daughter carries two changes** (§6.1). If families thin, the
-   levers are how often behaviour changes, or which daughter carries the
-   change.
-4. **Where a gene goes stays the body's** (§4.4), so the water's gene change is
-   still never a shift.
-5. **Drifters decide nothing** (§1 item 8).
-6. **A guest's sister arrives running today's behaviour**, until SISTER carries
-   one.
-7. **Organ-named blocks, `dash` and the player's own speed** are pack 4's to
-   add, if its screen wants them.
+   evolves within fifteen minutes or an hour, what it evolves toward, the danger
+   to the player and the cost on a phone are all for the playtest.
+2. **Your dread and your wake read other cells' mouths.**
+   - Your membrane still feels both, and so does "coming for you" (§4.3), which
+     decides when your dart fires.
+   - No rule can read them, so pack 4's blocks will not either.
+   - Whether the player keeps them is the owner's call, later.
+3. **No organ tells a cell that a mouth is bigger than it.** Real ciliates do
+   smell their predators. *Euplotes* takes a shape that is harder to swallow
+   when it smells *Lembadion*
+   ([Induction of defensive morphological changes in ciliates](https://link.springer.com/article/10.1007/BF00566974)).
+   A later sense gene could declare that input. Nothing is added in this pack.
+4. **Nobody hears a water cell's call.** You hear a friend's ping. Water cells
+   now call, for their own echoes, but nobody hears them. Hearing them would be
+   new on the membrane and on the wire.
+5. **Where a water cell's senses point is fixed** by the default order (§4.4). A
+   layout, and the player's shift with it, needs the order on the wire and in
+   the replay: the next protocol change.
+6. **The chase is no longer a contract** (§5.3). How you escape is the
+   playtest's to judge.
+7. **The changed daughter carries two changes** (§6.1). If families thin out,
+   the levers are how often rules change, and which daughter carries the change.
+8. **Drifters decide nothing**, and a guest's sister arrives on the founders'
+   rules until SISTER carries hers.
 
 ---
 
 ## 15. Owner's calls
 
 The rows are numbered on from `lineage.md`'s rows 19 to 21, so that one row
-number names one call across the three documents. Rows 22 and 23 set starting
-points that the playtest judges. Row 24 is about what a player sees.
+number names one call across the three documents. They are shown as they were
+put, and as they were answered on 2026-10-02.
 
 | # | Question | Options | What it means |
 |---|---|---|---|
-| 22 | What do the cells the water makes know how to do? | **today's hunting ✓ recommended** · today's, with a few random changes each · random rules, as you first described | Today's: a new drop behaves exactly as it does now, and only the cells born in it change, one small change at every division. A few random changes: a new drop is varied from the first minute, and some of its cells hunt worse than today's. Random: a new drop starts harmless, since most of its cells hunt badly or not at all and starve, and it gets dangerous as the families that work fill it. The cells the water adds to keep the drop alive stay random too, so a drop made for a player with good senses, where a third of the hunters are those, never gets as good. Untested: a starting point the playtest judges. |
-| 23 | Can cells learn to run from danger? | **yes: a cell's rules can make it swim away from a mouth that could swallow it, yours included ✓ recommended** · no: in this pack cells only rest, search and hunt | Yes: families can learn to turn and swim away from bigger mouths, at their own speed, and that includes yours once you are big enough to eat them. A cell with no sense that reaches you can only turn sharply at random. The hunters you chase may get harder to catch, and hunters that would have been eaten live longer. The drifters you mostly eat never run, because they decide nothing. No: no cell ever runs, as today. Untested: a starting point the playtest judges. |
-| 24 | Do you see what the water's cells are doing? | **not in this pack: you see them move, and the dev app counts how many ways of behaving the water has ✓ recommended** · full vision marks each cell that is resting, hunting or running | Not yet: behaviour shows only in how cells move, and it can be marked later without changing anything else. Marked: in full vision you would read each cell's intent at a glance. That is a screen of its own for the UX designer, and the replay would have to record it. |
+| 22 | What do the cells the water makes know how to do? | **today's hunting ✓ answered** · today's, with a few random changes each · random rules, as you first described | Today's: a new drop behaves exactly as it does now, and only the cells born in it change, one small change at every division. A few random changes: a new drop is varied from the first minute, and some of its cells hunt worse than today's. Random: a new drop starts harmless, since most of its cells hunt badly or not at all and starve, and it gets dangerous as the families that work fill it. The cells the water adds to keep the drop alive stay random too, so a drop made for a player with good senses, where a third of the hunters are those, never gets as good. Untested: a starting point the playtest judges. |
+| 23 | Can cells learn to run from danger? | **yes: a cell's rules can make it swim away from a mouth that could swallow it, yours included ✓ answered** · no: in this pack cells only rest, search and hunt | Yes: families can learn to turn and swim away from bigger mouths, at their own speed, and that includes yours once you are big enough to eat them. A cell with no sense that reaches you can only turn sharply at random. The hunters you chase may get harder to catch, and hunters that would have been eaten live longer. The drifters you mostly eat never run, because they decide nothing. No: no cell ever runs, as today. Untested: a starting point the playtest judges. |
+| 24 | Do you see what the water's cells are doing? | **not in this pack: you see them move, and the dev app counts how many ways of behaving the water has ✓ answered** · full vision marks each cell that is resting, hunting or running | Not yet: behaviour shows only in how cells move, and it can be marked later without changing anything else. Marked: in full vision you would read each cell's intent at a glance. That is a screen of its own for the UX designer, and the replay would have to record it. |
 
-**Under row 22.** The owner's first words for the evolving water were "random
-logic at the start". Today's hunting is recommended for two reasons:
+**Answered on 2026-10-02.** The owner, verbatim:
 
-- it starts the playtest from a water the owner has already played, so whatever
-  changes is the learning;
-- the spawner keeps making founders to hold the floor (`lineage.md` §5), so
-  whatever founders carry never leaves the water.
+> All recommended. But blocks can only contain things coming from enabled senses. If it cannot say whether my mouth is bigger, it cannot run. And currently, it cannot know that using available senses. No magic info. The cell has inputs and produces output that acts on available triggers (turn, dash)
 
-Each of the other two answers is one switch in the tools
-(`--founders=varied|random`).
+and later the same day:
 
-**Under row 23.** Fleeing is the one action the water does not do today.
-Without it, a cell can learn when to hunt and whom, but can only stay alive by
-eating. In pack 2, other hunters ate the water's daughters twice as often as
-they starved (`lineage.md` §2.2). Fleeing is real (§2.2) and it shows.
-`--flee=0` plays the other answer.
+> By it cannot run, I mean it can, but not because my mouth is bigger. Its behavior could still be turn away when laser touches something in front of it
+>
+> The design of the blocks must be modular. Any new added gene could declare inputs and outputs so we don't have to create manually new blocs
 
-**Not asked, because answered rows already decide them:**
+So rows 22 to 24 stand as recommended, and the three rules reshaped the design:
 
-- every division changes a daughter's behaviour together with her genes
-  (row 19);
-- behaviour gives a body nothing its organs cannot do (row 5's "all cells
-  follow the same rules").
+- **Inputs are only what senses report** (§3.2), in the form they report it.
+  Dread and the wake are not inputs (§3.4). The design as put had given every
+  cell its dread, with no organ needed.
+- **Outputs are the triggers** (§3.3). Fleeing is an ordinary rule, *turn away*
+  from what a sense reports, so row 23's "yes" now means that this is in the
+  vocabulary, not that a cell knows your mouth is bigger.
+- **Today's run goes, and hunting is rules over senses** (§4.2, §5). Row 22's
+  "today's hunting" is the closest the senses allow: seven rules, and not
+  exactly today's (§5.3).
+- **Genes declare the blocks** (§3). There is no hand-written vocabulary.
+- **The check that the founders replay today's hunter to the byte cannot hold,
+  and is gone.** The build checks instead that with rules off the drop is pack
+  2's to the byte, that a water cell reads what your organs would, and the rest
+  of §12.3.
 
-**Settled here, not asked:** a hunt runs to its end and its run is today's
-(§4.1), so the chase you escape is the one pack 2 measured; and where a gene
-goes stays the body's (§4.4), so the water's gene changes stay what pack 2's
-playtest is judging.
+**No new rows.** Everything this revision raised is decided by the owner's
+answer or by an answered row. The player's own dread and wake, and whether
+pack 4's blocks may stop your flagellum, are the owner's calls later (§11,
+§14), not this pack's.
+
+**Not asked, because the owner's answers or answered rows decide them:**
+
+- every division changes a daughter's rules together with her genes (row 19);
+- a rule never gives a body anything its organs cannot do, and reads nothing
+  they do not report ("No magic info");
+- the founders' rules are today's hunting under that rule (row 22);
+- a cell turns away from what it senses, never from what it cannot know
+  (row 23);
+- nothing new is drawn (row 24).
+
+**Settled here, not asked:**
+
+- a water cell's senses stay where the default order puts them (§4.4), because
+  a layout needs the wire and the replay first;
+- "coming for you" replaces "on a run at you" (§4.3), so your wake and your
+  dart work as they did, from cells that come at you.
