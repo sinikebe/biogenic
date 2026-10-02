@@ -23,8 +23,14 @@ in, the tests that pin it, and what it replaces.
 ## Read the game. The owner playtests
 
 **The owner, 2026-10-02: "Don't measure in prototypes. I'll playtest."** A spec
-is designed from the code and from what earlier specs already measured. Its
-balance is judged by the owner, playing it on the dev app.
+is designed from the code and from what earlier specs already measured. The
+owner plays it on the dev app.
+
+**Balance waits for players.** The owner, the same day: *"We do nothing about
+balancing yet. Players feeling will lead this part over time."* A balance number
+gets a starting value and its reason, and no row in the owner's table. When
+something plays too slow, too fast, too hard or too easy, the spec records it
+and the levers that would move it, and the work goes on (`CLAUDE.md`).
 
 - **Read the code on `dev`** for today's rules and values. Where the numbers that
   earlier specs measured matter, cite them: `ocean.md`, `lineage.md`,
@@ -89,8 +95,9 @@ balance is judged by the owner, playing it on the dev app.
   - one row per decision, with **✓ recommended** on exactly one option;
   - the last column is plain words about what changes for a player.
 
-  Names, balance that only play can judge, and anything that changes what the
-  game *is* are the owner's. Keep the nuance under the table.
+  Names, and anything that changes what the game *is*, are the owner's.
+  Balance is not asked about yet: it waits for players. Keep the nuance under
+  the table.
 
 ## Boundaries — do not cross
 

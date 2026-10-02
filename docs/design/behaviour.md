@@ -25,6 +25,10 @@ recommended, and three rules reshaped the design:
 - the blocks are modular: every gene declares what it senses and what it
   triggers, so a new gene brings its own blocks.
 
+The build raised rows 25 and 26, and both were answered the same day (§15.1).
+Nothing protects a newborn from a hunter's senses. The water's slow learning
+stays as built, because balance waits for players.
+
 The owner's standing rules bind it as they bound pack 2: *"all cells follow the
 same rules. Me, friends, NPC, doesn't matter."* -- *"A cell dies of hunger,
 nothing else. Unless it gets eaten by another one."* -- *"Don't go too far with
@@ -976,7 +980,8 @@ whether one behaviour takes over the whole room.
     still on the founders' rules. At five minutes, seed 1, 71 % to 85 % were.
     Learning needs divisions. The levers are founders that hunt better, so
     more hunters grow and divide, or a cheaper division, which is a rule the
-    referee copies.
+    referee copies. The owner's answer, row 26 (§15.1): none of them, for now.
+    Balance waits for how players feel the game, over time.
 
 ---
 
@@ -1047,3 +1052,15 @@ run from starting, and there are no runs. Put and answered on 2026-10-02:
 The owner, verbatim: *"25 as recommended"*. `lineage.md` §3.3 found that
 families wore out without the grace when every division changes a daughter, so
 it is the first thing to watch when 3-2 turns the rules' changes on (§13).
+
+Phase 3-2 found that the water learns slowly (§14, item 10). Put on 2026-10-02:
+
+| # | Question | Options | What it means |
+|---|---|---|---|
+| 26 | The water learns slowly because few hunters eat enough to divide. What do we do? | **play it first, then decide ✓ recommended** · better starting hunters now · more food in the water · cells divide at a smaller size | Play first: you judge it as it is, and I change it after. Better starters: hunters get honest improvements, such as lunging at a nearby echo of something they can eat, so more of them grow and divide and learning comes sooner; the water is also more dangerous from the start. More food: hunters, and you, eat more and divide sooner, so the water gets easier for you too. Smaller size: everyone divides sooner, you included; it changes the game's rules and every player must update together. |
+
+The owner, verbatim: *"We do nothing about balancing yet. Players feeling will
+lead this part over time."* So none of the four is pulled. The founders, the
+food and the division stay as built. The levers stay written down (§14, item 10)
+for when how players feel the game asks for them. This is now a standing rule
+(`CLAUDE.md`, "Balance waits for players").
