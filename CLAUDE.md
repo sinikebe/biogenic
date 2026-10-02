@@ -83,9 +83,16 @@ to watch for when playing. The checks that keep the build honest go in its
 build plan, and the build runs them.
 
 Bump `binary_version` in `version.json` in the same commit when a change cannot
-ship as a content pack: an engine upgrade, a new permission, a native plugin, a
-new icon, or a launcher sync that moves `build_info.gd` (see below). Everything
+ship as a content pack. That means an engine upgrade, a new permission, a native
+plugin, a new icon, a change to `project.godot` (an autoload, a project
+setting), or a launcher sync that moves `build_info.gd` (see below). Everything
 else goes out as content.
+
+**When in doubt, bump it.** The owner, 2026-10-02: *"Keep content packs"*,
+chosen over updating the whole app every time. A content update is about 1 MB
+and needs only a restart. A full update is a 53.5 MB APK or a 110 MB exe, and
+Android asks the player to install it. The price of packs is that a forgotten
+bump fails silently, because devices simply never get the change.
 
 **Never hesitate to change the APK, or to publish it.** The owner, 2026-10-02:
 *"Add a rule to never hesitate to edit the apk and publish it"*, after *"The
