@@ -481,10 +481,13 @@ tool's reference (`--rules=0`, §12).
   the target was.
 - **An eyespot** (`stigma`) **or a palp** alone: no founder rule reads them. The
   cell swims, and eats whatever it bumps into.
-- **No founder dashes.** Today's lunge needs prey to be close and ahead at the
-  same moment, and no founder sense reports both together. A family can learn
-  it, for example with *an echo smaller than my mouth, within 30°, nearer than
-  220 µm → dash*.
+- **No founder dashes.** Today's lunge fires only at prey that is close, ahead
+  and small enough for its mouth. A beam or a touch reports close and ahead, but
+  never what it touched, so a dash on them could as well be a dash into the rim
+  or into a bigger mouth. Only an echo also carries a size, and an echo comes
+  back once a call. So the founders do not dash, and a family can learn it, for
+  example with *an echo smaller than my mouth, within 30°, nearer than 220 µm →
+  dash*.
 
 ### 5.3 What changes for the player
 

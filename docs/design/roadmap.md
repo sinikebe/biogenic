@@ -64,9 +64,11 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 **The evolving water**, below under "Next". Packs 1 and 2 are built and on
 `dev`: the drop (`ocean.md`), and water cells that divide, built to the owner's
 answers in two phases -- the record (2-1) and the division (2-2)
-(`lineage.md`). The owner plays pack 2 on the dev app before pack 3 is built.
-Pack 3, behaviour blocks, is designed and waits on the owner's answers
-(`behaviour.md`, rows 22 on).
+(`lineage.md`). The owner played pack 2 on the dev app on 2026-10-02, with
+nothing to fix. Pack 3, behaviour blocks, is designed to the owner's answers
+(`behaviour.md`, rows 22 to 24). It is built in two phases: first cells hunt by
+rules over their own senses (3-1), then their rules change at every division
+(3-2).
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from
