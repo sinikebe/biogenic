@@ -76,6 +76,14 @@ The water learns slowly under pack 3's rules, and it stays that way. The owner,
 2026-10-02: *"We do nothing about balancing yet. Players feeling will lead this
 part over time."*
 
+**Pack 4, your own instincts, is designed** (`automation.md` for the rules of the
+game, `automation-ux.md` for the screen), and waits on the owner's answers to
+rows 27 to 35. It is built in three phases:
+
+- your instincts drive your cell when you let go (4-1);
+- your division changes them (4-2);
+- a friend's daughter carries hers (4-3, a protocol change).
+
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from
 the launcher (`settings.md`).
@@ -219,6 +227,7 @@ to ship on its own and be played on the dev app before the next starts:
 3. **Behaviour blocks with mutation** replace the hand-written AI.
    `docs/design/behaviour.md`.
 4. **The player's own block screen**, built from the same blocks.
+   `docs/design/automation.md` and `automation-ux.md`.
 
 Each depends on the one before. A lineage needs a water that keeps it long
 enough to have one; mutation needs births; and the player's screen needs blocks
