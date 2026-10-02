@@ -616,6 +616,38 @@ to a list when it enters the water.
 
 ---
 
+
+### 5.5 As built: phase 4-1, 2026-10-02
+
+Built to §5 and checks 1 to 7, which pass and each fail with their rule taken
+out. Content only; `Wire.RULES` stays `46913eab…`. Where the build differs from
+the text above, or found something:
+
+- **Check 1** runs a pack-3 five-minute drop of its own, seeded 1
+  (`_five_minutes` is now seeded), so `TAIL_LINES` equal what `eco_probe
+  --seed=1 --until=300 --sensed=1.0` prints; pack 2's `DEV_LINES` are untouched.
+- **Words**: only `rest`, `hold still` and the two hints, in the two-copies
+  wording (row 38). Nothing shows them before 4-2's page.
+- **The readout's behaviour line** counts a beating tail as swimming; it reads the
+  same as before in pack 3's water.
+- **A stun** marks a two-copy tail held, as the rest it leaves the body in; it
+  stops every tail regardless.
+- **Existing checks the new water reached**: check 6's "off" drop runs in pack 3's
+  water; the posing helper sets a posed body resting and held; `_one_body`'s and
+  `_replay_killer`'s hunters wear two-copy tails; `_flaws` reads a part's level
+  bit.
+- **`net_probe`**: the pond's mirror check now records the coming-for-you test
+  itself, within reach, because a resting one-copy hunter swims on and so comes
+  for the guest; the server's hunter stage clears and spares the other guest's
+  water. Three runs alone: 16,226 to 16,532 frames against 20,000. `drop_probe`:
+  319 s alone, against its 600 s timeout.
+- **The replay's held tail** is 4-2's (§18.1).
+- **Seen, and left for 4-2's pause work**: on the pause screen at 1280x720 under
+  `pads`, the genome caption's second line runs about 20 px over the dimmed hold
+  pad, and at 2400x1080 the French `nombres` button touches its top. `numbers`
+  already overlapped push and dash there before 4-1. The pads are inert under
+  the scrim; 4-2 rebuilds this screen's bottom edge for the programs page.
+
 ## 6. Division
 
 ### 6.1 The owner's answer
