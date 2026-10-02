@@ -87,6 +87,19 @@ ship as a content pack: an engine upgrade, a new permission, a native plugin, a
 new icon, or a launcher sync that moves `build_info.gd` (see below). Everything
 else goes out as content.
 
+**Never hesitate to change the APK, or to publish it.** The owner, 2026-10-02:
+*"Add a rule to never hesitate to edit the apk and publish it"*, after *"The
+launcher should download the new apk and propose update. It's almost
+nothing."* A new APK and a merge into `dev` cost the owner almost nothing,
+because the dev app downloads the update and offers it. So:
+
+- never hold back a merge into `dev` to spare the dev app an update, even while
+  the owner is playing;
+- never pick a worse design just to stay on the content side. When a change
+  needs a new binary, bump `binary_version` and ship it.
+
+Releases are unchanged: `main` still moves only when the owner asks.
+
 ## Nothing personal in the repo
 
 The repository and its releases are public. No real IP address, hostname,
@@ -210,11 +223,12 @@ ship on the strength of somebody's opinion. Base viewport 1280x720,
 `canvas_items` stretch, `expand` aspect.
 
 **C#, third-party addons, GDExtensions and Android Kotlin plugins are not
-forbidden. They are expensive, and the player pays.** None of them can ride in a
-content pack: a pack is GDScript and resources mounted over `res://`, and
-Android's linker only loads native libraries out of the APK's own `lib/`. So each
-one moves `binary_version`, which means the player must accept an *install*
-rather than take a content update — and a refused Android install strands them in
+forbidden, and the new APK each one needs is no reason to hold back** (see "Never
+hesitate to change the APK" above). What they cost is engineering. None of them
+can ride in a content pack: a pack is GDScript and resources mounted over
+`res://`, and Android's linker only loads native libraries out of the APK's own
+`lib/`. So each one moves `binary_version`, and the player takes an *install*
+rather than a content update. A refused Android install strands them in
 `NEEDS_PERMISSION` with no way back but a manual reinstall.
 
 Three costs that are not obvious until you are paying them:

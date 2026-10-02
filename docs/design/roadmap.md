@@ -219,8 +219,9 @@ lets them divide.
 - **Nothing is built before the thing it is evidence about.** Full vision exists
   to catch the membrane lying, so it came after the membrane; a third view
   exists to show what perception has bought, so it comes after genes.
-- **Content is cheaper than structure.** A phase that needs a new `.pck` beats a
-  phase that needs a new binary, every time; see `CLAUDE.md`.
+- **A new binary is no reason to pick a worse phase.** The owner, 2026-10-02:
+  never hesitate to change the APK and publish it (`CLAUDE.md`). A phase says
+  whether it needs a new binary, and bumps `binary_version` when it does.
 - **Each phase leaves its own headroom.** Phase 1 specced four glow lobes and
   two pressure lobes for senses that did not exist; Phase 4 reserved slot 3 for
   the edible predator, and Phase 5 handed it straight back unspent; Phase 5
