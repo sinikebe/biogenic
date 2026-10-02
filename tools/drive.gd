@@ -327,8 +327,9 @@ extends Node
 ##                           again. Pass it after --release-at=
 ##   --dev-readout           pose the run as the dev app, so the frame readout
 ##                           draws -- its generation and families rows among
-##                           them (lineage.md §6.4). A tool's seam: nothing a
-##                           player runs reaches it
+##                           them (lineage.md §6.4), and its behaviours and
+##                           unchanged rows (behaviour.md §7.3). A tool's seam:
+##                           nothing a player runs reaches it
 ##   --starve-near=<seconds> the water mouth nearest the cell, within the view,
 ##                           runs out at that time and dies of hunger on its next
 ##                           step, leaving its remains where it was (ocean.md
@@ -593,7 +594,9 @@ extends Node
 ## --floor=<share of today's hunters the spawner keeps>, --floor-tau=<seconds it
 ## pays them back within>, --newborn-grace=<seconds>. **And pack 3's**
 ## (docs/design/behaviour.md §12.1): --rules=0|1, 0 being pack 2's hand-written
-## hunter, the reference the water's rules are measured against.
+## hunter, the reference the water's rules are measured against; and
+## --rule-change=0|1, 0 being phase 3-1's water, whose rules never change at a
+## division.
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -3160,7 +3163,8 @@ func _drop_switch(text: String) -> bool:
 	const SWITCHES := {"--drifter-venom=": &"drifter_venom", "--own-speed=": &"own_speed",
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
-		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules"}
+		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules",
+		"--rule-change=": &"rule_change"}
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true
