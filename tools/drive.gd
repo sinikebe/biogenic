@@ -563,7 +563,8 @@ extends Node
 ##                           cytostome:3,flagellum:2. In the drop the hunter is
 ##                           a body of its own, in a slot nothing else uses
 ##   --census=<seconds>      print the drop's census line on that interval, and
-##                           its lineage line after it (lineage.md §4)
+##                           its lineage line after it (lineage.md §4) and its
+##                           behaviour line (behaviour.md §12.1)
 ##   --keep=<path>           keep the drop at that file, the way the game keeps
 ##                           yours at `user://drop.save` (§9): read as the run
 ##                           opens, written at every save point. **Without it
@@ -590,7 +591,9 @@ extends Node
 ## no sister has a grace, one debt for the whole drop), --mutate=<0..1> (a tool's
 ## rate of divisions that change a daughter; the game's is every one),
 ## --floor=<share of today's hunters the spawner keeps>, --floor-tau=<seconds it
-## pays them back within>, --newborn-grace=<seconds>.
+## pays them back within>, --newborn-grace=<seconds>. **And pack 3's**
+## (docs/design/behaviour.md §12.1): --rules=0|1, 0 being pack 2's hand-written
+## hunter, the reference the water's rules are measured against.
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -2366,7 +2369,7 @@ func _step_divide() -> void:
 
 ## `--census=`: the drop's census line, on the interval, while it runs -- and
 ## its lineage line after it, with this cell's own record: its id, its mother's
-## and its line's, and its generation.
+## and its line's, and its generation -- and its behaviour line.
 func _step_census(delta: float) -> void:
 	if _census <= 0.0 or _food == null or not _food.is_processing():
 		return
@@ -2380,6 +2383,7 @@ func _step_census(delta: float) -> void:
 		you = "  | you: id %d parent %d lineage %d generation %d" % [int(_run.get("_id")),
 			int(_run.get("_parent")), int(_run.get("_lineage")), int(_run.get("_generation"))]
 	print("[drive] %6.2f  %s%s" % [_clock, _food.call(&"lineage_line"), you])
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"behaviour_line")])
 
 
 ## `--leave-at=`: the app left, the two notifications in the order a phone
@@ -3156,7 +3160,7 @@ func _drop_switch(text: String) -> bool:
 	const SWITCHES := {"--drifter-venom=": &"drifter_venom", "--own-speed=": &"own_speed",
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
-		"--skip-still=": &"skip_still", "--births=": &"births"}
+		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules"}
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true

@@ -19,11 +19,15 @@ extends SceneTree
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
 ##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-venom=`; and pack 2's
 ##   (docs/design/lineage.md §12): `--births=0|1` (0 is pack 1), `--mutate=`,
-##   `--floor=`, `--floor-tau=`, `--newborn-grace=`.
+##   `--floor=`, `--floor-tau=`, `--newborn-grace=`; and pack 3's
+##   (docs/design/behaviour.md §12.1): `--rules=0|1`, 0 being pack 2's hand-written
+##   hunter -- the reference the rules are measured against.
 ##
 ## Prints `[census]` lines, each followed by the drop's `[lineage]` line -- its
 ## hunters' generations, families and what they have become
-## (docs/design/lineage.md §4, §6.1) -- `[eco] cost p50 .. p90 ..` for each
+## (docs/design/lineage.md §4, §6.1) -- and its `[behaviour]` line -- how its
+## hunters' rules fire and what they are doing (behaviour.md §12.1) --
+## `[eco] cost p50 .. p90 ..` for each
 ## window, and the drop's counters at the end. The census samples dread from a
 ## stream of its own, so asking never moves the drop, and a seed prints the same
 ## lines every time.
@@ -91,6 +95,8 @@ func _initialize() -> void:
 			sets[&"floor_tau"] = float(v)
 		elif a.begins_with("--newborn-grace="):
 			sets[&"newborn_grace"] = float(v)
+		elif a.begins_with("--rules="):
+			sets[&"rules"] = v == "1"
 		else:
 			for name: String in ["lod", "half-rate", "near-first", "skip-still", "own-speed",
 					"contact-swallow", "armour-swallow", "drifter-venom"]:
@@ -114,6 +120,7 @@ func _initialize() -> void:
 		"an empty room" if empty else "a ghost player, anchored", sets])
 	print(food.census_line())
 	print(food.lineage_line())
+	print(food.behaviour_line())
 
 
 func _process(_delta: float) -> bool:
@@ -127,6 +134,7 @@ func _process(_delta: float) -> bool:
 		clock = 0.0
 		print(food.census_line())
 		print(food.lineage_line())
+		print(food.behaviour_line())
 		var sorted := costs.duplicate()
 		sorted.sort()
 		print("[eco] cost p50 %d us  p90 %d us  over %d frames  stepped %d a frame"

@@ -394,6 +394,11 @@ const TOUCH_RANGE_BY_TIER: Array[float] = [0.0, 150.0, 230.0, 330.0]
 ## off, and how long before there is another one.
 const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
 const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
+## **What a dart does to what it hits** (docs/design/behaviour.md §4.3): it rests
+## this long with its rules unread, and feels the dart as a `hit` at its
+## bearing. Today's darts broke off a run and left the hunter resting for the
+## same five seconds; with no run to break, the dart stuns. A starting value.
+const DART_STUN := 5.0
 
 ## `veneneux` / venom. What surviving being eaten costs, in hunger. A cell that
 ## swallows you dies of it and you are spat out starving.
@@ -476,6 +481,27 @@ const TURN_COST := 1.3
 const DRAG_SPAN := 190.0
 ## Below this the player is not really steering, so onboarding stays up.
 const STEER_DEADZONE := 0.12
+
+# --- What the body gives a body's rules (docs/design/behaviour.md §3) ----------
+## **The body's own parts**, in the shape of `genome.gd`'s DECLARES: what every
+## body has whatever its genes. It feels a `hit` -- a bite or a dart landing on
+## its membrane, at a bearing and a strength, as the player feels one -- and it
+## has the triggers every body has (§3.3): it turns toward or away from what a
+## sense reports, which needs a bearing, or turns at random; it swims, on its
+## flagellum's own beat; and it rests, which claims every trigger there is. Its
+## `cirrus` and `flagellum` only make these faster, so they declare nothing.
+const DECLARES := {
+	&"body": {
+		"in": [{"name": &"hit", "bearing": true, "values": {&"strength": &"level"}}],
+		"out": [
+			{"name": &"turn-toward", "claims": [&"steering"], "needs": &"bearing"},
+			{"name": &"turn-away", "claims": [&"steering"], "needs": &"bearing"},
+			{"name": &"turn-random", "claims": [&"steering"]},
+			{"name": &"swim", "claims": [&"swimming"]},
+			{"name": &"rest", "claims": [&"all"]},
+		],
+	},
+}
 
 ## Nothing held. Touch indices are >= 0 and the mouse is -1, so -2 is free.
 const POINTER_NONE := -2

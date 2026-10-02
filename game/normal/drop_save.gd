@@ -204,6 +204,55 @@ const CELL_LINEAGE := {
 	"lineage": TYPE_INT,
 }
 
+## **What `drop.bodies` may also hold** (pack 3, docs/design/behaviour.md §8):
+## every body's rules and what they had it doing, a column a field like the
+## rest. `behaviour` is -1 for the founders' rules -- a drifter's, a floc's and
+## every body's still on them -- and otherwise which list of `drop.behaviours`
+## it carries, so a family's shared list is kept once. Then the heading it steers
+## for; what its rules claimed (`acts`: bit 0 a heading held, bit 1 a rest, bit 2
+## a swim) and its push's strength; the random turn it holds -- the rule that
+## drew it and the tick that rule last fired on, -1 for none; its stun; when it
+## last ate, on the drop's clock, -INF for never -- its `fed` is `age` less this,
+## kept as the time it happened so a round trip is exact; a hit it has not yet
+## felt, and the direction it came from; when it calls next; its echoes in
+## flight, [constant ECHO_NUMBERS] numbers each -- when it lands, where it came
+## off, its distance, its size and when it rings out; and what its rules last
+## read, input name to `[tick, reports]`, each report its numbers. Clocks in 64
+## bits, as every clock here is.
+##
+## A file without them is pack 2's, and loads every hunter on the founders'
+## rules, resting on as it was (food.gd's `load_drop`); a pack-2 build reading
+## one with them loads the rest and runs its own hunter. Each is checked as
+## [constant SHAPE] is when it is there, and every column one entry a body.
+const BEHAVIOUR := {
+	"behaviour": TYPE_PACKED_INT32_ARRAY,
+	"steer": TYPE_PACKED_FLOAT64_ARRAY,
+	"acts": TYPE_PACKED_BYTE_ARRAY,
+	"push": TYPE_PACKED_FLOAT64_ARRAY,
+	"tumble": TYPE_PACKED_INT32_ARRAY,
+	"tumble_tick": TYPE_PACKED_INT64_ARRAY,
+	"stun": TYPE_PACKED_FLOAT64_ARRAY,
+	"ate": TYPE_PACKED_FLOAT64_ARRAY,
+	"hit": TYPE_PACKED_FLOAT64_ARRAY,
+	"hit_from": TYPE_PACKED_FLOAT64_ARRAY,
+	"call": TYPE_PACKED_FLOAT64_ARRAY,
+	"echoes": TYPE_ARRAY,
+	"memory": TYPE_ARRAY,
+}
+## A kept echo's numbers: when it lands, where it came off (two), its distance,
+## its size and when it rings out.
+const ECHO_NUMBERS := 6
+## **The lists those bodies carry** (`drop.behaviours`, §8): `{"version": 1,
+## "lists": [...]}`, each list its rules' lines as behaviour.md §5.1 writes them,
+## by declared name -- so a name this build does not know is kept, a rule that
+## never fires, and written back as it came. Under a version this build does not
+## know, the lists are not read, and every body loads on the founders' rules.
+const BEHAVIOURS := {
+	"version": TYPE_INT,
+	"lists": TYPE_ARRAY,
+}
+const BEHAVIOURS_VERSION := 1
+
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
 ## -- empty for the faithful one.
@@ -457,7 +506,10 @@ static func _bad_bodies(drop: Dictionary) -> String:
 			return "a body's genome is not gene names to tiers"
 	if (drop["clocks"] as PackedFloat64Array).size() != 4:
 		return "drop.clocks is not four clocks"
-	return _bad_lineage(bodies, n)
+	var bad := _bad_lineage(bodies, n)
+	if bad.is_empty():
+		bad = _bad_behaviour(drop, bodies, n)
+	return bad
 
 
 ## What pack 2 added to the bodies, when it is there: each column the type it
@@ -477,6 +529,66 @@ static func _bad_lineage(bodies: Dictionary, n: int) -> String:
 			if not _is_genes(dna):
 				return "a body's DNA is not gene names to copies"
 	return ""
+
+
+## What pack 3 added, when it is there: the lists, each its lines, under a
+## version this build reads; and each column the type it says, one entry a body,
+## every body's list one the drop keeps, its echoes whole and its memory input
+## names to a tick and reports of numbers.
+static func _bad_behaviour(drop: Dictionary, bodies: Dictionary, n: int) -> String:
+	var lists := 0
+	var unread := false
+	if drop.has("behaviours"):
+		if not drop["behaviours"] is Dictionary:
+			return "drop.behaviours is not a dictionary"
+		var kept: Dictionary = drop["behaviours"]
+		var bad := _misfit(kept, BEHAVIOURS, "drop.behaviours.")
+		if not bad.is_empty():
+			return bad
+		unread = int(kept["version"]) != BEHAVIOURS_VERSION
+		if not unread:
+			for list: Variant in kept["lists"]:
+				if typeof(list) != TYPE_PACKED_STRING_ARRAY:
+					return "drop.behaviours.lists is not lists of rules"
+			lists = (kept["lists"] as Array).size()
+	for key: String in BEHAVIOUR:
+		if not bodies.has(key):
+			continue
+		if typeof(bodies[key]) != int(BEHAVIOUR[key]):
+			return "drop.bodies.%s is the wrong type" % key
+		var entries: int = bodies[key].size()
+		if entries != n:
+			return "drop.bodies.%s has %d entries for %d bodies" % [key, entries, n]
+	if bodies.has("behaviour") and not unread:
+		for index: int in bodies["behaviour"]:
+			if index < -1 or index >= lists:
+				return "drop.bodies.behaviour %d is not a list the drop keeps" % index
+	if bodies.has("echoes"):
+		for echoes: Variant in bodies["echoes"]:
+			if typeof(echoes) != TYPE_PACKED_FLOAT64_ARRAY \
+					or (echoes as PackedFloat64Array).size() % ECHO_NUMBERS != 0:
+				return "a body's echoes are not echoes"
+	if bodies.has("memory"):
+		for memory: Variant in bodies["memory"]:
+			if not _is_memory(memory):
+				return "a body's memory is not input names to what they read"
+	return ""
+
+
+## Whether [param value] is a body's memory as the file keeps it: input names to
+## `[tick, reports]`, each report its numbers.
+static func _is_memory(value: Variant) -> bool:
+	if not value is Dictionary:
+		return false
+	for input: Variant in value:
+		var read: Variant = value[input]
+		if typeof(input) != TYPE_STRING or not read is Array or (read as Array).size() != 2 \
+				or typeof(read[0]) != TYPE_INT or not read[1] is Array:
+			return false
+		for report: Variant in read[1]:
+			if typeof(report) != TYPE_PACKED_FLOAT64_ARRAY:
+				return false
+	return true
 
 
 ## What 1b-2 added, when it is there: every part the type it says, and the runs

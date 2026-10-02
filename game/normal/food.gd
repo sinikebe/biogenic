@@ -49,6 +49,15 @@ const Descent := preload("res://game/mechanics/descent.gd")
 ## The arithmetic of a tank, which every body in the drop runs as the player's
 ## node does (§5.2). Its static functions only: this file never makes the node.
 const Metabolism := preload("res://game/normal/metabolism.gd")
+## **Rules a body carries** (docs/design/behaviour.md §10): the generic mechanic
+## a water cell decides by, which knows inputs, outputs, kinds and tests and
+## nothing of cells or genes. Which name is which organ is wired here.
+const Rulebook := preload("res://game/mechanics/rulebook.gd")
+## A fan of rays: how a water cell's beam is spread, as the run spreads yours.
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
+## The file a drop is kept in, for the layout of pack 3's entries in it
+## ([method drop_state]). It preloads nothing of this file's, so no cycle.
+const DropSave := preload("res://game/normal/drop_save.gd")
 
 ## A meal, in the cell's own terms.
 ##
@@ -1035,7 +1044,10 @@ class Body:
 	var upkeep := 1.0
 	## Its own tail's speed: what it cruises at, and searches at (row 14).
 	var cruise := 0.0
-	## **Reserved** (§12): a behaviour genome for pack 3.
+	## **Its rules** (docs/design/behaviour.md §6.4): a list (`rulebook.gd`'s
+	## Behaviour) it shares with the family that carries it unchanged, or null
+	## for the founders' -- drop.gd's FOUNDERS -- which a founder, a sister, a
+	## posed body and a body from an old save carry without a copy.
 	var brain: Variant = null
 	# --- Lineage (docs/design/lineage.md §4): kept with the drop, drawn nowhere.
 	# [member id] above, these three and [member dna] are a body's record and what
@@ -1057,6 +1069,57 @@ class Body:
 	## none for a body the water makes. Not armour: a mouth it touches still
 	## swallows it ([method _look_in_drop]).
 	var grace := 0.0
+	# --- Pack 3 (docs/design/behaviour.md §4): what a body on rules is doing.
+	# Today's water and a drop with `rules` off never read any of these.
+	## **The heading it steers for** (§4.2): set by a turn on a tick and held,
+	## turned toward between ticks, until a later turn sets another or a rest
+	## clears it. [member holding] says whether it holds one.
+	var steer := 0.0
+	var holding := false
+	## What its rules claimed on its last tick, held until its next: a rest, a
+	## swim, and a push's strength, 0 for none (§4.1).
+	var resting := false
+	var swimming := false
+	var push := 0.0
+	## **The random turn it holds**: the rule that drew it and the tick it last
+	## fired on, -1 for none. While that rule keeps firing, the heading it drew
+	## is kept: a run of falling smell is one tumble, not a spin (§4.2).
+	var tumble := -1
+	var tumble_tick := -1
+	## **Stunned** (§4.3): seconds left resting with its rules unread, after a
+	## dart.
+	var stun := 0.0
+	## **When it last ate**, on the drop's clock -- a cell, a floc or a player --
+	## and -INF for a body that has not: its `fed` is the time since (§3.2).
+	var ate_at := -INF
+	## **A hit it has not yet felt on a tick** (§3.2): how hard, 0 for none, and
+	## the world direction it came from -- a bite on its membrane, or a dart.
+	var hit := 0.0
+	var hit_from := 0.0
+	## **Its own call** (`ampulla`, §3.2): when it calls next, on the drop's clock,
+	## and every return of its own on its way home or ringing, as `[lands, at,
+	## distance, size, rings until]` -- the place it came off, the distance its
+	## time home gives and the size its ring gives.
+	var call_at := 0.0
+	var echoes: Array = []
+	## **What its rules last read**: input name to `[tick, reports]`, the tick it
+	## was last read on and what it reported -- what rising, falling and leading
+	## are measured against (rulebook.gd's `choose`).
+	var memory := {}
+	## Its tail's own speed, without the push its `axoneme` now gives as a trigger
+	## of its own (§4.5); its `cirrus`'s turn rate; its `axoneme`'s thrust at full
+	## strength; and its `trichocyst`'s tier, 0 for none. Made with its body.
+	var tail := 0.0
+	var turn_rate := 0.0
+	var thrust := 0.0
+	var dart_tier := 0
+	## **Its organs as its senses read them** (§4.4, §12.1): each at its tier on
+	## the arc the default order puts it, made by [method _refresh_body] for a
+	## body with a mouth in a drop of this field's own; null otherwise. And what
+	## of the rulebook's vocabulary it has, as rulebook.gd's bits: what it wears
+	## and what every body has (`Rulebook.worn`).
+	var eye: Observer = null
+	var worn := 0
 
 
 ## **What a body lacks, for the body that is another player** (§1.2): how it
@@ -1103,6 +1166,89 @@ class Person:
 	## after it. Every rule that reaches for a person's body reaches through
 	## this, so a rule is written once for however many people there are.
 	var slot := PERSON_SLOT
+
+
+## **Whoever is sensing** (docs/design/behaviour.md §12.1): the player on this
+## device or any body in the water, by its place, heading, size, mouth and the
+## arcs its organs are worn on. **Every sense in this file is one function of
+## one of these** and of the bodies its organ reaches -- the nose, the beam, the
+## shadow, the touch and the call -- so the player's membrane and a water cell
+## read the water by one arithmetic, and neither is handed anything the other
+## is not (§3.2: no magic). Plain data, refilled where it is used.
+##
+## What a sense finds comes back on it too, beside what it was asked with: a
+## reading belongs to whoever took it.
+class Observer:
+	var pos := Vector2.ZERO
+	## Radians clockwise from world north, and the two directions it makes --
+	## built exactly as `cell.gd`'s `forward()` and `starboard()` build theirs,
+	## so a bearing from here is the cell's own `bearing_to`, to the bit.
+	var heading := 0.0
+	var forward := Vector2(0.0, -1.0)
+	var starboard := Vector2(1.0, 0.0)
+	var radius := 0.0
+	## How wide its mouth opens: what its nose weighs a body by.
+	var gape := 0.0
+	## Its own body as a mouth measures it, its `pellicle` and its wound: what
+	## the player's dread is felt against, and nothing else reads them.
+	var swallow := 0.0
+	var pellicle := 0
+	var wound := 0.0
+	## `chemocyte`: how far the nose reaches and the arc it is worn on.
+	var smell_range := 0.0
+	var smell_bearing := 0.0
+	## `palp`.
+	var touch_range := 0.0
+	## `stigma`: whether it wears one. The player's shadow is summed whatever it
+	## wears, and its membrane is gated downstream; a water cell's eyespot reads
+	## only when it is worn.
+	var eyespot := false
+	## `ocellus`: each ray's bearing, the arc a sweeping one crossed, how far the
+	## rays reach, and where the fan points and how far it spreads.
+	var beam_range := 0.0
+	var beam_bearings := PackedFloat32Array()
+	var beam_arcs := PackedFloat32Array()
+	var beam_fan_mid := 0.0
+	var beam_fan_half := -1.0
+	## `ampulla`: how far a call carries, where on the skin it leaves, how much
+	## of it a body in the way lets through, and the organ's tier.
+	var ping_range := 0.0
+	var ping_bearing := 0.0
+	var ping_through := 0.0
+	var ping_tier := 0
+	## Its own slot, which none of its senses ever reports; -1 for the player on
+	## this device, who is in no slot of the water's.
+	var slot := -1
+	# --- What [method _feel] found.
+	## The nose's reading, 0..1, and the scent of everything edible it summed on
+	## the way (the player's `concentration`) -- of what lay inside its reach
+	## alone, when the nose was asked alone.
+	var smell := 0.0
+	var scent := 0.0
+	## Light blocked, summed, and the direction it is blocked from.
+	var shade := 0.0
+	var shade_pull := Vector2.ZERO
+	## The player's dread, and the worst threat in it (§3.4: no water cell
+	## feels either).
+	var dread := 0.0
+	var worst := 0.0
+	# --- What [method _touch_of] found.
+	var touched := false
+	var touch := 0.0
+	var touch_bearing := 0.0
+
+	## Puts it at [param at], facing [param toward].
+	func face(at: Vector2, toward: float) -> void:
+		pos = at
+		heading = toward
+		forward = Vector2(sin(toward), -cos(toward))
+		starboard = Vector2(cos(toward), sin(toward))
+
+	## The body-relative bearing of [param point]: `cell.gd`'s `bearing_to`, from
+	## here.
+	func bearing_to(point: Vector2) -> float:
+		var offset := point - pos
+		return atan2(offset.dot(starboard), offset.dot(forward))
 
 
 ## Total scent concentration at the cell, 0..1. What the water is like, and no
@@ -1279,6 +1425,14 @@ var _dart_clock := 0.0
 ## The player's own mouth, reloading. Here and not on the cell for the same
 ## reason [member _dart_clock] is: the encounter lives in this file.
 var _bite_clock := 0.0
+## **The player on this device as an observer**, refilled by
+## [method _player_eye] for every sense it takes (behaviour.md §12.1).
+var _eye := Observer.new()
+## **The player on this device as the water finds it**: its place, size and
+## armour, as a body that is in no slot -- never in [member _cells] and never
+## in the grid -- refilled before the water senses, and handed to a water
+## cell's senses as [constant TARGET_PLAYER] (behaviour.md §12.1).
+var _me := Body.new()
 
 var _cell: CellBody = null
 var _cells: Array[Body] = []
@@ -1496,6 +1650,11 @@ func _step_body(index: int, delta: float) -> void:
 	if _drop != null:
 		b.dart_clock = maxf(b.dart_clock - delta, 0.0)
 		b.dash_clock = maxf(b.dash_clock - delta, 0.0)
+		# **Pack 3: in the drop every body runs on rules** (behaviour.md §4),
+		# and the hand-written hunter below is the reference alone.
+		if rules:
+			_step_ruled(index, b, delta)
+			return
 	match b.state:
 		State.STALK:
 			_step_stalk(index, b, delta)
@@ -2109,7 +2268,11 @@ func _contacts_with(p: Person) -> bool:
 		# **Not in the drop** (row 15): there a mouth swallows what fits on
 		# contact, whoever it is, as this cell's own always has. Dread still
 		# warns of it, because dread never depended on the run.
-		var committed := b.state == State.STALK and _hunts(b, p)
+		# **On rules nothing is on a run** (behaviour.md §4.3): what was committed
+		# is a cell coming for that player -- which the switch that lets only a
+		# run swallow a player asks, and nothing else does.
+		var committed := _coming_for_player(b, p) if _ruled() \
+			else b.state == State.STALK and _hunts(b, p)
 		if its_mouth and swallows_player(committed, _drop != null and contact_swallow,
 				_armoured(p), _gape(b)):
 			# **`veneneux`. It got you and it dies of it.** The one thing in the
@@ -2307,6 +2470,8 @@ func _chew(b: Body, other: Body) -> float:
 		return other.wound
 	b.bite = CellBody.BITE_GAP
 	other.wound = clampf(other.wound + damage, 0.0, 1.0)
+	# Felt as a `hit` on its membrane, from the mouth (behaviour.md §3.2).
+	_feel_hit(other, b.pos, _felt(damage))
 	b.wound = clampf(b.wound + CellBody.venom_back(
 		Genome.tier_of(other.genome, &"veneneux"), damage), 0.0, 1.0)
 	return other.wound
@@ -2421,6 +2586,8 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# on their own device, from the place.
 	var felt_at := _cell.bearing_to(at) if p == null else 0.0
 	b.wound = clampf(b.wound + damage, 0.0, 1.0)
+	# Felt as a `hit` on its membrane, from the player's mouth (behaviour.md §3.2).
+	_feel_hit(b, _cell.position if p == null else pb.pos, _felt(damage))
 	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"veneneux"), damage)
 	var hurt := 0.0
 	if p == null:
@@ -3080,12 +3247,79 @@ func _retire(index: int) -> void:
 # bearing in it at all, and a scalar with no bearing in it.
 # ---------------------------------------------------------------------------
 
+## **The player on this device, as an observer** (behaviour.md §12.1): its body
+## off the cell, and its organs as the run wrote them this frame -- what every
+## sense of the membrane is asked through.
+func _player_eye() -> Observer:
+	var o := _eye
+	o.face(_cell.position, _cell.heading)
+	o.radius = _cell.radius
+	o.gape = _cell.gape()
+	o.swallow = _cell.swallow_radius()
+	o.pellicle = _cell.extra(&"pellicle")
+	o.wound = _cell.wound
+	o.smell_range = smell_range
+	o.smell_bearing = smell_bearing
+	o.touch_range = touch_range
+	o.beam_range = beam_range
+	o.beam_bearings = beam_bearings
+	o.beam_arcs = beam_arcs
+	o.beam_fan_mid = beam_fan_mid
+	o.beam_fan_half = beam_fan_half
+	o.ping_range = ping_range
+	o.ping_bearing = ping_bearing
+	o.ping_through = ping_through
+	o.ping_tier = ping_tier
+	o.slot = -1
+	return o
+
+
+## **The player's nose, shadow and dread**, through [method _feel] -- the one
+## function every observer smells and sees by -- over the bodies the frame
+## gathered round the cell, written where the run reads them. The shadow's
+## bearing is left where it was when the last shadow faded.
 func _step_sense() -> void:
+	var o := _player_eye()
+	# In the drop, the bodies near this cell the frame gathered: nothing past
+	# them reaches any sense (§4.2) -- and in a pond the people in the water.
+	# In today's water, every body.
+	_feel(o, _sense_ids(), true, true, true)
+	concentration = minf(o.scent, 1.0)
+	# **There is no bearing here any more, and that is the change.** A cell with
+	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
+	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
+	# you have not grown is silent" true at the source as well as at the two
+	# gates downstream of it.
+	taste_level = o.smell
+	shadow = minf(o.shade, 1.0)
+	# Deliberately left where it was when the last shadow faded rather than
+	# snapped to dead ahead: the lobe is already dark at strength 0, and a
+	# bearing that resets would swing the amber round to the nose on its way
+	# out -- a movement the player would read as something passing in front of
+	# them, at the moment nothing is.
+	if shadow > 0.0 and o.shade_pull.length_squared() > 0.0:
+		shadow_bearing = o.bearing_to(o.pos + o.shade_pull)
+	threat = o.worst
+	dread_level = minf(o.dread, 1.0) * DREAD_CAP
+
+
+## **What an observer smells, the shadow it stands in, and -- for the player
+## alone -- its dread** (behaviour.md §12.1), over the bodies in [param scan]:
+## one pass, as the player's membrane has always made it, read off the observer
+## and those bodies and nothing else. [param smell] asks the nose, [param shade]
+## the eyespot, and [param fear] the dread only a player's membrane feels: no
+## organ reports another cell's mouth, so no water cell is ever asked it (§3.4).
+## What it finds is written on [param o]; a sense not asked is left at nothing.
+##
+## [param scan] holds slots, and [constant TARGET_PLAYER] for the player on this
+## device as a water cell finds it ([member _me]). The observer's own slot is
+## passed over.
+func _feel(o: Observer, scan: PackedInt32Array, smell: bool, shade: bool, fear: bool) -> void:
 	var total := 0.0
 	var dread := 0.0
 	var worst := 0.0
-	var gape := _cell.gape()
-	var shade := 0.0
+	var gape := o.gape
+	var shaded := 0.0
 	var shade_pull := Vector2.ZERO
 	# **What the nose picks up, which is not the same sum again.** Restricted to
 	# sources inside [member smell_range] and weighted by how nearly each one
@@ -3097,17 +3331,21 @@ func _step_sense() -> void:
 	# rewritten if the owner ever wanted a tail again.
 	var smelt_top := 0.0
 	var smelt_rest := 0.0
+	# **A nose asked alone sums only what lies inside its reach**: a water cell's
+	# `smell` is the level, which nothing past it reaches, and no organ of its
+	# reads the raw sum ([member Observer.scent]) the player's membrane does.
+	var nose_only := smell and not shade and not fear
 
-	# In the drop, the bodies near this cell the frame gathered: nothing past
-	# them reaches any sense (§4.2) -- and in a pond the people in the water.
-	# In today's water, every body.
-	var scan := _sense_ids()
 	for i: int in scan:
-		var b := _cells[i]
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
-		var offset := b.pos - _cell.position
+		var offset := b.pos - o.pos
 		var d := offset.length()
+		if nose_only and d >= o.smell_range:
+			continue
 
 		# Taste, over everything I can eat, weighted so a body crossing my gape
 		# limit fades rather than pops.
@@ -3116,28 +3354,46 @@ func _step_sense() -> void:
 		# protects it from every mouth there, so the scent weighs it by the size
 		# the mouth measures -- or it would call edible a cell the mouth cannot
 		# take. A floc smells in as it settles, never in a step (§7.2).
-		var edible := taste_weight(b.radius if _drop == null else _swallow_r(b), gape)
-		if b.inert:
-			edible *= b.settle
-		if edible > 0.0:
-			var c := scent(d) * edible
-			if c > 0.0:
-				total += c
-				if d < smell_range:
-					# The whole of "orientation should count": a cosine lobe
-					# about the arc the organ is worn on, never falling below
-					# SMELL_BEHIND. A cone with a tier-scaled width was measured
-					# and buys under 2% of swing -- three-senses.md §7.4.
-					var lobe := 0.5 + 0.5 * cos(angle_difference(
-						smell_bearing, _cell.bearing_to(b.pos)))
-					var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
-					# Loudest and rest, in one pass and with no sort: the new
-					# maximum demotes the old one into the tail.
-					if w > smelt_top:
-						smelt_rest += smelt_top
-						smelt_top = w
-					else:
-						smelt_rest += w
+		#
+		# The size is the one a mouth measures: [method _swallow_r]'s, and the
+		# player on this device ([member _me]) as its own cell measures itself.
+		#
+		# **Written out rather than called**, because every nose in the water runs
+		# this loop over every body it reaches: that size, [method taste_weight],
+		# [method scent] and the observer's `bearing_to`, each to the bit --
+		# drop_probe's checks 1 and 2 hold the two spellings together.
+		if smell:
+			var size := b.radius
+			if _drop != null:
+				size = _cell.swallow_radius() if b == _me \
+					else (b.radius * b.armour if armour_swallow else b.radius)
+			var edible := smoothstep(EDIBLE_FADE_OUT, EDIBLE_FADE_IN, size / maxf(gape, 0.001))
+			if b.inert:
+				edible *= b.settle
+			if edible > 0.0:
+				var c := 0.0
+				if d < SCENT_RANGE:
+					c = minf(1.0, pow(CORE_RANGE / maxf(d, CORE_RANGE), SCENT_FALLOFF)
+						* smoothstep(SCENT_RANGE, SCENT_RANGE - SCENT_WINDOW, d))
+				c *= edible
+				if c > 0.0:
+					total += c
+					if d < o.smell_range:
+						# The whole of "orientation should count": a cosine lobe
+						# about the arc the organ is worn on, never falling below
+						# SMELL_BEHIND. A cone with a tier-scaled width was
+						# measured and buys under 2% of swing -- three-senses.md
+						# §7.4.
+						var lobe := 0.5 + 0.5 * cos(angle_difference(o.smell_bearing,
+							atan2(offset.dot(o.starboard), offset.dot(o.forward))))
+						var w := c * (SMELL_BEHIND + (1.0 - SMELL_BEHIND) * lobe)
+						# Loudest and rest, in one pass and with no sort: the new
+						# maximum demotes the old one into the tail.
+						if w > smelt_top:
+							smelt_rest += smelt_top
+							smelt_top = w
+						else:
+							smelt_rest += w
 
 		# A floc is smell and nothing more: no mass to cast a shadow and no
 		# mouth to dread (§7.5).
@@ -3149,16 +3405,19 @@ func _step_sense() -> void:
 		# blocking the light really do block more of it than one, and a summed
 		# vector moves continuously where a pick-the-biggest would jump the
 		# bearing across the screen the frame two shadows swapped rank.
-		var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
-			b.radius / maxf(_cell.radius, 0.001))
-		if mass > 0.0 and d < SHADOW_RANGE:
-			var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
-				0.0, 1.0)
-			var blocked := mass * near
-			if blocked > 0.0:
-				shade += blocked
-				shade_pull += offset / maxf(d, 0.001) * blocked
+		if shade:
+			var mass := smoothstep(SHADOW_MIN_RATIO, SHADOW_FULL_RATIO,
+				b.radius / maxf(o.radius, 0.001))
+			if mass > 0.0 and d < SHADOW_RANGE:
+				var near := clampf((SHADOW_RANGE - d) / (SHADOW_RANGE - SHADOW_CORE),
+					0.0, 1.0)
+				var blocked := mass * near
+				if blocked > 0.0:
+					shaded += blocked
+					shade_pull += offset / maxf(d, 0.001) * blocked
 
+		if not fear:
+			continue
 		# Dread, over **every** body, with no question asked that has a yes/no
 		# answer -- see THREAT_LOW for the three steps that gating this put into
 		# the one readout §7.0 exists to protect. A body too small-mouthed to
@@ -3168,7 +3427,7 @@ func _step_sense() -> void:
 		# Nine seconds of closing still separate the first dread from the first
 		# wake: ten seconds of the water simply being wrong, then a direction.
 		var level := smoothstep(THREAT_LOW, THREAT_HIGH,
-			_gape(b) / maxf(_cell.swallow_radius(), 0.001))
+			_gape(b) / maxf(o.swallow, 0.001))
 		worst = maxf(worst, level)
 		if level > 0.0:
 			dread += clampf((DREAD_RANGE - d) / (DREAD_RANGE - DREAD_CORE),
@@ -3182,68 +3441,46 @@ func _step_sense() -> void:
 		if d >= CHEW_RANGE:
 			continue
 		var rate := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
-			_gape(b), _cell.radius, _cell.extra(&"pellicle"), PI) \
+			_gape(b), o.radius, o.pellicle, PI) \
 			/ CellBody.BITE_GAP
 		if rate <= 0.0:
 			continue
 		var urgency := clampf(rate * CHEW_FULL_SECONDS, 0.0, 1.0)
 		dread += CHEW_SHARE * urgency \
 			* clampf((CHEW_RANGE - d) / (CHEW_RANGE - DREAD_CORE), 0.0, 1.0) \
-			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * _cell.wound)
+			* (CHEW_HURT_FLOOR + (1.0 - CHEW_HURT_FLOOR) * o.wound)
 
 	# **The meniscus bends the light away** (§3.2): a curved surface is a lens,
 	# and the stretch of it nearest the cell reads to an eyespot as a shadow at
 	# its bearing, EDGE_SHADOW of a body's at the closest, falling to nothing
 	# at SHADOW_RANGE. Summed with the bodies' like one more, so it moves the
 	# lobe as continuously as they do. The drop only.
-	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position)
+	if shade and _drop != null:
+		var edge := _drop.meniscus.depth(o.pos)
 		if edge < SHADOW_RANGE:
 			var blocked := Drop.EDGE_SHADOW * clampf((SHADOW_RANGE - edge)
 				/ (SHADOW_RANGE - SHADOW_CORE), 0.0, 1.0)
-			shade += blocked
-			shade_pull += (_drop.meniscus.nearest_rim(_cell.position) - _cell.position) \
+			shaded += blocked
+			shade_pull += (_drop.meniscus.nearest_rim(o.pos) - o.pos) \
 				.normalized() * blocked
 
-	concentration = minf(total, 1.0)
-	# **There is no bearing here any more, and that is the change.** A cell with
-	# no chemocyte leaves with [member smell_range] 0, so nothing is ever inside
-	# the nose and it leaves with taste_level 0 -- which is what makes "an organ
-	# you have not grown is silent" true at the source as well as at the two
-	# gates downstream of it. `s` is 0 there, and `0 / (0 + K)` is 0, so the
-	# saturation costs that guarantee nothing.
-	#
+	o.scent = total
 	# **A receptor saturates; it does not clip.** The clamp that used to be on
 	# this line was the actual fault three-senses.md §7.5 blamed on the sum:
 	# above 1.0 its slope is zero, and a readout with no slope in it is a
-	# readout a forager cannot climb. See [constant SMELL_HALF].
+	# readout a forager cannot climb. See [constant SMELL_HALF]. A nose with no
+	# reach sums nothing, and `0 / (0 + K)` is 0.
 	var s := smelt_top + SMELL_TAIL * smelt_rest
-	taste_level = s / (s + SMELL_HALF)
-	shadow = minf(shade, 1.0)
-	# Deliberately left where it was when the last shadow faded rather than
-	# snapped to dead ahead: the lobe is already dark at strength 0, and a
-	# bearing that resets would swing the amber round to the nose on its way
-	# out -- a movement the player would read as something passing in front of
-	# them, at the moment nothing is.
-	if shadow > 0.0 and shade_pull.length_squared() > 0.0:
-		shadow_bearing = _cell.bearing_to(_cell.position + shade_pull)
-	threat = worst
-	dread_level = minf(dread, 1.0) * DREAD_CAP
+	o.smell = s / (s + SMELL_HALF)
+	o.shade = shaded
+	o.shade_pull = shade_pull
+	o.worst = worst
+	o.dread = dread
 
 
-## **The beams.** Each ray cast against every body near it: the nearest surface
-## along the ray, or nothing.
-##
-## **Bodies nowhere near the fan are skipped first**, by one range test and one
-## angle test against [member beam_fan_mid] and [member beam_fan_half]. Past the
-## fork there can be twenty rays, and twenty rays against 34 bodies is 680 ray
-## tests a frame (three-senses.md §3.4); most of the water is behind or beside a
-## 100-degree fan. A body that passes is tested exactly as it always was, so the
-## answer does not change.
-##
-## **A sweeping ray is cast across the whole arc it crossed this frame**, in
-## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
-## nearest hit in that arc (beam-levels.md §4.3).
+## **The player's beams**, through [method _beams_of] -- the one function every
+## observer's rays are cast by -- over the bodies the frame gathered round the
+## cell: [member beams] answered, and [member beam_touched] counted.
 ##
 ## Deliberately blind to the motes: they are inert dust with no chemistry and no
 ## genome, and a beam that stopped on grit would spend the one clear signal the
@@ -3253,50 +3490,79 @@ func _step_beams() -> void:
 	beam_touched.clear()
 	if beam_range <= 0.0 or beam_bearings.is_empty() or _cell == null:
 		return
-	var origin := _cell.position
+	_beams_of(_player_eye(), _sense_ids(), beams, true)
+
+
+## **An observer's beams** (behaviour.md §12.1): each of its rays cast against
+## the bodies in [param scan] its fan can reach -- the nearest surface along the
+## ray, or nothing -- appended to [param out] as `[bearing, distance, hit,
+## body]`, index-matched to its bearings. [param touches] is the player's beam
+## experience: every body a ray stops on goes into [member beam_touched], and no
+## other observer's ever does.
+##
+## **Bodies nowhere near the fan are skipped first**, by one range test and one
+## angle test against the fan's middle and half-width. Past the fork there can
+## be twenty rays, and twenty rays against 34 bodies is 680 ray tests a frame
+## (three-senses.md §3.4); most of the water is behind or beside a 100-degree
+## fan. A body that passes is tested exactly as it always was, so the answer
+## does not change.
+##
+## **A sweeping ray is cast across the whole arc it crossed this frame**, in
+## sub-steps no wider than [constant BEAM_SUBSTEP], and answers with the
+## nearest hit in that arc (beam-levels.md §4.3).
+func _beams_of(o: Observer, scan: PackedInt32Array, out: Array, touches: bool) -> void:
+	if o.beam_range <= 0.0 or o.beam_bearings.is_empty():
+		return
+	var origin := o.pos
 	var near: Array[int] = []
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
 		var to := b.pos - origin
 		var d := to.length()
-		if d - b.radius > beam_range:
+		if d - b.radius > o.beam_range:
 			continue
-		if beam_fan_half >= 0.0 and d > b.radius:
-			var at := atan2(to.dot(_cell.starboard()), to.dot(_cell.forward()))
+		if o.beam_fan_half >= 0.0 and d > b.radius:
+			var at := atan2(to.dot(o.starboard), to.dot(o.forward))
 			var reach := asin(clampf(b.radius / d, 0.0, 1.0))
-			if absf(angle_difference(beam_fan_mid, at)) \
-					> beam_fan_half + reach + BEAM_SLACK:
+			if absf(angle_difference(o.beam_fan_mid, at)) \
+					> o.beam_fan_half + reach + BEAM_SLACK:
 				continue
 		near.append(i)
-	var sweeping := beam_arcs.size() == beam_bearings.size() * 2
-	for k in beam_bearings.size():
-		var bearing := beam_bearings[k]
+	var sweeping := o.beam_arcs.size() == o.beam_bearings.size() * 2
+	for k in o.beam_bearings.size():
+		var bearing := o.beam_bearings[k]
 		if not sweeping:
-			beams.append(_cast_beam(origin, bearing, near))
+			out.append(_cast_ray(o, origin, bearing, near, touches))
 			continue
-		var low := beam_arcs[2 * k]
-		var span := angle_difference(low, beam_arcs[2 * k + 1])
+		var low := o.beam_arcs[2 * k]
+		var span := angle_difference(low, o.beam_arcs[2 * k + 1])
 		var steps := maxi(int(ceilf(absf(span) / BEAM_SUBSTEP)), 1)
-		var best: Array = [bearing, beam_range, false, -1]
+		var best: Array = [bearing, o.beam_range, false, -1]
 		for s in steps + 1:
-			var ray := _cast_beam(origin, low + span * float(s) / float(steps), near)
+			var ray := _cast_ray(o, origin, low + span * float(s) / float(steps), near,
+				touches)
 			if bool(ray[2]) and (not bool(best[2]) or float(ray[1]) < float(best[1])):
 				best = ray
-		beams.append(best)
+		out.append(best)
 
 
-## **One ray**: the nearest surface of the bodies in [param near] along
-## [param bearing], as `[bearing, distance, hit, body]`. Whatever it stops on is
-## counted as touched.
-func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
-	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
-	var best := beam_range
+## **One ray** of [param o]'s: the nearest surface of the bodies in [param near]
+## along [param bearing], as `[bearing, distance, hit, body]` -- `body` the slot
+## it stopped on, [constant EDGE_BODY] for the rim, [constant TARGET_PLAYER] for
+## the player on this device, -1 for nothing. With [param touches], whatever it
+## stops on is counted as touched.
+func _cast_ray(o: Observer, origin: Vector2, bearing: float, near: Array[int],
+		touches: bool) -> Array:
+	var dir := o.forward * cos(bearing) + o.starboard * sin(bearing)
+	var best := o.beam_range
 	var found := false
 	var body := -1
 	for i: int in near:
-		var b := _cells[i]
+		var b := _cells[i] if i >= 0 else _me
 		var to := b.pos - origin
 		var along := to.dot(dir)
 		if along <= 0.0 or along - b.radius > best:
@@ -3318,7 +3584,8 @@ func _cast_beam(origin: Vector2, bearing: float, near: Array[int]) -> Array:
 			best = edge
 			found = true
 			body = EDGE_BODY
-	if found and body >= 0 and not _cells[body].inert and not beam_touched.has(body):
+	if touches and found and body >= 0 and not _cells[body].inert \
+			and not beam_touched.has(body):
 		beam_touched.append(body)
 	return [bearing, best, found, body]
 
@@ -3481,17 +3748,32 @@ static func ping_level(path: float, reach: float) -> float:
 ##
 ## What they multiply into is [method ping_level] over the echo's whole path,
 ## out and back.
+##
+## **The player's call**, through [method _call_of], the one function every
+## observer calls by: its returns go into [member _echoes], where they fly home.
 func _cast_ping() -> void:
+	_call_of(_player_eye(), _sense_ids(), _echoes)
+
+
+## **An observer's call** (behaviour.md §12.1): the returns its pulse would
+## bring home off the bodies in [param scan], appended to [param out] as `[due,
+## at, level, width, hold]` -- seconds until it lands, the place it came off,
+## how loud, how wide the organ reports it and how long it rings -- as
+## [method _cast_ping] above describes. Read off the observer and those bodies
+## and nothing else.
+func _call_of(o: Observer, scan: PackedInt32Array, out: Array) -> void:
 	# Clamped here and not trusted: the run writes it every frame, and a headless
 	# boot casts a pulse before the first write lands.
-	var tier := clampi(ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
+	var tier := clampi(o.ping_tier, 0, PING_RETURNS_BY_TIER.size() - 1)
 	if PING_RETURNS_BY_TIER[tier] <= 0:
 		return
-	var dir := _cell.forward() * cos(ping_bearing) + _cell.starboard() * sin(ping_bearing)
-	var origin := _cell.position + dir * _cell.radius
+	var dir := o.forward * cos(o.ping_bearing) + o.starboard * sin(o.ping_bearing)
+	var origin := o.pos + dir * o.radius
 	var found: Array = []
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
 		# A floc is far smaller than the wave: a speck does not echo, and the
@@ -3502,8 +3784,8 @@ func _cast_ping() -> void:
 		# been: moving the origin is about what the pulse can *see*, not about
 		# how far it carries or how a return fades, and a range that changed
 		# with the slot would make one slot strictly the best place for a radar.
-		var d := b.pos.distance_to(_cell.position) - b.radius
-		if d >= ping_range:
+		var d := b.pos.distance_to(o.pos) - b.radius
+		if d >= o.ping_range:
 			continue
 		found.append([maxf(d, 0.0), b.pos, b.radius])
 	# **The meniscus answers** (the drop, §3.2): the largest reflector a pulse
@@ -3511,9 +3793,9 @@ func _cast_ping() -> void:
 	# -- the widest, longest echo in the game. The hull, the bodies in the way
 	# and the returns' cap take their share of it exactly as of a body's.
 	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position)
-		if edge < ping_range:
-			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(_cell.position),
+		var edge := _drop.meniscus.depth(o.pos)
+		if edge < o.ping_range:
+			found.append([maxf(edge, 0.0), _drop.meniscus.nearest_rim(o.pos),
 				Drop.EDGE_ECHO_RADIUS])
 	if found.is_empty():
 		return
@@ -3523,7 +3805,7 @@ func _cast_ping() -> void:
 		var at: Vector2 = found[i][1]
 		# **Out and back**: to the near edge and home again, so the wave has
 		# travelled `2d` by the time the organ hears it.
-		var level := ping_level(2.0 * float(found[i][0]), ping_range)
+		var level := ping_level(2.0 * float(found[i][0]), o.ping_range)
 		var path := at - origin
 		var reach := path.length()
 		# The hull. A body touching the organ has no direction to be on either
@@ -3531,7 +3813,7 @@ func _cast_ping() -> void:
 		# lands mid-fade, which is the only honest answer to "which side".
 		var open := smoothstep(-PING_GRAZE, PING_GRAZE,
 			path.normalized().dot(dir))
-		level *= lerpf(ping_through, 1.0, open)
+		level *= lerpf(o.ping_through, 1.0, open)
 		# Everything nearer is in the way, and "nearer" is measured from the
 		# cell while the path is measured from the organ -- so the two orders
 		# are not quite the same order, and `for j in i` can skip a body that
@@ -3568,7 +3850,7 @@ func _cast_ping() -> void:
 			if radius_j <= 0.0:
 				continue
 			var clear := clampf((to_j - axis * along).length() / radius_j, 0.0, 1.0)
-			level *= lerpf(ping_through, 1.0, clear)
+			level *= lerpf(o.ping_through, 1.0, clear)
 		if level <= PING_SILENT:
 			continue
 		# The two readings beside the level, out of numbers this loop already
@@ -3590,38 +3872,60 @@ func _cast_ping() -> void:
 		# and the echo takes as long again to get home.
 		var flight := 2.0 * d / PING_SPEED
 		due = flight if i == 0 else maxf(flight, due + PING_MIN_GAP)
-		_echoes.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
+		out.append([due, heard[i][1], heard[i][2], heard[i][3], heard[i][4]])
 
 
 ## `palp`. The nearest body inside touch range, as a bearing and a closeness --
 ## 1 against the skin, 0 at the edge of reach. No light, no chemistry, no size:
 ## touching something tells you it is there and nothing else, which is exactly
 ## what makes it worth a slot to a cell that cannot see.
+##
+## **The player's touch**, through [method _touch_of], the one function every
+## observer touches by. The bearing is left where it was while nothing is near.
 func _step_touch() -> void:
 	touch_level = 0.0
 	if touch_range <= 0.0 or _cell == null:
 		return
+	var o := _player_eye()
+	_touch_of(o, _sense_ids())
+	if not o.touched:
+		return
+	touch_level = o.touch
+	touch_bearing = o.touch_bearing
+
+
+## **What an observer touches** (behaviour.md §12.1): the nearest surface of the
+## bodies in [param scan] -- and of the rim -- within its `palp`'s reach of its
+## skin, as a closeness and a bearing on [param o], or nothing.
+func _touch_of(o: Observer, scan: PackedInt32Array) -> void:
+	o.touched = false
+	o.touch = 0.0
+	if o.touch_range <= 0.0:
+		return
 	var best := INF
 	var at := Vector2.ZERO
 	# A floc is touched too (§7.5): it is there.
-	for i: int in _sense_ids():
-		var b := _cells[i]
+	for i: int in scan:
+		if i == o.slot:
+			continue
+		var b := _cells[i] if i >= 0 else _me
 		if not b.seeded:
 			continue
-		var d := b.pos.distance_to(_cell.position) - b.radius - _cell.radius
+		var d := b.pos.distance_to(o.pos) - b.radius - o.radius
 		if d < best:
 			best = d
 			at = b.pos
 	# **And so is the meniscus** (the drop, §3.2): the nearest thing there is.
 	if _drop != null:
-		var edge := _drop.meniscus.depth(_cell.position) - _cell.radius
+		var edge := _drop.meniscus.depth(o.pos) - o.radius
 		if edge < best:
 			best = edge
-			at = _drop.meniscus.nearest_rim(_cell.position)
-	if best >= touch_range:
+			at = _drop.meniscus.nearest_rim(o.pos)
+	if best >= o.touch_range:
 		return
-	touch_level = clampf(1.0 - maxf(best, 0.0) / touch_range, 0.0, 1.0)
-	touch_bearing = _cell.bearing_to(at)
+	o.touched = true
+	o.touch = clampf(1.0 - maxf(best, 0.0) / o.touch_range, 0.0, 1.0)
+	o.touch_bearing = o.bearing_to(at)
 
 
 ## Concentration contributed by one source at distance [param d].
@@ -3909,7 +4213,14 @@ func gape_at(index: int) -> float:
 ## farther than every sense can reach is hunting nothing it can find. A replay's
 ## field gathers nothing -- it is never stepped -- and asks every body it holds,
 ## which are the recorded ones near the cell.
+##
+## **On rules there is no run** (behaviour.md §4.3), and this is the nearest
+## cell coming for you: swimming, you within 35 degrees of its heading, a mouth
+## that could take you. A mirror reads it off the host's flag and a replay off
+## the recording, as before.
 func hunter() -> int:
+	if _ruled():
+		return _nearest_coming()
 	var best := -1
 	var best_d := INF
 	for i: int in (_near if _drop != null and not _replay else _all_ids()):
@@ -4483,6 +4794,12 @@ func pond_entries_for(slot: int, reach: float = SEND_REACH) -> Array:
 ## first, wherever it is; then the rest whose surface lies within [param reach],
 ## nearest surface first, ties by slot; [constant SEND_MAX] in all. Never a
 ## person, and never a floc: a floc is told once, by SETTLE ([method flocs_in_reach]).
+##
+## **On rules the flag says "coming for you"** (behaviour.md §4.3, §8),
+## computed here for each recipient as the run was: every body within reach that
+## is coming for them goes first, by slot, then the rest as before. A body
+## farther than every sense of theirs can reach is coming at nothing they can
+## sense, and is not sent.
 func _send_set(you: Vector2, target: int, serial: int, reach: float) -> Array:
 	var out: Array = []
 	var keys := PackedInt64Array()
@@ -4491,6 +4808,8 @@ func _send_set(you: Vector2, target: int, serial: int, reach: float) -> Array:
 		_send_ids.resize(0)
 		_drop.grid.query(you, reach + _widest_now + Drop.GRID_SLACK, _send_ids)
 		scan = _send_ids
+	if _ruled():
+		return _send_coming(you, target, reach, scan)
 	for i: int in scan:
 		var b := _cells[i]
 		if not b.seeded or b.inert or b.person != null or _stalks(b, target, serial):
@@ -4507,6 +4826,38 @@ func _send_set(you: Vector2, target: int, serial: int, reach: float) -> Array:
 			out.append(_entry_of(i, true))
 			if out.size() >= SEND_MAX:
 				return out
+	keys.sort()
+	for key: int in keys:
+		if out.size() >= SEND_MAX:
+			break
+		out.append(_entry_of(key & 0xFFFFFF, false))
+	return out
+
+
+## [method _send_set] on rules: of the bodies in [param scan] within
+## [param reach] of [param you], those coming for the recipient [param target]
+## names first, by slot and flagged, then the rest nearest first.
+func _send_coming(you: Vector2, target: int, reach: float, scan: PackedInt32Array) -> Array:
+	var out: Array = []
+	var keys := PackedInt64Array()
+	var coming := PackedInt32Array()
+	var p: Person = _cells[target].person if target >= 0 else null
+	for i: int in scan:
+		var b := _cells[i]
+		if not b.seeded or b.inert or b.person != null:
+			continue
+		var gap := b.pos.distance_to(you) - b.radius
+		if not (gap <= reach):
+			continue
+		if (target < 0 or p != null) and _coming_for_player(b, p):
+			coming.append(i)
+		else:
+			keys.append((int(clampf(gap, 0.0, 1.0e6) * 16.0) << 24) | i)
+	coming.sort()
+	for i: int in coming:
+		out.append(_entry_of(i, true))
+		if out.size() >= SEND_MAX:
+			return out
 	keys.sort()
 	for key: int in keys:
 		if out.size() >= SEND_MAX:
@@ -5054,6 +5405,23 @@ func _renew(b: Body) -> void:
 	b.tuned = -1
 	if not b.order.is_empty():
 		b.order = []
+	# And nothing of what a body on rules was doing (behaviour.md §4): no heading
+	# held, no claim, no stun, no meal yet, no hit, its own call due at once and
+	# nothing in flight or remembered. No number is drawn for any of it.
+	b.holding = false
+	b.resting = false
+	b.swimming = false
+	b.push = 0.0
+	b.tumble = -1
+	b.tumble_tick = -1
+	b.stun = 0.0
+	b.ate_at = -INF
+	b.hit = 0.0
+	b.call_at = 0.0
+	if not b.echoes.is_empty():
+		b.echoes.clear()
+	if not b.memory.is_empty():
+		b.memory.clear()
 	_serial += 1
 	b.serial = _serial
 	_changes += 1
@@ -5593,6 +5961,14 @@ var floor_share := Drop.SPAWN_SHARE
 var floor_tau := Drop.FLOOR_TAU
 ## Seconds of grace every newborn gets (§3.4): the player's FIRST_DELAY.
 var newborn_grace := FIRST_DELAY
+# --- Pack 3's (docs/design/behaviour.md §12.1), set by tools/drive.gd and
+# tools/eco_probe.gd as the ones above are. Nothing in the game writes it.
+## **The water's cells decide by the rules they carry** (§4, §5): every hunter
+## reads its rules, on its tick, over what its own senses report, and acts
+## through the triggers its body has. **Off is pack 2, to the byte** (§12.3
+## check 1): today's hand-written hunter, which once it has found its prey knows
+## where it is -- the reference `--rules=0` plays. Today's water never reads it.
+var rules := true
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -5666,6 +6042,36 @@ var _anchors_now := PackedVector2Array()
 var _made_for := PackedFloat64Array()
 ## Whose turn the next body is made for, among them (§10.2).
 var _turn := 0
+# --- Rules (docs/design/behaviour.md §3.5, §10): the wiring --------------------
+## **What a body's rules can name**: every input and output the body, the
+## metabolism and the genes declare (cell.gd's, metabolism.gd's and genome.gd's
+## DECLARES), made once a process.
+static var _vocabulary: Rulebook.Vocabulary = null
+## **The founders' rules** (drop.gd's FOUNDERS), read once against it: what a
+## body whose `brain` is null carries.
+static var _founders: Rulebook.Behaviour = null
+## **Each declared input to what reads it for a body, and each declared output
+## to what performs it** (§3.5 step 3) -- the one place a name meets an organ.
+## Made on first use ([method _wire]).
+var _readers := {}
+var _triggers := {}
+var _read_with := Callable()
+## **The parts every body has** -- the body's own and its metabolism's (cell.gd's
+## and metabolism.gd's DECLARES) -- beside the genes it wears.
+static var _everybody := {}
+## The body whose rules are being read, and its slot: what the readers read for.
+var _reading: Body = null
+var _reading_slot := -1
+## The sizes a rule's size is measured against, the body's own (§3.1).
+var _sizes := {&"mouth": 0.0, &"body": 0.0}
+## One tick's winners; a beam's rays; a call's returns -- reused, never held.
+var _fired: Array = []
+var _rays: Array = []
+var _returns: Array = []
+## **The bodies one organ of one water cell can reach**, asked of the grid; and a
+## dart's -- each pass its own array (§4.2's trap).
+var _organ_ids := PackedInt32Array()
+var _dart_ids := PackedInt32Array()
 
 
 # --- Made once a run, entered at every birth ----------------------------------------
@@ -6064,6 +6470,13 @@ func _age_alone(seconds: float) -> void:
 ## its line, its grace, and its DNA by gene name -- empty where the DNA is the
 ## body, as it is for every body the water makes, so the column costs a body
 ## that has not diverged nothing but an empty entry.
+##
+## **And, since pack 3, every body's rules and what they had it doing**
+## (behaviour.md §8): which list it carries -- each list kept once, by its lines
+## -- and its held heading, its claims, its random turn, its stun, its last meal,
+## a hit it has not felt, its call's clock, its echoes in flight and what its
+## rules last read (drop_save.gd's BEHAVIOUR). The runs are still written, for a
+## pack-2 build reading this file.
 func drop_state() -> Dictionary:
 	if _drop == null:
 		return {}
@@ -6097,6 +6510,21 @@ func drop_state() -> Dictionary:
 	var run_flags := PackedByteArray()
 	var run_clocks := PackedFloat64Array()
 	var run_points := PackedVector2Array()
+	var lists: Array = []
+	var list_of := {}
+	var behaviour := PackedInt32Array()
+	var steer := PackedFloat64Array()
+	var acts := PackedByteArray()
+	var push := PackedFloat64Array()
+	var tumble := PackedInt32Array()
+	var tumble_tick := PackedInt64Array()
+	var stun := PackedFloat64Array()
+	var ate := PackedFloat64Array()
+	var hit := PackedFloat64Array()
+	var hit_from := PackedFloat64Array()
+	var calls := PackedFloat64Array()
+	var echoes: Array = []
+	var memory: Array = []
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded or b.person != null:
@@ -6141,6 +6569,39 @@ func drop_state() -> Dictionary:
 			b.break_clock, b.stroke, b.wander, b.speed])
 		run_points.append(b.aim)
 		run_points.append(b.flee_from)
+		# Its rules, by the list's place among those kept: a family's once.
+		if b.brain == null:
+			behaviour.append(-1)
+		else:
+			if not list_of.has(b.brain):
+				list_of[b.brain] = lists.size()
+				lists.append(Rulebook.lines_of(b.brain))
+			behaviour.append(int(list_of[b.brain]))
+		steer.append(b.steer)
+		acts.append((1 if b.holding else 0) | (2 if b.resting else 0)
+			| (4 if b.swimming else 0))
+		push.append(b.push)
+		tumble.append(b.tumble)
+		tumble_tick.append(b.tumble_tick)
+		stun.append(b.stun)
+		ate.append(b.ate_at)
+		hit.append(b.hit)
+		hit_from.append(b.hit_from)
+		calls.append(b.call_at)
+		var flying := PackedFloat64Array()
+		for echo: Array in b.echoes:
+			var at_: Vector2 = echo[1]
+			flying.append_array([float(echo[0]), at_.x, at_.y, float(echo[2]),
+				float(echo[3]), float(echo[4])])
+		echoes.append(flying)
+		var read := {}
+		for input: StringName in b.memory:
+			var was: Array = b.memory[input]
+			var reports: Array = []
+			for report: Array in was[1]:
+				reports.append(PackedFloat64Array(report))
+			read[String(input)] = [int(was[0]), reports]
+		memory.append(read)
 	var counts := {}
 	for what: StringName in stats:
 		counts[String(what)] = int(stats[what])
@@ -6166,7 +6627,11 @@ func drop_state() -> Dictionary:
 			"starve": starve, "effort": effort, "bite": bite, "dart": dart,
 			"dash": dash, "dash_v": dash_v, "settle": settle, "life": life,
 			"genome": genome, "generation": generation, "lineage": lineage,
-			"grace": graces, "dna": dna},
+			"grace": graces, "dna": dna, "behaviour": behaviour, "steer": steer,
+			"acts": acts, "push": push, "tumble": tumble, "tumble_tick": tumble_tick,
+			"stun": stun, "ate": ate, "hit": hit, "hit_from": hit_from, "call": calls,
+			"echoes": echoes, "memory": memory},
+		"behaviours": {"version": DropSave.BEHAVIOURS_VERSION, "lists": lists},
 		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
 			"clocks": run_clocks, "points": run_points},
 		"gene_short": short,
@@ -6225,6 +6690,11 @@ func _run_target_id(b: Body) -> int:
 ## itself. [param state] must fit drop_save.gd's SHAPE -- its `read` hands over
 ## nothing else. Returns how many bodies it put back, and how many of them it
 ## trimmed and contained.
+##
+## **Every body's rules come back by name** (pack 3, behaviour.md §8), with
+## what they had it doing. A file from before keeps none: every hunter loads on
+## the founders' rules, its `fed` set from its `calm` so a body resting after a
+## meal or a miss rests on.
 func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	_cell = cell
 	_pond = false
@@ -6355,6 +6825,7 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 				_drifters += 1
 		_drop.grid.insert(slot[k], b.pos)
 	_load_runs(state, slot)
+	_load_rules(state, slot)
 	# The free slots in the order they would have been reused -- and ahead of
 	# them, reused last, any empty slot the list had lost track of.
 	var listed := {}
@@ -6392,6 +6863,85 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	_first_hunt = grace
 	_fresh_senses()
 	return {"bodies": slot.size(), "trimmed": trimmed, "contained": contained}
+
+
+## **Every body's rules and what they had it doing, as [param state] keeps
+## them** (pack 3), for the bodies in [param slots]: each list read again from
+## its lines by declared name -- a name this build does not know is a rule that
+## never fires, kept to be written back as it came -- and shared again by the
+## bodies that shared it. Lists of a version this build does not know are not
+## read: every body is on the founders' rules, doing what it was. **A file from
+## before pack 3 keeps none of it**: every hunter on the founders' rules, and a
+## body resting after a meal or a miss -- its `calm`, which [method _load_runs]
+## gave back -- having eaten as long ago as leaves it resting as long again
+## under the founders' `fed below 5` ([constant REST_MEAL]).
+func _load_rules(state: Dictionary, slots: PackedInt32Array) -> void:
+	var rows: Dictionary = state["bodies"]
+	if not rows.has("behaviour"):
+		for i: int in slots:
+			var b := _cells[i]
+			b.brain = null
+			b.ate_at = _t - (REST_MEAL - b.calm) if b.calm > 0.0 else -INF
+		return
+	var kept: Dictionary = state.get("behaviours", {})
+	var lists: Array = []
+	if int(kept.get("version", DropSave.BEHAVIOURS_VERSION)) == DropSave.BEHAVIOURS_VERSION:
+		for lines: PackedStringArray in kept.get("lists", []):
+			lists.append(behaviour_from(lines))
+	var behaviour: PackedInt32Array = rows["behaviour"]
+	var steer: PackedFloat64Array = rows.get("steer", PackedFloat64Array())
+	var acts: PackedByteArray = rows.get("acts", PackedByteArray())
+	var push: PackedFloat64Array = rows.get("push", PackedFloat64Array())
+	var tumble: PackedInt32Array = rows.get("tumble", PackedInt32Array())
+	var tumble_tick: PackedInt64Array = rows.get("tumble_tick", PackedInt64Array())
+	var stun: PackedFloat64Array = rows.get("stun", PackedFloat64Array())
+	var ate: PackedFloat64Array = rows.get("ate", PackedFloat64Array())
+	var hit: PackedFloat64Array = rows.get("hit", PackedFloat64Array())
+	var hit_from: PackedFloat64Array = rows.get("hit_from", PackedFloat64Array())
+	var calls: PackedFloat64Array = rows.get("call", PackedFloat64Array())
+	var echoes: Array = rows.get("echoes", [])
+	var memory: Array = rows.get("memory", [])
+	for k in slots.size():
+		var b := _cells[slots[k]]
+		b.brain = lists[behaviour[k]] if behaviour[k] >= 0 and behaviour[k] < lists.size() \
+			else null
+		if not steer.is_empty():
+			b.steer = steer[k]
+		if not acts.is_empty():
+			b.holding = (acts[k] & 1) != 0
+			b.resting = (acts[k] & 2) != 0
+			b.swimming = (acts[k] & 4) != 0
+		if not push.is_empty():
+			b.push = push[k]
+		if not tumble.is_empty():
+			b.tumble = tumble[k]
+		if not tumble_tick.is_empty():
+			b.tumble_tick = tumble_tick[k]
+		if not stun.is_empty():
+			b.stun = stun[k]
+		if not ate.is_empty():
+			b.ate_at = ate[k]
+		if not hit.is_empty():
+			b.hit = hit[k]
+		if not hit_from.is_empty():
+			b.hit_from = hit_from[k]
+		if not calls.is_empty():
+			b.call_at = calls[k]
+		b.echoes = []
+		if not echoes.is_empty():
+			var flying: PackedFloat64Array = echoes[k]
+			for e in range(0, flying.size(), DropSave.ECHO_NUMBERS):
+				b.echoes.append([flying[e], Vector2(flying[e + 1], flying[e + 2]),
+					flying[e + 3], flying[e + 4], flying[e + 5]])
+		b.memory = {}
+		if not memory.is_empty():
+			var read: Dictionary = memory[k]
+			for input: String in read:
+				var was: Array = read[input]
+				var reports: Array = []
+				for report: PackedFloat64Array in was[1]:
+					reports.append(Array(report))
+				b.memory[StringName(input)] = [int(was[0]), reports]
 
 
 ## **What every body was doing, as [param state] keeps it** (1b-2 on), for the
@@ -6495,6 +7045,9 @@ func _process_drop(delta: float) -> void:
 	if _pond:
 		for k in _guests:
 			_step_person(delta, PERSON_SLOT + k)
+	# On rules, the water senses this cell where it is now (behaviour.md §12.1).
+	if rules:
+		_refresh_me()
 	_step_drop_bodies()
 	_near.resize(0)
 	if anchored:
@@ -6644,6 +7197,17 @@ func _tank(i: int, b: Body, dt: float) -> bool:
 func _feed_water(b: Body, nutrition: float) -> void:
 	b.hunger = maxf(b.hunger - Metabolism.meal(nutrition), 0.0)
 	b.starve = 0.0
+	# **What `fed` counts from** (behaviour.md §3.2): a cell, a floc or a player.
+	b.ate_at = _t
+	# And, on rules, which senses fed the water (§12.3 check 9): every meal of a
+	# hunter wearing a nose, a radar or a laser.
+	if _ruled() and not b.drifter:
+		if Genome.tier_of(b.genome, &"chemocyte") > 0:
+			_stat(&"meals_nose")
+		if Genome.tier_of(b.genome, &"ampulla") > 0:
+			_stat(&"meals_radar")
+		if Genome.tier_of(b.genome, &"ocellus") > 0:
+			_stat(&"meals_laser")
 
 
 ## **Growth, as the player grows** (§5.5): a unit of radius a meal to
@@ -6719,6 +7283,18 @@ func _refresh_body(b: Body) -> void:
 	b.tox = clampi(Genome.tier_of(g, &"veneneux"), 0, 3)
 	b.cruise = CellBody.swim_speed_of(Genome.tier_of(g, &"flagellum"),
 		Genome.tier_of(g, &"axoneme"))
+	# Pack 3 (behaviour.md §4.5): its tail alone, the push being a trigger of
+	# its own -- and, for a mouth in a drop of this field's own, its organs as its
+	# senses read them (§12.1).
+	b.tail = CellBody.speed_for(Genome.tier_of(g, &"flagellum"))
+	b.turn_rate = CellBody.turn_rate_for(Genome.tier_of(g, &"cirrus"))
+	b.thrust = CellBody.PUSH_ACCEL_BY_TIER[clampi(Genome.tier_of(g, &"axoneme"), 0,
+		CellBody.PUSH_ACCEL_BY_TIER.size() - 1)]
+	b.dart_tier = clampi(Genome.tier_of(g, &"trichocyst"), 0,
+		CellBody.DART_RANGE_BY_TIER.size() - 1)
+	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
+		and not b.drifter and not b.inert else null
+	b.worn = Rulebook.worn(vocabulary(), g, _everybody) if b.eye != null else 0
 	var smell: float = CellBody.SMELL_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"chemocyte"), 0, 3)]
 	var ping: float = CellBody.PING_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ampulla"), 0, 3)]
 	var beam: float = CellBody.BEAM_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ocellus"), 0, 3)]
@@ -6954,6 +7530,639 @@ func _shore_turn(b: Body, delta: float) -> void:
 		return
 	b.heading = wrapf(rotate_toward(b.heading, _angle_of(-out, b.heading),
 		Drop.shore_turn(depth) * delta), -PI, PI)
+
+
+# --- Behaviour by rules (docs/design/behaviour.md §3-§5): pack 3's ----------------------
+# Every body in a drop of this field's own runs here while [member rules] is on.
+# The rules' arithmetic -- reading from the top, one winner for each trigger --
+# is rulebook.gd's, which knows no organ. This is the wiring: each declared name
+# to the function that reads it for a body or performs it, the body's triggers,
+# and what the water reads off a body coming for someone.
+
+## **Leading** (§4.2, §6.5): a turn toward an input that also reported last
+## tick aims ahead of its bearing by this many times how far the bearing
+## drifted since -- the textbook navigation constant, a starting value.
+const LEAD := 3.0
+## **A bearing that jumps belongs to a new target** and is aimed at straight
+## (§4.2): a drift wider than this, in radians, between one tick and the next.
+## Not in the spec's table: a starting value, 30 degrees.
+const LEAD_JUMP := 0.5235987755982988
+## **Coming for you** (§4.3, §6.5): a cell swimming with you within this many
+## degrees of its heading, half today's LOCK_CONE_DEG -- and its cosine.
+const COMING_CONE_DEG := 35.0
+const COMING_COS := 0.8191520442889918
+## The census's names for the founders' rules firing, one each (§12.3 check 9).
+const FIRED: Array[StringName] = [&"fired_1", &"fired_2", &"fired_3", &"fired_4",
+	&"fired_5", &"fired_6", &"fired_7", &"fired_8"]
+
+
+## **Every input and output a body's rules can name** (behaviour.md §3): the
+## body's, the metabolism's and the genes', made once a process.
+static func vocabulary() -> Rulebook.Vocabulary:
+	if _vocabulary == null:
+		_vocabulary = Rulebook.vocabulary([CellBody.DECLARES, Metabolism.DECLARES,
+			Genome.DECLARES])
+		for owner: StringName in CellBody.DECLARES:
+			_everybody[owner] = true
+		for owner: StringName in Metabolism.DECLARES:
+			_everybody[owner] = true
+	return _vocabulary
+
+
+## **The founders' rules** (drop.gd's FOUNDERS, behaviour.md §5.1), read once.
+static func founders() -> Rulebook.Behaviour:
+	if _founders == null:
+		_founders = Rulebook.from_lines(PackedStringArray(Drop.FOUNDERS), vocabulary())
+	return _founders
+
+
+## **A list from its lines**, by declared name (§8): what a body carries, for a
+## save or a tool. A line this build cannot read is a rule that never fires.
+static func behaviour_from(lines: PackedStringArray) -> Rulebook.Behaviour:
+	return Rulebook.from_lines(lines, vocabulary())
+
+
+## Whether this field's own drop runs on rules: not a mirror's picture of
+## another's, nor a replay's.
+func _ruled() -> bool:
+	return rules and _drop != null and not _mirror and not _replay
+
+
+## **The wiring** (§3.5 step 3), made on first use: each declared input to the
+## function that reads it for any body, and each declared output to the one
+## that performs it, under the declared names.
+func _wire() -> void:
+	if not _readers.is_empty():
+		return
+	_readers = {
+		&"metabolism.hunger": _read_hunger,
+		&"metabolism.fed": _read_fed,
+		&"body.hit": _read_hit,
+		&"chemocyte.smell": _read_smell,
+		&"stigma.shadow": _read_shadow,
+		&"palp.touch": _read_touch,
+		&"ocellus.beam": _read_beam,
+		&"ampulla.echo": _read_echo,
+	}
+	_triggers = {
+		&"body.turn-toward": _turn_toward,
+		&"body.turn-away": _turn_away,
+		&"body.turn-random": _turn_random,
+		&"body.swim": _swim_on,
+		&"body.rest": _rest_on,
+		&"myoneme.dash": _dash_on,
+		&"axoneme.push": _push_on,
+	}
+	_read_with = _read_input
+	founders()
+
+
+## **What the body whose rules are being read reports on [param input]**, by
+## the function wired to the name: reports nearest first, each its declared
+## values in order -- its bearing first where it has one, and after them, for
+## the steering alone, the world direction of that bearing. A name with nothing
+## wired to it reports nothing.
+func _read_input(input: StringName) -> Array:
+	var reader: Callable = _readers.get(input, Callable())
+	if not reader.is_valid():
+		return []
+	return reader.call(_reading_slot, _reading)
+
+
+## **A body's organs as its senses read them** (§4.4, §12.1): each at its tier
+## -- a beam by its copies, as a water cell has no levels -- on the arc the
+## default order puts it on, as the run aims yours, and its mouth. Kept on the
+## body and made again whenever what it wears or its size changes: in the drop
+## a radius moves only through a door that refreshes the body.
+func _eye_of(b: Body) -> Observer:
+	var g := b.genome
+	var o := b.eye if b.eye != null else Observer.new()
+	o.radius = b.radius
+	o.gape = _gape(b)
+	var order := Cilia.default_order(g)
+	var tier := clampi(Genome.tier_of(g, &"chemocyte"), 0, 3)
+	o.smell_range = CellBody.SMELL_RANGE_BY_TIER[tier]
+	o.smell_bearing = _arc_in(order, &"chemocyte")
+	o.touch_range = CellBody.TOUCH_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"palp"), 0, 3)]
+	o.eyespot = Genome.tier_of(g, &"stigma") > 0
+	tier = clampi(Genome.tier_of(g, &"ampulla"), 0, 3)
+	o.ping_range = CellBody.PING_RANGE_BY_TIER[tier]
+	o.ping_tier = tier
+	o.ping_through = CellBody.PING_THROUGH_BY_TIER[tier]
+	o.ping_bearing = _arc_in(order, &"ampulla")
+	# The beam as the run aims yours below its fork (normal_mode.gd's
+	# `_aim_beam`): a fixed fan of its rung's rays, spread about the arc.
+	var shape := CellBody.beam_shape(clampi(Genome.tier_of(g, &"ocellus"), 0, 3), &"")
+	o.beam_range = float(shape[3])
+	o.beam_arcs = PackedFloat32Array()
+	var bearings := PackedFloat32Array()
+	var slot := order.find(&"ocellus")
+	if int(shape[0]) > 0 and slot >= 0:
+		var half := deg_to_rad(float(shape[1]))
+		var fan := RayFan.new()
+		fan.configure(int(shape[0]), half, 0.0)
+		fan.step(0.0)
+		var middle := Cilia.slot_bearing(slot)
+		var offsets := fan.offsets()
+		for k in offsets.size():
+			bearings.append(wrapf(middle + offsets[k], -PI, PI))
+		o.beam_fan_mid = middle
+		o.beam_fan_half = half
+	else:
+		o.beam_fan_half = -1.0
+	o.beam_bearings = bearings
+	return o
+
+
+## Where [param gene] is worn in [param order], as a bearing: dead ahead for one
+## that is not, as `Cilia.bearing_of` answers the run.
+static func _arc_in(order: Array, gene: StringName) -> float:
+	var slot := order.find(gene)
+	return Cilia.slot_bearing(slot) if slot >= 0 else 0.0
+
+
+## **Body [param b] in slot [param i], as an observer**: its organs and its
+## mouth from its eye, at its place and heading now.
+func _body_eye(i: int, b: Body) -> Observer:
+	var o := b.eye
+	o.face(b.pos, b.heading)
+	o.slot = i
+	return o
+
+
+## **The bodies an organ of body [param b] reaching [param reach] can find**,
+## asked of the grid round it -- and the player on this device and the people
+## in a pond, who are never in the grid, while they are in the water. Every
+## sense filters this to exactly what its organ reaches.
+func _scan_for(b: Body, reach: float) -> PackedInt32Array:
+	_organ_ids.resize(0)
+	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _organ_ids)
+	if _me.seeded:
+		_organ_ids.append(TARGET_PLAYER)
+	if _pond:
+		for k in _guests:
+			if _cells[PERSON_SLOT + k].seeded:
+				_organ_ids.append(PERSON_SLOT + k)
+	return _organ_ids
+
+
+## **The player on this device, as the water finds it** ([member _me]): made
+## again before the water senses -- where it is, how big, and whether it is in
+## the water at all.
+func _refresh_me() -> void:
+	_me.seeded = in_water and anchored and _cell != null
+	if not _me.seeded:
+		return
+	_me.pos = _cell.position
+	_me.heading = _cell.heading
+	_me.radius = _cell.radius
+	_me.inert = false
+	_me.settle = 1.0
+	_me.drifter = false
+
+
+# --- The inputs (§3.2): one function each, from the senses as they are ------------
+
+## `metabolism.hunger`: its tank, a level, always.
+func _read_hunger(_i: int, b: Body) -> Array:
+	return [[b.hunger]]
+
+
+## `metabolism.fed`: seconds since it last ate, always -- INF for a body that
+## never has.
+func _read_fed(_i: int, b: Body) -> Array:
+	return [[_t - b.ate_at]]
+
+
+## `body.hit`: a bite or a dart that landed on it since its last tick, at its
+## bearing now and how hard.
+func _read_hit(_i: int, b: Body) -> Array:
+	if b.hit <= 0.0:
+		return []
+	return [[angle_difference(b.heading, b.hit_from), b.hit, b.hit_from]]
+
+
+## `chemocyte.smell`: the level its nose reads, always while it wears one --
+## the player's own nose, run from where this body is (§12.1).
+func _read_smell(i: int, b: Body) -> Array:
+	var o := _body_eye(i, b)
+	if o.smell_range <= 0.0:
+		return []
+	_feel(o, _scan_for(b, o.smell_range), true, false, false)
+	return [[o.smell]]
+
+
+## `stigma.shadow`: the light blocked by bodies about its size or bigger and by
+## the rim, summed with a bearing, while any is.
+func _read_shadow(i: int, b: Body) -> Array:
+	var o := _body_eye(i, b)
+	if not o.eyespot:
+		return []
+	_feel(o, _scan_for(b, SHADOW_RANGE), false, true, false)
+	var level := minf(o.shade, 1.0)
+	if level <= 0.0 or o.shade_pull.length_squared() <= 0.0:
+		return []
+	var bearing := o.bearing_to(o.pos + o.shade_pull)
+	return [[bearing, level, wrapf(b.heading + bearing, -PI, PI)]]
+
+
+## `palp.touch`: the nearest thing within its reach of its skin, the rim
+## included, as a bearing and a closeness.
+func _read_touch(i: int, b: Body) -> Array:
+	var o := _body_eye(i, b)
+	if o.touch_range <= 0.0:
+		return []
+	_touch_of(o, _scan_for(b, o.touch_range + o.radius + _widest_now))
+	if not o.touched:
+		return []
+	return [[o.touch_bearing, o.touch, wrapf(b.heading + o.touch_bearing, -PI, PI)]]
+
+
+## `ocellus.beam`: each ray that stops on something -- a cell, a floc, you or the
+## rim -- as its bearing and how far, nearest first. What it hit is not reported.
+func _read_beam(i: int, b: Body) -> Array:
+	var o := _body_eye(i, b)
+	if o.beam_range <= 0.0:
+		return []
+	_rays.clear()
+	_beams_of(o, _scan_for(b, o.beam_range + _widest_now), _rays, false)
+	var out: Array = []
+	for ray: Array in _rays:
+		if bool(ray[2]):
+			out.append([float(ray[0]), float(ray[1]),
+				wrapf(b.heading + float(ray[0]), -PI, PI)])
+	if out.size() > 1:
+		out.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
+	return out
+
+
+## `ampulla.echo`: each return of its own call while it rings -- its bearing to
+## where the body it came off was, its distance from when it came back, and its
+## size from how long it rings -- nearest first. A return that has rung out is
+## let go.
+func _read_echo(i: int, b: Body) -> Array:
+	var out: Array = []
+	if b.echoes.is_empty():
+		return out
+	var o := _body_eye(i, b)
+	for k in range(b.echoes.size() - 1, -1, -1):
+		var echo: Array = b.echoes[k]
+		if float(echo[4]) <= _t:
+			b.echoes.remove_at(k)
+		elif float(echo[0]) <= _t:
+			var bearing := o.bearing_to(echo[1])
+			out.append([bearing, float(echo[2]), float(echo[3]),
+				wrapf(b.heading + bearing, -PI, PI)])
+	if out.size() > 1:
+		out.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
+	return out
+
+
+## **Its own call goes out** when its clock says (§3.2): once a round trip, by
+## the player's own arithmetic ([method _call_of]), from where it is now. Each
+## return is kept as the place it came off, the distance its time home says
+## and the size its ring says, to be read from when it lands until it rings out.
+func _call_now(i: int, b: Body) -> void:
+	if b.eye == null or b.eye.ping_range <= 0.0 or _t < b.call_at:
+		return
+	b.call_at = _t + CellBody.PING_PERIOD_BY_TIER[b.eye.ping_tier]
+	for k in range(b.echoes.size() - 1, -1, -1):
+		if float((b.echoes[k] as Array)[4]) <= _t:
+			b.echoes.remove_at(k)
+	var o := _body_eye(i, b)
+	_returns.clear()
+	_call_of(o, _scan_for(b, o.ping_range + _widest_now), _returns)
+	for one: Array in _returns:
+		var due := float(one[0])
+		var hold := float(one[4])
+		b.echoes.append([_t + due, one[1], due * PING_SPEED * 0.5,
+			hold * PING_SPEED / (2.0 * PING_RING), _t + due + hold])
+
+
+# --- The outputs (§3.3): the triggers a body has --------------------------------
+
+## `body.turn-toward`: the heading it steers for becomes the report's bearing --
+## led, when the input also reported last tick, by three times how far that
+## bearing drifted since: constant-bearing pursuit (§4.2).
+func _turn_toward(_i: int, b: Body, _k: int, report: Array, before: Variant, _tick: int) -> void:
+	var toward := float(report[report.size() - 1])
+	var lead := 0.0
+	if before != null:
+		var nearest := INF
+		for was: Array in before:
+			var drift := angle_difference(float(was[was.size() - 1]), toward)
+			if absf(drift) < absf(nearest):
+				nearest = drift
+		if absf(nearest) <= LEAD_JUMP:
+			lead = LEAD * nearest
+	b.steer = wrapf(toward + lead, -PI, PI)
+	b.holding = true
+
+
+## `body.turn-away`: the opposite heading.
+func _turn_away(_i: int, b: Body, _k: int, report: Array, _before: Variant, _tick: int) -> void:
+	b.steer = wrapf(float(report[report.size() - 1]) + PI, -PI, PI)
+	b.holding = true
+
+
+## `body.turn-random`: a heading 90 to 180 degrees to a random side, drawn when
+## the rule starts firing, from the stream `--seed=` seeds, and kept while it
+## keeps firing (§4.2).
+func _turn_random(_i: int, b: Body, k: int, _report: Array, _before: Variant, tick: int) -> void:
+	if not (b.tumble == k and b.tumble_tick == tick - 1 and b.holding):
+		var side := 1.0 if randf() < 0.5 else -1.0
+		b.steer = wrapf(b.heading + side * randf_range(PI * 0.5, PI), -PI, PI)
+	b.tumble = k
+	b.tumble_tick = tick
+	b.holding = true
+
+
+## `body.swim`: it beats its flagellum at its tail's speed, paying for it.
+func _swim_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	b.swimming = true
+
+
+## `body.rest`: everything stops -- the water carries it, for free -- and the
+## heading it held is let go.
+func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	b.resting = true
+	b.holding = false
+
+
+## `myoneme.dash`: a burst forward, on its cooldown and at its price.
+func _dash_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	_dash(b)
+
+
+## `axoneme.push`: its axoneme's thrust at the rule's strength while it holds.
+func _push_on(_i: int, b: Body, k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	var list: Rulebook.Behaviour = b.brain if b.brain != null else founders()
+	b.push = list.rules[k].option
+
+
+# --- A body on rules, stepped (§4) ----------------------------------------------------
+
+## **A body on rules** (§4): on its tick its rules are read -- unless it is
+## stunned -- and between ticks it does what they claimed; then what defends it
+## defends it, its own call goes out when it is due, and a player it is coming
+## for feels it. A body with no mouth decides nothing and drifts, as today's.
+func _step_ruled(index: int, b: Body, delta: float) -> void:
+	if b.stun > 0.0:
+		b.stun = maxf(b.stun - delta, 0.0)
+	if b.look and not b.drifter:
+		_decide_by_rules(index, b)
+	_move_ruled(b, delta)
+	# Each asked only of a body it can concern, here rather than inside: these
+	# run on every step of every body.
+	if b.dart_tier > 0 and b.dart_clock <= 0.0 and not b.inert:
+		_darts_of(index, b)
+	if b.drifter:
+		return
+	if b.eye != null and b.eye.ping_range > 0.0 and _t >= b.call_at:
+		_call_now(index, b)
+	if b.stun <= 0.0 and not b.resting and (b.swimming or b.push > 0.0 or b.dash_v > 0.0):
+		_felt_coming(b, delta)
+
+
+## **One tick of its rules** (§4.1): read from the top, one winner for each
+## trigger, by rulebook.gd -- each input read at most once and only for an organ
+## it wears -- and each winner performed. A trigger nothing claimed does what a
+## body does on its own: no new heading, no swim, no push. A hit is felt on the
+## tick it is read, acted on or not. **A stunned body reads nothing**, and keeps
+## what hit it for the tick it reads again: the dart that stunned it is felt
+## then, at its bearing.
+func _decide_by_rules(index: int, b: Body) -> void:
+	if b.stun > 0.0:
+		return
+	if _readers.is_empty():
+		_wire()
+	var list: Rulebook.Behaviour = b.brain if b.brain != null else _founders
+	var tick := _frame / Drop.LOD_EVERY
+	_reading = b
+	_reading_slot = index
+	_sizes[&"mouth"] = b.eye.gape
+	_sizes[&"body"] = b.radius
+	# What it wears is its genome; what every body has, it has ([member Body.worn]).
+	# A gene its DNA carries and its body does not wear is not there: its inputs
+	# never report and its outputs never fire (§3.5, §12.3 check 3).
+	Rulebook.choose(list, _read_with, b.worn, _sizes, b.memory, tick, _fired)
+	b.resting = false
+	b.swimming = false
+	b.push = 0.0
+	for won: Array in _fired:
+		var k := int(won[0])
+		var act: Callable = _triggers.get(list.rules[k].output, Callable())
+		if act.is_valid():
+			act.call(index, b, k, won[1], won[2], tick)
+		if b.brain == null and k < FIRED.size():
+			_stat(FIRED[k])
+	b.hit = 0.0
+	_reading = null
+
+
+## **How a body on rules moves** (§4.2, §4.5): toward the heading it holds at
+## its own cirrus's rate, paying TURN_COST a radian, the water's wander on top --
+## or, holding none, on the water's heading: the free wander and the turn off
+## the shore. At its tail's speed while it swims and with its axoneme's thrust
+## while it pushes, each paid at the player's prices, a dash's burst fading
+## with the drag; resting, stunned, or claiming neither, carried at
+## DRIFT_SPEED for free. A swimming body slides along the rim.
+func _move_ruled(b: Body, delta: float) -> void:
+	var still := b.resting or b.stun > 0.0
+	if b.holding and not still:
+		var rate := b.turn_rate
+		var turn := clampf(angle_difference(b.heading, b.steer), -rate * delta, rate * delta)
+		b.wander = lerpf(b.wander, randf_range(-WANDER_RATE, WANDER_RATE),
+			1.0 - exp(-delta / WANDER_TAU))
+		b.heading = wrapf(b.heading + turn + b.wander * delta, -PI, PI)
+		b.effort += absf(turn) * CellBody.TURN_COST
+	else:
+		b.heading = wrapf(b.heading + randf_range(-DRIFT_TURN, DRIFT_TURN) * delta, -PI, PI)
+		_shore_turn(b, delta)
+	var pace := DRIFT_SPEED
+	if not still:
+		if b.swimming:
+			pace = b.tail
+			b.effort += CellBody.stroke_cost(b.tail) * delta
+		if b.push > 0.0:
+			var thrust := b.thrust * b.push
+			pace += thrust / CellBody.DRAG
+			b.effort += thrust * CellBody.STROKE_COST * delta
+	if b.dash_v > 0.0:
+		pace += b.dash_v
+		b.dash_v *= exp(-CellBody.DRAG * delta)
+		if b.dash_v < 1.0:
+			b.dash_v = 0.0
+	b.pos += _forward(b.heading) * pace * delta
+	b.speed = pace
+
+
+## Whether [param b] moves under its own power: a swim, a push or a dash's
+## burst.
+static func _under_power(b: Body) -> bool:
+	return b.stun <= 0.0 and not b.resting and (b.swimming or b.push > 0.0 or b.dash_v > 0.0)
+
+
+# --- Coming for you (§4.3) -------------------------------------------------------------
+
+## **Whether [param a] is coming for a body at [param at]** (behaviour.md §4.3):
+## it is swimming, has that body within [constant COMING_CONE_DEG] of its
+## heading, and has a mouth that could swallow it -- [param size] being that
+## body as a mouth measures it -- or chew it, opened up past CHEW_INVITE
+## ([param wound]): today's test for starting a run. What a membrane and an
+## organ read the water by -- the wake, a dart, full vision's rings, the
+## replay's hunter and the pond's flag -- and never an input to a rule (§14).
+func _coming_for(a: Body, at: Vector2, size: float, wound: float) -> bool:
+	if not _under_power(a):
+		return false
+	var to := at - a.pos
+	var d2 := to.length_squared()
+	if d2 <= 0.0 or _forward(a.heading).dot(to) < COMING_COS * sqrt(d2):
+		return false
+	return _worth_committing_to(a, _gape(a), size, wound)
+
+
+## **Whether [param a] is coming for player [param p]** -- null the cell on this
+## device -- who has to be in the water. **Their grace is not asked**: no sense
+## reports one, so a rule may turn a cell onto a player in it, and the wake and
+## the dart that warn of it and answer it are what the player is left with.
+func _coming_for_player(a: Body, p: Person) -> bool:
+	if p == null:
+		return in_water \
+			and _coming_for(a, _cell.position, _cell.swallow_radius(), _cell.wound)
+	var pb := _cells[p.slot]
+	return pb.seeded and _coming_for(a, pb.pos, pb.radius * p.armour, pb.wound)
+
+
+## **The nearest cell coming for the player on this device**, among the bodies
+## the frame gathered round it; -1 for none. [method hunter], on rules.
+func _nearest_coming() -> int:
+	if not in_water:
+		return -1
+	var best := -1
+	var best_d := INF
+	var size := _cell.swallow_radius()
+	for i: int in _near:
+		var b := _cells[i]
+		if not b.seeded or b.inert or b.drifter or b.person != null or not _under_power(b):
+			continue
+		var d := b.pos.distance_to(_cell.position)
+		if d < best_d and _coming_for(b, _cell.position, size, _cell.wound):
+			best_d = d
+			best = i
+	return best
+
+
+## **What a cell coming for a player does to them** (§4.3): their dart, if it
+## is ready and looks its way, stuns it; otherwise its strokes are their wake,
+## at its true bearing -- the run's own `_felt_hunting`, with "on a run at you"
+## read as "coming for you". The nearest player within the wake's reach it is
+## coming for: the strokes are one flagellum's, counted once.
+func _felt_coming(b: Body, delta: float) -> void:
+	if not _under_power(b):
+		return
+	var found := false
+	var to: Person = null
+	var d := WAKE_RANGE
+	if in_water:
+		var mine := b.pos.distance_to(_cell.position)
+		if mine < d and _coming_for(b, _cell.position, _cell.swallow_radius(), _cell.wound):
+			d = mine
+			found = true
+	if _pond:
+		for k in _guests:
+			var pb := _cells[PERSON_SLOT + k]
+			var p := pb.person
+			if p == null or not pb.seeded:
+				continue
+			var theirs := b.pos.distance_to(pb.pos)
+			if theirs < d and _coming_for(b, pb.pos, pb.radius * p.armour, pb.wound):
+				d = theirs
+				to = p
+				found = true
+	if not found:
+		return
+	var reach := dart_range if to == null else to.dart_range
+	var clock := _dart_clock if to == null else to.dart_clock
+	if reach > 0.0 and d < reach and clock <= 0.0:
+		var facing := dart_bearing if to == null else to.dart_bearing
+		if absf(angle_difference(facing, _bearing_for(to, b.pos))) \
+				<= deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
+			if to == null:
+				_dart_clock = dart_cooldown
+			else:
+				to.dart_clock = to.dart_cooldown
+			_tell(to, Contact.DARTED, b.pos, 0.0, By.WATER, &"")
+			_stun(b, _cell.position if to == null else _cells[to.slot].pos)
+			return
+	b.stroke -= delta
+	if b.stroke > 0.0:
+		return
+	var committed := d < LUNGE_RANGE
+	b.stroke = STROKE_GAP * (0.5 if committed else 1.0) \
+		+ randf_range(-STROKE_JITTER, STROKE_JITTER) * (0.5 if committed else 1.0)
+	_stat(&"wakes")
+	_tell(to, Contact.WAKED, b.pos, 1.0 if committed else smoothstep(WAKE_RANGE, WAKE_CORE, d),
+		By.WATER, &"")
+
+
+## **`trichocyst` defends every body** (§4.3): its dart goes off on its own at
+## the nearest cell coming for it -- inside its range and on the arc it is worn
+## on, once a cooldown -- and stuns it. Never at a player, as today: a player's
+## dart is the player's own ([method _felt_coming]).
+##
+## Asked by [method _step_ruled] only of a body that wears one, whose dart is
+## ready and which is no floc.
+func _darts_of(index: int, b: Body) -> void:
+	var tier := b.dart_tier
+	var reach := CellBody.DART_RANGE_BY_TIER[tier]
+	_dart_ids.resize(0)
+	_drop.grid.query(b.pos, reach + Drop.GRID_SLACK, _dart_ids)
+	var size := _swallow_r(b)
+	var best := -1
+	var best_d := reach
+	for j: int in _dart_ids:
+		if j == index:
+			continue
+		var a := _cells[j]
+		if not a.seeded or a.inert or a.drifter or a.person != null:
+			continue
+		var d := a.pos.distance_to(b.pos)
+		if d >= best_d or not _coming_for(a, b.pos, size, b.wound):
+			continue
+		if absf(angle_difference(b.heading + b.dart_bearing, _angle_of(a.pos - b.pos,
+				b.heading))) > deg_to_rad(CellBody.DART_ARC_DEG) * 0.5:
+			continue
+		best = j
+		best_d = d
+	if best < 0:
+		return
+	b.dart_clock = CellBody.DART_COOLDOWN_BY_TIER[tier]
+	_stun(_cells[best], b.pos)
+	_stat(&"water_darts")
+
+
+## **A dart stuns what it hits** (§4.3): it rests for DART_STUN seconds with its
+## rules unread -- no heading held, no stroke, no push -- and feels the dart as a
+## `hit` at its bearing, on the first tick it reads its rules again.
+func _stun(b: Body, from: Vector2) -> void:
+	b.stun = maxf(b.stun, CellBody.DART_STUN)
+	b.holding = false
+	b.swimming = false
+	b.push = 0.0
+	b.resting = true
+	_feel_hit(b, from, 1.0)
+	_stat(&"stuns")
+
+
+## **A hit lands on body [param b]**, from [param from]: a bite on its membrane
+## or a dart, [param level] 0..1 hard. Felt on its next tick (§3.2): the
+## hardest since its last, from where that one came.
+func _feel_hit(b: Body, from: Vector2, level: float) -> void:
+	if level < b.hit:
+		return
+	b.hit = level
+	b.hit_from = _angle_of(from - b.pos, b.heading)
 
 
 # --- Mouths (§5.6) --------------------------------------------------------------------------
@@ -7517,6 +8726,10 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 	var mother := Descent.of(b.id, b.parent, b.generation, b.lineage)
 	var at := b.pos
 	var heading := b.heading
+	# **Her rules** (behaviour.md §6): in this phase both daughters carry them as
+	# they are -- the list itself, shared, null for the founders'. A change at
+	# division is the next phase's.
+	var brain: Variant = b.brain
 	var r := CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	var pair: Array = Drop.daughter_dna(b.dna) if mutate >= 1.0 or randf() < mutate \
 		else [b.dna.duplicate(), b.dna.duplicate(), &""]
@@ -7543,6 +8756,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 		var d := _cells[j]
 		d.heading = heading
 		d.dna = dna
+		d.brain = brain
 		_record_onto(d, Descent.child(d.id, mother))
 		d.grace = newborn_grace
 		# Her own first step is the next frame's, whichever pass would have
@@ -8019,6 +9233,53 @@ func lineage_counts() -> Array:
 	if n == 0:
 		return []
 	return [float(generations) / float(n), families.size()]
+
+
+## **One line on how the water's hunters behave** (behaviour.md §12.1), beside
+## the lineage line, for `tools/eco_probe.gd` and `tools/drive.gd`: its hunters,
+## how many of them are on the founders' rules and how many lists the rest
+## carry; how often each of the founders' rules has fired; the meals of hunters
+## wearing a nose, a radar and a laser; the darts the water fired, the stuns and
+## your wakes; and what its hunters are doing now. With [member rules] off,
+## that it runs pack 2's hunter. Asking moves nothing.
+func behaviour_line() -> String:
+	if _drop == null or _mirror:
+		return "[behaviour] not in a drop of its own"
+	if not rules:
+		return "[behaviour] t %.0f  rules off: pack 2's hunter" % _t
+	var n := 0
+	var on_founders := 0
+	var lists := {}
+	var holding := 0
+	var resting := 0
+	var swimming := 0
+	var pushing := 0
+	var stunned := 0
+	var echoes := 0
+	for b in _cells:
+		if not b.seeded or b.inert or b.drifter or b.person != null:
+			continue
+		n += 1
+		if b.brain == null:
+			on_founders += 1
+		else:
+			lists[b.brain] = true
+		holding += 1 if b.holding else 0
+		resting += 1 if b.resting else 0
+		swimming += 1 if b.swimming else 0
+		pushing += 1 if b.push > 0.0 else 0
+		stunned += 1 if b.stun > 0.0 else 0
+		echoes += b.echoes.size()
+	var fired := PackedStringArray()
+	for k in Drop.FOUNDERS.size():
+		fired.append(str(_n(FIRED[k])))
+	return ("[behaviour] t %.0f  hunters %d: on the founders' rules %d, other lists %d"
+		+ "  | founders' rules fired %s  | meals of hunters with a nose %d, radar %d,"
+		+ " laser %d  | water darts %d, stuns %d, your wakes %d  | now holding a heading"
+		+ " %d, resting %d, swimming %d, pushing %d, stunned %d, echoes in flight %d") % [
+		_t, n, on_founders, lists.size(), "/".join(fired), _n(&"meals_nose"),
+		_n(&"meals_radar"), _n(&"meals_laser"), _n(&"water_darts"), _n(&"stuns"),
+		_n(&"wakes"), holding, resting, swimming, pushing, stunned, echoes]
 
 
 func _n(what: StringName) -> int:

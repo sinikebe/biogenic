@@ -4994,8 +4994,10 @@ func _drop_pond_rules() -> void:
 ## **Every player is an anchor, and the send set is the nearest sixty** (ocean.md
 ## §10.2, §10.4): a body beside the other player and far from the host is stepped
 ## every frame, as one beside the host is; and their snapshot is every body
-## hunting them, wherever it is, and then the nearest of the rest within reach,
-## sixty in all -- never a floc, never a person.
+## within reach that is coming for them, flagged, and then the nearest of the
+## rest, sixty in all -- never a floc, never a person. **The host's water is on
+## rules** (behaviour.md §8): "stalking you" is "coming for you" (§4.3), a body
+## swimming with them within 35° of its heading and a mouth that takes them.
 func _drop_pond_anchors() -> void:
 	var field := _pond_drop_rig(83, 30.0, POND_SENSES)
 	var at := _drop_point(field, FoodField.Drop.LOD_NEAR * 1.5)
@@ -5006,13 +5008,14 @@ func _drop_pond_anchors() -> void:
 		field._process(POND_STEP)
 		if int(near.stepped) == int(field.get("_frame")):
 			every += 1
-	# A hunter of theirs past the send reach, and the snapshot they are sent.
+	# A mouth coming for them -- swimming, at them -- far inside the send reach,
+	# and the snapshot they are sent.
 	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
-	var far := _pond_pose(field, 7, 30.0, {&"cytostome": 3, &"flagellum": 1},
-		at + (at - (field.get("_cell").position as Vector2)).normalized() * -2500.0, 0.0)
-	far.state = FoodField.State.STALK
-	far.target = FoodField.PERSON_SLOT
-	far.target_serial = pb.serial
+	var far_at: Vector2 = at + (at - (field.get("_cell").position as Vector2)).normalized() \
+		* -1800.0
+	var far := _pond_pose(field, 7, 30.0, {&"cytostome": 3, &"flagellum": 1}, far_at,
+		_pond_face(far_at, pb.pos))
+	far.swimming = true
 	var entries: Array = field.pond_entries(true)
 	var sent := {}
 	var worst := 0.0
@@ -5041,9 +5044,9 @@ func _drop_pond_anchors() -> void:
 			and nearer_left == 0 and entries.size() == sent.size() + 1,
 		"pond-field, the drop: a body beside the other player, %.0f from the host, is"
 		% at.distance_to(field.get("_cell").position) + " stepped %d of 16 frames;" % every
-		+ " their snapshot is %d water bodies, their hunter 2,500 off in it, none of"
-		% sent.size() + " the rest nearer than its farthest (%.0f), no floc and no person"
-		% worst)
+		+ " their snapshot is %d water bodies, a mouth coming for them 1,800 off in it"
+		% sent.size() + " and flagged, none of the rest nearer than its farthest (%.0f), no"
+		% worst + " floc and no person")
 
 
 ## **The guest's mirror, on the host's drop** (ocean.md §10.4): fed the host's
@@ -7624,6 +7627,11 @@ func _check_server() -> void:
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
+	# **The room is on rules** (behaviour.md §4.3, §8), and there "stalking you"
+	# is "coming for you": swimming -- hungry enough to, on the founders' rules --
+	# with that guest dead ahead and a mouth that takes them.
+	hunter.hunger = 0.5
+	hunter.swimming = true
 	# **Until both have it**: each guest's snapshots run on a 50 ms schedule of
 	# its own (pond.gd `_flush_guest`), so the other guest can be a snapshot
 	# behind the one hunted -- and its mirror can hold an older body in slot 5

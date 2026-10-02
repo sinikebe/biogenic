@@ -30,7 +30,23 @@ extends Node
 ## rebuilt from the files; new, rename and delete round the index; switching the
 ## selected drop switches the water and the cell; delete never takes the drop you
 ## are in, nor leaves its files; a tool's run never touches the drops; and a
-## default name is said in the language of the moment, a typed one never.
+## default name is said in the language of the moment, a typed one never. **And
+## pack 3's first phase** (docs/design/behaviour.md §12.3, phase 3-1), the water
+## on rules: 1, with the rules off it is pack 2 to the byte -- the two drops the
+## lineage checks read run on pack 2's hunter from seed 1 and print `dev`'s
+## five-minute census and lineage lines, and forty seconds of a membrane fed by
+## every sense the player can have digest to `dev`'s; 2, a water cell posed as
+## you are reads what your organs read, to the float; 3, no magic -- a gene a
+## body carries and does not wear is never read, and a reading moves with
+## nothing its organs do not reach; 7, the save keeps every body's rules and what
+## they had it doing to the bit, loads a pack-2 file on the founders' rules
+## resting on, keeps a name it does not know, and a room on rules goes on as one
+## that never stopped; 9, in five minutes every founders' rule fires and a nose,
+## a radar and a laser each feed a hunter; 10, the wake and both darts answer a
+## mouth swimming at you within 35° that could take you, and neither one passing
+## nor one too small, and a dart stuns for 5 s. The checks that read pack 2's
+## hunter -- its runs, its searches, the grace no run begins at -- read it on the
+## reference drops, and the five-minute drop of a sighted player is on rules.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -64,7 +80,15 @@ extends Node
 ## offers delete on the drop you are in, a keep that does not tell the index, a
 ## default said only in English, a default's French kept as a typed name, its
 ## English kept as one in French, a new drop offered a default another wears in
-## French, and a naming field left in the language it opened in.
+## French, and a naming field left in the language it opened in. And pack 3's
+## first phase, one a rule: a number drawn as a body is renewed, a nose that
+## weighs a body by its bare radius, a water cell's nose on another arc, a call
+## that hears half its reach, a rulebook that reads what a body does not wear, a
+## nose that reaches as far as yours, an eyespot read that is not worn, a memory
+## the load forgets, a pack-2 file whose hunters stop resting, a list index the
+## file does not check, a laser that never reports, "coming for you" with no cone
+## or no mouth to take you with, a stun a second short, a stunned body that reads
+## its rules, and a dart forgotten before it is felt.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -86,6 +110,8 @@ const RecorderNode := preload("res://game/replay/recorder.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
 const Drops := preload("res://game/normal/drops.gd")
 const Descent := preload("res://game/mechanics/descent.gd")
+const Rulebook := preload("res://game/mechanics/rulebook.gd")
+const RayFan := preload("res://game/mechanics/ray_fan.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
@@ -165,6 +191,14 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var graced_eaten := 0
 	var peers_over_floor := 0
 	var made_kinds := {}
+	# --- Pack 3 (docs/design/behaviour.md §12.3): every step of a body on rules
+	# against what its own organs can give it, and -- while [member log_reads] is
+	# on -- every input read, as `[slot, input]`.
+	var moves := 0
+	var fast_moves := 0
+	var bursts := 0
+	var log_reads := false
+	var reads: Array = []
 
 	func _fault(what: String, of_body := false) -> void:
 		if of_body:
@@ -394,6 +428,27 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			burst_without += 1
 		super._swim(b, delta, speed)
 
+	## **No body on rules faster than its organs** (check 11): its tail or the
+	## water's drift, its axoneme at full strength and what is left of a dash, by
+	## the tables -- and no burst without a `myoneme`.
+	func _move_ruled(b: Body, delta: float) -> void:
+		var g := b.genome
+		var most := maxf(CellBody.speed_for(Genome.tier_of(g, &"flagellum")), DRIFT_SPEED) \
+			+ CellBody.PUSH_ACCEL_BY_TIER[clampi(Genome.tier_of(g, &"axoneme"), 0, 3)] \
+			/ CellBody.DRAG + b.dash_v
+		var burst := b.dash_v > 0.0 and Genome.tier_of(g, &"myoneme") <= 0
+		super._move_ruled(b, delta)
+		moves += 1
+		if b.speed > most + 1e-3:
+			fast_moves += 1
+		if burst:
+			bursts += 1
+
+	func _read_input(input: StringName) -> Array:
+		if log_reads:
+			reads.append([_reading_slot, input])
+		return super._read_input(input)
+
 	func _drift_in_drop(index: int, b: Body, delta: float) -> void:
 		super._drift_in_drop(index, b, delta)
 		if b.speed > DRIFT_SPEED + 1e-3:
@@ -472,6 +527,10 @@ func _ready() -> void:
 	_lineage()
 	_determinism()
 	_identity()
+	_membrane()
+	_shared_senses()
+	_no_magic()
+	_coming_for_you()
 	_flocs()
 	await _flocs_fed()
 	_one_body()
@@ -1289,13 +1348,15 @@ func _tank() -> void:
 ## frame at a time: out of the water until a check puts it in, still, and with
 ## everything alive within [param desert] of it taken away, so bodies can be
 ## posed in the clear. [param sensed] makes the drop for a player that sighted.
-func _water(desert := 0.0, sensed := -1.0) -> Array:
+## [param rules] false is pack 2's hand-written hunter (behaviour.md §12.3 check 1).
+func _water(desert := 0.0, sensed := -1.0, rules := true) -> Array:
 	var cell := CellBody.new()
 	cell.radius = CellBody.BASE_RADIUS
 	var field := WatchedDrop.new()
 	field.process_mode = Node.PROCESS_MODE_DISABLED
 	field.desert = desert
 	field.sensed_override = sensed
+	field.rules = rules
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = false
@@ -1308,7 +1369,10 @@ func _done(water: Array) -> void:
 
 
 ## A body [param index] of [param field]'s, posed: at [param at], facing
-## [param facing], its tank at [param hunger], resting as long as it is left.
+## [param facing], its tank at [param hunger], resting as long as it is left --
+## on pack 2's hunter by its `calm`, and on rules by a list that says so
+## ([constant RESTING]). A check that wants it to act gives it the founders' rules
+## back (`brain` null) or a list of its own.
 func _pose(field: Node, at: Vector2, radius: float, tiers: Dictionary, facing := 0.0,
 		hunger := 0.5) -> int:
 	var index: int = field.pose_body(at, radius, tiers)
@@ -1316,7 +1380,17 @@ func _pose(field: Node, at: Vector2, radius: float, tiers: Dictionary, facing :=
 	b.set("heading", facing)
 	b.set("hunger", hunger)
 	b.set("calm", 999.0)
+	b.set("brain", _list(RESTING))
 	return index
+
+
+## A posed body's rules: rest, whatever it senses.
+const RESTING: Array[String] = ["always -> body.rest"]
+
+
+## [param lines] as the rules a body carries, by this build's vocabulary.
+func _list(lines: Array[String]) -> RefCounted:
+	return FoodField.behaviour_from(PackedStringArray(lines))
 
 
 ## The heading from [param from] that points at [param to].
@@ -1443,6 +1517,7 @@ func _containment() -> void:
 		var hb: Object = (field.get("_cells") as Array)[hungry]
 		hb.set("calm", 0.0)
 		hb.set("searching", true)
+		hb.set("brain", null)
 	var worst_body := INF
 	var worst_cell := INF
 	var worst_mote := INF
@@ -1494,13 +1569,17 @@ func _containment() -> void:
 ##   reach of the still player every second; no drifter made with venom;
 ## - 11, one body: every body that left the drop living left by one of the four
 ##   causes or by dividing, and nothing else, and every body made or born is
-##   living or left; no swim faster than its own tail and its dash, no burst
-##   without a `myoneme`, a search at its own speed; no run begun at what its own
-##   senses cannot find, and no miss that ended in a flight.
+##   living or left; **on rules** (behaviour.md §4.5) no body faster than its own
+##   tail, its axoneme at full and its dash, no burst without a `myoneme` -- and
+##   nothing of pack 2's hunter: no run begun, no search, no swim of a run's.
+## - 9, **the founders hunt** (behaviour.md §12.3): each of the founders' seven
+##   rules fires, and hunters with a nose, a radar and a laser each eat. That the
+##   rules are alive, not how well they hunt.
 ##
 ## **Since bodies divide** (pack 2) a body at forty divides on its tick, so a
 ## look once a second finds one there less often: the ticks at forty count too.
-## And this is one of the three drops pack 2's checks read ([method _lineage]).
+## And this is one of the three drops pack 2's checks read ([method _lineage]),
+## the one on rules.
 func _five_minutes() -> void:
 	var water := _water(0.0, 1.0)
 	var field: WatchedDrop = water[0]
@@ -1556,21 +1635,34 @@ func _five_minutes() -> void:
 		four += int(field.causes.get(cause, 0))
 	_check(("11. one body, five minutes: %d bodies gone -- %d swallowed, %d chewed, %d"
 		+ " starved, %d poisoned, %d divided, %d any other way -- and %d made + %d born ="
-		+ " %d living + %d gone; %d swims, %d faster than its own tail and dash, %d bursts"
-		+ " without a myoneme, %d searching frames, %d faster than its tail; %d runs begun,"
-		+ " %d at what its senses cannot find; %d given up, %d of them in a flight") % [gone,
+		+ " %d living + %d gone; on rules, %d steps, %d faster than its own tail, axoneme"
+		+ " and dash, %d bursts without a myoneme; of pack 2's hunter %d runs begun, %d"
+		+ " searching frames and %d swims of a run") % [gone,
 		int(field.causes.get(FoodField.Cause.SWALLOWED, 0)),
 		int(field.causes.get(FoodField.Cause.CHEWED, 0)),
 		int(field.causes.get(FoodField.Cause.STARVED, 0)),
 		int(field.causes.get(FoodField.Cause.POISONED, 0)), field.divisions,
-		gone - four - field.divisions, field.made, field.born, living, gone, field.swims,
-		field.fast, field.burst_without, field.searches, field.fast_search, field.runs_begun,
-		field.blind_runs, field.given_up, field.fled],
+		gone - four - field.divisions, field.made, field.born, living, gone, field.moves,
+		field.fast_moves, field.bursts, field.runs_begun, field.searches, field.swims],
 		gone - four == field.divisions and gone > 500 and field.made + field.born == living + gone
 		and int(field.causes.get(FoodField.Cause.STARVED, 0)) > 0
-		and field.swims > 10000 and field.fast == 0 and field.burst_without == 0
-		and field.searches > 1000 and field.fast_search == 0 and field.runs_begun > 500
-		and field.blind_runs == 0 and field.given_up > 100 and field.fled == 0)
+		and field.moves > 10000 and field.fast_moves == 0 and field.bursts == 0
+		and field.runs_begun == 0 and field.searches == 0 and field.swims == 0)
+	# 9. Each founders' rule by its place in the list, and the meals by sense.
+	var stats: Dictionary = field.stats
+	var fired := PackedStringArray()
+	var silent := 0
+	for k in Drop.FOUNDERS.size():
+		var n := int(stats.get(FoodField.FIRED[k], 0))
+		fired.append(str(n))
+		silent += 1 if n <= 0 else 0
+	var meals := [int(stats.get(&"meals_nose", 0)), int(stats.get(&"meals_radar", 0)),
+		int(stats.get(&"meals_laser", 0))]
+	_check(("9. the founders hunt: in five minutes of a sighted player's drop each of the"
+		+ " founders' %d rules fired (%s times, top to bottom), and hunters with a nose, a"
+		+ " radar and a laser ate %d, %d and %d meals") % [Drop.FOUNDERS.size(),
+		"/".join(fired), meals[0], meals[1], meals[2]],
+		fired.size() == 7 and silent == 0 and meals[0] > 0 and meals[1] > 0 and meals[2] > 0)
 	seen["food"] = float(int(field.get("_drifters"))) / Drop.food_count(field._made_share())
 	_lineage_runs.append(_lineage_summary(field, "a fully sighted player's", seen))
 	_done(water)
@@ -1645,10 +1737,18 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 ##    over the three drops checked; daughters are hunted once it is over, and a
 ##    mouth one touches in it still eats her.
 ## 6. **A water cell's meal writes its DNA, never its body**: every meal.
+##
+## **The spec's two run on pack 2's hand-written hunter** (`rules` off), from
+## seed 1, and are **behaviour.md §12.3 check 1** as well: with the rules off it
+## is pack 2 to the byte -- their census and lineage lines at five minutes are
+## [constant DEV_LINES], `dev`'s, and the senses the player and the water share
+## are pinned by [method _membrane]. The sighted player's drop of
+## [method _five_minutes] is on rules, so the division is checked on both.
 func _lineage() -> void:
-	for each: Array in [[20261002, 0.2, "a newborn's"], [20261003, 0.6, "a sighted player's"]]:
+	var lines: Array[String] = []
+	for each: Array in [[1, 0.2, "a newborn's"], [1, 0.6, "a sighted player's"]]:
 		seed(int(each[0]))
-		var water := _water(0.0, float(each[1]))
+		var water := _water(0.0, float(each[1]), false)
 		var field: WatchedDrop = water[0]
 		var seen := {"composed": true}
 		for f in 5 * 60 * 60:
@@ -1658,8 +1758,22 @@ func _lineage() -> void:
 		seen["food"] = float(int(field.get("_drifters"))) \
 			/ Drop.food_count(field._made_share())
 		_lineage_runs.append(_lineage_summary(field, String(each[2]), seen))
+		lines.append(field.census_line())
+		lines.append(field.lineage_line())
 		_done(water)
 	seed(20260930)
+	var differ := 0
+	for k in DEV_LINES.size():
+		var ours: String = lines[k] if k < lines.size() else "(none)"
+		if ours != DEV_LINES[k]:
+			differ += 1
+			print("[drop-probe] check 1, line %d, this build: %s" % [k + 1, ours])
+			print("[drop-probe] check 1, line %d, dev:        %s" % [k + 1, DEV_LINES[k]])
+	_check(("1. with the rules off it is pack 2, the drop: a newborn's drop and a sighted"
+		+ " player's, seed 1, five minutes on pack 2's hunter -- their census and lineage"
+		+ " lines against dev's: %s") % ["the same to the byte" if differ == 0
+		else "%d DIFFER" % differ],
+		differ == 0 and lines.size() == DEV_LINES.size())
 	var posed := _food_over_floor()
 	var runs := _lineage_runs
 	var composed: Array[Dictionary] = []
@@ -1747,9 +1861,10 @@ func _lineage() -> void:
 		fed and sum.call("peers_over_floor") == 0 and int(made.get("peer", 0)) > 0
 		and int(posed["drifters"]) >= int(posed["taken"]) / 2 and int(posed["peers"]) == 0
 		and float(posed["food"]) >= 0.9)
-	_check(("lineage 5. the grace: %d runs begun over the three drops, %d at a body in its grace;"
-		+ " %d at daughters once theirs was over; %d daughters eaten in their grace by a"
-		+ " mouth they touched") % [sum.call("runs_begun"), sum.call("graced_runs"),
+	_check(("lineage 5. the grace: %d runs begun over the two drops on pack 2's hunter (the"
+		+ " rules begin none), %d at a body in its grace; %d at daughters once theirs was"
+		+ " over; %d daughters eaten in their grace by a mouth they touched")
+		% [sum.call("runs_begun"), sum.call("graced_runs"),
 		sum.call("runs_at_born"), sum.call("graced_eaten")],
 		enough and sum.call("graced_runs") == 0 and sum.call("runs_at_born") > 20
 		and sum.call("graced_eaten") > 0 and sum.call("runs_begun") > 1000)
@@ -2564,13 +2679,18 @@ const KEPT_FIELDS: Array[String] = ["seeded", "id", "parent", "drifter", "inert"
 	"pos", "heading", "radius", "wound", "age", "last_t", "hunger", "starve", "effort",
 	"bite", "dart_clock", "dash_clock", "dash_v", "settle", "life", "genome"]
 const DERIVED_FIELDS: Array[String] = ["upkeep", "reserve", "income", "burn", "armour",
-	"tox", "cruise", "notice", "notice_floc", "see_big", "dart_bearing"]
+	"tox", "cruise", "notice", "notice_floc", "see_big", "dart_bearing", "tail", "turn_rate",
+	"thrust", "dart_tier", "worn"]
+## **What a body on rules is doing** (pack 3, behaviour.md §8), read off the body
+## as [constant KEPT_FIELDS] are; its list is compared by its lines.
+const BEHAVIOUR_FIELDS: Array[String] = ["steer", "holding", "resting", "swimming", "push",
+	"tumble", "tumble_tick", "stun", "ate_at", "hit", "hit_from", "call_at", "echoes", "memory"]
 
 
 ## Each check begins with nothing kept, and nothing is left kept after them.
 func _save() -> void:
 	for check: Callable in [_save_bodies, _save_run, _save_format, _save_rules, _save_room,
-			_save_lineage, _save_cell_lineage]:
+			_save_lineage, _save_cell_lineage, _save_behaviour]:
 		_forget_kept()
 		await check.call()
 	_forget_kept()
@@ -2595,6 +2715,19 @@ func _save_bodies() -> void:
 			["dash_clock", 0.7], ["dash_v", 120.0], ["effort", 0.25], ["hunger", 1.0],
 			["starve", 2.5], ["meals", 3], ["parent", 17]]:
 		b.set(value[0], value[1])
+	# And on rules (pack 3): a heading held, a swim and a push, a random turn, a
+	# stun, a meal three seconds ago, a hit not yet felt, a call due, an echo in
+	# flight and what its rules last read -- on a list with a name this build
+	# does not know.
+	var t := float(field.get("_t"))
+	for value: Array in [["steer", 1.25], ["holding", true], ["swimming", true], ["push", 0.5],
+			["tumble", 4], ["tumble_tick", 77], ["stun", 2.5], ["ate_at", t - 3.25],
+			["hit", 0.5], ["hit_from", -2.0], ["call_at", t + 4.0],
+			["echoes", [[t + 0.5, Vector2(10.5, -3.25), 120.0, 14.0, t + 0.7]]],
+			["memory", {&"chemocyte.smell": [41, [[0.25]]],
+				&"ocellus.beam": [41, [[0.3, 220.0, 1.2], [-0.2, 480.0, 0.7]]]}]]:
+		b.set(value[0], value[1])
+	b.set("brain", _list(["kinety.tingle below 0.5 -> body.rest", "always -> body.swim"]))
 	var wrote := DropSave.write(KEEP, DropSave.compose(field.drop_state(), {}))
 	var tmp_left := FileAccess.file_exists(KEEP.get_basename() + ".tmp")
 	var back := DropSave.read(KEEP)
@@ -2615,7 +2748,10 @@ func _save_bodies() -> void:
 		elif seeded and (var_to_bytes(_row(ours[i], KEPT_FIELDS))
 				!= var_to_bytes(_row(theirs[i], KEPT_FIELDS))
 				or var_to_bytes(_row(ours[i], DERIVED_FIELDS))
-				!= var_to_bytes(_row(theirs[i], DERIVED_FIELDS))):
+				!= var_to_bytes(_row(theirs[i], DERIVED_FIELDS))
+				or var_to_bytes(_row(ours[i], BEHAVIOUR_FIELDS))
+				!= var_to_bytes(_row(theirs[i], BEHAVIOUR_FIELDS))
+				or _lines(ours[i]) != _lines(theirs[i])):
 			differ += 1
 	var drop := ["_t", "_frame", "_next_id", "_free", "_eco_clock", "_gene_clock",
 		"_floor_clock", "_shore_clock", "_living", "_drifters", "_flocs", "drop_seed"]
@@ -2626,7 +2762,8 @@ func _save_bodies() -> void:
 	var bytes := FileAccess.get_file_as_bytes(KEEP).size()
 	_check(("12. save and load: %d slots, %d bodies written (%s, %d B on disk, no .tmp left:"
 		+ " %s) and loaded into a field of their own -- %d slots differ in any field §9.2"
-		+ " names or anything its genome buys, to the bit; the drop's clocks, free slots and"
+		+ " names or anything its genome buys, or in its rules and what they had it doing"
+		+ " (pack 3), to the bit; the drop's clocks, free slots and"
 		+ " counts %s; a gene this build does not know, rhabdom:2, %s") % [ours.size(),
 		int(done.get("bodies", 0)), error_string(wrote), bytes, str(not tmp_left), differ,
 		"the same" if same_drop else "DIFFERENT", "kept" if kept_gene else "LOST"],
@@ -2661,10 +2798,14 @@ func _save_room() -> void:
 	room.open_dedicated(cell)
 	for f in 40 * 60:
 		room._process(1.0 / 60.0)
-	var runs := 0
+	# On rules (pack 3) nothing is on a run: what its bodies were doing is the
+	# heading each held and the echoes each had in flight.
+	var holding := 0
+	var echoes := 0
 	for b: Object in room.get("_cells"):
-		if b.get("seeded") and int(b.get("state")) == FoodField.State.STALK:
-			runs += 1
+		if b.get("seeded"):
+			holding += 1 if b.get("holding") else 0
+			echoes += (b.get("echoes") as Array).size()
 	var wrote := DropSave.write(KEEP, DropSave.compose(room.drop_state(), {}))
 	var back := DropSave.read(KEEP)
 	var cell2 := CellBody.new()
@@ -2685,14 +2826,15 @@ func _save_room() -> void:
 	var theirs: String = room2.census_line()
 	var their_line: String = room2.lineage_line()
 	var age := room2.drop_age()
-	_check(("12. and lineage 8. a room kept and loaded (%s, %d bodies, %d of them on a run as"
-		+ " it was kept) goes on as one that never stopped: after 30 s more on the same stream,"
+	_check(("12. and lineage 8. and 7. a room kept and loaded (%s, %d bodies, on rules, %d of"
+		+ " them holding a heading and %d echoes in flight as it was kept) goes on as one that"
+		+ " never stopped: after 30 s more on the same stream,"
 		+ " %d divisions in them, the two census lines are %s and the lineage lines %s -- %s")
-		% [error_string(wrote), int(done.get("bodies", 0)), runs,
+		% [error_string(wrote), int(done.get("bodies", 0)), holding, echoes,
 		room.divisions - divided_before, "the same" if ours == theirs else "DIFFERENT",
 		"the same" if our_line == their_line else "DIFFERENT", ours if ours == theirs
 			else ours + " AGAINST " + theirs],
-		wrote == OK and not back.is_empty() and runs > 0 and ours == theirs
+		wrote == OK and not back.is_empty() and holding > 0 and echoes > 0 and ours == theirs
 		and our_line == their_line and room.divisions - divided_before > 0
 		and room2.divisions == room.divisions - divided_before
 		and is_equal_approx(age, 70.0) and int(done.get("bodies", 0)) > 500)
@@ -2915,6 +3057,157 @@ func _row(object: Object, fields: Array) -> Array:
 	for name: String in fields:
 		out.append(object.get(name))
 	return out
+
+
+## The lines of the rules [param body] carries, and an empty list for the
+## founders' (`brain` null).
+func _lines(body: Object) -> PackedStringArray:
+	var list: Variant = body.get("brain")
+	return Rulebook.lines_of(list) if list != null else PackedStringArray()
+
+
+## **7. The save keeps the rules** (behaviour.md §8, §12.3): a drop with a
+## family's list -- carrying a name this build does not know -- on two of its
+## hunters, kept and loaded. The list is kept once and the two share it again;
+## the rule it cannot read never fires, and is written back as it came; and the
+## bodies' columns and the lists come back to the bit. **A pack-2 file** -- that
+## drop without pack 3's entries -- loads every hunter on the founders' rules,
+## each having eaten as long ago as leaves it resting as long again as its
+## `calm`, and one that was not resting never fed. **A version of the lists this
+## build does not know** is not read, and every body loads on the founders'.
+## **And spoilt**, pack 3's entries make the file unreadable: a body on a list
+## the drop does not keep, echoes that are not whole, a memory that is not one.
+func _save_behaviour() -> void:
+	seed(34)
+	var water := _water(0.0, 0.6)
+	var field: WatchedDrop = water[0]
+	for f in 10 * 60:
+		field._process(1.0 / 60.0)
+	var cells: Array = field.get("_cells")
+	var lines: Array[String] = ["kinety.tingle below 0.5 -> body.rest",
+		"metabolism.hunger below 0.4 -> body.rest", "always -> body.swim"]
+	var list := _list(lines)
+	var family: Array[int] = []
+	var resting: Array = []
+	for i in cells.size():
+		var b: Object = cells[i]
+		if not b.get("seeded") or b.get("inert") or b.get("drifter"):
+			continue
+		if family.size() < 2:
+			b.set("brain", list)
+			family.append(i)
+		elif resting.size() < 3:
+			b.set("calm", 1.0 + float(resting.size()))
+			resting.append(i)
+		else:
+			b.set("calm", 0.0)
+	var state: Dictionary = field.drop_state()
+	var t := float(state["age"])
+	var wrote := DropSave.write(KEEP, DropSave.compose(state, {}))
+	var back := DropSave.read(KEEP)
+	var loaded := _load_into(back["drop"] if not back.is_empty() else {})
+	var c2: Array = (loaded[0] as Node).get("_cells")
+	var a: Variant = (c2[family[0]] as Object).get("brain")
+	var shared: bool = a != null and a == (c2[family[1]] as Object).get("brain")
+	var inert: bool = shared and bool((a as RefCounted).get("rules")[0].get("inert"))
+	var kept_lists: Array = state["behaviours"]["lists"]
+	var once := kept_lists.size() == 1 \
+		and PackedStringArray(kept_lists[0]) == PackedStringArray(lines)
+	var again: Dictionary = (loaded[0] as Node).call(&"drop_state")
+	var written_back := (again["behaviours"]["lists"] as Array).size() == 1 \
+		and PackedStringArray(again["behaviours"]["lists"][0]) == PackedStringArray(lines)
+	var exact := var_to_bytes(again["bodies"]) == var_to_bytes(state["bodies"]) \
+		and var_to_bytes(again["behaviours"]) == var_to_bytes(state["behaviours"])
+	_unload(loaded)
+	# Pack 2's file: the same drop, none of pack 3's entries.
+	var old: Dictionary = state.duplicate(true)
+	old.erase("behaviours")
+	for key: String in DropSave.BEHAVIOUR:
+		(old["bodies"] as Dictionary).erase(key)
+	var usable_old := DropSave.unusable(DropSave.compose(old, {})).is_empty()
+	loaded = _load_into(old)
+	var c3: Array = (loaded[0] as Node).get("_cells")
+	var hunters := 0
+	var on_founders := 0
+	var rest_on := 0
+	var never := 0
+	for i in c3.size():
+		var b: Object = c3[i]
+		if not b.get("seeded") or b.get("inert") or b.get("drifter"):
+			continue
+		hunters += 1
+		on_founders += 1 if b.get("brain") == null else 0
+		var ate := float(b.get("ate_at"))
+		if resting.has(i):
+			var calm := 1.0 + float(resting.find(i))
+			var fed := t - ate
+			rest_on += 1 if ate == t - (FoodField.REST_MEAL - calm) \
+				and fed < FoodField.REST_MEAL else 0
+		elif float(b.get("calm")) <= 0.0:
+			never += 1 if ate == -INF else 0
+	var lists_unread := 0
+	_unload(loaded)
+	# Lists of a version this build does not know.
+	var later: Dictionary = state.duplicate(true)
+	later["behaviours"]["version"] = DropSave.BEHAVIOURS_VERSION + 1
+	later["behaviours"]["lists"] = [42]
+	var usable_later := DropSave.unusable(DropSave.compose(later, {})).is_empty()
+	loaded = _load_into(later)
+	for b: Object in (loaded[0] as Node).get("_cells"):
+		if b.get("seeded") and b.get("brain") != null:
+			lists_unread += 1
+	_unload(loaded)
+	# Spoilt, one way at a time.
+	var spoilt := PackedStringArray()
+	for way in 3:
+		var copy: Dictionary = state.duplicate(true)
+		var rows: Dictionary = copy["bodies"]
+		match way:
+			0:
+				var column: PackedInt32Array = rows["behaviour"]
+				column[0] = 5
+				rows["behaviour"] = column
+			1:
+				var flying: Array = rows["echoes"]
+				flying[0] = PackedFloat64Array([1.0, 2.0])
+			2:
+				var memory: Array = rows["memory"]
+				memory[0] = {"chemocyte.smell": [3, [[0.5]]]}
+		spoilt.append(DropSave.unusable(DropSave.compose(copy, {})))
+	_check(("7. the save keeps the rules: a family's list on %d hunters, with a name this build"
+		+ " does not know, kept once (%s), shared again (%s), its unknown rule inert (%s) and"
+		+ " written back as it came (%s); the bodies' columns and the lists through the file to"
+		+ " the bit (%s); a pack-2 file (readable: %s) loads %d hunters, %d of them on the"
+		+ " founders' rules, %d of %d resting on as long as their calm, %d of the rest never fed;"
+		+ " lists of version %d (readable: %s) not read, %d bodies off the founders'; spoilt: %s")
+		% [family.size(), str(once), str(shared), str(inert), str(written_back), str(exact),
+		str(usable_old), hunters, on_founders, rest_on, resting.size(), never,
+		DropSave.BEHAVIOURS_VERSION + 1, str(usable_later), lists_unread, "; ".join(spoilt)],
+		wrote == OK and once and shared and inert and written_back and exact and usable_old
+		and hunters > 50 and on_founders == hunters and rest_on == 3 and never > 50
+		and usable_later and lists_unread == 0
+		and Array(spoilt).all(func(why: String) -> bool: return not why.is_empty()))
+	_done(water)
+	seed(20260930)
+
+
+## A field of its own with [param drop] loaded into it, made for the same player
+## as [method _water]'s: `[field, cell]`.
+func _load_into(drop: Dictionary) -> Array:
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	var field := WatchedDrop.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.sensed_override = 0.6
+	add_child(field)
+	if not drop.is_empty():
+		field.load_drop(cell, drop)
+	return [field, cell]
+
+
+func _unload(loaded: Array) -> void:
+	(loaded[0] as Node).queue_free()
+	(loaded[1] as Node).free()
 
 
 ## Nothing of these checks left in `user://`.
@@ -3743,6 +4036,22 @@ const IDENTITY_LINES: Array[String] = [
 ]
 
 
+## **`dev`'s five minutes on pack 2's hunter** (behaviour.md §12.3 check 1): the
+## census and lineage lines at 300 s of a newborn's drop (0.2) and a sighted
+## player's (0.6), seed 1, as `tools/eco_probe.gd --seed=1 --until=300` printed
+## them on `dev` at 29a5231 -- three runs, the same to the byte -- in this
+## project's container (Godot 4.7.2, x86-64), which is what CI runs on. The
+## rules off, [method _lineage]'s two drops must print them again. **A change to
+## pack 2's water made on purpose changes them**: re-record them then from that
+## check's own output, and say so in the commit.
+const DEV_LINES: Array[String] = [
+	"[census] t 300  living 530 (drifters 432, hunters 98)  flocs 62  | hunters at r40 0, mean r 31.2, hunger 0.47  | could swallow r26/r34/r40 62/9/2  dread 0.70/0.17/0.07  genes 16  | spawned 1918  died: swallowed 1539 chewed 38 starved 210 (r40 0) poisoned 0  | grazed by the water 136, by drifters 5, dissolved 54, snow kept 17, remains 210  | runs 2792 at you 0 misses 1299 darts 37 dashes 360  floors: gene 0+0 drifter 0  | sum 2679262745",
+	"[lineage] t 300  hunters 98, born 97  generation mean 6.58 max 12  families 25 (largest 12)  dna apart 83  | cruise 95.1 notice 1326 mouth 1.27 upkeep 1.97 genes worn 5.85 carried 7.11  tails 71 sighted 98 at r40 0  | divisions 399 (trade 185 drift 214 faithfully 0), daughters 798: tailless 206, given a sense 110  | the spawner's peers 44 (for the floor 44, for venom 0), drifters 1319, left to births 0  | worn cyto 1.27 cirr 1.71 flag 1.84 stig 0.32 ocel 0.91 chem 1.10 ampu 0.95 axon 0.49 palp 0.34 myon 0.49 tric 0.24 pell 0.81 vene 0.11 plas 0.29 vacu 0.53 cris 0.47  | commonest 1x cytostome:1,ampulla:3,myoneme:2,pellicle:1,vacuole:2,crista:3 ; 1x cytostome:1,chemocyte:1,palp:3,trichocyst:3 ; 1x cytostome:1,cirrus:1,ampulla:2,palp:1,pellicle:1,vacuole:2",
+	"[census] t 300  living 546 (drifters 350, hunters 196)  flocs 57  | hunters at r40 0, mean r 30.8, hunger 0.48  | could swallow r26/r34/r40 126/57/40  dread 1.97/1.02/0.57  genes 16  | spawned 3357  died: swallowed 3148 chewed 56 starved 354 (r40 0) poisoned 1  | grazed by the water 303, by drifters 3, dissolved 35, snow kept 13, remains 355  | runs 5390 at you 0 misses 2552 darts 55 dashes 337  floors: gene 0+0 drifter 0  | sum 1492090636",
+	"[lineage] t 300  hunters 196, born 127  generation mean 3.71 max 13  families 146 (largest 10)  dna apart 125  | cruise 82.8 notice 1014 mouth 1.65 upkeep 1.62 genes worn 5.09 carried 5.94  tails 168 sighted 196 at r40 0  | divisions 748 (trade 354 drift 394 faithfully 0), daughters 1496: tailless 368, given a sense 252  | the spawner's peers 666 (for the floor 666, for venom 0), drifters 2136, left to births 0  | worn cyto 1.65 cirr 1.61 flag 1.60 stig 0.31 ocel 0.48 chem 0.56 ampu 0.59 axon 0.31 palp 0.16 myon 0.13 tric 0.17 pell 0.49 vene 0.03 plas 0.26 vacu 0.32 cris 0.32  | commonest 7x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 6x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 6x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+]
+
+
 ## **lineage 10, the identity gate** (§11.2, §11.3 check 10): **with births
 ## off** -- the field's own `births` switch, the seam every pack-2 rule is
 ## behind -- the drop's census lines are `dev`'s to the byte on the same seeds:
@@ -3786,8 +4095,10 @@ func _identity() -> void:
 ## left wearing [constant IDENTITY_BODY] and carrying [constant IDENTITY_DNA],
 ## the child of your record. `dev` ran it with neither -- no id taken, and a
 ## sister who was her body and nothing more -- so neither may move a thing.
-## Every field has [param births] as asked; with [param first] it stops at the
-## first census -- the newborn's at 30 s -- and adds its lineage line after it.
+## Every field has [param births] as asked, and pack 2's hand-written hunter,
+## which is pack 1's and `dev`'s (behaviour.md §12.3 check 1); with [param first]
+## it stops at the first census -- the newborn's at 30 s -- and adds its lineage
+## line after it.
 func _identity_lines(births: bool, first := 0) -> Array[String]:
 	var lines: Array[String] = []
 	for each: Array in [[1, 0.2], [2, 0.6]]:
@@ -3798,6 +4109,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 		field.process_mode = Node.PROCESS_MODE_DISABLED
 		field.sensed_override = float(each[1])
 		field.births = births
+		field.rules = false
 		add_child(field)
 		field.setup_drop(cell)
 		field.in_water = false
@@ -3821,6 +4133,7 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 	var room := FoodField.new()
 	room.process_mode = Node.PROCESS_MODE_DISABLED
 	room.births = births
+	room.rules = false
 	add_child(room)
 	room.open_dedicated(nobody)
 	for f in 30 * 60:
@@ -3829,6 +4142,507 @@ func _identity_lines(births: bool, first := 0) -> Array[String]:
 	room.free()
 	nobody.free()
 	return lines
+
+
+# --- Pack 3: the water's rules (docs/design/behaviour.md §12.3) ------------------------------
+
+## **What check 1's membrane digest reads** off the field every frame: every
+## sense the player's membrane is fed from, all of which the water's cells now
+## share -- the nose and its sum, the eyespot, dread, touch, the rays and what
+## they touched, and the call, its fronts, its returns and its clock.
+const MEMBRANE: Array[String] = ["concentration", "taste_level", "shadow", "shadow_bearing",
+	"threat", "dread_level", "touch_level", "touch_bearing", "beams", "beam_touched", "pings",
+	"ping_fronts", "ping_echoes", "ping_listen", "_echoes", "_pulses", "_ping_clock"]
+## **`dev`'s membrane**: [method _membrane_digest] as it ran on `dev` at 29a5231,
+## three times the same, in this project's container. Re-record it from the
+## check's own output when the player's senses change on purpose, and say so in
+## the commit.
+const DEV_MEMBRANE := "970c04211c3ce3dea7d967ea4d042dafbc46dfc9ce3ab49c1496ad0395d67de5"
+
+
+## **1. With the rules off it is pack 2, the membrane** (behaviour.md §12.3):
+## forty seconds of a cell swimming a loop through a sighted player's drop
+## (seed 1) with every sense the player can have -- a nose, an eyespot, three
+## rays, a call and a palp -- among pack 2's hunters: the digest of everything
+## [constant MEMBRANE] names, every frame, is `dev`'s. Every function the water
+## now shares with the player runs in it, so one that moved the player's
+## arithmetic by a bit fails here.
+func _membrane() -> void:
+	var digest := _membrane_digest(false)
+	seed(20260930)
+	_check(("1. with the rules off it is pack 2, the membrane: forty seconds of a cell"
+		+ " crossing a sighted player's drop with a nose, an eyespot, three rays, a call and"
+		+ " a palp, every sense it is fed each frame -- digest %s, %s") % [digest.left(16),
+		"dev's" if digest == DEV_MEMBRANE else "NOT dev's (%s)" % DEV_MEMBRANE.left(16)],
+		digest == DEV_MEMBRANE)
+
+
+## The digest [method _membrane] checks, the field on [param rules] or off.
+func _membrane_digest(rules: bool) -> String:
+	seed(1)
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	var field := FoodField.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.sensed_override = 0.6
+	field.grace = 1e6
+	field.rules = rules
+	add_child(field)
+	field.setup_drop(cell)
+	field.in_water = true
+	field.smell_range = CellBody.SMELL_RANGE_BY_TIER[2]
+	field.smell_bearing = 0.95
+	field.beam_range = CellBody.BEAM_RANGE_BY_TIER[2]
+	field.beam_bearings = PackedFloat32Array([-0.94, -0.62, -0.31])
+	field.beam_fan_mid = -0.62
+	field.beam_fan_half = 0.4
+	field.ping_range = CellBody.PING_RANGE_BY_TIER[1]
+	field.ping_period = CellBody.PING_PERIOD_BY_TIER[1]
+	field.ping_bearing = -2.3
+	field.ping_through = CellBody.PING_THROUGH_BY_TIER[1]
+	field.ping_tier = 1
+	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[2]
+	var start := cell.position
+	var hash := HashingContext.new()
+	hash.start(HashingContext.HASH_SHA256)
+	for f in 40 * 60:
+		var t := float(f) / 60.0
+		cell.position = start + Vector2(cos(t * 0.25) - 1.0, sin(t * 0.25)) * 600.0
+		cell.heading = wrapf(t * 0.4, -PI, PI)
+		field._process(1.0 / 60.0)
+		var row := []
+		for name: String in MEMBRANE:
+			row.append(field.get(name))
+		hash.update(var_to_bytes(row))
+	var out := hash.finish().hex_encode()
+	field.free()
+	cell.free()
+	return out
+
+
+## **2. A water cell reads what your organs would** (behaviour.md §12.1, §12.3).
+## You in the clear, wearing a nose, an eyespot, a palp, a laser and a radar in
+## the order a water cell wears them, your organs set from your genome the way
+## the run sets them (normal_mode.gd: the cell's reaches, `Cilia.bearing_of`,
+## `_aim_beam`), with bodies posed round you: prey on every side, bodies big
+## enough to cast a shadow, one at your palp, one on each ray and a floc. You
+## read your nose, your shadow, your touch, your rays and your call. Then a
+## water cell is posed where you were, as you were -- place, heading, size and
+## genome, its organs on its own arcs -- with you out of the water, and reads
+## its own. Each reading equals yours to the float: the level; the shadow and its
+## bearing; the touch and its bearing; every ray that stops, at its bearing and
+## distance; and every return of the call -- when it lands, where it came off,
+## how far and how big it says it was, and when it rings out. **And again for a
+## call answered from far off**, with nothing near: three bodies 600 to 1,000
+## out, past half its reach.
+func _shared_senses() -> void:
+	seed(31)
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	var h := 0.7
+	cell.heading = h
+	var fwd := Vector2(sin(h), -cos(h))
+	var stb := Vector2(cos(h), sin(h))
+	var tiers := {&"cytostome": 1, &"chemocyte": 2, &"stigma": 1, &"palp": 2, &"ocellus": 2,
+		&"ampulla": 1}
+	var genome := _your_organs(field, cell, tiers)
+	# The water cell, posed first far off -- out of your reach.
+	var centre: Vector2 = field.basin().get(&"center")
+	var inward := (centre - p).normalized() if p.distance_to(centre) > 1.0 else Vector2.RIGHT
+	var twin := _pose(field, p + inward * 2500.0, cell.radius, tiers, h, 0.5)
+	var tb: Object = cells[twin]
+	# Round you: [ahead, to starboard, radius, genome].
+	var round_you := [[420.0, 150.0, 16.0, {&"cirrus": 1}],
+		[700.0, -260.0, 18.0, {&"flagellum": 1}],
+		[-300.0, 520.0, 14.0, {&"cirrus": 1, &"pellicle": 2}],
+		[250.0, -330.0, 40.0, {&"cytostome": 2, &"cirrus": 1}],
+		[-150.0, -480.0, 36.0, {&"cytostome": 1}],
+		[60.0, 95.0, 20.0, {&"cirrus": 1}],
+		[-640.0, 380.0, 30.0, {&"cytostome": 1, &"flagellum": 1}],
+		[1150.0, -700.0, 25.0, {&"cirrus": 1}]]
+	var ray := 0
+	for bearing: float in field.beam_bearings:
+		round_you.append([cos(bearing) * (330.0 + 140.0 * ray),
+			sin(bearing) * (330.0 + 140.0 * ray), 17.0 + 3.0 * ray, {&"cirrus": 1}])
+		ray += 1
+	var posed: Array[int] = []
+	for one: Array in round_you:
+		posed.append(_pose(field, p + fwd * float(one[0]) + stb * float(one[1]),
+			float(one[2]), one[3], 0.3, 0.5))
+	posed.append(field._spawn_floc(p + fwd * 300.0 + stb * 40.0, 10.0, true))
+	var near := _both_read(field, twin, p, h)
+	# A call answered from far off: nothing near, three bodies past half its reach.
+	tb.set("pos", p + inward * 2500.0)
+	field.refile(twin)
+	for i: int in posed:
+		field.take_out(i)
+	for k in 3:
+		var bearing := -2.0 + 1.7 * float(k)
+		_pose(field, p + (fwd * cos(bearing) + stb * sin(bearing)) * (600.0 + 200.0 * k),
+			22.0, {&"cirrus": 1}, 0.0, 0.5)
+	var far := _both_read(field, twin, p, h)
+	var calls_far: Array = far[5]
+	var deepest := 0.0
+	for one: Array in calls_far:
+		deepest = maxf(deepest, (one[1] as Vector2).distance_to(p))
+	var yours: Array = near[0]
+	_check(("2. a water cell reads what your organs would: posed where you were as you were,"
+		+ " %d bodies and a floc round it -- smell %.4f, a shadow of %.3f at %.1f deg, a touch"
+		+ " of %.3f at %.1f deg, %d rays stopping, %d returns of its call -- equal to the"
+		+ " float: smell %s, shadow %s, touch %s, rays %s, call %s; and a call answered from"
+		+ " as far as %.0f, with nothing near (%d returns): %s") % [round_you.size(),
+		float(yours[0]), float(yours[1]), rad_to_deg(float(yours[2])), float(yours[3]),
+		rad_to_deg(float(yours[4])), (near[4] as Array).size(), (near[5] as Array).size(),
+		str(near[6]), str(near[7]), str(near[8]), str(near[9]), str(near[10]), deepest,
+		calls_far.size(), str(far[10])],
+		near[6] and near[7] and near[8] and near[9] and near[10] and far[10]
+		and float(yours[0]) > 0.05 and float(yours[1]) > 0.0 and float(yours[3]) > 0.0
+		and (near[4] as Array).size() >= 2 and (near[5] as Array).size() >= 2
+		and calls_far.size() >= 2 and deepest > 0.5 * CellBody.PING_RANGE_BY_TIER[1])
+	_done(water)
+	genome.free()
+	seed(20260930)
+
+
+## **Your organs from your genome, as the run sets them** (normal_mode.gd): a
+## genome node expressing [param tiers] in the order a water cell wears them --
+## its laser posed at its tier as its level, since a water cell has no levels --
+## on [param cell], and the field told the cell's reaches, the arcs
+## `Cilia.bearing_of` gives and the beam `_aim_beam` aims. Returns the node.
+func _your_organs(field: WatchedDrop, cell: CellBody, tiers: Dictionary) -> Node:
+	var genome: Node = GenomeNode.new()
+	genome.express(tiers, Cilia.default_order(tiers))
+	var laser: RefCounted = genome.progression(&"ocellus")
+	if laser != null:
+		laser.set("xp", laser.call("xp_at", int(tiers.get(&"ocellus", 0)),
+			float(laser.get("step"))))
+	cell.genome = genome
+	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[mini(cell.extra(&"palp"),
+		CellBody.TOUCH_RANGE_BY_TIER.size() - 1)]
+	field.smell_range = cell.smell_range()
+	field.smell_bearing = Cilia.bearing_of(genome, &"chemocyte")
+	field.ping_range = cell.ping_range()
+	field.ping_period = cell.ping_period()
+	field.ping_bearing = Cilia.bearing_of(genome, &"ampulla")
+	field.ping_through = cell.ping_through()
+	field.ping_tier = cell.ping_tier()
+	var shape := CellBody.beam_shape(cell.beam_level(), cell.beam_path())
+	var slot: int = genome.slot_of(&"ocellus")
+	field.beam_range = float(shape[3])
+	var bearings := PackedFloat32Array()
+	var arcs := PackedFloat32Array()
+	if int(shape[0]) > 0 and slot >= 0:
+		var fan := RayFan.new()
+		fan.configure(int(shape[0]), deg_to_rad(float(shape[1])), deg_to_rad(float(shape[2])))
+		fan.step(0.0)
+		var middle := Cilia.slot_bearing(slot)
+		var offsets := fan.offsets()
+		for k in offsets.size():
+			bearings.append(wrapf(middle + offsets[k], -PI, PI))
+			if fan.revisit() > 0.0:
+				arcs.append(wrapf(middle + fan.arc_low()[k], -PI, PI))
+				arcs.append(wrapf(middle + fan.arc_high()[k], -PI, PI))
+		field.beam_fan_mid = middle
+		field.beam_fan_half = deg_to_rad(float(shape[1]))
+	else:
+		field.beam_fan_half = -1.0
+	field.beam_bearings = bearings
+	field.beam_arcs = arcs
+	return genome
+
+
+## You at [param p], facing [param h], reading your nose, shadow, touch, rays and
+## call over the bodies the frame would gather round you; then water cell
+## [param twin] moved there, as you, with you out of the water, reading its own.
+## Returns `[yours, its smell, its shadow, its touch, your rays, your returns as
+## a water cell keeps them, and whether each of the five is equal]`.
+func _both_read(field: WatchedDrop, twin: int, p: Vector2, h: float) -> Array:
+	var tb: Object = (field.get("_cells") as Array)[twin]
+	field.in_water = true
+	field._refresh_me()
+	field.set("_near", field.bodies_near(p, 1800.0))
+	field._step_sense()
+	field._step_beams()
+	field._step_touch()
+	(field.get("_echoes") as Array).clear()
+	field._cast_ping()
+	var yours := [field.taste_level, field.shadow, field.shadow_bearing, field.touch_level,
+		field.touch_bearing]
+	var your_rays: Array = []
+	for one: Array in field.beams:
+		if bool(one[2]):
+			your_rays.append([float(one[0]), float(one[1])])
+	your_rays.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
+	var t := float(field.get("_t"))
+	var your_calls: Array = []
+	for one: Array in field.get("_echoes"):
+		var due := float(one[0])
+		var hold := float(one[4])
+		your_calls.append([t + due, one[1], due * FoodField.PING_SPEED * 0.5,
+			hold * FoodField.PING_SPEED / (2.0 * FoodField.PING_RING), t + due + hold])
+	field.in_water = false
+	field._refresh_me()
+	tb.set("pos", p)
+	tb.set("heading", h)
+	field.refile(twin)
+	var smell: Array = field._read_smell(twin, tb)
+	var shadow: Array = field._read_shadow(twin, tb)
+	var touch: Array = field._read_touch(twin, tb)
+	var beam: Array = field._read_beam(twin, tb)
+	tb.set("call_at", 0.0)
+	tb.set("echoes", [])
+	field._call_now(twin, tb)
+	var same_smell := smell.size() == 1 and float(smell[0][0]) == float(yours[0])
+	var same_shadow: bool = (shadow.size() == 1 and float(shadow[0][1]) == float(yours[1])
+		and float(shadow[0][0]) == float(yours[2])) or (shadow.is_empty() and yours[1] == 0.0)
+	var same_touch: bool = (touch.size() == 1 and float(touch[0][1]) == float(yours[3])
+		and float(touch[0][0]) == float(yours[4])) or (touch.is_empty() and yours[3] == 0.0)
+	var same_rays := beam.size() == your_rays.size()
+	for k in mini(beam.size(), your_rays.size()):
+		same_rays = same_rays and float(beam[k][0]) == float(your_rays[k][0]) \
+			and float(beam[k][1]) == float(your_rays[k][1])
+	var same_calls := var_to_bytes(tb.get("echoes")) == var_to_bytes(your_calls)
+	return [yours, smell, shadow, touch, your_rays, your_calls, same_smell, same_shadow,
+		same_touch, same_rays, same_calls]
+
+
+## **3. No magic** (behaviour.md §3.2, §12.3). **A gene a body carries and does
+## not wear is not there**: a body carrying a nose, a radar, a laser, an eyespot
+## and a palp and wearing none of them, on the founders' rules with prey all round
+## it, has none of their inputs read over three seconds of its ticks -- its tank
+## and its last meal are -- and asked straight, none of their readers reports.
+## **And a reading is its organs' and nothing else's**: a water cell wearing all
+## five, posed among bodies with you beside it, reads the same to the float after
+## everything its organs do not reach is changed -- every body past the farthest
+## of its reaches taken out, every other body's tank, meals, clocks and rules,
+## and your own organs. Check 2 holds what it does read to what yours read.
+func _no_magic() -> void:
+	seed(32)
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	cell.heading = 0.0
+	field.in_water = true
+	var senses := {&"chemocyte": 2, &"ampulla": 2, &"ocellus": 2, &"stigma": 1, &"palp": 2}
+	var owners: Array[StringName] = [&"chemocyte", &"ampulla", &"ocellus", &"stigma", &"palp"]
+	# Carried, not worn: its DNA has all five, its body none.
+	var at := p + Vector2(-700.0, 0.0)
+	var blind := _pose(field, at, 30.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, 0.0,
+		0.6)
+	var bb: Object = cells[blind]
+	var carried: Dictionary = (bb.get("genome") as Dictionary).duplicate()
+	carried.merge(senses)
+	bb.set("dna", carried)
+	bb.set("brain", null)
+	for k in 6:
+		_pose(field, at + Vector2.from_angle(TAU * float(k) / 6.0 + 0.3) * (90.0 + 40.0 * k),
+			14.0, {&"cirrus": 1}, 0.0, 0.5)
+	# Big enough to cast it a shadow, astern, out of its way.
+	_pose(field, at + Vector2(0.0, 420.0), 40.0, {&"cirrus": 1}, 0.0, 0.5)
+	field.log_reads = true
+	field.reads.clear()
+	for f in 3 * 60:
+		field._process(1.0 / 60.0)
+	field.log_reads = false
+	# Wearing all five, among bodies -- one on each of its rays -- you beside it.
+	var w_at := p + Vector2(700.0, 0.0)
+	var w_tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	w_tiers.merge(senses)
+	var w := _pose(field, w_at, 30.0, w_tiers, 0.4, 0.6)
+	var wb: Object = cells[w]
+	for k in 9:
+		var r := 15.0 if k % 3 != 0 else 38.0
+		_pose(field, w_at + Vector2.from_angle(TAU * float(k) / 9.0 + 0.11)
+			* (110.0 + 70.0 * k), r, {&"cirrus": 1}, 0.0, 0.5)
+	var ray := 0
+	for bearing: float in (wb.get("eye") as Object).get("beam_bearings"):
+		var aim := 0.4 + bearing
+		_pose(field, w_at + Vector2(sin(aim), -cos(aim)) * (380.0 + 150.0 * ray), 18.0,
+			{&"cirrus": 1}, 0.0, 0.5)
+		ray += 1
+	field._spawn_floc(w_at + Vector2(-60.0, 120.0), 10.0, true)
+	var unworn := 0
+	var own := 0
+	for read: Array in field.reads:
+		if int(read[0]) != blind:
+			continue
+		var owner := StringName(String(read[1]).get_slice(".", 0))
+		if owners.has(owner):
+			unworn += 1
+		else:
+			own += 1
+	var straight := [field._read_smell(blind, bb), field._read_shadow(blind, bb),
+		field._read_touch(blind, bb), field._read_beam(blind, bb), field._read_echo(blind, bb)]
+	var silent := straight.all(func(one: Array) -> bool: return one.is_empty())
+	# Everything the water cell's organs do not reach, changed.
+	var before := _readings(field, w)
+	var reach := maxf(maxf(CellBody.SMELL_RANGE_BY_TIER[2], CellBody.PING_RANGE_BY_TIER[2]),
+		maxf(CellBody.BEAM_RANGE_BY_TIER[2], FoodField.SHADOW_RANGE)) + 2.0 * Drop.GRID_SLACK \
+		+ CellBody.DIVIDE_RADIUS
+	var taken := 0
+	for i in cells.size():
+		var b: Object = cells[i]
+		if i != w and bool(b.get("seeded")) and (b.get("pos") as Vector2).distance_to(w_at) > reach:
+			field.take_out(i)
+			taken += 1
+	for i in cells.size():
+		var b: Object = cells[i]
+		if i == w or not bool(b.get("seeded")):
+			continue
+		for value: Array in [["hunger", 0.123], ["starve", 1.5], ["effort", 9.0], ["meals", 7],
+				["calm", 3.0], ["stun", 2.0], ["ate_at", 1.0], ["dart_clock", 4.0],
+				["memory", {}], ["brain", null], ["hit", 0.7]]:
+			b.set(value[0], value[1])
+	# Your organs, past every one of its own: a reader that asked them would read
+	# farther, wider and elsewhere.
+	for value: Array in [["smell_range", 5000.0], ["smell_bearing", 2.5],
+			["beam_range", 5000.0], ["beam_bearings", PackedFloat32Array([1.5, 2.0, 2.5])],
+			["beam_fan_mid", 2.0], ["beam_fan_half", 1.0], ["ping_range", 5000.0],
+			["ping_bearing", 3.0], ["ping_through", 0.9], ["ping_tier", 3],
+			["touch_range", 2000.0], ["dart_range", 300.0]]:
+		field.set(value[0], value[1])
+	var after := _readings(field, w)
+	var same := var_to_bytes(before) == var_to_bytes(after)
+	_check(("3. no magic: a body carrying a nose, a radar, a laser, an eyespot and a palp and"
+		+ " wearing none, on the founders' rules among prey -- %d reads of their inputs over three"
+		+ " seconds and %d of its own; asked straight they report %s. A water cell wearing all"
+		+ " five -- smell %.3f, %d shadows, %d touches, %d rays stopping, %d returns -- after %d"
+		+ " bodies past its reach were taken out and every other body's insides and your organs"
+		+ " changed: %s") % [unworn, own, "nothing" if silent else "SOMETHING", float(before[0][0][0])
+		if not (before[0] as Array).is_empty() else 0.0, (before[1] as Array).size(),
+		(before[2] as Array).size(), (before[3] as Array).size(), (before[4] as Array).size(),
+		taken, "the same to the float" if same else "DIFFERENT"],
+		unworn == 0 and own > 10 and silent and same and taken > 100
+		and not (before[0] as Array).is_empty() and float(before[0][0][0]) > 0.05
+		and not (before[1] as Array).is_empty() and not (before[2] as Array).is_empty()
+		and not (before[3] as Array).is_empty() and (before[4] as Array).size() >= 2)
+	_done(water)
+	seed(20260930)
+
+
+## Every reading body [param i] of [param field] takes now, its call made afresh:
+## its smell, its shadow, its touch, its rays and its echoes in flight.
+func _readings(field: WatchedDrop, i: int) -> Array:
+	var b: Object = (field.get("_cells") as Array)[i]
+	b.set("call_at", 0.0)
+	b.set("echoes", [])
+	field._call_now(i, b)
+	return [field._read_smell(i, b), field._read_shadow(i, b), field._read_touch(i, b),
+		field._read_beam(i, b), (b.get("echoes") as Array).duplicate(true)]
+
+
+## **10. Coming for you** (behaviour.md §4.3, §12.3), with bodies posed in the
+## clear, each alone with you and swimming on the founders' rules. A mouth that
+## could swallow you, swimming at you within 35°, is felt as a wake; one swimming
+## past at 60°, and one too small to take you swimming straight at you, are not.
+## Your dart -- ready, in range, facing it -- fires at the first and at neither of
+## the others, and a `trichocyst` in the water fires at a mouth coming for its
+## body and at neither of the others. **A dart stuns**: the body rests with its
+## rules unread for DART_STUN seconds, to a frame -- and on the first tick it
+## reads them again it feels the dart as a `hit` at its bearing, which its rule
+## turns it away from.
+func _coming_for_you() -> void:
+	seed(33)
+	var water := _water(3000.0)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	cell.heading = 0.0
+	field.in_water = true
+	var wakes: Array = []
+	var darts: Array = []
+	field.waked.connect(func(bearing: float, _strength: float) -> void: wakes.append(bearing))
+	field.darted.connect(func(bearing: float) -> void: darts.append(bearing))
+	var big := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	var small := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var cases := [[15.0, big, 38.0], [60.0, big, 38.0], [0.0, small, 20.0]]
+	# Your wake, 500 ahead of you: two and a half seconds each.
+	var felt := []
+	for one: Array in cases:
+		var at := p + Vector2(0.0, -500.0)
+		var k := _pose(field, at, float(one[2]), one[1], _facing(at, p) + deg_to_rad(float(one[0])),
+			0.6)
+		(cells[k] as Object).set("brain", null)
+		wakes.clear()
+		for f in 150:
+			field._process(1.0 / 60.0)
+		felt.append(wakes.size())
+		field.take_out(k)
+	# Your dart, ready and facing ahead, 200 ahead of you: the first is darted --
+	# and is on a list that turns away from a hit -- and watched through its stun.
+	field.dart_range = CellBody.DART_RANGE_BY_TIER[3]
+	field.dart_bearing = 0.0
+	field.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[3]
+	var yours := []
+	var stunned_for := 0.0
+	var reads_stunned := 0
+	var turned := false
+	for c in cases.size():
+		var one: Array = cases[c]
+		field.set("_dart_clock", 0.0)
+		var at := p + Vector2(0.0, -200.0)
+		var k := _pose(field, at, float(one[2]), one[1], _facing(at, p) + deg_to_rad(float(one[0])),
+			0.6)
+		var kb: Object = cells[k]
+		kb.set("brain", null if c > 0 else _list(["body.hit -> body.turn-away", "always -> body.swim"]))
+		darts.clear()
+		for f in 30:
+			field._process(1.0 / 60.0)
+			if c == 0 and not darts.is_empty():
+				break
+		yours.append(darts.size())
+		if c == 0 and darts.size() == 1:
+			var stun_at := float(field.get("_t"))
+			var from := float(kb.get("hit_from"))
+			field.log_reads = true
+			field.reads.clear()
+			while float(kb.get("stun")) > 0.0 and float(field.get("_t")) < stun_at + 10.0:
+				field._process(1.0 / 60.0)
+			stunned_for = float(field.get("_t")) - stun_at
+			for read: Array in field.reads:
+				reads_stunned += 1 if int(read[0]) == k else 0
+			for f in Drop.LOD_EVERY + 1:
+				field._process(1.0 / 60.0)
+			field.log_reads = false
+			turned = bool(kb.get("holding")) and absf(angle_difference(float(kb.get("steer")),
+				from + PI)) < 1e-6
+		field.take_out(k)
+	# A trichocyst in the water, resting, out of your wake's reach, its dart's arc
+	# on each in turn, 200 off.
+	var d_at := p + Vector2(1600.0, 0.0)
+	var defender := _pose(field, d_at, 30.0, {&"cytostome": 1, &"trichocyst": 3}, 0.4, 0.6)
+	var db: Object = cells[defender]
+	var arc := float(db.get("heading")) + float(db.get("dart_bearing"))
+	var theirs := []
+	for one: Array in cases:
+		db.set("dart_clock", 0.0)
+		var at := d_at + Vector2(sin(arc), -cos(arc)) * 200.0
+		var k := _pose(field, at, float(one[2]), one[1],
+			_facing(at, d_at) + deg_to_rad(float(one[0])), 0.6)
+		(cells[k] as Object).set("brain", null)
+		for f in 30:
+			field._process(1.0 / 60.0)
+		theirs.append([float(db.get("dart_clock")) > 0.0,
+			float((cells[k] as Object).get("stun")) > 0.0])
+		field.take_out(k)
+	_check(("10. coming for you: wakes from a mouth swimming at you 15 deg off %d, past at 60"
+		+ " deg %d, too small to take you %d; your dart at them %s; a trichocyst in the water at"
+		+ " them %s (fired, stunned); the dart's stun %.3f s (DART_STUN %.0f), %d reads while"
+		+ " stunned, and on its first tick after it turned away from the dart: %s") % [
+		felt[0], felt[1], felt[2], str(yours), str(theirs), stunned_for, CellBody.DART_STUN,
+		reads_stunned, str(turned)],
+		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0 and yours == [1, 0, 0]
+		and theirs == [[true, true], [false, false], [false, false]]
+		and absf(stunned_for - CellBody.DART_STUN) <= 1.5 / 60.0 and reads_stunned == 0
+		and turned)
+	_done(water)
+	seed(20260930)
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------
