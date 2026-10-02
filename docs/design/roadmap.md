@@ -76,13 +76,15 @@ The water learns slowly under pack 3's rules, and it stays that way. The owner,
 2026-10-02: *"We do nothing about balancing yet. Players feeling will lead this
 part over time."*
 
-**Pack 4, your own instincts, is designed** (`automation.md` for the rules of the
-game, `automation-ux.md` for the screen), and waits on the owner's answers to
-rows 27 to 35. It is built in three phases:
+**Pack 4, your own programs, is designed** (`automation.md` for the rules of the
+game, `automation-ux.md` for the screen). It was revised to the owner's answers
+to rows 27 to 37 and waits on rows 38 to 42. It is built in four phases:
 
-- your instincts drive your cell when you let go (4-1);
-- your division changes them (4-2);
-- a friend's daughter carries hers (4-3, a protocol change).
+- a tail at level 2 can be held still, by hand and by instinct, for every cell
+  (4-1);
+- programs, the library and the autopilot (4-2);
+- your division changes a program (4-3);
+- a friend's daughter carries her instincts (4-4, a protocol change).
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from
