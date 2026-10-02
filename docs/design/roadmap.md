@@ -61,11 +61,18 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 
 ## In hand
 
-**The evolving water**, below under "Next". Pack 1, the drop, is built and on
-`dev`, and reaches players when the owner runs the release (`ocean.md`). Pack 2,
-water cells that divide, is built to the owner's answers in two phases -- the
-record (2-1) and the division (2-2) -- each played on the dev app before the
-release (`lineage.md`).
+**The evolving water**, below under "Next". Packs 1 and 2 are built and on
+`dev`: the drop (`ocean.md`), and water cells that divide, built to the owner's
+answers in two phases -- the record (2-1) and the division (2-2)
+(`lineage.md`). The owner plays pack 2 on the dev app before pack 3 is built.
+Pack 3, behaviour blocks, is designed and waits on the owner's answers
+(`behaviour.md`, rows 22 on).
+
+**Beside them, on `dev` for the same release:** the game in French, a settings
+menu with a language picker, three named worlds, and the settings reachable from
+the launcher (`settings.md`).
+
+All of it reaches players together, when the owner runs the release.
 
 ## What the ending is for
 
@@ -198,6 +205,7 @@ to ship on its own and be played on the dev app before the next starts:
    `docs/design/ocean.md`.
 2. **Water cells divide**, passing on their genes. `docs/design/lineage.md`.
 3. **Behaviour blocks with mutation** replace the hand-written AI.
+   `docs/design/behaviour.md`.
 4. **The player's own block screen**, built from the same blocks.
 
 Each depends on the one before. A lineage needs a water that keeps it long
