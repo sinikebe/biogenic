@@ -110,6 +110,9 @@ const DIVIDE_SEAT := 132.0
 var _cell: CellBody = null
 var _genome: GenomeNode = null
 var _clock := 0.0
+## **The tail's own clock** (cilia.gd's `step_tail`): a held tail is drawn
+## still -- what the body is doing, not a readout (automation.md §8.1).
+var _tail := Vector2.ZERO
 @onready var _figure: Control = $Figure
 
 
@@ -150,6 +153,7 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_clock += delta
+	_tail = Cilia.step_tail(_tail, _cell != null and _cell.tail_held(), delta)
 	_figure.queue_redraw()
 
 
@@ -180,7 +184,7 @@ func _draw_figure() -> void:
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye)
+		0.0, false, eye, _tail)
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on. It is the only place point of view says a gene is

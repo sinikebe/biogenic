@@ -1,12 +1,15 @@
 extends Control
-## The drawn controls, for the two schemes that have any.
+## The drawn controls, for the two schemes that have any -- and the hold pad,
+## for all three.
 ##
 ## docs/design/controls.md. The owner asked for "a left right joystick and
 ## buttons", chosen from the pause menu. There are three schemes and this file
 ## draws two of them: `stick` is a knob in a channel plus a dash pad, `pads` is
 ## two turn pads plus a push pad and a dash pad. `anywhere` -- the scheme that
 ## ships and the default -- draws nothing at all, and under it this node is
-## invisible and inert.
+## invisible and inert, **but for one pad**: the hold, which exists only while
+## the tail can be held still (docs/design/automation-ux.md §6, rows 29, 37 and
+## 41), and is drawn under every scheme, `anywhere` included, from that moment.
 ##
 ## **This node never enters the GUI pass, and that is not tidiness.** It is a
 ## `Control` for its rect and nothing else: `MOUSE_FILTER_IGNORE`, no children,
@@ -49,10 +52,13 @@ const PORT := 1
 const STARBOARD := 2
 const PUSH := 3
 const DASH := 4
+## **The tail held still** (automation-ux.md §6): a pad of its own, held like
+## push, drawn only while the tail is at `cell.gd`'s HOLD_LEVEL.
+const HOLD := 5
 
 ## Draw and hit-test order. Never overlapping, so the order is only a
 ## convention -- but a stated one is cheaper than a proof.
-const ORDER: Array[int] = [STICK, PORT, STARBOARD, PUSH, DASH]
+const ORDER: Array[int] = [STICK, PORT, STARBOARD, PUSH, DASH, HOLD]
 
 ## The mouse, as a pointer index. Touch indices are >= 0, so -1 is free.
 const POINTER_MOUSE := -1
@@ -105,6 +111,10 @@ const MARK_HELD := 0.92
 ## every control on every frame it is drawn.
 static var TURN_HUE: Color = Cilia.hue(&"cirrus")
 static var PUSH_HUE: Color = Cilia.hue(&"axoneme")
+## `flagellum` / hold: the tail's own orchid, beside the axoneme's magenta -- the
+## family `cilia.gd` keeps on purpose, so it is the shape that tells the two
+## pads apart: the push pad's wave marches, and this one stops.
+static var HOLD_HUE: Color = Cilia.hue(&"flagellum")
 
 ## [method Cilia.draw_slot_dart] owns its own alpha -- 0.95 on the dart -- and
 ## it is shared with the pause strand and the choosing screen, so it is not
@@ -183,6 +193,20 @@ const BURST_SCALE := 2.0
 ## 18 is what puts equal air above the topmost stroke and below the arc.
 const BURST_SEAT := 18.0
 
+## `hold` is **one stroke of the tail's wave running into a stop bar**
+## (automation-ux.md §6.2): a polyline 64 px wide, 1.25 wavelengths, its swing
+## of 8 px damped to flat over the first 62 % of it, and a bar 26 px tall 6 px
+## past its end. The same picture the instincts page puts on the hold's chip.
+const HOLD_SPAN := 64.0
+const HOLD_WAVES := 1.25
+const HOLD_AMP := 8.0
+const HOLD_DAMPED := 0.62
+const HOLD_STEPS := 24
+const HOLD_WIDTH := 2.6
+const HOLD_BAR := 26.0
+const HOLD_BAR_WIDTH := 3.2
+const HOLD_BAR_GAP := 6.0
+
 ## Which scheme is being drawn. [constant RunState.Scheme.ANYWHERE] draws
 ## nothing, which is the whole of the shipped scheme being untouched.
 var scheme := RunState.Scheme.ANYWHERE
@@ -196,6 +220,8 @@ var _stick_x := 0.0
 ## for them to do.
 var _has_push := false
 var _has_dash := false
+## Whether the hold pad is drawn: the tail can be held still.
+var _has_hold := false
 var _acting := true
 
 var _well: StyleBoxFlat = null
@@ -230,18 +256,20 @@ func setup(wells: Dictionary) -> void:
 
 
 ## What is on screen this frame. [param shown] is the whole block; [param quiet]
-## is the pinch of a division, where the two action pads go and the steering
-## control stays; [param push] and [param dash] are the genome -- **a pad exists
-## only when the organ that works it does.**
-func update(shown: bool, quiet: bool, push: bool, dash: bool) -> void:
+## is the pinch of a division, where the action pads go and the steering
+## control stays; [param push], [param dash] and [param hold] are the genome --
+## **a pad exists only when the organ that works it does**, and the hold only
+## while the tail is at `cell.gd`'s HOLD_LEVEL.
+func update(shown: bool, quiet: bool, push: bool, dash: bool, hold: bool) -> void:
 	var acting := not quiet
 	if visible == shown and _acting == acting and _has_push == push \
-			and _has_dash == dash:
+			and _has_dash == dash and _has_hold == hold:
 		return
 	visible = shown
 	_acting = acting
 	_has_push = push
 	_has_dash = dash
+	_has_hold = hold
 	# A control that stopped being drawn cannot stay held: the thumb on it is
 	# now a thumb on open water, and under `stick` and `pads` open water is
 	# inert. Done here rather than by the caller so the two cannot disagree.
@@ -294,6 +322,14 @@ func rect_of(id: int) -> Rect2:
 			return Rect2(size.x - EDGE - BOX * 2.0 - PAD_GAP, top, BOX, BOX)
 		DASH:
 			return Rect2(size.x - EDGE - BOX, top, BOX, BOX)
+		HOLD:
+			# The innermost pad of the right-hand cluster (automation-ux.md §6.1):
+			# inboard of push under `pads`, and where `pads` puts it under
+			# `anywhere`, three pad widths in, past a resting thumb; under `stick`,
+			# which pushes with the stick, in push's place, inboard of dash.
+			var inboard := 2.0 if scheme == RunState.Scheme.STICK else 3.0
+			return Rect2(size.x - EDGE - BOX * inboard - PAD_GAP * (inboard - 1.0), top,
+				BOX, BOX)
 		_:
 			return Rect2()
 
@@ -311,6 +347,9 @@ func _live(id: int) -> bool:
 			return scheme == RunState.Scheme.PADS and _has_push and _acting
 		DASH:
 			return scheme != RunState.Scheme.ANYWHERE and _has_dash and _acting
+		HOLD:
+			# Under every scheme, `anywhere` too: the one control it draws.
+			return _has_hold and _acting
 		_:
 			return false
 
@@ -473,6 +512,12 @@ func pushing() -> bool:
 			return false
 
 
+## True while the hold pad is held, under any scheme: the hand holding the tail
+## still (automation-ux.md §6.1). `cell.gd` asks it only of a tail that can be.
+func holding() -> bool:
+	return _held(HOLD)
+
+
 ## True while a **steering** control is held. At a division that is what decides
 ## the lean, because a thumb parked on the stick sits at canvas x 144 whichever
 ## way it is pushing -- which is the port half either way -- and under `pads`
@@ -487,7 +532,10 @@ func steering() -> bool:
 # ---------------------------------------------------------------------------
 
 func _draw() -> void:
-	if _well == null or scheme == RunState.Scheme.ANYWHERE:
+	# Under `anywhere` [method _live] answers true for the hold pad alone, so that
+	# is all this draws there: the scheme stays an empty screen until the tail
+	# can be held.
+	if _well == null:
 		return
 	for id: int in ORDER:
 		if not _live(id):
@@ -507,6 +555,8 @@ func _draw() -> void:
 				_draw_wave(box, ink)
 			DASH:
 				_draw_burst(box, ink)
+			HOLD:
+				draw_hold_mark(self, box.get_center(), ink)
 
 
 func _draw_channel(box: Rect2, lit: bool, ink: float) -> void:
@@ -563,6 +613,29 @@ func _draw_wave(box: Rect2, ink: float) -> void:
 				mid.x + (u - 0.5) * WAVE_SPAN,
 				mid.y + lift + sin(u * TAU + phase) * WAVE_AMP))
 		draw_polyline(points, Color(PUSH_HUE, ink), WAVE_WIDTH, true)
+
+
+## **The hold's mark** (automation-ux.md §6.2), centred on [param centre] at
+## [param ink] and [param scale]: one stroke of the tail's wave, its swing dying
+## away to flat, and the bar it stops at. Static, so the page that names the
+## hold draws the same picture on its chip.
+static func draw_hold_mark(canvas: CanvasItem, centre: Vector2, ink: float,
+		scale: float = 1.0) -> void:
+	var tone := Color(HOLD_HUE, ink)
+	var span := HOLD_SPAN * scale
+	var whole := span + (HOLD_BAR_GAP + HOLD_BAR_WIDTH * 0.5) * scale
+	var from := centre.x - whole * 0.5
+	var points := PackedVector2Array()
+	for i in HOLD_STEPS + 1:
+		var u := float(i) / float(HOLD_STEPS)
+		var swing := 1.0 - clampf(u / HOLD_DAMPED, 0.0, 1.0)
+		points.append(Vector2(from + u * span,
+			centre.y + sin(u * HOLD_WAVES * TAU) * HOLD_AMP * scale * swing))
+	canvas.draw_polyline(points, tone, HOLD_WIDTH * scale, true)
+	var bar_x := from + span + HOLD_BAR_GAP * scale
+	var half := HOLD_BAR * scale * 0.5
+	canvas.draw_line(Vector2(bar_x, centre.y - half), Vector2(bar_x, centre.y + half), tone,
+		HOLD_BAR_WIDTH * scale, true)
 
 
 func _draw_burst(box: Rect2, ink: float) -> void:

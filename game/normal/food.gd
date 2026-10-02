@@ -1081,6 +1081,14 @@ class Body:
 	var resting := false
 	var swimming := false
 	var push := 0.0
+	## **Its tail held still** (automation.md §5.2, §5.3), claimed on its last
+	## tick and held until its next: by the flagellum's `hold`, or by a rest at
+	## [constant CellBody.HOLD_LEVEL]. Under [member tails_beat] a tail beats
+	## unless this holds it.
+	var tail_held := false
+	## **The level its tail works at**: its flagellum's worn copies, as its beam's
+	## level is (`_eye_of`). Made with its body ([method _refresh_body]).
+	var tail_level := 0
 	## **The random turn it holds**: the rule that drew it and the tick it last
 	## fired on, -1 for none. While that rule keeps firing, the heading it drew
 	## is kept: a run of falling smell is one tumble, not a spin (§4.2).
@@ -5412,6 +5420,7 @@ func _renew(b: Body) -> void:
 	b.resting = false
 	b.swimming = false
 	b.push = 0.0
+	b.tail_held = false
 	b.tumble = -1
 	b.tumble_tick = -1
 	b.stun = 0.0
@@ -5975,6 +5984,17 @@ var rules := true
 ## is drawn for it -- what `--rule-change=0` plays. Read only while [member rules]
 ## is on.
 var rule_change := true
+# --- Pack 4's (docs/design/automation.md §5.4), set by tools/drive.gd and
+# tools/eco_probe.gd as the ones above are, before the water is made. Nothing in
+# the game writes it.
+## **A tail beats unless it is held** (row 37, §5.3): every body that swims --
+## every water cell with a mouth -- swims at its tail's speed and pays for it
+## unless the flagellum's `hold`, or a rest at [constant CellBody.HOLD_LEVEL],
+## holds it, or a dart stuns it; a drifter is carried, as ever. **Off is pack 3,
+## to the byte** (§18.3 check 1): a body swims only while a swim rule fires, a
+## rest stops its tail at every level, and no part a level brings is there or
+## drawn by a change -- pack 3 had none -- what `--water-tail=pack3` plays.
+var tails_beat := true
 
 ## **The drop this run is in**, or null for today's water.
 var _drop: Drop = null
@@ -6587,8 +6607,10 @@ func drop_state() -> Dictionary:
 				lists.append(Rulebook.lines_of(b.brain))
 			behaviour.append(int(list_of[b.brain]))
 		steer.append(b.steer)
+		# Bit 3 since pack 4, a held tail (automation.md §5.3, §9.2): optional, so a
+		# pack-3 build reading it ignores it.
 		acts.append((1 if b.holding else 0) | (2 if b.resting else 0)
-			| (4 if b.swimming else 0))
+			| (4 if b.swimming else 0) | (8 if b.tail_held else 0))
 		push.append(b.push)
 		tumble.append(b.tumble)
 		tumble_tick.append(b.tumble_tick)
@@ -6920,6 +6942,7 @@ func _load_rules(state: Dictionary, slots: PackedInt32Array) -> void:
 			b.holding = (acts[k] & 1) != 0
 			b.resting = (acts[k] & 2) != 0
 			b.swimming = (acts[k] & 4) != 0
+			b.tail_held = (acts[k] & 8) != 0
 		if not push.is_empty():
 			b.push = push[k]
 		if not tumble.is_empty():
@@ -7301,9 +7324,11 @@ func _refresh_body(b: Body) -> void:
 		CellBody.PUSH_ACCEL_BY_TIER.size() - 1)]
 	b.dart_tier = clampi(Genome.tier_of(g, &"trichocyst"), 0,
 		CellBody.DART_RANGE_BY_TIER.size() - 1)
+	# Pack 4 (automation.md §5.3): its tail's level is its copies, as its beam's is.
+	b.tail_level = Genome.tier_of(g, &"flagellum")
 	b.eye = _eye_of(b) if _drop != null and not _mirror and not _replay \
 		and not b.drifter and not b.inert else null
-	b.worn = Rulebook.worn(vocabulary(), g, _everybody) if b.eye != null else 0
+	b.worn = _worn_of(g) if b.eye != null else 0
 	var smell: float = CellBody.SMELL_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"chemocyte"), 0, 3)]
 	var ping: float = CellBody.PING_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ampulla"), 0, 3)]
 	var beam: float = CellBody.BEAM_RANGE_BY_TIER[clampi(Genome.tier_of(g, &"ocellus"), 0, 3)]
@@ -7613,6 +7638,17 @@ func _ruled() -> bool:
 	return rules and _drop != null and not _mirror and not _replay
 
 
+## **What of the vocabulary a body with [param parts] has, as the rulebook's
+## bits** (§3.5): `Rulebook.worn` over a gene to the level it works at -- a water
+## cell's worn copies, or a daughter's DNA copies for what a change may draw --
+## and what every body has. **Pack 3's water has no part at a level**
+## ([member tails_beat] off): those bits are never there, so nothing a level
+## brings fires, nor is drawn by a change, and the drop is pack 3's to the byte.
+func _worn_of(parts: Dictionary) -> int:
+	var mask := Rulebook.worn(vocabulary(), parts, _everybody)
+	return mask if tails_beat else mask & ~vocabulary().levelled
+
+
 ## **The wiring** (§3.5 step 3), made on first use: each declared input to the
 ## function that reads it for any body, and each declared output to the one
 ## that performs it, under the declared names.
@@ -7637,6 +7673,7 @@ func _wire() -> void:
 		&"body.rest": _rest_on,
 		&"myoneme.dash": _dash_on,
 		&"axoneme.push": _push_on,
+		&"flagellum.hold": _hold_on,
 	}
 	_read_with = _read_input
 	founders()
@@ -7902,16 +7939,28 @@ func _turn_random(_i: int, b: Body, k: int, _report: Array, _before: Variant, ti
 	b.holding = true
 
 
-## `body.swim`: it beats its flagellum at its tail's speed, paying for it.
+## `body.swim`: it beats its flagellum at its tail's speed, paying for it. Under
+## [member tails_beat] the tail beats anyway: a swim claims it, so no rule below
+## may hold it (automation.md §5.3).
 func _swim_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.swimming = true
 
 
-## `body.rest`: everything stops -- the water carries it, for free -- and the
-## heading it held is let go.
+## `body.rest`: steering, the push and the dash stop, and the heading it held is
+## let go -- and **at [constant CellBody.HOLD_LEVEL] its tail is held still too**
+## (automation.md §5.3), so it is carried, for free. Under a level-1 tail it
+## swims on, under [member tails_beat]; pack 3's water carries every resting body.
 func _rest_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
 	b.resting = true
 	b.holding = false
+	b.tail_held = tails_beat and b.tail_level >= CellBody.HOLD_LEVEL
+
+
+## `flagellum.hold`, declared at [constant CellBody.HOLD_LEVEL]: its tail is held
+## still, and only its tail -- a rule below may still steer, push and dash
+## (automation.md §4.2).
+func _hold_on(_i: int, b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+	b.tail_held = true
 
 
 ## `myoneme.dash`: a burst forward, on its cooldown and at its price.
@@ -7945,14 +7994,15 @@ func _step_ruled(index: int, b: Body, delta: float) -> void:
 		return
 	if b.eye != null and b.eye.ping_range > 0.0 and _t >= b.call_at:
 		_call_now(index, b)
-	if b.stun <= 0.0 and not b.resting and (b.swimming or b.push > 0.0 or b.dash_v > 0.0):
+	if _under_power(b):
 		_felt_coming(b, delta)
 
 
 ## **One tick of its rules** (§4.1): read from the top, one winner for each
 ## trigger, by rulebook.gd -- each input read at most once and only for an organ
 ## it wears -- and each winner performed. A trigger nothing claimed does what a
-## body does on its own: no new heading, no swim, no push. A hit is felt on the
+## body does on its own: no new heading, no push, and its tail beats under
+## [member tails_beat] -- in pack 3's water, no swim. A hit is felt on the
 ## tick it is read, acted on or not. **A stunned body reads nothing**, and keeps
 ## what hit it for the tick it reads again: the dart that stunned it is felt
 ## then, at its bearing.
@@ -7974,6 +8024,7 @@ func _decide_by_rules(index: int, b: Body) -> void:
 	b.resting = false
 	b.swimming = false
 	b.push = 0.0
+	b.tail_held = false
 	for won: Array in _fired:
 		var k := int(won[0])
 		var act: Callable = _triggers.get(list.rules[k].output, Callable())
@@ -7988,10 +8039,12 @@ func _decide_by_rules(index: int, b: Body) -> void:
 ## **How a body on rules moves** (§4.2, §4.5): toward the heading it holds at
 ## its own cirrus's rate, paying TURN_COST a radian, the water's wander on top --
 ## or, holding none, on the water's heading: the free wander and the turn off
-## the shore. At its tail's speed while it swims and with its axoneme's thrust
-## while it pushes, each paid at the player's prices, a dash's burst fading
-## with the drag; resting, stunned, or claiming neither, carried at
-## DRIFT_SPEED for free. A swimming body slides along the rim.
+## the shore. At its tail's speed while its tail beats ([method _tail_beats])
+## and with its axoneme's thrust while it pushes, each paid at the player's
+## prices, a dash's burst fading with the drag; its tail still and pushing
+## nothing, carried at DRIFT_SPEED for free. A swimming body slides along the
+## rim. **Under row 37** (automation.md §5.3) a resting body with a level-1 tail
+## swims on: its rest stops its steering, its push and its dash, not its tail.
 func _move_ruled(b: Body, delta: float) -> void:
 	var still := b.resting or b.stun > 0.0
 	if b.holding and not still:
@@ -8005,14 +8058,13 @@ func _move_ruled(b: Body, delta: float) -> void:
 		b.heading = wrapf(b.heading + randf_range(-DRIFT_TURN, DRIFT_TURN) * delta, -PI, PI)
 		_shore_turn(b, delta)
 	var pace := DRIFT_SPEED
-	if not still:
-		if b.swimming:
-			pace = b.tail
-			b.effort += CellBody.stroke_cost(b.tail) * delta
-		if b.push > 0.0:
-			var thrust := b.thrust * b.push
-			pace += thrust / CellBody.DRAG
-			b.effort += thrust * CellBody.STROKE_COST * delta
+	if _tail_beats(b):
+		pace = b.tail
+		b.effort += CellBody.stroke_cost(b.tail) * delta
+	if not still and b.push > 0.0:
+		var thrust := b.thrust * b.push
+		pace += thrust / CellBody.DRAG
+		b.effort += thrust * CellBody.STROKE_COST * delta
 	if b.dash_v > 0.0:
 		pace += b.dash_v
 		b.dash_v *= exp(-CellBody.DRAG * delta)
@@ -8022,10 +8074,29 @@ func _move_ruled(b: Body, delta: float) -> void:
 	b.speed = pace
 
 
-## Whether [param b] moves under its own power: a swim, a push or a dash's
-## burst.
-static func _under_power(b: Body) -> bool:
-	return b.stun <= 0.0 and not b.resting and (b.swimming or b.push > 0.0 or b.dash_v > 0.0)
+## **Whether [param b]'s tail beats this step** (automation.md §5.3). Under
+## [member tails_beat], for every body that swims unless it is held -- by the
+## flagellum's `hold`, or a rest at [constant CellBody.HOLD_LEVEL] -- or a dart
+## has stunned it: a stun is done to a body, not an ability it has. A drifter
+## has no mouth, decides nothing and is carried, as pack 1's row 11 keeps it.
+## In pack 3's water only while a swim rule fires and it neither rests nor is
+## stunned.
+func _tail_beats(b: Body) -> bool:
+	if b.stun > 0.0:
+		return false
+	if not tails_beat:
+		return b.swimming and not b.resting
+	return not b.drifter and not b.tail_held
+
+
+## **Whether [param b] moves under its own power** -- what "coming for you"
+## asks first (§4.3): its tail beating, a push, or a dash's burst while it does
+## not rest. So under row 37 a resting one-copy hunter swimming at you is coming
+## for you, and a two-copy hunter holding still is not (automation.md §5.3).
+func _under_power(b: Body) -> bool:
+	if b.stun > 0.0:
+		return false
+	return _tail_beats(b) or (not b.resting and (b.push > 0.0 or b.dash_v > 0.0))
 
 
 # --- Coming for you (§4.3) -------------------------------------------------------------
@@ -8176,6 +8247,10 @@ func _stun(b: Body, from: Vector2) -> void:
 	b.swimming = false
 	b.push = 0.0
 	b.resting = true
+	# Resting until its next tick reads its rules again, as `_rest_on` rests it:
+	# with a level-2 tail, held. The stun itself stops every tail, whatever its
+	# level ([method _tail_beats]).
+	b.tail_held = tails_beat and b.tail_level >= CellBody.HOLD_LEVEL
 	_feel_hit(b, from, 1.0)
 	_stat(&"stuns")
 
@@ -8791,7 +8866,7 @@ func _divide(i: int, b: Body) -> PackedInt32Array:
 		d.brain = brain
 		if k == changed and changes and rules and rule_change:
 			var rolled: Array = Drop.daughter_behaviours(founders() if brain == null else brain,
-				vocabulary(), Rulebook.worn(vocabulary(), dna, _everybody))
+				vocabulary(), _worn_of(dna))
 			if rolled[2] != &"":
 				d.brain = rolled[1]
 				_stat(StringName("rules_" + String(rolled[2])))
@@ -9350,7 +9425,10 @@ func behaviour_line() -> String:
 			lists[b.brain] = true
 		holding += 1 if b.holding else 0
 		resting += 1 if b.resting else 0
-		swimming += 1 if b.swimming else 0
+		# **Swimming is its tail beating** (automation.md §5.3): a swim rule's
+		# claim in pack 3's water, where the two are the same body for body, and
+		# under row 37 every tail that is not held.
+		swimming += 1 if _tail_beats(b) else 0
 		pushing += 1 if b.push > 0.0 else 0
 		stunned += 1 if b.stun > 0.0 else 0
 		echoes += b.echoes.size()

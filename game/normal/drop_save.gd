@@ -210,9 +210,11 @@ const CELL_LINEAGE := {
 ## every body's still on them -- and otherwise which list of `drop.behaviours`
 ## it carries, so a family's shared list is kept once. Then the heading it steers
 ## for; what its rules claimed (`acts`: bit 0 a heading held, bit 1 a rest, bit 2
-## a swim) and its push's strength; the random turn it holds -- the rule that
-## drew it and the tick that rule last fired on, -1 for none; its stun; when it
-## last ate, on the drop's clock, -INF for never -- its `fed` is `age` less this,
+## a swim, and since pack 4 bit 3 a held tail, which a pack-3 build ignores --
+## docs/design/automation.md §9.2) and its push's strength; the random turn it
+## holds -- the rule that drew it and the tick that rule last fired on, -1 for
+## none; its stun; when it last ate, on the drop's clock, -INF for never -- its
+## `fed` is `age` less this,
 ## kept as the time it happened so a round trip is exact; a hit it has not yet
 ## felt, and the direction it came from; when it calls next; its echoes in
 ## flight, [constant ECHO_NUMBERS] numbers each -- when it lands, where it came

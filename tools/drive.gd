@@ -33,7 +33,13 @@ extends Node
 ##                           switch in one frame must not leave numbers on in
 ##                           every render after it. Pass `--numbers=0` to shoot
 ##                           the switch being tapped
-##   --hold=a|d              hold a steering key for the whole run
+##   --hold=a|d|w|s          hold a key for the whole run: a steering key, `w`
+##                           to push, or `s`, **the hand's hold** -- the tail
+##                           held still, at two copies of it (docs/design/
+##                           automation.md §5.2); at one copy the key does
+##                           nothing, as it does in the game. `--key-down=` and
+##                           `--key-up=` take `s` too, for a hold that comes
+##                           and goes
 ##   --drag=<pixels>         press near the middle and drag this far sideways
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
 ##   --arm-at=<seconds>      ignore --freeze-on before this time
@@ -596,7 +602,10 @@ extends Node
 ## (docs/design/behaviour.md §12.1): --rules=0|1, 0 being pack 2's hand-written
 ## hunter, the reference the water's rules are measured against; and
 ## --rule-change=0|1, 0 being phase 3-1's water, whose rules never change at a
-## division.
+## division. **And pack 4's** (docs/design/automation.md §5.4):
+## --water-tail=pack3|row37, `pack3` being pack 3's water, where a body swims
+## only while a swim rule fires, and `row37` the game's, where every tail that
+## swims beats unless it is held.
 ##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
@@ -1485,8 +1494,9 @@ func _ready() -> void:
 			view.call(&"set_camera_locked", true)
 			print("[drive] camera locked: forward is up")
 
-	# `w` is `axoneme`: hold to push. The steer keys are the other two.
-	var held := _keycode(hold) if hold == "w" else KEY_NONE
+	# `w` is `axoneme`: hold to push, and `s` the tail held still (automation.md
+	# §5.2). The steer keys are the other two.
+	var held := _keycode(hold) if hold == "w" or hold == "s" else KEY_NONE
 	if hold == "a" or hold == "d":
 		held = KEY_A if hold == "a" else KEY_D
 	if held != KEY_NONE:
@@ -2894,17 +2904,19 @@ func _step_controls(delta: float) -> void:
 		print("[ctl]  %6.2f  no controls node" % _clock)
 		return
 	var owners: Dictionary = node.get("_owner")
-	var names := ["stick", "port", "starboard", "push", "dash"]
+	var names := ["stick", "port", "starboard", "push", "dash", "hold"]
 	var held := PackedStringArray()
 	for pointer: int in owners:
 		var id: int = owners[pointer]
 		held.append("%s#%d" % [
 			names[id] if id >= 0 and id < names.size() else "?", pointer])
 	var cell := _find_node_with(_run, &"bearing_to")
-	print("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer %+5.2f" % [
+	print(("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer"
+		+ " %+5.2f  holding %s  tail held %s") % [
 		_clock, node.scheme, "yes" if node.visible else "no ",
 		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
-		cell.steer if cell != null else 0.0])
+		cell.steer if cell != null else 0.0, "yes" if node.holding() else "no ",
+		"yes" if cell != null and bool(cell.call(&"tail_held")) else "no "])
 
 
 ## The placing gesture, read off the run (dna-body.md §8): whether the body is
@@ -3168,6 +3180,11 @@ func _drop_switch(text: String) -> bool:
 	if text.begins_with("--flocs-near="):
 		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
 		return true
+	# Pack 4's (automation.md §5.4): `pack3` is pack 3's water, the tool's
+	# reference, where a tail beats only while a swim rule fires.
+	if text.begins_with("--water-tail="):
+		_field_sets[&"tails_beat"] = text.trim_prefix("--water-tail=") != "pack3"
+		return true
 	for prefix: String in FLOATS:
 		if text.begins_with(prefix):
 			_field_sets[FLOATS[prefix]] = float(text.trim_prefix(prefix))
@@ -3368,6 +3385,8 @@ func _keycode(name: String) -> Key:
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
 		"w": return KEY_W
+		# The hand's hold (automation.md §5.2): the tail held still, at two copies.
+		"s": return KEY_S
 		# The placing gesture's keys (dna-body.md §8): `E` holds the body open,
 		# and `A` / `D` -- the steer keys -- walk the lit slot while it does.
 		"e": return KEY_E

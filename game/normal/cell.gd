@@ -184,6 +184,16 @@ const IMPULSE_SPEED_BY_TIER: Array[float] = [118.0, 138.0, 162.0, 190.0]
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const IMPULSE_GAP_MIN_BY_TIER: Array[float] = [2.00, 1.70, 1.45, 1.20]
 const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
+## **A tail can be held still from its second copy** (docs/design/
+## automation.md §5.2, rows 29, 37 and 38): the one number the hand's hold and
+## a body's rules both ask, of the tail's level -- `genome.gd`'s `level_of`,
+## which for every gene but the beam is its worn copies. A held tail does not
+## beat, costs nothing, and **keeps its clock**: the stroke clock stands still
+## and is never reset, so two strokes are never closer than this table's
+## shortest gap however a hold comes and goes ([method _process]). Below it the
+## tail beats on its own, for every body that swims. Not a table a host's
+## referee judges by: a held tail only ever makes a body slower.
+const HOLD_LEVEL := 2
 ## Mean of the per-impulse strength roll below, for [method speed_for].
 const IMPULSE_MEAN := 0.85
 ## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
@@ -489,7 +499,13 @@ const STEER_DEADZONE := 0.12
 ## has the triggers every body has (§3.3): it turns toward or away from what a
 ## sense reports, which needs a bearing, or turns at random; it swims, on its
 ## flagellum's own beat; and it rests, which claims every trigger there is. Its
-## `cirrus` and `flagellum` only make these faster, so they declare nothing.
+## `cirrus` only makes these faster, so it declares nothing.
+##
+## **Under row 37** (docs/design/automation.md §5.3) a tail beats unless it is
+## held, so `swim` claims the tail -- the `swimming` trigger -- and keeps a rule
+## below it from holding it; and `rest` stops steering, the push and the dash
+## at every level, and holds the tail too only at [constant HOLD_LEVEL]. The
+## flagellum's own `hold` is `genome.gd`'s, declared at that level.
 const DECLARES := {
 	&"body": {
 		"in": [{"name": &"hit", "bearing": true, "values": {&"strength": &"level"}}],
@@ -502,6 +518,47 @@ const DECLARES := {
 		],
 	},
 }
+
+## **What the body's parts are called** (docs/design/automation.md §13.1), beside
+## [constant DECLARES], by qualified name: the words the instincts page puts on
+## a part's chip. Phase 4-1 brings the one whose meaning the tail changed; the
+## page brings the rest with it. Read through [method words_of].
+##
+## TRANSLATORS: The name of an action the player's cell can be told to do by one
+## of its "instincts" (a rule the player writes: "when <a sense reports
+## something> -> <do this>"), on a small chip. Lowercase, one or two short words.
+## "rest" means: stop moving on purpose and drift with the water.
+## ROOM: 112 px at 15 px
+const BODY_SAYS := {
+	&"body.rest": "rest",
+}
+## **The line that explains each of them**, beside the chip: the chip's word, a
+## middle dot, and what it makes the cell do, in plain words.
+##
+## TRANSLATORS: Explains one action an "instinct" can make the cell do, on one
+## line under the instincts: its name (the same word as on its chip), a middle
+## dot, then what it does, lowercase. "Your tail" is the cell's flagellum, which
+## swims; "two copies" means the gene is carried twice in the cell's DNA, which
+## is what lets the tail be held still.
+## ROOM: 856 px at 15 px
+const BODY_EXPLAINS := {
+	&"body.rest": "rest · stop steering, pushing and dashing, and drift. with two copies of"
+		+ " your tail, hold it still too.",
+}
+
+
+## **A part's words, in the language of the moment** (automation.md §13.1), for
+## the parts [constant DECLARES] names: `{"says": its chip, "explains": its
+## line}`, a key absent where there are none yet. `genome.gd` answers the same
+## way for the genes' parts, so the page asks the file that declares a part, and
+## a gene that brings a part brings its words with it.
+static func words_of(part: StringName) -> Dictionary:
+	var out := {}
+	if BODY_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(BODY_SAYS[part]))
+	if BODY_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(BODY_EXPLAINS[part]))
+	return out
 
 ## Nothing held. Touch indices are >= 0 and the mouse is -1, so -2 is free.
 const POINTER_NONE := -2
@@ -518,6 +575,10 @@ var _omega := 0.0
 var _wander := 0.0
 var _impulse_timer := 0.0
 var _dash_timer := 0.0
+## **Whether the tail was held still on this body's last step** -- by the hand,
+## at [constant HOLD_LEVEL] -- as [method _process] read it: what the views draw
+## still, and what the step that stopped the stroke clock decided.
+var _held := false
 ## Seconds of rest this body has spent moving since the run last took them
 ## ([method take_effort]).
 var _effort := 0.0
@@ -580,6 +641,7 @@ func reset(keep_place: bool = false) -> void:
 	_impulse_timer = randf_range(0.6, 1.4)
 	_dash_timer = 0.0
 	_effort = 0.0
+	_held = false
 	release()
 
 
@@ -615,6 +677,7 @@ func restore_body(state: Dictionary) -> void:
 	_impulse_timer = float(state["impulse"])
 	_dash_timer = float(state["dash"])
 	_effort = float(state["effort"])
+	_held = false
 	release()
 
 
@@ -636,9 +699,17 @@ func _process(delta: float) -> void:
 	# The turn the cirrus made, and only that: the wander above is the water's.
 	_effort += absf(_omega) * delta * TURN_COST
 
-	_impulse_timer -= delta
-	if _impulse_timer <= 0.0:
-		_fire_impulse()
+	# **A held tail keeps its clock** (automation.md §5.2): while it is held the
+	# stroke clock stands still -- never reset -- so the beat it was counting
+	# down to comes on its own time once it is let go, and two strokes are never
+	# closer than the tier's shortest gap however often a hold comes and goes.
+	# That is the host's referee's movement budget, "impulses as often as their
+	# clock allows". A held tail fires nothing, so it costs nothing.
+	_held = can_hold() and _holding()
+	if not _held:
+		_impulse_timer -= delta
+		if _impulse_timer <= 0.0:
+			_fire_impulse()
 
 	# `axoneme`: thrust you asked for, on top of the involuntary one. Held keys
 	# on desktop, a finger on the screen anywhere on touch -- the same gesture
@@ -818,6 +889,26 @@ func impulse_gap_min() -> float:
 
 func impulse_gap_max() -> float:
 	return IMPULSE_GAP_MAX_BY_TIER[_tier_index(tier(&"flagellum"))]
+
+
+## **The level this body's tail works at**: `genome.gd`'s `level_of`, which for
+## the flagellum is its worn copies -- 1 for an unwired cell, which is the born
+## one. What [constant HOLD_LEVEL] is asked of.
+func tail_level() -> int:
+	return int(genome.level_of(&"flagellum")) if genome != null else 1
+
+
+## Whether this tail can be held still at all: at [constant HOLD_LEVEL] or more.
+## What draws the hold's control (controls.gd), and what its key and a rule ask.
+func can_hold() -> bool:
+	return tail_level() >= HOLD_LEVEL
+
+
+## **Whether the tail is held still**, as this body's last step had it: what both
+## views draw still (soma.gd, vision.gd). False at a level-1 tail whatever the
+## hand does.
+func tail_held() -> bool:
+	return _held
 
 
 func turn_rate() -> float:
@@ -1061,7 +1152,8 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey:
 		# `myoneme` on desktop. Space is the only key normal mode spends besides
-		# the steer keys and V, and it is the one key nothing else wants.
+		# the steer keys, the push and hold keys (polled, in `_pushing` and
+		# `_holding`) and V, and it is the one key nothing else wants.
 		var key := event as InputEventKey
 		if key.pressed and not key.echo and key.keycode == KEY_SPACE:
 			_dash()
@@ -1141,6 +1233,21 @@ func _pushing() -> bool:
 		# Touching the stick, under `stick`; the `push` pad, under `pads`.
 		return controls.pushing()
 	return _pointer != POINTER_NONE
+
+
+## **True while the hand holds the tail still** (automation.md §5.2;
+## automation-ux.md §6): `S` or `↓` held -- the opposite of `W` and `↑`, which
+## push -- or the hold pad, which controls.gd draws under every scheme once the
+## tail can be held. Held, not toggled, as push is: let go and the tail beats on
+## its own clock. Only asked of a tail at [constant HOLD_LEVEL] ([method
+## _process]), so at a level-1 tail the key does nothing. `S` and `↓` are read
+## the way `W` and `↑` are, and a content pack adds no action for them.
+func _holding() -> bool:
+	if steering_off:
+		return false
+	if Input.is_action_pressed(&"ui_down") or Input.is_key_pressed(KEY_S):
+		return true
+	return controls != null and bool(controls.holding())
 
 
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on

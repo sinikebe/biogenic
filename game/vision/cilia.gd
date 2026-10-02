@@ -321,6 +321,17 @@ const FLAGELLUM_WAVE_V := 3.0
 const FLAGELLUM_WAVE_HZ := 5.2
 const FLAGELLUM_WAVE_U := 0.45
 const FLAGELLUM_LASH := 0.26
+## **A tail held still is drawn still** (docs/design/automation.md §8.1): its
+## wave stops travelling and its lash goes slack over this many seconds, and
+## comes back as fast when it is let go -- so a held tail reads as a body at
+## rest in a still frame as well as in motion, and the wave stops where it was
+## rather than snapping to a pose. Everything else on the body keeps its clock.
+const TAIL_SETTLE := 0.3
+## How much of its lash a tail held still keeps: a slack curve, not a rod.
+const TAIL_HELD_LASH := 0.3
+## [method draw_cell]'s tail when it is the body's own: drawn on the body's clock,
+## beating, as every tail in the water is.
+const NO_TAIL := Vector2(NAN, 0.0)
 
 ## The pigment organelle an earned gene carries, at the middle of its arc.
 const PIGMENT_SEAT := 0.80
@@ -529,13 +540,18 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## is 0..1, a level arriving. Passed **only for the player's own cell**, the
 ## way [method draw_pending] takes `offer`: no other cell's level is known, and
 ## a friend's is not on the wire. Empty draws exactly what it always drew.
+##
+## [param tail] is **the tail's own clock**, `(clock, still)` as [method
+## step_tail] keeps it: the clock its wave is drawn on, and 0 beating to 1 held
+## still (automation.md §8.1). Passed only for the player's own body, whose hold
+## is known; [constant NO_TAIL] draws it on [param clock], beating.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
-		eye: Dictionary = NO_EYE) -> void:
+		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -548,7 +564,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		pinch)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade, double)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order,
-		eye)
+		eye, tail)
 	draw_gape(canvas, at, fwd, stb, r, gape,
 		Genome.tier_of(tiers, &"cytostome"),
 		not is_self and gape > viewer_radius, fade, unit)
@@ -716,7 +732,7 @@ static func default_order(tiers: Dictionary) -> Array:
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
 		steer: float, unit: float, order: Array = [],
-		eye: Dictionary = NO_EYE) -> void:
+		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL) -> void:
 	if tiers.is_empty():
 		return
 
@@ -739,7 +755,9 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var swim := Genome.tier_of(tiers, &"flagellum")
 	if swim > 0:
 		var tails := PackedVector2Array()
-		_gather_flagellum(tails, at, fwd, stb, r, swim, clock)
+		var own := not is_nan(tail.x)
+		_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
+			tail.y if own else 0.0)
 		_stroke(canvas, tails, hue(&"flagellum"),
 			ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
 			WIDTH_FLAGELLUM * unit)
@@ -824,11 +842,15 @@ static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 
 
 ## The tail: long, smooth, and carrying a wave that travels out to the tip. The
-## only stroke in the vocabulary that is longer than half the body.
+## only stroke in the vocabulary that is longer than half the body. [param still]
+## is how far it is held still, 0 to 1: its lash goes slack toward
+## [constant TAIL_HELD_LASH] (its clock is the caller's, and stops).
 static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
-		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float) -> void:
+		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
+		still: float = 0.0) -> void:
 	var count := _count(COUNT_FLAGELLUM, tier)
 	var scale := _tier(TIER_LEN, tier)
+	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(still, 0.0, 1.0))
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
 		var t := deg_to_rad(lerpf(ARC_FLAGELLUM.x, ARC_FLAGELLUM.y, u))
@@ -841,11 +863,22 @@ static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 		for j in range(1, FLAGELLUM_POINTS):
 			var v := float(j) / float(FLAGELLUM_POINTS - 1)
 			var lash := sin(v * FLAGELLUM_WAVE_V - clock * FLAGELLUM_WAVE_HZ
-				+ u * FLAGELLUM_WAVE_U) * length * FLAGELLUM_LASH * v
+				+ u * FLAGELLUM_WAVE_U) * length * FLAGELLUM_LASH * v * slack
 			var point := root + dir * (length * v) + side * lash
 			into.append(previous)
 			into.append(point)
 			previous = point
+
+
+## **One step of a tail's own clock** (automation.md §8.1): `(clock, still)`,
+## the clock its wave is drawn on and how far it has gone still, 0 beating to 1
+## held, after [param delta] seconds with the tail [param held] or not. The clock
+## slows to a stop as the tail goes still and picks up as it beats again, so the
+## wave halts where it was. Both views keep one for the player's tail: the
+## point-of-view figure and full vision draw the same tail.
+static func step_tail(tail: Vector2, held: bool, delta: float) -> Vector2:
+	var still := move_toward(tail.y, 1.0 if held else 0.0, delta / TAIL_SETTLE)
+	return Vector2(tail.x + delta * (1.0 - still), still)
 
 
 ## An earned gene: stiff sensory bristles that do not row, over a pigment

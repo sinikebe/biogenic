@@ -103,6 +103,13 @@ const GENE_ORDER: Array[StringName] = [
 ## strength. A gene that only acts on its own, as the dart, the call and the
 ## mouth do, declares nothing (§3.3). Organs are what declare: what each input
 ## reports is the organ's, computed for any body by `food.gd`.
+##
+## **A part may wait for a level** (docs/design/automation.md §4.3): `"level"`
+## says the owner must work at that level or more for the part to be there --
+## its worn copies, for every gene but the beam. The flagellum's `hold` is the
+## first: it holds the tail still and only the tail, claiming the `swimming`
+## trigger `body.swim` claims, from the second copy (`cell.gd`'s HOLD_LEVEL,
+## rows 29 and 38). Declared last, so its owner's bits come after every other.
 const DECLARES := {
 	&"ocellus": {"in": [{"name": &"beam", "bearing": true,
 		"values": {&"distance": &"distance"}}]},
@@ -117,7 +124,77 @@ const DECLARES := {
 	&"myoneme": {"out": [{"name": &"dash", "claims": [&"dash"]}]},
 	&"axoneme": {"out": [{"name": &"push", "claims": [&"push"],
 		"options": [0.5, 1.0]}]},
+	&"flagellum": {"out": [{"name": &"hold", "claims": [&"swimming"],
+		"level": CellBody.HOLD_LEVEL}]},
 }
+
+## **What the genes' parts are called** (docs/design/automation.md §13.1), beside
+## [constant DECLARES], by qualified name: the words the instincts page puts on
+## a part's chip. Phase 4-1 brings the tail's; the page brings the rest with it.
+## Read through [method words_of].
+##
+## TRANSLATORS: The name of an action the player's cell can be told to do by one
+## of its "instincts" (a rule the player writes: "when <a sense reports
+## something> -> <do this>"), on a small chip. Lowercase, a few short words.
+## "hold still" means: stop the tail (the flagellum, which swims) from beating,
+## and keep it still.
+## ROOM: 112 px at 15 px
+const GENE_SAYS := {
+	&"flagellum.hold": "hold still",
+}
+## **The line that explains each of them**, beside the chip: the chip's word, a
+## middle dot, and what it makes the cell do, in plain words.
+##
+## TRANSLATORS: Explains one action an "instinct" can make the cell do, on one
+## line under the instincts: its name (the same words as on its chip), a middle
+## dot, then what it does, lowercase. "Your tail" is the cell's flagellum, which
+## swims; "two copies" means the gene is carried twice in the cell's DNA, which
+## is what lets the tail be held still. "For free" means it costs no food.
+## ROOM: 856 px at 15 px
+const GENE_EXPLAINS := {
+	&"flagellum.hold": "hold still · hold your tail still and keep steering, for free. needs"
+		+ " two copies of your tail.",
+}
+## **What a part that waits for a level says while it waits**: beside an
+## instinct that uses it, which is asleep until the organ reaches that level.
+##
+## TRANSLATORS: Said of an "instinct" (a rule the player wrote) that cannot act
+## yet, because the action it uses needs a gene carried twice. "Asleep" is the
+## state's name; "two copies of your tail" means the tail gene (the flagellum)
+## carried twice in the cell's DNA. Lowercase.
+## ROOM: 856 px at 14 px
+const GENE_ASLEEP := {
+	&"flagellum.hold": "asleep: needs two copies of your tail",
+}
+## **What the page says when a part that waits for a level is picked too early**.
+##
+## TRANSLATORS: Said when the player picks an action their cell cannot do yet,
+## because it needs a gene carried twice. "hold still" is the action's name, as on
+## its chip; "two copies of your tail" means the tail gene (the flagellum)
+## carried twice in the cell's DNA. Lowercase.
+## ROOM: 856 px at 14 px
+const GENE_NEEDS := {
+	&"flagellum.hold": "hold still needs two copies of your tail",
+}
+
+
+## **A part's words, in the language of the moment** (automation.md §13.1), for
+## the parts [constant DECLARES] names: `{"says": its chip, "explains": its
+## line, "asleep": what an instinct using it says while it waits for its level,
+## "needs": what the page says when it is picked too early}`, a key absent where
+## there are none. `cell.gd` answers the same way for the body's parts, so the
+## page asks the file that declares a part, and a gene brings its own words.
+static func words_of(part: StringName) -> Dictionary:
+	var out := {}
+	if GENE_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(GENE_SAYS[part]))
+	if GENE_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(GENE_EXPLAINS[part]))
+	if GENE_ASLEEP.has(part):
+		out["asleep"] = String(TranslationServer.translate(GENE_ASLEEP[part]))
+	if GENE_NEEDS.has(part):
+		out["needs"] = String(TranslationServer.translate(GENE_NEEDS[part]))
+	return out
 
 ## The starting cell is already full: three slots, three organs, all tier 1.
 ## You are not an empty vessel; you are mediocre at three things. §1.

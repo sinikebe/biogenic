@@ -120,9 +120,9 @@ const TURN_PLAIN := 0.15
 
 
 ## **`cell.gd`'s drawn controls, reduced to a steering demand.** The body reads
-## `floating()`, `steer()` and `pushing()` off its `controls` every frame, which
-## is the one way to steer one cell without steering every cell in the process
-## through the global `Input`.
+## `floating()`, `steer()`, `pushing()` and `holding()` off its `controls` every
+## frame, which is the one way to steer one cell without steering every cell in
+## the process through the global `Input`.
 class Stick extends Node:
 	const NONE := 0
 	const DASH := 1
@@ -135,6 +135,10 @@ class Stick extends Node:
 		return demand
 
 	func pushing() -> bool:
+		return false
+
+	## The hold pad (automation-ux.md §6.1): never held here.
+	func holding() -> bool:
 		return false
 
 	func press(_index: int, _at: Vector2) -> int:
