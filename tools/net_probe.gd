@@ -7627,6 +7627,11 @@ func _check_server() -> void:
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
+	# **The room is on rules** (behaviour.md §4.3, §8), and there "stalking you"
+	# is "coming for you": swimming -- hungry enough to, on the founders' rules --
+	# with that guest dead ahead and a mouth that takes them.
+	hunter.hunger = 0.5
+	hunter.swimming = true
 	# **Until both have it**: each guest's snapshots run on a 50 ms schedule of
 	# its own (pond.gd `_flush_guest`), so the other guest can be a snapshot
 	# behind the one hunted -- and its mirror can hold an older body in slot 5
