@@ -47,6 +47,22 @@ extends Node
 ## nor one too small, and a dart stuns for 5 s. The checks that read pack 2's
 ## hunter -- its runs, its searches, the grace no run begins at -- read it on the
 ## reference drops, and the five-minute drop of a sighted player is on rules.
+## **And pack 3's second phase** (behaviour.md §12.3, phase 3-2), the rules
+## changing at division: 4, ten thousand changes, from the founders' rules and
+## from random lists, each within §6.2's limits by this probe's own reading,
+## one change of the kind it says from its parent, drawing nothing new from past
+## what the body, the metabolism and its DNA declare, and the same through its
+## text; 5, every division of a drop on rules gives the daughter whose DNA
+## changed her mother's list with one change and her sister her mother's list
+## itself, every division on pack 2's hunter both her mother's, and every body
+## the water makes, poses or leaves as a sister the founders' rules; 6, one seed
+## with the changes on prints the same census, lineage and behaviour lines
+## twice, and with them off prints phase 3-1's; 8, a gene declared only here,
+## with an input and an output of its own and its reader and trigger wired here,
+## is in the vocabulary of a body that carries it, drawn by a change -- straight
+## and at a division -- read and acted on by a rule, and saved and loaded by
+## name. And check 7 now keeps a room whose rules change as it goes, and the
+## readout counts the water's behaviours.
 ##
 ## **Every check here fails with its fix taken out**, and was shown to by
 ## mutation when it was written: a grid that forgets the edge buckets stand for
@@ -88,7 +104,16 @@ extends Node
 ## the load forgets, a pack-2 file whose hunters stop resting, a list index the
 ## file does not check, a laser that never reports, "coming for you" with no cone
 ## or no mouth to take you with, a stun a second short, a stunned body that reads
-## its rules, and a dart forgotten before it is felt.
+## its rules, and a dart forgotten before it is felt. And its second phase's: a
+## nudge that steps past the end of its ladder, a replace that can draw the part
+## it replaces, a swap of two equal rules, a copy with no room, a list dropped to
+## nothing, two tests on one value, a turn on an input with no bearing, a change
+## drawn from every gene there is, weights the draw ignores, a list written
+## through, both daughters changed, the faithful daughter changed, nothing
+## changed, a door that keeps a slot's last rules, a change no seed reaches, a
+## switch that still draws, a vocabulary deaf to a gene's declaration, a change
+## blind to a gene the DNA carries and the body does not wear, and a readout that
+## counts lists rather than behaviours.
 ##
 ## Headless and deterministic: one seed, set first. Prints one line per check
 ## and `ALL PASS` only if every one held; CI asserts on that marker rather than
@@ -199,6 +224,14 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	var bursts := 0
 	var log_reads := false
 	var reads: Array = []
+	# --- Pack 3's second phase (behaviour.md §6, §12.3 check 5): every division's
+	# rules, as `[her mother's lines, whether the daughter whose DNA is hers carries
+	# her list itself, the other daughter's lines, whether the other carries it
+	# itself]` -- the lines of the founders' rules for a body on them -- and every
+	# body a door let in carrying anything but the founders' rules.
+	var rule_divisions: Array = []
+	var doors := 0
+	var off_founders := 0
 
 	func _fault(what: String, of_body := false) -> void:
 		if of_body:
@@ -231,6 +264,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var radius := b.radius
 		var at := b.pos
 		var heading := b.heading
+		var list: Variant = b.brain
 		var slots: PackedInt32Array = super._divide(i, b)
 		divisions += 1
 		if radius < CellBody.DIVIDE_RADIUS - 0.01:
@@ -267,6 +301,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		# -- read with and without the sense each may have been given.
 		var kind := &""
 		var gifts: Array = [[], []]
+		var kept := -1
 		for f in 2:
 			for gf: Array in _given(pair[f]):
 				for gc: Array in _given(pair[1 - f]):
@@ -276,13 +311,22 @@ class WatchedDrop extends "res://game/normal/food.gd":
 						if kind != &"":
 							gifts[f] = gf
 							gifts[1 - f] = gc
+							kept = f
 		if kind == &"":
 			_fault("of %s, daughters carry %s and %s" % [str(dna), str(pair[0].dna),
 				str(pair[1].dna)])
 		kinds[kind] = int(kinds.get(kind, 0)) + 1
 		for k in 2:
 			_judge_body(pair[k], gifts[k])
+		# Her rules (check 5), by which daughter carries her DNA: judged after.
+		if kept >= 0:
+			rule_divisions.append([_lines_of(list), pair[kept].brain == list,
+				_lines_of(pair[1 - kept].brain), pair[1 - kept].brain == list])
 		return slots
+
+	## The lines of [param list], the founders' for null.
+	func _lines_of(list: Variant) -> PackedStringArray:
+		return Rulebook.lines_of(list if list != null else founders())
 
 	## The ways to read what a daughter was given (`Drop.give_sense`): nothing,
 	## and -- when she wears one sense alone, at tier 1, and carries it at one
@@ -403,6 +447,11 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
 		last_spawned = index
 		var b: Body = _cells[index]
+		# **Every body comes in on the founders' rules** (check 5): a daughter is
+		# handed hers by `_divide` after.
+		doors += 1
+		if b.brain != null:
+			off_founders += 1
 		if body_radius <= 0.0:
 			made += 1
 			if b.drifter:
@@ -525,12 +574,15 @@ func _ready() -> void:
 	_containment()
 	_five_minutes()
 	_lineage()
+	_division_rules()
 	_determinism()
 	_identity()
 	_membrane()
 	_shared_senses()
 	_no_magic()
 	_coming_for_you()
+	_changes()
+	_modular()
 	_flocs()
 	await _flocs_fed()
 	_one_body()
@@ -1703,7 +1755,7 @@ func _lineage_summary(field: WatchedDrop, named: String, seen: Dictionary) -> Di
 	for key: String in ["divisions", "born", "faults", "body_faults", "said", "kinds",
 			"held_at_rim", "at_forty", "missed", "rolled", "worn", "meals_judged",
 			"meal_faults", "graced_runs", "runs_at_born", "graced_eaten", "peers_over_floor",
-			"made_kinds", "runs_begun"]:
+			"made_kinds", "runs_begun", "rule_divisions", "doors", "off_founders", "rules"]:
 		var value: Variant = field.get(key)
 		out[key] = value.duplicate() if value is Dictionary or value is Array \
 			or value is PackedInt32Array else value
@@ -1912,6 +1964,235 @@ func _food_over_floor() -> Dictionary:
 	return out
 
 
+# --- Pack 3's second phase: a change at every division (behaviour.md §6, §12.3) -----------------
+
+## **5. A division** (behaviour.md §6.1, §6.4, §12.3), over the three drops pack
+## 2's checks read: the sighted player's on rules ([method _five_minutes]), whose
+## rules change, and the two on pack 2's hunter ([method _lineage]). **On rules**
+## every division gives the daughter whose DNA is her mother's that list itself,
+## and her sister one change of it -- a new list of a kind [method _change_kinds]
+## reads, a family's own or the founders' -- and the five kinds all come. **On
+## pack 2's hunter** both daughters carry their mother's. **And every body the
+## water lets in carries the founders' rules**: every body each door of those
+## drops made; and in a drop of its own, a body posed into the slot of one that
+## carried rules of its own, and a sister, the child of the cell she divided from.
+func _division_rules() -> void:
+	var vocab: RefCounted = FoodField.vocabulary()
+	var on := 0
+	var off := 0
+	var faults := 0
+	var said: Array[String] = []
+	var kinds := {}
+	var doors := 0
+	var off_founders := 0
+	for run: Dictionary in _lineage_runs:
+		doors += int(run["doors"])
+		off_founders += int(run["off_founders"])
+		for one: Array in run["rule_divisions"]:
+			var why := ""
+			if not bool(one[1]):
+				why = "her faithful daughter does not carry her list"
+			elif not bool(run["rules"]):
+				off += 1
+				if not bool(one[3]):
+					why = "on pack 2's hunter, a daughter's rules changed"
+			else:
+				on += 1
+				var can := _change_kinds(FoodField.behaviour_from(one[0]),
+					FoodField.behaviour_from(one[2]), vocab)
+				if bool(one[3]) or can.is_empty():
+					why = "not one change: [%s] to [%s]" % [" / ".join(one[0]), " / ".join(one[2])]
+				else:
+					# The narrowest reading: a step one rung along is a nudge, though a
+					# replace could have drawn it too.
+					kinds[can[0]] = int(kinds.get(can[0], 0)) + 1
+			if not why.is_empty():
+				faults += 1
+				if said.size() < 3:
+					said.append(why)
+	# Posed where a body with rules of its own was, and a sister.
+	var water := _water()
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var cells: Array = field.get("_cells")
+	var body := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var was := _pose(field, cell.position + Vector2(800.0, 0.0), 30.0, body)
+	field.take_out(was)
+	var posed: int = field.pose_body(cell.position + Vector2(-800.0, 0.0), 30.0, body)
+	var posed_on: bool = posed == was and (cells[posed] as Object).get("brain") == null
+	field.put_sister(PI * 0.5, 560.0, CellBody.daughter_radius(), body,
+		{&"cytostome": 2, &"cirrus": 1, &"flagellum": 1}, Descent.founder(field.take_id()))
+	var sister: Object = cells[field.last_spawned]
+	var sister_on: bool = sister.get("brain") == null and int(sister.get("parent")) != 0
+	_done(water)
+	var every := [&"nudge", &"replace", &"swap", &"copy", &"drop"].all(
+		func(kind: StringName) -> bool: return int(kinds.get(kind, 0)) > 0)
+	_check(("5. a division: %d on rules, each giving the daughter with her mother's DNA her"
+		+ " list itself and her sister one change of it (%s), and %d on pack 2's hunter giving"
+		+ " both hers; %d faults%s; of %d bodies the water's doors let in, %d off the founders'"
+		+ " rules; a body posed into the slot of one with rules of its own is on them (%s), and"
+		+ " a sister (%s)") % [on, str(kinds), off, faults,
+		"" if said.is_empty() else " -- " + "; ".join(said), doors, off_founders,
+		str(posed_on), str(sister_on)],
+		on >= 100 and off >= 100 and faults == 0 and every and doors > 1000
+		and off_founders == 0 and posed_on and sister_on)
+
+
+## **The kinds of change [param child] could be from [param parent], by this
+## probe's own reading of §6.2**: a copy of one rule directly under itself, a
+## drop, a swap of two neighbours that differ, or one rule changed -- a nudge,
+## one step, reference or option one rung along its ladder and nothing else
+## moved, or a replace: its input with whatever tests, one test added, removed or
+## put in another's place, or its output with whatever option. A nudge is also a
+## replace that drew the next rung. Empty when it is not one change: nothing
+## changed, or more than one thing.
+func _change_kinds(parent: RefCounted, child: RefCounted, vocab: RefCounted) -> Array[StringName]:
+	var out: Array[StringName] = []
+	var p := _rule_keys(parent)
+	var c := _rule_keys(child)
+	var n := p.size()
+	if c.size() == n + 1:
+		for k in n:
+			var copied := p.duplicate()
+			copied.insert(k + 1, p[k])
+			if copied == c:
+				out.append(&"copy")
+				break
+		return out
+	if c.size() == n - 1:
+		for k in n:
+			var dropped := p.duplicate()
+			dropped.remove_at(k)
+			if dropped == c:
+				out.append(&"drop")
+				break
+		return out
+	if c.size() != n:
+		return out
+	var apart: Array[int] = []
+	for k in n:
+		if p[k] != c[k]:
+			apart.append(k)
+	if apart.size() == 2 and apart[1] == apart[0] + 1 and p[apart[0]] == c[apart[1]] \
+			and p[apart[1]] == c[apart[0]]:
+		out.append(&"swap")
+	elif apart.size() == 1:
+		out = _rule_change_kinds((parent.get("rules") as Array)[apart[0]],
+			(child.get("rules") as Array)[apart[0]], vocab)
+	return out
+
+
+## What one rule changed into another could be: a nudge, a replace, or both.
+func _rule_change_kinds(x: Object, y: Object, vocab: RefCounted) -> Array[StringName]:
+	var out: Array[StringName] = []
+	if bool(x.get("inert")) or bool(y.get("inert")):
+		return out
+	var xt := _tests_of(x)
+	var yt := _tests_of(y)
+	var same_in: bool = x.get("input") == y.get("input")
+	var same_out: bool = x.get("output") == y.get("output")
+	var xo := float(x.get("option"))
+	var yo := float(y.get("option"))
+	var same_option := (is_nan(xo) and is_nan(yo)) or xo == yo
+	var same_tests := _rule_key(x).get_slice(" -> ", 0) == _rule_key(y).get_slice(" -> ", 0)
+	if same_in and same_out:
+		var output: Object = (vocab.get("outputs") as Dictionary).get(y.get("output"))
+		if same_tests and not same_option and output != null \
+				and _one_rung(output.get("options"), xo, yo):
+			out.append(&"nudge")
+		if same_option and xt.size() == yt.size():
+			var moved: Array[String] = []
+			for value: String in xt:
+				if not yt.has(value) or xt[value] != yt[value]:
+					moved.append(value)
+			if moved.size() == 1 and yt.has(moved[0]):
+				var was: Array = xt[moved[0]]
+				var now: Array = yt[moved[0]]
+				var kind := StringName(now[3])
+				var below_above := int(was[0]) == int(now[0]) \
+					and (int(now[0]) == Rulebook.Test.BELOW or int(now[0]) == Rulebook.Test.ABOVE)
+				if below_above and kind == Rulebook.SIZE \
+						and _one_rung(Rulebook.REFERENCES, StringName(was[2]), StringName(now[2])):
+					out.append(&"nudge")
+				elif below_above and kind != Rulebook.SIZE \
+						and _one_rung(Rulebook.LADDERS.get(kind, []), float(was[1]), float(now[1])):
+					out.append(&"nudge")
+	if not same_in and same_out and same_option:
+		out.append(&"replace")
+	elif same_in and not same_out and same_tests:
+		out.append(&"replace")
+	elif same_in and same_out and same_option and _one_test_apart(xt, yt):
+		out.append(&"replace")
+	return out
+
+
+## Whether [param b] is the rung of [param rungs] next to [param a], up or down:
+## for references their places in the list; for numbers a rung with none
+## strictly between, so a value off the ladder steps onto the rung nearest it.
+func _one_rung(rungs: Array, a: Variant, b: Variant) -> bool:
+	if a is StringName:
+		var i := rungs.find(a)
+		var j := rungs.find(b)
+		return i >= 0 and j >= 0 and absi(i - j) == 1
+	var x := float(a)
+	var y := float(b)
+	if x == y or is_nan(x) or is_nan(y) or not rungs.has(y):
+		return false
+	for rung: Variant in rungs:
+		if float(rung) > minf(x, y) and float(rung) < maxf(x, y):
+			return false
+	return true
+
+
+## Whether [param y] is [param x] -- tests by value -- with one test added, one
+## removed, or one put in another's place, on its value or another.
+func _one_test_apart(x: Dictionary, y: Dictionary) -> bool:
+	var gone := 0
+	var came := 0
+	for value: String in x:
+		if not y.has(value) or y[value] != x[value]:
+			gone += 1
+	for value: String in y:
+		if not x.has(value) or x[value] != y[value]:
+			came += 1
+	return (gone == 0 and came == 1) or (gone == 1 and came == 0) or (gone == 1 and came == 1)
+
+
+## A rule's tests by value: `[test, step, reference, kind]`, the step and
+## reference only where the test is put against one.
+func _tests_of(rule: Object) -> Dictionary:
+	var out := {}
+	for clause: Object in rule.get("clauses"):
+		var test := int(clause.get("test"))
+		var against := test == Rulebook.Test.BELOW or test == Rulebook.Test.ABOVE
+		out[String(clause.get("value"))] = [test, float(clause.get("step")) if against else 0.0,
+			String(clause.get("ref")) if against else "", String(clause.get("kind"))]
+	return out
+
+
+## **What a rule says, as this probe reads it**: its input, its tests by value
+## in name order, its output and its option -- however its line was written. A
+## rule the build cannot read is its line.
+func _rule_key(rule: Object) -> String:
+	if bool(rule.get("inert")):
+		return "? " + String(rule.get("text"))
+	var tests := PackedStringArray()
+	var by_value := _tests_of(rule)
+	for value: String in by_value:
+		var one: Array = by_value[value]
+		tests.append("%s %d %s %s" % [value, int(one[0]), Rulebook.number(float(one[1])), one[2]])
+	tests.sort()
+	return "%s [%s] -> %s %s" % [rule.get("input"), ", ".join(tests), rule.get("output"),
+		str(rule.get("option"))]
+
+
+func _rule_keys(list: RefCounted) -> PackedStringArray:
+	var out := PackedStringArray()
+	for rule: Object in list.get("rules"):
+		out.append(_rule_key(rule))
+	return out
+
+
 # --- 8. Determinism -------------------------------------------------------------------------
 
 ## **One seed, one drop** (§14.3): forty seconds of a drop made for a sighted
@@ -1922,9 +2203,19 @@ func _food_over_floor() -> Dictionary:
 ## (lineage.md §11.3 check 7): the same lineage line too -- every division, its
 ## mutation and its daughters' rolls drawn from the one stream -- over forty
 ## seconds in which the water has divided.
+##
+## **And 6, with the rules changing** (behaviour.md §12.3): those three runs
+## change a daughter's rules at every division, and print the same behaviour
+## line too -- the changes made and the behaviours they left. **With the changes
+## off** (`rule_change`, `--rule-change=0`) the same forty seconds, at a sighted
+## player's composition and a newborn's, are phase 3-1's to the byte: its census
+## and lineage lines, and its behaviour line with nothing changed after it
+## ([constant THREE_ONE_LINES]). With them on, the first is not -- a switch that
+## passed either way would be a switch on nothing.
 func _determinism() -> void:
 	var lines: Array[String] = []
 	var families: Array[String] = []
+	var behaviours: Array[String] = []
 	for near_first: bool in [true, true, false]:
 		seed(8088)
 		var water := _water(0.0, 0.6)
@@ -1934,8 +2225,42 @@ func _determinism() -> void:
 			field._process(1.0 / 60.0)
 		lines.append(field.census_line())
 		families.append(field.lineage_line())
+		behaviours.append(field.behaviour_line())
+		_done(water)
+	var off: Array[String] = []
+	for sensed: float in [0.6, 0.2]:
+		seed(8088)
+		var water := _water(0.0, sensed)
+		var field: WatchedDrop = water[0]
+		field.rule_change = false
+		for f in 40 * 60:
+			field._process(1.0 / 60.0)
+		off.append_array([field.census_line(), field.lineage_line(), field.behaviour_line()])
 		_done(water)
 	seed(20260930)
+	var differ := 0
+	for k in maxi(off.size(), THREE_ONE_LINES.size()):
+		var ours: String = off[k] if k < off.size() else "(none)"
+		var theirs: String = THREE_ONE_LINES[k] if k < THREE_ONE_LINES.size() else "(none)"
+		if theirs.begins_with("[behaviour]"):
+			theirs += UNCHANGED_TAIL
+		if ours != theirs:
+			differ += 1
+			print("[drop-probe] check 6, line %d, this build: %s" % [k + 1, ours])
+			print("[drop-probe] check 6, line %d, 3-1:        %s" % [k + 1, theirs])
+	var changed := behaviours[0].get_slice("| rules changed ", 1).get_slice(":", 0)
+	var kinds := behaviours[0].get_slice("| behaviours ", 1).get_slice("  |", 0)
+	_check(("6. determinism: one seed, forty seconds of a sighted player's drop with the rules"
+		+ " changing (%s changes, behaviours %s), twice and with the near-first search off: the"
+		+ " behaviour lines %s; with the changes off, a sighted player's and a newborn's drop are"
+		+ " phase 3-1's -- census, lineage and behaviour lines %s -- and with them on the first is"
+		+ " %s") % [changed, kinds, "the same" if behaviours[0] == behaviours[1]
+		and behaviours[0] == behaviours[2] else "DIFFERENT",
+		"the same to the byte" if differ == 0 else "%d DIFFER" % differ,
+		"3-1's -- THE SWITCH DOES NOTHING" if lines[0] == THREE_ONE_LINES[0] else "not 3-1's"],
+		behaviours[0] == behaviours[1] and behaviours[0] == behaviours[2]
+		and changed.is_valid_int() and int(changed) > 0 and differ == 0 and off.size() == 6
+		and lines[0] != THREE_ONE_LINES[0])
 	var sums := PackedStringArray()
 	for line in lines:
 		sums.append(line.get_slice("| sum ", 1))
@@ -1949,6 +2274,26 @@ func _determinism() -> void:
 		lines[0] == lines[1] and lines[0] == lines[2] and lines[0].contains("living")
 		and families[0] == families[1] and families[0] == families[2]
 		and divided.begins_with("divisions ") and divided != "divisions 0")
+
+
+## **Phase 3-1's forty seconds** (behaviour.md §12.3 check 6): the census,
+## lineage and behaviour lines of [method _determinism]'s scenario -- seed 8088,
+## forty seconds, a sighted player's drop and then a newborn's -- as phase 3-1
+## printed them on `dev` at 93c61b4, the same as `--rule-change=0` prints them,
+## in this project's container (Godot 4.7.2, x86-64), which is what CI runs on.
+## **A change to the water made on purpose changes them**: re-record them then
+## from the check's own output, and say so in the commit.
+const THREE_ONE_LINES: Array[String] = [
+	"[census] t 40  living 550 (drifters 354, hunters 196)  flocs 105  | hunters at r40 0, mean r 29.2, hunger 0.52  | could swallow r26/r34/r40 103/41/16  dread 1.63/0.63/0.25  genes 16  | spawned 838  died: swallowed 230 chewed 0 starved 92 (r40 0) poisoned 0  | grazed by the water 14, by drifters 3, dissolved 0, snow kept 0, remains 92  | runs 0 at you 0 misses 0 darts 1 dashes 0  floors: gene 0+0 drifter 0  | sum 1986045848",
+	"[lineage] t 40  hunters 196, born 44  generation mean 1.23 max 3  families 181 (largest 2)  dna apart 75  | cruise 68.2 notice 755 mouth 1.51 upkeep 1.28 genes worn 4.32 carried 4.69  tails 182 sighted 196 at r40 0  | divisions 34 (trade 17 drift 17 faithfully 0), daughters 68: tailless 19, given a sense 14  | the spawner's peers 128 (for the floor 128, for venom 0), drifters 155, left to births 0  | worn cyto 1.51 cirr 1.28 flag 1.35 stig 0.32 ocel 0.29 chem 0.23 ampu 0.35 axon 0.07 palp 0.05 myon 0.08 tric 0.08 pell 0.14 vene 0.11 plas 0.02 vacu 0.03 cris 0.06  | commonest 16x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 12x cytostome:1,cirrus:1,flagellum:1,ocellus:1 ; 8x cytostome:1,cirrus:1,flagellum:1,stigma:1",
+	"[behaviour] t 40  hunters 196: on the founders' rules 196, other lists 0  | founders' rules fired 6983/15402/739/738/3020/35892/854  | meals of hunters with a nose 49, radar 91, laser 66  | water darts 1, stuns 1, your wakes 0  | now holding a heading 76, resting 73, swimming 123, pushing 3, stunned 0, echoes in flight 106",
+	"[census] t 40  living 550 (drifters 458, hunters 92)  flocs 73  | hunters at r40 0, mean r 30.5, hunger 0.50  | could swallow r26/r34/r40 49/4/1  dread 0.50/0.04/0.00  genes 16  | spawned 716  died: swallowed 129 chewed 0 starved 48 (r40 0) poisoned 0  | grazed by the water 7, by drifters 0, dissolved 0, snow kept 2, remains 48  | runs 0 at you 0 misses 0 darts 2 dashes 0  floors: gene 0+0 drifter 0  | sum 1742291140",
+	"[lineage] t 40  hunters 92, born 18  generation mean 1.20 max 2  families 85 (largest 2)  dna apart 48  | cruise 62.5 notice 800 mouth 1.24 upkeep 1.13 genes worn 4.27 carried 4.71  tails 89 sighted 92 at r40 0  | divisions 11 (trade 6 drift 5 faithfully 0), daughters 22: tailless 5, given a sense 3  | the spawner's peers 34 (for the floor 34, for venom 0), drifters 127, left to births 0  | worn cyto 1.24 cirr 1.13 flag 1.21 stig 0.20 ocel 0.34 chem 0.32 ampu 0.29 axon 0.01 palp 0.03 myon 0.04 tric 0.02 pell 0.03 vene 0.04 plas 0.01 vacu 0.10 cris 0.04  | commonest 11x cytostome:1,cirrus:1,flagellum:1,ampulla:1 ; 10x cytostome:1,cirrus:1,flagellum:1,chemocyte:1 ; 7x cytostome:1,cirrus:1,flagellum:1,ocellus:1",
+	"[behaviour] t 40  hunters 92: on the founders' rules 92, other lists 0  | founders' rules fired 4086/7534/395/487/2144/18642/390  | meals of hunters with a nose 36, radar 48, laser 43  | water darts 2, stuns 2, your wakes 0  | now holding a heading 37, resting 37, swimming 55, pushing 1, stunned 0, echoes in flight 51",
+]
+## What phase 3-2's behaviour line adds after phase 3-1's, for a water whose
+## rules never changed: one behaviour, every hunter on it, no change made.
+const UNCHANGED_TAIL := "  | behaviours 1, unchanged 100.0 %  | rules changed 0: nudge 0, replace 0, swap 0, copy 0, drop 0"
 
 
 # --- 9. Flocs ---------------------------------------------------------------------------------
@@ -2788,7 +3133,10 @@ func _save_bodies() -> void:
 ## the drop reads -- a chase, a clock, the grid's order, the floor's short genes
 ## -- moves the second one off the first. **And now dividing** (lineage.md §11.3
 ## check 8): the room divides through those thirty seconds, and the two lineage
-## lines match as well -- every grace, DNA and record the file kept.
+## lines match as well -- every grace, DNA and record the file kept. **And on
+## rules that change** (behaviour.md §12.3 check 7, phase 3-2): the lists its
+## families carried when it was kept come back by name, its divisions go on
+## changing them, and the two behaviour lines match too.
 func _save_room() -> void:
 	seed(20261001)
 	var cell := CellBody.new()
@@ -2815,31 +3163,41 @@ func _save_room() -> void:
 	var done: Dictionary = room2.open_dedicated(cell2, back["drop"]) if not back.is_empty() \
 		else {}
 	var divided_before := room.divisions
+	var kept_lists := (room.drop_state()["behaviours"]["lists"] as Array).size()
+	var changed_before := _changes_made(room)
 	seed(4242)
 	for f in 30 * 60:
 		room._process(1.0 / 60.0)
 	var ours: String = room.census_line()
 	var our_line: String = room.lineage_line()
+	var our_rules: String = room.behaviour_line()
 	seed(4242)
 	for f in 30 * 60:
 		room2._process(1.0 / 60.0)
 	var theirs: String = room2.census_line()
 	var their_line: String = room2.lineage_line()
+	var their_rules: String = room2.behaviour_line()
 	var age := room2.drop_age()
+	var changed := _changes_made(room) - changed_before
 	_check(("12. and lineage 8. and 7. a room kept and loaded (%s, %d bodies, on rules, %d of"
-		+ " them holding a heading and %d echoes in flight as it was kept) goes on as one that"
-		+ " never stopped: after 30 s more on the same stream,"
-		+ " %d divisions in them, the two census lines are %s and the lineage lines %s -- %s")
-		% [error_string(wrote), int(done.get("bodies", 0)), holding, echoes,
-		room.divisions - divided_before, "the same" if ours == theirs else "DIFFERENT",
-		"the same" if our_line == their_line else "DIFFERENT", ours if ours == theirs
+		+ " them holding a heading, %d echoes in flight and %d lists of rules as it was kept)"
+		+ " goes on as one that never stopped: after 30 s more on the same stream,"
+		+ " %d divisions and %d changes of rules in them, the two census lines are %s, the"
+		+ " lineage lines %s and the behaviour lines %s -- %s")
+		% [error_string(wrote), int(done.get("bodies", 0)), holding, echoes, kept_lists,
+		room.divisions - divided_before, changed, "the same" if ours == theirs else "DIFFERENT",
+		"the same" if our_line == their_line else "DIFFERENT",
+		"the same" if our_rules == their_rules else "DIFFERENT", ours if ours == theirs
 			else ours + " AGAINST " + theirs],
 		wrote == OK and not back.is_empty() and holding > 0 and echoes > 0 and ours == theirs
-		and our_line == their_line and room.divisions - divided_before > 0
+		and our_line == their_line and our_rules == their_rules and kept_lists > 0
+		and changed > 0 and room.divisions - divided_before > 0
 		and room2.divisions == room.divisions - divided_before
 		and is_equal_approx(age, 70.0) and int(done.get("bodies", 0)) > 500)
 	if our_line != their_line:
 		print("[drop-probe] lineage 8, the room: %s AGAINST %s" % [our_line, their_line])
+	if our_rules != their_rules:
+		print("[drop-probe] check 7, the room: %s AGAINST %s" % [our_rules, their_rules])
 	room.queue_free()
 	room2.queue_free()
 	cell.free()
@@ -3018,6 +3376,14 @@ func _save_rules() -> void:
 	cell2.free()
 
 
+## How many changes of rules [param field]'s divisions have made, of every kind.
+func _changes_made(field: Node) -> int:
+	var n := 0
+	for kind: StringName in Drop.CHANGES:
+		n += int((field.get("stats") as Dictionary).get(StringName("rules_" + String(kind)), 0))
+	return n
+
+
 ## A run of the game that keeps its drop at [constant KEEP], in point of view.
 func _kept_run() -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
@@ -3110,12 +3476,11 @@ func _save_behaviour() -> void:
 	var a: Variant = (c2[family[0]] as Object).get("brain")
 	var shared: bool = a != null and a == (c2[family[1]] as Object).get("brain")
 	var inert: bool = shared and bool((a as RefCounted).get("rules")[0].get("inert"))
-	var kept_lists: Array = state["behaviours"]["lists"]
-	var once := kept_lists.size() == 1 \
-		and PackedStringArray(kept_lists[0]) == PackedStringArray(lines)
+	# Kept once, under the one index both bodies name -- among whatever lists the
+	# drop's own divisions changed by then (phase 3-2).
+	var once := _kept_once(state, family, lines)
 	var again: Dictionary = (loaded[0] as Node).call(&"drop_state")
-	var written_back := (again["behaviours"]["lists"] as Array).size() == 1 \
-		and PackedStringArray(again["behaviours"]["lists"][0]) == PackedStringArray(lines)
+	var written_back := _kept_once(again, family, lines)
 	var exact := var_to_bytes(again["bodies"]) == var_to_bytes(state["bodies"]) \
 		and var_to_bytes(again["behaviours"]) == var_to_bytes(state["behaviours"])
 	_unload(loaded)
@@ -3189,6 +3554,24 @@ func _save_behaviour() -> void:
 		and Array(spoilt).all(func(why: String) -> bool: return not why.is_empty()))
 	_done(water)
 	seed(20260930)
+
+
+## Whether [param drop] keeps [param lines] once -- one list among those it keeps
+## -- and the bodies in [param slots] all name it.
+func _kept_once(drop: Dictionary, slots: Array[int], lines: Array[String]) -> bool:
+	var kept: Array = drop["behaviours"]["lists"]
+	var rows: Dictionary = drop["bodies"]
+	var column: PackedInt32Array = rows["behaviour"]
+	var at := (rows["slot"] as PackedInt32Array).find(slots[0])
+	var index := column[at] if at >= 0 else -1
+	var times := 0
+	for list: PackedStringArray in kept:
+		times += 1 if list == PackedStringArray(lines) else 0
+	var all_name_it := index >= 0 and index < kept.size()
+	for i: int in slots:
+		var row := (rows["slot"] as PackedInt32Array).find(i)
+		all_name_it = all_name_it and row >= 0 and column[row] == index
+	return all_name_it and times == 1 and PackedStringArray(kept[index]) == PackedStringArray(lines)
 
 
 ## A field of its own with [param drop] loaded into it, made for the same player
@@ -4645,6 +5028,474 @@ func _coming_for_you() -> void:
 	seed(20260930)
 
 
+## **4. Every change is valid** (behaviour.md §6.2, §6.3, §12.3): ten thousand
+## changes by the drop's own `daughter_behaviours`, half from the founders' rules
+## and half from random lists -- one rule to eight, now and then with a rule
+## this build cannot read, two equal rules side by side, or a step off its
+## ladder or past its ends -- each under the owners a random DNA gives. Every
+## change holds to §6.2's limits by this probe's own reading ([method _flaws]);
+## is one change of the kind it says from its parent ([method _change_kinds]),
+## and so differs from it; draws a new input or output only from the body, the
+## metabolism and the genes its DNA carries (§6.3); and comes back through its
+## text the same. Its parent is never written through. **And the kinds come at
+## their weights**: from the founders' rules, where all five can, within two and
+## a half points of drop.gd's CHANGES.
+func _changes() -> void:
+	seed(41)
+	var vocab: RefCounted = FoodField.vocabulary()
+	var founders: RefCounted = FoodField.founders()
+	var everybody := {}
+	for owner: StringName in CellBody.DECLARES:
+		everybody[owner] = true
+	for owner: StringName in Metabolism.DECLARES:
+		everybody[owner] = true
+	var genes: Array[StringName] = []
+	for owner: StringName in vocab.get("owners"):
+		if not everybody.has(owner):
+			genes.append(owner)
+	var counts := {"flawed": 0, "not one": 0, "drawn": 0, "outside": 0, "trips": 0,
+		"written": 0}
+	var edges := {"one rule": 0, "eight": 0, "unreadable": 0, "equal neighbours": 0,
+		"off the ladder": 0}
+	var said: Array[String] = []
+	var theirs := {}
+	var randoms := {}
+	for n in 10000:
+		var dna := {&"cytostome": 1}
+		for gene: StringName in genes:
+			if randf() < 0.4:
+				dna[gene] = 1 + randi() % 3
+		var owners := Rulebook.worn(vocab, dna, everybody)
+		var parent: RefCounted = founders if n % 2 == 0 else _random_list(vocab, edges)
+		var before := Rulebook.text_of(parent)
+		var rolled: Array = Drop.daughter_behaviours(parent, vocab, owners)
+		var child: RefCounted = rolled[1]
+		var kind: StringName = rolled[2]
+		var whys: Array[String] = []
+		var flaw := _flaws(child, vocab)
+		if not flaw.is_empty():
+			counts["flawed"] += 1
+			whys.append(flaw)
+		var can := _change_kinds(parent, child, vocab)
+		if not can.has(kind):
+			counts["not one"] += 1
+			whys.append("a %s that reads as %s" % [kind, str(can)])
+		for part: StringName in _drawn(parent, child):
+			counts["drawn"] += 1
+			if not _owned(part, vocab, owners):
+				counts["outside"] += 1
+				whys.append("drew %s, past a DNA of %s" % [part, str(dna.keys())])
+		var text := Rulebook.text_of(child)
+		var back: RefCounted = Rulebook.parse(text, vocab)
+		if Rulebook.text_of(back) != text or _rule_keys(back) != _rule_keys(child) \
+				or _inert_count(back) != _inert_count(child):
+			counts["trips"] += 1
+			whys.append("not the same through its text")
+		if Rulebook.text_of(parent) != before or rolled[0] != parent or child == parent \
+				or is_same(child.get("rules"), parent.get("rules")):
+			counts["written"] += 1
+			whys.append("its parent written through")
+		if not whys.is_empty() and said.size() < 4:
+			said.append("%s, from [%s] to [%s]" % [", ".join(whys), before.replace("\n", " / "),
+				text.replace("\n", " / ")])
+		var tally := theirs if n % 2 == 0 else randoms
+		tally[kind] = int(tally.get(kind, 0)) + 1
+	var total := 0.0
+	for kind: StringName in Drop.CHANGES:
+		total += float(Drop.CHANGES[kind])
+	var shares := PackedStringArray()
+	var weighed := true
+	for kind: StringName in Drop.CHANGES:
+		var share := float(theirs.get(kind, 0)) / 5000.0
+		var want := float(Drop.CHANGES[kind]) / total
+		shares.append("%s %.3f (%.1f)" % [kind, share, want])
+		weighed = weighed and absf(share - want) < 0.025
+	_check(("4. every change is valid: 10,000 changes, half from the founders' rules (%s, against"
+		+ " the weights) and half from random lists (%s; edges %s) -- %d outside §6.2's limits,"
+		+ " %d not one change of the kind they say, %d of %d parts drawn new from past their DNA,"
+		+ " %d not the same through their text, %d written through their parent%s")
+		% [", ".join(shares), str(randoms), str(edges), counts["flawed"], counts["not one"],
+		counts["outside"], counts["drawn"], counts["trips"], counts["written"],
+		"" if said.is_empty() else " -- " + "; ".join(said)],
+		weighed and counts["flawed"] == 0 and counts["not one"] == 0 and counts["outside"] == 0
+		and counts["trips"] == 0 and counts["written"] == 0 and counts["drawn"] > 500
+		and randoms.size() == 5 and edges.values().all(func(v: int) -> bool: return v >= 50)
+		and Rulebook.text_of(founders) == "\n".join(Drop.FOUNDERS))
+	seed(20260930)
+
+
+## **A random list over the whole vocabulary**: one to eight rules, now and then
+## one this build cannot read or a copy of the rule above it; counted into
+## [param edges] by what makes it an edge.
+func _random_list(vocab: RefCounted, edges: Dictionary) -> RefCounted:
+	var lines: Array[String] = []
+	var n := 1 + randi() % Drop.MOST_RULES
+	var equal := false
+	for k in n:
+		var roll := randf()
+		if roll < 0.06:
+			lines.append("kinety.tingle below 0.5 -> body.rest")
+		elif k > 0 and roll < 0.2:
+			lines.append(lines[k - 1])
+			equal = true
+		else:
+			lines.append(_random_rule(vocab, edges))
+	if n == 1:
+		edges["one rule"] += 1
+	if n == Drop.MOST_RULES:
+		edges["eight"] += 1
+	if lines.has("kinety.tingle below 0.5 -> body.rest"):
+		edges["unreadable"] += 1
+	if equal:
+		edges["equal neighbours"] += 1
+	return _list(lines)
+
+
+## **A random rule's line**: any declared input or always; a test on each value
+## it carries about a third of the time -- any of the four, against any rung, a
+## reference for a size, or now and then a step between two rungs or past
+## either end of the ladder; and any output its input can drive, at any option.
+func _random_rule(vocab: RefCounted, edges: Dictionary) -> String:
+	var inputs: Array = (vocab.get("inputs") as Dictionary).keys()
+	inputs.append(Rulebook.ALWAYS)
+	var name: StringName = inputs[randi() % inputs.size()]
+	var input: Object = (vocab.get("inputs") as Dictionary).get(name)
+	var words := PackedStringArray([String(name)])
+	var bearing := false
+	if input != null:
+		bearing = bool(input.get("bearing"))
+		var values: Array = input.get("values")
+		var kinds: Array = input.get("kinds")
+		for at in values.size():
+			if randf() >= 0.35:
+				continue
+			words.append(String(values[at]))
+			var test := randi() % 4
+			words.append(Rulebook.TEST_WORDS[test])
+			if test > Rulebook.Test.ABOVE:
+				continue
+			var kind := StringName(kinds[at])
+			if kind == Rulebook.SIZE:
+				words.append(String(Rulebook.REFERENCES[randi() % Rulebook.REFERENCES.size()]))
+				continue
+			var ladder: Array = Rulebook.LADDERS[kind]
+			var step := float(ladder[randi() % ladder.size()])
+			if randf() < 0.15:
+				var i := randi() % (ladder.size() - 1)
+				step = [(float(ladder[i]) + float(ladder[i + 1])) * 0.5, float(ladder[0]) * 0.5,
+					float(ladder[ladder.size() - 1]) * 1.25][randi() % 3]
+				edges["off the ladder"] += 1
+			words.append(Rulebook.number(step))
+	var outputs: Array = []
+	for out: StringName in vocab.get("outputs"):
+		var output: Object = (vocab.get("outputs") as Dictionary)[out]
+		if StringName(output.get("needs")) != Rulebook.BEARING or bearing:
+			outputs.append(out)
+	var named: StringName = outputs[randi() % outputs.size()]
+	words.append(Rulebook.ARROW)
+	words.append(String(named))
+	var options: Array = (vocab.get("outputs") as Dictionary)[named].get("options")
+	if not options.is_empty():
+		words.append(Rulebook.number(float(options[randi() % options.size()])))
+	return " ".join(words)
+
+
+## **What is wrong with [param list] by §6.2's limits, as this probe reads them**:
+## one to MOST_RULES rules; each it can read reading a declared input -- or
+## always, with no test -- with at most one test on each value it carries, each
+## on a value it carries, against a step or, for a size, a reference; doing a
+## declared output, at one of its options where it takes one; a turn only on an
+## input with a bearing; claiming and needing what its parts say. Empty when
+## nothing is.
+func _flaws(list: RefCounted, vocab: RefCounted) -> String:
+	var rules: Array = list.get("rules")
+	if rules.is_empty() or rules.size() > Drop.MOST_RULES:
+		return "%d rules" % rules.size()
+	var owners: Dictionary = vocab.get("owners")
+	for rule: Object in rules:
+		if bool(rule.get("inert")):
+			continue
+		var name := StringName(rule.get("input"))
+		var input: Object = (vocab.get("inputs") as Dictionary).get(name)
+		if name != Rulebook.ALWAYS and input == null:
+			return "reads %s, which nothing declares" % name
+		var seen := {}
+		for clause: Object in rule.get("clauses"):
+			if input == null:
+				return "a test on always"
+			var value := StringName(clause.get("value"))
+			if seen.has(value):
+				return "two tests on %s's %s" % [name, value]
+			seen[value] = true
+			var at := (input.get("values") as Array).find(value)
+			if at < 0 or int(clause.get("at")) != at \
+					or StringName(clause.get("kind")) != StringName((input.get("kinds") as Array)[at]):
+				return "a test on %s, which %s does not carry" % [value, name]
+			var test := int(clause.get("test"))
+			if test == Rulebook.Test.BELOW or test == Rulebook.Test.ABOVE:
+				if StringName(clause.get("kind")) == Rulebook.SIZE:
+					if not Rulebook.REFERENCES.has(StringName(clause.get("ref"))):
+						return "a size against %s" % clause.get("ref")
+				elif not is_finite(float(clause.get("step"))) or StringName(clause.get("ref")) != &"":
+					return "a step of %s" % clause.get("step")
+			elif test != Rulebook.Test.RISING and test != Rulebook.Test.FALLING:
+				return "a test %d" % test
+		var output: Object = (vocab.get("outputs") as Dictionary).get(rule.get("output"))
+		if output == null:
+			return "does %s, which nothing declares" % rule.get("output")
+		var options: Array = output.get("options")
+		var option := float(rule.get("option"))
+		if options.is_empty() != is_nan(option) or (not is_nan(option) and not options.has(option)):
+			return "%s at %s" % [rule.get("output"), option]
+		if StringName(output.get("needs")) == Rulebook.BEARING \
+				and (input == null or not bool(input.get("bearing"))):
+			return "a turn on %s, which carries no bearing" % name
+		var needs := int(owners[output.get("owner")])
+		if input != null:
+			needs |= int(owners[input.get("owner")])
+		if int(rule.get("claims")) != int(output.get("claims")) or int(rule.get("needs")) != needs:
+			return "%s claims or needs what its parts do not" % rule.get("text")
+	return ""
+
+
+## **The parts [param child] drew new**, one change from [param parent]: where one
+## rule changed, its input if that changed and its output if that did. A copy, a
+## drop and a swap draw nothing.
+func _drawn(parent: RefCounted, child: RefCounted) -> Array[StringName]:
+	var out: Array[StringName] = []
+	var p: Array = parent.get("rules")
+	var c: Array = child.get("rules")
+	if p.size() != c.size():
+		return out
+	var apart: Array[int] = []
+	for k in p.size():
+		if _rule_key(p[k]) != _rule_key(c[k]):
+			apart.append(k)
+	if apart.size() != 1 or bool((c[apart[0]] as Object).get("inert")):
+		return out
+	var x: Object = p[apart[0]]
+	var y: Object = c[apart[0]]
+	if x.get("input") != y.get("input"):
+		out.append(StringName(y.get("input")))
+	if x.get("output") != y.get("output"):
+		out.append(StringName(y.get("output")))
+	return out
+
+
+## Whether [param part], an input's or output's name, is always's or of an
+## owner in [param owners].
+func _owned(part: StringName, vocab: RefCounted, owners: int) -> bool:
+	if part == Rulebook.ALWAYS:
+		return true
+	var decl: Object = (vocab.get("inputs") as Dictionary).get(part)
+	if decl == null:
+		decl = (vocab.get("outputs") as Dictionary).get(part)
+	return decl != null \
+		and (owners & int((vocab.get("owners") as Dictionary)[decl.get("owner")])) != 0
+
+
+func _inert_count(list: RefCounted) -> int:
+	var n := 0
+	for rule: Object in list.get("rules"):
+		n += 1 if bool(rule.get("inert")) else 0
+	return n
+
+
+## **A gene this probe declares and nobody else** (behaviour.md §3.5, §12.3 check
+## 8): `trial`, an organ that senses a glow -- a bearing and a level -- and
+## triggers a flash, which claims a trigger of its own. Declared as its entry in
+## genome.gd's DECLARES would be.
+const TRIAL := {&"trial": {
+	"in": [{"name": &"glow", "bearing": true, "values": {&"level": &"level"}}],
+	"out": [{"name": &"flash", "claims": [&"flash"]}],
+}}
+## Its rules, as a body carries them: flash at a strong glow, turn toward it,
+## swim.
+const TRIAL_RULES: Array[String] = ["trial.glow level above 0.5 -> trial.flash",
+	"trial.glow -> body.turn-toward", "always -> body.swim"]
+## Where its glow comes from: a light this far round from north, at any distance.
+const TRIAL_LIGHT := 1.0
+
+
+## **The drop with `trial`'s organ wired** (§3.5 step 3), as food.gd wires a
+## gene's: its reader reports, for any body wearing it, a glow from
+## [constant TRIAL_LIGHT] at 0.75, at its bearing off that body's nose; its
+## trigger counts each flash, by slot.
+class TrialDrop extends WatchedDrop:
+	var flashes := {}
+
+	func _wire() -> void:
+		super._wire()
+		_readers[&"trial.glow"] = _read_glow
+		_triggers[&"trial.flash"] = _flash
+
+	func _read_glow(_i: int, b: Body) -> Array:
+		return [[angle_difference(b.heading, TRIAL_LIGHT), 0.75, TRIAL_LIGHT]]
+
+	func _flash(i: int, _b: Body, _k: int, _report: Array, _before: Variant, _tick: int) -> void:
+		flashes[i] = int(flashes.get(i, 0)) + 1
+
+
+## **8. Modular** (behaviour.md §3.5, §12.3): [constant TRIAL], declared here
+## and nowhere else, its reader and trigger wired here ([TrialDrop]) -- no line
+## of rulebook.gd, drop.gd, drop_save.gd or any list names it. **In the
+## vocabulary of a body that carries it**: its input and output are named, and
+## the bit of its owner is in what a body wearing it wears and in what a DNA
+## carrying it may draw from. **Drawn by a change**: of two thousand changes of
+## the founders' rules under a DNA that carries it, some read its glow and some
+## flash, and under one that does not, none; and of a thousand divisions of a
+## body that carries it without wearing it, some changed daughters who carry it
+## without wearing it draw it -- from what their DNA declares, not their body.
+## **Read and acted on by a rule**: a body wearing it on [constant TRIAL_RULES]
+## reads its glow, flashes and turns to the light, and one carrying it without
+## wearing it does none of it. **Saved and loaded by name**: through the file
+## and loaded, its list comes back read and it flashes again; loaded where the
+## gene was never declared, its rules are kept inert and written back as they
+## came.
+func _modular() -> void:
+	seed(43)
+	FoodField.declare([TRIAL])
+	var vocab: RefCounted = FoodField.vocabulary()
+	var owners: Dictionary = vocab.get("owners")
+	var bit := int(owners.get(&"trial", 0))
+	var named: bool = (vocab.get("inputs") as Dictionary).has(&"trial.glow") \
+		and (vocab.get("outputs") as Dictionary).has(&"trial.flash") and bit > 0
+	var everybody := {&"body": true, &"metabolism": true}
+	var cell := CellBody.new()
+	cell.radius = CellBody.BASE_RADIUS
+	var field := TrialDrop.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	field.desert = 3000.0
+	field.sensed_override = 0.6
+	add_child(field)
+	field.setup_drop(cell)
+	field.in_water = false
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var wearing := plain.duplicate()
+	wearing[&"trial"] = 1
+	var w := _pose(field, p + Vector2(700.0, 0.0), 30.0, wearing, 0.0, 0.6)
+	var wb: Object = cells[w]
+	wb.set("brain", _list(TRIAL_RULES))
+	var c := _pose(field, p + Vector2(-700.0, 0.0), 30.0, plain, 0.0, 0.6)
+	var cb: Object = cells[c]
+	cb.set("dna", wearing.duplicate())
+	cb.set("brain", _list(TRIAL_RULES))
+	var in_body := (int(wb.get("worn")) & bit) != 0 and (int(cb.get("worn")) & bit) == 0
+	var in_dna := bit > 0 and (Rulebook.worn(vocab, cb.get("dna"), everybody) & bit) != 0
+	field.log_reads = true
+	field.reads.clear()
+	for f in 2 * 60:
+		field._process(1.0 / 60.0)
+	field.log_reads = false
+	var reads := [0, 0]
+	for read: Array in field.reads:
+		if StringName(read[1]) == &"trial.glow":
+			if int(read[0]) == w:
+				reads[0] += 1
+			elif int(read[0]) == c:
+				reads[1] += 1
+	var flashed := [int(field.flashes.get(w, 0)), int(field.flashes.get(c, 0))]
+	var turned: bool = bool(wb.get("holding")) \
+		and absf(angle_difference(float(wb.get("steer")), TRIAL_LIGHT)) < 1e-6
+	# Drawn by a change, straight -- the drop's own -- under a DNA that carries
+	# it and one that does not.
+	var founders: RefCounted = FoodField.founders()
+	var with := Rulebook.worn(vocab, wearing, everybody)
+	var without := Rulebook.worn(vocab, plain, everybody)
+	var drawn := [0, 0, 0, 0]
+	for n in 2000:
+		var a := Rulebook.text_of(Drop.daughter_behaviours(founders, vocab, with)[1])
+		var b := Rulebook.text_of(Drop.daughter_behaviours(founders, vocab, without)[1])
+		drawn[0] += 1 if a.contains("trial.glow") else 0
+		drawn[1] += 1 if a.contains("trial.flash") else 0
+		drawn[2] += 1 if b.contains("trial.glow") else 0
+		drawn[3] += 1 if b.contains("trial.flash") else 0
+	# And at a division: a body at forty carrying it, not wearing it, on the
+	# founders' rules, divided a thousand times -- its changed daughters
+	# counted by whether they carry it and do not wear it, which is what tells
+	# her DNA from her body.
+	var changed := 0
+	var unworn := 0
+	var drew := 0
+	for n in 1000:
+		var k := _pose(field, p + Vector2(0.0, 900.0), CellBody.DIVIDE_RADIUS, plain, 0.0, 0.3)
+		var kb: Object = cells[k]
+		kb.set("dna", wearing.duplicate())
+		kb.set("brain", null)
+		for j: int in field._divide(k, kb):
+			var d: Object = cells[j]
+			var list: Variant = d.get("brain")
+			changed += 1 if list != null else 0
+			if list != null and GenomeNode.tier_of(d.get("dna"), &"trial") > 0 \
+					and GenomeNode.tier_of(d.get("genome"), &"trial") == 0:
+				unworn += 1
+				drew += 1 if Rulebook.text_of(list).contains("trial.") else 0
+			field.take_out(j)
+	# Saved and loaded by name.
+	var wrote := DropSave.write(KEEP, DropSave.compose(field.drop_state(), {}))
+	var back := DropSave.read(KEEP)
+	var cell2 := CellBody.new()
+	cell2.radius = CellBody.BASE_RADIUS
+	var field2 := TrialDrop.new()
+	field2.process_mode = Node.PROCESS_MODE_DISABLED
+	field2.sensed_override = 0.6
+	add_child(field2)
+	if not back.is_empty():
+		field2.load_drop(cell2, back["drop"])
+	field2.in_water = false
+	var w2: Object = (field2.get("_cells") as Array)[w]
+	var list2: Variant = w2.get("brain")
+	var kept: bool = list2 != null and Rulebook.lines_of(list2) == PackedStringArray(TRIAL_RULES) \
+		and _inert_count(list2) == 0 and GenomeNode.tier_of(w2.get("genome"), &"trial") == 1
+	for f in 60:
+		field2._process(1.0 / 60.0)
+	var again := int(field2.flashes.get(w, 0)) > 0
+	# Where it was never declared: the game's own vocabulary again.
+	FoodField.declare([])
+	var cell3 := CellBody.new()
+	cell3.radius = CellBody.BASE_RADIUS
+	var field3 := WatchedDrop.new()
+	field3.process_mode = Node.PROCESS_MODE_DISABLED
+	field3.sensed_override = 0.6
+	add_child(field3)
+	if not back.is_empty():
+		field3.load_drop(cell3, back["drop"])
+	var list3: Variant = ((field3.get("_cells") as Array)[w] as Object).get("brain")
+	var asleep: bool = list3 != null and _inert_count(list3) == 2 \
+		and not bool((list3 as RefCounted).get("rules")[2].get("inert"))
+	var as_came := false
+	for lines: PackedStringArray in field3.drop_state()["behaviours"]["lists"]:
+		as_came = as_came or lines == PackedStringArray(TRIAL_RULES)
+	_check(("8. modular: a gene declared only here, its reader and trigger wired here -- in the"
+		+ " vocabulary (%s), worn by a body that wears it and not by one that only carries it"
+		+ " (%s), drawable for a DNA that carries it (%s); of 2,000 changes of the founders'"
+		+ " rules under that DNA %d read its glow and %d flash, under one without it %d and %d;"
+		+ " of the %d changed daughters of a body carrying it unworn, %d carried it unworn and"
+		+ " %d of those drew it; worn, its glow"
+		+ " read %d times, %d flashes and turned to the light (%s); carried unworn, read %d"
+		+ " times and %d flashes; saved (%s) and loaded by name, its rules back and read (%s)"
+		+ " and flashing again (%s); loaded where it was never declared, inert (%s) and written"
+		+ " back as they came (%s)") % [str(named), str(in_body), str(in_dna), drawn[0],
+		drawn[1], drawn[2], drawn[3], changed, unworn, drew, reads[0], flashed[0],
+		str(turned), reads[1], flashed[1], error_string(wrote), str(kept), str(again),
+		str(asleep), str(as_came)],
+		named and in_body and in_dna and drawn[0] > 0 and drawn[1] > 0 and drawn[2] == 0
+		and drawn[3] == 0 and changed >= 800 and unworn >= 250 and drew > 0 and reads[0] > 0
+		and flashed[0] > 0
+		and turned and reads[1] == 0 and flashed[1] == 0 and wrote == OK and kept and again
+		and asleep and as_came)
+	field.queue_free()
+	field2.queue_free()
+	field3.queue_free()
+	cell.free()
+	cell2.free()
+	cell3.free()
+	_forget_kept()
+	seed(20260930)
+
+
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------
 
 ## Posed as a release build it adds nothing; posed as the dev app it seats its
@@ -4797,7 +5648,12 @@ func _readout() -> void:
 ## generation and how many founders they descend from, in the readout's own
 ## figures and as the drop counts them; over a friend's drop seen from inside
 ## it, which keeps no record here, a dash each. A release build draws none of it
-## ([method _readout]).
+## ([method _readout]). **And its behaviours** (behaviour.md §7.3): two rows more
+## under those, set apart -- how many different lists its hunters carry and the
+## share on the founders' rules, in percent. Different by what they say: the
+## hunters are put a quarter each on the founders' rules, on a list of their
+## own, on that list written another way, and on the founders' rules read again
+## into a list of their own -- two behaviours, half unchanged.
 func _readout_families() -> void:
 	var holder := Node.new()
 	add_child(holder)
@@ -4820,26 +5676,54 @@ func _readout_families() -> void:
 			if bool(b.get("seeded")) and not bool(b.get("drifter")) and not bool(b.get("inert")):
 				b.set("generation", 3)
 				break
+	# Their rules: a quarter each on the founders' rules, on a list of their own,
+	# on it written another way, and on the founders' read into a list again.
+	var own := _list(["chemocyte.smell level falling -> body.turn-random", "always -> body.swim"])
+	var again := _list(["chemocyte.smell falling -> body.turn-random", "always -> body.swim"])
+	var theirs := _list(Drop.FOUNDERS)
+	var unchanged := 0
+	var h := 0
+	for b: Object in field.get("_cells"):
+		if bool(b.get("seeded")) and not bool(b.get("inert")) and not bool(b.get("drifter")):
+			b.set("brain", [null, own, again, theirs][h % 4])
+			unchanged += 1 if h % 4 == 0 or h % 4 == 3 else 0
+			h += 1
 	FrameReadout.posing = "dev"
 	var readout := FrameReadout.attach(holder, field)
 	FrameReadout.posing = null
 	var rows: Array = readout.call(&"_figures") if readout != null else []
 	var counts: Array = field.lineage_counts()
+	var kinds: Array = field.behaviour_counts()
 	field.become_mirror()
 	var away: Array = readout.call(&"_figures") if readout != null else []
 	var named := []
 	for row: Array in rows:
 		named.append(row[0])
 	var tail := func(of: Array) -> Array:
-		return [of[5][1], of[6][1]] if of.size() == 7 else []
+		return [of[5][1], of[6][1]] if of.size() == 9 else []
+	var last := func(of: Array) -> Array:
+		return [of[7][1], of[8][1], of[8][2]] if of.size() == 9 else []
 	_check(("lineage, the readout: over a drop of its own, rows %s -- generation %s and"
 		+ " families %s over its %d hunters (the drop counts %s), the families' two set"
 		+ " apart; over a friend's drop, %s") % [str(named), str(tail.call(rows)[0])
-		if rows.size() == 7 else "-", str(tail.call(rows)[1]) if rows.size() == 7 else "-", k,
+		if rows.size() == 9 else "-", str(tail.call(rows)[1]) if rows.size() == 9 else "-", k,
 		str(counts), str(tail.call(away))],
-		named == ["frame", "p95", "dropped", "water", "stepped", "generation", "families"]
+		named == ["frame", "p95", "dropped", "water", "stepped", "generation", "families",
+			"behaviours", "unchanged"]
 		and tail.call(rows) == ["3.0", "4"] and counts == [3.0, 4] and bool(rows[5][3])
 		and not bool(rows[6][3]) and tail.call(away) == ["–", "–"])
+	var share := 100.0 * float(unchanged) / float(maxi(h, 1))
+	_check(("the readout's behaviours (behaviour.md §7.3): over its %d hunters, a quarter each on"
+		+ " the founders' rules, a list of their own, that list written another way and the"
+		+ " founders' read again -- behaviours %s, unchanged %s %s (the drop counts %s), the"
+		+ " two set apart; over a friend's drop, %s") % [h, str(last.call(rows)[0])
+		if rows.size() == 9 else "-", str(last.call(rows)[1]) if rows.size() == 9 else "-",
+		str(last.call(rows)[2]) if rows.size() == 9 else "-", str(kinds),
+		str(last.call(away).slice(0, 2))],
+		h >= 40 and kinds.size() == 2 and int(kinds[0]) == 2
+		and absf(float(kinds[1]) - share) < 1e-9
+		and last.call(rows) == ["2", FrameReadout.figure(share, 1), "%"] and bool(rows[7][3])
+		and not bool(rows[8][3]) and last.call(away).slice(0, 2) == ["–", "–"])
 	holder.queue_free()
 	cell.free()
 	await get_tree().process_frame
