@@ -6577,17 +6577,25 @@ func _check_pond_referee() -> void:
 	body[2] = CellBody.BASE_RADIUS
 	var back := await _ref_by_hand(guest, worn, order, body, host_food, host_pin)
 	ref = host_pond.call("referee_of", 0)
-	marks.clear()
-	guest.shout(body[0], CellBody.BASE_RADIUS, 1100.0)
-	var heard := await _ref_until(func() -> bool: return not marks.is_empty(), 1.0, guest,
-		body, host_pin)
-	var shouts := int(ref.judged["shout"])
-	# **The host's own organ held quiet through the window**, so every mark in it
-	# is a friend's call: its pulse, and the echoes of one already out, are
-	# marks too -- and in the drop the rim answers every one (ocean.md §3.2).
+	# **The host's own organ held quiet from here on**, so every mark is a
+	# friend's call: its pulse, and the echoes of one already out, are marks too
+	# -- and in the drop the rim answers every one (ocean.md §3.2). The returns
+	# that have already landed go with them. The run processes before its `Food`
+	# child, so it posts a frame's landed returns at the next frame, and one that
+	# landed as the honest call was heard was marked inside the window. Held from
+	# before the honest call as well, so the mark that call waits for is its own
+	# and not an echo's, with the call then marked in the window.
 	var quiet := func() -> void:
 		host_food.set("_ping_clock", 1000.0)
 		(host_food.get("_echoes") as Array).clear()
+		(host_food.get("pings") as Array).clear()
+	quiet.call()
+	marks.clear()
+	guest.shout(body[0], CellBody.BASE_RADIUS, 1100.0)
+	var heard := await _ref_until(func() -> bool:
+		quiet.call()
+		return not marks.is_empty(), 1.0, guest, body, host_pin)
+	var shouts := int(ref.judged["shout"])
 	quiet.call()
 	marks.clear()
 	points = _ref_points(host_net)

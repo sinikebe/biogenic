@@ -61,14 +61,20 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 
 ## In hand
 
-**The evolving water**, below under "Next". Packs 1 and 2 are built and on
-`dev`: the drop (`ocean.md`), and water cells that divide, built to the owner's
-answers in two phases -- the record (2-1) and the division (2-2)
-(`lineage.md`). The owner played pack 2 on the dev app on 2026-10-02, with
-nothing to fix. Pack 3, behaviour blocks, is designed to the owner's answers
-(`behaviour.md`, rows 22 to 24). It is built in two phases: first cells hunt by
-rules over their own senses (3-1), then their rules change at every division
-(3-2).
+**The evolving water**, below under "Next". Packs 1, 2 and 3 are built to the
+owner's answers and are on `dev`:
+
+- the drop (`ocean.md`);
+- water cells that divide, in two phases: the record (2-1) and the division
+  (2-2) (`lineage.md`). The owner played it on the dev app on 2026-10-02, with
+  nothing to fix;
+- behaviour blocks, in two phases: cells hunt by rules over their own senses
+  (3-1), then their rules change at every division (3-2) (`behaviour.md`, rows
+  22 to 26).
+
+The water learns slowly under pack 3's rules, and it stays that way. The owner,
+2026-10-02: *"We do nothing about balancing yet. Players feeling will lead this
+part over time."*
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from
@@ -132,6 +138,10 @@ weights (`genes-and-cilia.md` §1.3, §9.6) — are the same kind of thing as th
 chase contracts: settled in shape, unsettled in value, and answerable only by
 swimming. They belong in this pass rather than in a later one, because the chase
 cannot be measured against a water whose difficulty is still a free variable.
+
+*The owner, 2026-10-02: "We do nothing about balancing yet. Players feeling will
+lead this part over time." So this pass waits. Balancing follows how players
+feel the game, over time (`CLAUDE.md`, "Balance waits for players").*
 
 **7 — A third view.** The two existing views are *what the cell feels* and
 *what is actually there*. The missing one is **what the cell knows** — the world

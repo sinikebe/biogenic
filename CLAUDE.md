@@ -82,6 +82,15 @@ need a prototype, the spec gives a starting value, the reason for it, and what
 to watch for when playing. The checks that keep the build honest go in its
 build plan, and the build runs them.
 
+**Balance waits for players.** The owner, 2026-10-02, when pack 3's water
+turned out to learn slowly: *"We do nothing about balancing yet. Players feeling
+will lead this part over time."* A number that sets how hard, how fast or how
+generous the game is keeps the starting value its spec gave it. When a build or
+a playtest finds one that seems off, the spec records what was seen and the
+levers that would move it, and the work carries on. Do not retune it, and do not
+put it to the owner as a decision. A number that stops a mechanic from working
+at all is a bug, not balance, and still gets fixed.
+
 Bump `binary_version` in `version.json` in the same commit when a change cannot
 ship as a content pack. That means an engine upgrade, a new permission, a native
 plugin, a new icon, a change to `project.godot` (an autoload, a project
@@ -293,9 +302,10 @@ done instead of doing it, and it's the way to find the limit at fault.
 
 ## Putting a decision to the owner
 
-Some calls are not ours: names, balance numbers that can only be judged by
-playing, and anything that changes what the game *is*. When work stops on one of
-those, present it as a table, never as prose:
+Some calls are not ours: names, and anything that changes what the game *is*.
+Balance numbers are not put to the owner yet: they wait for players (see
+"Balance waits for players"). When work stops on one of those calls, present it
+as a table, never as prose:
 
 | # | Question | Options | What it means |
 |---|---|---|---|
