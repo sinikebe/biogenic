@@ -192,6 +192,34 @@ const START_PUSH := 100.0
 ## venomous, and a drop short of it gets it back through the next peer.
 const VENOM := &"veneneux"
 
+# --- How its cells behave (docs/design/behaviour.md §5, §6) --------------------
+
+## **The founders' rules** (behaviour.md §5.1, row 22): what every body this
+## water makes carries -- today's hunting, re-derived under the owner's rule
+## that a body knows only what its own senses report. In plain words: *rest for
+## five seconds after eating, and while less than a third hungry. Otherwise turn
+## toward an echo of something smaller than my mouth; otherwise toward whatever
+## my laser touches; otherwise, when the smell of food fades, turn at random.
+## Swim, and push at half strength.* A rule for an organ a founder lacks is
+## passed over, and waits, inherited, for a daughter who grows the organ.
+##
+## `HUNT_AT` and `REST_MEAL`, today's constants, are the 0.3 and the 5 here:
+## values in each body's rules, not rules of the water. A body whose `brain` is
+## null carries these (food.gd). A second water writes its own founders in its
+## own file.
+const FOUNDERS: Array[String] = [
+	"metabolism.fed below 5 -> body.rest",
+	"metabolism.hunger below 0.3 -> body.rest",
+	"ampulla.echo size below mouth -> body.turn-toward",
+	"ocellus.beam -> body.turn-toward",
+	"chemocyte.smell level falling -> body.turn-random",
+	"always -> body.swim",
+	"always -> axoneme.push 0.5",
+]
+## **The most rules a list holds** (behaviour.md §6.2): one phone screen (§11).
+## Only a change at division reads it, which is pack 3's next phase.
+const MOST_RULES := 8
+
 ## The meniscus: a disc of [constant RADIUS] round wherever the drop is.
 var meniscus: Basin = null
 ## Which bodies are near a place, over the square round the drop.

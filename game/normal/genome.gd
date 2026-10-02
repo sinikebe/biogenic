@@ -90,6 +90,35 @@ const GENE_ORDER: Array[StringName] = [
 	&"axoneme", &"palp", &"myoneme",
 	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"]
 
+## **What each gene gives a body's rules** (docs/design/behaviour.md §3): the
+## inputs it senses and the outputs it triggers, by name, beside the list a
+## gene is named in -- so a gene added here brings its own blocks, and rules can
+## read and drive it, the save keeps it and mutation draws it without one being
+## written by hand (§3.5). The body's own parts are declared in `cell.gd` and the
+## metabolism's in `metabolism.gd`, in the same shape.
+##
+## An input has a name, says whether it carries a bearing, and lists the values
+## it carries, each of a kind the rulebook knows (`rulebook.gd`'s ladders). An
+## output has a name, the triggers it claims, and may take an option -- a push's
+## strength. A gene that only acts on its own, as the dart, the call and the
+## mouth do, declares nothing (§3.3). Organs are what declare: what each input
+## reports is the organ's, computed for any body by `food.gd`.
+const DECLARES := {
+	&"ocellus": {"in": [{"name": &"beam", "bearing": true,
+		"values": {&"distance": &"distance"}}]},
+	&"ampulla": {"in": [{"name": &"echo", "bearing": true,
+		"values": {&"distance": &"distance", &"size": &"size"}}]},
+	&"chemocyte": {"in": [{"name": &"smell", "bearing": false,
+		"values": {&"level": &"level"}}]},
+	&"stigma": {"in": [{"name": &"shadow", "bearing": true,
+		"values": {&"level": &"level"}}]},
+	&"palp": {"in": [{"name": &"touch", "bearing": true,
+		"values": {&"closeness": &"level"}}]},
+	&"myoneme": {"out": [{"name": &"dash", "claims": [&"dash"]}]},
+	&"axoneme": {"out": [{"name": &"push", "claims": [&"push"],
+		"options": [0.5, 1.0]}]},
+}
+
 ## The starting cell is already full: three slots, three organs, all tier 1.
 ## You are not an empty vessel; you are mediocre at three things. §1.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).

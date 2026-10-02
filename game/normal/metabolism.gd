@@ -107,6 +107,18 @@ const ABSORB := 1.0
 ## The smallest tank the arithmetic divides by, as a share of a born cell's.
 const RESERVE_MIN := 0.05
 
+## **What the metabolism gives a body's rules** (docs/design/behaviour.md §3.2),
+## in the shape of `genome.gd`'s DECLARES: its `hunger`, the tank as a level,
+## which the player feels as the beat; and `fed`, the seconds since its last
+## meal -- a cell, a floc or you -- which a body knows because it is digesting.
+## No bearing in either: they are the body's own state.
+const DECLARES := {
+	&"metabolism": {"in": [
+		{"name": &"hunger", "bearing": false, "values": {&"level": &"level"}},
+		{"name": &"fed", "bearing": false, "values": {&"seconds": &"seconds"}},
+	]},
+}
+
 ## 0.0 just fed, 1.0 fully starved.
 var hunger := 0.0
 ## Metabolic multiplier, written once a frame by the run: 1.0 for a cell that
