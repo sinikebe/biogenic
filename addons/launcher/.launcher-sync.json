@@ -2,7 +2,7 @@
   "_comment": "Written by ci/sync_launcher.sh. Do not edit addons/launcher/ or ci/ by hand -- the next sync overwrites them.",
   "source": "sinikebe/godot-launcher-template",
   "ref": "main",
-  "commit": "94e2aca00c08837ef99a9239e14319e39601487f",
-  "subject": "Merge pull request #65 from sinikebe/64-let-the-launcher-s-screens-be-translated",
-  "synced_at": "2026-10-01T13:55:02Z"
+  "commit": "356b476b0d7e45a9f814459ae1cb59972d0f3015",
+  "subject": "Merge pull request #72 from sinikebe/68-a-game-s-launcher-translations-can-t-be-updated-by-a-content-pack",
+  "synced_at": "2026-10-02T06:23:30Z"
 }
