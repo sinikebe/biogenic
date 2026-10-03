@@ -76,15 +76,15 @@ The water learns slowly under pack 3's rules, and it stays that way. The owner,
 2026-10-02: *"We do nothing about balancing yet. Players feeling will lead this
 part over time."*
 
-**Pack 4, your own programs, is designed** (`automation.md` for the rules of the
+**Pack 4, your own programs, is built** (`automation.md` for the rules of the
 game, `automation-ux.md` for the screen), to the owner's answers to rows 27 to
 42. Divisions never change a player's programs (row 40): they change by hand
-alone. It is built in three phases:
+alone. It came in three phases:
 
 - a tail with two copies can be held still, by hand and by instinct, for every
   cell (4-1, built);
 - programs, the library and the autopilot (4-2, built);
-- a friend's daughter carries her instincts (4-3, a protocol change).
+- a friend's daughter carries her instincts (4-3, a protocol change, built).
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from

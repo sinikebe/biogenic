@@ -699,7 +699,8 @@ little at every division. In the water a list is a list: the programs'
 boundaries and names stay with you. Nothing of this is shown (row 21 stands);
 `behaviours` and `unchanged` on the dev readout count her list with the rest.
 
-**A guest's sister** carries the founders' rules until phase 4-3 (§10.3).
+**A guest's sister** carried the founders' rules until phase 4-3. Since 4-3 she
+carries her DNA and her list into the host's water too (§10.3, §10.4).
 
 ### 6.4 The choosing screen
 
@@ -921,6 +922,37 @@ this for the next protocol change (`lineage.md` §10).
 - **The dedicated server updates last** (`CLAUDE.md`): from the moment the phones
   have 6 until the server restarts empty, phones and server refuse each other with
   the version sentence. That is the price of every protocol change.
+
+### 10.4 As built: phase 4-3, 2026-10-03
+
+Built to §10.3, with checks 24 to 27. All of them pass, and so does the fuzz.
+`PROTOCOL` is 6, and `Wire.RULES` stays `46913eab…`. Protocols 1 to 5 are refused
+at HELLO by name, and so is a 7. The version sentence names no number, so nothing
+a player reads changed. Where the build differs from the text above, or found
+something:
+
+- **The gate.** Raising the cap on every guest frame to `SISTER_MAX` would have
+  changed what happens to a frame of 273 to 1,342 bytes that is not a SISTER.
+  Today it is the oversize cut, which is immediate and bars the address for a
+  minute; it would have become a strike on the ledger. So only a greeted guest's
+  SISTER may pass the old 272 bytes (`Wire.guest_cap`, `net-hardening.md` A.2
+  step 2), and every other guest frame past them is still the oversize cut.
+  Before the handshake, anything past 272 is the oversize cut, whatever its type.
+- **`SISTER_MAX` is 1,342**: the sum above, header included. The probe holds it
+  to the most the encoder can write.
+- **The writer never sends what the reader refuses.**
+  - A DNA gene at no copies is not carried, so it is left out.
+  - A line the reader would refuse is left out too. A list this build writes
+    never has one: all 72 words a line can be made of fit the alphabet, as do
+    the water's 7, and the longest line is 87 bytes. Only a line a later build
+    wrote into the library file could, and it stays in the library.
+- **"A gene name outside the wire's rule"** is judged on her DNA's names. A
+  line's words are judged only by the alphabet and the length. A word the host
+  does not know is an instinct that never fires, kept and written back.
+- **A guest's sister founds a line of her own.** Her mother's record belongs to
+  the guest's drop, so it does not cross.
+- **CI's margin:** `net_probe` adds about 500 frames: 19,239 to 19,419 locally,
+  against 19,088 for 4-2's tree the same day. Its backstop stays 24,000.
 
 ---
 
