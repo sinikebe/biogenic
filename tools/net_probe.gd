@@ -4620,6 +4620,14 @@ func _pond_said(said: Array, kind: String, what: int = -1) -> Array:
 	return []
 
 
+## **[param stacks] are a dose of [param n], as a body in the water holds it a
+## step later**: a body's loads are the water's to wear, so they may have worn
+## for the one step since the dose went in -- and by no more than that.
+func _pond_worn(stacks: float, n: float) -> bool:
+	return stacks <= n \
+		and stacks >= n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
+
+
 ## The heading that points a body at [param from] toward [param to].
 func _pond_face(from: Vector2, to: Vector2) -> float:
 	var v := to - from
@@ -4873,6 +4881,114 @@ func _pond_friends() -> void:
 				* FoodField.BITE_FELT_SHARE),
 		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
 		% float(cell.wound) + " each side feeling its own share")
+
+	# **Each bite carries its toxins, each way** (dna-slots.md §7.2). This cell's
+	# front venom rides its bite into the friend -- whatever their pellicle -- and
+	# their poison comes back into this cell: one bite, two doses. This cell's
+	# loads are the run's, and exact; the friend's are the water's to wear
+	# ([method _pond_worn]).
+	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	var venom_n := CellBody.VENOM_STACKS_BY_TIER[2]
+	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var fired: Array = []
+	field = _pond_rig(24, 30.0, venom)
+	field.toxins = FoodField.toxins_of(venom,
+		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 3, &"veneneux": 2})
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	var mine: Object = field.get("_cell")
+	var friend: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var into_them := float((friend.loads as PackedFloat64Array)[0])
+	var into_me := float((mine.loads as PackedFloat64Array)[0])
+	var dose := _pond_said(said, "dosed")
+	_says(field.person() != null
+			and not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+			and _pond_worn(into_them, venom_n) and into_me == poison_n
+			and not dose.is_empty() and float(dose[3]) == poison_n and not bool(dose[4])
+			and fired == [FoodField.FIRED_VENOM],
+		"pond-field: this cell's front venom rides its bite into an armoured friend"
+		+ " (%.3f stacks), and their poison comes back into this cell (%.0f, told"
+		% [into_them, into_me] + " as a dose); its venom is told as fired, once")
+
+	# And the other way: a friend's front venom rides their bite into this
+	# poisonous cell, and its poison goes into them.
+	var poisonous := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"veneneux": 2}
+	fired = []
+	field = _pond_rig(25, 30.0, poisonous, Vector2.ZERO, PI)
+	field.toxins = FoodField.toxins_of(poisonous, [&"cytostome", &"cirrus", &"flagellum"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"toxicyst": 2}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	into_me = float((mine.loads as PackedFloat64Array)[0])
+	dose = _pond_said(said, "dosed")
+	_says(field.person() != null and not _pond_said(said, "bitten").is_empty()
+			and float(mine.wound) > 0.0 and into_me == venom_n
+			and not dose.is_empty() and float(dose[3]) == venom_n and not bool(dose[4])
+			and _pond_worn(into_them, poison_n) and fired == [FoodField.FIRED_POISON],
+		"pond-field: and a friend's front venom rides their bite into this poisonous"
+		+ " cell (%.0f stacks, told as a dose), and its poison goes into them (%.3f);"
+		% [into_me, into_them] + " its poison is told as fired, once")
+
+	# **A side sting** (§7.2): the friend wears their venom in slot 5, on the
+	# starboard quarter. This cell's bite landing there takes its stacks, and the
+	# same bite on their other quarter none -- and neither friend's mouth is on
+	# this cell, so nothing else doses it. Then this cell's own sting, worn in
+	# slot 5 too, into a friend whose mouth lands there.
+	var guards := Cilia.slot_bearing(5)
+	var stinger := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"pellicle": 3,
+		&"toxicyst": 2}
+	var quarter: Array = [&"cytostome", &"cirrus", &"flagellum", &"pellicle", &"",
+		&"toxicyst"]
+	var sting: Array = []
+	for side: float in [guards, -guards]:
+		field = _pond_rig(26, 30.0, mouth)
+		field.open_pond()
+		field.set_person_genome(stinger, quarter)
+		# Turned so that this cell, straight below them, is at `side` from their
+		# nose: the bearing its bite lands at.
+		field.place_person(at, PI - side, 28.0)
+		said = _pond_listen(field)
+		field._process(POND_STEP)
+		mine = field.get("_cell")
+		dose = _pond_said(said, "dosed")
+		sting.append([float((mine.loads as PackedFloat64Array)[0]),
+			float(dose[3]) if not dose.is_empty() else 0.0,
+			not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+				and float(mine.wound) == 0.0])
+	var my_sting := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	fired = []
+	field = _pond_rig(27, 30.0, my_sting, Vector2.ZERO, -guards)
+	field.toxins = FoodField.toxins_of(my_sting,
+		[&"cytostome", &"cirrus", &"flagellum", &"", &"", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	_says(sting.size() == 2 and float(sting[0][0]) == venom_n
+			and float(sting[0][1]) == venom_n and bool(sting[0][2])
+			and float(sting[1][0]) == 0.0 and float(sting[1][1]) == 0.0
+			and bool(sting[1][2])
+			and not _pond_said(said, "bitten").is_empty()
+			and float((mine.loads as PackedFloat64Array)[0]) == 0.0
+			and _pond_worn(into_them, venom_n) and fired == [FoodField.FIRED_STING],
+		"pond-field: a side sting -- this cell's bite on the quarter a friend wears"
+		+ " their venom on takes %.0f stacks, and on their other quarter %.0f; and"
+		% [float(sting[0][0]), float(sting[1][0])] + " this cell's own sting puts"
+		+ " %.3f into a friend biting it there, told as fired, once" % into_them)
 
 
 ## **Every way one player's contact with the other can end in a death**, and the
