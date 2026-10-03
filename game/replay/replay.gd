@@ -239,6 +239,8 @@ func _write_state() -> void:
 	if _genome != null:
 		_genome.held_remaining = _frame[RecorderNode.AT_HELD]
 	_panes.set_division(_read_division())
+	# How slack the body was: the body's half of hunger, as the run drew it.
+	_panes.set_slack(_frame[RecorderNode.AT_SLACK])
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)

@@ -194,6 +194,20 @@ enum Onboard { OFF, WAITING, FADE_IN, HOLD, FADE_OUT }
 ## then the aperture opening on a new cell.
 enum Life { ALIVE, DYING, WAITING, RETURNING }
 
+# --- Hunger on the body (docs/design/hunger.md §2.4) -------------------------
+# The beat and the membrane are the bus's; the slack body is this run's to
+# draw, because it is a view of the cell and the views are handed it from here.
+
+## **The slack body's pace**: per second, so a meal fills the body out in half
+## a second, beside the beat calming and the membrane springing open. A tank
+## draining never moves that fast, so the body follows it and lags it only at
+## the jumps -- a meal, a dash.
+const SLACK_EASE := 2.0
+## How far the drawn slack moves before the pause screen's figure is drawn
+## again under a menu that does not stop the water (a pond's): twenty steps
+## from smooth to crumpled, finer than a crease can be seen to move by.
+const SLACK_REDRAW := 0.05
+
 # --- The division (docs/design/lifecycle.md §4) ------------------------------
 # **The largest dramatic beat the game will have, drawn entirely in the
 # vocabulary that already exists**: bodies, the fringe, the nucleus, the
@@ -699,6 +713,16 @@ var _said_divide := false
 ## What the two views are drawing this frame. Empty means an ordinary body; see
 ## [method _push_division] for the contract.
 var _division := {}
+## **How slack the body is drawn** (docs/design/hunger.md §2.4), 0..1: eased
+## toward metabolism.gd's `hungry()` at [constant SLACK_EASE] a second, so a
+## meal fills the body out rather than popping it, and handed to both views and
+## the pause screen's figure. Settled at once on a new body
+## ([method _settle_slack]), which is never eased into.
+var _slack := 0.0
+## What [member _slack] was when the pause screen's figure was last drawn: in a
+## pond the menu is open over a live water and hunger burns under it, so the
+## figure is drawn again whenever the two are [constant SLACK_REDRAW] apart.
+var _slack_drawn := 0.0
 ## **This run opened on a cell left mid-run** (row 17), which comes back behind
 ## a beat (ocean.md §9.1).
 var _resumed := false
@@ -1034,6 +1058,8 @@ func _resume_cell(state: Dictionary) -> void:
 	_genome.set_state(state["genome"])
 	_metabolism.set_hunger(float(state["hunger"]))
 	_metabolism.starve_seconds = float(state["starve"])
+	# As slack as it was left: a body opened crumpled is not one crumpling now.
+	_settle_slack()
 	_generation = int(state["generation"])
 	_id = int(state["id"]) if state.has("id") else _take_id()
 	_parent = int(state.get("parent", Descent.NOBODY))
@@ -1345,6 +1371,11 @@ func _process(delta: float) -> void:
 	# over it in the bus. A waiting gene and a coming division are read off the
 	# body, which both views draw.
 	_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
+	# **Hunger on the body and on the frame** (docs/design/hunger.md): the body
+	# goes slack from half a tank, and the membrane falls in once it is empty.
+	# A meal undoes both, behind the beat calming.
+	_step_slack(delta)
+	_bus.faint(_metabolism.faint())
 	_bus.shear(_cell.shear_rate())
 	# Proprioception is not a sensation and does not go on the bus: it is a
 	# view, and it is handed the one number it cannot derive for itself.
@@ -1368,6 +1399,35 @@ func _process(delta: float) -> void:
 	# rather than of the frame after it.
 	if _split == Split.NONE and _cell.radius >= CellBody.DIVIDE_RADIUS:
 		_begin_split()
+
+
+## **The body goes slack with hunger** (docs/design/hunger.md §2.4): eased
+## toward metabolism.gd's `hungry()` and handed to both views. Under a menu
+## that does not stop the water -- a pond's -- hunger burns on, and the pause
+## screen's figure is drawn again as it crumples or fills out. In single player
+## the menu stops the tree and this is not reached, so the figure holds.
+func _step_slack(delta: float) -> void:
+	_slack = move_toward(_slack, _metabolism.hungry(), delta * SLACK_EASE)
+	_soma.slack = _slack
+	_vision.slack = _slack
+	if not _menu_open or _slack == _slack_drawn:
+		return
+	# Every [constant SLACK_REDRAW] of it, and at either end, where it can stop:
+	# a meal that fills it out to smooth must not leave the figure a step short.
+	if absf(_slack - _slack_drawn) >= SLACK_REDRAW or _slack <= 0.0 \
+			or _slack >= 1.0:
+		_figure_body.queue_redraw()
+
+
+## **A new body is drawn as full as its tank, at once**: born, divided, woken
+## from the black or opened as it was left. The ease is for a meal; a new body
+## eased out of the last one's creases would be the game saying something
+## about it that is not true. Every one of them but a resumed cell is fed.
+func _settle_slack() -> void:
+	_slack = _metabolism.hungry()
+	_soma.slack = _slack
+	_vision.slack = _slack
+	_figure_body.queue_redraw()
 
 
 ## **Where this cell's beams look, and the arc each one crossed this frame.**
@@ -1479,7 +1539,7 @@ func _on_bus_sensation(kind: StringName, _info: Dictionary) -> void:
 	_eye_flare.cue()
 	if _pause_breath.armed():
 		# It holds for one beat, and the beat is whatever the body is beating
-		# at now: a starving cell's breath is slower, as its heart is.
+		# at now: a starving cell's breath is quicker, as its heart is.
 		_pause_breath.hold = _metabolism.beat_period()
 		_pause_breath.cue()
 
@@ -2024,6 +2084,8 @@ func _be_born() -> void:
 	_cell.reset(true)
 	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	_metabolism.reset()
+	# Born fed, so born full: none of her mother's creases.
+	_settle_slack()
 	# **A new body, the same programs** (automation.md §2.4, row 40): she has not
 	# eaten, her instincts hold nothing, and the autopilot is as it was -- on, if
 	# it was, from her first tick. Nothing about your programs is drawn.
@@ -2434,8 +2496,8 @@ func _step_death(delta: float) -> void:
 				# this was still RETURNING, so the figure is still hidden and
 				# nothing else will ever turn it back on.
 				_show_self(not _vision_active())
-				# The first beat on arrival: 2.4s and full strength, after
-				# minutes of a slow faint one.
+				# The first beat on arrival: 2.4s and full strength, the rest
+				# rate of a cell that is fed, after whatever the last one died of.
 				_bus.set_beat(_metabolism.beat_period(), _metabolism.beat_amplitude())
 				_bus.pulse_now()
 		_:
@@ -2578,6 +2640,8 @@ func _return(place: Array) -> void:
 		_cell.position = place[0]
 		_cell.heading = float(place[1])
 	_metabolism.reset()
+	# A born cell is a fed one: the starved cell's creases do not come back.
+	_settle_slack()
 	if pond:
 		# **In a pond the water is nobody's to move** (ocean.md §10.2): a host
 		# with no friend to come back near comes back at a quiet place in its
@@ -5879,6 +5943,11 @@ func _on_slot_unhover(slot: int) -> void:
 ## mirror. The tethers go first so the body wins where they cross; then the cell;
 ## then the body's own words where it disagrees with its DNA; then the arc being
 ## read, last, so nothing covers it.
+##
+## **As slack as the body is** (docs/design/hunger.md §4): a starving cell's
+## mirror is crumpled too, its creases still at `clock` 0. In single player the
+## pause stops hunger and the figure holds; in a pond it burns on under the
+## menu, and [method _step_slack] draws this again as it moves.
 func _draw_figure_body() -> void:
 	if _genome == null:
 		return
@@ -5886,9 +5955,11 @@ func _draw_figure_body() -> void:
 	var worn: Array[StringName] = _genome.body_layout()
 	for slot in _slot_count:
 		_draw_tether(slot)
+	_slack_drawn = _slack
 	Cilia.draw_cell(_figure_body, FIGURE_AT, 0.0, FIGURE_R, tiers,
 		CellBody.gape_of(int(tiers.get(&"cytostome", 0)), FIGURE_R), FIGURE_R,
-		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn)
+		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn, 0.0, 0.0, 0.0, 0.0,
+		false, Cilia.NO_EYE, Cilia.NO_TAIL, _slack)
 	_draw_dissent(worn)
 	_draw_arc_mark()
 
