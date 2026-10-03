@@ -287,11 +287,20 @@ jobs:
         # itself. A change that moves this trace with an empty library is a
         # change to 4-1's game: pin the new hash here, and say why.
         #
+        # **Re-pinned at DNA slots phase 1** (docs/design/dna-slots.md §20.3
+        # check 13), from ff34f4c6...: the water's draws changed on purpose. A
+        # peer that draws the toxin takes a coin for its place, venom outside or
+        # poison inside (§9), so every draw after the first one follows the stream
+        # one number on. Measured against dev at d08b0c3: the trace is dev's line
+        # for line until the drop's first carrier, cell 585 -- the same body on
+        # both, its poison by the coin -- and the next body seeded after it is the
+        # first to differ. Venom's bite, poison's and doses move the rest.
+        #
         # Each run prints about ten megabytes, so it goes to a file rather than
         # a variable. About twenty seconds a scheme.
         run: |
           set -uo pipefail
-          pinned="ff34f4c61a12eef67c846ffafde90a42e26c651bd4f89754a083d153d14240b8"
+          pinned="7397a410a51b14203ccdd58c040346c3fd72e975c0c50e4d1baf8684c8b83bf4"
           log=$(mktemp)
           fail=0
           for scheme in 0 1 2; do
