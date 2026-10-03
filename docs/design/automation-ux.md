@@ -249,7 +249,7 @@ back right now*, and the two could not be told apart (§10).
 |---|---|
 | name | 17 px `PALE` 0.98 |
 | state | 14 px `CAPTION`: `on · 7 instincts` or `off · 2 instincts` |
-| one line per trigger it moves | 30 tall: its mark at (12, 16), then 14 px `EXPLAIN` at x 30, reading `steering · first`, `steering · after “flee”`, `tail · never` (in `WARN`, with the T-bar over the mark) or `push · asleep`. For a program that is off, the trigger's word stands alone at `PALE` 0.45. Trimmed with an ellipsis at 234 px |
+| one line per trigger it moves | 30 tall: its mark at (12, 16), then 14 px `EXPLAIN` at x 34, reading `steering · first`, `steering · after “flee”`, `tail · never` (in `WARN`, with the T-bar over the mark) or `push · asleep`. For a program that is off, the trigger's word stands alone at `PALE` 0.45. Trimmed with an ellipsis at 230 px |
 | `open ›` | 264 x 48: fill `Color(0.086, 0.204, 0.176, 0.80)`, 2 px `TEAL` 0.62, 15 px `Color(0.588, 1.0, 0.859, 0.92)` |
 | `rename`, `copy` | 128 x 48 each, 8 apart: fill `FILL` 0.35, 1 px `TEAL` 0.22, 15 px `PALE` 0.70 |
 | `delete this program` | 264 x 48, styled the same |
@@ -726,7 +726,7 @@ language's quotes, “flee” and « fuite ». French figures are measured off t
 | count | 1 instinct; %d instincts; empty | 1 instinct; %d instincts; vide | ≤ 90 at 14 |
 | inspector | on · %s; off · %s; open; rename; copy; delete this program | actif · %s; coupé · %s; ouvrir; renommer; copier; supprimer ce programme | 78 in a 128 cell |
 | triggers | steering, tail, dash, push | direction, queue, bond, poussée | |
-| order | first; after %s; never; asleep | en premier; après %s; jamais; endormi | a line ≤ 234 at 14, trimmed |
+| order | first; after %s; never; asleep | en premier; après %s; jamais; endormi | a line ≤ 230 at 14, trimmed |
 | places (`Explain`) | runs first of the %d that are on; runs after %s, before %s; runs last, after %s; the only program on; off: the autopilot skips it; empty: open it to give it instincts | passe en premier des %d actifs; passe après %s, avant %s; passe en dernier, après %s; le seul programme actif; coupé : le pilote automatique l'ignore; vide : ouvrez-le pour lui donner des instincts | ≤ 856 at 15 |
 | sheets | rename this program; its %d instincts are gone for good. (`delete %s?`, `keep`, `delete`, `back` and `rename` exist) | renommer ce programme; ses %d instincts disparaissent pour de bon. | the sheets' own rooms |
 | autopilot | autopilot · hand your cell to your programs. tap it again, or steer, to take it back. | pilote automatique · confiez votre cellule à vos programmes. touchez-le encore, ou dirigez, pour la reprendre. | 790 of 856 at 15 |
@@ -762,7 +762,7 @@ declarations, so a new gene brings its own words, not a screen.
 - the page chip's word **≤ 108 px at 17 px**;
 - each head line **≤ 856 px at 15 px**, less the title, the switch and the places;
 - **`Explain` ≤ 856 at 15**;
-- each inspector trigger line ≤ 234 at 14 with a name of the default length.
+- each inspector trigger line ≤ 230 at 14 with a name of the default length.
 
 ---
 
@@ -891,18 +891,20 @@ of them before the merge. `badge_pips_*` became `editor_tail1_*` and
 
 - **A focused library row showed nothing at a keyboard.** `↓` changed nothing on
   screen, and `Enter` then opened a program other than the one shown. Now a
-  focused row underlines its name (2 px `SELECT`), and focus selects. `↑`/`↓`
-  move the selection, and the inspector, `Explain` and the bright places follow
-  the keyboard (§2.6).
+  focused row underlines its name (2 px `SELECT`), and focus selects, whether
+  it lands on the row, its switch or its `›`. `↑`/`↓` move the selection, and
+  the inspector, `Explain` and the bright places follow the keyboard (§2.6).
 - **One tap on `controls` brought the pause overlap back for good** (see the
   bottom edge, below). A tap left the button with hidden focus, and the emulated
-  mouse left it hovered. Only focus a player can see keeps the pads up now.
+  mouse left it hovered. Only focus a player can see keeps the pads up now. The
+  4 s are counted in the game's frames rather than on the wall clock, so a slow
+  frame cannot use them up.
 
 **Six small ones were fixed in the same round:**
 
 - a tap leaves no underline;
 - `Enter` on a row's `›` opens it;
-- the inspector's dash burst clears its word;
+- the inspector's dash burst clears its word (the word starts at x 34, §2.4);
 - a test's `Explain` gives its sentence, not a bare `level`;
 - the replay line is placed on its caption (below);
 - §2.4's hint, when a hold and a never come from one rule.
