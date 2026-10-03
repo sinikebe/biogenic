@@ -165,7 +165,8 @@ const METABOLISM_VALUES := {
 ## TRANSLATORS: Explains one sense or value of the player's "instincts", on one
 ## line under them: its name (the same word as on its chip), a middle dot, then
 ## what it is, lowercase. "Your tank" is how much food the cell has left; "the
-## beat you feel" is the heartbeat the game plays, which slows as the tank empties.
+## beat you feel" is the heartbeat the game plays, which quickens as the tank
+## empties.
 ## ROOM: 856 px at 15 px
 const METABOLISM_EXPLAINS := {
 	&"metabolism.hunger": "hunger · how empty your tank is: the beat you feel.",

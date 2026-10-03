@@ -2440,7 +2440,8 @@ msgstr ""
 #. Explains one sense or value of the player's "instincts", on one line under
 #. them: its name (the same word as on its chip), a middle dot, then what it
 #. is, lowercase. "Your tank" is how much food the cell has left; "the beat
-#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. you feel" is the heartbeat the game plays, which quickens as the tank
+#. empties.
 #. entry: metabolism.hunger
 #. Room: at most 856 px in 15 px type; the English takes 369 px.
 #: game/normal/metabolism.gd
@@ -2450,7 +2451,8 @@ msgstr ""
 #. Explains one sense or value of the player's "instincts", on one line under
 #. them: its name (the same word as on its chip), a middle dot, then what it
 #. is, lowercase. "Your tank" is how much food the cell has left; "the beat
-#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. you feel" is the heartbeat the game plays, which quickens as the tank
+#. empties.
 #. entry: metabolism.fed
 #. Room: at most 856 px in 15 px type; the English takes 527 px.
 #: game/normal/metabolism.gd
@@ -2460,7 +2462,8 @@ msgstr ""
 #. Explains one sense or value of the player's "instincts", on one line under
 #. them: its name (the same word as on its chip), a middle dot, then what it
 #. is, lowercase. "Your tank" is how much food the cell has left; "the beat
-#. you feel" is the heartbeat the game plays, which slows as the tank empties.
+#. you feel" is the heartbeat the game plays, which quickens as the tank
+#. empties.
 #. entry: seconds
 #. Room: at most 856 px in 15 px type; the English takes 256 px.
 #: game/normal/metabolism.gd
