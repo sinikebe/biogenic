@@ -88,7 +88,27 @@ alone. It came in three phases:
 
 **Beside them, on `dev` for the same release:** the game in French, a settings
 menu with a language picker, three named worlds, and the settings reachable from
-the launcher (`settings.md`).
+the launcher (`settings.md`). Also there is hunger you cannot miss, built
+2026-10-03 (`hunger.md`): from half a tank the beat races and the body
+crumples, and the membrane falls in when the tank empties.
+
+**Before the release: genes that work by where they sit** (`dna-slots.md` for the
+rules, `dna-slots-ux.md` for the screen), to the owner's answers to rows 1 to 15.
+- The body gains an inside slot.
+- The toxin, `toxicyst`, is poison inside and venom outside. Outside it works on
+  the bite at the front, and stings whatever bites the side or the stern it
+  faces.
+- Its doses keep hurting after the bite.
+
+The release waits for its phases 1 and 2:
+- venom and poison, outside and inside (`PROTOCOL` 7);
+- their screen.
+
+**After the release:**
+- paralysing and sleeping toxins (phases 3 and 4);
+- a cell without a mouth that eats with its whole skin (`feeding.md`, phase 5).
+
+A new cell is still born with its mouth (row 11).
 
 All of it reaches players together, when the owner runs the release.
 
