@@ -820,6 +820,42 @@ differ by 0 pixels. Where they differ:
 - **The stern's French numbers row** says `de dos`. `par-derrière` came to 658
   px against 650; the gene's line keeps `par-derrière`.
 
+### 10.2 As built: phase 2, 2026-10-03
+
+Phase 2's row of §8 is built. Two of its items, the add-a-copy target lit with its
+new copies and the inside lit as a whole, were already in phase 1 and were
+checked rather than rebuilt. The other four are new:
+- the ghosts;
+- the form's ghost under a drag;
+- the inside in the quick placement;
+- the choosing screen's eighth, inside locus. Its carets now also mark a trade
+  that involves the inside.
+
+The build's 186 frames were shot at both shapes in English and French. Its
+§9.3 frames are pixel-close to the mock's: U03, U05, U06, U06b, U07, U09, U09b,
+U11, W14, W14b, W14k, W15. 141 of phase 1's frames are unchanged. Where they
+differ:
+
+- **U04's gene-line icon** draws a waiting gene at full strength, as phase 1
+  does. The mock drew it dim.
+- **U14** matches on the screen itself. Its membrane beat and its daughters'
+  rolls fall differently from the mock's.
+- **A finger outside with nothing offered there** places nothing. The inside is
+  aimed only by coming back into the body, as §3.7 says; the mock's code aimed
+  the inside in this case.
+- **The thread to the nucleus** is drawn, but at the bloom's size it ends inside
+  the vesicle and does not show, as in the mock.
+- **A phase-1 bug was fixed.** A waiting toxin named for the form it was eaten
+  as had its copies counted from the DNA's carried form. With poison ●● inside,
+  a one-copy toxin read "two copies" and armed `venom ○○•`. Its own copies
+  (`_hand_copies()`) now feed the hint, the armed preview and the ghosts.
+- **Watch in the playtest:** in full vision the camera lags the body by up to
+  72 px, against a hit circle as small as 56 px. So a body that drifts out from
+  under a resting finger and back counts as "left and came back", which aims the
+  inside. The halo lights before the finger lifts, and the pause screen can move
+  the toxin back out. This adds to §11's risk that sliding out and back no longer
+  cancels for a toxin.
+
 ## 11. Left open
 
 What to watch when it is played, with the lever for each. None of these is a

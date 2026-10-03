@@ -1761,6 +1761,18 @@ work. Where the build differs from the text above, or found something:
   drag, the inside in the quick placement's bloom, and the choosing screen's
   inside locus.
 
+### 20.7 As built: phase 2, 2026-10-03
+
+The screen, as `dna-slots-ux.md` §10.2 records it. It is screen-only: `PROTOCOL`
+stays 7, `Wire.RULES` stays `46913eab…`, and no pin and no word moved. Every CI
+step ran locally: `drop_probe` took 359 s, and `net_probe` ran 17,153 frames.
+
+- **`controls.gd` is untouched.** §20.1 lists it for phase 2, but the screen's
+  spec gives its only changes to phases 3 and 4.
+- **The stale translators' notes on the `ACT_` lines** still say "one of seven
+  places round the cell's body". This is left for the next change that touches
+  words.
+
 ## 21. Left open
 
 1. **One inside slot.** Whether it feels like the "body internal slots" the
