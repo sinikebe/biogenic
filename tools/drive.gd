@@ -607,6 +607,42 @@ extends Node
 ## only while a swim rule fires, and `row37` the game's, where every tail that
 ## swims beats unless it is held.
 ##
+## **Your programs and the autopilot** (docs/design/automation.md §18.1, phase
+## 4-2). **A run of this harness keeps no library** unless told where, as it
+## keeps no drop: `--library=<path>` reads and writes that file, and without it
+## the run starts with an empty library it never writes.
+##   --program=[<name>=]<lines>
+##                           a program, its instincts `;`-separated in their
+##                           order, e.g. `ampulla.echo -> body.turn-away;always ->
+##                           axoneme.push 0.5`, named if `<name>=` comes first
+##                           (`flee=...`). Repeatable, in library order; each is
+##                           switched on, in that order, as far as the eight in all
+##                           allow (row 39) -- one that does not fit stays off, and
+##                           says so. Empty lines (`--program=hunt=`) make an empty
+##                           program
+##   --program=[<name>=]founders
+##                           a copy of the water's own program, drop.gd's founders
+##   --program-off=<n>       leave the nth program (from 1) off
+##   --autopilot[=on|off]    switch the autopilot on as the run begins, by its key
+##   --autopilot-at=<s>      press its key, `R`, at that time; repeatable. A key
+##                           press is the real input path: with nothing to run it
+##                           does nothing, which is check 8's
+##   --page=programs[:<n>]   open the pause screen on the programs page once the
+##                           run is up -- the library, or program n (from 1)
+##                           open in it
+##   --page-select=<what>    then select, as a press would: in the library `n`,
+##                           program n; in a program `<row>:<part>` with row from 1
+##                           and part `sense`, `test1`..`test4`, `action`, `add`
+##                           (its `+`) or `new` (the add row, which starts a
+##                           half-built instinct); `value` asks which value a new
+##                           test takes
+##   --page-sheet=rename|delete
+##                           then open the corner's sheet for the selected program,
+##                           as its inspector buttons do
+## With any of them, **who drives, the hold and what acted** are printed on lines
+## of their own (`[instincts]`), whenever one of them changes, so a run without
+## them traces as `dev` does. `--tap=` and the key flags take `r` too.
+##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
 ## presets exclude, so none of this ships.
@@ -929,6 +965,20 @@ var _pond_trace := -1.0
 var _pond_trace_clock := 0.0
 ## --divide-at=: when to grow this cell to DIVIDE_RADIUS, or -1 for never.
 var _divide_at := -1.0
+## **Your programs** (automation.md §18.1): the library this run keeps, if any;
+## the programs given, `founders` or lines, in order; which to leave off; when
+## to press the autopilot's key; the page to open; and the last state said.
+var _library_at := ""
+var _programs_given: Array = []
+var _programs_off: Array[int] = []
+var _autopilot_ats: Array[float] = []
+var _page_spec := ""
+var _page_select := ""
+var _page_sheet := ""
+var _page_opened := false
+var _instincts_trace := false
+var _instincts_said := ""
+var _r_said_in := 0
 ## --freeze-quiet=: freeze once this seat has heard nothing for this long.
 var _freeze_quiet := -1.0
 
@@ -1229,6 +1279,37 @@ func _ready() -> void:
 			_starve_near = float(text.trim_prefix("--starve-near="))
 		elif text.begins_with("--divide-at="):
 			_divide_at = float(text.trim_prefix("--divide-at="))
+		elif text.begins_with("--library="):
+			_library_at = text.trim_prefix("--library=")
+			_instincts_trace = true
+		elif text.begins_with("--program-off="):
+			_programs_off.append(int(text.trim_prefix("--program-off=")))
+			_instincts_trace = true
+		elif text.begins_with("--program="):
+			var given := text.trim_prefix("--program=")
+			var named := ""
+			var eq := given.find("=")
+			if eq >= 0:
+				named = given.left(eq)
+				given = given.substr(eq + 1)
+			_programs_given.append([named, given if given == "founders"
+				else PackedStringArray(Array(given.split(";", false)).map(
+					func(line: String) -> String: return line.strip_edges()))])
+			_instincts_trace = true
+		elif text == "--autopilot" or text == "--autopilot=on":
+			_autopilot_ats.append(0.0)
+			_instincts_trace = true
+		elif text == "--autopilot=off":
+			_instincts_trace = true
+		elif text.begins_with("--autopilot-at="):
+			_autopilot_ats.append(float(text.trim_prefix("--autopilot-at=")))
+			_instincts_trace = true
+		elif text.begins_with("--page="):
+			_page_spec = text.trim_prefix("--page=")
+		elif text.begins_with("--page-select="):
+			_page_select = text.trim_prefix("--page-select=")
+		elif text.begins_with("--page-sheet="):
+			_page_sheet = text.trim_prefix("--page-sheet=")
 		elif text.begins_with("--panes="):
 			_panes_at = float(text.trim_prefix("--panes="))
 		elif text.begins_with("--capture-cost="):
@@ -1328,6 +1409,11 @@ func _ready() -> void:
 	# open on nor write.
 	if &"keep" in run:
 		run.set("keep", _keep)
+	# **And no library** unless told where (automation.md §9.1): the game's
+	# default is the device's own file, which a render must neither open on nor
+	# write.
+	if &"library_at" in run:
+		run.set("library_at", _library_at)
 	if not _field_sets.is_empty():
 		var field := run.get_node_or_null(^"Food")
 		if field != null:
@@ -1350,6 +1436,7 @@ func _ready() -> void:
 		print("[drive] numbers pinned to ", _numbers)
 	add_child(run)
 	_run = run
+	_give_programs()
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
 	_genome = _find_script(self, "res://game/normal/genome.gd")
 	_food = _find_script(self, "res://game/normal/food.gd")
@@ -1676,6 +1763,7 @@ func _open_far_seat(scene: PackedScene) -> void:
 		far.set("drop", _drop_flag)
 	if &"keep" in far:
 		far.set("keep", "")
+		far.set("library_at", "")
 	_far_view.add_child(far)
 	NetSession.current = _seat_session(far_seat)
 	add_child(_far_view)
@@ -2083,6 +2171,7 @@ func _process(delta: float) -> void:
 	_step_capture_cost(delta)
 	_step_census(delta)
 	_step_leave()
+	_step_instincts()
 
 	if _freeze_countdown > 0:
 		_freeze_countdown -= 1
@@ -3395,6 +3484,8 @@ func _keycode(name: String) -> Key:
 		# The pause screen's `numbers` switch (gene-stats.md §2.2), read raw
 		# for the same reason the chords are.
 		"n": return KEY_N
+		# The autopilot's key (automation-ux.md §5.2), read raw as `N` is.
+		"r": return KEY_R
 		_: return KEY_NONE
 
 
@@ -3907,3 +3998,127 @@ func _away(index: int) -> float:
 	if cell == null or _food == null:
 		return 0.0
 	return _food.points()[index].distance_to(cell.position)
+
+
+# --- Your programs and the autopilot (automation.md §18.1) ----------------------
+
+## **The programs given, into the run's library**, in order, each switched on as
+## far as the eight in all allow -- through the library's own calls, as the page
+## makes them -- and the run told, as an edit tells it.
+func _give_programs() -> void:
+	if _programs_given.is_empty() or _run == null:
+		return
+	var library: RefCounted = _run.get("_library")
+	if library == null:
+		return
+	for k in _programs_given.size():
+		var named: String = _programs_given[k][0]
+		var given: Variant = _programs_given[k][1]
+		var at := int(library.call(&"add_founders")) if given is String \
+			else int(library.call(&"add_new"))
+		if at < 0:
+			print("[instincts] program %d not made: the library is full" % (k + 1))
+			continue
+		if not given is String:
+			library.call(&"set_lines", at, given)
+		if named != "":
+			library.call(&"rename", at, named)
+		var on := not _programs_off.has(k + 1)
+		if not bool(library.call(&"switch", at, on)):
+			print("[instincts] program %d stays off: %d instincts, %d places free" % [
+				k + 1, (given as PackedStringArray).size() if not given is String else 7,
+				int(library.call(&"room"))])
+	_run.call(&"_library_changed")
+	var lines: PackedStringArray = []
+	for i in int(library.call(&"size")):
+		var one: RefCounted = library.get("programs")[i]
+		lines.append("%d %s [%s] %s" % [i + 1, "on " if bool(one.get("on")) else "off",
+			str(library.call(&"name_of", i)), " ; ".join(one.get("lines"))])
+	print("[instincts] library: %d programs, %d of %d places taken\n  %s" % [
+		int(library.call(&"size")), int(library.call(&"taken")), 8, "\n  ".join(lines)])
+
+
+## **Who drives, the hold and what acted**, said whenever one of them changes --
+## and the autopilot's key pressed at the times given, through the input path.
+func _step_instincts() -> void:
+	if _run == null:
+		return
+	for i in range(_autopilot_ats.size() - 1, -1, -1):
+		if _clock >= _autopilot_ats[i]:
+			_autopilot_ats.remove_at(i)
+			_send_key(KEY_R, true)
+			_send_key(KEY_R, false)
+			print("[instincts] %6.2f  R pressed" % _clock)
+			_instincts_said = ""
+			# Said two frames on, once the key has landed and the icon been drawn.
+			_r_said_in = 2
+	if _r_said_in > 0:
+		_r_said_in -= 1
+		if _r_said_in == 0:
+			_say_after_r(_run.get_node_or_null(^"Hud/Autopilot"))
+	if not _page_opened and _page_spec != "" and _clock >= 0.6:
+		_page_opened = true
+		_open_page(_page_spec)
+	if not _instincts_trace:
+		return
+	var cell: Node = _run.get_node_or_null(^"Cell")
+	if cell == null:
+		return
+	var instincts: RefCounted = cell.get("instincts")
+	var driving := bool(cell.get("autopilot"))
+	var held := bool(cell.call(&"tail_held"))
+	var acted := int(instincts.get("acted")) if instincts != null and driving else 0
+	var said := "drives %s  held %s  acted %s" % ["yes" if driving else "no ",
+		"yes" if held else "no ", _acted_text(instincts, acted)]
+	if said != _instincts_said:
+		_instincts_said = said
+		print("[instincts] %6.2f  %s" % [_clock, said])
+
+
+func _say_after_r(icon: Control) -> void:
+	var cell: Node = _run.get_node_or_null(^"Cell") if _run != null else null
+	if cell == null:
+		return
+	print("[instincts] %6.2f  after R: drives %s, icon %s" % [_clock,
+		"yes" if bool(cell.get("autopilot")) else "no",
+		"shown" if icon != null and icon.visible else "hidden"])
+
+
+## The places of the instincts that acted, and what each is.
+func _acted_text(instincts: RefCounted, mask: int) -> String:
+	if mask == 0 or instincts == null:
+		return "[]"
+	var list: RefCounted = instincts.get("list")
+	var out: Array[String] = []
+	for k in 62:
+		if (mask & (1 << k)) == 0:
+			continue
+		var line := ""
+		if list != null and k < (list.get("rules") as Array).size():
+			line = str((list.get("rules") as Array)[k].get("text"))
+		out.append("%d:%s" % [k + 1, line])
+	return "[" + ", ".join(out) + "]"
+
+
+## **The pause screen, on the programs page** -- the library, or program [param
+## spec]'s number after a colon open in it -- for a render.
+func _open_page(spec: String) -> void:
+	var parts := spec.split(":")
+	if parts[0] != "programs" or _run == null:
+		return
+	if not bool(_run.get("_menu_open")):
+		_run.call(&"_toggle_pause")
+	var page: Node = _run.get_node_or_null(^"Hud/Pause/Programs")
+	if page == null:
+		return
+	_run.call(&"_show_programs", true)
+	page.call(&"show_library")
+	if parts.size() > 1:
+		page.call(&"open_program", int(parts[1]) - 1)
+	if _page_select != "":
+		page.call(&"pose_select", _page_select)
+	if _page_sheet == "rename":
+		page.call(&"_on_rename")
+	elif _page_sheet == "delete":
+		page.call(&"_on_delete")
+

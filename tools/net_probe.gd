@@ -5404,13 +5404,14 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 		return out
 
 	func place_sister(at: Vector2, heading: float, body_radius: float,
-			tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> int:
+			tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
+			brain: Variant = null) -> int:
 		var before := PackedInt64Array()
 		var seeded := PackedByteArray()
 		for b in _cells:
 			before.append(b.serial)
 			seeded.append(1 if b.seeded else 0)
-		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother)
+		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother, brain)
 		var changed: Array[int] = []
 		for i in mini(_cells.size(), before.size()):
 			if _cells[i].serial != before[i]:
@@ -5867,8 +5868,11 @@ func _check_pond() -> void:
 	# **And a second copy of its tail** (automation.md §5.2), which it can hold
 	# still: below, it does, in the host's water.
 	var genome_guest: Node = guest_run.get_node(^"Genome")
+	# **And a push and a dash** (automation.md §18.3 check 23), which its programs
+	# use on the autopilot below.
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 2}, [&"cytostome", &"cirrus", &"flagellum"], [host_pin])
+		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1}, [&"cytostome", &"cirrus",
+		&"flagellum", &"axoneme", &"myoneme"], [host_pin])
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -5895,6 +5899,19 @@ func _check_pond() -> void:
 		+ " it still %d frames, let go %d strokes and %d while held, %s, %.1f units in %.1f s"
 		% [int(swum[2]), int(swum[0]), int(swum[1]), _gap_said(swum), float(swum[3]),
 		float(swum[4])])
+
+	# **Check 23: never cut for the autopilot** (automation.md §18.3): the same
+	# guest hands its cell to its programs -- resting, holding its tail,
+	# swimming, pushing at half and full, dashing, and flipping hold and swim
+	# every tick -- in the host's water, for the host's referee to judge.
+	var host_fouls_were := _fouls_of(host_pond.get("referees_made"))
+	var flown: Dictionary = await _autopilot_free(guest_run, guest_cell, host_food,
+		host_cell.position, [host_pin])
+	_says(_autopilot_flew(flown) and int(guest_run.get("_life")) == NormalMode.Life.ALIVE
+			and bool(guest_pond.in_pond) and host_food.person() != null
+			and _fouls_of(host_pond.get("referees_made")) == host_fouls_were,
+		"pond: the guest on the autopilot (check 23) %s, in the host's water, and its"
+		% _autopilot_said(flown) + " referee called no foul")
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -6914,6 +6931,117 @@ func _gap_said(swum: Array) -> String:
 		float(swum[6])]
 
 
+## **Check 23** (automation.md §18.3): [param run]'s cell handed to its programs
+## and swum free in [param water], away from [param other], while the programs
+## rest, hold the tail, swim and push at half, turn at random pushing at full and
+## dashing, and then flip hold and swim at every tick of the instincts -- each as
+## a program of the run's own library, given as the page gives it, and the
+## autopilot switched on and off by the run's own switch. Returns what was seen:
+## the outputs that acted, frames the tail was held, strokes, dashes, the push
+## strengths claimed, the flips of the tail and the ticks.
+func _autopilot_free(run: Node, cell: Node, water: Node, other: Vector2,
+		pins: Array) -> Dictionary:
+	var at: Vector2 = cell.position
+	var ahead := Vector2(sin(float(cell.heading)), -cos(float(cell.heading)))
+	_pond_clear_line(water, at - ahead * 300.0, at + ahead * 900.0, 600.0)
+	var library: RefCounted = run.get("_library")
+	var instincts: RefCounted = run.get("_instincts")
+	var program := int(library.call(&"add_new"))
+	library.call(&"switch", program, true)
+	var seen := {"acted": {}, "held": 0, "strokes": 0, "dashes": 0, "pushes": {},
+		"flips": 0, "ticks": 0, "driving": false, "was_held": bool(cell.call(&"tail_held")),
+		"from": int(instincts.get("tick"))}
+	var on_stroke := func(_strength: float) -> void: seen["strokes"] = int(seen["strokes"]) + 1
+	var on_dash := func(_cost: float) -> void: seen["dashes"] = int(seen["dashes"]) + 1
+	cell.impulsed.connect(on_stroke)
+	cell.dashed.connect(on_dash)
+	var give := func(lines: Array) -> void:
+		library.call(&"set_lines", program, PackedStringArray(lines))
+		run.call(&"_library_changed")
+	var watch := func() -> bool:
+		var list: Object = instincts.get("list")
+		if list != null and bool(cell.get("autopilot")):
+			seen["driving"] = true
+			for won: Array in instincts.get("fired"):
+				(seen["acted"] as Dictionary)[str((list.get("rules") as Array)[int(won[0])]
+					.get("output"))] = true
+			var strength := float(instincts.call(&"push_strength"))
+			if strength > 0.0:
+				(seen["pushes"] as Dictionary)[strength] = true
+		var held := bool(cell.call(&"tail_held"))
+		if held:
+			seen["held"] = int(seen["held"]) + 1
+		if held != bool(seen["was_held"]):
+			seen["flips"] = int(seen["flips"]) + 1
+			seen["was_held"] = held
+		return false
+	give.call(["always -> body.rest"])
+	run.call(&"_set_autopilot", true)
+	for phase: Array in [[["always -> body.rest"], 0.6],
+			[["always -> flagellum.hold"], 0.6],
+			[["always -> body.swim", "always -> axoneme.push 0.5"], 0.8],
+			[["always -> body.turn-random", "always -> axoneme.push 1",
+				"always -> myoneme.dash"], 1.8]]:
+		give.call(phase[0])
+		await _pond_until(watch, float(phase[1]), pins)
+	# Hold and swim, flipped at every tick of the instincts.
+	var flipping := [int(instincts.get("tick")), true]
+	give.call(["always -> flagellum.hold"])
+	seen["flips"] = 0
+	await _pond_until(func() -> bool:
+		var tick := int(instincts.get("tick"))
+		if tick != int(flipping[0]):
+			flipping[0] = tick
+			flipping[1] = not bool(flipping[1])
+			give.call(["always -> flagellum.hold"] if bool(flipping[1])
+				else ["always -> body.swim"])
+		watch.call()
+		return false, 1.6, pins)
+	run.call(&"_set_autopilot", false)
+	await _pond_until(watch, 0.2, pins)
+	seen["ticks"] = int(instincts.get("tick")) - int(seen["from"])
+	seen["moved"] = at.distance_to(cell.position)
+	seen["kept_off"] = not bool(cell.get("autopilot"))
+	seen["far"] = (cell.position as Vector2).distance_to(other) >= 200.0
+	cell.impulsed.disconnect(on_stroke)
+	cell.dashed.disconnect(on_dash)
+	library.call(&"delete", program)
+	run.call(&"_library_changed")
+	return seen
+
+
+## Whether [method _autopilot_free] saw every motion it asked for.
+func _autopilot_flew(seen: Dictionary) -> bool:
+	var acted: Dictionary = seen["acted"]
+	var pushes: Dictionary = seen["pushes"]
+	for output: String in ["body.rest", "flagellum.hold", "body.swim", "axoneme.push",
+			"myoneme.dash", "body.turn-random"]:
+		if not acted.has(output):
+			return false
+	return bool(seen["driving"]) and pushes.has(0.5) and pushes.has(1.0) \
+		and int(seen["dashes"]) >= 1 and int(seen["held"]) > 30 and int(seen["strokes"]) >= 1 \
+		and int(seen["flips"]) >= 6 and bool(seen["kept_off"]) and bool(seen["far"])
+
+
+func _autopilot_said(seen: Dictionary) -> String:
+	var acted: Array = (seen["acted"] as Dictionary).keys()
+	acted.sort()
+	return ("rests, holds, swims, pushes at %s, dashes %d times and flips its tail %d"
+		% [", ".join((seen["pushes"] as Dictionary).keys().map(func(p: float) -> String:
+			return "%.1f" % p)), int(seen["dashes"]), int(seen["flips"])]
+		+ " times over %d ticks -- %s acted, the tail held %d frames, %d strokes, %.0f"
+		% [int(seen["ticks"]), ", ".join(acted), int(seen["held"]), int(seen["strokes"]),
+		float(seen.get("moved", 0.0))] + " units swum")
+
+
+## Every foul [param referees] have called between them.
+func _fouls_of(referees: Array) -> int:
+	var fouls := 0
+	for referee: Object in referees:
+		fouls += int(referee.call(&"fouled"))
+	return fouls
+
+
 ## **Feeds the guest [param cell] to r40 on real meals in the host's water**,
 ## one morsel at a time on the lip of its mouth -- facing north, as pinned --
 ## each one an ATE the host decides and the guest grows by. A wide mouth takes
@@ -7565,9 +7693,10 @@ func _check_server() -> void:
 	# keep the old one.
 	var b_genome: Node = b_run.get_node(^"Genome")
 	# And a second copy of its tail (automation.md §5.2), which it holds still below.
+	# And a push and a dash, which its programs use on the autopilot (check 23).
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 2, &"palp": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp"],
-		[a_pin])
+		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1}, [&"cytostome",
+		&"cirrus", &"flagellum", &"palp", &"axoneme", &"myoneme"], [a_pin])
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
@@ -7622,6 +7751,17 @@ func _check_server() -> void:
 		+ " holds it still %d frames, let go %d strokes and %d while held, %s, %.1f units in"
 		% [int(b_swum[2]), int(b_swum[0]), int(b_swum[1]), _gap_said(b_swum),
 		float(b_swum[3])] + " %.1f s" % float(b_swum[4]))
+	# **Check 23 in the room** (automation.md §18.3): the second guest on the
+	# autopilot, its programs resting, holding, swimming, pushing, dashing and
+	# flipping hold and swim every tick, judged by the server's referee.
+	var server_fouls_were := _fouls_of(pond.get("referees_made"))
+	var b_flown: Dictionary = await _autopilot_free(b_run, b_cell, food, a_cell.position,
+		[a_pin])
+	_says(_autopilot_flew(b_flown) and int(b_run.get("_life")) == NormalMode.Life.ALIVE
+			and food.person(slot_b) != null
+			and _fouls_of(pond.get("referees_made")) == server_fouls_were,
+		"server: the second guest on the autopilot (check 23) %s, in the room, and its"
+		% _autopilot_said(b_flown) + " referee called no foul")
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
