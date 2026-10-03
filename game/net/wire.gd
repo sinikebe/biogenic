@@ -96,12 +96,30 @@ extends RefCounted
 ## her place and size as it always did, and nothing it judges by changed --
 ## any DNA and any list are ones evolution could reach and the page could build.
 ##
+## **7: venom and poison, outside and inside** (docs/design/dna-slots.md §14.2).
+## A body carries loads of a toxin that wear off, and the host decides every
+## dose as it decides every contact: the POND header's spare byte becomes three,
+## the loads the snapshot's recipient carries, and a body's flags gain three bits
+## for the loads it carries, so a guest draws them and wears its own. A genome
+## may now hold nine names -- seven outside, one inside and the gift's -- where
+## a 6 refuses nine whole. And the bite tables changed: `VENOM_BITE_BACK_BY_TIER`,
+## `VENOM_COST_BY_TIER` and `venom_back` are gone into the doses, which by the
+## rule below moves this number on its own. A 6 would read a harmed body as one
+## swimming and a guest's loads as a reserved byte, and refuse the genomes the
+## inside makes; so a 6 is refused at HELLO by name, as 1 to 5 are. **`RULES`
+## does not move with it**: the referee judges a guest's size, path, heading,
+## arrivals, sister, body and death, and harm changes none of them -- the host
+## owns the guest's wound and decides its death. `Cause.POISONED` and
+## `Contact.STUNG`'s number are kept for the same reason.
+##
 ## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
-## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER` or the bite tables (`BITE_BY_TIER`,
-## `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`, `VENOM_COST_BY_TIER`, `bite_damage`,
-## `venom_back`) must bump this number**, or a host on one pack and a guest on
-## another share a pond whose contacts one of them misjudges.
-const PROTOCOL := 6
+## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER`, the bite tables (`BITE_BY_TIER`,
+## `BITE_GAP`, `bite_damage`) or the dose tables (`VENOM_STACKS_BY_TIER`,
+## `POISON_STACKS_BY_TIER`, `SWALLOW_STACKS_BY_TIER`, `VENOM_ARC_DEG`,
+## `VENOM_SIDES`, `HARM_PER_STACK`, `DOSE_TAU_BY_KIND`, `DOSE_GONE`, `DOSE_SIZE`)
+## must bump this number**, or a host on one pack and a guest on another share a
+## pond whose contacts one of them misjudges.
+const PROTOCOL := 7
 ## **The rules a host's referee judges a guest by, fingerprinted**
 ## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
 ## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
@@ -339,8 +357,17 @@ const STATE_POND := 1 << 2
 const BEARING_STEPS := 256
 
 # --- The POND snapshot (shared-pond.md §2, ocean.md §10.4) -------------------
-## `kind | seq(u32) | your_wound(u8, /255) | count(u8) | reserved(u8)`.
-const POND_HEADER := 8
+## `kind | seq(u32) | your_wound(u8, /255) | count(u8) | your_harm(u8, /4) |
+## your_paralysis(u8, /4) | your_sleep(u8, /4)`. **The spare byte became three in
+## protocol 7** (docs/design/dna-slots.md §14.2): the stacks of each of
+## doses.gd's kinds the recipient carries, as the host counts them, at a quarter
+## stack to 63.75 -- against the largest dose there is, a swallow's 48.
+const POND_HEADER := 10
+## Stacks per step of a POND load byte.
+const POND_LOAD_SCALE := 4.0
+## How many loads the header carries: doses.gd's KINDS, written out because this
+## file loads nothing, and the probe holds the two equal.
+const POND_LOADS := 3
 ## One body: `id(u32) | meals(u8) | flags(u8) | x(f32) | y(f32) | heading(u8)
 ## | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
 ##
@@ -368,7 +395,7 @@ const SEND_MAX := 60
 ## How many bodies one snapshot may carry: the send set and the person.
 const POND_BODIES_MAX := SEND_MAX + 1
 ## **The worst case, and the reason it is one datagram.** Sixty water bodies and
-## the person: 8 + 60 x 19 + 31 = 1,179 bytes, under ENet's 1,392-byte MTU, so a
+## the person: 10 + 60 x 19 + 31 = 1,181 bytes, under ENet's 1,392-byte MTU, so a
 ## snapshot is never fragmented and a lost fragment can never cost a whole one.
 const POND_MAX := POND_HEADER + (POND_BODIES_MAX - 1) * POND_BODY + POND_PERSON
 ## The person's id in a snapshot: no water body has it, since a drop numbers
@@ -380,6 +407,13 @@ const PERSON_ID := 0
 const POND_STALKING := 1 << 0
 const POND_IS_PERSON := 1 << 1
 const POND_IN_WATER := 1 << 2
+## **What a body carries, since protocol 7** (docs/design/dna-slots.md §14.2): a
+## load of harm, of paralysis, or of sleep past the cutoff -- so a guest draws
+## the doses of the water and of the other player. `food.gd`'s FLAG_HARMED,
+## FLAG_PARALYSED and FLAG_ASLEEP. Phase 1 writes harm's.
+const POND_HARMED := 1 << 3
+const POND_PARALYSED := 1 << 4
+const POND_ASLEEP := 1 << 5
 ## Radius and wound are fixed point on the wire; the speed is in steps.
 const POND_RADIUS_SCALE := 64.0
 const POND_WOUND_SCALE := 255.0
@@ -402,10 +436,13 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## is inert in every rule, which is the shipped retirement behaviour.
 ##
 ## The decoder refuses the whole message on more genes than [constant
-## GENES_MAX] -- seven slots and a held sample -- on a name outside 1 to
-## [constant NAME_MAX] bytes of `a-z`, or on an order longer than [constant
-## ORDER_MAX]. Tiers clamp to 0..[constant TIER_TOP].
-const GENES_MAX := 8
+## GENES_MAX] -- seven slots outside, one inside, and a held sample, or a gift
+## worn over an organ still worn -- on a name outside 1 to [constant NAME_MAX]
+## bytes of `a-z`, or on an order longer than [constant ORDER_MAX]: the order is
+## the worn layout, outside only, because an inside form is inside by its name.
+## Tiers clamp to 0..[constant TIER_TOP]. Nine since protocol 7, and every bound
+## after it follows (docs/design/dna-slots.md §14.2).
+const GENES_MAX := 9
 const ORDER_MAX := 7
 const NAME_MAX := 16
 const TIER_TOP := 3
@@ -472,11 +509,11 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
 ## why a host of this build refuses it. Longer, and the host hangs up before
 ## the handshake with no sentence at all; longer than [constant GUEST_OTHER_MAX]
-## (272), and it is the oversize cut, which bars the caller's address for a
+## (290), and it is the oversize cut, which bars the caller's address for a
 ## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
 ## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
-## `len | a name of NAME_MAX letters | tier`. 145 bytes. An unknown name is
+## `len | a name of NAME_MAX letters | tier`. 163 bytes. An unknown name is
 ## legal and inert, so the bound follows the format and not today's longest
 ## gene, which has ten letters.
 const TIERS_MAX := 1 + GENES_MAX * (1 + NAME_MAX + 1)
@@ -484,10 +521,10 @@ const TIERS_MAX := 1 + GENES_MAX * (1 + NAME_MAX + 1)
 ## `len | name`. 120 bytes.
 const ORDER_BYTES_MAX := 1 + ORDER_MAX * (1 + NAME_MAX)
 ## PERSON: the header, the new-body byte, a genome and an order -- 9 bytes with
-## nothing worn, 272 at the most the format holds. A real one is at most 182.
+## nothing worn, 290 at the most the format holds. A real one is at most 194.
 const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1
 const PERSON_MAX := EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
-## GENOME: the body's id and meals, then a genome. 12 to 156.
+## GENOME: the body's id and meals, then a genome. 12 to 174.
 const GENOME_MIN := EVENT_HEADER + 5 + 1
 const GENOME_MAX := EVENT_HEADER + 5 + TIERS_MAX
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
@@ -495,9 +532,9 @@ const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## SISTER: a place, a heading, a radius and a genome -- and since protocol 6 a
 ## second genome, her DNA, and her list: a count of rules to [constant
 ## MOST_RULES], then each line as `len | ASCII`. 22 bytes with nothing worn,
-## carried or run; 1,342 at the most the format holds, two genomes of eight
+## carried or run; 1,378 at the most the format holds, two genomes of nine
 ## sixteen-letter genes and eight lines of [constant RULE_BYTES_MAX]. A real one
-## is under a kilobyte: a DNA holds seven genes of ten letters at most, and
+## is under a kilobyte: a DNA holds eight genes of ten letters at most, and
 ## today's longest line is under ninety bytes.
 const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1
 const SISTER_MAX := EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 \
@@ -664,7 +701,11 @@ static func shout(seq: int, at: Vector2, radius: float,
 ## the frame past the budget -- sixty-one bodies all flagged as people, say,
 ## which would be 1,899 bytes -- is left out instead, like any other body this
 ## end will not send, and the reader refuses a longer frame outright.
-static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
+##
+## [param your_loads] are the stacks of each kind the recipient carries, as the
+## host counts them; none written as none.
+static func pond(seq: int, your_wound: float, bodies: Array,
+		your_loads: PackedFloat64Array = PackedFloat64Array()) -> PackedByteArray:
 	var keep: Array = []
 	var size := POND_HEADER
 	for body: Variant in bodies:
@@ -694,7 +735,10 @@ static func pond(seq: int, your_wound: float, bodies: Array) -> PackedByteArray:
 	_put_u32(out, 1, seq)
 	out[5] = _unit_byte(your_wound)
 	out[6] = keep.size()
-	out[7] = 0
+	for k in POND_LOADS:
+		var stacks := your_loads[k] if k < your_loads.size() else 0.0
+		out[7 + k] = clampi(roundi(stacks * POND_LOAD_SCALE), 0, 255) \
+			if is_finite(stacks) else 0
 	var at := POND_HEADER
 	for entry: Array in keep:
 		var flags := int(entry[Entry.FLAGS]) & 0xFF
@@ -1103,8 +1147,9 @@ static func take_shout(frame: PackedByteArray) -> Array:
 	return [Vector2(x, y), radius, reach]
 
 
-## `[seq, your_wound, bodies]` out of a POND frame, each body an Array indexed
-## by [enum Entry] -- or an empty array, and the whole frame refused, for a
+## `[seq, your_wound, bodies, your_loads]` out of a POND frame, each body an
+## Array indexed by [enum Entry], the loads the stacks of each kind the
+## recipient carries -- or an empty array, and the whole frame refused, for a
 ## short or overlong frame, one past [constant POND_MAX] bytes whatever it
 ## holds, a count past [constant POND_BODIES_MAX], a person that is not
 ## [constant PERSON_ID] or a water body that is, a non-finite float, or a motion
@@ -1149,7 +1194,11 @@ static func take_pond(frame: PackedByteArray) -> Array:
 		bodies.append(entry)
 	if at != frame.size():
 		return []
-	return [_take_u32(frame, 1), float(frame[5]) / POND_WOUND_SCALE, bodies]
+	var loads := PackedFloat64Array()
+	loads.resize(POND_LOADS)
+	for k in POND_LOADS:
+		loads[k] = float(frame[7 + k]) / POND_LOAD_SCALE
+	return [_take_u32(frame, 1), float(frame[5]) / POND_WOUND_SCALE, bodies, loads]
 
 
 ## `[radius]` out of an ENTER, or empty. A radius no body could have is

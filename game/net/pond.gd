@@ -713,8 +713,12 @@ func _flush_guest(g: Guest) -> void:
 	_send_genomes(g, bodies)
 	var pb: Object = _person_body(g.slot)
 	var wound := float(pb.wound) if pb != null else 0.0
-	var size: int = _net.send_pond(wound, bodies) if g.id == 0 \
-		else _net.send_pond_to(g.id, wound, bodies)
+	# **And what it carries**, as this host counts it (docs/design/dna-slots.md
+	# §14.1): the guest's cell wears its own loads between snapshots, and obeys
+	# these at each one.
+	var loads: PackedFloat64Array = pb.loads if pb != null else PackedFloat64Array()
+	var size: int = _net.send_pond(wound, bodies, loads) if g.id == 0 \
+		else _net.send_pond_to(g.id, wound, bodies, loads)
 	pond_bytes_max = maxi(pond_bytes_max, size)
 	ponds_sent += 1
 	if pb != null:
@@ -1026,7 +1030,7 @@ func apply_newest() -> bool:
 	var said := Wire.take_pond(frame)
 	if said.is_empty():
 		return false
-	_food.apply_pond(float(said[1]), said[2])
+	_food.apply_pond(float(said[1]), said[2], said[3])
 	return true
 
 

@@ -246,6 +246,21 @@ const BEHAVIOUR := {
 ## A kept echo's numbers: when it lands, where it came off (two), its distance,
 ## its size and when it rings out.
 const ECHO_NUMBERS := 6
+## **What `drop.bodies` may also hold** (the toxin's doses, docs/design/
+## dna-slots.md §12): every body's loads, a column a kind -- stacks of harm,
+## paralysis and sleep, in 64 bits, because they wear down like the clocks kept
+## here -- so a dose survives the app being closed mid-fight. **And `cell.loads`**,
+## the cell's own three, the same way. Absent means none: a file from before
+## loads every body carrying nothing, and a build before them loads the rest, as
+## it does pack 2's columns. Each is checked when it is there, every column one
+## entry a body and every entry a finite count of stacks, none below nothing.
+const DOSES := {
+	"harm": TYPE_PACKED_FLOAT64_ARRAY,
+	"paralysis": TYPE_PACKED_FLOAT64_ARRAY,
+	"sleep": TYPE_PACKED_FLOAT64_ARRAY,
+}
+## The kinds a cell's `loads` holds: doses.gd's three.
+const LOADS := 3
 ## **The lists those bodies carry** (`drop.behaviours`, §8): `{"version": 1,
 ## "lists": [...]}`, each list its rules' lines as behaviour.md §5.1 writes them,
 ## by declared name -- so a name this build does not know is kept, a rule that
@@ -513,7 +528,34 @@ static func _bad_bodies(drop: Dictionary) -> String:
 	var bad := _bad_lineage(bodies, n)
 	if bad.is_empty():
 		bad = _bad_behaviour(drop, bodies, n)
+	if bad.is_empty():
+		bad = _bad_doses(bodies, n)
 	return bad
+
+
+## What the toxin's doses added, when it is there: each column the type it says,
+## one entry a body, and every entry a finite count of stacks, none below nothing.
+static func _bad_doses(bodies: Dictionary, n: int) -> String:
+	for key: String in DOSES:
+		if not bodies.has(key):
+			continue
+		if typeof(bodies[key]) != int(DOSES[key]):
+			return "drop.bodies.%s is the wrong type" % key
+		var column: PackedFloat64Array = bodies[key]
+		if column.size() != n:
+			return "drop.bodies.%s has %d entries for %d bodies" % [key, column.size(), n]
+		if not _are_stacks(column):
+			return "drop.bodies.%s is not stacks" % key
+	return ""
+
+
+## Whether every entry of [param column] is a finite count of stacks, none
+## below nothing.
+static func _are_stacks(column: PackedFloat64Array) -> bool:
+	for stacks: float in column:
+		if not is_finite(stacks) or stacks < 0.0:
+			return false
+	return true
 
 
 ## What pack 2 added to the bodies, when it is there: each column the type it
@@ -639,6 +681,11 @@ static func _bad_cell(cell: Dictionary) -> String:
 	for key: String in CELL_LINEAGE:
 		if cell.has(key) and typeof(cell[key]) != int(CELL_LINEAGE[key]):
 			return "cell.%s is the wrong type" % key
+	# **The cell's own loads** (the toxin's doses): three counts of stacks.
+	if cell.has("loads") and (typeof(cell["loads"]) != TYPE_PACKED_FLOAT64_ARRAY
+			or (cell["loads"] as PackedFloat64Array).size() != LOADS
+			or not _are_stacks(cell["loads"])):
+		return "cell.loads is not three counts of stacks"
 	var pair: Array = cell["daughters"]
 	if not pair.is_empty() and pair.size() != 2:
 		return "cell.daughters is not two daughters"

@@ -12,7 +12,9 @@ extends Node
 ##
 ## **And the numbers a player can ask to see** (docs/design/gene-stats.md): the
 ## formatter's rules, a few rows of the table against the constants they are
-## read off, and the dash and the venom paid the way their rows say.
+## read off, the dash paid the way its row says, and the toxin's rows -- venom
+## by where it works, poison, and a stack diluted by the reader's size
+## (docs/design/dna-slots.md §3.3).
 ##
 ## **And hunger, as the player is warned of it** (docs/design/hunger.md): the
 ## beat that races, never slows and never dims, the body's slack and the
@@ -642,10 +644,11 @@ func _gene_stats() -> void:
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"
 		% clause, clause == "52 µm across · a full tank: 36 s, 24 s drifting")
 
-	# **The dash and the venom are paid as their rows say** (§11, call 2), by
-	# the run's own handlers: seconds of rest through `spend`, so a newborn pays
-	# the share it always paid, `crista` pays less, and a bigger tank pays the
-	# same seconds out of more. The run is built and never enters the tree.
+	# **The dash is paid as its row says** (§11, call 2), by the run's own
+	# handler: seconds of rest through `spend`, so a newborn pays the share it
+	# always paid, `crista` pays less, and a bigger tank pays the same seconds
+	# out of more. The run is built and never enters the tree. (The venom's
+	# spend went with the spitting: a toxin is doses now, dna-slots.md §7.)
 	var run: Node = load("res://game/normal/normal_mode.gd").new()
 	_nodes.append(run)
 	var met: Node = Metabolism.new()
@@ -658,37 +661,26 @@ func _gene_stats() -> void:
 	run.set("_metabolism", met)
 	run.set("_food", field)
 	run.set("_bus", bus)
-	field.venom_cost = CellBody.VENOM_COST_BY_TIER[3]
 	var dash := CellBody.DASH_COST_BY_TIER[1]
-	var venom := CellBody.VENOM_COST_BY_TIER[3]
 	var burn := CellBody.BURN_BY_TIER[2]
 	var tank := CellBody.STORE_BY_TIER[3]
-	var newborn_dash := _paid(run, met, 0, 0, false, dash)
-	var newborn_venom := _paid(run, met, 0, 0, true, dash)
-	_check("a newborn's dash takes %.3f of the bar and venom %.3f, exactly the share"
-		% [newborn_dash[0], newborn_venom[0]] + " each always took",
-		is_equal_approx(newborn_dash[0], dash) and is_equal_approx(newborn_venom[0], venom))
-	var burned_dash := _paid(run, met, 2, 0, false, dash)
-	var burned_venom := _paid(run, met, 2, 0, true, dash)
-	_check("with crista 2 both cost %.2f of it: a dash %.2f s, venom %.2f s"
-		% [burn, burned_dash[1], burned_venom[1]],
-		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn)
-		and is_equal_approx(burned_venom[1], venom * Metabolism.HUNGER_SECONDS * burn))
-	var stored_dash := _paid(run, met, 0, 3, false, dash)
-	var stored_venom := _paid(run, met, 0, 3, true, dash)
-	_check("with vacuole 3 they cost the same seconds (%.2f s, %.2f s), a smaller share"
-		% [stored_dash[1], stored_venom[1]] + " of a tank %.0f times as big" % tank,
+	var newborn_dash := _paid(run, met, 0, 0, dash)
+	_check("a newborn's dash takes %.3f of the bar, exactly the share it always took"
+		% newborn_dash[0], is_equal_approx(newborn_dash[0], dash))
+	var burned_dash := _paid(run, met, 2, 0, dash)
+	_check("with crista 2 it costs %.2f of it: %.2f s" % [burn, burned_dash[1]],
+		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn))
+	var stored_dash := _paid(run, met, 0, 3, dash)
+	_check("with vacuole 3 it costs the same seconds (%.2f s), a smaller share"
+		% stored_dash[1] + " of a tank %.0f times as big" % tank,
 		is_equal_approx(stored_dash[1], dash * Metabolism.HUNGER_SECONDS)
-		and is_equal_approx(stored_venom[1], venom * Metabolism.HUNGER_SECONDS)
 		and is_equal_approx(stored_dash[0], dash / tank))
 	var s04 := GeneStats.context({&"crista": 2, &"vacuole": 3})
 	var said_dash: float = GeneStats.lines(&"myoneme", 1, 0, &"", s04)[1][0]["values"][0]
-	var said_venom: float = GeneStats.lines(&"veneneux", 3, 0, &"", s04)[1][0]["values"][0]
-	_check("and the numbers say what is paid: `each dash burns %s s`, `being spat out"
-		% Readout.format(said_dash, Readout.Unit.ENERGY) + " burns %s s`"
-		% Readout.format(said_venom, Readout.Unit.ENERGY),
-		is_equal_approx(said_dash, _paid(run, met, 2, 3, false, dash)[1])
-		and is_equal_approx(said_venom, _paid(run, met, 2, 3, true, dash)[1]))
+	_check("and the numbers say what is paid: `each dash burns %s s`"
+		% Readout.format(said_dash, Readout.Unit.ENERGY),
+		is_equal_approx(said_dash, _paid(run, met, 2, 3, dash)[1]))
+	_toxin_rows()
 	var odds := PackedStringArray([GeneStats.odds_text(1), GeneStats.odds_text(2),
 		GeneStats.odds_text(3)])
 	_check("the odds gain their percentage: %s" % " | ".join(odds),
@@ -697,17 +689,38 @@ func _gene_stats() -> void:
 		and odds[2] == "three copies · a daughter always wears it")
 
 
-## One dash of [param cost], or one sting, paid by the run's own handler out of
-## a body with `crista` and `vacuole` at those copies. Returns what it took:
-## `[share of the bar, seconds of rest out of that body's tank]`.
-func _paid(run: Node, met: Node, crista: int, vacuole: int, stung: bool,
-		cost: float) -> Array:
+## **The toxin's rows** (docs/design/dna-slots.md §3.3), read off §15's
+## constants: venom by where it works -- the front, a side, the stern -- and
+## poison, each with what one stack does, diluted by the reader's own size.
+func _toxin_rows() -> void:
+	var born := GeneStats.context({})
+	var front := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 3)[0])
+	var side := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 5)[0])
+	var stern := Readout.plain(GeneStats.lines(&"toxicyst", 1, 0, &"", born, 2)[0])
+	var poison: Array = GeneStats.lines(&"veneneux", 3, 0, &"", born, GenomeNode.INSIDE)
+	var big := Readout.plain(GeneStats.lines(&"toxicyst", 3, 0, &"",
+		GeneStats.context({}, 40.0), 0)[0])
+	_check("front venom reads `%s`" % front, front == "each bite leaves 2 stacks of venom"
+		+ " · a stack takes 5% of a body your size over 9.66 s")
+	_check("side venom reads `%s`" % side, side.begins_with(
+		"whatever bites you on that side takes 2 stacks · a stack takes 5%"))
+	_check("stern venom reads `%s`, one stack singular" % stern, stern.begins_with(
+		"whatever bites you from behind takes 1 stack · a stack takes 5%"))
+	_check("poison reads `%s / %s`" % [Readout.plain(poison[0]), Readout.plain(poison[1])],
+		Readout.plain(poison[0]) == "whatever bites you takes 3 stacks a bite"
+			+ " · a swallower takes 48 stacks"
+		and Readout.plain(poison[1]).begins_with("a stack takes 5% of a body your size"))
+	_check("a stack is diluted by the reader's size, (26 / 40)^2: `%s`" % big,
+		big.contains("a stack takes 2% of a body your size"))
+
+
+## One dash of [param cost] paid by the run's own handler out of a body with
+## `crista` and `vacuole` at those copies. Returns what it took: `[share of the
+## bar, seconds of rest out of that body's tank]`.
+func _paid(run: Node, met: Node, crista: int, vacuole: int, cost: float) -> Array:
 	met.reset()
 	met.burn = CellBody.BURN_BY_TIER[crista]
 	met.reserve = CellBody.STORE_BY_TIER[vacuole]
-	if stung:
-		run.call("_on_stung", 0.0)
-	else:
-		run.call("_on_dashed", cost)
+	run.call("_on_dashed", cost)
 	var share: float = met.hunger
 	return [share, share * Metabolism.HUNGER_SECONDS * float(met.reserve)]

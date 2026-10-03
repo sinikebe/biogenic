@@ -64,6 +64,9 @@ const Tally := preload("res://game/mechanics/tally.gd")
 ## looks like -- the eye's flare, and the pause target's one breath.
 const Progression := preload("res://game/mechanics/progression.gd")
 const Swell := preload("res://game/mechanics/swell.gd")
+## **The kinds of load** (docs/design/dna-slots.md §6): which strain's hue a dose
+## arrives in, and which kind ends a run quietly.
+const Doses := preload("res://game/mechanics/doses.gd")
 ## **A gene's numbers** (gene-stats.md §6.1): the readout knows units and never
 ## genes, and gene_stats.gd is the edge where the two meet. This file only asks
 ## for the lines of the gene being read, and draws them.
@@ -665,6 +668,28 @@ var _eye_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
 ## Which gene's pigment the flare is on: the one that levelled.
 var _eye_gene: StringName = &""
 
+# --- The toxins (docs/design/dna-slots.md §7, dna-slots-ux.md §5) -----------
+## This cell's toxins as the field delivers them, and the genome and layout
+## they were read off.
+var _toxins_now := PackedFloat64Array()
+var _toxins_key := 0
+## **The hue of this frame's dose, for the sensation it arrived with**: a bite's
+## bruise, or a meal's flood. Stamped with the frame, and spent when used.
+var _dose_hit := Vector3.ZERO
+var _dose_meal := Vector3.ZERO
+var _dose_frame := -1
+## **Where the newest dose got in, and how long ago**, `(bearing, seconds)`: the
+## stain grows from the skin on that bearing over cilia.gd's SEEP.
+var _dose_entry := Vector2(0.0, INF)
+## **This cell's toxins flaring as they fire** (dna-slots-ux.md §5.1): its fangs
+## as its venom lands, its barbs as a mouth bites the side they guard, its
+## granules as its poison is taken. The eye flare's envelope, started at once.
+var _fang_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
+var _guard_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
+var _granule_flare := Swell.new(EYE_FLARE_RISE, 0.0, EYE_FLARE_FALL)
+## The close's hue: a dose's strain for a death by one, zero for teal.
+var _death_tint := Vector3.ZERO
+
 # --- The division -----------------------------------------------------------
 var _split := Split.NONE
 var _split_clock := 0.0
@@ -723,6 +748,11 @@ var _slack := 0.0
 ## pond the menu is open over a live water and hunger burns under it, so the
 ## figure is drawn again whenever the two are [constant SLACK_REDRAW] apart.
 var _slack_drawn := 0.0
+## **What the pause figure's loads were when it was last drawn**, felt: in a pond
+## a dose goes on wearing under the menu, so the figure is drawn again whenever
+## they are [constant DOSE_REDRAW] felt stacks apart, and once more as they end.
+var _dose_drawn := Vector3.ZERO
+const DOSE_REDRAW := 0.05
 ## **This run opened on a cell left mid-run** (row 17), which comes back behind
 ## a beat (ocean.md §9.1).
 var _resumed := false
@@ -783,7 +813,8 @@ func _ready() -> void:
 	_food.waked.connect(_on_waked)
 	_food.killed.connect(_on_killed)
 	_food.bitten.connect(_on_bitten)
-	_food.stung.connect(_on_stung)
+	_food.dosed.connect(_on_dosed)
+	_food.toxin_fired.connect(_on_toxin_fired)
 	_food.darted.connect(_on_darted)
 	# The drop's two (docs/design/ocean.md §3.1, §7.3): the meniscus is felt as
 	# the knock grit gives, and a floc is a meal with no growth and no gene.
@@ -1034,6 +1065,11 @@ func _open_drop() -> Dictionary:
 		cell = kept["cell"]
 		if not cell.is_empty():
 			_cell.restore_body(cell["body"])
+			# **And what it carried** (docs/design/dna-slots.md §12): a dose
+			# survives the app being closed mid-fight. A file from before the
+			# toxins has none, and the body carries nothing.
+			if cell.has("loads"):
+				_cell.restore_loads(cell["loads"])
 		var done := _food.load_drop(_cell, kept["drop"])
 		# **A cell left while it swam in a friend's drop** (§9.1) comes back
 		# into this one as a guest leaving the pond does: at a quiet place.
@@ -1163,6 +1199,7 @@ func _keep_drop() -> void:
 			"said_divide": _said_divide,
 			"daughters": _daughters_by_name(_daughters),
 			"water": _food.player_state(),
+			"loads": _cell.loads.duplicate(),
 		}
 		if elsewhere:
 			cell["elsewhere"] = true
@@ -1300,9 +1337,12 @@ func _process(delta: float) -> void:
 	# genome and cilia.gd's arc table. A rear dart answers a flank, which is what
 	# makes `trichocyst` a placement decision instead of a radius.
 	_food.dart_bearing = _slot_bearing_of(&"trichocyst")
-	var venom := mini(_cell.extra(&"veneneux"),
-		CellBody.VENOM_COST_BY_TIER.size() - 1)
-	_food.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
+	# **What this cell's toxins do, and where** (docs/design/dna-slots.md §7.1):
+	# its venom on its bite or its sting on the side it guards, read off the
+	# arc each is worn on, and its poison for whatever bites or swallows it.
+	# Resolved here for the dart's reason -- this file has the genome and
+	# cilia.gd's arcs -- and handed to the field, which delivers them.
+	_food.toxins = _toxins()
 	_aim_beam(delta)
 	# `chemocyte` and `ampulla`: how far this nose reaches and how often this
 	# electroreceptor fires. Scalars about the cell's own anatomy, handed to the
@@ -1382,6 +1422,8 @@ func _process(delta: float) -> void:
 	_soma.beat = _bus.pulse()
 	# The eye and the pause target: a choice waiting, a level arriving.
 	_step_eye(delta)
+	# What this body carries, and its toxins firing.
+	_step_doses(delta)
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
 	# **Your instincts' tick** (automation.md §12): every eighth frame, read off
@@ -2114,6 +2156,7 @@ func _be_born() -> void:
 		_genome.heritable_levels())
 	_genome.carry(carried)
 	_forget_eye()
+	_forget_doses()
 	# True of her when her copy of the level is her mother's, which is when her
 	# DNA carries the gene; a gene that came back new starts at level 1. The
 	# breath goes with it only while her fork is still open.
@@ -2246,18 +2289,98 @@ func _on_darted(bearing: float) -> void:
 	_bus.shove(bearing, 0.7)
 
 
-## `veneneux`. It swallowed you and died of it, and you are starving for it.
-##
-## Paid as the dash is, in seconds of rest through `spend` (gene-stats.md §11,
-## call 2). `venom_cost` keeps its values, which are all the host ever asks of
-## it (`>= 0`), so nothing about this crosses the wire. A negative one -- no
-## venom -- spends nothing, where the negative meal it used to be would have
-## fed the cell.
-func _on_stung(bearing: float) -> void:
-	if _life != Life.ALIVE:
+## **This cell's toxins**, as the field delivers them (food.gd's `toxins_of`):
+## off the body it wears, at the arcs it wears them on. Read again only when
+## either changes, because a bite asks for them and a frame does not.
+func _toxins() -> PackedFloat64Array:
+	var tiers := _genome.tiers()
+	var worn := _genome.body_layout()
+	var key := hash(tiers) ^ (hash(worn) * 31)
+	if key != _toxins_key:
+		_toxins_key = key
+		_toxins_now = FoodField.toxins_of(tiers, worn)
+	return _toxins_now
+
+
+## **A dose went into this cell** (docs/design/dna-slots-ux.md §5.1). It arrives
+## on what brought it: the field says it just before the bite's `bitten` or the
+## meal's `eaten`, in the same frame, and that sensation takes the dose's strain
+## hue -- a lime bruise where the bite landed, a lime flood for a poisonous meal.
+## Kept for this frame only, so a dose that nothing followed tints nothing later.
+## And it seeps in: the stain on the body grows from the skin on its bearing.
+func _on_dosed(bearing: float, kind: int, _stacks: float, meal: bool) -> void:
+	if not _in_the_water():
 		return
-	_bus.hit(bearing, 1.0)
-	_metabolism.spend(_food.venom_cost * MetabolismNode.HUNGER_SECONDS)
+	var tint := SignalBus.STRAIN_COLORS[clampi(kind, 0, SignalBus.STRAIN_COLORS.size() - 1)]
+	if meal:
+		_dose_meal = tint
+	else:
+		_dose_hit = tint
+	_dose_frame = Engine.get_process_frames()
+	_dose_entry = Vector2(bearing, 0.0)
+
+
+## **This cell's toxin went into something**: its fangs, its barbs or its
+## granules flare (dna-slots-ux.md §5.1) -- on the eye flare's envelope, and at
+## once, because a toxin firing is the moment it is shown. A fact about this
+## body, and in both views.
+func _on_toxin_fired(how: int) -> void:
+	if not _in_the_water():
+		return
+	match how:
+		FoodField.FIRED_VENOM:
+			_fang_flare.start()
+		FoodField.FIRED_STING:
+			_guard_flare.start()
+		FoodField.FIRED_POISON:
+			_granule_flare.start()
+
+
+## The hue this frame's dose tints [param what] with -- `_dose_hit` or
+## `_dose_meal` -- or zero, and it is spent either way.
+func _dose_tint(meal: bool) -> Vector3:
+	var tint := _dose_meal if meal else _dose_hit
+	if meal:
+		_dose_meal = Vector3.ZERO
+	else:
+		_dose_hit = Vector3.ZERO
+	return tint if _dose_frame == Engine.get_process_frames() else Vector3.ZERO
+
+
+## Once a frame, in the water: the flares move on, the newest dose seeps
+## further in, and both views are handed what this body carries.
+func _step_doses(delta: float) -> void:
+	_fang_flare.step(delta)
+	_guard_flare.step(delta)
+	_granule_flare.step(delta)
+	_dose_entry.y += delta
+	var felt := FoodField.felt_of(_cell.loads, _cell.radius)
+	var fangs := _fang_flare.value()
+	var guard := _guard_flare.value()
+	var granules := _granule_flare.value()
+	var dose := {}
+	if felt != Vector3.ZERO or fangs > 0.0 or guard > 0.0 or granules > 0.0:
+		dose = {"felt": felt, "entry": _dose_entry, "fangs": fangs,
+			"guard": guard, "granules": granules}
+	_soma.dose = dose
+	_vision.dose = dose
+	if _menu_open and felt != _dose_drawn and (felt == Vector3.ZERO
+			or (felt - _dose_drawn).length() >= DOSE_REDRAW):
+		_figure_body.queue_redraw()
+
+
+## **A new body carries nothing and fires nothing**: a death, a birth and a
+## return. A flare or a seep running for the body that just ended is about that
+## body.
+func _forget_doses() -> void:
+	_fang_flare.clear()
+	_guard_flare.clear()
+	_granule_flare.clear()
+	_dose_entry = Vector2(0.0, INF)
+	_dose_hit = Vector3.ZERO
+	_dose_meal = Vector3.ZERO
+	_soma.dose = {}
+	_vision.dose = {}
 
 
 ## A mouth closed on a body it could not swallow -- yours on something too big,
@@ -2266,10 +2389,13 @@ func _on_stung(bearing: float) -> void:
 ## had since Phase 1, and a bite is contact. There is no readout of how much of
 ## you is left, because there is no organ that could report it; a player learns
 ## they are in trouble by being bitten, repeatedly, from the same direction.
+##
+## **A bite that dosed you bruises in the dose's hue** (dna-slots-ux.md §5.1):
+## the arrival is at the bite's bearing because a bite is.
 func _on_bitten(bearing: float, strength: float) -> void:
 	if _life != Life.ALIVE:
 		return
-	_bus.hit(bearing, strength)
+	_bus.hit(bearing, strength, _dose_tint(false))
 
 
 ## The mote's world position arrives with this and is deliberately dropped here.
@@ -2324,6 +2450,12 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	var payload := {"gene": gene}
 	if gene != &"":
 		payload["color"] = Cilia.hue(gene)
+	# **A poisonous meal floods in the poison's hue** (dna-slots-ux.md §5.1):
+	# the flood is already the one place point of view names what you ate, and
+	# you ate poison.
+	var poisoned := _dose_tint(true)
+	if poisoned != Vector3.ZERO:
+		payload["color"] = Color(poisoned.x, poisoned.y, poisoned.z)
 	_bus.ingest(payload)
 	_metabolism.feed(nutrition)
 	# **The genome screen rebuilds on a meal** (shared-pond.md §1.7): with the
@@ -2361,6 +2493,12 @@ func _on_waked(bearing: float, strength: float) -> void:
 
 
 func _on_killed(bearing: float) -> void:
+	# **A death by a dose is quiet** (docs/design/dna-slots.md §6.2): nothing
+	# hit you, so no hit and no bearing -- the starving close, lit in the dose's
+	# hue.
+	if _food.died_of == FoodField.Cause.POISONED:
+		_die(false, 0.0, FoodField.Cause.POISONED)
+		return
 	_die(true, bearing)
 
 
@@ -2382,7 +2520,10 @@ func _in_the_water() -> bool:
 # natural place to put the phone down. docs/design/food-and-predators.md §6.
 # ---------------------------------------------------------------------------
 
-func _die(loud: bool, bearing: float) -> void:
+## [param cause] is a quiet death's: starving, or a dose. A loud one is the
+## field's, which has already said why in [member FoodField.died_of].
+func _die(loud: bool, bearing: float,
+		cause: int = FoodField.Cause.STARVED) -> void:
 	if not _in_the_water():
 		return
 	# **A death closes the menu** (shared-pond.md §1.7): reachable only with a
@@ -2411,9 +2552,14 @@ func _die(loud: bool, bearing: float) -> void:
 		_net.forget_body()
 	_death_loud = loud
 	_death_clock = 0.0
+	# **Three deaths, three pictures** (dna-slots-ux.md §6): a white slam at a
+	# bearing, a teal sink, and a death by a dose -- the sink, lit in its hue.
+	_death_tint = SignalBus.STRAIN_COLORS[Doses.Kind.HARM] \
+		if not loud and cause == FoodField.Cause.POISONED else Vector3.ZERO
 	_vision_cut = false
 	_tap_pending = false
 	_forget_eye()
+	_forget_doses()
 	# A death during the quickening -- the one phase the water is still moving
 	# in -- takes the division with it. The collapse owns the screen, and two
 	# daughters drawn under it would be the game contradicting itself twice.
@@ -2437,8 +2583,9 @@ func _die(loud: bool, bearing: float) -> void:
 	# own kill, and it has just said why; quiet is starving, which is this run's.
 	if _food.pond_open():
 		_food.leave_water(true)
-		_pond.died(_food.died_of if loud else FoodField.Cause.STARVED,
-			_food.died_by if loud else 0, _cell.position)
+		var poisoned := cause == FoodField.Cause.POISONED
+		_pond.died(_food.died_of if loud else cause,
+			_food.died_by if loud or poisoned else 0, _cell.position)
 	# **In the drop a cell that starved or was poisoned leaves its remains**
 	# where it died, as every body there does (ocean.md §7.4): the drop outlives
 	# the cell, and the next one may find them. Swallowed or chewed, it fed
@@ -2457,7 +2604,7 @@ func _die(loud: bool, bearing: float) -> void:
 	if loud:
 		# The sensation they already know, one last time.
 		_bus.hit(bearing, 1.0)
-	_bus.collapse(0.0, loud)
+	_bus.collapse(0.0, loud, _death_tint)
 
 
 func _step_death(delta: float) -> void:
@@ -2465,7 +2612,7 @@ func _step_death(delta: float) -> void:
 	_step_onboarding(delta)
 	match _life:
 		Life.DYING, Life.WAITING:
-			_bus.collapse(_death_clock, _death_loud)
+			_bus.collapse(_death_clock, _death_loud, _death_tint)
 			if not _vision_cut and _death_clock >= SignalBus.death_shut_at(_death_loud):
 				# The world goes with the light, not before it: in full vision
 				# the last thing on screen should be what killed you.
@@ -2664,6 +2811,7 @@ func _return(place: Array) -> void:
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
 	_forget_eye()
+	_forget_doses()
 	# A new cell is a born cell, and a born cell has no senses: the five-second
 	# clock starts again, and so does the line that announces it. **A run keeps
 	# nothing** -- and that has to include the leg-up and the lineage: generation
@@ -4369,29 +4517,37 @@ const SLOT_SEAT: Array[Vector2] = [
 	Vector2(-150.0, -138.0),  # 4 forward port
 	Vector2(150.0, 168.0),    # 5 rear starboard
 	Vector2(-150.0, 168.0),   # 6 rear port
+	# **7, the inside, on the body itself** (docs/design/dna-slots-ux.md §3.1):
+	# 6 px aft of its centre. The ring round the body is outside and the chip in
+	# it is inside, so the figure says the rule without a word. Not in the empty
+	# port-flank cell: that is where full vision's own ghost lands, and a chip
+	# there would read as a place on the skin.
+	Vector2(0.0, 6.0),
 ]
 ## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
 ## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
 ## **One table for both**, so the key that looks at a slot is the key that moves
-## a gene into it. Down from the nose crosses the body to the tail -- down the
-## body is down the screen -- and nothing wraps: a gene that left one edge of
-## the ring and came back in at the other would land on an arc nobody aimed at,
-## which is the strand's clamp argument in two dimensions.
+## a gene into it. **Down from the nose goes in**, and so do left from the flank
+## and up from the tail: the inside is the body's middle, and those three are the
+## slots beside it. Nothing wraps: a gene that left one edge of the ring and came
+## back in at the other would land on an arc nobody aimed at, which is the
+## strand's clamp argument in two dimensions. Every arrow has its way back.
 const SLOT_NEIGHBOUR: Array = [
-	[4, -1, 3, 2],    # 0 nose
-	[-1, 3, -1, 5],   # 1 starboard flank
-	[6, 0, 5, -1],    # 2 tail
+	[4, -1, 3, 7],    # 0 nose
+	[7, 3, -1, 5],    # 1 starboard flank
+	[6, 7, 5, -1],    # 2 tail
 	[0, -1, -1, 1],   # 3 forward starboard
 	[-1, -1, 0, 6],   # 4 forward port
 	[2, 1, -1, -1],   # 5 rear starboard
 	[-1, 4, 2, -1],   # 6 rear port
+	[-1, 0, 1, 2],    # 7 inside: up the nose, right the flank, down the tail
 ]
 ## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
 ## them for a focus neighbour.
 const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
-## Tab order: clockwise round the body from the nose, and then on to the
-## `numbers` switch and `light`.
-const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4]
+## Tab order: clockwise round the body from the nose, then in, and then on to
+## the `numbers` switch and `light`.
+const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
 
 ## **A tether per live slot**, from the chip's edge to the middle of its arc on
 ## the skin, drawn under the body so the body wins wherever the two cross. It is
@@ -4415,6 +4571,27 @@ const ARC_MARK_WIDTH := 3.0
 const ARC_MARK_LIFT := 5.0
 const ARC_MARK_ALPHA := 0.85
 const ARC_MARK_STEPS := 12
+## **The inside, lit** (dna-slots-ux.md §3.1): read, hovered, armed or a drop
+## target, the inside slot lights the whole inside -- a ring along the ovoid at
+## this share of the radius, in the hue of what is or would be there. Every
+## outside slot lights its arc; the inside has none.
+const INSIDE_MARK_AT := 0.88
+const INSIDE_MARK_STEPS := 64
+const INSIDE_MARK_WIDTH := 2.0
+const INSIDE_MARK_ALPHA := 0.55
+## **The inside chip's window**: an ellipse of the base colour under it, so its
+## weave and its word read over the nucleus and a stain. 5.1:1 against the
+## word's ground with it, 3.7:1 without. An ellipse echoes the body round it and
+## has no edge to read as a button.
+const INSIDE_BACK := Vector2(50.0, 29.0)
+const INSIDE_BACK_STEPS := 48
+const INSIDE_BACK_TINT := Color(0.023, 0.055, 0.05, 0.62)
+## **A refusal, drawn**: the slot that would refuse keeps no lens and its weave
+## falls to this. The line says why.
+const REFUSED_INK := 0.45
+## **A tap that adds a copy elsewhere** keeps the tapped chip as it is, its lens
+## only a trace of the selection: the copy lands on the target, which is lit.
+const RAISE_TRACE := 0.35
 ## **Where the body wears a different organ from the gene its slot now carries,
 ## the body names it**: that organ's own word, in its own hue, on the tether
 ## this far out from the skin. The word is needed and a render proved it -- a
@@ -4812,6 +4989,93 @@ const ACT_KEEP := "let go to leave %s where it is"
 ## ROOM: 560 px at 14 px with word
 const ACT_FORK := "tap again to choose how %s grows"
 
+# --- Places and forms on this screen (docs/design/dna-slots-ux.md §1, §3) ------
+# **Nothing on this screen refuses silently**: a move that would make a form you
+# carry, a copy to a form at three, and a gene that faces out put inside each dim
+# the slot and say why while the finger is down. Every case is asked of the
+# genome -- `placing()` for a gene in hand, `move_refusal()` for one in the air --
+# so the line, the chip and the guard never disagree.
+
+## **A toxin not yet placed is neither form**: the tray, the hand and a drag call
+## it this until it lands.
+##
+## TRANSLATORS: The word for a toxin gene that has been eaten and is waiting to be
+## placed, on its chip in the tray and on a finger dragging it. Placed outside the
+## body it becomes `venom`, inside it becomes `poison`; until then it is neither.
+## One short lowercase word, like the other gene words.
+## ROOM: 47 px at 13 px
+const TOXIN_WORD := "toxin"
+## TRANSLATORS: The gene line for a toxin that is waiting, before a slot is
+## chosen: it hurts over time, and becomes venom or poison depending on where it
+## is placed. After the gene's scientific name and a middle dot. No longer than
+## the English.
+## ROOM: 440 px at 15 px
+const EXPLAIN_TOXIN := "a toxin that goes on hurting, as venom or as poison"
+## TRANSLATORS: The line for the empty slot inside the body (the one slot in the
+## middle of the body, not round it): nothing is there yet, and a toxin placed
+## there becomes poison.
+## ROOM: 520 px at 15 px
+const EXPLAIN_INSIDE := "nothing inside yet · a toxin here becomes poison"
+## TRANSLATORS: Under that line, for the empty inside slot: the slot is inside the
+## cell's body, and a toxin is the only gene that can go there.
+## ROOM: 560 px at 14 px
+const HINT_INSIDE := "inside your body · only a toxin goes here"
+## TRANSLATORS: While a toxin is waiting and no slot is chosen: tapping a slot
+## round the body (outside) makes it venom, the slot in the body (inside) makes it
+## poison.
+## ROOM: 560 px at 14 px
+const ACT_ARM_FORMS := "tap a slot · venom outside, poison inside"
+## **A gene that faces out says what it does, not what the slot refuses**:
+## `swim works only outside` is true, short, and teaches the rule from the other
+## side.
+##
+## TRANSLATORS: When the player tries to put a gene other than a toxin into the
+## slot inside the body: only a toxin works there. %s is the gene's short word,
+## such as `swim`.
+## ROOM: 560 px at 14 px with word
+const ACT_FACES_OUT := "%s works only outside"
+## TRANSLATORS: A slot is chosen for a waiting toxin; a second tap places it, as
+## the form it takes in that slot. %s is `venom` or `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_COMMIT_FORM := "tap again to place %s here"
+## TRANSLATORS: A slot is chosen for a waiting toxin, but the toxin would become
+## a form the cell already carries, so a second tap adds one copy of it where it
+## already is. %s is `venom` or `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_RAISE := "tap again to add a copy to %s"
+## TRANSLATORS: As above, but that form already has the most copies a gene can
+## have, three, so placing it there would do nothing. %s is `venom` or `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_RAISE_FULL := "%s has three copies already"
+## TRANSLATORS: While dragging a waiting toxin over a slot where it would add a
+## copy to a form the cell already carries: letting go chooses the slot, and a
+## second tap adds the copy. %s is `venom` or `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_DROP_RAISE := "let go, then tap again to add a copy to %s"
+## TRANSLATORS: While dragging a gene to a slot where it would turn into a form
+## the cell already carries (venom outside, poison inside), which is not allowed.
+## %s is `venom` or `poison`.
+## ROOM: 560 px at 14 px with word
+const ACT_REFUSE := "here it would become %s, which you already carry"
+## TRANSLATORS: While dragging a toxin into a slot of the other place: letting go
+## moves it there, and it changes form. The first %s is its word now, the second
+## the word it becomes, such as "let go to move venom here · it becomes poison".
+## ROOM: 560 px at 14 px with word, word
+const ACT_LAND_FORM := "let go to move %s here · it becomes %s"
+## TRANSLATORS: While dragging a gene onto another, where the swap moves one of
+## them between outside and inside and changes its form. The first two %s are the
+## two genes' words; the last two say which one changes and what it becomes.
+## ROOM: 560 px at 14 px with word, word, word, word
+const ACT_SWAP_FORM := "let go to swap %s and %s · %s becomes %s"
+## TRANSLATORS: While dragging venom onto poison (or the reverse): the two swap
+## places and change forms, so in effect they trade copies. The two %s are the two
+## words.
+## ROOM: 560 px at 14 px with word, word
+const ACT_SWAP_COPIES := "let go to swap %s and %s · they trade copies"
+## **A refused `Shift`+arrow says why**, for this long, and moves nothing: the
+## focus stays where it was.
+const REFUSAL_MS := 2000
+
 ## The second, weaker channel behind the rungs: a gene the body does not wear
 ## draws its word and its organ fainter. Honest about which one does the work.
 const ORGAN_UNEXPRESSED := 0.52
@@ -4833,8 +5097,9 @@ const WORDS := {
 	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
 	&"palp": "touch",
 	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
-	&"veneneux": "venom", &"plastid": "sun", &"vacuole": "store",
-	&"crista": "burn", &"chemocyte": "smell", &"ampulla": "ping",
+	&"veneneux": "poison", &"toxicyst": "venom", &"plastid": "sun",
+	&"vacuole": "store", &"crista": "burn", &"chemocyte": "smell",
+	&"ampulla": "ping",
 }
 
 ## **One line per gene, and it says what the gene does to the player** -- not
@@ -4883,10 +5148,31 @@ const EXPLAINS := {
 	&"myoneme": "tap for a burst of speed, paid for in hunger",
 	&"trichocyst": "a dart at whatever closes in on that side",
 	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
-	&"veneneux": "whatever bites you pays, and whatever swallows you dies",
+	&"veneneux": "whatever bites or swallows you takes your poison",
+	&"toxicyst": "your bite leaves venom, which goes on hurting",
 	&"plastid": "makes a little of its own food, so you starve slower",
 	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
 	&"crista": "burns cleaner, so everything you carry costs less",
+}
+## **Where venom works is its line** (docs/design/dna-slots.md §3.2): at the
+## front it rides on your bite, and [constant EXPLAINS] says so; on a side or
+## the stern it stings what bites you there, and these say so -- `that side`
+## as the beam and the dart already say it, and `from behind` for the stern,
+## which a player least thinks of as a side.
+##
+## TRANSLATORS: The line of the venom gene (`toxicyst`, shown as `venom`) when it
+## sits on a side of the body: whatever bites the cell on that side takes venom
+## from it. "That side" is the side of the body where the gene's slot is. Same
+## limit as the gene lines above: no longer than the English.
+## ROOM: 440 px at 15 px
+const EXPLAINS_SIDE := {
+	&"toxicyst": "whatever bites you on that side takes venom",
+}
+## TRANSLATORS: The same line when the venom sits at the back of the body, where
+## the tail is: whatever bites the cell from behind takes venom from it.
+## ROOM: 440 px at 15 px
+const EXPLAINS_STERN := {
+	&"toxicyst": "whatever bites you from behind takes venom",
 }
 ## **Once a way is taken, the gene's line says which** (beam-levels.md §8.3):
 ## gene, then path, then what the organ now does -- the pause screen's receipt
@@ -4938,6 +5224,12 @@ const FOCUS_WIDTH := 2.0
 ## be redrawn from the same answer rather than deriving it a second time.
 var _explain_gene: StringName = &""
 var _explain_tier := 0
+## **Where that gene works**, the slot venom's sentence and numbers are read at
+## (dna-slots-ux.md §3.6), or -1.
+var _explain_at := -1
+## **A refused `Shift`+arrow's line**, and the wall-clock msec it holds until.
+var _refusal_text := ""
+var _refusal_until := 0
 ## The organ drawn beside the explanation, in canvas px of its own box.
 const EXPLAIN_ORGAN_SIZE := Vector2(34.0, 26.0)
 const EXPLAIN_ORGAN_SCALE := 0.60
@@ -5008,15 +5300,17 @@ func _build_genome_strip() -> void:
 	# **The layout, not the dictionary.** Slot index is the arc a gene is worn
 	# on, and the layout is the only thing that knows about holes -- a genome
 	# with the beam in slot 6 and nothing in slots 3 to 5 is a genome the player
-	# built on purpose.
-	_slot_genes.assign(_genome.layout())
+	# built on purpose. **And the inside after it**, at its own index: the eight
+	# chips are the DNA (dna-slots-ux.md §3.1).
+	_slot_genes.assign(_screen_layout())
 
 	# maxi, not slots(), so a genome can never be longer than the figure that
 	# claims to show it. **A newborn is over capacity and that is intended**: she
 	# carries up to seven genes on a body whose slots() is 3, so she may replace
-	# but not add until she grows -- and every slot her DNA has is live.
-	_slot_count = mini(maxi(_genome.slots(), _slot_genes.size()),
-		SLOT_SEAT.size())
+	# but not add until she grows -- and every slot her DNA has is live. The
+	# outside's count: the inside is every cell's from birth, and always live.
+	_slot_count = mini(maxi(_genome.slots(), _genome.layout().size()),
+		GenomeNode.INSIDE)
 	_slot_chips.clear()
 	_slot_chips.resize(SLOT_SEAT.size())
 	for slot in SLOT_SEAT.size():
@@ -5030,7 +5324,8 @@ func _build_genome_strip() -> void:
 		# `moving-a-gene.md` §2.4 -- and the body drawn in the middle now says
 		# where every organ is, with a word wherever that disagrees.
 		var chip := _make_slot(gene, int(dna.get(gene, 0)),
-			int(body.get(gene, 0)), slot, slot < _slot_count)
+			int(body.get(gene, 0)), slot, slot < _slot_count
+			or GenomeNode.is_inside(slot))
 		_figure_slots.add_child(chip)
 		_slot_chips[slot] = chip
 	_wire_focus()
@@ -5105,10 +5400,28 @@ func _wire_focus() -> void:
 
 
 ## True when [param slot] is one of this figure's live slots: earned, or
-## inherited. The keys' one test, and a drop's.
+## inherited -- and the inside, which every cell has from birth. The keys' one
+## test, and a drop's.
 func _slot_live(slot: int) -> bool:
-	return slot >= 0 and slot < _slot_count and slot < _slot_chips.size() \
-		and _slot_chips[slot] != null
+	if slot < 0 or slot >= _slot_chips.size() or _slot_chips[slot] == null:
+		return false
+	return slot < _slot_count or GenomeNode.is_inside(slot)
+
+
+## **What the figure's chips stand for** (dna-slots-ux.md §3.1): the DNA's
+## outside layout padded to its seven, and the inside after it, at
+## [constant GenomeNode.INSIDE]. **The genome changed when these eight changed**,
+## not the seven-long layout: a copy landing inside moves nothing outside, and a
+## check of the layout alone would call it no change at all.
+func _screen_layout() -> Array[StringName]:
+	var out: Array[StringName] = []
+	out.assign(_genome.layout())
+	while out.size() < GenomeNode.INSIDE:
+		out.append(&"")
+	while out.size() > GenomeNode.INSIDE:
+		out.pop_back()
+	out.append_array(_genome.inside_layout())
+	return out
 
 
 ## Which slot the keyboard is on, or [constant SLOT_NONE] for "not on a slot".
@@ -5195,7 +5508,15 @@ func _update_hint() -> void:
 	# travelling gene and priced the hole.
 	var gene := _reading()
 	if gene == &"":
-		_set_hint(tr(HINT_EMPTY))
+		_set_hint(tr(HINT_INSIDE) if GenomeNode.is_inside(slot) else tr(HINT_EMPTY))
+		return
+	# **A tap that adds a copy elsewhere loses nothing here**: the line prices
+	# the copy where it lands (dna-slots-ux.md §3.3).
+	var target := _raise_target(slot) if slot == _armed else -1
+	if target >= 0:
+		var form := _gene_at(target)
+		_set_hint(_odds(mini(_genome.dna_tier(form) + _genome.waiting_copies(_hand()),
+			GenomeNode.TIER_MAX)), form)
 		return
 	if slot >= 0 and slot == _armed and _dragging == SLOT_NONE \
 			and _hand() != &"" and _gene_at(slot) != &"":
@@ -5263,6 +5584,11 @@ func _set_hint(text: String, gene: StringName = &"") -> void:
 ## are wanted at once, and the moment one would have to be chosen over the other
 ## is the moment the player is about to change their daughters.
 func _update_act() -> void:
+	# A refused `Shift`+arrow says why, for two seconds, over whatever else.
+	if _refusal_text != "" and Time.get_ticks_msec() < _refusal_until:
+		_genome_act.text = _refusal_text
+		return
+	_refusal_text = ""
 	# The fork's cards: pick a way, then take it (beam-levels.md §8.3).
 	if _fork_open():
 		_genome_act.text = tr(ACT_CHOOSE_WAY) % _path_title(_way_path(_way_armed)) \
@@ -5278,13 +5604,23 @@ func _update_act() -> void:
 		var under := _gene_at(_hovered) if _hovered >= 0 else &""
 		if _dragging == SLOT_SAMPLE:
 			# Out of the tray: a drop on an empty slot places it, a drop on a
-			# gene arms that slot for the second tap.
+			# gene arms that slot for the second tap. **A toxin says the form
+			# it lands as**, or that the drop arms a copy to a form you carry.
 			if _hovered < 0:
-				_genome_act.text = tr(ACT_CARRY) % _word(flying)
-			elif under == &"":
-				_genome_act.text = tr(ACT_DROP) % _word(flying)
-			else:
-				_genome_act.text = tr(ACT_DROP_OVER) % [_word(flying), _word(under)]
+				_genome_act.text = tr(ACT_CARRY) % _carried_word(flying)
+				return
+			var what := _genome.placing(flying, _hovered)
+			var lands := GenomeNode.form_at(flying, _hovered)
+			match what[0]:
+				GenomeNode.PLACE_FACES_OUT:
+					_genome_act.text = tr(ACT_FACES_OUT) % _word(flying)
+				GenomeNode.PLACE_FULL:
+					_genome_act.text = tr(ACT_RAISE_FULL) % _word(lands)
+				GenomeNode.PLACE_RAISE:
+					_genome_act.text = tr(ACT_DROP_RAISE) % _word(lands)
+				_:
+					_genome_act.text = tr(ACT_DROP) % _word(lands) if under == &"" \
+						else tr(ACT_DROP_OVER) % [_word(lands), _word(under)]
 			return
 		if _hovered == _dragging:
 			# Back over the slot it came out of: a drop here is refused by
@@ -5292,8 +5628,7 @@ func _update_act() -> void:
 			# gesture's own cancel and now says so.
 			_genome_act.text = tr(ACT_KEEP) % _word(flying)
 		elif _hovered >= 0:
-			_genome_act.text = tr(ACT_SWAP) % [_word(flying), _word(under)] \
-				if under != &"" else tr(ACT_LAND) % _word(flying)
+			_genome_act.text = _move_line(_dragging, _hovered)
 		else:
 			_genome_act.text = tr(ACT_CARRY) % _word(flying)
 		return
@@ -5303,11 +5638,30 @@ func _update_act() -> void:
 		# selected and not placeable, so it must not promise a second tap that
 		# does nothing.
 		if _armed < 0:
-			_genome_act.text = tr(ACT_ARM)
+			_genome_act.text = tr(ACT_ARM_FORMS) if GenomeNode.has_forms(hand) \
+				else tr(ACT_ARM)
 			return
 		var under := _gene_at(_armed)
-		_genome_act.text = tr(ACT_COMMIT) if under == &"" \
-			else tr(ACT_COMMIT_OVER) % [_word(hand), _word(under)]
+		# **What the second tap would do, asked of the genome** (dna-slots.md
+		# §5.2): write the form of this place here, add a copy to that form
+		# where it already is, or nothing -- a form at three copies, or a gene
+		# that faces out, inside.
+		var what := _genome.placing(hand, _armed)
+		var form := GenomeNode.form_at(hand, _armed)
+		match what[0]:
+			GenomeNode.PLACE_FACES_OUT:
+				_genome_act.text = tr(ACT_FACES_OUT) % _word(hand)
+			GenomeNode.PLACE_FULL:
+				_genome_act.text = tr(ACT_RAISE_FULL) % _word(form)
+			GenomeNode.PLACE_RAISE:
+				_genome_act.text = tr(ACT_RAISE) % _word(form)
+			_:
+				if GenomeNode.has_forms(hand):
+					_genome_act.text = tr(ACT_COMMIT_FORM) % _word(form) if under == &"" \
+						else tr(ACT_COMMIT_OVER) % [_word(form), _word(under)]
+				else:
+					_genome_act.text = tr(ACT_COMMIT) if under == &"" \
+						else tr(ACT_COMMIT_OVER) % [_word(hand), _word(under)]
 		return
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
 	# **The selected slot's fork is open, so its second tap opens the cards.**
@@ -5323,6 +5677,51 @@ func _update_act() -> void:
 ## -- falls back to its own name rather than to nothing.
 func _word(gene: StringName) -> String:
 	return tr(WORDS[gene]) if WORDS.has(gene) else String(gene)
+
+
+## **The word for a gene not yet placed** (dna-slots-ux.md §3.5): a toxin is
+## `toxin` in the tray, in hand and on a finger, neither form until it lands.
+## Every other gene is its own word.
+func _carried_word(gene: StringName) -> String:
+	return tr(TOXIN_WORD) if GenomeNode.has_forms(gene) else _word(gene)
+
+
+## **What letting go of the gene from [param from] over [param to] would do, in
+## words** (dna-slots-ux.md §3.2, §3.4): a refusal says why while the finger is
+## down; a move between places says what the gene becomes; a swap that converts
+## says which; venom onto poison trades their copies.
+func _move_line(from: int, to: int) -> String:
+	var flying := _gene_at(from)
+	var under := _gene_at(to)
+	var lands := GenomeNode.form_at(flying, to)
+	var back := GenomeNode.form_at(under, from) if under != &"" else &""
+	match _genome.move_refusal(from, to):
+		GenomeNode.MOVE_FACES_OUT:
+			return tr(ACT_FACES_OUT) % _word(flying if lands == &"" else under)
+		GenomeNode.MOVE_COLLISION:
+			var carried := lands if lands != flying and lands != under \
+				and _genome.dna().has(lands) else back
+			return tr(ACT_REFUSE) % _word(carried)
+	if under == &"":
+		return tr(ACT_LAND) % _word(flying) if lands == flying \
+			else tr(ACT_LAND_FORM) % [_word(flying), _word(lands)]
+	if lands != flying and lands == under and back == flying:
+		return tr(ACT_SWAP_COPIES) % [_word(flying), _word(under)]
+	if lands != flying:
+		return tr(ACT_SWAP_FORM) % [_word(flying), _word(under), _word(flying),
+			_word(lands)]
+	if back != under:
+		return tr(ACT_SWAP_FORM) % [_word(flying), _word(under), _word(under),
+			_word(back)]
+	return tr(ACT_SWAP) % [_word(flying), _word(under)]
+
+
+## **A refused `Shift`+arrow says why** (dna-slots-ux.md §3.4), for
+## [constant REFUSAL_MS], and moves nothing: the focus stays where it was.
+func _say_refusal(from: int, to: int) -> void:
+	_refusal_text = _move_line(from, to)
+	_refusal_until = Time.get_ticks_msec() + REFUSAL_MS
+	_update_act()
 
 
 ## How many copies [param gene] is read at on this surface: the DNA's for a gene
@@ -5388,8 +5787,18 @@ func _hand_lost() -> bool:
 ## what a second tap would overwrite and the player should read it first.
 func _update_explain() -> void:
 	var slot := _hovered if _hovered != SLOT_NONE else _armed
-	var gene := _fork_gene if _fork_open() else _reading()
-	_explain_gene = gene
+	var gene := _fork_gene
+	var at := -1
+	var undecided := false
+	if not _fork_open():
+		var read := _read_form()
+		gene = read[0]
+		at = int(read[1])
+		undecided = bool(read[2])
+	# **A toxin in hand with no slot chosen is neither form**, so its line draws
+	# no organ and has no numbers (dna-slots-ux.md §2.5).
+	_explain_gene = &"" if undecided else gene
+	_explain_at = at
 	_explain_tier = _copies_of(gene) if gene != &"" else 0
 	# The numbers read the same gene, through the same resolution, so the two
 	# lines never disagree about their subject (gene-stats.md §6.3).
@@ -5401,12 +5810,19 @@ func _update_explain() -> void:
 	if gene == &"":
 		_explain_name.text = ""
 		# Two different silences: no slot chosen says nothing at all; a chosen
-		# empty slot still has a side of the body to explain.
-		_explain_says.text = "" if slot == SLOT_NONE else tr(EXPLAIN_EMPTY)
+		# empty slot still has a side of the body to explain -- or, inside, the
+		# one gene that goes there.
+		_explain_says.text = "" if slot == SLOT_NONE else (tr(EXPLAIN_INSIDE)
+			if GenomeNode.is_inside(slot) else tr(EXPLAIN_EMPTY))
 		return
-	_explain_name.text = String(gene)
+	# **One name for both of a gene's forms** (dna-slots.md §3.2): the toxin is
+	# `toxicyst` on this line whether it is venom or poison; the slot says which.
+	_explain_name.text = GenomeNode.name_of(gene)
 	_explain_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+	if undecided:
+		_explain_says.text = "· " + tr(EXPLAIN_TOXIN)
+		return
 	# **The cards keep this line's job** (beam-levels.md §8.3): the gene's own
 	# line until a way is hovered or armed, and then that way, by its name.
 	var way := _way_reading()
@@ -5418,20 +5834,95 @@ func _update_explain() -> void:
 	# A gene this build has no line for -- a later phase's, arriving over an
 	# older binary in a content pack -- shows its name and says nothing, rather
 	# than showing a bare separator.
-	var says := _explains(gene)
+	var says := _explains(gene, at)
 	_explain_says.text = "" if says.is_empty() else "· " + says
+
+
+## **What the lines under the figure read, places and forms included**
+## (dna-slots-ux.md §3.2, §3.3, §3.6): `[gene, at, undecided]`. [method
+## _reading]'s gene, made the form it would be -- a toxin in hand over an empty
+## slot is the form it would make there; a tap that would add a copy elsewhere
+## reads the form it adds to, where that is; a toxin carried over an empty slot
+## is the form it lands as. `at` is where that form works, for venom's sentence
+## and its numbers, -1 where nobody knows; `undecided` is a toxin in hand with no
+## slot chosen, which is neither form yet.
+func _read_form() -> Array:
+	var slot := _hovered if _hovered != SLOT_NONE else _armed
+	var gene := _reading()
+	if gene == &"":
+		return [gene, slot, false]
+	var hand := _hand()
+	var target := _raise_target(slot) if slot == _armed else -1
+	if target >= 0:
+		return [_gene_at(target), target, false]
+	if GenomeNode.has_forms(gene) and gene == hand and _dragging == SLOT_NONE \
+			and (slot < 0 or _gene_at(slot) == &""):
+		if slot < 0:
+			return [gene, -1, true]
+		var form := GenomeNode.form_at(gene, slot)
+		return [form if form != &"" else gene, slot, false]
+	if GenomeNode.has_forms(gene) and _dragging != SLOT_NONE and _hovered >= 0 \
+			and gene == _gene_at(_dragging) and _gene_at(_hovered) == &"":
+		var landed := GenomeNode.form_at(gene, _hovered)
+		return [landed if landed != &"" else gene, _hovered, false]
+	return [gene, _worn_at(gene, slot), false]
+
+
+## **Where a second tap on [param slot] would really put the gene in hand**: the
+## slot of the form it would add copies to -- elsewhere, or this one -- or -1 when
+## it would be written here, or nowhere (dna-slots.md §5.2). Never while a gene
+## is in the air.
+func _raise_target(slot: int) -> int:
+	var hand := _hand()
+	if hand == &"" or slot < 0 or _dragging != SLOT_NONE:
+		return -1
+	var what := _genome.placing(hand, slot)
+	if what[0] == GenomeNode.PLACE_RAISE or what[0] == GenomeNode.PLACE_FULL:
+		return int(what[1])
+	return -1
+
+
+## Whether the copy a second tap on [param slot] would add lands on a form at
+## three copies already: the tap would spend the sample for nothing, so the
+## screen refuses it and says so (dna-slots-ux.md §3.4).
+func _raise_full(slot: int) -> bool:
+	var hand := _hand()
+	return hand != &"" and slot >= 0 \
+		and _genome.placing(hand, slot)[0] == GenomeNode.PLACE_FULL
+
+
+## Whether [param gene] faces out and [param slot] is inside, where it cannot go.
+func _faces_out(gene: StringName, slot: int) -> bool:
+	return gene != &"" and slot >= 0 and GenomeNode.form_at(gene, slot) == &""
 
 
 ## **What [param gene] does, in the player's terms**: its line, or -- once its
 ## fork is behind it -- the line for the way it took (beam-levels.md §8.3). The
 ## pause screen and the choosing screen both read it, so a daughter reads what
 ## her mother chose.
-func _explains(gene: StringName) -> String:
+##
+## [param slot] is where it is read at, for a gene whose line depends on it:
+## venom on a side or the stern says what it does there.
+func _explains(gene: StringName, slot: int = -1) -> String:
 	var grown := _genome.progression(gene)
 	var taken: Dictionary = EXPLAINS_PATH.get(gene, {})
 	if grown != null and taken.has(grown.path):
 		return tr(EXPLAINS_PATH[gene][grown.path])
+	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot) \
+			and CellBody.VENOM_SIDES:
+		if slot == GenomeNode.STERN and EXPLAINS_STERN.has(gene):
+			return tr(EXPLAINS_STERN[gene])
+		if EXPLAINS_SIDE.has(gene):
+			return tr(EXPLAINS_SIDE[gene])
 	return tr(EXPLAINS[gene]) if EXPLAINS.has(gene) else ""
+
+
+## **Where [param gene] is read at**: [param slot] when it holds it, and
+## otherwise where the DNA has it, or -1.
+func _worn_at(gene: StringName, slot: int) -> int:
+	if slot >= 0 and _gene_at(slot) == gene:
+		return slot
+	return _slot_genes.find(gene)
 
 
 # --- A gene's numbers (docs/design/gene-stats.md) -----------------------------
@@ -5654,7 +6145,9 @@ func _draw_numbers(node: Control, choosing: bool) -> void:
 func _update_numbers() -> void:
 	_numbers_lines = [[], []]
 	_numbers_dim = false
-	var gene := _fork_gene if _fork_open() else _reading()
+	# The explanation's own resolution, places and forms included: the two
+	# lines never disagree about their subject (gene-stats.md §6.3).
+	var gene := _fork_gene if _fork_open() else _explain_gene
 	if _show_numbers and gene != &"":
 		var worn := _genome.tier(gene)
 		var copies := worn if worn > 0 else _copies_of(gene)
@@ -5673,7 +6166,8 @@ func _update_numbers() -> void:
 			path = _way_path(way)
 			_numbers_dim = false
 		_numbers_lines = GeneStats.lines(gene, copies, level, path,
-			GeneStats.context(_genome.tiers()))
+			GeneStats.context(_genome.tiers(), _cell.radius),
+			-1 if _fork_open() else _explain_at)
 		# **The next level**, at the end of the costs: only a worn gene earns,
 		# and the cards are about a level not yet had.
 		if grown != null and worn > 0 and not _fork_open():
@@ -5737,8 +6231,16 @@ func _gene_at(slot: int) -> StringName:
 ## tap is confirming, and that tap would write over a gene the player never saw
 ## there. Either way the tap does nothing, and [method _catch_up] shows what
 ## changed the first frame no finger is down.
+##
+## **And the genome has to be able to take it there** (dna-slots.md §5.2): a
+## gene that faces out is never written inside, and a copy to a form at three
+## copies would spend the sample for nothing. Both are said in words instead,
+## and the gene stays in hand.
 func _committable(slot: int) -> bool:
-	return slot >= 0 and _hand() != &"" and _strip_current()
+	if slot < 0 or _hand() == &"" or not _strip_current():
+		return false
+	var what: StringName = _genome.placing(_hand(), slot)[0]
+	return what != GenomeNode.PLACE_FACES_OUT and what != GenomeNode.PLACE_FULL
 
 
 ## True while the queue, the DNA's layout and the open forks are what the chips
@@ -5748,7 +6250,7 @@ func _committable(slot: int) -> bool:
 ## the tray has a chip to grow.
 func _strip_current() -> bool:
 	return _genome.waiting() == _strip_waiting \
-		and _genome.layout() == _slot_genes and _open_forks() == _strip_forks
+		and _screen_layout() == _slot_genes and _open_forks() == _strip_forks
 
 
 ## **The screen catches up with a genome that changed under it** -- only in a
@@ -5767,7 +6269,7 @@ func _catch_up() -> bool:
 		return true
 	# A selection with nothing in hand is a reading, not an arm, and stays.
 	if _armed >= 0 and _hand() != &"":
-		var layout := _genome.layout()
+		var layout := _screen_layout()
 		var there: StringName = layout[_armed] if _armed < layout.size() else &""
 		if there != _gene_at(_armed):
 			_armed = SLOT_SAMPLE
@@ -5910,7 +6412,7 @@ func _waiting_width(gene: StringName) -> float:
 	var font := _tray.get_theme_default_font()
 	if font == null:
 		return WAIT_SIZE.x
-	var word := font.get_string_size(_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
+	var word := font.get_string_size(_carried_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
 		-1.0, CHIP_WORD).x
 	return maxf(WAIT_SIZE.x, ceilf(WAIT_WORD_X + word + PIP_GAP + PIP_R * 2.0
 		+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + WAIT_AIR))
@@ -5948,6 +6450,10 @@ func _on_slot_unhover(slot: int) -> void:
 ## mirror is crumpled too, its creases still at `clock` 0. In single player the
 ## pause stops hunger and the figure holds; in a pond it burns on under the
 ## menu, and [method _step_slack] draws this again as it moves.
+##
+## **And as dosed as it is** (dna-slots-ux.md §3.1): the stain round the inside
+## chip's window and the pits in the rim, as hunger's crumple is -- a reminder
+## when paused, and live in a pond, where a dose goes on hurting under the menu.
 func _draw_figure_body() -> void:
 	if _genome == null:
 		return
@@ -5956,10 +6462,13 @@ func _draw_figure_body() -> void:
 	for slot in _slot_count:
 		_draw_tether(slot)
 	_slack_drawn = _slack
+	_dose_drawn = FoodField.felt_of(_cell.loads, _cell.radius) if _cell != null \
+		else Vector3.ZERO
 	Cilia.draw_cell(_figure_body, FIGURE_AT, 0.0, FIGURE_R, tiers,
 		CellBody.gape_of(int(tiers.get(&"cytostome", 0)), FIGURE_R), FIGURE_R,
 		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn, 0.0, 0.0, 0.0, 0.0,
-		false, Cilia.NO_EYE, Cilia.NO_TAIL, _slack)
+		false, Cilia.NO_EYE, Cilia.NO_TAIL, _slack,
+		Cilia.NO_DOSE if _dose_drawn == Vector3.ZERO else {"felt": _dose_drawn})
 	_draw_dissent(worn)
 	_draw_arc_mark()
 
@@ -6005,13 +6514,32 @@ func _draw_dissent(worn: Array[StringName]) -> void:
 ## over the slot armed for it, and otherwise the slot's own.
 func _draw_arc_mark() -> void:
 	var slot := _hovered if _hovered >= 0 else _armed
-	if slot < 0 or slot >= _slot_count:
+	if not _slot_live(slot):
 		return
 	var gene := _gene_at(slot)
 	if _dragging != SLOT_NONE and slot == _hovered and slot != _dragging:
-		gene = _gene_at(_dragging)
+		# **A refused drop target lights nothing**: lit in the travelling hue it
+		# said *yes* while the line under it said *no* (dna-slots-ux.md §10).
+		if _drop_refused(slot):
+			return
+		var flying := _gene_at(_dragging)
+		gene = GenomeNode.form_at(flying, slot) if GenomeNode.has_forms(flying) \
+			else flying
 	elif _dragging == SLOT_NONE and slot == _armed and _hand() != &"":
-		gene = _hand()
+		var hand := _hand()
+		# A gene that faces out, armed inside, lights nothing; a tap that adds a
+		# copy lights where the copy lands; otherwise the form it would be here.
+		if _faces_out(hand, slot):
+			return
+		var target := _raise_target(slot)
+		if target >= 0:
+			slot = target
+			gene = _gene_at(target)
+		else:
+			gene = GenomeNode.form_at(hand, slot) if GenomeNode.has_forms(hand) else hand
+	if GenomeNode.is_inside(slot):
+		_draw_inside_mark(gene)
+		return
 	var arc := Cilia.arc_for_slot(slot)
 	var points := PackedVector2Array()
 	for i in ARC_MARK_STEPS + 1:
@@ -6022,6 +6550,28 @@ func _draw_arc_mark() -> void:
 	_figure_body.draw_polyline(points,
 		Color(Cilia.hue(gene) if gene != &"" else PALE, ARC_MARK_ALPHA),
 		ARC_MARK_WIDTH, true)
+
+
+## **The inside, lit**: a ring along the ovoid just inside the rim, in the hue
+## of [param gene], or the column's pale for an empty inside.
+func _draw_inside_mark(gene: StringName) -> void:
+	var points := PackedVector2Array()
+	for i in INSIDE_MARK_STEPS + 1:
+		points.append(Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R * INSIDE_MARK_AT,
+			TAU * float(i) / float(INSIDE_MARK_STEPS)))
+	_figure_body.draw_polyline(points,
+		Color(Cilia.hue(gene) if gene != &"" else PALE, INSIDE_MARK_ALPHA),
+		INSIDE_MARK_WIDTH, true)
+
+
+## **Whether the gene in the air would be refused at [param slot]**: a move the
+## genome refuses -- a form you carry, a gene that faces out inside -- or a
+## waiting gene that faces out, or would add a copy to a form at three.
+func _drop_refused(slot: int) -> bool:
+	if _dragging == SLOT_SAMPLE:
+		var what: StringName = _genome.placing(_gene_at(_dragging), slot)[0]
+		return what == GenomeNode.PLACE_FACES_OUT or what == GenomeNode.PLACE_FULL
+	return _dragging >= 0 and slot != _dragging and not _genome.can_move(_dragging, slot)
 
 
 ## The middle of [param slot]'s arc on this figure's skin, [param lift] off it.
@@ -6062,6 +6612,20 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	var armed := selected and hand != &"" and _dragging == SLOT_NONE
 	if armed:
 		tone = Cilia.hue(hand)
+	# **The inside chip sits on the body, over a window of the base colour**, so
+	# its weave and word read over the nucleus and a stain (dna-slots-ux.md §3.1).
+	if GenomeNode.is_inside(slot):
+		_draw_inside_window(node)
+	# **Where a second tap would really go** (dna-slots.md §5.2): written here,
+	# a copy added where its form already is, or nothing at all.
+	var raise_to := _raise_target(_armed) if _dragging == SLOT_NONE \
+		and _armed >= 0 and hand != &"" else -1
+	var refused := false
+	if armed and _faces_out(hand, slot):
+		# A gene that faces out, armed inside: no lens, no preview, a dead weave.
+		refused = true
+		selected = false
+		armed = false
 
 	# **Both ends of a drag show what would arrive at them, and nothing moves
 	# until the finger lifts.** The lens is the only mark that changes and it is
@@ -6070,15 +6634,22 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	if _dragging != SLOT_NONE:
 		if slot == _hovered and slot != _dragging:
 			var flying := _gene_at(_dragging)
-			if flying != &"":
+			if _drop_refused(slot):
+				# Refused while the finger is down: no lens, a dead weave, and
+				# the line says why.
+				refused = true
+			elif flying != &"":
 				selected = true
-				tone = Cilia.hue(flying)
+				tone = Cilia.hue(GenomeNode.form_at(flying, slot)
+					if GenomeNode.has_forms(flying) else flying)
 		elif slot == _dragging and _hovered >= 0 and _hovered != slot:
 			# The hole the gene came out of, filled with the hue of whatever is
 			# coming back into it -- the displaced gene, or the column's own
-			# pale if the destination is empty.
+			# pale if the destination is empty. A refused move brings nothing.
 			var displaced := _gene_at(_hovered)
 			tone = Cilia.hue(displaced) if displaced != &"" else PALE
+			if _drop_refused(_hovered):
+				tone = PALE
 
 	var shown := gene
 	var copies := tier
@@ -6090,14 +6661,29 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		# until it lands, and drawing its rungs in both places would be the one
 		# lie a drag can tell.
 		shown = &""
-	elif armed and gene == &"":
+	elif armed and gene == &"" and raise_to < 0:
 		# What a second tap would write, drawn before it is written: a placed
 		# gene reaches the DNA and **not** this body, so the preview is carried
 		# rungs and ring pips. It is the one frame where the player can see that
-		# placing changes their daughters and not themselves.
-		shown = hand
+		# placing changes their daughters and not themselves. **A toxin is
+		# previewed as the form this place makes of it.**
+		shown = GenomeNode.form_at(hand, slot) if GenomeNode.has_forms(hand) else hand
 		copies = _copies_of(hand)
 		worn = 0
+		tone = Cilia.hue(shown)
+	if raise_to == slot and not _raise_full(_armed):
+		# **The copy lands here**, not where the finger is: lit as the target,
+		# its new copies drawn as carried rungs and ring pips (§3.3).
+		selected = true
+		tone = Cilia.hue(gene)
+		copies = mini(tier + _genome.waiting_copies(hand), GenomeNode.TIER_MAX)
+	elif raise_to == slot:
+		# A form at three copies already: the tap would add nothing (§3.4).
+		refused = true
+	var trace := armed and raise_to >= 0 and raise_to != slot
+	if trace:
+		# The tapped slot keeps what it has, and its lens is only a trace.
+		selected = false
 
 	node.draw_set_transform(Vector2(CHIP_X, 0.0))
 	# **The lens fills, and that is the whole of "selected".** The middle lobe
@@ -6105,7 +6691,10 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	if selected:
 		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
 			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS))
-	var bright := BACKBONE_LIT if selected else 1.0
+	elif trace:
+		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
+			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS * RAISE_TRACE))
+	var bright := BACKBONE_LIT if selected else (REFUSED_INK if refused else 1.0)
 	# **A fork waiting here parts the strands** (beam-levels.md §8.3): the first
 	# two lobes as ever, and then the fork where the third one was.
 	var forking := shown != &"" and _genome.can_choose(shown)
@@ -6130,6 +6719,19 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **The inside chip's window**: an ellipse of the base colour on the chip's
+## centre, drawn first, so the nucleus and a stain sit behind the chip and not
+## through its word.
+func _draw_inside_window(node: Control) -> void:
+	var centre := SLOT_SIZE * 0.5
+	var points := PackedVector2Array()
+	points.resize(INSIDE_BACK_STEPS)
+	for i in INSIDE_BACK_STEPS:
+		var a := TAU * float(i) / float(INSIDE_BACK_STEPS)
+		points[i] = centre + Vector2(cos(a) * INSIDE_BACK.x, sin(a) * INSIDE_BACK.y)
+	node.draw_colored_polygon(points, INSIDE_BACK_TINT)
 
 
 ## A slot the body has not earned: its helix, faint, and nothing else.
@@ -6264,7 +6866,8 @@ func _draw_waiting(node: Control, gene: StringName) -> void:
 		(1.6 if in_hand else 1.0) * (0.40 + 0.60 * wilt))
 	var font := node.get_theme_default_font()
 	if font != null:
-		var word := _word(gene)
+		# A toxin waits as `toxin`: neither form until it lands (§3.5).
+		var word := _carried_word(gene)
 		node.draw_string(font, Vector2(WAIT_WORD_X, mid + 5.0), word,
 			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
 			LABEL_TINT_LOUD if in_hand else LABEL_TINT)
@@ -6307,7 +6910,8 @@ func _draw_base_pair(node: CanvasItem, bar: Vector2, tone: Color, ink: float,
 func _draw_sample(node: Control, gene: StringName, centre: Vector2) -> void:
 	var tone := Cilia.hue(gene)
 	var font := node.get_theme_default_font()
-	var word := _word(gene)
+	# Out of the tray a toxin is `toxin`; out of a slot it is the form it is.
+	var word := _carried_word(gene) if _dragging == SLOT_SAMPLE else _word(gene)
 	var width := 0.0
 	if font != null:
 		width = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
@@ -6399,6 +7003,12 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 		# and the keyboard walks off the slot the gene just moved to.
 		tile.accept_event()
 		var to := int(SLOT_NEIGHBOUR[index][way])
+		# **A chord the genome refuses says why** (dna-slots-ux.md §3.4), for
+		# two seconds, and moves nothing: the focus stays where it was.
+		if _slot_live(to) and _gene_at(index) != &"" \
+				and not _genome.can_move(index, to):
+			_say_refusal(index, to)
+			return
 		if _slot_live(to):
 			_move_slot(index, to)
 		return
@@ -6580,10 +7190,18 @@ func _slot_can_drop(_at: Vector2, data: Variant, slot: int) -> bool:
 		return false
 	var carried := data as Dictionary
 	if carried.has(&"place"):
-		return _genome.waiting_index(StringName(carried[&"place"])) >= 0
+		# **Refused where it could never be written** (dna-slots-ux.md §3.4): a
+		# gene that faces out, inside, or a copy to a form at three copies.
+		var gene := StringName(carried[&"place"])
+		var what: StringName = _genome.placing(gene, slot)[0]
+		return _genome.waiting_index(gene) >= 0 \
+			and what != GenomeNode.PLACE_FACES_OUT and what != GenomeNode.PLACE_FULL
 	if not carried.has(&"move_from"):
 		return false
-	return slot != int(carried[&"move_from"])
+	# **And a move the genome refuses** -- one that would make a form you carry,
+	# or put a gene that faces out inside -- is no drop at all.
+	return slot != int(carried[&"move_from"]) \
+		and _genome.can_move(int(carried[&"move_from"]), slot)
 
 
 func _slot_drop(_at: Vector2, data: Variant, slot: int) -> void:
@@ -6604,9 +7222,13 @@ func _slot_drop(_at: Vector2, data: Variant, slot: int) -> void:
 ## second tap would confirm nothing (owner's call 6). Onto a gene the drop is
 ## the first tap and the slot arms, with the guard and the timeout running from
 ## now -- the eviction still needs its own second tap.
+##
+## **A toxin that would add a copy to a form you carry only arms** (dna-slots.md
+## §20.2): it would land elsewhere than the slot it was let go over, so it is a
+## first tap, and the second tap is the player's.
 func _drop_waiting(gene: StringName, slot: int) -> void:
 	_in_hand = gene
-	if _gene_at(slot) == &"":
+	if _gene_at(slot) == &"" and _raise_target(slot) < 0:
 		_commit_slot(slot)
 		return
 	_armed = slot
@@ -6807,6 +7429,9 @@ func _commit_slot(index: int) -> void:
 ## not a trap, it is a player reading a sentence, and four seconds is not long
 ## enough to read one twice.
 func _step_arming() -> void:
+	# A refused chord's two seconds are up: the line goes back to the gesture.
+	if _refusal_text != "" and Time.get_ticks_msec() >= _refusal_until:
+		_update_act()
 	# **Nothing lapses while a gesture is in flight.** A rebuild frees the chip
 	# a drag came out of and the one under the pointer -- and four seconds is an
 	# easy hold for a thumb that is choosing between seven destinations.
@@ -7882,12 +8507,21 @@ func _offer_allowed() -> bool:
 ## The DNA's free slots, in slot order. The layout is exactly the figure's live
 ## slots -- earned, or inherited by a newborn -- so a hole in it is a slot the
 ## pause screen would take a gene into, and nothing outside it is.
+##
+## **Outside only, and never a slot whose form is carried** (docs/design/
+## dna-slots.md §3.4): placed there, a toxin would add a copy to the venom it
+## already makes somewhere else and leave this slot empty, which is not what
+## the bud at this slot promises. The inside is the pause screen's to offer.
 func _offer_free() -> Array[int]:
 	var out: Array[int] = []
 	var layout := _genome.layout()
-	for slot in mini(layout.size(), SLOT_SEAT.size()):
-		if layout[slot] == &"":
-			out.append(slot)
+	var gene := _genome.held_sample
+	for slot in mini(mini(layout.size(), SLOT_SEAT.size()), GenomeNode.INSIDE):
+		if layout[slot] != &"":
+			continue
+		if GenomeNode.has_forms(gene) and layout.has(GenomeNode.form_at(gene, slot)):
+			continue
+		out.append(slot)
 	return out
 
 
@@ -8598,7 +9232,8 @@ func _choose_say() -> void:
 			works_at = inherited.effective_level() if inherited != null else 1
 			took = inherited.path if inherited != null else &""
 		_choose_lines = GeneStats.lines(gene, maxi(int(found[1]), 1), works_at, took,
-			GeneStats.context(_daughters[side]["body"]))
+			GeneStats.context(_daughters[side]["body"],
+				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)), slot)
 	_choose_numbers.queue_redraw()
 	if gene == &"":
 		_choose_name.text = ""
@@ -8607,13 +9242,13 @@ func _choose_say() -> void:
 		_choose_line.text = "" if slot < 0 else tr(EXPLAIN_EMPTY)
 		_choose_hint.text = "" if slot < 0 else tr(HINT_EMPTY)
 		return
-	_choose_name.text = String(gene)
+	_choose_name.text = GenomeNode.name_of(gene)
 	_choose_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
 	# **The way her mother took, if she took one** (beam-levels.md §8.6): a
 	# daughter inherits the path with the level, and an open fork reads as no
-	# path yet.
-	var says := _explains(gene)
+	# path yet. A venom says where it works at her locus.
+	var says := _explains(gene, slot)
 	_choose_line.text = "" if says.is_empty() else "· " + says
 	var register := tr(CHOOSE_WORN) if _choose_worn else tr(CHOOSE_CARRIED)
 	var odds := tr(HINT_CERTAIN) if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
@@ -9275,7 +9910,9 @@ func _on_friend_died(cause: int, _by: int, at: Vector2, eaten_by_me: bool) -> vo
 	var how: int = VisionLayer.Gone.EATEN
 	if eaten_by_me:
 		how = VisionLayer.Gone.EATEN_BY_YOU
-	elif cause == FoodField.Cause.STARVED:
+	elif cause == FoodField.Cause.STARVED or cause == FoodField.Cause.POISONED:
+		# **A dose is a death nothing ate** (docs/design/dna-slots-ux.md §6):
+		# they stop where they were, as a starving friend does.
 		how = VisionLayer.Gone.STARVED
 	_vision.friend_gone(how, at)
 	_pond_say("dead", &"ate" if eaten_by_me else &"died")

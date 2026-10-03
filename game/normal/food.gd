@@ -58,6 +58,10 @@ const RayFan := preload("res://game/mechanics/ray_fan.gd")
 ## The file a drop is kept in, for the layout of pack 3's entries in it
 ## ([method drop_state]). It preloads nothing of this file's, so no cycle.
 const DropSave := preload("res://game/normal/drop_save.gd")
+## **Doses** (docs/design/dna-slots.md §6): how a load wears and what each kind
+## is. This file decides where a dose is delivered and when a body dies of one;
+## the arithmetic is doses.gd's, and the numbers cell.gd's.
+const Doses := preload("res://game/mechanics/doses.gd")
 
 ## A meal, in the cell's own terms.
 ##
@@ -90,9 +94,23 @@ signal killed(bearing: float)
 ## *contact, there*. A wound is learnt by being bitten at a bearing enough
 ## times, which is the same way everything else in this game is learnt.
 signal bitten(bearing: float, strength: float)
-## `veneneux`: it swallowed you and died of it. You are alive, at a bearing and
-## a price the run pays out of hunger.
-signal stung(bearing: float)
+## **A dose went into this cell** (docs/design/dna-slots.md §7): [param stacks] of
+## doses.gd's [param kind], felt from [param bearing] -- a mouth's venom where it
+## bit you, a sting or a poison where your own bite landed -- or swallowed, when
+## [param meal] is true: the poison of what you just ate. Said **before** the
+## bite's `bitten` or the meal's `eaten`, in the same frame, so the run can tint
+## the sensation the dose arrived with. Nothing in the water rides on it.
+##
+## (`veneneux`'s `stung` -- swallowed, and spat out alive -- is gone with the
+## spitting: a poisonous body is eaten, as anyone is, and its swallower takes the
+## dose. `Contact.STUNG` keeps its number and is never sent.)
+signal dosed(bearing: float, kind: int, stacks: float, meal: bool)
+## **This cell's toxin went into something** (§10.1, item 12): [param how] is
+## [constant FIRED_VENOM] -- its venom rode in on its bite -- [constant
+## FIRED_STING], a venom on a side stung a mouth biting there, or [constant
+## FIRED_POISON], its poison was taken by a biter or a swallower. For the view's
+## flare and nothing else.
+signal toxin_fired(how: int)
 ## `trichocyst`: the dart went off and something hunting you broke away.
 signal darted(bearing: float)
 ## **The `ampulla` just fired.** Not a sensation and not for the membrane: a
@@ -189,8 +207,9 @@ const BOOK_MAX := 4 * POND_SLOTS
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 enum Contact { WAKED = 1, BITTEN = 2, STUNG = 3, DARTED = 4, ATE = 5, KILLED = 6,
 	GRAZED = 7 }
-## How a person died, on [signal person_died]. `POISONED` is the venom in
-## something it swallowed or bit, which §2's three-cause DIED did not name.
+## How a person died, on [signal person_died]. `POISONED` is a dose: the harm a
+## venom or a poison left in it made its wound whole (docs/design/dna-slots.md
+## §6.2), which §2's three-cause DIED did not name.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 enum Cause { SWALLOWED = 1, CHEWED = 2, STARVED = 3, POISONED = 4 }
 ## Whose mouth it was.
@@ -235,6 +254,40 @@ const PERSON_ID := 0
 const FLAG_STALKING := 1
 const FLAG_PERSON := 2
 const FLAG_IN_WATER := 4
+## **The body carries a load past `DOSE_GONE`** (docs/design/dna-slots.md §14.2):
+## harm, paralysis -- or, for the third, is asleep. A guest draws the doses of
+## the water and of the other player from these: a mirror is never told a body's
+## stacks, only that it carries some. Protocol 7; phase 1 writes harm's.
+const FLAG_HARMED := 8
+const FLAG_PARALYSED := 16
+const FLAG_ASLEEP := 32
+## How many stacks a mirrored body flagged with a load is drawn carrying, felt:
+## one stack's worth on a born cell -- enough to be seen, and nothing a guest
+## could read a number off.
+const MIRROR_SHOWN := 1.0
+
+# --- What a body's toxins deliver (docs/design/dna-slots.md §7) -----------------
+## A body's toxins, as [method toxins_of] reads them off what it wears: records
+## of [constant TOX_STRIDE] floats, `[how, kind, stacks, bearing]` -- how it is
+## delivered, doses.gd's kind, how many stacks, and for a sting the
+## body-relative bearing it guards. Read once whenever a body changes, never at
+## a bite.
+##
+## [constant HOW_BITE]: venom at the front, into whatever its bite lands on.
+## [constant HOW_STING]: venom on a side or the stern, into a mouth biting
+## within `VENOM_ARC_DEG / 2` of its bearing. [constant HOW_POISON]: poison,
+## into whatever bites it, anywhere. [constant HOW_SWALLOW]: poison, into
+## whatever swallows it.
+const HOW_BITE := 0
+const HOW_STING := 1
+const HOW_POISON := 2
+const HOW_SWALLOW := 3
+const TOX_STRIDE := 4
+## [signal toxin_fired]'s three: this cell's venom on its bite, its sting, its
+## poison taken.
+const FIRED_VENOM := 0
+const FIRED_STING := 1
+const FIRED_POISON := 2
 
 # --- Seeding (§1.3) ---------------------------------------------------------
 # A floor that never moves, a middle that tracks you, and a ceiling you can
@@ -939,8 +992,21 @@ class Body:
 	var serial := 0
 	var meals := 0
 	## How far through this body something has chewed, 0..1. Mends on its own at
-	## [constant CellBody.MEND_SECONDS], exactly as the player's does.
+	## [constant CellBody.MEND_SECONDS], exactly as the player's does -- except
+	## while it carries harm (docs/design/dna-slots.md §6.2).
 	var wound := 0.0
+	## **Its loads**, stacks of each of doses.gd's kinds -- the venom and poison
+	## it took, wearing off -- and the body whose stacks it took last, a slot or
+	## [constant TARGET_PLAYER] for the cell on this device: who killed it, if a
+	## dose does (§6.2). Every body, a person's included.
+	var loads := Doses.none()
+	var dosed_by := -1
+	## **What its own toxins deliver** ([method FoodField.toxins_of]), and what it
+	## was read off: the genome and the worn order, hashed. Read again only when
+	## that changes -- whichever door changed it, a meal, a seed or a tool -- and
+	## never at a bite that finds it unchanged. Empty for a body with no toxin.
+	var toxins := PackedFloat64Array()
+	var toxins_key := 0
 	## Seconds until this mouth can bite again, against [constant
 	## CellBody.BITE_GAP].
 	var bite := 0.0
@@ -1030,9 +1096,7 @@ class Body:
 	var see_big := 0.0
 	## `pellicle`'s multiple on its radius, as a mouth measures it (row 5).
 	var armour := 1.0
-	## `veneneux` tier; and where its `trichocyst` is worn, as a body-relative
-	## bearing.
-	var tox := 0
+	## Where its `trichocyst` is worn, as a body-relative bearing.
 	var dart_bearing := 0.0
 	## The tank's terms: `vacuole`'s store, `plastid`'s light, all it takes in
 	## without eating (light, and what a body with no `cytostome` absorbs),
@@ -1157,9 +1221,6 @@ class Person:
 	var dart_cooldown := 0.0
 	var dart_bearing := 0.0
 	var dart_clock := 0.0
-	## `veneneux`, as the field's own `venom_cost` for this cell: negative is
-	## no venom.
-	var venom_cost := -1.0
 	## Its own [constant FIRST_DELAY], granted at every arrival.
 	var first_hunt := 0.0
 	## Out of the water is a player dividing: still an anchor, and nothing in
@@ -1443,8 +1504,23 @@ var dart_cooldown := 0.0
 ## a dart in a rear slot is the answer to being flanked and placement becomes a
 ## defensive decision. Meaningless while [member dart_range] is 0.
 var dart_bearing := 0.0
-## `veneneux`. Negative means the cell has no venom and a kill is a kill.
-var venom_cost := -1.0
+## **What this cell's toxins deliver** -- its venom, where it is worn, and its
+## poison -- as [method toxins_of] reads them off its worn body, written once a
+## frame by the run where the dart's arc is (docs/design/dna-slots.md §7.2).
+## Empty is a cell with no toxin.
+var toxins := PackedFloat64Array()
+## **Whether a venom on a side or the stern stings** (cell.gd's `VENOM_SIDES`),
+## as this water reads its bodies' toxins: the design's switch, held here so a
+## probe can turn it off on one field and see a side venom leave nothing
+## (dna-slots.md §20.3 check 7). This cell's own follow it through
+## [method toxins_of], which the run hands the same constant.
+var venom_sides := CellBody.VENOM_SIDES
+## **The body whose stacks this cell took last**: a slot, or -1. Who a death by
+## a dose is the death of ([member died_to], [member died_by]); with
+## [member _dosed_serial], the serial that slot held then, since a swallowed
+## poisonous body's slot goes to another while its dose still works.
+var _dosed_by := -1
+var _dosed_serial := 0
 var _dart_clock := 0.0
 ## The player's own mouth, reloading. Here and not on the cell for the same
 ## reason [member _dart_clock] is: the encounter lives in this file.
@@ -1492,7 +1568,7 @@ var anchored := true
 var died_of := 0
 var died_by := 0
 ## **In the drop, the body that killed this cell**: the slot of what swallowed it
-## or chewed it through, or of the venomous one it bit, written beside
+## or chewed it through, or of the one whose dose finished it, written beside
 ## [member died_of]; -1 from every arrival until then, and always in today's
 ## water, which never writes it. The replay's recorder reads it once, as it
 ## seals the ring, to say which body the killer was (ocean.md §11).
@@ -1595,6 +1671,8 @@ func _fresh_senses() -> void:
 	ping_listen = 0.0
 	_dart_clock = 0.0
 	_bite_clock = 0.0
+	_dosed_by = -1
+	_dosed_serial = 0
 
 
 func _process(delta: float) -> void:
@@ -1666,8 +1744,12 @@ func _step_body(index: int, delta: float) -> void:
 	if _pond and not b.seeded:
 		return
 	# Every body knits and every mouth reloads, in every state. Neither is
-	# behaviour: a cell does not decide to heal.
-	b.wound = CellBody.mended(b.wound, delta)
+	# behaviour: a cell does not decide to heal. **Its loads wear with its wound**
+	# (docs/design/dna-slots.md §6.2) -- here in today's water; the drop wears
+	# them in [method _step_one], with the time a body is owed -- and a body
+	# carrying harm does not mend. Made whole by it, it dies of poison.
+	if _drop == null and _dose_step(index, b, delta):
+		return
 	b.bite = maxf(b.bite - delta, 0.0)
 	# In the drop the dart and the dash reload too, as the player's do: every
 	# body defends and lunges with its own organs there (§5.7).
@@ -2140,9 +2222,9 @@ func _swim(b: Body, delta: float, speed: float) -> void:
 #      mouth on it, body too big       -> a bite, and bites accumulate
 #
 #    A body bitten to nothing comes apart and feeds whoever finished it. That
-#    makes `pellicle` a real defence (it divides the bite) and `veneneux` a real
-#    punishment (it charges the biter a share of what it just did), using the
-#    two genes that already meant exactly those things.
+#    makes `pellicle` a real defence (it divides the bite), and the toxin's
+#    doses ride on the same bite (docs/design/dna-slots.md §7): venom from the
+#    biter, poison and a side's sting from the bitten.
 #
 # **Nothing here is gated on state except the one asymmetry that was already
 # here**, and nothing here reaches dread. A bite asks no question with a yes/no
@@ -2202,6 +2284,15 @@ func _step_contacts() -> bool:
 ## when the pass began, exactly as it always has.
 func _contacts_with(p: Person) -> bool:
 	var pb: Body = null if p == null else _cells[p.slot]
+	# **A death by a dose, first** (docs/design/dna-slots.md §6.2): a wound the
+	# harm in it made whole, worn by `cell.gd` for this cell and by
+	# [method _step_person] for a person. Told here, at the top of the one pass
+	# both waters call for each player, and returned as a contact death is -- so
+	# nothing touches the field after it. A mirror never runs this: its cell's
+	# death is the host's, and arrives as a KILLED.
+	if (_cell.wound if p == null else pb.wound) >= 1.0:
+		_dose_death(p)
+		return true
 	var my_gape := _cell.gape() if p == null else _gape(pb)
 	# **The pre-check, and it skips only bodies the full test rejects** -- the
 	# water's own kind, below, asked of a player. Neither mouth can be on the
@@ -2299,16 +2390,11 @@ func _contacts_with(p: Person) -> bool:
 			else b.state == State.STALK and _hunts(b, p)
 		if its_mouth and swallows_player(committed, _drop != null and contact_swallow,
 				_armoured(p), _gape(b)):
-			# **`veneneux`. It got you and it dies of it.** The one thing in the
-			# game that undoes a death, and it is not free: the run pays for it
-			# in hunger, which is the channel every other cost is paid in. The
-			# body that swallowed you is reseeded, or retired in a pond -- it is
-			# gone, not fleeing. In the drop it died of poison, and leaves its
-			# remains.
-			if (venom_cost if p == null else p.venom_cost) >= 0.0:
-				_tell(p, Contact.STUNG, b.pos, 0.0, By.WATER, &"")
-				_consume(i, Cause.POISONED)
-				continue
+			# **Your poison goes into what swallows you** (dna-slots.md §7,
+			# owner's row 5): a big dose, before the death is told -- after it,
+			# nothing may touch the field. You are eaten, as anyone is: nobody is
+			# spat out any more, and what ate you may die of it seconds later.
+			_swallow_doses(i, _who(p), 0.0)
 			# **In the drop the cell that eats you is fed by it** (§5.6), before
 			# the death is told: after it, nothing may touch the field. The
 			# other player likewise, and then out of their slot.
@@ -2332,6 +2418,10 @@ func _contacts_with(p: Person) -> bool:
 		# In the drop a body's `pellicle` makes it bigger to this mouth too, as
 		# this cell's own always has to theirs (row 5).
 		if my_mouth and (b.radius if _drop == null else _swallow_r(b)) < my_gape:
+			# Its poison into you first, then the meal: the run hears the dose
+			# before it hears what it ate, so the flood can say what it was.
+			_swallow_doses(_who(p), i,
+				_cell.bearing_to(b.pos) if p == null else 0.0)
 			# Emit where it was before recycling it, so a listener never has to
 			# work out which one this was -- the mistake motes.gd documents.
 			# Nutrition is against the eater's own radius, whoever that is.
@@ -2344,7 +2434,7 @@ func _contacts_with(p: Person) -> bool:
 		var serial := b.serial
 		if its_mouth and _bitten_by(i, b, p):
 			return true
-		# Its own venom may have just taken that body out of the water, and
+		# A listener of the bite may have taken that body out of the water, and
 		# then this slot is a different cell somewhere else entirely. The
 		# player's mouth was measured against the one that has gone.
 		if my_mouth and b.serial == serial and _bite_from(i, b, p):
@@ -2429,15 +2519,15 @@ func _mouth_on(i: int, b: Body, j: int, other: Body, gape: float) -> bool:
 		return _mouth_on_drop(i, b, j, other, gape)
 	if other.radius >= gape:
 		# Too big to swallow, so it gets chewed instead. Same clock, same table
-		# and same two defending genes as the player's.
-		if _chew(b, other) >= 1.0:
+		# and same two defending genes as the player's -- and the same toxins,
+		# which go in as stacks and work over the next seconds, so neither
+		# body leaves the water at the bite.
+		if _chew(i, b, j, other) >= 1.0:
 			_devour(b, other)
 			_consume(j)
-		if b.wound >= 1.0:
-			# Its own venom finished the biter. Nothing feeds on that.
-			_consume(i)
-			return true
 		return false
+	# Its poison into the swallower, before it is gone (dna-slots.md §7.1).
+	_swallow_doses(i, j, 0.0)
 	_devour(b, other)
 	_consume(j)
 	# It has just eaten, so the run is over -- ended here, as a meal, rather
@@ -2484,7 +2574,8 @@ func _mouth_reaches(b: Body, gape: float, at: Vector2, body_radius: float) -> bo
 ## One cell's mouth closing on another it cannot swallow. Returns the target's
 ## wound afterwards, so the caller can see whether that was the last bite.
 ## Does nothing at all, and costs nothing, while the mouth is still reloading.
-func _chew(b: Body, other: Body) -> float:
+## [param i] and [param j] are the two slots, which a dose names its doser by.
+func _chew(i: int, b: Body, j: int, other: Body) -> float:
 	if b.bite > 0.0:
 		return other.wound
 	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
@@ -2496,8 +2587,10 @@ func _chew(b: Body, other: Body) -> float:
 	other.wound = clampf(other.wound + damage, 0.0, 1.0)
 	# Felt as a `hit` on its membrane, from the mouth (behaviour.md §3.2).
 	_feel_hit(other, b.pos, _felt(damage))
-	b.wound = clampf(b.wound + CellBody.venom_back(
-		Genome.tier_of(other.genome, &"veneneux"), damage), 0.0, 1.0)
+	# The biter's venom into the bitten, and the bitten's poison -- and a sting,
+	# if the bite landed on the side it guards -- into the biter
+	# (dna-slots.md §7.2).
+	_bite_doses(i, j, _bite_bearing(other.heading, other.pos, b.pos), 0.0)
 	return other.wound
 
 
@@ -2507,10 +2600,18 @@ func _chew(b: Body, other: Body) -> float:
 ## player being flanked are the same arithmetic. §1.2.
 func _flank_theta(target_heading: float, target_pos: Vector2,
 		mouth_pos: Vector2) -> float:
+	return absf(_bite_bearing(target_heading, target_pos, mouth_pos))
+
+
+## **The same angle, signed** (docs/design/dna-slots.md §7.2): clockwise from
+## the target's nose, positive to its starboard -- the convention every bearing
+## in this game is written in, so it is the side a sting's slot guards.
+func _bite_bearing(target_heading: float, target_pos: Vector2,
+		mouth_pos: Vector2) -> float:
 	var from := mouth_pos - target_pos
 	if from.length_squared() <= 0.0001:
 		return 0.0
-	return absf(angle_difference(target_heading, _angle_of(from, target_heading)))
+	return angle_difference(target_heading, _angle_of(from, target_heading))
 
 
 ## **Something has its mouth on a player and cannot swallow them.** Returns true
@@ -2522,18 +2623,19 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		return false
 	var pb: Body = null if p == null else _cells[p.slot]
 	# Where the mouth was when it closed: every event below is told from here,
-	# even after the venom has taken that body somewhere else.
+	# even after a listener has taken that body somewhere else.
 	var at := b.pos
 	# Measured at the player, who is the target here: the bearing the mouth is
 	# on *is* theta, because a body-relative bearing is already the angle from
 	# its own heading. A mouth astern is the 2.10. For the person the same
-	# angle is worked out the way the water measures every other body.
-	var theta := absf(_cell.bearing_to(at)) if p == null \
-		else _flank_theta(pb.heading, pb.pos, at)
+	# angle is worked out the way the water measures every other body. Kept
+	# signed, which is the side a sting guards (dna-slots.md §7.2).
+	var landed := _cell.bearing_to(at) if p == null \
+		else _bite_bearing(pb.heading, pb.pos, at)
 	var damage := CellBody.bite_damage(Genome.tier_of(b.genome, &"cytostome"),
 		_gape(b), _cell.radius if p == null else pb.radius,
 		_cell.extra(&"pellicle") if p == null else Genome.tier_of(pb.genome, &"pellicle"),
-		theta)
+		absf(landed))
 	if damage <= 0.0:
 		return false
 	b.bite = CellBody.BITE_GAP
@@ -2544,6 +2646,14 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 	else:
 		pb.wound = clampf(pb.wound + damage, 0.0, 1.0)
 		hurt = pb.wound
+	# **The toxins of a bite** (dna-slots.md §7.2): its venom into the player,
+	# and the player's poison -- and a sting, on the side it guards -- into the
+	# mouth. Stacks that work over the next seconds: nobody leaves the water at
+	# the bite. **The bite that finishes the player carries them too**, as a
+	# water body's last bite on another does ([method _chew]) -- every cell alike
+	# (§20.3 check 6) -- and before anything is told, so the run hears the dose
+	# first and nothing touches the field after the death.
+	_bite_doses(index, _who(p), landed, landed)
 	if hurt >= 1.0:
 		# Chewed through rather than swallowed, and it ends the same way. The
 		# player has felt every one of the bites that got here, at this bearing.
@@ -2565,23 +2675,17 @@ func _bitten_by(index: int, b: Body, p: Person = null) -> bool:
 		if p != null:
 			_person_gone(Cause.CHEWED, By.WATER, p)
 		return true
-	# `veneneux` from the other end: biting a venomous body costs the mouth a
-	# share of what it just did, and enough of them kill it.
-	b.wound = clampf(b.wound + CellBody.venom_back(
-		_cell.extra(&"veneneux") if p == null else Genome.tier_of(pb.genome, &"veneneux"),
-		damage), 0.0, 1.0)
-	if b.wound >= 1.0:
-		_consume(index, Cause.POISONED)
 	_tell(p, Contact.BITTEN, at, _felt(damage), By.WATER, &"")
 	return false
 
 
 ## **A player's own mouth on a body too big to swallow.** The option the player
 ## never had: whittle it down and it comes apart, and then it is a meal on
-## exactly the terms a swallowed one is. Returns true when the venom in it
-## finished them. One rule with two callers, [param p] null being this device's
-## cell -- and its order is the one every contact in a pond keeps: the eater's
-## death before the meal (shared-pond.md §1.3).
+## exactly the terms a swallowed one is. One rule with two callers, [param p]
+## null being this device's cell. **It no longer kills the biter**: a poisonous
+## body's poison goes in as stacks and works over the next seconds
+## (docs/design/dna-slots.md §7.2), so this returns false; the return is kept for
+## the contact pass's contract, a death of the player's ending it.
 func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	var pb: Body = null if p == null else _cells[p.slot]
 	if (_bite_clock if p == null else pb.bite) > 0.0:
@@ -2609,33 +2713,20 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 	# than left to be true (shared-pond.md §3). A person's bearing is worked out
 	# on their own device, from the place.
 	var felt_at := _cell.bearing_to(at) if p == null else 0.0
+	var mouth_at := _cell.position if p == null else pb.pos
 	b.wound = clampf(b.wound + damage, 0.0, 1.0)
 	# Felt as a `hit` on its membrane, from the player's mouth (behaviour.md §3.2).
-	_feel_hit(b, _cell.position if p == null else pb.pos, _felt(damage))
-	var back := CellBody.venom_back(Genome.tier_of(b.genome, &"veneneux"), damage)
-	var hurt := 0.0
-	if p == null:
-		_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
-		hurt = _cell.wound
-	else:
-		pb.wound = clampf(pb.wound + back, 0.0, 1.0)
-		hurt = pb.wound
-	# The death is checked before the meal, and in that order on purpose:
-	# `eaten` is not idempotent and feeding a corpse would be silent.
-	if hurt >= 1.0:
-		# In the drop the body whose venom did it is the killer (§11).
-		if _drop != null and p == null:
-			died_to = index
-		_tell(p, Contact.KILLED, at, 0.0, By.WATER, &"", Cause.POISONED)
-		if p != null:
-			_person_gone(Cause.POISONED, By.WATER, p)
-		return true
+	_feel_hit(b, mouth_at, _felt(damage))
+	# **The toxins of a bite** (dna-slots.md §7.2): the player's venom into the
+	# body, and its poison -- and a sting, if the bite landed on the side it
+	# guards -- into the player, felt where the bite landed.
+	_bite_doses(_who(p), index, _bite_bearing(b.heading, b.pos, mouth_at), felt_at)
 	if b.wound >= 1.0:
 		_tell(p, Contact.ATE, at,
 			_meal_value_for(b.radius, _cell.radius if p == null else pb.radius),
 			By.WATER, Genome.dominant_of(b.genome))
 		_consume(index, Cause.CHEWED)
-	var level := maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back))
+	var level := _felt(damage) * BITE_FELT_SHARE
 	if p == null:
 		bitten.emit(felt_at, level)
 	else:
@@ -2651,11 +2742,12 @@ func _bite_from(index: int, b: Body, p: Person = null) -> bool:
 # Resolved on the host, from its own cell's side, exactly as a water cell's
 # contact with that cell is -- with the person in the water cell's place:
 #
-#   their mouth on me and I fit it (armoured) -> I am swallowed, or they are
-#                                                poisoned by my venom
-#   my mouth on them and they fit (armoured)  -> they are, or I am
+#   their mouth on me and I fit it (armoured) -> I am swallowed, and they take
+#                                                my poison
+#   my mouth on them and they fit (armoured)  -> they are, and I take theirs
 #   otherwise                                 -> each mouth chews, in its own
-#                                                direction's order
+#                                                direction's order, and each
+#                                                bite carries its toxins
 #
 # So a pair that could each swallow the other is decided the way the shipped
 # pass decides a water cell against this cell: the other mouth is asked first.
@@ -2685,23 +2777,18 @@ func _players_meet(p: Person, me: Person = null) -> void:
 	var here := _my_pos(me)
 	var there := pb.pos
 	if their_mouth and _armoured(me) < their_gape:
-		if (venom_cost if me == null else me.venom_cost) >= 0.0:
-			# Spat out starving, and they die of it.
-			_tell(me, Contact.STUNG, there, 0.0, By.FRIEND, &"")
-			_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
-			_person_gone(Cause.POISONED, By.FRIEND, p)
-			return
+		# Eaten, as anyone is, and they take my poison before it is told
+		# (dna-slots.md §7.1, owner's row 5).
+		_swallow_doses(p.slot, _who(me), 0.0)
 		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
 		_tell(p, Contact.ATE, here, _meal_value_for(_my_radius(me), pb.radius),
 			By.FRIEND, _my_dominant(me))
 		_lose(me, Cause.SWALLOWED, By.FRIEND)
 		return
 	if my_mouth and pb.radius * p.armour < my_gape:
-		if p.venom_cost >= 0.0:
-			_tell(p, Contact.STUNG, here, 0.0, By.FRIEND, &"")
-			_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
-			_lose(me, Cause.POISONED, By.FRIEND)
-			return
+		# And the other way: their poison into me, felt as a meal, then the meal.
+		_swallow_doses(_who(me), p.slot,
+			_cell.bearing_to(there) if me == null else 0.0)
 		_tell(me, Contact.ATE, there, _meal_value_for(pb.radius, _my_radius(me)),
 			By.FRIEND, Genome.dominant_of(pb.genome))
 		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.SWALLOWED)
@@ -2722,12 +2809,14 @@ func _chewed_by_friend(p: Person, me: Person = null) -> bool:
 		return false
 	var there := pb.pos
 	var here := _my_pos(me)
-	# The flank at this cell, as the water measures it at a person.
+	# The flank at this cell, as the water measures it at a person -- signed,
+	# for the side a sting guards.
+	var landed := _cell.bearing_to(there) if me == null \
+		else _bite_bearing(mb.heading, mb.pos, there)
 	var damage := CellBody.bite_damage(Genome.tier_of(pb.genome, &"cytostome"),
 		_gape(pb), _my_radius(me),
 		_cell.extra(&"pellicle") if me == null else Genome.tier_of(mb.genome, &"pellicle"),
-		absf(_cell.bearing_to(there)) if me == null
-			else _flank_theta(mb.heading, mb.pos, there))
+		absf(landed))
 	if damage <= 0.0:
 		return false
 	pb.bite = CellBody.BITE_GAP
@@ -2738,23 +2827,18 @@ func _chewed_by_friend(p: Person, me: Person = null) -> bool:
 	else:
 		mb.wound = clampf(mb.wound + damage, 0.0, 1.0)
 		hurt = mb.wound
+	# Their venom into me, and my poison -- and my sting, on that side -- into
+	# them (dna-slots.md §7.2). Stacks: nobody leaves the water at the bite --
+	# and the bite that finishes me carries them too, before it is told.
+	_bite_doses(p.slot, _who(me), landed, landed)
 	if hurt >= 1.0:
 		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.CHEWED)
 		_tell(p, Contact.ATE, here, _meal_value_for(_my_radius(me), pb.radius),
 			By.FRIEND, _my_dominant(me))
 		_lose(me, Cause.CHEWED, By.FRIEND)
 		return true
-	var back := CellBody.venom_back(
-		_cell.extra(&"veneneux") if me == null else Genome.tier_of(mb.genome, &"veneneux"),
-		damage)
-	pb.wound = clampf(pb.wound + back, 0.0, 1.0)
 	_tell(me, Contact.BITTEN, there, _felt(damage), By.FRIEND, &"")
-	if pb.wound >= 1.0:
-		_tell(p, Contact.KILLED, here, 0.0, By.FRIEND, &"", Cause.POISONED)
-		_person_gone(Cause.POISONED, By.FRIEND, p)
-		return false
-	_tell(p, Contact.BITTEN, here,
-		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.FRIEND, &"")
+	_tell(p, Contact.BITTEN, here, _felt(damage) * BITE_FELT_SHARE, By.FRIEND, &"")
 	return false
 
 
@@ -2779,19 +2863,10 @@ func _chew_friend(p: Person, me: Person = null) -> void:
 	else:
 		mb.bite = CellBody.BITE_GAP
 	pb.wound = clampf(pb.wound + damage, 0.0, 1.0)
-	var back := CellBody.venom_back(Genome.tier_of(pb.genome, &"veneneux"), damage)
-	var hurt := 0.0
-	if me == null:
-		_cell.wound = clampf(_cell.wound + back, 0.0, 1.0)
-		hurt = _cell.wound
-	else:
-		mb.wound = clampf(mb.wound + back, 0.0, 1.0)
-		hurt = mb.wound
-	if hurt >= 1.0:
-		_tell(me, Contact.KILLED, there, 0.0, By.FRIEND, &"", Cause.POISONED)
-		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
-		_lose(me, Cause.POISONED, By.FRIEND)
-		return
+	# My venom into them, and their poison -- and their sting, on the side my
+	# bite landed -- into me, felt where it landed (dna-slots.md §7.2).
+	_bite_doses(_who(me), p.slot, _bite_bearing(pb.heading, there, here),
+		_cell.bearing_to(there) if me == null else 0.0)
 	if pb.wound >= 1.0:
 		_tell(me, Contact.ATE, there, _meal_value_for(pb.radius, _my_radius(me)),
 			By.FRIEND, Genome.dominant_of(pb.genome))
@@ -2799,8 +2874,7 @@ func _chew_friend(p: Person, me: Person = null) -> void:
 		_person_gone(Cause.CHEWED, By.FRIEND, p)
 	else:
 		_tell(p, Contact.BITTEN, here, _felt(damage), By.FRIEND, &"")
-	_tell(me, Contact.BITTEN, there,
-		maxf(_felt(damage) * BITE_FELT_SHARE, _felt(back)), By.FRIEND, &"")
+	_tell(me, Contact.BITTEN, there, _felt(damage) * BITE_FELT_SHARE, By.FRIEND, &"")
 
 
 ## **A dedicated host's two guests, mouth to mouth** -- [method _players_meet]
@@ -2847,6 +2921,209 @@ func _felt(damage: float) -> float:
 		return 0.0
 	var worst: float = CellBody.BITE_BY_TIER[CellBody.BITE_BY_TIER.size() - 1]
 	return clampf(damage / maxf(worst, 0.001), BITE_HIT_FLOOR, 1.0)
+
+
+# ---------------------------------------------------------------------------
+# **Venom and poison: how a dose arrives** (docs/design/dna-slots.md §7). Every
+# place above where a bite or a swallow is resolved hands its two bodies here,
+# in one shape, so a player and a water cell in either role take the same
+# stacks from the same contact. A body is named by its slot, and the cell on
+# this device -- which is in no slot -- by [constant TARGET_PLAYER].
+#
+# | form   | where         | when                                   | who takes it |
+# | venom  | the front     | a bite its mouth lands                 | the bitten   |
+# | venom  | a side, stern | a bite landing within VENOM_ARC_DEG / 2 | the biter    |
+# | poison | inside        | a bite landing anywhere                | the biter    |
+# | poison | inside        | it is swallowed                        | the swallower|
+#
+# Armour does not stop venom: `pellicle` divides a bite's damage and the stacks
+# ride in whole. A dose is stacks in a body's loads; what they do is the dose
+# step's, over the seconds that follow -- nobody leaves the water at the bite.
+# ---------------------------------------------------------------------------
+
+## **What a body wearing [param tiers] delivers** -- its toxins' forms, by where
+## each sits -- as records of [constant TOX_STRIDE] floats `[how, kind, stacks,
+## bearing]` ([constant HOW_BITE] and the rest). [param order] is where its
+## outside forms are worn, slot by slot; empty, the default order every water
+## cell is drawn and senses in ([method Cilia.default_order]). A venom with no
+## seat rides on the bite. Empty for a body with no toxin, which is most of the
+## water. Read once, whenever what a body wears changes. [param sides] false is
+## a venom on a side or the stern that stings nothing ([member venom_sides]).
+static func toxins_of(tiers: Dictionary, order: Array = [],
+		sides := CellBody.VENOM_SIDES) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	var seats: Array = order
+	for gene: Variant in tiers:
+		var form := StringName(gene)
+		if not Genome.has_forms(form):
+			continue
+		var copies := clampi(int(tiers[gene]), 0, Genome.TIER_MAX)
+		var kind := Doses.kind_of(Genome.strain_of(form))
+		if copies <= 0 or kind < 0:
+			continue
+		if Genome.is_inside_form(form):
+			_toxin_record(out, HOW_POISON, kind, CellBody.POISON_STACKS_BY_TIER[copies])
+			_toxin_record(out, HOW_SWALLOW, kind, CellBody.SWALLOW_STACKS_BY_TIER[copies])
+			continue
+		if seats.is_empty():
+			seats = Cilia.default_order(tiers)
+		var slot := seats.find(form)
+		if slot < 0 or Genome.is_front(slot):
+			_toxin_record(out, HOW_BITE, kind, CellBody.VENOM_STACKS_BY_TIER[copies])
+		elif sides:
+			_toxin_record(out, HOW_STING, kind, CellBody.VENOM_STACKS_BY_TIER[copies],
+				Cilia.slot_bearing(slot))
+	return out
+
+
+## One record of [method toxins_of], onto [param out].
+static func _toxin_record(out: PackedFloat64Array, how: int, kind: int, stacks: float,
+		bearing: float = 0.0) -> void:
+	out.append(float(how))
+	out.append(float(kind))
+	out.append(stacks)
+	out.append(bearing)
+
+
+## **Who [param p] is, as a dose names a body**: [constant TARGET_PLAYER] for
+## the cell on this device, a person's slot for a person.
+func _who(p: Person) -> int:
+	return TARGET_PLAYER if p == null else p.slot
+
+
+## **What the body [param who] names delivers**: this cell's as the run wrote
+## them, or a body's own, read again off what it wears if that changed since
+## they were last read -- whichever door changed it.
+func _toxins_at(who: int) -> PackedFloat64Array:
+	if who == TARGET_PLAYER:
+		return toxins
+	if who < 0 or who >= _cells.size():
+		return PackedFloat64Array()
+	var b := _cells[who]
+	var key := hash(b.genome) ^ (hash(b.order) * 31 if not b.order.is_empty() else 0) \
+		^ (0 if venom_sides else 0x5157)
+	if key != b.toxins_key:
+		b.toxins = toxins_of(b.genome, b.order, venom_sides)
+		b.toxins_key = key
+	return b.toxins
+
+
+## **A bite's toxins** (§7.1): [param biter] bit [param target], landing at
+## [param landed] -- the signed bearing at the target, clockwise from its nose.
+## The biter's front venom goes into the target; the target's poison, and its
+## sting if the bite landed within `VENOM_ARC_DEG / 2` of the bearing it guards,
+## go into the biter. [param felt] is the bearing the cell on this device feels
+## its own dose from, when it is one of the two.
+func _bite_doses(biter: int, target: int, landed: float, felt: float) -> void:
+	var into_target := _toxins_at(biter)
+	for r in range(0, into_target.size(), TOX_STRIDE):
+		if int(into_target[r]) == HOW_BITE:
+			_dose(target, int(into_target[r + 1]), into_target[r + 2], biter, felt, false)
+			if biter == TARGET_PLAYER:
+				toxin_fired.emit(FIRED_VENOM)
+	var into_biter := _toxins_at(target)
+	var reach := deg_to_rad(CellBody.VENOM_ARC_DEG) * 0.5
+	for r in range(0, into_biter.size(), TOX_STRIDE):
+		var how := int(into_biter[r])
+		if how == HOW_POISON:
+			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
+			if target == TARGET_PLAYER:
+				toxin_fired.emit(FIRED_POISON)
+		elif how == HOW_STING and absf(angle_difference(into_biter[r + 3], landed)) <= reach:
+			_dose(biter, int(into_biter[r + 1]), into_biter[r + 2], target, felt, false)
+			if target == TARGET_PLAYER:
+				toxin_fired.emit(FIRED_STING)
+
+
+## **A swallow's toxin** (§7.1): [param eater] swallowed [param eaten], and takes
+## its poison -- **before** the death is told, which is the order every contact
+## keeps. Venom does nothing on a swallow: what it would poison is already dead.
+## [param felt] is the bearing the cell on this device feels a meal's dose from.
+func _swallow_doses(eater: int, eaten: int, felt: float) -> void:
+	var into_eater := _toxins_at(eaten)
+	for r in range(0, into_eater.size(), TOX_STRIDE):
+		if int(into_eater[r]) == HOW_SWALLOW:
+			_dose(eater, int(into_eater[r + 1]), into_eater[r + 2], eaten, felt, true)
+			if eaten == TARGET_PLAYER:
+				toxin_fired.emit(FIRED_POISON)
+
+
+## **[param stacks] of [param kind] into the body [param who] names**, the last
+## of them [param by]'s. The cell on this device is told, from [param felt] and
+## as a [param meal] or not, before whatever sensation the dose arrived with.
+func _dose(who: int, kind: int, stacks: float, by: int, felt: float, meal: bool) -> void:
+	if stacks <= 0.0 or kind < 0 or kind >= Doses.KINDS:
+		return
+	if who == TARGET_PLAYER:
+		if _cell == null:
+			return
+		_cell.loads[kind] += stacks
+		_dosed_by = by
+		_dosed_serial = _cells[by].serial if by >= 0 and by < _cells.size() else 0
+		dosed.emit(felt, kind, stacks, meal)
+		return
+	if who < 0 or who >= _cells.size():
+		return
+	var b := _cells[who]
+	b.loads[kind] += stacks
+	b.dosed_by = by
+	_stat(&"doses")
+
+
+## **Whose mouth a death by a dose was**, for the pond (shared-pond.md §2): a
+## friend's -- the cell on this device, or a person -- or the water's.
+func _by_of(doser: int) -> int:
+	return By.FRIEND if doser == TARGET_PLAYER or _is_person_slot(doser) else By.WATER
+
+
+## **A player died of a dose** (docs/design/dna-slots.md §6.2): its wound made
+## whole by the harm in it. **Quiet**: told as a KILLED from where it was, with
+## no bearing in it -- nothing hit it -- caused `POISONED`, by the water or a
+## friend as its last doser was. For this cell the doser is [member died_to],
+## the killer the replay rings, while that slot still holds the body that dosed
+## it; a person leaves its slot, its remains left in the drop.
+func _dose_death(p: Person) -> void:
+	if p == null:
+		var doser := _dosed_by
+		died_to = doser if doser >= 0 and doser < _cells.size() \
+			and not _is_person_slot(doser) and _cells[doser].seeded \
+			and _cells[doser].serial == _dosed_serial else -1
+		_tell(null, Contact.KILLED, _cell.position, 0.0, _by_of(doser), &"", Cause.POISONED)
+		return
+	var pb := _cells[p.slot]
+	var by := _by_of(pb.dosed_by)
+	_tell(p, Contact.KILLED, pb.pos, 0.0, by, &"", Cause.POISONED)
+	_person_gone(Cause.POISONED, by, p)
+
+
+## **What one body carries**, stacks of each of doses.gd's kinds, index-matched
+## to [method points] -- for the views, which draw every load on every body.
+## The live array: read it, and do not write through it.
+func loads_of(index: int) -> PackedFloat64Array:
+	if index < 0 or index >= _cells.size():
+		return Doses.none()
+	return _cells[index].loads
+
+
+## **What one body's loads come to on that body**: each kind's stacks felt at
+## its radius, `Vector3(harm, paralysis, sleep)`, as cilia.gd's `dose` takes
+## them -- zero for a body that carries nothing, which is nearly every body.
+func felt_at(index: int) -> Vector3:
+	if index < 0 or index >= _cells.size():
+		return Vector3.ZERO
+	var b := _cells[index]
+	return felt_of(b.loads, b.radius)
+
+
+## [param loads] felt by a body of [param body_radius], as a `Vector3` of
+## doses.gd's three kinds. Static, for the player's own cell and the replay.
+static func felt_of(loads: PackedFloat64Array, body_radius: float) -> Vector3:
+	if not Doses.any(loads):
+		return Vector3.ZERO
+	var out := Vector3.ZERO
+	for k in mini(loads.size(), Doses.KINDS):
+		out[k] = Doses.felt(loads[k], body_radius, CellBody.DOSE_SIZE)
+	return out
 
 
 # ---------------------------------------------------------------------------
@@ -3260,6 +3537,8 @@ func _retire(index: int) -> void:
 	b.target_serial = 0
 	b.meals = 0
 	b.wound = 0.0
+	b.loads.fill(0.0)
+	b.dosed_by = -1
 	b.bite = 0.0
 	_serial += 1
 	b.serial = _serial
@@ -4100,6 +4379,36 @@ func restore_body(index: int, pos: Vector2, heading: float, radius: float,
 		_drop.grid.remove(index)
 
 
+## **What a body carried, written back from a recording** (docs/design/
+## dna-slots.md §13): its loads, as [method pack_loads] packed them into one
+## float. A replay's field only, as [method restore_body] is.
+func restore_loads(index: int, packed: float) -> void:
+	if index < 0 or index >= _cells.size():
+		return
+	unpack_loads(packed, _cells[index].loads)
+
+
+## **A body's three loads in one float** (docs/design/dna-slots.md §13), for the
+## replay: `h + 256 p + 65536 s`, each `round(stacks x 4)` clamped to 0..255 -- a
+## quarter of a stack, to 63.75 stacks, against the largest swallow dose of 48. A
+## float32 holds 24 bits exactly, so nothing is lost in the ring.
+static func pack_loads(loads: PackedFloat64Array) -> float:
+	var packed := 0
+	var place := 1
+	for k in mini(loads.size(), Doses.KINDS):
+		packed += clampi(roundi(loads[k] * 4.0), 0, 255) * place
+		place *= 256
+	return float(packed)
+
+
+## [method pack_loads] undone, into [param into]'s three kinds.
+static func unpack_loads(packed: float, into: PackedFloat64Array) -> void:
+	var left := maxi(roundi(packed), 0)
+	for k in mini(into.size(), Doses.KINDS):
+		into[k] = float(left % 256) / 4.0
+		left /= 256
+
+
 ## **Who was hunting the player, written back from a recording.**
 ##
 ## [method restore_body] deliberately writes no state machine, which is right --
@@ -4128,8 +4437,8 @@ func restore_hunter(index: int) -> void:
 
 
 ## **Who killed the player, written back from a recording** (ocean.md §11):
-## the slot of the body that swallowed or chewed the cell, or of the venomous one
-## it bit, on the frames the recording names it; -1 on every other. [method
+## the slot of the body that swallowed or chewed the cell, or whose dose finished
+## it, on the frames the recording names it; -1 on every other. [method
 ## hunter] answers only for a stalker, and in the drop most deaths by mouth are
 ## not a stalker's, so this is what the view draws the predator rings round when
 ## nothing is hunting.
@@ -4455,6 +4764,8 @@ func place_person(at: Vector2, heading: float, body_radius: float,
 		pb.serial = _serial
 		pb.meals = 0
 		pb.wound = 0.0
+		pb.loads.fill(0.0)
+		pb.dosed_by = -1
 		pb.bite = 0.0
 		pb.state = State.DRIFT
 		pb.target = TARGET_NONE
@@ -4504,9 +4815,9 @@ func _derive_person(pb: Body) -> void:
 	p.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[dart]
 	var slot := pb.order.find(&"trichocyst")
 	p.dart_bearing = Cilia.slot_bearing(slot) if slot >= 0 else 0.0
-	var venom := clampi(Genome.tier_of(tiers, &"veneneux"), 0,
-		CellBody.VENOM_COST_BY_TIER.size() - 1)
-	p.venom_cost = CellBody.VENOM_COST_BY_TIER[venom] if venom > 0 else -1.0
+	# Their toxins are read off their body and its worn order where a bite asks
+	# for them ([method _toxins_at]), as every body's are: a venom on a side
+	# guards the side of the slot they wear it in (dna-slots.md §7.2).
 	# The body carries it too, so a sense that weighs every body by the size a
 	# mouth measures -- the drop's taste (§14.1) -- weighs a person as one.
 	pb.armour = p.armour
@@ -4544,6 +4855,8 @@ func remove_person(slot: int = PERSON_SLOT) -> void:
 	pb.radius = 0.0
 	pb.speed = 0.0
 	pb.wound = 0.0
+	pb.loads.fill(0.0)
+	pb.dosed_by = -1
 	pb.bite = 0.0
 	_serial += 1
 	pb.serial = _serial
@@ -4678,6 +4991,9 @@ func renew_person(slot: int = PERSON_SLOT) -> void:
 	pb.serial = _serial
 	pb.meals = 0
 	pb.wound = 0.0
+	# A daughter is a new body: she carries none of her mother's doses.
+	pb.loads.fill(0.0)
+	pb.dosed_by = -1
 	pb.bite = 0.0
 	p.first_hunt = FIRST_DELAY
 	p.dart_clock = 0.0
@@ -4816,17 +5132,43 @@ func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 		out = _send_set(pb.pos, PERSON_SLOT, pb.serial, reach)
 		if anchored:
 			out.append([PERSON_ID, 0,
-				FLAG_PERSON | (FLAG_IN_WATER if in_water else 0),
+				FLAG_PERSON | (FLAG_IN_WATER if in_water else 0) | dose_flags(_cell.loads),
 				_cell.position, _cell.heading, _cell.radius, _cell.wound,
 				_cell.velocity.length(), _cell.velocity, _cell.heading_rate(), -1])
 		return out
 	out = _send_set(_cell.position, TARGET_PLAYER, 0, reach)
 	if pb.person != null:
 		out.append([PERSON_ID, pb.meals,
-			FLAG_PERSON | (FLAG_IN_WATER if pb.person.in_water else 0),
+			FLAG_PERSON | (FLAG_IN_WATER if pb.person.in_water else 0) | dose_flags(pb.loads),
 			pb.pos, pb.heading, pb.radius, pb.wound, pb.person.velocity.length(),
 			pb.person.velocity, pb.person.turning, -1])
 	return out
+
+
+## **What a snapshot says of a body's loads** (docs/design/dna-slots.md
+## §14.2): [constant FLAG_HARMED] for harm past `DOSE_GONE`, and the two later
+## kinds' bits the same way. Never how many stacks: a guest draws a dose, it does
+## not read one.
+static func dose_flags(loads: PackedFloat64Array) -> int:
+	var flags := 0
+	if loads.size() > Doses.Kind.HARM and loads[Doses.Kind.HARM] > CellBody.DOSE_GONE:
+		flags |= FLAG_HARMED
+	if loads.size() > Doses.Kind.PARALYSIS \
+			and loads[Doses.Kind.PARALYSIS] > CellBody.DOSE_GONE:
+		flags |= FLAG_PARALYSED
+	if loads.size() > Doses.Kind.SLEEP and loads[Doses.Kind.SLEEP] > CellBody.DOSE_GONE:
+		flags |= FLAG_ASLEEP
+	return flags
+
+
+## **A mirrored body's loads, from a snapshot's flags**: one stack's worth
+## ([constant MIRROR_SHOWN], felt) of each kind its flags say it carries, none of
+## the rest -- what a guest's views draw it with.
+static func _loads_from_flags(into: PackedFloat64Array, flags: int, radius: float) -> void:
+	var shown := MIRROR_SHOWN * (radius / CellBody.DOSE_SIZE) * (radius / CellBody.DOSE_SIZE)
+	into[Doses.Kind.HARM] = shown if (flags & FLAG_HARMED) != 0 else 0.0
+	into[Doses.Kind.PARALYSIS] = shown if (flags & FLAG_PARALYSED) != 0 else 0.0
+	into[Doses.Kind.SLEEP] = shown if (flags & FLAG_ASLEEP) != 0 else 0.0
 
 
 ## **A dedicated host's snapshot for the guest in [param slot]** -- the same
@@ -4849,7 +5191,7 @@ func pond_entries_for(slot: int, reach: float = SEND_REACH) -> Array:
 		if PERSON_SLOT + k == slot or ob.person == null:
 			continue
 		out.append([PERSON_ID, 0,
-			FLAG_PERSON | (FLAG_IN_WATER if ob.person.in_water else 0),
+			FLAG_PERSON | (FLAG_IN_WATER if ob.person.in_water else 0) | dose_flags(ob.loads),
 			ob.pos, ob.heading, ob.radius, ob.wound, ob.person.velocity.length(),
 			ob.person.velocity, ob.person.turning, -1])
 		break
@@ -4941,10 +5283,11 @@ func _stalks(b: Body, target: int, serial: int) -> bool:
 		and (target == TARGET_PLAYER or b.target_serial == serial)
 
 
-## One water body's snapshot entry, [param stalking] the recipient or not.
+## One water body's snapshot entry, [param stalking] the recipient or not, and
+## whether it carries a dose.
 func _entry_of(i: int, stalking: bool) -> Array:
 	var b := _cells[i]
-	return [_wire_id(b), b.meals, FLAG_STALKING if stalking else 0,
+	return [_wire_id(b), b.meals, (FLAG_STALKING if stalking else 0) | dose_flags(b.loads),
 		b.pos, b.heading, b.radius, b.wound, b.speed, Vector2.ZERO, 0.0, i]
 
 
@@ -4979,11 +5322,20 @@ func flocs_in_reach(point: Vector2, reach: float = SEND_REACH) -> Array:
 ## out of the send set is out of every sense. [param your_wound] is this cell's
 ## own wound as the host last bit it (§0.1); this cell mends it itself until the
 ## next one. A floc is not in a snapshot: SETTLE and CLEAR tell those.
-func apply_pond(your_wound: float, entries: Array) -> void:
+##
+## **[param your_loads] are this cell's own loads as the host keeps them**
+## (docs/design/dna-slots.md §14.1), stacks of each kind: this cell wears them,
+## and is harmed by them, until the next snapshot says again -- and never dies of
+## its own count, since the host owns that death. Empty says nothing. Every other
+## body's loads are only its flags, drawn at [constant MIRROR_SHOWN].
+func apply_pond(your_wound: float, entries: Array,
+		your_loads := PackedFloat64Array()) -> void:
 	if not _mirror:
 		return
 	if is_finite(your_wound):
 		_cell.wound = clampf(your_wound, 0.0, 1.0)
+	if not your_loads.is_empty():
+		_cell.restore_loads(your_loads)
 	var sent := {}
 	var person_sent := false
 	for entry: Array in entries:
@@ -5032,6 +5384,7 @@ func apply_pond(your_wound: float, entries: Array) -> void:
 		b.wound = float(entry[Entry.WOUND])
 		b.speed = float(entry[Entry.SPEED])
 		b.seeded = true
+		_loads_from_flags(b.loads, flags, b.radius)
 		# **The stalking bit is the hunt, for everything this side reads:**
 		# [method hunter], and through it the view's rings and the recorder.
 		var stalking := (flags & FLAG_STALKING) != 0
@@ -5057,6 +5410,7 @@ func apply_pond(your_wound: float, entries: Array) -> void:
 		pb.seeded = false
 		pb.radius = 0.0
 		pb.speed = 0.0
+		pb.loads.fill(0.0)
 		pb.state = State.DRIFT
 		pb.target = TARGET_NONE
 		pb.person = null
@@ -5083,6 +5437,7 @@ func _mirror_person(pb: Body, entry: Array, wet: bool) -> void:
 	pb.wound = float(entry[Entry.WOUND])
 	pb.speed = float(entry[Entry.SPEED])
 	pb.seeded = wet
+	_loads_from_flags(pb.loads, int(entry[Entry.FLAGS]), pb.radius)
 
 
 ## **A body version's genome** (mirror only), as GENOME carries it once per
@@ -5193,6 +5548,7 @@ func _mirror_release(slot: int) -> void:
 	b.seeded = false
 	b.radius = 0.0
 	b.speed = 0.0
+	b.loads.fill(0.0)
 	b.inert = false
 	b.state = State.DRIFT
 	b.target = TARGET_NONE
@@ -5229,8 +5585,9 @@ func hear_contact(what: int, at: Vector2, level: float = 0.0,
 				player_hit = level
 				player_hit_from = _angle_of(at - _cell.position, _cell.heading)
 			bitten.emit(_cell.bearing_to(at), level)
-		Contact.STUNG:
-			stung.emit(_cell.bearing_to(at))
+		# `Contact.STUNG` keeps its number and is never sent since the toxin's
+		# doses (docs/design/dna-slots.md §7.2): nobody is spat out any more.
+		# One heard is from no build this one speaks to, and changes nothing.
 		Contact.DARTED:
 			darted.emit(_cell.bearing_to(at))
 		Contact.ATE:
@@ -5324,7 +5681,11 @@ func _step_person(delta: float, slot: int = PERSON_SLOT) -> void:
 	var p := pb.person
 	if p == null:
 		return
-	pb.wound = CellBody.mended(pb.wound, delta)
+	# Their loads wear with their wound, by the one dose step every body takes:
+	# the host decides every dose and owns their death (dna-slots.md §14.1),
+	# found at the top of their contacts, and POND tells their device what they
+	# carry.
+	pb.wound = CellBody.dosed(pb.loads, pb.wound, pb.radius, delta)
 	pb.bite = maxf(pb.bite - delta, 0.0)
 	p.dart_clock = maxf(p.dart_clock - delta, 0.0)
 	if p.first_hunt > 0.0:
@@ -5473,6 +5834,8 @@ func _renew(b: Body) -> void:
 	b.wander = 0.0
 	b.meals = 0
 	b.wound = 0.0
+	b.loads.fill(0.0)
+	b.dosed_by = -1
 	b.bite = 0.0
 	b.speed = 0.0
 	b.tuned = -1
@@ -5696,7 +6059,7 @@ func _seed_drifter(b: Body) -> void:
 	# genome with would make the early game a dead end.
 	b.genome = {}
 	# **In the drop** (§5.8, §6.4): the gene the drop is down to its last
-	# carriers of, if one is -- and never venom, which comes back through a
+	# carriers of, if one is -- and never the toxin, which comes back through a
 	# peer instead: the drop's drifters are its defenceless food (row 13).
 	if _drop != null:
 		var wanted := Drop.take_drifter_gene(_gene_short)
@@ -5704,9 +6067,18 @@ func _seed_drifter(b: Body) -> void:
 			b.genome[wanted] = 1
 			_stat(&"gene_floor")
 			return
-		b.genome[_draw_gene(DRIFTER_GENES if drifter_venom else _drifter_pool)] = 1
+		b.genome[_place_toxin(_draw_gene(DRIFTER_GENES if drifter_toxin else _drifter_pool))] = 1
 		return
-	b.genome[_draw_gene(DRIFTER_GENES)] = 1
+	# **Drifters carry neither form in today's water either** (docs/design/
+	# dna-slots.md §0 item 12): the first water's drifter could carry the old
+	# `veneneux` and be swallowed safely, but poison now doses whatever swallows
+	# it, and a drifter is the food. Drawn by today's weights as it always was, and
+	# a toxin drawn is drawn again from the rest -- one more number, on that
+	# drifter alone.
+	var gene := _draw_gene(DRIFTER_GENES)
+	if Genome.variety(gene) == Drop.TOXIN:
+		gene = _draw_gene(Drop.drifter_genes(DRIFTER_GENES))
+	b.genome[gene] = 1
 
 
 ## A body in the peer band round a player of radius [param mine], whose senses
@@ -5730,10 +6102,14 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 	var tiers := {&"cytostome": _draw_tier(sensed)}
 	var capacity := CellBody.slots_for(body_radius)
 	var pool: Array[StringName] = DRIFTER_GENES.duplicate()
-	while tiers.size() < capacity and not pool.is_empty():
+	# **Room is by place** (docs/design/dna-slots.md §9): the toxin is drawn as
+	# one gene and a coin puts it inside or out, and poison takes no arc, so the
+	# loop fills the outside to its capacity as it always did.
+	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
 		pool.erase(gene)
-		tiers[gene] = _draw_tier(sensed)
+		var tier := _draw_tier(sensed)
+		tiers[_place_toxin(gene)] = tier
 	# The ceiling, applied where §1.3 puts it: on the mouth, by taking tiers off
 	# until it fits. A radius-40 arrival comes out at cytostome 1; a radius-28
 	# one can keep cytostome 3.
@@ -5741,6 +6117,16 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 			and CellBody.gape_of(int(tiers[&"cytostome"]), body_radius) > ARRIVAL_GAPE_MAX:
 		tiers[&"cytostome"] = int(tiers[&"cytostome"]) - 1
 	return tiers
+
+
+## **Where a toxin the water draws goes** (docs/design/dna-slots.md §9): the
+## water draws it as one gene, by its variety's name and weight, and a coin puts
+## it inside, as poison, or outside, as venom -- the two places are equal. Any
+## other gene is itself, and no number is drawn for it.
+func _place_toxin(gene: StringName) -> StringName:
+	if not Genome.has_forms(gene):
+		return gene
+	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
 
 
 func _draw_gene(pool: Array[StringName]) -> StringName:
@@ -5986,8 +6372,9 @@ const NOTHING_SHORT := -2
 
 ## Row 11: seconds of rest a second that a body with no `cytostome` absorbs.
 var absorb := Metabolism.ABSORB
-## Row 13, the other way: drifters may carry venom, as today's do.
-var drifter_venom := false
+## Row 13, the other way: drifters may carry the toxin, either form, as the
+## first water's did (docs/design/dna-slots.md §9).
+var drifter_toxin := false
 ## Row 14: a hunter swims at its own tail's speed. Off, today's 1.2 and 1.7
 ## times its prey's.
 var own_speed := true
@@ -6109,7 +6496,7 @@ var _view_ids := PackedInt32Array()
 ## which the same functions run as the drop's lists.
 var _ids := PackedInt32Array()
 var _water_idx := PackedInt32Array()
-## What a drifter's gene is drawn from: every gene but venom (row 13).
+## What a drifter's gene is drawn from: every gene but the toxin (row 13).
 var _drifter_pool: Array[StringName] = []
 ## The genes the drop is down to its last carriers of, at the last count.
 var _gene_short: Array[StringName] = []
@@ -6578,6 +6965,11 @@ func _age_alone(seconds: float) -> void:
 ## a hit it has not felt, its call's clock, its echoes in flight and what its
 ## rules last read (drop_save.gd's BEHAVIOUR). The runs are still written, for a
 ## pack-2 build reading this file.
+##
+## **And, since the toxin's doses, every body's loads** (docs/design/dna-slots.md
+## §12): `harm`, `paralysis` and `sleep`, a column a kind, in 64 bits -- they wear
+## down like the clocks kept here -- so a dose survives the app being closed
+## mid-fight (drop_save.gd's DOSES). A build before them loads the rest.
 func drop_state() -> Dictionary:
 	if _drop == null:
 		return {}
@@ -6626,11 +7018,17 @@ func drop_state() -> Dictionary:
 	var calls := PackedFloat64Array()
 	var echoes: Array = []
 	var memory: Array = []
+	var harm := PackedFloat64Array()
+	var paralysis := PackedFloat64Array()
+	var sleep := PackedFloat64Array()
 	for i in _cells.size():
 		var b := _cells[i]
 		if not b.seeded or b.person != null:
 			continue
 		slot.append(i)
+		harm.append(b.loads[Doses.Kind.HARM])
+		paralysis.append(b.loads[Doses.Kind.PARALYSIS])
+		sleep.append(b.loads[Doses.Kind.SLEEP])
 		ids.append(b.id)
 		parent.append(b.parent)
 		generation.append(b.generation)
@@ -6733,7 +7131,8 @@ func drop_state() -> Dictionary:
 			"grace": graces, "dna": dna, "behaviour": behaviour, "steer": steer,
 			"acts": acts, "push": push, "tumble": tumble, "tumble_tick": tumble_tick,
 			"stun": stun, "ate": ate, "hit": hit, "hit_from": hit_from, "call": calls,
-			"echoes": echoes, "memory": memory},
+			"echoes": echoes, "memory": memory, "harm": harm, "paralysis": paralysis,
+			"sleep": sleep},
 		"behaviours": {"version": DropSave.BEHAVIOURS_VERSION, "lists": lists},
 		"runs": {"state": run_state, "target": run_target, "flags": run_flags,
 			"clocks": run_clocks, "points": run_points},
@@ -6867,6 +7266,10 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 	var lineage: PackedInt32Array = rows.get("lineage", PackedInt32Array())
 	var graces: PackedFloat64Array = rows.get("grace", PackedFloat64Array())
 	var dna: Array = rows.get("dna", [])
+	# **Its loads, where the file keeps them** (docs/design/dna-slots.md §12). A
+	# file from before has none, and every body in it comes back carrying none.
+	var kept_loads: Array = [rows.get("harm", PackedFloat64Array()),
+		rows.get("paralysis", PackedFloat64Array()), rows.get("sleep", PackedFloat64Array())]
 	var trimmed := 0
 	var contained := 0
 	for k in slot.size():
@@ -6896,6 +7299,9 @@ func load_drop(cell: CellBody, state: Dictionary) -> Dictionary:
 		b.dash_v = dash_v[k]
 		b.settle = settle[k]
 		b.life = life[k]
+		for dose in Doses.KINDS:
+			var column: PackedFloat64Array = kept_loads[dose]
+			b.loads[dose] = maxf(column[k], 0.0) if not column.is_empty() else 0.0
 		# **By name**: a gene this build does not know is kept as the name it is,
 		# and costs and draws as `rhabdom` always has (genome.gd, GENE_ORDER).
 		var genes: Dictionary = genome[k]
@@ -7257,6 +7663,12 @@ func _step_one(i: int, b: Body, tick: int) -> void:
 		b.grace = maxf(b.grace - dt, 0.0)
 	if _tank(i, b, dt):
 		return
+	# **Its loads wear, with all the time it is owed** (docs/design/dna-slots.md
+	# §6.2): exact for any step, so a far body stepped on its tick ends where a
+	# near one does. A wound made whole by harm is a death by poison, and it
+	# returns as a starvation does: nothing here files a body it has retired.
+	if _dose_step(i, b, dt):
+		return
 	if births and b.look and not b.drifter and b.radius >= CellBody.DIVIDE_RADIUS - 0.01:
 		_divide(i, b)
 		return
@@ -7293,6 +7705,20 @@ func _tank(i: int, b: Body, dt: float) -> bool:
 	if b.starve < Metabolism.STARVE_GRACE:
 		return false
 	_consume(i, Cause.STARVED)
+	return true
+
+
+## **One body's loads, worn over [param dt]** (docs/design/dna-slots.md §6.2),
+## through cell.gd's one dose step every body takes: the harm that wore off goes
+## into its wound, and it mends only for the part of the step after the harm ran
+## out. Returns true when harm made the wound whole -- **a death by poison**: the
+## body leaves the water with its remains, and the caller stops touching it. A
+## body carrying nothing is mended as it always was, for one test.
+func _dose_step(i: int, b: Body, dt: float) -> bool:
+	b.wound = CellBody.dosed(b.loads, b.wound, b.radius, dt)
+	if b.wound < 1.0:
+		return false
+	_consume(i, Cause.POISONED)
 	return true
 
 
@@ -7384,7 +7810,6 @@ func _refresh_body(b: Body) -> void:
 	b.income = b.sun + (absorb if Genome.tier_of(g, &"cytostome") == 0 else 0.0)
 	b.burn = CellBody.BURN_BY_TIER[clampi(Genome.tier_of(g, &"crista"), 0, 3)]
 	b.armour = CellBody.ARMOR_BY_TIER[clampi(Genome.tier_of(g, &"pellicle"), 0, 3)]
-	b.tox = clampi(Genome.tier_of(g, &"veneneux"), 0, 3)
 	b.cruise = CellBody.swim_speed_of(Genome.tier_of(g, &"flagellum"),
 		Genome.tier_of(g, &"axoneme"))
 	# Pack 3 (behaviour.md §4.5): its tail alone, the push being a trigger of
@@ -8420,8 +8845,10 @@ func _feel_hit(b: Body, from: Vector2, level: float) -> void:
 ## **A water mouth on another body, in the drop**: the one mouth rule every body
 ## obeys. A settled floc that fits is food and nothing else; a body too big for
 ## the mouth -- its `pellicle` counted -- is chewed, and fed on once it comes
-## apart; one that fits is swallowed. Venom is today's (row 12): it bites back
-## what bites it, and a swallowed venomous water cell is a meal like any other.
+## apart; one that fits is swallowed. **The toxins are every cell's alike**
+## (docs/design/dna-slots.md §7): a bite carries its venom in and takes the
+## bitten's poison -- and its sting, on that side -- back, and a swallowed
+## poisonous cell is eaten and doses what ate it.
 ## Returns true when this mouth is finished for the frame.
 func _mouth_on_drop(i: int, b: Body, j: int, other: Body, gape: float) -> bool:
 	if other.inert:
@@ -8433,21 +8860,16 @@ func _mouth_on_drop(i: int, b: Body, j: int, other: Body, gape: float) -> bool:
 		_rest(b, REST_MEAL)
 		return true
 	if _swallow_r(other) >= gape:
-		var through := _chew(b, other) >= 1.0
+		var through := _chew(i, b, j, other) >= 1.0
 		if through:
 			_feed_water(b, _meal_value_for(other.radius, b.radius))
 			_devour(b, other)
 			_stat(&"water_chewed")
 			_consume(j, Cause.CHEWED)
-		# Its prey's venom may have finished the biter: that is poison, and
-		# poison leaves remains.
-		if b.wound >= 1.0:
-			_consume(i, Cause.POISONED)
-			return true
-		if through:
 			_rest(b, REST_MEAL)
 			return true
 		return false
+	_swallow_doses(i, j, 0.0)
 	_feed_water(b, _meal_value_for(other.radius, b.radius))
 	_devour(b, other)
 	_stat(&"water_ate_drifter" if other.drifter else &"water_ate_hunter")
@@ -8710,7 +9132,7 @@ func _ecology(dt: float) -> void:
 	# each at the thinnest of its candidate places (§6.3), made for the players
 	# in turn. **Since bodies divide, each kind's own** (lineage.md §5): the food
 	# against its count over SPAWN_TAU, the hunters against today's count within
-	# [member floor_tau], and venom whenever it is short -- summed into the one
+	# [member floor_tau], and the toxin whenever it is short -- summed into the one
 	# debt, and each body made the kind that is short ([method _make_one]). A
 	# unit owed when nothing is short any more is not a body: births made it.
 	var due := _drop.spawner.due_for(_shortfall(), dt) if births \
@@ -8770,7 +9192,8 @@ func _ecology(dt: float) -> void:
 ## was nowhere to put it.
 ##
 ## **Since bodies divide, it makes only what is short** (lineage.md §5): a
-## venomous peer while the drop is down to its last venom, whatever the count;
+## peer carrying the toxin while the drop is down to its last carriers of it,
+## whatever the count;
 ## a drifter while the food is under its own count; a peer while the hunters are
 ## under today's; and otherwise nothing -- [constant NOTHING_SHORT] -- since
 ## above the floor how many hunters there are is how many their families feed.
@@ -8788,7 +9211,7 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var venom := false
 	if births:
 		var share := _made_share()
-		venom = _venom_short()
+		venom = _toxin_short()
 		if not venom:
 			drifter = float(_drifters) < Drop.food_count(share)
 			if not drifter \
@@ -8815,14 +9238,14 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 ## **What the spawner owes now, since bodies divide** (lineage.md §5): the
 ## food's shortfall against its count, the hunters' under today's count weighed
 ## up by the spawner's tau over [member floor_tau] -- so the one debt pays it
-## back that much sooner -- and one more while venom is short.
+## back that much sooner -- and one more while the toxin is short.
 func _shortfall() -> float:
 	var share := _made_share()
 	var food := maxf(Drop.food_count(share) - float(_drifters), 0.0)
 	var hunters := maxf(Drop.hunter_floor(share, floor_share) - float(_living - _drifters),
 		0.0)
 	return food + hunters * _drop.spawner.tau / maxf(floor_tau, 1e-3) \
-		+ (1.0 if _venom_short() else 0.0)
+		+ (1.0 if _toxin_short() else 0.0)
 
 
 ## **The drifter share of the water the spawner keeps**: the share each player
@@ -8835,10 +9258,11 @@ func _made_share() -> float:
 	return sum / float(turns)
 
 
-## Whether the drop is down to its last venomous bodies, which only a peer
-## brings back (row 13; a tool's `--drifter-venom=1` lets a drifter carry it).
-func _venom_short() -> bool:
-	return not drifter_venom and _gene_short.has(Drop.VENOM)
+## Whether the drop is down to its last carriers of the toxin, in either form,
+## which only a peer brings back (row 13; a tool's `--drifter-toxin=1` lets a
+## drifter carry it).
+func _toxin_short() -> bool:
+	return not drifter_toxin and _gene_short.has(Drop.TOXIN)
 
 
 ## A drifter [param reach] from a player at [param from], ahead of its
@@ -8898,8 +9322,8 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 		if mine <= 0.0:
 			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
 		_seed_peer(b, mine, sensed)
-		_give_venom_back(b)
-	# Expressed whole, as a run's first cell is: after venom, which is worn.
+		_give_toxin_back(b)
+	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
 	b.pos = at
 	b.aim = at
@@ -9099,10 +9523,14 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var pool: Array[StringName] = DRIFTER_GENES.duplicate()
 	for gene: StringName in tiers:
 		pool.erase(gene)
-	while tiers.size() < capacity and not pool.is_empty():
+	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
+	# ([method _place_toxin]): a peer's draw differs from before only on a peer
+	# that drew the toxin.
+	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
 		pool.erase(gene)
-		tiers[gene] = _draw_tier(sensed)
+		var tier := _draw_tier(sensed)
+		tiers[_place_toxin(gene)] = tier
 	while int(tiers[&"cytostome"]) > 0 \
 			and CellBody.gape_of(int(tiers[&"cytostome"]), body_radius) > ARRIVAL_GAPE_MAX:
 		tiers[&"cytostome"] = int(tiers[&"cytostome"]) - 1
@@ -9111,26 +9539,33 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	return tiers
 
 
-## **Venom back through a peer** (§6.4): a drop down to its last venomous
-## bodies gives the next peer `veneneux`, since no drifter may carry it.
-func _give_venom_back(b: Body) -> void:
-	if drifter_venom or not _gene_short.has(Drop.VENOM) \
-			or Genome.tier_of(b.genome, Drop.VENOM) > 0:
+## **The toxin back through a peer** (§6.4, docs/design/dna-slots.md §9): a drop
+## down to its last carriers of it, in either form, gives the next peer the
+## toxin -- its place by a coin -- since no drifter may carry it.
+func _give_toxin_back(b: Body) -> void:
+	if drifter_toxin or not _gene_short.has(Drop.TOXIN):
 		return
-	_gene_short.erase(Drop.VENOM)
-	Drop.give_venom(b.genome, CellBody.slots_for(b.radius), SENSE_GENES, randi())
+	for form: StringName in Genome.forms_of(Drop.TOXIN):
+		if Genome.tier_of(b.genome, form) > 0:
+			return
+	_gene_short.erase(Drop.TOXIN)
+	Drop.give_toxin(b.genome, CellBody.slots_for(b.radius), SENSE_GENES, randi(),
+		randi() % 2 == 0)
 	_stat(&"gene_floor_peer")
 
 
 ## **The gene floor's count** (§6.4): who carries what, and which genes the
-## drop is down to its last GENE_FLOOR carriers of.
+## drop is down to its last GENE_FLOOR carriers of. **A form counts as its
+## variety** (docs/design/dna-slots.md §9): a venom and a poison are two carriers
+## of one toxin, which is the gene the floor keeps.
 func _count_genes() -> void:
 	var counts := {}
 	for b in _cells:
 		if not b.seeded or b.inert:
 			continue
 		for gene: StringName in b.genome:
-			counts[gene] = int(counts.get(gene, 0)) + 1
+			var kind := Genome.variety(gene)
+			counts[kind] = int(counts.get(kind, 0)) + 1
 	_gene_short = Drop.short_genes(counts, DRIFTER_GENES)
 
 

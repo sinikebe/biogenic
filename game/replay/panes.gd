@@ -392,6 +392,17 @@ func set_slack(slack: float) -> void:
 		_vision.slack = slack
 
 
+## **What the body carried**, felt (docs/design/dna-slots-ux.md §6): the stain
+## on the figure in both panes, from the recorded loads. The seep and the
+## flares are the run's moments and are not recorded; the loads are.
+func set_dose(felt: Vector3) -> void:
+	var dose := {} if felt == Vector3.ZERO else {"felt": felt}
+	if _soma != null:
+		_soma.dose = dose
+	if _vision != null:
+		_vision.dose = dose
+
+
 func _process(_delta: float) -> void:
 	if not live:
 		return

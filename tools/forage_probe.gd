@@ -45,8 +45,9 @@ extends SceneTree
 ## does not grow them, and a body's `pellicle` makes it bigger to the bot's mouth
 ## as to every mouth there. Two more players:
 ##
-## - `--avoid-venom` passes over a body carrying `veneneux`, as a full-vision
-##   player who has learnt the organ's colour does;
+## - `--avoid-venom` passes over a body wearing any of the toxin's forms -- venom
+##   or poison (docs/design/dna-slots.md §3) -- as a full-vision player who has
+##   learnt their fangs, barbs and granules does; the old name is kept;
 ## - `--cautious` reads the red lip: it leaves food within CAUTION of a mouth
 ##   that could swallow it, and turns away from such a mouth that close ahead.
 ##
@@ -58,6 +59,7 @@ extends SceneTree
 ## the same way (§15.4).
 
 const FoodField := preload("res://game/normal/food.gd")
+const GenomeNode := preload("res://game/normal/genome.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const NormalMode := preload("res://game/normal/normal_mode.gd")
 const VisionLayer := preload("res://game/vision/vision.gd")
@@ -295,7 +297,7 @@ func _nearest(cell: Node, reach: float, screen: Vector2) -> Vector2:
 				found_floc = body.get("pos")
 				picked_floc = body
 			continue
-		if _avoid_venom and int((body.get("genome") as Dictionary).get(&"veneneux", 0)) > 0:
+		if _avoid_venom and _toxic(body.get("genome")):
 			continue
 		if off.length() < best and not (_cautious and _threat_near(body.get("pos"), cell)):
 			best = off.length()
@@ -452,3 +454,14 @@ func _report() -> void:
 		_end if _end != "" else "alive"])
 	if _food != null and bool(_food.call(&"in_drop")):
 		print(_food.call(&"census_line"))
+
+
+## Whether [param genome] wears any form of a gene with forms -- the toxin's
+## venom or its poison -- at one copy or more.
+func _toxic(genome: Variant) -> bool:
+	if not (genome is Dictionary):
+		return false
+	for gene: StringName in (genome as Dictionary):
+		if GenomeNode.has_forms(gene) and int((genome as Dictionary)[gene]) > 0:
+			return true
+	return false

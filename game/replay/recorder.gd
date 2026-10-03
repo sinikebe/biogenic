@@ -50,11 +50,11 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 472 float32 a frame is 1,888 bytes, which is 113 KB a second at 60 fps. A
-# four-hundred-second run would be 45 MB and mostly empty water; sixty seconds
-# is 6.8 MB, allocated once here and never grown. Nobody rewatches seven
+# 526 float32 a frame is 2,104 bytes, which is 126 KB a second at 60 fps. A
+# four-hundred-second run would be 50 MB and mostly empty water; sixty seconds
+# is 7.6 MB, allocated once here and never grown. Nobody rewatches seven
 # minutes -- the mistake that killed you is in the last twenty seconds. The
-# constant below is the knob and the arithmetic is 113 KB per second bought.
+# constant below is the knob and the arithmetic is 126 KB per second bought.
 #
 # It was 296 floats and 69 KB/s until the wave bounced. Two more glow lobes and
 # their hollowness are eight and one, and the pulse out and back is eighteen:
@@ -64,7 +64,10 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # bodies of six floats, and the killer's slot (docs/design/ocean.md §11).
 # Hunger took it to 472: how far the membrane had fallen in, inside the
 # membrane's block, and how slack the body was (docs/design/hunger.md §2.5).
-# §3.1 and owner's call 1 in §7.
+# The toxins took it to 526 (docs/design/dna-slots.md §13): this cell's three
+# loads, one float of packed loads for each of the 48 bodies, and the self
+# lobe's colour in the membrane's block, so a dosing bite's bruise plays back in
+# its hue. §3.1 and owner's call 1 in §7.
 # ---------------------------------------------------------------------------
 
 const SECONDS := 60
@@ -97,13 +100,22 @@ const INDEX_MASK := (1 << INDEX_BITS) - 1
 ## tens of hours of use away, keeps its hits first and drops misses.
 const BEAMS := 24
 
-## player: pos, heading, velocity, radius, wound, steer
+## player: pos, heading, velocity, radius, wound, steer, and its loads -- the
+## stacks of each of doses.gd's kinds it carried, which lerp as the quantities
+## they are
 const AT_PLAYER := 0
-const PLAYER_FLOATS := 8
-## 48 bodies x (pos, heading, radius, wound, gape). **A radius of 0 is an empty
-## slot**, which both views draw as nothing -- the mirror's convention.
+const PLAYER_FLOATS := 11
+## Where this cell's three loads sit in its block.
+const AT_LOADS := AT_PLAYER + 8
+## 48 bodies x (pos, heading, radius, wound, gape, loads). **A radius of 0 is an
+## empty slot**, which both views draw as nothing -- the mirror's convention.
+## **The loads are one float**, `FoodField.pack_loads`'s three bytes, and
+## stepped at playback: a lerp between two packed numbers is a third number
+## that means neither.
 const AT_BODIES := AT_PLAYER + PLAYER_FLOATS
-const BODY_FLOATS := 6
+const BODY_FLOATS := 7
+## Where a body's packed loads sit in its block.
+const BODY_LOADS := 6
 ## 14 motes x pos
 const AT_MOTES := AT_BODIES + BODIES * BODY_FLOATS
 ## The membrane, as uniforms. signal_bus.gd is the only file that knows which.
@@ -365,6 +377,8 @@ func capture(delta: float) -> void:
 	_ring[at + 5] = _cell.radius
 	_ring[at + 6] = _cell.wound
 	_ring[at + 7] = _cell.steer
+	for k in 3:
+		_ring[at + AT_LOADS + k] = _cell.loads[k] if k < _cell.loads.size() else 0.0
 
 	_capture_bodies(at)
 
@@ -528,6 +542,10 @@ func _capture_bodies(at: int) -> void:
 		# multiplier is cached there and this is a multiply. The float it writes
 		# is bit-identical to `gape_at()`'s.
 		_ring[i + 5] = _gape_scale[slot] * b.radius
+		# **What it carried**, packed, and nothing at all for the bodies that
+		# carry nothing -- nearly all of them -- which is one comparison.
+		_ring[i + BODY_LOADS] = FoodField.pack_loads(b.loads) \
+			if FoodField.Doses.any(b.loads) else 0.0
 		i += BODY_FLOATS
 
 
@@ -798,9 +816,14 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 		return
 	match kind:
 		&"thrust", &"hit", &"shove", &"beat":
+			# **A hit keeps its tint** (dna-slots-ux.md §6): the dosing bite's
+			# bruise ray is drawn in the dose's hue in the truth pane, as its
+			# bruise was on the membrane. Zero is the impact's own colour.
+			var tint: Variant = info.get("tint", Vector3.ZERO)
 			_sensations.append([_clock, kind,
 				float(info.get("bearing", 0.0)),
-				float(info.get("strength", 1.0))])
+				float(info.get("strength", 1.0)),
+				tint if tint is Vector3 else Vector3.ZERO])
 			if _sensations.size() > PRUNE_ABOVE:
 				_sensations = _slice_from(_sensations, _clock - float(SECONDS))
 		_:
@@ -1023,6 +1046,7 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 			continue
 		out[head + 2] = lerp_angle(_ring[from + head + 2],
 			_ring[to + head + 2], t)
+		out[head + BODY_LOADS] = _ring[from + head + BODY_LOADS]
 		_hold_jump(out, from, to, head, t)
 	for index in MOTES:
 		_hold_jump(out, from, to, AT_MOTES + index * 2, t)

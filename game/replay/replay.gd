@@ -107,6 +107,8 @@ var _speed_button: Button = null
 var _leave_button: Button = null
 
 var _frame := PackedFloat32Array()
+## This cell's loads, read back each frame. One array, written in place.
+var _loads := PackedFloat64Array([0.0, 0.0, 0.0])
 ## Seconds into the window, and the recorded frame the cursor is sitting on.
 var _at := 0.0
 var _index := 0
@@ -202,11 +204,18 @@ func _write_state() -> void:
 		_cell.radius = _frame[5]
 		_cell.wound = _frame[6]
 		_cell.steer = _frame[7]
+		# **What it carried** (docs/design/dna-slots.md §13), for the stain on
+		# the figure in both panes.
+		for k in _loads.size():
+			_loads[k] = _frame[RecorderNode.AT_LOADS + k]
+		_cell.restore_loads(_loads)
+		_panes.set_dose(FoodField.felt_of(_cell.loads, _cell.radius))
 	if _food != null:
 		for i in RecorderNode.BODIES:
 			var at := RecorderNode.AT_BODIES + i * RecorderNode.BODY_FLOATS
 			_food.restore_body(i, Vector2(_frame[at], _frame[at + 1]),
 				_frame[at + 2], _frame[at + 3], _frame[at + 4])
+			_food.restore_loads(i, _frame[at + RecorderNode.BODY_LOADS])
 		_write_flocs()
 		_food.beams = _read_beams()
 		_food.ping_fronts = _read_ping_fronts()
@@ -436,7 +445,10 @@ func _fire_events() -> void:
 	while _sensation_at < sens.size() and float(sens[_sensation_at][0]) <= t:
 		var row: Array = sens[_sensation_at]
 		_sensation_at += 1
-		_panes.feel(row[1], {"bearing": row[2], "strength": row[3]})
+		var info := {"bearing": row[2], "strength": row[3]}
+		if row.size() > 4 and row[4] is Vector3 and row[4] != Vector3.ZERO:
+			info["tint"] = row[4]
+		_panes.feel(row[1], info)
 		# The recorded heartbeat is the flare's cue, as the live one was.
 		if row[1] == &"beat":
 			_eye_flare.cue()

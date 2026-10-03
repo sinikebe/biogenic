@@ -12,6 +12,12 @@ extends Node
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## **How a load wears and what it does** (docs/design/dna-slots.md §6): the
+## generic arithmetic, which knows no gene. This file holds the game's numbers for
+## it, beside every other table, and every body's wound is stepped through
+## [method dosed]. doses.gd preloads nothing, so there is no cycle.
+const Doses := preload("res://game/mechanics/doses.gd")
+
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
 ## **A new press of a control the hand drives with**, while the autopilot has the
@@ -73,10 +79,6 @@ const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 ## Seconds between bites from one mouth. One mouth, one bite, whatever it is
 ## resting against -- so a cell wedged between two others does not chew both.
 const BITE_GAP := 0.85
-## `veneneux` / venom, from the other end. Swallowing a venomous cell already
-## kills the swallower; *biting* one costs this share of the damage just dealt,
-## which makes venom the answer to being gnawed as well as to being eaten.
-const VENOM_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
 
 ## Where on a body a bite lands, and therefore how much of it lands. The nose is
 ## 1.0 because that is where the target's own mouth is and where it is thickest;
@@ -100,6 +102,13 @@ const DART_ARC_DEG := 110.0
 ## anywhere: point of view feels each bite as a `hit` at the bearing it came
 ## from, and full vision draws the tears (cilia.gd).
 var wound := 0.0
+## **This body's loads**, stacks of each of doses.gd's kinds (docs/design/
+## dna-slots.md §6.1): what venom and poison left in it, wearing off. 64 bits,
+## because a load wears down like a clock and every clock here is kept in 64.
+## Written by the field, which decides every dose -- or, on a guest, by the host's
+## snapshot -- and worn here with the wound, every frame. Being born, a death and
+## a reset clear them.
+var loads := Doses.none()
 
 ## The genome this cell wears. Written by normal_mode.gd, which is the only
 ## place the two halves are introduced to each other.
@@ -424,14 +433,48 @@ const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
 ## same five seconds; with no run to break, the dart stuns. A starting value.
 const DART_STUN := 5.0
 
-## `veneneux` / venom. What surviving being eaten costs, in hunger. A cell that
-## swallows you dies of it and you are spat out starving.
-##
-## A share of a born cell's tank, paid as seconds of rest through `spend` as
-## the dash is, so `crista` and `vacuole` soften it too (gene-stats.md §11,
-## call 2). The values are wire.gd's to guard; the host only asks whether this
-## is `>= 0`, and how it is paid is each device's own hunger.
-const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
+# --- The toxin: venom outside, poison inside (docs/design/dna-slots.md §6, §7) --
+# **Doses replace both of what `veneneux` did** -- the bite-back share and the
+# swallower that died while the player was spat out. A dose is stacks that wear
+# off over seconds and act while they last, the owner's rule of 2026-09-30, and a
+# body carrying harm does not mend. Every value here is a starting value (§15):
+# balance waits for players.
+
+## **The body a stack is quoted for**: a born cell. A load acts on any other body
+## as `stacks x (DOSE_SIZE / r)^2` (doses.gd's `felt`).
+const DOSE_SIZE := BASE_RADIUS
+## **What one stack of harm takes out of a body of [constant DOSE_SIZE]**, as it
+## wears off: about 70 % of a born mouth's head-on bite (0.07). Into the same
+## wound bites tear, so full vision's tears show it.
+const HARM_PER_STACK := 0.05
+## **How fast each kind of load wears off**, by doses.gd's `Kind`: harm over
+## about a fight (a stern kill takes 13 s), paralysis short so it opens a window
+## and does not lock anybody out, sleep longer because a bite ends it. Phase 1
+## delivers harm alone.
+const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
+## **Below this a load is gone**, cleared whole: one stack lasts
+## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
+const DOSE_GONE := 0.2
+## `toxicyst` / **venom**, outside: the stacks its every bite leaves at the front,
+## and its every sting on a side, by copies. One a copy, which the line can say as
+## such. Armour does not stop them: they ride in whole.
+const VENOM_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
+## **How far round its slot's bearing a venom on a side or the stern stings** a
+## mouth that bites there: the dart's own arc, so the two weapons that guard a side
+## reach as far round it.
+const VENOM_ARC_DEG := 110.0
+## **Whether a venom on a side or the stern stings at all.** False makes it inert
+## there, and venom works through the bite alone: the switch, should the owner read
+## *"the direction slots express outside"* as the mouth only (dna-slots.md §22.2).
+const VENOM_SIDES := true
+## `veneneux` / **poison**, inside: the stacks whatever bites the body takes, a
+## bite, by copies -- the price of chewing a poisonous cell, in place of the old
+## bite-back share.
+const POISON_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
+## **And what whatever swallows it takes**, by copies: one copy takes 0.8 of a
+## born swallower, three kill anything up to r40. The swallowed body is eaten all
+## the same (owner's row 5): nobody is spat out any more.
+const SWALLOW_STACKS_BY_TIER: Array[float] = [0.0, 16.0, 32.0, 48.0]
 
 ## `statocyst` / level used to be named here: it bought no number, only a lobe
 ## on the membrane at a bearing that did not turn with the body. The owner
@@ -692,6 +735,7 @@ func reset(keep_place: bool = false) -> void:
 	velocity = Vector2.ZERO
 	radius = BASE_RADIUS
 	wound = 0.0
+	loads.fill(0.0)
 	_omega = 0.0
 	_wander = 0.0
 	_impulse_timer = randf_range(0.6, 1.4)
@@ -721,7 +765,9 @@ func body_state() -> Dictionary:
 	}
 
 
-## Puts back what [method body_state] took, and lets go of anything held.
+## Puts back what [method body_state] took, and lets go of anything held. The
+## loads are not in it -- a file keeps them beside the body, as `cell.loads`
+## ([method restore_loads]) -- so a body put back carries none until they are.
 func restore_body(state: Dictionary) -> void:
 	position = state["at"]
 	heading = float(state["heading"])
@@ -733,8 +779,36 @@ func restore_body(state: Dictionary) -> void:
 	_impulse_timer = float(state["impulse"])
 	_dash_timer = float(state["dash"])
 	_effort = float(state["effort"])
+	loads.fill(0.0)
 	_held = false
 	release()
+
+
+## **The loads, written back** -- from a kept drop's `cell.loads`, a host's
+## snapshot or a replay: each kind as many stacks as [param kept] says, and none
+## where it says nothing. Copied, never held: a packed array is passed by
+## reference.
+func restore_loads(kept: PackedFloat64Array) -> void:
+	for k in loads.size():
+		loads[k] = maxf(kept[k], 0.0) if k < kept.size() and is_finite(kept[k]) else 0.0
+
+
+## **A body's wound after [param delta] seconds, with its [param loads]**
+## (docs/design/dna-slots.md §6.2) -- the one dose step every body takes, the
+## cell on this device here, every water body and every person in food.gd. With
+## nothing in it, it is [method mended], exactly. With harm in it, the stacks that
+## wore off this step go into the wound -- [constant HARM_PER_STACK] a stack,
+## diluted by the body's [param body_radius] -- and **the wound mends only for
+## the part of the step after the harm ran out**: a body carrying harm does not
+## mend. [param loads] are worn in place.
+static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
+		delta: float) -> float:
+	if not Doses.any(loads):
+		return mended(hurt, delta)
+	var worn := Doses.wear(loads, delta, DOSE_TAU_BY_KIND, DOSE_GONE)
+	var harmed := clampf(hurt + worn.x * HARM_PER_STACK
+		* Doses.felt(1.0, body_radius, DOSE_SIZE), 0.0, 1.0)
+	return mended(harmed, worn.y)
 
 
 func _process(delta: float) -> void:
@@ -748,7 +822,13 @@ func _process(delta: float) -> void:
 	# rather than in the water, because it is a thing a body does and not a
 	# thing that happens to it -- and because _set_simulating() stops this node
 	# on a death, which is exactly when it should stop.
-	wound = mended(wound, delta)
+	#
+	# **And its loads wear here, with it** (dna-slots.md §6.2): harm tears it as
+	# it wears off, and it does not mend while harm is in it. A wound made whole
+	# this way is found by the field, at the top of its contacts with this cell,
+	# which is where every death of this cell is told -- on a guest never, since
+	# the host owns that death and the next snapshot's wound is the truth.
+	wound = dosed(loads, wound, radius, delta)
 
 	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
@@ -1053,11 +1133,6 @@ static func bite_damage(cytostome_tier: int, gape: float, target_radius: float,
 ## and the whole of §2.
 static func flank(theta: float) -> float:
 	return lerpf(FLANK_AHEAD, FLANK_ASTERN, 0.5 - 0.5 * cos(theta))
-
-
-## What a venomous body does back to the mouth that just bit it.
-static func venom_back(veneneux_tier: int, damage: float) -> float:
-	return damage * VENOM_BITE_BACK_BY_TIER[_tier_index(veneneux_tier)]
 
 
 ## A wound knitting up over [param delta] seconds. Every body in the water uses

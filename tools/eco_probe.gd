@@ -17,7 +17,8 @@ extends SceneTree
 ## - the drop's own switches, as `tools/drive.gd` takes them: `--lod=`,
 ##   `--half-rate=`, `--near-first=`, `--skip-still=`, `--own-speed=`,
 ##   `--notice=senses|fixed`, `--flight=none|all`, `--absorb=`,
-##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-venom=`; and pack 2's
+##   `--contact-swallow=`, `--armour-swallow=`, `--drifter-toxin=` (or its old
+##   name, `--drifter-venom=`); and pack 2's
 ##   (docs/design/lineage.md §12): `--births=0|1` (0 is pack 1), `--mutate=`,
 ##   `--floor=`, `--floor-tau=`, `--newborn-grace=`; and pack 3's
 ##   (docs/design/behaviour.md §12.1): `--rules=0|1`, 0 being pack 2's hand-written
@@ -107,9 +108,13 @@ func _initialize() -> void:
 			sets[&"rule_change"] = v == "1"
 		elif a.begins_with("--water-tail="):
 			sets[&"tails_beat"] = v != "pack3"
+		elif a.begins_with("--drifter-toxin=") or a.begins_with("--drifter-venom="):
+			# Row 13's switch, renamed with the toxin's two forms
+			# (docs/design/dna-slots.md §9); the old name still reads.
+			sets[&"drifter_toxin"] = v == "1"
 		else:
 			for name: String in ["lod", "half-rate", "near-first", "skip-still", "own-speed",
-					"contact-swallow", "armour-swallow", "drifter-venom"]:
+					"contact-swallow", "armour-swallow"]:
 				if a.begins_with("--%s=" % name):
 					sets[StringName(name.replace("-", "_"))] = v == "1"
 	seed(seed_value)
