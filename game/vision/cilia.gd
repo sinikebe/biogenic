@@ -162,6 +162,29 @@ const BODY_FILL_ALPHA := 0.16
 const BODY_RIM_ALPHA := 0.66
 const BODY_RIM_WIDTH := 2.2
 
+# --- A starving body goes slack (docs/design/hunger.md §2.3) -----------------
+# A cell running out of fuel loses turgor, and its rim crumples into creases
+# that deepen as the tank empties. **Inward only**: a starving cell really does
+# shrink, and this one is never drawn smaller than its radius, for the reason
+# the wound gives in [method _draw_ovoid]. The fill, the rim's ink and the
+# nucleus do not change: a thinner fill was tried, and it cost the figure the
+# glance it needs against the controls (controls.md §3.2).
+
+## Nine creases round the rim. Odd, so the body never reads as a symmetric
+## badge.
+const SLACK_FOLDS := 9.0
+## How deep a crease goes at full slack, as a share of the radius: 5.3 canvas
+## px on the born point-of-view figure, 3.1 in full vision.
+const SLACK_DEPTH := 0.12
+## Narrow creases between broad lobes, rather than a sine's even ripple.
+const SLACK_SHARP := 2.0
+## Radians a second the creases wander, wet and slow, so a still body is not a
+## drawn shape. A clock of 0 holds them still, as the pause screen's figure is.
+const SLACK_DRIFT := 0.15
+## Rim points while the body is slack. [constant OVOID_STEPS]' forty cannot
+## draw nine folds; a smooth body keeps its forty.
+const SLACK_STEPS := 96
+
 # --- A body that has been bitten --------------------------------------------
 # **No health bar and no new colour.** A wound is drawn as what it is: the
 # membrane is open, so the rim has holes in it and what was inside has mostly
@@ -545,13 +568,20 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## step_tail] keeps it: the clock its wave is drawn on, and 0 beating to 1 held
 ## still (automation.md §8.1). Passed only for the player's own body, whose hold
 ## is known; [constant NO_TAIL] draws it on [param clock], beating.
+##
+## [param slack] is 0..1, **how far this body has gone slack with hunger**
+## (docs/design/hunger.md): the rim crumples inward into [constant SLACK_FOLDS]
+## creases. Passed only for the player's own body, as [param eye] is: hunger is
+## each player's own and is not on the wire, so a friend is never drawn
+## crumpled, and nothing in the water is either.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
-		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL) -> void:
+		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
+		slack: float = 0.0) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -561,7 +591,7 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		tint = tint.lerp(body_tint(tiers, false), clampf(shed, 0.0, 1.0))
 
 	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound,
-		pinch)
+		pinch, slack)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade, double)
 	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order,
 		eye, tail)
@@ -572,22 +602,26 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 
 ## The body: an ovoid, narrower at the front, so the cell has a nose even before
 ## the heading needle is read -- and, once something has been biting it, a rim
-## with holes in it.
+## with holes in it; once it is starving, a rim with creases in it.
 static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tint: Color, clock: float, fade: float,
 		phase: float, unit: float, wound: float = 0.0,
-		pinch: float = 0.0) -> void:
+		pinch: float = 0.0, slack: float = 0.0) -> void:
+	var limp := clampf(slack, 0.0, 1.0)
+	var steps := OVOID_STEPS if limp <= 0.0 else SLACK_STEPS
 	var body := PackedVector2Array()
-	body.resize(OVOID_STEPS)
+	body.resize(steps)
 	var squeeze := clampf(pinch, 0.0, 1.0)
-	for i in OVOID_STEPS:
-		var t := TAU * float(i) / float(OVOID_STEPS)
+	for i in steps:
+		var t := TAU * float(i) / float(steps)
 		var breathe := 1.0 + BREATHE * sin(t * 3.0 + clock * 1.7 + phase)
-		body[i] = _surface(at, fwd, stb, r * breathe, t, squeeze)
+		body[i] = _surface(at, fwd, stb,
+			r * breathe * _crease(t, phase, clock, limp), t, squeeze)
 
 	# **The body is not drawn smaller.** The radius is what decides every
 	# encounter in the water, so a wounded cell that looked smaller would be
-	# lying about the one number that matters. It holds less instead.
+	# lying about the one number that matters. It holds less instead. A
+	# starving one creases inward and keeps its extent, for the same reason.
 	var hurt := clampf(wound, 0.0, 1.0)
 	canvas.draw_colored_polygon(body,
 		Color(tint, BODY_FILL_ALPHA * (1.0 - WOUND_FILL * hurt) * fade))
@@ -606,24 +640,37 @@ static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var rim := PackedVector2Array()
 	var flaps := PackedVector2Array()
 	var ink := BODY_RIM_ALPHA * (1.0 - WOUND_DIM * hurt) * fade
-	for i in OVOID_STEPS:
-		var t := TAU * (float(i) + 0.5) / float(OVOID_STEPS)
+	for i in steps:
+		var t := TAU * (float(i) + 0.5) / float(steps)
 		if _tear_at(t, phase, hurt) <= 0.0:
 			rim.append(body[i])
-			rim.append(body[(i + 1) % OVOID_STEPS])
+			rim.append(body[(i + 1) % steps])
 	_stroke(canvas, rim, tint, ink, BODY_RIM_WIDTH * unit)
 
 	# A flap of membrane hanging into each tear, so a gap reads as a hole in a
-	# body rather than as a dashed line.
+	# body rather than as a dashed line. Rooted on the creased rim, not the
+	# full one: a starving, bitten body's flaps would otherwise hang outside it.
 	for k in WOUND_TEARS:
 		var open := clampf(hurt * float(WOUND_TEARS) - float(k), 0.0, 1.0)
 		if open <= 0.0:
 			continue
 		var t := _tear_seat(phase, k)
-		var edge := _surface(at, fwd, stb, r, t)
+		var edge := _surface(at, fwd, stb, r * _crease(t, phase, clock, limp), t)
 		flaps.append(edge)
 		flaps.append(edge + (at - edge).normalized() * (r * WOUND_GASH * open))
 	_stroke(canvas, flaps, tint, ink, BODY_RIM_WIDTH * unit)
+
+
+## **How far the rim has fallen in** at ovoid parameter [param t], as a share
+## of the radius: 1 everywhere on a body that is not slack, and down to
+## `1 - SLACK_DEPTH` at the bottom of a crease on one that is [param limp] 1.
+## The creases sit off [param phase], which is already the per-cell number the
+## breath and the tears use, and wander on [param clock].
+static func _crease(t: float, phase: float, clock: float, limp: float) -> float:
+	if limp <= 0.0:
+		return 1.0
+	return 1.0 - SLACK_DEPTH * limp * pow(0.5 + 0.5 * cos(t * SLACK_FOLDS
+		+ phase * 3.0 + clock * SLACK_DRIFT), SLACK_SHARP)
 
 
 ## How far open the tear nearest ovoid parameter [param t] is, 0 for intact rim.

@@ -14,6 +14,11 @@ extends Node
 ## formatter's rules, a few rows of the table against the constants they are
 ## read off, and the dash and the venom paid the way their rows say.
 ##
+## **And hunger, as the player is warned of it** (docs/design/hunger.md): the
+## beat that races, never slows and never dims, the body's slack and the
+## membrane's fall, read off the one mapping in metabolism.gd -- a number that
+## would show only as a warning that came too late, or not at all.
+##
 ## Headless and deterministic. Prints one line per check and `ALL PASS` only if
 ## every one held; CI asserts on that marker rather than on the exit code,
 ## because Godot exits 0 after a script error too.
@@ -28,6 +33,7 @@ const FoodField := preload("res://game/normal/food.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
+const SignalBus := preload("res://game/perception/signal_bus.gd")
 
 const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 
@@ -45,6 +51,7 @@ func _ready() -> void:
 	_tally_and_glow()
 	_field()
 	_energy()
+	_alarm()
 	_gene_stats()
 	for node in _nodes:
 		if is_instance_valid(node):
@@ -489,6 +496,77 @@ func _energy() -> void:
 	_check("a held push pays on the speed it adds (%.4f, want %.4f), and a new body"
 		% [push, push_want] + " owes nothing (%.4f)" % after_reset,
 		is_equal_approx(push, push_want) and after_reset == 0.0)
+
+
+# --- Hunger is an alarm (docs/design/hunger.md §2.1, §7) ------------------------
+
+func _alarm() -> void:
+	var met: Node = Metabolism.new()
+	met.set_process(false)
+	_nodes.append(met)
+	# Fed, half a tank, empty, and the end of the grace.
+	var periods: Array[float] = []
+	var strengths: Array[float] = []
+	for hunger: float in [0.0, 0.5, 1.0]:
+		met.reset()
+		met.set_hunger(hunger)
+		periods.append(met.beat_period())
+		strengths.append(met.beat_amplitude())
+	met.starve_seconds = Metabolism.STARVE_GRACE
+	var last: float = met.beat_period()
+	strengths.append(met.beat_amplitude())
+	_check("the beat comes every %.2f s fed, %.2f s at half a tank and %.2f s empty"
+		% [periods[0], periods[1], periods[2]] + " -- 2.4, 2.4 and 1.2",
+		is_equal_approx(periods[0], 2.4) and is_equal_approx(periods[1], 2.4)
+		and is_equal_approx(periods[2], 1.2))
+	_check("and every %.2f s as the grace runs out -- 0.75" % last,
+		is_equal_approx(last, 0.75))
+	_check("every beat lands at full strength, fed or dying: %s" % [strengths],
+		strengths.all(func(a: float) -> bool: return is_equal_approx(a, 1.0)))
+
+	# **Never slower and never dimmer as the danger rises**, which is the whole of
+	# §0: a warning that gets quieter as death comes reads as nothing at all.
+	var never_slower := true
+	var before := INF
+	for step in 101:
+		met.reset()
+		met.set_hunger(float(step) / 100.0)
+		never_slower = never_slower and met.beat_period() <= before + 1e-6
+		before = met.beat_period()
+	for step in 101:
+		met.starve_seconds = Metabolism.STARVE_GRACE * float(step) / 100.0
+		never_slower = never_slower and met.beat_period() <= before + 1e-6
+		before = met.beat_period()
+	_check("from fed to the end of the grace the beat never once slows", never_slower)
+
+	met.reset()
+	met.set_hunger(0.5)
+	var calm: float = met.hungry()
+	met.set_hunger(1.0)
+	var warned: float = met.hungry()
+	_check("the body's warning is %.2f at half a tank and %.2f empty -- 0 and 1"
+		% [calm, warned], calm == 0.0 and warned == 1.0)
+
+	met.reset()
+	met.set_hunger(0.99)
+	var fed_faint: float = met.faint()
+	met.set_hunger(1.0)
+	var onset: float = met.faint()
+	met.starve_seconds = Metabolism.STARVE_GRACE
+	var gone: float = met.faint()
+	_check("the membrane has fallen %.2f with 1%% of the tank left, %.2f the moment"
+		% [fed_faint, onset] + " it is empty and %.2f at the end -- 0, 0.35 and 1"
+		% gone, fed_faint == 0.0 and is_equal_approx(onset, 0.35)
+		and is_equal_approx(gone, 1.0))
+
+	# No beat faster than the floor even under dread's full jitter, and the floor
+	# itself under three flashes a second.
+	var fastest := Metabolism.LAST_PERIOD * (1.0 - SignalBus.DREAD_JITTER)
+	_check("the fastest beat dread can make of the last one is %.2f s, at or above"
+		% fastest + " the bus's floor of %.2f s, and that is under 3 a second"
+		% SignalBus.BEAT_PERIOD_MIN,
+		fastest >= SignalBus.BEAT_PERIOD_MIN - 1e-6
+		and SignalBus.BEAT_PERIOD_MIN >= 1.0 / 3.0)
 
 
 # --- A gene's numbers (docs/design/gene-stats.md) -------------------------------

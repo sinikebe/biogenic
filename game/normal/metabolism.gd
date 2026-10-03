@@ -18,6 +18,16 @@ extends Node
 ## nowhere else -- change starvation balance here and you can see, in the same
 ## screenful, what it does to legibility.
 ##
+## **Starving is an alarm, said three ways** (docs/design/hunger.md; the owner,
+## 2026-10-03: "I often die of hunger without noticing anything"). The beat it
+## replaces slowed and dimmed as death came, and a warning that gets quieter as
+## the danger rises read as nothing at all. Now, from half a tank, the beat
+## races at full strength ([method beat_period]) and the body goes slack
+## ([method hungry], which the run draws as creases); when the tank empties the
+## membrane falls in, and closes further through the grace ([method faint]). A
+## meal undoes all three. No words, and no balance moved: these are thresholds
+## for *noticing*, and the pace, the meal and the grace are below as they were.
+##
 ## **The arithmetic of a tank is in static functions** -- [method rest_rate],
 ## [method effort_cost], [method meal] -- and this node's [method _process],
 ## [method spend] and [method feed] are their callers, as the water's bodies
@@ -35,20 +45,27 @@ signal hunger_changed(hunger: float)
 
 ## Beat period when fed. The rest state of the whole game.
 const REST_PERIOD := 2.4
-## The floor on the beat *rate* while there is still time to fix it. A starving
-## cell beats this slowly -- the membrane must still be there to read.
-const STARVED_PERIOD := 4.8
-## Past the point of fixing: the grace stretches to here. Intervals long enough
-## that you sit waiting, wondering whether it is coming back. Rate is free -- it
-## costs no light, and nothing else is using it at that moment.
-const DYING_PERIOD := 7.5
-
+## **Where the warning starts: half a tank.** At the usual pace that is twenty
+## seconds from death, longer than a good forager's gap between meals (median
+## 12.5 s, energy.md §7.3), so a cell that eats on time meets it only on its
+## way to the next meal. hunger.md §3.
+const HUNGRY_FROM := 0.5
+## Seconds between beats when the tank is empty: twice the rest rate. The beat
+## quickens toward it in a straight line from [constant HUNGRY_FROM].
+const EMPTY_PERIOD := 1.2
+## And at the very end of the grace: 80 a minute, three times the rest rate,
+## and still longer than one beat's envelope lasts, so the beats stay separate
+## instead of blurring into a glow.
+const LAST_PERIOD := 0.75
+## **How far the membrane falls the moment the tank empties**, as a share of
+## the whole fall: the empty tank is an *event*, because it is where this
+## game's own rule changes (spending stops and the grace starts). The rest of
+## the fall comes through the grace.
+const FAINT_ONSET := 0.35
+## Every beat lands at full strength: hunger never dims it, only dread does.
+## `STARVED_PERIOD` 4.8, `DYING_PERIOD` 7.5 and `STARVED_AMPLITUDE` 0.35 are
+## retired with the slowing, dimming beat they drew (hunger.md §2.1).
 const FULL_AMPLITUDE := 1.0
-## The floor on the beat *strength*, and the more important of the two floors.
-## A beat that decays to nothing leaves no membrane at all, which reads as a
-## broken screen rather than as dying. It holds through the grace as well: the
-## floor rule has no exceptions, and only the period is allowed past it.
-const STARVED_AMPLITUDE := 0.35
 
 ## Seconds from fed to starved **for a body at rest**, which no living cell is:
 ## every stroke and every turn is paid on top ([method spend],
@@ -306,19 +323,35 @@ func starved() -> bool:
 	return hunger >= 1.0 and starve_seconds >= STARVE_GRACE
 
 
-## THE mapping, half one. Seconds between beats.
-##
-## Starving stretches the period toward [constant STARVED_PERIOD] and then,
-## through the grace, toward [constant DYING_PERIOD]. **Hunger alone.** The
-## water's richness used to multiply this down to 0.55 s beside food
+## **How far into the warning**, 0..1: nothing above [constant HUNGRY_FROM],
+## rising in a straight line to 1 at empty, and 1 through the grace. The beat
+## quickens on it and the body goes slack on it -- normal_mode.gd eases the
+## drawn slack toward it, so a meal fills the body out rather than popping it.
+func hungry() -> float:
+	return clampf((hunger - HUNGRY_FROM) / (1.0 - HUNGRY_FROM), 0.0, 1.0)
+
+
+## THE mapping, half one. Seconds between beats: [constant REST_PERIOD] above
+## half a tank, **quicker as the tank empties** to [constant EMPTY_PERIOD], then
+## quicker again through the grace to [constant LAST_PERIOD]. **Hunger alone.**
+## The water's richness used to multiply this down to 0.55 s beside food
 ## (food-and-predators.md §2.1); the owner took it off on 2026-09-29, because
-## food is what the senses are for, so the same hunger now beats the same
-## rhythm wherever the cell is.
+## food is what the senses are for, so the same hunger beats the same rhythm
+## wherever the cell is.
 func beat_period() -> float:
-	var starved := lerpf(REST_PERIOD, STARVED_PERIOD, hunger)
-	return lerpf(starved, DYING_PERIOD, dying())
+	return lerpf(lerpf(REST_PERIOD, EMPTY_PERIOD, hungry()), LAST_PERIOD, dying())
 
 
-## THE mapping, half two. How hard each beat lands, 0..1.
+## THE mapping, half two. How hard each beat lands, 0..1: **always full.**
+## Hunger never dims the beat; dread does, in signal_bus.gd's
+## `beat_strength()`, and that drain is dread's own signature.
 func beat_amplitude() -> float:
-	return lerpf(FULL_AMPLITUDE, STARVED_AMPLITUDE, hunger)
+	return FULL_AMPLITUDE
+
+
+## **How far the membrane has fallen in**, 0..1: nothing while there is food in
+## the tank, [constant FAINT_ONSET] the moment it is empty, and all of it as the
+## grace runs out. The run posts it to the bus every frame (signal_bus.gd's
+## `faint()`), which owns how far that is in pixels and how fast it moves.
+func faint() -> float:
+	return lerpf(FAINT_ONSET, 1.0, dying()) if hunger >= 1.0 else 0.0

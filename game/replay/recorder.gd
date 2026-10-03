@@ -50,7 +50,7 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 470 float32 a frame is 1,880 bytes, which is 113 KB a second at 60 fps. A
+# 472 float32 a frame is 1,888 bytes, which is 113 KB a second at 60 fps. A
 # four-hundred-second run would be 45 MB and mostly empty water; sixty seconds
 # is 6.8 MB, allocated once here and never grown. Nobody rewatches seven
 # minutes -- the mistake that killed you is in the last twenty seconds. The
@@ -62,6 +62,8 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # stride, one capture() costs 186 us at its worst and 104 us on average. The
 # beam's twenty-four rays took it to 385, and the drop to 470: fourteen more
 # bodies of six floats, and the killer's slot (docs/design/ocean.md §11).
+# Hunger took it to 472: how far the membrane had fallen in, inside the
+# membrane's block, and how slack the body was (docs/design/hunger.md §2.5).
 # §3.1 and owner's call 1 in §7.
 # ---------------------------------------------------------------------------
 
@@ -111,7 +113,7 @@ const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
 ## **The ping, out and back.** Two outgoing fronts and four returning echoes,
 ## then ping_range, held_remaining, the division's four, the frame's own delta,
-## the beat and the hunter.
+## the beat, the hunter, the killer and the slack.
 ##
 ## Two and four, and both numbers were measured rather than chosen. The field
 ## can hold eleven fronts and fifty-five echoes at tier 3, and recording all of
@@ -173,7 +175,12 @@ const AT_HUNTER := AT_PING_RANGE + 8
 ## killer is named on the frames of its approach, and its rings are drawn as the
 ## cell crossed them, whenever nothing was hunting it.
 const AT_KILLER := AT_PING_RANGE + 9
-const STRIDE := AT_PING_RANGE + 10
+## **How slack the body was** (docs/design/hunger.md §2.5): the drawn slack the
+## run handed both views, so the replay crumples the body exactly as the run
+## did -- the membrane's fall rides in its block, and this is the body's half.
+## A quantity, so it lerps.
+const AT_SLACK := AT_PING_RANGE + 10
+const STRIDE := AT_PING_RANGE + 11
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -397,6 +404,7 @@ func capture(delta: float) -> void:
 	_ring[at + AT_HUNTER] = float(_slot_of(_food.hunter())) if _food != null else -1.0
 	# Nobody, until the seal says who. See AT_KILLER.
 	_ring[at + AT_KILLER] = -1.0
+	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
