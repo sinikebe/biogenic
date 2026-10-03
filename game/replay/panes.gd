@@ -143,10 +143,12 @@ const ICON_SIZE := 56.0
 const ICON_EDGE := 48.0
 const ACTING_SIZE := 14
 const ACTING_COLOR := Color(0.855, 0.953, 0.933, 0.45)
-## Where the acting line sits in the band: under the caption, beside the
-## transport, which the replay centres in the band (replay.gd).
+## Where the acting line sits in the band: under the felt pane's caption,
+## centred on it, and slid left only as far as it must go to stay this clear of
+## the transport, which the replay centres in the band (replay.gd) -- and as
+## clear of the screen's left edge, where a line too long for both is trimmed.
 const ACTING_TOP := 34.0
-const ACTING_GAP := 24.0
+const ACTING_CLEAR := 16.0
 const TRANSPORT_WIDTH := 368.0
 
 ## True while this screen is mirroring a run that is still being played, which
@@ -315,6 +317,26 @@ func _say_acting() -> void:
 		line = acting_line(_programs, int(_acts[2]))
 	_acting.text = line
 	_acting.visible = not line.is_empty()
+	_place_acting()
+
+
+## **The acting line under its caption** (automation-ux.md §7.3): centred on the
+## felt pane's caption, then slid left only as far as it must go to stay
+## [constant ACTING_CLEAR] clear of the transport. Placed again with every line,
+## since a line's width is what decides how far.
+func _place_acting() -> void:
+	if _acting == null:
+		return
+	var felt := felt_rect()
+	var font := _acting.get_theme_font(&"font")
+	var w := font.get_string_size(_acting.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+		ACTING_SIZE).x if font != null else 0.0
+	var right := (_view.x - TRANSPORT_WIDTH) * 0.5 - ACTING_CLEAR
+	var x := minf(felt.position.x + (felt.size.x - w) * 0.5, right - w)
+	x = maxf(x, ACTING_CLEAR)
+	_acting.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_acting.position = Vector2(x, felt.size.y + ACTING_TOP)
+	_acting.size = Vector2(maxf(right - x, 1.0), CAPTION_HEIGHT)
 
 
 ## **The program and the instinct that steered**, in a row's words: `“flee” ·
@@ -457,7 +479,7 @@ func _build() -> void:
 	_acting.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_acting.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
 	_acting.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
-	_acting.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	_acting.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
 	_acting.add_theme_font_size_override("font_size", ACTING_SIZE)
 	_acting.add_theme_color_override("font_color", ACTING_COLOR)
 	_acting.visible = false
@@ -543,14 +565,11 @@ func _relayout() -> void:
 			pane.size.y + CAPTION_TOP)
 		label.size = Vector2(pane.size.x, CAPTION_HEIGHT)
 	# The icon in the felt pane's own top-right corner; the acting line under its
-	# caption, in the band's room left of the transport, which is centred.
+	# caption ([method _place_acting]).
 	_icon.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
 	_icon.position = Vector2(felt.end.x - ICON_EDGE - ICON_SIZE, ICON_EDGE)
 	_icon.size = Vector2(ICON_SIZE, ICON_SIZE)
-	var room := maxf((_view.x - TRANSPORT_WIDTH) * 0.5 - ACTING_GAP * 2.0, 120.0)
-	_acting.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
-	_acting.position = Vector2(ACTING_GAP, felt.size.y + ACTING_TOP)
-	_acting.size = Vector2(room, CAPTION_HEIGHT)
+	_place_acting()
 
 
 # ---------------------------------------------------------------------------
