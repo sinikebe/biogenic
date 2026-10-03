@@ -6901,17 +6901,18 @@ func _instincts_order() -> void:
 	_own_tick(own)
 	var first: Array = (own.get("states") as Array).duplicate(true)
 	var held_by := Vector2i(library.call(&"owner_of", int(first[1][1])))
+	# Named now: the reorder below moves what an index means.
+	var first_by := str(library.call(&"name_of", held_by.x))
 	var upper_wins := int(first[0][0]) == Rulebook.State.ACTED \
-		and int(first[1][0]) == Rulebook.State.HELD \
-		and str(library.call(&"name_of", held_by.x)) == "upper"
+		and int(first[1][0]) == Rulebook.State.HELD and first_by == "upper"
 	library.call(&"move", lower, upper)
 	give.call()
 	_own_tick(own)
 	var second: Array = (own.get("states") as Array).duplicate(true)
 	var by2 := Vector2i(library.call(&"owner_of", int(second[1][1])))
+	var second_by := str(library.call(&"name_of", by2.x))
 	var lower_wins := int(second[0][0]) == Rulebook.State.ACTED \
-		and int(second[1][0]) == Rulebook.State.HELD \
-		and str(library.call(&"name_of", by2.x)) == "lower"
+		and int(second[1][0]) == Rulebook.State.HELD and second_by == "lower"
 	var before := int(reads[0])
 	library.call(&"switch", 1, false)
 	give.call()
@@ -6921,8 +6922,7 @@ func _instincts_order() -> void:
 	_check(("12. the order decides: two programs on the steering, the upper one acts and the"
 		+ " lower one is held back by %s (%s); reordered, the other wins at the next tick, held"
 		+ " back by %s (%s); and a program off is never read (%s)") % [
-		str(library.call(&"name_of", held_by.x)), str(upper_wins),
-		str(library.call(&"name_of", by2.x)), str(lower_wins), str(unread)],
+		first_by, str(upper_wins), second_by, str(lower_wins), str(unread)],
 		upper_wins and lower_wins and unread)
 	_own_done(player)
 	seed(20260930)
