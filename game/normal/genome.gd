@@ -84,11 +84,82 @@ const TIER_MAX := 3
 ## `.get`, so a `{gene: tier}` map that names a retired organ keeps it, pays
 ## upkeep on it and draws it in cilia.gd's reserved hue. Nothing is silently
 ## dropped from a genome here.
+##
+## **`toxicyst` is appended, last** (docs/design/dna-slots.md §3): the toxin's
+## form outside, venom, beside `veneneux`, its form inside, poison. At the end so
+## that no tie between two genes that already existed changes. **A drift never
+## draws it by this name**: what comes is a gene, not a form, and the toxin
+## comes as its variety ([method _mutate_drift]).
 const GENE_ORDER: Array[StringName] = [
 	&"cytostome", &"cirrus", &"flagellum", &"stigma",
 	&"ocellus", &"chemocyte", &"ampulla",
 	&"axoneme", &"palp", &"myoneme",
-	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"]
+	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
+	&"toxicyst"]
+
+# --- Places and forms (docs/design/dna-slots.md §2, §3) -------------------------
+# The owner, 2026-10-03: *"We need add body internal slots. Those express inside
+# the body. The direction slots express outside the body."* **Two places**: the
+# seven slots round the body are outside, as they always were -- each the arc of
+# skin it is worn on -- and one slot is inside it. A gene may be a different
+# *form* in each place, with a name of its own, so every `{name: copies}` map in
+# the game -- the DNA, the body, a water cell's genome, the wire, a save, the
+# replay -- still holds each name once, as it always has.
+
+## **The inside of a body**: every slot from this index on is inside the body,
+## and every slot before it is an arc of the skin, outside. Arcs are earned by
+## growing; the inside is every cell's from birth.
+const INSIDE := CellBody.SLOT_MAX
+## **How much room the inside has**: one slot, for the one gene that has an
+## inside form now. More inside genes, or more strains, are where it would grow
+## (dna-slots.md §19). Structure, not balance.
+const INSIDE_SLOTS := 1
+## The two places, by the owner's words.
+const OUTSIDE_PLACE := &"outside"
+const INSIDE_PLACE := &"inside"
+## **The front**: the arcs that touch the mouth's own, the nose and the two
+## either side of it. Anatomy, not a place: an outside toxin in one of them acts
+## through the bite, and on any other arc it stings what bites that side
+## (dna-slots.md §2.3).
+const FRONT: Array[int] = [0, 3, 4]
+## **The stern**: the arc behind, the tail's. An outside toxin here stings what
+## bites from behind; named for the words that say so, and nothing else.
+const STERN := 2
+
+## **A gene that is a different form in another place**: form to `[gene, strain,
+## place]`. A name not here is an outside gene of one form: itself outside, and
+## nothing inside. **The first listed form of a gene and strain is its
+## variety**, the name the gene goes by where no place is known yet: the water's
+## draws, the floor's count, and two meals in the tray found to be one.
+##
+## `veneneux` keeps its name, and its meaning: what harms whoever bites or
+## swallows it -- French for *poisonous*. `toxicyst` is the real organ, the
+## harpoon hunting ciliates fire from round their mouths. From phase 3 each strain
+## is two more forms, one a place (§8.3); their names are permanent once
+## shipped, because saves and the wire keep them.
+const FORMS := {
+	&"veneneux": [&"toxin", &"harm", &"inside"],
+	&"toxicyst": [&"toxin", &"harm", &"outside"],
+}
+
+## **The name a gene goes by on screen, where it is not its key** (owner's row
+## 1): both of the toxin's forms are `toxicyst`. The keys never change; they are
+## in saves and on the wire for good. A gene not here is its own name.
+const NAMES := {&"veneneux": "toxicyst", &"toxicyst": "toxicyst"}
+
+## What a second tap would do with a waiting gene ([method placing]): write it
+## here, add a copy to the form it makes where that form already is, refuse as
+## full, or refuse because the gene faces out.
+const PLACE_WRITE := &"write"
+const PLACE_RAISE := &"raise"
+const PLACE_FULL := &"full"
+const PLACE_FACES_OUT := &"faces_out"
+## Why a move is refused ([method move_refusal]): there is nothing to move, a
+## gene that faces out would go inside, or one end would become a form already
+## carried in a third slot.
+const MOVE_NOTHING := &"nothing"
+const MOVE_FACES_OUT := &"faces_out"
+const MOVE_COLLISION := &"collision"
 
 ## **What each gene gives a body's rules** (docs/design/behaviour.md §3): the
 ## inputs it senses and the outputs it triggers, by name, beside the list a
@@ -489,6 +560,7 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 		var gene := StringName(seats[slot])
 		if gene != &"" and _body.has(gene):
 			_body_slots[gene] = slot
+	_put_in_place(body == null)
 	bonus_slots = 0
 	_gift = &""
 	# A death, a forced genome and a replayed one start with nothing waiting. A
@@ -498,6 +570,80 @@ func express(dna: Dictionary, order: Array, body: Variant = null,
 	_levels = inherited
 	_tend_levels()
 	_sync_order()
+
+
+## **Every DNA form in its place** (docs/design/dna-slots.md §5.6), before
+## anything reads it. A birth is in place already -- placing, moving and
+## mutating keep it so -- and this does nothing there. It is what migrates a
+## save written before there was an inside, and what makes a pose honest:
+##
+## - **a gene posed at an inside index** (`--genome=...,toxicyst:2:7`) becomes its
+##   inside form; one that faces out cannot sit there, and is seated outside;
+## - **an inside form found in the outside layout** -- a save's `veneneux` in
+##   slot 3 -- leaves its slot and goes inside, if the inside has room; otherwise
+##   it becomes its outside form in place, if that is not carried, and otherwise
+##   it stays and the log says so (no save can hold this);
+## - **the body keeps every organ it wears**: an inside form it wears only loses
+##   its outside slot in the body's layout, because inside nothing has an arc.
+##
+## [param whole] is a body expressed whole from this DNA -- a pose, a run's first
+## cell -- whose organs follow the DNA's forms; a body handed in (a birth's roll,
+## a save) is kept as it came.
+func _put_in_place(whole: bool) -> void:
+	for slot in range(INSIDE, _order.size()):
+		var gene := _order[slot]
+		_order[slot] = &""
+		if gene == &"" or not _dna.has(gene):
+			continue
+		var inner := form_in(gene, INSIDE_PLACE)
+		if inner == &"":
+			print("[genome] %s faces out, and cannot sit inside: it is seated outside" % gene)
+		elif inner != gene and not _dna.has(inner):
+			_convert(gene, inner, whole)
+	while _order.size() > INSIDE:
+		_order.pop_back()
+	var room := INSIDE_SLOTS
+	for gene: StringName in _dna:
+		if is_inside_form(gene) and not _order.has(gene):
+			room -= 1
+	for slot in _order.size():
+		var gene := _order[slot]
+		if gene == &"" or not is_inside_form(gene):
+			continue
+		if room > 0:
+			room -= 1
+			_order[slot] = &""
+			print("[genome] %s moved inside from slot %d" % [gene, slot])
+			continue
+		var outer := form_in(gene, OUTSIDE_PLACE)
+		if outer != &"" and not _dna.has(outer):
+			_convert(gene, outer, whole)
+			_order[slot] = outer
+			print("[genome] %s had no room inside: it is %s in slot %d" % [gene, outer, slot])
+			continue
+		print("[genome] %s has no room inside and no outside form to be: kept inside, over its room"
+			% gene)
+	# Nothing inside has an arc: an inside form worn, or anything posed at an
+	# inside index, keeps no seat on the skin.
+	for gene: StringName in _body_slots.keys():
+		if is_inside_form(gene) or int(_body_slots[gene]) >= INSIDE:
+			_body_slots.erase(gene)
+
+
+## One form becomes another, at its copies, in the DNA -- and on the body too
+## when the body was expressed whole from it ([param whole]), with its arc.
+func _convert(from: StringName, to: StringName, whole: bool) -> void:
+	_dna[to] = _dna[from]
+	_dna.erase(from)
+	if whole and _body.has(from) and not _body.has(to):
+		_body[to] = _body[from]
+		_body.erase(from)
+		if _body_slots.has(from):
+			if not is_inside_form(to):
+				_body_slots[to] = _body_slots[from]
+			_body_slots.erase(from)
+	if _levels.has(from) and not _levels.has(to):
+		_levels[to] = _levels[from]
 
 
 func _process(delta: float) -> void:
@@ -513,8 +659,12 @@ func _process(delta: float) -> void:
 	# What still resolves itself is the case where there is nothing left for a
 	# sample to be: its gene reached the DNA by some other route while it
 	# waited -- a daughter whose one mutation drew that very gene, say.
+	#
+	# **Never a gene with forms** (dna-slots.md §5.1): carrying one form of the
+	# toxin does not say whether this copy is more of it or the other form. That
+	# is the placement, and it is the player's.
 	for i in range(_waiting.size() - 1, -1, -1):
-		if _dna.has(_waiting[i].gene):
+		if not has_forms(_waiting[i].gene) and _dna.has(_waiting[i].gene):
 			_settle(_waiting.pop_at(i), -1)
 	# **Every clock runs, not only the head's**: each meal is given its own
 	# forty-five seconds. The head is always the next to lapse (see
@@ -538,12 +688,45 @@ func _process(delta: float) -> void:
 ## inherited layout already longer than her body -- still has no room for it,
 ## exactly as the single held sample never did.
 func _lapse(waiting: Waiting) -> void:
+	if has_forms(waiting.gene):
+		_lapse_form(waiting)
+		return
 	var free := _first_free()
 	if free < 0 and waiting.gene == _gift and slots() < CellBody.SLOT_MAX:
 		bonus_slots += 1
 		free = _first_free()
 	if free >= 0:
 		_settle(waiting, free)
+
+
+## **A toxin left to lapse** (dna-slots.md §5.3) goes to the first of these that
+## applies: more copies of the form it was eaten as, carried with room; more of
+## the other form, carried with room; the form it was eaten as, new, in a free
+## slot of its place -- the inside, or the first free arc; the other form, new,
+## in a free slot of the other place; or it is gone. Forty-five seconds of not
+## choosing still means *anywhere*: for a gene you carry *anywhere* is more of
+## it, and for one you do not, it is where you ate it from.
+func _lapse_form(waiting: Waiting) -> void:
+	var tried: Array[StringName] = [waiting.gene]
+	for form: StringName in forms_of(waiting.gene):
+		if not tried.has(form):
+			tried.append(form)
+	for form: StringName in tried:
+		if _dna.has(form) and int(_dna[form]) < TIER_MAX:
+			_raise(form, waiting.copies)
+			return
+	for form: StringName in tried:
+		if _dna.has(form):
+			continue
+		if is_inside_form(form):
+			if count_inside(_dna) < INSIDE_SLOTS:
+				_write_inside(form, waiting.copies, INSIDE)
+				return
+			continue
+		var free := _first_free()
+		if free >= 0:
+			_write(free, form, waiting.copies)
+			return
 
 
 ## Writes one waiting gene into the DNA: into [param slot], or -- when its gene
@@ -553,15 +736,59 @@ func _lapse(waiting: Waiting) -> void:
 ## If it was the anti-blindness grant it also lands on the *body*, whichever way
 ## it arrived: otherwise eating the same gene inside the forty-five seconds
 ## would quietly cancel the one rescue in the game and leave a blind cell blind.
+##
+## **A gene with forms becomes the form of the slot it lands in**
+## (dna-slots.md §5.2): placed where that form is already carried, it adds its
+## copies there and the tapped slot is left alone; placed inside, it goes inside,
+## over the inside form there if the inside is full; otherwise it is written into
+## the slot, over whatever is there. A gene that faces out is never written
+## inside: nothing happens, and the screen never asks.
 func _settle(waiting: Waiting, slot: int) -> int:
+	if has_forms(waiting.gene) and slot >= 0:
+		var form := form_at(waiting.gene, slot)
+		if form == &"":
+			return Result.NOTHING
+		if _dna.has(form):
+			_raise(form, waiting.copies)
+			return Result.RAISED
+		if is_inside(slot):
+			_write_inside(form, waiting.copies, slot)
+			return Result.INTEGRATED
+		_write(slot, form, waiting.copies)
+		return Result.INTEGRATED
+	if slot >= 0 and is_inside(slot):
+		return Result.NOTHING
 	if _dna.has(waiting.gene):
 		if waiting.gene == _gift:
 			_express_gift(waiting.gene, _order.find(waiting.gene))
-		for copy in waiting.copies:
-			integrate_into(_dna, waiting.gene, maxi(slots(), _order.size()))
+		_raise(waiting.gene, waiting.copies)
 		return Result.RAISED
 	_write(slot, waiting.gene, waiting.copies)
 	return Result.INTEGRATED
+
+
+## [param copies] more copies of [param form], which the DNA carries, up to
+## three: wherever it is, the tapped slot left alone.
+func _raise(form: StringName, copies: int) -> void:
+	_dna[form] = mini(int(_dna[form]) + maxi(copies, 0), TIER_MAX)
+
+
+## [param form], an inside form, written inside at [param copies] -- over the
+## inside form in [param slot] when the inside is full, which is the inside's
+## one irreversible write, as writing over an arc is the outside's.
+func _write_inside(form: StringName, copies: int, slot: int) -> void:
+	if count_inside(_dna) >= INSIDE_SLOTS:
+		var held := inside_layout()
+		var over: StringName = held[clampi(slot - INSIDE, 0, held.size() - 1)]
+		if over == &"":
+			for gene: StringName in held:
+				if gene != &"":
+					over = gene
+					break
+		if over != &"":
+			_dna.erase(over)
+	_dna[form] = clampi(copies, 1, TIER_MAX)
+	_tend_levels()
 
 
 ## Tier of one organ **this body wears**, 0 if it does not wear it. This is what
@@ -806,15 +1033,37 @@ func dominant() -> StringName:
 ## that already existed, with the two taps that already existed.
 ##
 ## Raising a tier is not a placement decision: the organ is already somewhere.
+##
+## **Except for a gene with forms** (dna-slots.md §5.1), which waits even when
+## you carry it: carrying the poison does not say whether this copy should go to
+## the poison or become a venom. That decision is the placement, the owner's
+## *"put its genes how he wants to"*. It is food alone only when every form of it
+## is carried at three copies already.
 func integrate(gene: StringName) -> int:
 	if gene == &"":
 		return Result.NOTHING
+	if has_forms(gene):
+		var room := false
+		for form: StringName in forms_of(gene):
+			if int(_dna.get(form, 0)) < TIER_MAX:
+				room = true
+				break
+		if not room:
+			return Result.SATURATED
+		return _hold(gene)
 	if _dna.has(gene):
 		var value := int(_dna[gene])
 		if value >= TIER_MAX:
 			return Result.SATURATED
 		_dna[gene] = value + 1
 		return Result.RAISED
+	return _hold(gene)
+
+
+## A meal that waits for its place: at the back of the queue with a full clock,
+## or -- the same gene again before it was placed, which for a gene with forms
+## is any form of the same variety -- one more copy of the sample that waits.
+func _hold(gene: StringName) -> int:
 	# Nothing blocks and nothing is lost yet: the sample waits, and the player
 	# is told by the body, which draws it, rather than by a screen. **A sample
 	# arriving while another waits queues behind it** (#118) -- it used to
@@ -826,7 +1075,8 @@ func integrate(gene: StringName) -> int:
 	# **The same gene again, before it was placed, is one more copy of it** --
 	# exactly what eating it again would have done had it been placed in
 	# between -- and its clock starts over, so it moves to the back: the
-	# newest meal is the one it waits from.
+	# newest meal is the one it waits from. A toxin keeps the name of the form
+	# it was first eaten as, which only its lapse reads.
 	var again: Waiting = _waiting.pop_at(at)
 	again.copies = mini(again.copies + 1, TIER_MAX)
 	again.left = SAMPLE_SECONDS
@@ -859,15 +1109,52 @@ func gift(gene: StringName) -> int:
 ## That is the one placement decision in the game, and [member _order] is what
 ## makes it survivable: the gene goes to that index whatever else is empty, so
 ## the arc it will be worn on is the arc the tile's compass promised.
+##
+## **The inside is a slot too** ([constant INSIDE]): a toxin placed there is
+## poison. A gene that faces out is refused there and keeps waiting -- nothing
+## is spent on a placement that cannot be.
 func place(slot: int, which: int = 0) -> int:
 	if which < 0 or which >= _waiting.size():
 		return Result.NOTHING
 	_sync_order()
-	if slot < 0 or slot >= _order.size():
+	if slot < 0:
+		return Result.NOTHING
+	if is_inside(slot):
+		if slot >= INSIDE + INSIDE_SLOTS or form_at(_waiting[which].gene, slot) == &"":
+			return Result.NOTHING
+	elif slot >= _order.size():
 		return Result.NOTHING
 	# It reached the DNA by another route while it waited: [method _settle]
 	# raises that locus, and certainly writes no second copy in a second slot.
 	return _settle(_waiting.pop_at(which), slot)
+
+
+## **What a second tap on [param slot] would do with the waiting [param gene]**
+## (dna-slots.md §5.2), as `[what, where]`: [constant PLACE_WRITE] here;
+## [constant PLACE_RAISE], a copy added to the form it makes, which is already
+## carried in slot `where`; [constant PLACE_FULL], that form is at three copies
+## and the tap would spend the sample for nothing; [constant PLACE_FACES_OUT], a
+## gene that cannot sit there at all. The screen's armed preview, its line and
+## its guard all ask this, so the three never disagree.
+func placing(gene: StringName, slot: int) -> Array:
+	var form := form_at(gene, slot)
+	if form == &"":
+		return [PLACE_FACES_OUT, -1]
+	if _dna.has(form):
+		return [PLACE_FULL if int(_dna[form]) >= TIER_MAX else PLACE_RAISE,
+			dna_slot(form)]
+	return [PLACE_WRITE, slot]
+
+
+## **Where the DNA carries [param form]**: its outside slot, the inside slot that
+## holds it, or -1 for a form it does not carry.
+func dna_slot(form: StringName) -> int:
+	if not _dna.has(form):
+		return -1
+	if is_inside_form(form):
+		return INSIDE + maxi(inside_layout().find(form), 0)
+	_sync_order()
+	return _order.find(form)
 
 
 ## Every gene waiting for a slot, head first. A fresh array: read it.
@@ -892,10 +1179,13 @@ func waiting_left(gene: StringName) -> float:
 	return _waiting[at].left if at >= 0 else 0.0
 
 
-## Where [param gene] is in the queue, or -1.
+## Where [param gene] is in the queue, or -1. **A gene with forms is found by
+## its variety**: two meals of one toxin are one sample, whichever form each was
+## eaten as (dna-slots.md §5.1).
 func waiting_index(gene: StringName) -> int:
+	var kind := variety(gene)
 	for i in _waiting.size():
-		if _waiting[i].gene == gene:
+		if variety(_waiting[i].gene) == kind:
 			return i
 	return -1
 
@@ -944,20 +1234,124 @@ func carry(samples: Array[Waiting]) -> void:
 ##
 ## Returns false and changes nothing when there is no move to make: the same
 ## locus twice, either index off the strand, or an empty source.
+##
+## **Across inside and outside it converts** (dna-slots.md §5.4): each of the two
+## becomes the form of its new place, with its own slot's copies -- swapping
+## your venom (slot 3, three copies) with your poison (one copy) gives three
+## copies of poison and one of venom at slot 3. Between two outside slots the
+## toxin stays venom, and only where it works changes. **Refused, changing
+## nothing**, when either end would become nothing -- a gene that faces out,
+## moved or swapped inside -- or a form already carried in a third slot: that
+## would merge two slots into one and lose copies, and a move never destroys.
+## [method can_move] answers the same question for the screen.
 func move(from: int, to: int) -> bool:
-	_sync_order()
-	if from == to:
+	if move_refusal(from, to) != &"":
 		return false
-	if from < 0 or from >= _order.size():
-		return false
-	if to < 0 or to >= _order.size():
-		return false
-	if _order[from] == &"":
-		return false
-	var lifted := _order[from]
-	_order[from] = _order[to]
-	_order[to] = lifted
+	var lifted := _slot_gene(from)
+	var displaced := _slot_gene(to)
+	if not is_inside(from) and not is_inside(to):
+		_order[from] = displaced
+		_order[to] = lifted
+		return true
+	var landed := form_at(lifted, to)
+	var back := form_at(displaced, from) if displaced != &"" else &""
+	var lifted_copies := int(_dna[lifted])
+	var displaced_copies := int(_dna.get(displaced, 0))
+	_dna.erase(lifted)
+	if displaced != &"":
+		_dna.erase(displaced)
+	_dna[landed] = lifted_copies
+	if back != &"":
+		_dna[back] = displaced_copies
+	for pair: Array in [[lifted, landed], [displaced, back]]:
+		var was: StringName = pair[0]
+		var now: StringName = pair[1]
+		if was != now and now != &"" and _levels.has(was) and not _levels.has(now):
+			_levels[now] = _levels[was]
+	if not is_inside(from):
+		_order[from] = back
+	if not is_inside(to):
+		_order[to] = landed
+	_tend_levels()
 	return true
+
+
+## **Whether [method move] would move anything**, without moving it.
+func can_move(from: int, to: int) -> bool:
+	return move_refusal(from, to) == &""
+
+
+## **Why [method move] would refuse**, or `&""` when it would not:
+## [constant MOVE_NOTHING] (no move -- the same slot, a slot off the strand, an
+## empty source), [constant MOVE_FACES_OUT] (a gene that faces out would go
+## inside) or [constant MOVE_COLLISION] (one end would become a form already
+## carried in a third slot). The screen says the second and third in words.
+func move_refusal(from: int, to: int) -> StringName:
+	_sync_order()
+	if from == to or not _slot_ok(from) or not _slot_ok(to):
+		return MOVE_NOTHING
+	var lifted := _slot_gene(from)
+	if lifted == &"":
+		return MOVE_NOTHING
+	var displaced := _slot_gene(to)
+	var landed := form_at(lifted, to)
+	if landed == &"":
+		return MOVE_FACES_OUT
+	var back := &""
+	if displaced != &"":
+		back = form_at(displaced, from)
+		if back == &"":
+			return MOVE_FACES_OUT
+	if landed != lifted and landed != displaced and _dna.has(landed):
+		return MOVE_COLLISION
+	if back != &"" and back != displaced and back != lifted and _dna.has(back):
+		return MOVE_COLLISION
+	return &""
+
+
+## Whether [param slot] is one a move may name: a slot of the DNA's outside
+## layout, or the inside.
+func _slot_ok(slot: int) -> bool:
+	if is_inside(slot):
+		return slot < INSIDE + INSIDE_SLOTS
+	return slot >= 0 and slot < _order.size()
+
+
+## **The form in [param slot]**, the inside included, `&""` for an empty one.
+func _slot_gene(slot: int) -> StringName:
+	if is_inside(slot):
+		var held := inside_layout()
+		var k := slot - INSIDE
+		return held[k] if k >= 0 and k < held.size() else &""
+	return _order[slot] if slot >= 0 and slot < _order.size() else &""
+
+
+## **What the DNA carries inside** (dna-slots.md §2.2): its inside forms, in
+## [constant GENE_ORDER] and then any other, padded with `&""` to
+## [constant INSIDE_SLOTS]. **The inside keeps no order of its own**: nothing
+## inside faces anywhere, so which inside slot holds what means nothing, and it is
+## read off the DNA rather than kept -- which is why no save, no message and no
+## rule of the referee's changes for it.
+func inside_layout() -> Array[StringName]:
+	return _inside_of(_dna)
+
+
+## **What the body wears inside**: the same, off the body.
+func body_inside() -> Array[StringName]:
+	return _inside_of(_body)
+
+
+static func _inside_of(tiers: Dictionary) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for gene: StringName in GENE_ORDER:
+		if is_inside_form(gene) and tiers.has(gene):
+			out.append(gene)
+	for gene: StringName in tiers:
+		if is_inside_form(gene) and not out.has(gene):
+			out.append(gene)
+	while out.size() < INSIDE_SLOTS:
+		out.append(&"")
+	return out
 
 
 ## **The DNA's** slot layout, `&""` for empty. Read it; do not write it. This is
@@ -1035,8 +1429,13 @@ func _first_free() -> int:
 ## Keeps the layout the width of the body and free of anything the genome no
 ## longer carries. Growth only ever widens it, so nothing is dropped by this;
 ## the erase branch is what keeps a swap honest.
+##
+## **It seats outside forms only** (dna-slots.md §5.6): the layout is the
+## outside's, and an inside form is never put into it.
 func _sync_order() -> void:
 	for gene: StringName in _dna:
+		if is_inside_form(gene):
+			continue
 		if not _order.has(gene):
 			var free := _order.find(&"")
 			if free >= 0:
@@ -1044,7 +1443,7 @@ func _sync_order() -> void:
 			else:
 				_order.append(gene)
 	for i in _order.size():
-		if _order[i] != &"" and not _dna.has(_order[i]):
+		if _order[i] != &"" and (not _dna.has(_order[i]) or is_inside_form(_order[i])):
 			_order[i] = &""
 	var want := slots()
 	while _order.size() < want:
@@ -1142,6 +1541,11 @@ static func express_chance(gene: StringName, copies: int) -> float:
 ## Writes [param gene] into [param tiers] in place. [param capacity] is how many
 ## slots the body has. Returns a [enum Result]; a full genome comes back as
 ## NO_ROOM, which only the node half knows what to do about (it holds it).
+##
+## **Room is by place** (dna-slots.md §5.7): an inside form asks for room
+## inside, [constant INSIDE_SLOTS], and every other gene for room outside,
+## [param capacity] -- so a water cell's poison takes no arc. A genome with
+## nothing inside counts exactly as it always did.
 static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -> int:
 	if gene == &"":
 		return Result.NOTHING
@@ -1151,10 +1555,128 @@ static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -
 			return Result.SATURATED
 		tiers[gene] = value + 1
 		return Result.RAISED
-	if tiers.size() >= capacity:
+	if is_inside_form(gene):
+		if count_inside(tiers) >= INSIDE_SLOTS:
+			return Result.NO_ROOM
+	elif count_outside(tiers) >= capacity:
 		return Result.NO_ROOM
 	tiers[gene] = 1
 	return Result.INTEGRATED
+
+
+# --- Places and forms, as statics (docs/design/dna-slots.md §2, §3) ------------
+# What a place, a form and a variety are, for any `{gene: tier}` map -- the
+# player's genome node asks these as every cell in the water does.
+
+## **The place [param slot] is in**: inside from [constant INSIDE] on, outside
+## before it.
+static func place_of(slot: int) -> StringName:
+	return INSIDE_PLACE if slot >= INSIDE else OUTSIDE_PLACE
+
+
+## Whether [param slot] is inside the body.
+static func is_inside(slot: int) -> bool:
+	return slot >= INSIDE
+
+
+## Whether [param slot] is at the front: the nose and the arc either side of it.
+static func is_front(slot: int) -> bool:
+	return FRONT.has(slot)
+
+
+## **The place [param form] sits in**: its row's in [constant FORMS], and outside
+## for a gene of one form.
+static func place_of_form(form: StringName) -> StringName:
+	return StringName((FORMS[form] as Array)[2]) if FORMS.has(form) else OUTSIDE_PLACE
+
+
+## Whether [param form] sits inside: never in the outside layout, never on an arc.
+static func is_inside_form(form: StringName) -> bool:
+	return FORMS.has(form) and StringName((FORMS[form] as Array)[2]) == INSIDE_PLACE
+
+
+## Whether [param form] is one form of a gene with others.
+static func has_forms(form: StringName) -> bool:
+	return FORMS.has(form)
+
+
+## **[param form]'s gene and strain, in [param place]**: the toxin's poison
+## inside and its venom outside; a gene of one form is itself outside and
+## `&""` -- it cannot sit there -- inside.
+static func form_in(form: StringName, place: StringName) -> StringName:
+	if not FORMS.has(form):
+		return form if place == OUTSIDE_PLACE else &""
+	var row: Array = FORMS[form]
+	for other: StringName in FORMS:
+		var it: Array = FORMS[other]
+		if it[0] == row[0] and it[1] == row[1] and it[2] == place:
+			return other
+	return &""
+
+
+## [method form_in] at the place of [param slot]: what [param form] becomes there.
+static func form_at(form: StringName, slot: int) -> StringName:
+	return form_in(form, place_of(slot))
+
+
+## Whether [param form] may sit in [param slot] as itself.
+static func fits(form: StringName, slot: int) -> bool:
+	return form != &"" and form_at(form, slot) == form
+
+
+## **[param form]'s variety**: the first listed form of its gene and strain, the
+## name it goes by where no place is known -- `veneneux` for both of the toxin's
+## forms, today. Itself for a gene of one form.
+static func variety(form: StringName) -> StringName:
+	if not FORMS.has(form):
+		return form
+	var row: Array = FORMS[form]
+	for other: StringName in FORMS:
+		var it: Array = FORMS[other]
+		if it[0] == row[0] and it[1] == row[1]:
+			return other
+	return form
+
+
+## **Every form of [param form]'s gene and strain**, its variety first; itself
+## alone for a gene of one form.
+static func forms_of(form: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	if not FORMS.has(form):
+		out.append(form)
+		return out
+	var row: Array = FORMS[form]
+	for other: StringName in FORMS:
+		var it: Array = FORMS[other]
+		if it[0] == row[0] and it[1] == row[1]:
+			out.append(other)
+	return out
+
+
+## The strain [param form] is of -- the kind of dose it delivers -- or `&""` for a
+## gene of one form.
+static func strain_of(form: StringName) -> StringName:
+	return StringName((FORMS[form] as Array)[1]) if FORMS.has(form) else &""
+
+
+## **The name [param gene] goes by on screen** ([constant NAMES]): `toxicyst`
+## for both of the toxin's forms, and its own key for every other gene.
+static func name_of(gene: StringName) -> String:
+	return String(NAMES.get(gene, gene))
+
+
+## How many inside forms [param tiers] holds.
+static func count_inside(tiers: Dictionary) -> int:
+	var n := 0
+	for gene: StringName in tiers:
+		if is_inside_form(gene):
+			n += 1
+	return n
+
+
+## How many genes of [param tiers] face out: the ones that take an arc.
+static func count_outside(tiers: Dictionary) -> int:
+	return tiers.size() - count_inside(tiers)
 
 
 # ---------------------------------------------------------------------------
@@ -1249,22 +1771,63 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ## **The mouth is never the gene that is replaced.** Every other trade here is
 ## even; losing the cytostome is not, and a daughter born without a mouth is a
 ## choice no one would make rather than a choice between two builds.
+##
+## **The toxin, by three rules** (dna-slots.md §5.5), and a genome with no toxin
+## draws exactly what it always drew:
+##
+## - **what comes is a gene, not a form**: the pool leaves out every form but each
+##   variety's first, and any variety the lineage carries in any form -- so the
+##   toxin comes by `veneneux`'s name, as often as it ever did, and a lineage that
+##   carries venom does not draw it again as poison;
+## - **a toxin that comes takes the form of the slot it lands in**: venom, since
+##   the gene it replaces sat outside. A water cell has no slots ([param seats]
+##   empty), so its place is one more coin, drawn only when the toxin is what
+##   comes;
+## - **the poison that goes, inside, is replaced by a gene that faces out**, which
+##   needs a free outside slot: a hole in a daughter's layout, or, for a water
+##   cell, fewer than seven genes outside. With none, the drift does not apply,
+##   and the caller's next kind is tried.
 static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var goes: Array[StringName] = []
+	var carried := {}
 	for gene: StringName in tiers:
 		if gene != &"cytostome":
 			goes.append(gene)
+		carried[variety(gene)] = true
 	var comes: Array[StringName] = []
 	for gene: StringName in GENE_ORDER:
-		if gene != &"cytostome" and not tiers.has(gene):
+		if gene != &"cytostome" and variety(gene) == gene and not carried.has(gene):
 			comes.append(gene)
 	if goes.is_empty() or comes.is_empty():
 		return false
 	var out: StringName = goes[randi() % goes.size()]
 	var into: StringName = comes[randi() % comes.size()]
-	tiers[into] = int(tiers[out])
+	var water := seats.is_empty()
+	var form := into
+	if has_forms(into):
+		# The slot it lands in decides, and that slot is the outside one the gene
+		# it replaces held. A water cell has none to read: a coin.
+		if water:
+			form = into if randi() % 2 == 0 else form_in(into, OUTSIDE_PLACE)
+		else:
+			form = form_in(into, OUTSIDE_PLACE)
+	var tier := int(tiers[out])
+	if is_inside_form(out) and not is_inside_form(form):
+		# The poison goes and a gene that faces out comes: it needs an arc.
+		if water:
+			if count_outside(tiers) >= CellBody.SLOT_MAX:
+				return false
+		else:
+			var hole := seats.find(&"")
+			if hole < 0:
+				return false
+			seats[hole] = form
+		tiers[form] = tier
+		tiers.erase(out)
+		return true
+	tiers[form] = tier
 	tiers.erase(out)
 	var slot := seats.find(out)
 	if slot >= 0:
-		seats[slot] = into
+		seats[slot] = &"" if is_inside_form(form) else form
 	return true

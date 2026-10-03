@@ -167,6 +167,31 @@ extends Node
 ##                           knit up every frame, so a wound cannot be posed by
 ##                           setting it once. A pond guest's wound is the host's,
 ##                           and is held there as well
+##   --dose=<kind>:<stacks>[:hunter|<cell>]
+##                           pose a load (docs/design/dna-slots.md §6): that many
+##                           stacks of `harm`, `paralysis` or `sleep`, on this
+##                           cell -- or on the posed hunter, or on the body
+##                           `--cell=` posed as that index. Repeatable. **Held at
+##                           that value every frame** until --dose-at= lets it
+##                           wear, so a frame holds still
+##   --dose-at=<seconds>     stop holding the --dose= loads: from then on they
+##                           wear, and harm goes into the wound as it does
+##   --cell-wound=<cell>:<0..1>
+##                           hold the body `--cell=` posed as that index at that
+##                           much damage, as --wound= holds yours. Repeatable
+##   --dose-hit=<seconds>:<deg>
+##                           a bite that dosed this cell, at that body-relative
+##                           bearing: three stacks of harm by the field's own
+##                           door, then the bite (dna-slots-ux.md §5.1 -- the
+##                           bruise in the strain's hue, the stain seeping in)
+##   --poison-meal=<seconds> a poisonous meal: a swallow's dose by the field's own
+##                           door, then the meal (the flood in the strain's hue)
+##   --venom-lands=<seconds> this cell's venom lands: its fangs flare
+##   --sting=<seconds>       this cell's side venom stings a biter: its barbs flare
+##   --poison-taken=<seconds>
+##                           this cell's poison is taken: its granules flare
+##   --dose-death=<seconds>  this cell dies of a dose, as the field finds one: the
+##                           quiet close, lit in the strain's hue
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -658,6 +683,8 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## For places and forms: the inside slot, and what a gene becomes there.
+const GenomeNode := preload("res://game/normal/genome.gd")
 ## Only for `MEAL`, so the `[meal]` line says how much of the bar a meal gave
 ## back at whatever the meal is worth.
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -839,6 +866,14 @@ var _sample: StringName = &""
 var _samples: Array = []
 var _sample_left := -1.0
 var _wound := -1.0
+## `--dose=`'s loads, `[kind, stacks, who]` -- who is "" for this cell, "hunter",
+## or a `--cell=` index -- held until [member _dose_at].
+var _doses: Array = []
+var _dose_at := -1.0
+## `--cell-wound=`'s, `[cell, wound]`.
+var _cell_wounds: Array = []
+## The timed toxin events: `[seconds, what, value]`.
+var _toxin_events: Array = []
 ## Cumulative meals eaten by one field cell off another, which is the one thing
 ## in section 1.3 that has to be observed rather than argued about. Field cells
 ## are recycled, so this is accumulated by watching each slot's serial.
@@ -1208,6 +1243,31 @@ func _ready() -> void:
 			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
+		elif text.begins_with("--dose="):
+			var bits := text.trim_prefix("--dose=").split(":")
+			if bits.size() >= 2:
+				_doses.append([bits[0], float(bits[1]), bits[2] if bits.size() > 2 else ""])
+		elif text.begins_with("--dose-at="):
+			_dose_at = float(text.trim_prefix("--dose-at="))
+		elif text.begins_with("--cell-wound="):
+			var hurt := text.trim_prefix("--cell-wound=").split(":")
+			if hurt.size() == 2:
+				_cell_wounds.append([int(hurt[0]), float(hurt[1])])
+		elif text.begins_with("--dose-hit="):
+			var hit := text.trim_prefix("--dose-hit=").split(":")
+			_toxin_events.append([float(hit[0]), "hit",
+				deg_to_rad(float(hit[1])) if hit.size() > 1 else 0.0])
+		elif text.begins_with("--poison-meal="):
+			_toxin_events.append([float(text.trim_prefix("--poison-meal=")), "meal", 0.0])
+		elif text.begins_with("--venom-lands="):
+			_toxin_events.append([float(text.trim_prefix("--venom-lands=")), "fangs", 0.0])
+		elif text.begins_with("--sting="):
+			_toxin_events.append([float(text.trim_prefix("--sting=")), "guard", 0.0])
+		elif text.begins_with("--poison-taken="):
+			_toxin_events.append([float(text.trim_prefix("--poison-taken=")), "granules",
+				0.0])
+		elif text.begins_with("--dose-death="):
+			_toxin_events.append([float(text.trim_prefix("--dose-death=")), "death", 0.0])
 		elif text.begins_with("--hover="):
 			var hover := text.trim_prefix("--hover=").split(":")
 			if hover.size() == 2:
@@ -1512,7 +1572,8 @@ func _ready() -> void:
 			# nothing about the run it is watching.
 			_food.bitten.connect(func(_b: float, _s: float) -> void: _fp_bites += 1)
 			_food.waked.connect(func(_b: float, _s: float) -> void: _fp_wakes += 1)
-			_food.stung.connect(func(_b: float) -> void: _fp_stings += 1)
+			_food.dosed.connect(func(_b: float, _k: int, _s: float, _m: bool) -> void:
+				_fp_stings += 1)
 			_food.darted.connect(func(_b: float) -> void: _fp_darts += 1)
 			_food.killed.connect(_fp_on_killed)
 		if _field_cost > 0:
@@ -2164,6 +2225,7 @@ func _process(delta: float) -> void:
 	_step_offer(delta)
 	_step_rects()
 	_step_kill()
+	_step_toxins()
 	_step_starve_near()
 	_step_watch()
 	_step_divide()
@@ -2292,7 +2354,7 @@ func _step_fingerprint() -> void:
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	print(("[fingerprint] frames %d  seed %s  sha256 %s  |  t %.2f  %s  me r%.2f"
 		+ "  meals %d  field meals %d  hunts %d  chases %d  wakes %d  bites %d"
-		+ "  chews %d  overlaps %d  stung %d  darted %d") % [
+		+ "  chews %d  overlaps %d  dosed %d  darted %d") % [
 		_frames, str(_seed) if _seeded else "none",
 		hashing.finish().hex_encode(), _clock,
 		"alive" if _fp_died_at < 0.0 else "died %.2f" % _fp_died_at,
@@ -2522,6 +2584,84 @@ func _step_kill() -> void:
 	_metabolism.set_hunger(1.0)
 	_metabolism.starve_seconds = _metabolism.STARVE_GRACE + 1.0
 	print("[drive] %5.2f  starved" % _clock)
+
+
+## **The toxins' moments, by the field's own doors** (dna-slots-ux.md §9.1): a
+## dose goes in through `_dose`, which says `dosed` before the sensation it came
+## with, exactly as a contact does; a toxin firing is the field's own signal. The
+## run's handlers are the shipped ones, so what is photographed is the game.
+func _step_toxins() -> void:
+	if _food == null or get_tree().paused:
+		return
+	for i in range(_toxin_events.size() - 1, -1, -1):
+		var event: Array = _toxin_events[i]
+		if _clock < float(event[0]):
+			continue
+		_toxin_events.remove_at(i)
+		var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+		match String(event[1]):
+			"hit":
+				var bearing := float(event[2])
+				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
+					CellBody.VENOM_STACKS_BY_TIER[3], -1, bearing, false)
+				_food.bitten.emit(bearing, 1.0)
+			"meal":
+				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
+					CellBody.SWALLOW_STACKS_BY_TIER[1], -1, 0.0, true)
+				_food.eaten.emit(FoodField.MEAL_MIN, &"",
+					cell.position if cell != null else Vector2.ZERO)
+			"fangs":
+				_food.toxin_fired.emit(FoodField.FIRED_VENOM)
+			"guard":
+				_food.toxin_fired.emit(FoodField.FIRED_STING)
+			"granules":
+				_food.toxin_fired.emit(FoodField.FIRED_POISON)
+			"death":
+				if cell != null:
+					cell.loads[0] = maxf(cell.loads[0], 1.0)
+				_food.call(&"_dose_death", null)
+		print("[drive] %5.2f  toxin %s" % [_clock, event[1]])
+
+
+## The body slot `--cell=` posed as [param index]: the index itself in today's
+## water, and the body the drop made for it there.
+func _posed_slot(water: Node, index: int) -> int:
+	if bool(water.call(&"in_drop")):
+		return int(_pose_slots.get(index, -1))
+	return index
+
+
+## **`--dose=`'s loads, held** until `--dose-at=` lets them wear: this cell's,
+## the posed hunter's, or a posed body's, by the kind's name.
+func _hold_doses() -> void:
+	var water := _water_food()
+	if water != null and not _cell_wounds.is_empty():
+		var held: Array = water.get("_cells")
+		for one: Array in _cell_wounds:
+			var at := _posed_slot(water, int(one[0]))
+			if at >= 0 and at < held.size():
+				held[at].set("wound", float(one[1]))
+	if _doses.is_empty() or (_dose_at >= 0.0 and _clock >= _dose_at):
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	for dose: Array in _doses:
+		var kind := int(FoodField.Doses.kind_of(StringName(dose[0])))
+		if kind < 0:
+			continue
+		var who := String(dose[2])
+		var loads: Variant = null
+		if who == "":
+			loads = cell.loads if cell != null else null
+		elif water != null:
+			var bodies: Array = water.get("_cells")
+			var slot := _hunter_slot if who == "hunter" else _posed_slot(water, int(who))
+			if slot >= 0 and slot < bodies.size():
+				loads = bodies[slot].get("loads")
+		# Through a typed local: `(loads as PackedFloat64Array)[k] = ...` writes
+		# into a copy the cast made, and the body never hears of it.
+		if loads is PackedFloat64Array:
+			var held: PackedFloat64Array = loads
+			held[kind] = float(dose[1])
 
 
 ## `--starve-near=`: the living mouth nearest the cell within the view empties,
@@ -3212,6 +3352,7 @@ func _hold_world() -> void:
 		_place(1, _hold_point(_food_at, -35.0))
 	if _starve >= 0.0 and _metabolism != null:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
+	_hold_doses()
 	if _wound >= 0.0:
 		cell.wound = _wound
 		# A guest's wound is the host's (shared-pond.md §0.1), and the host's
@@ -3261,7 +3402,10 @@ func _drop_switch(text: String) -> bool:
 		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
 		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
 		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
-	const SWITCHES := {"--drifter-venom=": &"drifter_venom", "--own-speed=": &"own_speed",
+	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
+	# meaning -- the drifters' share of the toxin -- when the toxin took forms.
+	const SWITCHES := {"--drifter-toxin=": &"drifter_toxin",
+		"--drifter-venom=": &"drifter_toxin", "--own-speed=": &"own_speed",
 		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
 		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
 		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules",
@@ -3885,8 +4029,25 @@ func _parse_genes(spec: String, genome: Node = null) -> Array:
 		tiers[gene] = int(bits[1])
 		if bits.size() >= 3:
 			placed[gene] = int(bits[2])
+	# **The inside is slot 7** (docs/design/dna-slots.md §2.2), whatever the
+	# body's size: every cell has it from birth, and it takes no outside slot.
+	# `gene:tier:7` poses a gene inside -- a venom posed there is made poison,
+	# as `express` would -- and an inside form posed with no slot is inside by
+	# its name. Posed at an arc instead (`veneneux:1:5`), `express` moves it in
+	# and leaves the arc empty. A gene that faces out cannot be posed inside.
+	for gene: StringName in placed.keys():
+		if not GenomeNode.is_inside(int(placed[gene])):
+			continue
+		placed.erase(gene)
+		var inner := GenomeNode.form_in(gene, GenomeNode.INSIDE_PLACE)
+		if inner == &"":
+			print("[drive] %s faces out and cannot be posed inside: it goes on an arc"
+				% gene)
+		elif inner != gene:
+			tiers[inner] = tiers[gene]
+			tiers.erase(gene)
 	var layout: Array[StringName] = []
-	for i in maxi(slots_of.slots(), tiers.size()):
+	for i in maxi(slots_of.slots(), GenomeNode.count_outside(tiers)):
 		layout.append(&"")
 	for gene: StringName in placed:
 		var slot := int(placed[gene])
@@ -3894,6 +4055,8 @@ func _parse_genes(spec: String, genome: Node = null) -> Array:
 			layout[slot] = gene
 	for gene: StringName in tiers:
 		if placed.has(gene) and layout.has(gene):
+			continue
+		if not placed.has(gene) and GenomeNode.is_inside_form(gene):
 			continue
 		if placed.has(gene):
 			# Asked for a slot this body does not have yet -- the ladder is

@@ -653,11 +653,11 @@ func _check_pond_wire() -> void:
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var whole := Wire.pond(123456, 0.62, bodies)
-	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1179,
+	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1181,
 		"pond wire: sixty water bodies and a person make %d bytes, the budget's"
-		% whole.size() + " 1,179 -- one datagram under ENet's 1,392")
+		% whole.size() + " 1,181 -- one datagram under ENet's 1,392")
 	var said := Wire.take_pond(whole)
-	var exact := said.size() == 3 and int(said[0]) == 123456 \
+	var exact := said.size() == 4 and int(said[0]) == 123456 \
 		and absf(float(said[1]) - 0.62) <= 0.5 / 255.0 \
 		and (said[2] as Array).size() == bodies.size()
 	var worst_heading := 0.0
@@ -687,6 +687,38 @@ func _check_pond_wire() -> void:
 		+ " exactly, radius to 1/64, wound to 1/255, speed to 2 u/s, heading to"
 		+ " half a step (worst %.4f rad) -- and the person's motion exactly"
 		% worst_heading)
+	# **The loads, since protocol 7** (docs/design/dna-slots.md §14.2): the three
+	# the recipient carries, in the header, at none, at the most its bytes say,
+	# between, and past it -- held there, and a load that is not a number sent as
+	# none; and a body's three flags, each its own bit beside the three before.
+	var loads_back: Array = []
+	for loads: PackedFloat64Array in [PackedFloat64Array([0.0, 0.0, 0.0]),
+			PackedFloat64Array([63.75, 63.75, 63.75]), PackedFloat64Array([12.3, 0.25, 7.6]),
+			PackedFloat64Array([64.0, 400.0, INF])]:
+		var got := Wire.take_pond(Wire.pond(9, 0.25, bodies.slice(0, 2), loads))
+		loads_back.append(Array(got[3]) if got.size() == 4 else [])
+	var flagged: Array = []
+	for k in 3:
+		flagged.append((bodies[k] as Array).duplicate())
+	flagged[0][Wire.Entry.FLAGS] = Wire.POND_HARMED
+	flagged[1][Wire.Entry.FLAGS] = Wire.POND_PARALYSED | Wire.POND_STALKING
+	flagged[2][Wire.Entry.FLAGS] = Wire.POND_ASLEEP | Wire.POND_HARMED | Wire.POND_PARALYSED
+	var flags_back := Wire.take_pond(Wire.pond(10, 0.0, flagged))
+	var flags_kept := flags_back.size() == 4 and (flags_back[2] as Array).size() == 3
+	if flags_kept:
+		for k in 3:
+			flags_kept = flags_kept and int(flags_back[2][k][Wire.Entry.FLAGS]) \
+				== int(flagged[k][Wire.Entry.FLAGS])
+	_says(loads_back == [[0.0, 0.0, 0.0], [63.75, 63.75, 63.75], [12.25, 0.25, 7.5],
+			[63.75, 63.75, 0.0]] and flags_kept and Wire.POND_LOADS == 3
+			and Wire.POND_LOAD_SCALE == 4.0
+			and Wire.POND_HARMED == FoodField.FLAG_HARMED
+			and Wire.POND_PARALYSED == FoodField.FLAG_PARALYSED
+			and Wire.POND_ASLEEP == FoodField.FLAG_ASLEEP,
+		"pond wire: the recipient's three loads round-trip at a quarter stack -- %s"
+		% str(loads_back) + " for none, the most, between and past it -- and a body's"
+		+ " harmed, paralysed and asleep flags are its own bits (%s), the field's own"
+		% str(flags_kept))
 
 	# Refused whole: every truncation, one byte too many, a slot that is not one,
 	# a place that is not finite, a motion no body could have.
@@ -725,7 +757,7 @@ func _check_pond_wire() -> void:
 	person[Wire.Entry.VELOCITY] = Vector2(Wire.MOTION_MAX * 2.0, 0.0)
 	rotten.append(person)
 	var cleaned := Wire.take_pond(Wire.pond(1, 0.0, rotten))
-	_says(cleaned.size() == 3 and (cleaned[2] as Array).size() == 3
+	_says(cleaned.size() == 4 and (cleaned[2] as Array).size() == 3
 			and (cleaned[2][2][Wire.Entry.VELOCITY] as Vector2) == Vector2.ZERO,
 		"pond wire: a body the reader would refuse is never written, and an"
 		+ " impossible motion goes as none")
@@ -744,7 +776,7 @@ func _check_pond_wire() -> void:
 	var over := capped.duplicate()
 	over.append_array(capped.slice(capped.size() - Wire.POND_PERSON))
 	over[6] = int(over[6]) + 1
-	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 3
+	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 4
 			and (capped_said[2] as Array).size() == fits
 			and over.size() > Wire.POND_MAX and Wire.take_pond(over).is_empty(),
 		"pond wire: sixty-one people are written as the %d that fit, %d bytes of"
@@ -752,10 +784,12 @@ func _check_pond_wire() -> void:
 		% [Wire.POND_MAX, over.size()] + " refused")
 
 	# The nine events, each against its decoder.
-	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"veneneux": 1,
-		&"ampulla": 2}
+	# A phase-1 body: venom worn on an arc, poison inside -- in the genome by its
+	# name and in no slot of the order, which is the worn layout outside.
+	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"toxicyst": 1,
+		&"veneneux": 1, &"ampulla": 2}
 	var order: Array = [&"cytostome", &"", &"cirrus", &"flagellum", &"ampulla", &"",
-		&"veneneux"]
+		&"toxicyst"]
 	var enter := Wire.event(9, Wire.EVENT_ENTER, Wire.enter_payload(28.28))
 	var arrive := Wire.event(10, Wire.EVENT_ARRIVE,
 		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0, Vector2(-1234.5, 777.25), 6000.0))
@@ -867,21 +901,26 @@ func _check_pond_wire() -> void:
 		+ " byte long, by every decoder")
 
 	# **Genomes by name**: the reader refuses the whole message on a name that
-	# is not 1-16 bytes of a-z, on more than eight genes or seven slots; tiers
-	# clamp to 0..3; the writer never sends what the reader refuses.
+	# is not 1-16 bytes of a-z, on more than nine genes -- seven outside, one
+	# inside and a held sample, since protocol 7 -- or seven slots; tiers clamp to
+	# 0..3; the writer never sends what the reader refuses. Nine are taken.
 	var loud := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 9, &"cirrus": -2}, [])))
-	var nine := {}
-	for i in 9:
-		nine[StringName("gene" + "abcdefghi"[i])] = 1
-	var nine_frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, {}, []))
-	nine_frame.resize(Wire.EVENT_HEADER + 1)
-	nine_frame.append(9)
-	for gene: StringName in nine:
-		nine_frame.append(String(gene).length())
-		nine_frame.append_array(String(gene).to_ascii_buffer())
-		nine_frame.append(1)
-	nine_frame.append(0)
+	var ten := {}
+	for i in Wire.GENES_MAX + 1:
+		ten[StringName("gene" + "abcdefghij"[i])] = 1
+	var ten_frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, {}, []))
+	ten_frame.resize(Wire.EVENT_HEADER + 1)
+	ten_frame.append(ten.size())
+	for gene: StringName in ten:
+		ten_frame.append(String(gene).length())
+		ten_frame.append_array(String(gene).to_ascii_buffer())
+		ten_frame.append(1)
+	ten_frame.append(0)
+	var nine := ten.duplicate()
+	nine.erase(&"genej")
+	var nine_said := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
+		Wire.person_payload(false, nine, [])))
 	var named := func(name: String, tier: int = 1) -> PackedByteArray:
 		var f := Wire.event(1, Wire.EVENT_PERSON, PackedByteArray([0, 1]))
 		f.append(name.to_utf8_buffer().size())
@@ -902,10 +941,11 @@ func _check_pond_wire() -> void:
 			and Wire.take_person(named.call("abcdefghijklmnopq")).is_empty()
 			and Wire.take_person(named.call("cir rus")).is_empty()
 			and Wire.take_person(named.call("cili5")).is_empty()
-			and Wire.take_person(nine_frame).is_empty()
+			and Wire.take_person(ten_frame).is_empty()
+			and nine_said.size() == 3 and nine_said[1] == nine and Wire.GENES_MAX == 9
 			and Wire.take_person(eight_slots).is_empty(),
 		"pond wire: a genome is refused whole on a name that is not 1-16 bytes of"
-		+ " a-z, nine genes or eight slots; tiers clamp to 0..3")
+		+ " a-z, ten genes or eight slots, and nine are taken; tiers clamp to 0..3")
 	var written := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 1, &"Bad Name": 2, &"": 1},
 			[&"cytostome", &"Bad Name", &"", &"a", &"b", &"c", &"d", &"e", &"f"])))
@@ -963,7 +1003,7 @@ func _check_sister_wire() -> void:
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
 			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
 				+ 8 * (1 + Wire.RULE_BYTES_MAX)
-			and Wire.SISTER_MAX == 1342 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
+			and Wire.SISTER_MAX == 1378 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
 			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX)
 			and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX
 			and caps == [Wire.SISTER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX,
@@ -1028,7 +1068,7 @@ func _check_sister_wire() -> void:
 		+ " kept as a rule that never fires and written back as it came; a SISTER"
 		+ " with no lines gives her the founders' rules")
 
-	# **SISTER_MAX is the most the writer writes** -- two genomes of eight
+	# **SISTER_MAX is the most the writer writes** -- two genomes of nine
 	# sixteen-letter genes at three copies, and eight lines of 128 bytes -- and
 	# handed more, it writes no more: a gene the wire cannot name, a ninth line,
 	# an empty one, one of 129 bytes and one in capitals are each left out. The
@@ -1051,7 +1091,7 @@ func _check_sister_wire() -> void:
 			and biggest_said[3] == full and biggest_said[4] == full
 			and biggest_said[5] == most.slice(0, Wire.MOST_RULES),
 		"sister wire: SISTER_MAX, %d bytes, is the most the writer writes -- two"
-		% Wire.SISTER_MAX + " genomes of eight sixteen-letter genes and eight lines"
+		% Wire.SISTER_MAX + " genomes of nine sixteen-letter genes and eight lines"
 		+ " of 128 -- and handed more it writes no more: a gene the wire cannot name,"
 		+ " a ninth line, an empty one, one of 129 bytes and one in capitals are left"
 		+ " out")
@@ -1069,9 +1109,9 @@ func _check_sister_wire() -> void:
 	var nine: Array = []
 	for i in Wire.MOST_RULES + 1:
 		nine.append(ascii.call(_rule_line_of(48, i)))
-	var nine_genes: Array = []
+	var ten_genes: Array = []
 	for i in Wire.GENES_MAX + 1:
-		nine_genes.append([ascii.call("gene" + "abcdefghi"[i]), 1])
+		ten_genes.append([ascii.call("gene" + "abcdefghij"[i]), 1])
 	var refused := {
 		"nine instincts": _sister_by_hand(worn, dna_said, nine),
 		"a count of nine": _sister_by_hand(worn, dna_said, nine.slice(0, 8), 9),
@@ -1083,7 +1123,7 @@ func _check_sister_wire() -> void:
 		"a DNA gene in capitals": _sister_by_hand(worn, [[ascii.call("Ampulla"), 1]], two),
 		"a DNA gene with no name": _sister_by_hand(worn, [[PackedByteArray(), 1]], two),
 		"a DNA gene with a digit": _sister_by_hand(worn, [[ascii.call("cili5"), 1]], two),
-		"nine DNA genes": _sister_by_hand(worn, nine_genes, two),
+		"ten DNA genes": _sister_by_hand(worn, ten_genes, two),
 		"a byte after the last line": _sister_by_hand(worn, dna_said, two, -1,
 			PackedByteArray([0])),
 		"a line past its count": _sister_by_hand(worn, dna_said, two, 1),
@@ -1851,7 +1891,7 @@ func _check_limits() -> void:
 
 
 ## **T1: every frame at its edges.** Each bound in wire.gd's size table is a
-## frame a writer really produces -- the largest PERSON is eight genes and
+## frame a writer really produces -- the largest PERSON is nine genes and
 ## seven slots of sixteen-letter names, and since protocol 6 the largest SISTER,
 ## a guest's longest frame, is two genomes of them and eight lines of 128 bytes
 ## -- and one byte either side of it, or the wrong side of the wire, is refused.
@@ -2125,17 +2165,17 @@ func _limits_sister_room() -> void:
 	await _limits_close([host, guest, early])
 
 
-## **T3: malformed, twice and then again.** A PERSON with nine genes is the
-## right size and does not read. Two are 8 points and the guest stays; two
+## **T3: malformed, twice and then again.** A PERSON with ten genes is the
+## right size and does not read -- nine is the most since protocol 7. Two are 8 points and the guest stays; two
 ## more inside a second cut it, told why: REFUSE_BROKEN.
 func _limits_malformed() -> void:
 	var host: Node = await _limits_host("LimitsMalformedHost")
 	var guest: Node = await _limits_guest("LimitsMalformedGuest")
 	var gid: int = guest.my_id()
-	var nine := PackedByteArray([0, 9])
-	for i in 9:
+	var nine := PackedByteArray([0, Wire.GENES_MAX + 1])
+	for i in Wire.GENES_MAX + 1:
 		nine.append(5)
-		nine.append_array(("gene" + "abcdefghi"[i]).to_ascii_buffer())
+		nine.append_array(("gene" + "abcdefghij"[i]).to_ascii_buffer())
 		nine.append(1)
 	nine.append(0)
 	guest.send_event(Wire.EVENT_PERSON, nine)
@@ -2147,7 +2187,7 @@ func _limits_malformed() -> void:
 		and (host.pond_events as Array).is_empty()
 	_says(int(host.gate_counts["malformed"]) == 2 and points > 6.0 and points <= 8.0
 			and stayed,
-		"limits T3: two nine-gene PERSONs, %d bytes each, are %.2f points; the"
+		"limits T3: two ten-gene PERSONs, %d bytes each, are %.2f points; the"
 		% [Wire.EVENT_HEADER + nine.size(), points] + " guest stays, and nothing"
 		+ " was queued")
 	guest.send_event(Wire.EVENT_PERSON, nine)
@@ -4568,7 +4608,8 @@ func _pond_listen(field: Node) -> Array:
 	field.bitten.connect(func(b: float, strength: float) -> void:
 		said.append(["bitten", b, strength]))
 	field.killed.connect(func(b: float) -> void: said.append(["killed", b]))
-	field.stung.connect(func(b: float) -> void: said.append(["stung", b]))
+	field.dosed.connect(func(b: float, kind: int, stacks: float, meal: bool) -> void:
+		said.append(["dosed", b, kind, stacks, meal]))
 	return said
 
 
@@ -4577,6 +4618,14 @@ func _pond_said(said: Array, kind: String, what: int = -1) -> Array:
 		if entry[0] == kind and (what < 0 or int(entry[1]) == what):
 			return entry
 	return []
+
+
+## **[param stacks] are a dose of [param n], as a body in the water holds it a
+## step later**: a body's loads are the water's to wear, so they may have worn
+## for the one step since the dose went in -- and by no more than that.
+func _pond_worn(stacks: float, n: float) -> bool:
+	return stacks <= n \
+		and stacks >= n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
 
 
 ## The heading that points a body at [param from] toward [param to].
@@ -4701,7 +4750,8 @@ func _pond_swallow_rule() -> void:
 
 	# The same mouth, not committed -- they have just arrived, so nothing may
 	# commit to them yet -- only bites. Astern, through two tiers of pellicle
-	# and into two of veneneux, so every term of the bite is in the number.
+	# and into two of veneneux, so every term of the bite is in the number, and
+	# the person's poison goes into the biter as stacks (dna-slots.md §7).
 	field = _pond_rig(12, 30.0, POND_SENSES)
 	field.open_pond()
 	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
@@ -4714,23 +4764,29 @@ func _pond_swallow_rule() -> void:
 	var bit := _pond_said(said, "touched", FoodField.Contact.BITTEN)
 	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
 	var expected := 0.0
-	var back := 0.0
 	if not bit.is_empty():
 		expected = CellBody.bite_damage(3, gape, 28.0, 2,
 			_pond_flank(0.0, at, bit[2] as Vector2))
-		back = CellBody.venom_back(2, expected)
+	# The poison is the stacks the table gives, worn for at most the one step the
+	# body may have taken since; nothing yet in its wound but what that step wore.
+	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var taken := float((b.loads as PackedFloat64Array)[0])
 	_says(field.person() != null and _pond_said(said, "died").is_empty()
 			and not bit.is_empty() and 28.0 * CellBody.ARMOR_BY_TIER[2] < gape,
 		"pond-field: an uncommitted cell whose gape fits them only bites")
 	_says(not bit.is_empty() and absf(float(person.wound) - expected) < 1e-9
-			and absf(float(b.wound) - back) < 1e-9 and expected > 0.0
+			and expected > 0.0 and taken <= poison_n
+			and taken >= poison_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
+			and float(b.wound) < 0.001
 			and is_equal_approx(float(bit[3]), clampf(expected
 				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)),
 		"pond-field: the chew is bite_damage for that gape, pellicle and flank"
-		+ " (%.5f, astern), with %.5f of venom back on the biter"
-		% [float(person.wound), float(b.wound)])
+		+ " (%.5f, astern), and the biter takes %.3f stacks of their poison, its"
+		% [float(person.wound), taken] + " wound %.5f" % float(b.wound))
 
-	# Committed, and they carry venom: spat out, and the cell is gone.
+	# Committed, and they are poisonous: swallowed as anyone is -- nobody is spat
+	# out any more -- and the cell that ate them takes the swallow's dose, and
+	# lives on with it (dna-slots.md §7.1, owner's row 5).
 	field = _pond_rig(13, 30.0, POND_SENSES)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1,
@@ -4740,12 +4796,27 @@ func _pond_swallow_rule() -> void:
 	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
 	_pond_hunt(field, b)
 	var serial := int(b.serial)
+	# What the cell that ate them carries **when the death is told**: the dose goes
+	# in first. Read then, because later in the same step today's water culls it
+	# with the rest of what the person anchored (`_step_pond`): out here, 3,000
+	# from the host, nobody is left to keep it.
+	var at_death: Array = []
+	field.person_died.connect(func(_cause: int, _by: int, _at: Vector2) -> void:
+		at_death.append([int(b.serial), bool(b.seeded),
+			float((b.loads as PackedFloat64Array)[0])]))
 	field._process(POND_STEP)
-	_says(field.person() != null and _pond_said(said, "died").is_empty()
-			and not _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
-			and int(b.serial) != serial,
-		"pond-field: a committed cell that swallows a venomous person is retired,"
-		+ " and they are stung, not killed")
+	died = _pond_said(said, "died")
+	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
+	var dosed := float(at_death[0][2]) if at_death.size() == 1 else 0.0
+	_says(field.person() == null and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.WATER
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
+			and at_death.size() == 1 and int(at_death[0][0]) == serial
+			and bool(at_death[0][1]) and dosed == swallow_n,
+		"pond-field: a committed cell that swallows a poisonous person eats them --"
+		+ " SWALLOWED by the water -- and carries %.2f stacks of their poison when the"
+		% dosed + " death is told, alive")
 
 
 # --- §1.3, the last row: one player's mouth on the other ---------------------
@@ -4811,6 +4882,114 @@ func _pond_friends() -> void:
 		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
 		% float(cell.wound) + " each side feeling its own share")
 
+	# **Each bite carries its toxins, each way** (dna-slots.md §7.2). This cell's
+	# front venom rides its bite into the friend -- whatever their pellicle -- and
+	# their poison comes back into this cell: one bite, two doses. This cell's
+	# loads are the run's, and exact; the friend's are the water's to wear
+	# ([method _pond_worn]).
+	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	var venom_n := CellBody.VENOM_STACKS_BY_TIER[2]
+	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var fired: Array = []
+	field = _pond_rig(24, 30.0, venom)
+	field.toxins = FoodField.toxins_of(venom,
+		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 3, &"veneneux": 2})
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	var mine: Object = field.get("_cell")
+	var friend: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var into_them := float((friend.loads as PackedFloat64Array)[0])
+	var into_me := float((mine.loads as PackedFloat64Array)[0])
+	var dose := _pond_said(said, "dosed")
+	_says(field.person() != null
+			and not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+			and _pond_worn(into_them, venom_n) and into_me == poison_n
+			and not dose.is_empty() and float(dose[3]) == poison_n and not bool(dose[4])
+			and fired == [FoodField.FIRED_VENOM],
+		"pond-field: this cell's front venom rides its bite into an armoured friend"
+		+ " (%.3f stacks), and their poison comes back into this cell (%.0f, told"
+		% [into_them, into_me] + " as a dose); its venom is told as fired, once")
+
+	# And the other way: a friend's front venom rides their bite into this
+	# poisonous cell, and its poison goes into them.
+	var poisonous := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"veneneux": 2}
+	fired = []
+	field = _pond_rig(25, 30.0, poisonous, Vector2.ZERO, PI)
+	field.toxins = FoodField.toxins_of(poisonous, [&"cytostome", &"cirrus", &"flagellum"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"toxicyst": 2}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	into_me = float((mine.loads as PackedFloat64Array)[0])
+	dose = _pond_said(said, "dosed")
+	_says(field.person() != null and not _pond_said(said, "bitten").is_empty()
+			and float(mine.wound) > 0.0 and into_me == venom_n
+			and not dose.is_empty() and float(dose[3]) == venom_n and not bool(dose[4])
+			and _pond_worn(into_them, poison_n) and fired == [FoodField.FIRED_POISON],
+		"pond-field: and a friend's front venom rides their bite into this poisonous"
+		+ " cell (%.0f stacks, told as a dose), and its poison goes into them (%.3f);"
+		% [into_me, into_them] + " its poison is told as fired, once")
+
+	# **A side sting** (§7.2): the friend wears their venom in slot 5, on the
+	# starboard quarter. This cell's bite landing there takes its stacks, and the
+	# same bite on their other quarter none -- and neither friend's mouth is on
+	# this cell, so nothing else doses it. Then this cell's own sting, worn in
+	# slot 5 too, into a friend whose mouth lands there.
+	var guards := Cilia.slot_bearing(5)
+	var stinger := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"pellicle": 3,
+		&"toxicyst": 2}
+	var quarter: Array = [&"cytostome", &"cirrus", &"flagellum", &"pellicle", &"",
+		&"toxicyst"]
+	var sting: Array = []
+	for side: float in [guards, -guards]:
+		field = _pond_rig(26, 30.0, mouth)
+		field.open_pond()
+		field.set_person_genome(stinger, quarter)
+		# Turned so that this cell, straight below them, is at `side` from their
+		# nose: the bearing its bite lands at.
+		field.place_person(at, PI - side, 28.0)
+		said = _pond_listen(field)
+		field._process(POND_STEP)
+		mine = field.get("_cell")
+		dose = _pond_said(said, "dosed")
+		sting.append([float((mine.loads as PackedFloat64Array)[0]),
+			float(dose[3]) if not dose.is_empty() else 0.0,
+			not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+				and float(mine.wound) == 0.0])
+	var my_sting := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	fired = []
+	field = _pond_rig(27, 30.0, my_sting, Vector2.ZERO, -guards)
+	field.toxins = FoodField.toxins_of(my_sting,
+		[&"cytostome", &"cirrus", &"flagellum", &"", &"", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	_says(sting.size() == 2 and float(sting[0][0]) == venom_n
+			and float(sting[0][1]) == venom_n and bool(sting[0][2])
+			and float(sting[1][0]) == 0.0 and float(sting[1][1]) == 0.0
+			and bool(sting[1][2])
+			and not _pond_said(said, "bitten").is_empty()
+			and float((mine.loads as PackedFloat64Array)[0]) == 0.0
+			and _pond_worn(into_them, venom_n) and fired == [FoodField.FIRED_STING],
+		"pond-field: a side sting -- this cell's bite on the quarter a friend wears"
+		+ " their venom on takes %.0f stacks, and on their other quarter %.0f; and"
+		% [float(sting[0][0]), float(sting[1][0])] + " this cell's own sting puts"
+		+ " %.3f into a friend biting it there, told as fired, once" % into_them)
+
 
 ## **Every way one player's contact with the other can end in a death**, and the
 ## cause each side is told (shared-pond.md §1.3's three unsaid things, and
@@ -4823,37 +5002,50 @@ func _pond_to_the_death() -> void:
 	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 	var big := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 
-	# This cell swallows a venomous friend: it is poisoned, and they are stung.
+	# **This cell swallows a poisonous friend** (dna-slots.md §7.1, owner's row 5):
+	# they are eaten -- SWALLOWED by the friend -- and this cell takes the swallow's
+	# dose, felt as the meal, before the meal is told; nobody is stung any more.
+	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
 	var field := _pond_rig(81, 30.0, big)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"veneneux": 1})
 	var said := _pond_listen(field)
 	field._process(POND_STEP)
-	_says(not _pond_said(said, "killed").is_empty()
-			and int(field.died_of) == FoodField.Cause.POISONED
-			and int(field.died_by) == FoodField.By.FRIEND
-			and not _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
-			and _pond_said(said, "died").is_empty() and field.person() != null
-			and not field.anchored,
-		"pond-field: swallowing a venomous friend poisons this cell -- told"
-		+ " POISONED by the friend -- and the friend is stung, not eaten")
+	var cell: Object = field.get("_cell")
+	var died := _pond_said(said, "died")
+	var dosed := _pond_said(said, "dosed")
+	_says(_pond_said(said, "killed").is_empty() and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.FRIEND
+			and not _pond_said(said, "eaten").is_empty() and not dosed.is_empty()
+			and bool(dosed[4]) and said.find(dosed) < said.find(_pond_said(said, "eaten"))
+			and float((cell.loads as PackedFloat64Array)[0]) == swallow_n
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
+			and field.person() == null,
+		"pond-field: swallowing a poisonous friend eats them -- SWALLOWED by the"
+		+ " friend -- and this cell takes %.0f stacks, told as the meal's before it"
+		% float((cell.loads as PackedFloat64Array)[0]))
 
-	# The friend swallows this venomous cell: they are poisoned, it is stung.
-	field = _pond_rig(82, 30.0, {&"cytostome": 1, &"cirrus": 1, &"veneneux": 1},
-		Vector2.ZERO, PI)
-	field.venom_cost = CellBody.VENOM_COST_BY_TIER[1]
+	# **The friend swallows this poisonous cell**: this cell is eaten -- SWALLOWED
+	# by the friend -- and they take the dose, and live on with it.
+	var mine := {&"cytostome": 1, &"cirrus": 1, &"veneneux": 1}
+	field = _pond_rig(82, 30.0, mine, Vector2.ZERO, PI)
+	field.toxins = FoodField.toxins_of(mine, [&"cytostome", &"cirrus"])
 	field.open_pond()
 	_pond_person(field, at, 30.0, big, PI)
 	said = _pond_listen(field)
 	field._process(POND_STEP)
-	var died := _pond_said(said, "died")
-	_says(not died.is_empty() and int(died[1]) == FoodField.Cause.POISONED
-			and int(died[2]) == FoodField.By.FRIEND
-			and not _pond_said(said, "stung").is_empty()
-			and _pond_said(said, "killed").is_empty() and field.anchored
-			and field.person() == null,
-		"pond-field: a friend who swallows this venomous cell is poisoned --"
-		+ " POISONED by the friend, on their side -- and this cell is stung")
+	var friend: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var theirs := float((friend.loads as PackedFloat64Array)[0])
+	_says(not _pond_said(said, "killed").is_empty()
+			and int(field.died_of) == FoodField.Cause.SWALLOWED
+			and int(field.died_by) == FoodField.By.FRIEND
+			and _pond_said(said, "died").is_empty() and field.person() != null
+			and theirs <= swallow_n
+			and theirs >= swallow_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty(),
+		"pond-field: a friend who swallows this poisonous cell eats it -- SWALLOWED by"
+		+ " the friend, on this side -- and takes %.2f stacks of its poison" % theirs)
 
 	# This cell chews the friend apart: its meal, their CHEWED.
 	field = _pond_rig(83, 30.0, big)
@@ -4887,24 +5079,61 @@ func _pond_to_the_death() -> void:
 		"pond-field: a friend chewing this cell to the end kills it CHEWED by the"
 		+ " friend, and the friend is fed")
 
-	# **The eater's death first.** One bite that would finish both: the venom
-	# back finishes this cell, and the friend it was chewing lives.
+	# **A bite on a poisonous friend that finishes them** (dna-slots.md §7): a meal
+	# here, CHEWED by the friend there, and the bite carries their poison into this
+	# cell all the same -- stacks that work over the next seconds, so this cell is
+	# not killed at the bite, already wounded as it is. Then the harm wears into
+	# its wound until it is whole: POISONED, by the friend whose poison it was.
 	field = _pond_rig(85, 30.0, big)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
 		&"pellicle": 3, &"veneneux": 3})
 	field.bodies()[FoodField.PERSON_SLOT].wound = 0.99
-	(field.get("_cell") as Object).set("wound", 0.999)
+	cell = field.get("_cell")
+	cell.set("wound", 0.95)
 	said = _pond_listen(field)
 	field._process(POND_STEP)
-	_says(not _pond_said(said, "killed").is_empty()
+	died = _pond_said(said, "died")
+	var bite_n := float((cell.loads as PackedFloat64Array)[0])
+	var alive_after := _pond_said(said, "killed").is_empty()
+	var steps := 0
+	while float(cell.get("wound")) < 1.0 and steps < 3600:
+		cell.set("wound", CellBody.dosed(cell.loads, float(cell.get("wound")),
+			float(cell.get("radius")), POND_STEP))
+		steps += 1
+	field._process(POND_STEP)
+	_says(not died.is_empty() and int(died[1]) == FoodField.Cause.CHEWED
+			and int(died[2]) == FoodField.By.FRIEND and not _pond_said(said, "eaten").is_empty()
+			and alive_after and bite_n == CellBody.POISON_STACKS_BY_TIER[3]
+			and not _pond_said(said, "killed").is_empty()
 			and int(field.died_of) == FoodField.Cause.POISONED
-			and int(field.died_by) == FoodField.By.FRIEND
-			and _pond_said(said, "died").is_empty()
-			and not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
-			and _pond_said(said, "eaten").is_empty() and field.person() != null,
-		"pond-field: a bite that would finish both kills the eater first --"
-		+ " this cell POISONED, the friend only bitten and not a meal")
+			and int(field.died_by) == FoodField.By.FRIEND,
+		"pond-field: a bite that finishes a poisonous friend is a meal -- CHEWED by the"
+		+ " friend -- and carries %.0f stacks into this cell, which lives; %.1f s on"
+		% [bite_n, steps * POND_STEP] + " the harm makes its wound whole: POISONED by"
+		+ " the friend")
+
+	# **A friend made whole by harm** (dna-slots.md §6.2): this cell's poison in
+	# them, worn into their wound, takes them out of the pond -- POISONED, by the
+	# friend, told them as a KILLED with that cause, and nothing eats them.
+	field = _pond_rig(89, 30.0, plain)
+	field.open_pond()
+	_pond_person(field, Vector2(600.0, 0.0), 28.0, plain)
+	said = _pond_listen(field)
+	field._dose(FoodField.PERSON_SLOT, 0, 60.0, FoodField.TARGET_PLAYER, 0.0, false)
+	var frames := 0
+	while field.person() != null and frames < 3600:
+		field._process(POND_STEP)
+		frames += 1
+	died = _pond_said(said, "died")
+	var told_killed := _pond_said(said, "touched", FoodField.Contact.KILLED)
+	_says(field.person() == null and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.POISONED
+			and int(died[2]) == FoodField.By.FRIEND and not told_killed.is_empty()
+			and _pond_said(said, "eaten").is_empty() and frames < 3600,
+		"pond-field: a friend carrying this cell's poison dies of it %.1f s on --"
+		% (frames * POND_STEP) + " POISONED by the friend, told as a KILLED, eaten"
+		+ " by nobody")
 
 	# And the water's three ways, told to this cell as causes too.
 	var water := {&"cytostome": 3, &"flagellum": 1}
@@ -4928,10 +5157,19 @@ func _pond_to_the_death() -> void:
 	var chewed: Array = [int(field.died_of), int(field.died_by)]
 	field = _pond_rig(88, 30.0, plain)
 	field.open_pond()
-	(field.get("_cell") as Object).set("wound", 0.999)
+	cell = field.get("_cell")
+	cell.set("wound", 0.95)
 	var ahead := Vector2(0.0, -72.0)
 	_pond_pose(field, 5, 44.0, {&"cytostome": 1, &"pellicle": 3, &"veneneux": 3},
 		ahead, 0.0)
+	field._process(POND_STEP)
+	# What it bit dosed it; the harm, worn as this cell's own step wears it, makes
+	# its wound whole, and the field tells the death at its next pass.
+	steps = 0
+	while float(cell.get("wound")) < 1.0 and steps < 3600:
+		cell.set("wound", CellBody.dosed(cell.loads, float(cell.get("wound")),
+			float(cell.get("radius")), POND_STEP))
+		steps += 1
 	field._process(POND_STEP)
 	var poisoned: Array = [int(field.died_of), int(field.died_by)]
 	_says(swallowed == [FoodField.Cause.SWALLOWED, FoodField.By.WATER]
@@ -5505,7 +5743,10 @@ func _drop_pond_anchors() -> void:
 			fair = false
 		if slot == 7:
 			hunter_in = (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) != 0
-		else:
+		elif (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) == 0:
+			# The rest, nearest first. Another body coming for them goes first
+			# wherever it is in reach, flagged, as the posed one does -- so it is
+			# not one of the rest, however far it is.
 			worst = maxf(worst, (b.pos as Vector2).distance_to(pb.pos) - float(b.radius))
 	var nearer_left := 0
 	for i in field.bodies().size():
@@ -5945,6 +6186,20 @@ func _check_pond() -> void:
 
 	# **The host's run first, and its water is the pond.**
 	var host_run := _pond_run_scene(host_net, true)
+	# **Started at the drop's centre**, not at a quiet start (ocean.md §8.1),
+	# which can be anywhere 1,000 or more inside the rim. Everything below
+	# happens within about 2,200 units of where the host began, nearly all of
+	# it north-east -- the arrival, the deaths, and the division, which puts
+	# the host 560 east of the guest and asks for its sister 560 further. From
+	# a start near that side of the rim that is past it. Measured at DNA slots
+	# phase 1, where it happened in two runs of eight: a start 1,441 units in
+	# from the rim, eastward, had the host pinned 328 units outside the water
+	# when it divided, and the pond came apart; in the other the host's
+	# sister, held back onto the rim, landed beside it and shoved its daughter
+	# 27 units. The rim is not what this section is about, and from the centre
+	# it is 3,800 units or more from anything here. The start's clearing is the
+	# same either way.
+	host_run.get_node(^"Food").set("start_mode", &"centre")
 	get_tree().root.add_child.call_deferred(host_run)
 	await host_run.ready
 	var host_cell: Node = host_run.get_node(^"Cell")
@@ -6328,9 +6583,13 @@ func _check_pond() -> void:
 	var genome_guest: Node = guest_run.get_node(^"Genome")
 	# **And a push and a dash** (automation.md §18.3 check 23), which its programs
 	# use on the autopilot below.
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom on its
+	# flank and poison inside -- eight names -- so every word of the guest's from
+	# here to the section's end is a venomous, poisonous body's.
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1}, [&"cytostome", &"cirrus",
-		&"flagellum", &"axoneme", &"myoneme"], [host_pin])
+		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme", &"toxicyst"],
+		[host_pin])
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -6338,9 +6597,26 @@ func _check_pond() -> void:
 	var worn_three := await _pond_until(func() -> bool:
 		return (Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome,
 			&"cytostome") == 3), 1.0, pins)
-	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null,
-		"pond: the guest leaves the pond, grows a tier-3 mouth alone and swims back"
-		+ " in %.2f s, and the host takes the body it arrives with" % reentry)
+	var guest_worn: Dictionary = host_food.bodies()[FoodField.PERSON_SLOT].genome
+	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null
+			and guest_worn.has(&"toxicyst") and guest_worn.has(&"veneneux"),
+		"pond: the guest leaves the pond, grows a tier-3 mouth, venom and poison alone"
+		+ " and swims back in %.2f s, and the host takes the body it arrives with"
+		% reentry)
+	# **And a dose the host gives it**: the loads ride the next snapshot's header,
+	# and the guest's cell carries what the host counts.
+	host_food.call(&"_dose", FoodField.PERSON_SLOT, 0, 2.0, -1, 0.0, false)
+	var carried := [0.0, 0.0]
+	var dosed_guest := await _pond_until(func() -> bool:
+		carried[0] = float((host_food.bodies()[FoodField.PERSON_SLOT].loads
+			as PackedFloat64Array)[0])
+		carried[1] = float((guest_cell.loads as PackedFloat64Array)[0])
+		return (float(carried[1]) > 0.0 and absf(float(carried[0]) - float(carried[1]))
+			<= 0.5 / Wire.POND_LOAD_SCALE + 0.05), 2.0, pins)
+	_says(dosed_guest >= 0.0,
+		"pond: a dose the host gives the guest reaches its cell -- %.2f stacks on the"
+		% float(carried[1]) + " guest against the host's %.2f, %.0f ms on"
+		% [float(carried[0]), dosed_guest * 1000.0])
 
 	# **The guest holds its tail still, and lets it go** (automation.md §10.2,
 	# §18.3 check 7): a motion no guest made before 4-1, swum free in the host's
@@ -7206,6 +7482,37 @@ func _check_pond_referee() -> void:
 		"pond referee: watched, %d fouls were counted and logged and none cost a"
 		% int(watched["referee_would_strikes"]) + " point -- while every verdict above"
 		+ " stood")
+
+	# **A guest made whole by harm** (docs/design/dna-slots.md §6.2, §20.3 check
+	# 5): the host's poison in it, as a dose, wears into its wound until it is
+	# whole -- the host decides that death as every other: POISONED, by the
+	# friend, told the guest as a KILLED with that cause -- and the host draws its
+	# friend gone as one that starved, stopped where it was, eaten by nobody.
+	var poisoned_as: Array = []
+	var on_poisoned := func(cause: int, by: int, _at: Vector2, mine: bool) -> void:
+		poisoned_as.append([cause, by, mine])
+	host_pond.friend_died.connect(on_poisoned)
+	guest.pond_events.clear()
+	host_food.call(&"_dose", FoodField.PERSON_SLOT, 0, 400.0, FoodField.TARGET_PLAYER, 0.0,
+		false)
+	var poisoned := await _ref_until(func() -> bool: return host_food.person() == null,
+		2.0, guest, body, host_pin)
+	host_pond.friend_died.disconnect(on_poisoned)
+	var killed_by: Array = []
+	for frame: PackedByteArray in guest.pond_events:
+		if Wire.event_type(frame) == Wire.EVENT_CONTACT:
+			var said := Wire.take_contact(frame)
+			if said.size() == 6 and int(said[0]) == FoodField.Contact.KILLED:
+				killed_by.append([int(said[5]), int(said[3])])
+	var drawn := int((host_run.get("_vision") as Node).get("_fr_gone"))
+	_says(poisoned >= 0.0 and poisoned_as == [[FoodField.Cause.POISONED,
+			FoodField.By.FRIEND, false]]
+			and killed_by == [[FoodField.Cause.POISONED, FoodField.By.FRIEND]]
+			and drawn == VisionLayer.Gone.STARVED,
+		"pond referee: a guest the host's poison makes whole dies %.0f ms on --"
+		% (poisoned * 1000.0) + " %s, told it as %s -- and the host draws it gone as"
+		% [str(poisoned_as), str(killed_by)] + " one that starved (%s)"
+		% ("STARVED" if drawn == VisionLayer.Gone.STARVED else str(drawn)))
 
 	# **R11: a radius lie on every frame, enforced**: cut within 3 s, the guest
 	# told REFUSE_BROKEN.
@@ -8228,16 +8535,29 @@ func _check_server() -> void:
 	var b_genome: Node = b_run.get_node(^"Genome")
 	# And a second copy of its tail (automation.md §5.2), which it holds still below.
 	# And a push and a dash, which its programs use on the autopilot (check 23).
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom at the
+	# back of its free arcs and poison inside -- eight names, for the room's
+	# referee and the other guest's mirror.
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1}, [&"cytostome",
-		&"cirrus", &"flagellum", &"palp", &"axoneme", &"myoneme"], [a_pin])
+		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1,
+		&"veneneux": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme",
+		&"myoneme", &"toxicyst"], [a_pin])
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
 	_says(b_brought >= 0.0 and food.person(slot_b) != null,
-		"server: the second guest leaves the pond and swims back in with a palp in"
-		+ " %.2f s, in slot %d again" % [b_brought, int((pond.call("_guest_by_id",
-			int(b_net.my_id())) as Object).slot)])
+		"server: the second guest leaves the pond and swims back in with a palp, venom"
+		+ " and poison in %.2f s, in slot %d again" % [b_brought,
+			int((pond.call("_guest_by_id", int(b_net.my_id())) as Object).slot)])
+	# **And a dose the room gives it**, which reaches its cell in its own header.
+	food.call(&"_dose", slot_b, 0, 2.0, -1, 0.0, false)
+	var b_carried := [0.0]
+	var b_dosed := await _server_until(func() -> bool:
+		b_carried[0] = float((b_cell.loads as PackedFloat64Array)[0])
+		return float(b_carried[0]) > 0.0, pins)
+	_says(b_dosed >= 0.0 and float((a_cell.loads as PackedFloat64Array)[0]) == 0.0,
+		"server: a dose the room gives the second guest reaches its cell (%.2f stacks)"
+		% float(b_carried[0]) + " and the first guest's header carries none")
 	var mirrored := await _server_until(func() -> bool:
 		var fa: Object = a_food.person()
 		var fb: Object = b_food.person()

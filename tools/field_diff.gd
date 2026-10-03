@@ -37,6 +37,13 @@ extends SceneTree
 ## signals. This is what holds a change that teaches the field a *second*
 ## person (the dedicated host, `game/server/`) to leaving the one-person pond
 ## exactly as it was: the same calls, the same bits, the same draws.
+##
+## **Against a reference from before the toxins** (docs/design/dna-slots.md),
+## every trial in which a toxin acts differs by design: the old field spat a
+## venomous body out and charged a cost, the new one delivers doses. The two
+## signals are logged under their own names and each field's own switch is set
+## only where it has one, so the tool runs on either side of that change and
+## says where they part.
 
 var NewFood: GDScript = null
 var OldFood: GDScript = null
@@ -184,7 +191,11 @@ func _wire(food: Node, log: Array, cell: Node) -> void:
 	food.waked.connect(func(b: float, s: float) -> void: log.append(["waked", b, s]))
 	food.killed.connect(func(b: float) -> void: log.append(["killed", b]))
 	food.bitten.connect(func(b: float, s: float) -> void: log.append(["bitten", b, s]))
-	food.stung.connect(func(b: float) -> void: log.append(["stung", b]))
+	if food.has_signal(&"stung"):
+		food.connect(&"stung", func(b: float) -> void: log.append(["stung", b]))
+	if food.has_signal(&"dosed"):
+		food.connect(&"dosed", func(b: float, k: int, n: float, m: bool) -> void:
+			log.append(["dosed", b, k, n, m]))
 	food.darted.connect(func(b: float) -> void: log.append(["darted", b]))
 	food.pulsed.connect(func() -> void: log.append(["pulsed"]))
 	# The person's two, which only a pond emits: a single-player trial never
@@ -329,7 +340,8 @@ func _apply(food: Node, cell: Node, st: Dictionary) -> void:
 	food.set("_serial", 100)
 	food.set("_first_pending", false)
 	food.set("_first_hunt", st[&"first_hunt"])
-	food.set("venom_cost", st[&"venom_cost"])
+	if &"venom_cost" in food:
+		food.set("venom_cost", st[&"venom_cost"])
 	food.set("_bite_clock", st[&"bite_clock"])
 	food.set("_dart_clock", 0.0)
 	food.set("dart_range", st[&"dart_range"])

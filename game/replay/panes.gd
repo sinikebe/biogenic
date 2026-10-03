@@ -392,6 +392,17 @@ func set_slack(slack: float) -> void:
 		_vision.slack = slack
 
 
+## **What the body carried**, felt (docs/design/dna-slots-ux.md §6): the stain
+## on the figure in both panes, from the recorded loads. The seep and the
+## flares are the run's moments and are not recorded; the loads are.
+func set_dose(felt: Vector3) -> void:
+	var dose := {} if felt == Vector3.ZERO else {"felt": felt}
+	if _soma != null:
+		_soma.dose = dose
+	if _vision != null:
+		_vision.dose = dose
+
+
 func _process(_delta: float) -> void:
 	if not live:
 		return
@@ -405,6 +416,9 @@ func _process(_delta: float) -> void:
 		set_division(_run_soma.division)
 		set_eye(_run_soma.eye)
 		set_slack(_run_soma.slack)
+		# What the body carries, as a real replay draws it: the felt loads alone,
+		# since the seep and the flares are the run's moments and not recorded.
+		set_dose((_run_soma.dose as Dictionary).get("felt", Vector3.ZERO))
 
 
 # ---------------------------------------------------------------------------

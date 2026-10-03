@@ -542,11 +542,19 @@ static func _body_why(body: Array) -> String:
 
 ## **A snapshot, held to what [method Wire.take_pond] promises**: every value
 ## finite, no more bodies than a snapshot holds, the person and only the person
-## by the person's id, and a person's motion one a body could have.
+## by the person's id, and a person's motion one a body could have -- and since
+## protocol 7 the recipient's three loads, each a count of stacks its byte can
+## say.
 static func _pond_why(pond: Array) -> String:
 	var why := _finite_why(pond)
 	if not why.is_empty():
 		return why
+	var loads: PackedFloat64Array = pond[3]
+	if loads.size() != Wire.POND_LOADS:
+		return "%d loads" % loads.size()
+	for stacks: float in loads:
+		if not is_finite(stacks) or stacks < 0.0 or stacks > 255.0 / Wire.POND_LOAD_SCALE:
+			return "a load of %s" % str(stacks)
 	var bodies: Array = pond[2]
 	if bodies.size() > Wire.POND_BODIES_MAX:
 		return "%d bodies, past %d" % [bodies.size(), Wire.POND_BODIES_MAX]
@@ -640,7 +648,7 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
 		7:
 			if from_host:
-				return Wire.pond(seq, _rng.randf(), _pond_bodies())
+				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads())
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		8:
 			return Wire.event(seq, Wire.EVENT_ARRIVE, Wire.arrive_payload(at,
@@ -687,12 +695,27 @@ func _lines() -> PackedStringArray:
 	return out
 
 
+## **A genome a body could wear** -- since protocol 7 the toxin's two forms
+## among its genes, and up to the nine names a genome may hold.
 static func _tiers_from(rng: RandomNumberGenerator) -> Dictionary:
 	var genes := [&"cytostome", &"cirrus", &"flagellum", &"ampulla", &"ocellus",
-		&"stigma", &"chemocyte", &"pellicle", &"veneneux"]
+		&"stigma", &"chemocyte", &"pellicle", &"veneneux", &"toxicyst", &"palp",
+		&"axoneme"]
 	var out := {}
-	for i in rng.randi_range(1, 6):
+	for i in rng.randi_range(1, Wire.GENES_MAX + 2):
 		out[genes[rng.randi_range(0, genes.size() - 1)]] = rng.randi_range(0, 3)
+	return out
+
+
+## **The loads a snapshot tells its recipient** (protocol 7): none mostly, then
+## stacks of each kind, to past what a byte says, and now and then not a number
+## at all -- which the writer sends as none.
+func _pond_loads() -> PackedFloat64Array:
+	var out := PackedFloat64Array([0.0, 0.0, 0.0])
+	if _rng.randf() < 0.5:
+		return out
+	for k in out.size():
+		out[k] = [0.0, _rng.randf_range(0.0, 80.0), 63.75, INF, NAN][_rng.randi_range(0, 4)]
 	return out
 
 
@@ -700,8 +723,11 @@ func _pond_bodies() -> Array:
 	var bodies: Array = []
 	for i in _rng.randi_range(0, 12):
 		var person := _rng.randf() < 0.2
+		# A body's loads are three flags of its own since protocol 7.
+		var loads: int = [0, Wire.POND_HARMED, Wire.POND_PARALYSED | Wire.POND_ASLEEP,
+			Wire.POND_HARMED | Wire.POND_PARALYSED | Wire.POND_ASLEEP][_rng.randi_range(0, 3)]
 		bodies.append([Wire.PERSON_ID if person else _rng.randi_range(1, 0x7FFFFFFF),
-			_rng.randi_range(0, 40), Wire.POND_IS_PERSON if person else 0,
+			_rng.randi_range(0, 40), (Wire.POND_IS_PERSON if person else 0) | loads,
 			Vector2(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-3000.0, 3000.0)),
 			_rng.randf_range(-PI, PI), _rng.randf_range(4.0, 40.0), _rng.randf(),
 			_rng.randf_range(0.0, 400.0), Vector2(_rng.randf_range(-300.0, 300.0),
