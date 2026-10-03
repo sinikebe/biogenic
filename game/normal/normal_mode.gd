@@ -2754,18 +2754,22 @@ func _cycle_scheme() -> void:
 
 ## **The drawn controls behind the pause screen** (controls.md §5.1;
 ## automation-ux.md §2.1). In play, always. On the genome page, **while its
-## controls chooser is in use** -- under the pointer, focused, or for
+## controls chooser is in use** -- the keyboard's focus on it, or for
 ## [constant SCHEME_PREVIEW] seconds after it was cycled -- so cycling the word
 ## still changes the corners under the scrim, which is the chooser's whole
 ## explanation; the rest of the time no pad's ghost sits under the caption, the
 ## `numbers` switch or `leave`, which the 4-1 layout put over three of them. The
 ## programs page never shows them, so none sits under `resume`.
+##
+## **Not a hover, nor the hidden focus a press leaves**: a phone's tap leaves the
+## chooser focused that way and, by the emulated mouse, hovered for good, and the
+## four seconds would never end.
 func _controls_previewed() -> bool:
 	if not _menu_open:
 		return true
 	if _on_programs:
 		return false
-	if _feel_button.is_hovered() or _feel_button.has_focus():
+	if _feel_button.has_focus(true):
 		return true
 	return Time.get_ticks_msec() / 1000.0 - _scheme_shown_at < SCHEME_PREVIEW
 
