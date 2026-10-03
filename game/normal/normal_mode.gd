@@ -4592,6 +4592,17 @@ const REFUSED_INK := 0.45
 ## **A tap that adds a copy elsewhere** keeps the tapped chip as it is, its lens
 ## only a trace of the selection: the copy lands on the target, which is lit.
 const RAISE_TRACE := 0.35
+## **What a toxin would become, before it lands** (dna-slots-ux.md §3.2): while
+## one is in hand, every empty live slot it could be written into carries the
+## form it would make there -- `venom` round the body, `poison` in it -- as its
+## word and the hand's copies in ring pips, no rungs, this quiet. The rule is on
+## the figure before the line says it. A slot whose form is carried shows
+## nothing: a tap there adds a copy where that form already is, and says so when
+## armed.
+const GHOST_INK := 0.42
+## The same, under a drag: the form the toxin in the air would land as, on the
+## empty slot under the finger. Louder, because it is the one slot being asked.
+const LAND_INK := 0.75
 ## **Where the body wears a different organ from the gene its slot now carries,
 ## the body names it**: that organ's own word, in its own hue, on the tether
 ## this far out from the skin. The word is needed and a render proved it -- a
@@ -5539,8 +5550,12 @@ func _update_hint() -> void:
 	# gene is worth the copies it waited with, not none. A slot always carries
 	# at least one; a waiting gene has `dna_tier == 0`, which indexes the empty
 	# string -- so without this the odds go blank at exactly the moment the
-	# player is deciding what a placement is worth.
-	_set_hint(_odds(_copies_of(gene)), gene)
+	# player is deciding what a placement is worth. **The hand, where it is
+	# what is read** -- no slot chosen, or an empty one -- is worth what it
+	# waited with ([method _hand_copies]).
+	var hand_read := gene == _hand() and (slot < 0 or _gene_at(slot) == &"") \
+		and _dragging < 0
+	_set_hint(_odds(_hand_copies() if hand_read else _copies_of(gene)), gene)
 
 
 ## **The odds a copy count gives**, in words -- and with the numbers on, with
@@ -5731,6 +5746,16 @@ func _say_refusal(from: int, to: int) -> void:
 ## table, and it is worth a copy the moment it is placed.
 func _copies_of(gene: StringName) -> int:
 	return maxi(maxi(_genome.dna_tier(gene), _genome.waiting_copies(gene)), 1)
+
+
+## **The copies the gene in hand would be written with**: what it waited with,
+## at least one. Not [method _copies_of] of its name: a toxin waits under the
+## name of the form it was eaten as, and when the DNA carries that form too, its
+## tier is the carried slot's -- `poison ●●` inside read a one-copy toxin in hand
+## as two, and an empty slot armed for it previewed two copies of venom where
+## the tap writes one.
+func _hand_copies() -> int:
+	return maxi(_genome.waiting_copies(_hand()), 1)
 
 
 ## True when [param slot] is a DNA slot with a gene in it, which is the only
@@ -6666,9 +6691,10 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		# gene reaches the DNA and **not** this body, so the preview is carried
 		# rungs and ring pips. It is the one frame where the player can see that
 		# placing changes their daughters and not themselves. **A toxin is
-		# previewed as the form this place makes of it.**
+		# previewed as the form this place makes of it**, at the copies it
+		# waited with, which are the copies the tap writes.
 		shown = GenomeNode.form_at(hand, slot) if GenomeNode.has_forms(hand) else hand
-		copies = _copies_of(hand)
+		copies = _hand_copies()
 		worn = 0
 		tone = Cilia.hue(shown)
 	if raise_to == slot and not _raise_full(_armed):
@@ -6684,6 +6710,22 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	if trace:
 		# The tapped slot keeps what it has, and its lens is only a trace.
 		selected = false
+	# **What an empty slot would make of a toxin** (dna-slots-ux.md §3.2): the
+	# form's word and its copies in ring pips, with no rungs, because nothing is
+	# written yet -- quiet on every empty slot the hand could be written into,
+	# and louder on the one a toxin in the air is over.
+	var ghost: StringName = &""
+	var ghost_copies := 0
+	var ghost_ink := GHOST_INK
+	if shown == &"" and not refused:
+		if _dragging == SLOT_NONE:
+			ghost = _ghost_at(slot)
+			ghost_copies = _hand_copies()
+		elif slot == _hovered and slot != _dragging:
+			ghost = _landing_at(slot)
+			ghost_copies = _hand_copies() if _dragging == SLOT_SAMPLE \
+				else _genome.dna_tier(_gene_at(_dragging))
+			ghost_ink = LAND_INK
 
 	node.draw_set_transform(Vector2(CHIP_X, 0.0))
 	# **The lens fills, and that is the whole of "selected".** The middle lobe
@@ -6712,6 +6754,8 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	node.draw_set_transform(Vector2.ZERO)
 
 	_draw_chip_label(node, shown, copies, worn, selected)
+	if ghost != &"":
+		_draw_ghost_label(node, ghost, ghost_copies, ghost_ink)
 	if LEVEL_SEAT == LevelSeat.LOBE:
 		_draw_chip_level(node, shown, worn, selected, forking)
 
@@ -6719,6 +6763,58 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **The form an empty [param slot] would make of the toxin in hand**, or &"":
+## on every empty slot but the armed one, which previews it in full, while
+## nothing is in the air. Not where that form is carried already -- a tap there
+## adds a copy to it where it is (dna-slots.md §5.2), and the armed line says so
+## -- and never for a gene of one form, which is itself wherever it goes.
+func _ghost_at(slot: int) -> StringName:
+	var hand := _hand()
+	if _dragging != SLOT_NONE or slot == _armed or not GenomeNode.has_forms(hand) \
+			or _gene_at(slot) != &"":
+		return &""
+	if _genome.placing(hand, slot)[0] != GenomeNode.PLACE_WRITE:
+		return &""
+	return GenomeNode.form_at(hand, slot)
+
+
+## **The form the toxin in the air would land as on [param slot]**, or &"": an
+## empty slot that would take the drop. A toxin out of the tray that would add a
+## copy to a form carried elsewhere lands nowhere here -- the drop only arms, and
+## the line says where the copy goes -- and a gene of one form needs no word for
+## what it is already called.
+func _landing_at(slot: int) -> StringName:
+	var flying := _gene_at(_dragging)
+	if not GenomeNode.has_forms(flying) or _gene_at(slot) != &"" \
+			or _drop_refused(slot):
+		return &""
+	if _dragging == SLOT_SAMPLE \
+			and _genome.placing(flying, slot)[0] != GenomeNode.PLACE_WRITE:
+		return &""
+	return GenomeNode.form_at(flying, slot)
+
+
+## **A form not written yet** (dna-slots-ux.md §3.2): its word and
+## [param copies] as ring pips, centred as a chip's own reading is, at
+## [param ink]. No rungs and no level -- nothing is in the DNA until the tap or
+## the drop, and the rungs are the DNA.
+func _draw_ghost_label(node: Control, form: StringName, copies: int,
+		ink: float) -> void:
+	var font := node.get_theme_default_font()
+	if font == null:
+		return
+	var word := _word(form)
+	var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
+		CHIP_WORD).x
+	var left := (SLOT_SIZE.x - width - PIP_GAP
+		- PIP_PITCH * float(GenomeNode.TIER_MAX - 1) - PIP_R * 2.0) * 0.5
+	node.draw_string(font, Vector2(left, CHIP_BASE), word,
+		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
+		Color(PALE, LABEL_TINT_LOUD.a * ink))
+	_draw_pips(node, Vector2(left + width + PIP_GAP + PIP_R, CHIP_BASE - PIP_LIFT),
+		Cilia.hue(form), copies, 0, ink)
 
 
 ## **The inside chip's window**: an ellipse of the base colour on the chip's
@@ -8418,6 +8514,12 @@ func _draw_centred(card: Control, font: Font, text: String, base: float,
 # irreversible action in the game keeps its two taps on the pause screen. With
 # no free slot the body does not open, and a press on it is an ordinary steer.
 #
+# **The inside is a free slot too, for a toxin** (dna-slots-ux.md §3.7): out to
+# grow it on that side, back in to keep it inside. Its bud is the poison it
+# would make, drawn where poison is, and a finger that comes back into the body
+# after leaving it aims there. Letting go without ever leaving still places
+# nothing, for every gene.
+#
 # **The water keeps moving.** A pond cannot stop, and a shortcut that paused
 # would be the pause screen again. The price is the flick: about 0.6 s under
 # `anywhere`, when that finger is not steering, and about 0.25 s under `stick`
@@ -8469,8 +8571,16 @@ var _offer_clock := 0.0
 ## the press on the frame clock, which is what keeps a `--fixed-fps` run
 ## repeatable.
 var _offer_fresh := false
-## The free slot that is lit, or -1 for none -- a finger back inside the body.
+## The free slot that is lit -- [constant GenomeNode.INSIDE] for the inside --
+## or -1 for none: a finger that never left the body, or one back inside it
+## when the inside is not offered.
 var _offer_aim := -1
+## **The finger has left the body since it opened** (dna-slots-ux.md §3.7).
+## Back inside after that, it aims at the inside, while the inside is offered:
+## *out to grow it on that side, back in to keep it inside*. A finger that never
+## left still places nothing when it lets go, which is what keeps a hold on your
+## own body safe under `anywhere`.
+var _offer_left := false
 ## **The gene the body opened for, held by name** -- the guarantee [member
 ## _in_hand] keeps on the pause screen. It is the head when the body opens, and
 ## if it stops being waiting while the body is open, nothing is placed.
@@ -8501,17 +8611,20 @@ func _offer_allowed() -> bool:
 	# The pond's three still moments, when nothing is simulated.
 	if _held or _water_beat >= 0.0 or _entering_held:
 		return false
-	return _genome.held_sample != &"" and not _offer_free().is_empty()
+	# **The inside alone is enough to open for** (dna-slots-ux.md §3.7): a toxin
+	# whose venom is carried still has the inside to go to.
+	return _genome.held_sample != &"" \
+		and (not _offer_free().is_empty() or _offer_inside())
 
 
-## The DNA's free slots, in slot order. The layout is exactly the figure's live
-## slots -- earned, or inherited by a newborn -- so a hole in it is a slot the
-## pause screen would take a gene into, and nothing outside it is.
+## The DNA's free outside slots, in slot order. The layout is exactly the
+## figure's live slots -- earned, or inherited by a newborn -- so a hole in it is
+## a slot the pause screen would take a gene into, and nothing outside it is.
 ##
-## **Outside only, and never a slot whose form is carried** (docs/design/
-## dna-slots.md §3.4): placed there, a toxin would add a copy to the venom it
-## already makes somewhere else and leave this slot empty, which is not what
-## the bud at this slot promises. The inside is the pause screen's to offer.
+## **Never a slot whose form is carried** (docs/design/dna-slots.md §3.4):
+## placed there, a toxin would add a copy to the venom it already makes
+## somewhere else and leave this slot empty, which is not what the bud at this
+## slot promises. The inside is [method _offer_inside]'s.
 func _offer_free() -> Array[int]:
 	var out: Array[int] = []
 	var layout := _genome.layout()
@@ -8523,6 +8636,18 @@ func _offer_free() -> Array[int]:
 			continue
 		out.append(slot)
 	return out
+
+
+## **Whether the inside is offered too** (dna-slots-ux.md §3.7): while the gene
+## the body opened for -- or, before it opens, the head of the queue -- would
+## be written into a free inside slot as a form not carried yet. So only a
+## toxin, and only into an empty inside: nothing there is written over, as
+## nothing is under any bud, and the pause screen can still move it out.
+func _offer_inside() -> bool:
+	var gene := _offer_gene if _offer_gene != &"" else _genome.held_sample
+	if gene == &"" or not _genome.inside_layout().has(&""):
+		return false
+	return _genome.placing(gene, GenomeNode.INSIDE)[0] == GenomeNode.PLACE_WRITE
 
 
 ## `[centre, heading, radius]` of the player's body on the screen, in canvas px,
@@ -8546,13 +8671,19 @@ func _offer_on_body(at: Vector2) -> bool:
 ## not the screen -- with the nose pointing east, a finger slid straight up
 ## lights the forward-port slot. Inside the hit circle it points at nothing, and
 ## letting go there places nothing: that is how a player changes their mind.
+##
+## **Unless it has been out and come back** (dna-slots-ux.md §3.7): then, while
+## the inside is offered, it points at the inside. The first time the finger is
+## outside the hit circle is recorded here, so every caller -- the drag, and the
+## frame under a still finger while the body turns -- agrees about it.
 func _offer_aim_at(at: Vector2) -> int:
 	var body := _offer_body()
 	if body.is_empty():
 		return -1
 	var reach: Vector2 = at - body[0]
 	if reach.length() <= _offer_hit(body):
-		return -1
+		return GenomeNode.INSIDE if _offer_left and _offer_inside() else -1
+	_offer_left = true
 	var bearing := atan2(reach.x, -reach.y) - float(body[1])
 	var best := -1
 	var best_off := INF
@@ -8566,8 +8697,19 @@ func _offer_aim_at(at: Vector2) -> int:
 
 ## The keyboard's first aim: the free slot nearest the nose, and the starboard
 ## one when two are level -- the forward diagonals are mirror images, and the
-## first aim should be the same slot every time.
+## first aim should be the same slot every time. **With no free slot outside,
+## the inside at once** (dna-slots-ux.md §3.7), when it is offered: it is the
+## only thing the body opened for.
 func _offer_default() -> int:
+	var best := _offer_nearest_nose()
+	if best < 0 and _offer_inside():
+		return GenomeNode.INSIDE
+	return best
+
+
+## The free outside slot nearest the nose, or -1: where `W` takes the aim back
+## out to from the inside.
+func _offer_nearest_nose() -> int:
 	var best := -1
 	var best_off := INF
 	for slot in _offer_free():
@@ -8600,6 +8742,8 @@ func _offer_clockwise(a: int, b: int) -> bool:
 func _offer_begin() -> void:
 	_offer_open = true
 	_offer_gene = _genome.held_sample
+	# The finger opens it on the body, so it has not left yet.
+	_offer_left = false
 	_offer_aim = _offer_default() if _offer_key else _offer_aim_at(_offer_at)
 	if _offer_key:
 		# `A` and `D` walk the lit slot while `E` is down, so they must not also
@@ -8635,6 +8779,7 @@ func _offer_close(place: bool) -> void:
 	_offer_key = false
 	_offer_pointer = POINTER_NONE
 	_offer_aim = -1
+	_offer_left = false
 	_offer_clock = 0.0
 	_offer_fresh = false
 	_offer_gene = &""
@@ -8653,7 +8798,15 @@ func _offer_close(place: bool) -> void:
 func _offer_place() -> void:
 	var slot := _offer_aim
 	var which := _genome.waiting_index(_offer_gene)
-	if slot < 0 or which < 0 or not _offer_free().has(slot):
+	if slot < 0 or which < 0:
+		return
+	# **The inside, asked again now as every bud is**: still offered -- still a
+	# toxin, still an empty inside -- or nothing.
+	if GenomeNode.is_inside(slot):
+		if _offer_inside():
+			_genome.place(slot, which)
+		return
+	if not _offer_free().has(slot):
 		return
 	_genome.place(slot, which)
 
@@ -8698,9 +8851,10 @@ func _offer_emulated(event: InputEvent) -> bool:
 	return ours
 
 
-## `E` held opens the body; `A` / `D` or the arrows walk the lit slot round it;
-## letting go of `E` places. `Esc` cancels any open body, keyed or held by a
-## finger, and is then not also a pause.
+## `E` held opens the body; `A` / `D` or the arrows walk the lit slot round it,
+## and `S` / `W` or the arrows take it inside and back out; letting go of `E`
+## places. `Esc` cancels any open body, keyed or held by a finger, and is then
+## not also a pause.
 func _offer_keys(key: InputEventKey) -> bool:
 	if key.keycode == KEY_E or key.physical_keycode == KEY_E:
 		if key.echo:
@@ -8723,6 +8877,21 @@ func _offer_keys(key: InputEventKey) -> bool:
 		return true
 	if not _offer_key:
 		return false
+	# **In and out** (dna-slots-ux.md §3.7): `S` or the down arrow aims inside,
+	# while the inside is offered; `W` or the up arrow takes the aim back out, to
+	# the free slot nearest the nose. Swallowed whole while `E` is down, as `A`
+	# and `D` are below: `W` and `S` are the cell's own keys, and the arrows are
+	# `ui_up` and `ui_down` as well.
+	if key.keycode == KEY_S or key.keycode == KEY_DOWN:
+		if key.pressed and not key.echo and _offer_inside():
+			_offer_aim = GenomeNode.INSIDE
+		return true
+	if key.keycode == KEY_W or key.keycode == KEY_UP:
+		if key.pressed and not key.echo and GenomeNode.is_inside(_offer_aim):
+			var out := _offer_nearest_nose()
+			if out >= 0:
+				_offer_aim = out
+		return true
 	var step := 0
 	if key.keycode == KEY_A or key.keycode == KEY_LEFT:
 		step = -1
@@ -8830,7 +8999,8 @@ func _step_offer(delta: float) -> void:
 			_offer_begin()
 	if _offer_open:
 		if _offer_key:
-			if not _offer_free().has(_offer_aim):
+			if not _offer_free().has(_offer_aim) \
+					and not (GenomeNode.is_inside(_offer_aim) and _offer_inside()):
 				_offer_aim = _offer_default()
 		else:
 			# The body turns and, in full vision, drifts under a finger that has
@@ -8839,7 +9009,8 @@ func _step_offer(delta: float) -> void:
 	var state := {}
 	if _offer_open:
 		state = {"aim": _offer_aim,
-			"copies": _genome.waiting_copies(_offer_gene)}
+			"copies": _genome.waiting_copies(_offer_gene),
+			"inside": _offer_inside()}
 	_soma.offer = state
 	_vision.offer = state
 
@@ -8869,13 +9040,15 @@ func _step_offer(delta: float) -> void:
 #
 # Three things about the geometry are worth stating rather than deriving:
 #
-# - **Seven loci, always.** A division fires only at `DIVIDE_RADIUS` 40, where
-#   `slots_for(40)` is 7, and `Genome.mutated()` never changes the order's
-#   length. So the column is a fixed 432 px at every division of every
-#   generation and nothing ever reflows. Empty loci are drawn -- weave and pale
-#   dart, no rungs, no word -- because locus *i* has to sit at the same canvas y
-#   on both sides or the comparison stops being a horizontal scan, and that scan
-#   is the whole mechanism.
+# - **Seven loci outside and the inside, always.** A division fires only at
+#   `DIVIDE_RADIUS` 40, where `slots_for(40)` is 7, and `Genome.mutated()` never
+#   changes the order's length; the inside is every cell's from birth, so it is
+#   the eighth locus, last on each strand (dna-slots-ux.md §3.8). So the column
+#   is a fixed 480 px at every division of every generation and nothing ever
+#   reflows. Empty loci are drawn -- weave and pale dart, no rungs, no word --
+#   because locus *i* has to sit at the same canvas y on both sides or the
+#   comparison stops being a horizontal scan, and that scan is the whole
+#   mechanism.
 # - **One lobe per locus, at 48 px.** The pause strand was 800 canvas px wide and
 #   the space beside a daughter is 335; it did not fit at either shape, so the
 #   pitch shrinks and the lobe count with it. A locus must begin and end at a
@@ -8897,8 +9070,11 @@ func _step_offer(delta: float) -> void:
 # a daughter next to it -- does not move.
 # ---------------------------------------------------------------------------
 
-## §3.1 -- an invariant, not a maximum. See the note above.
-const CHOOSE_LOCI := 7
+## §3.1 -- an invariant, not a maximum. See the note above. The seven outside
+## slots and then the inside, at [constant GenomeNode.INSIDE]: **its mark is a
+## ring with a seed in it**, where every outside locus has its slot's dart -- a
+## body with something inside, pointing nowhere (`Cilia.draw_slot_dart`).
+const CHOOSE_LOCI := GenomeNode.INSIDE + GenomeNode.INSIDE_SLOTS
 ## One locus, along the strand, and therefore one lobe of the weave.
 const CHOOSE_PITCH := 48.0
 ## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
@@ -9139,7 +9315,6 @@ func _choose_begin() -> void:
 	_choose_diff = _choose_differences()
 	_choose_side = 0
 	_choose_slot = -1
-	var order: Array = _daughters[0]["order"]
 	for i in CHOOSE_LOCI:
 		if _choose_diff.has(i):
 			_choose_slot = i
@@ -9149,7 +9324,7 @@ func _choose_begin() -> void:
 	# carries anything, and to locus 0 if even that fails.
 	if _choose_slot < 0:
 		for i in CHOOSE_LOCI:
-			if i < order.size() and order[i] != &"":
+			if _choose_gene_at(0, i) != &"":
 				_choose_slot = i
 				break
 	if _choose_slot < 0:
@@ -9167,16 +9342,34 @@ func _choose_differences() -> Dictionary:
 	var out := {}
 	if _daughters.size() != 2:
 		return out
-	var port_order: Array = _daughters[0]["order"]
-	var stbd_order: Array = _daughters[1]["order"]
 	var port_dna: Dictionary = _daughters[0]["tiers"]
 	var stbd_dna: Dictionary = _daughters[1]["tiers"]
 	for i in CHOOSE_LOCI:
-		var a: StringName = port_order[i] if i < port_order.size() else &""
-		var b: StringName = stbd_order[i] if i < stbd_order.size() else &""
+		var a: StringName = _choose_gene_at(0, i)
+		var b: StringName = _choose_gene_at(1, i)
 		if a != b or int(port_dna.get(a, 0)) != int(stbd_dna.get(b, 0)):
 			out[i] = true
 	return out
+
+
+## **The gene a daughter carries at [param slot]**: her outside order's, and
+## for the inside, the inside form her DNA carries -- the inside keeps no order
+## of its own, so it is read off the DNA, in the genome's own order
+## (dna-slots.md §2.2). `&""` for an empty locus.
+func _choose_gene_at(side: int, slot: int) -> StringName:
+	if GenomeNode.is_inside(slot):
+		var dna: Dictionary = _daughters[side]["tiers"]
+		var held: Array[StringName] = []
+		for gene: StringName in GenomeNode.GENE_ORDER:
+			if GenomeNode.is_inside_form(gene) and dna.has(gene):
+				held.append(gene)
+		for gene: StringName in dna:
+			if GenomeNode.is_inside_form(gene) and not held.has(gene):
+				held.append(gene)
+		var k := slot - GenomeNode.INSIDE
+		return held[k] if k < held.size() else &""
+	var order: Array = _daughters[side]["order"]
+	return StringName(order[slot]) if slot < order.size() else &""
 
 
 func _redraw_choosing() -> void:
@@ -9191,8 +9384,7 @@ func _redraw_choosing() -> void:
 func _choose_at(side: int, slot: int) -> Array:
 	if side < 0 or slot < 0 or _daughters.size() != 2:
 		return [&"", 0, 0]
-	var order: Array = _daughters[side]["order"]
-	var gene: StringName = order[slot] if slot < order.size() else &""
+	var gene := _choose_gene_at(side, slot)
 	if gene == &"":
 		return [&"", 0, 0]
 	var dna: Dictionary = _daughters[side]["tiers"]
@@ -9238,9 +9430,13 @@ func _choose_say() -> void:
 	if gene == &"":
 		_choose_name.text = ""
 		# A locus with nothing in it still has a direction to explain, which is
-		# what the dart under it is for.
-		_choose_line.text = "" if slot < 0 else tr(EXPLAIN_EMPTY)
-		_choose_hint.text = "" if slot < 0 else tr(HINT_EMPTY)
+		# what the dart under it is for -- or, inside, the one gene that goes
+		# there, as the pause screen's inside chip says it.
+		var inside := GenomeNode.is_inside(slot)
+		_choose_line.text = "" if slot < 0 else (tr(EXPLAIN_INSIDE) if inside
+			else tr(EXPLAIN_EMPTY))
+		_choose_hint.text = "" if slot < 0 else (tr(HINT_INSIDE) if inside
+			else tr(HINT_EMPTY))
 		return
 	_choose_name.text = GenomeNode.name_of(gene)
 	_choose_name.add_theme_color_override("font_color",

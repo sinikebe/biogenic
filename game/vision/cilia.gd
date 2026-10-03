@@ -1808,7 +1808,9 @@ const HELD_WILT := 15.0
 ## water full of vacancy beads would be ink spent on nothing anyone can act on.
 ##
 ## [param offer] is the body held open to place [param gene] (dna-body.md §8):
-## `{"aim": slot, "copies": n}`, or empty. See [method _draw_offer].
+## `{"aim": slot, "copies": n, "inside": bool}`, or empty -- `aim` is
+## [constant Genome.INSIDE] for the inside, and `inside` whether it is offered at
+## all (dna-slots-ux.md §3.7). See [method _draw_offer].
 static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, remaining: float,
 		beat: float, clock: float, fade: float = 1.0,
@@ -1820,7 +1822,11 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 	if not offer.is_empty() and gene != &"":
 		aim = int(offer.get("aim", -1))
 		_draw_offer(canvas, at, heading, r, order, gene,
-			int(offer.get("copies", 1)), aim, fade, unit)
+			int(offer.get("copies", 1)), aim, fade, unit,
+			bool(offer.get("inside", false)))
+	# Aimed inside, no socket on the skin is being tried: the gene is going to
+	# the DNA in the middle of the body, and the thread says so.
+	var inward := Genome.is_inside(aim)
 	var held := gene != &"" and remaining > 0.0
 	if free.is_empty() and not held:
 		return
@@ -1857,8 +1863,11 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		# drift: the tuft on the skin and the thread move to the slot that is
 		# lit, so the body says the same thing as the bloom outside it -- and
 		# on a phone, where the lit bud is under the thumb, the tuft is the half
-		# that stays visible.
-		if aim >= 0:
+		# that stays visible. **The inside has no arc to ask for**, and no
+		# socket is tried while it is aimed at.
+		if inward:
+			tried = -1
+		elif aim >= 0:
 			tried = free.find(arc_for_slot(aim))
 
 	for i in free.size():
@@ -1869,8 +1878,12 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 	var target := seat
 	if tried >= 0:
 		target = _socket_bead(at, fwd, stb, r, free[tried])
-	_draw_vesicle(canvas, seat, size, target, tried >= 0, -fwd, tone, wilt,
-		pulse, clock, fade, unit)
+	elif inward:
+		# **Aimed inside, the thread goes to the nucleus** (dna-slots-ux.md
+		# §3.7): the DNA, which is where the gene is going.
+		target = at - fwd * (r * NUCLEUS_BACK)
+	_draw_vesicle(canvas, seat, size, target, tried >= 0 or inward, -fwd, tone,
+		wilt, pulse, clock, fade, unit)
 
 
 ## **The body held open** (dna-body.md §8), outboard of it. Every free slot
@@ -1903,13 +1916,40 @@ const OFFER_SCALE := 1.15
 const OFFER_LINE_FROM := 0.42
 const OFFER_LINE_ALPHA := 0.55
 const OFFER_LINE_WIDTH := 1.4
+## **The inside, offered** (dna-slots-ux.md §3.7). Its bud is the poison it
+## would make, drawn where poison is -- the granule field under the whole skin,
+## at [constant OFFER_ALPHA], and at [constant OFFER_AIM_ALPHA] once aimed -- and
+## not a bud outside: the one bearing no slot uses is the port flank, and a bud
+## there would teach that the inside is your left side. **Aimed, a halo stands
+## round the body** at this share of r and never nearer than this many canvas
+## px, which clears a thumb resting on it, and every outside bud dims to this:
+## the lit thing is under the finger, and the halo is the half of it a thumb
+## does not cover.
+const OFFER_HALO := 1.45
+const OFFER_HALO_MIN := 62.0
+const OFFER_HALO_WIDTH := 2.5
+const OFFER_HALO_ALPHA := 0.55
+const OFFER_HALO_STEPS := 64
+const OFFER_OUT_DIM := 0.45
 
 
 static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, copies: int, aim: int,
-		fade: float, unit: float) -> void:
+		fade: float, unit: float, inside: bool = false) -> void:
 	var reach := maxf(r * OFFER_REACH, OFFER_REACH_MIN * unit)
 	var tone := hue(gene)
+	var inward := inside and Genome.is_inside(aim)
+	if inside:
+		var form := Genome.form_in(gene, Genome.INSIDE_PLACE)
+		if form != &"":
+			_draw_granules(canvas, at, Vector2(sin(heading), -cos(heading)),
+				Vector2(cos(heading), sin(heading)), r, form, copies,
+				(OFFER_AIM_ALPHA if inward else OFFER_ALPHA) * fade, unit)
+		if inward:
+			canvas.draw_arc(at, maxf(r * OFFER_HALO, OFFER_HALO_MIN * unit), 0.0,
+				TAU, OFFER_HALO_STEPS, Color(tone, OFFER_HALO_ALPHA * fade),
+				OFFER_HALO_WIDTH * unit, true)
+	var outside := OFFER_OUT_DIM if inward else 1.0
 	for slot in mini(order.size(), 3 + ARC_FREE.size()):
 		if StringName(order[slot]) != &"":
 			continue
@@ -1934,7 +1974,7 @@ static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
 		# own centre so the strokes, not the arc, reach the seat.
 		canvas.draw_set_transform(seat, bearing, Vector2.ONE * unit)
 		draw_tile_organ(canvas, form, copies, Vector2(0.0, 4.0),
-			(OFFER_AIM_ALPHA if lit else OFFER_ALPHA) * fade, OFFER_SCALE)
+			(OFFER_AIM_ALPHA if lit else OFFER_ALPHA) * fade * outside, OFFER_SCALE)
 		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 

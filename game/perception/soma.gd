@@ -97,9 +97,11 @@ var dose := {}
 var division := {}
 
 ## **The body held open to place a gene** (dna-body.md §8), written once a frame
-## by the run: `{"aim": slot, "copies": n}` while a finger or `E` holds it, empty
-## otherwise. cilia.gd's [method Cilia.draw_pending] draws it; this layer only
-## passes it on, exactly as vision.gd does, so the two views are one picture.
+## by the run: `{"aim": slot, "copies": n, "inside": bool}` while a finger or `E`
+## holds it, empty otherwise -- `inside` when the inside is offered too
+## (dna-slots-ux.md §3.7). cilia.gd's [method Cilia.draw_pending] draws it; this
+## layer only passes it on, exactly as vision.gd does, so the two views are one
+## picture.
 ##
 ## Inside this layer's licence for the same reason the loose gene is: it is the
 ## player's own body and the player's own decision, and nothing about the water.
