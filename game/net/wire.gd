@@ -471,9 +471,9 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ##
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
 ## why a host of this build refuses it. Longer, and the host hangs up before
-## the handshake with no sentence at all; longer than [constant GUEST_FRAME_MAX]
-## (1,342 since protocol 6, 272 before it), and it is the oversize cut, which
-## bars the caller's address for a minute (net-hardening.md A.2).
+## the handshake with no sentence at all; longer than [constant GUEST_OTHER_MAX]
+## (272), and it is the oversize cut, which bars the caller's address for a
+## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
 ## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
 ## `len | a name of NAME_MAX letters | tier`. 145 bytes. An unknown name is
@@ -508,6 +508,12 @@ const SISTER_MAX := EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 \
 ## longer.
 const GUEST_FRAME_MAX := SISTER_MAX
 const HOST_FRAME_MAX := POND_MAX
+## **The most a guest writes in any frame but a SISTER**: its longest PERSON,
+## which was every guest frame's cap before protocol 6. Only a SISTER needs
+## more -- her list rides in it -- so a guest frame of any other kind past this
+## is still the oversize cut that bars an address (net-hardening.md A.2), and
+## not a strike on the ledger. [method guest_cap] says which applies.
+const GUEST_OTHER_MAX := PERSON_MAX
 
 # ---------------------------------------------------------------------------
 # Writing.
@@ -1013,6 +1019,18 @@ static func event_type(frame: PackedByteArray) -> int:
 static func size_ok(kind: int, type: int, size: int, from_host: bool) -> bool:
 	var span := _span(kind, type, from_host)
 	return span.x >= 0 and size >= span.x and size <= span.y
+
+
+## **The cap a guest's [param frame] is held to**: [constant SISTER_MAX] for a
+## SISTER event, and [constant GUEST_OTHER_MAX] for every other frame. Of a
+## frame past [constant GUEST_OTHER_MAX] it reads byte 0 and the event's type,
+## byte 5 -- which a frame that long has -- only to find the one kind allowed
+## past it; of any other frame it reads nothing.
+static func guest_cap(frame: PackedByteArray) -> int:
+	if frame.size() > GUEST_OTHER_MAX and frame[0] == KIND_EVENT \
+			and frame[5] == EVENT_SISTER:
+		return SISTER_MAX
+	return GUEST_OTHER_MAX
 
 
 ## True for a frame kind this protocol defines -- and for an event, a type it

@@ -947,18 +947,33 @@ func _check_sister_wire() -> void:
 		var listed := code > 0 and Wire.RULE_BYTES.contains(String.chr(code))
 		if Wire._rule_byte_ok(code) != listed:
 			alphabet = false
+	# **Only a SISTER gets the room**: every other guest frame keeps the cap a
+	# PERSON set before protocol 6, and the cap is read off the event's type.
+	var padded := func(kind: int, type: int, size: int) -> PackedByteArray:
+		var frame := PackedByteArray([kind, 0, 0, 0, 0, type])
+		frame.resize(size)
+		return frame
+	var caps := [Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_PERSON, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_STATE, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
+		Wire.guest_cap(PackedByteArray())]
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
 			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
 				+ 8 * (1 + Wire.RULE_BYTES_MAX)
 			and Wire.SISTER_MAX == 1342 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
-			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX),
+			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX)
+			and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX
+			and caps == [Wire.SISTER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX,
+				Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX],
 		"sister wire: a list holds drop.gd's %d rules, each line 1 to %d bytes of"
 		% [FoodField.Drop.MOST_RULES, Wire.RULE_BYTES_MAX] + " the %d of a-z, 0-9,"
 		% Wire.RULE_BYTES.length() + " '.', '-', '>' and the space; a SISTER is %d"
-		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and so a"
-		% Wire.SISTER_MAX + " guest's longest frame, past a PERSON's %d"
-		% Wire.PERSON_MAX)
+		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and the one"
+		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
+		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps))
 
 	# **Every line this build can write crosses**: each word a rule's line is
 	# made of -- every name the declarations give, the tests, the references,
@@ -1940,7 +1955,7 @@ func _limits_edges() -> void:
 		and Wire.CONTACT_MAX == contact_max.size() + Wire.EVENT_HEADER \
 		and Wire.POND_MAX == (cases[cases.size() - 1][1] as PackedByteArray).size() \
 		and Wire.GUEST_FRAME_MAX == Wire.SISTER_MAX and Wire.SISTER_MAX > Wire.PERSON_MAX \
-		and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
+		and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
 		and at_bound.size() == cases.size()
 	var later := not Wire.known(0x7E, 0) and not Wire.known(Wire.KIND_EVENT, 0x7F) \
 		and not Wire.size_ok(0x7E, 0, 8, false) \
@@ -1991,16 +2006,17 @@ func _limits_edges() -> void:
 
 
 ## **T2: over the cap.** An event one byte past the longest frame a guest
-## writes -- 1,343 bytes since protocol 6's SISTER, 273 before it -- and then a
-## 64 KiB reliable frame that ENet reassembles from fifty
+## writes of any kind but a SISTER -- 273 bytes, as before protocol 6 -- and
+## then a 64 KiB reliable frame that ENet reassembles from fifty
 ## fragments: each is a cut on the spot, with nothing queued, and the address
 ## is barred -- a minute, then ten for a second offence -- so a call back is
-## cut at the door.
+## cut at the door. Then the one kind allowed past 272 since protocol 6, a
+## SISTER, on a host of its own ([method _limits_sister_room]).
 func _limits_oversize() -> void:
 	var host: Node = await _limits_host("LimitsOversizeHost")
 	var first: Node = await _limits_guest("LimitsOversizeGuest1")
 	var over := Wire.event(1, Wire.EVENT_PERSON, PackedByteArray())
-	over.resize(Wire.GUEST_FRAME_MAX + 1)
+	over.resize(Wire.GUEST_OTHER_MAX + 1)
 	first._to(int(first.get("_host_id")), over)
 	await _limits_until(func() -> bool:
 		return int(host.peer_count()) == 0 and int(first.link) != NetSession.Link.TOGETHER)
@@ -2042,6 +2058,71 @@ func _limits_oversize() -> void:
 		+ " the same way, and a second offence inside ten minutes bars for %.0f s"
 		% barred)
 	await _limits_close([host, first, again, third])
+	await _limits_sister_room()
+
+
+## **T2, the SISTER's room** (protocol 6, automation.md §10.3): the one kind a
+## greeted guest may send past [constant Wire.GUEST_OTHER_MAX], to [constant
+## Wire.SISTER_MAX], because her list rides in it. One of a thousand-odd bytes
+## is taken; one as long that does not read is an ordinary malformed frame, a
+## strike and no cut; one byte past SISTER_MAX is the oversize cut. And a
+## caller that has not said HELLO is held to 272 whatever it sends: its SISTER
+## past it is the oversize cut, as at protocol 5.
+func _limits_sister_room() -> void:
+	var host: Node = await _limits_host("LimitsSisterRoomHost")
+	var guest: Node = await _limits_guest("LimitsSisterRoomGuest")
+	var gid: int = guest.my_id()
+	var lines := PackedStringArray()
+	for i in Wire.MOST_RULES:
+		lines.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
+	var payload := Wire.sister_payload(Vector2(560.0, 0.0), 0.0, Referee.DAUGHTER_RADIUS,
+		{&"cytostome": 1}, {&"cytostome": 2}, lines)
+	guest.send_event(Wire.EVENT_SISTER, payload)
+	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
+	var taken: Array = (host.pond_events as Array).map(func(f: PackedByteArray) -> int:
+		return f.size())
+	# The same length, its count of rules made nine: a SISTER that does not read.
+	var spoiled := payload.duplicate()
+	spoiled[payload.size() - 1 - Wire.MOST_RULES * (1 + Wire.RULE_BYTES_MAX)] = \
+		Wire.MOST_RULES + 1
+	guest.send_event(Wire.EVENT_SISTER, spoiled)
+	await _limits_until(func() -> bool: return int(host.gate_counts["malformed"]) >= 1)
+	var points: float = host.points_of(gid)
+	var struck := int(host.gate_counts["malformed"]) == 1 \
+		and int(host.gate_counts["oversize"]) == 0 and int(host.gate_counts["cuts"]) == 0 \
+		and points > 2.0 and points <= NetSession.STRIKE_MALFORMED \
+		and int(guest.link) == NetSession.Link.TOGETHER \
+		and (host.pond_events as Array).size() == 1
+	var over := Wire.event(9, Wire.EVENT_SISTER, PackedByteArray())
+	over.resize(Wire.SISTER_MAX + 1)
+	guest._to(int(guest.get("_host_id")), over)
+	await _limits_until(func() -> bool: return int(host.peer_count()) == 0)
+	var book: Dictionary = host.get("_book")
+	var barred: float = float(book.get("127.0.0.1", {}).get("barred_until", 0.0)) - _now()
+	_says(taken == [Wire.EVENT_HEADER + payload.size()]
+			and Wire.EVENT_HEADER + payload.size() > Wire.GUEST_OTHER_MAX and struck
+			and int(host.gate_counts["oversize"]) == 1 and int(host.gate_counts["cuts"]) == 1
+			and int(host.peer_count()) == 0 and barred > NetSession.BAR_FIRST * 0.5,
+		"limits T2: since protocol 6 a greeted guest's SISTER may pass %d bytes --"
+		% Wire.GUEST_OTHER_MAX + " one of %d is taken; one as long that does not read"
+		% (Wire.EVENT_HEADER + payload.size()) + " is a malformed strike, %.2f"
+		% points + " points and no cut; one of %d, a byte past SISTER_MAX, is the"
+		% over.size() + " oversize cut, and the address barred for %.0f s" % barred)
+	# Before its hello, a caller is held to the old cap whatever its frame says.
+	book["127.0.0.1"]["barred_until"] = 0.0
+	var early := _limits_rogue("LimitsSisterRoomEarly")
+	await _limits_until(func() -> bool: return early.connected())
+	var early_sister := Wire.event(1, Wire.EVENT_SISTER, payload)
+	early.send(early_sister)
+	await _limits_until(func() -> bool:
+		return int(host.gate_counts["oversize"]) >= 2 and early.down())
+	_says(int(host.gate_counts["oversize"]) == 2 and int(host.gate_counts["malformed"]) == 1
+			and int(host.peer_count()) == 0 and early.down()
+			and float(book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now(),
+		"limits T2: and a caller's SISTER of %d bytes before its hello is the oversize"
+		% early_sister.size() + " cut, barred, as any frame past %d was at protocol 5"
+		% Wire.GUEST_OTHER_MAX)
+	await _limits_close([host, guest, early])
 
 
 ## **T3: malformed, twice and then again.** A PERSON with nine genes is the
@@ -2661,7 +2742,7 @@ func _limits_leftovers() -> void:
 	cut.send_event(Wire.EVENT_ENTER, Wire.enter_payload(26.0))
 	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
 	var over := Wire.event(9, Wire.EVENT_PERSON, PackedByteArray())
-	over.resize(Wire.GUEST_FRAME_MAX + 1)
+	over.resize(Wire.GUEST_OTHER_MAX + 1)
 	cut._to(int(cut.get("_host_id")), over)
 	await _limits_until(func() -> bool: return int(host.gate_counts["cuts"]) >= 1)
 	var after_cut := (host.pond_events as Array).size() + (host.heard as Array).size()

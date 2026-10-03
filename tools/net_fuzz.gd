@@ -441,8 +441,9 @@ func _wire_case(frame: PackedByteArray, from_host: bool) -> String:
 	var size := frame.size()
 	# The gate's steps 2-5 (`_admit_frame`): the cap, a kind, the event
 	# header, and a size its writer produces. Nothing past them is read unless
-	# they pass.
-	var ceiling := Wire.HOST_FRAME_MAX if from_host else Wire.GUEST_FRAME_MAX
+	# they pass. A greeted guest's cap is its frame's kind's: a SISTER's, or the
+	# one every other frame keeps (`Wire.guest_cap`, protocol 6).
+	var ceiling := Wire.HOST_FRAME_MAX if from_host else Wire.guest_cap(frame)
 	if size == 0 or size > ceiling:
 		return _errors_since(errors, "")
 	var kind := Wire.kind(frame)
@@ -1121,9 +1122,13 @@ func _door_bytes() -> Array:
 		9:
 			return ["bare", _bytes(_rng.randi_range(0, 12))]
 		10:
+			# **Past a cap**: past the one every frame but a SISTER keeps, up to
+			# past the most any guest frame may be -- one in four a SISTER, the
+			# one kind allowed between the two (protocol 6).
 			var big := PackedByteArray()
-			big.resize(Wire.GUEST_FRAME_MAX + _rng.randi_range(1, 200))
+			big.resize(_rng.randi_range(Wire.GUEST_OTHER_MAX + 1, Wire.GUEST_FRAME_MAX + 200))
 			big[0] = Wire.KIND_EVENT
+			big[5] = Wire.EVENT_SISTER if _rng.randf() < 0.25 else _rng.randi_range(0, 10)
 			return ["raw", big]
 	return ["raw", Wire.challenge(_bytes(Wire.NONCE_SIZE))]
 
@@ -1220,8 +1225,10 @@ static func _flood_frame(what: String, seq: int) -> PackedByteArray:
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(26.0))
 		"shout":
 			return Wire.shout(seq, Vector2(10.0, 20.0), 26.0, 400.0)
+	# At the cap a frame of a later build's kind is held to: every frame but a
+	# SISTER's.
 	var later := PackedByteArray()
-	later.resize(Wire.GUEST_FRAME_MAX)
+	later.resize(Wire.GUEST_OTHER_MAX)
 	later[0] = 0x20
 	return later
 
