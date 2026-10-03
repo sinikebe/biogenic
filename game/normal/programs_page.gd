@@ -71,6 +71,8 @@ const CELL_W := 128.0
 const VALUE_W := 82.0
 ## What rides above a finger while it drags (moving-a-gene.md §3.3).
 const DRAG_LIFT := 34.0
+## **How long a row's state takes to change** (§3.2): a cross-fade, not a cut.
+const FADE := 0.12
 ## How many tests the pool holds a row: one for each value the widest sense
 ## carries, the beam's and the echo's bearing included.
 const TESTS_MOST := 4
@@ -512,6 +514,15 @@ var _ap_hot := false
 var _focus_key := ""
 ## The controls a placing shows, so the rest can be hidden after.
 var _placing := {}
+## **What each row looked like, and since when** (§3.2): states cross-fade over
+## [constant FADE], so a pond's 7.5 ticks a second never flicker. Per row, the
+## look it is fading from and to -- a program row's state, or a library row's
+## `[drives now, its four column marks]` -- and when the change began; and the
+## view and program they are of, a change of which starts them afresh.
+var _look_was: Array = []
+var _look_now: Array = []
+var _look_at: Array[float] = []
+var _looks_of := ""
 var _rows_x := EDGE
 var _rows_w := 856.0
 var _input_w := 111.0
@@ -972,6 +983,13 @@ func _notification(what: int) -> void:
 func _process(_delta: float) -> void:
 	if not visible or _library == null:
 		return
+	if _fading():
+		_area.queue_redraw()
+		for j in ROWS:
+			_row_nodes[j].queue_redraw()
+			for button: Button in _pool(j):
+				if button.visible:
+					button.queue_redraw()
 	# **In a pond the rows update with every tick** (§7.1): the last tick's
 	# states while the autopilot drives, the dry run's while it does not.
 	if bool(_run.call(&"_session_up")) and _instincts.tick != _tick_seen:
@@ -1393,6 +1411,7 @@ func _can_add_test(rule: Rulebook.Rule) -> bool:
 
 
 func _redraw_rows() -> void:
+	_note_looks()
 	_area.queue_redraw()
 	for j in ROWS:
 		_row_nodes[j].queue_redraw()
@@ -1460,6 +1479,62 @@ func _inspector_controls() -> Array[Control]:
 
 # --- Drawing the rows ---------------------------------------------------------------------
 
+## **Each row's look, noted**: a row whose look changed starts a fade from the
+## one it had; a new view or program starts every row afresh, with no fade.
+func _note_looks() -> void:
+	var key := "%d/%d/%d" % [_view, _program, _library.size() if _library != null else 0]
+	var fresh := key != _looks_of or _look_now.size() != ROWS
+	_looks_of = key
+	if _look_now.size() != ROWS:
+		_look_was.resize(ROWS)
+		_look_now.resize(ROWS)
+		_look_at.resize(ROWS)
+	var now := Time.get_ticks_msec() / 1000.0
+	for j in ROWS:
+		var look: Variant = _look_of(j) if _view == View.PROGRAM else _library_look(j)
+		if fresh:
+			_look_was[j] = look
+			_look_now[j] = look
+			_look_at[j] = -INF
+		elif look != _look_now[j]:
+			_look_was[j] = _look_now[j]
+			_look_now[j] = look
+			_look_at[j] = now
+
+
+## How far row [param j] is through its fade, 0 at its start and 1 once done.
+func _blend(j: int) -> float:
+	if j >= _look_at.size():
+		return 1.0
+	return clampf((Time.get_ticks_msec() / 1000.0 - _look_at[j]) / FADE, 0.0, 1.0)
+
+
+## **How much of [param looks] row [param j] shows**, faded: 1 when it is in one
+## of them now and was before, 0 in neither, and the fade between.
+func _amount(j: int, looks: Array) -> float:
+	if j >= _look_now.size():
+		return 0.0
+	var was := 1.0 if looks.has(_look_was[j]) else 0.0
+	var is_now := 1.0 if looks.has(_look_now[j]) else 0.0
+	return lerpf(was, is_now, _blend(j))
+
+
+## Whether any row is still fading, so the page keeps drawing until none is.
+func _fading() -> bool:
+	for j in _look_at.size():
+		if _blend(j) < 1.0:
+			return true
+	return false
+
+
+## **A library row's look**: whether its program drives the cell now, and what
+## each column shows (§2.3).
+func _library_look(j: int) -> Variant:
+	if _library == null or j >= _library.size():
+		return []
+	return [_drives_now(j), _program_columns(j)]
+
+
 func _draw_area() -> void:
 	# **Where a drag would land** (§2.6): a lit line in the gap nearest the
 	# pointer, a dot at each end.
@@ -1499,8 +1574,13 @@ func _draw_library_row(row: Control, j: int) -> void:
 		return
 	var one: Library.Program = _library.programs[j]
 	var selected := j == _program
-	if _drives_now(j):
-		row.draw_style_box(_box_style(Color(LIT, 0.045), Color(0, 0, 0, 0), 0, 10),
+	var t := _blend(j)
+	var was: Array = _look_was[j] if j < _look_was.size() and _look_was[j] is Array \
+		and not (_look_was[j] as Array).is_empty() else _library_look(j)
+	var now_look: Array = _library_look(j)
+	var driving := lerpf(1.0 if bool(was[0]) else 0.0, 1.0 if bool(now_look[0]) else 0.0, t)
+	if driving > 0.0:
+		row.draw_style_box(_box_style(Color(LIT, 0.045 * driving), Color(0, 0, 0, 0), 0, 10),
 			Rect2(Vector2(-6.0, -4.0), row.size + Vector2(12.0, 8.0)))
 	var box: StyleBoxFlat
 	if selected:
@@ -1521,31 +1601,41 @@ func _draw_library_row(row: Control, j: int) -> void:
 	_text(row, Vector2(count_x, ROW_H * 0.5), count, 14, Color(PALE, 0.45 if one.on else 0.30))
 	var name := _trimmed(font, _library.name_of(j), 15, count_x - 16.0 - NAME_X)
 	_text(row, Vector2(NAME_X, ROW_H * 0.5), name, 15, Color(PALE, 0.92 if one.on else 0.50))
-	# The trigger columns (§2.3).
-	var marks := _program_columns(j)
+	# The trigger columns (§2.3), each fading from what it showed.
+	var marks: Array = now_look[1]
+	var marks_was: Array = was[1]
 	for c in COLUMNS.size():
-		var mark: String = marks[c]
-		if mark == "":
-			continue
 		var centre := Vector2(columns_x + COLUMN_W * c + COLUMN_W * 0.5, ROW_H * 0.5)
-		match mark:
-			"now":
-				row.draw_style_box(_box_style(Color(LIT, 0.14), Color(LIT, 0.55), 1),
-					Rect2(centre - Vector2(17.0, 17.0), Vector2(34.0, 34.0)))
-				draw_column_mark(row, c, centre, 0.98)
-			"moves":
-				draw_column_mark(row, c, centre, 0.80)
-			"never":
-				draw_column_mark(row, c, centre, 0.34)
-				_draw_never_bar(row, centre.x)
-			_:
-				draw_column_mark(row, c, centre, 0.30)
+		if String(marks_was[c]) != String(marks[c]) and t < 1.0:
+			_draw_column_state(row, c, centre, String(marks_was[c]), 1.0 - t)
+			_draw_column_state(row, c, centre, String(marks[c]), t)
+		else:
+			_draw_column_state(row, c, centre, String(marks[c]), 1.0)
+
+
+## **One column of a program's row**, as [param mark] shows it (§2.3), at
+## [param k] of its light.
+func _draw_column_state(row: Control, c: int, centre: Vector2, mark: String, k: float) -> void:
+	if mark == "" or k <= 0.0:
+		return
+	match mark:
+		"now":
+			row.draw_style_box(_box_style(Color(LIT, 0.14 * k), Color(LIT, 0.55 * k), 1),
+				Rect2(centre - Vector2(17.0, 17.0), Vector2(34.0, 34.0)))
+			draw_column_mark(row, c, centre, 0.98 * k)
+		"moves":
+			draw_column_mark(row, c, centre, 0.80 * k)
+		"never":
+			draw_column_mark(row, c, centre, 0.34 * k)
+			_draw_never_bar(row, centre.x, 0.0, k)
+		_:
+			draw_column_mark(row, c, centre, 0.30 * k)
 
 
 ## **The page's mark for inhibition** over a column (§2.3): a stem from y 3 to 10
 ## and a 16 px bar at y 10.5.
-func _draw_never_bar(node: CanvasItem, x: float, top := 0.0) -> void:
-	var ink := Color(PALE, 0.70)
+func _draw_never_bar(node: CanvasItem, x: float, top := 0.0, k := 1.0) -> void:
+	var ink := Color(PALE, 0.70 * k)
 	node.draw_line(Vector2(x, top + 3.0), Vector2(x, top + 10.0), ink, 2.4, true)
 	node.draw_line(Vector2(x - 8.0, top + 10.5), Vector2(x + 8.0, top + 10.5), ink, 2.4, true)
 
@@ -1742,31 +1832,48 @@ func _draw_program_row(row: Control, j: int) -> void:
 	var rule := list.rules[j]
 	if rule.inert:
 		return
-	var look := _look_of(j)
-	if look == "acting":
-		row.draw_style_box(_box_style(Color(LIT, 0.045), Color(0, 0, 0, 0), 0, 10),
+	var acting := _amount(j, ["acting"])
+	if acting > 0.0:
+		row.draw_style_box(_box_style(Color(LIT, 0.045 * acting), Color(0, 0, 0, 0), 0, 10),
 			Rect2(Vector2(-6.0, -4.0), row.size + Vector2(12.0, 8.0)))
-	# **The arc** (§3.2): from the last chip to the action, in the row's state.
+	# **The arc** (§3.2): from the last chip to the action, in the row's state --
+	# the one it had fading out under the one it has.
 	var lay := _chips_of(rule, j == _row)
-	var y := ROW_H * 0.5
 	var x0 := float(lay["end"]) + ARC_FROM
 	var x1 := (lay["action"] as Rect2).position.x - ARC_TO
+	var t := _blend(j)
+	if t < 1.0 and j < _look_was.size() and _look_was[j] != _look_now[j]:
+		_draw_arc(row, String(_look_was[j]), x0, x1, 1.0 - t)
+	_draw_arc(row, _look_of(j), x0, x1, t if j < _look_was.size() \
+		and _look_was[j] != _look_now[j] else 1.0)
+
+
+## **An instinct's arc** (§3.2) from [param x0] to [param x1], as [param look]
+## draws it, at [param k] of its light: a lit line and a chevron while it acts, a
+## T-bar while held back, a pale T-bar where it never can, and a quiet line and
+## head otherwise.
+func _draw_arc(row: Control, look: String, x0: float, x1: float, k: float) -> void:
+	if k <= 0.0:
+		return
+	var y := ROW_H * 0.5
 	var fade := ASLEEP if look == "asleep" else 1.0
 	match look:
 		"acting":
-			row.draw_line(Vector2(x0, y), Vector2(x1, y), Color(LIT, 0.85), 2.0, true)
+			row.draw_line(Vector2(x0, y), Vector2(x1, y), Color(LIT, 0.85 * k), 2.0, true)
 			row.draw_polyline(PackedVector2Array([Vector2(x1 - 8.0, y - 6.0), Vector2(x1, y),
-				Vector2(x1 - 8.0, y + 6.0)]), Color(LIT, 0.95), 2.0, true)
+				Vector2(x1 - 8.0, y + 6.0)]), Color(LIT, 0.95 * k), 2.0, true)
 		"held":
-			row.draw_line(Vector2(x0, y), Vector2(x1 - 1.0, y), Color(LIT, 0.45), 1.6, true)
-			row.draw_line(Vector2(x1, y - 8.0), Vector2(x1, y + 8.0), Color(LIT, 0.80), 2.4, true)
+			row.draw_line(Vector2(x0, y), Vector2(x1 - 1.0, y), Color(LIT, 0.45 * k), 1.6, true)
+			row.draw_line(Vector2(x1, y - 8.0), Vector2(x1, y + 8.0), Color(LIT, 0.80 * k), 2.4,
+				true)
 		"never":
-			row.draw_line(Vector2(x0, y), Vector2(x1 - 1.0, y), Color(PALE, 0.14), 1.2, true)
-			row.draw_line(Vector2(x1, y - 8.0), Vector2(x1, y + 8.0), Color(PALE, 0.50), 2.4, true)
+			row.draw_line(Vector2(x0, y), Vector2(x1 - 1.0, y), Color(PALE, 0.14 * k), 1.2, true)
+			row.draw_line(Vector2(x1, y - 8.0), Vector2(x1, y + 8.0), Color(PALE, 0.50 * k), 2.4,
+				true)
 		_:
-			row.draw_line(Vector2(x0, y), Vector2(x1, y), Color(PALE, 0.10 * fade), 1.2, true)
+			row.draw_line(Vector2(x0, y), Vector2(x1, y), Color(PALE, 0.10 * fade * k), 1.2, true)
 			row.draw_polyline(PackedVector2Array([Vector2(x1 - 6.0, y - 5.0), Vector2(x1, y),
-				Vector2(x1 - 6.0, y + 5.0)]), Color(PALE, 0.28 * fade), 1.5, true)
+				Vector2(x1 - 6.0, y + 5.0)]), Color(PALE, 0.28 * fade * k), 1.5, true)
 
 
 ## **How row [param j] of the open program looks** (§3.2): `acting`, `held`,
@@ -1824,17 +1931,17 @@ func _draw_sense(button: Button, j: int) -> void:
 			if button.has_focus():
 				_focus_mark(button)
 			return
-		var look := _look_of(j)
-		var fade := ASLEEP if look == "asleep" else 1.0
-		var lit := look == "acting" or look == "held"
+		var fade := lerpf(1.0, ASLEEP, _amount(j, ["asleep"]))
+		var lit := _amount(j, ["acting", "held"])
 		var hue := part_hue(rule.input)
 		_chip_box(button, r, hue, lit, selected, fade, hot)
-		if look == "failed" and not selected and rule.input != Rulebook.ALWAYS:
-			button.draw_style_box(_box_style(Color(0, 0, 0, 0), Color(hue, 0.60), 1), r)
+		var failed := _amount(j, ["failed"])
+		if failed > 0.0 and not selected and rule.input != Rulebook.ALWAYS:
+			button.draw_style_box(_box_style(Color(0, 0, 0, 0), Color(hue, 0.60 * failed), 1), r)
 		draw_part_glyph(button, rule.input, Vector2(CHIP_PAD + 10.0, ROW_H * 0.5),
-			(0.95 if lit else 0.60) * fade)
+			lerpf(0.60, 0.95, lit) * fade)
 		_text(button, Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5), ProgramWords.says(rule.input),
-			15, Color(PALE, (0.95 if lit or selected else 0.80) * fade))
+			15, Color(PALE, (0.95 if selected else lerpf(0.80, 0.95, lit)) * fade))
 	else:
 		# **A half-built instinct's sense** (§3.4): picked, or a dashed blank.
 		var input: StringName = _draft.get("input", &"")
@@ -1842,7 +1949,7 @@ func _draw_sense(button: Button, j: int) -> void:
 			_dashed_box(button, r, Color(SELECT, 0.85) if selected else Color(PALE, 0.30),
 				2.0 if selected else 1.2, 5.0, 6.0)
 		else:
-			_chip_box(button, r, part_hue(input), false, selected, 1.0, hot)
+			_chip_box(button, r, part_hue(input), 0.0, selected, 1.0, hot)
 			draw_part_glyph(button, input, Vector2(CHIP_PAD + 10.0, ROW_H * 0.5), 0.60)
 			_text(button, Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5), ProgramWords.says(input),
 				15, Color(PALE, 0.80))
@@ -1857,24 +1964,23 @@ func _draw_test(button: Button, j: int, t: int) -> void:
 	var rule := list.rules[j]
 	if t >= rule.clauses.size():
 		return
-	var look := _look_of(j)
-	var fade := ASLEEP if look == "asleep" else 1.0
-	var lit := look == "acting" or look == "held"
+	var fade := lerpf(1.0, ASLEEP, _amount(j, ["asleep"]))
+	var lit := _amount(j, ["acting", "held"])
 	var selected := j == _row and _part == t + 1
 	var r := Rect2(Vector2.ZERO, button.size)
 	var box: StyleBoxFlat
 	if selected:
 		box = _box_style(SELECTED, SELECT, 2)
 	else:
-		var edge := Color(LIT, 0.55) if lit else Color(PALE, 0.16)
+		var edge := Color(PALE, 0.16).lerp(Color(LIT, 0.55), lit)
 		if button.is_hovered():
 			edge.a = minf(edge.a + 0.25, 0.95)
-		box = _box_style(Color(FILL, (0.62 if lit else 0.40) * fade), Color(edge, edge.a * fade), 1)
+		box = _box_style(Color(FILL, lerpf(0.40, 0.62, lit) * fade), Color(edge, edge.a * fade), 1)
 	button.draw_style_box(box, r)
 	var said := ProgramWords.test_text(rule.clauses[t])
 	var w := _text_w(_font(), said, 14)
 	_text(button, Vector2((button.size.x - w) * 0.5, ROW_H * 0.5), said, 14,
-		Color(PALE, (0.95 if lit or selected else 0.78) * fade))
+		Color(PALE, (0.95 if selected else lerpf(0.78, 0.95, lit)) * fade))
 	if button.has_focus():
 		_focus_mark(button)
 
@@ -1898,21 +2004,20 @@ func _draw_action(button: Button, j: int) -> void:
 	var hot := button.is_hovered()
 	if list != null and j < list.rules.size():
 		var rule := list.rules[j]
-		var look := _look_of(j)
-		var fade := ASLEEP if look == "asleep" else 1.0
-		var lit := look == "acting"
+		var fade := lerpf(1.0, ASLEEP, _amount(j, ["asleep"]))
+		var lit := _amount(j, ["acting"])
 		_chip_box(button, r, part_hue(rule.output), lit, selected, fade, hot)
 		draw_part_glyph(button, rule.output, Vector2(CHIP_PAD + 10.0, ROW_H * 0.5),
-			(0.95 if lit else 0.60) * fade)
+			lerpf(0.60, 0.95, lit) * fade)
 		_text(button, Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5), ProgramWords.action_text(rule),
-			15, Color(PALE, (0.95 if lit or selected else 0.80) * fade))
+			15, Color(PALE, (0.95 if selected else lerpf(0.80, 0.95, lit)) * fade))
 	else:
 		var output: StringName = _draft.get("output", &"")
 		if output == &"":
 			_dashed_box(button, r, Color(SELECT, 0.85) if selected else Color(PALE, 0.30),
 				2.0 if selected else 1.2, 5.0, 6.0)
 		else:
-			_chip_box(button, r, part_hue(output), false, selected, 1.0, hot)
+			_chip_box(button, r, part_hue(output), 0.0, selected, 1.0, hot)
 			draw_part_glyph(button, output, Vector2(CHIP_PAD + 10.0, ROW_H * 0.5), 0.60)
 			_text(button, Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5), ProgramWords.says(output),
 				15, Color(PALE, 0.80))
@@ -1922,16 +2027,17 @@ func _draw_action(button: Button, j: int) -> void:
 
 ## **A sense's or an action's box** (§3.3 of the landed spec): at rest, lit or
 ## selected; hovered, its edge brighter.
-func _chip_box(node: CanvasItem, r: Rect2, hue: Color, lit: bool, selected: bool, fade: float,
+func _chip_box(node: CanvasItem, r: Rect2, hue: Color, lit: float, selected: bool, fade: float,
 		hot: bool) -> void:
 	var box: StyleBoxFlat
 	if selected:
 		box = _box_style(SELECTED, SELECT, 2)
-	elif lit:
-		box = _box_style(Color(FILL, 0.70).lerp(Color(hue, 0.70), 0.16), Color(hue, 0.85), 1)
 	else:
 		var edge := minf(0.38 + (0.25 if hot else 0.0), 0.95)
-		box = _box_style(Color(FILL, 0.55 * fade), Color(hue, edge * fade), 1)
+		var rest_fill := Color(FILL, 0.55 * fade)
+		var lit_fill := Color(FILL, 0.70).lerp(Color(hue, 0.70), 0.16)
+		box = _box_style(rest_fill.lerp(lit_fill, lit),
+			Color(hue, edge * fade).lerp(Color(hue, 0.85), lit), 1)
 	node.draw_style_box(box, r)
 
 
@@ -2542,7 +2648,7 @@ func _draw_pill(pill: Control, j: int) -> void:
 		return
 	var rule := list.rules[j]
 	var r_in := Rect2(Vector2.ZERO, Vector2(_input_w, ROW_H))
-	_chip_box(pill, r_in, part_hue(rule.input), true, false, 1.0, false)
+	_chip_box(pill, r_in, part_hue(rule.input), 1.0, false, 1.0, false)
 	draw_part_glyph(pill, rule.input, Vector2(CHIP_PAD + 10.0, ROW_H * 0.5), 0.95)
 	_text(pill, Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5), ProgramWords.says(rule.input), 15,
 		Color(PALE, 0.95))
@@ -2553,7 +2659,7 @@ func _draw_pill(pill: Control, j: int) -> void:
 	pill.draw_polyline(PackedVector2Array([Vector2(x1 - 6.0, y - 5.0), Vector2(x1, y),
 		Vector2(x1 - 6.0, y + 5.0)]), Color(PALE, 0.70), 1.6, true)
 	var r_out := Rect2(Vector2(x1 + CHIP_SEP + 2.0, 0.0), Vector2(_output_w, ROW_H))
-	_chip_box(pill, r_out, part_hue(rule.output), true, false, 1.0, false)
+	_chip_box(pill, r_out, part_hue(rule.output), 1.0, false, 1.0, false)
 	draw_part_glyph(pill, rule.output, r_out.position + Vector2(CHIP_PAD + 10.0, ROW_H * 0.5),
 		0.95)
 	_text(pill, r_out.position + Vector2(CHIP_PAD + GLYPH_W, ROW_H * 0.5),
