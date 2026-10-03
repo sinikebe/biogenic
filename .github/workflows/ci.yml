@@ -268,6 +268,64 @@ jobs:
           done
           exit "$fail"
 
+      - name: Check an empty library changes nothing
+        # automation.md §18.3, check 8. With no programs, pack 4's autopilot
+        # must leave the game exactly as phase 4-1 left it: three seeded runs
+        # of tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps, under
+        # each scheme, `--trace=0.5` -- hashed over their trace and compared
+        # with the hash 4-1's tree printed (dev at 2a761a5), pinned here as
+        # drop_probe pins pack 2's lines in DEV_LINES. The same hash under all
+        # three schemes: with no hand on it the scheme draws differently and
+        # moves nothing.
+        #
+        # The autopilot's key, R, is pressed twenty seconds in by the real
+        # input path. With nothing to run it must do nothing: the hash says it
+        # did nothing to the cell, and the `[instincts]` line after it says
+        # nothing drives and no icon is drawn. The hash covers the `[trace]`
+        # lines and the eight-space lines under them, nothing else -- the
+        # `[drive]` and `[instincts]` lines are the harness talking about
+        # itself. A change that moves this trace with an empty library is a
+        # change to 4-1's game: pin the new hash here, and say why.
+        #
+        # Each run prints about ten megabytes, so it goes to a file rather than
+        # a variable. About twenty seconds a scheme.
+        run: |
+          set -uo pipefail
+          pinned="ff34f4c61a12eef67c846ffafde90a42e26c651bd4f89754a083d153d14240b8"
+          log=$(mktemp)
+          fail=0
+          for scheme in 0 1 2; do
+            echo "--- scheme $scheme, seed 1, sixty seconds, R pressed at 20 s"
+            if ! ~/godot/godot --headless --path . --fixed-fps 60 \
+                   --quit-after 3600 res://tools/drive.tscn -- \
+                   --size=1280x720 --seed=1 --scheme="$scheme" --trace=0.5 \
+                   --autopilot-at=20 > "$log" 2>&1; then
+              tail -n 40 "$log"
+              echo "::error::scheme $scheme exited non-zero"
+              fail=1
+              continue
+            fi
+            if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
+              echo "::error::scheme $scheme reported script errors"
+              fail=1
+            fi
+            lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
+            hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
+            echo "$lines trace lines, sha256 $hash"
+            if [ "$hash" != "$pinned" ]; then
+              grep -E "^\[trace\]" "$log" | tail -n 20 || true
+              echo "::error::scheme $scheme: with an empty library the trace is not the one 4-1 left (pinned $pinned)"
+              fail=1
+            fi
+            grep -E "^\[instincts\]" "$log" || true
+            if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
+              echo "::error::scheme $scheme: with nothing to run, R switched something on or drew the icon"
+              fail=1
+            fi
+          done
+          rm -f "$log"
+          exit "$fail"
+
       - name: Check the Back gesture
         # Android Back is the one control this project could not test. A real
         # Back propagates NOTIFICATION_WM_GO_BACK_REQUEST and *then* emits
@@ -473,27 +531,29 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 368 checks, caps itself at 500
-        # frames a second and quits itself in about 188 seconds: some seven in
+        # a backstop only. The probe makes 391 checks, caps itself at 500
+        # frames a second and quits itself in about 217 seconds: some nine in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # twenty-three to twenty-seven in `limits`, at up to 100 frames a second,
-        # about twenty-five in the pond section, two real runs over loopback,
+        # about thirty-nine in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
-        # about ten in the server's, about seventy-one in `invites`, at up
-        # to 50 frames a second, most of it waiting out what a player would --
+        # about twenty-two in the server's, about seventy-four in `invites`, at
+        # up to 50 frames a second, most of it waiting out what a player would --
         # the eight seconds of a call nothing answers, the three of a caller
         # that never proves -- about sixteen in `upnp`, at up to 50, with a
         # stand-in router, and about six in `channel`, at up to 50. Its pond
         # timings are counted in frames, not wall milliseconds, so a loaded
         # runner slows the step without failing it. It prints its own frame
-        # count -- 17,071 here since pack 4's tail (4-1), whose pond and
-        # server sections run again with a guest holding its tail, and 16,226
-        # to 16,532 in three runs on a quiet local machine; 15,070 with
-        # `channel`'s 240, as it was 15,070 with
-        # `upnp`'s 800 before `channel`, against 14,300 to 14,750 measured
-        # eight times before that -- so the margin on 20000 is visible in the
-        # log.
+        # count. Since pack 4's programs (4-2), whose pond and server sections
+        # also hand a guest to its autopilot (automation.md check 23), it is
+        # 18,124 on a quiet local machine, where 4-1 was 16,226 to 16,532 and
+        # 17,071 here -- so about 18,700 to 19,100 here, too near the 20000
+        # this step stopped at until then, against local runs that have spread
+        # by a tenth (14,751 to 16,354 at 4-1). Hence 24000 from 4-2. Before
+        # 4-1: 15,070 with `channel`'s 240, as it was 15,070 with `upnp`'s 800
+        # before `channel`, against 14,300 to 14,750 measured eight times
+        # before that -- so the margin on the backstop is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
@@ -503,7 +563,7 @@ jobs:
         # real Wi-Fi for half an hour is the test this is not.
         run: |
           set -uo pipefail
-          out=$(~/godot/godot --headless --path . --quit-after 20000 \
+          out=$(~/godot/godot --headless --path . --quit-after 24000 \
                   res://tools/net_probe.tscn 2>&1) || true
           printf '%s\n' "$out" | grep -E "^\[net-probe\]" || true
           if ! grep -q "^\[net-probe\] ALL PASS$" <<< "$out"; then

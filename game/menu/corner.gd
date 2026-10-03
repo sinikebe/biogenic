@@ -101,7 +101,8 @@ const QUIET_MARGIN := Vector2(12.0, 10.0)
 	set(value):
 		show_cluster = value
 		if is_node_ready():
-			_cluster.visible = value and not _over_menu()
+			_cluster.visible = value and not (_open != null
+				and (_open == _naming or _open == _confirm))
 ## **The pause screen's own warning, repeated in the sheet that covers it**: in a
 ## pond the water keeps moving under the menu (shared-pond.md §1.7). The pause
 ## screen sets it whenever its own warning changes.
@@ -199,6 +200,12 @@ var _offered := ""
 ## for the cluster ([method link_focus]).
 var _below: Control = null
 var _beside: Array = []
+## **Naming or the confirm opened for a screen's own thing** -- a program, on the
+## pause screen (automation-ux.md §2.5) -- rather than for a world: what to do with
+## the answer, called with the name typed, or with nothing for a delete. Empty
+## while the sheets serve worlds. A sheet opened this way sits over the screen and
+## not over the drop menu, so Back and `back` go back to the screen.
+var _answer := Callable()
 
 
 func _ready() -> void:
@@ -332,9 +339,10 @@ func _layers() -> Array[Control]:
 	return [_settings, _drops, _naming, _confirm]
 
 
-## True while naming or the confirm is open over the drop menu.
+## True while naming or the confirm is open over the drop menu -- and not over a
+## screen that opened it for its own thing ([member _answer]).
 func _over_menu() -> bool:
-	return _open != null and (_open == _naming or _open == _confirm)
+	return _open != null and (_open == _naming or _open == _confirm) and not _answer.is_valid()
 
 
 ## True while the drop menu, or a layer over it, is open.
@@ -350,7 +358,7 @@ func _show_layer(layer: Control) -> void:
 		each.visible = each == layer
 	_veil.show()
 	_open = layer
-	_cluster.visible = show_cluster and not _over_menu()
+	_cluster.visible = show_cluster and not (layer == _naming or layer == _confirm)
 
 
 ## Remembers what had the focus as the first layer opens, so closing gives it
@@ -377,6 +385,7 @@ func _shut(give_focus_back: bool) -> void:
 	for each: Control in _layers():
 		each.hide()
 	_open = null
+	_answer = Callable()
 	_veil.hide()
 	_cluster.visible = show_cluster
 	if give_focus_back:
@@ -769,13 +778,59 @@ func _say_naming() -> void:
 		_offered = offered
 
 
+## **Naming opened for a screen's own thing** (automation-ux.md §2.5): the world's
+## sheet with [param title] over the field, [param name] in it and selected, and
+## [param fallback] -- what an empty name keeps -- shown when it is emptied; `back`
+## and `rename` under it. [param answer] is called with what was typed when it is
+## kept, and the sheet closes back to the screen. **At the top of the screen**, as
+## for a world: an Android keyboard covers the bottom half.
+func open_naming_for(title: String, name: String, fallback: String,
+		answer: Callable) -> void:
+	_remember_opener(null)
+	_layer_opener = null
+	_answer = answer
+	_making = false
+	_offered = ""
+	_naming_title.text = title
+	_make.text = tr("rename")
+	_naming_back.text = tr("back")
+	_field.text = name
+	_field.placeholder_text = fallback
+	_show_layer(_naming)
+	_field.grab_focus()
+	_field.select_all()
+
+
+## **The confirm opened for a screen's own thing** (automation-ux.md §2.5): a
+## world's own question, `delete <name>?`, over [param line], with `keep` focused
+## and `delete` beside it. [param answer] is called on `delete`, and the sheet
+## closes back to the screen. There is no undo, as for a world.
+func open_confirm_for(name: String, line: String, answer: Callable) -> void:
+	_remember_opener(null)
+	_layer_opener = null
+	_answer = answer
+	_confirm_title.text = tr("delete %s?") % name
+	_confirm_line.text = line
+	_keep.text = tr("keep")
+	_delete.text = tr("delete")
+	_show_layer(_confirm)
+	_keep.grab_focus()
+
+
 ## **The name is kept** (§4.4, §5.2), from the button or the field's Enter: a new
 ## drop is made, selected, and everything closes; a renamed one goes back to the
-## menu, which shows the new name. Trimmed, and the default name when empty.
+## menu, which shows the new name. Trimmed, and the default name when empty. A
+## sheet opened for a screen's own thing hands the name to its answer instead.
 func _on_named() -> void:
 	if _open != _naming:
 		return
 	var typed := _field.text
+	if _answer.is_valid():
+		var answer := _answer
+		_closed_frame = Engine.get_process_frames()
+		_shut(true)
+		answer.call(typed)
+		return
 	if _making:
 		var done := Drops.make(_slot, typed, drops_root)
 		if done == OK:
@@ -849,9 +904,16 @@ func _say_confirm() -> void:
 	_delete.text = tr("delete")
 
 
-## **Deleted** (§4.4): the row is empty, and the menu says so.
+## **Deleted** (§4.4): the row is empty, and the menu says so. A confirm opened
+## for a screen's own thing calls its answer instead.
 func _on_delete() -> void:
 	if _open != _confirm:
+		return
+	if _answer.is_valid():
+		var answer := _answer
+		_closed_frame = Engine.get_process_frames()
+		_shut(true)
+		answer.call()
 		return
 	var done := Drops.delete(_slot, drops_root)
 	if done != OK:
@@ -895,9 +957,11 @@ func _say() -> void:
 	_say_chip()
 	if _in_drops():
 		_say_drops()
-	if _open == _naming:
+	# A sheet opened for a screen's own thing was given its words by that screen,
+	# which says them again itself.
+	if _open == _naming and not _answer.is_valid():
 		_say_naming()
-	elif _open == _confirm:
+	elif _open == _confirm and not _answer.is_valid():
 		_say_confirm()
 
 

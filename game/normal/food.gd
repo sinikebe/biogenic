@@ -1411,6 +1411,22 @@ var _echoes: Array = []
 var _pulses: Array = []
 var _ping_clock := 0.0
 var _ping_age := -1.0
+## **The player's own call, as their instincts read it** (automation.md §4.1):
+## every return of it, `[lands, at, distance, size, rings until]` on
+## [member _call_t], kept from the moment it is cast until it rings out --
+## exactly as a water cell keeps its own ([member Body.echoes]).
+var player_calls: Array = []
+## Seconds the player's organs have run, the clock [member player_calls] is
+## kept on: the drop's own clock runs only in the drop.
+var _call_t := 0.0
+## **A bite the player has not yet felt on a tick of their instincts**
+## (automation.md §4.1): how hard -- the hardest since the last tick -- and the
+## world direction it came from. Taken at [method hear_contact]'s `BITTEN`, the
+## one door a mouth's bite reaches the player by, from the water or a friend;
+## let go by the instincts' tick. Never a mote, never the feel of the player's
+## own bite.
+var player_hit := 0.0
+var player_hit_from := 0.0
 ## `palp`. Range in, bearing and strength out: the nearest body inside touch
 ## range, which is the one thing a blind cell can know for certain.
 var touch_range := 0.0
@@ -3282,6 +3298,23 @@ func _player_eye() -> Observer:
 	return o
 
 
+## **The player's organs as their membrane last read them** (automation.md
+## §4.1): the observer every sense of this frame was asked through, with what
+## each found on it -- the nose's level, the shade and its pull, the touch --
+## and whether the body wears an eyespot, which the membrane's shadow is gated
+## by downstream and an instinct's by this. What the player's instincts are
+## reported from (game/normal/own_rules.gd); nothing here is sensed again.
+func own_eye() -> Observer:
+	if _cell != null:
+		_eye.eyespot = _cell.extra(&"stigma") > 0
+	return _eye
+
+
+## The clock [member player_calls] is kept on.
+func call_clock() -> float:
+	return _call_t
+
+
 ## **The player's nose, shadow and dread**, through [method _feel] -- the one
 ## function every observer smells and sees by -- over the bodies the frame
 ## gathered round the cell, written where the run reads them. The shadow's
@@ -3630,6 +3663,7 @@ func _step_pings(delta: float) -> void:
 	ping_echoes.clear()
 	if _cell == null:
 		return
+	_call_t += delta
 	if ping_range <= 0.0 or ping_period <= 0.0:
 		# The organ was lost, or was never grown. Anything still in flight is
 		# dropped rather than delivered: it was never heard.
@@ -3639,7 +3673,16 @@ func _step_pings(delta: float) -> void:
 		ping_listen = 0.0
 		_ping_clock = 0.0
 		_ping_age = -1.0
+		if not player_calls.is_empty():
+			player_calls.clear()
 		return
+	# **The player's returns, kept for their instincts until they ring out**
+	# (automation.md §4.1), as a water cell keeps its own: at most five, once a
+	# call. Let go here as well as where they are read, so a run whose instincts
+	# never read them keeps no more than one call's worth.
+	for k in range(player_calls.size() - 1, -1, -1):
+		if float((player_calls[k] as Array)[4]) <= _call_t:
+			player_calls.remove_at(k)
 
 	_ping_clock -= delta
 	if _ping_clock <= 0.0:
@@ -3758,9 +3801,19 @@ static func ping_level(path: float, reach: float) -> float:
 ## out and back.
 ##
 ## **The player's call**, through [method _call_of], the one function every
-## observer calls by: its returns go into [member _echoes], where they fly home.
+## observer calls by: its returns go into [member _echoes], where they fly home
+## -- and into [member player_calls] as a water cell keeps its own
+## ([method _call_now]), for the player's instincts to read from the moment each
+## lands until it rings out (automation.md §4.1).
 func _cast_ping() -> void:
+	var from := _echoes.size()
 	_call_of(_player_eye(), _sense_ids(), _echoes)
+	for k in range(from, _echoes.size()):
+		var one: Array = _echoes[k]
+		var due := float(one[0])
+		var hold := float(one[4])
+		player_calls.append([_call_t + due, one[1], due * PING_SPEED * 0.5,
+			hold * PING_SPEED / (2.0 * PING_RING), _call_t + due + hold])
 
 
 ## **An observer's call** (behaviour.md §12.1): the returns its pulse would
@@ -4534,16 +4587,20 @@ func enter_water() -> void:
 ## more, so she arrives as the founder of a line of her own with her DNA equal
 ## to her body (§8): the one place a newborn's genes are not all passed on.
 func place_sister(at: Vector2, heading: float, body_radius: float,
-		tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> int:
+		tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
+		brain: Variant = null) -> int:
 	if not _pond or _mirror or _cell == null:
 		return -1
 	at = _clear_of_players(at, body_radius)
 	# **In the drop she comes in by the one door every body does**, held inside
-	# the rim, a water cell from then on -- as the host's own sister does.
+	# the rim, a water cell from then on -- as the host's own sister does --
+	# carrying [param brain], the list her cell ran (automation.md §6.3), or the
+	# founders' for null.
 	if _drop != null:
 		var index := _spawn(_drop.meniscus.contain(at, body_radius), false, _sensed(),
 			false, body_radius, tiers)
 		_cells[index].heading = heading
+		_cells[index].brain = brain
 		_born_of(_cells[index], dna, mother)
 		_stat(&"sisters")
 		return index
@@ -5163,6 +5220,11 @@ func hear_contact(what: int, at: Vector2, level: float = 0.0,
 		Contact.WAKED:
 			waked.emit(_cell.bearing_to(at), level)
 		Contact.BITTEN:
+			# Felt by the player's instincts on their next tick, as a water
+			# cell feels a bite on its own (`_feel_hit`): the hardest since.
+			if level >= player_hit:
+				player_hit = level
+				player_hit_from = _angle_of(at - _cell.position, _cell.heading)
 			bitten.emit(_cell.bearing_to(at), level)
 		Contact.STUNG:
 			stung.emit(_cell.bearing_to(at))
@@ -5564,8 +5626,14 @@ func _anchor_sensed(anchor: int) -> float:
 ## daughter's, her body where it is empty -- and [param mother] the record of
 ## the cell she and you divided from, so her parent is your mother's id and her
 ## family is yours ([method _born_of]). Today's water keeps no record.
+##
+## **And she carries [param brain]** (automation.md §6.3): the list her cell
+## ran -- the programs that were on, merged in the library's order -- or null
+## for the founders', as every sister did in pack 3. From her birth it is a
+## water cell's list, hers, which her line's divisions change.
 func put_sister(bearing: float, distance: float, body_radius: float,
-		tiers: Dictionary, dna := {}, mother := PackedInt32Array()) -> void:
+		tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
+		brain: Variant = null) -> void:
 	# **In the drop she comes in by the one door every body does** (§8.2,
 	# §12): [method _spawn], born fed, a water cell under every rule of §5 from
 	# then on -- and held inside the rim if her side of her mother is past it.
@@ -5575,11 +5643,12 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 		# **In a pond, as a guest's sister is** ([method place_sister]): never on
 		# the other player, and inside the rim.
 		if _pond:
-			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother)
+			place_sister(at, _angle_of(side, 0.0), body_radius, tiers, dna, mother, brain)
 			return
 		at = _drop.meniscus.contain(at, body_radius)
 		var index := _spawn(at, false, _sensed(), false, body_radius, tiers)
 		_cells[index].heading = _angle_of(side, _cells[index].heading)
+		_cells[index].brain = brain
 		_born_of(_cells[index], dna, mother)
 		_stat(&"sisters")
 		return
@@ -5588,7 +5657,7 @@ func put_sister(bearing: float, distance: float, body_radius: float,
 	if _pond:
 		var side := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
 		place_sister(_cell.position + side * distance, _angle_of(side, 0.0),
-			body_radius, tiers, dna, mother)
+			body_radius, tiers, dna, mother, brain)
 		return
 	var index := 1
 	# Seeded first, so every clock, counter and serial on that slot is reset by
@@ -7679,6 +7748,25 @@ func _wire() -> void:
 	founders()
 
 
+## **The trigger this field performs [param output] with**, for a body it does
+## not step: the player's, whose instincts run on the water's own triggers
+## (game/normal/own_rules.gd, automation.md §13) -- the held heading, the random
+## turn, the claims -- so an instinct means the same in both bodies. An invalid
+## callable for a name nothing performs.
+func trigger(output: StringName) -> Callable:
+	if _readers.is_empty():
+		_wire()
+	return _triggers.get(output, Callable())
+
+
+## **What every body has**, owner to true: the body's own parts and its
+## metabolism's, which `Rulebook.worn` counts at the first level whatever a body
+## wears.
+static func everybody() -> Dictionary:
+	vocabulary()
+	return _everybody
+
+
 ## **What the body whose rules are being read reports on [param input]**, by
 ## the function wired to the name: reports nearest first, each its declared
 ## values in order -- its bearing first where it has one, and after them, for
@@ -7784,24 +7872,47 @@ func _refresh_me() -> void:
 
 
 # --- The inputs (§3.2): one function each, from the senses as they are ------------
+#
+# **Each reader is the sensing it does for a water body and a report**
+# (automation.md §4.1): the reader senses from where the body is, and the report
+# -- a static `report_*` below it, shared -- formats what the sense found. The
+# player's instincts get the same reports of what their membrane's frame already
+# sensed (game/normal/own_rules.gd), so the report an instinct reads is one
+# function for both bodies, and drop_probe's check 9 holds the two equal.
 
 ## `metabolism.hunger`: its tank, a level, always.
 func _read_hunger(_i: int, b: Body) -> Array:
-	return [[b.hunger]]
+	return report_hunger(b.hunger)
+
+
+## The report of a tank at [param level]: always one.
+static func report_hunger(level: float) -> Array:
+	return [[level]]
 
 
 ## `metabolism.fed`: seconds since it last ate, always -- INF for a body that
 ## never has.
 func _read_fed(_i: int, b: Body) -> Array:
-	return [[_t - b.ate_at]]
+	return report_fed(_t - b.ate_at)
+
+
+## The report of [param seconds] since a meal: always one, INF for none yet.
+static func report_fed(seconds: float) -> Array:
+	return [[seconds]]
 
 
 ## `body.hit`: a bite or a dart that landed on it since its last tick, at its
 ## bearing now and how hard.
 func _read_hit(_i: int, b: Body) -> Array:
-	if b.hit <= 0.0:
+	return report_hit(b.hit, b.hit_from, b.heading)
+
+
+## The report of a hit [param hit] hard from the world direction [param from],
+## felt by a body facing [param heading] now: nothing for no hit.
+static func report_hit(hit: float, from: float, heading: float) -> Array:
+	if hit <= 0.0:
 		return []
-	return [[angle_difference(b.heading, b.hit_from), b.hit, b.hit_from]]
+	return [[angle_difference(heading, from), hit, from]]
 
 
 ## `chemocyte.smell`: the level its nose reads, always while it wears one --
@@ -7811,6 +7922,13 @@ func _read_smell(i: int, b: Body) -> Array:
 	if o.smell_range <= 0.0:
 		return []
 	_feel(o, _scan_for(b, o.smell_range), true, false, false)
+	return report_smell(o)
+
+
+## The report of what [param o]'s nose read: its level, while it has a nose.
+static func report_smell(o: Observer) -> Array:
+	if o.smell_range <= 0.0:
+		return []
 	return [[o.smell]]
 
 
@@ -7821,11 +7939,19 @@ func _read_shadow(i: int, b: Body) -> Array:
 	if not o.eyespot:
 		return []
 	_feel(o, _scan_for(b, SHADOW_RANGE), false, true, false)
+	return report_shadow(o)
+
+
+## The report of the shade on [param o]'s eyespot: its bearing, how dark, and
+## that bearing in the world, while there is any and it wears an eyespot.
+static func report_shadow(o: Observer) -> Array:
+	if not o.eyespot:
+		return []
 	var level := minf(o.shade, 1.0)
 	if level <= 0.0 or o.shade_pull.length_squared() <= 0.0:
 		return []
 	var bearing := o.bearing_to(o.pos + o.shade_pull)
-	return [[bearing, level, wrapf(b.heading + bearing, -PI, PI)]]
+	return [[bearing, level, wrapf(o.heading + bearing, -PI, PI)]]
 
 
 ## `palp.touch`: the nearest thing within its reach of its skin, the rim
@@ -7835,9 +7961,15 @@ func _read_touch(i: int, b: Body) -> Array:
 	if o.touch_range <= 0.0:
 		return []
 	_touch_of(o, _scan_for(b, o.touch_range + o.radius + _widest_now))
-	if not o.touched:
+	return report_touch(o)
+
+
+## The report of what [param o]'s palps touched: its bearing, how close, and
+## that bearing in the world, while it has palps and touched anything.
+static func report_touch(o: Observer) -> Array:
+	if o.touch_range <= 0.0 or not o.touched:
 		return []
-	return [[o.touch_bearing, o.touch, wrapf(b.heading + o.touch_bearing, -PI, PI)]]
+	return [[o.touch_bearing, o.touch, wrapf(o.heading + o.touch_bearing, -PI, PI)]]
 
 
 ## `ocellus.beam`: each ray that stops on something -- a cell, a floc, you or the
@@ -7848,11 +7980,18 @@ func _read_beam(i: int, b: Body) -> Array:
 		return []
 	_rays.clear()
 	_beams_of(o, _scan_for(b, o.beam_range + _widest_now), _rays, false)
+	return report_beam(_rays, o.heading)
+
+
+## The report of [param rays], cast as `[bearing, distance, hit, body]` by a body
+## facing [param heading]: every ray that stopped on something, as its bearing,
+## how far and that bearing in the world, nearest first.
+static func report_beam(rays: Array, heading: float) -> Array:
 	var out: Array = []
-	for ray: Array in _rays:
+	for ray: Array in rays:
 		if bool(ray[2]):
 			out.append([float(ray[0]), float(ray[1]),
-				wrapf(b.heading + float(ray[0]), -PI, PI)])
+				wrapf(heading + float(ray[0]), -PI, PI)])
 	if out.size() > 1:
 		out.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
 	return out
@@ -7863,18 +8002,26 @@ func _read_beam(i: int, b: Body) -> Array:
 ## size from how long it rings -- nearest first. A return that has rung out is
 ## let go.
 func _read_echo(i: int, b: Body) -> Array:
-	var out: Array = []
 	if b.echoes.is_empty():
-		return out
-	var o := _body_eye(i, b)
-	for k in range(b.echoes.size() - 1, -1, -1):
-		var echo: Array = b.echoes[k]
-		if float(echo[4]) <= _t:
-			b.echoes.remove_at(k)
-		elif float(echo[0]) <= _t:
+		return []
+	return report_echo(b.echoes, _body_eye(i, b), _t)
+
+
+## The report of the returns of a call, kept as `[lands, at, distance, size,
+## rings until]` in [param echoes], heard by [param o] at [param now]: each that
+## has landed and rings still, as its bearing, distance, size and that bearing in
+## the world, nearest first. **A return that has rung out is let go** from
+## [param echoes] as it is read.
+static func report_echo(echoes: Array, o: Observer, now: float) -> Array:
+	var out: Array = []
+	for k in range(echoes.size() - 1, -1, -1):
+		var echo: Array = echoes[k]
+		if float(echo[4]) <= now:
+			echoes.remove_at(k)
+		elif float(echo[0]) <= now:
 			var bearing := o.bearing_to(echo[1])
 			out.append([bearing, float(echo[2]), float(echo[3]),
-				wrapf(b.heading + bearing, -PI, PI)])
+				wrapf(o.heading + bearing, -PI, PI)])
 	if out.size() > 1:
 		out.sort_custom(func(x: Array, y: Array) -> bool: return x[1] < y[1])
 	return out

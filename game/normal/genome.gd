@@ -129,31 +129,83 @@ const DECLARES := {
 }
 
 ## **What the genes' parts are called** (docs/design/automation.md §13.1), beside
-## [constant DECLARES], by qualified name: the words the instincts page puts on
-## a part's chip. Phase 4-1 brings the tail's; the page brings the rest with it.
+## [constant DECLARES], by qualified name: the words the programs page puts on a
+## part's chip -- each organ's sense and action, as the player knows the organ.
 ## Read through [method words_of].
 ##
 ## TRANSLATORS: The name of an action the player's cell can be told to do by one
-## of its "instincts" (a rule the player writes: "when <a sense reports
+## of its "instincts" (rules the player writes: "when <a sense reports
 ## something> -> <do this>"), on a small chip. Lowercase, a few short words.
-## "hold still" means: stop the tail (the flagellum, which swims) from beating,
-## and keep it still.
+## "dash": a burst forward; "push": thrust held on; "hold still": stop the tail
+## (the flagellum, which swims) from beating, and keep it still.
 ## ROOM: 112 px at 15 px
 const GENE_SAYS := {
+	&"myoneme.dash": "dash",
+	&"axoneme.push": "push",
 	&"flagellum.hold": "hold still",
 }
-## **The line that explains each of them**, beside the chip: the chip's word, a
-## middle dot, and what it makes the cell do, in plain words.
+## **What the genes' senses are called**, on an instinct's chip: what each organ
+## reports, as the player knows it. Words of their own, apart from the organs'
+## names on the genome page, which a language may say differently.
 ##
-## TRANSLATORS: Explains one action an "instinct" can make the cell do, on one
-## line under the instincts: its name (the same words as on its chip), a middle
-## dot, then what it does, lowercase. "Your tail" is the cell's flagellum, which
-## swims; "two copies" means the gene is carried twice in the cell's DNA, which
-## is what lets the tail be held still. "For free" means it costs no food.
+## TRANSLATORS: The name of a sense on a small chip of the player's "instincts"
+## (rules: "when <a sense reports something> -> <do this>"): what one organ of the
+## cell reports. "beam": what the light the cell's ocellus casts lands on; "echo":
+## what comes back of the cell's ping; "smell": the smell of food; "shadow": the
+## shade of something big; "touch": something against the cell's skin, felt by
+## its palps. Lowercase, one short word.
+## ROOM: 112 px at 15 px
+## CONTEXT: sense
+const GENE_SENSES := {
+	&"ocellus.beam": "beam",
+	&"ampulla.echo": "echo",
+	&"chemocyte.smell": "smell",
+	&"stigma.shadow": "shadow",
+	&"palp.touch": "touch",
+}
+## **What the values the genes' senses report are called**, by value name: a test
+## is put to one of them.
+##
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell. Lowercase, one short word.
+## "distance": how far away; "size": how big; "level": how strong; "closeness":
+## how near, for touch.
+## ROOM: 70 px at 14 px
+const GENE_VALUES := {
+	&"distance": "distance",
+	&"size": "size",
+	&"level": "level",
+	&"closeness": "closeness",
+}
+## **The line that explains each of them**, beside the chip: the chip's word, a
+## middle dot, and what it is or makes the cell do, in plain words.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same words as on its chip), a middle
+## dot, then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+## which calls and listens; "your beam" its ocellus; "your nose" its chemocyte;
+## "your eyespot" its stigma; "your palps" its palp. "Your tail" is the cell's
+## flagellum, which swims; "two copies" means the gene is carried twice in the
+## cell's DNA, which is what lets the tail be held still. "For free" means it
+## costs no food.
 ## ROOM: 856 px at 15 px
 const GENE_EXPLAINS := {
+	&"ocellus.beam": "beam · the nearest thing each ray of your beam stops on: where, and how"
+		+ " far.",
+	&"ampulla.echo": "echo · what your ping hears back: where it came from, how far, and how"
+		+ " big it rings.",
+	&"chemocyte.smell": "smell · how strongly food your mouth could take smells, along your"
+		+ " nose.",
+	&"stigma.shadow": "shadow · the shade of anything your size or bigger: where, and how dark.",
+	&"palp.touch": "touch · the nearest thing against your skin: where, and how close.",
+	&"myoneme.dash": "dash · a burst forward, on its cooldown, paid in hunger.",
+	&"axoneme.push": "push · thrust while this holds, at half or full, paid as you go.",
 	&"flagellum.hold": "hold still · hold your tail still and keep steering, for free. needs"
 		+ " two copies of your tail.",
+	&"distance": "distance · how far away it is.",
+	&"size": "size · how big it rings, against your mouth or your whole body.",
+	&"level": "level · how strong it is, from nothing to full.",
+	&"closeness": "closeness · how near it is, from the edge of your reach to your skin.",
 }
 ## **What a part that waits for a level says while it waits**: beside an
 ## instinct that uses it, which is asleep until the organ reaches that level.
@@ -186,8 +238,12 @@ const GENE_NEEDS := {
 ## page asks the file that declares a part, and a gene brings its own words.
 static func words_of(part: StringName) -> Dictionary:
 	var out := {}
-	if GENE_SAYS.has(part):
+	if GENE_SENSES.has(part):
+		out["says"] = String(TranslationServer.translate(GENE_SENSES[part], &"sense"))
+	elif GENE_SAYS.has(part):
 		out["says"] = String(TranslationServer.translate(GENE_SAYS[part]))
+	elif GENE_VALUES.has(part):
+		out["says"] = String(TranslationServer.translate(GENE_VALUES[part]))
 	if GENE_EXPLAINS.has(part):
 		out["explains"] = String(TranslationServer.translate(GENE_EXPLAINS[part]))
 	if GENE_ASLEEP.has(part):

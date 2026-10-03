@@ -210,6 +210,7 @@ func _pause_sheet() -> void:
 	# a probe must not open or write the player's own drop.
 	var run := (load(NORMAL) as PackedScene).instantiate()
 	run.set(&"keep", "")
+	run.set(&"library_at", "")
 	tree.root.add_child(run)
 	tree.current_scene = run
 	if old != null:
