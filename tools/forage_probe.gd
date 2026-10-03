@@ -36,7 +36,12 @@ extends SceneTree
 ##
 ## Prints the first meal, the meals, the longest wait, what the bar averaged
 ## and how much of the time was spent in the grace, the divisions, and how the
-## run ended. Excluded from export (`tools/*` on every preset), so none of it
+## run ended. **And what its toxin did** (docs/design/dna-slots.md §20.3 check
+## 15): the bites on the cell -- found by its wound, which a bite moves by a
+## share and a dose or mending by thousandths -- and where they landed, and the
+## times its venom rode in on its own bite, stung a mouth biting the side it
+## guards, and its poison went into a biter or a swallower, with the stacks
+## each left. That the wiring is alive, not how well the cell does. Excluded from export (`tools/*` on every preset), so none of it
 ## ships.
 ##
 ## **In the drop** (docs/design/ocean.md §8.3, §15.3) -- a run with no session,
@@ -59,6 +64,7 @@ extends SceneTree
 ## the same way (§15.4).
 
 const FoodField := preload("res://game/normal/food.gd")
+const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const NormalMode := preload("res://game/normal/normal_mode.gd")
@@ -122,6 +128,22 @@ var _dread_samples: Array[float] = []
 var _living1400: Array[int] = []
 var _avoid_venom := false
 var _cautious := false
+## **The toxin's counts** (check 15): `toxin_fired` by its how -- venom on the
+## cell's bite, a sting, poison -- and the stacks each left; the bites on the
+## cell, those landing on the stern, and the bearings `bitten` gave this frame.
+var _fired := PackedInt32Array([0, 0, 0])
+var _fired_stacks := PackedFloat64Array([0.0, 0.0, 0.0])
+var _poison_frames: Array[int] = []
+var _bites := 0
+var _bites_stern := 0
+var _bites_unplaced := 0
+var _bitten_now: Array[float] = []
+var _wound_was := -1.0
+var _frame := 0
+## A frame's wound rising by more than this is a bite: the smallest bite a
+## water mouth lands is a share of a few hundredths, and a frame of harm from
+## twenty stacks is three thousandths.
+const BITE_JUMP := 0.008
 ## How close a mouth that could swallow the cautious bot may be to its food.
 const CAUTION := 200.0
 
@@ -156,6 +178,8 @@ func _process(delta: float) -> bool:
 		if _food != null:
 			_food.connect(&"eaten", _on_eaten)
 			_food.connect(&"grazed", _on_grazed)
+			_food.connect(&"toxin_fired", _on_toxin_fired)
+			_food.connect(&"bitten", _on_bitten)
 		if _met != null and _burn:
 			_met.set_hunger(MARK)
 	if _run != null and _met != null and _end == "":
@@ -171,6 +195,8 @@ func _seeking() -> bool:
 
 
 func _step(delta: float) -> void:
+	_frame += 1
+	_count_bites()
 	var hunger := float(_met.get("hunger"))
 	if int(_run.get("_life")) != NormalMode.Life.ALIVE:
 		var cause := "starved" if hunger >= 1.0 and not _burn else "eaten"
@@ -454,6 +480,7 @@ func _report() -> void:
 		_end if _end != "" else "alive"])
 	if _food != null and bool(_food.call(&"in_drop")):
 		print(_food.call(&"census_line"))
+	_report_toxin()
 
 
 ## Whether [param genome] wears any form of a gene with forms -- the toxin's
@@ -465,3 +492,69 @@ func _toxic(genome: Variant) -> bool:
 		if GenomeNode.has_forms(gene) and int((genome as Dictionary)[gene]) > 0:
 			return true
 	return false
+
+
+
+## **This cell's toxin went into something**: counted by how, with the stacks of
+## the record it fired from -- the cell's own, as the run handed them over.
+func _on_toxin_fired(how: int) -> void:
+	_fired[how] += 1
+	var record: int = [FoodField.HOW_BITE, FoodField.HOW_STING, FoodField.HOW_POISON][how]
+	var toxins: PackedFloat64Array = _food.get("toxins")
+	for r in range(0, toxins.size(), FoodField.TOX_STRIDE):
+		if int(toxins[r]) == record:
+			_fired_stacks[how] += toxins[r + 2]
+			break
+	if how == FoodField.FIRED_POISON:
+		_poison_frames.append(_frame)
+
+
+func _on_bitten(bearing: float, _strength: float) -> void:
+	_bitten_now.append(bearing)
+
+
+## **A bite on the cell**, found by its wound: a frame where it rose by more than
+## [constant BITE_JUMP]. Placed by the bearing `bitten` gave that frame -- on the
+## stern when within `VENOM_ARC_DEG / 2` of it -- unless the cell's own bite
+## said one too, when it is counted but not placed.
+func _count_bites() -> void:
+	var cell: Node = _run.get("_cell")
+	var wound := float(cell.get("wound"))
+	if _wound_was >= 0.0 and wound - _wound_was > BITE_JUMP:
+		_bites += 1
+		if _bitten_now.size() == 1:
+			var reach := deg_to_rad(CellBody.VENOM_ARC_DEG) * 0.5
+			if absf(angle_difference(PI, _bitten_now[0])) <= reach:
+				_bites_stern += 1
+		else:
+			_bites_unplaced += 1
+	_wound_was = wound
+	_bitten_now.clear()
+
+
+func _report_toxin() -> void:
+	if _food == null:
+		return
+	var toxins: PackedFloat64Array = _food.get("toxins")
+	var carried := PackedStringArray()
+	for r in range(0, toxins.size(), FoodField.TOX_STRIDE):
+		carried.append("%s %.0f" % [["bite", "sting", "poison", "swallow"][int(toxins[r])],
+			toxins[r + 2]])
+	# A poison said in the frame the cell was swallowed went into its swallower.
+	var swallowed := _end.begins_with("eaten (swallowed)") and not _poison_frames.is_empty() \
+		and _poison_frames[-1] == _frame
+	var bite_poison := _fired[FoodField.FIRED_POISON] - (1 if swallowed else 0)
+	var poison_stacks := _fired_stacks[FoodField.FIRED_POISON]
+	var swallow_stacks := 0.0
+	for r in range(0, toxins.size(), FoodField.TOX_STRIDE):
+		if swallowed and int(toxins[r]) == FoodField.HOW_POISON:
+			poison_stacks -= toxins[r + 2]
+		if int(toxins[r]) == FoodField.HOW_SWALLOW:
+			swallow_stacks = toxins[r + 2]
+	print(("[forage-toxin] carries %s | bitten %d (stern %d, unplaced %d) | its venom rode its"
+		+ " bite %d times, %.0f stacks | stung %d biters, %.0f stacks | poison into %d biters,"
+		+ " %.0f stacks%s") % [", ".join(carried) if not carried.is_empty() else "none", _bites,
+		_bites_stern, _bites_unplaced, _fired[FoodField.FIRED_VENOM],
+		_fired_stacks[FoodField.FIRED_VENOM], _fired[FoodField.FIRED_STING],
+		_fired_stacks[FoodField.FIRED_STING], bite_poison, poison_stacks,
+		" | and its swallower took %.0f stacks" % swallow_stacks if swallowed else ""])

@@ -1767,35 +1767,44 @@ func _measure_screens() -> Dictionary:
 				all_bodies.append({&"crista": crista, &"vacuole": vacuole, &"plastid": plastid})
 	var few_bodies: Array[Dictionary] = [{}, {&"vacuole": tier_max},
 		{&"crista": tier_max, &"vacuole": tier_max, &"plastid": tier_max}]
+	# **And every slot**: a gene's numbers may depend on where it is worn -- venom
+	# at the front and on a side or the stern are three rows (dna-slots.md §3.3) --
+	# so a gene that does not level is read in each outside slot, and with none.
+	var slot_max := int(_script_const(cell, "SLOT_MAX")) if _script_const(cell, "SLOT_MAX") != null else 0
+	var all_slots: Array = range(-1, slot_max)
 	var worst := {}
 	for gene: StringName in genes:
 		var grows := levelled.has(gene)
 		var bodies := few_bodies if grows else all_bodies
 		var levels: Array = range(1, 100) if grows else [0]
 		var paths: Array = ways if grows else [&""]
+		var slots: Array = [-1] if grows else all_slots
 		for copies in range(1, tier_max + 1):
 			for body: Dictionary in bodies:
 				var ctx: Dictionary = stats.call(&"context", body)
 				for level: int in levels:
 					for way: StringName in paths:
-						var rows: Array = stats.call(&"lines", gene, copies, level, way, ctx)
-						for i in mini(rows.size(), 2):
-							var items: Array = rows[i]
-							if grows and i == 1:
-								# A worn gene that levels ends its costs with the next level.
-								items = items.duplicate()
-								items.append(stats.call(&"progress_item", level, 999.0))
-							var wide := float(readout.call(&"width", font, NUMBERS_SIZE,
-								readout.call(&"runs", items)))
-							var tag := "%s/%d" % [gene, i]
-							if worst.has(tag) and wide <= float((worst[tag] as Array)[0]):
-								continue
-							var about := "%d cop%s" % [copies, "y" if copies == 1 else "ies"]
-							if grows:
-								about = "level %d, %s" % [level, ("way " + String(way)) if way != &"" else "no way chosen"]
-							worst[tag] = [wide, String(readout.call(&"plain", items)),
-								"the %s numbers line of %s (%s), at %s" % [
-									"first" if i == 0 else "second", words.get(String(gene), String(gene)), gene, about]]
+						for slot: int in slots:
+							var rows: Array = stats.call(&"lines", gene, copies, level, way, ctx, slot)
+							for i in mini(rows.size(), 2):
+								var items: Array = rows[i]
+								if grows and i == 1:
+									# A worn gene that levels ends its costs with the next level.
+									items = items.duplicate()
+									items.append(stats.call(&"progress_item", level, 999.0))
+								var wide := float(readout.call(&"width", font, NUMBERS_SIZE,
+									readout.call(&"runs", items)))
+								var tag := "%s/%d" % [gene, i]
+								if worst.has(tag) and wide <= float((worst[tag] as Array)[0]):
+									continue
+								var about := "%d cop%s" % [copies, "y" if copies == 1 else "ies"]
+								if slot >= 0:
+									about += " in slot %d" % slot
+								if grows:
+									about = "level %d, %s" % [level, ("way " + String(way)) if way != &"" else "no way chosen"]
+								worst[tag] = [wide, String(readout.call(&"plain", items)),
+									"the %s numbers line of %s (%s), at %s" % [
+										"first" if i == 0 else "second", words.get(String(gene), String(gene)), gene, about]]
 	var numbers: Array = worst.values()
 	numbers.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
 	# The caption: the widest generation, and the widest clause the numbers add to it.

@@ -724,7 +724,7 @@ func _pond_bodies() -> Array:
 	for i in _rng.randi_range(0, 12):
 		var person := _rng.randf() < 0.2
 		# A body's loads are three flags of its own since protocol 7.
-		var loads := [0, Wire.POND_HARMED, Wire.POND_PARALYSED | Wire.POND_ASLEEP,
+		var loads: int = [0, Wire.POND_HARMED, Wire.POND_PARALYSED | Wire.POND_ASLEEP,
 			Wire.POND_HARMED | Wire.POND_PARALYSED | Wire.POND_ASLEEP][_rng.randi_range(0, 3)]
 		bodies.append([Wire.PERSON_ID if person else _rng.randi_range(1, 0x7FFFFFFF),
 			_rng.randi_range(0, 40), (Wire.POND_IS_PERSON if person else 0) | loads,

@@ -4788,19 +4788,27 @@ func _pond_swallow_rule() -> void:
 	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
 	_pond_hunt(field, b)
 	var serial := int(b.serial)
+	# What the cell that ate them carries **when the death is told**: the dose goes
+	# in first. Read then, because later in the same step today's water culls it
+	# with the rest of what the person anchored (`_step_pond`): out here, 3,000
+	# from the host, nobody is left to keep it.
+	var at_death: Array = []
+	field.person_died.connect(func(_cause: int, _by: int, _at: Vector2) -> void:
+		at_death.append([int(b.serial), bool(b.seeded),
+			float((b.loads as PackedFloat64Array)[0])]))
 	field._process(POND_STEP)
 	died = _pond_said(said, "died")
 	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
-	var dosed := float((b.loads as PackedFloat64Array)[0])
+	var dosed := float(at_death[0][2]) if at_death.size() == 1 else 0.0
 	_says(field.person() == null and not died.is_empty()
 			and int(died[1]) == FoodField.Cause.SWALLOWED
 			and int(died[2]) == FoodField.By.WATER
 			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
-			and int(b.serial) == serial and bool(b.seeded) and dosed <= swallow_n
-			and dosed >= swallow_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9,
+			and at_death.size() == 1 and int(at_death[0][0]) == serial
+			and bool(at_death[0][1]) and dosed == swallow_n,
 		"pond-field: a committed cell that swallows a poisonous person eats them --"
-		+ " SWALLOWED by the water -- and takes %.2f stacks of their poison, alive"
-		% dosed)
+		+ " SWALLOWED by the water -- and carries %.2f stacks of their poison when the"
+		% dosed + " death is told, alive")
 
 
 # --- §1.3, the last row: one player's mouth on the other ---------------------
@@ -5619,7 +5627,10 @@ func _drop_pond_anchors() -> void:
 			fair = false
 		if slot == 7:
 			hunter_in = (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) != 0
-		else:
+		elif (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) == 0:
+			# The rest, nearest first. Another body coming for them goes first
+			# wherever it is in reach, flagged, as the posed one does -- so it is
+			# not one of the rest, however far it is.
 			worst = maxf(worst, (b.pos as Vector2).distance_to(pb.pos) - float(b.radius))
 	var nearer_left := 0
 	for i in field.bodies().size():
