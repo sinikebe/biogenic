@@ -3501,6 +3501,15 @@ func _send_hover(canvas: Vector2) -> void:
 	get_viewport().warp_mouse(canvas)
 	print("[drive] %5.2f  hover canvas %.0f,%.0f" % [
 		_clock, canvas.x, canvas.y])
+	# **And what it landed on**, two frames on, once the motion has been read: a
+	# hover a render shows nothing for is then a hover that missed, or one the
+	# control under it does not answer -- not a guess.
+	for f in 2:
+		await get_tree().process_frame
+	var under: Control = get_viewport().gui_get_hovered_control()
+	print("[drive] %5.2f  hover lands on %s, the mouse at canvas %.0f,%.0f" % [_clock,
+		str(under.get_path()) if under != null else "nothing",
+		get_viewport().get_mouse_position().x, get_viewport().get_mouse_position().y])
 
 
 ## One finger, down and up, at a point in the **design canvas** rather than in
