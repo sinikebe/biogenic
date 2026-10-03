@@ -382,6 +382,16 @@ func set_eye(eye: Dictionary) -> void:
 		_vision.eye = eye
 
 
+## How slack the body being watched was with hunger, 0..1, drawn by both views
+## as creases (docs/design/hunger.md §2.5). Same contract as the run's: 0 is a
+## fed body. The membrane's own fall arrives in its block.
+func set_slack(slack: float) -> void:
+	if _soma != null:
+		_soma.slack = slack
+	if _vision != null:
+		_vision.slack = slack
+
+
 func _process(_delta: float) -> void:
 	if not live:
 		return
@@ -394,6 +404,7 @@ func _process(_delta: float) -> void:
 	if _run_soma != null:
 		set_division(_run_soma.division)
 		set_eye(_run_soma.eye)
+		set_slack(_run_soma.slack)
 
 
 # ---------------------------------------------------------------------------

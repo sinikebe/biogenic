@@ -62,6 +62,11 @@ const FADE_PENDING := 0.68
 ## The nucleus takes the beat, so the figure breathes on the same heart the
 ## contour does rather than on a clock of its own.
 var beat := 0.0
+## **How slack the body is with hunger**, 0..1, written once a frame by the
+## run (docs/design/hunger.md) and drawn by cilia.gd as creases in the rim. A
+## fact about this body and nothing in the water, so inside this layer's
+## licence. The daughters are drawn without it: they are born fed.
+var slack := 0.0
 
 ## **The division**, written once a frame by the run. Empty is an ordinary body.
 ## `double` and `pinch` are the mother becoming two; `bodies` is present only
@@ -184,7 +189,7 @@ func _draw_figure() -> void:
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail)
+		0.0, false, eye, _tail, slack)
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on. It is the only place point of view says a gene is

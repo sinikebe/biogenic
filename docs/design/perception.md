@@ -273,7 +273,7 @@ Play is a continuous cut with no flash.
 
 | signal | uniform | value | half-width | envelope |
 | --- | --- | --- | --- | --- |
-| metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s fed → 4.8s starved → 7.5s at the end of the grace, **set by hunger alone**, with dread's jitter below (2026-09-29; it used to fall to 0.55s as concentration rose) |
+| metabolic beat | `pulse` | 1.0 peak | — (symmetric) | attack 90ms, decay 420ms, period 2.4s fed, quickening from half a tank to 1.2s empty and 0.75s at the end of the grace, at full strength, **set by hunger alone**, with dread's jitter below (`hunger.md`, 2026-10-03; until then it slowed to 4.8s starved and 7.5s at the end of the grace; and until 2026-09-29 it fell to 0.55s as concentration rose) |
 | thrust bloom | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.14 | 60° at bearing 0° | attack 60ms, decay 500ms, on each impulse |
 | turn shear | glow lobe 0, `Color(0.12,0.70,0.58,1)` | 0.10 × `|ω|/ω_max` | 84° at ±90°, outside of the turn | no lag; decay 180ms |
 | nutrient taste | glow lobe 1, `Color(0.35,0.88,0.42,1)` | `pow(clamp((c-0.02)/(0.70-0.02)),0.8) * 0.62`, faded in over 0.02 and suppressed 60% by dread | **a full ring, not a lobe**: `z` solved so its dimmest point is 0.22 of its brightest | no lag and no jitter at all; off below c = 0.02. **The bearing is the organ's own arc on this body, not a direction to food** — it decides which side of the ring is bright and nothing else. Silent without `chemocyte`, and `c` is `s / (s + SMELL_HALF)` where `s` is the facing-weighted sum over **every** source inside that organ's reach — superposition, then a receptor that saturates rather than clips. three-senses.md §2 and §7.5.2 |
@@ -517,7 +517,9 @@ absent on some fraction of devices can be used at all.
    It is the only text in normal mode — do not let a second string join it.
 2. ~~Is the beat also the health readout?~~ **DECIDED: yes, beat rate is hunger.**
    The metabolic beat slows and weakens as the cell starves; one signal carries
-   both "I exist" and "I am running out".
+   both "I exist" and "I am running out". **Since 2026-10-03 it races instead**,
+   at full strength, and the body and the membrane say it too (`hunger.md`): a
+   beat that faded as danger rose went unnoticed on the dev app.
 
    This is a deliberate coupling, so treat it as one: **hunger is now a
    perception parameter, not just a survival number.** Any change to starvation

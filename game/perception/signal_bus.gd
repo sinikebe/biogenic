@@ -355,10 +355,36 @@ const DREAD_JITTER := 0.40
 ## [method beat_strength] and it is the only one; a second constant here could
 ## drift away from this one and quietly reintroduce the bug.
 const DREAD_BEAT_FLOOR := 0.15
-## Jitter on a slow beat must not leave the screen empty for eight seconds. The
-## ceiling never cuts an authored period -- a dying cell really does beat at
-## 7.5s -- it only stops the random half of it running away.
+## Jitter on a beat must not leave the screen empty for long. The ceiling never
+## cuts an authored period, it only stops the random half of one running away.
+## No authored period comes near it since a starving beat stopped slowing
+## (hunger.md): the slowest is the fed 2.4 s, and dread's jitter takes that to
+## 3.4 s at most. It stays, because it is the rule and not the case.
 const BEAT_PERIOD_MAX := 6.5
+## **And no beat faster than 0.4 s, dread's jitter included**: 2.5 Hz, under
+## the three-flashes-a-second line. The fastest authored beat is the end of the
+## grace, metabolism.gd's 0.75 s, and under full dread's jitter that is 0.45 s,
+## so this never cuts it either; levels_probe holds the two apart. hunger.md §2.2.
+const BEAT_PERIOD_MIN := 0.4
+
+# --- The last chance: the membrane falls in (docs/design/hunger.md) ----------
+# When the tank empties the contour drops inward all the way round, then keeps
+# closing through the grace. A faint narrows vision before it takes it; this is
+# that, drawn on the frame the eyes already use, and it is the one hunger cue
+# that is an *event* rather than a slope. Posted every frame by the run as a
+# level, like dread, and stepped here so it falls and springs back at its own
+# speed. A delta on the inset: whatever rect the membrane is drawn into, a pane
+# included, it falls in by the same pixels.
+
+## How far the contour has fallen in at the end of the grace, in canvas px.
+## The quiet death closes the rest of the way from there.
+const FAINT_PX := 64.0
+## Pixels a second it falls: the 22 px that land when the tank empties take
+## 0.28 s, quick enough to read as something happening.
+const FAINT_IN := 80.0
+## Pixels a second it springs back on a meal: all 64 in 0.27 s, right behind
+## the ingest flood, so the relief is felt as the same moment as the mouthful.
+const FAINT_OUT := 240.0
 
 ## How much a continuous signal has to move before subscribers are told again.
 const POST_EPSILON := 0.02
@@ -416,7 +442,9 @@ const DEATH_INSET := 300.0
 const DEATH_FLASH := 0.80
 
 ## Starvation: the same aperture, three times slower, with no white in it. It
-## has been telegraphed for minutes; it does not get to be loud.
+## has been telegraphed for twenty seconds -- a racing beat, a slack body and a
+## membrane already falling in -- so it does not get to be loud. It closes from
+## wherever the membrane fell ([member _faint]).
 const FAINT_COLLAPSE := 2.60
 const FAINT_BLACK := 1.20
 
@@ -690,6 +718,12 @@ var _rng := RandomNumberGenerator.new()
 var _dread := 0.0
 var _dread_target := 0.0
 
+## How far the contour has fallen in, in canvas px, and how far it is going:
+## stepped toward the target in [method _process] like [member _dread]. See
+## [constant FAINT_PX].
+var _faint := 0.0
+var _faint_target := 0.0
+
 ## The shadow of something big, at its true bearing. No envelope: it is a
 ## continuous state like taste, posted every frame by whoever owns the run.
 var _light := 0.0
@@ -713,6 +747,7 @@ var _said_light := -1.0
 var _said_light_bearing := 0.0
 var _said_beam := -1.0
 var _said_beam_bearing := 0.0
+var _said_faint := 0.0
 
 var _beat_period := 2.4
 var _beat_amplitude := 1.0
@@ -848,12 +883,15 @@ func apply_gain(value: float) -> void:
 # name. Three uniforms are deliberately NOT in the block: `rect_px` and
 # `inset_px` are the geometry of whatever rect is being drawn into -- a pane is
 # half a screen wide and has its own -- and `gain` is a setting the player owns
-# now, not a fact about the run that ended.
+# now, not a fact about the run that ended. How far a starving membrane has
+# fallen in IS in it: a fact about the run, laid on whatever inset the pane has.
 # ---------------------------------------------------------------------------
 
 ## Floats one captured membrane takes. **Thirty-seven until the ping got two
 ## lobes of its own**: six glow lobes instead of four is eight more floats, and
-## the hollowness is a ninth.
+## the hollowness is a ninth. **Forty-seven since hunger** (hunger.md §2.2): the
+## last is how far the contour has fallen in, so the replay of a starving death
+## closes in exactly as the run did.
 ##
 ## Hollowness has to be in here, and that is not obvious. It rides in the
 ## palette's alpha, and the palette is pushed from the `ampulla` tier -- which
@@ -864,7 +902,7 @@ func apply_gain(value: float) -> void:
 ##
 ## The recording never outlives the run that made it, so there is no format to
 ## migrate. docs/design/replay.md §4.1.
-const BLOCK_FLOATS := 46
+const BLOCK_FLOATS := 47
 
 
 ## Writes this membrane's state into [param out] at [param at]. No allocation:
@@ -898,6 +936,7 @@ func capture_block(out: PackedFloat32Array, at: int) -> void:
 	out[at + 43] = _ingest_hue.z
 	out[at + 44] = _dread
 	out[at + 45] = PING_HOLLOW_BY_TIER[_senses[SENSE_AMPULLA]]
+	out[at + 46] = _faint
 
 
 ## Puts a captured membrane back on the shader, through this node's own state so
@@ -921,6 +960,10 @@ func write_block(block: PackedFloat32Array, at: int) -> void:
 	_ingest.hold(block[at + 40])
 	_ingest_hue = Vector3(block[at + 41], block[at + 42], block[at + 43])
 	_dread = block[at + 44]
+	# Held where it was recorded: the target with it, so nothing would step it
+	# anywhere else even if this node were processing.
+	_faint = block[at + 46]
+	_faint_target = _faint
 	# The palette, because the hollowness of a ping mark lives in it and this
 	# bus has no organ to read it off. Pushed through the same guard the live
 	# one uses, so a whole replay costs one uniform write and not one a frame.
@@ -1216,6 +1259,19 @@ func shear(rate: float) -> void:
 		sensation.emit(&"shear", {"bearing": _shear_bearing, "strength": absf(r)})
 
 
+## **The last chance**: how far the membrane has fallen in, 0..1 of [constant
+## FAINT_PX] -- metabolism.gd's `faint()`, 0 while there is food in the tank.
+## Continuous, posted every frame by the run like [method dread], and gated for
+## subscribers the same way. `&"faint"` on [signal sensation] is the seam a
+## felt heartbeat will hang off (hunger.md §8): nothing listens to it yet.
+func faint(level: float) -> void:
+	var next := clampf(level, 0.0, 1.0)
+	_faint_target = next * FAINT_PX
+	if absf(next - _said_faint) > POST_EPSILON or (next == 0.0) != (_said_faint == 0.0):
+		_said_faint = next
+		sensation.emit(&"faint", {"strength": next})
+
+
 ## The metabolic beat, driven from exactly one place: see game/normal/metabolism.gd.
 func set_beat(period: float, amplitude: float) -> void:
 	_beat_period = maxf(period, 0.05)
@@ -1225,12 +1281,13 @@ func set_beat(period: float, amplitude: float) -> void:
 ## What the next beat will actually land with: the strength metabolism asked
 ## for, less whatever dread is draining out of it.
 ##
-## **The one clamp.** Dread drains the beat and starvation drains the beat and
-## they multiply; at full both that is 0.35 x 0.1925 = 0.067, which renders as a
-## ghost of a contour on black. The rule is that dread is the dimmest the game
-## is ever allowed to be and nothing compounds past it, so the floor IS
-## [constant DREAD_BEAT_FLOOR] -- not a second number that could drift from it,
-## and unbreakable by the third and fourth stressor Phase 5 adds.
+## **The one clamp.** Dread drains the beat, and starvation used to drain it
+## too: the two multiplied, and at full both came to 0.35 x 0.1925 = 0.067,
+## which renders as a ghost of a contour on black. Hunger no longer dims the
+## beat at all (hunger.md) -- it races it instead -- and the rule stands for
+## whatever comes next: dread is the dimmest the game is ever allowed to be and
+## nothing compounds past it, so the floor IS [constant DREAD_BEAT_FLOOR] -- not
+## a second number that could drift from it.
 func beat_strength() -> float:
 	return maxf(_beat_amplitude * lerpf(1.0, DREAD_BEAT_FLOOR, _dread), DREAD_BEAT_FLOOR)
 
@@ -1267,7 +1324,13 @@ static func death_shut_at(loud: bool) -> float:
 ## until [method revive] is called.
 ##
 ## [param loud] is predation: the strike, the white, 0.75s. False is starvation,
-## which has been telegraphed for minutes and does not get to be loud.
+## which has been telegraphed for twenty seconds and does not get to be loud.
+##
+## **Either one closes from where the membrane had fallen** ([member _faint]),
+## not from where it would have been fed: a starving cell's aperture is already
+## part of the way in, and opening it again to close it would be a flinch the
+## player reads as a meal. The racing beat stops with the first frame of this,
+## so the gap is felt within a second.
 func collapse(t: float, loud: bool = true) -> void:
 	if not _dying:
 		_dying = true
@@ -1285,7 +1348,7 @@ func collapse(t: float, loud: bool = true) -> void:
 
 	# t squared, so it starts as a sag and ends as a slam.
 	var u := clampf((t - start) / span, 0.0, 1.0)
-	_inset_override = lerpf(_inset, DEATH_INSET, u * u)
+	_inset_override = lerpf(_inset + _faint, DEATH_INSET, u * u)
 
 	var fade := clampf((t - shut) / maxf(black, 0.001), 0.0, 1.0)
 	_base_hue = BASE_COLOR * (1.0 - fade)
@@ -1377,6 +1440,12 @@ func _end_collapse() -> void:
 	_dread_hue = DREAD_COLOR
 	_dread = 0.0
 	_dread_target = 0.0
+	# Open all the way: a new cell is a fed one. A cell that comes back hungry --
+	# out of a water's beat, or a run left mid-starve -- falls in again from
+	# here on its first frames, which is the alarm saying itself once more.
+	_faint = 0.0
+	_faint_target = 0.0
+	_said_faint = 0.0
 	_taste_c = 0.0
 	_taste_bearing = 0.0
 	_light = 0.0
@@ -1439,6 +1508,11 @@ func _process(delta: float) -> void:
 	# Asymmetric: ten seconds to arrive, four and a half to let go.
 	_dread = move_toward(_dread, _dread_target,
 		delta * (DREAD_RATE if _dread_target > _dread else DREAD_FALL_RATE))
+	# Asymmetric the other way round: the fall is quick and the relief quicker.
+	# Still stepped under the pause scrim, where the run posts nothing, so the
+	# membrane holds where it fell.
+	_faint = move_toward(_faint, _faint_target,
+		delta * (FAINT_IN if _faint_target > _faint else FAINT_OUT))
 
 	_compose_lobes()
 	_apply()
@@ -1460,10 +1534,11 @@ func _step_beat(delta: float) -> void:
 	var jitter := 1.0
 	if shake > 0.0:
 		jitter = _rng.randf_range(1.0 - shake, 1.0 + shake)
-	# The ceiling never shortens an authored period -- a dying cell really does
-	# beat at 7.5s -- it only stops the random half of it emptying the screen.
+	# The ceiling never shortens an authored period, it only stops the random
+	# half of one emptying the screen; the floor stops it strobing. Neither
+	# binds on any period metabolism.gd authors, jitter included.
 	var ceiling := maxf(BEAT_PERIOD_MAX, _beat_period)
-	_beat_this_period = clampf(_beat_period * jitter, 0.05, ceiling)
+	_beat_this_period = clampf(_beat_period * jitter, BEAT_PERIOD_MIN, ceiling)
 
 
 ## Lobe 0 carries every self-sensation, so the three compete instead of summing:
@@ -1594,7 +1669,7 @@ func _apply() -> void:
 		return
 	_material.set_shader_parameter("rect_px", _rect)
 	_material.set_shader_parameter("inset_px",
-		_inset_override if _inset_override >= 0.0 else _inset)
+		_inset_override if _inset_override >= 0.0 else _inset + _faint)
 	_material.set_shader_parameter("base_color", _base_hue)
 	_material.set_shader_parameter("dread_color", _dread_hue)
 	_material.set_shader_parameter("pulse", _pulse.value)

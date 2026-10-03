@@ -426,6 +426,13 @@ recommended." Nothing moves, because the recommended option is what was built:
 Rows 1 and 3 have their answers, so nothing here holds a release. Rows 3 and 4
 were answered "play it first", so what the dev app shows can still reopen them.
 
+**Row 4 reopened, 2026-10-03.** The owner, after playing the dev app: *"hunger.
+It must be more than what it is. I often die of hunger without noticing
+anything."* A slowing, fading beat read as nothing at all, or as dread.
+`hunger.md` answers it, still with no words: from half a tank the beat races at
+full strength, the body crumples, and when the tank empties the membrane falls
+in. The thirty seconds, the meal and the grace are unchanged.
+
 ### 7.7 To measure again
 
 `tools/forage_probe.gd` wraps `tools/drive.tscn`, so every drive flag plays the

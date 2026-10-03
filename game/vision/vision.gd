@@ -383,6 +383,10 @@ var offer := {}
 ## contract as soma.gd's. Drawn on the player's own cell and never on another
 ## body. Empty is an ordinary eye. beam-levels.md §8.4-§8.5.
 var eye := {}
+## **How slack the body is with hunger**, 0..1, written once a frame by the
+## run; same contract as soma.gd's. Drawn on the player's own cell and never on
+## another body: hunger is not on the wire, so a friend is never drawn crumpled.
+var slack := 0.0
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -1885,7 +1889,7 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail)
+		0.0, false, eye, _tail, slack)
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)

@@ -123,7 +123,7 @@ yet*; only the ones a later designer would want to move are repeated here.
 | 1 | **a gene is waiting** | vesicle + thread + one bright socket + ghost tuft | `draw_pending` |
 | 2 | **a free slot exists** | socket beads only, in `SELF_TINT`, at `0.52` alpha | `draw_pending` |
 | 3 | **wound** | the rim tears open one gap at a time, a flap hangs into each, the fill empties | `draw_cell`, already shipped |
-| 4 | **hunger** | the metabolic beat — Phase 1's design, untouched | `signal_bus.gd` |
+| 4 | **hunger** | the beat races, the body crumples, and the membrane falls in when the tank empties (`hunger.md`, 2026-10-03; until then the metabolic beat alone, slowing) | `metabolism.gd`, `signal_bus.gd`, `draw_cell` |
 
 Rank 2 is teal because nothing is asking for it; rank 1 takes the gene's hue,
 which is the same hue the organ will wear when it is placed. **A full genome
