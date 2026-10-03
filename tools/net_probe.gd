@@ -6975,8 +6975,27 @@ func _autopilot_free(run: Node, cell: Node, water: Node, other: Vector2,
 			seen["flips"] = int(seen["flips"]) + 1
 			seen["was_held"] = held
 		return false
-	give.call(["always -> body.rest"])
+	# **The open menu in a pond** (§2.2, §2.4; check 11's last clause, which
+	# needs a session): it engages nothing -- it silences the hand and the cell
+	# drifts -- and once the autopilot is on, as the page's copy of the icon
+	# switches it, the programs drive under it, since in a pond it stops nothing.
+	give.call(["always -> body.swim", "always -> axoneme.push 0.5"])
+	run.call(&"_toggle_pause")
+	await _pond_until(func() -> bool: return false, 0.4, pins)
+	seen["menu_open"] = bool(run.get("_menu_open")) and bool(cell.get("steering_off"))
+	seen["menu_engaged"] = bool(cell.get("autopilot"))
 	run.call(&"_set_autopilot", true)
+	var under_menu := [0]
+	await _pond_until(func() -> bool:
+		if bool(cell.get("autopilot")) and not (instincts.get("fired") as Array).is_empty():
+			under_menu[0] += 1
+		return false, 0.6, pins)
+	seen["menu_drove"] = int(under_menu[0]) > 0 and bool(cell.get("autopilot")) \
+		and bool(run.get("_menu_open"))
+	run.call(&"_toggle_pause")
+	await get_tree().process_frame
+	seen["menu_shut_kept"] = bool(cell.get("autopilot")) and not bool(run.get("_menu_open"))
+	give.call(["always -> body.rest"])
 	for phase: Array in [[["always -> body.rest"], 0.6],
 			[["always -> flagellum.hold"], 0.6],
 			[["always -> body.swim", "always -> axoneme.push 0.5"], 0.8],
@@ -7020,13 +7039,19 @@ func _autopilot_flew(seen: Dictionary) -> bool:
 			return false
 	return bool(seen["driving"]) and pushes.has(0.5) and pushes.has(1.0) \
 		and int(seen["dashes"]) >= 1 and int(seen["held"]) > 30 and int(seen["strokes"]) >= 1 \
-		and int(seen["flips"]) >= 6 and bool(seen["kept_off"]) and bool(seen["far"])
+		and int(seen["flips"]) >= 6 and bool(seen["kept_off"]) and bool(seen["far"]) \
+		and bool(seen["menu_open"]) and not bool(seen["menu_engaged"]) \
+		and bool(seen["menu_drove"]) and bool(seen["menu_shut_kept"])
 
 
 func _autopilot_said(seen: Dictionary) -> String:
 	var acted: Array = (seen["acted"] as Dictionary).keys()
 	acted.sort()
-	return ("rests, holds, swims, pushes at %s, dashes %d times and flips its tail %d"
+	return ("is not engaged by its open menu (%s) and drives under it once on (%s, %s);"
+		% [str(not bool(seen["menu_engaged"]) and bool(seen["menu_open"])),
+		str(seen["menu_drove"]), "kept as it shuts" if bool(seen["menu_shut_kept"])
+		else "NOT kept as it shuts"]
+		+ " rests, holds, swims, pushes at %s, dashes %d times and flips its tail %d"
 		% [", ".join((seen["pushes"] as Dictionary).keys().map(func(p: float) -> String:
 			return "%.1f" % p)), int(seen["dashes"]), int(seen["flips"])]
 		+ " times over %d ticks -- %s acted, the tail held %d frames, %d strokes, %.0f"
