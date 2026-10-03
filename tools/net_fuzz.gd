@@ -94,6 +94,14 @@ const DOOR_OUT_OF_REACH := ["saturated", "refused_closed", "net_refused_closed",
 	"referee_strikes", "referee_would_strikes", "referee_would_cuts", "challenges_dropped"]
 ## The label and secret of the one invite the door knows: found in no log.
 const LABEL := "fuzzfriend"
+## **Lines a sister's list holds** (protocol 6, docs/design/automation.md
+## §10.3): the water's seven, a page's, and the rule of a gene no build declares.
+const LINES: Array[String] = ["metabolism.fed below 5 -> body.rest",
+	"metabolism.hunger below 0.3 -> body.rest",
+	"ampulla.echo size below mouth -> body.turn-toward", "ocellus.beam -> body.turn-toward",
+	"chemocyte.smell level falling -> body.turn-random", "always -> body.swim",
+	"always -> axoneme.push 0.5", "palp.touch closeness above 0.5 -> body.turn-away",
+	"always -> flagellum.hold", "xenogene.hum above 0.5 -> body.turn-away"]
 
 
 ## **Every line printed and every error raised**, counted by kind.
@@ -433,8 +441,9 @@ func _wire_case(frame: PackedByteArray, from_host: bool) -> String:
 	var size := frame.size()
 	# The gate's steps 2-5 (`_admit_frame`): the cap, a kind, the event
 	# header, and a size its writer produces. Nothing past them is read unless
-	# they pass.
-	var ceiling := Wire.HOST_FRAME_MAX if from_host else Wire.GUEST_FRAME_MAX
+	# they pass. A greeted guest's cap is its frame's kind's: a SISTER's, or the
+	# one every other frame keeps (`Wire.guest_cap`, protocol 6).
+	var ceiling := Wire.HOST_FRAME_MAX if from_host else Wire.guest_cap(frame)
 	if size == 0 or size > ceiling:
 		return _errors_since(errors, "")
 	var kind := Wire.kind(frame)
@@ -482,6 +491,8 @@ func _wire_case(frame: PackedByteArray, from_host: bool) -> String:
 			var got: Array = _take_event(type, frame)
 			if parses and not got.is_empty():
 				var why := _finite_why(got)
+				if why.is_empty() and type == Wire.EVENT_SISTER:
+					why = _sister_why(got)
 				if not why.is_empty():
 					outcome = "an event the host takes carried " + why
 	return _errors_since(errors, outcome)
@@ -511,6 +522,10 @@ func _take_event(type: int, frame: PackedByteArray) -> Array:
 			return Wire.take_died(frame)
 		Wire.EVENT_SISTER:
 			return Wire.take_sister(frame)
+		Wire.EVENT_SETTLE:
+			return Wire.take_settle(frame)
+		Wire.EVENT_CLEAR:
+			return Wire.take_clear(frame)
 	return []
 
 
@@ -526,22 +541,55 @@ static func _body_why(body: Array) -> String:
 
 
 ## **A snapshot, held to what [method Wire.take_pond] promises**: every value
-## finite, no more bodies than a snapshot holds, each in a slot that is one, and
-## a person's motion one a body could have.
+## finite, no more bodies than a snapshot holds, the person and only the person
+## by the person's id, and a person's motion one a body could have -- and since
+## protocol 7 the recipient's three loads, each a count of stacks its byte can
+## say.
 static func _pond_why(pond: Array) -> String:
 	var why := _finite_why(pond)
 	if not why.is_empty():
 		return why
+	var loads: PackedFloat64Array = pond[3]
+	if loads.size() != Wire.POND_LOADS:
+		return "%d loads" % loads.size()
+	for stacks: float in loads:
+		if not is_finite(stacks) or stacks < 0.0 or stacks > 255.0 / Wire.POND_LOAD_SCALE:
+			return "a load of %s" % str(stacks)
 	var bodies: Array = pond[2]
 	if bodies.size() > Wire.POND_BODIES_MAX:
 		return "%d bodies, past %d" % [bodies.size(), Wire.POND_BODIES_MAX]
 	for body: Array in bodies:
-		var slot := int(body[Wire.Entry.SLOT])
-		if slot < 0 or slot >= Wire.POND_BODIES_MAX:
-			return "a body in slot %d" % slot
+		var id := int(body[Wire.Entry.ID])
+		var person := (int(body[Wire.Entry.FLAGS]) & Wire.POND_IS_PERSON) != 0
+		if id < 0 or id > 0xFFFFFFFF or (id == Wire.PERSON_ID) != person:
+			return "a body of id %d%s" % [id, " flagged as the person" if person else ""]
 		why = _motion_why(body[Wire.Entry.VELOCITY], float(body[Wire.Entry.TURNING]))
 		if not why.is_empty():
 			return why
+	return ""
+
+
+## **A sister, held to what [method Wire.take_sister] promises** (protocol 6):
+## her body's genes and her DNA's named as the wire names them, at most
+## [constant Wire.GENES_MAX], at tiers inside 0..3 and her DNA's copies inside
+## 1..3; and at most [constant Wire.MOST_RULES] lines, each 1 to
+## [constant Wire.RULE_BYTES_MAX] bytes of [constant Wire.RULE_BYTES].
+static func _sister_why(sister: Array) -> String:
+	for which: int in [3, 4]:
+		var genome: Dictionary = sister[which]
+		if genome.size() > Wire.GENES_MAX:
+			return "%d genes" % genome.size()
+		for gene: Variant in genome:
+			var tier := int(genome[gene])
+			if not Wire._name_ok(String(gene)) or tier > Wire.TIER_TOP \
+					or tier < (1 if which == 4 else 0):
+				return "a gene %s at %d" % [String(gene).c_escape(), tier]
+	var lines: PackedStringArray = sister[5]
+	if lines.size() > Wire.MOST_RULES:
+		return "%d lines" % lines.size()
+	for line: String in lines:
+		if not Wire._line_ok(line):
+			return "a line '%s'" % line.c_escape()
 	return ""
 
 
@@ -578,7 +626,7 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 	var at := Vector2(_rng.randf_range(-5000.0, 5000.0), _rng.randf_range(-5000.0, 5000.0))
 	var radius := _rng.randf_range(CellBody.BASE_RADIUS, CellBody.DIVIDE_RADIUS)
 	var tiers := _tiers()
-	var choice := _rng.randi_range(0, 13)
+	var choice := _rng.randi_range(0, 15)
 	match choice:
 		0:
 			return Wire.hello(_rng.randi_range(0, 9))
@@ -600,18 +648,24 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
 		7:
 			if from_host:
-				return Wire.pond(seq, _rng.randf(), _pond_bodies())
+				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads())
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		8:
 			return Wire.event(seq, Wire.EVENT_ARRIVE, Wire.arrive_payload(at,
-				_rng.randf_range(-PI, PI)))
+				_rng.randf_range(-PI, PI), at * 0.5, _rng.randf_range(0.0, 8000.0)))
 		9:
 			return Wire.event(seq, Wire.EVENT_PERSON, Wire.person_payload(_rng.randf() < 0.5,
 				tiers, tiers.keys()))
 		10:
 			return Wire.event(seq, Wire.EVENT_GENOME, Wire.genome_payload(
-				_rng.randi_range(0, 68), _rng.randi_range(0, 0xFFFF), _rng.randi_range(0, 40),
-				tiers))
+				_rng.randi_range(1, 0x7FFFFFFF), _rng.randi_range(0, 40), tiers))
+		13:
+			return Wire.event(seq, Wire.EVENT_SETTLE, Wire.settle_payload(
+				_rng.randi_range(1, 0x7FFFFFFF), at, _rng.randf_range(8.0, 18.0), _rng.randf(),
+				_rng.randf_range(0.0, 150.0)))
+		14:
+			return Wire.event(seq, Wire.EVENT_CLEAR, Wire.clear_payload(
+				_rng.randi_range(1, 0x7FFFFFFF)))
 		11:
 			return Wire.event(seq, Wire.EVENT_CONTACT, Wire.contact_payload(
 				_rng.randi_range(1, 6), at, _rng.randf(), _rng.randi_range(1, 2),
@@ -621,19 +675,47 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 			return Wire.event(seq, Wire.EVENT_DIED, Wire.died_payload(_rng.randi_range(1, 4),
 				_rng.randi_range(0, 2), at))
 	return Wire.event(seq, Wire.EVENT_SISTER, Wire.sister_payload(at,
-		_rng.randf_range(-PI, PI), Referee.DAUGHTER_RADIUS, tiers))
+		_rng.randf_range(-PI, PI), Referee.DAUGHTER_RADIUS, tiers, _tiers(), _lines()))
 
 
 func _tiers() -> Dictionary:
 	return _tiers_from(_rng)
 
 
+## **A list a sister could carry**: none to [constant Wire.MOST_RULES] of
+## [constant LINES], and now and then one as long as a line may be.
+func _lines() -> PackedStringArray:
+	var out := PackedStringArray()
+	for i in _rng.randi_range(0, Wire.MOST_RULES):
+		if _rng.randf() < 0.1:
+			out.append((LINES[0] + " " + "x".repeat(Wire.RULE_BYTES_MAX)).left(
+				Wire.RULE_BYTES_MAX))
+		else:
+			out.append(LINES[_rng.randi_range(0, LINES.size() - 1)])
+	return out
+
+
+## **A genome a body could wear** -- since protocol 7 the toxin's two forms
+## among its genes, and up to the nine names a genome may hold.
 static func _tiers_from(rng: RandomNumberGenerator) -> Dictionary:
 	var genes := [&"cytostome", &"cirrus", &"flagellum", &"ampulla", &"ocellus",
-		&"stigma", &"chemocyte", &"pellicle", &"toxicyst"]
+		&"stigma", &"chemocyte", &"pellicle", &"veneneux", &"toxicyst", &"palp",
+		&"axoneme"]
 	var out := {}
-	for i in rng.randi_range(1, 6):
+	for i in rng.randi_range(1, Wire.GENES_MAX + 2):
 		out[genes[rng.randi_range(0, genes.size() - 1)]] = rng.randi_range(0, 3)
+	return out
+
+
+## **The loads a snapshot tells its recipient** (protocol 7): none mostly, then
+## stacks of each kind, to past what a byte says, and now and then not a number
+## at all -- which the writer sends as none.
+func _pond_loads() -> PackedFloat64Array:
+	var out := PackedFloat64Array([0.0, 0.0, 0.0])
+	if _rng.randf() < 0.5:
+		return out
+	for k in out.size():
+		out[k] = [0.0, _rng.randf_range(0.0, 80.0), 63.75, INF, NAN][_rng.randi_range(0, 4)]
 	return out
 
 
@@ -641,8 +723,11 @@ func _pond_bodies() -> Array:
 	var bodies: Array = []
 	for i in _rng.randi_range(0, 12):
 		var person := _rng.randf() < 0.2
-		bodies.append([i, _rng.randi_range(0, 0xFFFF), _rng.randi_range(0, 40),
-			Wire.POND_IS_PERSON if person else 0,
+		# A body's loads are three flags of its own since protocol 7.
+		var loads: int = [0, Wire.POND_HARMED, Wire.POND_PARALYSED | Wire.POND_ASLEEP,
+			Wire.POND_HARMED | Wire.POND_PARALYSED | Wire.POND_ASLEEP][_rng.randi_range(0, 3)]
+		bodies.append([Wire.PERSON_ID if person else _rng.randi_range(1, 0x7FFFFFFF),
+			_rng.randi_range(0, 40), (Wire.POND_IS_PERSON if person else 0) | loads,
 			Vector2(_rng.randf_range(-3000.0, 3000.0), _rng.randf_range(-3000.0, 3000.0)),
 			_rng.randf_range(-PI, PI), _rng.randf_range(4.0, 40.0), _rng.randf(),
 			_rng.randf_range(0.0, 400.0), Vector2(_rng.randf_range(-300.0, 300.0),
@@ -732,6 +817,17 @@ func _shrink_frame(frame: PackedByteArray, from_host: bool) -> PackedByteArray:
 				changed = true
 				break
 	return best
+
+
+## **Whether an event is taken**: the gate would read it, its reader hands
+## something on, and on a host the gate's own parse lets it through -- what a
+## saved case says it must or must not be. Anything but an event is not.
+func _taken(frame: PackedByteArray, from_host: bool) -> bool:
+	if _wire_case(frame, from_host) != "read" or Wire.kind(frame) != Wire.KIND_EVENT:
+		return false
+	var type: int = frame[5]
+	return not _take_event(type, frame).is_empty() \
+		and (from_host or NetSession._parses(Wire.KIND_EVENT, type, frame))
 
 
 func _fails_wire(frame: PackedByteArray, from_host: bool) -> bool:
@@ -1052,9 +1148,13 @@ func _door_bytes() -> Array:
 		9:
 			return ["bare", _bytes(_rng.randi_range(0, 12))]
 		10:
+			# **Past a cap**: past the one every frame but a SISTER keeps, up to
+			# past the most any guest frame may be -- one in four a SISTER, the
+			# one kind allowed between the two (protocol 6).
 			var big := PackedByteArray()
-			big.resize(Wire.GUEST_FRAME_MAX + _rng.randi_range(1, 200))
+			big.resize(_rng.randi_range(Wire.GUEST_OTHER_MAX + 1, Wire.GUEST_FRAME_MAX + 200))
 			big[0] = Wire.KIND_EVENT
+			big[5] = Wire.EVENT_SISTER if _rng.randf() < 0.25 else _rng.randi_range(0, 10)
 			return ["raw", big]
 	return ["raw", Wire.challenge(_bytes(Wire.NONCE_SIZE))]
 
@@ -1151,8 +1251,10 @@ static func _flood_frame(what: String, seq: int) -> PackedByteArray:
 			return Wire.event(seq, Wire.EVENT_ENTER, Wire.enter_payload(26.0))
 		"shout":
 			return Wire.shout(seq, Vector2(10.0, 20.0), 26.0, 400.0)
+	# At the cap a frame of a later build's kind is held to: every frame but a
+	# SISTER's.
 	var later := PackedByteArray()
-	later.resize(Wire.GUEST_FRAME_MAX)
+	later.resize(Wire.GUEST_OTHER_MAX)
 	later[0] = 0x20
 	return later
 
@@ -1181,7 +1283,8 @@ func _fresh_host(phone: bool) -> FuzzHost:
 	_host = host
 	host.loopback_is_local = true
 	if not host.host(1 if phone else NetSession.GUESTS_MAX):
-		_no_host = "this machine has no address a LAN host can use, or 45771 is taken"
+		_no_host = "this machine has no address a LAN host can use, or %d is taken" \
+			% Lan.channel_port()
 		return null
 	# Driven by hand from here: its frames are the fuzzer's steps, not the
 	# engine's.
@@ -1198,7 +1301,7 @@ func _fresh_host(phone: bool) -> FuzzHost:
 			return null
 	if not phone:
 		if not host.listen_internet(_key, _cert):
-			_no_host = "45772 is taken"
+			_no_host = "%d is taken" % Invite.channel_port()
 			return null
 		host.set_invites({_key_id.hex_encode(): [LABEL, _secret]})
 	# One frame taken, as a real host has before anybody calls: otherwise the
@@ -2167,7 +2270,7 @@ func _referee_plan(seed: int, run: int) -> Array:
 	var plan: Array = []
 	for step in REFEREE_STEPS:
 		var dt := _f32([0.0, 0.016, 0.05, 0.5, 3.0, 12.0][rng.randi_range(0, 5)])
-		var what := rng.randi_range(0, 9)
+		var what := rng.randi_range(0, 10)
 		var at := Vector2(_wild(rng, 5000.0), _wild(rng, 5000.0))
 		match what:
 			0:
@@ -2199,6 +2302,11 @@ func _referee_plan(seed: int, run: int) -> Array:
 				plan.append([dt, "left", _f32(rng.randf()), _f32(rng.randf_range(0.0, 42.0))])
 			9:
 				plan.append([dt, "stalled", _f32(rng.randf_range(0.0, 20.0))])
+			10:
+				# **The host's drop** (ocean.md §10.5): a rim, somewhere, of any
+				# size a host could have -- or none.
+				plan.append([dt, "rim", Vector2(_wild(rng, 2000.0), _wild(rng, 2000.0)),
+					_f32([0.0, 6000.0, 50.0, rng.randf_range(0.0, 9000.0)][rng.randi_range(0, 3)])])
 	return plan
 
 
@@ -2246,7 +2354,7 @@ static func _referee_read(code: String) -> Array:
 					f[9] == "1"])
 			"enter":
 				plan.append([dt, what, _f32(float(f[2]))])
-			"arrive", "sister":
+			"arrive", "sister", "rim":
 				plan.append([dt, what, Vector2(float(f[2]), float(f[3])), _f32(float(f[4]))])
 			"person":
 				var tiers := {}
@@ -2344,6 +2452,8 @@ func _referee_run(plan: Array, only: Array) -> Array:
 					here = false
 			"stalled":
 				ref.stalled(float(step[2]))
+			"rim":
+				ref.set_rim(step[2], float(step[3]))
 		ref.take_fouls()
 		judged += 1
 		if why.is_empty() and _catcher.errors() > errors:
@@ -2413,9 +2523,21 @@ func _replay(entry: String, say: bool) -> bool:
 	var payload := entry.substr(section.length()).strip_edges()
 	match section:
 		"wire":
-			var from_host := payload.get_slice(" ", 0) == "h"
-			var frame := payload.get_slice(" ", 1).hex_decode()
-			return not _fails_wire(frame, from_host)
+			# `<g|h> [takes|refuses] <frame in hex>`: an event can say what it
+			# must read as, since protocol 6's SISTER -- a judge of its own, as an
+			# invite's is, so a saved refusal fails the day the reader takes it.
+			var parts := payload.split(" ", false)
+			if parts.size() < 2 or parts.size() > 3:
+				return false
+			var from_host := parts[0] == "h"
+			var frame := parts[parts.size() - 1].hex_decode()
+			if _fails_wire(frame, from_host):
+				return false
+			if parts.size() == 2:
+				return true
+			if parts[1] != "takes" and parts[1] != "refuses":
+				return false
+			return _taken(frame, from_host) == (parts[1] == "takes")
 		"door":
 			var result: Array = await _door_run(_door_read(payload))
 			if not str(result[0]).is_empty():

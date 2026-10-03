@@ -67,10 +67,54 @@ So the review happens *before* a change reaches `dev`, and the owner plays it on
 the dev app before it reaches `main`. There is no "fix it in the next one" that
 does not also ship.
 
+**Test in proportion to where it lands.** The owner, 2026-09-30: *"don't test
+extensively dev features. There will be a human playtest anyway, + you will be
+able to do that for the release if you want."* A change into `dev` needs CI
+green, its own checks passing, and a look at anything a player can see. It does
+not need mutation sweeps, repeated review rounds or evidence dossiers: the dev
+app is where it gets played. The thorough pass belongs to the release, before
+`main`.
+
+**A design is not measured in a prototype either.** The owner, 2026-10-02, on
+pack 3: *"Don't measure in prototypes. I'll playtest."* A spec is written from
+the code and from numbers earlier specs already measured. Where a number would
+need a prototype, the spec gives a starting value, the reason for it, and what
+to watch for when playing. The checks that keep the build honest go in its
+build plan, and the build runs them.
+
+**Balance waits for players.** The owner, 2026-10-02, when pack 3's water
+turned out to learn slowly: *"We do nothing about balancing yet. Players feeling
+will lead this part over time."* A number that sets how hard, how fast or how
+generous the game is keeps the starting value its spec gave it. When a build or
+a playtest finds one that seems off, the spec records what was seen and the
+levers that would move it, and the work carries on. Do not retune it, and do not
+put it to the owner as a decision. A number that stops a mechanic from working
+at all is a bug, not balance, and still gets fixed.
+
 Bump `binary_version` in `version.json` in the same commit when a change cannot
-ship as a content pack: an engine upgrade, a new permission, a native plugin, a
-new icon, or a launcher sync that moves `build_info.gd` (see below). Everything
+ship as a content pack. That means an engine upgrade, a new permission, a native
+plugin, a new icon, a change to `project.godot` (an autoload, a project
+setting), or a launcher sync that moves `build_info.gd` (see below). Everything
 else goes out as content.
+
+**When in doubt, bump it.** The owner, 2026-10-02: *"Keep content packs"*,
+chosen over updating the whole app every time. A content update is about 1 MB
+and needs only a restart. A full update is a 53.5 MB APK or a 110 MB exe, and
+Android asks the player to install it. The price of packs is that a forgotten
+bump fails silently, because devices simply never get the change.
+
+**Never hesitate to change the APK, or to publish it.** The owner, 2026-10-02:
+*"Add a rule to never hesitate to edit the apk and publish it"*, after *"The
+launcher should download the new apk and propose update. It's almost
+nothing."* A new APK and a merge into `dev` cost the owner almost nothing,
+because the dev app downloads the update and offers it. So:
+
+- never hold back a merge into `dev` to spare the dev app an update, even while
+  the owner is playing;
+- never pick a worse design just to stay on the content side. When a change
+  needs a new binary, bump `binary_version` and ship it.
+
+Releases are unchanged: `main` still moves only when the owner asks.
 
 ## Nothing personal in the repo
 
@@ -195,11 +239,12 @@ ship on the strength of somebody's opinion. Base viewport 1280x720,
 `canvas_items` stretch, `expand` aspect.
 
 **C#, third-party addons, GDExtensions and Android Kotlin plugins are not
-forbidden. They are expensive, and the player pays.** None of them can ride in a
-content pack: a pack is GDScript and resources mounted over `res://`, and
-Android's linker only loads native libraries out of the APK's own `lib/`. So each
-one moves `binary_version`, which means the player must accept an *install*
-rather than take a content update — and a refused Android install strands them in
+forbidden, and the new APK each one needs is no reason to hold back** (see "Never
+hesitate to change the APK" above). What they cost is engineering. None of them
+can ride in a content pack: a pack is GDScript and resources mounted over
+`res://`, and Android's linker only loads native libraries out of the APK's own
+`lib/`. So each one moves `binary_version`, and the player takes an *install*
+rather than a content update. A refused Android install strands them in
 `NEEDS_PERMISSION` with no way back but a manual reinstall.
 
 Three costs that are not obvious until you are paying them:
@@ -257,9 +302,10 @@ done instead of doing it, and it's the way to find the limit at fault.
 
 ## Putting a decision to the owner
 
-Some calls are not ours: names, balance numbers that can only be judged by
-playing, and anything that changes what the game *is*. When work stops on one of
-those, present it as a table, never as prose:
+Some calls are not ours: names, and anything that changes what the game *is*.
+Balance numbers are not put to the owner yet: they wait for players (see
+"Balance waits for players"). When work stops on one of those calls, present it
+as a table, never as prose:
 
 | # | Question | Options | What it means |
 |---|---|---|---|

@@ -32,6 +32,21 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check the translation template is current
+        # The .pot is committed because Godot 4.7 cannot generate one headlessly,
+        # so nothing would otherwise notice a tr() added without regenerating it --
+        # and a string missing from the template is a string no translator ever
+        # sees. Regenerate and diff rather than trust.
+        run: python3 ci/make_pot.py --check
+
+      - name: Check launcher code still runs on older binaries
+        # A content pack carries this launcher to every binary the game ever
+        # shipped, but BuildInfo and LauncherConfig stay at the binary's version.
+        # A direct read of a member an older one lacks breaks it at runtime, in
+        # #70's case the updater itself, beyond repair from inside the app. Reads
+        # the whole history, which is why the checkout above is fetch-depth: 0.
+        run: python3 ci/check_binary_skew.py
+
       - name: Set up Java
         uses: actions/setup-java@v6
         with:
@@ -151,7 +166,9 @@ jobs:
         #
         #    server.tscn is reached by neither route: only the Linux Server
         #    export boots it, through `run/main_scene.server`. It is booted here
-        #    with `--no-update`, so this step never reaches the network.
+        #    with `--no-update`, so it never looks for an update, and with
+        #    `--no-upnp`, so it never asks any network for a router
+        #    (game/net/port_forward.gd, docs/server.md §9.3).
         #
         # Seconds, against an export measured in minutes.
         run: |
@@ -163,7 +180,7 @@ jobs:
                        "res://game/net/far.tscn" \
                        "res://game/normal/normal_mode.tscn" \
                        "res://game/replay/replay.tscn" \
-                       "res://game/server/server.tscn -- --no-update"; do
+                       "res://game/server/server.tscn -- --no-update --no-upnp"; do
             name="${scene:-main scene (launcher)}"
             echo "--- booting $name"
             # shellcheck disable=SC2086
@@ -251,6 +268,73 @@ jobs:
           done
           exit "$fail"
 
+      - name: Check an empty library changes nothing
+        # automation.md §18.3, check 8. With no programs, pack 4's autopilot
+        # must leave the game exactly as phase 4-1 left it: three seeded runs
+        # of tools/drive.tscn -- seed 1, sixty seconds at a fixed 60 fps, under
+        # each scheme, `--trace=0.5` -- hashed over their trace and compared
+        # with the hash 4-1's tree printed (dev at 2a761a5), pinned here as
+        # drop_probe pins pack 2's lines in DEV_LINES. The same hash under all
+        # three schemes: with no hand on it the scheme draws differently and
+        # moves nothing.
+        #
+        # The autopilot's key, R, is pressed twenty seconds in by the real
+        # input path. With nothing to run it must do nothing: the hash says it
+        # did nothing to the cell, and the `[instincts]` line after it says
+        # nothing drives and no icon is drawn. The hash covers the `[trace]`
+        # lines and the eight-space lines under them, nothing else -- the
+        # `[drive]` and `[instincts]` lines are the harness talking about
+        # itself. A change that moves this trace with an empty library is a
+        # change to 4-1's game: pin the new hash here, and say why.
+        #
+        # **Re-pinned at DNA slots phase 1** (docs/design/dna-slots.md §20.3
+        # check 13), from ff34f4c6...: the water's draws changed on purpose. A
+        # peer that draws the toxin takes a coin for its place, venom outside or
+        # poison inside (§9), so every draw after the first one follows the stream
+        # one number on. Measured against dev at d08b0c3: the trace is dev's line
+        # for line until the drop's first carrier, cell 585 -- the same body on
+        # both, its poison by the coin -- and the next body seeded after it is the
+        # first to differ. Venom's bite, poison's and doses move the rest.
+        #
+        # Each run prints about ten megabytes, so it goes to a file rather than
+        # a variable. About twenty seconds a scheme.
+        run: |
+          set -uo pipefail
+          pinned="7397a410a51b14203ccdd58c040346c3fd72e975c0c50e4d1baf8684c8b83bf4"
+          log=$(mktemp)
+          fail=0
+          for scheme in 0 1 2; do
+            echo "--- scheme $scheme, seed 1, sixty seconds, R pressed at 20 s"
+            if ! ~/godot/godot --headless --path . --fixed-fps 60 \
+                   --quit-after 3600 res://tools/drive.tscn -- \
+                   --size=1280x720 --seed=1 --scheme="$scheme" --trace=0.5 \
+                   --autopilot-at=20 > "$log" 2>&1; then
+              tail -n 40 "$log"
+              echo "::error::scheme $scheme exited non-zero"
+              fail=1
+              continue
+            fi
+            if grep -E "SCRIPT ERROR|Parse Error|Failed to load|Cannot open file" "$log"; then
+              echo "::error::scheme $scheme reported script errors"
+              fail=1
+            fi
+            lines=$(grep -cE '^(\[trace\]|        )' "$log" || true)
+            hash=$(grep -E '^(\[trace\]|        )' "$log" | sha256sum | cut -d' ' -f1)
+            echo "$lines trace lines, sha256 $hash"
+            if [ "$hash" != "$pinned" ]; then
+              grep -E "^\[trace\]" "$log" | tail -n 20 || true
+              echo "::error::scheme $scheme: with an empty library the trace is not the one 4-1 left (pinned $pinned)"
+              fail=1
+            fi
+            grep -E "^\[instincts\]" "$log" || true
+            if ! grep -qE "^\[instincts\] +20\.[0-9]+  after R: drives no, icon hidden$" "$log"; then
+              echo "::error::scheme $scheme: with nothing to run, R switched something on or drew the icon"
+              fail=1
+            fi
+          done
+          rm -f "$log"
+          exit "$fail"
+
       - name: Check the Back gesture
         # Android Back is the one control this project could not test. A real
         # Back propagates NOTIFICATION_WM_GO_BACK_REQUEST and *then* emits
@@ -316,6 +400,104 @@ jobs:
             exit 1
           fi
 
+      - name: Check the drop
+        # docs/design/ocean.md §14.3: what the finite water is built on. The
+        # grid against brute force over 10,000 queries, the basin's rim against
+        # the rim sampled, the spawner's debt and the snow's draws against
+        # their own arithmetic, the drop's own decisions one at a time, the LOD
+        # reaches against every sense in the tables, one tank: the player's
+        # metabolism node against the static functions the water calls, to
+        # 1e-6 -- and the dev app's frame readout, which this release-stamped
+        # job would never draw: nothing added to a release build, the dropped
+        # share the phone gate reads, and nothing shown or counted under the
+        # pause page. Then the drop's own rules, run in the drop: nothing made
+        # where a player can see it, containment, growth, the floors, the LOD,
+        # determinism, the flocs and remains, one body for every cell, and the
+        # quiet start's push kept clear of the rim. And the replay on the drop:
+        # the nearest 48 in stable slots, the flocs told as they land and go,
+        # the killer named, and a drop left untouched by watching it. None of
+        # it shows in a render -- a grid that misses one body in ten thousand
+        # is a hunter that never sees you -- and a player would find it an
+        # hour into a run. About three and a half minutes here since pack 3's
+        # rules (3-1), which read every hunter's senses, and about four since
+        # pack 4's tail (4-1), which runs a pack-3 drop of its own beside the
+        # new water: 235 s here at 4-1 and 192 s at 4-2's programs, and 319 to
+        # 329 s on a quiet local machine, against the 600 s timeout below.
+        # Grepped, not trusted to the exit code, for the reason the Back probe
+        # gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 600 ~/godot/godot --headless --path . res://tools/drop_probe.tscn 2>&1) || true
+          grep -E "^\[drop-probe\]" <<< "$out" || true
+          if ! grep -q "^\[drop-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::the grid, the rim, the spawner, the snow, the tank or the readout is wrong -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the drop probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
+      - name: Check the translation template
+        # Every sentence a player reads goes through tr(), and
+        # game/i18n/biogenic.pot is the list a translator works from
+        # (game/i18n/README.md). A sentence added without writing the template
+        # again reaches no language, and nothing on screen says so: the check
+        # fails while the template is stale, or while a tr() holds something
+        # it cannot read. Grepped, not trusted to the exit code, for the
+        # reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --check 2>&1) || true
+          grep -E "^\[i18n\]" <<< "$out" || true
+          if ! grep -q "^\[i18n\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::game/i18n/biogenic.pot is stale or a tr() cannot be read -- run res://tools/i18n_pot.tscn -- --write"
+            exit 1
+          fi
+
+      - name: Check the translation catalogs
+        # A language is a .po file: game/i18n/<locale>.po for the game and
+        # game/i18n/launcher/<locale>.po for the launcher's own screens
+        # (game/i18n/README.md). A catalog that is merely incomplete is fine,
+        # but one that is BROKEN is a crash or a wrong sentence on a phone: a
+        # placeholder lost, which the game's % turns into a script error; a
+        # plural message with the wrong number of forms, which makes the engine
+        # drop the whole language without a word; a control character where a
+        # dash was meant; text wider than the room it has -- a message with a
+        # placeholder measured with the widest word that can stand in it, and a
+        # gene's numbers line or the pause caption built in that language by the
+        # game's own code. This fails on those. It only REPORTS what is
+        # untranslated or stale, because the template moves ahead of every
+        # catalog whenever a sentence is reworded or the launcher is synced, the
+        # game then shows that sentence in English, which works, and failing
+        # here would hold up the launcher-sync pull request, which nobody is
+        # there to fix. It passes while there is no catalog at all. Grepped, not
+        # trusted to the exit code, for the reason the Back probe gives, and the
+        # same guard against a script error that skipped a check.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/i18n_pot.tscn -- --lint-all 2>&1) || true
+          grep -E "^\[i18n\]" <<< "$out" || true
+          if ! grep -q "^\[i18n\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a translation catalog is broken -- run res://tools/i18n_pot.tscn -- --lint-all and fix its PROBLEM lines (game/i18n/README.md)"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the catalog lint hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the LAN session
         # Two sessions in ONE headless process, talking ENet over loopback: a
         # guest through a SceneMultiplayer bound to its own subtree with
@@ -336,12 +518,15 @@ jobs:
         # host's water, breaking each rule and then cut. Then the dedicated
         # server (`game/server/`) with two real guests on this build's own
         # PROTOCOL 4 guest code, and its update decisions against a fake release
-        # feed and a loopback HTTP server -- no network. Last, `invites`
+        # feed and a loopback HTTP server -- no network. Then `invites`
         # (net-hardening.md part C): the invite line and the kept invite, calls
         # by invite over DTLS on loopback and each way one ends, hostile callers
         # at the internet listener, the two doors, the LAN listener closing
         # under a host (part G), and the real server scene with a book of its
-        # own.
+        # own. Then `upnp`, the server's forward against a stand-in router. Last,
+        # `channel` (game/net/channel.gd): which pair of ports a build is on,
+        # posed as a dev build and as a release one -- a dev server and a live
+        # one side by side on one address, each guest in with its own.
         #
         # Grepped for a POSITIVE line, for the reason the two steps above spell
         # out twice: Godot exits 0 through script errors, so a network step that
@@ -355,20 +540,33 @@ jobs:
         # headless build at several thousand frames a second would outrun the
         # session's clocks in simulated time: twenty state frames a second
         # while a body swims, the 2 Hz beat while nothing does. --quit-after is
-        # a backstop only. The probe makes 343 checks, caps itself at 500
-        # frames a second and quits itself in 160 to 165 seconds: some seven in
+        # a backstop only. The probe makes 410 checks, caps itself at 500
+        # frames a second and quits itself in about 217 seconds: some nine in
         # the socket-free pond-field section and well under one in `referee`,
         # which both run inside one frame and spend none of the budget,
         # twenty-three to twenty-seven in `limits`, at up to 100 frames a second,
-        # about twenty-five in the pond section, two real runs over loopback,
+        # about thirty-nine in the pond section, two real runs over loopback,
         # and about six in `pond referee`, both at up to 250 frames a second,
-        # about ten in the server's, and about seventy-one in `invites`, at up
-        # to 50 frames a second, most of it waiting out what a player would --
+        # about twenty-five in the server's, about seventy-four in `invites`, at
+        # up to 50 frames a second, most of it waiting out what a player would --
         # the eight seconds of a call nothing answers, the three of a caller
-        # that never proves. Its pond timings are counted in frames, not wall
-        # milliseconds, so a loaded runner slows the step without failing it.
-        # It prints its own frame count -- 14,300 to 14,750, measured eight
-        # times -- so the margin on 20000 is visible in the log.
+        # that never proves -- about sixteen in `upnp`, at up to 50, with a
+        # stand-in router, and about six in `channel`, at up to 50. Its pond
+        # timings are counted in frames, not wall milliseconds, so a loaded
+        # runner slows the step without failing it. It prints its own frame
+        # count. Since pack 4's programs (4-2), whose pond and server sections
+        # also hand a guest to its autopilot (automation.md check 23), it is
+        # 18,124 on a quiet local machine, where 4-1 was 16,226 to 16,532 and
+        # 17,071 here -- so about 18,700 to 19,100 here (18,724 on its first
+        # run, in 208.6 s), too near the 20000
+        # this step stopped at until then, against local runs that have spread
+        # by a tenth (14,751 to 16,354 at 4-1). Hence 24000 from 4-2. 4-3's
+        # SISTER (checks 24 to 27), whose server section has two guests divide
+        # in the room, adds about five hundred: 19,239 to 19,419 on a local
+        # machine where 4-2's tree ran 19,088 the same day. Before
+        # 4-1: 15,070 with `channel`'s 240, as it was 15,070 with `upnp`'s 800
+        # before `channel`, against 14,300 to 14,750 measured eight times
+        # before that -- so the margin on the backstop is visible in the log.
         #
         # WHAT THIS CANNOT SEE, and it is most of a real network: latency,
         # jitter, loss, reordering, MTU, NAT, Wi-Fi roaming, Android doze or
@@ -378,7 +576,7 @@ jobs:
         # real Wi-Fi for half an hour is the test this is not.
         run: |
           set -uo pipefail
-          out=$(~/godot/godot --headless --path . --quit-after 20000 \
+          out=$(~/godot/godot --headless --path . --quit-after 24000 \
                   res://tools/net_probe.tscn 2>&1) || true
           printf '%s\n' "$out" | grep -E "^\[net-probe\]" || true
           if ! grep -q "^\[net-probe\] ALL PASS$" <<< "$out"; then
@@ -520,6 +718,28 @@ jobs:
           ~/godot/godot --headless --path . --export-pack "Windows Desktop" build/content/content-windows.pck
           ~/godot/godot --headless --path . --export-pack "Linux Server" build/content/content-linux.pck
 
+      - name: Check the exported scenes lay out as the source does
+        # **What ships is the export, not this tree.** The exporter re-saves every
+        # scene in binary, and for an instanced or inherited Control it can write
+        # an override the text never had (`anchors_preset = 0`, `layout_mode =
+        # 0`). On 2026-10-01 that drew the settings gear past the left edge of
+        # every phone's screen, and had piled the whole "by invite" screen into
+        # its top-left corner since it shipped. Meanwhile every run from the
+        # tree, every probe and every screenshot looked right. This reloads every
+        # scene under game/ from the Android content pack, the one the phones
+        # download, and compares each Control's layout with the tree's
+        # (tools/export_layout_probe.gd). Grepped, not trusted to the exit code,
+        # as the steps above are.
+        run: |
+          set -uo pipefail
+          out=$(timeout 180 ~/godot/godot --headless --path . --script res://tools/export_layout_probe.gd -- --pack=build/content/content-android.pck 2>&1) || true
+          grep -E "^\[export-layout\]" <<< "$out" || true
+          if ! grep -q "^\[export-layout\] ALL PASS" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out" || true
+            echo "::error::an exported scene lays out differently from its source -- give the instanced node the layout the Godot editor writes (layout_mode and its anchors); tools/export_layout_probe.gd says why"
+            exit 1
+          fi
+
       - name: Smoke-boot the Linux server
         # **The exported binary, not the editor**, because the thing that makes
         # it a server is only true of an export: an official 4.7 release
@@ -532,7 +752,9 @@ jobs:
         # **And it stops the way systemd stops it**: by the stop file its unit's
         # ExecStop touches, because Godot does not catch SIGTERM (measured: the
         # process dies at once, status 143). A clean stop prints `[server]
-        # stopped` and exits 0. `--no-update` keeps the network out of it.
+        # stopped` and exits 0. `--no-update` keeps the updater off the
+        # network; the one UPnP search the server starts at READY finds no
+        # router here, and the stop waits it out -- four seconds at most.
         #
         # Grepped for SCRIPT ERROR and Parse Error as well, for the reason the
         # scene step above spells out: Godot exits 0 straight through them.

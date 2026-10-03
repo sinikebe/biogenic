@@ -59,9 +59,31 @@ const FADE := 0.34
 ## band's 136, and the ordering is right in every pair.
 const FADE_PENDING := 0.68
 
+## **A load in your own body is the figure's other licence** (docs/design/
+## dna-slots-ux.md §5.1-§5.2): the stain and harm's pits are drawn at this fade
+## and not at the figure's [constant FADE], because a dose that goes on hurting
+## is a fact about this body that the player has to notice in a fight, and the
+## figure is where it lives. Measured as [constant FADE_PENDING] was, σ 6 on the
+## figure box: one stack at 73 tops the figure's brightest organ, the eyespot at
+## 64 -- at 0.45 and 0.55 it read 65, a dead heat, and was lost; three stacks at
+## 106 are the brightest point of a calm screen, and a full load at 129 still
+## loses to a hunter's lobe at 110 units (145). Only the marks: the body, its
+## organs and its venom are drawn at [constant FADE] as ever.
+const FADE_DOSE := 0.68
+
 ## The nucleus takes the beat, so the figure breathes on the same heart the
 ## contour does rather than on a clock of its own.
 var beat := 0.0
+## **How slack the body is with hunger**, 0..1, written once a frame by the
+## run (docs/design/hunger.md) and drawn by cilia.gd as creases in the rim. A
+## fact about this body and nothing in the water, so inside this layer's
+## licence. The daughters are drawn without it: they are born fed.
+var slack := 0.0
+## **What this body carries, and what its toxins are doing**, written once a
+## frame by the run: cilia.gd's `dose` -- `"felt"`, `"entry"` and the three
+## flares -- or empty. This layer adds the marks' own fade, [constant
+## FADE_DOSE]; vision.gd is handed the same dictionary and draws it at the body's.
+var dose := {}
 
 ## **The division**, written once a frame by the run. Empty is an ordinary body.
 ## `double` and `pinch` are the mother becoming two; `bodies` is present only
@@ -75,9 +97,11 @@ var beat := 0.0
 var division := {}
 
 ## **The body held open to place a gene** (dna-body.md §8), written once a frame
-## by the run: `{"aim": slot, "copies": n}` while a finger or `E` holds it, empty
-## otherwise. cilia.gd's [method Cilia.draw_pending] draws it; this layer only
-## passes it on, exactly as vision.gd does, so the two views are one picture.
+## by the run: `{"aim": slot, "copies": n, "inside": bool}` while a finger or `E`
+## holds it, empty otherwise -- `inside` when the inside is offered too
+## (dna-slots-ux.md §3.7). cilia.gd's [method Cilia.draw_pending] draws it; this
+## layer only passes it on, exactly as vision.gd does, so the two views are one
+## picture.
 ##
 ## Inside this layer's licence for the same reason the loose gene is: it is the
 ## player's own body and the player's own decision, and nothing about the water.
@@ -110,6 +134,9 @@ const DIVIDE_SEAT := 132.0
 var _cell: CellBody = null
 var _genome: GenomeNode = null
 var _clock := 0.0
+## **The tail's own clock** (cilia.gd's `step_tail`): a held tail is drawn
+## still -- what the body is doing, not a readout (automation.md §8.1).
+var _tail := Vector2.ZERO
 @onready var _figure: Control = $Figure
 
 
@@ -150,6 +177,7 @@ func _process(delta: float) -> void:
 	if not visible:
 		return
 	_clock += delta
+	_tail = Cilia.step_tail(_tail, _cell != null and _cell.tail_held(), delta)
 	_figure.queue_redraw()
 
 
@@ -180,7 +208,7 @@ func _draw_figure() -> void:
 		_cell.gape() * SCALE, r, true, _clock, FADE, _cell.steer,
 		clampf(beat, 0.0, 1.0), 0.0, 1.0, order, _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye)
+		0.0, false, eye, _tail, slack, _dosed())
 	# **What is loose in you, and where it could go.** Both are facts about this
 	# body and about nothing in the water, so both are inside the line this
 	# figure stands on. It is the only place point of view says a gene is
@@ -190,6 +218,15 @@ func _draw_figure() -> void:
 		_genome.held_sample if _genome != null else &"",
 		_genome.held_remaining if _genome != null else 0.0,
 		clampf(beat, 0.0, 1.0), _clock, FADE_PENDING, 1.0, offer)
+
+
+## The run's [member dose] with this figure's licence on it, or nothing.
+func _dosed() -> Dictionary:
+	if dose.is_empty():
+		return Cilia.NO_DOSE
+	var out := dose.duplicate()
+	out["fade"] = FADE_DOSE
+	return out
 
 
 ## **Where the body is on the screen**, which way its nose points there and its

@@ -41,8 +41,10 @@ crashes at `_ready()` when there is no window, no input device and no network.
 
 - **Godot 4.7**, GL Compatibility renderer on both desktop and mobile. No
   Forward+ only features.
-- **No C#**, no extra addons, no native plugins — any of those force a new
-  binary, which is a release decision above your pay grade. Pure GDScript.
+- **Pure GDScript, unless the lead's brief says otherwise.** C#, extra addons
+  and native plugins each need a new APK. A new APK is no reason to hold back
+  (`CLAUDE.md`, "Never hesitate to change the APK"), but whether a build takes
+  one is the lead's call: when the right fix needs one, say so in your report.
 - Base viewport 1280x720, `canvas_items` stretch, `expand` aspect.
 - Two autoloads already exist and are the template's, not yours: `BuildInfo` and
   `UpdateService`. Read them to understand what is available; never edit them.
@@ -59,8 +61,8 @@ crashes at `_ready()` when there is no window, no input device and no network.
 - **Never touch the template repository.** No commits, no PRs, no clones. If a
   launcher bug blocks you, report it in your final message — the lead files a
   GitHub issue against the template. That is the only channel.
-- **Do not bump `binary_version` in `version.json`.** Content-only changes are
-  the default; a binary bump is the lead's call.
+- **Do not bump `binary_version` in `version.json` yourself.** When a change
+  needs a new binary, say so in your report and the lead bumps it.
 - Do not edit `.github/workflows/` unless explicitly asked.
 
 ## Definition of done

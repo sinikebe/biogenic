@@ -39,7 +39,9 @@ extends Node
 ## page reads the session, and a session is only welcomed by a real host. Its
 ## label is `earshot-shot`; it is revoked, `--reach` is put back as it was, and a
 ## key and certificate this run made are removed, once the shot is taken. It
-## listens on UDP 45771 and 45772 of this machine. The pages that use it:
+## listens on its channel's pair of this machine (`game/net/channel.gd`): UDP
+## 45771 and 45772, or 45781 and 45782 in a tree stamped for a branch -- where
+## every invite here names its channel's port too. The pages that use it:
 ## `far-together`, `far-refused-back`, and the troubles `not_this_pond` (an
 ## invite pinned to another certificate), `invite_refused` (a revoked one),
 ## `game_older` and `server_older` (this game made to speak one protocol
@@ -69,6 +71,9 @@ const Lan := preload("res://game/net/lan.gd")
 const Wire := preload("res://game/net/wire.gd")
 const Invite := preload("res://game/net/invite.gd")
 const InviteBook := preload("res://game/server/invite_book.gd")
+## For the file its room is kept in (ocean.md §10.3), which a far page's server
+## writes as the real one does.
+const DedicatedServer := preload("res://game/server/server.gd")
 const Earshot := preload("res://game/net/earshot.gd")
 
 ## **The harness's own key and certificate**, kept between runs: every invite
@@ -104,6 +109,9 @@ var _stop_file := ""
 var _kept_before: Variant = null
 var _reach_before: Variant = null
 var _key_before := true
+## The server's room as it was, or null for none: the real server keeps one
+## at every start and stop (ocean.md §10.3), and this is this machine's.
+var _room_before: Variant = null
 var _minted := false
 var _far_page := false
 ## The lines minted for the real server: its good invite and a revoked one.
@@ -174,10 +182,11 @@ func _ready() -> void:
 		Invite.forget()
 
 	var packed: PackedScene = load(FAR_SCREEN if _far_page else SCREEN)
-	_screen = packed.instantiate()
-	get_tree().root.add_child.call_deferred(_screen)
-	await _screen.ready
-	get_tree().current_scene = _screen
+	var scene := packed.instantiate()
+	get_tree().root.add_child.call_deferred(scene)
+	await scene.ready
+	get_tree().current_scene = scene
+	_screen = _earshot_in(scene)
 	await _settle(0.4)
 
 	match page:
@@ -437,7 +446,7 @@ func _into_far() -> bool:
 	await _touch(chooser.get_node(^"Center/Column/Company/FarBlock/Far"))
 	if not await _until_scene(FAR_SCREEN):
 		return false
-	_screen = get_tree().current_scene as Control
+	_screen = _earshot_in(get_tree().current_scene)
 	await _pause(0.4)
 	await _park_mouse()
 	return true
@@ -504,7 +513,8 @@ func _line_for(address: String) -> String:
 	if identity.is_empty():
 		return ""
 	var crypto := Crypto.new()
-	return Invite.format(address, Invite.PORT, crypto.generate_random_bytes(Invite.KEY_ID_SIZE),
+	return Invite.format(address, Invite.channel_port(),
+		crypto.generate_random_bytes(Invite.KEY_ID_SIZE),
 		crypto.generate_random_bytes(Invite.SECRET_SIZE), identity[2])
 
 
@@ -654,6 +664,7 @@ func _server_up() -> bool:
 	var where := InviteBook.paths()
 	_key_before = FileAccess.file_exists(str(where["key"]))
 	_reach_before = _bytes_or_null(str(where["reach"]))
+	_room_before = _bytes_or_null(DedicatedServer.ROOM_PATH)
 	_minted = true
 	var minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
 		"--invite=" + LABEL, "--invite=" + LABEL_GONE]))
@@ -667,9 +678,11 @@ func _server_up() -> bool:
 		return false
 	_stop_file = ProjectSettings.globalize_path("user://earshot_shot.stop")
 	DirAccess.remove_absolute(_stop_file)
+	# `--no-upnp` beside the run's own flags: a screenshot asks no router to
+	# forward anything, and writes no switch down (docs/server.md §9.3).
 	var got := OS.execute_with_pipe(OS.get_executable_path(), PackedStringArray([
 		"--headless", "--path", ProjectSettings.globalize_path("res://"), SERVER_SCENE, "--",
-		"--no-update", "--stop-file=" + _stop_file]), false)
+		"--no-update", "--stop-file=" + _stop_file, "--no-upnp"]), false)
 	if got.is_empty():
 		push_error("[earshot-shot] could not start the server")
 		return false
@@ -725,7 +738,8 @@ func _drain_server() -> void:
 
 
 ## **This machine as it was**: the kept invite, and the server's book --
-## the label revoked, `--reach` as it was, and a key this run made, gone.
+## the label revoked, `--reach` as it was, its room as it was, and a key this
+## run made, gone.
 func _put_back() -> void:
 	if _far_page:
 		if _kept_before == null:
@@ -741,6 +755,17 @@ func _put_back() -> void:
 		DirAccess.remove_absolute(str(where["reach"]))
 	else:
 		Invite.write_private(str(where["reach"]), _reach_before)
+	# The room: as it was, or gone with the folder this run made for it.
+	var room := DedicatedServer.ROOM_PATH
+	if _room_before == null:
+		for path: String in [room, room.get_basename() + ".tmp"]:
+			DirAccess.remove_absolute(path)
+		DirAccess.remove_absolute(room.get_base_dir())
+	else:
+		var file := FileAccess.open(room, FileAccess.WRITE)
+		if file != null:
+			file.store_buffer(_room_before)
+			file.close()
 	if not _key_before and InviteBook.entries().is_empty():
 		for what: String in ["key", "cert", "book", "joined"]:
 			DirAccess.remove_absolute(str(where[what]))
@@ -873,3 +898,9 @@ func _settle(seconds: float) -> void:
 	while spent < seconds:
 		await get_tree().process_frame
 		spent += 1.0 / 60.0
+
+
+## **The earshot screen in [param scene]**: the scene itself, or, for `far.tscn`,
+## the earshot instance it holds with `far` set.
+func _earshot_in(scene: Node) -> Control:
+	return (scene.get_node("Earshot") if scene.has_node("Earshot") else scene) as Control

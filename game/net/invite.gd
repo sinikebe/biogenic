@@ -42,6 +42,8 @@ extends RefCounted
 
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
+## Which pair of ports this build is on.
+const Channel := preload("res://game/net/channel.gd")
 
 const PREFIX := "biogenic-invite:"
 ## **The one format this build writes and reads.** Anything else that checks
@@ -49,7 +51,10 @@ const PREFIX := "biogenic-invite:"
 const VERSION := 1
 ## **The internet listener's port**: the one port an owner forwards, next to
 ## the LAN's `Lan.PORT`, 45771, which stays unforwarded. The port in an invite
-## is the one friends *dial*, which a router may map onto this one.
+## is the one friends *dial*, which a router may map onto this one. **The
+## release channel's**: a build on a branch's channel is on another pair, so
+## nothing binds, forwards or defaults to this but through
+## [method channel_port].
 const PORT := 45772
 ## **The server certificate's fixed name.** Every server's certificate is
 ## self-signed with this name, and the call checks it
@@ -96,6 +101,16 @@ enum Read {
 ## **What the screens call the way in** -- the chooser's button and the far
 ## page's heading (docs/design/invites-ux.md §11, row 1: the owner's to name).
 ## The server's mint line tells the friend to tap it.
+##
+## **In English here, on purpose, and translated where a screen shows it**
+## (`tr(Invite.DOOR_NAME)`): the server's own console says it to its owner, and
+## game/mode_select.gd decides which note goes under the button by reading it.
+##
+## TRANSLATORS: What the game calls the way in to a friend's game far away, by an
+## invite the friend sent. It is the name of a button on the screen where a game
+## is started (320 px wide, 20 px type) and the heading of the screen behind it.
+## A short phrase: about 25 characters at most.
+## ROOM: 290 px at 20 px
 const DOOR_NAME := "by invite"
 
 ## **Every sentence a player is shown about an invite or an internet call**:
@@ -105,6 +120,12 @@ const DOOR_NAME := "by invite"
 ## A session calling by invite sets its `trouble` and `because` from here and
 ## nowhere else, and says which key in `trouble_key`: the screen picks its
 ## first button by it.
+##
+## TRANSLATORS: A heading of two to four words in large type, then one sentence
+## that says what to do, on a single line in 17 px type. Lowercase, plain words.
+## The "friend" owns a server that keeps the shared game world, "the water", and
+## sent the "invite" the player pasted.
+## ROOM: 1180 px at 17 px
 const SAYS := {
 	# Pasting (§6.2): shown on the far page, never by the session.
 	&"not_found": ["no invite copied",
@@ -159,9 +180,19 @@ const SAYS := {
 }
 
 
+## **The internet listener's port on this build's channel** (channel.gd):
+## [constant PORT], 45772, on the release channel, and 45782 on a branch's.
+## The listener binds it, the router is asked to forward it, and it is the
+## port `--reach` means when it names none.
+static func channel_port() -> int:
+	return Channel.port(PORT)
+
+
 ## `[heading, sentence]` for [param key] in [constant SAYS].
 static func says(key: StringName) -> Array:
-	return SAYS.get(key, SAYS[&"no_answer"])
+	var known: StringName = key if SAYS.has(key) else &"no_answer"
+	return [String(TranslationServer.translate(SAYS[known][0])),
+		String(TranslationServer.translate(SAYS[known][1]))]
 
 
 ## `[heading, sentence]` for what [method parse] said, or empty for [constant
@@ -537,15 +568,15 @@ static func _v4_problem(first: int) -> String:
 
 
 ## **`--reach`, read**: `host`, `host:port`, `[v6]` or `[v6]:port`; a bare
-## IPv6 address is taken whole, with the default port. A host name is
-## lowercased and loses a trailing dot. `{"address", "port"}`, or
-## `{"error": sentence}`.
+## IPv6 address is taken whole, with the default port -- this channel's,
+## [method channel_port]. A host name is lowercased and loses a trailing dot.
+## `{"address", "port"}`, or `{"error": sentence}`.
 static func parse_reach(text: String) -> Dictionary:
 	var t := text.strip_edges()
 	if t.is_empty():
 		return {"error": "it needs the address friends dial"}
 	var host := t
-	var port := PORT
+	var port := channel_port()
 	if t.begins_with("["):
 		var close := t.find("]")
 		if close < 0:

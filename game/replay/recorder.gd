@@ -14,9 +14,20 @@ extends Node
 ## So: a state trace. It cannot desync by construction, it seeks in O(1), and --
 ## the part that decides it -- it needs no change to how anything simulates and
 ## almost none to the four view files, because the replay writes recorded state
-## back into the real `Cell` / `Food` / `Genome` / `Motes` nodes and lets
-## `soma.gd`, `returns.gd` and `vision.gd` read them exactly as they do now.
-## *A run keeps nothing*, so scribbling on those nodes at the end of it is free.
+## back into the real `Cell` / `Genome` / `Motes` nodes, and into a `Food` of its
+## own, and lets `soma.gd`, `returns.gd` and `vision.gd` read them exactly as they
+## do now. *A run keeps nothing* of its cell, so scribbling on the cell's nodes
+## at the end of it is free. **The water is kept** since the drop -- it outlives
+## the run and the player goes back into it -- so the replay binds a field of its
+## own and never writes to the run's (docs/design/ocean.md §11).
+##
+## **Which bodies, since the drop.** A drop holds six hundred, so what is kept is
+## the 48 living bodies nearest the cell each frame, each in a slot it keeps for
+## as long as it stays among them; the flocs near it, told once as they settle or
+## come into reach and once as they go, since they never move; and the drop's rim,
+## once. Today's water, which a run with a session still plays, is recorded the
+## same way and comes out as it always did: its 34 bodies are always the nearest,
+## and take the slots of their own indices.
 ##
 ## **This node is the last child of `NormalMode` on purpose**, so its `_process`
 ## runs after every other node's and it sees the finished frame. Nothing was
@@ -39,17 +50,24 @@ const SomaLayer := preload("res://game/perception/soma.gd")
 # ---------------------------------------------------------------------------
 # The window, and it is the design rather than an optimisation.
 #
-# 322 float32 a frame is 1,288 bytes, which is 75 KB a second at 60 fps. A
-# four-hundred-second run would be 29.5 MB and mostly empty water; sixty
-# seconds is 4.4 MB, allocated once here and never grown. Nobody rewatches
-# seven minutes -- the mistake that killed you is in the last twenty seconds.
-# The constant below is the knob and the arithmetic is 75 KB per second bought.
+# 526 float32 a frame is 2,104 bytes, which is 126 KB a second at 60 fps. A
+# four-hundred-second run would be 50 MB and mostly empty water; sixty seconds
+# is 7.6 MB, allocated once here and never grown. Nobody rewatches seven
+# minutes -- the mistake that killed you is in the last twenty seconds. The
+# constant below is the knob and the arithmetic is 126 KB per second bought.
 #
 # It was 296 floats and 69 KB/s until the wave bounced. Two more glow lobes and
 # their hollowness are eight and one, and the pulse out and back is eighteen:
 # two front radii and four echoes of four scalars each. Measured on the new
-# stride, one capture() costs 186 us at its worst and 104 us on average.
-# §3.1 and owner's call 1 in §7.
+# stride, one capture() costs 186 us at its worst and 104 us on average. The
+# beam's twenty-four rays took it to 385, and the drop to 470: fourteen more
+# bodies of six floats, and the killer's slot (docs/design/ocean.md §11).
+# Hunger took it to 472: how far the membrane had fallen in, inside the
+# membrane's block, and how slack the body was (docs/design/hunger.md §2.5).
+# The toxins took it to 526 (docs/design/dna-slots.md §13): this cell's three
+# loads, one float of packed loads for each of the 48 bodies, and the self
+# lobe's colour in the membrane's block, so a dosing bite's bruise plays back in
+# its hue. §3.1 and owner's call 1 in §7.
 # ---------------------------------------------------------------------------
 
 const SECONDS := 60
@@ -58,8 +76,23 @@ const CAPACITY := SECONDS * RATE
 
 ## What one frame is made of. Every offset below is checked by [constant
 ## STRIDE] adding up, and the replay reads the same constants.
-const BODIES := FoodField.COUNT
+##
+## **Forty-eight bodies: the living ones nearest the cell, each frame** (ocean.md
+## §11). At the drop's density they reach about 1,770 µm, which is the frame,
+## dread, scent and the beam; today's water has 34 and every one of them fits.
+const BODIES := 48
 const MOTES := MotesField.COUNT
+## **How far a body may be and still be kept**: where the drop steps every body
+## every frame, and past which no sense reaches -- `drop_probe`'s check 7 holds
+## every reach in the tables inside it. Near the rim, or in water the dead have
+## thinned, fewer than [constant BODIES] may be this close, and the rest of the
+## slots are empty: nothing past it is anything either pane could show. Today's
+## water keeps every body well inside it (`food.gd`'s `CULL`).
+const REACH := FoodField.Drop.LOD_NEAR
+## A body's place in the field, packed under its distance so one native sort
+## orders a frame's candidates: the index in the low bits.
+const INDEX_BITS := 16
+const INDEX_MASK := (1 << INDEX_BITS) - 1
 ## **Twenty-four rays a frame**, not three: past its fork the beam grows a ray a
 ## level (beam-levels.md §7). That is 63 more floats a frame than three -- about
 ## 0.9 MB more ring over the minute -- and the ring lives in RAM and is never
@@ -67,12 +100,22 @@ const MOTES := MotesField.COUNT
 ## tens of hours of use away, keeps its hits first and drops misses.
 const BEAMS := 24
 
-## player: pos, heading, velocity, radius, wound, steer
+## player: pos, heading, velocity, radius, wound, steer, and its loads -- the
+## stacks of each of doses.gd's kinds it carried, which lerp as the quantities
+## they are
 const AT_PLAYER := 0
-const PLAYER_FLOATS := 8
-## 34 bodies x (pos, heading, radius, wound, gape)
+const PLAYER_FLOATS := 11
+## Where this cell's three loads sit in its block.
+const AT_LOADS := AT_PLAYER + 8
+## 48 bodies x (pos, heading, radius, wound, gape, loads). **A radius of 0 is an
+## empty slot**, which both views draw as nothing -- the mirror's convention.
+## **The loads are one float**, `FoodField.pack_loads`'s three bytes, and
+## stepped at playback: a lerp between two packed numbers is a third number
+## that means neither.
 const AT_BODIES := AT_PLAYER + PLAYER_FLOATS
-const BODY_FLOATS := 6
+const BODY_FLOATS := 7
+## Where a body's packed loads sit in its block.
+const BODY_LOADS := 6
 ## 14 motes x pos
 const AT_MOTES := AT_BODIES + BODIES * BODY_FLOATS
 ## The membrane, as uniforms. signal_bus.gd is the only file that knows which.
@@ -82,7 +125,7 @@ const AT_BEAMS := AT_MEMBRANE + SignalBus.BLOCK_FLOATS
 const BEAM_FLOATS := 3
 ## **The ping, out and back.** Two outgoing fronts and four returning echoes,
 ## then ping_range, held_remaining, the division's four, the frame's own delta,
-## the beat and the hunter.
+## the beat, the hunter, the killer and the slack.
 ##
 ## Two and four, and both numbers were measured rather than chosen. The field
 ## can hold eleven fronts and fifty-five echoes at tier 3, and recording all of
@@ -123,10 +166,33 @@ const AT_BEAT := AT_PING_RANGE + 7
 ## Recorded rather than suppressed, and it costs one float: the rings are drawn
 ## for the single nearest stalker and never for more than one. -1 is nobody, and
 ## it is stepped rather than lerped at playback the way [constant AT_COMMIT] is
-## -- an index halfway between body 3 and body 9 is body 6, which is a different
-## cell in a different place. 4 bytes a frame is 0.24 KB/s against 75.
+## -- a slot halfway between slot 3 and slot 9 is slot 6, which is a different
+## cell in a different place. 4 bytes a frame is 0.24 KB/s against 113. **It is
+## a recorder slot, not a field index** (ocean.md §11): the field's index means
+## nothing to a replay that has a field of its own.
 const AT_HUNTER := AT_PING_RANGE + 8
-const STRIDE := AT_PING_RANGE + 9
+## **Who killed you, as a slot** (ocean.md §11): the body that swallowed you or
+## chewed you through, or the venomous one you bit. [method FoodField.hunter]
+## answers only for a stalker, and in the drop most deaths by mouth are by a cell
+## that was not hunting you, so without this the truth pane would draw no
+## predator for them. -1 is nobody, and stepped like [constant AT_HUNTER].
+##
+## **Written at the seal, over every frame that body held its slot**, not on the
+## frame of the death alone, and the reason is two measurements. The ring is
+## sealed before the death is captured and the replay loops as its cursor
+## reaches the last frame, so a stepped float on the last frame is never on
+## screen; and a predator ring is drawn only while the cell is within
+## `vision.gd`'s `RING_WINDOW`, 130, of crossing it -- at contact, some 60 from
+## the killer's centre, the nearest of the three rings, 220, is 160 away. So the
+## killer is named on the frames of its approach, and its rings are drawn as the
+## cell crossed them, whenever nothing was hunting it.
+const AT_KILLER := AT_PING_RANGE + 9
+## **How slack the body was** (docs/design/hunger.md §2.5): the drawn slack the
+## run handed both views, so the replay crumples the body exactly as the run
+## did -- the membrane's fall rides in its block, and this is the body's half.
+## A quantity, so it lerps.
+const AT_SLACK := AT_PING_RANGE + 10
+const STRIDE := AT_PING_RANGE + 11
 
 ## Further than this between two recorded frames is a body being recycled to the
 ## far side of the water, not a body moving. Lerping across it would draw a
@@ -141,8 +207,28 @@ const PRUNE_ABOVE := 512
 # Genomes, layouts, held samples and the two daughters are dictionaries and
 # arrays, not floats. They change rarely and they change in steps, so they are
 # recorded when they change and stepped -- never interpolated -- at playback.
+#
+# **And the drop's** (ocean.md §11). A body's genome is written when a body
+# takes a slot and when it eats, keyed on the body itself, so a slot that
+# changes hands never shows the last one's genes. A floc is SETTLE and CLEAR,
+# like the wire's: its place, its radius, how far it had settled and how long it
+# had to live, once as it comes into reach or lands in it, and once as it goes --
+# it never moves, and its fade is a function of time. A cell that starves or is
+# poisoned in view is its slot emptying and a SETTLE where it was, already
+# settled, so the replay shows the death as it happened with nothing new
+# recorded. The drop's centre and radius are one RIM, at the start.
+#
+# **And your programs** (docs/design/automation.md §11): your instincts move
+# nothing that is not already recorded, but *why* has to be recorded to be
+# drawn. PROGRAMS is the programs that are on, in order, `[name, lines]` each --
+# at the start of the window and at every edit, switch and reorder -- and ACTS
+# is `[the autopilot drives, the tail is held, a mask of the instincts that acted
+# on the last tick, by their place in the merged list]`, whenever any of them
+# changes: at most 7.5 a second. A run with nothing on records ACTS only for the
+# hand's holds. Both are dictionaries' worth in a row, so [constant STRIDE] does
+# not move.
 
-enum Delta { PLAYER, BODY, DAUGHTERS }
+enum Delta { PLAYER, BODY, DAUGHTERS, RIM, SETTLE, CLEAR, PROGRAMS, ACTS }
 
 ## Measured, not estimated. §4.6 asks for `Time.get_ticks_usec()` around
 ## [method capture] as a rolling maximum and refuses to let the estimate be
@@ -178,31 +264,76 @@ var _sensations: Array = []
 ## [[t, kind, at, nutrition, gene], ...] -- `motes.struck` and `food.eaten`,
 ## with the world positions the bus is not allowed to carry.
 var _marks: Array = []
-## [[t, Delta, index, payload], ...]
+## [[t, Delta, index, payload], ...] -- the index a slot for BODY, a floc's id
+## for SETTLE and CLEAR, and 0 for the rest; a BODY row carries the body's id
+## after its genome.
 var _deltas: Array = []
 
-## What the last captured frame's genomes hashed to, so a change is one integer
-## compare rather than a dictionary walk. The first frame of a run always writes
-## a delta, whatever the numbers happen to hash to -- the state at the start of
-## the window is what every later delta is a change *from*, so it is the one
-## that cannot be allowed to depend on a hash collision with zero.
+## What the last captured frame's player genome hashed to, so a change is one
+## integer compare rather than a dictionary walk. The first frame of a run always
+## writes a delta, whatever the numbers happen to hash to -- the state at the
+## start of the window is what every later delta is a change *from*, so it is
+## the one that cannot be allowed to depend on a hash collision with zero. A
+## body's is two integers, its serial and its meals, kept by slot below.
 var _player_seen := false
 var _player_sig := 0
-var _body_sig := PackedInt64Array()
 var _had_daughters := false
-## `CellBody.GAPE_BY_TIER[cytostome]` per body, refreshed only when that body's
-## genome changes. See the note at the write site.
+## The programs last written, and the last `[drives, held, mask]` as one int:
+## what a PROGRAMS and an ACTS are changes from. Nothing on and nothing held is
+## where a run starts, and writes nothing.
+var _programs_kept: Array = []
+var _acts_kept := 0
+## `CellBody.GAPE_BY_TIER[cytostome]` per slot, refreshed only when the genome
+## in it changes. See the note at the write site.
 var _gape_scale := PackedFloat32Array()
+
+# --- The slots (ocean.md §11) ------------------------------------------------
+## Who is in each slot: the body's serial -- new for every body the water makes,
+## as its id is in the drop, and there in today's water too -- or -1 for an
+## empty slot; and its index in the field, -1 as well.
+var _slot_serial := PackedInt64Array()
+var _slot_index := PackedInt32Array()
+## Its meals when its genome was last written, -1 to write it on the next frame.
+var _slot_meals := PackedInt32Array()
+## The capture it took the slot on, counted since the ring was cleared.
+var _slot_since := PackedInt64Array()
+## The frame it was last found among the nearest.
+var _slot_stamp := PackedInt64Array()
+## Each field index's slot, or -1: the other way round, so a body found this
+## frame is looked up rather than searched for.
+var _slot_by_index := PackedInt32Array()
+## Every capture since the ring was cleared, and this one's stamp.
+var _captures := 0
+var _stamp := 0
+## One frame's candidates, as distance and index packed together; and the ones
+## new to the slots, by index.
+var _keys := PackedInt64Array()
+var _fresh := PackedInt32Array()
+var _no_bodies: Array[FoodField.Body] = []
+## Each floc in reach at the last capture, by its id: the stamp that found it.
+var _floc_stamp := {}
+## The rim last written, so a RIM goes in once.
+var _rim_seen := false
+var _rim_center := Vector2.ZERO
+var _rim_radius := 0.0
+## How big the deltas may get before the next prune. Grows with what a prune
+## keeps, so a window that holds more than [constant PRUNE_ABOVE] rows is pruned
+## now and then rather than every frame.
+var _prune_at := PRUNE_ABOVE
 
 
 func _ready() -> void:
-	# 4.26 MB, once. Nothing here touches a window, an input device or a
+	# 6.8 MB, once. Nothing here touches a window, an input device or a
 	# network: a headless boot allocates the ring and records nothing anybody
 	# will ever look at, which costs one allocation and no frames.
 	_ring.resize(CAPACITY * STRIDE)
 	_when.resize(CAPACITY)
-	_body_sig.resize(BODIES)
 	_gape_scale.resize(BODIES)
+	_slot_serial.resize(BODIES)
+	_slot_index.resize(BODIES)
+	_slot_meals.resize(BODIES)
+	_slot_since.resize(BODIES)
+	_slot_stamp.resize(BODIES)
 	_forget()
 
 	_find(get_parent())
@@ -246,32 +377,10 @@ func capture(delta: float) -> void:
 	_ring[at + 5] = _cell.radius
 	_ring[at + 6] = _cell.wound
 	_ring[at + 7] = _cell.steer
+	for k in 3:
+		_ring[at + AT_LOADS + k] = _cell.loads[k] if k < _cell.loads.size() else 0.0
 
-	# **`bodies()`, not `points()` and the six other rebuilds.** Every accessor
-	# on the field builds a fresh array on the spot, and `genomes()` allocates
-	# one every call; an eighth rebuild in the hot loop is exactly the thing the
-	# ring exists to avoid. This is the live array, read and not held. §4.6.
-	if _food != null:
-		var cells: Array = _food.bodies()
-		var i := at + AT_BODIES
-		for index in mini(cells.size(), BODIES):
-			var b: Object = cells[index]
-			var pos: Vector2 = b.pos
-			_ring[i] = pos.x
-			_ring[i + 1] = pos.y
-			_ring[i + 2] = b.heading
-			_ring[i + 3] = b.radius
-			_ring[i + 4] = b.wound
-			# **The gape, without three calls per body to get it.**
-			# `food.gape_at()` resolves to `gape_of(tier_of(genome))`, which is
-			# a dictionary lookup and two static calls -- 102 of them a frame,
-			# and measured at 34 of the 80 microseconds this function costs. A
-			# gape is `GAPE_BY_TIER[tier] * radius` and the tier only changes
-			# when the genome does, which is a thing this file already watches,
-			# so the multiplier is cached there and this is a multiply. The
-			# float it writes is bit-identical to `gape_at()`'s.
-			_ring[i + 5] = _gape_scale[index] * float(b.radius)
-			i += BODY_FLOATS
+	_capture_bodies(at)
 
 	if _motes != null:
 		var points := _motes.points()
@@ -306,13 +415,164 @@ func capture(delta: float) -> void:
 	_ring[at + AT_HELD] = _genome.held_remaining if _genome != null else 0.0
 	# One integer-valued float, and the only thing in this loop that asks the
 	# field a question rather than reading a number off it. See AT_HUNTER.
-	_ring[at + AT_HUNTER] = float(_food.hunter()) if _food != null else -1.0
+	_ring[at + AT_HUNTER] = float(_slot_of(_food.hunter())) if _food != null else -1.0
+	# Nobody, until the seal says who. See AT_KILLER.
+	_ring[at + AT_KILLER] = -1.0
+	_ring[at + AT_SLACK] = _soma.slack if _soma != null else 0.0
 	_ring[at + AT_DELTA] = delta
 	_capture_division(at)
 
 	_when[_head] = _clock
 	_head = (_head + 1) % CAPACITY
 	_count = mini(_count + 1, CAPACITY)
+	_captures += 1
+	if _deltas.size() > _prune_at:
+		_prune_deltas()
+
+
+## **The 48 living bodies nearest the cell, each in a slot it keeps** (ocean.md
+## §11), and the flocs in reach as deltas.
+##
+## One grid question a frame, through the field's own `bodies_near()`, out to
+## [constant REACH]; the candidates ordered by one native sort of their
+## distances. A body found again keeps its slot. One gone -- out of the nearest,
+## eaten, starved -- empties its slot, which writes radius 0 from this frame. A
+## newcomer takes the lowest empty slot, newcomers in the order of the field's
+## own slots, which is what leaves today's water exactly where it always was:
+## its 34 bodies are always the nearest, a reseed is a body gone and one come in
+## the same field slot, and each lands in the slot of its own index.
+##
+## A slot that changes hands in one frame is two bodies, possibly far apart, in
+## the same six floats. [method sample] holds such a jump rather than drawing a
+## body sliding between them; a newcomer is on the edge of the nearest, so the
+## two are nearly always further apart than [constant JUMP], and on the rare
+## frame they are not, both are far off the edge of any pane.
+func _capture_bodies(at: int) -> void:
+	_stamp += 1
+	_keys.resize(0)
+	_fresh.resize(0)
+	# Typed, because it is read some two hundred times a frame: a property of
+	# a typed body is a direct read, of an untyped one a lookup by name.
+	var cells: Array[FoodField.Body] = _food.bodies() if _food != null else _no_bodies
+	if _food != null:
+		var here := _cell.position
+		for index: int in _food.bodies_near(here, REACH):
+			var b := cells[index]
+			# The other player, in a pond: never a water body. A pond's
+			# replay is withheld anyway (normal_mode `_offer_replay`).
+			if b.person != null:
+				continue
+			if b.inert:
+				_floc_found(b)
+				continue
+			var pos: Vector2 = b.pos
+			_keys.append((int(pos.distance_squared_to(here)) << INDEX_BITS) | index)
+		_keys.sort()
+		_flocs_gone()
+	if _slot_by_index.size() < cells.size():
+		var old := _slot_by_index.size()
+		_slot_by_index.resize(cells.size())
+		for k in range(old, cells.size()):
+			_slot_by_index[k] = -1
+	var n := mini(_keys.size(), BODIES)
+	# Still here: the same slot.
+	for k in n:
+		var index := int(_keys[k] & INDEX_MASK)
+		var slot := _slot_by_index[index]
+		if slot >= 0 and _slot_serial[slot] == cells[index].serial:
+			_slot_stamp[slot] = _stamp
+		else:
+			_fresh.append(index)
+	# Gone: the slot empties.
+	for slot in BODIES:
+		if _slot_serial[slot] >= 0 and _slot_stamp[slot] != _stamp:
+			var was := _slot_index[slot]
+			if was >= 0 and was < _slot_by_index.size() and _slot_by_index[was] == slot:
+				_slot_by_index[was] = -1
+			_slot_serial[slot] = -1
+			_slot_index[slot] = -1
+	# New: the lowest empty slot, in the field's order.
+	_fresh.sort()
+	var free := 0
+	for index: int in _fresh:
+		while free < BODIES and _slot_serial[free] >= 0:
+			free += 1
+		if free >= BODIES:
+			break
+		_slot_serial[free] = cells[index].serial
+		_slot_index[free] = index
+		_slot_by_index[index] = free
+		_slot_since[free] = _captures
+		_slot_meals[free] = -1
+		_slot_stamp[free] = _stamp
+	# **`bodies()`, not `points()` and the six other rebuilds.** Every accessor
+	# on the field builds a fresh array on the spot, and `genomes()` allocates
+	# one every call; an eighth rebuild in the hot loop is exactly the thing the
+	# ring exists to avoid. This is the live array, read and not held. §4.6.
+	var i := at + AT_BODIES
+	for slot in BODIES:
+		var index := _slot_index[slot]
+		if index < 0:
+			for k in BODY_FLOATS:
+				_ring[i + k] = 0.0
+			i += BODY_FLOATS
+			continue
+		var b := cells[index]
+		# **Its genome, keyed on the body**: when it takes the slot, and when
+		# it eats -- a meal is the only thing that moves a genome in either
+		# water. Stepped at playback, and carrying the body's id.
+		var meals := b.meals
+		if meals != _slot_meals[slot]:
+			_slot_meals[slot] = meals
+			_gape_scale[slot] = CellBody.gape_of(
+				GenomeNode.tier_of(b.genome, &"cytostome"), 1.0)
+			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id])
+		var pos := b.pos
+		_ring[i] = pos.x
+		_ring[i + 1] = pos.y
+		_ring[i + 2] = b.heading
+		_ring[i + 3] = b.radius
+		_ring[i + 4] = b.wound
+		# **The gape, without three calls per body to get it.**
+		# `food.gape_at()` resolves to `gape_of(tier_of(genome))`, which is a
+		# dictionary lookup and two static calls -- 102 of them a frame, and
+		# measured at 34 of the 80 microseconds this function costs. A gape is
+		# `GAPE_BY_TIER[tier] * radius` and the tier only changes when the
+		# genome does, which is a thing this file already watches, so the
+		# multiplier is cached there and this is a multiply. The float it writes
+		# is bit-identical to `gape_at()`'s.
+		_ring[i + 5] = _gape_scale[slot] * b.radius
+		# **What it carried**, packed, and nothing at all for the bodies that
+		# carry nothing -- nearly all of them -- which is one comparison.
+		_ring[i + BODY_LOADS] = FoodField.pack_loads(b.loads) \
+			if FoodField.Doses.any(b.loads) else 0.0
+		i += BODY_FLOATS
+
+
+## A floc in reach this frame: told the first frame it is, with where it lies,
+## how big it is, how far it has settled and how long it has left.
+func _floc_found(b: FoodField.Body) -> void:
+	if not _floc_stamp.has(b.id):
+		_deltas.append([_clock, Delta.SETTLE, b.id, [b.pos, b.radius, b.settle, b.life]])
+	_floc_stamp[b.id] = _stamp
+
+
+## Every floc in reach last frame and not this one: eaten, dissolved, or left
+## behind.
+func _flocs_gone() -> void:
+	if _floc_stamp.is_empty():
+		return
+	for id: int in _floc_stamp.keys():
+		if int(_floc_stamp[id]) != _stamp:
+			_floc_stamp.erase(id)
+			_deltas.append([_clock, Delta.CLEAR, id, null])
+
+
+## The slot the body at field index [param index] is in this frame, or -1.
+func _slot_of(index: int) -> int:
+	if index < 0 or index >= _slot_by_index.size():
+		return -1
+	return _slot_by_index[index]
 
 
 ## **The pulse, out and back**, in eighteen floats. A radius per outgoing front
@@ -447,19 +707,17 @@ func _watch_state() -> void:
 				# shape and a sweep's hold are read off at playback.
 				"levels": _genome.level_state(),
 			}])
-	if _food != null:
-		var cells: Array = _food.bodies()
-		for index in mini(cells.size(), BODIES):
-			var b: Object = cells[index]
-			# A reseed is a different body in the same slot, and a meal is the
-			# same body with a new genome. Two integers catch both.
-			var sig: int = int(b.serial) * 1000 + int(b.meals)
-			if sig != _body_sig[index]:
-				_body_sig[index] = sig
-				_gape_scale[index] = CellBody.gape_of(
-					GenomeNode.tier_of(b.genome, &"cytostome"), 1.0)
-				_deltas.append([_clock, Delta.BODY, index,
-					(b.genome as Dictionary).duplicate()])
+	# **The drop's rim**, once: it moves only when a run starts in it, and the
+	# ring is cleared then. Today's water has none, and writes none.
+	var rim: RefCounted = _food.basin() if _food != null else null
+	if rim != null:
+		var center: Vector2 = rim.get(&"center")
+		var radius := float(rim.get(&"radius"))
+		if not _rim_seen or center != _rim_center or radius != _rim_radius:
+			_rim_seen = true
+			_rim_center = center
+			_rim_radius = radius
+			_deltas.append([_clock, Delta.RIM, 0, [center, radius]])
 	var has: bool = _soma != null and _soma.division.has("bodies")
 	if has != _had_daughters:
 		_had_daughters = has
@@ -471,8 +729,28 @@ func _watch_state() -> void:
 					"order": (one["order"] as Array).duplicate(),
 				})
 		_deltas.append([_clock, Delta.DAUGHTERS, 0, pair])
-	if _deltas.size() > PRUNE_ABOVE:
-		_prune_deltas()
+	_watch_programs()
+
+
+## **Your programs, and what drove your cell** (automation.md §11): read off the
+## cell -- whether the autopilot has it, whether its tail is held -- and off the
+## instincts it is handed, which say what is on and what acted.
+func _watch_programs() -> void:
+	if _cell == null:
+		return
+	var instincts: RefCounted = _cell.instincts
+	if instincts != null:
+		var on: Array = instincts.get(&"programs")
+		if on != _programs_kept:
+			_programs_kept = on.duplicate(true)
+			_deltas.append([_clock, Delta.PROGRAMS, 0, _programs_kept.duplicate(true)])
+	var driving: bool = _cell.autopilot
+	var held: bool = _cell.tail_held()
+	var mask := int(instincts.get(&"acted")) if driving and instincts != null else 0
+	var acts := (1 if driving else 0) | (2 if held else 0) | (mask << 2)
+	if acts != _acts_kept:
+		_acts_kept = acts
+		_deltas.append([_clock, Delta.ACTS, 0, [driving, held, mask]])
 
 
 ## One integer for the whole genome: the body, the DNA, where the genes sit on
@@ -538,9 +816,14 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 		return
 	match kind:
 		&"thrust", &"hit", &"shove", &"beat":
+			# **A hit keeps its tint** (dna-slots-ux.md §6): the dosing bite's
+			# bruise ray is drawn in the dose's hue in the truth pane, as its
+			# bruise was on the membrane. Zero is the impact's own colour.
+			var tint: Variant = info.get("tint", Vector3.ZERO)
 			_sensations.append([_clock, kind,
 				float(info.get("bearing", 0.0)),
-				float(info.get("strength", 1.0))])
+				float(info.get("strength", 1.0)),
+				tint if tint is Vector3 else Vector3.ZERO])
 			if _sensations.size() > PRUNE_ABOVE:
 				_sensations = _slice_from(_sensations, _clock - float(SECONDS))
 		_:
@@ -572,25 +855,38 @@ func _slice_from(rows: Array, cutoff: float) -> Array:
 
 
 ## Deltas are kept **one per key** before the window as well as every one
-## inside it: the last genome a body had before the window opened is the genome
+## inside it: the last genome a slot had before the window opened is the genome
 ## it has at the start of the replay, and dropping it would leave that body
 ## drawn as whatever it was born as.
+##
+## **A floc is keyed on its id**, and kept only if the last word on it before
+## the window was that it settled: one cleared before the window opened is not
+## there at its start.
 func _prune_deltas() -> void:
 	var cutoff := _clock - float(SECONDS)
 	var keep: Array = []
 	var latest := {}
+	var flocs := {}
 	for row: Array in _deltas:
 		if float(row[0]) >= cutoff:
 			keep.append(row)
+			continue
+		var kind := int(row[1])
+		if kind == Delta.SETTLE or kind == Delta.CLEAR:
+			flocs[int(row[2])] = row
 		else:
-			latest[int(row[1]) * 100 + int(row[2])] = row
+			latest[kind * 100 + int(row[2])] = row
 	var head: Array = []
 	for key: int in latest:
 		head.append(latest[key])
+	for id: int in flocs:
+		if int(flocs[id][1]) == Delta.SETTLE:
+			head.append(flocs[id])
 	head.sort_custom(func(a: Array, b: Array) -> bool:
 		return float(a[0]) < float(b[0]))
 	head.append_array(keep)
 	_deltas = head
+	_prune_at = maxi(PRUNE_ABOVE, _deltas.size() * 2)
 
 
 # ---------------------------------------------------------------------------
@@ -605,9 +901,28 @@ func seal() -> void:
 	_recording = false
 	_start = (_head - _count + CAPACITY) % CAPACITY
 	_origin = _when[_start] if _count > 0 else 0.0
+	_mark_killer()
 	_prune_deltas()
 	_sensations = _slice_from(_sensations, _origin)
 	_marks = _slice_from(_marks, _origin)
+
+
+## **Who killed the cell, named in the ring** (see [constant AT_KILLER]): the
+## field says which body did it, and that body's slot is written into every
+## frame since it took the slot. A death with no mouth in it -- hunger -- names
+## nobody, and neither does today's water, whose field never says.
+func _mark_killer() -> void:
+	if _food == null or _count <= 0:
+		return
+	var index: int = _food.died_to
+	var slot := _slot_of(index)
+	if slot < 0:
+		return
+	var cells: Array[FoodField.Body] = _food.bodies()
+	if index >= cells.size() or _slot_serial[slot] != cells[index].serial:
+		return
+	for n in range(maxi(_slot_since[slot], _captures - _count), _captures):
+		_ring[(n % CAPACITY) * STRIDE + AT_KILLER] = float(slot)
 
 
 ## **A run keeps nothing.** Called from `_wake_up()`, and the only thing that
@@ -625,16 +940,27 @@ func clear() -> void:
 	_forget()
 
 
-## Back to knowing nothing about any genome, so the next frame writes the
-## opening delta for every one of them.
+## Back to knowing nothing about any genome, any slot, any floc or the rim, so
+## the next frame writes the opening delta for every one of them.
 func _forget() -> void:
 	_player_seen = false
 	_player_sig = 0
 	_had_daughters = false
-	for i in _body_sig.size():
-		# Impossible for a real body: serial and meals are both non-negative.
-		_body_sig[i] = -1
-		_gape_scale[i] = 0.0
+	_programs_kept = []
+	_acts_kept = 0
+	# -1 is impossible for a real body: serial and meals are both non-negative.
+	_slot_serial.fill(-1)
+	_slot_index.fill(-1)
+	_slot_meals.fill(-1)
+	_slot_since.fill(0)
+	_slot_stamp.fill(0)
+	_slot_by_index.fill(-1)
+	_gape_scale.fill(0.0)
+	_captures = 0
+	_stamp = 0
+	_floc_stamp.clear()
+	_rim_seen = false
+	_prune_at = PRUNE_ABOVE
 
 
 func frames() -> int:
@@ -671,6 +997,15 @@ func deltas() -> Array:
 	return _deltas
 
 
+## **The drop's rim at the start of the window**, `[centre, radius]`, or empty
+## for a recording of today's water: what a replay's field is made round.
+func rim() -> Array:
+	for row: Array in _deltas:
+		if int(row[1]) == Delta.RIM:
+			return row[3]
+	return []
+
+
 ## Seconds into the window that recorded frame [param i] happened at.
 func time_of(i: int) -> float:
 	if _count <= 0:
@@ -678,14 +1013,16 @@ func time_of(i: int) -> float:
 	return _when[(_start + clampi(i, 0, _count - 1)) % CAPACITY] - _origin
 
 
-## **One frame, interpolated**, into a 322-float array the caller owns.
+## **One frame, interpolated**, into a [constant STRIDE]-float array the caller
+## owns.
 ##
-## Everything lerps except the four things that would lie if they did: the
-## division's `commit`, which jumps when a daughter is chosen; the hunter, which
-## is an index and not a quantity; a beam's hit flag, which is a boolean; and
-## any position that moved further than [constant JUMP] between two frames,
-## which is a body or a mote being recycled to the far side of the water rather
-## than swimming there.
+## Everything lerps except the things that would lie if they did: the
+## division's `commit`, which jumps when a daughter is chosen; the hunter and
+## the killer, which are slots and not quantities; a beam's hit flag, which is a
+## boolean; any position that moved further than [constant JUMP] between two
+## frames, which is a body or a mote being recycled to the far side of the water
+## rather than swimming there; and a slot that is empty in either frame, which is
+## a body arriving or going and not one growing out of nothing.
 func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 	if _count <= 0:
 		return
@@ -702,8 +1039,14 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 	_hold_jump(out, from, to, AT_PLAYER, t)
 	for index in BODIES:
 		var head := AT_BODIES + index * BODY_FLOATS
+		if _ring[from + head + 3] <= 0.0 or _ring[to + head + 3] <= 0.0:
+			var whole := from if t < 1.0 else to
+			for k in BODY_FLOATS:
+				out[head + k] = _ring[whole + head + k]
+			continue
 		out[head + 2] = lerp_angle(_ring[from + head + 2],
 			_ring[to + head + 2], t)
+		out[head + BODY_LOADS] = _ring[from + head + BODY_LOADS]
 		_hold_jump(out, from, to, head, t)
 	for index in MOTES:
 		_hold_jump(out, from, to, AT_MOTES + index * 2, t)
@@ -712,6 +1055,7 @@ func sample(i: int, u: float, out: PackedFloat32Array) -> void:
 		out[head + 2] = _ring[from + head + 2]
 	out[AT_COMMIT] = _ring[from + AT_COMMIT]
 	out[AT_HUNTER] = _ring[from + AT_HUNTER]
+	out[AT_KILLER] = _ring[from + AT_KILLER]
 	# **The ping's slots are not identities**, which is the same fault the
 	# hunter index has. The field re-sorts its echoes nearest-home every frame
 	# and a return that lands vacates one, so slot 2 in two consecutive frames

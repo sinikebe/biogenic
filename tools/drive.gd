@@ -33,7 +33,13 @@ extends Node
 ##                           switch in one frame must not leave numbers on in
 ##                           every render after it. Pass `--numbers=0` to shoot
 ##                           the switch being tapped
-##   --hold=a|d              hold a steering key for the whole run
+##   --hold=a|d|w|s          hold a key for the whole run: a steering key, `w`
+##                           to push, or `s`, **the hand's hold** -- the tail
+##                           held still, at two copies of it (docs/design/
+##                           automation.md §5.2); at one copy the key does
+##                           nothing, as it does in the game. `--key-down=` and
+##                           `--key-up=` take `s` too, for a hold that comes
+##                           and goes
 ##   --drag=<pixels>         press near the middle and drag this far sideways
 ##   --drag-at=<seconds>     when to start that drag, default 0.5
 ##   --arm-at=<seconds>      ignore --freeze-on before this time
@@ -161,6 +167,31 @@ extends Node
 ##                           knit up every frame, so a wound cannot be posed by
 ##                           setting it once. A pond guest's wound is the host's,
 ##                           and is held there as well
+##   --dose=<kind>:<stacks>[:hunter|<cell>]
+##                           pose a load (docs/design/dna-slots.md §6): that many
+##                           stacks of `harm`, `paralysis` or `sleep`, on this
+##                           cell -- or on the posed hunter, or on the body
+##                           `--cell=` posed as that index. Repeatable. **Held at
+##                           that value every frame** until --dose-at= lets it
+##                           wear, so a frame holds still
+##   --dose-at=<seconds>     stop holding the --dose= loads: from then on they
+##                           wear, and harm goes into the wound as it does
+##   --cell-wound=<cell>:<0..1>
+##                           hold the body `--cell=` posed as that index at that
+##                           much damage, as --wound= holds yours. Repeatable
+##   --dose-hit=<seconds>:<deg>
+##                           a bite that dosed this cell, at that body-relative
+##                           bearing: three stacks of harm by the field's own
+##                           door, then the bite (dna-slots-ux.md §5.1 -- the
+##                           bruise in the strain's hue, the stain seeping in)
+##   --poison-meal=<seconds> a poisonous meal: a swallow's dose by the field's own
+##                           door, then the meal (the flood in the strain's hue)
+##   --venom-lands=<seconds> this cell's venom lands: its fangs flare
+##   --sting=<seconds>       this cell's side venom stings a biter: its barbs flare
+##   --poison-taken=<seconds>
+##                           this cell's poison is taken: its granules flare
+##   --dose-death=<seconds>  this cell dies of a dose, as the field finds one: the
+##                           quiet close, lit in the strain's hue
 ##   --freeze-on=<kind>      pause the tree a few frames after this sensation,
 ##                           so a flash or a beat can be caught at its peak
 ##   --freeze-delay=<n>      how many frames after it, default 2
@@ -307,9 +338,45 @@ extends Node
 ##                           screen, the `watch` offer and the replay itself can
 ##                           each be photographed without waiting minutes for
 ##                           hunger or gambling on a hunter
+##   --watch-at=<seconds>    click the run's own `watch` button at that time, or
+##                           as soon after it as the run offers it -- the replay
+##                           through the input path a player uses. Whatever ends
+##                           the run is said once, with its cause, the killer's
+##                           field slot and the recording's length; and the
+##                           drop's census line is printed as the replay rises,
+##                           as it closes and as the next cell arrives, so a
+##                           replay that wrote into the drop shows in the sum
+##   --release-at=<seconds>  stop holding the bodies --cell= posed: from then on
+##                           they are left where they are, resting, and drift
+##                           with the water. How a mouth that is hunting nobody
+##                           comes to meet the cell, for a contact swallow
+##   --grow-posed-at=<seconds>
+##                           grow the bodies --cell= posed in the drop to
+##                           DIVIDE_RADIUS then, so each divides on its next tick
+##                           (lineage.md §6.4's frames): one posed at forty would
+##                           divide while it is held, and its daughter be posed
+##                           again. Pass it after --release-at=
+##   --dev-readout           pose the run as the dev app, so the frame readout
+##                           draws -- its generation and families rows among
+##                           them (lineage.md §6.4), and its behaviours and
+##                           unchanged rows (behaviour.md §7.3). A tool's seam:
+##                           nothing a player runs reaches it
+##   --starve-near=<seconds> the water mouth nearest the cell, within the view,
+##                           runs out at that time and dies of hunger on its next
+##                           step, leaving its remains where it was (ocean.md
+##                           §7.4) -- a death in view, for the replay's flocs
 ##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
 ##                           at a known time -- in a pond, after the guest has
 ##                           arrived
+##   --shift=<from>:<to>     the division's mutation is a shift of the gene in
+##                           outside slot <from> to <to>, swapping with whatever
+##                           is there, as `Genome._mutate_shift` does -- so the
+##                           choosing screen can be photographed with a venom a
+##                           shift moved between the front and a side
+##                           (dna-slots-ux.md §3.8). The shifted daughter is put
+##                           on the port side, so a frame is the same picture
+##                           whichever way the run's own coin fell. Outside
+##                           slots only: a shift never crosses into the inside
 ##   --panes=<seconds>       raise the two-pane replay screen over the live run
 ##                           at that time, mirroring it frame for frame. The
 ##                           split screen is the part of docs/design/replay.md
@@ -339,11 +406,14 @@ extends Node
 ##                           and at once whenever it changes: whether the body
 ##                           is open and to which finger, the slot lit, the
 ##                           cell's steer and heading, and the waiting genes
-##                           and the DNA. dna-body.md §8's evidence is a log,
-##                           because what the gesture does to steering -- a tap
-##                           on the body still dashes, a drag still steers, a
-##                           second finger keeps the first one's turn -- is
-##                           nothing a frame can show
+##                           and the DNA -- its layout, its inside and every
+##                           copy count, so a placement anywhere, the inside
+##                           included, is a line (dna-slots-ux.md §3.7). The
+##                           slot lit is 7 for the inside. dna-body.md §8's
+##                           evidence is a log, because what the gesture does
+##                           to steering -- a tap on the body still dashes, a
+##                           drag still steers, a second finger keeps the first
+##                           one's turn -- is nothing a frame can show
 ##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
 ##                           **a second player**, on a real loopback session --
 ##                           two `net_session.gd` nodes in this process, a real
@@ -510,6 +580,106 @@ extends Node
 ##                           other for that long, on the session's wall clock --
 ##                           the one the held pond and the quiet line keep
 ##
+## **The drop** (docs/design/ocean.md §14.1). A run with no session is in the
+## drop; these are read before the run enters the tree, as `--mode` is:
+##   --drop=0|1              0 plays today's water, the reference every probe
+##                           and the identity gate (§14.4) compare the drop
+##                           against; 1 the drop. A run with a session up is
+##                           in the drop too (§10.2): with `--pond=host|guest`
+##                           the host's drop is the pond and the guest's own is
+##                           set aside, and the far seat is in the same water
+##                           as this one and keeps nothing. `--pond=<dist>`'s
+##                           field is always today's water
+##   --start=quiet|centre|edge
+##                           where the run starts: somewhere quiet (§8.1, the
+##                           game's), the middle, or --edge-gap= inside the rim
+##                           facing it, for the renders
+##   --edge-gap=<units>      default 380
+##   --flocs-near=<n>        n flocs 220-520 units round the start, the last one
+##                           caught settling (§7.6's render)
+##   --desert=<units>        everything alive within it of the start taken away
+##   --age=<seconds>         the drop lives alone that long before the cell
+##                           arrives, then the start is chosen in it
+##   --sensed=<0..1>         the water made for a player this sighted, whatever
+##                           the cell carries
+##   --hunter-genome=<g:t,...>
+##                           what --hunt= and --stalk= pose, default
+##                           cytostome:3,flagellum:2. In the drop the hunter is
+##                           a body of its own, in a slot nothing else uses
+##   --census=<seconds>      print the drop's census line on that interval, and
+##                           its lineage line after it (lineage.md §4) and its
+##                           behaviour line (behaviour.md §12.1)
+##   --keep=<path>           keep the drop at that file, the way the game keeps
+##                           yours at `user://drop.save` (§9): read as the run
+##                           opens, written at every save point. **Without it
+##                           this harness keeps nothing** -- the run neither
+##                           reads nor writes a drop -- so no render opens on a
+##                           drop another run left behind, and none leaves one.
+##                           With it, the run prints the cell and the drop's
+##                           census sum as it opens, which is what a relaunch
+##                           is compared by
+##   --leave-at=<seconds>    leave the app at that time, as a phone does: the
+##                           window loses focus and the activity pauses
+##                           (NOTIFICATION_APPLICATION_FOCUS_OUT, then _PAUSED),
+##                           which is a save point. The cell and the census sum
+##                           are printed as it leaves. The process goes on, as
+##                           a backgrounded app's does until the system kills
+##                           it: end it with the shot or `--quit-after`
+## One switch per body rule, so the owner's other answers can be played, each
+## defaulting to the drop's rule: --absorb=<rest a second> (row 11),
+## --drifter-venom=0|1 (13), --own-speed=0|1 (14), --notice=senses|fixed (5),
+## --contact-swallow=0|1 (15), --armour-swallow=0|1 (5), --first-delay=<s>
+## (16), --flight=none|all (§5.4); and §4's: --lod=0|1, --half-rate=0|1,
+## --near-first=0|1, --skip-still=0|1. **And pack 2's** (docs/design/lineage.md
+## §11.1, §12): --births=0|1 (0 is pack 1: nothing divides, a meal grows the body,
+## no sister has a grace, one debt for the whole drop), --mutate=<0..1> (a tool's
+## rate of divisions that change a daughter; the game's is every one),
+## --floor=<share of today's hunters the spawner keeps>, --floor-tau=<seconds it
+## pays them back within>, --newborn-grace=<seconds>. **And pack 3's**
+## (docs/design/behaviour.md §12.1): --rules=0|1, 0 being pack 2's hand-written
+## hunter, the reference the water's rules are measured against; and
+## --rule-change=0|1, 0 being phase 3-1's water, whose rules never change at a
+## division. **And pack 4's** (docs/design/automation.md §5.4):
+## --water-tail=pack3|row37, `pack3` being pack 3's water, where a body swims
+## only while a swim rule fires, and `row37` the game's, where every tail that
+## swims beats unless it is held.
+##
+## **Your programs and the autopilot** (docs/design/automation.md §18.1, phase
+## 4-2). **A run of this harness keeps no library** unless told where, as it
+## keeps no drop: `--library=<path>` reads and writes that file, and without it
+## the run starts with an empty library it never writes.
+##   --program=[<name>=]<lines>
+##                           a program, its instincts `;`-separated in their
+##                           order, e.g. `ampulla.echo -> body.turn-away;always ->
+##                           axoneme.push 0.5`, named if `<name>=` comes first
+##                           (`flee=...`). Repeatable, in library order; each is
+##                           switched on, in that order, as far as the eight in all
+##                           allow (row 39) -- one that does not fit stays off, and
+##                           says so. Empty lines (`--program=hunt=`) make an empty
+##                           program
+##   --program=[<name>=]founders
+##                           a copy of the water's own program, drop.gd's founders
+##   --program-off=<n>       leave the nth program (from 1) off
+##   --autopilot[=on|off]    switch the autopilot on as the run begins, by its key
+##   --autopilot-at=<s>      press its key, `R`, at that time; repeatable. A key
+##                           press is the real input path: with nothing to run it
+##                           does nothing, which is check 8's
+##   --page=programs[:<n>]   open the pause screen on the programs page once the
+##                           run is up -- the library, or program n (from 1)
+##                           open in it
+##   --page-select=<what>    then select, as a press would: in the library `n`,
+##                           program n; in a program `<row>:<part>` with row from 1
+##                           and part `sense`, `test1`..`test4`, `action`, `add`
+##                           (its `+`) or `new` (the add row, which starts a
+##                           half-built instinct); `value` asks which value a new
+##                           test takes
+##   --page-sheet=rename|delete
+##                           then open the corner's sheet for the selected program,
+##                           as its inspector buttons do
+## With any of them, **who drives, the hold and what acted** are printed on lines
+## of their own (`[instincts]`), whenever one of them changes, so a run without
+## them traces as `dev` does. `--tap=` and the key flags take `r` too.
+##
 ## Prints every sensation the membrane bus receives with its timestamp, which is
 ## how the event bus gets checked end to end. Lives in tools/, which the export
 ## presets exclude, so none of this ships.
@@ -525,6 +695,8 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## For places and forms: the inside slot, and what a gene becomes there.
+const GenomeNode := preload("res://game/normal/genome.gd")
 ## Only for `MEAL`, so the `[meal]` line says how much of the bar a meal gave
 ## back at whatever the meal is worth.
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -625,6 +797,25 @@ var _scheme := -1
 ## Whether to pin a gene's numbers, 0 off or 1 on, or -1 to take user://'s.
 var _numbers := -1
 var _hunter_gape := 1.40
+## What `--hunt=` and `--stalk=` pose (`--hunter-genome=`).
+var _hunter_genome := {&"cytostome": 3, &"flagellum": 2}
+## `--drop=`: 0 today's water, 1 the drop, -1 the run's own choice.
+var _drop_flag := -1
+## The drop's switches, by the field member each sets, set on the run's field
+## before it enters the tree.
+var _field_sets := {}
+## `--census=`: the drop's census line on this interval.
+var _census := -1.0
+var _census_clock := 0.0
+## `--keep=`: where the run keeps its drop, or "" for a run that keeps none.
+var _keep := ""
+## `--leave-at=`: when the app is left, or -1.
+var _leave_at := -1.0
+## The slot the posed hunter is in: 0 in today's water, as it always was; in
+## the drop a body of its own, made in a slot nothing else uses (§15.6).
+var _hunter_slot := 0
+## In the drop, `--cell=`'s index to the body made for it.
+var _pose_slots := {}
 var _prey_radius := -1.0
 var _radius := -1.0
 ## `--sister=` -- a second cell of your own size, placed by the same call a real
@@ -687,6 +878,14 @@ var _sample: StringName = &""
 var _samples: Array = []
 var _sample_left := -1.0
 var _wound := -1.0
+## `--dose=`'s loads, `[kind, stacks, who]` -- who is "" for this cell, "hunter",
+## or a `--cell=` index -- held until [member _dose_at].
+var _doses: Array = []
+var _dose_at := -1.0
+## `--cell-wound=`'s, `[cell, wound]`.
+var _cell_wounds: Array = []
+## The timed toxin events: `[seconds, what, value]`.
+var _toxin_events: Array = []
 ## Cumulative meals eaten by one field cell off another, which is the one thing
 ## in section 1.3 that has to be observed rather than argued about. Field cells
 ## are recycled, so this is accumulated by watching each slot's serial.
@@ -735,6 +934,20 @@ var _arm_at := 0.0
 var _mode := -1
 ## When to starve the cell to death, for photographing what happens next.
 var _kill_at := -1.0
+## When to click `watch`, and whether it was asked for at all; whether the death
+## and each census line are said yet.
+var _watch_at := -1.0
+var _watching := false
+var _watch_down := false
+var _watch_shown := 0
+var _watch_point := Vector2.ZERO
+var _death_said := false
+var _replay_seen := false
+## When the poses stop being held, and when the nearest mouth starves.
+var _release_at := -1.0
+var _starve_near := -1.0
+## `--grow-posed-at=`: when the posed bodies are grown to DIVIDE_RADIUS, or -1.
+var _grow_posed_at := -1.0
 ## When to raise the two-pane screen over the live run, and the node once it is.
 var _panes_at := -1.0
 var _panes: Node = null
@@ -799,6 +1012,24 @@ var _pond_trace := -1.0
 var _pond_trace_clock := 0.0
 ## --divide-at=: when to grow this cell to DIVIDE_RADIUS, or -1 for never.
 var _divide_at := -1.0
+## --shift=: the two outside slots the division's mutation swaps, empty for the
+## run's own roll; and whether the pair has been rewritten yet.
+var _shift: Array[int] = []
+var _shift_done := false
+## **Your programs** (automation.md §18.1): the library this run keeps, if any;
+## the programs given, `founders` or lines, in order; which to leave off; when
+## to press the autopilot's key; the page to open; and the last state said.
+var _library_at := ""
+var _programs_given: Array = []
+var _programs_off: Array[int] = []
+var _autopilot_ats: Array[float] = []
+var _page_spec := ""
+var _page_select := ""
+var _page_sheet := ""
+var _page_opened := false
+var _instincts_trace := false
+var _instincts_said := ""
+var _r_said_in := 0
 ## --freeze-quiet=: freeze once this seat has heard nothing for this long.
 var _freeze_quiet := -1.0
 
@@ -964,6 +1195,28 @@ func _ready() -> void:
 			_prey_radius = float(text.trim_prefix("--prey-radius="))
 		elif text.begins_with("--hunter-gape="):
 			_hunter_gape = float(text.trim_prefix("--hunter-gape="))
+		elif text.begins_with("--hunter-genome="):
+			_hunter_genome = {}
+			for pair in text.trim_prefix("--hunter-genome=").split(",", false):
+				var kv := str(pair).split(":")
+				if kv.size() >= 2:
+					_hunter_genome[StringName(kv[0].strip_edges())] = int(kv[1])
+		elif text.begins_with("--drop="):
+			_drop_flag = clampi(int(text.trim_prefix("--drop=")), 0, 1)
+		elif text.begins_with("--census="):
+			_census = float(text.trim_prefix("--census="))
+		elif text.begins_with("--keep="):
+			_keep = text.trim_prefix("--keep=")
+		elif text.begins_with("--leave-at="):
+			_leave_at = float(text.trim_prefix("--leave-at="))
+		elif text.begins_with("--start="):
+			_field_sets[&"start_mode"] = StringName(text.trim_prefix("--start="))
+		elif text.begins_with("--notice="):
+			_field_sets[&"notice_by_senses"] = text.trim_prefix("--notice=") != "fixed"
+		elif text.begins_with("--flight="):
+			_field_sets[&"flight"] = text.trim_prefix("--flight=") == "all"
+		elif _drop_switch(text):
+			pass
 		elif text.begins_with("--radius="):
 			_radius = float(text.trim_prefix("--radius="))
 		elif text.begins_with("--sister="):
@@ -1006,6 +1259,31 @@ func _ready() -> void:
 			_sample = StringName(_samples[0][0]) if not _samples.is_empty() else &""
 		elif text.begins_with("--wound="):
 			_wound = float(text.trim_prefix("--wound="))
+		elif text.begins_with("--dose="):
+			var bits := text.trim_prefix("--dose=").split(":")
+			if bits.size() >= 2:
+				_doses.append([bits[0], float(bits[1]), bits[2] if bits.size() > 2 else ""])
+		elif text.begins_with("--dose-at="):
+			_dose_at = float(text.trim_prefix("--dose-at="))
+		elif text.begins_with("--cell-wound="):
+			var hurt := text.trim_prefix("--cell-wound=").split(":")
+			if hurt.size() == 2:
+				_cell_wounds.append([int(hurt[0]), float(hurt[1])])
+		elif text.begins_with("--dose-hit="):
+			var hit := text.trim_prefix("--dose-hit=").split(":")
+			_toxin_events.append([float(hit[0]), "hit",
+				deg_to_rad(float(hit[1])) if hit.size() > 1 else 0.0])
+		elif text.begins_with("--poison-meal="):
+			_toxin_events.append([float(text.trim_prefix("--poison-meal=")), "meal", 0.0])
+		elif text.begins_with("--venom-lands="):
+			_toxin_events.append([float(text.trim_prefix("--venom-lands=")), "fangs", 0.0])
+		elif text.begins_with("--sting="):
+			_toxin_events.append([float(text.trim_prefix("--sting=")), "guard", 0.0])
+		elif text.begins_with("--poison-taken="):
+			_toxin_events.append([float(text.trim_prefix("--poison-taken=")), "granules",
+				0.0])
+		elif text.begins_with("--dose-death="):
+			_toxin_events.append([float(text.trim_prefix("--dose-death=")), "death", 0.0])
 		elif text.begins_with("--hover="):
 			var hover := text.trim_prefix("--hover=").split(":")
 			if hover.size() == 2:
@@ -1064,8 +1342,54 @@ func _ready() -> void:
 			_mouse_lifts.append(float(text.trim_prefix("--mouse-lift=")))
 		elif text.begins_with("--kill-at="):
 			_kill_at = float(text.trim_prefix("--kill-at="))
+		elif text.begins_with("--watch-at="):
+			_watch_at = float(text.trim_prefix("--watch-at="))
+			_watching = true
+		elif text.begins_with("--release-at="):
+			_release_at = float(text.trim_prefix("--release-at="))
+		elif text.begins_with("--grow-posed-at="):
+			_grow_posed_at = float(text.trim_prefix("--grow-posed-at="))
+		elif text == "--dev-readout":
+			(load("res://game/dev/frame_readout.gd") as Script).set(&"posing", "dev")
+		elif text.begins_with("--starve-near="):
+			_starve_near = float(text.trim_prefix("--starve-near="))
 		elif text.begins_with("--divide-at="):
 			_divide_at = float(text.trim_prefix("--divide-at="))
+		elif text.begins_with("--shift="):
+			var ends := text.trim_prefix("--shift=").split(":")
+			if ends.size() == 2:
+				_shift = [int(ends[0]), int(ends[1])]
+		elif text.begins_with("--library="):
+			_library_at = text.trim_prefix("--library=")
+			_instincts_trace = true
+		elif text.begins_with("--program-off="):
+			_programs_off.append(int(text.trim_prefix("--program-off=")))
+			_instincts_trace = true
+		elif text.begins_with("--program="):
+			var given := text.trim_prefix("--program=")
+			var named := ""
+			var eq := given.find("=")
+			if eq >= 0:
+				named = given.left(eq)
+				given = given.substr(eq + 1)
+			_programs_given.append([named, given if given == "founders"
+				else PackedStringArray(Array(given.split(";", false)).map(
+					func(line: String) -> String: return line.strip_edges()))])
+			_instincts_trace = true
+		elif text == "--autopilot" or text == "--autopilot=on":
+			_autopilot_ats.append(0.0)
+			_instincts_trace = true
+		elif text == "--autopilot=off":
+			_instincts_trace = true
+		elif text.begins_with("--autopilot-at="):
+			_autopilot_ats.append(float(text.trim_prefix("--autopilot-at=")))
+			_instincts_trace = true
+		elif text.begins_with("--page="):
+			_page_spec = text.trim_prefix("--page=")
+		elif text.begins_with("--page-select="):
+			_page_select = text.trim_prefix("--page-select=")
+		elif text.begins_with("--page-sheet="):
+			_page_sheet = text.trim_prefix("--page-sheet=")
 		elif text.begins_with("--panes="):
 			_panes_at = float(text.trim_prefix("--panes="))
 		elif text.begins_with("--capture-cost="):
@@ -1152,6 +1476,30 @@ func _ready() -> void:
 
 	var scene: PackedScene = load(scene_path)
 	var run := scene.instantiate()
+	# **Which water, and the drop's switches**, set before the scene enters the
+	# tree, where both are read. `--pond=<dist>` opens a pond in the field
+	# alone, which is today's water's, so it plays today's water.
+	if _pond_dist >= 0.0 and _drop_flag < 0:
+		_drop_flag = 0
+	if _drop_flag >= 0 and &"drop" in run:
+		run.set("drop", _drop_flag)
+		print("[drive] water forced to ", "the drop" if _drop_flag == 1 else "today's")
+	# **A run of this harness keeps no drop** unless told where (ocean.md §9):
+	# the game's default is the player's own file, which a render must neither
+	# open on nor write.
+	if &"keep" in run:
+		run.set("keep", _keep)
+	# **And no library** unless told where (automation.md §9.1): the game's
+	# default is the device's own file, which a render must neither open on nor
+	# write.
+	if &"library_at" in run:
+		run.set("library_at", _library_at)
+	if not _field_sets.is_empty():
+		var field := run.get_node_or_null(^"Food")
+		if field != null:
+			for key: StringName in _field_sets:
+				field.set(key, _field_sets[key])
+			print("[drive] the drop's switches: ", _field_sets)
 	if _mode >= 0:
 		# Set before the scene enters the tree, which is where it is read.
 		run.set("mode", _mode)
@@ -1168,9 +1516,12 @@ func _ready() -> void:
 		print("[drive] numbers pinned to ", _numbers)
 	add_child(run)
 	_run = run
+	_give_programs()
 	_metabolism = _find_script(self, "res://game/normal/metabolism.gd")
 	_genome = _find_script(self, "res://game/normal/genome.gd")
 	_food = _find_script(self, "res://game/normal/food.gd")
+	if _keep != "":
+		print("[drive] %5.2f  opened, keeping at %s: %s" % [_clock, _keep, _kept_text()])
 
 	if _radius > 0.0:
 		var body := _find_node_with(self, &"bearing_to")
@@ -1178,8 +1529,18 @@ func _ready() -> void:
 			body.radius = _radius
 			# The water is seeded around the player's radius, so it has to be
 			# seeded again once that has been forced -- and a pond host's water
-			# opened again, because `setup()` is a single-player water.
-			if _food != null:
+			# opened again, because `setup()` is a single-player water. The drop
+			# is made again round it, and its grit hung inside the new rim.
+			if _food != null and bool(_food.call(&"in_drop")):
+				_food.call(&"setup_drop", body)
+				# A host's drop is the pond (§10.2), and a drop made again is
+				# nobody's pond until it is opened again.
+				if _seat == "host":
+					_food.open_pond()
+				var motes := _find_script(self, "res://game/normal/motes.gd")
+				if motes != null:
+					motes.call(&"setup", body, _food.call(&"basin"))
+			elif _food != null:
 				_food.setup(body)
 				if _seat == "host":
 					_food.open_pond()
@@ -1231,7 +1592,8 @@ func _ready() -> void:
 			# nothing about the run it is watching.
 			_food.bitten.connect(func(_b: float, _s: float) -> void: _fp_bites += 1)
 			_food.waked.connect(func(_b: float, _s: float) -> void: _fp_wakes += 1)
-			_food.stung.connect(func(_b: float) -> void: _fp_stings += 1)
+			_food.dosed.connect(func(_b: float, _k: int, _s: float, _m: bool) -> void:
+				_fp_stings += 1)
 			_food.darted.connect(func(_b: float) -> void: _fp_darts += 1)
 			_food.killed.connect(_fp_on_killed)
 		if _field_cost > 0:
@@ -1268,19 +1630,19 @@ func _ready() -> void:
 			_hunger, _metabolism.beat_period(), _metabolism.beat_amplitude()])
 
 	if _stalk >= 0.0 and _water_food() != null:
-		_make_hunter(0, _hold_point(_stalk, _stalk_at))
-		_stalk_serial = int((_water_food().get("_cells") as Array)[0].get("serial"))
+		_make_hunter(_hunter_slot, _hold_point(_stalk, _stalk_at))
+		_stalk_serial = int((_water_food().get("_cells") as Array)[_hunter_slot].get("serial"))
 		# Before the first frame, not after it: _make_hunter points the mouth at
 		# the player, and the game's own _process runs ahead of this node's, so
 		# a hunter turned away only in _hold_world has already had one frame
 		# nose-on -- which at contact range is one frame too many.
-		_face(0, _stalk_face)
+		_face(_hunter_slot, _stalk_face)
 		print("[drive] hunter parked at %.0f units, bearing %+.0f deg, facing %s" % [
 			_stalk, _stalk_at,
 			"as it likes" if is_nan(_stalk_face) else "%+.0f deg off you" % _stalk_face])
 	if _hunt >= 0.0 and _water_food() != null:
-		_make_hunter(0, _hold_point(_hunt, _stalk_at))
-		_face(0, _stalk_face)
+		_make_hunter(_hunter_slot, _hold_point(_hunt, _stalk_at))
+		_face(_hunter_slot, _stalk_face)
 		print("[drive] hunter released from %.0f units" % _hunt)
 	if _prey_radius > 0.0 and _water_food() != null:
 		var bodies: Array = _water_food().get("_cells")
@@ -1300,8 +1662,9 @@ func _ready() -> void:
 			view.call(&"set_camera_locked", true)
 			print("[drive] camera locked: forward is up")
 
-	# `w` is `axoneme`: hold to push. The steer keys are the other two.
-	var held := _keycode(hold) if hold == "w" else KEY_NONE
+	# `w` is `axoneme`: hold to push, and `s` the tail held still (automation.md
+	# §5.2). The steer keys are the other two.
+	var held := _keycode(hold) if hold == "w" or hold == "s" else KEY_NONE
 	if hold == "a" or hold == "d":
 		held = KEY_A if hold == "a" else KEY_D
 	if held != KEY_NONE:
@@ -1474,6 +1837,14 @@ func _open_far_seat(scene: PackedScene) -> void:
 	var far := scene.instantiate()
 	far.set("mode", 0)
 	far.set("scheme", 0)
+	# **In this run's water, keeping nothing** (ocean.md §9, §10.2): the game's
+	# default is the player's own file, which the far seat must neither open on
+	# nor write -- whatever `--keep=` gives this one.
+	if _drop_flag >= 0 and &"drop" in far:
+		far.set("drop", _drop_flag)
+	if &"keep" in far:
+		far.set("keep", "")
+		far.set("library_at", "")
 	_far_view.add_child(far)
 	NetSession.current = _seat_session(far_seat)
 	add_child(_far_view)
@@ -1486,7 +1857,10 @@ func _open_far_seat(scene: PackedScene) -> void:
 		cell.set("steering_off", true)
 	if _friend_radius > 0.0 and cell != null and food != null:
 		cell.radius = _friend_radius
-		food.setup(cell)
+		if bool(food.call(&"in_drop")):
+			food.call(&"setup_drop", cell)
+		else:
+			food.setup(cell)
 		if far_seat == "host":
 			food.open_pond()
 	if _friend_genome != "" and genome != null:
@@ -1848,7 +2222,7 @@ func _on_meal(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	# leaves the organism it went into alone (lifecycle.md §1), so printing the
 	# body here would show a genome that never changes however much you eat.
 	print("[meal]  %5.2f  nutrition %.2f of one meal (%.2f hunger)  gene %s -> dna %s  me r%.2f gape %.2f" % [
-		_clock, nutrition, Metabolism.MEAL * nutrition, gene if gene != &"" else &"none",
+		_clock, nutrition, Metabolism.meal(nutrition), gene if gene != &"" else &"none",
 		_genome_text(_genome.dna() if _genome != null else {}),
 		cell.radius if cell != null else 0.0, cell.gape() if cell != null else 0.0])
 
@@ -1871,9 +2245,16 @@ func _process(delta: float) -> void:
 	_step_offer(delta)
 	_step_rects()
 	_step_kill()
+	_step_toxins()
+	_step_starve_near()
+	_step_watch()
 	_step_divide()
+	_step_shift()
 	_step_panes()
 	_step_capture_cost(delta)
+	_step_census(delta)
+	_step_leave()
+	_step_instincts()
 
 	if _freeze_countdown > 0:
 		_freeze_countdown -= 1
@@ -1994,7 +2375,7 @@ func _step_fingerprint() -> void:
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	print(("[fingerprint] frames %d  seed %s  sha256 %s  |  t %.2f  %s  me r%.2f"
 		+ "  meals %d  field meals %d  hunts %d  chases %d  wakes %d  bites %d"
-		+ "  chews %d  overlaps %d  stung %d  darted %d") % [
+		+ "  chews %d  overlaps %d  dosed %d  darted %d") % [
 		_frames, str(_seed) if _seeded else "none",
 		hashing.finish().hex_encode(), _clock,
 		"alive" if _fp_died_at < 0.0 else "died %.2f" % _fp_died_at,
@@ -2171,6 +2552,91 @@ func _step_divide() -> void:
 		print("[drive] %5.2f  grown to r%.0f -- dividing" % [_clock, cell.radius])
 
 
+## --shift=: once the pair is rolled at the pinch, and before the choosing
+## screen opens on it at PART, the daughter that mutated is made again from the
+## faithful one with the asked shift -- its seats swapped and nothing else, as
+## [method Genome._mutate_shift] swaps them -- rolled into a body of her own,
+## and put on the port side. Reaching for the run's private state is a thing
+## only tools/ may do.
+func _step_shift() -> void:
+	if _shift.is_empty() or _shift_done or _run == null:
+		return
+	if int(_run.get("_split")) != NormalMode.Split.PINCH:
+		return
+	var pair: Array = _run.get("_daughters")
+	if pair.size() != 2:
+		return
+	_shift_done = true
+	var from := _shift[0]
+	var to := _shift[1]
+	var faithful: Dictionary = pair[0] if StringName(pair[0]["mutation"]) == &"" \
+		else pair[1]
+	var seats: Array[StringName] = []
+	for gene: Variant in faithful["order"]:
+		seats.append(StringName(gene))
+	if from == to or from < 0 or to < 0 or from >= seats.size() \
+			or to >= seats.size() or seats[from] == &"":
+		print("[drive] %5.2f  shift %d:%d refused -- outside slots of the order %s, from a gene" % [
+			_clock, from, to, seats])
+		return
+	var held := seats[from]
+	seats[from] = seats[to]
+	seats[to] = held
+	var tiers: Dictionary = (faithful["tiers"] as Dictionary).duplicate()
+	var shifted := {"tiers": tiers, "order": seats, "mutation": &"shift",
+		"body": GenomeNode.expressed(tiers)}
+	pair[0] = shifted
+	pair[1] = faithful
+	print("[drive] %5.2f  shift %d:%d -- port daughter %s, starboard faithful %s" % [
+		_clock, from, to, seats, faithful["order"]])
+
+
+## `--census=`: the drop's census line, on the interval, while it runs -- and
+## its lineage line after it, with this cell's own record: its id, its mother's
+## and its line's, and its generation -- and its behaviour line.
+func _step_census(delta: float) -> void:
+	if _census <= 0.0 or _food == null or not _food.is_processing():
+		return
+	_census_clock += delta
+	if _census_clock < _census:
+		return
+	_census_clock = 0.0
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"census_line")])
+	var you := ""
+	if _run != null:
+		you = "  | you: id %d parent %d lineage %d generation %d" % [int(_run.get("_id")),
+			int(_run.get("_parent")), int(_run.get("_lineage")), int(_run.get("_generation"))]
+	print("[drive] %6.2f  %s%s" % [_clock, _food.call(&"lineage_line"), you])
+	print("[drive] %6.2f  %s" % [_clock, _food.call(&"behaviour_line")])
+
+
+## `--leave-at=`: the app left, the two notifications in the order a phone
+## sends them, to the whole tree as the engine sends them.
+func _step_leave() -> void:
+	if _leave_at < 0.0 or _clock < _leave_at:
+		return
+	_leave_at = -1.0
+	print("[drive] %5.2f  leave the app: %s" % [_clock, _kept_text()])
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_FOCUS_OUT)
+	get_tree().root.propagate_notification(NOTIFICATION_APPLICATION_PAUSED)
+
+
+## **What a kept run is compared by**: the cell -- where, which way, how big,
+## how hungry, which generation, its DNA and body in slot order -- and the
+## drop's census sum, which hashes every body's place, size and tank.
+func _kept_text() -> String:
+	if _run == null or _food == null or not bool(_food.call(&"in_drop")):
+		return "not in the drop"
+	var body: Node = _run.get("_cell")
+	var line := "cell at %.2f,%.2f heading %.4f r%.2f hunger %.4f generation %d" % [
+		body.position.x, body.position.y, body.heading, body.radius,
+		float(_metabolism.get("hunger")), int(_run.get("_generation"))]
+	if _genome != null:
+		line += " dna %s body %s waiting %s" % [_genome.call(&"layout"),
+			_genome.call(&"body_layout"), _waiting_text()]
+	return line + " | drop sum %s" % str(_food.call(&"census_line")).get_slice("| sum ", 1)
+
+
 func _step_kill() -> void:
 	if _kill_at < 0.0 or _clock < _kill_at or _metabolism == null:
 		return
@@ -2178,6 +2644,162 @@ func _step_kill() -> void:
 	_metabolism.set_hunger(1.0)
 	_metabolism.starve_seconds = _metabolism.STARVE_GRACE + 1.0
 	print("[drive] %5.2f  starved" % _clock)
+
+
+## **The toxins' moments, by the field's own doors** (dna-slots-ux.md §9.1): a
+## dose goes in through `_dose`, which says `dosed` before the sensation it came
+## with, exactly as a contact does; a toxin firing is the field's own signal. The
+## run's handlers are the shipped ones, so what is photographed is the game.
+func _step_toxins() -> void:
+	if _food == null or get_tree().paused:
+		return
+	for i in range(_toxin_events.size() - 1, -1, -1):
+		var event: Array = _toxin_events[i]
+		if _clock < float(event[0]):
+			continue
+		_toxin_events.remove_at(i)
+		var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+		match String(event[1]):
+			"hit":
+				var bearing := float(event[2])
+				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
+					CellBody.VENOM_STACKS_BY_TIER[3], -1, bearing, false)
+				_food.bitten.emit(bearing, 1.0)
+			"meal":
+				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
+					CellBody.SWALLOW_STACKS_BY_TIER[1], -1, 0.0, true)
+				_food.eaten.emit(FoodField.MEAL_MIN, &"",
+					cell.position if cell != null else Vector2.ZERO)
+			"fangs":
+				_food.toxin_fired.emit(FoodField.FIRED_VENOM)
+			"guard":
+				_food.toxin_fired.emit(FoodField.FIRED_STING)
+			"granules":
+				_food.toxin_fired.emit(FoodField.FIRED_POISON)
+			"death":
+				if cell != null:
+					cell.loads[0] = maxf(cell.loads[0], 1.0)
+				_food.call(&"_dose_death", null)
+		print("[drive] %5.2f  toxin %s" % [_clock, event[1]])
+
+
+## The body slot `--cell=` posed as [param index]: the index itself in today's
+## water, and the body the drop made for it there.
+func _posed_slot(water: Node, index: int) -> int:
+	if bool(water.call(&"in_drop")):
+		return int(_pose_slots.get(index, -1))
+	return index
+
+
+## **`--dose=`'s loads, held** until `--dose-at=` lets them wear: this cell's,
+## the posed hunter's, or a posed body's, by the kind's name.
+func _hold_doses() -> void:
+	var water := _water_food()
+	if water != null and not _cell_wounds.is_empty():
+		var held: Array = water.get("_cells")
+		for one: Array in _cell_wounds:
+			var at := _posed_slot(water, int(one[0]))
+			if at >= 0 and at < held.size():
+				held[at].set("wound", float(one[1]))
+	if _doses.is_empty() or (_dose_at >= 0.0 and _clock >= _dose_at):
+		return
+	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
+	for dose: Array in _doses:
+		var kind := int(FoodField.Doses.kind_of(StringName(dose[0])))
+		if kind < 0:
+			continue
+		var who := String(dose[2])
+		var loads: Variant = null
+		if who == "":
+			loads = cell.loads if cell != null else null
+		elif water != null:
+			var bodies: Array = water.get("_cells")
+			var slot := _hunter_slot if who == "hunter" else _posed_slot(water, int(who))
+			if slot >= 0 and slot < bodies.size():
+				loads = bodies[slot].get("loads")
+		# Through a typed local: `(loads as PackedFloat64Array)[k] = ...` writes
+		# into a copy the cast made, and the body never hears of it.
+		if loads is PackedFloat64Array:
+			var held: PackedFloat64Array = loads
+			held[kind] = float(dose[1])
+
+
+## `--starve-near=`: the living mouth nearest the cell within the view empties,
+## and a tank empty for longer than its grace dies of hunger on its next step.
+func _step_starve_near() -> void:
+	if _starve_near < 0.0 or _clock < _starve_near or _food == null:
+		return
+	_starve_near = -1.0
+	var cell := _find_node_with(_run, &"bearing_to")
+	if cell == null or not bool(_food.call(&"in_drop")):
+		return
+	var bodies: Array = _food.get("_cells")
+	var best := -1
+	var best_d := INF
+	for i: int in _food.call(&"bodies_near", cell.position, 600.0):
+		var b: Object = bodies[i]
+		if b.get("inert") or b.get("drifter") or b.get("person") != null:
+			continue
+		var d := (b.get("pos") as Vector2).distance_to(cell.position)
+		if d < best_d:
+			best_d = d
+			best = i
+	if best < 0:
+		print("[drive] %5.2f  no mouth in view to starve" % _clock)
+		return
+	bodies[best].set("hunger", 1.0)
+	bodies[best].set("starve", Metabolism.STARVE_GRACE)
+	print("[drive] %5.2f  field body %d, %.0f off, starves" % [_clock, best, best_d])
+
+
+## `--watch-at=`: the run's `watch` button, clicked where it is, the frame it is
+## offered at or after that time -- and the death, the replay and the next
+## arrival said, each once, with the drop's census line beside them.
+func _step_watch() -> void:
+	if not _watching or _run == null or _run.get("_life") == null:
+		return
+	var life := int(_run.get("_life"))
+	var water: Node = _food
+	if life != 0 and not _death_said:
+		_death_said = true
+		var recorder: Node = _find_script(self, "res://game/replay/recorder.gd")
+		print("[drive] %5.2f  died: cause %d, killer at field slot %d, %.1f s recorded" % [
+			_clock, int(water.get("died_of")) if water != null else 0,
+			int(water.get("died_to")) if water != null else -1,
+			float(recorder.call(&"span")) if recorder != null else 0.0])
+	var screen: Variant = _run.get("_replay")
+	if screen != null and not _replay_seen:
+		_replay_seen = true
+		print("[drive] %5.2f  replay up; the drop: %s" % [_clock, _census_of(water)])
+	elif screen == null and _replay_seen and life == 2:
+		_replay_seen = false
+		print("[drive] %5.2f  replay closed; the drop: %s" % [_clock, _census_of(water)])
+	if _death_said and life == 0:
+		_death_said = false
+		print("[drive] %5.2f  a new cell; the drop: %s" % [_clock, _census_of(water)])
+	if _watch_at < 0.0 or _clock < _watch_at:
+		return
+	var button: Control = _run.get("_watch_button")
+	if button == null:
+		return
+	if _watch_down:
+		_watch_down = false
+		_watch_at = -1.0
+		_send_mouse_button(_watch_point, false)
+		return
+	# A few frames after it shows, so its container has laid it out where it
+	# is drawn: pressed the frame it appears, it is still where it was hidden.
+	_watch_shown = _watch_shown + 1 if life == 2 and button.is_visible_in_tree() else 0
+	if _watch_shown >= 3:
+		_watch_down = true
+		_watch_point = button.get_global_rect().get_center()
+		_send_mouse_button(_watch_point, true)
+
+
+func _census_of(water: Node) -> String:
+	if water == null or not bool(water.call(&"in_drop")):
+		return "not in the drop"
+	return str(water.call(&"census_line"))
 
 
 ## **The two panes, over a run that is still being played.** Not the replay --
@@ -2571,17 +3193,19 @@ func _step_controls(delta: float) -> void:
 		print("[ctl]  %6.2f  no controls node" % _clock)
 		return
 	var owners: Dictionary = node.get("_owner")
-	var names := ["stick", "port", "starboard", "push", "dash"]
+	var names := ["stick", "port", "starboard", "push", "dash", "hold"]
 	var held := PackedStringArray()
 	for pointer: int in owners:
 		var id: int = owners[pointer]
 		held.append("%s#%d" % [
 			names[id] if id >= 0 and id < names.size() else "?", pointer])
 	var cell := _find_node_with(_run, &"bearing_to")
-	print("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer %+5.2f" % [
+	print(("[ctl]  %6.2f  scheme %d  drawn %s  held [%s]  steer %+5.2f  pushing %s  cell.steer"
+		+ " %+5.2f  holding %s  tail held %s") % [
 		_clock, node.scheme, "yes" if node.visible else "no ",
 		", ".join(held), node.steer(), "yes" if node.pushing() else "no ",
-		cell.steer if cell != null else 0.0])
+		cell.steer if cell != null else 0.0, "yes" if node.holding() else "no ",
+		"yes" if cell != null and bool(cell.call(&"tail_held")) else "no "])
 
 
 ## The placing gesture, read off the run (dna-body.md §8): whether the body is
@@ -2603,20 +3227,25 @@ func _step_offer(delta: float) -> void:
 	var keyed: bool = _run.get("_offer_key")
 	var aim: int = _run.get("_offer_aim")
 	var layout: Array = _genome.layout()
+	# **And the inside** (dna-slots-ux.md §3.7): what the DNA carries there, and
+	# every copy count, so a placement inside is a line too.
+	var inside: Array = _genome.inside_layout()
 	var who := "key e" if keyed else ("finger %d" % pointer if pointer >= 0
 		else ("mouse" if pointer == -1 else "nobody"))
-	var said := "%s %s %d %s %s" % [open, who, aim, layout, _genome.waiting()]
+	var said := "%s %s %d %s %s %s %s" % [open, who, aim, layout, inside,
+		_genome.dna(), _genome.waiting()]
 	_offer_clock += delta
 	if said == _offer_said and _offer_clock < _offer_trace:
 		return
 	_offer_clock = 0.0
 	_offer_said = said
 	var cell := _find_node_with(_run, &"bearing_to")
-	print("[offer] %6.2f  %s  %-8s  aim %2d  steer %+5.2f  heading %+7.1f  waiting %s  dna %s" % [
+	print("[offer] %6.2f  %s  %-8s  aim %2d%s  steer %+5.2f  heading %+7.1f  waiting %s  dna %s  inside %s  copies %s" % [
 		_clock, "OPEN  " if open else "closed", who, aim,
+		" (inside)" if GenomeNode.is_inside(aim) else "",
 		cell.steer if cell != null else 0.0,
 		rad_to_deg(cell.heading) if cell != null else 0.0,
-		_waiting_text(), layout])
+		_waiting_text(), layout, inside, _genome_text(_genome.dna())])
 
 
 func _field_text(index: int, cell: Node) -> String:
@@ -2682,7 +3311,18 @@ func _watch_field(delta: float) -> void:
 	if _watch_serial.size() != bodies.size():
 		_watch_serial.resize(bodies.size())
 		_watch_meals.resize(bodies.size())
-	for i in bodies.size():
+	# **In the drop only what is near you is watched**: six hundred bodies eat
+	# somewhere all the time, and a line for every meal in the drop would bury
+	# the ones in the frame.
+	var watched := PackedInt32Array()
+	if bool(_food.call(&"in_drop")):
+		var cell_at: Vector2 = _food.get("_cell").position
+		watched = _food.call(&"bodies_near", cell_at, 1100.0)
+	else:
+		watched.resize(bodies.size())
+		for i in bodies.size():
+			watched[i] = i
+	for i: int in watched:
 		var serial: int = bodies[i].get("serial")
 		var meals: int = bodies[i].get("meals")
 		if serial != _watch_serial[i]:
@@ -2691,7 +3331,7 @@ func _watch_field(delta: float) -> void:
 			continue
 		if meals > _watch_meals[i]:
 			_field_meals += meals - _watch_meals[i]
-			var here: Vector2 = _food.points()[i]
+			var here: Vector2 = bodies[i].get("pos")
 			print("[field] %5.2f  cell %d ate one and is now r%.2f gape %.2f %s  (%.0f units from you)" % [
 				_clock, i, bodies[i].get("radius"), _food.gape_at(i),
 				_genome_text(bodies[i].get("genome")), _away(i)])
@@ -2713,7 +3353,7 @@ func _watch_field(delta: float) -> void:
 		# Its own displacement, not the gap to a player swimming at 56 u/s.
 		# A break-off runs at lunge speed, so fleeing shows up as 570-1100
 		# units in six seconds; drifting shows up as about 54.
-		var moved: float = (mark[2] as Vector2).distance_to(_food.points()[index])
+		var moved: float = (mark[2] as Vector2).distance_to(bodies[index].get("pos"))
 		print("[field] %5.2f  cell %d travelled %4.0f units in the %.0fs after its meal: %s" % [
 			_clock, index, moved, AFTER_MEAL_LOOK,
 			"drifting" if moved < 200.0 else "BOLTED"])
@@ -2753,21 +3393,23 @@ func _hold_world() -> void:
 		# nothing. Solo it runs only when a player's mouth takes its own
 		# stalker, and the pose survives that too.
 		var slot0: Array = water.get("_cells")
-		if not slot0.is_empty() and int(slot0[0].get("serial")) != _stalk_serial:
-			_make_hunter(0, _hold_point(_stalk, _stalk_at))
-			_stalk_serial = int(slot0[0].get("serial"))
-		_place(0, _hold_point(_stalk, _stalk_at))
-		_face(0, _stalk_face)
+		if slot0.size() > _hunter_slot \
+				and int(slot0[_hunter_slot].get("serial")) != _stalk_serial:
+			_make_hunter(_hunter_slot, _hold_point(_stalk, _stalk_at))
+			slot0 = water.get("_cells")
+			_stalk_serial = int(slot0[_hunter_slot].get("serial"))
+		_place(_hunter_slot, _hold_point(_stalk, _stalk_at))
+		_face(_hunter_slot, _stalk_face)
 		# **Held committed as well as held in place.** A parked hunter's aim
 		# point is behind it within a frame or two of contact, so it breaks off
 		# and the pose stops being the thing it claims to be -- and the kill
 		# branch is gated on STALK, so a test of *why* a kill did or did not
 		# land has to keep the state constant and vary only the geometry.
 		var bodies: Array = water.get("_cells")
-		if not bodies.is_empty():
-			bodies[0].set("state", FoodField.State.STALK)
-			_aim_at_me(bodies[0])
-			bodies[0].set("stale", 0.0)
+		if bodies.size() > _hunter_slot:
+			bodies[_hunter_slot].set("state", FoodField.State.STALK)
+			_aim_at_me(bodies[_hunter_slot])
+			bodies[_hunter_slot].set("stale", 0.0)
 	if _food_at >= 0.0 and water != null:
 		# Reaching for a private member is a thing only tools/ is allowed to do.
 		# The bodies are objects rather than packed arrays now, so this writes
@@ -2775,6 +3417,7 @@ func _hold_world() -> void:
 		_place(1, _hold_point(_food_at, -35.0))
 	if _starve >= 0.0 and _metabolism != null:
 		_metabolism.starve_seconds = maxf(_metabolism.starve_seconds, _starve)
+	_hold_doses()
 	if _wound >= 0.0:
 		cell.wound = _wound
 		# A guest's wound is the host's (shared-pond.md §0.1), and the host's
@@ -2790,6 +3433,65 @@ func _hold_world() -> void:
 	if _gain >= 0.0 and _bus != null:
 		_bus.gain = _gain
 	_apply_poses(false)
+	_grow_posed()
+
+
+## `--grow-posed-at=`: the bodies `--cell=` posed in the drop grown to
+## DIVIDE_RADIUS, once, so each divides on its next tick -- the frames of a
+## division (lineage.md §6.4). One the water took meanwhile is left alone.
+func _grow_posed() -> void:
+	# Not while frozen: a photograph's water stands still, the posed bodies too.
+	if _grow_posed_at < 0.0 or _clock < _grow_posed_at or get_tree().paused:
+		return
+	_grow_posed_at = -1.0
+	var water := _water_food()
+	if water == null or not bool(water.call(&"in_drop")):
+		return
+	var bodies: Array = water.get("_cells")
+	for index: Variant in _pose_slots:
+		var slot := int(_pose_slots[index])
+		if slot < 0 or slot >= bodies.size() or not bool(bodies[slot].get("seeded")) \
+				or bool(bodies[slot].get("inert")) or bool(bodies[slot].get("drifter")):
+			continue
+		bodies[slot].set("radius", CellBody.DIVIDE_RADIUS)
+		water.call(&"refresh", slot)
+		print("[drive] %5.2f  posed cell %d grown to r%.0f in slot %d, id %d" % [_clock,
+			int(index), CellBody.DIVIDE_RADIUS, slot, int(bodies[slot].get("id"))])
+
+
+## **The drop's numeric and on/off switches** (the header's last block), by the
+## field member each sets. Returns whether [param text] was one of them; it is
+## then set on the run's field before the run enters the tree.
+func _drop_switch(text: String) -> bool:
+	const FLOATS := {"--edge-gap=": &"edge_gap", "--desert=": &"desert",
+		"--age=": &"age_first", "--sensed=": &"sensed_override", "--absorb=": &"absorb",
+		"--first-delay=": &"grace", "--mutate=": &"mutate", "--floor=": &"floor_share",
+		"--floor-tau=": &"floor_tau", "--newborn-grace=": &"newborn_grace"}
+	# `--drifter-venom=` is read as `--drifter-toxin=` as well: the switch kept its
+	# meaning -- the drifters' share of the toxin -- when the toxin took forms.
+	const SWITCHES := {"--drifter-toxin=": &"drifter_toxin",
+		"--drifter-venom=": &"drifter_toxin", "--own-speed=": &"own_speed",
+		"--contact-swallow=": &"contact_swallow", "--armour-swallow=": &"armour_swallow",
+		"--lod=": &"lod", "--half-rate=": &"half_rate", "--near-first=": &"near_first",
+		"--skip-still=": &"skip_still", "--births=": &"births", "--rules=": &"rules",
+		"--rule-change=": &"rule_change"}
+	if text.begins_with("--flocs-near="):
+		_field_sets[&"flocs_near"] = int(text.trim_prefix("--flocs-near="))
+		return true
+	# Pack 4's (automation.md §5.4): `pack3` is pack 3's water, the tool's
+	# reference, where a tail beats only while a swim rule fires.
+	if text.begins_with("--water-tail="):
+		_field_sets[&"tails_beat"] = text.trim_prefix("--water-tail=") != "pack3"
+		return true
+	for prefix: String in FLOATS:
+		if text.begins_with(prefix):
+			_field_sets[FLOATS[prefix]] = float(text.trim_prefix(prefix))
+			return true
+	for prefix: String in SWITCHES:
+		if text.begins_with(prefix):
+			_field_sets[SWITCHES[prefix]] = text.trim_prefix(prefix) == "1"
+			return true
+	return false
 
 
 func _parse_pose(spec: String) -> Array:
@@ -2816,12 +3518,29 @@ func _apply_poses(announce: bool) -> void:
 	var water := _water_food()
 	if _posed.is_empty() or water == null:
 		return
+	if _release_at >= 0.0 and _clock >= _release_at:
+		_posed.clear()
+		print("[drive] %5.2f  posed bodies released" % _clock)
+		return
 	var cell := _find_node_with(_run, &"bearing_to") if _run != null else null
 	if cell == null:
 		return
 	var bodies: Array = water.get("_cells")
+	var in_drop := bool(water.call(&"in_drop"))
 	for pose: Array in _posed:
 		var index: int = pose[0]
+		# **In the drop a posed body is one of its own**, made once through the
+		# door every body comes in by, and made again if the water took it: a
+		# slot index there is any body at all, a floc or a stranger.
+		if in_drop:
+			var made: int = int(_pose_slots.get(index, -1))
+			if made < 0 or made >= bodies.size() or not bool(bodies[made].get("seeded")) \
+					or bool(bodies[made].get("inert")):
+				made = int(water.call(&"pose_body", _hold_point(pose[1], pose[2]),
+					float(pose[3]), pose[4]))
+				_pose_slots[index] = made
+				bodies = water.get("_cells")
+			index = made
 		if index < 0 or index >= bodies.size():
 			continue
 		var b: Object = bodies[index]
@@ -2833,6 +3552,8 @@ func _apply_poses(announce: bool) -> void:
 		b.set("target", FoodField.TARGET_NONE)
 		b.set("calm", 999.0)
 		b.set("pos", _hold_point(pose[1], pose[2]))
+		if in_drop:
+			water.call(&"refresh", index)
 		# Facing the player by default, so the mouth is pointed at the thing it
 		# is being read against -- which is the frame a forager actually gets.
 		# The sixth field turns it away from that, and 180 is the pose the
@@ -2962,6 +3683,8 @@ func _keycode(name: String) -> Key:
 		# `myoneme` on desktop, and the one key normal mode did not already use.
 		"space": return KEY_SPACE
 		"w": return KEY_W
+		# The hand's hold (automation.md §5.2): the tail held still, at two copies.
+		"s": return KEY_S
 		# The placing gesture's keys (dna-body.md §8): `E` holds the body open,
 		# and `A` / `D` -- the steer keys -- walk the lit slot while it does.
 		"e": return KEY_E
@@ -2970,6 +3693,8 @@ func _keycode(name: String) -> Key:
 		# The pause screen's `numbers` switch (gene-stats.md §2.2), read raw
 		# for the same reason the chords are.
 		"n": return KEY_N
+		# The autopilot's key (automation-ux.md §5.2), read raw as `N` is.
+		"r": return KEY_R
 		_: return KEY_NONE
 
 
@@ -2985,6 +3710,15 @@ func _send_hover(canvas: Vector2) -> void:
 	get_viewport().warp_mouse(canvas)
 	print("[drive] %5.2f  hover canvas %.0f,%.0f" % [
 		_clock, canvas.x, canvas.y])
+	# **And what it landed on**, two frames on, once the motion has been read: a
+	# hover a render shows nothing for is then a hover that missed, or one the
+	# control under it does not answer -- not a guess.
+	for f in 2:
+		await get_tree().process_frame
+	var under: Control = get_viewport().gui_get_hovered_control()
+	print("[drive] %5.2f  hover lands on %s, the mouse at canvas %.0f,%.0f" % [_clock,
+		str(under.get_path()) if under != null else "nothing",
+		get_viewport().get_mouse_position().x, get_viewport().get_mouse_position().y])
 
 
 ## One finger, down and up, at a point in the **design canvas** rather than in
@@ -3156,6 +3890,13 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	var water := _water_food()
 	if cell == null or water == null:
 		return
+	# **In the drop the hunter is a body of its own**, made through the one door
+	# every body comes in by, in a slot nothing else uses -- not a slot the
+	# opening moves (ocean.md §15.6).
+	var in_drop := bool(water.call(&"in_drop"))
+	if in_drop:
+		index = int(water.call(&"pose_body", at, cell.radius, _hunter_genome))
+		_hunter_slot = index
 	var bodies: Array = water.get("_cells")
 	if index >= bodies.size():
 		return
@@ -3165,7 +3906,7 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	# rather than approximated by a tier -- this is a measuring instrument.
 	b.set("radius", cell.radius)
 	b.set("drifter", false)
-	b.set("genome", {&"cytostome": 3, &"flagellum": 2})
+	b.set("genome", _hunter_genome.duplicate())
 	b.set("pos", at)
 	b.set("state", FoodField.State.STALK)
 	_aim_at_me(b)
@@ -3180,6 +3921,12 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	# Scale the radius so the gape comes out at exactly the multiple asked for.
 	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
 	b.set("radius", cell.radius * _hunter_gape / tier_gape)
+	if in_drop:
+		# What its organs buy, read again for the body written here: its own
+		# tail, its senses, its tank -- a hungry one, so it hunts as it is told.
+		water.call(&"refresh", index)
+		b.set("hunger", 0.5)
+		b.set("orienting", false)
 	print("[drive] hunter %d: r%.1f gape %.1f against your r%.1f" % [
 		index, b.get("radius"), water.gape_at(index), cell.radius])
 
@@ -3208,9 +3955,12 @@ func _aim_at_me(b: Object) -> void:
 
 
 func _place(index: int, at: Vector2) -> void:
-	var bodies: Array = _water_food().get("_cells")
+	var water := _water_food()
+	var bodies: Array = water.get("_cells")
 	if index < bodies.size():
 		bodies[index].set("pos", at)
+		# The drop finds a body through its grid: filed where it now is.
+		water.call(&"refile", index)
 
 
 ## Points field cell [param index] [param away] degrees off facing the player,
@@ -3344,8 +4094,25 @@ func _parse_genes(spec: String, genome: Node = null) -> Array:
 		tiers[gene] = int(bits[1])
 		if bits.size() >= 3:
 			placed[gene] = int(bits[2])
+	# **The inside is slot 7** (docs/design/dna-slots.md §2.2), whatever the
+	# body's size: every cell has it from birth, and it takes no outside slot.
+	# `gene:tier:7` poses a gene inside -- a venom posed there is made poison,
+	# as `express` would -- and an inside form posed with no slot is inside by
+	# its name. Posed at an arc instead (`veneneux:1:5`), `express` moves it in
+	# and leaves the arc empty. A gene that faces out cannot be posed inside.
+	for gene: StringName in placed.keys():
+		if not GenomeNode.is_inside(int(placed[gene])):
+			continue
+		placed.erase(gene)
+		var inner := GenomeNode.form_in(gene, GenomeNode.INSIDE_PLACE)
+		if inner == &"":
+			print("[drive] %s faces out and cannot be posed inside: it goes on an arc"
+				% gene)
+		elif inner != gene:
+			tiers[inner] = tiers[gene]
+			tiers.erase(gene)
 	var layout: Array[StringName] = []
-	for i in maxi(slots_of.slots(), tiers.size()):
+	for i in maxi(slots_of.slots(), GenomeNode.count_outside(tiers)):
 		layout.append(&"")
 	for gene: StringName in placed:
 		var slot := int(placed[gene])
@@ -3353,6 +4120,8 @@ func _parse_genes(spec: String, genome: Node = null) -> Array:
 			layout[slot] = gene
 	for gene: StringName in tiers:
 		if placed.has(gene) and layout.has(gene):
+			continue
+		if not placed.has(gene) and GenomeNode.is_inside_form(gene):
 			continue
 		if placed.has(gene):
 			# Asked for a slot this body does not have yet -- the ladder is
@@ -3466,3 +4235,127 @@ func _away(index: int) -> float:
 	if cell == null or _food == null:
 		return 0.0
 	return _food.points()[index].distance_to(cell.position)
+
+
+# --- Your programs and the autopilot (automation.md §18.1) ----------------------
+
+## **The programs given, into the run's library**, in order, each switched on as
+## far as the eight in all allow -- through the library's own calls, as the page
+## makes them -- and the run told, as an edit tells it.
+func _give_programs() -> void:
+	if _programs_given.is_empty() or _run == null:
+		return
+	var library: RefCounted = _run.get("_library")
+	if library == null:
+		return
+	for k in _programs_given.size():
+		var named: String = _programs_given[k][0]
+		var given: Variant = _programs_given[k][1]
+		var at := int(library.call(&"add_founders")) if given is String \
+			else int(library.call(&"add_new"))
+		if at < 0:
+			print("[instincts] program %d not made: the library is full" % (k + 1))
+			continue
+		if not given is String:
+			library.call(&"set_lines", at, given)
+		if named != "":
+			library.call(&"rename", at, named)
+		var on := not _programs_off.has(k + 1)
+		if not bool(library.call(&"switch", at, on)):
+			print("[instincts] program %d stays off: %d instincts, %d places free" % [
+				k + 1, (given as PackedStringArray).size() if not given is String else 7,
+				int(library.call(&"room"))])
+	_run.call(&"_library_changed")
+	var lines: PackedStringArray = []
+	for i in int(library.call(&"size")):
+		var one: RefCounted = library.get("programs")[i]
+		lines.append("%d %s [%s] %s" % [i + 1, "on " if bool(one.get("on")) else "off",
+			str(library.call(&"name_of", i)), " ; ".join(one.get("lines"))])
+	print("[instincts] library: %d programs, %d of %d places taken\n  %s" % [
+		int(library.call(&"size")), int(library.call(&"taken")), 8, "\n  ".join(lines)])
+
+
+## **Who drives, the hold and what acted**, said whenever one of them changes --
+## and the autopilot's key pressed at the times given, through the input path.
+func _step_instincts() -> void:
+	if _run == null:
+		return
+	for i in range(_autopilot_ats.size() - 1, -1, -1):
+		if _clock >= _autopilot_ats[i]:
+			_autopilot_ats.remove_at(i)
+			_send_key(KEY_R, true)
+			_send_key(KEY_R, false)
+			print("[instincts] %6.2f  R pressed" % _clock)
+			_instincts_said = ""
+			# Said two frames on, once the key has landed and the icon been drawn.
+			_r_said_in = 2
+	if _r_said_in > 0:
+		_r_said_in -= 1
+		if _r_said_in == 0:
+			_say_after_r(_run.get_node_or_null(^"Hud/Autopilot"))
+	if not _page_opened and _page_spec != "" and _clock >= 0.6:
+		_page_opened = true
+		_open_page(_page_spec)
+	if not _instincts_trace:
+		return
+	var cell: Node = _run.get_node_or_null(^"Cell")
+	if cell == null:
+		return
+	var instincts: RefCounted = cell.get("instincts")
+	var driving := bool(cell.get("autopilot"))
+	var held := bool(cell.call(&"tail_held"))
+	var acted := int(instincts.get("acted")) if instincts != null and driving else 0
+	var said := "drives %s  held %s  acted %s" % ["yes" if driving else "no ",
+		"yes" if held else "no ", _acted_text(instincts, acted)]
+	if said != _instincts_said:
+		_instincts_said = said
+		print("[instincts] %6.2f  %s" % [_clock, said])
+
+
+func _say_after_r(icon: Control) -> void:
+	var cell: Node = _run.get_node_or_null(^"Cell") if _run != null else null
+	if cell == null:
+		return
+	print("[instincts] %6.2f  after R: drives %s, icon %s" % [_clock,
+		"yes" if bool(cell.get("autopilot")) else "no",
+		"shown" if icon != null and icon.visible else "hidden"])
+
+
+## The places of the instincts that acted, and what each is.
+func _acted_text(instincts: RefCounted, mask: int) -> String:
+	if mask == 0 or instincts == null:
+		return "[]"
+	var list: RefCounted = instincts.get("list")
+	var out: Array[String] = []
+	for k in 62:
+		if (mask & (1 << k)) == 0:
+			continue
+		var line := ""
+		if list != null and k < (list.get("rules") as Array).size():
+			line = str((list.get("rules") as Array)[k].get("text"))
+		out.append("%d:%s" % [k + 1, line])
+	return "[" + ", ".join(out) + "]"
+
+
+## **The pause screen, on the programs page** -- the library, or program [param
+## spec]'s number after a colon open in it -- for a render.
+func _open_page(spec: String) -> void:
+	var parts := spec.split(":")
+	if parts[0] != "programs" or _run == null:
+		return
+	if not bool(_run.get("_menu_open")):
+		_run.call(&"_toggle_pause")
+	var page: Node = _run.get_node_or_null(^"Hud/Pause/Programs")
+	if page == null:
+		return
+	_run.call(&"_show_programs", true)
+	page.call(&"show_library")
+	if parts.size() > 1:
+		page.call(&"open_program", int(parts[1]) - 1)
+	if _page_select != "":
+		page.call(&"pose_select", _page_select)
+	if _page_sheet == "rename":
+		page.call(&"_on_rename")
+	elif _page_sheet == "delete":
+		page.call(&"_on_delete")
+

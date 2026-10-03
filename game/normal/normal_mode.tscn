@@ -1,4 +1,4 @@
-[gd_scene load_steps=13 format=3]
+[gd_scene load_steps=15 format=3]
 
 [ext_resource type="Script" path="res://game/normal/normal_mode.gd" id="1_normal"]
 [ext_resource type="PackedScene" path="res://game/perception/membrane.tscn" id="2_membrane"]
@@ -12,6 +12,8 @@
 [ext_resource type="PackedScene" path="res://game/perception/returns.tscn" id="10_returns"]
 [ext_resource type="Script" path="res://game/replay/recorder.gd" id="11_recorder"]
 [ext_resource type="Script" path="res://game/normal/controls.gd" id="12_controls"]
+[ext_resource type="PackedScene" path="res://game/menu/corner.tscn" id="13_corner"]
+[ext_resource type="Script" path="res://game/normal/programs_page.gd" id="14_programs"]
 
 [node name="NormalMode" type="Node"]
 process_mode = 3
@@ -77,7 +79,7 @@ anchor_right = 0.5
 offset_left = -356.0
 offset_top = 112.0
 offset_right = -232.0
-offset_bottom = 544.0
+offset_bottom = 592.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
@@ -88,15 +90,15 @@ anchor_right = 0.5
 offset_left = 232.0
 offset_top = 112.0
 offset_right = 356.0
-offset_bottom = 544.0
+offset_bottom = 592.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
 
 [node name="Says" type="VBoxContainer" parent="Hud/Choosing"]
 anchor_right = 1.0
-offset_top = 552.0
-offset_bottom = 610.0
+offset_top = 600.0
+offset_bottom = 658.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
@@ -146,6 +148,16 @@ offset_left = 48.0
 offset_top = 48.0
 offset_right = 104.0
 offset_bottom = 104.0
+
+[node name="Autopilot" type="Control" parent="Hud"]
+visible = false
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -104.0
+offset_top = 48.0
+offset_right = -48.0
+offset_bottom = 104.0
+grow_horizontal = 0
 
 [node name="Watch" type="CenterContainer" parent="Hud"]
 anchor_right = 1.0
@@ -398,6 +410,34 @@ offset_top = -11.0
 offset_right = 112.0
 offset_bottom = 37.0
 focus_mode = 2
+
+[node name="Programs" type="Control" parent="Hud/Pause"]
+visible = false
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("14_programs")
+
+[node name="PageChip" type="Button" parent="Hud/Pause"]
+anchor_left = 1.0
+anchor_right = 1.0
+offset_left = -176.0
+offset_top = 116.0
+offset_right = -48.0
+offset_bottom = 172.0
+grow_horizontal = 0
+focus_mode = 2
+
+[node name="Corner" parent="Hud/Pause" instance=ExtResource("13_corner")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+show_drop = false
 
 [node name="Recorder" type="Node" parent="."]
 process_mode = 1

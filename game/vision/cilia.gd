@@ -22,6 +22,11 @@ extends RefCounted
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Genome := preload("res://game/normal/genome.gd")
+## For the venom switch and nothing else. cilia -> genome -> cell already runs
+## this way, and cell.gd preloads no view, so there is no cycle.
+const CellBody := preload("res://game/normal/cell.gd")
+## The kinds of load, by name and index. doses.gd preloads nothing.
+const Doses := preload("res://game/mechanics/doses.gd")
 
 # --- Palette (§4.4) ---------------------------------------------------------
 # A new gene hue must sit >= 30 degrees from every other gene hue and >= 40
@@ -70,7 +75,16 @@ const HUES := {
 	&"myoneme": Color(0.94, 0.42, 0.68),     # dash, 333 deg (§4.4's reserved rose)
 	&"trichocyst": Color(0.76, 0.42, 1.00),  # sting, 276 deg
 	&"pellicle": Color(0.36, 0.88, 0.96),    # armor, 186 deg
-	&"toxicyst": Color(0.34, 1.00, 0.52),    # venom, 128 deg
+	# **The toxin wears its strain's hue, in both its forms** (dna-slots-ux.md
+	# §2.1): venom and poison of one strain are one colour, and the place is
+	# told by shape -- fangs on the lips, granules under the skin. Corrosive
+	# left nutrient green for lime: at 128 deg `veneneux` *was* the scent bloom's
+	# and the taste ring's green, so a poison looked like food and a dose would
+	# have felt like a smell. Lime is the free 72 deg the retired `rhabdom` left,
+	# and the only lime on either screen. signal_bus.gd copies it as
+	# STRAIN_COLORS, as it copies PING_COLOR.
+	&"veneneux": Color(0.84, 0.98, 0.22),    # poison, corrosive, 71 deg (was 128)
+	&"toxicyst": Color(0.84, 0.98, 0.22),    # venom, corrosive
 	&"plastid": Color(1.00, 0.86, 0.26),     # sun, 52 deg
 	&"vacuole": Color(0.44, 0.58, 1.00),     # store, 232 deg
 	&"crista": Color(0.86, 0.50, 0.22),      # burn, 26 deg, darker than palp
@@ -101,7 +115,9 @@ const EARNED_COUNT := {
 	&"myoneme": 5,
 	&"trichocyst": 3,
 	&"pellicle": 7,
-	&"toxicyst": 6,
+	# Not the toxin: neither of its forms is a tuft. Venom is fangs on the lips
+	# or barbs on a side, poison granules under the whole skin -- see
+	# [method _draw_fangs], [method _draw_guard] and [method _draw_granules].
 	# 8 is the ceiling, found by rendering: a tier-3 tuft multiplies the count
 	# by 1.70, and above about 14 strokes a 24-degree arc closes up into a solid
 	# flag and stops being a texture -- the same failure the oral mat documents.
@@ -161,6 +177,29 @@ const BREATHE := 0.035
 const BODY_FILL_ALPHA := 0.16
 const BODY_RIM_ALPHA := 0.66
 const BODY_RIM_WIDTH := 2.2
+
+# --- A starving body goes slack (docs/design/hunger.md §2.3) -----------------
+# A cell running out of fuel loses turgor, and its rim crumples into creases
+# that deepen as the tank empties. **Inward only**: a starving cell really does
+# shrink, and this one is never drawn smaller than its radius, for the reason
+# the wound gives in [method _draw_ovoid]. The fill, the rim's ink and the
+# nucleus do not change: a thinner fill was tried, and it cost the figure the
+# glance it needs against the controls (controls.md §3.2).
+
+## Nine creases round the rim. Odd, so the body never reads as a symmetric
+## badge.
+const SLACK_FOLDS := 9.0
+## How deep a crease goes at full slack, as a share of the radius: 5.3 canvas
+## px on the born point-of-view figure, 3.1 in full vision.
+const SLACK_DEPTH := 0.12
+## Narrow creases between broad lobes, rather than a sine's even ripple.
+const SLACK_SHARP := 2.0
+## Radians a second the creases wander, wet and slow, so a still body is not a
+## drawn shape. A clock of 0 holds them still, as the pause screen's figure is.
+const SLACK_DRIFT := 0.15
+## Rim points while the body is slack. [constant OVOID_STEPS]' forty cannot
+## draw nine folds; a smooth body keeps its forty.
+const SLACK_STEPS := 96
 
 # --- A body that has been bitten --------------------------------------------
 # **No health bar and no new colour.** A wound is drawn as what it is: the
@@ -237,6 +276,13 @@ const ARC_FREE: Array[Vector2] = [
 ## two-tap on the pause strip already lets the player pick which slot a gene
 ## goes into, and a directional gene reads its facing off the arc it landed on.
 ## A laser in slot 5 looks backwards and cannot show you where you are going.
+##
+## **The inside has no arc** (docs/design/dna-slots.md §2.2): nothing inside
+## faces anywhere, so nothing inside is ever asked for one -- [method
+## _draw_fringe] draws an inside form round the whole body, and an inside form
+## never has a slot in a layout. No layout holds an index past the seventh now
+## ([method default_order] keeps every outside gene on an arc); one that did
+## would land on the last free arc, as it always has.
 static func arc_for_slot(slot: int) -> Vector2:
 	match slot:
 		0:
@@ -321,6 +367,17 @@ const FLAGELLUM_WAVE_V := 3.0
 const FLAGELLUM_WAVE_HZ := 5.2
 const FLAGELLUM_WAVE_U := 0.45
 const FLAGELLUM_LASH := 0.26
+## **A tail held still is drawn still** (docs/design/automation.md §8.1): its
+## wave stops travelling and its lash goes slack over this many seconds, and
+## comes back as fast when it is let go -- so a held tail reads as a body at
+## rest in a still frame as well as in motion, and the wave stops where it was
+## rather than snapping to a pose. Everything else on the body keeps its clock.
+const TAIL_SETTLE := 0.3
+## How much of its lash a tail held still keeps: a slack curve, not a rod.
+const TAIL_HELD_LASH := 0.3
+## [method draw_cell]'s tail when it is the body's own: drawn on the body's clock,
+## beating, as every tail in the water is.
+const NO_TAIL := Vector2(NAN, 0.0)
 
 ## The pigment organelle an earned gene carries, at the middle of its arc.
 const PIGMENT_SEAT := 0.80
@@ -367,6 +424,142 @@ const FLARE_INK := 1.35
 const FLARE_HAZE_WIDE := 1.5
 const FLARE_HAZE_DENSE := 2.0
 const FLARE_REACH := 1.30
+
+# --- The toxin's two forms (docs/design/dna-slots-ux.md §2) -----------------
+# **The colour is the strain, the shape is where it works.** Venom and poison of
+# one strain wear one hue, so where a toxin works is carried by shape alone: at
+# the front, fangs on the lips; on a side or the stern, barbs out of that arc;
+# inside, granules under the whole skin and nothing at any one arc. A
+# full-vision player tells the three apart at a glance and with no colour.
+
+## **Venom at the front is fangs on the lips.** It rides on the bite, so it is
+## drawn on the organ every encounter is read off: barbs standing out of the lip
+## bow's two corners, splayed away from the centreline, a bead at each tip --
+## where the threat bow's teeth point in. One pair per copy, evenly from
+## [constant FANG_FROM] to [constant FANG_TO] of the bow's half-span. On the
+## lips whichever front slot holds it: at full vision's true size a
+## forward-diagonal venom drawn at its own arc was a lime smudge beside the mouth.
+const FANG_FROM := 0.50
+const FANG_TO := 0.96
+## Degrees further out than the bow's normal.
+const FANG_SPLAY := 28.0
+## Of the gape, x TIER_LEN[copies], and never under [constant FANG_MIN] canvas px.
+const FANG_LEN := 0.24
+const FANG_MIN := 5.0
+const FANG_WIDTH := 1.9
+const FANG_ALPHA := 0.95
+## Of the gape, and never under [constant BEAD_MIN] canvas px.
+const FANG_BEAD := 0.06
+
+## **Venom on a side or the stern is barbs on that arc.** It stings the mouth
+## that bites there, so it is drawn on the side it guards: beaded barbs standing
+## out of the slot's arc, fanned -- the extrusomes a real ciliate fires where it
+## is touched. Two a copy, evenly across the arc's middle: one arc has no left
+## and right, and two is the fewest that read as a row of points rather than one
+## bristle. No haze and no pigment -- an organ has both, and this is a weapon.
+## Of the arc left bare at each end.
+const GUARD_FROM := 0.15
+## Of r past the skin, x TIER_LEN[copies], and never under
+## [constant GUARD_MIN] canvas px.
+const GUARD_LEN := 0.26
+const GUARD_MIN := 5.0
+## Degrees either side of the normal, at the end barbs.
+const GUARD_FAN := 16.0
+const GUARD_WIDTH := 1.9
+const GUARD_ALPHA := 0.95
+## Of r, and never under [constant BEAD_MIN] canvas px.
+const GUARD_BEAD := 0.055
+
+## **Poison is granules, and no arc.** Inside has no arc, so poison draws no
+## pigment and no haze at any one place: only its granules, scattered just inside
+## the rim round the whole body, the mouth's arc left clear. Defensive ciliates
+## keep their toxins in cortical granules under the whole skin (Blepharisma,
+## Stentor). Degrees either side of the nose left clear.
+const GRANULE_FROM := 74.0
+## x TIER_COUNT[copies]: 12, 16, 20.
+const GRANULE_COUNT := 12
+## Of r, jittered by `0.07 sin(2.3 i + 1.1) - 0.02` so they sit at different
+## depths, and spread `0.38 sin(3.7 i)` of one step along the rim: scattered,
+## never strung -- a necklace of even beads read as an ornament.
+const GRANULE_SEAT := 0.84
+const GRANULE_SPREAD := 0.38
+## Of r, and never under 1.5 canvas px.
+const GRANULE_R := 0.045
+const GRANULE_MIN := 1.5
+const GRANULE_ALPHA := 0.80
+
+## The fangs' and the barbs' smallest bead, in canvas px.
+const BEAD_MIN := 1.4
+
+## **A toxin at work flares** (dna-slots-ux.md §5.1): your fangs as your venom
+## lands, your barbs as a mouth bites the side they guard, your granules as your
+## poison is taken. On the eye flare's envelope, which the caller runs: the
+## fangs and barbs this much longer, every bead this much bigger and the organ
+## this much brighter, with a three-ring haze round each bead.
+const TOXIN_FLARE_LONG := 0.35
+const TOXIN_FLARE_BEAD := 0.5
+const TOXIN_FLARE_INK := 0.6
+## The poison's granules carry more of the flare as ink: they have no length.
+const GRANULE_FLARE_INK := 0.6
+
+# --- A body carrying a load (docs/design/dna-slots-ux.md §4) -----------------
+# **A load is drawn inside the body that carries it**, by this one routine, for
+# every body, in both views and the replay: a stain in the strain's hue whose
+# outline is its kind, and for harm pits in the rim. No rhythm: a hurt that goes
+# on churns, because a pulse at about a second is what hunger's racing beat
+# looks like.
+
+## Felt stacks (doses.gd's `felt`) at which harm's marks are drawn whole.
+## Square-rooted, so one stack already shows at half.
+const HARM_FULL := 4.0
+## **The stain**: a lumpy pool, not a disc -- three soft stacked rings read as
+## three glowing organelles, which is the pigment's own construction saying the
+## wrong thing; a pool reads as something spilled inside the cell. Three nested
+## layers of [constant STAIN_STEPS] points at these scales, of
+## `r x STAIN_R x lerp(STAIN_MIN, 1, h)`.
+const STAIN_R := 0.58
+const STAIN_MIN := 0.62
+const STAIN_SCALES: Array[float] = [1.28, 1.0, 0.58]
+## Each layer's share of `STAIN_ALPHA x h x marks`.
+const STAIN_INKS: Array[float] = [0.35, 1.0, 1.0]
+const STAIN_ALPHA := 0.40
+const STAIN_STEPS := 36
+## Seated this far aft of the middle, and drifting this far round it.
+const STAIN_AFT := 0.10
+const STAIN_WANDER := 0.16
+## Radians a second: wet and slow.
+const STAIN_DRIFT := 0.13
+## Along the heading and across it: a pool lying in the body, not a coin on it.
+const STAIN_ALONG := 1.1
+const STAIN_ACROSS := 0.9
+## **A new dose seeps in from where it came**: the stain grows from this share of
+## its size, at the skin on the arrival's bearing, to its seat, over
+## [constant SEEP] seconds (§5.1).
+const SEEP := 0.8
+const SEEP_FROM := 0.30
+const SEEP_SKIN := 0.80
+
+## **Harm's pits**: its own damage, in the rim. Up to three gaps, `ceil(3h)` of
+## them live, that open and close and wander where they please, their lips lit
+## in the strain's hue and a curl of eaten membrane hanging into each. A wound's
+## tears are still, untinted and flapped; these move, glow and close -- a body
+## being eaten now and a body bitten once are two different pictures.
+const PITS := 3
+## Half-width of a pit at its widest, and of the lit lip either side of it, in
+## ovoid parameter degrees.
+const PIT_DEG := 13.0
+const PIT_LIP_DEG := 12.0
+const PIT_LIP_ALPHA := 0.95
+const PIT_LIP_WIDTH := 1.3       ## x BODY_RIM_WIDTH
+## How far the curl of eaten membrane hangs in, as a share of the radius.
+const PIT_CURL := 0.16
+## Rim points while pitted. Forty cannot hold a 13-degree gap, and the rim is
+## drawn in runs rather than per segment: per-segment strokes beaded the rim.
+const PITTED_STEPS := 120
+
+## **No dose**: what every body carrying nothing passes to [method draw_cell].
+## One shared, read-only dictionary, as [constant NO_EYE] is.
+const NO_DOSE := {}
 
 # --- Tier is magnitude, not a badge (§4.3) ----------------------------------
 ## Longer, denser, brighter. Countable without counting.
@@ -448,6 +641,13 @@ const TILE_LEN := {
 }
 const TILE_COUNT_EARNED := 5
 const TILE_LEN_EARNED := 11.0
+## The toxin's tiles: venom's rods and their beads; poison's granules, on an arc
+## this far outside the dome.
+const TILE_RODS := 4
+const TILE_ROD_BEAD := 1.9
+const TILE_GRANULES := 7
+const TILE_GRANULE_OUT := 4.5
+const TILE_GRANULE_R := 1.45
 ## The slot compass, in the tile's own pixels.
 const TILE_COMPASS_X := 12.0
 const TILE_COMPASS_Y := 13.0
@@ -529,13 +729,37 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 ## is 0..1, a level arriving. Passed **only for the player's own cell**, the
 ## way [method draw_pending] takes `offer`: no other cell's level is known, and
 ## a friend's is not on the wire. Empty draws exactly what it always drew.
+##
+## [param tail] is **the tail's own clock**, `(clock, still)` as [method
+## step_tail] keeps it: the clock its wave is drawn on, and 0 beating to 1 held
+## still (automation.md §8.1). Passed only for the player's own body, whose hold
+## is known; [constant NO_TAIL] draws it on [param clock], beating.
+##
+## [param slack] is 0..1, **how far this body has gone slack with hunger**
+## (docs/design/hunger.md): the rim crumples inward into [constant SLACK_FOLDS]
+## creases. Passed only for the player's own body, as [param eye] is: hunger is
+## each player's own and is not on the wire, so a friend is never drawn
+## crumpled, and nothing in the water is either.
+##
+## [param dose] is **what this body carries, and what its toxins are doing**
+## (docs/design/dna-slots-ux.md §4, §5), or [constant NO_DOSE]. Every body
+## passes its loads, in both views and the replay, as `"felt"`:
+## `Vector3(harm, paralysis, sleep)` in **felt stacks** -- doses.gd's `felt`,
+## already diluted by the body's own size, because a drawing's radius is canvas
+## px and not the body's. The player's own body adds `"fade"`, the marks' own
+## fade where the figure has a licence to be louder than itself (soma.gd's
+## FADE_DOSE); `"entry"`, `Vector2(bearing, seconds)` of the newest dose while it
+## seeps in from the skin; and the three flares, `"fangs"`, `"guard"` and
+## `"granules"`, 0..1, as its toxins fire. Phase 1 draws harm; the other two
+## kinds are laid out for the strains that will deliver them.
 static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, tiers: Dictionary, gape: float, viewer_radius: float,
 		is_self: bool, clock: float, fade: float = 1.0, steer: float = 0.0,
 		beat: float = 0.0, phase: float = 0.0, unit: float = 1.0,
 		order: Array = [], wound: float = 0.0, double: float = 0.0,
 		pinch: float = 0.0, shed: float = 0.0, untinted: bool = false,
-		eye: Dictionary = NO_EYE) -> void:
+		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
+		slack: float = 0.0, dose: Dictionary = NO_DOSE) -> void:
 	if fade <= 0.0 or r <= 0.0:
 		return
 	var fwd := Vector2(sin(heading), -cos(heading))
@@ -543,35 +767,84 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 	var tint := body_tint(tiers, is_self or untinted)
 	if shed > 0.0:
 		tint = tint.lerp(body_tint(tiers, false), clampf(shed, 0.0, 1.0))
+	# What each load does to the drawing, 0..1, and the fade its marks are drawn
+	# at. Nothing at all for a body that carries nothing, which is nearly all.
+	var harm := 0.0
+	var marks := fade
+	if not dose.is_empty():
+		var felt: Vector3 = dose.get("felt", Vector3.ZERO)
+		harm = sqrt(clampf(felt.x / HARM_FULL, 0.0, 1.0))
+		marks = float(dose.get("fade", fade))
 
 	_draw_ovoid(canvas, at, fwd, stb, r, tint, clock, fade, phase, unit, wound,
-		pinch)
+		pinch, slack, harm, marks)
 	_draw_nucleus(canvas, at, fwd, r, tint, beat, fade, double)
-	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, order,
-		eye)
+	if harm > 0.0:
+		_draw_stain(canvas, at, fwd, stb, r, dose_hue(Doses.Kind.HARM), harm,
+			clock, phase, marks, dose.get("entry", Vector2(0.0, INF)))
+	# The layout once, for the fringe and the lips both: where a venom is worn
+	# decides which of them draws it.
+	var layout := order if not order.is_empty() else default_order(tiers)
+	_draw_fringe(canvas, at, fwd, stb, r, tiers, clock, fade, steer, unit, layout,
+		eye, tail, dose)
 	draw_gape(canvas, at, fwd, stb, r, gape,
 		Genome.tier_of(tiers, &"cytostome"),
 		not is_self and gape > viewer_radius, fade, unit)
+	# **Venom at the front is on the lips**, drawn after them: a venom worn in a
+	# front slot, or worn nowhere, rides on the bite (food.gd's `toxins_of`
+	# reads the same layout the same way). A body with no mouth draws none.
+	if gape <= 0.0:
+		return
+	for gene: StringName in tiers:
+		if not Genome.has_forms(gene) or Genome.is_inside_form(gene):
+			continue
+		var tier := int(tiers[gene])
+		var worn := layout.find(gene)
+		if tier > 0 and (worn < 0 or Genome.is_front(worn)):
+			_draw_fangs(canvas, at, fwd, stb, r, gape, gene, tier, fade, unit,
+				float(dose.get("fangs", 0.0)))
+
+
+## **The hue a load of [param kind] is drawn in**: its strain's, which is the
+## hue of the forms that deliver it (dna-slots-ux.md §2.1) -- lime for harm. A
+## kind no form delivers yet takes the first reserved hue, as an unknown gene
+## does, rather than drawing as nothing.
+static func dose_hue(kind: int) -> Color:
+	for form: StringName in Genome.FORMS:
+		if Doses.kind_of(Genome.strain_of(form)) == kind:
+			return hue(form)
+	return RESERVED_HUES[0]
 
 
 ## The body: an ovoid, narrower at the front, so the cell has a nose even before
 ## the heading needle is read -- and, once something has been biting it, a rim
-## with holes in it.
+## with holes in it; once it is starving, a rim with creases in it; while harm
+## is in it, a rim with pits in it ([param harm] 0..1, its marks drawn at
+## [param marks]).
 static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tint: Color, clock: float, fade: float,
 		phase: float, unit: float, wound: float = 0.0,
-		pinch: float = 0.0) -> void:
+		pinch: float = 0.0, slack: float = 0.0, harm: float = 0.0,
+		marks: float = 1.0) -> void:
+	var limp := clampf(slack, 0.0, 1.0)
+	if harm > 0.0:
+		_draw_ovoid_pitted(canvas, at, fwd, stb, r, tint, clock, fade, phase,
+			unit, wound, pinch, limp, harm, marks)
+		return
+	var steps := OVOID_STEPS if limp <= 0.0 else SLACK_STEPS
 	var body := PackedVector2Array()
-	body.resize(OVOID_STEPS)
+	body.resize(steps)
 	var squeeze := clampf(pinch, 0.0, 1.0)
-	for i in OVOID_STEPS:
-		var t := TAU * float(i) / float(OVOID_STEPS)
+	for i in steps:
+		var t := TAU * float(i) / float(steps)
 		var breathe := 1.0 + BREATHE * sin(t * 3.0 + clock * 1.7 + phase)
-		body[i] = _surface(at, fwd, stb, r * breathe, t, squeeze)
+		body[i] = _surface(at, fwd, stb,
+			r * breathe * _crease(t, phase, clock, limp), t, squeeze)
 
 	# **The body is not drawn smaller.** The radius is what decides every
 	# encounter in the water, so a wounded cell that looked smaller would be
-	# lying about the one number that matters. It holds less instead.
+	# lying about the one number that matters. It holds less instead. A
+	# starving one creases inward and keeps its extent, for the same reason.
 	var hurt := clampf(wound, 0.0, 1.0)
 	canvas.draw_colored_polygon(body,
 		Color(tint, BODY_FILL_ALPHA * (1.0 - WOUND_FILL * hurt) * fade))
@@ -590,24 +863,37 @@ static func _draw_ovoid(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var rim := PackedVector2Array()
 	var flaps := PackedVector2Array()
 	var ink := BODY_RIM_ALPHA * (1.0 - WOUND_DIM * hurt) * fade
-	for i in OVOID_STEPS:
-		var t := TAU * (float(i) + 0.5) / float(OVOID_STEPS)
+	for i in steps:
+		var t := TAU * (float(i) + 0.5) / float(steps)
 		if _tear_at(t, phase, hurt) <= 0.0:
 			rim.append(body[i])
-			rim.append(body[(i + 1) % OVOID_STEPS])
+			rim.append(body[(i + 1) % steps])
 	_stroke(canvas, rim, tint, ink, BODY_RIM_WIDTH * unit)
 
 	# A flap of membrane hanging into each tear, so a gap reads as a hole in a
-	# body rather than as a dashed line.
+	# body rather than as a dashed line. Rooted on the creased rim, not the
+	# full one: a starving, bitten body's flaps would otherwise hang outside it.
 	for k in WOUND_TEARS:
 		var open := clampf(hurt * float(WOUND_TEARS) - float(k), 0.0, 1.0)
 		if open <= 0.0:
 			continue
 		var t := _tear_seat(phase, k)
-		var edge := _surface(at, fwd, stb, r, t)
+		var edge := _surface(at, fwd, stb, r * _crease(t, phase, clock, limp), t)
 		flaps.append(edge)
 		flaps.append(edge + (at - edge).normalized() * (r * WOUND_GASH * open))
 	_stroke(canvas, flaps, tint, ink, BODY_RIM_WIDTH * unit)
+
+
+## **How far the rim has fallen in** at ovoid parameter [param t], as a share
+## of the radius: 1 everywhere on a body that is not slack, and down to
+## `1 - SLACK_DEPTH` at the bottom of a crease on one that is [param limp] 1.
+## The creases sit off [param phase], which is already the per-cell number the
+## breath and the tears use, and wander on [param clock].
+static func _crease(t: float, phase: float, clock: float, limp: float) -> float:
+	if limp <= 0.0:
+		return 1.0
+	return 1.0 - SLACK_DEPTH * limp * pow(0.5 + 0.5 * cos(t * SLACK_FOLDS
+		+ phase * 3.0 + clock * SLACK_DRIFT), SLACK_SHARP)
 
 
 ## How far open the tear nearest ovoid parameter [param t] is, 0 for intact rim.
@@ -625,6 +911,187 @@ static func _tear_at(t: float, phase: float, hurt: float) -> float:
 ## Where tear [param k] sits on a body whose breath offset is [param phase].
 static func _tear_seat(phase: float, k: int) -> float:
 	return phase + WOUND_TEAR_SEAT + TAU * float(k) / float(WOUND_TEARS)
+
+
+## How far open pit [param k] is, 0..1, on a body whose harm is [param harm]
+## (dna-slots-ux.md §4.1): `ceil(3h)` of them live, each opening and closing on
+## its own clock, never in step.
+static func _pit_open(k: int, clock: float, phase: float, harm: float) -> float:
+	if float(k) >= ceilf(harm * float(PITS)):
+		return 0.0
+	var s := sin(clock * (1.3 + 0.23 * float(k)) + 1.7 * float(k) + phase)
+	return clampf(s, 0.0, 1.0) * clampf(1.4 * harm, 0.35, 1.0)
+
+
+## Where pit [param k] sits, in ovoid parameter radians: it wanders round the
+## body, each pit at its own rate.
+static func _pit_seat(k: int, clock: float, phase: float) -> float:
+	return 2.3 * phase + 2.1 * float(k) + clock * (0.21 + 0.07 * float(k))
+
+
+## The rim's segments, by what each one is.
+const _RIM := 0
+const _GAP := 1
+const _LIP := 2
+
+
+## **The body with harm in it**: the ovoid of [method _draw_ovoid], creased and
+## torn as that one is, with harm's pits in the rim -- each a gap with its lips
+## lit in the strain's hue and a curl of eaten membrane hanging into it. The rim
+## is drawn in **runs**, one polyline for each stretch of one kind, so it stays
+## one stroke between its gaps.
+static func _draw_ovoid_pitted(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, tint: Color, clock: float, fade: float,
+		phase: float, unit: float, wound: float, pinch: float, limp: float,
+		harm: float, marks: float) -> void:
+	var n := PITTED_STEPS
+	var squeeze := clampf(pinch, 0.0, 1.0)
+	var body := PackedVector2Array()
+	body.resize(n)
+	for i in n:
+		var t := TAU * float(i) / float(n)
+		var breathe := 1.0 + BREATHE * sin(t * 3.0 + clock * 1.7 + phase)
+		body[i] = _surface(at, fwd, stb,
+			r * breathe * _crease(t, phase, clock, limp), t, squeeze)
+	var hurt := clampf(wound, 0.0, 1.0)
+	canvas.draw_colored_polygon(body,
+		Color(tint, BODY_FILL_ALPHA * (1.0 - WOUND_FILL * hurt) * fade))
+
+	var open: Array[float] = []
+	var seats: Array[float] = []
+	for k in PITS:
+		open.append(_pit_open(k, clock, phase, harm))
+		seats.append(_pit_seat(k, clock, phase))
+	var kinds := PackedByteArray()
+	kinds.resize(n)
+	var lip_open := PackedFloat32Array()
+	lip_open.resize(n)
+	for i in n:
+		var t := TAU * (float(i) + 0.5) / float(n)
+		kinds[i] = _RIM
+		if hurt > 0.0 and _tear_at(t, phase, hurt) > 0.0:
+			kinds[i] = _GAP
+			continue
+		for k in PITS:
+			if open[k] <= 0.0:
+				continue
+			var off := absf(angle_difference(t, seats[k]))
+			var half := deg_to_rad(PIT_DEG) * open[k]
+			if off < half:
+				kinds[i] = _GAP
+				break
+			if off < half + deg_to_rad(PIT_LIP_DEG):
+				kinds[i] = _LIP
+				lip_open[i] = maxf(lip_open[i], open[k])
+	var tone := dose_hue(Doses.Kind.HARM)
+	var ink := BODY_RIM_ALPHA * (1.0 - WOUND_DIM * hurt) * fade
+	_draw_rim_runs(canvas, body, kinds, lip_open, tint, ink, tone, marks, unit)
+
+	# A curl of eaten membrane into each pit, in the strain's hue: the wound's
+	# own flap, lit, so a pit reads as damage being done and not as a gap.
+	var curls := PackedVector2Array()
+	var curl_ink := 0.0
+	for k in PITS:
+		if open[k] <= 0.05:
+			continue
+		var edge := _surface(at, fwd, stb, r * _crease(seats[k], phase, clock, limp),
+			seats[k], squeeze)
+		curls.append(edge)
+		curls.append(edge + (at - edge).normalized() * (r * PIT_CURL * open[k]))
+		curl_ink = maxf(curl_ink, open[k])
+	_stroke(canvas, curls, tone,
+		PIT_LIP_ALPHA * clampf(0.4 + curl_ink, 0.0, 1.0) * marks,
+		BODY_RIM_WIDTH * unit)
+	if hurt <= 0.0:
+		return
+	# The wound's flaps, exactly as [method _draw_ovoid] hangs them.
+	var flaps := PackedVector2Array()
+	for k in WOUND_TEARS:
+		var gash := clampf(hurt * float(WOUND_TEARS) - float(k), 0.0, 1.0)
+		if gash <= 0.0:
+			continue
+		var t := _tear_seat(phase, k)
+		var edge := _surface(at, fwd, stb, r * _crease(t, phase, clock, limp), t)
+		flaps.append(edge)
+		flaps.append(edge + (at - edge).normalized() * (r * WOUND_GASH * gash))
+	_stroke(canvas, flaps, tint, ink, BODY_RIM_WIDTH * unit)
+
+
+## The closed rim [param body], segment `i` running from point `i` to `i + 1`,
+## drawn in runs by [param kinds]: rim in the body's [param tint], lips in the
+## strain's [param tone], gaps not at all. Started at a change of kind, so no run
+## is cut in two at the seam.
+static func _draw_rim_runs(canvas: CanvasItem, body: PackedVector2Array,
+		kinds: PackedByteArray, lip_open: PackedFloat32Array, tint: Color,
+		ink: float, tone: Color, marks: float, unit: float) -> void:
+	var n := body.size()
+	var start := 0
+	for i in n:
+		if kinds[i] != kinds[(i + n - 1) % n]:
+			start = i
+			break
+	var run := PackedVector2Array()
+	var run_kind := int(kinds[start])
+	var run_open := 0.0
+	for j in n + 1:
+		var i := (start + j) % n
+		var kind := int(kinds[i]) if j < n else -1
+		if kind != run_kind:
+			if run.size() >= 2 and run_kind == _RIM:
+				canvas.draw_polyline(run, Color(tint, ink), BODY_RIM_WIDTH * unit,
+					true)
+			elif run.size() >= 2 and run_kind == _LIP:
+				canvas.draw_polyline(run, Color(tone, PIT_LIP_ALPHA
+					* clampf(0.4 + run_open, 0.0, 1.0) * marks),
+					BODY_RIM_WIDTH * PIT_LIP_WIDTH * unit, true)
+			run = PackedVector2Array()
+			run_kind = kind
+			run_open = 0.0
+		if j == n or kind == _GAP:
+			continue
+		if run.is_empty():
+			run.append(body[i])
+		run.append(body[(i + 1) % n])
+		run_open = maxf(run_open, lip_open[i])
+
+
+## **The stain**: harm in the body, a lumpy pool of the strain's [param tone],
+## [param h] 0..1, off the body's middle -- its outline three incommensurate
+## ripples, so it roils and is never the same shape twice: liquid inside the
+## cell, not an organelle (dna-slots-ux.md §4). Drawn after the nucleus and
+## before the fringe, so organs stay on top.
+##
+## [param entry] is `Vector2(bearing, seconds)` of the newest dose: for its
+## first [constant SEEP] seconds the stain grows from the skin on that bearing
+## to its seat (§5.1). Any other age draws the stain where it lives.
+static func _draw_stain(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, tone: Color, h: float, clock: float, phase: float,
+		marks: float, entry: Vector2) -> void:
+	var size := r * STAIN_R * lerpf(STAIN_MIN, 1.0, h)
+	var drift := phase * 1.3 + clock * STAIN_DRIFT
+	var seat := at - fwd * (r * STAIN_AFT) \
+		+ (fwd * cos(drift) * 0.9 + stb * sin(drift) * 0.7) * (r * STAIN_WANDER)
+	if entry.y >= 0.0 and entry.y < SEEP:
+		var u := smoothstep(0.0, SEEP, entry.y)
+		var skin := at + (fwd * cos(entry.x) + stb * sin(entry.x)) * (r * SEEP_SKIN)
+		seat = skin.lerp(seat, u)
+		size *= lerpf(SEEP_FROM, 1.0, u)
+	for layer in STAIN_SCALES.size():
+		var reach := size * STAIN_SCALES[layer]
+		var pool := PackedVector2Array()
+		pool.resize(STAIN_STEPS)
+		for i in STAIN_STEPS:
+			var a := TAU * float(i) / float(STAIN_STEPS)
+			# It roils, and never in step: a hurt that goes on is a churn, not a
+			# rhythm -- a rhythm here would be read as hunger's racing beat.
+			var edge := reach * (1.0
+				+ 0.20 * sin(2.0 * a + phase + 0.9 * clock)
+				+ 0.13 * sin(5.0 * a - 1.7 * phase - 1.7 * clock)
+				+ 0.07 * sin(9.0 * a + 2.3 * phase + 2.9 * clock))
+			pool[i] = seat + (fwd * (cos(a) * STAIN_ALONG)
+				+ stb * (sin(a) * STAIN_ACROSS)) * edge
+		canvas.draw_colored_polygon(pool, Color(tone,
+			minf(STAIN_ALPHA * STAIN_INKS[layer] * h * marks, 1.0)))
 
 
 ## The nucleus, and -- while [param double] is above zero -- the two it is
@@ -699,6 +1166,23 @@ static func skin_point(at: Vector2, heading: float, r: float, t: float,
 ## The slot layout of a cell that has never been given one: the three home
 ## organs in their home arcs, everything else in the free arcs in whatever order
 ## the dictionary holds it. Every cell in the water but the player is this.
+##
+## **By place** (docs/design/dna-slots.md §5.7): a venom is seated first, at
+## slot 3, the first front arc -- so a water hunter's venom rides on its bite --
+## and the other outside genes after it. An inside form is left out: it is
+## inside, and has no arc. food.gd reads a water cell's toxins off this same
+## layout, so what is drawn is where it works.
+##
+## **Every outside gene on an arc of the skin, never at the inside's index.**
+## A body missing a home organ -- a tailless daughter -- can carry more than the
+## four free arcs hold, and the one past them used to sit at index 7, drawn and
+## aimed on the last diagonal beside the gene already there. Index 7 is the
+## inside now (§2.1), where nothing that faces out may sit, and a player's
+## genome wears a gene posed there with no arc at all. So a gene past the free
+## arcs takes a home arc its organ left empty, the first one free, as the
+## genome's `_sync_order` seats one; and a tool's genome with more outside genes
+## than a body has arcs wears the rest unseated, as a player's body wears an
+## organ the gift took the arc of. No water cell carries more than seven.
 static func default_order(tiers: Dictionary) -> Array:
 	var out: Array[StringName] = [&"", &"", &""]
 	if tiers.has(&"cytostome"):
@@ -708,15 +1192,31 @@ static func default_order(tiers: Dictionary) -> Array:
 	if tiers.has(&"flagellum"):
 		out[2] = &"flagellum"
 	for gene: StringName in tiers:
-		if gene != &"cytostome" and gene != &"cirrus" and gene != &"flagellum":
+		if Genome.has_forms(gene) and not Genome.is_inside_form(gene):
 			out.append(gene)
+	for gene: StringName in tiers:
+		if gene != &"cytostome" and gene != &"cirrus" and gene != &"flagellum" \
+				and not Genome.has_forms(gene):
+			out.append(gene)
+	for home in 3:
+		if out.size() <= Genome.INSIDE:
+			break
+		if out[home] == &"":
+			out[home] = out[Genome.INSIDE]
+			out.remove_at(Genome.INSIDE)
+	if out.size() > Genome.INSIDE:
+		out.resize(Genome.INSIDE)
 	return out
 
 
+## The home organs, the earned tufts at their arcs, a venom's barbs on the side
+## it guards, and an inside form's granules round the whole body. [param layout]
+## is resolved: the body's own order, or [method default_order]'s.
 static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tiers: Dictionary, clock: float, fade: float,
-		steer: float, unit: float, order: Array = [],
-		eye: Dictionary = NO_EYE) -> void:
+		steer: float, unit: float, layout: Array,
+		eye: Dictionary = NO_EYE, tail: Vector2 = NO_TAIL,
+		dose: Dictionary = NO_DOSE) -> void:
 	if tiers.is_empty():
 		return
 
@@ -739,7 +1239,9 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	var swim := Genome.tier_of(tiers, &"flagellum")
 	if swim > 0:
 		var tails := PackedVector2Array()
-		_gather_flagellum(tails, at, fwd, stb, r, swim, clock)
+		var own := not is_nan(tail.x)
+		_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
+			tail.y if own else 0.0)
 		_stroke(canvas, tails, hue(&"flagellum"),
 			ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
 			WIDTH_FLAGELLUM * unit)
@@ -747,17 +1249,33 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 	# **The slot is the arc.** Walked by slot rather than by dictionary order, so
 	# a gene the player placed in the rear-left diagonal is drawn -- and aimed --
 	# in the rear-left diagonal.
-	var layout := order if not order.is_empty() else default_order(tiers)
 	for slot in layout.size():
 		var gene: StringName = layout[slot]
 		if gene == &"" or gene == &"cytostome" or gene == &"cirrus" \
 				or gene == &"flagellum":
 			continue
 		var tier := int(tiers.get(gene, 0))
-		if tier > 0:
-			_draw_earned(canvas, at, fwd, stb, r, gene, tier,
-				arc_for_slot(slot), fade, unit, clock,
-				eye if StringName(eye.get("gene", &"")) == gene else NO_EYE)
+		if tier <= 0:
+			continue
+		# **The toxin is never a tuft.** Inside it has no arc, and is drawn
+		# below; at the front it is on the lips, drawn with the gape; on a side
+		# or the stern it is barbs on the arc it guards -- unless the switch has
+		# made a side venom inert, when it draws nothing at all.
+		if Genome.has_forms(gene):
+			if not Genome.is_inside_form(gene) and slot < Genome.INSIDE \
+					and not Genome.is_front(slot) and CellBody.VENOM_SIDES:
+				_draw_guard(canvas, at, fwd, stb, r, gene, tier,
+					arc_for_slot(slot), fade, unit, float(dose.get("guard", 0.0)))
+			continue
+		_draw_earned(canvas, at, fwd, stb, r, gene, tier,
+			arc_for_slot(slot), fade, unit, clock,
+			eye if StringName(eye.get("gene", &"")) == gene else NO_EYE)
+	# **What is inside has no arc**: poison is its granules under the whole skin,
+	# and nothing at any one place.
+	for gene: StringName in tiers:
+		if Genome.is_inside_form(gene) and int(tiers[gene]) > 0:
+			_draw_granules(canvas, at, fwd, stb, r, gene, int(tiers[gene]), fade,
+				unit, float(dose.get("granules", 0.0)))
 
 
 ## The oral mat: dense, fine, standing just off the surface, with a beat that
@@ -824,11 +1342,15 @@ static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 
 
 ## The tail: long, smooth, and carrying a wave that travels out to the tip. The
-## only stroke in the vocabulary that is longer than half the body.
+## only stroke in the vocabulary that is longer than half the body. [param still]
+## is how far it is held still, 0 to 1: its lash goes slack toward
+## [constant TAIL_HELD_LASH] (its clock is the caller's, and stops).
 static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
-		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float) -> void:
+		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
+		still: float = 0.0) -> void:
 	var count := _count(COUNT_FLAGELLUM, tier)
 	var scale := _tier(TIER_LEN, tier)
+	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(still, 0.0, 1.0))
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
 		var t := deg_to_rad(lerpf(ARC_FLAGELLUM.x, ARC_FLAGELLUM.y, u))
@@ -841,11 +1363,22 @@ static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 		for j in range(1, FLAGELLUM_POINTS):
 			var v := float(j) / float(FLAGELLUM_POINTS - 1)
 			var lash := sin(v * FLAGELLUM_WAVE_V - clock * FLAGELLUM_WAVE_HZ
-				+ u * FLAGELLUM_WAVE_U) * length * FLAGELLUM_LASH * v
+				+ u * FLAGELLUM_WAVE_U) * length * FLAGELLUM_LASH * v * slack
 			var point := root + dir * (length * v) + side * lash
 			into.append(previous)
 			into.append(point)
 			previous = point
+
+
+## **One step of a tail's own clock** (automation.md §8.1): `(clock, still)`,
+## the clock its wave is drawn on and how far it has gone still, 0 beating to 1
+## held, after [param delta] seconds with the tail [param held] or not. The clock
+## slows to a stop as the tail goes still and picks up as it beats again, so the
+## wave halts where it was. Both views keep one for the player's tail: the
+## point-of-view figure and full vision draw the same tail.
+static func step_tail(tail: Vector2, held: bool, delta: float) -> Vector2:
+	var still := move_toward(tail.y, 1.0 if held else 0.0, delta / TAIL_SETTLE)
+	return Vector2(tail.x + delta * (1.0 - still), still)
 
 
 ## An earned gene: stiff sensory bristles that do not row, over a pigment
@@ -930,6 +1463,102 @@ static func _draw_bud(canvas: CanvasItem, seat: Vector2, normal: Vector2,
 			Color(tone, minf(rim * shimmer * fade, 1.0)), true, -1.0, true)
 		canvas.draw_circle(lobe, r * BUD_CORE,
 			Color(tone, minf(core * shimmer * fade, 1.0)), true, -1.0, true)
+
+
+## **Venom at the front: fangs on the lips** (dna-slots-ux.md §2.2). One pair
+## per copy, standing out of the lip bow's two corners and splayed away from the
+## centreline, a bead at each tip. [param flare] is 0..1, the venom landing.
+static func _draw_fangs(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, gape: float, gene: StringName, tier: int,
+		fade: float, unit: float, flare: float = 0.0) -> void:
+	var tone := hue(gene)
+	var base := at + fwd * (r * OVOID_ALONG * GAPE_SEAT)
+	var pairs := clampi(tier, 1, 3)
+	var lit := clampf(flare, 0.0, 1.0)
+	var length := maxf(gape * FANG_LEN * _tier(TIER_LEN, tier), FANG_MIN * unit) \
+		* (1.0 + TOXIN_FLARE_LONG * lit)
+	var bead := maxf(gape * FANG_BEAD, BEAD_MIN * unit) * (1.0 + TOXIN_FLARE_BEAD * lit)
+	var ink := fade * (1.0 + TOXIN_FLARE_INK * lit)
+	# Which way a positive turn takes a vector, on this canvas: toward starboard
+	# on every canvas this game has, and the other way on a mirrored one.
+	var hand := 1.0 if stb.cross(fwd) < 0.0 else -1.0
+	var lines := PackedVector2Array()
+	for side: float in [-1.0, 1.0]:
+		for i in pairs:
+			var u := (float(i) + 0.5) / float(pairs)
+			var s := side * lerpf(FANG_FROM, FANG_TO, u)
+			var root := _lip(base, fwd, stb, gape, s)
+			var along := (_lip(base, fwd, stb, gape, s + 0.01)
+				- _lip(base, fwd, stb, gape, s - 0.01)).normalized()
+			var out := Vector2(-along.y, along.x)
+			if out.dot(fwd) < 0.0:
+				out = -out
+			# Splayed outward, so the pair reads as fangs at the corners of the
+			# mouth and stays out of the way ahead.
+			out = out.rotated(deg_to_rad(FANG_SPLAY) * side * hand)
+			var tip := root + out * length
+			lines.append(root)
+			lines.append(tip)
+			_draw_bead(canvas, tip, bead, tone, FANG_ALPHA * ink, lit)
+	_stroke(canvas, lines, tone, FANG_ALPHA * ink, FANG_WIDTH * unit)
+
+
+## **Venom on a side or the stern: barbs on that arc** (dna-slots-ux.md §2.3).
+## Two a copy, evenly across the arc's middle, fanned [constant GUARD_FAN]
+## degrees either side of the normal at the ends. [param flare] is 0..1, a
+## mouth biting the side they guard.
+static func _draw_guard(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, gene: StringName, tier: int, arc: Vector2,
+		fade: float, unit: float, flare: float = 0.0) -> void:
+	var tone := hue(gene)
+	var count := 2 * clampi(tier, 1, 3)
+	var lit := clampf(flare, 0.0, 1.0)
+	var length := maxf(r * GUARD_LEN * _tier(TIER_LEN, tier), GUARD_MIN * unit) \
+		* (1.0 + TOXIN_FLARE_LONG * lit)
+	var bead := maxf(r * GUARD_BEAD, BEAD_MIN * unit) * (1.0 + TOXIN_FLARE_BEAD * lit)
+	var ink := fade * (1.0 + TOXIN_FLARE_INK * lit)
+	var lines := PackedVector2Array()
+	for i in count:
+		var u := (float(i) + 0.5) / float(count)
+		var t := deg_to_rad(lerpf(arc.x, arc.y, lerpf(GUARD_FROM, 1.0 - GUARD_FROM, u)))
+		var out := _normal(fwd, stb, t).rotated(deg_to_rad(GUARD_FAN) * lerpf(-1.0, 1.0, u))
+		var root := _surface(at, fwd, stb, r, t)
+		var tip := root + out * length
+		lines.append(root)
+		lines.append(tip)
+		_draw_bead(canvas, tip, bead, tone, GUARD_ALPHA * ink, lit)
+	_stroke(canvas, lines, tone, GUARD_ALPHA * ink, GUARD_WIDTH * unit)
+
+
+## **Poison: granules under the whole skin, and no arc** (dna-slots-ux.md
+## §2.4). [constant GRANULE_COUNT] by copies, scattered just inside the rim
+## round the body, the mouth's arc left clear. [param flare] is 0..1, the poison
+## being taken.
+static func _draw_granules(canvas: CanvasItem, at: Vector2, fwd: Vector2,
+		stb: Vector2, r: float, gene: StringName, tier: int, fade: float,
+		unit: float, flare: float = 0.0) -> void:
+	var tone := hue(gene)
+	var lit := clampf(flare, 0.0, 1.0)
+	var count := _count(GRANULE_COUNT, tier)
+	var dot := maxf(r * GRANULE_R, GRANULE_MIN * unit) * (1.0 + TOXIN_FLARE_BEAD * lit)
+	var ink := GRANULE_ALPHA * fade * (1.0 + GRANULE_FLARE_INK * lit)
+	for i in count:
+		var u := (float(i) + 0.5 + GRANULE_SPREAD * sin(float(i) * 3.7)) / float(count)
+		var t := deg_to_rad(lerpf(GRANULE_FROM, 360.0 - GRANULE_FROM, u))
+		var jitter := 0.07 * sin(float(i) * 2.3 + 1.1) - 0.02
+		_draw_bead(canvas, _surface(at, fwd, stb, r * (GRANULE_SEAT + jitter), t),
+			dot, tone, ink, lit)
+
+
+## One bead of a toxin, and while it flares, a three-ring haze round it.
+static func _draw_bead(canvas: CanvasItem, at: Vector2, size: float, tone: Color,
+		alpha: float, flare: float) -> void:
+	if flare > 0.0:
+		for q in 3:
+			var k := float(q) / 3.0
+			canvas.draw_circle(at, size * (2.0 + 4.8 * k),
+				Color(tone, 0.10 * (1.0 - k) * flare), true, -1.0, true)
+	canvas.draw_circle(at, size, Color(tone, minf(alpha, 1.0)), true, -1.0, true)
 
 
 # ---------------------------------------------------------------------------
@@ -1179,7 +1808,9 @@ const HELD_WILT := 15.0
 ## water full of vacancy beads would be ink spent on nothing anyone can act on.
 ##
 ## [param offer] is the body held open to place [param gene] (dna-body.md §8):
-## `{"aim": slot, "copies": n}`, or empty. See [method _draw_offer].
+## `{"aim": slot, "copies": n, "inside": bool}`, or empty -- `aim` is
+## [constant Genome.INSIDE] for the inside, and `inside` whether it is offered at
+## all (dna-slots-ux.md §3.7). See [method _draw_offer].
 static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, remaining: float,
 		beat: float, clock: float, fade: float = 1.0,
@@ -1191,7 +1822,11 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 	if not offer.is_empty() and gene != &"":
 		aim = int(offer.get("aim", -1))
 		_draw_offer(canvas, at, heading, r, order, gene,
-			int(offer.get("copies", 1)), aim, fade, unit)
+			int(offer.get("copies", 1)), aim, fade, unit,
+			bool(offer.get("inside", false)))
+	# Aimed inside, no socket on the skin is being tried: the gene is going to
+	# the DNA in the middle of the body, and the thread says so.
+	var inward := Genome.is_inside(aim)
 	var held := gene != &"" and remaining > 0.0
 	if free.is_empty() and not held:
 		return
@@ -1228,8 +1863,11 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		# drift: the tuft on the skin and the thread move to the slot that is
 		# lit, so the body says the same thing as the bloom outside it -- and
 		# on a phone, where the lit bud is under the thumb, the tuft is the half
-		# that stays visible.
-		if aim >= 0:
+		# that stays visible. **The inside has no arc to ask for**, and no
+		# socket is tried while it is aimed at.
+		if inward:
+			tried = -1
+		elif aim >= 0:
 			tried = free.find(arc_for_slot(aim))
 
 	for i in free.size():
@@ -1240,8 +1878,12 @@ static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 	var target := seat
 	if tried >= 0:
 		target = _socket_bead(at, fwd, stb, r, free[tried])
-	_draw_vesicle(canvas, seat, size, target, tried >= 0, -fwd, tone, wilt,
-		pulse, clock, fade, unit)
+	elif inward:
+		# **Aimed inside, the thread goes to the nucleus** (dna-slots-ux.md
+		# §3.7): the DNA, which is where the gene is going.
+		target = at - fwd * (r * NUCLEUS_BACK)
+	_draw_vesicle(canvas, seat, size, target, tried >= 0 or inward, -fwd, tone,
+		wilt, pulse, clock, fade, unit)
 
 
 ## **The body held open** (dna-body.md §8), outboard of it. Every free slot
@@ -1274,15 +1916,49 @@ const OFFER_SCALE := 1.15
 const OFFER_LINE_FROM := 0.42
 const OFFER_LINE_ALPHA := 0.55
 const OFFER_LINE_WIDTH := 1.4
+## **The inside, offered** (dna-slots-ux.md §3.7). Its bud is the poison it
+## would make, drawn where poison is -- the granule field under the whole skin,
+## at [constant OFFER_ALPHA], and at [constant OFFER_AIM_ALPHA] once aimed -- and
+## not a bud outside: the one bearing no slot uses is the port flank, and a bud
+## there would teach that the inside is your left side. **Aimed, a halo stands
+## round the body** at this share of r and never nearer than this many canvas
+## px, which clears a thumb resting on it, and every outside bud dims to this:
+## the lit thing is under the finger, and the halo is the half of it a thumb
+## does not cover.
+const OFFER_HALO := 1.45
+const OFFER_HALO_MIN := 62.0
+const OFFER_HALO_WIDTH := 2.5
+const OFFER_HALO_ALPHA := 0.55
+const OFFER_HALO_STEPS := 64
+const OFFER_OUT_DIM := 0.45
 
 
 static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, copies: int, aim: int,
-		fade: float, unit: float) -> void:
+		fade: float, unit: float, inside: bool = false) -> void:
 	var reach := maxf(r * OFFER_REACH, OFFER_REACH_MIN * unit)
 	var tone := hue(gene)
+	var inward := inside and Genome.is_inside(aim)
+	if inside:
+		var form := Genome.form_in(gene, Genome.INSIDE_PLACE)
+		if form != &"":
+			_draw_granules(canvas, at, Vector2(sin(heading), -cos(heading)),
+				Vector2(cos(heading), sin(heading)), r, form, copies,
+				(OFFER_AIM_ALPHA if inward else OFFER_ALPHA) * fade, unit)
+		if inward:
+			canvas.draw_arc(at, maxf(r * OFFER_HALO, OFFER_HALO_MIN * unit), 0.0,
+				TAU, OFFER_HALO_STEPS, Color(tone, OFFER_HALO_ALPHA * fade),
+				OFFER_HALO_WIDTH * unit, true)
+	var outside := OFFER_OUT_DIM if inward else 1.0
 	for slot in mini(order.size(), 3 + ARC_FREE.size()):
 		if StringName(order[slot]) != &"":
+			continue
+		# **Each free slot blooms as the form it would make**, and a slot whose
+		# form is already carried does not bloom at all: placed there, the gene
+		# would add copies to that form where it is and leave this slot empty
+		# (dna-slots.md §5.2), which is not what a bud here promises.
+		var form := Genome.form_at(gene, slot)
+		if form == &"" or (Genome.has_forms(gene) and order.has(form)):
 			continue
 		var bearing := slot_bearing(slot) + heading
 		var dir := Vector2(sin(bearing), -cos(bearing))
@@ -1297,8 +1973,8 @@ static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
 		# bearing it opens away from the body, and seated 4 px inboard of its
 		# own centre so the strokes, not the arc, reach the seat.
 		canvas.draw_set_transform(seat, bearing, Vector2.ONE * unit)
-		draw_tile_organ(canvas, gene, copies, Vector2(0.0, 4.0),
-			(OFFER_AIM_ALPHA if lit else OFFER_ALPHA) * fade, OFFER_SCALE)
+		draw_tile_organ(canvas, form, copies, Vector2(0.0, 4.0),
+			(OFFER_AIM_ALPHA if lit else OFFER_ALPHA) * fade * outside, OFFER_SCALE)
 		canvas.draw_set_transform(Vector2.ZERO, 0.0, Vector2.ONE)
 
 
@@ -1555,6 +2231,33 @@ static func draw_tile_organ(canvas: CanvasItem, gene: StringName, tier: int,
 	canvas.draw_arc(centre, arc_r, TILE_ARC_FROM, TILE_ARC_TO, 32,
 		Color(tone, TILE_ARC_ALPHA * ink), TILE_ARC_WIDTH * scale, true)
 
+	# **The toxin's two forms are two tiles** (dna-slots-ux.md §2.5): venom four
+	# beaded rods standing out of the dome, poison the dome, the pigment and seven
+	# dots on an arc just outside it -- the granules, at a tile's size.
+	if Genome.has_forms(gene):
+		if Genome.is_inside_form(gene):
+			canvas.draw_circle(centre + Vector2(0.0, -arc_r * PIGMENT_SEAT),
+				TILE_PIGMENT * scale, Color(tone, 0.85 * ink), true, -1.0, true)
+			for i in TILE_GRANULES:
+				var u := (float(i) + 0.5) / float(TILE_GRANULES)
+				var angle := lerpf(TILE_ARC_FROM - 0.15, TILE_ARC_TO + 0.15, u)
+				canvas.draw_circle(centre + Vector2(cos(angle), sin(angle))
+					* (arc_r + TILE_GRANULE_OUT * scale), TILE_GRANULE_R * scale,
+					Color(tone, minf(alpha, 1.0)), true, -1.0, true)
+			return
+		var rods := PackedVector2Array()
+		for i in TILE_RODS:
+			var u := (float(i) + 0.5) / float(TILE_RODS)
+			var angle := lerpf(TILE_ARC_FROM + 0.25, TILE_ARC_TO - 0.25, u)
+			var dir := Vector2(cos(angle), sin(angle))
+			var tip := centre + dir * (arc_r + TILE_LEN_EARNED * 0.85 * scale)
+			rods.append(centre + dir * (arc_r * 0.55))
+			rods.append(tip)
+			canvas.draw_circle(tip, TILE_ROD_BEAD * scale, Color(tone, 0.95 * ink),
+				true, -1.0, true)
+		_stroke(canvas, rods, tone, alpha, TILE_ARC_WIDTH * 1.35 * scale)
+		return
+
 	var count := int(TILE_COUNT.get(gene,
 		EARNED_COUNT.get(gene, TILE_COUNT_EARNED)))
 	var length := float(TILE_LEN.get(gene, TILE_LEN_EARNED)) * scale
@@ -1614,6 +2317,14 @@ static func draw_slot_dart(canvas: CanvasItem, slot: int, tone: Color,
 		centre: Vector2, radius: float = TILE_COMPASS_R,
 		ring: bool = true) -> void:
 	if slot < 0:
+		return
+	# **The inside points nowhere** (dna-slots-ux.md §3.8): its mark is a ring
+	# with a seed in it -- a body with something inside -- where every outside
+	# slot has a dart.
+	if Genome.is_inside(slot):
+		canvas.draw_arc(centre, radius, 0.0, TAU, 24, Color(tone, 0.80), 1.4, true)
+		canvas.draw_circle(centre, radius * 0.38, Color(tone, 0.95), true, -1.0,
+			true)
 		return
 	if ring:
 		canvas.draw_arc(centre, radius, 0.0, TAU, 20, Color(tone, 0.28), 1.0,

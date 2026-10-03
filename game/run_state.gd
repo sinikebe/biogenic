@@ -1,6 +1,7 @@
 extends RefCounted
 ## The little the game remembers between runs: which view was last chosen, how
-## bright the membrane is, and whether the one line of onboarding has been read.
+## bright the membrane is, whether the one line of onboarding has been read, and
+## the language the player chose.
 ##
 ## One small file in user://, separate from the launcher's own state, and never
 ## instanced -- everything here is static. It is deliberately not an autoload:
@@ -118,6 +119,23 @@ static func load_numbers() -> bool:
 
 static func save_numbers(value: bool) -> void:
 	_store("run", "numbers", value)
+
+
+## **The language this player chose** in the settings sheet, as the locale of the
+## catalog it picked (`fr`, `pt_BR`, or `en` for the English the game is written
+## in), or "" for none: the game follows the device's language, as it did before
+## there was a choice. Only the list writes it, so a player who never opens it
+## never has one (docs/design/settings.md §3.2). It belongs to the whole app
+## rather than to a run, hence its own section; game/i18n/i18n.gd applies it.
+static func load_locale() -> String:
+	var config := ConfigFile.new()
+	if config.load(PATH) != OK:
+		return ""
+	return str(config.get_value("app", "locale", ""))
+
+
+static func save_locale(locale: String) -> void:
+	_store("app", "locale", locale)
 
 
 static func onboarding_seen() -> bool:

@@ -91,6 +91,88 @@ func _process(_delta: float) -> void:
 
 
 # ---------------------------------------------------------------------------
+# The installed binary's side
+# ---------------------------------------------------------------------------
+#
+# This file ships in content packs; BuildInfo and LauncherConfig never do.
+# BuildInfo mounts the pack, so it is compiled from the binary before any pack
+# exists, and LauncherConfig comes with it, because BuildInfo names the class.
+# Every launch after a content update therefore runs this script against a
+# BuildInfo and a LauncherConfig as old as the installed binary -- as old as the
+# first launcher a game shipped. A member added to either since then is not
+# there, and reading it fails at runtime (#24, #70). A debug build aborts the
+# function; a release build runs on with nil. In check_for_updates() either one
+# left the updater unable ever to run again, and so unable to fetch its own fix.
+#
+# So everything below reads them by name and falls back to what an older binary
+# actually did. ci/check_binary_skew.py fails a change that reads one directly in
+# the ordinary way; its docstring lists the forms it cannot follow.
+
+## The release stream this binary follows. A binary built before branch builds
+## existed has no such member, and follows /releases/latest/: "".
+func _release_branch() -> String:
+	if "release_branch" in BuildInfo:
+		return str(BuildInfo.get("release_branch"))
+	return ""
+
+
+## Why updates cannot run, or "" when they can.
+func _config_error(branch: String) -> String:
+	var config := BuildInfo.config
+	if _accepts(config, "update_config_error", 1):
+		return str(config.call("update_config_error", branch))
+	# Before branch builds, an unset update_repo was the only way to be unusable.
+	if config.update_repo.is_empty():
+		return tr("No update repository configured (set update_repo in the launcher config).")
+	# A branch stamp alongside a config that cannot take one: only a commit made
+	# while branch builds were being written ever shipped like that. Its URLs
+	# would point at the releases players get, which a branch build must never
+	# update itself from.
+	if not branch.is_empty() and not _accepts(config, "manifest_url", 1):
+		return tr("This build follows branch \"%s\", but its launcher config cannot. Install the branch's current build.") % branch
+	return ""
+
+
+## Where this binary polls for its manifest, or "" when it cannot say.
+func _manifest_url(branch: String) -> String:
+	return _config_url("manifest_url", branch)
+
+
+## The release page for this binary's stream, or "" when it cannot say.
+func _releases_url(branch: String) -> String:
+	return _config_url("releases_url", branch)
+
+
+## Every config there has ever been answers for the release stream with no
+## argument; only one built for branch builds takes the branch.
+func _config_url(method: String, branch: String) -> String:
+	var config := BuildInfo.config
+	if branch.is_empty():
+		return str(config.call(method))
+	if _accepts(config, method, 1):
+		return str(config.call(method, branch))
+	return ""
+
+
+## BuildInfo.launcher_source(), or "" from a binary that predates it. That binary
+## also predates the check it feeds, so skipping the check is what it did.
+func _launcher_source() -> String:
+	if BuildInfo.has_method("launcher_source"):
+		return str(BuildInfo.call("launcher_source"))
+	return ""
+
+
+## Whether [param object] has a method [param method] that takes [param argc]
+## arguments.
+static func _accepts(object: Object, method: String, argc: int) -> bool:
+	for info: Dictionary in object.get_method_list():
+		if info.name == method:
+			var total: int = info.args.size()
+			return argc <= total and argc >= total - info.default_args.size()
+	return false
+
+
+# ---------------------------------------------------------------------------
 # Checking
 # ---------------------------------------------------------------------------
 
@@ -102,16 +184,17 @@ func check_for_updates() -> State:
 	# Reports a bad branch stamp as well as a missing update_repo. updates_enabled()
 	# stays keyed on update_repo alone, so a misconfigured branch surfaces as an
 	# error the player can see rather than hiding the update bar entirely.
-	var config_error := BuildInfo.config.update_config_error(BuildInfo.release_branch)
+	var branch := _release_branch()
+	var config_error := _config_error(branch)
 	if not config_error.is_empty():
 		return _finish(State.UNAVAILABLE, config_error)
 
 	# A game that copied the demo's config would poll the launcher template and
 	# try to install the demo over itself. Refuse rather than do that.
-	var source := BuildInfo.launcher_source()
+	var source := _launcher_source()
 	if not source.is_empty() and BuildInfo.config.update_repo == source:
 		return _finish(State.UNAVAILABLE,
-			"update_repo still points at the launcher template. Set it to this game's own repository.")
+			tr("update_repo still points at the launcher template. Set it to this game's own repository."))
 	_busy = true
 	_set_state(State.CHECKING)
 	last_error = ""
@@ -125,25 +208,25 @@ func check_for_updates() -> State:
 	# value that decided this build's package id and user:// directory, so what it
 	# polls cannot disagree with which app it is.
 	var url := "%s?ts=%d" % [
-		BuildInfo.config.manifest_url(BuildInfo.release_branch), Time.get_unix_time_from_system()]
+		_manifest_url(branch), Time.get_unix_time_from_system()]
 	var response := await _request(url, "")
 	_busy = false
 
 	if not response.ok:
 		if response.code == 404:
-			return _fail("No release has been published yet.")
+			return _fail(tr("No release has been published yet."))
 		return _fail(response.error)
 
 	var parsed: Variant = JSON.parse_string(response.body.get_string_from_utf8())
 	if not parsed is Dictionary:
-		return _fail("The update manifest is malformed.")
+		return _fail(tr("The update manifest is malformed."))
 
 	manifest = parsed
 	_cache_changelog()
 	var schema := int(manifest.get("schema", 0))
 	if schema > SUPPORTED_SCHEMA:
 		return _finish(State.UNAVAILABLE,
-			"This build is too old to understand the update feed. Please reinstall from GitHub.")
+			tr("This build is too old to understand the update feed. Please reinstall from GitHub."))
 
 	var platform := BuildInfo.platform_key()
 	var artifacts: Dictionary = manifest.get("artifacts", {})
@@ -155,8 +238,10 @@ func check_for_updates() -> State:
 	if remote_binary > BuildInfo.binary_version:
 		var binary_artifact := _artifact_for(artifacts, "binary", platform)
 		if binary_artifact.is_empty():
+			# tr() before %, not after: auto-translation only ever sees the finished
+			# string, which matches no msgid once a version number is in it.
 			return _finish(State.UNAVAILABLE,
-				"Version %s needs a new app build, but none is published for %s yet." % [
+				tr("Version %s needs a new app build, but none is published for %s yet.") % [
 					manifest.get("version_name", "?"), platform])
 		pending_kind = "binary"
 		pending_artifact = binary_artifact
@@ -166,7 +251,7 @@ func check_for_updates() -> State:
 	if remote_content > BuildInfo.content_version:
 		var content_artifact := _artifact_for(artifacts, "content", platform)
 		if content_artifact.is_empty():
-			return _finish(State.UNAVAILABLE, "No content pack published for %s." % platform)
+			return _finish(State.UNAVAILABLE, tr("No content pack published for %s.") % platform)
 		pending_kind = "content"
 		pending_artifact = content_artifact
 		pending_version = remote_content
@@ -222,7 +307,7 @@ func _apply_content() -> State:
 		DirAccess.remove_absolute(final_path)
 	if DirAccess.rename_absolute(staged, final_path) != OK:
 		_busy = false
-		return _fail("Could not move the downloaded content into place.")
+		return _fail(tr("Could not move the downloaded content into place."))
 
 	var size := 0
 	var probe := FileAccess.open(final_path, FileAccess.READ)
@@ -233,7 +318,7 @@ func _apply_content() -> State:
 		"content_version": version,
 		# Which build stream staged it, so a build following another one refuses to
 		# mount it even if the two ever end up sharing a user:// directory.
-		"branch": BuildInfo.release_branch,
+		"branch": _release_branch(),
 		"pack_path": final_path,
 		"size": size,
 		"sha256": str(pending_artifact.get("sha256", "")),
@@ -277,8 +362,8 @@ func _apply_binary() -> State:
 
 	# Nothing safe to automate here: point at the release page.
 	_busy = false
-	OS.shell_open(BuildInfo.config.releases_url(BuildInfo.release_branch))
-	return _finish(State.UNAVAILABLE, "Download the new build from the GitHub releases page.")
+	OS.shell_open(_releases_url(_release_branch()))
+	return _finish(State.UNAVAILABLE, tr("Download the new build from the GitHub releases page."))
 
 
 ## Hands the already-downloaded, already-verified APK to the system installer.
@@ -294,14 +379,14 @@ func _hand_off_to_installer() -> State:
 	if not AndroidBridge.can_install_packages():
 		AndroidBridge.open_install_settings()
 		return _finish(State.NEEDS_PERMISSION,
-			"Allow %s to install unknown apps, then tap Install." % BuildInfo.config.game_title)
+			tr("Allow %s to install unknown apps, then tap Install.") % BuildInfo.config.game_title)
 
 	if not AndroidBridge.install_apk(_verified_apk_path):
 		# The APK sits in private storage, so there is nothing the user could
 		# open by hand. Send them to the release page instead -- a browser
 		# download lands somewhere they can install from.
-		OS.shell_open(BuildInfo.config.releases_url(BuildInfo.release_branch))
-		return _fail("Could not open the installer. Opened the releases page so you can download the APK directly.")
+		OS.shell_open(_releases_url(_release_branch()))
+		return _fail(tr("Could not open the installer. Opened the releases page so you can download the APK directly."))
 
 	return _finish(State.INSTALL_HANDOFF, "")
 
@@ -323,7 +408,7 @@ func retry_install() -> State:
 ## hash. Returns State.VERIFYING on success, or a failure state.
 func _download_verified(url: String, dest: String) -> State:
 	if url.is_empty():
-		return _fail("The manifest entry has no download URL.")
+		return _fail(tr("The manifest entry has no download URL."))
 
 	_set_state(State.DOWNLOADING)
 	var response := await _request(url, dest)
@@ -336,12 +421,12 @@ func _download_verified(url: String, dest: String) -> State:
 	if expected.is_empty():
 		# Refuse to install something we cannot authenticate.
 		DirAccess.remove_absolute(dest)
-		return _fail("The manifest is missing a checksum for this download.")
+		return _fail(tr("The manifest is missing a checksum for this download."))
 
 	var actual := FileAccess.get_sha256(dest).to_lower()
 	if actual != expected:
 		DirAccess.remove_absolute(dest)
-		return _fail("The download is corrupted (checksum mismatch) and was discarded.")
+		return _fail(tr("The download is corrupted (checksum mismatch) and was discarded."))
 
 	return State.VERIFYING
 
@@ -383,7 +468,7 @@ func _request(url: String, download_to: String) -> Dictionary:
 		_teardown_request(http)
 		return {
 			"ok": false, "code": 0, "body": PackedByteArray(),
-			"error": "Could not start the request (error %d). Check your connection." % error,
+			"error": tr("Could not start the request (error %d). Check your connection.") % error,
 		}
 
 	var result: Array = await http.request_completed
@@ -396,7 +481,7 @@ func _request(url: String, download_to: String) -> Dictionary:
 	if outcome != HTTPRequest.RESULT_SUCCESS:
 		return {"ok": false, "code": code, "body": body, "error": _describe_transfer_failure(outcome)}
 	if code < 200 or code >= 300:
-		return {"ok": false, "code": code, "body": body, "error": "The server answered with HTTP %d." % code}
+		return {"ok": false, "code": code, "body": body, "error": tr("The server answered with HTTP %d.") % code}
 
 	return {"ok": true, "code": code, "body": body, "error": ""}
 
@@ -410,21 +495,21 @@ func _teardown_request(http: HTTPRequest) -> void:
 func _describe_transfer_failure(outcome: int) -> String:
 	match outcome:
 		HTTPRequest.RESULT_CANT_CONNECT, HTTPRequest.RESULT_CANT_RESOLVE:
-			return "Could not reach GitHub. Check your connection."
+			return tr("Could not reach GitHub. Check your connection.")
 		HTTPRequest.RESULT_TIMEOUT:
-			return "The connection timed out."
+			return tr("The connection timed out.")
 		# A peer that stalls and then drops surfaces here rather than as
 		# RESULT_TIMEOUT once the deadline is long enough not to fire first --
 		# same cause as far as the player is concerned, so say the same thing
 		# instead of falling through to a bare error number.
 		HTTPRequest.RESULT_CONNECTION_ERROR:
-			return "The connection dropped part-way through. Try again."
+			return tr("The connection dropped part-way through. Try again.")
 		HTTPRequest.RESULT_TLS_HANDSHAKE_ERROR:
-			return "Secure connection failed."
+			return tr("Secure connection failed.")
 		HTTPRequest.RESULT_DOWNLOAD_FILE_CANT_OPEN, HTTPRequest.RESULT_DOWNLOAD_FILE_WRITE_ERROR:
-			return "Could not write the download to storage. Is the device full?"
+			return tr("Could not write the download to storage. Is the device full?")
 		_:
-			return "The download failed (error %d)." % outcome
+			return tr("The download failed (error %d).") % outcome
 
 
 # ---------------------------------------------------------------------------
@@ -470,11 +555,11 @@ func _apply_windows_binary(url: String) -> State:
 
 	if OS.has_feature("editor"):
 		return _finish(State.UNAVAILABLE,
-			"Running from the editor — the new build was saved to %s." %
+			tr("Running from the editor — the new build was saved to %s.") %
 				ProjectSettings.globalize_path(staged))
 
 	if not _spawn_windows_swap(staged, OS.get_executable_path()):
-		return _fail("Could not start the updater. The new build is at %s." %
+		return _fail(tr("Could not start the updater. The new build is at %s.") %
 			ProjectSettings.globalize_path(staged))
 
 	get_tree().quit()
@@ -583,8 +668,12 @@ func pending_changelog() -> Array:
 	return result
 
 
-## The pending patch notes as display text, capped so the dialog cannot outgrow
-## the screen. Empty when there is nothing to show.
+## The pending patch notes as display text, capped so the prompt stays a summary;
+## the whole history is under "What's new". Empty when there is nothing to show.
+##
+## The cap counts lines of text, not lines drawn: one change can wrap to several.
+## So it cannot keep the dialog on screen, which is the launcher's job; see
+## _fit_overlay() in launcher.gd.
 func pending_notes_text(max_lines: int = 12) -> String:
 	return _format_entries(pending_changelog(), max_lines, false)
 
@@ -638,9 +727,11 @@ func _format_entries(entries: Array, max_lines: int, mark_installed: bool) -> St
 		var changes: Array = entry.get("changes", [])
 
 		var version := int(entry.get("content_version", 0))
-		var heading := "v%s  ·  build %d" % [entry.get("version_name", "?"), version]
+		var heading := tr("v%s  ·  build %d") % [entry.get("version_name", "?"), version]
 		if mark_installed and version == BuildInfo.content_version:
-			heading += "     ← installed"
+			# "<-" and not "←": the bundled theme uses Godot's built-in font, which
+			# has no glyph for U+2190 -- it measured zero width and drew nothing.
+			heading += tr("     <- installed")
 
 		if lines.size() >= max_lines:
 			dropped += changes.size()
@@ -660,7 +751,10 @@ func _format_entries(entries: Array, max_lines: int, mark_installed: bool) -> St
 		return ""
 	if dropped > 0:
 		lines.append("")
-		lines.append("…and %d more change%s." % [dropped, "" if dropped == 1 else "s"])
+		# tr_n(), not tr(): the old form appended an English "s", which no language
+		# with different plural rules can express. A translator gets both forms and
+		# gettext picks by its own rules.
+		lines.append(tr_n("…and %d more change.", "…and %d more changes.", dropped) % dropped)
 	return "\n".join(lines)
 
 
@@ -699,23 +793,23 @@ func _read_cached_changelog() -> Array:
 func status_text() -> String:
 	match state:
 		State.IDLE:
-			return "Not checked yet."
+			return tr("Not checked yet.")
 		State.CHECKING:
-			return "Checking for updates…"
+			return tr("Checking for updates…")
 		State.UP_TO_DATE:
-			return "Up to date."
+			return tr("Up to date.")
 		State.DOWNLOADING:
-			return "Downloading…"
+			return tr("Downloading…")
 		State.VERIFYING:
-			return "Verifying download…"
+			return tr("Verifying download…")
 		State.CONTENT_READY:
-			return "Content update available (v%s)." % manifest.get("version_name", pending_version)
+			return tr("Content update available (v%s).") % manifest.get("version_name", pending_version)
 		State.BINARY_READY:
-			return "New app version available (v%s)." % manifest.get("version_name", pending_version)
+			return tr("New app version available (v%s).") % manifest.get("version_name", pending_version)
 		State.RESTART_REQUIRED:
-			return "Update ready — restart to finish."
+			return tr("Update ready — restart to finish.")
 		State.INSTALL_HANDOFF:
-			return "Handed over to the installer."
+			return tr("Handed over to the installer.")
 		State.NEEDS_PERMISSION, State.UNAVAILABLE, State.FAILED:
 			return last_error
 		_:

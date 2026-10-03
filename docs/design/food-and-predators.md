@@ -397,7 +397,8 @@ not bit-identical, but it can never cost more.
 at all.** Three things carry it, none of them luminance:
 
 - **rate** — hunger owns the beat period and dread does not touch it, so
-  starvation stays fully legible while hunted (4.8s against 2.4s)
+  starvation stays fully legible while hunted (4.8s against 2.4s; since
+  2026-10-03 the beat races instead, 1.2s empty against 2.4s fed, `hunger.md`)
 - **rhythm** — dread owns the stumble, which reads at any brightness
 - **the wake is never dimmed.** `press_color * pushv * line` is independent of
   `pulse`. Measured on the exact compound frame: contour `(5,22,22)`, wake
@@ -528,6 +529,12 @@ playing it rather than by measuring it.
 There are two, and they feel opposite.
 
 ### 6.1 Starvation — quiet
+
+> **Since 2026-10-03 (`hunger.md`)** the beat races through the grace instead of
+> slowing (0.75s at its end, not `DYING_PERIOD`), the membrane has already
+> fallen in when the grace starts, and the aperture closes from where it fell.
+> What follows is the death as it was first designed: the last beat still lights
+> the close, and it is still the racing beat that stops.
 
 `hunger` reaching 1.0 starts `STARVE_GRACE = 40.0` seconds. (**Ten since
 2026-09-29**, the last ten of the thirty a born cell has: `energy.md` §7. What

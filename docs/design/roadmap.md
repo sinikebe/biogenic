@@ -32,13 +32,85 @@ Two deaths, a growth curve, and the `radius` comparison that decides what eats
 what. `docs/design/food-and-predators.md`. Depends on 3 because the escape
 window and the wake bearings could not have been measured blind.
 
-## In hand
-
 **5 — Genes and cilia.** A genome with a fixed number of slots, filled by what
 you eat and worn on the outside as cilia; a starting cell that is already full,
 so specialising means giving something up. `docs/design/genes-and-cilia.md`.
 Depends on 4 because the gene rides on `food.eaten` and the slot count rides on
-the `radius` that meals grow.
+the `radius` that meals grow. Its lifecycle -- a cell divides and you take one
+of the daughters -- and what decides who eats whom are `lifecycle.md`,
+`choosing.md` and `edibility.md`.
+
+**Shipped beside the phases**, each because the owner asked for it:
+
+- **Playing together.** Two cells in one water: on one wi-fi with a phone as
+  host, on a home server, and from far away by invite. `multiplayer.md`,
+  `shared-pond.md`, `shared-pond-ux.md`, `net-hardening.md`, `invites-ux.md`,
+  and `docs/server.md`.
+- **The senses and the beam.** A ping that bounces and fades, a nose that
+  saturates, and a beam that levels up and grows two ways. `three-senses.md`,
+  `ping-as-outline.md`, `beam-levels.md`.
+- **The genome on screen.** The body with a slot at each part, the DNA strand,
+  gene levels, and a gene you move or place without pausing. `dna-body.md`,
+  `dna-strand.md`, `moving-a-gene.md`, `gene-lines-and-the-pause-target.md`.
+- **Steering and the HUD.** Three ways to steer, and a HUD made of the
+  organism. `controls.md`, `diegetic-hud.md`.
+- **Energy.** Swimming and turning cost energy, and a cell starves in about
+  thirty seconds. `energy.md`.
+- **Gene stats and the replay.** Every gene's numbers on demand, and the run
+  watched back after a death, at up to 4x. `gene-stats.md`, `replay.md`.
+
+## In hand
+
+**The evolving water**, below under "Next". Packs 1, 2 and 3 are built to the
+owner's answers and are on `dev`:
+
+- the drop (`ocean.md`);
+- water cells that divide, in two phases: the record (2-1) and the division
+  (2-2) (`lineage.md`). The owner played it on the dev app on 2026-10-02, with
+  nothing to fix;
+- behaviour blocks, in two phases: cells hunt by rules over their own senses
+  (3-1), then their rules change at every division (3-2) (`behaviour.md`, rows
+  22 to 26).
+
+The water learns slowly under pack 3's rules, and it stays that way. The owner,
+2026-10-02: *"We do nothing about balancing yet. Players feeling will lead this
+part over time."*
+
+**Pack 4, your own programs, is built** (`automation.md` for the rules of the
+game, `automation-ux.md` for the screen), to the owner's answers to rows 27 to
+42. Divisions never change a player's programs (row 40): they change by hand
+alone. It came in three phases:
+
+- a tail with two copies can be held still, by hand and by instinct, for every
+  cell (4-1, built);
+- programs, the library and the autopilot (4-2, built);
+- a friend's daughter carries her instincts (4-3, a protocol change, built).
+
+**Beside them, on `dev` for the same release:** the game in French, a settings
+menu with a language picker, three named worlds, and the settings reachable from
+the launcher (`settings.md`). Also there is hunger you cannot miss, built
+2026-10-03 (`hunger.md`): from half a tank the beat races and the body
+crumples, and the membrane falls in when the tank empties.
+
+**Before the release: genes that work by where they sit** (`dna-slots.md` for the
+rules, `dna-slots-ux.md` for the screen), to the owner's answers to rows 1 to 15.
+- The body gains an inside slot.
+- The toxin, `toxicyst`, is poison inside and venom outside. Outside it works on
+  the bite at the front, and stings whatever bites the side or the stern it
+  faces.
+- Its doses keep hurting after the bite.
+
+The release waits for its phases 1 and 2:
+- venom and poison, outside and inside (`PROTOCOL` 7);
+- their screen.
+
+**After the release:**
+- paralysing and sleeping toxins (phases 3 and 4);
+- a cell without a mouth that eats with its whole skin (`feeding.md`, phase 5).
+
+A new cell is still born with its mouth (row 11).
+
+All of it reaches players together, when the owner runs the release.
 
 ## What the ending is for
 
@@ -97,6 +169,10 @@ chase contracts: settled in shape, unsettled in value, and answerable only by
 swimming. They belong in this pass rather than in a later one, because the chase
 cannot be measured against a water whose difficulty is still a free variable.
 
+*The owner, 2026-10-02: "We do nothing about balancing yet. Players feeling will
+lead this part over time." So this pass waits. Balancing follows how players
+feel the game, over time (`CLAUDE.md`, "Balance waits for players").*
+
 **7 — A third view.** The two existing views are *what the cell feels* and
 *what is actually there*. The missing one is **what the cell knows** — the world
 as its senses have built it, only what it has tasted or felt, drawn where it
@@ -121,10 +197,11 @@ for the genes to synthesise from and on 8 for a reason — a colony needs a
 pressure that a single cell cannot meet, and a second environment is the natural
 place to put one.
 
-**Later — genes decide one bite or chewing, for every cell.** The owner's rule
-for the shared pond (`shared-pond.md`, `multiplayer.md` §10 row 6) is that every
-cell obeys one eating rule, players included. *Which* genes decide whether a
-mouth swallows a body whole or has to chew it apart is left to this phase:
+**Later — genes decide one bite or chewing, for every cell** (the owner calls
+it the gene pass, or the gene phase). The owner's rule for the shared pond
+(`shared-pond.md`, `multiplayer.md` §10 row 6) is that every cell obeys one
+eating rule, players included. *Which* genes decide whether a mouth swallows a
+body whole or has to chew it apart is left to this phase:
 
 - the membrane genes (`pellicle`);
 - the eating gene (`cytostome`);
@@ -132,25 +209,62 @@ mouth swallows a body whole or has to chew it apart is left to this phase:
 
 It is decided once, for every cell equally.
 
-Its first work is the two places where today's rule is not yet the same for
-every cell:
+**Venom comes to it in two variants.** The owner, 2026-09-30, verbatim: "venom
+add a stack of venom while it's biting. The stacks deplete over time, doing
+damage. We could later imagine specialized venoms later. But for now keep it
+simple", and then: "There'll be 2 variants. This is about the difference
+between venomous and poisonous. We'll add both on the gene pass later."
 
-- a water cell swallows a player only from a committed run
-  (`food.gd:1409-1436`);
-- `pellicle` armours a player against a swallow but not a water cell
-  (`food.gd:1467` against `cell.gd:508-509`).
+- **Venomous**: its bite adds stacks of venom to what it bites.
+- **Poisonous**: whatever bites or eats it takes stacks.
+
+The stacks wear off over time and do damage while they last; specialised venoms
+may come after. The two variants replace `veneneux`'s two effects today: a share
+of each bite back into whatever bites a venomous body, and death to whatever
+swallows a venomous player.
+
+The two places where today's rule was not yet the same for every cell are
+settled in pack 1, in the drop (`ocean.md` §5.7; single player from 1a, the
+shared pond from 1b): a water cell swallows a player on contact, not only from a
+committed run (its row 15), and `pellicle` armours every body against a swallow
+(its row 5). **Venom is the one exception left**: a water cell that swallows a
+venomous player dies of it, while a player swallows a venomous water cell
+safely, until this phase replaces both effects with the two variants.
 
 It depends on the pond only in that the pond must not special-case players, so
 that this rule lands on every cell at once. It is also Phase 6's kind of number:
 a human has to play it.
+
+**Next — the evolving water, in four packs** (the owner, 2026-09-29). Cells in
+the water carry behaviour as well as genes, and pass both on with small
+mutations, "so the cell dangerousness improve with time not only because of
+genes, but also from a kind of learning". Players then build their own cell's
+behaviour from the same blocks. The owner set the order and asked for each pack
+to ship on its own and be played on the dev app before the next starts:
+
+1. **A real ocean.** A finite drop of water that keeps its cells, rules that
+   spawn cells where there are too few, and food that isn't alive.
+   `docs/design/ocean.md`.
+2. **Water cells divide**, passing on their genes. `docs/design/lineage.md`.
+3. **Behaviour blocks with mutation** replace the hand-written AI.
+   `docs/design/behaviour.md`.
+4. **The player's own block screen**, built from the same blocks.
+   `docs/design/automation.md` and `automation-ux.md`.
+
+Each depends on the one before. A lineage needs a water that keeps it long
+enough to have one; mutation needs births; and the player's screen needs blocks
+that already run the water. Pack 1 settles which rules the water keeps in the
+meantime. For example, the spawner makes every new water cell until pack 2
+lets them divide.
 
 ## Standing rules the order obeys
 
 - **Nothing is built before the thing it is evidence about.** Full vision exists
   to catch the membrane lying, so it came after the membrane; a third view
   exists to show what perception has bought, so it comes after genes.
-- **Content is cheaper than structure.** A phase that needs a new `.pck` beats a
-  phase that needs a new binary, every time; see `CLAUDE.md`.
+- **A new binary is no reason to pick a worse phase.** The owner, 2026-10-02:
+  never hesitate to change the APK and publish it (`CLAUDE.md`). A phase says
+  whether it needs a new binary, and bumps `binary_version` when it does.
 - **Each phase leaves its own headroom.** Phase 1 specced four glow lobes and
   two pressure lobes for senses that did not exist; Phase 4 reserved slot 3 for
   the edible predator, and Phase 5 handed it straight back unspent; Phase 5

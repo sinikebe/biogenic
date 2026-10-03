@@ -33,7 +33,7 @@ pips' job, and `+30%` is the classic HUD this game spent two phases not building
 | `myoneme` | *dash* | tap for a burst of speed, paid for in hunger |
 | `trichocyst` | *sting* | a dart at whatever closes in on that side |
 | `pellicle` | *armor* | thicker skin, so bites take less and fewer mouths fit |
-| `toxicyst` | *venom* | whatever bites you pays, and whatever swallows you dies |
+| `veneneux` | *venom* | whatever bites you pays, and whatever swallows you dies |
 | `plastid` | *sun* | makes a little of its own food, so you starve slower |
 | `vacuole` | *store* | a bigger tank, so hunger takes longer to reach you |
 | `crista` | *burn* | burns cleaner, so everything you carry costs less |
@@ -186,7 +186,7 @@ tightest end.
 
 | | canvas px |
 | --- | --- |
-| longest line, `toxicyst`, with its name, at 15px | **484** |
+| longest line, `veneneux`, with its name, at 15px | **484** |
 | widest strip it sits under (7 slots + sample + arrow + tail) | 652 |
 | the line at 3 slots — wider than the strip | fine; every group on the column is centred, so the column simply becomes as wide as its widest row |
 
@@ -320,7 +320,7 @@ At 1280x720 and 2400x1080, `--rendering-driver opengl3`, through
 | tap the target, full vision 2400x1080 | passes. Same, and the column is centred on the 1600-wide canvas |
 | tapping the target with a `myoneme` genome | passes. No thrust on the bus; the control tap in open water does fire one |
 | 7 slots + held sample, armed on an occupied tile, both shapes | **the case most likely to overflow.** Passes: `ampulla` + its line under a 652px strip with a sample block hanging off the left, `tap again to place` below it. Nothing overflows, nothing collides |
-| the longest line — `toxicyst`, 484px | passes, inside the strip's own width at 7 slots and centred at 3 |
+| the longest line — `veneneux`, 484px | passes, inside the strip's own width at 7 slots and centred at 3 |
 | an empty slot selected | passes. Bright teal 2px border, `nothing here yet · an organ here would look this way`, no name |
 | hover on a tile while another is selected, both shapes | passes. The line follows the cursor and the selected tile keeps its border |
 | two taps on an empty slot with a sample held | passes. `dash` lands in the slot, the sample block goes, the strip re-centres and the line becomes the receipt |

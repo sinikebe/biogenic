@@ -1,0 +1,6 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://tools/i18n_pot.gd" id="1_pot"]
+
+[node name="I18nPot" type="Node"]
+script = ExtResource("1_pot")

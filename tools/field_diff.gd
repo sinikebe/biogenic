@@ -37,6 +37,13 @@ extends SceneTree
 ## signals. This is what holds a change that teaches the field a *second*
 ## person (the dedicated host, `game/server/`) to leaving the one-person pond
 ## exactly as it was: the same calls, the same bits, the same draws.
+##
+## **Against a reference from before the toxins** (docs/design/dna-slots.md),
+## every trial in which a toxin acts differs by design: the old field spat a
+## venomous body out and charged a cost, the new one delivers doses. The two
+## signals are logged under their own names and each field's own switch is set
+## only where it has one, so the tool runs on either side of that change and
+## says where they part.
 
 var NewFood: GDScript = null
 var OldFood: GDScript = null
@@ -103,7 +110,7 @@ const POND_FIELD_KEYS: Array[StringName] = [&"in_water", &"anchored", &"died_of"
 	&"_stamp", &"_anchor_ids", &"_anchor_at", &"_snap_at", &"_snap_age", &"_book",
 	&"smell_bearing", &"ping_bearing", &"dart_bearing", &"dart_range"]
 const PERSON_GENES: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum",
-	&"pellicle", &"toxicyst", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
+	&"pellicle", &"veneneux", &"trichocyst", &"axoneme", &"chemocyte", &"ampulla"]
 
 
 func _initialize() -> void:
@@ -179,12 +186,16 @@ func _wire(food: Node, log: Array, cell: Node) -> void:
 			cell.radius = minf(cell.radius + NewCell.GROWTH_PER_MEAL,
 				NewCell.DIVIDE_RADIUS)
 			var tiers: Dictionary = cell.genome.t
-			for gene: StringName in [&"pellicle", &"toxicyst", &"cytostome"]:
+			for gene: StringName in [&"pellicle", &"veneneux", &"cytostome"]:
 				tiers[gene] = (int(tiers.get(gene, 0)) + 1) % 4)
 	food.waked.connect(func(b: float, s: float) -> void: log.append(["waked", b, s]))
 	food.killed.connect(func(b: float) -> void: log.append(["killed", b]))
 	food.bitten.connect(func(b: float, s: float) -> void: log.append(["bitten", b, s]))
-	food.stung.connect(func(b: float) -> void: log.append(["stung", b]))
+	if food.has_signal(&"stung"):
+		food.connect(&"stung", func(b: float) -> void: log.append(["stung", b]))
+	if food.has_signal(&"dosed"):
+		food.connect(&"dosed", func(b: float, k: int, n: float, m: bool) -> void:
+			log.append(["dosed", b, k, n, m]))
 	food.darted.connect(func(b: float) -> void: log.append(["darted", b]))
 	food.pulsed.connect(func() -> void: log.append(["pulsed"]))
 	# The person's two, which only a pond emits: a single-player trial never
@@ -232,7 +243,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 		var g := {}
 		if not d[&"drifter"] or rng.randf() < 0.15:
 			g[&"cytostome"] = rng.randi_range(0, 3)
-		for gene: StringName in [&"pellicle", &"toxicyst", &"flagellum", &"cirrus", &"chemocyte"]:
+		for gene: StringName in [&"pellicle", &"veneneux", &"flagellum", &"cirrus", &"chemocyte"]:
 			if rng.randf() < 0.45:
 				g[gene] = rng.randi_range(1, 3)
 		if g.is_empty():
@@ -298,7 +309,7 @@ func _make_state(rng: RandomNumberGenerator, kind: String) -> Dictionary:
 		&"flagellum": rng.randi_range(0, 3)}
 	if kind == "growing":
 		ct[&"cytostome"] = 3
-	for gene: StringName in [&"pellicle", &"toxicyst", &"axoneme", &"chemocyte", &"ampulla", &"ocellus", &"palp", &"trichocyst"]:
+	for gene: StringName in [&"pellicle", &"veneneux", &"axoneme", &"chemocyte", &"ampulla", &"ocellus", &"palp", &"trichocyst"]:
 		if rng.randf() < 0.4:
 			ct[gene] = rng.randi_range(1, 3)
 	st[&"cell_tiers"] = ct
@@ -329,7 +340,8 @@ func _apply(food: Node, cell: Node, st: Dictionary) -> void:
 	food.set("_serial", 100)
 	food.set("_first_pending", false)
 	food.set("_first_hunt", st[&"first_hunt"])
-	food.set("venom_cost", st[&"venom_cost"])
+	if &"venom_cost" in food:
+		food.set("venom_cost", st[&"venom_cost"])
 	food.set("_bite_clock", st[&"bite_clock"])
 	food.set("_dart_clock", 0.0)
 	food.set("dart_range", st[&"dart_range"])

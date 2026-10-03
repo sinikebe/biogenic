@@ -76,8 +76,27 @@ static func _trimmed(value: float, decimals: int) -> String:
 
 ## One item: `item("out to {} µm", [620.0], [Unit.DISTANCE])`. Words alone
 ## need no values: `item("free to wear")`.
+##
+## **The template is translated here, before the values go in** -- the one place
+## every item passes through -- so `{}` stays in the translated text and the
+## number is written where the translation puts it. [param text] is therefore a
+## message of the game's own language: a literal, so that tools/i18n_pot.gd finds
+## it.
+# i18n-ok: the literal is at each caller, and tools/i18n_pot.gd lists it there.
 static func item(text: String, values: Array = [], units: Array = []) -> Dictionary:
-	return {"text": text, "values": values, "units": units}
+	return {"text": String(TranslationServer.translate(text)), "values": values,
+		"units": units}
+
+
+## **An item whose words depend on a count**, with the count that decides: one
+## [param text] for exactly one and [param plural] for any other number, which a
+## language with more forms than two gets from its translation (the engine picks
+## the form from [param n]). [param n] is usually among [param values] too.
+# i18n-ok: the literals are at each caller, and tools/i18n_pot.gd lists them there.
+static func item_n(text: String, plural: String, n: int, values: Array = [],
+		units: Array = []) -> Dictionary:
+	return {"text": String(TranslationServer.translate_plural(text, plural, n)),
+		"values": values, "units": units}
 
 
 ## **A line of items as runs** `[text, is_value]`, [constant SEP] between two

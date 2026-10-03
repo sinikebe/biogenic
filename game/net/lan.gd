@@ -38,6 +38,9 @@ extends RefCounted
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## Which pair of ports this build is on (channel.gd).
+const Channel := preload("res://game/net/channel.gd")
+
 ## Twelve, because twelve bearings is a clock face and a clock face is the one
 ## ring layout every player can already read. Thirty degrees of arc apiece.
 const BEARINGS := 12
@@ -49,7 +52,9 @@ const SPAN := 1728
 
 ## The port, fixed, so that nothing else has to be tapped. Unregistered, high,
 ## and the same on both ends. Needs no manifest permission: the Android preset
-## already has `permissions/internet`, which is what a socket costs.
+## already has `permissions/internet`, which is what a socket costs. **The
+## release channel's**: a build on a branch's channel is on another pair, so
+## nothing binds, dials or shows this but through [method channel_port].
 const PORT := 45771
 
 ## **A scramble, not an encoding.** Straight base-twelve would put nearly every
@@ -114,6 +119,13 @@ const VIRTUAL_WORDS: Array[String] = ["vethernet", "hyper-v", "wsl",
 const CELLULAR_PREFIXES: Array[String] = ["rmnet", "ccmni", "seth_lte", "sipa_eth", "pdp",
 	"ww", "v4-"]
 const CELLULAR_WORDS: Array[String] = ["cellular", "mobile broadband"]
+
+
+## **The LAN's port on this build's channel** (channel.gd): [constant PORT],
+## 45771, on the release channel, and 45781 on a branch's. The LAN listener
+## binds it, a code is dialled on it, and the screen shows it.
+static func channel_port() -> int:
+	return Channel.port(PORT)
 
 
 ## This device's own address on whatever it is attached to, or "" if it is not

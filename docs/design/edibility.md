@@ -15,7 +15,7 @@ it.**
 > `_bite_from_me` carries this docstring: *"Your own mouth on a body too big to
 > swallow. The option the player never had: whittle it down and it comes apart,
 > and then it is a meal on exactly the terms a swallowed one is."* Biting, wounds
-> that accumulate, `pellicle` dividing the damage, `toxicyst` charging the biter,
+> that accumulate, `pellicle` dividing the damage, `veneneux` charging the biter,
 > and a body that is devoured at `wound >= 1.0` all exist, in both directions,
 > off one table. The mouth is directional geometry (`Cilia.mouth_touches`) and
 > bodies are solid. **You can already eat anything. Nobody told the player, the
@@ -99,7 +99,7 @@ it has never had.
 | **`cirrus`** *turn* | being flanked — you turn your nose onto the attacker and the 2.10 becomes 1.00 | **none.** A 180° turn is 5.1 s at tier 1 and 3.1 s at tier 3, against a 13 s stern kill. `cirrus` stops being a foraging gene and becomes the defensive one. |
 | **`pellicle`** *armor* | every bite, everywhere | none. Divides the damage; tier 3 turns a 13 s stern kill into 22 s. |
 | **`trichocyst`** *sting* | being held on one bearing | **becomes directional.** See below. |
-| **`toxicyst`** *venom* | the attacker, afterwards | none. Already charges a biter a share of what it just did. |
+| **`veneneux`** *venom* | the attacker, afterwards | none. Already charges a biter a share of what it just did. |
 | **`vacuole`** *store*, **`crista`** *burn* | the length of the fight | none. A fight is now measured in seconds of contact, so endurance is defence. |
 
 **`trichocyst` reads the arc it is worn on.** It is the one gene whose fix is

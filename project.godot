@@ -24,6 +24,7 @@ config/icon="res://icon.svg"
 
 BuildInfo="*res://addons/launcher/build_info.gd"
 UpdateService="*res://addons/launcher/update_service.gd"
+GameBoot="*res://game/boot.gd"
 
 [display]
 
@@ -32,6 +33,10 @@ window/size/viewport_height=720
 window/stretch/mode="canvas_items"
 window/stretch/aspect="expand"
 window/handheld/orientation=4
+
+[internationalization]
+
+locale/fallback="en"
 
 [launcher]
 

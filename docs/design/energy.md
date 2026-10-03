@@ -265,7 +265,7 @@ drifting and ×1.78 steering a third of the time. Two prices are shares of the
 bar, not seconds of rest, and kept their share: the dash (6, 4.5 and 3.2 %,
 which is now 2.2, 1.6 and 1.2 s of rest; at tier 1 that is almost exactly what
 a stroke of the same speed costs, 2.16 s against 2.15 s) and
-`toxicyst`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
+`veneneux`'s venom (46, 34 and 22 %). Hunger is each player's own, so there is no
 `Wire.PROTOCOL` or `Wire.RULES` change (§1.3), and it ships as a content pack.
 
 > **Seconds of rest since, 2026-09-29** (`gene-stats.md` §11, call 2). The dash
@@ -425,6 +425,13 @@ recommended." Nothing moves, because the recommended option is what was built:
 
 Rows 1 and 3 have their answers, so nothing here holds a release. Rows 3 and 4
 were answered "play it first", so what the dev app shows can still reopen them.
+
+**Row 4 reopened, 2026-10-03.** The owner, after playing the dev app: *"hunger.
+It must be more than what it is. I often die of hunger without noticing
+anything."* A slowing, fading beat read as nothing at all, or as dread.
+`hunger.md` answers it, still with no words: from half a tank the beat races at
+full strength, the body crumples, and when the tank empties the membrane falls
+in. The thirty seconds, the meal and the grace are unchanged.
 
 ### 7.7 To measure again
 

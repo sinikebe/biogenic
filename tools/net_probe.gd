@@ -27,14 +27,18 @@ extends Node
 ## wins and the ones behind it are dropped, that the marker the world view draws
 ## off all that lands where the other cell said it was -- **on time, which is
 ## locked here** -- and the highest-value assertion in the file, that a peer on a
-## different protocol is refused with a sentence instead of hanging. Protocols
-## 1, 2 and 3 are all refused by name, because none is a hypothetical: they are
-## the three builds that shipped before this one.
+## different protocol is refused with a sentence instead of hanging. Every
+## protocol before this one -- 1 to 5 since protocol 6 -- is refused by name,
+## because none is a hypothetical: each is a build that shipped.
 ##
 ## **And the pond, played** (shared-pond.md §5, Phase 2): two sessions and two
 ## real runs of the game, one hosting the water and one mirroring it, put
 ## through every lifecycle the pond has -- arriving, eating and being eaten,
-## the black, dividing, a quiet host and a closed one.
+## the black, dividing, a quiet host and a closed one. **And a held tail**
+## (automation.md §18.3 check 7): a guest whose tail has two copies holds it
+## still and lets it go, in the pond and on the server, slowly and as fast as a
+## hand can, and the host's referee calls no foul -- on rules whose fingerprint,
+## `Wire.RULES`, the tail did not move.
 ##
 ## **How late the marker is, as a distribution, is `tools/net_lag.gd`'s job**,
 ## not this file's -- it takes minutes. What this file keeps is the one number
@@ -47,11 +51,26 @@ extends Node
 ##
 ## **And the dedicated server** (`game/server/`, docs/server.md): the real
 ## server scene with two guests, each a real run of the game on this build's
-## own guest code -- which is exactly the PROTOCOL 4 guest a phone that has
-## never heard of a server runs -- arriving, mirroring each other as the friend,
+## own guest code -- which is exactly the guest a phone that has never heard
+## of a server runs -- arriving, mirroring each other as the friend,
 ## eating each other, being eaten by the water, leaving, and being told when
 ## the server stops. Then its update loop's decisions, against a fake release
 ## feed and a loopback HTTP server, with no network.
+##
+## **And the server's forward on the router** (`upnp`, docs/server.md §9.3):
+## `game/net/port_forward.gd` against a router of this probe's own -- it maps at
+## start, renews before the lease ends, falls back to a forward with no time
+## limit, takes it off at a stop, leaves one it did not make, never maps the
+## LAN's port, names a router that cannot help, and never holds a frame for a
+## slow search -- and the server scene's `--no-upnp`, remembered and for one
+## run. Not a packet leaves the machine.
+##
+## **And which pair of ports a build is on** (`channel`, `game/net/channel.gd`,
+## docs/server.md "A dev server"): the release channel's 45771 and 45772, and a
+## branch's 45781 and 45782, posed as each -- every socket the game binds and
+## dials, with a dev server and a live one side by side on one address, the
+## forward and its name, and every sentence that names a port, the release
+## channel's word for word as before there were two.
 ##
 ## **And the door and the gate** (`limits`, docs/design/net-hardening.md A.8):
 ## hostile peers against a host of their own each -- every frame at and past
@@ -115,11 +134,11 @@ var _failed := 0
 
 func _ready() -> void:
 	# **A ceiling on the frame rate, for CI's backstop and for nothing else.**
-	# The step runs this uncapped under `--quit-after 20000`, which counts
+	# The step runs this uncapped under `--quit-after 24000`, which counts
 	# frames, and every wait in here is wall time -- so on a fast enough runner
-	# twenty thousand frames arrive before the last check does, and the probe
-	# is cut off one line short of `ALL PASS`. At 500 a second twenty thousand
-	# frames is forty seconds, twice what the socket sections take. The
+	# twenty-four thousand frames arrive before the last check does, and the
+	# probe is cut off one line short of `ALL PASS`. At 500 a second that is
+	# forty-eight seconds, and most sections cap themselves lower still. The
 	# `pond-field` section's seconds do not count against it: it runs to the end
 	# inside this one call, so all of it is spent within a single frame. Nothing
 	# here depends on a frame rate above that: every clock in `game/net/` is
@@ -149,6 +168,19 @@ func _ready() -> void:
 		print("[net-probe] NOTE --invites-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--upnp-only` is the same for the server's forward on the router.
+	if OS.get_cmdline_user_args().has("--upnp-only"):
+		await _check_upnp()
+		print("[net-probe] NOTE --upnp-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
+	# `--channel-only` is the same for the channel: which pair of ports a build
+	# is on, and everything that binds, dials or says one.
+	if OS.get_cmdline_user_args().has("--channel-only"):
+		await _check_channel()
+		print("[net-probe] NOTE --channel-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	# `--referee-only` is the same for the referee (net-hardening.md part B):
 	# its socket-free checks and the pond's own, which include the real game.
 	if OS.get_cmdline_user_args().has("--referee-only"):
@@ -158,9 +190,21 @@ func _ready() -> void:
 		print("[net-probe] NOTE --referee-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--sister-only` is the same for protocol 6's SISTER (automation.md §10.3):
+	# its wire, the referee's fingerprint and the handshake's refusals -- checks
+	# 24 to 26 but for the real divisions, which are the pond's and the server's.
+	if OS.get_cmdline_user_args().has("--sister-only"):
+		_check_pond_wire()
+		_check_sister_wire()
+		_check_referee()
+		await _check_skew()
+		print("[net-probe] NOTE --sister-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	var only_pond := OS.get_cmdline_user_args().has("--pond-only")
 	if only_pond:
 		_check_pond_wire()
+		_check_sister_wire()
 		_check_pond_field()
 		_check_referee()
 		await _check_pond()
@@ -170,6 +214,7 @@ func _ready() -> void:
 	_check_code()
 	_check_wire()
 	_check_pond_wire()
+	_check_sister_wire()
 	_check_carry()
 	_check_pond_field()
 	_check_referee()
@@ -182,13 +227,15 @@ func _ready() -> void:
 	await _check_server()
 	await _check_server_updates()
 	await _check_invites()
+	await _check_upnp()
+	await _check_channel()
 	# **The margin on CI's backstop, printed.** The step runs this with no
-	# frame cap and `--quit-after 20000`, which is a count of frames, not of
+	# frame cap and `--quit-after 24000`, which is a count of frames, not of
 	# seconds -- so a faster runner reaches it sooner, and a probe that grew
 	# past it would be cut off before `ALL PASS` and read as a failure.
 	print("[net-probe] NOTE finished in %d frames and %.1f s -- CI stops at"
 		% [Engine.get_process_frames(), float(Time.get_ticks_msec()) / 1000.0]
-		+ " 20000, and at most %d a second can arrive" % Engine.max_fps)
+		+ " 24000, and at most %d a second can arrive" % Engine.max_fps)
 	if _failed == 0:
 		print("[net-probe] ALL PASS")
 	else:
@@ -580,32 +627,37 @@ func _check_pond_wire() -> void:
 		if not Wire.Entry.has(key) or int(Wire.Entry[key]) != int(FoodField.Entry[key]):
 			same = false
 	_says(same and Wire.Entry.size() == FoodField.Entry.size()
+			and FoodField.ENTRY_SLOT == Wire.Entry.size()
 			and Wire.POND_STALKING == FoodField.FLAG_STALKING
 			and Wire.POND_IS_PERSON == FoodField.FLAG_PERSON
 			and Wire.POND_IN_WATER == FoodField.FLAG_IN_WATER
-			and Wire.POND_BODIES_MAX == FoodField.POND_SLOTS
+			and Wire.SEND_MAX == FoodField.SEND_MAX
+			and Wire.POND_BODIES_MAX == FoodField.SEND_MAX + 1
+			and Wire.PERSON_ID == FoodField.PERSON_ID
 			and Wire.CONTACT_ATE == FoodField.Contact.ATE
-			and Wire.CONTACT_KILLED == FoodField.Contact.KILLED,
-		"pond wire: the snapshot's entry order, its flags, its slot count and"
-		+ " the contact numbers are the field's own")
+			and Wire.CONTACT_KILLED == FoodField.Contact.KILLED
+			and Wire.CONTACT_GRAZED == FoodField.Contact.GRAZED,
+		"pond wire: the snapshot's entry order, its flags, its send set, the"
+		+ " person's id and the contact numbers are the field's own")
 
-	# **The budget, at its worst**: sixty-eight water cells and the other
-	# player, every one of them sent. One ENet datagram under the MTU.
+	# **The budget, at its worst** (ocean.md §10.4): the send set's sixty water
+	# bodies and the other player, every one of them sent, ids past 16 bits.
+	# One ENet datagram under the MTU.
 	var bodies: Array = []
-	for i in FoodField.PERSON_SLOT:
-		bodies.append([i, 60000 + i, i % 7, Wire.POND_STALKING if i % 5 == 0 else 0,
+	for i in Wire.SEND_MAX:
+		bodies.append([70001 + 977 * i, i % 7, Wire.POND_STALKING if i % 5 == 0 else 0,
 			Vector2(-3000.5 + 91.25 * i, 1777.75 - 13.5 * i), -3.0 + 0.09 * i,
 			4.0 + 0.61 * i, float(i % 11) / 10.0, 2.0 * float(i % 90), Vector2.ZERO,
 			0.0])
-	bodies.append([FoodField.PERSON_SLOT, 65535, 255,
+	bodies.append([Wire.PERSON_ID, 255,
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var whole := Wire.pond(123456, 0.62, bodies)
-	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1262,
-		"pond wire: sixty-eight cells and a person make %d bytes, the budget's"
-		% whole.size() + " 1,262 -- one datagram under ENet's 1,392")
+	_says(whole.size() == Wire.POND_MAX and Wire.POND_MAX == 1181,
+		"pond wire: sixty water bodies and a person make %d bytes, the budget's"
+		% whole.size() + " 1,181 -- one datagram under ENet's 1,392")
 	var said := Wire.take_pond(whole)
-	var exact := said.size() == 3 and int(said[0]) == 123456 \
+	var exact := said.size() == 4 and int(said[0]) == 123456 \
 		and absf(float(said[1]) - 0.62) <= 0.5 / 255.0 \
 		and (said[2] as Array).size() == bodies.size()
 	var worst_heading := 0.0
@@ -615,8 +667,7 @@ func _check_pond_wire() -> void:
 			var got: Array = said[2][k]
 			worst_heading = maxf(worst_heading, absf(angle_difference(
 				float(got[Wire.Entry.HEADING]), float(sent[Wire.Entry.HEADING]))))
-			if int(got[Wire.Entry.SLOT]) != int(sent[Wire.Entry.SLOT]) \
-					or int(got[Wire.Entry.SERIAL]) != int(sent[Wire.Entry.SERIAL]) & 0xFFFF \
+			if int(got[Wire.Entry.ID]) != int(sent[Wire.Entry.ID]) \
 					or int(got[Wire.Entry.MEALS]) != int(sent[Wire.Entry.MEALS]) \
 					or int(got[Wire.Entry.FLAGS]) != int(sent[Wire.Entry.FLAGS]) \
 					or not (got[Wire.Entry.AT] as Vector2).is_equal_approx(sent[Wire.Entry.AT]) \
@@ -632,10 +683,42 @@ func _check_pond_wire() -> void:
 						float(sent[Wire.Entry.TURNING])):
 				exact = false
 	_says(exact and worst_heading <= TAU / float(Wire.BEARING_STEPS) * 0.5 + 1e-4,
-		"pond wire: every body round-trips -- slot, serial, meals, flags, place"
+		"pond wire: every body round-trips -- id, meals, flags, place"
 		+ " exactly, radius to 1/64, wound to 1/255, speed to 2 u/s, heading to"
 		+ " half a step (worst %.4f rad) -- and the person's motion exactly"
 		% worst_heading)
+	# **The loads, since protocol 7** (docs/design/dna-slots.md §14.2): the three
+	# the recipient carries, in the header, at none, at the most its bytes say,
+	# between, and past it -- held there, and a load that is not a number sent as
+	# none; and a body's three flags, each its own bit beside the three before.
+	var loads_back: Array = []
+	for loads: PackedFloat64Array in [PackedFloat64Array([0.0, 0.0, 0.0]),
+			PackedFloat64Array([63.75, 63.75, 63.75]), PackedFloat64Array([12.3, 0.25, 7.6]),
+			PackedFloat64Array([64.0, 400.0, INF])]:
+		var got := Wire.take_pond(Wire.pond(9, 0.25, bodies.slice(0, 2), loads))
+		loads_back.append(Array(got[3]) if got.size() == 4 else [])
+	var flagged: Array = []
+	for k in 3:
+		flagged.append((bodies[k] as Array).duplicate())
+	flagged[0][Wire.Entry.FLAGS] = Wire.POND_HARMED
+	flagged[1][Wire.Entry.FLAGS] = Wire.POND_PARALYSED | Wire.POND_STALKING
+	flagged[2][Wire.Entry.FLAGS] = Wire.POND_ASLEEP | Wire.POND_HARMED | Wire.POND_PARALYSED
+	var flags_back := Wire.take_pond(Wire.pond(10, 0.0, flagged))
+	var flags_kept := flags_back.size() == 4 and (flags_back[2] as Array).size() == 3
+	if flags_kept:
+		for k in 3:
+			flags_kept = flags_kept and int(flags_back[2][k][Wire.Entry.FLAGS]) \
+				== int(flagged[k][Wire.Entry.FLAGS])
+	_says(loads_back == [[0.0, 0.0, 0.0], [63.75, 63.75, 63.75], [12.25, 0.25, 7.5],
+			[63.75, 63.75, 0.0]] and flags_kept and Wire.POND_LOADS == 3
+			and Wire.POND_LOAD_SCALE == 4.0
+			and Wire.POND_HARMED == FoodField.FLAG_HARMED
+			and Wire.POND_PARALYSED == FoodField.FLAG_PARALYSED
+			and Wire.POND_ASLEEP == FoodField.FLAG_ASLEEP,
+		"pond wire: the recipient's three loads round-trip at a quarter stack -- %s"
+		% str(loads_back) + " for none, the most, between and past it -- and a body's"
+		+ " harmed, paralysed and asleep flags are its own bits (%s), the field's own"
+		% str(flags_kept))
 
 	# Refused whole: every truncation, one byte too many, a slot that is not one,
 	# a place that is not finite, a motion no body could have.
@@ -646,22 +729,25 @@ func _check_pond_wire() -> void:
 			break
 	var longer := whole.duplicate()
 	longer.append(0)
-	var bad_slot := whole.duplicate()
-	bad_slot[Wire.POND_HEADER] = Wire.POND_BODIES_MAX
+	var bad_id := whole.duplicate()
+	bad_id.encode_u32(Wire.POND_HEADER, Wire.PERSON_ID)
+	var bad_person := whole.duplicate()
+	bad_person.encode_u32(whole.size() - Wire.POND_PERSON, 42)
 	var bad_place := whole.duplicate()
-	bad_place.encode_float(Wire.POND_HEADER + 5, NAN)
+	bad_place.encode_float(Wire.POND_HEADER + 6, NAN)
 	var bad_motion := whole.duplicate()
 	bad_motion.encode_float(whole.size() - 12, INF)
 	var too_many := whole.duplicate()
 	too_many[6] = Wire.POND_BODIES_MAX + 1
 	_says(refuses and Wire.take_pond(longer).is_empty()
-			and Wire.take_pond(bad_slot).is_empty()
+			and Wire.take_pond(bad_id).is_empty()
+			and Wire.take_pond(bad_person).is_empty()
 			and Wire.take_pond(bad_place).is_empty()
 			and Wire.take_pond(bad_motion).is_empty()
 			and Wire.take_pond(too_many).is_empty(),
 		"pond wire: a snapshot is refused whole at every truncation, one byte"
-		+ " long, with a slot past 68, a place or a motion that is not finite,"
-		+ " or a count past 69")
+		+ " long, with a water body under the person's id or the person under a"
+		+ " body's, a place or a motion that is not finite, or a count past 61")
 	# And never written: a body the reader would refuse is left out, and a
 	# motion no body could have goes as none.
 	var rotten: Array = bodies.slice(0, 3)
@@ -671,19 +757,18 @@ func _check_pond_wire() -> void:
 	person[Wire.Entry.VELOCITY] = Vector2(Wire.MOTION_MAX * 2.0, 0.0)
 	rotten.append(person)
 	var cleaned := Wire.take_pond(Wire.pond(1, 0.0, rotten))
-	_says(cleaned.size() == 3 and (cleaned[2] as Array).size() == 3
+	_says(cleaned.size() == 4 and (cleaned[2] as Array).size() == 3
 			and (cleaned[2][2][Wire.Entry.VELOCITY] as Vector2) == Vector2.ZERO,
 		"pond wire: a body the reader would refuse is never written, and an"
 		+ " impossible motion goes as none")
 	# **Never past the budget, whatever the writer is handed** (review): sixty-
-	# nine bodies all flagged as people were 2,078 bytes, which ENet sends as
+	# one bodies all flagged as people would be 1,899 bytes, which ENet sends as
 	# fragments -- one lost, the whole snapshot lost. The writer leaves out what
 	# would not fit, and the reader refuses a longer frame outright, however
 	# well formed.
 	var people: Array = []
 	for i in Wire.POND_BODIES_MAX:
 		var one: Array = (bodies[bodies.size() - 1] as Array).duplicate()
-		one[Wire.Entry.SLOT] = i
 		people.append(one)
 	var capped := Wire.pond(7, 0.0, people)
 	var capped_said := Wire.take_pond(capped)
@@ -691,28 +776,30 @@ func _check_pond_wire() -> void:
 	var over := capped.duplicate()
 	over.append_array(capped.slice(capped.size() - Wire.POND_PERSON))
 	over[6] = int(over[6]) + 1
-	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 3
+	_says(capped.size() <= Wire.POND_MAX and capped_said.size() == 4
 			and (capped_said[2] as Array).size() == fits
 			and over.size() > Wire.POND_MAX and Wire.take_pond(over).is_empty(),
-		"pond wire: sixty-nine people are written as the %d that fit, %d bytes of"
+		"pond wire: sixty-one people are written as the %d that fit, %d bytes of"
 		% [fits, capped.size()] + " %d; one more, well formed at %d bytes, is"
 		% [Wire.POND_MAX, over.size()] + " refused")
 
-	# The seven events, each against its decoder.
+	# The nine events, each against its decoder.
+	# A phase-1 body: venom worn on an arc, poison inside -- in the genome by its
+	# name and in no slot of the order, which is the worn layout outside.
 	var worn := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"toxicyst": 1,
-		&"ampulla": 2}
+		&"veneneux": 1, &"ampulla": 2}
 	var order: Array = [&"cytostome", &"", &"cirrus", &"flagellum", &"ampulla", &"",
 		&"toxicyst"]
 	var enter := Wire.event(9, Wire.EVENT_ENTER, Wire.enter_payload(28.28))
 	var arrive := Wire.event(10, Wire.EVENT_ARRIVE,
-		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0))
+		Wire.arrive_payload(Vector2(560.5, -12.25), 1.0, Vector2(-1234.5, 777.25), 6000.0))
 	var person_frame := Wire.event(11, Wire.EVENT_PERSON,
 		Wire.person_payload(true, worn, order))
 	var genome := Wire.event(12, Wire.EVENT_GENOME,
-		Wire.genome_payload(67, 70001, 4, worn))
+		Wire.genome_payload(3000000001, 4, worn))
 	var ate := Wire.event(13, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.ATE, Vector2(3.5, -4.5), 0.93, FoodField.By.FRIEND,
-		&"toxicyst"))
+		&"veneneux"))
 	var killed := Wire.event(14, Wire.EVENT_CONTACT, Wire.contact_payload(
 		FoodField.Contact.KILLED, Vector2(-8.0, 2.0), 0.0, FoodField.By.WATER, &"",
 		FoodField.Cause.POISONED))
@@ -722,6 +809,11 @@ func _check_pond_wire() -> void:
 		FoodField.Cause.CHEWED, FoodField.By.FRIEND, Vector2(-44.5, 90.0)))
 	var sister := Wire.event(17, Wire.EVENT_SISTER, Wire.sister_payload(
 		Vector2(700.0, -3.0), -1.25, 28.28, worn))
+	var settle := Wire.event(18, Wire.EVENT_SETTLE, Wire.settle_payload(4000000123,
+		Vector2(-812.5, 4410.25), 12.75, 0.4, 97.25))
+	var clear := Wire.event(19, Wire.EVENT_CLEAR, Wire.clear_payload(4000000123))
+	var grazed := Wire.event(20, Wire.EVENT_CONTACT, Wire.contact_payload(
+		FoodField.Contact.GRAZED, Vector2(10.5, -2.0), 0.62, FoodField.By.WATER))
 	var e := Wire.take_enter(enter)
 	var a := Wire.take_arrive(arrive)
 	var p := Wire.take_person(person_frame)
@@ -731,37 +823,59 @@ func _check_pond_wire() -> void:
 	var b := Wire.take_contact(bit)
 	var d := Wire.take_died(died)
 	var s := Wire.take_sister(sister)
+	var st := Wire.take_settle(settle)
+	var cl := Wire.take_clear(clear)
+	var gr := Wire.take_contact(grazed)
 	var step := TAU / float(Wire.BEARING_STEPS)
 	_says(enter.size() == Wire.ENTER_SIZE and arrive.size() == Wire.ARRIVE_SIZE
 			and died.size() == Wire.DIED_SIZE and bit.size() == Wire.CONTACT_SIZE
-			and killed.size() == Wire.CONTACT_SIZE + 1,
+			and killed.size() == Wire.CONTACT_SIZE + 1
+			and settle.size() == Wire.SETTLE_SIZE and clear.size() == Wire.CLEAR_SIZE
+			and grazed.size() == Wire.CONTACT_SIZE
+			and Wire.ARRIVE_SIZE == 27 and Wire.SETTLE_SIZE == 22 and Wire.CLEAR_SIZE == 10,
 		"pond wire: ENTER %d, ARRIVE %d, DIED %d and CONTACT %d bytes, as §2 says"
 		% [enter.size(), arrive.size(), died.size(), bit.size()]
-		+ " (KILLED one more, for its cause)")
+		+ " (KILLED one more, for its cause); SETTLE %d and CLEAR %d, and ARRIVE with"
+		% [settle.size(), clear.size()] + " its rim, as ocean.md §10.4 says")
 	_says(e.size() == 1 and is_equal_approx(float(e[0]), 28.28)
-			and a.size() == 2 and (a[0] as Vector2).is_equal_approx(Vector2(560.5, -12.25))
+			and a.size() == 4 and (a[0] as Vector2).is_equal_approx(Vector2(560.5, -12.25))
 			and absf(angle_difference(float(a[1]), 1.0)) <= step * 0.5
+			and (a[2] as Vector2).is_equal_approx(Vector2(-1234.5, 777.25))
+			and is_equal_approx(float(a[3]), 6000.0)
 			and p.size() == 3 and bool(p[0]) and p[1] == worn and p[2] == order
-			and g.size() == 4 and int(g[0]) == 67 and int(g[1]) == 70001 & 0xFFFF
-			and int(g[2]) == 4 and g[3] == worn,
-		"pond wire: ENTER, ARRIVE, PERSON and GENOME round-trip -- the worn"
-		+ " genome by name, with its empty slots, and a serial past 16 bits as"
-		+ " its low 16")
+			and g.size() == 3 and int(g[0]) == 3000000001 and int(g[1]) == 4
+			and g[2] == worn,
+		"pond wire: ENTER, ARRIVE with the drop's rim, PERSON and GENOME round-trip --"
+		+ " the worn genome by name, with its empty slots, and a body's id past 31"
+		+ " bits whole")
+	_says(st.size() == 5 and int(st[0]) == 4000000123
+			and (st[1] as Vector2).is_equal_approx(Vector2(-812.5, 4410.25))
+			and is_equal_approx(float(st[2]), 12.75)
+			and absf(float(st[3]) - 0.4) <= 0.5 / Wire.POND_WOUND_SCALE
+			and absf(float(st[4]) - 97.25) <= 0.5 / Wire.SETTLE_LIFE_SCALE
+			and cl.size() == 1 and int(cl[0]) == 4000000123
+			and gr.size() == 6 and int(gr[0]) == FoodField.Contact.GRAZED
+			and is_equal_approx(float(gr[2]), 0.62) and gr[4] == &"",
+		"pond wire: SETTLE carries a floc's id, place, size, settle and life, CLEAR"
+		+ " its id, and a GRAZED CONTACT its nutrition and no gene")
 	_says(c.size() == 6 and int(c[0]) == FoodField.Contact.ATE
 			and (c[1] as Vector2).is_equal_approx(Vector2(3.5, -4.5))
 			and is_equal_approx(float(c[2]), 0.93) and int(c[3]) == FoodField.By.FRIEND
-			and c[4] == &"toxicyst" and int(c[5]) == 0
+			and c[4] == &"veneneux" and int(c[5]) == 0
 			and k.size() == 6 and int(k[5]) == FoodField.Cause.POISONED
 			and k[4] == &"" and b.size() == 6 and is_equal_approx(float(b[2]), 0.37)
 			and d.size() == 3 and int(d[0]) == FoodField.Cause.CHEWED
 			and int(d[1]) == FoodField.By.FRIEND
 			and (d[2] as Vector2).is_equal_approx(Vector2(-44.5, 90.0))
-			and s.size() == 4 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
+			and s.size() == 6 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
 			and absf(angle_difference(float(s[1]), -1.25)) <= step * 0.5
-			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn,
+			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn
+			and (s[4] as Dictionary).is_empty() and (s[5] as PackedStringArray).is_empty(),
 		"pond wire: CONTACT carries an ATE's gene and a KILLED's cause, and DIED"
-		+ " and SISTER round-trip")
-	var events := [enter, arrive, person_frame, genome, ate, killed, bit, died, sister]
+		+ " and SISTER round-trip -- a SISTER that names no DNA and no list reads as"
+		+ " neither")
+	var events := [enter, arrive, person_frame, genome, ate, killed, bit, died, sister,
+		settle, clear, grazed]
 	var cut_ok := true
 	for frame: PackedByteArray in events:
 		for cut in frame.size():
@@ -771,34 +885,42 @@ func _check_pond_wire() -> void:
 					and Wire.take_genome(short).is_empty()
 					and Wire.take_contact(short).is_empty()
 					and Wire.take_died(short).is_empty()
-					and Wire.take_sister(short).is_empty()):
+					and Wire.take_sister(short).is_empty()
+					and Wire.take_settle(short).is_empty()
+					and Wire.take_clear(short).is_empty()):
 				cut_ok = false
 		var long := frame.duplicate()
 		long.append(0)
 		if not (Wire.take_enter(long).is_empty() and Wire.take_arrive(long).is_empty()
 				and Wire.take_person(long).is_empty() and Wire.take_genome(long).is_empty()
 				and Wire.take_contact(long).is_empty() and Wire.take_died(long).is_empty()
-				and Wire.take_sister(long).is_empty()):
+				and Wire.take_sister(long).is_empty() and Wire.take_settle(long).is_empty()
+				and Wire.take_clear(long).is_empty()):
 			cut_ok = false
 	_says(cut_ok, "pond wire: every event is refused at every truncation and one"
 		+ " byte long, by every decoder")
 
 	# **Genomes by name**: the reader refuses the whole message on a name that
-	# is not 1-16 bytes of a-z, on more than eight genes or seven slots; tiers
-	# clamp to 0..3; the writer never sends what the reader refuses.
+	# is not 1-16 bytes of a-z, on more than nine genes -- seven outside, one
+	# inside and a held sample, since protocol 7 -- or seven slots; tiers clamp to
+	# 0..3; the writer never sends what the reader refuses. Nine are taken.
 	var loud := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 9, &"cirrus": -2}, [])))
-	var nine := {}
-	for i in 9:
-		nine[StringName("gene" + "abcdefghi"[i])] = 1
-	var nine_frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, {}, []))
-	nine_frame.resize(Wire.EVENT_HEADER + 1)
-	nine_frame.append(9)
-	for gene: StringName in nine:
-		nine_frame.append(String(gene).length())
-		nine_frame.append_array(String(gene).to_ascii_buffer())
-		nine_frame.append(1)
-	nine_frame.append(0)
+	var ten := {}
+	for i in Wire.GENES_MAX + 1:
+		ten[StringName("gene" + "abcdefghij"[i])] = 1
+	var ten_frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, {}, []))
+	ten_frame.resize(Wire.EVENT_HEADER + 1)
+	ten_frame.append(ten.size())
+	for gene: StringName in ten:
+		ten_frame.append(String(gene).length())
+		ten_frame.append_array(String(gene).to_ascii_buffer())
+		ten_frame.append(1)
+	ten_frame.append(0)
+	var nine := ten.duplicate()
+	nine.erase(&"genej")
+	var nine_said := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
+		Wire.person_payload(false, nine, [])))
 	var named := func(name: String, tier: int = 1) -> PackedByteArray:
 		var f := Wire.event(1, Wire.EVENT_PERSON, PackedByteArray([0, 1]))
 		f.append(name.to_utf8_buffer().size())
@@ -819,10 +941,11 @@ func _check_pond_wire() -> void:
 			and Wire.take_person(named.call("abcdefghijklmnopq")).is_empty()
 			and Wire.take_person(named.call("cir rus")).is_empty()
 			and Wire.take_person(named.call("cili5")).is_empty()
-			and Wire.take_person(nine_frame).is_empty()
+			and Wire.take_person(ten_frame).is_empty()
+			and nine_said.size() == 3 and nine_said[1] == nine and Wire.GENES_MAX == 9
 			and Wire.take_person(eight_slots).is_empty(),
 		"pond wire: a genome is refused whole on a name that is not 1-16 bytes of"
-		+ " a-z, nine genes or eight slots; tiers clamp to 0..3")
+		+ " a-z, ten genes or eight slots, and nine are taken; tiers clamp to 0..3")
 	var written := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 1, &"Bad Name": 2, &"": 1},
 			[&"cytostome", &"Bad Name", &"", &"a", &"b", &"c", &"d", &"e", &"f"])))
@@ -831,6 +954,347 @@ func _check_pond_wire() -> void:
 			and written[2][1] == &"",
 		"pond wire: and the writer leaves out what the reader would refuse --"
 		+ " a bad name is not sent, a bad slot goes empty, past seven slots stop")
+
+
+# ---------------------------------------------------------------------------
+# **Protocol 6's SISTER** (docs/design/automation.md §10.3; §18.3 checks 24 and
+# 25): a guest's sister carries her DNA and the list her cell ran. Socket-free:
+# the writer against the reader, every refusal against the gate's own parse,
+# and the host's reading of her lines with its own vocabulary. The real
+# divisions -- on a phone host, and in the server's room through a save and a
+# load -- are the `pond` and `server` sections'.
+# ---------------------------------------------------------------------------
+
+## The host's reading of a guest's sister's lines (`Pond.sister_list`).
+const Pond := preload("res://game/net/pond.gd")
+## **A rule of a gene no build of this game declares**: what a later build's
+## gene looks like to this one -- a rule that never fires, kept as it came.
+const LATER_LINE := "xenogene.hum above 0.5 -> body.turn-away"
+## **A guest's sister's list**, as a page builds one: three rules this build
+## reads -- a gene's sense, the metabolism's and one that always acts -- and
+## [constant LATER_LINE].
+const SISTER_LINES: Array[String] = ["palp.touch closeness above 0.5 -> body.turn-away",
+	"metabolism.hunger below 0.3 -> body.rest", LATER_LINE, "always -> body.swim"]
+
+
+func _check_sister_wire() -> void:
+	var vocab := FoodField.vocabulary()
+	# **The tables written out twice** -- drop.gd's eight, held here -- and the
+	# alphabet's two spellings, the reader's test and the documented string, the
+	# same over every byte there is.
+	var alphabet := true
+	for code in 256:
+		var listed := code > 0 and Wire.RULE_BYTES.contains(String.chr(code))
+		if Wire._rule_byte_ok(code) != listed:
+			alphabet = false
+	# **Only a SISTER gets the room**: every other guest frame keeps the cap a
+	# PERSON set before protocol 6, and the cap is read off the event's type.
+	var padded := func(kind: int, type: int, size: int) -> PackedByteArray:
+		var frame := PackedByteArray([kind, 0, 0, 0, 0, type])
+		frame.resize(size)
+		return frame
+	var caps := [Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_PERSON, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_STATE, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, 300)),
+		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
+		Wire.guest_cap(PackedByteArray())]
+	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
+			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
+			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
+				+ 8 * (1 + Wire.RULE_BYTES_MAX)
+			and Wire.SISTER_MAX == 1378 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
+			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX)
+			and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX
+			and caps == [Wire.SISTER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX,
+				Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX],
+		"sister wire: a list holds drop.gd's %d rules, each line 1 to %d bytes of"
+		% [FoodField.Drop.MOST_RULES, Wire.RULE_BYTES_MAX] + " the %d of a-z, 0-9,"
+		% Wire.RULE_BYTES.length() + " '.', '-', '>' and the space; a SISTER is %d"
+		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and the one"
+		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
+		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps))
+
+	# **Every line this build can write crosses**: each word a rule's line is
+	# made of -- every name the declarations give, the tests, the references,
+	# every rung of every ladder, every option and the arrow -- is of the
+	# alphabet, and so are the water's seven. A merged list holds nothing else,
+	# unless a later build wrote a line into the library's file, which is kept
+	# there as it came and which the writer leaves out if the reader would not
+	# take it.
+	var words := _line_words(vocab)
+	var unfit: PackedStringArray = []
+	for word: String in words:
+		if not Wire._line_ok(word):
+			unfit.append(word)
+	for line: String in FoodField.Drop.FOUNDERS:
+		if not Wire._line_ok(line):
+			unfit.append(line)
+	var longest := _longest_line(vocab)
+	_says(unfit.is_empty() and not longest.is_empty() and Wire._line_ok(longest),
+		"sister wire: the %d words a rule's line is made of are of the alphabet,"
+		% words.size() + " and so are the water's seven; the longest rule the"
+		+ " vocabulary reads is %d bytes of %d -- '%s'" % [longest.length(),
+			Wire.RULE_BYTES_MAX, longest]
+		+ ("" if unfit.is_empty() else " -- NOT: " + ", ".join(unfit)))
+
+	# **Check 24, on the wire**: her body, her DNA and her list cross exactly --
+	# a gene at no copies is not carried, and a list of nothing is the
+	# founders' -- and the host reads the lines with its own vocabulary, a later
+	# build's rule kept as it came.
+	var body := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
+	var dna := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"ampulla": 1,
+		&"palp": 2, &"stigma": 0}
+	var carried := dna.duplicate()
+	carried.erase(&"stigma")
+	var lines := PackedStringArray(SISTER_LINES)
+	var at := Vector2(-812.5, 4410.25)
+	var frame := Wire.event(21, Wire.EVENT_SISTER, Wire.sister_payload(at, 2.0,
+		Referee.DAUGHTER_RADIUS, body, dna, lines))
+	var said := Wire.take_sister(frame)
+	var bare := Wire.take_sister(Wire.event(22, Wire.EVENT_SISTER, Wire.sister_payload(at,
+		2.0, Referee.DAUGHTER_RADIUS, body, dna)))
+	var read: Array = _list_said(Pond.sister_list(said[5]) if said.size() == 6 else null)
+	_says(said.size() == 6 and (said[0] as Vector2) == at
+			and is_equal_approx(float(said[2]), Referee.DAUGHTER_RADIUS)
+			and said[3] == body and said[4] == carried and said[5] == lines
+			and bare.size() == 6 and bare[4] == carried
+			and (bare[5] as PackedStringArray).is_empty() and Pond.sister_list(bare[5]) == null
+			and read[0] == lines and read[1] == [false, false, true, false],
+		"sister wire (check 24): a guest's sister crosses with her body, her DNA --"
+		+ " %d genes, the one at no copies not carried -- and her list of %d lines,"
+		% [carried.size(), lines.size()] + " in %d bytes; the host reads them with"
+		% frame.size() + " its own vocabulary, the rule of a gene it does not know"
+		+ " kept as a rule that never fires and written back as it came; a SISTER"
+		+ " with no lines gives her the founders' rules")
+
+	# **SISTER_MAX is the most the writer writes** -- two genomes of nine
+	# sixteen-letter genes at three copies, and eight lines of 128 bytes -- and
+	# handed more, it writes no more: a gene the wire cannot name, a ninth line,
+	# an empty one, one of 129 bytes and one in capitals are each left out. The
+	# writer never sends what the reader refuses.
+	var full := {}
+	for i in Wire.GENES_MAX:
+		full[StringName(String.chr(97 + i).repeat(Wire.NAME_MAX))] = Wire.TIER_TOP
+	var overfull := {&"Cirrus": 1, StringName("z".repeat(Wire.NAME_MAX + 1)): 2}
+	overfull.merge(full)
+	var most := PackedStringArray()
+	for i in Wire.MOST_RULES + 1:
+		most.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
+	var crowded := PackedStringArray([most[0], "", _rule_line_of(Wire.RULE_BYTES_MAX + 1, 99),
+		"Chemocyte.smell above 0.5 -> body.swim"])
+	crowded.append_array(most.slice(1))
+	var biggest := Wire.sister_payload(at, 2.0, Referee.DAUGHTER_RADIUS, overfull, overfull,
+		crowded)
+	var biggest_said := Wire.take_sister(Wire.event(23, Wire.EVENT_SISTER, biggest))
+	_says(biggest.size() + Wire.EVENT_HEADER == Wire.SISTER_MAX and biggest_said.size() == 6
+			and biggest_said[3] == full and biggest_said[4] == full
+			and biggest_said[5] == most.slice(0, Wire.MOST_RULES),
+		"sister wire: SISTER_MAX, %d bytes, is the most the writer writes -- two"
+		% Wire.SISTER_MAX + " genomes of nine sixteen-letter genes and eight lines"
+		+ " of 128 -- and handed more it writes no more: a gene the wire cannot name,"
+		+ " a ninth line, an empty one, one of 129 bytes and one in capitals are left"
+		+ " out")
+
+	# **Check 25: the refusals.** Each by hand, the way no writer of this build
+	# writes it, against the reader and against the gate's own parse
+	# (`NetSession._parses`, its step 8): refused whole, so the guest that sent it
+	# is struck and nothing is placed. Then what lies just inside every bound,
+	# taken.
+	var ascii := func(text: String) -> PackedByteArray: return text.to_ascii_buffer()
+	var worn := [[ascii.call("cytostome"), 1], [ascii.call("cirrus"), 1],
+		[ascii.call("flagellum"), 2]]
+	var dna_said := [[ascii.call("cytostome"), 2], [ascii.call("ampulla"), 1]]
+	var two := [ascii.call(SISTER_LINES[0]), ascii.call(SISTER_LINES[1])]
+	var nine: Array = []
+	for i in Wire.MOST_RULES + 1:
+		nine.append(ascii.call(_rule_line_of(48, i)))
+	var ten_genes: Array = []
+	for i in Wire.GENES_MAX + 1:
+		ten_genes.append([ascii.call("gene" + "abcdefghij"[i]), 1])
+	var refused := {
+		"nine instincts": _sister_by_hand(worn, dna_said, nine),
+		"a count of nine": _sister_by_hand(worn, dna_said, nine.slice(0, 8), 9),
+		"a line of 129 bytes": _sister_by_hand(worn, dna_said,
+			[ascii.call(_rule_line_of(Wire.RULE_BYTES_MAX + 1, 1))]),
+		"an empty line": _sister_by_hand(worn, dna_said, [two[0], PackedByteArray()]),
+		"a DNA gene of 17 letters": _sister_by_hand(worn, [[ascii.call("q".repeat(17)), 1]],
+			two),
+		"a DNA gene in capitals": _sister_by_hand(worn, [[ascii.call("Ampulla"), 1]], two),
+		"a DNA gene with no name": _sister_by_hand(worn, [[PackedByteArray(), 1]], two),
+		"a DNA gene with a digit": _sister_by_hand(worn, [[ascii.call("cili5"), 1]], two),
+		"ten DNA genes": _sister_by_hand(worn, ten_genes, two),
+		"a byte after the last line": _sister_by_hand(worn, dna_said, two, -1,
+			PackedByteArray([0])),
+		"a line past its count": _sister_by_hand(worn, dna_said, two, 1),
+		"a protocol 5 SISTER, her body alone": _sister_by_hand(worn, [], [], -2),
+	}
+	var wrong: PackedStringArray = []
+	for name: String in refused:
+		var f: PackedByteArray = refused[name]
+		if not Wire.take_sister(f).is_empty() \
+				or NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f):
+			wrong.append(name)
+	var outside := 0
+	for code in 256:
+		if Wire._rule_byte_ok(code):
+			continue
+		var odd: PackedByteArray = ascii.call(SISTER_LINES[3])
+		odd[6] = code
+		var f := _sister_by_hand(worn, dna_said, [two[0], odd])
+		outside += 1
+		if not Wire.take_sister(f).is_empty() \
+				or NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f):
+			wrong.append("byte %d" % code)
+	var every := PackedByteArray()
+	for code in 256:
+		if Wire._rule_byte_ok(code):
+			every.append(code)
+	var taken := {
+		"eight instincts": _sister_by_hand(worn, dna_said, nine.slice(0, 8)),
+		"a line of 128 bytes": _sister_by_hand(worn, dna_said,
+			[ascii.call(_rule_line_of(Wire.RULE_BYTES_MAX, 1))]),
+		"a line of every byte of the alphabet": _sister_by_hand(worn, dna_said, [every]),
+		"a line of one byte": _sister_by_hand(worn, dna_said, [PackedByteArray([62])]),
+		"no DNA and no list": _sister_by_hand(worn, [], []),
+		"a DNA gene at no copies": _sister_by_hand(worn, [[ascii.call("ampulla"), 0]], two),
+	}
+	for name: String in taken:
+		var f: PackedByteArray = taken[name]
+		if Wire.take_sister(f).is_empty() \
+				or not NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f) \
+				or not Wire.size_ok(Wire.KIND_EVENT, Wire.EVENT_SISTER, f.size(), false):
+			wrong.append("NOT TAKEN: " + name)
+	var at_no_copies := Wire.take_sister(taken["a DNA gene at no copies"])
+	if at_no_copies.size() != 6 or not (at_no_copies[4] as Dictionary).is_empty():
+		wrong.append("a gene at no copies carried")
+	var whole: PackedByteArray = taken["eight instincts"]
+	var cuts := 0
+	for cut in whole.size():
+		if not Wire.take_sister(whole.slice(0, cut)).is_empty():
+			wrong.append("cut at %d" % cut)
+		cuts += 1
+	_says(wrong.is_empty() and outside == 256 - Wire.RULE_BYTES.length() and cuts > 300,
+		"sister wire (check 25): the whole SISTER is refused, by the reader and by the"
+		+ " gate's own parse, on %s; on each of the %d bytes outside the alphabet in a"
+		% [", ".join(PackedStringArray(refused.keys())), outside] + " line; and at every"
+		+ " one of %d truncations -- and %s are taken" % [cuts,
+			", ".join(PackedStringArray(taken.keys()))]
+		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(wrong)))
+
+
+## **A SISTER written by hand**, so a test can say what no writer of this build
+## would: [param worn] and [param dna] as `[name bytes, tier]` pairs, [param lines]
+## as raw bytes, [param count] the count byte as said -- -1 for the true one, -2
+## for none, a protocol-5 SISTER's shape -- and [param tail] any bytes after.
+static func _sister_by_hand(worn: Array, dna: Array, lines: Array, count := -1,
+		tail := PackedByteArray()) -> PackedByteArray:
+	var out := Wire.event(30, Wire.EVENT_SISTER, Wire.sister_payload(Vector2(560.0, 0.0),
+		0.0, Referee.DAUGHTER_RADIUS, {}))
+	out.resize(Wire.EVENT_HEADER + 13)
+	var genomes: Array = [worn] if count == -2 else [worn, dna]
+	for genome: Array in genomes:
+		out.append(genome.size())
+		for gene: Array in genome:
+			var name: PackedByteArray = gene[0]
+			out.append(name.size())
+			out.append_array(name)
+			out.append(int(gene[1]))
+	if count == -2:
+		return out
+	out.append(lines.size() if count < 0 else count)
+	for line: PackedByteArray in lines:
+		out.append(line.size())
+		out.append_array(line)
+	out.append_array(tail)
+	return out
+
+
+## **A line of exactly [param size] bytes** of the alphabet: [constant LATER_LINE]
+## numbered [param n], padded out.
+static func _rule_line_of(size: int, n: int) -> String:
+	return ("%s %d " % [LATER_LINE, n] + "x".repeat(size)).left(size)
+
+
+## **Every word a rule's line can hold**, as `rulebook.gd`'s `line_of` writes
+## them, from [param vocab]: its inputs and their values, its outputs and their
+## options, the tests, the references, every rung of every ladder, `always` and
+## the arrow.
+static func _line_words(vocab: Variant) -> PackedStringArray:
+	var words := PackedStringArray([String(FoodField.Rulebook.ALWAYS),
+		FoodField.Rulebook.ARROW])
+	words.append_array(PackedStringArray(FoodField.Rulebook.TEST_WORDS))
+	for ref: StringName in FoodField.Rulebook.REFERENCES:
+		words.append(String(ref))
+	for kind: StringName in FoodField.Rulebook.LADDERS:
+		for rung: float in FoodField.Rulebook.LADDERS[kind]:
+			words.append(FoodField.Rulebook.number(rung))
+	var inputs: Dictionary = vocab.get("inputs")
+	for name: StringName in inputs:
+		words.append(String(name))
+		for value: StringName in (inputs[name] as Object).get("values"):
+			words.append(String(value))
+	var outputs: Dictionary = vocab.get("outputs")
+	for name: StringName in outputs:
+		words.append(String(name))
+		for option: float in (outputs[name] as Object).get("options"):
+			words.append(FoodField.Rulebook.number(option))
+	return words
+
+
+## **The longest rule [param vocab] reads**: for each input, every value it
+## carries tested at its longest -- a rule tests a value once -- driving each
+## output at its longest option, kept when the rulebook reads it as a rule that
+## fires.
+static func _longest_line(vocab: Variant) -> String:
+	var heads: Array = [String(FoodField.Rulebook.ALWAYS)]
+	var inputs: Dictionary = vocab.get("inputs")
+	for name: StringName in inputs:
+		var input: Object = inputs[name]
+		var values: Array = input.get("values")
+		var kinds: Array = input.get("kinds")
+		var head := String(name)
+		for k in values.size():
+			var against: PackedStringArray = []
+			if StringName(kinds[k]) == FoodField.Rulebook.SIZE:
+				for ref: StringName in FoodField.Rulebook.REFERENCES:
+					against.append(String(ref))
+			else:
+				for rung: float in FoodField.Rulebook.LADDERS[StringName(kinds[k])]:
+					against.append(FoodField.Rulebook.number(rung))
+			var widest := "falling"
+			for each: String in against:
+				if ("below " + each).length() > widest.length():
+					widest = "below " + each
+			head += " %s %s" % [values[k], widest]
+		heads.append(head)
+	var longest := ""
+	var outputs: Dictionary = vocab.get("outputs")
+	for head: String in heads:
+		for name: StringName in outputs:
+			var tail := String(name)
+			var option := ""
+			for each: float in (outputs[name] as Object).get("options"):
+				if FoodField.Rulebook.number(each).length() > option.length():
+					option = FoodField.Rulebook.number(each)
+			if not option.is_empty():
+				tail += " " + option
+			var whole := "%s %s %s" % [head, FoodField.Rulebook.ARROW, tail]
+			if whole.length() > longest.length() \
+					and not bool(FoodField.Rulebook.rule_from(whole, vocab).get("inert")):
+				longest = whole
+	return longest
+
+
+## **What a list says, as lines**, and which of its rules never fire: `[lines,
+## inert flags]` -- no lines for the founders', null.
+static func _list_said(brain: Variant) -> Array:
+	if brain == null:
+		return [PackedStringArray(), []]
+	var inert: Array = []
+	for rule: Object in (brain as Object).get("rules"):
+		inert.append(bool(rule.get("inert")))
+	return [FoodField.Rulebook.lines_of(brain), inert]
 
 
 # ---------------------------------------------------------------------------
@@ -1183,7 +1647,7 @@ func _check_link() -> void:
 	var older_peer: ENetPacketPeer = null
 	if older.create_host(1) == OK:
 		# The id a client offers ENet's server: 2 or more, and nobody else's.
-		older_peer = older.connect_to_host("127.0.0.1", Lan.PORT, 0,
+		older_peer = older.connect_to_host("127.0.0.1", Lan.channel_port(), 0,
 			3 if guest.my_id() == 2 else 2)
 	var older_knobs: Array = []
 	var older_until := _now() + SETTLE
@@ -1221,18 +1685,37 @@ func _check_link() -> void:
 
 func _check_skew() -> void:
 	# **No older protocol is a hypothetical.** 1 is the LAN build that first
-	# shipped, 2 is the one that drew the friend half a second late, and 3 is
-	# the one with a friend who cannot eat you and no pond; all of them are on
-	# somebody's phone right now, because updates are opt-in, and a 3 reads a
-	# POND frame as a kind it has never heard of. The one from the future is
-	# still worth its two seconds: the host cannot tell which side is behind,
-	# and does not need to.
-	for theirs: int in [Wire.PROTOCOL - 3, Wire.PROTOCOL - 2, Wire.PROTOCOL - 1,
-			Wire.PROTOCOL + 1]:
-		await _one_skew(theirs)
+	# shipped, 2 is the one that drew the friend half a second late, 3 is the
+	# one with a friend who cannot eat you and no pond, 4 is today's water
+	# shared, whose snapshot is keyed on a slot, and 5 is the drop shared, whose
+	# SISTER says a guest's sister's body and nothing more; all of them are on
+	# somebody's phone right now, because updates are opt-in. A 4 reads a
+	# protocol-5 snapshot's ids as slots (ocean.md §10.4), and a 5 refuses a
+	# protocol-6 SISTER and leaves its division unanswered (automation.md
+	# §10.3). So every one of them is refused by name, 5 included. The one from
+	# the future is still worth its two seconds: the host cannot tell which side
+	# is behind, and does not need to.
+	var older: Array = range(1, Wire.PROTOCOL)
+	var named: Array = []
+	for theirs: int in older + [Wire.PROTOCOL + 1]:
+		if await _one_skew(theirs):
+			named.append(theirs)
+	# **Check 26** (automation.md §18.3): every older protocol refused by name,
+	# and the rules the referee judges by just as they were -- protocol 6 moved
+	# the shape of one message, and nothing a host judges a guest by.
+	_says(named == older + [Wire.PROTOCOL + 1]
+			and _rules_text().sha256_text() == Wire.RULES,
+		"handshake (check 26): a guest on each of protocols %s is refused by a host"
+		% ", ".join(PackedStringArray(older.map(func(p: int) -> String: return str(p))))
+		+ " on %d by name, with the sentence that names the update, as is one on %d;"
+		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the referee judges by the rules"
+		+ " it did, Wire.RULES %s" % Wire.RULES.left(16))
 
 
-func _one_skew(theirs: int) -> void:
+## One guest on [param theirs] against a host on this build: true when it was
+## refused by name, and every line below passed.
+func _one_skew(theirs: int) -> bool:
+	var failed := _failed
 	var host: Node = await _session("HostSide2_%d" % theirs)
 	var guest: Node = await _session("GuestSide2_%d" % theirs)
 	# Updates are opt-in (multiplayer.md §0.1), so the gap between two installs
@@ -1264,6 +1747,7 @@ func _one_skew(theirs: int) -> void:
 	host.close()
 	guest.close()
 	await _wait(0.4)
+	return _failed == failed
 
 
 # ---------------------------------------------------------------------------
@@ -1300,7 +1784,7 @@ class Rogue extends Node:
 		process_mode = Node.PROCESS_MODE_ALWAYS
 
 	func call_host() -> bool:
-		if peer.create_client("127.0.0.1", Lan.PORT) != OK:
+		if peer.create_client("127.0.0.1", Lan.channel_port()) != OK:
 			return false
 		id = peer.get_unique_id()
 		return true
@@ -1313,7 +1797,7 @@ class Rogue extends Node:
 			local_port: int = 0) -> bool:
 		if not source.is_empty():
 			peer.set_bind_ip(source)
-		if peer.create_client("127.0.0.1", Invite.PORT, 0, 0, 0, local_port) != OK:
+		if peer.create_client("127.0.0.1", Invite.channel_port(), 0, 0, 0, local_port) != OK:
 			return false
 		if peer.host.dtls_client_setup(Invite.NAME,
 				TLSOptions.client(certificate, Invite.NAME)) != OK:
@@ -1407,10 +1891,12 @@ func _check_limits() -> void:
 
 
 ## **T1: every frame at its edges.** Each bound in wire.gd's size table is a
-## frame a writer really produces -- the largest PERSON is eight genes and
-## seven slots of sixteen-letter names -- and one byte either side of it, or
-## the wrong side of the wire, is refused. Then the largest of each crosses a
-## real socket both ways and every one is taken.
+## frame a writer really produces -- the largest PERSON is nine genes and
+## seven slots of sixteen-letter names, and since protocol 6 the largest SISTER,
+## a guest's longest frame, is two genomes of them and eight lines of 128 bytes
+## -- and one byte either side of it, or the wrong side of the wire, is refused.
+## Then the largest of each crosses a real socket both ways and every one is
+## taken.
 func _limits_edges() -> void:
 	var genes := {}
 	for i in Wire.GENES_MAX:
@@ -1418,18 +1904,21 @@ func _limits_edges() -> void:
 	var order: Array = []
 	for i in Wire.ORDER_MAX:
 		order.append(StringName(String.chr(97 + i).repeat(Wire.NAME_MAX)))
+	var longest_list := PackedStringArray()
+	for i in Wire.MOST_RULES:
+		longest_list.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
 	var long_gene := StringName("z".repeat(Wire.NAME_MAX))
 	var bodies: Array = []
-	for i in FoodField.PERSON_SLOT:
-		bodies.append([i, 60000 + i, i % 7, 0, Vector2(91.25 * i, -13.5 * i), 0.09 * i,
+	for i in Wire.SEND_MAX:
+		bodies.append([60000 + i, i % 7, 0, Vector2(91.25 * i, -13.5 * i), 0.09 * i,
 			4.0 + 0.61 * i, 0.1, 2.0 * float(i % 90), Vector2.ZERO, 0.0])
-	bodies.append([FoodField.PERSON_SLOT, 65535, 255,
+	bodies.append([Wire.PERSON_ID, 255,
 		Wire.POND_IS_PERSON | Wire.POND_IN_WATER, Vector2(512.25, -96.5), 1.5, 28.28,
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var at := Vector2(700.0, -3.0)
 	var person_max := Wire.person_payload(true, genes, order)
-	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes)
-	var genome_max := Wire.genome_payload(67, 65535, 255, genes)
+	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes, genes, longest_list)
+	var genome_max := Wire.genome_payload(0xFFFFFFFF, 255, genes)
 	var contact_max := Wire.contact_payload(FoodField.Contact.ATE, at, 0.9,
 		FoodField.By.FRIEND, long_gene)
 	# `[name, frame, least, most, the host sends it, a guest sends it]` -- the
@@ -1447,14 +1936,14 @@ func _limits_edges() -> void:
 			true, true],
 		["ENTER", Wire.event(1, Wire.EVENT_ENTER, Wire.enter_payload(26.0)),
 			Wire.ENTER_SIZE, Wire.ENTER_SIZE, false, true],
-		["ARRIVE", Wire.event(1, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 1.0)),
-			Wire.ARRIVE_SIZE, Wire.ARRIVE_SIZE, true, false],
+		["ARRIVE", Wire.event(1, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 1.0,
+			Vector2.ZERO, 6000.0)), Wire.ARRIVE_SIZE, Wire.ARRIVE_SIZE, true, false],
 		["PERSON, smallest", Wire.event(1, Wire.EVENT_PERSON,
 			Wire.person_payload(false, {}, [])), Wire.PERSON_MIN, Wire.PERSON_MAX, true, true],
 		["PERSON, largest", Wire.event(1, Wire.EVENT_PERSON, person_max),
 			Wire.PERSON_MIN, Wire.PERSON_MAX, true, true],
 		["GENOME, smallest", Wire.event(1, Wire.EVENT_GENOME,
-			Wire.genome_payload(0, 0, 0, {})), Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
+			Wire.genome_payload(1, 0, {})), Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
 		["GENOME, largest", Wire.event(1, Wire.EVENT_GENOME, genome_max),
 			Wire.GENOME_MIN, Wire.GENOME_MAX, true, false],
 		["CONTACT, smallest", Wire.event(1, Wire.EVENT_CONTACT, Wire.contact_payload(
@@ -1470,6 +1959,10 @@ func _limits_edges() -> void:
 			false, true],
 		["SISTER, largest", Wire.event(1, Wire.EVENT_SISTER, sister_max),
 			Wire.SISTER_MIN, Wire.SISTER_MAX, false, true],
+		["SETTLE", Wire.event(1, Wire.EVENT_SETTLE, Wire.settle_payload(9, at, 12.0, 1.0,
+			120.0)), Wire.SETTLE_SIZE, Wire.SETTLE_SIZE, true, false],
+		["CLEAR", Wire.event(1, Wire.EVENT_CLEAR, Wire.clear_payload(9)),
+			Wire.CLEAR_SIZE, Wire.CLEAR_SIZE, true, false],
 		["POND, smallest", Wire.pond(1, 0.0, []), Wire.POND_HEADER, Wire.POND_MAX,
 			true, false],
 		["POND, largest", Wire.pond(1, 0.5, bodies), Wire.POND_HEADER, Wire.POND_MAX,
@@ -1500,8 +1993,9 @@ func _limits_edges() -> void:
 		and Wire.SISTER_MAX == sister_max.size() + Wire.EVENT_HEADER \
 		and Wire.GENOME_MAX == genome_max.size() + Wire.EVENT_HEADER \
 		and Wire.CONTACT_MAX == contact_max.size() + Wire.EVENT_HEADER \
-		and Wire.POND_MAX == (cases[17][1] as PackedByteArray).size() \
-		and Wire.GUEST_FRAME_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
+		and Wire.POND_MAX == (cases[cases.size() - 1][1] as PackedByteArray).size() \
+		and Wire.GUEST_FRAME_MAX == Wire.SISTER_MAX and Wire.SISTER_MAX > Wire.PERSON_MAX \
+		and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
 		and at_bound.size() == cases.size()
 	var later := not Wire.known(0x7E, 0) and not Wire.known(Wire.KIND_EVENT, 0x7F) \
 		and not Wire.size_ok(0x7E, 0, 8, false) \
@@ -1551,16 +2045,18 @@ func _limits_edges() -> void:
 	await _limits_close([host, guest])
 
 
-## **T2: over the cap.** A 273-byte event, one past the longest frame a guest
-## writes, and then a 64 KiB reliable frame that ENet reassembles from fifty
+## **T2: over the cap.** An event one byte past the longest frame a guest
+## writes of any kind but a SISTER -- 273 bytes, as before protocol 6 -- and
+## then a 64 KiB reliable frame that ENet reassembles from fifty
 ## fragments: each is a cut on the spot, with nothing queued, and the address
 ## is barred -- a minute, then ten for a second offence -- so a call back is
-## cut at the door.
+## cut at the door. Then the one kind allowed past 272 since protocol 6, a
+## SISTER, on a host of its own ([method _limits_sister_room]).
 func _limits_oversize() -> void:
 	var host: Node = await _limits_host("LimitsOversizeHost")
 	var first: Node = await _limits_guest("LimitsOversizeGuest1")
 	var over := Wire.event(1, Wire.EVENT_PERSON, PackedByteArray())
-	over.resize(Wire.GUEST_FRAME_MAX + 1)
+	over.resize(Wire.GUEST_OTHER_MAX + 1)
 	first._to(int(first.get("_host_id")), over)
 	await _limits_until(func() -> bool:
 		return int(host.peer_count()) == 0 and int(first.link) != NetSession.Link.TOGETHER)
@@ -1602,19 +2098,84 @@ func _limits_oversize() -> void:
 		+ " the same way, and a second offence inside ten minutes bars for %.0f s"
 		% barred)
 	await _limits_close([host, first, again, third])
+	await _limits_sister_room()
 
 
-## **T3: malformed, twice and then again.** A PERSON with nine genes is the
-## right size and does not read. Two are 8 points and the guest stays; two
+## **T2, the SISTER's room** (protocol 6, automation.md §10.3): the one kind a
+## greeted guest may send past [constant Wire.GUEST_OTHER_MAX], to [constant
+## Wire.SISTER_MAX], because her list rides in it. One of a thousand-odd bytes
+## is taken; one as long that does not read is an ordinary malformed frame, a
+## strike and no cut; one byte past SISTER_MAX is the oversize cut. And a
+## caller that has not said HELLO is held to 272 whatever it sends: its SISTER
+## past it is the oversize cut, as at protocol 5.
+func _limits_sister_room() -> void:
+	var host: Node = await _limits_host("LimitsSisterRoomHost")
+	var guest: Node = await _limits_guest("LimitsSisterRoomGuest")
+	var gid: int = guest.my_id()
+	var lines := PackedStringArray()
+	for i in Wire.MOST_RULES:
+		lines.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
+	var payload := Wire.sister_payload(Vector2(560.0, 0.0), 0.0, Referee.DAUGHTER_RADIUS,
+		{&"cytostome": 1}, {&"cytostome": 2}, lines)
+	guest.send_event(Wire.EVENT_SISTER, payload)
+	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
+	var taken: Array = (host.pond_events as Array).map(func(f: PackedByteArray) -> int:
+		return f.size())
+	# The same length, its count of rules made nine: a SISTER that does not read.
+	var spoiled := payload.duplicate()
+	spoiled[payload.size() - 1 - Wire.MOST_RULES * (1 + Wire.RULE_BYTES_MAX)] = \
+		Wire.MOST_RULES + 1
+	guest.send_event(Wire.EVENT_SISTER, spoiled)
+	await _limits_until(func() -> bool: return int(host.gate_counts["malformed"]) >= 1)
+	var points: float = host.points_of(gid)
+	var struck := int(host.gate_counts["malformed"]) == 1 \
+		and int(host.gate_counts["oversize"]) == 0 and int(host.gate_counts["cuts"]) == 0 \
+		and points > 2.0 and points <= NetSession.STRIKE_MALFORMED \
+		and int(guest.link) == NetSession.Link.TOGETHER \
+		and (host.pond_events as Array).size() == 1
+	var over := Wire.event(9, Wire.EVENT_SISTER, PackedByteArray())
+	over.resize(Wire.SISTER_MAX + 1)
+	guest._to(int(guest.get("_host_id")), over)
+	await _limits_until(func() -> bool: return int(host.peer_count()) == 0)
+	var book: Dictionary = host.get("_book")
+	var barred: float = float(book.get("127.0.0.1", {}).get("barred_until", 0.0)) - _now()
+	_says(taken == [Wire.EVENT_HEADER + payload.size()]
+			and Wire.EVENT_HEADER + payload.size() > Wire.GUEST_OTHER_MAX and struck
+			and int(host.gate_counts["oversize"]) == 1 and int(host.gate_counts["cuts"]) == 1
+			and int(host.peer_count()) == 0 and barred > NetSession.BAR_FIRST * 0.5,
+		"limits T2: since protocol 6 a greeted guest's SISTER may pass %d bytes --"
+		% Wire.GUEST_OTHER_MAX + " one of %d is taken; one as long that does not read"
+		% (Wire.EVENT_HEADER + payload.size()) + " is a malformed strike, %.2f"
+		% points + " points and no cut; one of %d, a byte past SISTER_MAX, is the"
+		% over.size() + " oversize cut, and the address barred for %.0f s" % barred)
+	# Before its hello, a caller is held to the old cap whatever its frame says.
+	book["127.0.0.1"]["barred_until"] = 0.0
+	var early := _limits_rogue("LimitsSisterRoomEarly")
+	await _limits_until(func() -> bool: return early.connected())
+	var early_sister := Wire.event(1, Wire.EVENT_SISTER, payload)
+	early.send(early_sister)
+	await _limits_until(func() -> bool:
+		return int(host.gate_counts["oversize"]) >= 2 and early.down())
+	_says(int(host.gate_counts["oversize"]) == 2 and int(host.gate_counts["malformed"]) == 1
+			and int(host.peer_count()) == 0 and early.down()
+			and float(book.get("127.0.0.1", {}).get("barred_until", 0.0)) > _now(),
+		"limits T2: and a caller's SISTER of %d bytes before its hello is the oversize"
+		% early_sister.size() + " cut, barred, as any frame past %d was at protocol 5"
+		% Wire.GUEST_OTHER_MAX)
+	await _limits_close([host, guest, early])
+
+
+## **T3: malformed, twice and then again.** A PERSON with ten genes is the
+## right size and does not read -- nine is the most since protocol 7. Two are 8 points and the guest stays; two
 ## more inside a second cut it, told why: REFUSE_BROKEN.
 func _limits_malformed() -> void:
 	var host: Node = await _limits_host("LimitsMalformedHost")
 	var guest: Node = await _limits_guest("LimitsMalformedGuest")
 	var gid: int = guest.my_id()
-	var nine := PackedByteArray([0, 9])
-	for i in 9:
+	var nine := PackedByteArray([0, Wire.GENES_MAX + 1])
+	for i in Wire.GENES_MAX + 1:
 		nine.append(5)
-		nine.append_array(("gene" + "abcdefghi"[i]).to_ascii_buffer())
+		nine.append_array(("gene" + "abcdefghij"[i]).to_ascii_buffer())
 		nine.append(1)
 	nine.append(0)
 	guest.send_event(Wire.EVENT_PERSON, nine)
@@ -1626,7 +2187,7 @@ func _limits_malformed() -> void:
 		and (host.pond_events as Array).is_empty()
 	_says(int(host.gate_counts["malformed"]) == 2 and points > 6.0 and points <= 8.0
 			and stayed,
-		"limits T3: two nine-gene PERSONs, %d bytes each, are %.2f points; the"
+		"limits T3: two ten-gene PERSONs, %d bytes each, are %.2f points; the"
 		% [Wire.EVENT_HEADER + nine.size(), points] + " guest stays, and nothing"
 		+ " was queued")
 	guest.send_event(Wire.EVENT_PERSON, nine)
@@ -1650,7 +2211,7 @@ func _limits_direction() -> void:
 	var guest: Node = await _limits_guest("LimitsDirectionGuest")
 	var gid: int = guest.my_id()
 	guest._to(int(guest.get("_host_id")), Wire.pond(1, 0.0, []))
-	guest.send_event(Wire.EVENT_GENOME, Wire.genome_payload(3, 1, 0, {}))
+	guest.send_event(Wire.EVENT_GENOME, Wire.genome_payload(3, 0, {}))
 	await _limits_until(func() -> bool: return int(host.gate_counts["malformed"]) >= 2)
 	var peer: Dictionary = (host.get("_peers") as Dictionary).get(gid, {})
 	var points: float = host.points_of(gid)
@@ -1818,7 +2379,7 @@ func _limits_squat(id: int) -> Array:
 	var squatter := ENetConnection.new()
 	var peer: ENetPacketPeer = null
 	if squatter.create_host(1) == OK:
-		peer = squatter.connect_to_host("127.0.0.1", Lan.PORT, 0, id)
+		peer = squatter.connect_to_host("127.0.0.1", Lan.channel_port(), 0, id)
 	var seen := [false, false]
 	await _limits_until(func() -> bool:
 		if peer == null:
@@ -2128,7 +2689,7 @@ func _limits_queues() -> void:
 	node.hosting = false
 	node.guests_max = 1
 	var host_peer: Dictionary = peer.call(1)
-	var genome := Wire.genome_payload(1, 1, 0, genes)
+	var genome := Wire.genome_payload(1, 0, genes)
 	for seq in 600:
 		node._take_event(host_peer, Wire.event(seq, Wire.EVENT_GENOME, genome))
 	var guest_kept := (node.pond_events as Array).size()
@@ -2221,7 +2782,7 @@ func _limits_leftovers() -> void:
 	cut.send_event(Wire.EVENT_ENTER, Wire.enter_payload(26.0))
 	await _limits_until(func() -> bool: return (host.pond_events as Array).size() >= 1)
 	var over := Wire.event(9, Wire.EVENT_PERSON, PackedByteArray())
-	over.resize(Wire.GUEST_FRAME_MAX + 1)
+	over.resize(Wire.GUEST_OTHER_MAX + 1)
 	cut._to(int(cut.get("_host_id")), over)
 	await _limits_until(func() -> bool: return int(host.gate_counts["cuts"]) >= 1)
 	var after_cut := (host.pond_events as Array).size() + (host.heard as Array).size()
@@ -2370,6 +2931,10 @@ class RefStick extends Node:
 	func pushing() -> bool:
 		return true
 
+	## The hold pad (automation-ux.md §6.1), never held here: R2 swims flat out.
+	func holding() -> bool:
+		return false
+
 	func press(_index: int, _at: Vector2) -> int:
 		return NONE
 
@@ -2397,6 +2962,7 @@ func _check_referee() -> void:
 	_referee_reentry()
 	_referee_once()
 	_referee_gaps()
+	_referee_rim()
 	for node: Node in _ref_nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -2471,6 +3037,23 @@ func _rules_text() -> String:
 	put.call("food.Contact", FoodField.Contact)
 	put.call("food.Cause", FoodField.Cause)
 	put.call("food.By", FoodField.By)
+	# **The drop** (ocean.md §10.5): a floc feeds and grows nobody, so a graze is
+	# never a meal to the referee; the rim holds a body in -- by a sample value,
+	# as `cell.mended` is -- which is where a claim past it is held and a sister
+	# near it is put; and the two eating rules a guest is held to, which the host
+	# decides and the referee never judges, one sample each, so two builds that
+	# disagree on them refuse each other at HELLO: a mouth swallows a player
+	# that fits on contact, hunting or not (row 15), and `pellicle` makes a body
+	# bigger to a mouth (row 5).
+	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
+	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
+		Referee.DAUGHTER_RADIUS)
+	put.call("drop.contain(7000,125;r28.28).x", held.x)
+	put.call("drop.contain(7000,125;r28.28).y", held.y)
+	put.call("food.swallows_player(not hunting, on contact)",
+		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
+	put.call("food.armoured_size(r30, pellicle 2)",
+		FoodField.armoured_size(30.0, CellBody.ARMOR_BY_TIER[2], FoodField.ARMOUR_SWALLOW))
 	# normal_mode.gd: the sister's ring and the free senses.
 	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
 	put.call("run.FIRST_SENSES", NormalMode.FIRST_SENSES)
@@ -2949,6 +3532,65 @@ func _referee_dividing() -> void:
 		+ " back in undivided fouls; a daughter's frame waits %.0f s for her sister"
 		% Referee.BIRTH_WAIT + " and fouls only then; one fed before her sister lands"
 		+ " is expected at what she was fed")
+
+
+## **The host's drop's rim, at its referee** (ocean.md §10.5): a claim past the
+## rim is held at it -- a clamp, never a foul, since an honest guest's own run
+## holds its cell there too -- and a sister the rim held back is taken where the
+## guest's run put her, unfouled, when the same sister with no rim is fouled;
+## one off the ring and off the rim is put on the ring, inside it, and fouled.
+func _referee_rim() -> void:
+	var centre := Vector2(1234.0, -567.0)
+	var rim := FoodField.Drop.new(centre).meniscus
+	# A claim 25 units past the edge, at walking pace.
+	var edge := centre + Vector2(rim.radius - CellBody.BASE_RADIUS - 10.0, 0.0)
+	var walker := _ref_arrived(0.0, edge)
+	walker.set_rim(centre, rim.radius)
+	var past := edge + Vector2(25.0, 0.0)
+	var held: Array = walker.claim(0.3, past, 0.0, CellBody.BASE_RADIUS, Vector2(80.0, 0.0),
+		0.0, false)
+	var walker_said := walker.take_fouls()
+	var at := held[0] as Vector2
+	# A division 140 from the edge; her side of her mother is past the rim.
+	var mother := centre + Vector2(rim.radius - 140.0, 0.0)
+	var side := Vector2(0.6, 0.8)
+	var kept := rim.contain(mother + side * Referee.SISTER_DISTANCE, Referee.DAUGHTER_RADIUS)
+	var ref := _ref_near_rim(mother, centre, rim.radius)
+	var taken := ref.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
+	var taken_said := ref.take_fouls()
+	var bare := _ref_near_rim(mother, centre, 0.0)
+	bare.judge_sister(3.0, kept, Referee.DAUGHTER_RADIUS, true)
+	var bare_said := _ref_rules(bare.take_fouls())
+	# Off the ring and off the rim: 300 out, on her side.
+	var stray := _ref_near_rim(mother, centre, rim.radius)
+	var put := stray.judge_sister(3.0, mother + side * 300.0, Referee.DAUGHTER_RADIUS, true)
+	var stray_said := stray.take_fouls()
+	_says(walker_said.is_empty() and rim.inside(at, CellBody.BASE_RADIUS)
+			and at.distance_to(rim.contain(past, CellBody.BASE_RADIUS)) < 0.01
+			and taken.size() == 2 and (taken[0] as Vector2).distance_to(kept) < 0.01
+			and taken_said.is_empty() and bare_said == [Referee.SISTER]
+			and put.size() == 2 and (put[0] as Vector2).distance_to(kept) < 0.5
+			and rim.inside(put[0], Referee.DAUGHTER_RADIUS)
+			and _ref_rules(stray_said) == [Referee.SISTER]
+			and float(stray_said[0][1]) == Referee.WEIGHT_SISTER_OFF,
+		"referee, the drop: a claim %.0f past the rim is held %.1f inside it with %d"
+		% [past.distance_to(centre) - rim.radius + CellBody.BASE_RADIUS,
+			rim.radius - CellBody.BASE_RADIUS - at.distance_to(centre), walker_said.size()]
+		+ " fouls; a sister the rim held back, %.0f from her mother, is taken there with"
+		% kept.distance_to(mother) + " %d fouls (%s with no rim); one off the ring and"
+		% [taken_said.size(), bare_said] + " the rim is put on the ring inside it and"
+		+ " fouled %s" % [_ref_rules(stray_said)])
+
+
+## A referee, its rim at [param centre] [param radius] across (0 for none),
+## whose guest is at r40 and out of the water at [param at], from 2.5 s.
+func _ref_near_rim(at: Vector2, centre: Vector2, radius: float) -> Referee:
+	var ref := _ref_arrived(0.0, at)
+	ref.set_rim(centre, radius)
+	ref.credit_meals(4)
+	ref.claim(2.0, at, 0.0, 40.0, Vector2.ZERO, 0.0, false)
+	ref.claim(2.5, at, 0.0, 40.0, Vector2.ZERO, 0.0, true)
+	return ref
 
 
 ## A referee whose guest is at r40 and out of the water at the origin, from 2.5 s.
@@ -3510,8 +4152,11 @@ func _check_run() -> void:
 	# **Before it enters the tree**, which is where `normal_mode.gd` reads it.
 	# Forced rather than inherited: the view is remembered in `user://`, so a
 	# probe that took whatever was last chosen would assert about the marker on
-	# some machines and about nothing on others.
+	# some machines and about nothing on others. And it keeps no drop: the
+	# game's default is the player's own file (ocean.md §9).
 	run.mode = 1
+	run.keep = ""
+	run.library_at = ""
 	get_tree().root.add_child.call_deferred(run)
 	await run.ready
 	await get_tree().process_frame
@@ -3781,6 +4426,8 @@ func _check_run() -> void:
 	# only ever heard.
 	var blind: Node = load(RUN_SCENE).instantiate()
 	blind.mode = 0
+	blind.keep = ""
+	blind.library_at = ""
 	get_tree().root.add_child.call_deferred(blind)
 	await blind.ready
 	other.report_body(Vector2(0.0, -260.0), 0.0, 29.0)
@@ -3803,13 +4450,15 @@ func _check_run() -> void:
 #
 # No socket and no tree: every frame here is `_process(1/60)` called by hand, so
 # a minute of water costs its arithmetic -- seconds -- and not a minute of wall
-# time, and no frame of CI's 20000 is spent on it. The global stream is seeded
+# time, and no frame of CI's 24000 is spent on it. The global stream is seeded
 # before every field, so a failure here is the same failure on every machine.
 #
 # Every field is a [WatchedFood], which counts any seed, retirement or meal
 # that touches the person's slot -- the one thing §1.2 says can never happen to
 # a person -- and the last check below is that nothing did, across everything
-# the section put the water through.
+# the section put the water through. **Since pack 2 the host's water divides**
+# (docs/design/lineage.md §8), and a guest's mirror is held to that too: a
+# mother leaves it and her two daughters arrive, by id, with no new message.
 # ---------------------------------------------------------------------------
 
 const POND_STEP := 1.0 / 60.0
@@ -3866,6 +4515,20 @@ class WatchedFood extends "res://game/normal/food.gd":
 			touched_person += 1
 		super._devour(b, prey)
 
+	# **The drop's doors** (ocean.md §10.2): a body made into a person's slot,
+	# or one leaving it as water, is the same thing happening to a person.
+	func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
+			body_radius := 0.0, tiers := {}, mine := -1.0) -> int:
+		var index: int = super._spawn(at, drifter, sensed, fill, body_radius, tiers, mine)
+		if _pond and _is_person_slot(index):
+			touched_person += 1
+		return index
+
+	func _drop_lose(index: int, cause: int) -> void:
+		if _pond and _is_person_slot(index):
+			touched_person += 1
+		super._drop_lose(index, cause)
+
 
 var _pond_nodes: Array[Node] = []
 var _pond_fields: Array = []
@@ -3881,10 +4544,15 @@ func _check_pond_field() -> void:
 	_pond_out_of_water()
 	_pond_mirror()
 	_pond_housekeeping()
+	_drop_pond_rules()
+	_drop_pond_anchors()
+	_drop_pond_mirror()
+	_drop_pond_kept()
+	_drop_pond_births()
 	var touched := 0
 	for field: Node in _pond_fields:
 		touched += int(field.get("touched_person"))
-	_says(touched == 0 and _pond_fields.size() >= 10,
+	_says(touched == 0 and _pond_fields.size() >= 14,
 		"pond-field: slot 68 never reached _seed, _seed_for, _retire or _devour"
 		+ " in %d fields (%d times)" % [_pond_fields.size(), touched])
 	for node: Node in _pond_nodes:
@@ -3940,7 +4608,8 @@ func _pond_listen(field: Node) -> Array:
 	field.bitten.connect(func(b: float, strength: float) -> void:
 		said.append(["bitten", b, strength]))
 	field.killed.connect(func(b: float) -> void: said.append(["killed", b]))
-	field.stung.connect(func(b: float) -> void: said.append(["stung", b]))
+	field.dosed.connect(func(b: float, kind: int, stacks: float, meal: bool) -> void:
+		said.append(["dosed", b, kind, stacks, meal]))
 	return said
 
 
@@ -3949,6 +4618,14 @@ func _pond_said(said: Array, kind: String, what: int = -1) -> Array:
 		if entry[0] == kind and (what < 0 or int(entry[1]) == what):
 			return entry
 	return []
+
+
+## **[param stacks] are a dose of [param n], as a body in the water holds it a
+## step later**: a body's loads are the water's to wear, so they may have worn
+## for the one step since the dose went in -- and by no more than that.
+func _pond_worn(stacks: float, n: float) -> bool:
+	return stacks <= n \
+		and stacks >= n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
 
 
 ## The heading that points a body at [param from] toward [param to].
@@ -3964,9 +4641,14 @@ func _pond_flank(heading: float, target: Vector2, mouth: Vector2) -> float:
 
 
 ## Water slot [param i], made into a calm body of [param radius] wearing
-## [param tiers] at [param at], facing [param heading].
+## [param tiers] at [param at], facing [param heading]. **In the drop** a new
+## body, with an id of its own, comes into that slot by the drop's own door
+## (`pose_at`), and is filed where it is: a body written by hand over another
+## would keep that one's id, and the guest's mirror its genome.
 func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 		at: Vector2, heading: float) -> Object:
+	if field.owns_drop():
+		field.pose_at(i, at, radius, tiers)
 	var b: Object = field.bodies()[i]
 	b.radius = radius
 	b.genome = tiers.duplicate()
@@ -3981,7 +4663,36 @@ func _pond_pose(field: Node, i: int, radius: float, tiers: Dictionary,
 	b.bite = 0.0
 	b.aim = at
 	b.flee_from = at
+	if field.owns_drop():
+		# Fed, and resting on nothing: a posed body neither starves nor dashes.
+		b.hunger = 0.0
+		field.refresh(i)
 	return b
+
+
+## Water slot [param i] out of the water: retired in today's water, taken out
+## of the drop by its own bookkeeping there.
+func _pond_retire(field: Node, i: int) -> void:
+	if field.owns_drop():
+		field.take_out(i)
+	else:
+		field.call("_retire", i)
+
+
+## **Every water body but [param keep_id] coming for the person in [param slot]**,
+## taken out of [param field]: for a check about whose hunter one posed body is,
+## in a room whose own hunters swim (automation.md §5.3).
+func _pond_spare(field: Node, slot: int, keep_id: int) -> void:
+	var bodies: Array = field.bodies()
+	var p: Object = (bodies[slot] as Object).get("person")
+	if p == null:
+		return
+	for i in bodies.size():
+		var b: Object = bodies[i]
+		if not bool(b.seeded) or bool(b.inert) or b.person != null or int(b.id) == keep_id:
+			continue
+		if bool(field.call(&"_coming_for_player", b, p)):
+			_pond_retire(field, i)
 
 
 ## ...on a run at the person, committed -- the one in [param slot], on a
@@ -4039,11 +4750,12 @@ func _pond_swallow_rule() -> void:
 
 	# The same mouth, not committed -- they have just arrived, so nothing may
 	# commit to them yet -- only bites. Astern, through two tiers of pellicle
-	# and into two of toxicyst, so every term of the bite is in the number.
+	# and into two of veneneux, so every term of the bite is in the number, and
+	# the person's poison goes into the biter as stacks (dna-slots.md §7).
 	field = _pond_rig(12, 30.0, POND_SENSES)
 	field.open_pond()
 	var armoured := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
-		&"pellicle": 2, &"toxicyst": 2}
+		&"pellicle": 2, &"veneneux": 2}
 	_pond_person(field, at, 28.0, armoured)
 	said = _pond_listen(field)
 	from = at + Vector2(0.0, 54.0)
@@ -4052,38 +4764,59 @@ func _pond_swallow_rule() -> void:
 	var bit := _pond_said(said, "touched", FoodField.Contact.BITTEN)
 	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
 	var expected := 0.0
-	var back := 0.0
 	if not bit.is_empty():
 		expected = CellBody.bite_damage(3, gape, 28.0, 2,
 			_pond_flank(0.0, at, bit[2] as Vector2))
-		back = CellBody.venom_back(2, expected)
+	# The poison is the stacks the table gives, worn for at most the one step the
+	# body may have taken since; nothing yet in its wound but what that step wore.
+	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var taken := float((b.loads as PackedFloat64Array)[0])
 	_says(field.person() != null and _pond_said(said, "died").is_empty()
 			and not bit.is_empty() and 28.0 * CellBody.ARMOR_BY_TIER[2] < gape,
 		"pond-field: an uncommitted cell whose gape fits them only bites")
 	_says(not bit.is_empty() and absf(float(person.wound) - expected) < 1e-9
-			and absf(float(b.wound) - back) < 1e-9 and expected > 0.0
+			and expected > 0.0 and taken <= poison_n
+			and taken >= poison_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
+			and float(b.wound) < 0.001
 			and is_equal_approx(float(bit[3]), clampf(expected
 				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)),
 		"pond-field: the chew is bite_damage for that gape, pellicle and flank"
-		+ " (%.5f, astern), with %.5f of venom back on the biter"
-		% [float(person.wound), float(b.wound)])
+		+ " (%.5f, astern), and the biter takes %.3f stacks of their poison, its"
+		% [float(person.wound), taken] + " wound %.5f" % float(b.wound))
 
-	# Committed, and they carry venom: spat out, and the cell is gone.
+	# Committed, and they are poisonous: swallowed as anyone is -- nobody is spat
+	# out any more -- and the cell that ate them takes the swallow's dose, and
+	# lives on with it (dna-slots.md §7.1, owner's row 5).
 	field = _pond_rig(13, 30.0, POND_SENSES)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1,
-		&"toxicyst": 1})
+		&"veneneux": 1})
 	said = _pond_listen(field)
 	from = at + Vector2(0.0, -54.0)
 	b = _pond_pose(field, 5, 30.0, hunter_genes, from, _pond_face(from, at))
 	_pond_hunt(field, b)
 	var serial := int(b.serial)
+	# What the cell that ate them carries **when the death is told**: the dose goes
+	# in first. Read then, because later in the same step today's water culls it
+	# with the rest of what the person anchored (`_step_pond`): out here, 3,000
+	# from the host, nobody is left to keep it.
+	var at_death: Array = []
+	field.person_died.connect(func(_cause: int, _by: int, _at: Vector2) -> void:
+		at_death.append([int(b.serial), bool(b.seeded),
+			float((b.loads as PackedFloat64Array)[0])]))
 	field._process(POND_STEP)
-	_says(field.person() != null and _pond_said(said, "died").is_empty()
-			and not _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
-			and int(b.serial) != serial,
-		"pond-field: a committed cell that swallows a venomous person is retired,"
-		+ " and they are stung, not killed")
+	died = _pond_said(said, "died")
+	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
+	var dosed := float(at_death[0][2]) if at_death.size() == 1 else 0.0
+	_says(field.person() == null and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.WATER
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
+			and at_death.size() == 1 and int(at_death[0][0]) == serial
+			and bool(at_death[0][1]) and dosed == swallow_n,
+		"pond-field: a committed cell that swallows a poisonous person eats them --"
+		+ " SWALLOWED by the water -- and carries %.2f stacks of their poison when the"
+		% dosed + " death is told, alive")
 
 
 # --- §1.3, the last row: one player's mouth on the other ---------------------
@@ -4149,6 +4882,114 @@ func _pond_friends() -> void:
 		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
 		% float(cell.wound) + " each side feeling its own share")
 
+	# **Each bite carries its toxins, each way** (dna-slots.md §7.2). This cell's
+	# front venom rides its bite into the friend -- whatever their pellicle -- and
+	# their poison comes back into this cell: one bite, two doses. This cell's
+	# loads are the run's, and exact; the friend's are the water's to wear
+	# ([method _pond_worn]).
+	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	var venom_n := CellBody.VENOM_STACKS_BY_TIER[2]
+	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var fired: Array = []
+	field = _pond_rig(24, 30.0, venom)
+	field.toxins = FoodField.toxins_of(venom,
+		[&"cytostome", &"cirrus", &"flagellum", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"pellicle": 3, &"veneneux": 2})
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	var mine: Object = field.get("_cell")
+	var friend: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var into_them := float((friend.loads as PackedFloat64Array)[0])
+	var into_me := float((mine.loads as PackedFloat64Array)[0])
+	var dose := _pond_said(said, "dosed")
+	_says(field.person() != null
+			and not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+			and _pond_worn(into_them, venom_n) and into_me == poison_n
+			and not dose.is_empty() and float(dose[3]) == poison_n and not bool(dose[4])
+			and fired == [FoodField.FIRED_VENOM],
+		"pond-field: this cell's front venom rides its bite into an armoured friend"
+		+ " (%.3f stacks), and their poison comes back into this cell (%.0f, told"
+		% [into_them, into_me] + " as a dose); its venom is told as fired, once")
+
+	# And the other way: a friend's front venom rides their bite into this
+	# poisonous cell, and its poison goes into them.
+	var poisonous := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"veneneux": 2}
+	fired = []
+	field = _pond_rig(25, 30.0, poisonous, Vector2.ZERO, PI)
+	field.toxins = FoodField.toxins_of(poisonous, [&"cytostome", &"cirrus", &"flagellum"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
+		&"toxicyst": 2}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	into_me = float((mine.loads as PackedFloat64Array)[0])
+	dose = _pond_said(said, "dosed")
+	_says(field.person() != null and not _pond_said(said, "bitten").is_empty()
+			and float(mine.wound) > 0.0 and into_me == venom_n
+			and not dose.is_empty() and float(dose[3]) == venom_n and not bool(dose[4])
+			and _pond_worn(into_them, poison_n) and fired == [FoodField.FIRED_POISON],
+		"pond-field: and a friend's front venom rides their bite into this poisonous"
+		+ " cell (%.0f stacks, told as a dose), and its poison goes into them (%.3f);"
+		% [into_me, into_them] + " its poison is told as fired, once")
+
+	# **A side sting** (§7.2): the friend wears their venom in slot 5, on the
+	# starboard quarter. This cell's bite landing there takes its stacks, and the
+	# same bite on their other quarter none -- and neither friend's mouth is on
+	# this cell, so nothing else doses it. Then this cell's own sting, worn in
+	# slot 5 too, into a friend whose mouth lands there.
+	var guards := Cilia.slot_bearing(5)
+	var stinger := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"pellicle": 3,
+		&"toxicyst": 2}
+	var quarter: Array = [&"cytostome", &"cirrus", &"flagellum", &"pellicle", &"",
+		&"toxicyst"]
+	var sting: Array = []
+	for side: float in [guards, -guards]:
+		field = _pond_rig(26, 30.0, mouth)
+		field.open_pond()
+		field.set_person_genome(stinger, quarter)
+		# Turned so that this cell, straight below them, is at `side` from their
+		# nose: the bearing its bite lands at.
+		field.place_person(at, PI - side, 28.0)
+		said = _pond_listen(field)
+		field._process(POND_STEP)
+		mine = field.get("_cell")
+		dose = _pond_said(said, "dosed")
+		sting.append([float((mine.loads as PackedFloat64Array)[0]),
+			float(dose[3]) if not dose.is_empty() else 0.0,
+			not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
+				and float(mine.wound) == 0.0])
+	var my_sting := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
+	fired = []
+	field = _pond_rig(27, 30.0, my_sting, Vector2.ZERO, -guards)
+	field.toxins = FoodField.toxins_of(my_sting,
+		[&"cytostome", &"cirrus", &"flagellum", &"", &"", &"toxicyst"])
+	field.open_pond()
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}, PI)
+	said = _pond_listen(field)
+	field.toxin_fired.connect(func(how: int) -> void: fired.append(how))
+	field._process(POND_STEP)
+	mine = field.get("_cell")
+	friend = field.bodies()[FoodField.PERSON_SLOT]
+	into_them = float((friend.loads as PackedFloat64Array)[0])
+	_says(sting.size() == 2 and float(sting[0][0]) == venom_n
+			and float(sting[0][1]) == venom_n and bool(sting[0][2])
+			and float(sting[1][0]) == 0.0 and float(sting[1][1]) == 0.0
+			and bool(sting[1][2])
+			and not _pond_said(said, "bitten").is_empty()
+			and float((mine.loads as PackedFloat64Array)[0]) == 0.0
+			and _pond_worn(into_them, venom_n) and fired == [FoodField.FIRED_STING],
+		"pond-field: a side sting -- this cell's bite on the quarter a friend wears"
+		+ " their venom on takes %.0f stacks, and on their other quarter %.0f; and"
+		% [float(sting[0][0]), float(sting[1][0])] + " this cell's own sting puts"
+		+ " %.3f into a friend biting it there, told as fired, once" % into_them)
+
 
 ## **Every way one player's contact with the other can end in a death**, and the
 ## cause each side is told (shared-pond.md §1.3's three unsaid things, and
@@ -4161,37 +5002,50 @@ func _pond_to_the_death() -> void:
 	var plain := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
 	var big := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 
-	# This cell swallows a venomous friend: it is poisoned, and they are stung.
+	# **This cell swallows a poisonous friend** (dna-slots.md §7.1, owner's row 5):
+	# they are eaten -- SWALLOWED by the friend -- and this cell takes the swallow's
+	# dose, felt as the meal, before the meal is told; nobody is stung any more.
+	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
 	var field := _pond_rig(81, 30.0, big)
 	field.open_pond()
-	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"toxicyst": 1})
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"veneneux": 1})
 	var said := _pond_listen(field)
 	field._process(POND_STEP)
-	_says(not _pond_said(said, "killed").is_empty()
-			and int(field.died_of) == FoodField.Cause.POISONED
-			and int(field.died_by) == FoodField.By.FRIEND
-			and not _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
-			and _pond_said(said, "died").is_empty() and field.person() != null
-			and not field.anchored,
-		"pond-field: swallowing a venomous friend poisons this cell -- told"
-		+ " POISONED by the friend -- and the friend is stung, not eaten")
+	var cell: Object = field.get("_cell")
+	var died := _pond_said(said, "died")
+	var dosed := _pond_said(said, "dosed")
+	_says(_pond_said(said, "killed").is_empty() and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED
+			and int(died[2]) == FoodField.By.FRIEND
+			and not _pond_said(said, "eaten").is_empty() and not dosed.is_empty()
+			and bool(dosed[4]) and said.find(dosed) < said.find(_pond_said(said, "eaten"))
+			and float((cell.loads as PackedFloat64Array)[0]) == swallow_n
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty()
+			and field.person() == null,
+		"pond-field: swallowing a poisonous friend eats them -- SWALLOWED by the"
+		+ " friend -- and this cell takes %.0f stacks, told as the meal's before it"
+		% float((cell.loads as PackedFloat64Array)[0]))
 
-	# The friend swallows this venomous cell: they are poisoned, it is stung.
-	field = _pond_rig(82, 30.0, {&"cytostome": 1, &"cirrus": 1, &"toxicyst": 1},
-		Vector2.ZERO, PI)
-	field.venom_cost = CellBody.VENOM_COST_BY_TIER[1]
+	# **The friend swallows this poisonous cell**: this cell is eaten -- SWALLOWED
+	# by the friend -- and they take the dose, and live on with it.
+	var mine := {&"cytostome": 1, &"cirrus": 1, &"veneneux": 1}
+	field = _pond_rig(82, 30.0, mine, Vector2.ZERO, PI)
+	field.toxins = FoodField.toxins_of(mine, [&"cytostome", &"cirrus"])
 	field.open_pond()
 	_pond_person(field, at, 30.0, big, PI)
 	said = _pond_listen(field)
 	field._process(POND_STEP)
-	var died := _pond_said(said, "died")
-	_says(not died.is_empty() and int(died[1]) == FoodField.Cause.POISONED
-			and int(died[2]) == FoodField.By.FRIEND
-			and not _pond_said(said, "stung").is_empty()
-			and _pond_said(said, "killed").is_empty() and field.anchored
-			and field.person() == null,
-		"pond-field: a friend who swallows this venomous cell is poisoned --"
-		+ " POISONED by the friend, on their side -- and this cell is stung")
+	var friend: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var theirs := float((friend.loads as PackedFloat64Array)[0])
+	_says(not _pond_said(said, "killed").is_empty()
+			and int(field.died_of) == FoodField.Cause.SWALLOWED
+			and int(field.died_by) == FoodField.By.FRIEND
+			and _pond_said(said, "died").is_empty() and field.person() != null
+			and theirs <= swallow_n
+			and theirs >= swallow_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
+			and _pond_said(said, "touched", FoodField.Contact.STUNG).is_empty(),
+		"pond-field: a friend who swallows this poisonous cell eats it -- SWALLOWED by"
+		+ " the friend, on this side -- and takes %.2f stacks of its poison" % theirs)
 
 	# This cell chews the friend apart: its meal, their CHEWED.
 	field = _pond_rig(83, 30.0, big)
@@ -4225,24 +5079,61 @@ func _pond_to_the_death() -> void:
 		"pond-field: a friend chewing this cell to the end kills it CHEWED by the"
 		+ " friend, and the friend is fed")
 
-	# **The eater's death first.** One bite that would finish both: the venom
-	# back finishes this cell, and the friend it was chewing lives.
+	# **A bite on a poisonous friend that finishes them** (dna-slots.md §7): a meal
+	# here, CHEWED by the friend there, and the bite carries their poison into this
+	# cell all the same -- stacks that work over the next seconds, so this cell is
+	# not killed at the bite, already wounded as it is. Then the harm wears into
+	# its wound until it is whole: POISONED, by the friend whose poison it was.
 	field = _pond_rig(85, 30.0, big)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1,
-		&"pellicle": 3, &"toxicyst": 3})
+		&"pellicle": 3, &"veneneux": 3})
 	field.bodies()[FoodField.PERSON_SLOT].wound = 0.99
-	(field.get("_cell") as Object).set("wound", 0.999)
+	cell = field.get("_cell")
+	cell.set("wound", 0.95)
 	said = _pond_listen(field)
 	field._process(POND_STEP)
-	_says(not _pond_said(said, "killed").is_empty()
+	died = _pond_said(said, "died")
+	var bite_n := float((cell.loads as PackedFloat64Array)[0])
+	var alive_after := _pond_said(said, "killed").is_empty()
+	var steps := 0
+	while float(cell.get("wound")) < 1.0 and steps < 3600:
+		cell.set("wound", CellBody.dosed(cell.loads, float(cell.get("wound")),
+			float(cell.get("radius")), POND_STEP))
+		steps += 1
+	field._process(POND_STEP)
+	_says(not died.is_empty() and int(died[1]) == FoodField.Cause.CHEWED
+			and int(died[2]) == FoodField.By.FRIEND and not _pond_said(said, "eaten").is_empty()
+			and alive_after and bite_n == CellBody.POISON_STACKS_BY_TIER[3]
+			and not _pond_said(said, "killed").is_empty()
 			and int(field.died_of) == FoodField.Cause.POISONED
-			and int(field.died_by) == FoodField.By.FRIEND
-			and _pond_said(said, "died").is_empty()
-			and not _pond_said(said, "touched", FoodField.Contact.BITTEN).is_empty()
-			and _pond_said(said, "eaten").is_empty() and field.person() != null,
-		"pond-field: a bite that would finish both kills the eater first --"
-		+ " this cell POISONED, the friend only bitten and not a meal")
+			and int(field.died_by) == FoodField.By.FRIEND,
+		"pond-field: a bite that finishes a poisonous friend is a meal -- CHEWED by the"
+		+ " friend -- and carries %.0f stacks into this cell, which lives; %.1f s on"
+		% [bite_n, steps * POND_STEP] + " the harm makes its wound whole: POISONED by"
+		+ " the friend")
+
+	# **A friend made whole by harm** (dna-slots.md §6.2): this cell's poison in
+	# them, worn into their wound, takes them out of the pond -- POISONED, by the
+	# friend, told them as a KILLED with that cause, and nothing eats them.
+	field = _pond_rig(89, 30.0, plain)
+	field.open_pond()
+	_pond_person(field, Vector2(600.0, 0.0), 28.0, plain)
+	said = _pond_listen(field)
+	field._dose(FoodField.PERSON_SLOT, 0, 60.0, FoodField.TARGET_PLAYER, 0.0, false)
+	var frames := 0
+	while field.person() != null and frames < 3600:
+		field._process(POND_STEP)
+		frames += 1
+	died = _pond_said(said, "died")
+	var told_killed := _pond_said(said, "touched", FoodField.Contact.KILLED)
+	_says(field.person() == null and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.POISONED
+			and int(died[2]) == FoodField.By.FRIEND and not told_killed.is_empty()
+			and _pond_said(said, "eaten").is_empty() and frames < 3600,
+		"pond-field: a friend carrying this cell's poison dies of it %.1f s on --"
+		% (frames * POND_STEP) + " POISONED by the friend, told as a KILLED, eaten"
+		+ " by nobody")
 
 	# And the water's three ways, told to this cell as causes too.
 	var water := {&"cytostome": 3, &"flagellum": 1}
@@ -4266,10 +5157,19 @@ func _pond_to_the_death() -> void:
 	var chewed: Array = [int(field.died_of), int(field.died_by)]
 	field = _pond_rig(88, 30.0, plain)
 	field.open_pond()
-	(field.get("_cell") as Object).set("wound", 0.999)
+	cell = field.get("_cell")
+	cell.set("wound", 0.95)
 	var ahead := Vector2(0.0, -72.0)
-	_pond_pose(field, 5, 44.0, {&"cytostome": 1, &"pellicle": 3, &"toxicyst": 3},
+	_pond_pose(field, 5, 44.0, {&"cytostome": 1, &"pellicle": 3, &"veneneux": 3},
 		ahead, 0.0)
+	field._process(POND_STEP)
+	# What it bit dosed it; the harm, worn as this cell's own step wears it, makes
+	# its wound whole, and the field tells the death at its next pass.
+	steps = 0
+	while float(cell.get("wound")) < 1.0 and steps < 3600:
+		cell.set("wound", CellBody.dosed(cell.loads, float(cell.get("wound")),
+			float(cell.get("radius")), POND_STEP))
+		steps += 1
 	field._process(POND_STEP)
 	var poisoned: Array = [int(field.died_of), int(field.died_by)]
 	_says(swallowed == [FoodField.Cause.SWALLOWED, FoodField.By.WATER]
@@ -4579,15 +5479,14 @@ func _pond_mirror() -> void:
 		var entries: Array = host.pond_entries(false)
 		sent_max = maxi(sent_max, entries.size())
 		for entry: Array in entries:
-			var slot := int(entry[FoodField.Entry.SLOT])
-			if slot == FoodField.PERSON_SLOT:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
 				continue
-			var sig := int(entry[FoodField.Entry.SERIAL]) * 1000 \
-				+ int(entry[FoodField.Entry.MEALS])
-			if versions.get(slot, -1) != sig:
-				versions[slot] = sig
-				mirror.apply_genome(slot, int(entry[FoodField.Entry.SERIAL]),
-					int(entry[FoodField.Entry.MEALS]),
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals,
 					(host.bodies()[slot].genome as Dictionary).duplicate())
 		mirror.apply_pond(host_cell.wound, entries)
 		# The organs alone: this cell's own push-out was the host's to make,
@@ -4601,9 +5500,9 @@ func _pond_mirror() -> void:
 		if host.hunter() >= 0:
 			hunted += 1
 		returns += (host.pings as Array).size()
-		if host.hunter() != mirror.hunter() and mismatch.is_empty():
-			mismatch = "-- frame %d hunter %d against %d" % [frame, host.hunter(),
-				mirror.hunter()]
+		if _hunter_id(host) != _hunter_id(mirror) and mismatch.is_empty():
+			mismatch = "-- frame %d hunter %d against %d" % [frame, _hunter_id(host),
+				_hunter_id(mirror)]
 	_says(mismatch.is_empty() and worst <= 1e-6 and hunted > 500 and returns > 0,
 		("pond-field: the mirror returns the host's taste, dread, shadow, touch,"
 		+ " beams, ping returns and hunter() within 1e-6 for %d frames (worst %s;"
@@ -4613,20 +5512,24 @@ func _pond_mirror() -> void:
 
 	# A hunter the host loses leaves the mirror's hunt in the same snapshot: a
 	# retired body is not sent, and a mirror that kept its last STALK would go
-	# on answering hunter() for nothing.
-	var was_hunted: bool = host.hunter() == 7 and mirror.hunter() == 7
+	# on answering hunter() for nothing. The mirror holds it in a slot of its
+	# own, found by the body's id (protocol 5).
+	var gone_id := int(host.call("_wire_id", host.bodies()[7]))
+	var gone_at := int((mirror.get("_mirror_slots") as Dictionary).get(gone_id, -1))
+	var was_hunted: bool = host.hunter() == 7 and mirror.hunter() == gone_at \
+		and gone_at >= 0
 	host.call("_retire", 7)
 	mirror.apply_pond(host_cell.wound, host.pond_entries(false))
-	_says(was_hunted and host.hunter() == mirror.hunter()
-			and mirror.hunter() != 7,
+	_says(was_hunted and _hunter_id(host) == _hunter_id(mirror)
+			and mirror.hunter() != gone_at,
 		"pond-field: a hunter the host retires leaves the mirror's hunter() with"
-		+ " the next snapshot (%d on both)" % mirror.hunter())
+		+ " the next snapshot (%d on both)" % _hunter_id(mirror))
 	# And it is drawn as nothing there, as on the host: the view reads points()
 	# and radii() and never `seeded`, so a radius left behind is a ghost.
-	_says(not bool(mirror.bodies()[7].seeded) and float(mirror.radii()[7]) == 0.0
-			and float(host.radii()[7]) == 0.0,
+	_says(gone_at >= 0 and not bool(mirror.bodies()[gone_at].seeded)
+			and float(mirror.radii()[gone_at]) == 0.0 and float(host.radii()[7]) == 0.0,
 		"pond-field: a body the host stops sending has radius 0 on the mirror,"
-		+ " as on the host (%s against %s)" % [str(mirror.radii()[7]),
+		+ " as on the host (%s against %s)" % [str(mirror.radii()[maxi(gone_at, 0)]),
 			str(host.radii()[7])])
 
 	# And between snapshots it carries: a water body on along its heading at
@@ -4716,6 +5619,387 @@ func _pond_housekeeping() -> void:
 		"pond-field: a mirror starts empty, and leaving it is 34 fresh cells alone")
 
 
+# --- The pond on the drop (ocean.md §10.2, protocol 5) --------------------------
+
+## **A host's own drop, opened as a pond**: made round a cell of [param radius]
+## wearing [param tiers] as a run makes one, with the organs set as a run sets
+## them, and the pond opened on it. The cell is at the drop's quiet start.
+func _pond_drop_rig(from_seed: int, radius: float, tiers: Dictionary) -> Node:
+	seed(from_seed)
+	var genome := StubGenome.new()
+	genome.body = tiers.duplicate()
+	var cell: Node = CellBody.new()
+	cell.genome = genome
+	cell.radius = radius
+	var field: Node = WatchedFood.new()
+	field.setup_drop(cell)
+	field.smell_range = cell.smell_range()
+	field.smell_bearing = 0.0
+	field.ping_range = cell.ping_range()
+	field.ping_period = cell.ping_period()
+	field.ping_through = cell.ping_through()
+	field.ping_tier = cell.ping_tier()
+	field.open_pond()
+	_pond_nodes.append_array([genome, cell, field])
+	_pond_fields.append(field)
+	return field
+
+
+## A point inside [param field]'s rim [param away] units from its cell: along
+## the line from the cell through the middle, or the middle itself.
+func _drop_point(field: Node, away: float) -> Vector2:
+	var rim: RefCounted = field.basin()
+	var centre: Vector2 = rim.get(&"center")
+	var from: Vector2 = field.get("_cell").position
+	var dir := (centre - from).normalized() if from.distance_to(centre) > 1.0 \
+		else Vector2.RIGHT
+	return from + dir * away
+
+
+## **The drop's rules for the other player** (ocean.md §10.2, rows 15 and 5): a
+## water mouth that is not hunting them swallows them on contact when they fit,
+## as it does the host, and is fed by them -- a meal and a unit of growth -- and
+## the slot empties that frame; and their mouth on a settled floc grazes it,
+## said to them as GRAZED with its worth, and they do not grow.
+func _drop_pond_rules() -> void:
+	var field := _pond_drop_rig(81, 30.0, POND_SENSES)
+	var at := _drop_point(field, 700.0)
+	_pond_person(field, at, CellBody.BASE_RADIUS, {&"cytostome": 1, &"cirrus": 1,
+		&"flagellum": 1})
+	var said := _pond_listen(field)
+	var from := at + Vector2(0.0, -54.0)
+	var b := _pond_pose(field, 5, 30.0, {&"cytostome": 3, &"flagellum": 1}, from,
+		_pond_face(from, at))
+	b.hunger = 0.8
+	var gape := CellBody.gape_of(3, 30.0)
+	var reaches := Cilia.mouth_touches(b.pos, b.heading, 30.0, gape, at, CellBody.BASE_RADIUS)
+	field._process(POND_STEP)
+	var died := _pond_said(said, "died")
+	_says(reaches and int(b.state) != FoodField.State.STALK and not died.is_empty()
+			and int(died[1]) == FoodField.Cause.SWALLOWED and field.person() == null
+			and not bool(field.bodies()[FoodField.PERSON_SLOT].seeded)
+			and is_equal_approx(float(b.radius), 30.0 + CellBody.GROWTH_PER_MEAL)
+			and int(b.meals) == 1 and float(b.hunger) < 0.8,
+		"pond-field, the drop: a mouth not hunting the other player swallows them on"
+		+ " contact (row 15), is fed by them -- r%.0f and a meal, hunger %.2f from 0.80 --"
+		% [float(b.radius), float(b.hunger)] + " and their slot is empty that frame")
+
+	field = _pond_drop_rig(82, 30.0, POND_SENSES)
+	at = _drop_point(field, 700.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	said = _pond_listen(field)
+	var floc := int(field.call("_spawn_floc", at + Vector2(0.0, -(28.0 + 4.0)), 8.0, true))
+	var floc_id := int(field.bodies()[floc].id)
+	field._process(POND_STEP)
+	var grazed := _pond_said(said, "touched", FoodField.Contact.GRAZED)
+	var fb: Object = field.bodies()[floc]
+	_says(not grazed.is_empty() and is_equal_approx(float(grazed[3]),
+			clampf(8.0 / 28.0, FoodField.MEAL_MIN, FoodField.MEAL_MAX))
+			and _pond_said(said, "touched", FoodField.Contact.ATE).is_empty()
+			and not (bool(fb.seeded) and int(fb.id) == floc_id)
+			and is_equal_approx(float(field.bodies()[FoodField.PERSON_SLOT].radius), 28.0),
+		"pond-field, the drop: the other player's mouth on a settled floc grazes it --"
+		+ " GRAZED at %.2f of a meal, no ATE, the floc gone and r28 still"
+		% (float(grazed[3]) if not grazed.is_empty() else -1.0))
+
+
+## **Every player is an anchor, and the send set is the nearest sixty** (ocean.md
+## §10.2, §10.4): a body beside the other player and far from the host is stepped
+## every frame, as one beside the host is; and their snapshot is every body
+## within reach that is coming for them, flagged, and then the nearest of the
+## rest, sixty in all -- never a floc, never a person. **The host's water is on
+## rules** (behaviour.md §8): "stalking you" is "coming for you" (§4.3), a body
+## swimming with them within 35° of its heading and a mouth that takes them.
+func _drop_pond_anchors() -> void:
+	var field := _pond_drop_rig(83, 30.0, POND_SENSES)
+	var at := _drop_point(field, FoodField.Drop.LOD_NEAR * 1.5)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var near := _pond_pose(field, 6, 15.0, {}, at + Vector2(150.0, 0.0), 0.0)
+	var every := 0
+	for frame in 16:
+		field._process(POND_STEP)
+		if int(near.stepped) == int(field.get("_frame")):
+			every += 1
+	# A mouth coming for them -- swimming, at them -- far inside the send reach,
+	# and the snapshot they are sent.
+	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+	var far_at: Vector2 = at + (at - (field.get("_cell").position as Vector2)).normalized() \
+		* -1800.0
+	var far := _pond_pose(field, 7, 30.0, {&"cytostome": 3, &"flagellum": 1}, far_at,
+		_pond_face(far_at, pb.pos))
+	far.swimming = true
+	var entries: Array = field.pond_entries(true)
+	var sent := {}
+	var worst := 0.0
+	var fair := true
+	var hunter_in := false
+	for entry: Array in entries:
+		var slot := int(entry[FoodField.ENTRY_SLOT])
+		if slot < 0:
+			continue
+		var b: Object = field.bodies()[slot]
+		sent[slot] = true
+		if bool(b.inert) or b.person != null:
+			fair = false
+		if slot == 7:
+			hunter_in = (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) != 0
+		elif (int(entry[FoodField.Entry.FLAGS]) & FoodField.FLAG_STALKING) == 0:
+			# The rest, nearest first. Another body coming for them goes first
+			# wherever it is in reach, flagged, as the posed one does -- so it is
+			# not one of the rest, however far it is.
+			worst = maxf(worst, (b.pos as Vector2).distance_to(pb.pos) - float(b.radius))
+	var nearer_left := 0
+	for i in field.bodies().size():
+		var b: Object = field.bodies()[i]
+		if not bool(b.seeded) or bool(b.inert) or b.person != null or sent.has(i):
+			continue
+		if (b.pos as Vector2).distance_to(pb.pos) - float(b.radius) < worst - 1.0 / 16.0:
+			nearer_left += 1
+	_says(every == 16 and hunter_in and fair and sent.size() <= FoodField.SEND_MAX
+			and nearer_left == 0 and entries.size() == sent.size() + 1,
+		"pond-field, the drop: a body beside the other player, %.0f from the host, is"
+		% at.distance_to(field.get("_cell").position) + " stepped %d of 16 frames;" % every
+		+ " their snapshot is %d water bodies, a mouth coming for them 1,800 off in it"
+		% sent.size() + " and flagged, none of the rest nearer than its farthest (%.0f), no"
+		% worst + " floc and no person")
+
+
+## **The guest's mirror, on the host's drop** (ocean.md §10.4): fed the host's
+## own snapshots for the other player, their bodies' genomes by id, the flocs in
+## their reach as SETTLE and CLEAR, and the rim -- it holds exactly the bodies
+## sent, each under its id with its genome, and exactly the flocs in reach, each
+## settling by the mirror's own clock; and its cell, put past the rim, is held
+## inside it and knocked.
+func _drop_pond_mirror() -> void:
+	var host := _pond_drop_rig(84, 30.0, POND_SENSES)
+	var at := _drop_point(host, 400.0)
+	_pond_person(host, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	# A floc landing in their reach, still settling.
+	var landing := int(host.call("_spawn_floc", at + Vector2(160.0, 90.0), 10.0, false))
+	var landing_id := int(host.bodies()[landing].id)
+	var mirror := _pond_rig(84, 28.0, POND_SENSES)
+	mirror.become_mirror()
+	var rim: Array = host.rim()
+	mirror.mirror_rim(rim[0], float(rim[1]))
+	var versions := {}
+	var told := {}
+	var problems: Array[String] = []
+	var settling := [-1.0, -1.0]
+	for frame in 90:
+		host._process(POND_STEP)
+		var pb: Object = host.bodies()[FoodField.PERSON_SLOT]
+		var mirror_cell: Object = mirror.get("_cell")
+		mirror_cell.position = pb.pos
+		var entries: Array = host.pond_entries(true)
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals, (host.bodies()[slot].genome as Dictionary)
+					.duplicate())
+		mirror.apply_pond(0.0, entries)
+		var now := {}
+		for f: Array in host.flocs_in_reach(pb.pos):
+			now[int(f[0])] = true
+			if not told.has(int(f[0])):
+				told[int(f[0])] = true
+				mirror.mirror_floc(int(f[0]), f[1], float(f[2]), float(f[3]), float(f[4]))
+		for id: int in told.keys():
+			if not now.has(id):
+				told.erase(id)
+				mirror.mirror_unfloc(id)
+		mirror.call("_step_mirror", POND_STEP)
+		# Exactly what was sent, by id, with its genome.
+		var slots: Dictionary = mirror.get("_mirror_slots")
+		var flocs: Dictionary = mirror.get("_mirror_flocs")
+		var sent := 0
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			sent += 1
+			var m := int(slots.get(int(entry[FoodField.Entry.ID]), -1))
+			if m < 0 or mirror.bodies()[m].genome != host.bodies()[slot].genome:
+				problems.append("frame %d body %d" % [frame, int(entry[FoodField.Entry.ID])])
+		if slots.size() != sent or flocs.size() != now.size():
+			problems.append("frame %d holds %d bodies and %d flocs for %d and %d"
+				% [frame, slots.size(), flocs.size(), sent, now.size()])
+		if flocs.has(landing_id):
+			var m := int((flocs[landing_id] as Array)[0])
+			if frame == 10:
+				settling[0] = float(mirror.bodies()[m].settle)
+			elif frame == 70:
+				settling[1] = float(mirror.bodies()[m].settle)
+	# Its own cell, put past the rim.
+	var knocks := [0]
+	mirror.shored.connect(func(_b: float, _s: float, _at: Vector2) -> void: knocks[0] += 1)
+	var cell: Object = mirror.get("_cell")
+	var basin: RefCounted = mirror.basin()
+	var centre: Vector2 = basin.get(&"center")
+	cell.position = centre + Vector2(float(basin.get(&"radius")) + 50.0, 0.0)
+	cell.velocity = Vector2(80.0, 0.0)
+	mirror.call("_step_mirror", POND_STEP)
+	var held: bool = basin.call(&"inside", cell.position, float(cell.radius))
+	_says(problems.is_empty() and settling[0] >= 0.0 and settling[1] > settling[0]
+			and held and knocks[0] == 1,
+		"pond-field, the drop: the guest's mirror holds exactly the bodies sent, by id and"
+		+ " with their genomes, and the flocs in reach (settling %.2f to %.2f by its own"
+		% [settling[0], settling[1]] + " clock); its cell past the rim is held inside and"
+		+ " knocked %d time%s%s" % [knocks[0], "" if knocks[0] == 1 else "s",
+			"" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))])
+
+
+## **A drop kept while it is a pond keeps nobody** (ocean.md §9.1): the other
+## player is never in the file -- no body where they are, their slot empty
+## loaded -- and a chase of them is kept as a chase of nobody.
+func _drop_pond_kept() -> void:
+	var field := _pond_drop_rig(85, 30.0, POND_SENSES)
+	var at := _drop_point(field, 600.0)
+	_pond_person(field, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var pb: Object = field.bodies()[FoodField.PERSON_SLOT]
+	for frame in 30:
+		field._process(POND_STEP)
+	var hunter := _pond_pose(field, 8, 30.0, {&"cytostome": 3, &"flagellum": 1},
+		pb.pos + Vector2(0.0, 400.0), 0.0)
+	hunter.state = FoodField.State.STALK
+	hunter.target = FoodField.PERSON_SLOT
+	hunter.target_serial = pb.serial
+	var state: Dictionary = field.drop_state()
+	var rows: Dictionary = state["bodies"]
+	var there := 0
+	for p: Vector2 in rows["at"] as PackedVector2Array:
+		if p.distance_to(pb.pos) < 0.5:
+			there += 1
+	var slots: PackedInt32Array = rows["slot"]
+	# A phone's pond has one person, in slot 68; the slot after it is water.
+	var kept_person := slots.has(FoodField.PERSON_SLOT)
+	var chase := -99
+	var at_row := slots.find(8)
+	if at_row >= 0:
+		chase = int((state["runs"]["target"] as PackedInt64Array)[at_row])
+	var solo := _pond_drop_rig(86, 30.0, POND_SENSES)
+	solo.load_drop(solo.get("_cell"), state)
+	_says(there == 0 and not kept_person and chase == FoodField.TARGET_NONE
+			and not bool(solo.bodies()[FoodField.PERSON_SLOT].seeded),
+		"pond-field, the drop: kept mid-pond, %d bodies, %d where the other player is"
+		% [slots.size(), there] + " (none, and not their slot: %s), their slot empty" % kept_person
+		+ " loaded, and a chase of them kept as a chase of nobody (%d)" % chase)
+
+
+## **The host's water divides, and the guest's mirror sees it** (lineage.md §8,
+## §11.3): births are the host's water, and the wire carries them as it carries
+## any body coming into reach -- no new field, no new message. A host's drop
+## with the other player in it, a mouth beside them posed a meal short of
+## DIVIDE_RADIUS, and a guest's mirror fed the host's own snapshots and GENOMEs
+## by id, as in [method _drop_pond_mirror]. Ten frames on the mouth is grown to
+## forty, and on the frame the host divides it the mirror loses the mother's id
+## and holds her two daughters' -- each at half her area, where the host has her,
+## under her own genome -- with **no foul**: every frame the mirror holds exactly
+## the bodies sent, each with its genome, and nothing the host did reached the
+## other player's slot.
+func _drop_pond_births() -> void:
+	var host := _pond_drop_rig(87, 30.0, POND_SENSES)
+	var at := _drop_point(host, 500.0)
+	_pond_person(host, at, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var from := at + Vector2(250.0, 0.0)
+	var mother := _pond_pose(host, 9, CellBody.DIVIDE_RADIUS - CellBody.GROWTH_PER_MEAL,
+		{&"cytostome": 1, &"cirrus": 2, &"flagellum": 2, &"ampulla": 1}, from,
+		_pond_face(from, at))
+	var mother_id := int(mother.id)
+	var mirror := _pond_rig(87, 28.0, POND_SENSES)
+	mirror.become_mirror()
+	var rim: Array = host.rim()
+	mirror.mirror_rim(rim[0], float(rim[1]))
+	var versions := {}
+	var problems: Array[String] = []
+	var held_mother := -1
+	var left := -1
+	var arrived := -1
+	var daughters: Array[int] = []
+	var as_sent := 0
+	for frame in 40:
+		# Grown to forty on the tenth frame, as a meal would, if the water has not
+		# already fed it there: it divides on its next tick.
+		if frame == 10 and bool(mother.seeded) and int(mother.id) == mother_id:
+			mother.radius = CellBody.DIVIDE_RADIUS
+			host.refresh(9)
+		host._process(POND_STEP)
+		var pb: Object = host.bodies()[FoodField.PERSON_SLOT]
+		var mirror_cell: Object = mirror.get("_cell")
+		mirror_cell.position = pb.pos
+		var entries: Array = host.pond_entries(true)
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			var id := int(entry[FoodField.Entry.ID])
+			var meals := int(entry[FoodField.Entry.MEALS])
+			if versions.get(id, -1) != meals:
+				versions[id] = meals
+				mirror.apply_genome(id, meals, (host.bodies()[slot].genome as Dictionary)
+					.duplicate())
+		mirror.apply_pond(0.0, entries)
+		# As it lands: every body sent, by id, with its genome and where the host has
+		# it -- before the mirror carries it on by its own clock.
+		var slots: Dictionary = mirror.get("_mirror_slots")
+		var sent := 0
+		for entry: Array in entries:
+			var slot := int(entry[FoodField.ENTRY_SLOT])
+			if slot < 0:
+				continue
+			sent += 1
+			var m := int(slots.get(int(entry[FoodField.Entry.ID]), -1))
+			if m < 0 or mirror.bodies()[m].genome != host.bodies()[slot].genome \
+					or (mirror.bodies()[m].pos as Vector2) != (host.bodies()[slot].pos as Vector2):
+				problems.append("frame %d body %d" % [frame, int(entry[FoodField.Entry.ID])])
+		if slots.size() != sent:
+			problems.append("frame %d holds %d bodies for %d" % [frame, slots.size(), sent])
+		mirror.call("_step_mirror", POND_STEP)
+		if slots.has(mother_id):
+			held_mother = frame
+		elif held_mother >= 0 and left < 0:
+			left = frame
+			for b: Object in host.bodies():
+				if bool(b.seeded) and int(b.parent) == mother_id:
+					daughters.append(int(b.id))
+			var both := daughters.size() == 2
+			for id: int in daughters:
+				both = both and slots.has(id)
+			arrived = frame if both else -1
+			for id: int in daughters:
+				var m := int(slots.get(id, -1))
+				if m >= 0 and is_equal_approx(float(mirror.bodies()[m].radius),
+						CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)):
+					as_sent += 1
+	var touched := int(host.get("touched_person"))
+	_says(problems.is_empty() and held_mother >= 0 and left == held_mother + 1
+			and arrived == left and as_sent == 2 and touched == 0,
+		"pond-field, the drop: the host's water divides and the guest's mirror sees it -- the"
+		+ " mother (id %d) held until frame %d, gone at frame %d, and her daughters %s"
+		% [mother_id, held_mother, left, str(daughters)]
+		+ " there from frame %d, %d of them at r%.2f under their own genomes; every frame"
+		% [arrived, as_sent, CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)]
+		+ " exactly the bodies sent, %d fouls, and the other player's slot touched %d times"
+		% [problems.size(), touched]
+		+ ("" if problems.is_empty() else " -- NOT: " + ", ".join(problems.slice(0, 4))))
+
+
+## **Which body is hunting this cell, by its id on the wire** -- a host's and a
+## mirror's slots for one body differ (protocol 5), its id does not. -1 for
+## none.
+func _hunter_id(field: Node) -> int:
+	var h: int = field.hunter()
+	if h < 0:
+		return -1
+	if field.mirroring():
+		return int(field.bodies()[h].id)
+	return int(field.call("_wire_id", field.bodies()[h]))
+
+
 ## The largest difference between what the two fields report this frame, over
 ## every sense the mirror is held to; INF for a shape that differs at all.
 func _pond_differ(a: Node, b: Node) -> float:
@@ -4770,36 +6054,53 @@ func _pond_differ(a: Node, b: Node) -> float:
 class PondWatchedFood extends "res://game/normal/food.gd":
 	var sisters: Array = []
 	## **Every snapshot this water built for the guest**, newest last and the
-	## last 64 kept: `[count, entries, water, the guest's place, its serial]`,
-	## where `water` is each body as it stood at that instant -- `[seeded, place,
-	## radius, serial, meals, genome, state, target, target serial]`. The mirror
-	## check finds the one the guest applied by its sequence, and so never
-	## compares a mirror with water a frame later than the water it was sent.
+	## last 64 kept: `[count, entries, water, the guest's place]`, where `water`
+	## is every water body that could be in it as it stood at that instant --
+	## within the send reach and a margin, or hunting the guest -- as `[slot,
+	## id, place, radius, meals, genome, hunting the guest]`. **On rules,
+	## "hunting" is what the send set puts first** (`_send_coming`): coming for
+	## the guest, within the reach. Under row 37 (automation.md §5.3) a resting
+	## hunter of one copy swims, so one is often coming for the guest from past
+	## the sixty nearest -- and a run's state, which no body on rules is in, never
+	## named it. The mirror check finds the one the guest applied by its
+	## sequence, and so never compares a mirror with water a frame later than the
+	## water it was sent.
 	var built: Array = []
 	var built_count := 0
 
 	func pond_entries(for_person: bool, reach: float = SEND_REACH) -> Array:
 		var out: Array = super.pond_entries(for_person, reach)
 		if for_person:
+			var pb := _cells[PERSON_SLOT]
 			var water: Array = []
-			for b in _cells:
-				water.append([b.seeded, b.pos, b.radius, b.serial, b.meals,
-					b.genome.duplicate(), b.state, b.target, b.target_serial])
+			for i in _cells.size():
+				var b := _cells[i]
+				if not b.seeded or b.inert or b.person != null:
+					continue
+				var hunting := b.state == State.STALK and b.target == PERSON_SLOT \
+					and b.target_serial == pb.serial
+				if _ruled():
+					hunting = pb.person != null and b.pos.distance_to(pb.pos) - b.radius \
+						<= reach and _coming_for_player(b, pb.person)
+				if not hunting and b.pos.distance_to(pb.pos) - b.radius > reach + 100.0:
+					continue
+				water.append([i, _wire_id(b), b.pos, b.radius, b.meals,
+					b.genome.duplicate(), hunting])
 			built_count += 1
-			built.append([built_count, out, water, _cells[PERSON_SLOT].pos,
-				_cells[PERSON_SLOT].serial])
+			built.append([built_count, out, water, pb.pos])
 			if built.size() > 64:
 				built.pop_front()
 		return out
 
 	func place_sister(at: Vector2, heading: float, body_radius: float,
-			tiers: Dictionary) -> int:
+			tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
+			brain: Variant = null) -> int:
 		var before := PackedInt64Array()
 		var seeded := PackedByteArray()
 		for b in _cells:
 			before.append(b.serial)
 			seeded.append(1 if b.seeded else 0)
-		var slot := super.place_sister(at, heading, body_radius, tiers)
+		var slot := super.place_sister(at, heading, body_radius, tiers, dna, mother, brain)
 		var changed: Array[int] = []
 		for i in mini(_cells.size(), before.size()):
 			if _cells[i].serial != before[i]:
@@ -4817,9 +6118,21 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 			var pb := _cells[PERSON_SLOT]
 			if pb.person != null:
 				clear = minf(clear, sb.pos.distance_to(pb.pos) - sb.radius - pb.radius)
-		sisters.append({"slot": slot, "was_free": slot >= 0 and seeded[slot] == 0,
+		var record := {"slot": slot,
+			"was_free": slot >= 0 and (slot >= seeded.size() or seeded[slot] == 0),
+			"appended": slot >= before.size(),
 			"changed": changed, "at": at, "radius": body_radius,
-			"host_at": _cell.position, "clear": clear, "moved": moved})
+			"host_at": _cell.position, "clear": clear, "moved": moved,
+			# **What she was placed with, and what she is in the water**
+			# (automation.md §10.3, check 24): a guest's comes with no record.
+			"tiers": tiers.duplicate(), "dna": dna.duplicate(), "mother": mother.size(),
+			"brain": brain}
+		if slot >= 0:
+			var sb := _cells[slot]
+			record.merge({"id": sb.id, "parent": sb.parent, "generation": sb.generation,
+				"lineage": sb.lineage, "body_dna": sb.dna.duplicate(),
+				"body_brain": sb.brain, "genome": sb.genome.duplicate()})
+		sisters.append(record)
 		return slot
 
 
@@ -4854,7 +6167,7 @@ func _check_pond() -> void:
 	var began_frames := Engine.get_process_frames()
 	# **Half the probe's ceiling, for this section only**, which is most of
 	# the probe's wall time: at 250 a second its twenty-odd seconds can never
-	# be more than about 5,500 of CI's 20,000 frames, however fast the runner.
+	# be more than about 5,500 of CI's 24,000 frames, however fast the runner.
 	# Nothing here is finer than a 4 ms frame -- the tightest bound is 0.1 s.
 	var ceiling := Engine.max_fps
 	Engine.max_fps = 250
@@ -4873,6 +6186,20 @@ func _check_pond() -> void:
 
 	# **The host's run first, and its water is the pond.**
 	var host_run := _pond_run_scene(host_net, true)
+	# **Started at the drop's centre**, not at a quiet start (ocean.md §8.1),
+	# which can be anywhere 1,000 or more inside the rim. Everything below
+	# happens within about 2,200 units of where the host began, nearly all of
+	# it north-east -- the arrival, the deaths, and the division, which puts
+	# the host 560 east of the guest and asks for its sister 560 further. From
+	# a start near that side of the rim that is past it. Measured at DNA slots
+	# phase 1, where it happened in two runs of eight: a start 1,441 units in
+	# from the rim, eastward, had the host pinned 328 units outside the water
+	# when it divided, and the pond came apart; in the other the host's
+	# sister, held back onto the rim, landed beside it and shoved its daughter
+	# 27 units. The rim is not what this section is about, and from the centre
+	# it is 3,800 units or more from anything here. The start's clearing is the
+	# same either way.
+	host_run.get_node(^"Food").set("start_mode", &"centre")
 	get_tree().root.add_child.call_deferred(host_run)
 	await host_run.ready
 	var host_cell: Node = host_run.get_node(^"Cell")
@@ -4910,16 +6237,18 @@ func _check_pond() -> void:
 	var pins := [host_pin, guest_pin]
 
 	# ----------------------------------------------------------------------
-	# **The mirror** (§2's send set): every host body within 1,900 of the
-	# guest, surface to centre, is in the guest's water within a unit of where
-	# the host has it, with the genome of its (serial, meals); none farther.
+	# **The mirror** (§2's send set; ocean.md §10.4): the host's send set for
+	# the guest -- every body hunting it, or on rules every body within reach
+	# coming for it, then the nearest within 1,900, surface to centre, sixty in
+	# all -- is in the guest's water within a unit of where the host has it,
+	# with the genome of its (id, meals); nothing else.
 	#
 	# **Held exactly, so a loaded runner cannot fail it and a broken mirror
 	# cannot pass it**: against the snapshot the guest applied, found by its
 	# sequence among the ones the host recorded building. The send set is the
 	# host's own bodies at the instant it was built; each body sent is in the
 	# mirror at the place sent, carried by the snapshot's age along its
-	# heading, with the genome of its (serial, meals); nothing else is there.
+	# heading, with the genome of its (id, meals); nothing else is there.
 	# Put the carry back at the frame's start, or halve the send reach, and
 	# this fails.
 	#
@@ -4940,9 +6269,9 @@ func _check_pond() -> void:
 	var exact: Array = _pond_mirror_exact(host_food, guest_food, guest_pond, host_net)
 	var mirror: Array = _pond_mirror_error(host_food, guest_food, host_cell)
 	_says(int(exact[0]) > 5 and (exact[1] as Array).is_empty(),
-		"pond: %d host bodies within 1,900 of the guest are mirrored exactly as"
+		"pond: the %d host bodies of the guest's send set are mirrored exactly as"
 		% int(exact[0]) + " the snapshot it applied said, carried by its age,"
-		+ " with (serial, meals) genomes and nothing else%s; live, %.3f units"
+		+ " with (id, meals) genomes and nothing else%s; live, %.3f units"
 		% ["" if (exact[1] as Array).is_empty() else " -- NOT: " + ", ".join(
 			exact[1] as Array), float(mirror[1])]
 		+ " off the host's water now (latency: net_lag's), the host itself"
@@ -4979,7 +6308,7 @@ func _check_pond() -> void:
 	var felt := await _pond_until(func() -> bool:
 		chew_pin.call()
 		return not hits.is_empty(), 1.0, pins)
-	host_food.call("_retire", 3)
+	_pond_retire(host_food, 3)
 	# **The wound rides the next snapshot's header**, a frame or more behind
 	# the bite on the reliable channel: waited for, not slept past -- 0.12 s
 	# was not one snapshot on a saturated runner. Both ends mend by the same
@@ -5060,6 +6389,58 @@ func _check_pond() -> void:
 		% gifted + " as the gift, with no foul")
 
 	# ----------------------------------------------------------------------
+	# **A graze on the guest's side** (ocean.md §10.4, §10.5): a floc settling
+	# on the guest's lip is told to it -- SETTLE -- and held in its mirror;
+	# settled, the host's water says GRAZED, and the guest is fed by it and does
+	# not grow, nor does the host's referee expect it to; and the floc gone is
+	# told -- CLEAR.
+	# ----------------------------------------------------------------------
+	var guest_meta: Node = guest_run.get("_metabolism")
+	var hunger_was := float(guest_meta.hunger)
+	var grazes: Array = []
+	guest_food.grazed.connect(func(worth: float, _at: Vector2) -> void:
+		grazes.append([worth, float(guest_meta.hunger)]))
+	guest_meta.set_hunger(0.8)
+	var graze_r := float(guest_cell.radius)
+	var lip := graze_r * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \
+		+ float(guest_cell.gape()) * Cilia.GAPE_BULGE
+	var told_were := int(host_pond.get("flocs_told"))
+	var cleared_were := int(host_pond.get("flocs_cleared"))
+	var expected_was := float(host_ref.get("expected")) if host_ref != null else NAN
+	var fouls_before := int(host_ref.call("fouled")) if host_ref != null else -1
+	var floc := int(host_food.call("_spawn_floc", landed + Vector2(0.0, -lip), 6.0, false))
+	var floc_id := int(host_food.bodies()[floc].id)
+	host_food.bodies()[floc].settle = 0.9
+	var in_mirror := [false]
+	var grazed_in := await _pond_until(func() -> bool:
+		if (guest_food.get("_mirror_flocs") as Dictionary).has(floc_id):
+			in_mirror[0] = true
+		return not grazes.is_empty(), 2.0, pins)
+	var cleared := await _pond_until(func() -> bool:
+		return not (guest_food.get("_mirror_flocs") as Dictionary).has(floc_id), 1.0, pins)
+	var worth := float(grazes[0][0]) if not grazes.is_empty() else -1.0
+	var fed_to := float(grazes[0][1]) if not grazes.is_empty() else -1.0
+	guest_meta.set_hunger(hunger_was)
+	_says(in_mirror[0] and grazed_in >= 0.0 and cleared >= 0.0
+			and int(host_pond.get("flocs_told")) > told_were
+			and int(host_pond.get("flocs_cleared")) > cleared_were
+			and absf(worth - clampf(6.0 / graze_r, FoodField.MEAL_MIN, FoodField.MEAL_MAX))
+				<= 1.0 / 255.0
+			and fed_to >= 0.0 and fed_to < 0.8
+			and is_equal_approx(float(guest_cell.radius), graze_r)
+			and is_equal_approx(float(host_food.bodies()[FoodField.PERSON_SLOT].radius),
+				graze_r)
+			and host_ref != null and float(host_ref.get("expected")) == expected_was
+			and int(host_ref.call("fouled")) == fouls_before,
+		"pond: a floc settling on the guest's lip is told (SETTLE) and held in its"
+		+ " mirror (%s); settled, it is GRAZED at %.2f of a meal %.0f ms later, the"
+		% [in_mirror[0], worth, grazed_in * 1000.0] + " guest fed to hunger %.2f from"
+		% fed_to + " 0.80 and still r%.2f, the host's referee expecting r%.2f and no"
+		% [float(guest_cell.radius), float(host_ref.get("expected")) if host_ref != null
+			else NAN] + " foul, and the floc gone told (CLEAR) %.0f ms after"
+		% (cleared * 1000.0))
+
+	# ----------------------------------------------------------------------
 	# **Pause stops nothing (B)**, on both seats at once: the tree never
 	# pauses, the warning is up, KEY_D moves no cell, and a hunter still eats
 	# the cell whose menu is open.
@@ -5086,6 +6467,13 @@ func _check_pond() -> void:
 		+ " the warning is up on both")
 	_says(steer_host == 0.0 and steer_guest == 0.0,
 		"pond: KEY_D held with the menu up leaves both cells' steer at 0")
+	# A settled floc behind the guest, told to it and held in its mirror before
+	# it dies -- for the return below.
+	var behind := int(host_food.call("_spawn_floc", guest_cell.position
+		+ Vector2(0.0, 160.0), 6.0, true))
+	var behind_id := int(host_food.bodies()[behind].id)
+	var behind_held := await _pond_until(func() -> bool:
+		return (guest_food.get("_mirror_flocs") as Dictionary).has(behind_id), 1.0, pins)
 	var died_at := [-1.0, false, 0]
 	var on_died := func(_cause: int, _by: int, _at: Vector2) -> void:
 		died_at[0] = _now()
@@ -5112,6 +6500,8 @@ func _check_pond() -> void:
 	host_run.call("_toggle_pause")
 	_says(not bool(guest_run.get("_menu_open")) and not get_tree().paused,
 		"pond: the death closed the guest's menu, and nothing ever paused")
+	# The floc goes while the guest is in the black, where nothing is sent it.
+	host_food.call("take_out", behind)
 
 	# **Back from the black into the pond** (owner's row A): tapped during the
 	# collapse, it asks the host where, and lands near its friend.
@@ -5128,6 +6518,24 @@ func _check_pond() -> void:
 			host_cell.position))
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
+	# **Back, it holds only the flocs there are** (ocean.md §10.4): the one
+	# that went in the black is not in its mirror, and every one it holds is
+	# the host's, told again since the arrival.
+	await _pond_until(func() -> bool: return false, 0.3, pins)
+	var held_flocs: Dictionary = guest_food.get("_mirror_flocs")
+	var ghosts := 0
+	for id: int in held_flocs:
+		var real := false
+		for b: Object in host_food.bodies():
+			if bool(b.seeded) and bool(b.inert) and int(b.id) == id:
+				real = true
+				break
+		ghosts += 0 if real else 1
+	_says(behind_held >= 0.0 and not held_flocs.has(behind_id) and ghosts == 0,
+		"pond: a floc held in the guest's mirror and gone while it was in the black"
+		+ " is not in it when it is back (%s), and %d of the %d flocs it holds"
+		% [not held_flocs.has(behind_id), ghosts, held_flocs.size()]
+		+ " are ones the host no longer has")
 
 	# ----------------------------------------------------------------------
 	# **Either player can eat the other.** The host grows a mouth and the
@@ -5151,7 +6559,7 @@ func _check_pond() -> void:
 		return int(guest_run.get("_life")) == NormalMode.Life.DYING, 2.0,
 		[host_pin, [guest_cell, in_mouth, 0.0, POND_GLIDE]])
 	host_food.eaten.disconnect(on_eaten)
-	var said_ate: String = str(host_run.get("_line_text"))
+	var said_ate: String = _line_of(host_run)
 	_says(eaten >= 0.0 and bool(host_ate[0])
 			and int(guest_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(guest_food.died_by) == FoodField.By.FRIEND
@@ -5170,9 +6578,18 @@ func _check_pond() -> void:
 	# the pond, grown alone, and back in by an arrival. A worn body never
 	# changes mid-life, so the host's referee keeps the old one if a guest says
 	# otherwise -- which is what this used to do, and what R7 now holds it to.
+	# **And a second copy of its tail** (automation.md §5.2), which it can hold
+	# still: below, it does, in the host's water.
 	var genome_guest: Node = guest_run.get_node(^"Genome")
+	# **And a push and a dash** (automation.md §18.3 check 23), which its programs
+	# use on the autopilot below.
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom on its
+	# flank and poison inside -- eight names -- so every word of the guest's from
+	# here to the section's end is a venomous, poisonous body's.
 	var reentry := await _pond_reenter(guest_run, {&"cytostome": 3, &"cirrus": 1,
-		&"flagellum": 1}, [&"cytostome", &"cirrus", &"flagellum"], [host_pin])
+		&"flagellum": 2, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1, &"veneneux": 1},
+		[&"cytostome", &"cirrus", &"flagellum", &"axoneme", &"myoneme", &"toxicyst"],
+		[host_pin])
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
@@ -5180,9 +6597,58 @@ func _check_pond() -> void:
 	var worn_three := await _pond_until(func() -> bool:
 		return (Genome.tier_of(host_food.bodies()[FoodField.PERSON_SLOT].genome,
 			&"cytostome") == 3), 1.0, pins)
-	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null,
-		"pond: the guest leaves the pond, grows a tier-3 mouth alone and swims back"
-		+ " in %.2f s, and the host takes the body it arrives with" % reentry)
+	var guest_worn: Dictionary = host_food.bodies()[FoodField.PERSON_SLOT].genome
+	_says(reentry >= 0.0 and worn_three >= 0.0 and host_food.person() != null
+			and guest_worn.has(&"toxicyst") and guest_worn.has(&"veneneux"),
+		"pond: the guest leaves the pond, grows a tier-3 mouth, venom and poison alone"
+		+ " and swims back in %.2f s, and the host takes the body it arrives with"
+		% reentry)
+	# **And a dose the host gives it**: the loads ride the next snapshot's header,
+	# and the guest's cell carries what the host counts.
+	host_food.call(&"_dose", FoodField.PERSON_SLOT, 0, 2.0, -1, 0.0, false)
+	var carried := [0.0, 0.0]
+	var dosed_guest := await _pond_until(func() -> bool:
+		carried[0] = float((host_food.bodies()[FoodField.PERSON_SLOT].loads
+			as PackedFloat64Array)[0])
+		carried[1] = float((guest_cell.loads as PackedFloat64Array)[0])
+		return (float(carried[1]) > 0.0 and absf(float(carried[0]) - float(carried[1]))
+			<= 0.5 / Wire.POND_LOAD_SCALE + 0.05), 2.0, pins)
+	_says(dosed_guest >= 0.0,
+		"pond: a dose the host gives the guest reaches its cell -- %.2f stacks on the"
+		% float(carried[1]) + " guest against the host's %.2f, %.0f ms on"
+		% [float(carried[0]), dosed_guest * 1000.0])
+
+	# **The guest holds its tail still, and lets it go** (automation.md §10.2,
+	# §18.3 check 7): a motion no guest made before 4-1, swum free in the host's
+	# water -- strokes that stop while its hand holds the tail and come back on
+	# their own clock -- for the host's referee to judge. Its last word is the
+	# section's end: no foul on either honest guest.
+	var swum: Array = await _hold_tail_free(guest_cell, host_food, host_cell.position,
+		[host_pin])
+	_says(int(swum[0]) >= 1 and int(swum[1]) == 0 and int(swum[2]) > 90
+			and float(swum[5]) >= float(swum[6]) - 0.1
+			and int(guest_run.get("_life")) == NormalMode.Life.ALIVE
+			and bool(guest_pond.in_pond) and host_food.person() != null,
+		"pond: the guest, its tail at two copies, swims free in the host's water and holds"
+		+ " it still %d frames, let go %d strokes and %d while held, %s, %.1f units in %.1f s"
+		% [int(swum[2]), int(swum[0]), int(swum[1]), _gap_said(swum), float(swum[3]),
+		float(swum[4])])
+
+	# **Check 23: never cut for the autopilot** (automation.md §18.3): the same
+	# guest hands its cell to its programs -- resting, holding its tail,
+	# swimming, pushing at half and full, dashing, and flipping hold and swim
+	# every tick -- in the host's water, for the host's referee to judge.
+	var host_fouls_were := _fouls_of(host_pond.get("referees_made"))
+	var flown: Dictionary = await _autopilot_free(guest_run, guest_cell, host_food,
+		host_cell.position, [host_pin])
+	_says(_autopilot_flew(flown) and int(guest_run.get("_life")) == NormalMode.Life.ALIVE
+			and bool(guest_pond.in_pond) and host_food.person() != null
+			and _fouls_of(host_pond.get("referees_made")) == host_fouls_were,
+		"pond: the guest on the autopilot (check 23) %s, in the host's water, and its"
+		% _autopilot_said(flown) + " referee called no foul")
+	guest_home = guest_cell.position
+	guest_pin = [guest_cell, guest_home, 0.0]
+	pins = [host_pin, guest_pin]
 	var guest_ate := [false]
 	var on_guest_eaten := func(_n: float, _g: StringName, _a: Vector2) -> void:
 		guest_ate[0] = true
@@ -5197,10 +6663,10 @@ func _check_pond() -> void:
 	_says(host_down >= 0.0 and bool(guest_ate[0])
 			and int(host_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(host_food.died_by) == FoodField.By.FRIEND
-			and str(guest_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(guest_run) == NormalMode.LINE_ATE,
 		"pond: and the guest swallows the host -- the host told its own cause,"
 		+ " SWALLOWED by the friend, and the guest told '%s'"
-		% str(guest_run.get("_line_text")))
+		% _line_of(guest_run))
 
 	# ----------------------------------------------------------------------
 	# **The host's black does not stop the pond** (owner's row A): 3 s of it,
@@ -5241,6 +6707,15 @@ func _check_pond() -> void:
 	# ----------------------------------------------------------------------
 	var sisters: Array = host_food.get("sisters")
 	sisters.clear()
+	# **Check 24 on a phone host** (automation.md §10.3, §18.3): the guest
+	# divides with a program on -- the autopilot off, so nothing it does moves
+	# -- and its sister carries that list into the host's water, the rule of a
+	# gene no build declares among it.
+	var guest_library: RefCounted = guest_run.get("_library")
+	var guest_program := int(guest_library.call(&"add_new"))
+	guest_library.call(&"set_lines", guest_program, PackedStringArray(SISTER_LINES))
+	guest_library.call(&"switch", guest_program, true)
+	guest_run.call(&"_library_changed")
 	# **Aimed at the host, on purpose.** Facing north, a sister declined to
 	# starboard goes SISTER_DISTANCE due east -- so with the host put exactly
 	# there, the guest's sister is asked for the host's own place. That is
@@ -5301,13 +6776,13 @@ func _check_pond() -> void:
 	var spots: Array[Vector2] = [left_host, left_guest]
 	var keep_clear := func() -> void:
 		var bodies: Array = host_food.bodies()
-		for i in FoodField.PERSON_SLOT:
+		for i in bodies.size():
 			var b: Object = bodies[i]
-			if not b.seeded:
+			if not b.seeded or b.person != null:
 				continue
 			for spot: Vector2 in spots:
 				if (b.pos as Vector2).distance_to(spot) < float(b.radius) + 90.0:
-					host_food.call("_retire", i)
+					_pond_retire(host_food, i)
 					break
 	await _pond_until(func() -> bool:
 		keep_clear.call()
@@ -5320,6 +6795,20 @@ func _check_pond() -> void:
 			and chose_moved > 10 and seq_chose >= _pond_snapshots(5.0, chose_frames),
 		"pond: through 5 s of both choosing, %d bodies moved and the guest took"
 		% chose_moved + " %d snapshots" % seq_chose)
+	# **The daughter the guest declines carries a gene her body does not wear**
+	# -- expression is a roll, so a DNA often holds one -- and only her DNA can
+	# say it: with it, a sister made of her body alone is told apart from one
+	# made of her DNA (check 24). Both lean to the first daughter, below.
+	var declined: Dictionary = (guest_run.get("_daughters") as Array)[1]
+	var unworn := &""
+	for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus", &"chemocyte"]:
+		if not (declined["body"] as Dictionary).has(gene) \
+				and not (declined["tiers"] as Dictionary).has(gene):
+			unworn = gene
+			break
+	(declined["tiers"] as Dictionary)[unworn] = 2
+	var declined_dna: Dictionary = (declined["tiers"] as Dictionary).duplicate()
+	var declined_body: Dictionary = (declined["body"] as Dictionary).duplicate()
 	# Both lean the same way, as `_step_choosing` would after CHOOSE_HOLD.
 	for run: Node in [host_run, guest_run]:
 		run.set("_chosen", 0)
@@ -5350,7 +6839,10 @@ func _check_pond() -> void:
 	var clear_of := true
 	var shifted: Array[String] = []
 	for sister: Dictionary in sisters:
-		if not bool(sister["was_free"]) or sister["changed"] != [int(sister["slot"])] \
+		# **A new slot in the drop is a slot too** (ocean.md §4): one past the
+		# end, which had no serial to change.
+		var renumbered: Array = [] if bool(sister["appended"]) else [int(sister["slot"])]
+		if not bool(sister["was_free"]) or sister["changed"] != renumbered \
 				or not is_equal_approx(float(sister["radius"]), daughter):
 			clean = false
 		if float(sister["clear"]) < FoodField.SISTER_CLEAR - 0.01:
@@ -5378,6 +6870,34 @@ func _check_pond() -> void:
 		"pond: and neither landed on a player -- each at least %.0f units clear,"
 		% FoodField.SISTER_CLEAR + " moved %s units from where she was asked for"
 		% str(shifted))
+	# **Check 24 on a phone host**: the guest's sister is the one that came with
+	# no record -- the host's own is its mother's child -- and she came with her
+	# DNA and her list, read with the host's own vocabulary.
+	var from_guest := {}
+	for each: Dictionary in sisters:
+		if int(each["mother"]) == 0:
+			from_guest = each
+	var placed_list: Array = _list_said(from_guest.get("brain"))
+	var kept_list: Array = _list_said(from_guest.get("body_brain"))
+	_says(not from_guest.is_empty() and unworn != &""
+			and _by_name(from_guest["dna"]) == _by_name(declined_dna)
+			and _by_name(from_guest["body_dna"]) == _by_name(declined_dna)
+			and _by_name(from_guest["tiers"]) == _by_name(declined_body)
+			and not (from_guest["genome"] as Dictionary).has(unworn)
+			and placed_list[0] == PackedStringArray(SISTER_LINES)
+			and placed_list[1] == [false, false, true, false]
+			and kept_list[0] == PackedStringArray(SISTER_LINES)
+			and int(from_guest["parent"]) == FoodField.Descent.NOBODY
+			and int(from_guest["generation"]) == 1
+			and int(from_guest["lineage"]) == int(from_guest["id"]),
+		"pond (check 24): the guest's declined daughter arrives in the host's water"
+		+ " with her DNA, %s -- %s at 2 copies, which her body does not wear -- and"
+		% [str(from_guest.get("body_dna", {})), unworn] + " the list her cell ran,"
+		+ " %d lines read with the host's own vocabulary, the rule of a gene it does"
+		% SISTER_LINES.size() + " not know kept as it came and never firing; the"
+		+ " founder of a line of her own (id %d)" % int(from_guest.get("id", -1)))
+	guest_library.call(&"delete", guest_program)
+	guest_run.call(&"_library_changed")
 	home = host_cell.position
 	guest_home = guest_cell.position
 	host_pin = [host_cell, home, 0.0]
@@ -5543,8 +7063,8 @@ func _check_pond() -> void:
 
 	# ----------------------------------------------------------------------
 	# **A closed host is a takeover** (§1.8): within 0.1 s the guest swims in
-	# 34 fresh cells of its own, keeping its body, genome, generation and
-	# hunger.
+	# its own drop again -- the one it set aside as it joined, frozen, taken up
+	# again (ocean.md §9.1) -- keeping its body, genome, generation and hunger.
 	# ----------------------------------------------------------------------
 	await _pond_until(func() -> bool: return false, 0.2, pins)
 	# Half a bar, so a takeover that lost the hunger -- back to fed, or to
@@ -5555,15 +7075,18 @@ func _check_pond() -> void:
 	guest_met.set_hunger(0.5)
 	var kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers().duplicate(),
 		int(guest_run.get("_generation")), float(guest_met.hunger)]
+	var own: Dictionary = guest_run.get("_own_drop")
+	var own_seed := int(own.get("seed", -1))
+	var own_age := float(own.get("age", -1.0))
 	var closed_at := _now()
 	host_net.close()
 	var took := await _pond_until(func() -> bool: return not guest_food.mirroring(),
 		1.0, [guest_pin])
 	var took_frames := _pond_frames
-	var fresh: bool = guest_food.bodies().size() == FoodField.COUNT
-	for body: Object in guest_food.bodies():
-		if not body.seeded:
-			fresh = false
+	var fresh: bool = not own.is_empty() and guest_food.owns_drop() \
+		and int(guest_food.drop_seed) == own_seed and guest_food.drop_age() >= own_age \
+		and guest_food.drop_age() < own_age + 1.0 \
+		and (guest_run.get("_own_drop") as Dictionary).is_empty()
 	var now_kept := [guest_cell.radius, (guest_run.get_node(^"Genome")).tiers(),
 		int(guest_run.get("_generation")), float(guest_met.hunger)]
 	# Kept, less what the body spent while the host went: the second the wait
@@ -5577,9 +7100,10 @@ func _check_pond() -> void:
 			and kept[1] == now_kept[1] and int(kept[2]) == int(now_kept[2])
 			and gained > -0.01 and gained < spent_max + 0.01,
 		"pond: the host closes and the guest takes over %d frames later (0.1 s"
-		% took_frames + " at 60 fps is %d; %.0f ms here) in %d fresh cells,"
-		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0,
-			guest_food.bodies().size()]
+		% took_frames + " at 60 fps is %d; %.0f ms here) in its own drop again, as it"
+		% [_pond_budget(0.1), (took if took >= 0.0 else _now() - closed_at) * 1000.0]
+		+ " set it aside (drop %d, %.1f s old then, %d bodies now),"
+		% [own_seed, own_age, guest_food.drop_bodies()]
 		+ " keeping r%.2f, its genome, generation %d and hunger %.2f (set to %.2f)"
 		% [float(now_kept[0]), int(now_kept[2]), float(now_kept[3]), float(kept[3])])
 	guest_met.set_hunger(own_hunger)
@@ -5622,7 +7146,8 @@ func _check_pond() -> void:
 	# swimming alone.
 	guest_run.set("_swap_pending", true)
 	guest_run.set("_split", NormalMode.Split.QUICKEN)
-	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
+	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0,
+		Vector2.ZERO, 0.0)
 	var dropped: bool = float(guest_run.get("_water_beat")) < 0.0 \
 		and not bool(guest_run.get("_swap_pending")) and not guest_food.mirroring() \
 		and not bool(guest_pond.in_pond)
@@ -5631,7 +7156,8 @@ func _check_pond() -> void:
 		+ " beat, no mirror, not in the pond")
 	guest_run.set("_swap_pending", true)
 	guest_run.set("_menu_open", true)
-	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0)
+	guest_run.call("_on_pond_arrived", guest_cell.position + Vector2(480.0, 0.0), 0.0,
+		Vector2.ZERO, 0.0)
 	var dropped_menu: bool = float(guest_run.get("_water_beat")) < 0.0 \
 		and not bool(guest_run.get("_swap_pending")) and not guest_food.mirroring() \
 		and not bool(guest_pond.in_pond)
@@ -5779,7 +7305,7 @@ func _check_pond_referee() -> void:
 			chewer.heading = _pond_face(chewer_at, at)
 		return int(bites[0]) > 0, 1.0, guest, body, host_pin)
 	host_food.person_touched.disconnect(on_touch)
-	host_food.call("_retire", 3)
+	_pond_retire(host_food, 3)
 	body[3] = false
 	var pb: Object = host_food.bodies()[FoodField.PERSON_SLOT]
 	_says(fed >= 0.0 and kept_in and bitten >= 0.0 and float(pb.wound) > 0.0
@@ -5909,21 +7435,42 @@ func _check_pond_referee() -> void:
 	body[2] = CellBody.BASE_RADIUS
 	var back := await _ref_by_hand(guest, worn, order, body, host_food, host_pin)
 	ref = host_pond.call("referee_of", 0)
+	# **The host's own organ held quiet from here on**, so every mark is a
+	# friend's call: its pulse, and the echoes of one already out, are marks too
+	# -- and in the drop the rim answers every one (ocean.md §3.2). The returns
+	# that have already landed go with them. The run processes before its `Food`
+	# child, so it posts a frame's landed returns at the next frame, and one that
+	# landed as the honest call was heard was marked inside the window. Held from
+	# before the honest call as well, so the mark that call waits for is its own
+	# and not an echo's, with the call then marked in the window.
+	var quiet := func() -> void:
+		host_food.set("_ping_clock", 1000.0)
+		(host_food.get("_echoes") as Array).clear()
+		(host_food.get("pings") as Array).clear()
+	quiet.call()
 	marks.clear()
 	guest.shout(body[0], CellBody.BASE_RADIUS, 1100.0)
-	var heard := await _ref_until(func() -> bool: return not marks.is_empty(), 1.0, guest,
-		body, host_pin)
+	var heard := await _ref_until(func() -> bool:
+		quiet.call()
+		return not marks.is_empty(), 1.0, guest, body, host_pin)
 	var shouts := int(ref.judged["shout"])
+	quiet.call()
 	marks.clear()
 	points = _ref_points(host_net)
 	guest.shout((body[0] as Vector2) + Vector2(3000.0, 0.0), CellBody.BASE_RADIUS, 1100.0)
-	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts, 1.0, guest,
-		body, host_pin)
-	await _ref_until(func() -> bool: return false, 0.55, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return int(ref.judged["shout"]) > shouts, 1.0, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return false, 0.55, guest, body, host_pin)
 	guest.shout(body[0], CellBody.BASE_RADIUS, 1500.0)
-	await _ref_until(func() -> bool: return int(ref.judged["shout"]) > shouts + 1, 1.0,
-		guest, body, host_pin)
-	await _ref_until(func() -> bool: return false, 0.2, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return int(ref.judged["shout"]) > shouts + 1, 1.0, guest, body, host_pin)
+	await _ref_until(func() -> bool:
+		quiet.call()
+		return false, 0.2, guest, body, host_pin)
 	_says(back and heard >= 0.0 and marks.is_empty()
 			and is_equal_approx(_ref_points(host_net) - points, 2.0 * Referee.WEIGHT_SHOUT),
 		"pond referee R10: an honest call is marked on the host's membrane; one from"
@@ -5935,6 +7482,37 @@ func _check_pond_referee() -> void:
 		"pond referee: watched, %d fouls were counted and logged and none cost a"
 		% int(watched["referee_would_strikes"]) + " point -- while every verdict above"
 		+ " stood")
+
+	# **A guest made whole by harm** (docs/design/dna-slots.md §6.2, §20.3 check
+	# 5): the host's poison in it, as a dose, wears into its wound until it is
+	# whole -- the host decides that death as every other: POISONED, by the
+	# friend, told the guest as a KILLED with that cause -- and the host draws its
+	# friend gone as one that starved, stopped where it was, eaten by nobody.
+	var poisoned_as: Array = []
+	var on_poisoned := func(cause: int, by: int, _at: Vector2, mine: bool) -> void:
+		poisoned_as.append([cause, by, mine])
+	host_pond.friend_died.connect(on_poisoned)
+	guest.pond_events.clear()
+	host_food.call(&"_dose", FoodField.PERSON_SLOT, 0, 400.0, FoodField.TARGET_PLAYER, 0.0,
+		false)
+	var poisoned := await _ref_until(func() -> bool: return host_food.person() == null,
+		2.0, guest, body, host_pin)
+	host_pond.friend_died.disconnect(on_poisoned)
+	var killed_by: Array = []
+	for frame: PackedByteArray in guest.pond_events:
+		if Wire.event_type(frame) == Wire.EVENT_CONTACT:
+			var said := Wire.take_contact(frame)
+			if said.size() == 6 and int(said[0]) == FoodField.Contact.KILLED:
+				killed_by.append([int(said[5]), int(said[3])])
+	var drawn := int((host_run.get("_vision") as Node).get("_fr_gone"))
+	_says(poisoned >= 0.0 and poisoned_as == [[FoodField.Cause.POISONED,
+			FoodField.By.FRIEND, false]]
+			and killed_by == [[FoodField.Cause.POISONED, FoodField.By.FRIEND]]
+			and drawn == VisionLayer.Gone.STARVED,
+		"pond referee: a guest the host's poison makes whole dies %.0f ms on --"
+		% (poisoned * 1000.0) + " %s, told it as %s -- and the host draws it gone as"
+		% [str(poisoned_as), str(killed_by)] + " one that starved (%s)"
+		% ("STARVED" if drawn == VisionLayer.Gone.STARVED else str(drawn)))
 
 	# **R11: a radius lie on every frame, enforced**: cut within 3 s, the guest
 	# told REFUSE_BROKEN.
@@ -6015,6 +7593,10 @@ func _pond_run_scene(net: Node, watched: bool) -> Node:
 	var run: Node = load(RUN_SCENE).instantiate()
 	run.set("mode", 1)
 	run.set("scheme", 0)
+	# **A probe's run keeps no drop** (ocean.md §9): the game's default is the
+	# player's own file, which two runs in one process would share.
+	run.set("keep", "")
+	run.set("library_at", "")
 	if watched:
 		run.get_node(^"Food").set_script(PondWatchedFood)
 	return run
@@ -6087,6 +7669,220 @@ func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array) -> f
 	return _now() - from if back >= 0.0 else -1.0
 
 
+## **A guest's tail of two copies, held still and let go** (automation.md §5.2,
+## §10.2; §18.3 check 7): the one motion 4-1 gives a guest that none made before.
+## [param cell] is let swim free the way it was pinned facing -- turned by nothing
+## but the water, as a hand that holds only its tail turns it -- through water
+## cleared of every body round it, so nothing takes it meanwhile, while its hand
+## holds the tail by `↓`'s action for a second, lets go until a stroke beats on
+## the clock it kept, holds and lets go twice more, and then flips its hold every
+## frame for 120 frames, the fastest a hand can: a tail that beat at once when let
+## go would stroke on every other frame, far past the speed and the turn the
+## host's referee allows. [param pins] hold the rest, and [param other], the one
+## other cell, is an arrival's distance off, past any swim this takes -- or the
+## strokes say -1. Every other cell in this process wears one copy, so the key
+## holds nothing of theirs. `[strokes, strokes while held, frames held, units
+## swum, seconds, the closest two strokes in seconds, the tier's shortest gap]`.
+func _hold_tail_free(cell: Node, water: Node, other: Vector2, pins: Array) -> Array:
+	var at: Vector2 = cell.position
+	var ahead := Vector2(sin(float(cell.heading)), -cos(float(cell.heading)))
+	_pond_clear_line(water, at - ahead * 300.0, at + ahead * 600.0, 600.0)
+	var strokes := [0, 0]
+	var beats := PackedFloat64Array()
+	var on_stroke := func(_strength: float) -> void:
+		strokes[0] += 1
+		beats.append(_clock())
+		if Input.is_action_pressed(&"ui_down"):
+			strokes[1] += 1
+	cell.impulsed.connect(on_stroke)
+	var held := [0]
+	var watch := func() -> bool:
+		if bool(cell.call(&"tail_held")):
+			held[0] += 1
+		return false
+	var from := _now()
+	Input.action_press(&"ui_down")
+	await _pond_until(watch, 1.0, pins)
+	Input.action_release(&"ui_down")
+	var beat: int = strokes[0]
+	await _pond_until(func() -> bool:
+		watch.call()
+		return strokes[0] > beat, 3.2, pins)
+	for k in 2:
+		Input.action_press(&"ui_down")
+		await _pond_until(watch, 0.4, pins)
+		Input.action_release(&"ui_down")
+		await _pond_until(watch, 0.2, pins)
+	for k in 120:
+		if k % 2 == 0:
+			Input.action_press(&"ui_down")
+		else:
+			Input.action_release(&"ui_down")
+		var ticks := [0]
+		await _pond_until(func() -> bool:
+			ticks[0] += 1
+			if ticks[0] > 1:
+				watch.call()
+			return ticks[0] > 1, 1.0, pins)
+	Input.action_release(&"ui_down")
+	await _pond_until(watch, 0.2, pins)
+	cell.impulsed.disconnect(on_stroke)
+	var closest := INF
+	for n in range(1, beats.size()):
+		closest = minf(closest, beats[n] - beats[n - 1])
+	# It never came near the other cell: what this asks is the referee's word on
+	# a hold, not a meeting.
+	if (cell.position as Vector2).distance_to(other) < 200.0:
+		strokes[0] = -1
+	return [strokes[0], strokes[1], held[0], at.distance_to(cell.position), _now() - from,
+		closest, float(cell.call(&"impulse_gap_min"))]
+
+
+## How close [method _hold_tail_free]'s strokes came, said against the tier's
+## shortest gap.
+func _gap_said(swum: Array) -> String:
+	if is_inf(float(swum[5])):
+		return "no two to compare (shortest gap %.2f s)" % float(swum[6])
+	return "the closest two %.2f s apart (shortest gap %.2f s)" % [float(swum[5]),
+		float(swum[6])]
+
+
+## **Check 23** (automation.md §18.3): [param run]'s cell handed to its programs
+## and swum free in [param water], away from [param other], while the programs
+## rest, hold the tail, swim and push at half, turn at random pushing at full and
+## dashing, and then flip hold and swim at every tick of the instincts -- each as
+## a program of the run's own library, given as the page gives it, and the
+## autopilot switched on and off by the run's own switch. Returns what was seen:
+## the outputs that acted, frames the tail was held, strokes, dashes, the push
+## strengths claimed, the flips of the tail and the ticks.
+func _autopilot_free(run: Node, cell: Node, water: Node, other: Vector2,
+		pins: Array) -> Dictionary:
+	var at: Vector2 = cell.position
+	var ahead := Vector2(sin(float(cell.heading)), -cos(float(cell.heading)))
+	_pond_clear_line(water, at - ahead * 300.0, at + ahead * 900.0, 600.0)
+	var library: RefCounted = run.get("_library")
+	var instincts: RefCounted = run.get("_instincts")
+	var program := int(library.call(&"add_new"))
+	library.call(&"switch", program, true)
+	var seen := {"acted": {}, "held": 0, "strokes": 0, "dashes": 0, "pushes": {},
+		"flips": 0, "ticks": 0, "driving": false, "was_held": bool(cell.call(&"tail_held")),
+		"from": int(instincts.get("tick"))}
+	var on_stroke := func(_strength: float) -> void: seen["strokes"] = int(seen["strokes"]) + 1
+	var on_dash := func(_cost: float) -> void: seen["dashes"] = int(seen["dashes"]) + 1
+	cell.impulsed.connect(on_stroke)
+	cell.dashed.connect(on_dash)
+	var give := func(lines: Array) -> void:
+		library.call(&"set_lines", program, PackedStringArray(lines))
+		run.call(&"_library_changed")
+	var watch := func() -> bool:
+		var list: Object = instincts.get("list")
+		if list != null and bool(cell.get("autopilot")):
+			seen["driving"] = true
+			for won: Array in instincts.get("fired"):
+				(seen["acted"] as Dictionary)[str((list.get("rules") as Array)[int(won[0])]
+					.get("output"))] = true
+			var strength := float(instincts.call(&"push_strength"))
+			if strength > 0.0:
+				(seen["pushes"] as Dictionary)[strength] = true
+		var held := bool(cell.call(&"tail_held"))
+		if held:
+			seen["held"] = int(seen["held"]) + 1
+		if held != bool(seen["was_held"]):
+			seen["flips"] = int(seen["flips"]) + 1
+			seen["was_held"] = held
+		return false
+	# **The open menu in a pond** (§2.2, §2.4; check 11's last clause, which
+	# needs a session): it engages nothing -- it silences the hand and the cell
+	# drifts -- and once the autopilot is on, as the page's copy of the icon
+	# switches it, the programs drive under it, since in a pond it stops nothing.
+	give.call(["always -> body.swim", "always -> axoneme.push 0.5"])
+	run.call(&"_toggle_pause")
+	await _pond_until(func() -> bool: return false, 0.4, pins)
+	seen["menu_open"] = bool(run.get("_menu_open")) and bool(cell.get("steering_off"))
+	seen["menu_engaged"] = bool(cell.get("autopilot"))
+	run.call(&"_set_autopilot", true)
+	var under_menu := [0]
+	await _pond_until(func() -> bool:
+		if bool(cell.get("autopilot")) and not (instincts.get("fired") as Array).is_empty():
+			under_menu[0] += 1
+		return false, 0.6, pins)
+	seen["menu_drove"] = int(under_menu[0]) > 0 and bool(cell.get("autopilot")) \
+		and bool(run.get("_menu_open"))
+	run.call(&"_toggle_pause")
+	await get_tree().process_frame
+	seen["menu_shut_kept"] = bool(cell.get("autopilot")) and not bool(run.get("_menu_open"))
+	give.call(["always -> body.rest"])
+	for phase: Array in [[["always -> body.rest"], 0.6],
+			[["always -> flagellum.hold"], 0.6],
+			[["always -> body.swim", "always -> axoneme.push 0.5"], 0.8],
+			[["always -> body.turn-random", "always -> axoneme.push 1",
+				"always -> myoneme.dash"], 1.8]]:
+		give.call(phase[0])
+		await _pond_until(watch, float(phase[1]), pins)
+	# Hold and swim, flipped at every tick of the instincts.
+	var flipping := [int(instincts.get("tick")), true]
+	give.call(["always -> flagellum.hold"])
+	seen["flips"] = 0
+	await _pond_until(func() -> bool:
+		var tick := int(instincts.get("tick"))
+		if tick != int(flipping[0]):
+			flipping[0] = tick
+			flipping[1] = not bool(flipping[1])
+			give.call(["always -> flagellum.hold"] if bool(flipping[1])
+				else ["always -> body.swim"])
+		watch.call()
+		return false, 1.6, pins)
+	run.call(&"_set_autopilot", false)
+	await _pond_until(watch, 0.2, pins)
+	seen["ticks"] = int(instincts.get("tick")) - int(seen["from"])
+	seen["moved"] = at.distance_to(cell.position)
+	seen["kept_off"] = not bool(cell.get("autopilot"))
+	seen["far"] = (cell.position as Vector2).distance_to(other) >= 200.0
+	cell.impulsed.disconnect(on_stroke)
+	cell.dashed.disconnect(on_dash)
+	library.call(&"delete", program)
+	run.call(&"_library_changed")
+	return seen
+
+
+## Whether [method _autopilot_free] saw every motion it asked for.
+func _autopilot_flew(seen: Dictionary) -> bool:
+	var acted: Dictionary = seen["acted"]
+	var pushes: Dictionary = seen["pushes"]
+	for output: String in ["body.rest", "flagellum.hold", "body.swim", "axoneme.push",
+			"myoneme.dash", "body.turn-random"]:
+		if not acted.has(output):
+			return false
+	return bool(seen["driving"]) and pushes.has(0.5) and pushes.has(1.0) \
+		and int(seen["dashes"]) >= 1 and int(seen["held"]) > 30 and int(seen["strokes"]) >= 1 \
+		and int(seen["flips"]) >= 6 and bool(seen["kept_off"]) and bool(seen["far"]) \
+		and bool(seen["menu_open"]) and not bool(seen["menu_engaged"]) \
+		and bool(seen["menu_drove"]) and bool(seen["menu_shut_kept"])
+
+
+func _autopilot_said(seen: Dictionary) -> String:
+	var acted: Array = (seen["acted"] as Dictionary).keys()
+	acted.sort()
+	return ("is not engaged by its open menu (%s) and drives under it once on (%s, %s);"
+		% [str(not bool(seen["menu_engaged"]) and bool(seen["menu_open"])),
+		str(seen["menu_drove"]), "kept as it shuts" if bool(seen["menu_shut_kept"])
+		else "NOT kept as it shuts"]
+		+ " rests, holds, swims, pushes at %s, dashes %d times and flips its tail %d"
+		% [", ".join((seen["pushes"] as Dictionary).keys().map(func(p: float) -> String:
+			return "%.1f" % p)), int(seen["dashes"]), int(seen["flips"])]
+		+ " times over %d ticks -- %s acted, the tail held %d frames, %d strokes, %.0f"
+		% [int(seen["ticks"]), ", ".join(acted), int(seen["held"]), int(seen["strokes"]),
+		float(seen.get("moved", 0.0))] + " units swum")
+
+
+## Every foul [param referees] have called between them.
+func _fouls_of(referees: Array) -> int:
+	var fouls := 0
+	for referee: Object in referees:
+		fouls += int(referee.call(&"fouled"))
+	return fouls
+
+
 ## **Feeds the guest [param cell] to r40 on real meals in the host's water**,
 ## one morsel at a time on the lip of its mouth -- facing north, as pinned --
 ## each one an ATE the host decides and the guest grows by. A wide mouth takes
@@ -6116,14 +7912,14 @@ func _pond_feed(host_food: Node, cell: Node, pins: Array) -> int:
 ## [param from] to [param to], so a glide along it meets nothing.
 func _pond_clear_line(food: Node, from: Vector2, to: Vector2, reach: float) -> void:
 	var bodies: Array = food.bodies()
-	for i in FoodField.PERSON_SLOT:
+	for i in bodies.size():
 		var b: Object = bodies[i]
-		if not bool(b.seeded):
+		if not bool(b.seeded) or b.person != null:
 			continue
 		var p: Vector2 = b.pos
 		if p.distance_to(Geometry2D.get_closest_point_to_segment(p, from, to)) \
 				< reach + float(b.radius):
-			food.call("_retire", i)
+			_pond_retire(food, i)
 
 
 ## **What the referees in [param referees] judged, and how near they came to a
@@ -6172,37 +7968,32 @@ func _pond_snapshots(seconds: float, frames: int) -> int:
 func _pond_mirror_error(host_food: Node, guest_food: Node, host_cell: Node) -> Array:
 	var host_bodies: Array = host_food.bodies()
 	var mirror: Array = guest_food.bodies()
-	var guest_at: Vector2 = host_bodies[FoodField.PERSON_SLOT].pos
-	var person_serial := int(host_bodies[FoodField.PERSON_SLOT].serial)
+	var slots: Dictionary = guest_food.get("_mirror_slots")
 	var sent := 0
 	var worst := 0.0
-	var too_far := 0
 	var wrong := 0
 	var missing := 0
-	for i in FoodField.PERSON_SLOT:
-		var hb: Object = host_bodies[i]
-		var mb: Object = mirror[i]
-		var reach: float = (hb.pos as Vector2).distance_to(guest_at) - float(hb.radius)
-		var hunting := int(hb.state) == FoodField.State.STALK \
-			and int(hb.target) == FoodField.PERSON_SLOT \
-			and int(hb.target_serial) == person_serial
-		if not hb.seeded:
-			if mb.seeded:
-				too_far += 1
+	var ids := {}
+	for entry: Array in host_food.pond_entries(true):
+		var slot := int(entry[FoodField.ENTRY_SLOT])
+		if slot < 0:
 			continue
-		# A body within a hair of the edge may be either side of it by the
-		# frame the two are compared in.
-		if absf(reach - FoodField.SEND_REACH) < 2.0 and not hunting:
+		var id := int(entry[FoodField.Entry.ID])
+		ids[id] = true
+		sent += 1
+		var m := int(slots.get(id, -1))
+		if m < 0 or not bool(mirror[m].seeded):
+			missing += 1
 			continue
-		if reach <= FoodField.SEND_REACH or hunting:
-			sent += 1
-			if not mb.seeded or int(mb.serial) != int(hb.serial) & 0xFFFF:
-				missing += 1
-				continue
-			worst = maxf(worst, (mb.pos as Vector2).distance_to(hb.pos))
-			if int(mb.meals) != int(hb.meals) or mb.genome != hb.genome:
-				wrong += 1
-		elif mb.seeded:
+		var hb: Object = host_bodies[slot]
+		worst = maxf(worst, (mirror[m].pos as Vector2).distance_to(hb.pos))
+		if int(mirror[m].meals) != int(hb.meals) or mirror[m].genome != hb.genome:
+			wrong += 1
+	# In the mirror and not in the host's send set now: one frame of lag can
+	# leave a body at the set's edge either side of it, so this is reported.
+	var too_far := 0
+	for id: int in slots:
+		if not ids.has(id):
 			too_far += 1
 	var self_off: float = (mirror[FoodField.PERSON_SLOT].pos as Vector2).distance_to(
 		host_cell.position)
@@ -6214,12 +8005,12 @@ func _pond_mirror_error(host_food: Node, guest_food: Node, host_cell: Node) -> A
 ## checked, problems]`, no problems meaning all of it held. The host's watched
 ## field recorded that snapshot and the water it was built from, found here by
 ## the sequence the guest applied. The send set is worked out again from that
-## water -- every seeded body within SEND_REACH of the guest, surface to
-## centre, or hunting it, and nothing else -- and each body sent must be in the
-## mirror under its (serial, meals), at the place sent (float32 both ways, so
-## exact), heading and speed to half a wire step, carried from there by the
-## snapshot's age along that heading, with the genome that body wore. A slot
-## not sent must be empty.
+## water (ocean.md §10.4) -- every body hunting the guest, then the rest whose
+## surface lies within SEND_REACH of it, nearest first, SEND_MAX in all -- and
+## each body sent must be in the mirror under its id and meals, at the place
+## sent (float32 both ways, so exact), heading and speed to half a wire step,
+## carried from there by the snapshot's age along that heading, with the genome
+## that body wore. Nothing else may be in the mirror but its flocs and the host.
 func _pond_mirror_exact(host_food: Node, guest_food: Node, guest_pond: Object,
 		host_net: Node) -> Array:
 	var problems: Array[String] = []
@@ -6236,52 +8027,68 @@ func _pond_mirror_exact(host_food: Node, guest_food: Node, guest_pond: Object,
 	var entries: Array = record[1]
 	var water: Array = record[2]
 	var you: Vector2 = record[3]
-	var person_serial := int(record[4])
 	var sent := {}
 	for entry: Array in entries:
-		sent[int(entry[FoodField.Entry.SLOT])] = entry
-	for i in FoodField.PERSON_SLOT:
-		var w: Array = water[i]
-		var should := false
-		if bool(w[0]):
-			var hunting := int(w[6]) == FoodField.State.STALK \
-				and int(w[7]) == FoodField.PERSON_SLOT and int(w[8]) == person_serial
-			should = hunting \
-				or (w[1] as Vector2).distance_to(you) - float(w[2]) <= FoodField.SEND_REACH
-		if should != sent.has(i):
-			problems.append("slot %d %s" % [i, "left out" if should else "sent"])
+		if int(entry[FoodField.ENTRY_SLOT]) >= 0:
+			sent[int(entry[FoodField.Entry.ID])] = entry
+	# The set it should have been, from the water it was built from.
+	var should := {}
+	var near: Array = []
+	var by_id := {}
+	for w: Array in water:
+		by_id[int(w[1])] = w
+		if bool(w[6]):
+			should[int(w[1])] = true
+		else:
+			var gap: float = (w[2] as Vector2).distance_to(you) - float(w[3])
+			if gap <= FoodField.SEND_REACH:
+				# The host's own order: the surface gap to a sixteenth of a unit,
+				# then the slot.
+				near.append([(int(clampf(gap, 0.0, 1.0e6) * 16.0) << 24) | int(w[0]),
+					int(w[1])])
+	near.sort_custom(func(a: Array, b: Array) -> bool: return int(a[0]) < int(b[0]))
+	for each: Array in near:
+		if should.size() >= FoodField.SEND_MAX:
+			break
+		should[int(each[1])] = true
+	for id: int in should:
+		if not sent.has(id):
+			problems.append("body %d left out" % id)
+	for id: int in sent:
+		if not should.has(id):
+			problems.append("body %d sent" % id)
 	var mirror: Array = guest_food.bodies()
+	var slots: Dictionary = guest_food.get("_mirror_slots")
 	var snap_at: PackedVector2Array = guest_food.get("_snap_at")
 	var ahead := minf(float(guest_food.get("_snap_age")), FoodField.CARRY_MAX)
 	var step := TAU / float(Wire.BEARING_STEPS)
 	var checked := 0
-	for i in FoodField.PERSON_SLOT:
-		var mb: Object = mirror[i]
-		if not sent.has(i):
-			if bool(mb.seeded):
-				problems.append("slot %d in the mirror, not sent" % i)
-			continue
-		var entry: Array = sent[i]
+	for id: int in slots:
+		if not sent.has(id):
+			problems.append("body %d in the mirror, not sent" % id)
+	for id: int in sent:
+		var entry: Array = sent[id]
+		var m := int(slots.get(id, -1))
 		checked += 1
-		if not bool(mb.seeded) \
-				or int(mb.serial) != int(entry[FoodField.Entry.SERIAL]) & 0xFFFF \
-				or int(mb.meals) != int(entry[FoodField.Entry.MEALS]):
-			problems.append("slot %d not the body sent" % i)
+		if m < 0 or not bool(mirror[m].seeded) \
+				or int(mirror[m].meals) != int(entry[FoodField.Entry.MEALS]):
+			problems.append("body %d not in the mirror as sent" % id)
 			continue
+		var mb: Object = mirror[m]
 		var heading := float(mb.heading)
 		var speed := float(mb.speed)
-		if not snap_at[i].is_equal_approx(entry[FoodField.Entry.AT]) \
+		if not snap_at[m].is_equal_approx(entry[FoodField.Entry.AT]) \
 				or absf(angle_difference(heading, float(entry[FoodField.Entry.HEADING]))) \
 					> step * 0.5 + 1e-4 \
 				or absf(speed - float(entry[FoodField.Entry.SPEED])) \
 					> Wire.POND_SPEED_STEP * 0.5 + 1e-3:
-			problems.append("slot %d not where it was sent" % i)
-		var carried: Vector2 = snap_at[i] + Vector2(sin(heading), -cos(heading)) \
+			problems.append("body %d not where it was sent" % id)
+		var carried: Vector2 = snap_at[m] + Vector2(sin(heading), -cos(heading)) \
 			* (speed * ahead)
 		if (mb.pos as Vector2).distance_to(carried) > 1e-3:
-			problems.append("slot %d not carried by its age" % i)
-		if mb.genome != (water[i] as Array)[5]:
-			problems.append("slot %d wears another genome" % i)
+			problems.append("body %d not carried by its age" % id)
+		if by_id.has(id) and mb.genome != (by_id[id] as Array)[5]:
+			problems.append("body %d wears another genome" % id)
 	return [checked, problems]
 
 
@@ -6380,6 +8187,13 @@ func _says(passed: bool, what: String) -> void:
 		return
 	_failed += 1
 	print("[net-probe] FAIL %s" % what)
+
+
+## **The pond line [param run] has queued**, in words. The run keeps a line by name
+## and says it in the language of the moment (docs/design/settings.md §3.3); with
+## no screen, that is the English the lines are written in.
+func _line_of(run: Node) -> String:
+	return str(run.call(&"_line_words", run.get(&"_line_next")))
 
 
 ## Waits for a link to reach a state, or gives up, so a broken handshake is a
@@ -6576,7 +8390,7 @@ func _read_throttles() -> void:
 # ---------------------------------------------------------------------------
 # **The dedicated host** (`game/server/`): the pond with no cell of its own and
 # two guests, each of whom is told the other is the friend. The guests are two
-# real runs of the game on this build's own guest code -- which is PROTOCOL 4's
+# real runs of the game on this build's own guest code -- which is a phone's
 # guest code, unchanged, exactly what a phone that has never heard of a server
 # runs -- so everything here is a phone joining a server.
 #
@@ -6601,6 +8415,10 @@ var _server_waited := 0.0
 const Updater := preload("res://game/server/updater.gd")
 ## For its `State` values only, which the fake service below answers in.
 const ServiceScript := preload("res://addons/launcher/update_service.gd")
+const DropSave := preload("res://game/normal/drop_save.gd")
+## **The section's own room** (ocean.md §10.3), where no real server keeps one:
+## made at its start, kept at its stop, loaded by the next start, and gone after.
+const SERVER_ROOM := "user://net_probe_room/1.save"
 
 
 func _check_server() -> void:
@@ -6616,6 +8434,11 @@ func _check_server() -> void:
 	# A book of its own, which stays empty: this section is the LAN's, and a
 	# real server's invites in this user:// must not open anything here.
 	server.set("pond_root", "user://net_probe_no_invites/")
+	# A router of the probe's own that finds nothing: this section asks none.
+	server.set("upnp_router", UpnpRouter.new(&"none"))
+	# A room of the probe's own, never there before it starts.
+	_server_room_gone()
+	server.set("room_path", SERVER_ROOM)
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -6623,11 +8446,14 @@ func _check_server() -> void:
 	var food: Node = server.food()
 	var pond: Object = server.pond()
 	_says(int(net.link) == NetSession.Link.LISTENING and food.pond_open()
+			and food.in_drop() and int(food.drop_bodies()) > FoodField.COUNT
 			and not bool(food.in_water) and not bool(food.anchored)
-			and (food.bodies() as Array).size()
-				== FoodField.PERSON_SLOT + FoodField.GUESTS_MAX,
-		"server: listening, its water open with %d slots and no cell of its own"
-		% (food.bodies() as Array).size() + " in it")
+			and food.person(FoodField.PERSON_SLOT) == null
+			and food.person(FoodField.PERSON_SLOT + 1) == null
+			and int(server.get("rooms_kept")) == 1 and FileAccess.file_exists(SERVER_ROOM),
+		"server: listening, its room open as the pond -- a drop of %d bodies, made"
+		% int(food.drop_bodies()) + " and kept at once (%d), with no cell of its own"
+		% int(server.get("rooms_kept")) + " in it and nobody in either guest's slot")
 	_watch_throttle(true)
 
 	var a_net: Node = await _session("ServerGuestA")
@@ -6707,16 +8533,31 @@ func _check_server() -> void:
 	# (B.5) -- a worn body never changes mid-life, and the server's referee would
 	# keep the old one.
 	var b_genome: Node = b_run.get_node(^"Genome")
+	# And a second copy of its tail (automation.md §5.2), which it holds still below.
+	# And a push and a dash, which its programs use on the autopilot (check 23).
+	# **And the toxin, both forms** (dna-slots.md §20.3 check 11): venom at the
+	# back of its free arcs and poison inside -- eight names, for the room's
+	# referee and the other guest's mirror.
 	var b_brought := await _pond_reenter(b_run, {&"cytostome": 2, &"cirrus": 1,
-		&"flagellum": 1, &"palp": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp"],
-		[a_pin])
+		&"flagellum": 2, &"palp": 1, &"axoneme": 1, &"myoneme": 1, &"toxicyst": 1,
+		&"veneneux": 1}, [&"cytostome", &"cirrus", &"flagellum", &"palp", &"axoneme",
+		&"myoneme", &"toxicyst"], [a_pin])
 	b_home = b_cell.position
 	b_pin = [b_cell, b_home, 0.0]
 	pins = [a_pin, b_pin]
 	_says(b_brought >= 0.0 and food.person(slot_b) != null,
-		"server: the second guest leaves the pond and swims back in with a palp in"
-		+ " %.2f s, in slot %d again" % [b_brought, int((pond.call("_guest_by_id",
-			int(b_net.my_id())) as Object).slot)])
+		"server: the second guest leaves the pond and swims back in with a palp, venom"
+		+ " and poison in %.2f s, in slot %d again" % [b_brought,
+			int((pond.call("_guest_by_id", int(b_net.my_id())) as Object).slot)])
+	# **And a dose the room gives it**, which reaches its cell in its own header.
+	food.call(&"_dose", slot_b, 0, 2.0, -1, 0.0, false)
+	var b_carried := [0.0]
+	var b_dosed := await _server_until(func() -> bool:
+		b_carried[0] = float((b_cell.loads as PackedFloat64Array)[0])
+		return float(b_carried[0]) > 0.0, pins)
+	_says(b_dosed >= 0.0 and float((a_cell.loads as PackedFloat64Array)[0]) == 0.0,
+		"server: a dose the room gives the second guest reaches its cell (%.2f stacks)"
+		% float(b_carried[0]) + " and the first guest's header carries none")
 	var mirrored := await _server_until(func() -> bool:
 		var fa: Object = a_food.person()
 		var fb: Object = b_food.person()
@@ -6752,6 +8593,33 @@ func _check_server() -> void:
 		+ " -- in water of %d and %d cells; largest snapshot %d B"
 		% [water_a, water_b, int(pond.pond_bytes_max)])
 
+	# **The second guest holds its tail still, and lets it go** (automation.md
+	# §10.2, §18.3 check 7), swum free in the room: the server's referee judges it,
+	# and the section ends on its word -- no foul on any of its guests.
+	var b_swum: Array = await _hold_tail_free(b_cell, food, a_cell.position, [a_pin])
+	_says(int(b_swum[0]) >= 1 and int(b_swum[1]) == 0 and int(b_swum[2]) > 90
+			and float(b_swum[5]) >= float(b_swum[6]) - 0.1
+			and int(b_run.get("_life")) == NormalMode.Life.ALIVE
+			and food.person(slot_b) != null,
+		"server: the second guest, its tail at two copies, swims free in the room and"
+		+ " holds it still %d frames, let go %d strokes and %d while held, %s, %.1f units in"
+		% [int(b_swum[2]), int(b_swum[0]), int(b_swum[1]), _gap_said(b_swum),
+		float(b_swum[3])] + " %.1f s" % float(b_swum[4]))
+	# **Check 23 in the room** (automation.md §18.3): the second guest on the
+	# autopilot, its programs resting, holding, swimming, pushing, dashing and
+	# flipping hold and swim every tick, judged by the server's referee.
+	var server_fouls_were := _fouls_of(pond.get("referees_made"))
+	var b_flown: Dictionary = await _autopilot_free(b_run, b_cell, food, a_cell.position,
+		[a_pin])
+	_says(_autopilot_flew(b_flown) and int(b_run.get("_life")) == NormalMode.Life.ALIVE
+			and food.person(slot_b) != null
+			and _fouls_of(pond.get("referees_made")) == server_fouls_were,
+		"server: the second guest on the autopilot (check 23) %s, in the room, and its"
+		% _autopilot_said(b_flown) + " referee called no foul")
+	b_home = b_cell.position
+	b_pin = [b_cell, b_home, 0.0]
+	pins = [a_pin, b_pin]
+
 	# **The server decides a meeting of the two, and both hear it.** The guest
 	# in slot 68 is this cell's side of the players' rule on a dedicated host,
 	# so it is tested eating and being eaten.
@@ -6778,15 +8646,15 @@ func _check_server() -> void:
 	var b_slot_empty: bool = food.person(slot_b) == null
 	await _pond_until(func() -> bool:
 		return (bool(a_ate[0])
-			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [a_pin])
+			and _line_of(a_run) == NormalMode.LINE_ATE), 1.0, [a_pin])
 	a_food.eaten.disconnect(on_a_eaten)
 	_says(b_down >= 0.0 and bool(a_ate[0]) and b_slot_empty
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(b_food.died_by) == FoodField.By.FRIEND
-			and str(a_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(a_run) == NormalMode.LINE_ATE,
 		"server: the first guest swallows the second -- a meal for the first and"
 		+ " '%s' said to it; SWALLOWED by the friend for the second, and its"
-		% str(a_run.get("_line_text")) + " slot empty on the server")
+		% _line_of(a_run) + " slot empty on the server")
 
 	b_run.set("_tap_pending", true)
 	var b_back := await _pond_until(func() -> bool:
@@ -6823,12 +8691,12 @@ func _check_server() -> void:
 	var a_slot_empty: bool = food.person(slot_a) == null
 	await _pond_until(func() -> bool:
 		return (bool(b_ate[0])
-			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE), 1.0, [b_pin])
+			and _line_of(b_run) == NormalMode.LINE_ATE), 1.0, [b_pin])
 	b_food.eaten.disconnect(on_b_eaten)
 	_says(a_down >= 0.0 and bool(b_ate[0]) and a_slot_empty
 			and int(a_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(a_food.died_by) == FoodField.By.FRIEND
-			and str(b_run.get("_line_text")) == NormalMode.LINE_ATE,
+			and _line_of(b_run) == NormalMode.LINE_ATE,
 		"server: and the second swallows the first, with the same outcome on"
 		+ " both, the other way round")
 
@@ -6860,7 +8728,7 @@ func _check_server() -> void:
 			chewer.pos = chewer_at
 			chewer.heading = _pond_face(chewer_at, b_home)
 		return not b_bites.is_empty(), 1.5, pins)
-	food.call("_retire", 3)
+	_pond_retire(food, 3)
 	b_food.bitten.disconnect(on_b_bitten)
 	var wounds := [0.0, 0.0]
 	var agreed := await _server_until(func() -> bool:
@@ -6885,25 +8753,82 @@ func _check_server() -> void:
 	# chase its slot last ran (`_pond_hunt`): a closest approach left over from
 	# that one ends this run on its first step, and so can a lunge whose aim it
 	# has passed -- measured: held at 300 with a `best` of 137.5 left in it.
-	var held_at: Vector2 = b_home + Vector2(0.0, -(FoodField.COMMIT_RANGE + 90.0))
+	#
+	# **Square to the line between the guests, on whichever side lies deeper in
+	# the drop.** The guests land wherever the room puts them, and 400 to one
+	# side of a guest near the rim is past it: the server holds the body inside,
+	# and the other guest's mirror holds it there -- measured once in 320 runs,
+	# some 200 units from where it was posed, the 197 the rim's arithmetic
+	# gives. An arrival lands inside the rim by its radius and more, so the
+	# deeper side is in the water, or past it by less than the 30 the other
+	# guest is held to below.
+	var hold_off := (b_home - a_home).orthogonal().normalized() \
+		* (FoodField.COMMIT_RANGE + 90.0)
+	var rim: RefCounted = food.basin()
+	var held_at: Vector2 = b_home + hold_off
+	if float(rim.call(&"depth", b_home - hold_off)) > float(rim.call(&"depth", held_at)):
+		held_at = b_home - hold_off
+	# **And in clear water.** The pond is a live drop, and a mouth this wide
+	# posed beside whatever lies there closes on it within a step or two: a
+	# meal, REST_MEAL, off the run for five seconds, so nobody is hunted and the
+	# wait below runs out -- measured in 14 runs of the same 320, before pack 2
+	# and after: 13 bodies swallowed (r30 to r34), and once off the run with no
+	# growth. So nothing within its mouth's reach, and 60 more: seconds of drift
+	# for anything outside, where the wait takes a snapshot or two.
+	var hunter_gape := CellBody.gape_of(3, 30.0)
+	_pond_clear_line(food, held_at, held_at, Cilia.mouth_reach(30.0, hunter_gape)
+		+ hunter_gape * Cilia.MOUTH_BITE + 60.0)
+	# **And nothing else coming for the other guest** (automation.md §5.3). The
+	# room is a live drop, and under row 37 a hunter of one copy swims even at
+	# rest, so one aimed at the other guest by chance would be that guest's
+	# hunter -- once in this probe's first runs on the tail. So the water round it
+	# is cleared, and while this waits a body that comes for it all the same is
+	# taken out: what is asked is whose hunter the posed one is, not the room's.
+	_pond_clear_line(food, a_home, a_home, 1000.0)
 	var hunter := _pond_pose(food, 5, 30.0, {&"cytostome": 3, &"flagellum": 1},
 		held_at, _pond_face(held_at, b_home))
 	_pond_hunt(food, hunter, slot_b)
+	# **The room is on rules** (behaviour.md §4.3, §8), and there "stalking you"
+	# is "coming for you": swimming -- hungry enough to, on the founders' rules --
+	# with that guest dead ahead and a mouth that takes them.
+	hunter.hunger = 0.5
+	hunter.swimming = true
 	# **Until both have it**: each guest's snapshots run on a 50 ms schedule of
 	# its own (pond.gd `_flush_guest`), so the other guest can be a snapshot
 	# behind the one hunted -- and its mirror can hold an older body in slot 5
 	# somewhere else. So the wait is for the hunted guest's hunter and for the
 	# posed body, where it was posed, in the other guest's water.
+	# Each mirror holds it under its id (protocol 5), in a slot of its own.
+	var hunter_id := int(hunter.id)
+	var a_holds := func() -> bool:
+		var m := int((a_food.get("_mirror_slots") as Dictionary).get(hunter_id, -1))
+		return m >= 0 and (a_food.bodies()[m].pos as Vector2).distance_to(held_at) < 30.0
 	var flagged := await _server_until(func() -> bool:
 		hunter.pos = held_at
 		hunter.heading = _pond_face(held_at, b_home)
-		return int(b_food.hunter()) == 5 and bool(a_food.bodies()[5].seeded) \
-			and (a_food.bodies()[5].pos as Vector2).distance_to(held_at) < 30.0, pins)
-	var a_sees_hunter := int(a_food.hunter())
-	var a_has_it: bool = bool(a_food.bodies()[5].seeded)
+		_pond_spare(food, slot_a, hunter_id)
+		return _hunter_id(b_food) == hunter_id and a_holds.call() \
+			and _hunter_id(a_food) == -1, pins)
+	var a_sees_hunter := _hunter_id(a_food)
+	var a_has_it: bool = a_holds.call()
+	# Which of the three, when it fails, and what the server's body was doing.
+	var hunt_off: Array = []
+	if flagged < 0.0:
+		hunt_off.append("the hunted guest's hunter is %d, not %d, after %.0f s; slot 5"
+			% [_hunter_id(b_food), hunter_id, SERVER_UNRELIABLE] + " holds %d, %s, %d"
+			% [int(hunter.id), "stalking" if int(hunter.state) == FoodField.State.STALK
+				else "off the run", int(hunter.meals)] + " meals")
+	if a_sees_hunter != -1:
+		hunt_off.append("the other guest's hunter is %d" % a_sees_hunter)
+	if not a_has_it:
+		var a_slot := int((a_food.get("_mirror_slots") as Dictionary).get(hunter_id, -1))
+		hunt_off.append("the other guest holds %d, %.0f units from where it was posed"
+			% [hunter_id, (a_food.bodies()[a_slot].pos as Vector2).distance_to(held_at)]
+			if a_slot >= 0 else "the other guest holds no %d" % hunter_id)
 	_says(flagged >= 0.0 and a_sees_hunter == -1 and a_has_it,
 		"server: a hunter on the guest in slot %d is that guest's hunter, and the"
-		% slot_b + " other guest, who is sent the same body, sees no hunter")
+		% slot_b + " other guest, who is sent the same body, sees no hunter"
+		+ ("" if hunt_off.is_empty() else " -- NOT: " + ", ".join(hunt_off)))
 	# Then let in: already on the lunge, and aimed at the guest.
 	var hunter_at: Vector2 = b_home + Vector2(0.0, -56.0)
 	hunter.pos = hunter_at
@@ -6912,14 +8837,14 @@ func _check_server() -> void:
 	hunter.lunging = true
 	var hunted := await _server_until(func() -> bool:
 		return (int(b_run.get("_life")) != NormalMode.Life.ALIVE
-			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED), [a_pin])
+			and _line_of(a_run) == NormalMode.LINE_DIED), [a_pin])
 	_says(hunted >= 0.0 and food.person(slot_b) == null
 			and int(b_food.died_of) == FoodField.Cause.SWALLOWED
 			and int(b_food.died_by) == FoodField.By.WATER
-			and str(a_run.get("_line_text")) == NormalMode.LINE_DIED,
+			and _line_of(a_run) == NormalMode.LINE_DIED,
 		"server: a committed hunter swallows the guest in slot %d -- SWALLOWED by"
 		% slot_b + " the water -- and the other guest is told '%s'"
-		% str(a_run.get("_line_text")))
+		% _line_of(a_run))
 	b_run.set("_tap_pending", true)
 	await _pond_until(func() -> bool:
 		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])
@@ -6963,22 +8888,24 @@ func _check_server() -> void:
 		"server: the freed slot %d takes the next guest, who lands %.1f units"
 		% [slot_b, d_apart] + " from the one still swimming, and is its friend")
 
-	# **With nobody left, the water goes with them**: every cell retired, so an
-	# empty server simulates nothing -- where a guest who is only dead keeps
-	# theirs, because they are coming back to it.
+	# **With nobody left, the room lives on** (ocean.md §10.3): its guests go
+	# out of it, and its cells hunt, grow and starve on with nobody watching --
+	# the drop's clock runs, and its bodies are still there.
 	a_net.close()
 	d_net.close()
 	var emptied := await _pond_until(func() -> bool:
-		if not (net.guests() as Array).is_empty() or food.person(slot_a) != null \
-				or food.person(slot_b) != null:
-			return false
-		for i in FoodField.PERSON_SLOT:
-			if bool(food.bodies()[i].seeded):
-				return false
-		return true, 2.0, [])
-	_says(emptied >= 0.0,
-		"server: when the last guest leaves, the water goes with them -- no cell"
-		+ " is left to simulate on an empty server")
+		return (net.guests() as Array).is_empty() and food.person(slot_a) == null \
+			and food.person(slot_b) == null, 2.0, [])
+	var age_empty := float(food.drop_age())
+	var stepped_from := int(food.get("_frame"))
+	await _pond_until(func() -> bool: return false, 0.5, [])
+	var lived := float(food.drop_age()) - age_empty
+	var stepped := int(food.get("_frame")) - stepped_from
+	_says(emptied >= 0.0 and food.pond_open() and int(food.drop_bodies()) > FoodField.COUNT
+			and lived > 0.3 and stepped > 10,
+		"server: when the last guest leaves, the room lives on -- %.2f s of its life"
+		% lived + " and %d steps in half a second with nobody in it, %d bodies"
+		% [stepped, int(food.drop_bodies())])
 	a_run.queue_free()
 	d_run.queue_free()
 
@@ -7002,18 +8929,38 @@ func _check_server() -> void:
 	await _pond_until(func() -> bool:
 		return (bool((e_run.get("_pond") as Object).in_pond)
 			and bool((f_run.get("_pond") as Object).in_pond)), 3.0, [])
-	var fresh := 0
-	for i in FoodField.PERSON_SLOT:
-		fresh += 1 if bool(food.bodies()[i].seeded) else 0
+	# **Checks 24 and 27 in the room** (automation.md §10.3, §18.3): both divide
+	# on meals the room fed them -- the first with a program on, the second with
+	# nothing on -- and the server places each one's sister: the first's with her
+	# DNA and her list, the second's with her DNA and the founders' rules. The
+	# stop below keeps them in the room, and the next start loads them so.
+	var room_sisters: Array = await _server_sisters(pond, food, e_run, f_run)
+	var e_sister: Dictionary = room_sisters[0]
+	var f_sister: Dictionary = room_sisters[1]
+	_says(_sister_came(e_sister, true) and _sister_came(f_sister, false),
+		"server (check 24): in the room, the first guest's declined daughter arrives"
+		+ " with her DNA -- %s at 2 copies, which her body does not wear -- and the"
+		% e_sister.get("unworn", &"") + " %d lines her cell ran, the rule of a gene"
+		% SISTER_LINES.size() + " the server does not know kept as it came; the"
+		+ " second's, with nothing on, with her DNA and the founders' rules; each the"
+		+ " founder of a line of her own (ids %d and %d)" % [int(e_sister.get("id", -1)),
+			int(f_sister.get("id", -1))])
+	var fresh := int(food.drop_bodies())
+	var kept_before := int(server.get("rooms_kept"))
 	server.shut_down()
+	var stopped_age := float(food.drop_age())
+	var kept_at_stop := int(server.get("rooms_kept")) - kept_before
 	var taken := await _pond_until(func() -> bool:
 		return not e_food.mirroring() and not f_food.mirroring(), 1.5, [])
 	var taken_frames := _pond_frames
 	_says(fresh >= FoodField.COUNT and taken >= 0.0
 			and taken_frames <= _pond_budget(0.2),
-		"server: the next two arrive in %d fresh cells; stopped, both take over" % fresh
-		+ " their own water %d frames later (%.0f ms here) -- told, not timed out"
+		"server: the next two arrive in the room, %d bodies; stopped, both take over"
+		% fresh + " their own water %d frames later (%.0f ms here) -- told, not timed out"
 		% [taken_frames, taken * 1000.0])
+	var stop_kept := DropSave.read(SERVER_ROOM)
+	var stop_rows: Dictionary = (stop_kept.get("drop", {}) as Dictionary).get("bodies", {})
+	var stop_bodies := (stop_rows.get("slot", PackedInt32Array()) as PackedInt32Array).size()
 
 	e_run.queue_free()
 	f_run.queue_free()
@@ -7021,6 +8968,48 @@ func _check_server() -> void:
 	f_net.close()
 	server.queue_free()
 	await _wait(0.3)
+	# **The next start takes the room up where the stop kept it** (§10.3).
+	var again: Node = load(SERVER_SCENE).instantiate()
+	for seam: String in ["check_updates", "own_frame_rate", "quits"]:
+		again.set(seam, false)
+	again.set("pond_root", "user://net_probe_no_invites/")
+	again.set("upnp_router", UpnpRouter.new(&"none"))
+	again.set("room_path", SERVER_ROOM)
+	get_tree().root.add_child.call_deferred(again)
+	await again.ready
+	var again_food: Node = again.food()
+	var loaded_age := float(again_food.drop_age())
+	var loaded_bodies := int(again_food.drop_bodies())
+	_says(kept_at_stop == 1 and stop_bodies > FoodField.COUNT
+			and absf(loaded_age - stopped_age) < 0.001 and loaded_bodies == stop_bodies
+			and int(again.get("rooms_kept")) == 0 and again_food.pond_open(),
+		"server: stopped, it kept its room first (%d bodies, %.1f s old); the next"
+		% [stop_bodies, stopped_age] + " start loads it -- %d bodies, %.1f s old --"
+		% [loaded_bodies, loaded_age] + " and keeps nothing new until it is due")
+	# **Check 27: a guest's sister's list, through a save and a load**
+	# (automation.md §10.3, §18.3): the file holds her lines as they came, the
+	# rule this build cannot read among them, and the next start gives them back
+	# to her, read again, with her DNA; the sister on the founders' stays on them.
+	var stop_lists: Array = ((stop_kept.get("drop", {}) as Dictionary).get("behaviours",
+		{}) as Dictionary).get("lists", [])
+	var e_again: Object = _body_of(again_food, int(e_sister.get("id", -1)))
+	var f_again: Object = _body_of(again_food, int(f_sister.get("id", -1)))
+	var e_back: Array = _list_said(e_again.get("brain") if e_again != null else null)
+	_says(stop_lists.has(PackedStringArray(SISTER_LINES)) and e_again != null
+			and f_again != null and e_back[0] == PackedStringArray(SISTER_LINES)
+			and e_back[1] == [false, false, true, false]
+			and _by_name(e_again.get("dna")) == _by_name(e_sister.get("body_dna"))
+			and f_again.get("brain") == null
+			and _by_name(f_again.get("dna")) == _by_name(f_sister.get("body_dna")),
+		"server (check 27): stopped, the room kept the first guest's sister's list as"
+		+ " it came -- the rule it cannot read among it -- and loaded, she has it back,"
+		+ " %d lines, one never firing, with her DNA; the second's sister is on the"
+		% (e_back[0] as PackedStringArray).size() + " founders' rules still")
+	again.set("room_path", "")
+	again.shut_down()
+	again.queue_free()
+	await _wait(0.2)
+	_server_room_gone()
 	_watch_throttle(false)
 	_says(_throttle_reads > 0
 			and _throttle_lowest == ENetPacketPeer.PACKET_THROTTLE_SCALE,
@@ -7049,6 +9038,129 @@ func _check_server() -> void:
 		+ " its longest wait on an unreliable frame %.2f s, of %.0f"
 		% [_server_waited, SERVER_UNRELIABLE])
 	Engine.max_fps = ceiling
+
+
+## The section's room, and what a save leaves beside it, gone -- and its folder.
+func _server_room_gone() -> void:
+	for path: String in [SERVER_ROOM, SERVER_ROOM.get_basename() + ".tmp",
+			SERVER_ROOM + ".old"]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+	if DirAccess.dir_exists_absolute(SERVER_ROOM.get_base_dir()):
+		DirAccess.remove_absolute(SERVER_ROOM.get_base_dir())
+
+
+## **Two guests of the room divide, and the room places their sisters**
+## (automation.md §10.3; checks 24 and 27): [param first] with a program on --
+## [constant SISTER_LINES], the autopilot off -- and [param second] with nothing
+## on. Each is fed to r40 on morsels the room puts on its lip, divides as the
+## pond section's guest does, its quickening and its parting skipped, and leans
+## to its first daughter. The one it declines carries in her DNA a gene her body
+## does not wear, a different one for each, and that tells the two sisters apart
+## in the room. `[first's, second's]`, each `{unworn, dna, body}` as the guest
+## sent them and, once the room placed her, `{id, parent, generation, lineage,
+## body_dna, brain, genome}` as she is there -- `id` -1 for one it never placed.
+func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Array:
+	var runs: Array = [first, second]
+	var pins: Array = []
+	for run: Node in runs:
+		var cell: Node = run.get_node(^"Cell")
+		pins.append([cell, cell.position, 0.0])
+	var library: RefCounted = first.get("_library")
+	var program := int(library.call(&"add_new"))
+	library.call(&"set_lines", program, PackedStringArray(SISTER_LINES))
+	first.call(&"_library_changed")
+	var placed: Array = []
+	var on_placed := func(slot: int) -> void: placed.append(slot)
+	pond.connect(&"sister_placed", on_placed)
+	for pin: Array in pins:
+		await _pond_feed(food, pin[0], pins)
+	await _pond_until(func() -> bool:
+		return runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
+	await _pond_until(func() -> bool:
+		for run: Node in runs:
+			if int(run.get("_split")) == NormalMode.Split.QUICKEN:
+				run.set("_split_clock", NormalMode.DIVIDE_QUICKEN)
+			elif int(run.get("_split")) == NormalMode.Split.PART:
+				run.set("_split_clock", NormalMode.DIVIDE_PART)
+		return runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) == NormalMode.Split.CHOOSING), 3.0, [])
+	var out: Array = []
+	var taken := {}
+	for run: Node in runs:
+		var said := {"unworn": &"", "id": -1}
+		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
+			var declined: Dictionary = (run.get("_daughters") as Array)[1]
+			for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus",
+					&"chemocyte"]:
+				if not taken.has(gene) and not (declined["body"] as Dictionary).has(gene) \
+						and not (declined["tiers"] as Dictionary).has(gene):
+					said["unworn"] = gene
+					break
+			taken[said["unworn"]] = true
+			(declined["tiers"] as Dictionary)[said["unworn"]] = 2
+			said["dna"] = (declined["tiers"] as Dictionary).duplicate()
+			said["body"] = (declined["body"] as Dictionary).duplicate()
+			# Leaning to the first, as `_step_choosing` would after CHOOSE_HOLD.
+			run.set("_chosen", 0)
+			run.set("_split", NormalMode.Split.COMMIT)
+			run.set("_split_clock", 0.0)
+		out.append(said)
+	await _pond_until(func() -> bool:
+		return placed.size() >= 2 and runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) == NormalMode.Split.NONE), 3.0, [])
+	pond.disconnect(&"sister_placed", on_placed)
+	for slot: int in placed:
+		var b: Object = food.bodies()[slot]
+		for said: Dictionary in out:
+			if said["unworn"] != &"" and (b.get("dna") as Dictionary).has(said["unworn"]):
+				said.merge({"id": int(b.get("id")), "parent": int(b.get("parent")),
+					"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
+					"body_dna": (b.get("dna") as Dictionary).duplicate(),
+					"brain": b.get("brain"), "genome": (b.get("genome") as Dictionary).duplicate()},
+					true)
+	return out
+
+
+## **Whether a guest's sister came as §10.3 says**, from [method _server_sisters]'
+## record of her: placed, with the DNA her mother sent -- the gene her body does
+## not wear in it, and not on her body -- and, [param with_list], the list of
+## [constant SISTER_LINES] read with the room's own vocabulary, the later
+## build's rule never firing; without, the founders' rules. A founder of a line
+## of her own either way: ids are per drop.
+static func _sister_came(said: Dictionary, with_list: bool) -> bool:
+	if int(said.get("id", -1)) < 0 or not said.has("dna"):
+		return false
+	var list: Array = _list_said(said.get("brain"))
+	var listed: bool = (list[0] == PackedStringArray(SISTER_LINES)
+		and list[1] == [false, false, true, false]) if with_list \
+		else said.get("brain") == null
+	return listed and _by_name(said["body_dna"]) == _by_name(said["dna"]) \
+		and not (said["genome"] as Dictionary).has(said["unworn"]) \
+		and _by_name(said["genome"]) == _by_name(said["body"]) \
+		and int(said["parent"]) == FoodField.Descent.NOBODY \
+		and int(said["generation"]) == 1 and int(said["lineage"]) == int(said["id"])
+
+
+## [param tiers] by name, `{String: int}`, so two maps are compared whatever
+## their keys were read as.
+static func _by_name(tiers: Variant) -> Dictionary:
+	var out := {}
+	if tiers is Dictionary:
+		for gene: Variant in tiers:
+			out[String(gene)] = int(tiers[gene])
+	return out
+
+
+## The body numbered [param id] in [param food]'s water, or null.
+static func _body_of(food: Node, id: int) -> Object:
+	if id < 0:
+		return null
+	for b: Object in food.bodies():
+		if bool(b.get("seeded")) and int(b.get("id")) == id:
+			return b
+	return null
 
 
 ## [method _pond_until] for anything an unreliable frame carries: given
@@ -7674,7 +9786,7 @@ func _invites_format() -> void:
 		refused += 1 if Invite.parse_reach(typed).has("error") else 0
 	_says(reach_ok and str(reach_read["address"]) == "2001:db8::7"
 			and int(reach_read["port"]) == 50000 and str(name_read["address"]) == "pond.example.net"
-			and int(name_read["port"]) == Invite.PORT and refused == 8,
+			and int(name_read["port"]) == Invite.channel_port() and refused == 8,
 		"invites F4: --reach takes an address, a name or [IPv6] with or without a port,"
 		+ " and refuses %d of 8 things that are none of them" % refused)
 	# F5: kept once pasted, where only this user reads it.
@@ -7886,7 +9998,7 @@ func _invites_calls() -> void:
 	_says(int(minted[0]) == 0 and int(alice["read"]) == Invite.Read.OK
 			and int(bob["read"]) == Invite.Read.OK and alice["key_id"] != bob["key_id"],
 		"invites C0: two invites minted from the command line's own code, each with its"
-		+ " own key id and secret, both calling 127.0.0.1:%d" % Invite.PORT)
+		+ " own key id and secret, both calling 127.0.0.1:%d" % Invite.channel_port())
 	# J1: a job root would run into another user's files is refused, with the
 	# command to run instead; root in its own, and anybody else, goes on. The
 	# rule is asked with the owners given, since this probe runs as root in one
@@ -8157,10 +10269,10 @@ func _invites_strangers() -> void:
 	var host: Node = await _invites_host("InvStrangersHost")
 	# S1 and S2 together: each waits out its own timeout.
 	var plain: Node = await _session("InvPlainAtInternet")
-	_invites_join_port(plain, Invite.PORT)
+	_invites_join_port(plain, Invite.channel_port())
 	var crossed: Node = await _session("InvDtlsAtLan")
 	var at_lan := bob.duplicate()
-	at_lan["port"] = Lan.PORT
+	at_lan["port"] = Lan.channel_port()
 	crossed.call_invite(at_lan)
 	var waited := await _limits_until(func() -> bool:
 		return int(plain.link) != NetSession.Link.REACHING \
@@ -8680,7 +10792,7 @@ func _invites_house_closed() -> void:
 	from = _inv_catcher.lines.size()
 	(host.get("_peer") as ENetMultiplayerPeer).close()
 	var squatter := PacketPeerUDP.new()
-	var squatted := squatter.bind(Lan.PORT) == OK
+	var squatted := squatter.bind(Lan.channel_port()) == OK
 	await _wait(5.0)
 	var down: bool = float(host.get("_lan_down_since")) >= 0.0
 	var counting: float = host._now() - float(host.get("_saturation_from"))
@@ -8701,7 +10813,7 @@ func _invites_house_closed() -> void:
 	_says(squatted and down and counting < 2.0 and far_on and took >= 0.0
 			and on >= 6.5 and on < 8.5 and tries == 3
 			and _count(lines, "[net] the LAN listener could not open again: port %d is taken"
-				% Lan.PORT) == 1
+				% Lan.channel_port()) == 1
 			and int(lan.link) == NetSession.Link.TOGETHER
 			and int(far.link) == NetSession.Link.TOGETHER,
 		"invites H4: with the port taken for 5 s the moment the listener closed, it is"
@@ -8731,6 +10843,9 @@ func _invites_server() -> void:
 	server.set("quits", false)
 	server.set("pond_root", root)
 	server.set("invites_poll", INVITES_POLL)
+	server.set("upnp_router", UpnpRouter.new(&"none"))
+	# No room kept: this user dir's `rooms/1.save` is not the probe's to write.
+	server.set("room_path", "")
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -9110,7 +11225,8 @@ func _invites_raw_call(internet: bool, id: int) -> Array:
 	if raw.create_host(1) == OK:
 		if internet:
 			raw.dtls_client_setup(Invite.NAME, TLSOptions.client(_inv_cert, Invite.NAME))
-		peer = raw.connect_to_host("127.0.0.1", Invite.PORT if internet else Lan.PORT, 0, id)
+		peer = raw.connect_to_host("127.0.0.1", Invite.channel_port() if internet
+			else Lan.channel_port(), 0, id)
 	var seen := [false, false]
 	await _limits_until(func() -> bool:
 		if peer == null:
@@ -9162,3 +11278,1363 @@ func _invites_wipe(root: String) -> void:
 		for file: String in DirAccess.get_files_at(dir):
 			DirAccess.remove_absolute(dir.path_join(file))
 		DirAccess.remove_absolute(dir)
+
+
+# ---------------------------------------------------------------------------
+# **UPnP** (docs/server.md §9.3): the server's internet port, forwarded on the
+# home router for as long as the server runs -- `game/net/port_forward.gd`,
+# the generic forward, and the server's use of it -- against a router of this
+# probe's own, [UpnpRouter], so not a packet leaves the machine. The real
+# `UPNP` is only asked which numbers it uses. What this cannot see is a real
+# router: that was run by hand against miniupnpd in a network namespace, and
+# the notes are in the report that shipped this section.
+# ---------------------------------------------------------------------------
+
+const PortForward := preload("res://game/net/port_forward.gd")
+## The server's script, for its `[upnp]` sentences, which are static.
+const DedicatedServer := preload("res://game/server/server.gd")
+## Where this section keeps its switches: never a real server's `user://pond`.
+const UPNP_ROOT := "user://net_probe_upnp/"
+const UPNP_RUN_ROOT := "user://net_probe_upnp_run/"
+## A stand-in `/proc`, for reading a running server's own command line.
+const UPNP_PROC_ROOT := "user://net_probe_upnp_proc/"
+## **Fifty frames a second**, as `invites` runs: nothing here is finer than a
+## tenth of a second, and a slow search is timed in wall clock.
+const UPNP_FPS := 50
+## The server scene's look at its switch, as this section runs it.
+const UPNP_POLL := 0.5
+
+
+## **A router, as far as the forward can tell**: the four calls the real one
+## takes (`PortForward.Upnp`), answered from what the test set, each written
+## down with the time it came and whether it came on the main thread -- which
+## none may. The forward calls it from its worker threads, so it takes a lock.
+class UpnpRouter extends RefCounted:
+	## What a search finds: `ok`, `reserved`, `offline`, `not_igd` or `none`.
+	var status := &"ok"
+	var wan := ""
+	var internal := "192.0.2.12"
+	var external := "203.0.113.7"
+	var search_ms := 0
+	## How long an add takes to answer, as a router on a slow link would.
+	var add_ms := 0
+	## What adding answers for a lease, and with none; what removing answers.
+	var timed := PortForward.SUCCESS
+	var lasting := PortForward.SUCCESS
+	var removal := PortForward.SUCCESS
+	var on_main := 0
+	var _calls: Array = []
+	var _lock := Mutex.new()
+
+	func _init(finds: StringName = &"ok") -> void:
+		status = finds
+
+	## Each search written down with the ports it was told never to listen on.
+	func discover(timeout_ms: int, avoid: PackedInt32Array = PackedInt32Array()) -> Dictionary:
+		_note(["discover", timeout_ms, avoid])
+		if search_ms > 0:
+			OS.delay_msec(search_ms)
+		var out := {"status": status, "result": PortForward.NO_DEVICES if status == &"none"
+			else PortForward.SUCCESS, "devices": 0 if status == &"none" else 1}
+		if status == &"ok":
+			out["internal"] = internal
+		elif status == &"reserved":
+			out["wan"] = wan
+		return out
+
+	func external_address() -> String:
+		_note(["external"])
+		return external
+
+	func add_mapping(port: int, protocol: String, said: String, lease: int) -> int:
+		_note(["add", port, protocol, said, lease])
+		if add_ms > 0:
+			OS.delay_msec(add_ms)
+		return timed if lease > 0 else lasting
+
+	func delete_mapping(port: int, protocol: String) -> int:
+		_note(["delete", port, protocol])
+		return removal
+
+	## Every call of [param kind] so far -- each `[kind, args..., msec]` -- or
+	## every call at all for "".
+	func calls(kind: String = "") -> Array:
+		_lock.lock()
+		var out: Array = []
+		for call: Array in _calls:
+			if kind.is_empty() or call[0] == kind:
+				out.append(call.duplicate())
+		_lock.unlock()
+		return out
+
+	func _note(call: Array) -> void:
+		_lock.lock()
+		if OS.get_thread_caller_id() == OS.get_main_thread_id():
+			on_main += 1
+		call.append(Time.get_ticks_msec())
+		_calls.append(call)
+		_lock.unlock()
+
+
+## Every `[event, facts]` a forward reported, in order.
+class UpnpEvents extends RefCounted:
+	var said: Array = []
+
+	func take(event: StringName, facts: Dictionary) -> void:
+		said.append([event, facts])
+
+	func count(event: StringName) -> int:
+		var n := 0
+		for each: Array in said:
+			if each[0] == event:
+				n += 1
+		return n
+
+	func first(event: StringName) -> Dictionary:
+		for each: Array in said:
+			if each[0] == event:
+				return each[1]
+		return {}
+
+	func names() -> String:
+		var out: PackedStringArray = []
+		for each: Array in said:
+			out.append(str(each[0]))
+		return ", ".join(out)
+
+
+var _upnp_catcher: LineCatcher = null
+
+
+func _check_upnp() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var ceiling := Engine.max_fps
+	Engine.max_fps = UPNP_FPS
+	for root: String in [UPNP_ROOT, UPNP_RUN_ROOT]:
+		_invites_wipe(root)
+	_upnp_catcher = LineCatcher.new()
+	OS.add_logger(_upnp_catcher)
+	_upnp_numbers()
+	await _upnp_maps_and_removes()
+	await _upnp_renews()
+	await _upnp_lasting()
+	await _upnp_conflict()
+	await _upnp_never_the_lan()
+	await _upnp_cannot_help()
+	await _upnp_slow_search()
+	await _upnp_server_switch()
+	await _upnp_server_this_run()
+	await _upnp_lasting_ceiling()
+	await _upnp_search_port()
+	_upnp_running_override()
+	_upnp_words()
+	OS.remove_logger(_upnp_catcher)
+	_upnp_catcher = null
+	for root: String in [UPNP_ROOT, UPNP_RUN_ROOT]:
+		_invites_wipe(root)
+	print("[net-probe] NOTE upnp took %.1f s and %d frames, at most %d a second"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	Engine.max_fps = ceiling
+
+
+## **U0: the numbers the forward mirrors are the engine's**: every result code
+## and gateway status it reads by value, so that it parses where there is no
+## `UPNP` at all, held to `UPNP` and `UPNPDevice` here -- an engine upgrade that
+## renumbered or renamed one fails this, not a router.
+func _upnp_numbers() -> void:
+	var wrong: Array[String] = []
+	for each: Array in PortForward.MIRRORED:
+		# `class_get_integer_constant` is 0 for a name the class does not have,
+		# which two of these are anyway: asked whether it has it, first.
+		if not ClassDB.class_has_integer_constant(str(each[0]), str(each[1])) \
+				or ClassDB.class_get_integer_constant(str(each[0]), str(each[1])) != int(each[2]):
+			wrong.append(str(each[1]))
+	_says(ClassDB.class_exists("UPNP") and wrong.is_empty()
+			and PortForward.result_name(PortForward.CONFLICT) == "conflict with other mapping"
+			and PortForward.result_name(PortForward.PERMANENT_ONLY)
+				== "only permanent lease supported",
+		"upnp U0: the %d result codes and gateway statuses the forward mirrors are the engine's"
+		% PortForward.MIRRORED.size() + ("" if wrong.is_empty() else " -- NOT: "
+			+ ", ".join(wrong)))
+
+
+## How many of [param calls] name [param port], or -1 when any names another.
+func _upnp_only(calls: Array, port: int) -> int:
+	for call: Array in calls:
+		if int(call[1]) != port:
+			return -1
+	return calls.size()
+
+
+## A forward of [method Invite.channel_port] that never maps [method Lan.channel_port], as
+## the server makes it, through [param router], its events kept in
+## [param events].
+func _upnp_forward(router: UpnpRouter, events: UpnpEvents,
+		port: int = Invite.channel_port()) -> Node:
+	var forward: Node = PortForward.new(port, DedicatedServer.upnp_description(),
+		PackedInt32Array([Lan.channel_port()]), router)
+	forward.reported.connect(events.take)
+	add_child(forward)
+	return forward
+
+
+func _upnp_gone(forward: Node) -> void:
+	forward.stop()
+	await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
+	forward.queue_free()
+
+
+## **U1: it maps at start, and U2: takes it off at a stop.** One search, off the
+## main thread, told never to listen on this port or the LAN's; the port, the
+## same outside and in, UDP, for an hour, to this machine as the router sees
+## it, the hour counted from when the router was asked -- this one takes a
+## quarter of a second to answer -- not from when it did; the router's public
+## address said once. Then the forward asked for once more and taken off, and
+## nothing asked after it.
+func _upnp_maps_and_removes() -> void:
+	var router := UpnpRouter.new()
+	router.add_ms = 250
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.start()
+	var mapped := await _limits_until(func() -> bool: return bool(forward.holds()), 3.0)
+	var adds := router.calls("add")
+	var searches := router.calls("discover")
+	var said: Dictionary = events.first(&"mapped")
+	var address: Dictionary = events.first(&"address")
+	var counted_from := float(forward.get("_lease_end")) - float(PortForward.LEASE)
+	var asked_at := float(adds[0][5]) / 1000.0 if not adds.is_empty() else -INF
+	var avoided: PackedInt32Array = searches[0][2] if not searches.is_empty() \
+		else PackedInt32Array()
+	_says(mapped >= 0.0 and searches.size() == 1
+			and int(searches[0][1]) == PortForward.DISCOVER_TIMEOUT
+			and avoided.has(Invite.channel_port()) and avoided.has(Lan.channel_port())
+			and absf(counted_from - asked_at) < 0.05 and adds.size() == 1
+			and int(adds[0][1]) == Invite.channel_port() and str(adds[0][2]) == "UDP"
+			and str(adds[0][3]) == DedicatedServer.upnp_description()
+			and int(adds[0][4]) == PortForward.LEASE
+			and not bool(forward.is_permanent()) and str(said.get("internal", "")) == "192.0.2.12"
+			and str(address.get("address", "")) == "203.0.113.7"
+			and StringName(address.get("kind", &"")) == &"public" and router.on_main == 0,
+		"upnp U1: started, the forward searches once, off the main thread and never listening on"
+		+ " %s, and maps UDP %d to this machine's %s:%d for %d s, %.2f s in -- the lease" % [
+			str(avoided), Invite.channel_port(), said.get("internal", "?"),
+			Invite.channel_port(), PortForward.LEASE, mapped] + " counted from %.0f ms before"
+		% ((asked_at + 0.25 - counted_from) * 1000.0) + " the router answered -- and says the"
+		+ " router's public address, %s (%s)" % [address.get("address", "?"), events.names()])
+	forward.stop()
+	var stopped := await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
+	await _wait(0.3)
+	var removals := router.calls("delete")
+	var all := router.calls()
+	_says(stopped >= 0.0 and removals.size() == 1 and int(removals[0][1]) == Invite.channel_port()
+			and str(removals[0][2]) == "UDP" and not bool(forward.holds())
+			and events.count(&"removed") == 1 and all.size() == 5
+			and str(all[3][0]) == "add" and int(all[3][1]) == Invite.channel_port()
+			and str(all[4][0]) == "delete" and router.on_main == 0,
+		"upnp U2: stopped, it asks for that forward once more and then takes it off the router,"
+		+ " %.2f s later, says so once, and asks nothing more" % stopped)
+	forward.queue_free()
+
+
+## **U3: it renews before the lease ends -- and a renewal that does not take is
+## one line, however often it is asked again.** A four-second lease is asked
+## again at two; the router gives no answer to that or the two retries after
+## it, which is one `renew_failed`, and each retry searches for the router
+## afresh, as one that restarted elsewhere needs; a later one takes -- still
+## inside the lease, with two retries to spare for a runner that stalls --
+## which is one `renewed`, the forward held throughout.
+func _upnp_renews() -> void:
+	var router := UpnpRouter.new()
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.lease = 4
+	forward.renew_retry = 0.1
+	forward.start()
+	await _limits_until(func() -> bool: return bool(forward.holds()), 3.0)
+	router.timed = PortForward.HTTP_ERROR
+	await _limits_until(func() -> bool: return router.calls("add").size() >= 4, 3.0)
+	var refused := router.calls("add").size()
+	router.timed = PortForward.SUCCESS
+	await _limits_until(func() -> bool: return events.count(&"renewed") >= 1, 3.0)
+	var adds := router.calls("add")
+	var taken := float(adds[0][5]) if not adds.is_empty() else 0.0
+	var asked := (float(adds[1][5]) - taken) / 1000.0 if adds.size() > 1 else INF
+	var took := (float(adds[adds.size() - 1][5]) - taken) / 1000.0 if adds.size() > 4 else INF
+	var told: Dictionary = events.first(&"renew_failed")
+	var searches := router.calls("discover").size()
+	_says(refused >= 4 and adds.size() >= 5 and int(adds[1][4]) == 4
+			and searches == adds.size() - 1
+			and int(adds[1][1]) == Invite.channel_port() and asked >= 1.9 and asked < 2.5
+			and took < 4.0
+			and events.count(&"renew_failed") == 1 and events.count(&"renewed") == 1
+			and str(told.get("name", "")) == "http error" and bool(forward.holds())
+			and events.count(&"lapsed") == 0,
+		"upnp U3: a 4 s lease is asked again %.2f s after it was taken, before it ends; the" % asked
+		+ " %d unanswered running are one line, each retried by a fresh search (%d in all)," % [
+			adds.size() - 2, searches] + " and the renewal that takes, %.2f s in, is one" % took
+		+ " more -- the forward held throughout (%s)" % events.names())
+	await _upnp_gone(forward)
+
+
+## **U4: a router that takes no timed lease gets one with no time limit** --
+## asked once for the hour, refused with 725, then with none -- which is put
+## again with none from then on, and taken off at a stop like any other, asked
+## for with none once more first. Started again at a router that now takes the
+## hour, it asks for the hour first: no time limit is asked for only while one
+## is held.
+func _upnp_lasting() -> void:
+	var router := UpnpRouter.new()
+	router.timed = PortForward.PERMANENT_ONLY
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.permanent_check = 0.3
+	forward.start()
+	await _limits_until(func() -> bool: return router.calls("add").size() >= 3, 3.0)
+	var adds := router.calls("add")
+	var leases: Array[int] = []
+	for add: Array in adds:
+		leases.append(int(add[4]))
+	var lasting := bool(forward.is_permanent())
+	var before_stop := router.calls("add").size()
+	forward.stop()
+	await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
+	var at_stop := router.calls("add").slice(before_stop)
+	router.timed = PortForward.SUCCESS
+	var before_start := router.calls("add").size()
+	forward.start()
+	await _limits_until(func() -> bool: return router.calls("add").size() > before_start, 3.0)
+	var anew := router.calls("add").slice(before_start)
+	_says(adds.size() >= 3 and leases[0] == PortForward.LEASE and leases[1] == 0 and leases[2] == 0
+			and lasting and bool(events.first(&"mapped").get("permanent", false))
+			and at_stop.size() == 1 and int(at_stop[0][4]) == 0
+			and router.calls("delete").size() == 1 and events.count(&"removed") == 1
+			and not anew.is_empty() and int(anew[0][4]) == PortForward.LEASE,
+		"upnp U4: refused a timed lease (725), it maps with no time limit and puts it again"
+		+ " with none -- leases asked %s -- a stop asks for it with none once more" % str(leases)
+		+ " and takes it off, and started again it asks for the hour first")
+	await _upnp_gone(forward)
+
+
+## **U5: a port the router forwards to another machine is left alone** -- one
+## line, however often it looks again, no removal at a stop, and the public
+## address said without the hint for `--reach`: the forward was never this
+## one's. And a forward this one held, which the router gave to another machine
+## before the stop -- asked for once more at the stop, it answers 718 -- is left
+## there too.
+func _upnp_conflict() -> void:
+	var router := UpnpRouter.new()
+	router.timed = PortForward.CONFLICT
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.look_again = 0.2
+	forward.look_again_max = 0.2
+	forward.start()
+	await _limits_until(func() -> bool: return router.calls("discover").size() >= 3, 3.0)
+	var looks := router.calls("discover").size()
+	forward.stop()
+	await _limits_until(func() -> bool: return bool(forward.is_stopped()), 3.0)
+	await _wait(0.2)
+	var line := DedicatedServer.upnp_said(&"conflict", events.first(&"conflict"))
+	var elsewhere: Dictionary = events.first(&"address")
+	var hint := DedicatedServer.upnp_said(&"address", elsewhere)
+	var kept := bool(forward.holds())
+	forward.queue_free()
+	# Held, then given away before the stop.
+	var given := UpnpRouter.new()
+	var held := UpnpEvents.new()
+	var holding := _upnp_forward(given, held)
+	holding.start()
+	await _limits_until(func() -> bool: return bool(holding.holds()), 3.0)
+	given.timed = PortForward.CONFLICT
+	given.lasting = PortForward.CONFLICT
+	holding.stop()
+	await _limits_until(func() -> bool: return bool(holding.is_stopped()), 3.0)
+	var left := DedicatedServer.upnp_said(&"not_ours", held.first(&"not_ours"))
+	holding.queue_free()
+	_says(looks >= 3 and events.count(&"conflict") == 1 and not kept
+			and router.calls("delete").is_empty() and line.contains("forwards UDP %d elsewhere"
+				% Invite.channel_port()) and line.contains("left alone")
+			and line.contains("192.0.2.12")
+			and not bool(elsewhere.get("held", true)) and not hint.contains("set --reach")
+			and hint.contains("which this server's own forward does not")
+			and given.calls("add").size() == 2 and given.calls("delete").is_empty()
+			and held.count(&"not_ours") == 1 and held.count(&"removed") == 0
+			and left.contains("another machine holds it now"),
+		"upnp U5: with the port forwarded elsewhere, %d looks say so once, a stop removes" % looks
+		+ " nothing, and the public address comes without the hint for --reach; one it held"
+		+ " and the router gave away before the stop is asked for again, answered 718, and"
+		+ " left there: \"%s...\"" % line.substr(0, 60))
+
+
+## **U6: never the LAN's port.** A forward made for [method Lan.channel_port] asks the
+## router nothing at all, not even a search; one made for the internet port
+## and pointed at the LAN's afterwards is refused where the call is made; and
+## the guard itself: its own port, 1 to 65535, and none of its never-list.
+func _upnp_never_the_lan() -> void:
+	var router := UpnpRouter.new()
+	var events := UpnpEvents.new()
+	var lan_forward := _upnp_forward(router, events, Lan.channel_port())
+	lan_forward.start()
+	await _wait(0.3)
+	var asked_for_lan := router.calls().size()
+	lan_forward.queue_free()
+	var turned := UpnpEvents.new()
+	var retold := _upnp_forward(router, turned)
+	retold.set("port", Lan.channel_port())
+	retold.start()
+	await _wait(0.3)
+	var untouched := router.calls().is_empty()
+	retold.queue_free()
+	# One already forwarding when it is turned: its renewal is refused where the
+	# call is made, and its stop still takes off its own port, and only that.
+	var held := UpnpEvents.new()
+	var holding := _upnp_forward(router, held)
+	holding.lease = 2
+	holding.start()
+	await _limits_until(func() -> bool: return bool(holding.holds()), 3.0)
+	holding.set("port", Lan.channel_port())
+	await _limits_until(func() -> bool: return held.count(&"forbidden") > 0, 3.0)
+	holding.stop()
+	await _limits_until(func() -> bool: return bool(holding.is_stopped()), 3.0)
+	holding.queue_free()
+	var lan_calls := 0
+	for call: Array in router.calls():
+		if call.size() > 1 and int(call[1]) == Lan.channel_port():
+			lan_calls += 1
+	var removed := router.calls("delete")
+	var lan := Lan.channel_port()
+	var net := Invite.channel_port()
+	var guard := not PortForward.may_map(lan, lan, PackedInt32Array([lan])) \
+		and not PortForward.may_map(lan, net, PackedInt32Array()) \
+		and not PortForward.may_map(0, 0, PackedInt32Array()) \
+		and PortForward.may_map(net, net, PackedInt32Array([lan]))
+	_says(asked_for_lan == 0 and events.count(&"forbidden") == 1 and untouched
+			and turned.count(&"forbidden") == 1 and held.count(&"forbidden") == 1
+			and lan_calls == 0 and removed.size() == 1 and int(removed[0][1]) == net
+			and _upnp_only(router.calls("add"), net) == 2 and guard,
+		"upnp U6: UDP %d is never forwarded -- a forward made for it asks the router" % lan
+		+ " nothing; one turned to it before it starts, or while it holds %d, is" % net
+		+ " refused where the call is made, and the one holding takes off its own port at a"
+		+ " stop and no other; the guard takes only the port a forward was made for")
+
+
+## **U7: a router that cannot help is said to be one, and asked for nothing**:
+## its own internet address shared (carrier-grade NAT), private (a router
+## behind a router), or one it would not say -- each with the sentence the
+## server prints -- and a public one the hint for `--reach`, which is never set
+## for the owner. 100.64.0.2, 10.0.0.2 and 172.16.0.1 are round stand-ins for
+## their ranges, as the adapters' checks use; 203.0.113.7 is RFC 5737's.
+func _upnp_cannot_help() -> void:
+	var lines := {}
+	var adds := 0
+	for wan: String in ["100.64.0.2", "10.0.0.2", ""]:
+		var router := UpnpRouter.new(&"reserved")
+		router.wan = wan
+		var events := UpnpEvents.new()
+		var forward := _upnp_forward(router, events)
+		forward.start()
+		await _limits_until(func() -> bool: return events.count(&"cannot_help") > 0, 2.0)
+		lines[wan] = DedicatedServer.upnp_said(&"cannot_help", events.first(&"cannot_help"))
+		adds += router.calls("add").size()
+		await _upnp_gone(forward)
+	var shared := str(lines["100.64.0.2"])
+	var private := str(lines["10.0.0.2"])
+	var unsaid := str(lines[""])
+	var facts := {"port": Invite.channel_port(), "protocol": "UDP", "address": "203.0.113.7",
+		"kind": PortForward.kind_of("203.0.113.7")}
+	var hint := DedicatedServer.upnp_said(&"address", facts)
+	var named := DedicatedServer.upnp_said(&"address", facts, {"address": "203.0.113.7",
+		"port": Invite.channel_port()})
+	var v6 := DedicatedServer.upnp_said(&"address", facts, {"address": "2001:db8::7",
+		"port": Invite.channel_port()})
+	var gone_private := DedicatedServer.upnp_said(&"address", {"port": Invite.channel_port(),
+		"protocol": "UDP", "address": "10.0.0.2", "kind": PortForward.kind_of("10.0.0.2")})
+	_says(adds == 0 and shared.contains("100.64.0.2") and shared.contains("shares one address")
+			and shared.contains("cannot reach you") and private.contains("10.0.0.2")
+			and private.contains("two routers in a row")
+			and unsaid.contains("private, shared, or none")
+			and hint.contains("set --reach=203.0.113.7") and named.ends_with("which --reach names")
+			and v6.contains("a firewall rule, not a forward") and gone_private == private
+			and PortForward.kind_of("172.16.0.1") == &"private"
+			and PortForward.kind_of("0.0.0.0") == &"unusable"
+			and PortForward.kind_of("pond.example.net") == &"unknown",
+		"upnp U7: a router whose own address is shared, private or unsaid is asked for nothing"
+		+ " and named as what it is -- carrier-grade NAT, two routers in a row -- and a public"
+		+ " one is the hint for --reach, which the server never sets; IPv6 needs a firewall rule")
+
+
+## **U8: a search that takes seconds does not stop the frames.** The router
+## takes 1.5 s to answer, on the worker thread, and the main thread goes on at
+## its fifty a second meanwhile: its longest frame is timed.
+func _upnp_slow_search() -> void:
+	var router := UpnpRouter.new()
+	router.search_ms = 1500
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	var frames := 0
+	var longest := 0.0
+	var last := _clock()
+	var from := _clock()
+	forward.start()
+	while not bool(forward.holds()) and _clock() - from < 5.0:
+		await get_tree().process_frame
+		var now := _clock()
+		longest = maxf(longest, now - last)
+		last = now
+		frames += 1
+	var took := _clock() - from
+	_says(bool(forward.holds()) and took >= 1.4 and frames >= int(1.5 * UPNP_FPS * 0.6)
+			and longest < 0.25 and router.on_main == 0,
+		"upnp U8: a search that takes %.2f s costs the main thread nothing: %d frames went" % [took,
+			frames] + " by meanwhile, the longest %.0f ms" % (longest * 1000.0))
+	await _upnp_gone(forward)
+
+
+## A server scene with a router of the probe's own, [param router], its
+## switches under [param root], looked at every [constant UPNP_POLL].
+func _upnp_server(router: UpnpRouter, root: String, args: PackedStringArray) -> Node:
+	var server: Node = load(SERVER_SCENE).instantiate()
+	server.set("check_updates", false)
+	server.set("own_frame_rate", false)
+	server.set("quits", false)
+	server.set("pond_root", root)
+	server.set("invites_poll", UPNP_POLL)
+	server.set("upnp_router", router)
+	server.set("job_args", args)
+	# No room kept: this user dir's `rooms/1.save` is not the probe's to write.
+	server.set("room_path", "")
+	get_tree().root.add_child.call_deferred(server)
+	await server.ready
+	return server
+
+
+## The `[upnp]` lines printed since [param from].
+func _upnp_lines(from: int) -> Array[String]:
+	var out: Array[String] = []
+	for line: String in _upnp_catcher.lines.slice(from):
+		if line.begins_with("[upnp] "):
+			out.append(line.strip_edges())
+	return out
+
+
+func _upnp_has(lines: Array[String], part: String) -> bool:
+	for line: String in lines:
+		if line.contains(part):
+			return true
+	return false
+
+
+## **U9-U11: the server scene.** It forwards from its first READY, whatever the
+## invites -- there are none here -- to [method Invite.channel_port] and never
+## [method Lan.channel_port]; `--no-upnp`, run as the command line runs it, takes the
+## forward off within a look, is remembered in `pond/upnp.cfg`, `rw-------`, and
+## asks the router nothing while it holds; `--upnp` forwards again within a
+## look; and the server's clean stop takes the forward off.
+func _upnp_server_switch() -> void:
+	var router := UpnpRouter.new()
+	var from := _upnp_catcher.lines.size()
+	var server: Node = await _upnp_server(router, UPNP_ROOT, PackedStringArray())
+	var forward: Node = server.call("forward")
+	var up := await _limits_until(func() -> bool: return forward != null and bool(forward.holds()),
+		3.0)
+	var at_start := _upnp_lines(from)
+	_says(up >= 0.0 and int(forward.port) == Invite.channel_port()
+			and (forward.call("never") as PackedInt32Array).has(Lan.channel_port())
+			and not bool(server.session().internet_listening())
+			and _upnp_has(at_start, "looking for the router")
+			and _upnp_has(at_start, "forwarded UDP %d" % Invite.channel_port())
+			and _upnp_has(at_start, "set --reach=203.0.113.7")
+			and router.on_main == 0,
+		"upnp U9: the server forwards UDP %d from its first READY, %.2f s in, with no" % [
+			Invite.channel_port(), up] + " invite and nothing listening there -- never UDP %d --"
+		% Lan.channel_port() + " and says so in %d [upnp] lines" % at_start.size())
+	var job: Array = InviteBook.run(PackedStringArray(["--no-upnp"]), UPNP_ROOT)
+	var mode := FileAccess.get_unix_permissions(str(InviteBook.paths(UPNP_ROOT)["upnp"]))
+	var off := await _limits_until(func() -> bool:
+		return router.calls("delete").size() == 1 and not bool(forward.holds()), UPNP_POLL * 4.0)
+	var asked := router.calls().size()
+	await _wait(UPNP_POLL * 3.0)
+	var listing: Array = InviteBook.run(PackedStringArray(["--invites"]), UPNP_ROOT)
+	var said_off := _upnp_lines(from)
+	var job_said := "\n".join(PackedStringArray(job[1]))
+	_says(int(job[0]) == 0 and job_said.contains("upnp: off, remembered")
+			and mode == Invite.PRIVATE and InviteBook.upnp_setting(UPNP_ROOT) == 0
+			and off >= 0.0 and off <= UPNP_POLL + 0.5 and router.calls().size() == asked
+			and _upnp_has(said_off, "off (--no-upnp)") and _upnp_has(said_off, "took the forward")
+			and "\n".join(PackedStringArray(listing[1])).contains("upnp: off"),
+		"upnp U10: --no-upnp is remembered in pond/upnp.cfg (%o), and the running server" % mode
+		+ " takes its forward off %.2f s later, within a look, and asks the router" % off
+		+ " nothing while it holds")
+	job = InviteBook.run(PackedStringArray(["--upnp"]), UPNP_ROOT)
+	var again := await _limits_until(func() -> bool: return bool(forward.holds()), UPNP_POLL * 4.0
+		+ 1.0)
+	var before_stop := router.calls("delete").size()
+	var line_from := _upnp_catcher.lines.size()
+	server.call("shut_down")
+	var taken := await _limits_until(func() -> bool:
+		return router.calls("delete").size() == before_stop + 1 and bool(forward.is_stopped()),
+		3.0)
+	var at_stop := _upnp_lines(line_from)
+	_says(int(job[0]) == 0 and again >= 0.0 and InviteBook.upnp_setting(UPNP_ROOT) == 1
+			and _upnp_has(_upnp_lines(from), "on again (--upnp)") and taken >= 0.0
+			and _upnp_has(at_stop, "took the forward of UDP %d off the router"
+				% Invite.channel_port())
+			and router.on_main == 0,
+		"upnp U11: --upnp forwards again %.2f s later, and the server's clean stop takes the"
+		% again + " forward off the router %.2f s after it is asked" % taken)
+	server.queue_free()
+	await _wait(0.3)
+
+
+## **U12: `--no-upnp` on the service's own command line** -- beside
+## `--no-update` or `--stop-file=` -- holds for that run: the server runs rather
+## than doing a job and exiting, asks the router nothing, and writes nothing
+## down. Alone, it is a job.
+func _upnp_server_this_run() -> void:
+	var router := UpnpRouter.new()
+	var from := _upnp_catcher.lines.size()
+	var server: Node = await _upnp_server(router, UPNP_RUN_ROOT,
+		PackedStringArray(["--no-update", "--no-upnp"]))
+	await _wait(UPNP_POLL * 3.0)
+	var said := _upnp_lines(from)
+	var ran := server.session() != null and int(server.get("_job_code")) == -1
+	_says(ran and router.calls().is_empty() and _upnp_has(said, "off for this run")
+			and not FileAccess.file_exists(str(InviteBook.paths(UPNP_RUN_ROOT)["upnp"]))
+			and InviteBook.is_job(PackedStringArray(["--no-upnp"]))
+			and not InviteBook.is_job(PackedStringArray(["--stop-file=/run/x", "--no-upnp"]))
+			and not bool(server.forward().is_on()),
+		"upnp U12: --no-upnp beside --no-update runs the server, asks the router nothing and"
+		+ " writes nothing down; alone, it is a job")
+	server.call("shut_down")
+	server.queue_free()
+	await _wait(0.3)
+
+
+## **U13: a forward with no time limit is asked for again no further apart than
+## [member PortForward.permanent_check], however long the router stays away.**
+## Held with none, then refused (501) at every renewal: the waits double from
+## [member PortForward.renew_retry] and stop at the ceiling, where they had
+## doubled on without end -- after a two-hour outage, the next try was hours
+## off while the status line said "forwarded".
+func _upnp_lasting_ceiling() -> void:
+	var router := UpnpRouter.new()
+	router.timed = PortForward.PERMANENT_ONLY
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.permanent_check = 0.5
+	forward.renew_retry = 0.1
+	forward.start()
+	await _limits_until(func() -> bool: return bool(forward.is_permanent()), 3.0)
+	router.lasting = ClassDB.class_get_integer_constant("UPNP", "UPNP_RESULT_ACTION_FAILED")
+	var from := router.calls("add").size()
+	await _limits_until(func() -> bool: return router.calls("add").size() >= from + 7, 5.0)
+	var tries := router.calls("add").slice(from)
+	var gaps: Array[float] = []
+	for i in range(1, tries.size()):
+		gaps.append((float(tries[i][5]) - float(tries[i - 1][5])) / 1000.0)
+	var longest := 0.0
+	for gap: float in gaps:
+		longest = maxf(longest, gap)
+	var shown: PackedStringArray = []
+	for gap: float in gaps:
+		shown.append("%.2f" % gap)
+	_says(tries.size() >= 7 and longest <= 0.5 + 0.15 and gaps.size() >= 5
+			and gaps[gaps.size() - 1] >= 0.45 and bool(forward.holds())
+			and events.count(&"renew_failed") == 1,
+		"upnp U13: refused at every renewal, a forward with no time limit is asked again %s s" % (
+			", ".join(shown)) + " apart -- never further than its 0.5 s ceiling -- and says so"
+		+ " once")
+	await _upnp_gone(forward)
+
+
+## **U14: the search never listens on the forwarded port, or the LAN's.** Its
+## port is drawn from 49152 to 65535 for every search; twenty thousand draws
+## land in that range and never on the forwarded port or the LAN's -- 45772 and
+## 45771 on the release channel -- and a draw that lands on a port it must
+## avoid moves on to the next, round the range. The forward hands the search
+## its own port and its never-list. A search port the forward reached would
+## take any datagram from the internet for a router's answer.
+func _upnp_search_port() -> void:
+	var draw := RandomNumberGenerator.new()
+	draw.seed = 7
+	var avoid := PackedInt32Array([Invite.channel_port(), Lan.channel_port()])
+	var outside := 0
+	var ours := 0
+	var low := 65536
+	var high := 0
+	for _i in 20000:
+		var port := PortForward.Upnp.search_port(avoid, draw)
+		if port < PortForward.Upnp.SEARCH_PORT_LOW or port > PortForward.Upnp.SEARCH_PORT_HIGH:
+			outside += 1
+		if avoid.has(port):
+			ours += 1
+		low = mini(low, port)
+		high = maxi(high, port)
+	# Every port of the range but one avoided: the draw finds the one left.
+	var all_but := PackedInt32Array()
+	for port in range(PortForward.Upnp.SEARCH_PORT_LOW, PortForward.Upnp.SEARCH_PORT_HIGH + 1):
+		if port != 60000:
+			all_but.append(port)
+	var cornered := PortForward.Upnp.search_port(all_but, draw)
+	var router := UpnpRouter.new(&"none")
+	var events := UpnpEvents.new()
+	var forward := _upnp_forward(router, events)
+	forward.start()
+	await _limits_until(func() -> bool: return not router.calls("discover").is_empty(), 3.0)
+	await _upnp_gone(forward)
+	var told: PackedInt32Array = router.calls("discover")[0][2] \
+		if not router.calls("discover").is_empty() else PackedInt32Array()
+	_says(outside == 0 and ours == 0 and cornered == 60000 and told.has(Invite.channel_port())
+			and told.has(Lan.channel_port())
+			and PortForward.Upnp.SEARCH_PORT_LOW > Invite.channel_port()
+			and PortForward.Upnp.SEARCH_PORT_LOW > Lan.channel_port(),
+		"upnp U14: 20000 search ports drawn from %d-%d, none outside it and none %d or %d;" % [
+			low, high, Invite.channel_port(), Lan.channel_port()] + " a draw on an avoided port"
+		+ " moves on, and the forward tells its search to avoid %s" % str(told))
+
+
+## **U15: a running server's own `--no-upnp` or `--upnp` is found and named.**
+## Read from `cmdline` files as `ps` reads them -- here under a stand-in
+## `/proc`: the service, run with its own flags, counts; the same binary doing
+## a job, another program, and this process do not. The jobs and `--invites`
+## then say what that server makes of the switch, rather than promising what
+## its command line overrides.
+func _upnp_running_override() -> void:
+	var exe := "/opt/biogenic/biogenic-server.x86_64"
+	var write := func(pid: String, argv: Array) -> void:
+		DirAccess.make_dir_recursive_absolute(UPNP_PROC_ROOT.path_join(pid))
+		var bytes := PackedByteArray()
+		for arg: String in argv:
+			bytes.append_array(arg.to_utf8_buffer())
+			bytes.append(0)
+		var file := FileAccess.open(UPNP_PROC_ROOT.path_join(pid).path_join("cmdline"),
+			FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+	_upnp_proc_wipe()
+	write.call("102", [exe, "--headless", "--", "--invites"])
+	write.call("103", ["/usr/bin/bash", "-c", "--", "--stop-file=/run/biogenic/stop", "--no-upnp"])
+	DirAccess.make_dir_recursive_absolute(UPNP_PROC_ROOT.path_join("self"))
+	var none := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop"])
+	var plain := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop", "--upnp"])
+	var forced := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	write.call("101", [exe, "--headless", "--", "--stop-file=/run/biogenic/stop", "--no-upnp"])
+	var off := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 999)
+	var mine := InviteBook.running_upnp_override(UPNP_PROC_ROOT, exe, 101)
+	var missing := InviteBook.running_upnp_override(UPNP_PROC_ROOT.path_join("nowhere"), exe, 999)
+	_upnp_proc_wipe()
+	var off_job := InviteBook._running_takes(false, 1)
+	var on_job := InviteBook._running_takes(true, -1)
+	var unseen := InviteBook._running_takes(false, -2)
+	var plain_job := InviteBook._running_takes(false, 0)
+	var listed := InviteBook.upnp_said(1, -1)
+	var listed_unseen := InviteBook.upnp_said(1, -2)
+	var listed_agree := InviteBook.upnp_said(0, -1)
+	_says(none == -2 and plain == 0 and forced == 1 and off == -1 and mine == -2 and missing == -2
+			and off_job.contains("says --upnp, which holds for its run")
+			and on_job.contains("says --no-upnp, which holds for its run")
+			and unseen.contains("unless its own command line says --upnp")
+			and plain_job == "the running server takes its forward off within seconds."
+			and listed.contains("but the running server's own command line says --no-upnp")
+			and listed_unseen.contains("would hold instead")
+			and listed_agree.begins_with("upnp: off --") and not listed_agree.contains("but"),
+		"upnp U15: a running server's own command line is read from /proc -- %d with" % plain
+		+ " neither,"
+		+ " %d with --upnp, %d with --no-upnp, and %d for a job, another program, this" % [forced,
+			off, none] + " process or no /proc -- and the jobs and --invites say what it makes of"
+		+ " the switch")
+
+
+func _upnp_proc_wipe() -> void:
+	if not DirAccess.dir_exists_absolute(UPNP_PROC_ROOT):
+		return
+	for pid: String in DirAccess.get_directories_at(UPNP_PROC_ROOT):
+		var dir := UPNP_PROC_ROOT.path_join(pid)
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
+	DirAccess.remove_absolute(UPNP_PROC_ROOT)
+
+
+## **U16: the words say what is so.** No router answering is where UPnP being
+## off lands, since Godot keeps only devices that say they are Internet Gateway
+## Devices; a router whose description cannot be read is not called off. The
+## advice for `--reach` tells a switch it cannot read from one set to off. And
+## a stop still waiting on the router says so at once, with the wait it will
+## take and that SIGTERM comes sooner under systemd.
+func _upnp_words() -> void:
+	var what := {"port": Invite.channel_port(), "protocol": "UDP"}
+	var silent := DedicatedServer.upnp_said(&"no_router", what.merged({"network": true}))
+	var unread := DedicatedServer.upnp_said(&"no_gateway", what.merged({"why": &"not_igd",
+		"devices": 2}))
+	var looking := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": false}))
+	var lasting := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": true,
+		"permanent": true}))
+	var timed := DedicatedServer.upnp_said(&"stop_timeout", what.merged({"holds": true,
+		"permanent": false, "lease": 3600}))
+	var on := InviteBook.forward_advice(Invite.channel_port(), 1)
+	var off := InviteBook.forward_advice(Invite.channel_port(), 0)
+	var unreadable := InviteBook.forward_advice(Invite.channel_port(), -1)
+	var other := InviteBook.forward_advice(50000, 1)
+	_says(silent.contains("UPnP is off in the router, most likely")
+			and unread.contains("UPnP is on") and unread.contains("could not be read")
+			and not unread.contains("UPnP is off")
+			and looking.contains("15 s at most for each call") and looking.contains("SIGTERM")
+			and looking.contains("nothing is forwarded yet")
+			and lasting.contains("stays until you take it off the router")
+			and timed.contains("lapses within an hour")
+			and on.contains("by UPnP") and off.contains("(--no-upnp)")
+			and unreadable.contains("cannot be read") and not unreadable.contains("--no-upnp")
+			and other.contains("is of %d, not of 50000" % Invite.channel_port()),
+		"upnp U16: the lines say what is so -- no router answering is where UPnP off lands, a"
+		+ " description that cannot be read is not called off, an unreadable switch is not"
+		+ " called --no-upnp, and a stop still waiting says how long, and that SIGTERM comes"
+		+ " sooner")
+
+
+# ---------------------------------------------------------------------------
+# **The channel** (`game/net/channel.gd`; docs/server.md, "A dev server"):
+# which pair of ports a build is on. A build that follows a branch's rolling
+# prerelease -- the dev app, and the dev server beside it -- is on its branch's
+# channel, 45781 and 45782; every other build is on the release channel, 45771
+# and 45772, as every build was before there were two. This section poses as
+# each through `Channel.posing`, the seam no player reaches, and holds the game
+# to the pair wherever it binds, dials, forwards, prints or defaults a port --
+# the sockets themselves, not only the helpers -- and the release channel to
+# what it said before, word for word.
+# ---------------------------------------------------------------------------
+
+const Channel := preload("res://game/net/channel.gd")
+## For its receipt, `address · port`, which is the one port a screen shows.
+const Earshot := preload("res://game/net/earshot.gd")
+## Where this section keeps its books and its stand-in `/proc`: never a real
+## server's `user://pond`.
+const CHANNEL_ROOT := "user://net_probe_channel/"
+const CHANNEL_SERVER_ROOT := "user://net_probe_channel_server/"
+const CHANNEL_WORDS_ROOT := "user://net_probe_channel_words/"
+const CHANNEL_PROC_ROOT := "user://net_probe_channel_proc/"
+## **The two pairs, written out** -- the LAN's port, then the internet's --
+## which the helpers are held to.
+const RELEASE_PAIR := [45771, 45772]
+const BRANCH_PAIR := [45781, 45782]
+
+var _channel_catcher: LineCatcher = null
+
+
+func _check_channel() -> void:
+	var began := _now()
+	var began_frames := Engine.get_process_frames()
+	var ceiling := Engine.max_fps
+	Engine.max_fps = INVITES_FPS
+	NetSession.forget_refusals()
+	for root: String in [CHANNEL_ROOT, CHANNEL_SERVER_ROOT, CHANNEL_WORDS_ROOT]:
+		_invites_wipe(root)
+	_channel_catcher = LineCatcher.new()
+	OS.add_logger(_channel_catcher)
+	_channel_pairs()
+	await _channel_sockets()
+	await _channel_server("dev")
+	await _channel_server("")
+	_channel_words()
+	_channel_own_server()
+	Channel.posing = null
+	OS.remove_logger(_channel_catcher)
+	_channel_catcher = null
+	NetSession.forget_refusals()
+	for root: String in [CHANNEL_ROOT, CHANNEL_SERVER_ROOT, CHANNEL_WORDS_ROOT]:
+		_invites_wipe(root)
+	print("[net-probe] NOTE channel took %.1f s and %d frames, at most %d a second"
+		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps])
+	Engine.max_fps = ceiling
+
+
+## **K1: the two pairs.** Posed as the release channel, the LAN's port is 45771
+## and the internet's 45772 -- `Lan.PORT` and `Invite.PORT`, as they always
+## were; posed as a branch's, 45781 and 45782. The four are apart, and all
+## below the range a UPnP search listens in. Unposed, the channel is this
+## build's own stamp, read from BuildInfo and fixed: the same at every ask.
+func _channel_pairs() -> void:
+	var info := get_node_or_null(^"/root/BuildInfo")
+	var stamped: Variant = info.get("release_branch") if info != null else null
+	var stamp: String = stamped if stamped is String else ""
+	Channel.posing = null
+	var own := [Channel.branch(), Lan.channel_port(), Invite.channel_port()]
+	Channel.posing = ""
+	var release := [Lan.channel_port(), Invite.channel_port(), Channel.is_branch(),
+		Channel.port(1000)]
+	Channel.posing = "dev"
+	var branch := [Lan.channel_port(), Invite.channel_port(), Channel.is_branch(),
+		Channel.port(1000)]
+	Channel.posing = null
+	var again := [Channel.branch(), Lan.channel_port(), Invite.channel_port()]
+	var own_pair: Array = BRANCH_PAIR if not stamp.is_empty() else RELEASE_PAIR
+	var below := true
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		below = below and port < PortForward.Upnp.SEARCH_PORT_LOW
+	var apart := {}
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		apart[port] = true
+	_says(release == [45771, 45772, false, 1000] and branch == [45781, 45782, true, 1010]
+			and [Lan.PORT, Invite.PORT] == RELEASE_PAIR and Channel.BRANCH_SHIFT == 10
+			and own == [stamp, own_pair[0], own_pair[1]] and again == own
+			and apart.size() == 4 and below,
+		"channel K1: the release channel is on %d and %d, a branch's on %d and %d -- four"
+		% [release[0], release[1], branch[0], branch[1]] + " ports, all apart; this"
+		+ " build's own stamp, read from BuildInfo, is '%s': %d and %d, the same at"
+		% [stamp, own[1], own[2]] + " every ask")
+
+
+## Whether [param port] is held on this machine: a UDP socket cannot bind it.
+func _channel_held(port: int) -> bool:
+	var probe := PacketPeerUDP.new()
+	var held := probe.bind(port) != OK
+	probe.close()
+	return held
+
+
+## Which of the four ports are held: the release channel's LAN and internet
+## ports, then the branch channel's.
+func _channel_holds() -> Array:
+	var out: Array = []
+	for port: int in RELEASE_PAIR + BRANCH_PAIR:
+		out.append(_channel_held(port))
+	return out
+
+
+## The port [param guest]'s LAN call went to.
+func _channel_dialled(guest: Node) -> int:
+	var peer := guest.get("_peer") as ENetMultiplayerPeer
+	if peer == null or peer.get_peer(1) == null:
+		return -1
+	return peer.get_peer(1).get_remote_port()
+
+
+## **K2: every listener binds its channel's port. K3: every call dials its
+## own channel's.** Posed as a branch, a server's LAN listener binds 45781 and
+## its internet one 45782, and nothing of the release channel's; posed as the
+## release channel, a second server beside it binds 45771 and 45772. With both
+## up on one address, a guest on each channel dials its own channel's LAN port
+## and is in with its own server and never the other; and a call by each
+## channel's invite -- minted with `--reach` naming no port -- is in at its own
+## internet listener. **K4:** the LAN listener, closed under its guest, opens
+## again on its channel's port, and a phone hosts on it too.
+func _channel_sockets() -> void:
+	# One book for both servers: one key, and an invite minted on each channel
+	# to a --reach with no port.
+	Channel.posing = "dev"
+	var dev_minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
+		"--invite=dev-friend"]), CHANNEL_ROOT)
+	Channel.posing = ""
+	var live_minted: Array = InviteBook.run(PackedStringArray(["--reach=127.0.0.1",
+		"--invite=live-friend"]), CHANNEL_ROOT)
+	var identity := InviteBook.load_identity(CHANNEL_ROOT)
+	var table := InviteBook.table(CHANNEL_ROOT)
+	var dev_invite := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("dev-friend", CHANNEL_ROOT)))
+	var live_invite := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("live-friend", CHANNEL_ROOT)))
+	var held_before := _channel_holds()
+	# The dev server alone first: its pair held, and none of the release's.
+	Channel.posing = "dev"
+	var dev_host: Node = await _session("ChannelDevHost")
+	var dev_up: bool = dev_host.host(NetSession.GUESTS_MAX) \
+		and dev_host.listen_internet(identity[0], identity[1])
+	dev_host.set_invites(table)
+	var dev_alone := _channel_holds()
+	Channel.posing = ""
+	var live_host: Node = await _session("ChannelLiveHost")
+	var live_up: bool = live_host.host(NetSession.GUESTS_MAX) \
+		and live_host.listen_internet(identity[0], identity[1])
+	live_host.set_invites(table)
+	var both := _channel_holds()
+	_says(int(dev_minted[0]) == 0 and int(live_minted[0]) == 0 and identity.size() == 3
+			and held_before == [false, false, false, false] and dev_up and live_up
+			and dev_alone == [false, false, true, true] and both == [true, true, true, true],
+		"channel K2: posed as a branch, a server's LAN listener binds %d and its internet"
+		% BRANCH_PAIR[0] + " one %d, and nothing of the release channel's; posed as the"
+		% BRANCH_PAIR[1] + " release channel, a server beside it binds %d and %d -- held"
+		% RELEASE_PAIR + " %s, then %s" % [str(dev_alone), str(both)])
+	# A guest on each channel, calling the one address.
+	Channel.posing = "dev"
+	var dev_guest: Node = await _limits_guest("ChannelDevGuest")
+	var dev_dialled := _channel_dialled(dev_guest)
+	var after_dev := [(dev_host.guests() as Array).size(), (live_host.guests() as Array).size()]
+	Channel.posing = ""
+	var live_guest: Node = await _limits_guest("ChannelLiveGuest")
+	var live_dialled := _channel_dialled(live_guest)
+	var after_live := [(dev_host.guests() as Array).size(),
+		(live_host.guests() as Array).size()]
+	# By invite, each at its own channel's internet listener.
+	Channel.posing = "dev"
+	var dev_far: Node = await _session("ChannelDevFar")
+	await _invites_call(dev_far, dev_invite)
+	Channel.posing = ""
+	var live_far: Node = await _session("ChannelLiveFar")
+	await _invites_call(live_far, live_invite)
+	var far_in := [str(dev_host.label_of(dev_far.my_id())),
+		str(live_host.label_of(live_far.my_id()))]
+	var together := int(dev_guest.link) == NetSession.Link.TOGETHER \
+		and int(live_guest.link) == NetSession.Link.TOGETHER \
+		and int(dev_far.link) == NetSession.Link.TOGETHER \
+		and int(live_far.link) == NetSession.Link.TOGETHER
+	_says(together and dev_dialled == BRANCH_PAIR[0] and after_dev == [1, 0]
+			and live_dialled == RELEASE_PAIR[0] and after_live == [1, 1]
+			and int(dev_invite["port"]) == BRANCH_PAIR[1]
+			and int(live_invite["port"]) == RELEASE_PAIR[1]
+			and far_in == ["dev-friend", "live-friend"],
+		"channel K3: on one address, a dev guest dials %d and is in with the dev server"
+		% dev_dialled + " alone, and a release guest dials %d and is in with the live one" % (
+			live_dialled) + " alone; each channel's invite, minted to a --reach with no port,"
+		+ " calls %d and %d and is in at its own server's internet listener -- %s" % [
+			int(dev_invite["port"]), int(live_invite["port"]), str(far_in)])
+	# The LAN listener closed under its guest, as 4.7 closes one whose send
+	# failed, with its port held by something else that moment -- as H4 holds
+	# the release channel's: it says so, naming its own channel's port, and
+	# once the port is free it opens on it again, and the guest is back.
+	Channel.posing = "dev"
+	var from := _channel_catcher.lines.size()
+	(dev_host.get("_peer") as ENetMultiplayerPeer).close()
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(BRANCH_PAIR[0]) == OK
+	await _limits_until(func() -> bool:
+		return int(dev_host.gate_counts["lan_closed"]) >= 1 \
+			and int(dev_guest.link) != NetSession.Link.TOGETHER \
+			and _count(_channel_catcher.lines.slice(from), "could not open again") >= 1)
+	squatter.close()
+	await _limits_until(func() -> bool:
+		return float(dev_host.get("_lan_down_since")) < 0.0, 4.0)
+	var taken_said := _count(_channel_catcher.lines.slice(from),
+		"[net] the LAN listener could not open again: port %d is taken" % BRANCH_PAIR[0])
+	var reopened := float(dev_host.get("_lan_down_since")) < 0.0 \
+		and _channel_held(BRANCH_PAIR[0])
+	dev_guest.join("127.0.0.1")
+	await _until_link(dev_guest, NetSession.Link.TOGETHER)
+	var back := int(dev_guest.link) == NetSession.Link.TOGETHER \
+		and _channel_dialled(dev_guest) == BRANCH_PAIR[0]
+	await _limits_close([dev_host, dev_guest, dev_far])
+	# A phone, which hosts on the LAN's port alone.
+	var phone: Node = await _session("ChannelDevPhone")
+	var phone_up: bool = phone.host(1)
+	var phone_holds := _channel_holds()
+	var friend: Node = await _limits_guest("ChannelDevFriend")
+	var friend_in := int(friend.link) == NetSession.Link.TOGETHER \
+		and _channel_dialled(friend) == BRANCH_PAIR[0] and (phone.guests() as Array).size() == 1
+	# A session's close() frees it as well.
+	await _limits_close([phone, friend, live_host, live_guest, live_far])
+	Channel.posing = null
+	var held_after := _channel_holds()
+	_says(squatted and taken_said == 1 and reopened and back and phone_up
+			and phone_holds == [true, true, true, false] and friend_in
+			and held_after == [false, false, false, false],
+		"channel K4: a dev server's LAN listener, closed under its guest with %d held" % (
+			BRANCH_PAIR[0]) + " elsewhere, says that port is taken, opens again on it once it"
+		+ " is free, and the guest is back; a dev phone hosts on %d alone, beside"
+		% BRANCH_PAIR[0] + " the live server's %d, and its friend dials it there; and" % (
+			RELEASE_PAIR[0]) + " closed, every port is let go")
+
+
+## The `[server]` and `[upnp]` lines printed since [param from].
+func _channel_lines(from: int) -> Array[String]:
+	var out: Array[String] = []
+	for line: String in _channel_catcher.lines.slice(from):
+		if line.begins_with("[server] ") or line.begins_with("[upnp] "):
+			out.append(line.strip_edges())
+	return out
+
+
+## **K5 and K6: the server scene, as [param branch]'s build** -- K5 a dev
+## build, K6 the release channel's. Its LAN listener binds its channel's port
+## and not the other channel's; its READY, join and listening lines name that
+## port -- a dev build's saying whose build it is, the release channel's word
+## for word as they always were. With an invite in its book, minted to a
+## `--reach` with no port, and its internet port held by something else as it
+## starts, its `internet:` line says that port is taken; free, the next says
+## it listens there, for friends calling that port. Its forward asks the
+## router for its channel's internet port, never the LAN's, under its
+## channel's name; and its clean stop takes that forward off.
+func _channel_server(branch: String) -> void:
+	Channel.posing = branch
+	var dev := not branch.is_empty()
+	var lan: int = BRANCH_PAIR[0] if dev else RELEASE_PAIR[0]
+	var net: int = BRANCH_PAIR[1] if dev else RELEASE_PAIR[1]
+	var other_lan: int = RELEASE_PAIR[0] if dev else BRANCH_PAIR[0]
+	_invites_wipe(CHANNEL_SERVER_ROOT)
+	var minted: Array = InviteBook.run(PackedStringArray(["--reach=203.0.113.7",
+		"--invite=channel"]), CHANNEL_SERVER_ROOT)
+	var identity := InviteBook.load_identity(CHANNEL_SERVER_ROOT)
+	var certificate := InviteBook.fingerprint(identity[2]) if identity.size() == 3 else "?"
+	var squatter := PacketPeerUDP.new()
+	var squatted := squatter.bind(net) == OK
+	var router := UpnpRouter.new()
+	var from := _channel_catcher.lines.size()
+	var server: Node = await _upnp_server(router, CHANNEL_SERVER_ROOT, PackedStringArray())
+	var forward: Node = server.call("forward")
+	var up := await _limits_until(func() -> bool:
+		return forward != null and bool(forward.holds()), 3.0)
+	squatter.close()
+	var listening := await _limits_until(func() -> bool:
+		return bool(server.session().internet_listening()), 3.0)
+	var held := [_channel_held(lan), _channel_held(other_lan)]
+	server.call("_announce", false)
+	var address := str(server.session().address)
+	var code: String = DedicatedServer.clock_code(address)
+	var lines := _channel_lines(from)
+	var ready_line := "[server] READY -- listening on %s port %d/udp, code %s" % [address, lan,
+		code] + (" -- a dev build: only the dev app finds it" if dev else "")
+	var join_line := ("[server] to join: a phone on this wi-fi (%sx) opens within earshot,"
+		% Lan.prefix_of(address) + (" in the dev app," if dev else "") + " taps answer, and"
+		+ " taps the ring at %s, in that order. LAN only: do not forward this port." % code)
+	var listening_line := ("[server] listening on %s port %d/udp, code %s -- 0 of %d guests, 0 in"
+		% [address, lan, code, FoodField.GUESTS_MAX] + " the water -- internet: 1 invite -- upnp:"
+		+ " forwarded" + (" -- a dev build" if dev else ""))
+	var taken_line := ("[server] internet: not listening for the internet: there are invites, but"
+		+ " port %d/udp is taken, or not free yet. Trying again in %d s." % [net,
+			roundi(UPNP_POLL)])
+	var internet_line := ("[server] internet: listening on port %d/udp for 1 invite (channel),"
+		% net + " certificate %s. Friends call 203.0.113.7:%d, which must reach this" % [
+			certificate, net] + " machine's %d/udp: the [upnp] lines say whether the router" % net
+		+ " forwards it, and if not, forward it by hand -- the one port to forward"
+		+ " (docs/server.md §9.3).")
+	var adds := router.calls("add")
+	var avoided: PackedInt32Array = router.calls("discover")[0][2] \
+		if not router.calls("discover").is_empty() else PackedInt32Array()
+	var description := "Biogenic server (dev)" if dev else "Biogenic server"
+	var asked := adds.size() == 1 and int(adds[0][1]) == net and str(adds[0][2]) == "UDP" \
+		and str(adds[0][3]) == description and int(adds[0][4]) == PortForward.LEASE
+	var joins := Lan.octet_of(address) < 0 or lines.has(join_line)
+	var never: PackedInt32Array = forward.call("never")
+	var to := "[upnp] forwarded UDP %d on the router to this machine," % net
+	var forwarded := false
+	for line: String in lines:
+		forwarded = forwarded or line.begins_with(to)
+	var line_from := _channel_catcher.lines.size()
+	server.call("shut_down")
+	var down := await _limits_until(func() -> bool:
+		return router.calls("delete").size() == 1 and bool(forward.is_stopped()), 3.0)
+	var at_stop := _channel_lines(line_from)
+	var removed := router.calls("delete")
+	server.queue_free()
+	await _wait(0.3)
+	Channel.posing = null
+	_says(up >= 0.0 and held == [true, false] and lines.has(ready_line) and joins
+			and int(minted[0]) == 0 and squatted and lines.has(taken_line) and listening >= 0.0
+			and lines.has(internet_line) and lines.has(listening_line) and asked and forwarded
+			and never == PackedInt32Array([lan]) and avoided.has(net) and avoided.has(lan)
+			and lines.has("[upnp] looking for the router, to forward UDP %d to this" % net
+				+ " machine for as long as the server runs -- nothing answers there without"
+				+ " an invite")
+			and down >= 0.0 and removed.size() == 1 and int(removed[0][1]) == net
+			and at_stop.has("[upnp] took the forward of UDP %d off the router" % net)
+			and router.on_main == 0,
+		"channel %s: %s server listens on %d and not %d, says so in its READY, join and" % [
+			"K5" if dev else "K6", "a dev" if dev else "the release channel's", lan, other_lan]
+		+ " listening lines%s; with an invite, its internet line says %d is taken while" % [
+			" -- a dev build's own" if dev else " -- word for word as ever", net]
+		+ " held and then that it listens there; it asks the router for UDP %d as '%s'," % [net,
+			description] + " never %d, and takes that forward off at its stop" % lan)
+
+
+## **K7: every sentence that names a port, or the service's account, names its
+## channel's -- and on the release channel, word for word what it said before
+## there were two.** `--reach` with no port, and a `reach.cfg` a hand made with
+## none, mean the internet's port; `--reach` and `--invite` refused say it; the
+## advice for the router, the UPnP switch and `--invites` name it; a call from
+## outside the house at the LAN's door is sent to it; the earshot screen shows
+## the LAN's; the forward's line and its name on the router are the channel's;
+## and the note a job run as root gives, and the refusal when a job run as root
+## cannot read who owns the book, name the channel's service account.
+func _channel_words() -> void:
+	var release := {
+		"reach": "45772,45772,50000",
+		"reach_job": "friends will call 203.0.113.7:45772. The server asks your router to"
+			+ " forward UDP 45772 to it by itself, by UPnP, and its [upnp] lines say whether the"
+			+ " router did; if not, forward UDP 45772 on your router to this machine's port"
+			+ " 45772/udp, and nothing else.",
+		"reach_refused": "--reach: a port is a number from 1 to 65535. For example"
+			+ " --reach=203.0.113.7 or --reach=pond.example.net:45772 (both placeholders).",
+		"mint_refused": "--invite: friends need an address to call first. Set it with"
+			+ " --reach=<your public address or name>[:<port>] -- where your router answers,"
+			+ " and the port it forwards to this machine's 45772/udp.",
+		"handmade": "45772",
+		"advice_off": "Forward UDP 45772 on your router to this machine's port 45772/udp, and"
+			+ " nothing else -- UPnP is off here (--no-upnp).",
+		"advice_other": "Forward UDP 50000 on your router to this machine's port 45772/udp,"
+			+ " and nothing else: the server's own forward, by UPnP, is of 45772, not of"
+			+ " 50000.",
+		"switch_on": "upnp: on -- the server asks the router to forward 45772/udp to it"
+			+ " (--no-upnp turns that off)",
+		"switch_off": "upnp: off -- forward 45772/udp to this machine by hand (--upnp turns it"
+			+ " back on)",
+		"set_off": "upnp: off, remembered -- the server asks the router for nothing. For"
+			+ " friends outside the house, forward UDP 45772 to this machine by hand"
+			+ " (docs/server.md §9.3); --upnp turns it back on.",
+		"set_on": "upnp: on, remembered -- the server asks the router to forward UDP 45772 to"
+			+ " this machine for as long as it runs, and its [upnp] lines say whether the"
+			+ " router did (docs/server.md §9.3).",
+		"listing": "friends call 203.0.113.7:45772; the server listens on 45772/udp for them.",
+		"door": "not on this network -- a call from outside needs an invite, on port 45772",
+		"mapped": "forwarded UDP 45772 on the router to this machine, 192.0.2.12:45772, for an"
+			+ " hour at a time -- renewed every 30 minutes while the server runs, and taken off"
+			+ " when it stops",
+		"receipt": "%s · 45771" % Lan.local_address() if not Lan.local_address().is_empty()
+			else "no network here",
+		"account": "biogenic",
+		"description": "Biogenic server",
+		"tag": "|",
+		"root_note": "note: this runs as root, so it keeps root's own book, in %s, which the"
+			% ProjectSettings.globalize_path(CHANNEL_WORDS_ROOT).trim_suffix("/") + " service"
+			+ " never reads. For the service's, run the job as its user: runuser -u biogenic --"
+			+ " env HOME=/var/lib/biogenic /opt/biogenic/biogenic-server.x86_64 --headless --"
+			+ " <job> (docs/server.md §9.1)",
+		"ownership": "refused: this runs as root but could not read who owns the invite files,"
+			+ " so it will not write what the service user might not read back. Run the job as"
+			+ " that user: runuser -u biogenic -- env HOME=/h /x --headless -- --invites (or"
+			+ " sudo -u biogenic, the same way; docs/server.md §9.1)",
+	}
+	# A dev build's: the same sentences on the other pair, and its own names.
+	var branch := {}
+	for key: String in release:
+		branch[key] = str(release[key]).replace("45772", "45782").replace("45771", "45781")
+	branch["account"] = "biogenic-dev"
+	branch["root_note"] = str(release["root_note"]).replace("biogenic -- env HOME=/var/lib/biogenic"
+		+ " /opt/biogenic/", "biogenic-dev -- env HOME=/var/lib/biogenic-dev /opt/biogenic-dev/")
+	branch["ownership"] = str(release["ownership"]).replace("runuser -u biogenic --",
+		"runuser -u biogenic-dev --").replace("sudo -u biogenic,", "sudo -u biogenic-dev,")
+	branch["description"] = "Biogenic server (dev)"
+	branch["tag"] = " -- a dev build: only the dev app finds it| -- a dev build"
+	var wrong: Array[String] = []
+	for posed: String in ["", "dev"]:
+		Channel.posing = posed
+		var said := _channel_sentences()
+		var want: Dictionary = branch if not posed.is_empty() else release
+		for key: String in want:
+			if str(said.get(key, "")) != str(want[key]):
+				wrong.append("%s %s: '%s'" % ["dev" if not posed.is_empty() else "release", key,
+					said.get(key, "")])
+	Channel.posing = null
+	_says(wrong.is_empty(),
+		"channel K7: %d sentences that name a port or the service's account name their" % (
+			release.size()) + " channel's, and the release channel's are word for word what"
+		+ " they were before there were two" + ("" if wrong.is_empty() else " -- NOT: "
+			+ "; ".join(wrong)))
+
+
+## Every sentence K7 holds, as this channel says it, from the game's own code.
+func _channel_sentences() -> Dictionary:
+	_invites_wipe(CHANNEL_WORDS_ROOT)
+	var said := {}
+	said["reach"] = "%d,%d,%d" % [int(Invite.parse_reach("203.0.113.7")["port"]),
+		int(Invite.parse_reach("2001:db8::7")["port"]),
+		int(Invite.parse_reach("pond.example.net:50000")["port"])]
+	said["mint_refused"] = str((InviteBook.mint("sam", CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["reach_refused"] = str((InviteBook.set_reach("203.0.113.7:0", CHANNEL_WORDS_ROOT)[1]
+		as Array)[0])
+	said["reach_job"] = str((InviteBook.set_reach("203.0.113.7", CHANNEL_WORDS_ROOT)[1]
+		as Array)[0])
+	said["listing"] = str((InviteBook.listing(CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["set_off"] = str((InviteBook.set_upnp(false, CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	said["set_on"] = str((InviteBook.set_upnp(true, CHANNEL_WORDS_ROOT)[1] as Array)[0])
+	# A reach.cfg a hand made, with an address and no port.
+	var handmade := ConfigFile.new()
+	handmade.set_value("reach", "address", "203.0.113.7")
+	Invite.write_private(str(InviteBook.paths(CHANNEL_WORDS_ROOT)["reach"]),
+		handmade.encode_to_text().to_utf8_buffer())
+	said["handmade"] = str(int(InviteBook.reach(CHANNEL_WORDS_ROOT).get("port", -1)))
+	_invites_wipe(CHANNEL_WORDS_ROOT)
+	said["advice_off"] = InviteBook.forward_advice(Invite.channel_port(), 0)
+	said["advice_other"] = InviteBook.forward_advice(50000, 1)
+	said["switch_on"] = InviteBook.upnp_said(1, 0)
+	said["switch_off"] = InviteBook.upnp_said(0, 0)
+	# The LAN's door, as a server's: a call from outside the house.
+	var door: Node = NetSession.new()
+	door.set("address", "192.0.2.12")
+	door.set("guests_max", NetSession.GUESTS_MAX)
+	said["door"] = str((door.call("_admit", "203.0.113.9", NetSession.VIA_LAN) as Array)[1])
+	door.free()
+	said["mapped"] = DedicatedServer.upnp_said(&"mapped", {"port": Invite.channel_port(),
+		"protocol": "UDP", "internal": "192.0.2.12", "lease": PortForward.LEASE})
+	var screen: Node = Earshot.new()
+	said["receipt"] = str(screen.call("_here_says"))
+	screen.free()
+	said["account"] = InviteBook.service_account()
+	said["root_note"] = InviteBook.root_note(CHANNEL_WORDS_ROOT)
+	said["ownership"] = InviteBook.ownership_refusal(0, {}, PackedStringArray(["--invites"]),
+		"/x", "/h", false)
+	said["description"] = DedicatedServer.upnp_description()
+	said["tag"] = DedicatedServer.channel_said(true) + "|" + DedicatedServer.channel_said(false)
+	return said
+
+
+## **K8: a job reads its own server's command line, and never the other
+## channel's.** The live server and the dev server run the same file name from
+## two directories, so the server a job asks about is the one started from its
+## own path: under a stand-in `/proc`, a live service with neither switch and a
+## dev service with `--no-upnp` -- the live job sees neither, and the dev job
+## its own `--no-upnp`. One started by another path to the same file -- a
+## symlinked directory -- is known by the `exe` link `/proc` keeps, the same
+## after its build was replaced, when the link reads ` (deleted)`; and one
+## started by a relative path is known by its name.
+func _channel_own_server() -> void:
+	var live := "/opt/biogenic/biogenic-server.x86_64"
+	var dev := "/opt/biogenic-dev/biogenic-server.x86_64"
+	var write := func(pid: String, argv: Array) -> void:
+		DirAccess.make_dir_recursive_absolute(CHANNEL_PROC_ROOT.path_join(pid))
+		var bytes := PackedByteArray()
+		for arg: String in argv:
+			bytes.append_array(arg.to_utf8_buffer())
+			bytes.append(0)
+		var file := FileAccess.open(CHANNEL_PROC_ROOT.path_join(pid).path_join("cmdline"),
+			FileAccess.WRITE)
+		file.store_buffer(bytes)
+		file.close()
+	_channel_proc_wipe()
+	write.call("201", [live, "--headless", "--", "--stop-file=/run/biogenic/stop"])
+	write.call("202", [dev, "--headless", "--", "--stop-file=/run/biogenic-dev/stop",
+		"--no-upnp"])
+	var live_sees := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	var dev_sees := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	write.call("203", ["./biogenic-server.x86_64", "--headless", "--", "--no-update",
+		"--upnp"])
+	var by_name := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	# Started through a symlinked directory: the same file, by its link.
+	var linked := "/srv/pond/biogenic-server.x86_64"
+	write.call("204", [linked, "--headless", "--", "--stop-file=/run/biogenic/stop",
+		"--no-upnp"])
+	var linking := DirAccess.open(CHANNEL_PROC_ROOT.path_join("204"))
+	var link_made := linking != null and linking.create_link(live, "exe") == OK
+	var by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	var dev_by_link := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, dev, 999)
+	_channel_proc_wipe()
+	write.call("205", [linked, "--headless", "--", "--no-update", "--upnp"])
+	linking = DirAccess.open(CHANNEL_PROC_ROOT.path_join("205"))
+	link_made = link_made and linking != null \
+		and linking.create_link(live + " (deleted)", "exe") == OK
+	var by_deleted := InviteBook.running_upnp_override(CHANNEL_PROC_ROOT, live, 999)
+	_channel_proc_wipe()
+	_says(live_sees == 0 and dev_sees == -1 and by_name == 1 and link_made and by_link == -1
+			and dev_by_link == -2 and by_deleted == 1,
+		"channel K8: beside a dev server run with --no-upnp, a live server's job sees its own"
+		+ " server with neither (%d), the dev server's job its --no-upnp (%d); one started" % [
+			live_sees, dev_sees] + " through a symlinked directory is known by its /proc link"
+		+ " (%d, and %d to the dev job), and after its build was replaced (%d); one" % [
+			by_link, dev_by_link, by_deleted] + " started by a relative path is known by its"
+		+ " name (%d)" % by_name)
+
+
+func _channel_proc_wipe() -> void:
+	if not DirAccess.dir_exists_absolute(CHANNEL_PROC_ROOT):
+		return
+	for pid: String in DirAccess.get_directories_at(CHANNEL_PROC_ROOT):
+		var dir := CHANNEL_PROC_ROOT.path_join(pid)
+		# The `exe` link first, by name: one that leads nowhere may not list.
+		DirAccess.remove_absolute(dir.path_join("exe"))
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
+	DirAccess.remove_absolute(CHANNEL_PROC_ROOT)

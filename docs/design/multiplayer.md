@@ -1069,7 +1069,7 @@ network would: `vision.gd:51` sets `CAM_LAG := 0.30` with a 0.16 s lead, a net
   `randf` into `_wander` every frame. This removes the need for a per-cell RNG, a
   fixed timestep, an input-command abstraction and a rollback buffer, all at once.
 - **Contact resolves once, on the authority.** At `DASH_SPEED_BY_TIER[3]` 300 px/s,
-  250 ms is 75 px against a player radius of 26–40. Eating, biting, toxicyst and
+  250 ms is 75 px against a player radius of 26–40. Eating, biting, veneneux and
   trichocyst all live in `food.gd:1400-1470`.
 - **Dead-reckon remote cells** using the sim's own closed form, `p(t) = p₀ +
   v₀(1−e^(−0.74t))/0.74` — exact, not approximate, four lines. It cuts the 100 ms

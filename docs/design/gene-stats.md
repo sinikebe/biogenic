@@ -342,7 +342,7 @@ Each row gives the value at 1, 2 and 3 worn copies, for a newborn with no
 | | 1 | `again after {} s` | 26 | 18 | 11 | `DART_COOLDOWN_BY_TIER` |
 | `pellicle` *armor* | 1 | `to a mouth you are {} × your size` | 1.14 | 1.30 | 1.52 | `ARMOR_BY_TIER` |
 | | 1 | `bites take {} less` | 12% | 23% | 34% | `1 − 1 / ARMOR_BY_TIER` |
-| `toxicyst` *venom* | 1 | `a biter takes back {} of its bite` | 35% | 55% | 80% | `VENOM_BITE_BACK_BY_TIER` |
+| `veneneux` *venom* | 1 | `a biter takes back {} of its bite` | 35% | 55% | 80% | `VENOM_BITE_BACK_BY_TIER` |
 | | 1 | `a swallower dies, and you are spat out` | | | | words only |
 | | 2 | `being spat out burns {} s` | 17 | 12 | 7.9 | `VENOM_COST_BY_TIER × HUNGER_SECONDS × reserve` (× burn instead, if call 2 is yes) |
 | `plastid` *sun* | 1 | `makes {} s of food every second` | 0.12 | 0.22 | 0.34 | `SUN_BY_TIER` (not scaled by burn, as metabolism.gd pays it) |
@@ -544,7 +544,7 @@ read `--numbers`; the build takes `--numbers=1` (§2.2).
 ```
 G  = --genome=cytostome:2,cirrus:1,flagellum:3,ocellus:1:3 --radius=34 --esc-at=1.0 --seed=7 --mode=0
 F5 = --level=ocellus:5 --earn=0.5:ocellus:100 --touch=1.5:938,204 --touch=2.0:898,358
-CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,ocellus:1:3,ampulla:2:4,pellicle:1:5,toxicyst:2:6
+CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:3:2,ocellus:1:3,ampulla:2:4,pellicle:1:5,veneneux:2:6
 ```
 
 | frame | wait, flags | shows | judgement |
@@ -552,7 +552,7 @@ CH = --seed=12345 --radius=40 --mode=0 --dna=cytostome:3:0,cirrus:2:1,flagellum:
 | `S01` both | 2.0 `G --touch=1.4:938,204` | numbers off: today's screen and the quiet switch | passes; §3.2's diff |
 | `S02` both | `S01 --numbers=1` | the beam: `1 ray · reaches 620 µm` / `free to wear · level 2 after 40 strikes`, the odds at 55%, the caption | passes |
 | `S03` both | 2.0 `G --numbers=1 --touch=1.4:788,510` | a three-copy tail, both lines full | passes |
-| `S04` both | 2.0 `--genome=cytostome:1,cirrus:1,flagellum:1,toxicyst:3:3,crista:2:4,vacuole:3:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,204` | venom in a body with `crista` and `vacuole`: `burns 16 s`, `0.28 s a second`, `72 s, 39 s drifting` | passes, and shows call 2's loose end. **On the build** (call 2's *yes*): `burns 6.1 s` |
+| `S04` both | 2.0 `--genome=cytostome:1,cirrus:1,flagellum:1,veneneux:3:3,crista:2:4,vacuole:3:1 --radius=34 --esc-at=1.0 --seed=7 --mode=0 --numbers=1 --touch=1.4:938,204` | venom in a body with `crista` and `vacuole`: `burns 16 s`, `0.28 s a second`, `72 s, 39 s drifting` | passes, and shows call 2's loose end. **On the build** (call 2's *yes*): `burns 6.1 s` |
 | `S05` both | 2.0 `G --sample=ampulla --numbers=1` | a waiting gene in hand, dimmed; `one copy · 55% of daughters wear it` | passes |
 | `S06` both | 2.4 `G F5 --numbers=1` | the cards, with `sweep` armed at level 5 | passes |
 | `S07` both | 2.0 `G --sample=ampulla,trichocyst:2,chemocyte,pellicle,stigma:3 --numbers=1` | two tray rows, the tightest case: `Act` ends at y 708 | passes, with 12 px to spare |

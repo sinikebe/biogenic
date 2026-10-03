@@ -12,8 +12,21 @@ extends Node
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## **How a load wears and what it does** (docs/design/dna-slots.md §6): the
+## generic arithmetic, which knows no gene. This file holds the game's numbers for
+## it, beside every other table, and every body's wound is stepped through
+## [method dosed]. doses.gd preloads nothing, so there is no cycle.
+const Doses := preload("res://game/mechanics/doses.gd")
+
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
+## **A new press of a control the hand drives with**, while the autopilot has the
+## cell (docs/design/automation.md §2.3, row 36): a steer, a push, a dash or the
+## hold, by the scheme's own rules -- a finger on the water under `anywhere`, a
+## drawn control under `stick` and `pads`, a key. The run takes the cell back on
+## it, in the same frame, before the press does what it does. Never for a press
+## that was already down, nor while the hand is silenced.
+signal took_back
 ## `myoneme` -- a burst of speed the player asked for, and what it cost. The
 ## cell cannot spend hunger itself: metabolism belongs to the run, so the price
 ## rides out on the signal and the run pays it.
@@ -66,10 +79,6 @@ const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 ## Seconds between bites from one mouth. One mouth, one bite, whatever it is
 ## resting against -- so a cell wedged between two others does not chew both.
 const BITE_GAP := 0.85
-## `toxicyst` / venom, from the other end. Swallowing a venomous cell already
-## kills the swallower; *biting* one costs this share of the damage just dealt,
-## which makes venom the answer to being gnawed as well as to being eaten.
-const VENOM_BITE_BACK_BY_TIER: Array[float] = [0.0, 0.35, 0.55, 0.80]
 
 ## Where on a body a bite lands, and therefore how much of it lands. The nose is
 ## 1.0 because that is where the target's own mouth is and where it is thickest;
@@ -93,6 +102,13 @@ const DART_ARC_DEG := 110.0
 ## anywhere: point of view feels each bite as a `hit` at the bearing it came
 ## from, and full vision draws the tears (cilia.gd).
 var wound := 0.0
+## **This body's loads**, stacks of each of doses.gd's kinds (docs/design/
+## dna-slots.md §6.1): what venom and poison left in it, wearing off. 64 bits,
+## because a load wears down like a clock and every clock here is kept in 64.
+## Written by the field, which decides every dose -- or, on a guest, by the host's
+## snapshot -- and worn here with the wound, every frame. Being born, a death and
+## a reset clear them.
+var loads := Doses.none()
 
 ## The genome this cell wears. Written by normal_mode.gd, which is the only
 ## place the two halves are introduced to each other.
@@ -184,6 +200,23 @@ const IMPULSE_SPEED_BY_TIER: Array[float] = [118.0, 138.0, 162.0, 190.0]
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const IMPULSE_GAP_MIN_BY_TIER: Array[float] = [2.00, 1.70, 1.45, 1.20]
 const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
+## **A tail can be held still from its second copy** (docs/design/
+## automation.md §5.2, rows 29, 37 and 38): the one number the hand's hold and
+## a body's rules both ask, of the tail's level -- `genome.gd`'s `level_of`,
+## which for every gene but the beam is its worn copies. A held tail does not
+## beat, costs nothing, and **keeps its clock**: the stroke clock stands still
+## and is never reset, so two strokes are never closer than this table's
+## shortest gap however a hold comes and goes ([method _process]). Below it the
+## tail beats on its own, for every body that swims. Not a table a host's
+## referee judges by: a held tail only ever makes a body slower.
+const HOLD_LEVEL := 2
+## **How an instinct steers onto the heading it holds** (automation.md §4.2): in
+## proportion to how far off it is, inside this band, and at full rate outside
+## it. The cirrus's lag times its rate is about 0.68 rad at every tier, so full
+## rate to the heading would carry the turn about that far past it; a band of
+## about twice that settles with a few degrees of overshoot. Radians, a starting
+## value (§15). Not a table: a host's referee judges the motion, never this.
+const HOLD_BAND := 1.3
 ## Mean of the per-impulse strength roll below, for [method speed_for].
 const IMPULSE_MEAN := 0.85
 ## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
@@ -394,15 +427,54 @@ const TOUCH_RANGE_BY_TIER: Array[float] = [0.0, 150.0, 230.0, 330.0]
 ## off, and how long before there is another one.
 const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
 const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
+## **What a dart does to what it hits** (docs/design/behaviour.md §4.3): it rests
+## this long with its rules unread, and feels the dart as a `hit` at its
+## bearing. Today's darts broke off a run and left the hunter resting for the
+## same five seconds; with no run to break, the dart stuns. A starting value.
+const DART_STUN := 5.0
 
-## `toxicyst` / venom. What surviving being eaten costs, in hunger. A cell that
-## swallows you dies of it and you are spat out starving.
-##
-## A share of a born cell's tank, paid as seconds of rest through `spend` as
-## the dash is, so `crista` and `vacuole` soften it too (gene-stats.md §11,
-## call 2). The values are wire.gd's to guard; the host only asks whether this
-## is `>= 0`, and how it is paid is each device's own hunger.
-const VENOM_COST_BY_TIER: Array[float] = [0.0, 0.46, 0.34, 0.22]
+# --- The toxin: venom outside, poison inside (docs/design/dna-slots.md §6, §7) --
+# **Doses replace both of what `veneneux` did** -- the bite-back share and the
+# swallower that died while the player was spat out. A dose is stacks that wear
+# off over seconds and act while they last, the owner's rule of 2026-09-30, and a
+# body carrying harm does not mend. Every value here is a starting value (§15):
+# balance waits for players.
+
+## **The body a stack is quoted for**: a born cell. A load acts on any other body
+## as `stacks x (DOSE_SIZE / r)^2` (doses.gd's `felt`).
+const DOSE_SIZE := BASE_RADIUS
+## **What one stack of harm takes out of a body of [constant DOSE_SIZE]**, as it
+## wears off: about 70 % of a born mouth's head-on bite (0.07). Into the same
+## wound bites tear, so full vision's tears show it.
+const HARM_PER_STACK := 0.05
+## **How fast each kind of load wears off**, by doses.gd's `Kind`: harm over
+## about a fight (a stern kill takes 13 s), paralysis short so it opens a window
+## and does not lock anybody out, sleep longer because a bite ends it. Phase 1
+## delivers harm alone.
+const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
+## **Below this a load is gone**, cleared whole: one stack lasts
+## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
+const DOSE_GONE := 0.2
+## `toxicyst` / **venom**, outside: the stacks its every bite leaves at the front,
+## and its every sting on a side, by copies. One a copy, which the line can say as
+## such. Armour does not stop them: they ride in whole.
+const VENOM_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
+## **How far round its slot's bearing a venom on a side or the stern stings** a
+## mouth that bites there: the dart's own arc, so the two weapons that guard a side
+## reach as far round it.
+const VENOM_ARC_DEG := 110.0
+## **Whether a venom on a side or the stern stings at all.** False makes it inert
+## there, and venom works through the bite alone: the switch, should the owner read
+## *"the direction slots express outside"* as the mouth only (dna-slots.md §22.2).
+const VENOM_SIDES := true
+## `veneneux` / **poison**, inside: the stacks whatever bites the body takes, a
+## bite, by copies -- the price of chewing a poisonous cell, in place of the old
+## bite-back share.
+const POISON_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
+## **And what whatever swallows it takes**, by copies: one copy takes 0.8 of a
+## born swallower, three kill anything up to r40. The swallowed body is eaten all
+## the same (owner's row 5): nobody is spat out any more.
+const SWALLOW_STACKS_BY_TIER: Array[float] = [0.0, 16.0, 32.0, 48.0]
 
 ## `statocyst` / level used to be named here: it bought no number, only a lobe
 ## on the membrane at a bearing that did not turn with the body. The owner
@@ -451,6 +523,20 @@ const WANDER_TAU := 2.6
 ## paid in the same seconds of rest, through the same `spend`, so `crista` and
 ## `vacuole` soften both alike.
 const STROKE_COST := 0.0113
+
+
+## **What holding [param speed] against the drag costs a body, in seconds of
+## rest a second**: the speed the drag takes out each second, grossed up by what
+## a stroke loses to spreading, at [constant STROKE_COST] per unit of it. The
+## player's flagellum pays per beat, on the speed each beat adds; a water body
+## swims at a steady speed and pays for holding it -- 0.50 a second at a born
+## cell's 56.5, what the player's flagellum costs it either way
+## (docs/design/ocean.md §5.2). One table, so the water prices a swim from the
+## player's own.
+static func stroke_cost(speed: float) -> float:
+	return maxf(speed, 0.0) * DRAG / SPREAD_LOSS * STROKE_COST
+
+
 ## **Seconds of rest per radian the body turns under steering.** A half turn
 ## costs about 4 s of rest, and turning flat out at tier 1 burns 0.8 of a
 ## resting body's rate on top of everything else. The water's own wander is
@@ -462,6 +548,100 @@ const TURN_COST := 1.3
 const DRAG_SPAN := 190.0
 ## Below this the player is not really steering, so onboarding stays up.
 const STEER_DEADZONE := 0.12
+
+# --- What the body gives a body's rules (docs/design/behaviour.md §3) ----------
+## **The body's own parts**, in the shape of `genome.gd`'s DECLARES: what every
+## body has whatever its genes. It feels a `hit` -- a bite or a dart landing on
+## its membrane, at a bearing and a strength, as the player feels one -- and it
+## has the triggers every body has (§3.3): it turns toward or away from what a
+## sense reports, which needs a bearing, or turns at random; it swims, on its
+## flagellum's own beat; and it rests, which claims every trigger there is. Its
+## `cirrus` only makes these faster, so it declares nothing.
+##
+## **Under row 37** (docs/design/automation.md §5.3) a tail beats unless it is
+## held, so `swim` claims the tail -- the `swimming` trigger -- and keeps a rule
+## below it from holding it; and `rest` stops steering, the push and the dash
+## at every level, and holds the tail too only at [constant HOLD_LEVEL]. The
+## flagellum's own `hold` is `genome.gd`'s, declared at that level.
+const DECLARES := {
+	&"body": {
+		"in": [{"name": &"hit", "bearing": true, "values": {&"strength": &"level"}}],
+		"out": [
+			{"name": &"turn-toward", "claims": [&"steering"], "needs": &"bearing"},
+			{"name": &"turn-away", "claims": [&"steering"], "needs": &"bearing"},
+			{"name": &"turn-random", "claims": [&"steering"]},
+			{"name": &"swim", "claims": [&"swimming"]},
+			{"name": &"rest", "claims": [&"all"]},
+		],
+	},
+}
+
+## **What the body's parts are called** (docs/design/automation.md §13.1), beside
+## [constant DECLARES], by qualified name and by value name: the words the
+## programs page puts on a part's chip. Read through [method words_of].
+##
+## TRANSLATORS: The name of a sense or an action on a small chip of the player's
+## "instincts" (rules the player writes: "when <a sense reports something> -> <do
+## this>"), or of a value a sense reports. Lowercase, one or two short words.
+## "hit": a bite landing on the cell. "turn toward" / "turn away": steer to or
+## from where the sense says it is. "tumble": a sudden turn to a random side, as
+## swimming bacteria do. "swim": keep the tail beating. "rest": stop moving on
+## purpose and drift with the water.
+## ROOM: 112 px at 15 px
+const BODY_SAYS := {
+	&"body.hit": "hit",
+	&"body.turn-toward": "turn toward",
+	&"body.turn-away": "turn away",
+	&"body.turn-random": "tumble",
+	&"body.swim": "swim",
+	&"body.rest": "rest",
+}
+## **What the values its senses report are called**, by value name: a test is put
+## to one of them.
+##
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell: "strength", how hard a bite was.
+## Lowercase, one short word.
+## ROOM: 70 px at 14 px
+const BODY_VALUES := {
+	&"strength": "strength",
+}
+## **The line that explains each of them**, beside the chip: the chip's word, a
+## middle dot, and what it is or makes the cell do, in plain words.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same word as on its chip), a middle dot,
+## then what it is or does, lowercase. "Your tail" is the cell's flagellum, which
+## swims; "two copies" means the gene is carried twice in the cell's DNA, which
+## is what lets the tail be held still; "below" means the instincts lower in the
+## list.
+## ROOM: 856 px at 15 px
+const BODY_EXPLAINS := {
+	&"body.hit": "hit · a bite landing on you: where it came from, and how hard.",
+	&"body.turn-toward": "turn toward · steer for where the sense says it is.",
+	&"body.turn-away": "turn away · steer away from where the sense says it is.",
+	&"body.turn-random": "tumble · a quarter to a half turn, to a random side.",
+	&"body.swim": "swim · keep your tail beating, so nothing below holds it still.",
+	&"body.rest": "rest · stop steering, pushing and dashing, and drift. with two copies of"
+		+ " your tail, hold it still too.",
+	&"strength": "strength · how hard the bite was, from a graze to a full bite.",
+}
+
+
+## **A part's words, in the language of the moment** (automation.md §13.1), for
+## the parts [constant DECLARES] names and the values they report: `{"says": its
+## chip, "explains": its line}`, a key absent where there are none. `genome.gd`
+## and `metabolism.gd` answer the same way for their parts, so the page asks the
+## file that declares a part, and a gene that brings a part brings its words.
+static func words_of(part: StringName) -> Dictionary:
+	var out := {}
+	if BODY_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(BODY_SAYS[part]))
+	elif BODY_VALUES.has(part):
+		out["says"] = String(TranslationServer.translate(BODY_VALUES[part]))
+	if BODY_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(BODY_EXPLAINS[part]))
+	return out
 
 ## Nothing held. Touch indices are >= 0 and the mouse is -1, so -2 is free.
 const POINTER_NONE := -2
@@ -478,6 +658,10 @@ var _omega := 0.0
 var _wander := 0.0
 var _impulse_timer := 0.0
 var _dash_timer := 0.0
+## **Whether the tail was held still on this body's last step** -- by the hand,
+## at [constant HOLD_LEVEL] -- as [method _process] read it: what the views draw
+## still, and what the step that stopped the stroke clock decided.
+var _held := false
 ## Seconds of rest this body has spent moving since the run last took them
 ## ([method take_effort]).
 var _effort := 0.0
@@ -515,7 +699,23 @@ var controls: Node = null
 ## steering, the moment it clears. So whoever flips it calls [method release]
 ## and `controls.let_go()` at the same moment, both ways round: exactly the
 ## pair the pause screen and a lost focus already call.
+##
+## **It silences the hand only** (automation.md §2.4, §13): the autopilot drives
+## through it, so a pond's open menu lets your programs steer while you edit.
 var steering_off := false
+
+## **Whether the autopilot has the cell** (automation.md §2): set by the run, and
+## nothing here sets it. While it does, the steer, the push and the tail are what
+## [member instincts] claim, and the hand's keys and fingers move nothing until a
+## new press takes the cell back ([signal took_back]).
+var autopilot := false
+## **The instincts that drive the cell while the autopilot has it**:
+## `own_rules.gd`, set by the run. Untyped for the reason [member controls] is.
+var instincts: RefCounted = null
+## **What the hand asked to steer this frame**, -1 .. +1, whoever had the cell:
+## what the run's onboarding waits for (automation.md §18.1), never an
+## instinct's turn.
+var hand_steer := 0.0
 
 
 func _ready() -> void:
@@ -535,22 +735,100 @@ func reset(keep_place: bool = false) -> void:
 	velocity = Vector2.ZERO
 	radius = BASE_RADIUS
 	wound = 0.0
+	loads.fill(0.0)
 	_omega = 0.0
 	_wander = 0.0
 	_impulse_timer = randf_range(0.6, 1.4)
 	_dash_timer = 0.0
 	_effort = 0.0
+	_held = false
 	release()
 
 
+## **This body as plain types**, for a drop kept with its cell in it (ocean.md
+## §9.2, row 17): where it is, which way it points and how it is moving, its
+## size and its wound, and what its tail and its dash are in the middle of --
+## the turn, the drift, the clocks of the next impulse and the next dash, and
+## the effort not yet paid for. Nothing a finger was doing: it comes back let go.
+func body_state() -> Dictionary:
+	return {
+		"at": position,
+		"heading": heading,
+		"velocity": velocity,
+		"radius": radius,
+		"wound": wound,
+		"omega": _omega,
+		"wander": _wander,
+		"impulse": _impulse_timer,
+		"dash": _dash_timer,
+		"effort": _effort,
+	}
+
+
+## Puts back what [method body_state] took, and lets go of anything held. The
+## loads are not in it -- a file keeps them beside the body, as `cell.loads`
+## ([method restore_loads]) -- so a body put back carries none until they are.
+func restore_body(state: Dictionary) -> void:
+	position = state["at"]
+	heading = float(state["heading"])
+	velocity = state["velocity"]
+	radius = float(state["radius"])
+	wound = float(state["wound"])
+	_omega = float(state["omega"])
+	_wander = float(state["wander"])
+	_impulse_timer = float(state["impulse"])
+	_dash_timer = float(state["dash"])
+	_effort = float(state["effort"])
+	loads.fill(0.0)
+	_held = false
+	release()
+
+
+## **The loads, written back** -- from a kept drop's `cell.loads`, a host's
+## snapshot or a replay: each kind as many stacks as [param kept] says, and none
+## where it says nothing. Copied, never held: a packed array is passed by
+## reference.
+func restore_loads(kept: PackedFloat64Array) -> void:
+	for k in loads.size():
+		loads[k] = maxf(kept[k], 0.0) if k < kept.size() and is_finite(kept[k]) else 0.0
+
+
+## **A body's wound after [param delta] seconds, with its [param loads]**
+## (docs/design/dna-slots.md §6.2) -- the one dose step every body takes, the
+## cell on this device here, every water body and every person in food.gd. With
+## nothing in it, it is [method mended], exactly. With harm in it, the stacks that
+## wore off this step go into the wound -- [constant HARM_PER_STACK] a stack,
+## diluted by the body's [param body_radius] -- and **the wound mends only for
+## the part of the step after the harm ran out**: a body carrying harm does not
+## mend. [param loads] are worn in place.
+static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
+		delta: float) -> float:
+	if not Doses.any(loads):
+		return mended(hurt, delta)
+	var worn := Doses.wear(loads, delta, DOSE_TAU_BY_KIND, DOSE_GONE)
+	var harmed := clampf(hurt + worn[0] * HARM_PER_STACK
+		* Doses.felt(1.0, body_radius, DOSE_SIZE), 0.0, 1.0)
+	return mended(harmed, worn[1])
+
+
 func _process(delta: float) -> void:
-	steer = _read_steer()
+	# **The hand, or the heading the instincts hold** (automation.md §4.2, §18.4):
+	# while the autopilot has the cell its instincts steer, in proportion inside
+	# HOLD_BAND, and the hand's keys and fingers move nothing.
+	hand_steer = _read_steer()
+	steer = float(instincts.call(&"steer_for", heading)) if _driven() else hand_steer
 
 	# The body knits itself back up whenever nothing is chewing on it. Here
 	# rather than in the water, because it is a thing a body does and not a
 	# thing that happens to it -- and because _set_simulating() stops this node
 	# on a death, which is exactly when it should stop.
-	wound = mended(wound, delta)
+	#
+	# **And its loads wear here, with it** (dna-slots.md §6.2): harm tears it as
+	# it wears off, and it does not mend while harm is in it. A wound made whole
+	# this way is found by the field, at the top of its contacts with this cell,
+	# which is where every death of this cell is told -- on a guest never, since
+	# the host owns that death and the next snapshot's wound is the truth.
+	wound = dosed(loads, wound, radius, delta)
 
 	_omega = lerpf(_omega, steer * turn_rate(), 1.0 - exp(-delta / turn_response()))
 	# Ornstein-Uhlenbeck-ish drift: a heading nudge that wanders instead of
@@ -561,9 +839,17 @@ func _process(delta: float) -> void:
 	# The turn the cirrus made, and only that: the wander above is the water's.
 	_effort += absf(_omega) * delta * TURN_COST
 
-	_impulse_timer -= delta
-	if _impulse_timer <= 0.0:
-		_fire_impulse()
+	# **A held tail keeps its clock** (automation.md §5.2): while it is held the
+	# stroke clock stands still -- never reset -- so the beat it was counting
+	# down to comes on its own time once it is let go, and two strokes are never
+	# closer than the tier's shortest gap however often a hold comes and goes.
+	# That is the host's referee's movement budget, "impulses as often as their
+	# clock allows". A held tail fires nothing, so it costs nothing.
+	_held = can_hold() and _holding()
+	if not _held:
+		_impulse_timer -= delta
+		if _impulse_timer <= 0.0:
+			_fire_impulse()
 
 	# `axoneme`: thrust you asked for, on top of the involuntary one. Held keys
 	# on desktop, a finger on the screen anywhere on touch -- the same gesture
@@ -571,9 +857,13 @@ func _process(delta: float) -> void:
 	# second control would cost a pixel of screen the design does not have.
 	_dash_timer = maxf(_dash_timer - delta, 0.0)
 	var push := PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))]
-	if push > 0.0 and _pushing():
-		velocity += forward() * push * delta
-		_effort += push * delta * STROKE_COST
+	# **A strength, not a yes or no** (automation.md §4.2): the hand's is full, and
+	# an instinct's a half or full, at that share of the thrust and of its price.
+	var strength := _push_strength()
+	if push > 0.0 and strength > 0.0:
+		var thrust := push if strength >= 1.0 else push * strength
+		velocity += forward() * thrust * delta
+		_effort += thrust * delta * STROKE_COST
 
 	velocity *= exp(-DRAG * delta)
 	position += velocity * delta
@@ -620,7 +910,14 @@ func gape() -> float:
 ## [member radius]; every "how much is that worth" test reads the radius, so
 ## armour never made you a bigger meal.
 func swallow_radius() -> float:
-	return radius * ARMOR_BY_TIER[_tier_index(extra(&"pellicle"))]
+	return swallow_radius_of(radius, extra(&"pellicle"))
+
+
+## [method swallow_radius] for a body that is not this node: its
+## [param body_radius] and its [param pellicle_tier]. In the drop every body's
+## armour is asked this way, a water cell's as a player's (ocean.md §5.7, row 5).
+static func swallow_radius_of(body_radius: float, pellicle_tier: int) -> float:
+	return body_radius * ARMOR_BY_TIER[_tier_index(pellicle_tier)]
 
 
 ## How far this cell's beams reach, 0 for a cell with no ocellus. Which way
@@ -738,6 +1035,32 @@ func impulse_gap_max() -> float:
 	return IMPULSE_GAP_MAX_BY_TIER[_tier_index(tier(&"flagellum"))]
 
 
+## **The level this body's tail works at**: `genome.gd`'s `level_of`, which for
+## the flagellum is its worn copies -- 1 for an unwired cell, which is the born
+## one. What [constant HOLD_LEVEL] is asked of.
+func tail_level() -> int:
+	return int(genome.level_of(&"flagellum")) if genome != null else 1
+
+
+## Whether this tail can be held still at all: at [constant HOLD_LEVEL] or more.
+## What draws the hold's control (controls.gd), and what its key and a rule ask.
+func can_hold() -> bool:
+	return tail_level() >= HOLD_LEVEL
+
+
+## **Whether the tail is held still**, as this body's last step had it: what both
+## views draw still (soma.gd, vision.gd). False at a level-1 tail whatever the
+## hand does.
+func tail_held() -> bool:
+	return _held
+
+
+## **The held tail a replay writes back** (automation.md §11), as it writes the
+## rest of a recorded frame onto this body: what both views draw still.
+func restore_held(on: bool) -> void:
+	_held = on
+
+
 func turn_rate() -> float:
 	return TURN_RATE_BY_TIER[_tier_index(tier(&"cirrus"))]
 
@@ -810,11 +1133,6 @@ static func bite_damage(cytostome_tier: int, gape: float, target_radius: float,
 ## and the whole of §2.
 static func flank(theta: float) -> float:
 	return lerpf(FLANK_AHEAD, FLANK_ASTERN, 0.5 - 0.5 * cos(theta))
-
-
-## What a venomous body does back to the mouth that just bit it.
-static func venom_back(toxicyst_tier: int, damage: float) -> float:
-	return damage * VENOM_BITE_BACK_BY_TIER[_tier_index(toxicyst_tier)]
 
 
 ## A wound knitting up over [param delta] seconds. Every body in the water uses
@@ -979,10 +1297,26 @@ func _unhandled_input(event: InputEvent) -> void:
 
 	if event is InputEventKey:
 		# `myoneme` on desktop. Space is the only key normal mode spends besides
-		# the steer keys and V, and it is the one key nothing else wants.
+		# the steer keys, the push and hold keys (polled, in `_pushing` and
+		# `_holding`), V and R, and it is the one key nothing else wants.
 		var key := event as InputEventKey
-		if key.pressed and not key.echo and key.keycode == KEY_SPACE:
-			_dash()
+		if key.pressed and not key.echo:
+			# **A new press of a key the hand drives with takes the cell back**
+			# (row 36): a key held through the switching-on sends no new press,
+			# and takes nothing back until it is pressed again.
+			if _hand_key(key):
+				_hand_pressed()
+			if key.keycode == KEY_SPACE:
+				_dash()
+		return
+
+	# A pad's d-pad steers as the arrows do, through the same actions, and a new
+	# press of it is the hand's as much as a key's.
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		for action: StringName in HAND_ACTIONS:
+			if event.is_action_pressed(action):
+				_hand_pressed()
+				break
 		return
 
 	if event is InputEventMouseMotion:
@@ -1002,9 +1336,18 @@ func _unhandled_input(event: InputEvent) -> void:
 ##
 ## The dash fires here, on the press, and never on the release -- a dash that
 ## waits for a lift is a dash that arrives after the thing that was chasing you.
+##
+## **And it is the hand, by the scheme's own rule** (automation.md §2.3): a press
+## a drawn control takes, or under `anywhere` a press anywhere on the water --
+## which is also where a dash, a push and the placing of a gene begin. Under
+## `stick` and `pads` open water is inert and takes nothing back. While the
+## autopilot has the cell that press takes it back first, on this frame, and
+## then does what it does.
 func _claim(index: int, at: Vector2) -> void:
 	if controls != null:
 		var id: int = controls.press(index, at)
+		if id != controls.NONE or controls.floating():
+			_hand_pressed()
 		if id == controls.DASH:
 			_dash()
 			return
@@ -1012,8 +1355,34 @@ func _claim(index: int, at: Vector2) -> void:
 			return
 		if not controls.floating():
 			return
+	else:
+		_hand_pressed()
 	if _pointer == POINTER_NONE:
 		_grab(index, at.x)
+
+
+## **A new press of the hand's** (row 36): the autopilot, if it has the cell,
+## gives it back -- the run hears [signal took_back] and switches it off in the
+## same frame. Nothing while the hand is silenced: a pond's open menu is moving
+## focus, not taking the cell.
+func _hand_pressed() -> void:
+	if autopilot and not steering_off:
+		took_back.emit()
+
+
+## The keys the hand drives with: steering, the push and the hold, by their
+## actions and by the letters read raw, and the dash's Space.
+const HAND_ACTIONS: Array[StringName] = [&"ui_left", &"ui_right", &"ui_up", &"ui_down"]
+const HAND_KEYS: Array[int] = [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE]
+
+
+func _hand_key(key: InputEventKey) -> bool:
+	if HAND_KEYS.has(key.keycode) or HAND_KEYS.has(key.physical_keycode):
+		return true
+	for action: StringName in HAND_ACTIONS:
+		if key.is_action_pressed(action):
+			return true
+	return false
 
 
 ## True when that pointer belongs to a drawn control, which owns every later
@@ -1061,11 +1430,54 @@ func _pushing() -> bool:
 	return _pointer != POINTER_NONE
 
 
+## **True while the hand holds the tail still** (automation.md §5.2;
+## automation-ux.md §6): `S` or `↓` held -- the opposite of `W` and `↑`, which
+## push -- or the hold pad, which controls.gd draws under every scheme once the
+## tail can be held. Held, not toggled, as push is: let go and the tail beats on
+## its own clock. Only asked of a tail at [constant HOLD_LEVEL] ([method
+## _process]), so at a level-1 tail the key does nothing. `S` and `↓` are read
+## the way `W` and `↑` are, and a content pack adds no action for them.
+func _holding() -> bool:
+	# **The instincts' hold, while the autopilot has the cell**: the flagellum's
+	# own, or a rest at this level (automation.md §4.2).
+	if _driven():
+		return bool(instincts.call(&"holds_tail"))
+	if steering_off:
+		return false
+	if Input.is_action_pressed(&"ui_down") or Input.is_key_pressed(KEY_S):
+		return true
+	return controls != null and bool(controls.holding())
+
+
+## **The push's strength this frame**: an instinct's half or full while the
+## autopilot has the cell, otherwise the hand's, which is full or nothing.
+func _push_strength() -> float:
+	if _driven():
+		return float(instincts.call(&"push_strength"))
+	return 1.0 if _pushing() else 0.0
+
+
+## Whether the instincts drive this frame.
+func _driven() -> bool:
+	return autopilot and instincts != null
+
+
+## **A dash an instinct fires** (automation.md §4.2): the hand's own burst, on its
+## cooldown and at its price -- past [member steering_off], which silences the
+## hand only, as a water body's rules fire its dash.
+func instinct_dash() -> void:
+	_dash_now()
+
+
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on
 ## a signal and the run pays it.
 func _dash() -> void:
 	if steering_off:
 		return
+	_dash_now()
+
+
+func _dash_now() -> void:
 	var tier := _tier_index(extra(&"myoneme"))
 	var speed := DASH_SPEED_BY_TIER[tier]
 	if speed <= 0.0 or _dash_timer > 0.0:

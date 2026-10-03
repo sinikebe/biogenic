@@ -133,6 +133,16 @@ either**, because the replay can write recorded state back into the real `Cell`
 `vision.gd` read them exactly as they do now. *A run keeps nothing*, so
 scribbling on those nodes is free: `_wake_up()` rebuilds all of them.
 
+> **The drop, 2026-09-30.** The water stopped being free to scribble on when it
+> started outliving the run: the drop is kept, and the player swims back into it
+> after watching. So the replay now writes the water into a `Food` of its own
+> and never into the run's, and the recorder keeps the 48 living bodies nearest
+> the cell in slots they keep, the flocs as SETTLE and CLEAR, the drop's rim,
+> and who killed you. The cell's own nodes are still scribbled on, and still
+> free. `ocean.md` §11 is the design and what was measured; today's water, which
+> a run with a session still plays, is recorded the same way and comes out as it
+> always did.
+
 A is the elegant answer and it measures clean. B is the one that does not put a
 tripwire under every future gene.
 
@@ -176,6 +186,10 @@ in a preallocated ring: 4.4 MB, allocated once in `_ready()`, never grown, never
 written to disk. Nobody rewatches seven minutes; the mistake that killed you is
 in the last twenty seconds. The constant is the knob and the arithmetic is
 75 KB per second bought.
+
+> **Since then**: the beam's twenty-four rays took the stride to 385 floats, and
+> the drop to 470 -- 48 bodies, and the killer -- which is 113 KB a second and
+> **6.8 MB** for the minute (`ocean.md` §11).
 
 ## 4. The spec
 

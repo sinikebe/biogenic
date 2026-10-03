@@ -5,16 +5,39 @@ extends Control
 ## Update logic lives in UpdateService; this file only drives the UI.
 
 ## Emitted when one of [member LauncherConfig.extra_buttons] is pressed, with
-## that button's label. Connect it from your own scene to add Settings, Credits
-## or anything else without modifying the launcher.
+## that button's label. Connect it from [constant HOOKS_PATH]'s
+## _launcher_opening() to add Settings, Credits or anything else without
+## modifying the launcher.
 signal custom_button_pressed(label: String)
 
-## Emitted just before Play changes scene, or instead of it when no play scene
-## is configured. Lets a game take over the Play action entirely.
+## Emitted when Play is pressed, before it changes scene. With no play scene
+## configured, connecting this takes the Play action over entirely.
 signal play_requested()
+
+## The game's own script for the launcher's screen, run before it builds
+## anything when the file exists. See _run_opening_hook().
+const HOOKS_PATH := "res://launcher_hooks.gd"
 
 ## Height the patch-note history is capped at before it starts scrolling.
 const HISTORY_VIEW_HEIGHT := 300.0
+
+## Space kept above and below an overlay's dialog once its text is long enough
+## to fill the screen. Past that, the text scrolls inside the dialog.
+##
+## Deliberately not LauncherConfig.edge_margin, which frames the launcher's own
+## screen -- the part the overlay dims. Across that setting's 0 to 200 range the
+## dialog would sit flush against the screen's edges, or keep room for only six
+## lines of text on a screen 720 pixels tall.
+const OVERLAY_MARGIN := 24.0
+
+## What [method register_translations] accepts inside a folder: gettext catalogs,
+## and the .translation files Godot imports from a CSV.
+const CATALOG_EXTENSIONS: PackedStringArray = ["po", "mo", "translation"]
+
+## Catalogs [method register_translations] has already read in this process. A
+## content pack cannot change until the next launch, so reading one again each
+## time the launcher reopens would only repeat work.
+static var _registered_catalogs: Dictionary = {}
 
 @onready var _bg_color: ColorRect = %BackgroundColor
 @onready var _bg_texture: TextureRect = %BackgroundTexture
@@ -36,6 +59,9 @@ const HISTORY_VIEW_HEIGHT := 300.0
 @onready var _progress: ProgressBar = %UpdateProgress
 
 @onready var _overlay: Control = %UpdateOverlay
+@onready var _overlay_dialog: PanelContainer = %Dialog
+@onready var _overlay_box: VBoxContainer = %Box
+@onready var _overlay_actions: HBoxContainer = %Actions
 @onready var _overlay_title: Label = %OverlayTitle
 @onready var _overlay_scroll: ScrollContainer = %OverlayScroll
 @onready var _overlay_body: Label = %OverlayBody
@@ -49,10 +75,28 @@ var _first_button: Button = null
 var _laying_out := false
 ## What the overlay's primary button should do when pressed.
 var _overlay_action: Callable = Callable()
+## Shows the open overlay again from scratch, so a language change can re-say it.
+var _overlay_resay: Callable = Callable()
+## The open overlay's own cap on its text's height, or 0 for none. The screen
+## caps it as well; see _fit_overlay().
+var _overlay_text_cap := 0.0
+## True while a language change re-says the overlay, which must leave the
+## player's focus and scroll position where they were.
+var _resaying := false
+## Set once _ready() has built the screen. Before then there is nothing to
+## retranslate -- and a language change can arrive earlier than that, from the
+## game's own hook calling TranslationServer.set_locale().
+var _screen_built := false
+## The game's hooks object, held for as long as the launcher is up so that
+## signals it connected to its own methods keep working.
+var _hooks: Object = null
 
 
 func _ready() -> void:
 	_config = BuildInfo.config
+	# First, so whatever the game sets up -- its catalogs, a language the player
+	# chose -- is already in force when the screen below is built.
+	_run_opening_hook()
 
 	if _config.theme_override != null:
 		theme = _config.theme_override
@@ -70,6 +114,13 @@ func _ready() -> void:
 	_update_button.pressed.connect(_on_update_pressed)
 	_overlay_primary.pressed.connect(_on_overlay_primary)
 	_overlay_secondary.pressed.connect(_hide_overlay)
+	_overlay.resized.connect(_fit_overlay)
+	# The dialog's own panel is its frame, so the text area draws none of its
+	# own, whatever a game's theme gives ScrollContainer. Margins there would also
+	# undo _fit_overlay(): Godot 4.7 holds the scroll to its cap but reports the
+	# cap plus those margins as its minimum height, and the dialog stacks its
+	# buttons after the larger figure -- below its own frame, and off screen.
+	_overlay_scroll.add_theme_stylebox_override("panel", StyleBoxEmpty.new())
 
 	UpdateService.state_changed.connect(_on_update_state_changed)
 	UpdateService.progress_changed.connect(_on_progress_changed)
@@ -81,6 +132,7 @@ func _ready() -> void:
 	# survive a project that has the updater turned off.
 	_update_bar.visible = _config.show_update_bar and _config.updates_enabled()
 	_refresh_update_ui()
+	_screen_built = true
 
 	if _first_button != null:
 		_first_button.grab_focus()
@@ -92,15 +144,138 @@ func _ready() -> void:
 		await UpdateService.check_for_updates()
 
 
+## Follows a language change made while the launcher is showing. The menu and
+## the title translate themselves; the nodes refilled here are filled with tr()
+## instead -- so a placeholder can be filled after translating -- and nothing
+## else would ever refill them.
+func _notification(what: int) -> void:
+	if what == NOTIFICATION_PREDELETE:
+		# A hooks script that extends Object is neither reference-counted nor in
+		# the tree, so nothing else would ever free it.
+		if is_instance_valid(_hooks) and not (_hooks is RefCounted) and not (_hooks is Node):
+			_hooks.free()
+		return
+	if what != NOTIFICATION_TRANSLATION_CHANGED or not _screen_built:
+		return
+	_apply_identity()
+	_refresh_update_ui()
+	if _overlay.visible and _overlay_resay.is_valid():
+		_resaying = true
+		_overlay_resay.call()
+		_resaying = false
+
+
+# ---------------------------------------------------------------------------
+# The game's own code, and its languages
+# ---------------------------------------------------------------------------
+
+## Runs _launcher_opening(launcher) from [constant HOOKS_PATH], if the game has
+## that file, before anything is built.
+##
+## Its own file rather than a method on the config. A script that fails to parse
+## cannot be loaded, and as the config's script that would cost the whole config:
+## BuildInfo falls back to defaults with no update_repo, the updater turns off,
+## and players who installed the broken content could never receive its fix.
+## Here a broken file costs only the hooks, and the next content update can
+## repair it.
+##
+## The file ships in content packs like any other game script, and it is this
+## launcher -- the pack's -- that runs it, so it works the same on every binary.
+func _run_opening_hook() -> void:
+	if not ResourceLoader.exists(HOOKS_PATH):
+		return
+	var script := load(HOOKS_PATH) as Script
+	if script == null or not script.can_instantiate():
+		push_warning("[Launcher] %s could not be loaded; carrying on without it." % HOOKS_PATH)
+		return
+	# Godot 4.7 can crash a debug build outright on new() when _init() needs
+	# arguments, rather than reporting it, so it is checked rather than tried.
+	for method: Dictionary in script.get_script_method_list():
+		if method.name == "_init" and method.args.size() > method.default_args.size():
+			push_warning("[Launcher] %s could not be instantiated: its _init() needs arguments; carrying on without it." % HOOKS_PATH)
+			return
+	_hooks = script.new()
+	if _hooks == null:
+		push_warning("[Launcher] %s could not be instantiated; carrying on without it." % HOOKS_PATH)
+		return
+	if _hooks is Node:
+		# Freed with the launcher, instead of leaking once the scene changes.
+		add_child(_hooks)
+	if _hooks.has_method("_launcher_opening"):
+		_hooks.call("_launcher_opening", self)
+
+
+## Registers a game's translation catalogs -- .po, .mo or imported .translation
+## files, or folders holding them directly -- as res:// has them now, a mounted
+## content pack included. Call it from _launcher_opening() in [constant HOOKS_PATH].
+##
+## Project Settings → Localization cannot do this. The engine reads that list
+## from the installed binary before any pack is mounted, so a corrected string
+## or a new language shipped as a content update never takes effect there. A
+## catalog already registered that way at the same path is replaced by the copy
+## read here. One left at another path is not, and which of the two Godot then
+## uses depends on the order they were registered in and on how closely each
+## matches the locale, so the stale one can win.
+func register_translations(paths: PackedStringArray) -> void:
+	for path in _catalog_files(paths):
+		if _registered_catalogs.has(path):
+			continue
+		# CACHE_MODE_IGNORE because a catalog the engine registered at startup is
+		# cached under this same path, and a plain load() hands back that copy --
+		# the binary's -- instead of reading the pack's.
+		var catalog := ResourceLoader.load(path, "", ResourceLoader.CACHE_MODE_IGNORE) as Translation
+		if catalog == null:
+			push_warning("[Launcher] %s is not a translation catalog; skipped." % path)
+			continue
+		for registered in TranslationServer.get_translations():
+			if registered.resource_path == path:
+				TranslationServer.remove_translation(registered)
+		TranslationServer.add_translation(catalog)
+		_registered_catalogs[path] = true
+
+
+## [param paths] with each folder replaced by the catalogs directly inside it.
+static func _catalog_files(paths: PackedStringArray) -> PackedStringArray:
+	var files := PackedStringArray()
+	for path in paths:
+		if not DirAccess.dir_exists_absolute(path):
+			files.append(path)
+			continue
+		# ResourceLoader rather than DirAccess, which in an exported game lists
+		# the .remap and .import stand-ins instead of the files behind them.
+		var entries := ResourceLoader.list_directory(path)
+		entries.sort()
+		var found := 0
+		for entry in entries:
+			if entry.get_extension().to_lower() in CATALOG_EXTENSIONS:
+				files.append(path.path_join(entry))
+				found += 1
+		if found == 0:
+			push_warning("[Launcher] %s holds no translation catalogs (subfolders are not searched)." % path)
+	return files
+
+
 # ---------------------------------------------------------------------------
 # Appearance
 # ---------------------------------------------------------------------------
 
 func _apply_identity() -> void:
 	_title.text = _config.game_title
-	var tagline := _config.resolved_tagline(BuildInfo.version_name, BuildInfo.content_version)
+	var tagline := _resolved_tagline()
 	_tagline.text = tagline
 	_tagline.visible = not tagline.is_empty()
+
+
+## The tagline translated as written, then its placeholders filled -- the same
+## result as LauncherConfig.resolved_tagline() on a current binary. Done here
+## because that method runs at the installed binary's version, and one built
+## before launcher 2.3.0 fills the placeholders without translating at all.
+func _resolved_tagline() -> String:
+	if _config.tagline.is_empty():
+		return ""
+	return tr(_config.tagline) \
+		.replace("{build}", str(BuildInfo.content_version)) \
+		.replace("{version}", BuildInfo.version_name)
 
 
 func _apply_background() -> void:
@@ -223,15 +398,24 @@ func _text_align_for(h_align: int) -> HorizontalAlignment:
 # ---------------------------------------------------------------------------
 
 func _on_play_pressed() -> void:
+	# Asked before emitting: a one-shot connection -- which is what
+	# `await launcher.play_requested` makes -- is dropped during the emission.
+	var answered := not play_requested.get_connections().is_empty()
 	play_requested.emit()
 	if _config.play_scene.is_empty():
-		_show_overlay(
-			"Not wired up yet",
-			"This is where the game starts. Set play_scene in the launcher config, "
-			+ "or connect the launcher's play_requested signal to take over.",
-			"OK", Callable(self, "_hide_overlay"), "")
+		# A game listening to play_requested has taken Play over; only Play that
+		# nothing answers explains itself.
+		if not answered:
+			_explain_play()
 		return
 	get_tree().change_scene_to_file(_config.play_scene)
+
+
+func _explain_play() -> void:
+	_show_overlay(
+		tr("Not wired up yet"),
+		tr("This is where the game starts. Set play_scene in the launcher config, or connect the launcher's play_requested signal to take over."),
+		tr("OK"), Callable(self, "_hide_overlay"), "", _explain_play)
 
 
 func _on_quit_pressed() -> void:
@@ -263,13 +447,16 @@ func _on_update_state_changed(_new_state: int) -> void:
 		UpdateService.State.RESTART_REQUIRED:
 			_prompt_restart()
 		UpdateService.State.INSTALL_HANDOFF:
-			_show_overlay(
-				"Installing",
-				"Confirm the update in the system installer. The game will reopen "
-				+ "on the new version once the install finishes.",
-				"OK", Callable(self, "_hide_overlay"), "")
+			_explain_install_handoff()
 		_:
 			pass
+
+
+func _explain_install_handoff() -> void:
+	_show_overlay(
+		tr("Installing"),
+		tr("Confirm the update in the system installer. The game will reopen on the new version once the install finishes."),
+		tr("OK"), Callable(self, "_hide_overlay"), "", _explain_install_handoff)
 
 
 func _refresh_update_ui() -> void:
@@ -290,55 +477,65 @@ func _refresh_update_ui() -> void:
 	# dialog then skips for having no changes, which is exactly what a release of
 	# nothing but chore commits produces.
 	_notes_button.visible = UpdateService.has_notes()
+	# Set from code, not left to the scene's own literal, so that every string the
+	# launcher owns reaches a translator through a tr() call -- which is what lets
+	# ci/make_pot.py find them all by reading the scripts alone, with no list of
+	# scene properties to keep in step.
+	_notes_button.text = tr("What's new")
 
 	match UpdateService.state:
 		UpdateService.State.BINARY_READY:
-			_update_button.text = "Update app"
+			_update_button.text = tr("Update app")
 		UpdateService.State.CONTENT_READY:
-			_update_button.text = "Download update"
+			_update_button.text = tr("Download update")
 		UpdateService.State.NEEDS_PERMISSION:
-			_update_button.text = "Install"
+			_update_button.text = tr("Install")
 		UpdateService.State.RESTART_REQUIRED:
-			_update_button.text = "Restart"
+			_update_button.text = tr("Restart")
 		UpdateService.State.CHECKING:
-			_update_button.text = "Checking…"
+			_update_button.text = tr("Checking…")
 		UpdateService.State.DOWNLOADING, UpdateService.State.VERIFYING:
-			_update_button.text = "Working…"
+			_update_button.text = tr("Working…")
 		_:
-			_update_button.text = "Check for updates"
+			_update_button.text = tr("Check for updates")
 
 
 func _on_progress_changed(downloaded: int, total: int) -> void:
 	if total > 0:
 		_progress.max_value = total
 		_progress.value = downloaded
-		_status_label.text = "Downloading… %s of %s" % [
+		_status_label.text = tr("Downloading… %s of %s") % [
 			_format_bytes(downloaded), _format_bytes(total)]
 	else:
 		# No Content-Length: show motion without a bogus percentage.
 		_progress.max_value = 1
 		_progress.value = 0
-		_status_label.text = "Downloading… %s" % _format_bytes(downloaded)
+		_status_label.text = tr("Downloading… %s") % _format_bytes(downloaded)
 
 
 ## Shows what the update actually contains before spending a download on it.
 func _prompt_update() -> void:
-	var notes := UpdateService.pending_notes_text()
-	if notes.is_empty():
+	if UpdateService.pending_notes_text().is_empty():
 		# Nothing worth reading; don't make anyone dismiss an empty dialog.
 		await UpdateService.apply_pending_update()
 		return
+	_say_update_prompt()
 
+
+## Apart from _prompt_update() so that saying it again in another language can
+## never take the branch above, which starts the download.
+func _say_update_prompt() -> void:
+	var notes := UpdateService.pending_notes_text()
 	var is_binary := UpdateService.state == UpdateService.State.BINARY_READY
 	var size := _format_bytes(int(UpdateService.pending_artifact.get("size", 0)))
-	var summary := ("New app build · %s" if is_binary else "Content update · %s") % size
+	var summary := (tr("New app build · %s") if is_binary else tr("Content update · %s")) % size
 
 	_show_overlay(
-		"What's new in v%s" % UpdateService.manifest.get("version_name", "?"),
+		tr("What's new in v%s") % UpdateService.manifest.get("version_name", "?"),
 		"%s\n\n%s" % [summary, notes],
-		"Update now" if is_binary else "Download",
+		tr("Update now") if is_binary else tr("Download"),
 		Callable(self, "_do_apply"),
-		"Later")
+		tr("Later"), _say_update_prompt)
 
 
 func _do_apply() -> void:
@@ -346,19 +543,26 @@ func _do_apply() -> void:
 
 
 func _prompt_restart() -> void:
-	var body := "The update is downloaded. The game needs to restart to finish applying it."
+	var body := tr("The update is downloaded. The game needs to restart to finish applying it.")
 	if OS.has_feature("editor"):
-		body += "\n\nRunning from the editor: stop and play the project again."
-	_show_overlay("Update ready", body, "Restart now", Callable(self, "_do_restart"), "Later")
+		# The separator stays out of the msgid: a translator should not have to
+		# carry leading newlines through their file to keep the layout.
+		body += "\n\n" + tr("Running from the editor: stop and play the project again.")
+	_show_overlay(tr("Update ready"), body, tr("Restart now"), Callable(self, "_do_restart"),
+		tr("Later"), _prompt_restart)
 
 
 func _do_restart() -> void:
 	if UpdateService.restart_app():
 		return
+	_explain_manual_restart()
+
+
+func _explain_manual_restart() -> void:
 	_show_overlay(
-		"Restart needed",
-		"Close the game and open it again to finish the update.",
-		"OK", Callable(self, "_hide_overlay"), "")
+		tr("Restart needed"),
+		tr("Close the game and open it again to finish the update."),
+		tr("OK"), Callable(self, "_hide_overlay"), "", _explain_manual_restart)
 
 
 # ---------------------------------------------------------------------------
@@ -370,44 +574,75 @@ func _show_history() -> void:
 	var history := UpdateService.history_text()
 	if history.is_empty():
 		_show_overlay(
-			"Patch notes",
-			"Nothing recorded yet. Notes arrive with the first successful update "
-			+ "check — tap \"Check for updates\" once you're online.",
-			"Close", Callable(self, "_hide_overlay"), "")
+			tr("Patch notes"),
+			tr("Nothing recorded yet. Notes arrive with the first successful update check — tap \"Check for updates\" once you're online."),
+			tr("Close"), Callable(self, "_hide_overlay"), "", _show_history)
 		return
-	_show_overlay("Patch notes", history, "Close",
-		Callable(self, "_hide_overlay"), "", HISTORY_VIEW_HEIGHT)
+	_show_overlay(tr("Patch notes"), history, tr("Close"),
+		Callable(self, "_hide_overlay"), "", _show_history, HISTORY_VIEW_HEIGHT)
 
 
-## [param scroll_height] of 0 lets the dialog size itself to the text; anything
-## larger caps it there and scrolls, which is what the long history needs.
+## [param resay] shows this same overlay again from scratch -- normally the
+## function calling this one. A language change re-runs it, since the strings
+## passed here were translated once, on the way in.
+##
+## The text is capped at the height the screen leaves for it, and at
+## [param scroll_height] too when that is above 0 -- the long history uses it to
+## stay compact. Text under its cap is shown whole; text over it scrolls.
 func _show_overlay(title: String, body: String, primary_text: String,
-		primary_action: Callable, secondary_text: String,
+		primary_action: Callable, secondary_text: String, resay: Callable,
 		scroll_height: float = 0.0) -> void:
+	_overlay_resay = resay
 	_overlay_title.text = title
 	_overlay_body.text = body
-
-	if scroll_height > 0.0:
-		_overlay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_AUTO
-		_overlay_scroll.custom_minimum_size.y = scroll_height
-	else:
-		# Disabled vertical scrolling makes the container report its child's full
-		# height, so short dialogs keep hugging their text.
-		_overlay_scroll.vertical_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
-		_overlay_scroll.custom_minimum_size.y = 0.0
-	_overlay_scroll.scroll_vertical = 0
+	# Saying the same overlay again in another language keeps the reader's place
+	# and focus; only a new overlay starts from the top, on its primary button.
+	if not _resaying:
+		_overlay_scroll.scroll_vertical = 0
 
 	_overlay_primary.text = primary_text
 	_overlay_action = primary_action
 	_overlay_secondary.text = secondary_text
 	_overlay_secondary.visible = not secondary_text.is_empty()
+	_overlay_text_cap = scroll_height
+	_fit_overlay()
 	_overlay.show()
-	_overlay_primary.grab_focus()
+	if not _resaying:
+		_overlay_primary.grab_focus()
+
+
+## Caps the overlay's text at the height the screen has left once the rest of
+## the dialog and OVERLAY_MARGIN above and below it are taken out, so the
+## dialog's buttons always stay on screen. Nothing else could reach them: the
+## overlay takes every tap outside the dialog, and a phone has no Enter key.
+##
+## OverlayScroll is in SCROLL_MODE_MAXIMIZE_FIRST, which grows with its text up
+## to custom_maximum_size and scrolls only past it, so short text still gets a
+## dialog that fits around it. Its scroll hints fade the text out at an edge
+## with more beyond it. Otherwise the cap, which falls between two lines, would
+## make a cut-off list look finished.
+##
+## Runs again whenever the screen changes size: a desktop window resized, or a
+## phone turning in a game that allows both orientations.
+func _fit_overlay() -> void:
+	var rest_of_dialog := _overlay_dialog.get_theme_stylebox("panel").get_minimum_size().y \
+		+ _overlay_title.get_combined_minimum_size().y \
+		+ _overlay_actions.get_combined_minimum_size().y \
+		+ 2 * _overlay_box.get_theme_constant("separation")
+	var room := _overlay.size.y - 2.0 * OVERLAY_MARGIN - rest_of_dialog
+	if _overlay_text_cap > 0.0:
+		room = minf(room, _overlay_text_cap)
+	_overlay_scroll.custom_maximum_size.y = maxf(room, 0.0)
+	# Godot 4.7 applies a lowered maximum at once but not a raised one: until
+	# something recalculates the scroll's minimum size, it keeps its old height.
+	# A window made taller would otherwise leave the text in its old, smaller box.
+	_overlay_scroll.update_minimum_size()
 
 
 func _hide_overlay() -> void:
 	_overlay.hide()
 	_overlay_action = Callable()
+	_overlay_resay = Callable()
 	if _first_button != null:
 		_first_button.grab_focus()
 
@@ -421,7 +656,7 @@ func _on_overlay_primary() -> void:
 
 func _format_bytes(count: int) -> String:
 	if count < 1024:
-		return "%d B" % count
+		return tr("%d B") % count
 	if count < 1024 * 1024:
-		return "%.1f KB" % (count / 1024.0)
-	return "%.1f MB" % (count / (1024.0 * 1024.0))
+		return tr("%.1f KB") % (count / 1024.0)
+	return tr("%.1f MB") % (count / (1024.0 * 1024.0))

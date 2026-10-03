@@ -23,7 +23,7 @@ extends RefCounted
 ## phone host would speak for its own cell, it speaks for the *other guest*: a
 ## guest's snapshot carries the other one as the person in slot 68, and its
 ## PERSON, its DIED and its shouts are passed on as the host's own would be.
-## So a PROTOCOL 4 guest joins either kind of host with the same code, and
+## So a guest joins either kind of host with the same code, and
 ## meets its friend in the place it always has.
 ##
 ## **Nothing here decides what anything looks like or says.** Every moment the
@@ -74,8 +74,10 @@ const STALL_GAP := 0.25
 ## How many referees tools can still read after their guests have gone.
 const REFEREES_KEPT := 8
 
-## Guest: the host put this cell at [param at], facing [param heading].
-signal arrived(at: Vector2, heading: float)
+## Guest: the host put this cell at [param at], facing [param heading], in a
+## drop whose rim is [param rim_center] and [param rim_radius] -- radius 0 for
+## a host in today's water.
+signal arrived(at: Vector2, heading: float, rim_center: Vector2, rim_radius: float)
 ## Host: a guest's cell has just been put in this water.
 signal friend_entered
 ## Either seat: the other player's cell died. [param cause] and [param by] are
@@ -118,9 +120,13 @@ class Guest:
 	var id := 0
 	## Its body's slot in the host's field.
 	var slot := FoodField.PERSON_SLOT
-	## Body version last sent as GENOME, by slot: `serial * 1000 + meals`, the
-	## mirror's own book key.
+	## The meals each body was at when its GENOME last went, by the body's id on
+	## the wire: the mirror's own book key is the two.
 	var sent := {}
+	## **Every floc this guest has been told of and not yet told has gone**, by
+	## id (ocean.md §10.4): SETTLE once as it comes into reach, CLEAR once as it
+	## leaves it.
+	var told := {}
 	## When the next snapshot is due if no state frame goes first, and how many
 	## state frames had gone when the last one went.
 	var pond_due := 0.0
@@ -164,6 +170,9 @@ var arrival_at := Vector2.ZERO
 var pond_bytes_max := 0
 var ponds_sent := 0
 var genomes_sent := 0
+## **For tools**: how many flocs went out as SETTLE and as CLEAR.
+var flocs_told := 0
+var flocs_cleared := 0
 ## Where the other player's body last was, and whether there has been one: a
 ## phone host's guest, for its own return from the black.
 var _friend_at := Vector2.ZERO
@@ -347,7 +356,8 @@ func _meet_guests() -> void:
 			FoodField.GUESTS_MAX])
 		if _guests.is_empty():
 			_food.empty_water()
-			noted.emit("nobody is left, so the water goes with them")
+			noted.emit("nobody is left -- the room lives on" if _food.in_drop()
+				else "nobody is left, so the water goes with them")
 	for id: int in ids:
 		if _guest_by_id(id) != null:
 			continue
@@ -420,8 +430,12 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			_charge(g)
 			if take.is_empty() or _gone(g):
 				return
+			# **She carries her DNA and the list her cell ran** (protocol 6,
+			# automation.md §10.3), as this host's own sister does -- but not
+			# her record: ids are this drop's, so she is the founder of a line
+			# of her own here.
 			var slot := _food.place_sister(take[0], float(said[1]), float(take[1]),
-				said[3])
+				said[3], said[4], PackedInt32Array(), sister_list(said[5]))
 			if slot >= 0:
 				sister_placed.emit(slot)
 		Wire.EVENT_DIED:
@@ -439,7 +453,11 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			if take.is_empty():
 				return
 			var at: Vector2 = _person_body(g.slot).pos
+			var r: float = _person_body(g.slot).radius
 			_food.remove_person(g.slot)
+			# **It starved, and in the drop it leaves its remains** where it died,
+			# as every body there does (ocean.md §7.4). Nothing in today's water.
+			_food.leave_remains(at, r)
 			g.awaiting = false
 			friend_died.emit(int(take[0]), int(take[1]), at, false)
 			if dedicated:
@@ -481,6 +499,11 @@ func _host_enter(g: Guest, radius: float) -> void:
 		_food.remove_person(g.slot)
 	var from := _arrival_origin(g)
 	var at := arrival_point(from, radius)
+	# **A room with nobody in it takes a guest at a quiet place** (ocean.md
+	# §10.3, §8.1): there is no friend to arrive beside.
+	if _quiet_arrival(g):
+		from = _food.quiet_place()
+		at = from
 	arrival_from = from
 	arrival_at = at
 	_food.place_person(at, 0.0, radius, Vector2.ZERO, 0.0, g.slot)
@@ -495,14 +518,17 @@ func _host_enter(g: Guest, radius: float) -> void:
 	g.basis = track[track.size() - 1] if not track.is_empty() else []
 	g.awaiting = true
 	g.awaiting_since = _now()
-	# A new mirror knows none of this water yet: every genome goes again.
+	# A new mirror knows none of this water yet: every genome and every floc
+	# goes again.
 	g.sent.clear()
+	g.told.clear()
 	g.last_at = at
 	g.known = true
 	if not dedicated:
 		_friend_at = at
 		_friend_known = true
-	_send(g, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 0.0))
+	var rim: Array = _food.rim()
+	_send(g, Wire.EVENT_ARRIVE, Wire.arrive_payload(at, 0.0, rim[0], float(rim[1])))
 	if dedicated:
 		# The friend's PERSON, as a phone host sends its own: what the other
 		# guest wears, if it has ever said.
@@ -514,6 +540,16 @@ func _host_enter(g: Guest, radius: float) -> void:
 	else:
 		_send_person(false)
 	friend_entered.emit()
+
+
+## **A guest arriving at a dedicated host's room with nobody else in it** --
+## no other guest with a body -- and the room a drop: it arrives at a quiet
+## place ([method _host_enter]).
+func _quiet_arrival(g: Guest) -> bool:
+	if not dedicated or not _food.in_drop():
+		return false
+	var other := _other(g)
+	return other == null or _food.person(other.slot) == null
 
 
 ## **Where an arrival is measured from.** A phone host: its own cell, alive or
@@ -546,16 +582,23 @@ func arrival_point(near: Vector2, radius: float) -> Vector2:
 	# spot either side of it is tried before anything steeper.
 	for k: int in [1, 5, 7, 11, 2, 4, 8, 10, 3, 9]:
 		angles.append(step * float(k))
+	# **Inside the drop's rim** (ocean.md §10.2), a spot past it passed over as
+	# one on a body is.
+	var rim: RefCounted = _food.basin()
 	for angle: float in angles:
 		var at := near + Vector2(cos(angle), sin(angle)) * ARRIVAL
+		if rim != null and not rim.call(&"inside", at, radius + ARRIVAL_CLEAR):
+			continue
 		if _clear(at, radius):
 			return at
-	return near + Vector2(ARRIVAL, 0.0)
+	var fallback := near + Vector2(ARRIVAL, 0.0)
+	return rim.call(&"contain", fallback, radius) if rim != null else fallback
 
 
 func _clear(at: Vector2, radius: float) -> bool:
 	for b: Object in _food.bodies():
-		if not b.seeded:
+		# A floc is not solid (ocean.md §7.5): a cell swims over one.
+		if not b.seeded or b.inert:
 			continue
 		if at.distance_to(b.pos) < radius + float(b.radius) + ARRIVAL_CLEAR:
 			return false
@@ -670,28 +713,65 @@ func _flush_guest(g: Guest) -> void:
 	_send_genomes(g, bodies)
 	var pb: Object = _person_body(g.slot)
 	var wound := float(pb.wound) if pb != null else 0.0
-	var size: int = _net.send_pond(wound, bodies) if g.id == 0 \
-		else _net.send_pond_to(g.id, wound, bodies)
+	# **And what it carries**, as this host counts it (docs/design/dna-slots.md
+	# §14.1): the guest's cell wears its own loads between snapshots, and obeys
+	# these at each one.
+	var loads: PackedFloat64Array = pb.loads if pb != null else PackedFloat64Array()
+	var size: int = _net.send_pond(wound, bodies, loads) if g.id == 0 \
+		else _net.send_pond_to(g.id, wound, bodies, loads)
 	pond_bytes_max = maxi(pond_bytes_max, size)
 	ponds_sent += 1
+	if pb != null:
+		_send_flocs(g, pb.pos)
 
 
-## Every body in the send set whose version the guest has not been sent.
+## Every body in the send set whose version the guest has not been sent: its id
+## and meals, and the genome the host holds for it now.
 func _send_genomes(g: Guest, bodies: Array) -> void:
 	var cells := _food.bodies()
+	var ids := {}
 	for entry: Array in bodies:
-		var slot := int(entry[FoodField.Entry.SLOT])
-		if slot >= FoodField.PERSON_SLOT or slot >= cells.size():
+		if entry.size() <= FoodField.ENTRY_SLOT:
 			continue
-		var serial := int(entry[FoodField.Entry.SERIAL])
+		var slot := int(entry[FoodField.ENTRY_SLOT])
+		if slot < 0 or slot >= cells.size():
+			continue
+		var id := int(entry[FoodField.Entry.ID])
 		var meals := int(entry[FoodField.Entry.MEALS])
-		var version := (serial & 0xFFFF) * 1000 + meals
-		if int(g.sent.get(slot, -1)) == version:
+		ids[id] = true
+		if int(g.sent.get(id, -1)) == meals:
 			continue
-		g.sent[slot] = version
+		g.sent[id] = meals
 		genomes_sent += 1
-		_send(g, Wire.EVENT_GENOME, Wire.genome_payload(slot, serial, meals,
-			cells[slot].genome))
+		_send(g, Wire.EVENT_GENOME, Wire.genome_payload(id, meals, cells[slot].genome))
+	# A body out of the send set is forgotten here once the record has grown
+	# past four sets' worth: sent again, it costs one GENOME.
+	if g.sent.size() > 4 * Wire.SEND_MAX:
+		for id: int in g.sent.keys():
+			if not ids.has(id):
+				g.sent.erase(id)
+
+
+## **The flocs in this guest's reach, told once each way** (ocean.md §10.4):
+## SETTLE for one that has come into reach round [param you] -- or landed in it
+## -- and CLEAR for one told before that has gone: eaten, dissolved, or left
+## behind. A floc never moves, so nothing else about one is ever said again.
+func _send_flocs(g: Guest, you: Vector2) -> void:
+	var now := {}
+	for floc: Array in _food.flocs_in_reach(you):
+		var id := int(floc[0])
+		now[id] = true
+		if g.told.has(id):
+			continue
+		g.told[id] = true
+		flocs_told += 1
+		_send(g, Wire.EVENT_SETTLE, Wire.settle_payload(id, floc[1], float(floc[2]),
+			float(floc[3]), float(floc[4])))
+	for id: int in g.told.keys():
+		if not now.has(id):
+			g.told.erase(id)
+			flocs_cleared += 1
+			_send(g, Wire.EVENT_CLEAR, Wire.clear_payload(id))
 
 
 ## **What the field did to a guest, told to that guest.** Every contact but a
@@ -708,7 +788,8 @@ func _on_person_touched(what: int, at: Vector2, level: float, by: int,
 		return
 	if what == FoodField.Contact.ATE and g.referee != null:
 		# **The meal the guest will grow by**, counted as it is sent: the
-		# guest's radius can only lag behind what the host expects of it.
+		# guest's radius can only lag behind what the host expects of it. A
+		# GRAZED is food and no growth (ocean.md §10.5): never a meal here.
 		g.referee.ate()
 	_send(g, Wire.EVENT_CONTACT, Wire.contact_payload(what, at, level, by, gene))
 
@@ -754,6 +835,9 @@ func _new_guest() -> Guest:
 
 func _new_referee() -> Referee:
 	var referee := Referee.new(_now())
+	# **The drop's rim, which it holds a guest's body inside** (ocean.md §10.5).
+	var rim: Array = _food.rim()
+	referee.set_rim(rim[0], float(rim[1]))
 	referees_made.append(referee)
 	while referees_made.size() > REFEREES_KEPT:
 		referees_made.remove_at(0)
@@ -946,7 +1030,7 @@ func apply_newest() -> bool:
 	var said := Wire.take_pond(frame)
 	if said.is_empty():
 		return false
-	_food.apply_pond(float(said[1]), said[2])
+	_food.apply_pond(float(said[1]), said[2], said[3])
 	return true
 
 
@@ -957,11 +1041,27 @@ func _guest_hears(frame: PackedByteArray) -> void:
 			if said.is_empty() or not entering:
 				return
 			entering = false
-			arrived.emit(said[0], float(said[1]))
+			# **The host tells this cell's flocs afresh from its ARRIVE on**
+			# (ocean.md §10.4), so whatever the mirror still holds from before
+			# goes: a floc that went while this cell was in the black is one
+			# the host will never CLEAR.
+			_food.mirror_forget_flocs()
+			arrived.emit(said[0], float(said[1]), said[2], float(said[3]))
 		Wire.EVENT_GENOME:
 			var said := Wire.take_genome(frame)
 			if not said.is_empty():
-				_food.apply_genome(int(said[0]), int(said[1]), int(said[2]), said[3])
+				_food.apply_genome(int(said[0]), int(said[1]), said[2])
+		Wire.EVENT_SETTLE:
+			# **A floc in reach** (ocean.md §10.4): into the mirror, which works
+			# out its settling from here by its own clock.
+			var said := Wire.take_settle(frame)
+			if not said.is_empty() and _food.mirroring():
+				_food.mirror_floc(int(said[0]), said[1], float(said[2]), float(said[3]),
+					float(said[4]))
+		Wire.EVENT_CLEAR:
+			var said := Wire.take_clear(frame)
+			if not said.is_empty() and _food.mirroring():
+				_food.mirror_unfloc(int(said[0]))
 		Wire.EVENT_CONTACT:
 			# **The host is the authority on every contact** (§0.1), so a
 			# contact that reaches a living cell is obeyed -- a KILLED during
@@ -1022,9 +1122,22 @@ func mirror_ended() -> void:
 	entering = false
 
 
-## The guest's declined daughter, for the host to leave in the water.
-func sister(at: Vector2, heading: float, radius: float, tiers: Dictionary) -> void:
-	_net.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at, heading, radius, tiers))
+## **The guest's declined daughter, for the host to leave in the water**: where,
+## facing which way, how big, and what she wears -- and since protocol 6 the DNA
+## she was made of and the list her cell ran, [param lines] a rule a line, none
+## for the founders' (automation.md §10.3).
+func sister(at: Vector2, heading: float, radius: float, tiers: Dictionary,
+		dna: Dictionary = {}, lines: PackedStringArray = PackedStringArray()) -> void:
+	_net.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at, heading, radius, tiers,
+		dna, lines))
+
+
+## **A guest's sister's list, read with this host's own vocabulary**
+## (automation.md §10.3): a name it does not know is a rule that never fires,
+## kept and written back as it came -- in a room's save too -- and no lines are
+## the founders' rules, null.
+static func sister_list(lines: PackedStringArray) -> Variant:
+	return null if lines.is_empty() else FoodField.behaviour_from(lines)
 
 
 # ---------------------------------------------------------------------------

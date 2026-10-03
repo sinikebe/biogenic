@@ -1,8 +1,9 @@
-[gd_scene load_steps=5 format=3]
+[gd_scene load_steps=6 format=3]
 
 [ext_resource type="Script" path="res://game/mode_select.gd" id="1_select"]
 [ext_resource type="Theme" path="res://addons/launcher/theme/launcher_theme.tres" id="2_theme"]
 [ext_resource type="Shader" path="res://addons/launcher/shaders/organic_background.gdshader" id="3_wash"]
+[ext_resource type="PackedScene" path="res://game/menu/corner.tscn" id="4_corner"]
 
 [sub_resource type="ShaderMaterial" id="ShaderMaterial_wash"]
 shader = ExtResource("3_wash")
@@ -129,3 +130,11 @@ theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
 theme_override_font_sizes/font_size = 14
 text = "esc returns to the launcher"
 horizontal_alignment = 1
+
+[node name="Corner" parent="." instance=ExtResource("4_corner")]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2

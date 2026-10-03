@@ -120,9 +120,9 @@ const TURN_PLAIN := 0.15
 
 
 ## **`cell.gd`'s drawn controls, reduced to a steering demand.** The body reads
-## `floating()`, `steer()` and `pushing()` off its `controls` every frame, which
-## is the one way to steer one cell without steering every cell in the process
-## through the global `Input`.
+## `floating()`, `steer()`, `pushing()` and `holding()` off its `controls` every
+## frame, which is the one way to steer one cell without steering every cell in
+## the process through the global `Input`.
 class Stick extends Node:
 	const NONE := 0
 	const DASH := 1
@@ -135,6 +135,10 @@ class Stick extends Node:
 		return demand
 
 	func pushing() -> bool:
+		return false
+
+	## The hold pad (automation-ux.md §6.1): never held here.
+	func holding() -> bool:
 		return false
 
 	func press(_index: int, _at: Vector2) -> int:
@@ -306,23 +310,27 @@ class Keeper extends Node:
 		if sampling:
 			_sample()
 
+	## A mirror holds each body under its id on the wire, in a slot of its own
+	## (protocol 5): so each host body is found in it by that id, and one it
+	## does not hold -- not sent yet, or no longer -- is not a place error.
 	func _sample() -> void:
 		var hosts: Array = host_food.bodies()
 		var mirror: Array = guest_food.bodies()
-		if mirror.size() < hosts.size() or hosts.size() <= FoodField.PERSON_SLOT:
+		var held: Dictionary = guest_food.get(&"_mirror_slots")
+		if hosts.size() <= FoodField.PERSON_SLOT or held.is_empty():
 			return
 		var guest: Vector2 = hosts[FoodField.PERSON_SLOT].pos
-		for i in FoodField.PERSON_SLOT:
+		for i in hosts.size():
 			var h: Object = hosts[i]
-			if not h.seeded:
+			if not h.seeded or h.inert or h.person != null:
 				continue
 			if (h.pos as Vector2).distance_to(guest) - float(h.radius) \
 					> FoodField.SEND_REACH - 50.0:
 				continue
-			var m: Object = mirror[i]
-			if not m.seeded or int(m.serial) != int(h.serial) & 0xFFFF:
+			var m := int(held.get(int(host_food.call(&"_wire_id", h)), -1))
+			if m < 0 or m >= mirror.size():
 				continue
-			errors.append((m.pos as Vector2).distance_to(h.pos))
+			errors.append((mirror[m].pos as Vector2).distance_to(h.pos))
 
 
 var _rng := RandomNumberGenerator.new()
@@ -553,6 +561,10 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	_host_run = (load(RUN) as PackedScene).instantiate()
 	_host_run.set("mode", 0)
 	_host_run.set("scheme", 0)
+	# **Neither run keeps a drop** (ocean.md §9): the game's default is the
+	# player's own file, which a measurement must neither open on nor write.
+	_host_run.set("keep", "")
+	_host_run.set("library_at", "")
 	add_child(_host_run)
 	var until := _now() + 4.0
 	while _now() < until and not bool(_near.peer_pond_open()):
@@ -561,6 +573,8 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	_guest_run = (load(RUN) as PackedScene).instantiate()
 	_guest_run.set("mode", 1)
 	_guest_run.set("scheme", 0)
+	_guest_run.set("keep", "")
+	_guest_run.set("library_at", "")
 	add_child(_guest_run)
 	var guest_pond: Object = _guest_run.get("_pond")
 	until = _now() + 6.0
@@ -853,6 +867,12 @@ func _time_bites(trials: int) -> void:
 		var at := guest + Vector2(sin(bearing), -cos(bearing)) * (float(_me.radius) + 27.0)
 		var face := atan2((guest - at).x, -(guest - at).y)
 		slot = 3 + trial % 20
+		# **In the drop a body comes in by its door** (ocean.md §10.2), with an
+		# id of its own and a place in the drop's grid; in today's water the
+		# slot is simply written.
+		var in_drop := bool(host_food.call(&"in_drop"))
+		if in_drop:
+			host_food.call(&"pose_at", slot, at, 30.0, {&"cytostome": 1, &"flagellum": 1})
 		var b: Object = host_food.bodies()[slot]
 		var until := _now() + 1.0
 		while _now() < until and felt[0] < 0.0:
@@ -877,7 +897,7 @@ func _time_bites(trials: int) -> void:
 					+ " person %s in water %s at %.0f from the chewer, chewer bite %.2f"
 					% [host_food.person() != null, bool(pb.seeded),
 						(pb.pos as Vector2).distance_to(b.pos), float(b.bite)])])
-		host_food.call(&"_retire", slot)
+		_take_out(host_food, slot)
 	host_food.person_touched.disconnect(on_touch)
 	guest_food.bitten.disconnect(on_bitten)
 	_keeper.sampling = true
@@ -892,14 +912,23 @@ func _time_bites(trials: int) -> void:
 ## the host's water -- the only water there is.
 func _clear_round(points: Array, reach: float) -> void:
 	var bodies: Array = _keeper.host_food.bodies()
-	for i in FoodField.PERSON_SLOT:
+	for i in bodies.size():
 		var b: Object = bodies[i]
-		if not b.seeded:
+		if not b.seeded or b.person != null:
 			continue
 		for point: Vector2 in points:
 			if (b.pos as Vector2).distance_to(point) < reach + float(b.radius):
-				_keeper.host_food.call(&"_retire", i)
+				_take_out(_keeper.host_food, i)
 				break
+
+
+## Body [param i] out of [param food]'s water: taken out of the drop, which
+## keeps its free slots and its grid, or retired from today's water.
+func _take_out(food: Node, i: int) -> void:
+	if bool(food.call(&"in_drop")):
+		food.call(&"take_out", i)
+	else:
+		food.call(&"_retire", i)
 
 
 # ---------------------------------------------------------------------------

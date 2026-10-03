@@ -1533,6 +1533,10 @@ works at a glance and under any colour vision.
    starts as the basic cell — three organs, all tier 1. Death is a clean restart
    and the arc is one session. Lineage is a real design and it is not this one.
    Previously open as `food-and-predators.md` §9.2.
+   **Changed 2026-09-30 by the owner's row 17** (`ocean.md` §17.1), built in
+   pack 1b-1: a run can span several sittings — closing the app is a pause, and
+   the same cell is there when you come back. A death is still the only clean
+   restart.
 5. ~~A dedicated gesture for the genome~~ (two-finger tap / `G`) instead of
    going through pause. **DECIDED: pause only.** It already works on both targets
    and costs nothing; a dedicated gesture is one more thing to teach and one more

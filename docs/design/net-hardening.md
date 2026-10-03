@@ -73,7 +73,10 @@ What changed, in `net_session.gd`:
 `_admit_frame(id, frame) -> bool` is the first statement of `_on_peer_packet`. The first failed step ends it, and no byte past a size already checked is read.
 
 1. **Known peer.** An id not in `_peers` (refused, cut, or never admitted) is dropped without a log line.
-2. **Size cap by direction**, before any byte after byte 0: a guest's frame may be 272 bytes (`Wire.GUEST_FRAME_MAX`, the longest PERSON), a host's 1,262 (`Wire.HOST_FRAME_MAX`, `POND_MAX`). Above it, a host cuts the guest at once and bars its address, with no strike count; a guest drops the frame. An empty frame is malformed.
+2. **Size cap by direction**, before any byte after byte 0: a guest's frame may be 272 bytes (`Wire.GUEST_OTHER_MAX`, the longest PERSON), a host's 1,262 (`Wire.HOST_FRAME_MAX`, `POND_MAX`). Above it, a host cuts the guest at once and bars its address, with no strike count; a guest drops the frame. An empty frame is malformed.
+   - **One kind may go further, since protocol 6: a greeted guest's SISTER**, to 1,342 bytes (`Wire.SISTER_MAX`, also `Wire.GUEST_FRAME_MAX`, the absolute ceiling `_take_datagram` checks first). Her list rides in it (automation.md §10.3).
+   - To find a SISTER, `Wire.guest_cap` reads byte 0 and the event's type, byte 5, of a frame past 272, which always has them. It reads nothing else.
+   - Before the handshake, anything past 272 is still the oversize cut, whatever its type.
 3. **Before the handshake (host only):** a peer not yet greeted may send one thing, a HELLO of 3 to 64 bytes. Anything else is cut at once. A guest stays lenient: the host's first STATE can overtake its WELCOME, and is simply not read yet, as before.
 4. **Kind and direction.** An event shorter than its six-byte header is malformed. A kind or event type this protocol knows, arriving from the side that never sends it, is malformed: a guest's POND, GENOME, CONTACT, ARRIVE, WELCOME or REFUSE; a host's HELLO, ENTER or SISTER.
 5. **Size** for the kind and type (A.3). Outside it, malformed.
@@ -102,9 +105,9 @@ Sizes are the frame as `_on_peer_packet` sees it; ENet carries one more byte, th
 | EVENT GENOME 0x05 | host→guest | 11-155 | 6 + 4 + tiers |
 | EVENT CONTACT 0x06 | host→guest | 20-37 | `CONTACT_SIZE` 20; ATE adds 1 + 0-16 bytes, KILLED adds 1 |
 | EVENT DIED 0x07 | both | exactly 16 | `DIED_SIZE` |
-| EVENT SISTER 0x08 | guest→host | 20-164 | 6 + 13 + tiers |
+| EVENT SISTER 0x08 | guest→host | 22-1,342 | Since protocol 6 (automation.md §10.3): 6 + 13 + the tiers she wears + her DNA in the same format (each at most `TIERS_MAX`, 145) + a count of rules to `MOST_RULES` (8) + each line as 1 + at most `RULE_BYTES_MAX` (128) bytes of `RULE_BYTES`. A real one is under a kilobyte: today's longest line is 87 bytes. The only guest frame allowed past 272 (A.2, step 2). Before protocol 6: 20-164. |
 | POND 0x06 | host→guest | 8-1,262 | `POND_MAX` = 8 + 68 × 18 + 30 |
-| unknown kind or type | either | within the direction cap | dropped (A.2, step 7) |
+| unknown kind or type | either | within the direction cap (a guest's: 272) | dropped (A.2, step 7) |
 
 ### A.4 Budgets, strikes and cuts
 
@@ -667,10 +670,10 @@ All of this was read in 4.7-stable and measured in this container. Where the bui
 
 ```
 [server] internet: nothing listens for the internet: there are no invites. To let a friend in from outside, set --reach, then --invite=<name> (docs/server.md).
-[server] internet: listening on port 45772/udp for 2 invites (kit, sam), certificate 46:6C:97:79:19:7D:09:E3. Friends call 203.0.113.7:45772: forward that port, UDP, to this machine's 45772/udp -- the one port to forward.
+[server] internet: listening on port 45772/udp for 2 invites (kit, sam), certificate 46:6C:97:79:19:7D:09:E3. Friends call 203.0.113.7:45772, which must reach this machine's 45772/udp: the [upnp] lines say whether the router forwards it, and if not, forward it by hand -- the one port to forward (docs/server.md §9.3).
 ```
 
-The LAN's line still ends "LAN only: do not forward this port."; the five-minute line ends `-- internet: 2 invites` or `-- internet: off`.
+The LAN's line still ends "LAN only: do not forward this port."; the five-minute line ends `-- internet: 2 invites` or `-- internet: off`, and since the UPnP forward (C.11) `-- upnp: forwarded`, `not forwarded` or `off`.
 
 ### C.7 The invite, and the call
 
@@ -822,6 +825,8 @@ No datagram in any run was over 1,372 bytes of UDP payload (1,400 on the wire): 
 - **An invite is a bearer token.** Whoever holds the line gets in as that friend until it is revoked: there is no binding to a device. A leaked line is revoked, and the friend gets a new one.
 - **No client certificates**, as planned: DTLS proves the server, and the client proves a secret inside it.
 - **No NAT traversal.** The owner forwards one UDP port; there is no UPnP, no relay and no hole-punching. A LAN phone with an invite reaches the public address only through a router that loops it back; at home the four taps are the way in.
+
+  > **UPnP since 2026-09-30.** The owner: *"The server should be always exposed imo."* The dedicated server now asks the home router to forward UDP 45772 to it by UPnP IGD -- Godot's own miniupnpc, every call on a worker thread (`game/net/port_forward.gd`) -- from its first READY until it stops, whatever the invites, for an hour at a time and renewed at half; a clean stop takes it off, and a crash leaves it to its lease. `--no-upnp` turns it off, remembered as `--reach` is (docs/server.md §9.3). **What listens behind the forward is unchanged**: nothing, until there is an invite, and a caller proves one before a frame of play (C.5). 45771 is never forwarded: the forward refuses it where each call is made (net_probe `upnp` U6). A forward already on the router is never taken over or removed, and at a stop the server's own is asked for again before it is taken off, so a router that gave the port away since keeps the other machine's. **The search's own port is pinned too**: it listens for the routers' answers on a port drawn from 49152-65535, never 45771 or 45772 (U14). Left to the system it could be any ephemeral port, 45772 among them, and miniupnpc takes whatever datagram reaches it for an answer and fetches the description it names -- so a search port the forward reached would let the internet steer that fetch (found in review). `--reach` stays the owner's to set -- *"Leave always set manually for now"* -- and the server only prints the router's public address as a hint. A router behind another router, or behind carrier-grade NAT, is named as such and asked for nothing, since no forward on it could reach the house. Still no relay and no hole-punching, and nothing over IPv6, which needs a firewall rule on the router rather than a forward.
 - **Handshakes from real addresses still cost the server.** Cookies stop spoofed ones; a real address can complete DTLS again and again, each costing an RSA-2048 signature on the server's main thread -- 2.1 ms median here, 4.4 ms at worst over fifty, a frame is 16.7 ms -- and a caller that completes DTLS and ENet and never proves holds a slot for `HELLO_GRACE` at most -- 1.5 s if a newcomer needs it -- and is then barred however it goes (C.5, E.1), so one address can do that once, then not for a minute. The door refuses a storm only after each handshake is paid for. The firewall rule in docs/server.md §9.6, ten new calls a minute from each address, is the lever below GDScript.
 - **ENet's 32 MiB per peer** (A.9) is unchanged, and applies to a guest that proved an invite as to any other.
 - **The engine's error lines** cannot be limited from GDScript: journald's rate limit (docs/server.md §9.7) is the lever.
@@ -911,7 +916,7 @@ sudo unshare --net -- bash -c 'ip link set lo up &&
 
 **A replay is exact** -- but for an invite paste holding a surrogate on its own (#106), which the replay's UTF-8 cannot carry: rerun that one by its seed. `--replay="<section> <case>"` runs one case:
 
-- **wire**: a frame in hex.
+- **wire**: a frame in hex. Since protocol 6, a saved event may say what the reader must do with it, as `<g|h> takes <hex>` or `<g|h> refuses <hex>`. A saved refusal then fails the day the reader takes it, as an invite's does.
 - **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore` and, since #105, `L` for the LAN listener closing by itself. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
 - **guest**: its frames, `from:hex`.
 - **invite**: a paste in base64 -- since #106 after the word for what it must read as, where that is the point: `ok`, `none`, `damaged` or `newer`.
@@ -1266,4 +1271,5 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
 - **Part H (built):** `game/net/invite.gd` (`address_ok`, `_numeric`, `_literal_problem`, `_v4_problem`, `_unread`, `why_not`, `_squeeze`, `_base64_whole`, `_der_whole`, `CERTIFICATES_MAX`), `game/server/invite_book.gd` (`reach_refused`, `reach_said`, `_stored_text`, `_stored_reach`, `set_reach`, `mint`, `listing`), `game/server/server.gd` (its status line), F7-F9 in `tools/net_probe.gd`, the `invite` section of `tools/net_fuzz.gd` and its saved cases in `tools/net_fuzz_corpus.txt`, `docs/server.md` §9.2, `docs/design/invites-ux.md` §6.2, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part G (built):** `game/net/net_session.gd` (`_open_lan`, `_pump_one`, `_lan_closed_by_itself`, `_count_arrivals`), `tools/net_drop.gd` and `tools/net_drop.tscn` (new, and excluded from export with the rest of `tools/`), H1-H4 in `tools/net_probe.gd`, the `L` step in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md` §7, the "Take the network from under a host" step in `.github/workflows/ci.yml` and the comment on its LAN step, and this document.
 - **Part E (built):** `game/net/net_session.gd` (`_admit`, `_evict`, `_left_unproved`, `_bar`), `game/net/lan.gd` (`wider_key`), `tools/net_probe.gd` (R1-R4), `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md`, the comments on `.github/workflows/ci.yml`'s two network steps, and this document.
+- **Pack 4's SISTER (protocol 6, built; automation.md §10.3):** `game/net/wire.gd` (`PROTOCOL`, `MOST_RULES`, `RULE_BYTES_MAX`, `RULE_BYTES`, `SISTER_MIN`/`MAX`, `GUEST_OTHER_MAX`, `guest_cap`, `sister_payload`, `take_sister`), `game/net/net_session.gd` (the gate's step 2, `_oversize`), `game/net/pond.gd` (`sister`, `sister_list`), T1, T2 and checks 24 to 27 in `tools/net_probe.gd`, the SISTER frames and the `takes`/`refuses` replay in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.

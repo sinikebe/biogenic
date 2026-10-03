@@ -13,6 +13,10 @@ extends Control
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
+## **Loading this is what registers the game's languages** (game/i18n/README.md),
+## and it has to happen before this scene's nodes exist, which is why it is a
+## preload and not a call. Not unused: do not remove it.
+const I18n := preload("res://game/i18n/i18n.gd")
 const RunState := preload("res://game/run_state.gd")
 ## Preloaded for one call and one constant. This screen is the boundary of a
 ## session: everything on the far side of Play is either in one or is not, and
@@ -41,12 +45,36 @@ const LAUNCHER_SCENE := "res://addons/launcher/launcher.tscn"
 const OPTION_SIZE := Vector2(460.0, 64.0)
 const COMPANION_SIZE := Vector2(320.0, 52.0)
 
+# --- The words in mode_select.tscn ---------------------------------------------
+# A scene's text is translated by the Control that shows it, and the template reads
+# it from the scene file; a scene has no place for a note, so the notes are here.
+#
+# TRANSLATORS "choose a view": The heading of the screen where a game is started, in
+# 17 px type. The player chooses how the water is drawn for this game: a "view".
+#
+# TRANSLATORS "full vision": A button, 460 px wide in 20 px type: the view that draws
+# the water the cell swims in, and the membrane (the cell's skin, which senses) over it.
+#
+# TRANSLATORS "the water the cell is swimming in, and the membrane over it": A note in
+# 15 px type under the "full vision" button, on one line: about 60 characters at most.
+#
+# TRANSLATORS "point of view": A button, 460 px wide in 20 px type: the view that shows
+# only what the cell itself can feel, as if the player were inside it.
+#
+# TRANSLATORS "only what the cell itself can feel": A note in 15 px type under the
+# "point of view" button: about 40 characters at most.
+#
+# TRANSLATORS "a friend on the same wi-fi": A note in 15 px type under the "within
+# earshot" button, which is 320 px wide: about 35 characters at most.
 @onready var _full: Button = $Center/Column/FullBlock/Full
 @onready var _pov: Button = $Center/Column/PovBlock/Pov
 @onready var _net: Button = $Center/Column/Company/NetBlock/Net
 @onready var _far: Button = $Center/Column/Company/FarBlock/Far
 @onready var _far_note: Label = $Center/Column/Company/FarBlock/FarNote
 @onready var _hint: Label = $Hint
+## **Settings, from the gear in the top-right corner** (docs/design/settings.md
+## §1): the last child, so Esc reaches it before this screen does.
+@onready var _corner: Control = $Corner
 
 var _leaving := false
 
@@ -66,8 +94,6 @@ func _ready() -> void:
 	_net.pressed.connect(_company.bind(EARSHOT_SCENE))
 	_far.pressed.connect(_company.bind(FAR_SCENE))
 
-	_hint.text = "back returns to the launcher" if _touch_first() else "esc returns to the launcher"
-
 	for button: Button in [_full, _pov]:
 		button.custom_minimum_size = OPTION_SIZE
 		button.focus_mode = Control.FOCUS_ALL
@@ -84,11 +110,7 @@ func _ready() -> void:
 	for button: Button in [_net, _far]:
 		button.custom_minimum_size = COMPANION_SIZE
 		button.focus_mode = Control.FOCUS_ALL
-	# **The owner has not named the way in yet** (invites-ux.md §11): the button
-	# and the far page's heading both read Invite.DOOR_NAME, so a rename is one
-	# constant.
-	_far.text = Invite.DOOR_NAME
-	_far_note.text = far_note(Invite.DOOR_NAME)
+	_say()
 
 	# **Down from point of view lands on within earshot.** The pair sits
 	# symmetrically under it, so the automatic pick is a tie, and a tie-break is
@@ -99,6 +121,8 @@ func _ready() -> void:
 	_far.focus_neighbor_top = _far.get_path_to(_pov)
 	_net.focus_neighbor_right = _net.get_path_to(_far)
 	_far.focus_neighbor_left = _far.get_path_to(_net)
+	# **Up from full vision is the gear**, and Down from the gear comes back.
+	_corner.link_focus(_full)
 
 	# The remembered choice is the focused one, so the keyboard path is one key
 	# and the returning player can see what they picked last time.
@@ -107,17 +131,57 @@ func _ready() -> void:
 	start.grab_focus()
 
 
+## **Every word this screen sets from code**, said again whenever the language
+## changes (docs/design/settings.md §3.3). The words in the scene file translate
+## themselves; these were given as `tr()` of a message, which keeps the words and
+## not the message, so they would stay in the language they were said in.
+func _say() -> void:
+	# TRANSLATORS: The hint along the bottom edge of the screen, in small type. It
+	# names the key that goes back, and the key differs by device: `back` is the
+	# Android Back button or gesture, `esc` is the Escape key. The launcher is the
+	# app's main menu, the screen with the play button.
+	_hint.text = tr("back returns to the launcher") if _touch_first() \
+		else tr("esc returns to the launcher")
+	# **The owner has not named the way in yet** (invites-ux.md §11): the button
+	# and the far page's heading both read Invite.DOOR_NAME, so a rename is one
+	# constant.
+	_far.text = tr(Invite.DOOR_NAME)
+	_far_note.text = far_note(Invite.DOOR_NAME)
+
+
 ## **The note under the far button** (invites-ux.md §6.1). "by invite" already
 ## says how, so its note says who; any other name gets the how in its note.
+##
+## [param door] is the way in's name **in English, as `Invite.DOOR_NAME` has it**:
+## which note to give is decided by reading it, and a translated name would be
+## read for a word it does not have. The note comes back translated.
 static func far_note(door: String) -> String:
 	if door.contains("invite"):
-		return "a friend far away, who sent you one"
-	return "a friend far away, by the invite they sent"
+		# TRANSLATORS: A note in 15 px type under a button. The button is "by invite"
+		# (the way to reach a friend's game by an invite they sent you), so this
+		# says who: someone who is not in the same house, and who sent you an
+		# invite. Under a button 320 px wide: about 40 characters at most.
+		return TranslationServer.translate("a friend far away, who sent you one")
+	# TRANSLATORS: Same note, for the case where the button's own name does not
+	# mention an invite, so the note says how instead. About 45 characters at most.
+	return TranslationServer.translate("a friend far away, by the invite they sent")
 
 
 func _notification(what: int) -> void:
-	if what == NOTIFICATION_WM_GO_BACK_REQUEST:
-		_back()
+	match what:
+		NOTIFICATION_WM_GO_BACK_REQUEST:
+			# **The corner first** (settings.md §1.3): Android Back reaches this
+			# screen before the sheet over it, so a sheet that is open is what Back
+			# closes, and the view chooser stays.
+			if _corner.close_top():
+				return
+			_back()
+		NOTIFICATION_TRANSLATION_CHANGED:
+			# Deferred: the tree is still telling every node, and nothing may be
+			# changed under it. The first one comes as the node enters the tree,
+			# before `_ready` has said anything, and is let go.
+			if is_node_ready():
+				_say.call_deferred()
 
 
 func _unhandled_input(event: InputEvent) -> void:
@@ -125,6 +189,10 @@ func _unhandled_input(event: InputEvent) -> void:
 		# Marked handled before leaving: by the time _back() returns this node
 		# may already be out of the tree and get_viewport() null.
 		get_viewport().set_input_as_handled()
+		# The corner is the last child, so an open sheet has had Esc already;
+		# asked again in case the same Back reached it by the other door.
+		if _corner.close_top():
+			return
 		_back()
 
 
