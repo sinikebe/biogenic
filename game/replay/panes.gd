@@ -416,6 +416,9 @@ func _process(_delta: float) -> void:
 		set_division(_run_soma.division)
 		set_eye(_run_soma.eye)
 		set_slack(_run_soma.slack)
+		# What the body carries, as a real replay draws it: the felt loads alone,
+		# since the seep and the flares are the run's moments and not recorded.
+		set_dose((_run_soma.dose as Dictionary).get("felt", Vector3.ZERO))
 
 
 # ---------------------------------------------------------------------------

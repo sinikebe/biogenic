@@ -806,9 +806,9 @@ static func dosed(loads: PackedFloat64Array, hurt: float, body_radius: float,
 	if not Doses.any(loads):
 		return mended(hurt, delta)
 	var worn := Doses.wear(loads, delta, DOSE_TAU_BY_KIND, DOSE_GONE)
-	var harmed := clampf(hurt + worn.x * HARM_PER_STACK
+	var harmed := clampf(hurt + worn[0] * HARM_PER_STACK
 		* Doses.felt(1.0, body_radius, DOSE_SIZE), 0.0, 1.0)
-	return mended(harmed, worn.y)
+	return mended(harmed, worn[1])
 
 
 func _process(delta: float) -> void:

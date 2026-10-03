@@ -72,14 +72,19 @@ static func any(loads: PackedFloat64Array) -> bool:
 ## own tau in [param taus], in closed form, and a kind that falls below
 ## [param gone] stacks cleared whole.
 ##
-## Returns `Vector2(harm stacks that wore off, seconds of the step left after the
-## harm ran out)`. **Harm is delivered as it wears**, every stack of it -- the
+## Returns `[harm stacks that wore off, seconds of the step left after the harm
+## ran out]`. **Harm is delivered as it wears**, every stack of it -- the
 ## remainder a cutoff clears is delivered with it, so one stack is worth exactly
 ## what it says however the steps fall. The seconds left are the part of the step
 ## mending may have: none while harm is still there, all of it when there was
 ## none, and the rest of the step after the moment it ran out.
+##
+## **In 64 bits, as the loads are**, and not a `Vector2`: a Vector2 is 32-bit, and
+## rounding each step's harm to it put a body stepped every eighth frame some
+## 1e-9 of a wound away from one stepped every frame -- "exact for any step" is
+## the reason this is closed form at all (dna-slots.md §20.3 check 4).
 static func wear(loads: PackedFloat64Array, delta: float, taus: Array,
-		gone: float) -> Vector2:
+		gone: float) -> PackedFloat64Array:
 	var worn := 0.0
 	var left := maxf(delta, 0.0)
 	for k in loads.size():
@@ -100,7 +105,7 @@ static func wear(loads: PackedFloat64Array, delta: float, taus: Array,
 			left = 0.0
 			worn = stacks - after
 		loads[k] = after
-	return Vector2(worn, left)
+	return PackedFloat64Array([worn, left])
 
 
 ## **How free a body is to move**, 1 free .. 0 stopped, under a paralysing load

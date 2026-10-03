@@ -1781,44 +1781,6 @@ msgstr ""
 msgid "bites take {} less"
 msgstr ""
 
-#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
-#. has to give part of its bite back, and a body that swallows the cell dies
-#. while the cell is spat out alive, which costs the cell some energy ("burns
-#. {} s").
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a biter takes back {} of its bite"
-msgstr ""
-
-#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
-#. has to give part of its bite back, and a body that swallows the cell dies
-#. while the cell is spat out alive, which costs the cell some energy ("burns
-#. {} s").
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-msgid "a swallower dies, and you are spat out"
-msgstr ""
-
-#. The poison gene (`veneneux`, shown as `venom`): a body that bites the cell
-#. has to give part of its bite back, and a body that swallows the cell dies
-#. while the cell is spat out alive, which costs the cell some energy ("burns
-#. {} s").
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "being spat out burns {} s"
-msgstr ""
-
 #. The light-eating gene (`plastid`, shown as `sun`): the cell makes a little
 #. food of its own from light.
 #. A phrase of a gene's numbers, in 14 px type; {} is a number the game
@@ -1851,6 +1813,100 @@ msgstr ""
 #: game/normal/gene_stats.gd
 #, python-brace-format
 msgid "everything burns {} less"
+msgstr ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "each bite leaves {} stack of venom"
+msgid_plural "each bite leaves {} stacks of venom"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. The venom gene at the back of the cell, where the tail is: whatever bites
+#. the cell from behind takes this many stacks of venom.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "whatever bites you from behind takes {} stack"
+msgid_plural "whatever bites you from behind takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. The venom gene on a side of the cell: whatever bites the cell on that side
+#. takes this many stacks of venom. "That side" is the side of the body where
+#. the gene's slot is.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "whatever bites you on that side takes {} stack"
+msgid_plural "whatever bites you on that side takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
+#. bites the cell takes this many "stacks" of poison with each bite, and
+#. whatever swallows it takes this many at once. A "stack" is one dose of the
+#. toxin. Give the forms your language needs for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "whatever bites you takes {} stack a bite"
+msgid_plural "whatever bites you takes {} stacks a bite"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
+#. bites the cell takes this many "stacks" of poison with each bite, and
+#. whatever swallows it takes this many at once. A "stack" is one dose of the
+#. toxin. Give the forms your language needs for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a swallower takes {} stack"
+msgid_plural "a swallower takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. What one "stack" (one dose) of a toxin does: it takes this share of a body
+#. the size of the player's cell, a percentage, over this many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/normal/gene_stats.gd
+#, python-brace-format
+msgid "a stack takes {} of a body your size over {} s"
 msgstr ""
 
 #. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
@@ -2688,7 +2744,7 @@ msgstr ""
 #. first is the waiting gene, the second the gene it would replace in the DNA.
 #. Keep both %s, in this order.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 249 px.
+#. your second widest in place of the placeholders; the English takes 252 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to write %s over %s"
@@ -2707,7 +2763,7 @@ msgstr ""
 #. letting go only selects it, and a second tap writes over it. The two %s are
 #. short gene words: the one being dragged, then the one it would replace.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 330 px.
+#. your second widest in place of the placeholders; the English takes 333 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go, then tap again to place %s over %s"
@@ -2739,7 +2795,7 @@ msgstr ""
 #. While dragging a gene over a slot that holds another: letting go swaps
 #. them. The two %s are the two genes' short words.
 #. Room: at most 560 px in 14 px type, measured with your widest gene word and
-#. your second widest in place of the placeholders; the English takes 220 px.
+#. your second widest in place of the placeholders; the English takes 223 px.
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to swap %s and %s"
@@ -2761,6 +2817,135 @@ msgstr ""
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "tap again to choose how %s grows"
+msgstr ""
+
+#. The word for a toxin gene that has been eaten and is waiting to be placed,
+#. on its chip in the tray and on a finger dragging it. Placed outside the
+#. body it becomes `venom`, inside it becomes `poison`; until then it is
+#. neither. One short lowercase word, like the other gene words.
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/normal/normal_mode.gd
+msgid "toxin"
+msgstr ""
+
+#. The gene line for a toxin that is waiting, before a slot is chosen: it
+#. hurts over time, and becomes venom or poison depending on where it is
+#. placed. After the gene's scientific name and a middle dot. No longer than
+#. the English.
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/normal/normal_mode.gd
+msgid "a toxin that goes on hurting, as venom or as poison"
+msgstr ""
+
+#. The line for the empty slot inside the body (the one slot in the middle of
+#. the body, not round it): nothing is there yet, and a toxin placed there
+#. becomes poison.
+#. Room: at most 520 px in 15 px type; the English takes 350 px.
+#: game/normal/normal_mode.gd
+msgid "nothing inside yet · a toxin here becomes poison"
+msgstr ""
+
+#. Under that line, for the empty inside slot: the slot is inside the cell's
+#. body, and a toxin is the only gene that can go there.
+#. Room: at most 560 px in 14 px type; the English takes 272 px.
+#: game/normal/normal_mode.gd
+msgid "inside your body · only a toxin goes here"
+msgstr ""
+
+#. While a toxin is waiting and no slot is chosen: tapping a slot round the
+#. body (outside) makes it venom, the slot in the body (inside) makes it
+#. poison.
+#. Room: at most 560 px in 14 px type; the English takes 271 px.
+#: game/normal/normal_mode.gd
+msgid "tap a slot · venom outside, poison inside"
+msgstr ""
+
+#. When the player tries to put a gene other than a toxin into the slot inside
+#. the body: only a toxin works there. %s is the gene's short word, such as
+#. `swim`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 178 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s works only outside"
+msgstr ""
+
+#. A slot is chosen for a waiting toxin; a second tap places it, as the form
+#. it takes in that slot. %s is `venom` or `poison`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 205 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to place %s here"
+msgstr ""
+
+#. A slot is chosen for a waiting toxin, but the toxin would become a form the
+#. cell already carries, so a second tap adds one copy of it where it already
+#. is. %s is `venom` or `poison`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 225 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "tap again to add a copy to %s"
+msgstr ""
+
+#. As above, but that form already has the most copies a gene can have, three,
+#. so placing it there would do nothing. %s is `venom` or `poison`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 215 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "%s has three copies already"
+msgstr ""
+
+#. While dragging a waiting toxin over a slot where it would add a copy to a
+#. form the cell already carries: letting go chooses the slot, and a second
+#. tap adds the copy. %s is `venom` or `poison`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 305 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go, then tap again to add a copy to %s"
+msgstr ""
+
+#. While dragging a gene to a slot where it would turn into a form the cell
+#. already carries (venom outside, poison inside), which is not allowed. %s is
+#. `venom` or `poison`.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word in
+#. place of the placeholders; the English takes 366 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "here it would become %s, which you already carry"
+msgstr ""
+
+#. While dragging a toxin into a slot of the other place: letting go moves it
+#. there, and it changes form. The first %s is its word now, the second the
+#. word it becomes, such as "let go to move venom here · it becomes poison".
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 315 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to move %s here · it becomes %s"
+msgstr ""
+
+#. While dragging a gene onto another, where the swap moves one of them
+#. between outside and inside and changes its form. The first two %s are the
+#. two genes' words; the last two say which one changes and what it becomes.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word,
+#. your second widest, your second widest and your second widest in place of
+#. the placeholders; the English takes 382 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to swap %s and %s · %s becomes %s"
+msgstr ""
+
+#. While dragging venom onto poison (or the reverse): the two swap places and
+#. change forms, so in effect they trade copies. The two %s are the two words.
+#. Room: at most 560 px in 14 px type, measured with your widest gene word and
+#. your second widest in place of the placeholders; the English takes 351 px.
+#: game/normal/normal_mode.gd
+#, c-format
+msgid "let go to swap %s and %s · they trade copies"
 msgstr ""
 
 #. A gene's name as the player reads it on a chip beside three small dots: one
@@ -2846,6 +3031,17 @@ msgstr ""
 #. has to be short: prefer the shortest everyday word. The same words appear
 #. inside sentences such as "let go to swap eat and ping".
 #. entry: veneneux
+#. Room: at most 47 px in 13 px type; the English takes 43 px.
+#: game/normal/normal_mode.gd
+msgid "poison"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: toxicyst
 #. Room: at most 47 px in 13 px type; the English takes 44 px.
 #: game/normal/normal_mode.gd
 msgid "venom"
@@ -3057,9 +3253,21 @@ msgstr ""
 #. the English. "That side" is the side of the body where the gene's slot is.
 #. The `entry` line says which gene.
 #. entry: veneneux
-#. Room: at most 440 px in 15 px type; the English takes 417 px.
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
 #: game/normal/normal_mode.gd
-msgid "whatever bites you pays, and whatever swallows you dies"
+msgid "whatever bites or swallows you takes your poison"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 337 px.
+#: game/normal/normal_mode.gd
+msgid "your bite leaves venom, which goes on hurting"
 msgstr ""
 
 #. What a gene does, in one line shown after the gene's scientific name and a
@@ -3096,6 +3304,24 @@ msgstr ""
 #. Room: at most 440 px in 15 px type; the English takes 350 px.
 #: game/normal/normal_mode.gd
 msgid "burns cleaner, so everything you carry costs less"
+msgstr ""
+
+#. The line of the venom gene (`toxicyst`, shown as `venom`) when it sits on a
+#. side of the body: whatever bites the cell on that side takes venom from it.
+#. "That side" is the side of the body where the gene's slot is. Same limit as
+#. the gene lines above: no longer than the English.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 325 px.
+#: game/normal/normal_mode.gd
+msgid "whatever bites you on that side takes venom"
+msgstr ""
+
+#. The same line when the venom sits at the back of the body, where the tail
+#. is: whatever bites the cell from behind takes venom from it.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 329 px.
+#: game/normal/normal_mode.gd
+msgid "whatever bites you from behind takes venom"
 msgstr ""
 
 #. As the gene lines above, for a gene that can grow in two ways and has been

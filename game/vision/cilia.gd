@@ -280,9 +280,9 @@ const ARC_FREE: Array[Vector2] = [
 ## **The inside has no arc** (docs/design/dna-slots.md §2.2): nothing inside
 ## faces anywhere, so nothing inside is ever asked for one -- [method
 ## _draw_fringe] draws an inside form round the whole body, and an inside form
-## never has a slot in a layout. An index past the seventh is a tool's genome
-## with more outside genes than a body has arcs, and lands on the last free arc,
-## as it always has.
+## never has a slot in a layout. No layout holds an index past the seventh now
+## ([method default_order] keeps every outside gene on an arc); one that did
+## would land on the last free arc, as it always has.
 static func arc_for_slot(slot: int) -> Vector2:
 	match slot:
 		0:
@@ -1172,6 +1172,17 @@ static func skin_point(at: Vector2, heading: float, r: float, t: float,
 ## and the other outside genes after it. An inside form is left out: it is
 ## inside, and has no arc. food.gd reads a water cell's toxins off this same
 ## layout, so what is drawn is where it works.
+##
+## **Every outside gene on an arc of the skin, never at the inside's index.**
+## A body missing a home organ -- a tailless daughter -- can carry more than the
+## four free arcs hold, and the one past them used to sit at index 7, drawn and
+## aimed on the last diagonal beside the gene already there. Index 7 is the
+## inside now (§2.1), where nothing that faces out may sit, and a player's
+## genome wears a gene posed there with no arc at all. So a gene past the free
+## arcs takes a home arc its organ left empty, the first one free, as the
+## genome's `_sync_order` seats one; and a tool's genome with more outside genes
+## than a body has arcs wears the rest unseated, as a player's body wears an
+## organ the gift took the arc of. No water cell carries more than seven.
 static func default_order(tiers: Dictionary) -> Array:
 	var out: Array[StringName] = [&"", &"", &""]
 	if tiers.has(&"cytostome"):
@@ -1187,6 +1198,14 @@ static func default_order(tiers: Dictionary) -> Array:
 		if gene != &"cytostome" and gene != &"cirrus" and gene != &"flagellum" \
 				and not Genome.has_forms(gene):
 			out.append(gene)
+	for home in 3:
+		if out.size() <= Genome.INSIDE:
+			break
+		if out[home] == &"":
+			out[home] = out[Genome.INSIDE]
+			out.remove_at(Genome.INSIDE)
+	if out.size() > Genome.INSIDE:
+		out.resize(Genome.INSIDE)
 	return out
 
 
