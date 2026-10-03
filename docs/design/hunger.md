@@ -374,3 +374,43 @@ Today's starving cell (hunger 0, 0.5, 0.9 and the last chance, both views, both
 shapes, at a beat peak), the mocks over a real run, the beat over a life that
 never eats, and a daylight illustration were made in a scratch copy and are not
 kept in the repo. The build shoots §7's frames again from the real game.
+
+## 10. As built, 2026-10-03
+
+Built to §2 and §7, as a content pack. `project.godot`, `version.json`, the input
+actions, `Wire.RULES` and `PROTOCOL` are untouched, no words were added, and no
+balance number moved: `levels_probe` still holds the death at 30.4 s. Where the
+build differs from the text above, or found something:
+
+- **Arrivals snap the slack to `hungry()` rather than to 0.** A pond swap keeps
+  the cell's hunger, so a zero there would flash a hungry body smooth for half a
+  second. Where hunger resets (a birth, a division, a return) `hungry()` is 0
+  anyway. A resumed cell opens as crumpled as it was left, and a pond swap does
+  nothing, because it is the same body.
+- **Under a pond's open menu only the figure's body is redrawn** as the slack
+  moves, every 0.05 and at either end, not the whole figure with its chips and
+  tray.
+- **A starving body that is also bitten** roots its wound flaps on the creased
+  rim. Rooted at the uncreased radius, they hung up to 12% of r outside it.
+  Bodies that are not slack draw exactly as before.
+- **`levels_probe`** has §7's check 2, and one more line: from fed to the end of
+  the grace the beat never once slows. Putting the old mapping back fails four
+  of them.
+- **Check 8's trace hash did not move.** The run does get hungry, beating 35
+  times where it beat 16, but no line of the trace reads the beat.
+- **The glance rule** at the last chance, 9 s, at a beat peak: the figure stays
+  above both blocks under every scheme and at both shapes. Under `pads` it wins by
+  under half a unit (59.96 against 59.29 and 59.50 at 1280x720; 60.09 against
+  59.71 and 59.50 at 2400x1080).
+  - Through the whole last chance, the contour's glance at a peak now holds
+    about 58, where it used to fall to 38.9.
+- **The replay** gains one float in the bus's block (`BLOCK_FLOATS` 47) and one
+  in the frame (`AT_SLACK`, 472 floats). Both panes crumple and close as the run
+  did.
+  - In a 640-wide pane the same fall takes a larger share of the view, and the
+    contour turns blobbier there. Watch it; it still reads as the same membrane.
+- **The translators' note** on hunger now says the beat quickens. `biogenic.pot`
+  was regenerated, and `fr.po` is untouched.
+- **Not checked here:** a phone outdoors, a real two-phone pond, and how a
+  1.3 Hz beat at full strength sits for ten seconds. It stays under the
+  three-flashes line.
