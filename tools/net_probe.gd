@@ -134,11 +134,11 @@ var _failed := 0
 
 func _ready() -> void:
 	# **A ceiling on the frame rate, for CI's backstop and for nothing else.**
-	# The step runs this uncapped under `--quit-after 20000`, which counts
+	# The step runs this uncapped under `--quit-after 24000`, which counts
 	# frames, and every wait in here is wall time -- so on a fast enough runner
-	# twenty thousand frames arrive before the last check does, and the probe
-	# is cut off one line short of `ALL PASS`. At 500 a second twenty thousand
-	# frames is forty seconds, twice what the socket sections take. The
+	# twenty-four thousand frames arrive before the last check does, and the
+	# probe is cut off one line short of `ALL PASS`. At 500 a second that is
+	# forty-eight seconds, and most sections cap themselves lower still. The
 	# `pond-field` section's seconds do not count against it: it runs to the end
 	# inside this one call, so all of it is spent within a single frame. Nothing
 	# here depends on a frame rate above that: every clock in `game/net/` is
@@ -217,12 +217,12 @@ func _ready() -> void:
 	await _check_upnp()
 	await _check_channel()
 	# **The margin on CI's backstop, printed.** The step runs this with no
-	# frame cap and `--quit-after 20000`, which is a count of frames, not of
+	# frame cap and `--quit-after 24000`, which is a count of frames, not of
 	# seconds -- so a faster runner reaches it sooner, and a probe that grew
 	# past it would be cut off before `ALL PASS` and read as a failure.
 	print("[net-probe] NOTE finished in %d frames and %.1f s -- CI stops at"
 		% [Engine.get_process_frames(), float(Time.get_ticks_msec()) / 1000.0]
-		+ " 20000, and at most %d a second can arrive" % Engine.max_fps)
+		+ " 24000, and at most %d a second can arrive" % Engine.max_fps)
 	if _failed == 0:
 		print("[net-probe] ALL PASS")
 	else:
@@ -3962,7 +3962,7 @@ func _check_run() -> void:
 #
 # No socket and no tree: every frame here is `_process(1/60)` called by hand, so
 # a minute of water costs its arithmetic -- seconds -- and not a minute of wall
-# time, and no frame of CI's 20000 is spent on it. The global stream is seeded
+# time, and no frame of CI's 24000 is spent on it. The global stream is seeded
 # before every field, so a failure here is the same failure on every machine.
 #
 # Every field is a [WatchedFood], which counts any seed, retirement or meal
@@ -5468,7 +5468,7 @@ func _check_pond() -> void:
 	var began_frames := Engine.get_process_frames()
 	# **Half the probe's ceiling, for this section only**, which is most of
 	# the probe's wall time: at 250 a second its twenty-odd seconds can never
-	# be more than about 5,500 of CI's 20,000 frames, however fast the runner.
+	# be more than about 5,500 of CI's 24,000 frames, however fast the runner.
 	# Nothing here is finer than a 4 ms frame -- the tightest bound is 0.1 s.
 	var ceiling := Engine.max_fps
 	Engine.max_fps = 250
