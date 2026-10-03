@@ -79,7 +79,7 @@ anchor_right = 0.5
 offset_left = -356.0
 offset_top = 112.0
 offset_right = -232.0
-offset_bottom = 544.0
+offset_bottom = 592.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
@@ -90,15 +90,15 @@ anchor_right = 0.5
 offset_left = 232.0
 offset_top = 112.0
 offset_right = 356.0
-offset_bottom = 544.0
+offset_bottom = 592.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 0
 
 [node name="Says" type="VBoxContainer" parent="Hud/Choosing"]
 anchor_right = 1.0
-offset_top = 552.0
-offset_bottom = 610.0
+offset_top = 600.0
+offset_bottom = 658.0
 grow_horizontal = 2
 mouse_filter = 2
 theme_override_constants/separation = 4
