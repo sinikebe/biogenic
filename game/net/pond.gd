@@ -430,8 +430,12 @@ func _host_hears(g: Guest, frame: PackedByteArray) -> void:
 			_charge(g)
 			if take.is_empty() or _gone(g):
 				return
+			# **She carries her DNA and the list her cell ran** (protocol 6,
+			# automation.md §10.3), as this host's own sister does -- but not
+			# her record: ids are this drop's, so she is the founder of a line
+			# of her own here.
 			var slot := _food.place_sister(take[0], float(said[1]), float(take[1]),
-				said[3])
+				said[3], said[4], PackedInt32Array(), sister_list(said[5]))
 			if slot >= 0:
 				sister_placed.emit(slot)
 		Wire.EVENT_DIED:
@@ -1114,9 +1118,22 @@ func mirror_ended() -> void:
 	entering = false
 
 
-## The guest's declined daughter, for the host to leave in the water.
-func sister(at: Vector2, heading: float, radius: float, tiers: Dictionary) -> void:
-	_net.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at, heading, radius, tiers))
+## **The guest's declined daughter, for the host to leave in the water**: where,
+## facing which way, how big, and what she wears -- and since protocol 6 the DNA
+## she was made of and the list her cell ran, [param lines] a rule a line, none
+## for the founders' (automation.md §10.3).
+func sister(at: Vector2, heading: float, radius: float, tiers: Dictionary,
+		dna: Dictionary = {}, lines: PackedStringArray = PackedStringArray()) -> void:
+	_net.send_event(Wire.EVENT_SISTER, Wire.sister_payload(at, heading, radius, tiers,
+		dna, lines))
+
+
+## **A guest's sister's list, read with this host's own vocabulary**
+## (automation.md §10.3): a name it does not know is a rule that never fires,
+## kept and written back as it came -- in a room's save too -- and no lines are
+## the founders' rules, null.
+static func sister_list(lines: PackedStringArray) -> Variant:
+	return null if lines.is_empty() else FoodField.behaviour_from(lines)
 
 
 # ---------------------------------------------------------------------------

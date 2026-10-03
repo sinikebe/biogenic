@@ -2562,7 +2562,7 @@ func _take_datagram(id: int, bytes: PackedByteArray, via: int = VIA_LAN) -> void
 		gate_counts["strays"] += 1
 		return
 	if bytes.size() - 1 > Wire.GUEST_FRAME_MAX:
-		_oversize(id, bytes.size() - 1)
+		_oversize(id, bytes.size() - 1, Wire.GUEST_FRAME_MAX)
 		return
 	if bytes.size() < 2 or bytes[0] != RAW:
 		if not bool(peer["greeted"]):
@@ -2587,11 +2587,19 @@ func _admit_frame(id: int, frame: PackedByteArray) -> bool:
 	var peer: Dictionary = _peers.get(id, {})
 	if peer.is_empty():
 		return false
-	# 2. The direction's cap, before any byte past the first is read. Over it
-	# is the one offence that bypasses the ledger: it is how memory gets taken.
+	# 2. The direction's cap, before any byte past the first is read -- but
+	# for one: of a greeted guest's frame past Wire.GUEST_OTHER_MAX, the
+	# event's type, byte 5, is read only to find the one kind allowed past it,
+	# a SISTER, whose list rides in it since protocol 6 (`Wire.guest_cap`).
+	# Every other kind, and anything before the handshake, keeps the cap it
+	# always had. Over it is the one offence that bypasses the ledger: it is how
+	# memory gets taken.
 	var size := frame.size()
-	if size > (Wire.GUEST_FRAME_MAX if hosting else Wire.HOST_FRAME_MAX):
-		_oversize(id, size)
+	var cap := Wire.HOST_FRAME_MAX
+	if hosting:
+		cap = Wire.guest_cap(frame) if bool(peer["greeted"]) else Wire.GUEST_OTHER_MAX
+	if size > cap:
+		_oversize(id, size, cap, "SISTER" if cap == Wire.SISTER_MAX else "frame")
 		return false
 	if size == 0:
 		return _malformed(id, "an empty frame")
@@ -2842,16 +2850,18 @@ func _malformed(id: int, why: String) -> bool:
 	return false
 
 
-## A frame over the direction's cap. A host cuts the guest on the spot and
-## bars its address; a guest drops it.
-func _oversize(id: int, size: int) -> void:
+## A frame over the direction's cap: [param cap], the one that applied to
+## [param what] -- a guest's SISTER's, any other guest frame's, the most any
+## guest frame may be, or a host's. A host cuts the guest on the spot and bars
+## its address; a guest drops it.
+func _oversize(id: int, size: int, cap: int, what := "frame") -> void:
 	gate_counts["oversize"] += 1
 	if hosting:
-		_cut(id, "a %d-byte frame, where a guest writes %d at most"
-			% [size, Wire.GUEST_FRAME_MAX], false, true)
+		_cut(id, "a %d-byte %s, where a guest writes %d at most" % [size, what, cap],
+			false, true)
 	else:
 		_note("oversize", "host", "[net] dropped a %d-byte frame from the host,"
-			% size + " where a host writes %d at most" % Wire.HOST_FRAME_MAX)
+			% size + " where a host writes %d at most" % cap)
 
 
 ## **A strike on peer [param id]'s ledger** (A.4). At [constant STRIKE_CUT]

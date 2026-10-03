@@ -4583,9 +4583,12 @@ func enter_water() -> void:
 ##
 ## **In the drop she is a daughter** (lineage.md §4), wearing [param tiers] and
 ## carrying [param dna], the child of [param mother] -- see [method _born_of].
-## **A guest's sister** comes by SISTER, which says what she wears and nothing
-## more, so she arrives as the founder of a line of her own with her DNA equal
-## to her body (§8): the one place a newborn's genes are not all passed on.
+## **A guest's sister** comes by SISTER, which since protocol 6 says what she
+## wears, the DNA she was made of and the list her cell ran (automation.md
+## §10.3), and never her record: ids are per drop, so she arrives as the founder
+## of a line of her own. A protocol-5 SISTER said her body alone, and she came
+## with her DNA equal to it -- the one place a newborn's genes were not all
+## passed on (lineage.md §8).
 func place_sister(at: Vector2, heading: float, body_radius: float,
 		tiers: Dictionary, dna := {}, mother := PackedInt32Array(),
 		brain: Variant = null) -> int:
@@ -8939,7 +8942,8 @@ func _record_onto(b: Body, record: PackedInt32Array) -> void:
 ## the daughter she was -- and is the child of [param mother]: its id her
 ## parent, its generation and one, its line. With no DNA she carries what she
 ## wears, and with no record she stays the founder [method _spawn] made her: a
-## guest's sister, whom SISTER brings with neither (§8). **And she has a
+## guest's sister, whom SISTER brings with her DNA and never her record
+## (automation.md §10.3). **And she has a
 ## newborn's grace** (§3.4), as every daughter does -- a guest's too, who is
 ## no less newborn for arriving without her record.
 func _born_of(b: Body, dna: Dictionary, mother: PackedInt32Array) -> void:

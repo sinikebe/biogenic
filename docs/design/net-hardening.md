@@ -73,7 +73,10 @@ What changed, in `net_session.gd`:
 `_admit_frame(id, frame) -> bool` is the first statement of `_on_peer_packet`. The first failed step ends it, and no byte past a size already checked is read.
 
 1. **Known peer.** An id not in `_peers` (refused, cut, or never admitted) is dropped without a log line.
-2. **Size cap by direction**, before any byte after byte 0: a guest's frame may be 272 bytes (`Wire.GUEST_FRAME_MAX`, the longest PERSON), a host's 1,262 (`Wire.HOST_FRAME_MAX`, `POND_MAX`). Above it, a host cuts the guest at once and bars its address, with no strike count; a guest drops the frame. An empty frame is malformed.
+2. **Size cap by direction**, before any byte after byte 0: a guest's frame may be 272 bytes (`Wire.GUEST_OTHER_MAX`, the longest PERSON), a host's 1,262 (`Wire.HOST_FRAME_MAX`, `POND_MAX`). Above it, a host cuts the guest at once and bars its address, with no strike count; a guest drops the frame. An empty frame is malformed.
+   - **One kind may go further, since protocol 6: a greeted guest's SISTER**, to 1,342 bytes (`Wire.SISTER_MAX`, also `Wire.GUEST_FRAME_MAX`, the absolute ceiling `_take_datagram` checks first). Her list rides in it (automation.md §10.3).
+   - To find a SISTER, `Wire.guest_cap` reads byte 0 and the event's type, byte 5, of a frame past 272, which always has them. It reads nothing else.
+   - Before the handshake, anything past 272 is still the oversize cut, whatever its type.
 3. **Before the handshake (host only):** a peer not yet greeted may send one thing, a HELLO of 3 to 64 bytes. Anything else is cut at once. A guest stays lenient: the host's first STATE can overtake its WELCOME, and is simply not read yet, as before.
 4. **Kind and direction.** An event shorter than its six-byte header is malformed. A kind or event type this protocol knows, arriving from the side that never sends it, is malformed: a guest's POND, GENOME, CONTACT, ARRIVE, WELCOME or REFUSE; a host's HELLO, ENTER or SISTER.
 5. **Size** for the kind and type (A.3). Outside it, malformed.
@@ -102,9 +105,9 @@ Sizes are the frame as `_on_peer_packet` sees it; ENet carries one more byte, th
 | EVENT GENOME 0x05 | host→guest | 11-155 | 6 + 4 + tiers |
 | EVENT CONTACT 0x06 | host→guest | 20-37 | `CONTACT_SIZE` 20; ATE adds 1 + 0-16 bytes, KILLED adds 1 |
 | EVENT DIED 0x07 | both | exactly 16 | `DIED_SIZE` |
-| EVENT SISTER 0x08 | guest→host | 20-164 | 6 + 13 + tiers |
+| EVENT SISTER 0x08 | guest→host | 22-1,342 | Since protocol 6 (automation.md §10.3): 6 + 13 + the tiers she wears + her DNA in the same format (each at most `TIERS_MAX`, 145) + a count of rules to `MOST_RULES` (8) + each line as 1 + at most `RULE_BYTES_MAX` (128) bytes of `RULE_BYTES`. A real one is under a kilobyte: today's longest line is 87 bytes. The only guest frame allowed past 272 (A.2, step 2). Before protocol 6: 20-164. |
 | POND 0x06 | host→guest | 8-1,262 | `POND_MAX` = 8 + 68 × 18 + 30 |
-| unknown kind or type | either | within the direction cap | dropped (A.2, step 7) |
+| unknown kind or type | either | within the direction cap (a guest's: 272) | dropped (A.2, step 7) |
 
 ### A.4 Budgets, strikes and cuts
 
@@ -913,7 +916,7 @@ sudo unshare --net -- bash -c 'ip link set lo up &&
 
 **A replay is exact** -- but for an invite paste holding a surrogate on its own (#106), which the replay's UTF-8 cannot carry: rerun that one by its seed. `--replay="<section> <case>"` runs one case:
 
-- **wire**: a frame in hex.
+- **wire**: a frame in hex. Since protocol 6, a saved event may say what the reader must do with it, as `<g|h> takes <hex>` or `<g|h> refuses <hex>`. A saved refusal then fails the day the reader takes it, as an invite's does.
 - **door**: steps written `C:id:via:address`, `D:id:via:what:payload`, `X:id:via`, `T:seconds`, `I:revoke|replace|restore` and, since #105, `L` for the LAN listener closing by itself. `P` opens a phone host's run. Two compact steps are written out as they run, with every check after each datagram and each caller: `S:via:count` for a book filled, and `F:id:via:what:count:first` for a flood. A proof is named rather than written, since its nonce is the host's.
 - **guest**: its frames, `from:hex`.
 - **invite**: a paste in base64 -- since #106 after the word for what it must read as, where that is the point: `ok`, `none`, `damaged` or `newer`.
@@ -1268,4 +1271,5 @@ A first cut of H also refused a leading zero and all IPv4 in IPv6 clothes, as a 
 - **Part H (built):** `game/net/invite.gd` (`address_ok`, `_numeric`, `_literal_problem`, `_v4_problem`, `_unread`, `why_not`, `_squeeze`, `_base64_whole`, `_der_whole`, `CERTIFICATES_MAX`), `game/server/invite_book.gd` (`reach_refused`, `reach_said`, `_stored_text`, `_stored_reach`, `set_reach`, `mint`, `listing`), `game/server/server.gd` (its status line), F7-F9 in `tools/net_probe.gd`, the `invite` section of `tools/net_fuzz.gd` and its saved cases in `tools/net_fuzz_corpus.txt`, `docs/server.md` §9.2, `docs/design/invites-ux.md` §6.2, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part G (built):** `game/net/net_session.gd` (`_open_lan`, `_pump_one`, `_lan_closed_by_itself`, `_count_arrivals`), `tools/net_drop.gd` and `tools/net_drop.tscn` (new, and excluded from export with the rest of `tools/`), H1-H4 in `tools/net_probe.gd`, the `L` step in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md` §7, the "Take the network from under a host" step in `.github/workflows/ci.yml` and the comment on its LAN step, and this document.
 - **Part E (built):** `game/net/net_session.gd` (`_admit`, `_evict`, `_left_unproved`, `_bar`), `game/net/lan.gd` (`wider_key`), `tools/net_probe.gd` (R1-R4), `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, `docs/server.md`, the comments on `.github/workflows/ci.yml`'s two network steps, and this document.
+- **Pack 4's SISTER (protocol 6, built; automation.md §10.3):** `game/net/wire.gd` (`PROTOCOL`, `MOST_RULES`, `RULE_BYTES_MAX`, `RULE_BYTES`, `SISTER_MIN`/`MAX`, `GUEST_OTHER_MAX`, `guest_cap`, `sister_payload`, `take_sister`), `game/net/net_session.gd` (the gate's step 2, `_oversize`), `game/net/pond.gd` (`sister`, `sister_list`), T1, T2 and checks 24 to 27 in `tools/net_probe.gd`, the SISTER frames and the `takes`/`refuses` replay in `tools/net_fuzz.gd` and `tools/net_fuzz_corpus.txt`, the comment on `.github/workflows/ci.yml`'s LAN step, and this document.
 - **Part C (built):** `game/net/invite.gd` (new), `game/server/invite_book.gd` (new), `game/net/net_session.gd`, `game/net/wire.gd`, `game/net/lan.gd` (`is_loopback`), `game/net/pond.gd` (`cut_off`), `game/server/server.gd`, `tools/net_probe.gd`, `tools/net_lag.gd`, `docs/server.md` (§9, and the notes it changes), `server/biogenic-server.service` (its Description), `server/install-server.sh` (its comments and closing lines), `game/server/updater.gd` (what it is told, from the review), the comment on `.github/workflows/ci.yml`'s LAN step, and this document. The screens built on it are `docs/design/invites-ux.md`'s: `game/net/earshot.gd` and `.tscn`, `game/net/far.tscn` (new), `game/mode_select.gd` and `.tscn`, and `tools/earshot_shot.gd`.
