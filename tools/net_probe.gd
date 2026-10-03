@@ -6186,6 +6186,20 @@ func _check_pond() -> void:
 
 	# **The host's run first, and its water is the pond.**
 	var host_run := _pond_run_scene(host_net, true)
+	# **Started at the drop's centre**, not at a quiet start (ocean.md §8.1),
+	# which can be anywhere 1,000 or more inside the rim. Everything below
+	# happens within about 2,200 units of where the host began, nearly all of
+	# it north-east -- the arrival, the deaths, and the division, which puts
+	# the host 560 east of the guest and asks for its sister 560 further. From
+	# a start near that side of the rim that is past it. Measured at DNA slots
+	# phase 1, where it happened in two runs of eight: a start 1,441 units in
+	# from the rim, eastward, had the host pinned 328 units outside the water
+	# when it divided, and the pond came apart; in the other the host's
+	# sister, held back onto the rim, landed beside it and shoved its daughter
+	# 27 units. The rim is not what this section is about, and from the centre
+	# it is 3,800 units or more from anything here. The start's clearing is the
+	# same either way.
+	host_run.get_node(^"Food").set("start_mode", &"centre")
 	get_tree().root.add_child.call_deferred(host_run)
 	await host_run.ready
 	var host_cell: Node = host_run.get_node(^"Cell")
