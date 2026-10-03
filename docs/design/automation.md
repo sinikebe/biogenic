@@ -648,6 +648,7 @@ the text above, or found something:
   pad, and at 2400x1080 the French `nombres` button touches its top. `numbers`
   already overlapped push and dash there before 4-1. The pads are inert under
   the scrim; 4-2 rebuilds this screen's bottom edge for the programs page.
+  4-2 settled it (§18.5).
 
 ## 6. Division
 
@@ -807,6 +808,10 @@ library.
 {"version": 1,
  "programs": [                     # in the library's order: the priority
    {"name": "…",                   # as typed; "" while it wears its default
+    "auto": ["program", 2],        # optional: the default it wears, a kind
+                                   # ("program" or "water") and a number, said
+                                   # in the language of the moment; absent,
+                                   # "program 1" (as built, §18.5)
     "lines": PackedStringArray,    # its instincts, in behaviour.md §5.1's text
     "on": bool},
  ...]}
@@ -1405,6 +1410,50 @@ each of which must fail with its rule taken out.
 | the design before row 40: your division changes one of your programs, with one undo | no division changes your programs; only your hand does, and the choosing screen is today's |
 | a guest's sister carries her worn body (`PROTOCOL` 5) | her body, her DNA and her list (`PROTOCOL` 6, phase 4-3) |
 | the replay records what moved | what moved, when the autopilot drove, the held tail, and which instinct acted |
+
+### 18.5 As built: phase 4-2, 2026-10-03
+
+Built to §2 to §4, §6, §8, §9 and §11, with checks 8 to 23. Every one of them
+passes. It ships as content only:
+
+- `Wire.RULES` and `PROTOCOL` did not move (the wire is 4-3), and the exported
+  server still says protocol 5.
+- The drop's rules fingerprint did not move either, so a kept drop loads as it
+  was.
+
+Where the build differs from the text above, or found something:
+
+- **The library file** keeps, beside each program, the default name it wears as a
+  kind and a number (§9.1). That way `program 2` is said in the language of the
+  moment.
+- **Check 8 is a CI step.** It runs three drives, one per scheme, each with seed 1
+  and 3,600 frames at 60 fps, and presses `R` at 20 s with an empty library. Each
+  trace must hash to 4-1's (`ff34f4c6…`), and the cell must be left "drives no,
+  icon hidden".
+- **Check 11's pond-menu clause** needs a session, so it runs in `net_probe`
+  beside check 23. Its wait for a division counts seconds, not frames, because an
+  uncapped headless run never reached the choice.
+- **Check 21, Alive:** every one of the seven founders' instincts acts, and there
+  were 4 meals over seeds 1 to 4. The cells starve at 29 to 52 s on the founders'
+  rules alone. That is balance, so it is recorded and not tuned (CLAUDE.md,
+  "Balance waits for players"); §19 asks the same question of a player's own
+  programs.
+- **CI's two margins:**
+  - `drop_probe` ran 328.7 s locally, against 319 s at 4-1, which was 235 s on CI.
+  - `net_probe` ran 18,124 frames locally, so its backstop went from 20,000 to
+    24,000 frames.
+- **The pause screen's bottom edge** (§5.5) is settled in `automation-ux.md`
+  §10.1. On the genome page the pads show only while the controls chooser is in
+  use; on the programs page they never show.
+- **Two things to watch on a phone, because no probe can show them:**
+  - **Take-back routing.** Every press passes `cell.gd`'s `_hand_pressed()`
+    before it does anything. The probes drive touch, mouse and keys, but only a
+    phone pairs a touch with its emulated mouse twin. A misrouted twin would
+    switch the autopilot off unasked. A missing route would leave it driving
+    under your thumb.
+  - **The page's dry run** (`automation-ux.md` §7.1). It peeks at each rule
+    without writing its memory. Watch for an instinct that acts differently
+    after a resume than the page showed.
 
 ---
 

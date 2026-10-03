@@ -264,7 +264,10 @@ and its gap of 8. Under the rows:
   the autopilot skips it`, or `· empty: open it to give it instincts`.
 - **`Hint`** says what holds it back. A live hold comes first: `held back now:
   “flee”, above, already steers`. Otherwise the line that cannot change: `“careful”
-  never moves your tail: “water cell”, above, always swims`.
+  never moves your tail: “water cell”, above, always swims`. When the live hold
+  comes from the same `always` that makes the trigger `never`, the line that
+  cannot change is said instead. It is one hold, and the reason that lasts is the
+  one worth reading (found in `library_drag_*`, §10.1).
 - **`Act`**: `tap a program to see it · drag a program up to let it win`.
 
 ### 2.5 New, copy, rename and delete
@@ -876,6 +879,63 @@ again for the record as `*_FIRST`):
 | a frame of the autopilot on with the hold pad held | a state row 36 forbids | removed |
 | a new program's `Hint` repeating that it is off | said twice | only the head says it |
 | the badge as a numeral `2` at the cell's right end | in French, `fige la queue` runs to x 123 and the badge sat at x 101..119, on the word; found while folding row 38 | the genome page's pips, in the cell's top-right corner |
+
+### 10.1 As built: phase 4-2, 2026-10-03
+
+Every frame above was shot again from the build, in English and French at
+1280x720 and 2400x1080. The build judged them, and a designer then reviewed all
+of them before the merge. `badge_pips_*` became `editor_tail1_*` and
+`editor_new_tail1_*`, which show the same pips on the real page.
+
+**The review found two blockers, fixed before the merge:**
+
+- **A focused library row showed nothing at a keyboard.** `↓` changed nothing on
+  screen, and `Enter` then opened a program other than the one shown. Now a
+  focused row underlines its name (2 px `SELECT`), and focus selects. `↑`/`↓`
+  move the selection, and the inspector, `Explain` and the bright places follow
+  the keyboard (§2.6).
+- **One tap on `controls` brought the pause overlap back for good** (see the
+  bottom edge, below). A tap left the button with hidden focus, and the emulated
+  mouse left it hovered. Only focus a player can see keeps the pads up now.
+
+**Six small ones were fixed in the same round:**
+
+- a tap leaves no underline;
+- `Enter` on a row's `›` opens it;
+- the inspector's dash burst clears its word;
+- a test's `Explain` gives its sentence, not a bare `level`;
+- the replay line is placed on its caption (below);
+- §2.4's hint, when a hold and a never come from one rule.
+
+**Kept as the build made them:**
+
+- **The places indicator is hidden while the library is empty.** `0 of 8` means
+  nothing before a first program, and the indicator arrives with it.
+- **The on glyph's ink is `LIT` 0.35**, lowered from 0.85 because §9.3's glance
+  asked for it. On, the icon is 53/62 against the figure's 58/74. On and off still
+  differ in light and in shape at device pixels.
+- **The replay line is centred on its caption**, then slid left only as far as it
+  must go to stay 16 px clear of `pause`. Under the caption alone it had about
+  224 px, and most lines would have been cut.
+- **`R` toggles while a sheet's button has focus.** A focused text field takes
+  the key first, so a name can still have an `r` in it.
+- **A gamepad stick's motion past its 0.5 dead zone counts as a new press.**
+  Gamepads are not a target.
+- **Default names are kept as a kind and a number** (`automation.md` §9.1), so
+  `program 2` is said in the language of the moment, as « programme 2 ».
+
+**The pause screen's bottom edge** (`automation.md` §5.5). On the genome page,
+the dimmed pads now show only while the controls chooser is in use: while it
+has a keyboard's focus, or for 4 s after it is cycled. They never show on the
+programs page.
+
+Hiding them on both pages would have been one line. They stay while choosing
+because they are the chooser's only explanation (`controls.md` §5.1): without
+them, `anywhere`, `stick` and `pads` are bare words until you resume. At rest
+the edge is clear at both shapes in both languages.
+
+The frames: `edge_before_*`, which is dev; `edge_after_*`, at rest;
+`edge_after_chooser_*`, while choosing; and `edge_programs_*`.
 
 ---
 
