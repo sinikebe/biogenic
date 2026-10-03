@@ -80,6 +80,18 @@ const Drops := preload("res://game/normal/drops.gd")
 ## piece that knows nothing of cells. This file numbers the cell and names its
 ## mother; the drop keeps the record of every other body.
 const Descent := preload("res://game/mechanics/descent.gd")
+## **Your programs and your instincts** (docs/design/automation.md §2, §3, §13):
+## the library -- yours, the device's, every world's -- and the wiring that runs
+## the programs that are on as your cell's instincts while the autopilot has it.
+## This file decides when: it keeps the autopilot's state, builds the merged
+## list and ticks it, and hands it to your sister.
+const Library := preload("res://game/normal/library.gd")
+const OwnRules := preload("res://game/normal/own_rules.gd")
+## **The programs page**, beside the genome on the pause screen (automation-ux.md
+## §1 to §4): it reads the library, the instincts and their states, and draws
+## the autopilot's icon for the water, the page and the replay alike.
+const ProgramsPage := preload("res://game/normal/programs_page.gd")
+const Rulebook := preload("res://game/mechanics/rulebook.gd")
 
 ## Leaving a run goes back one step, to the screen that chose the view.
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -314,6 +326,14 @@ var drop := -1
 ## selected drop of a folder of its own ([method Drops.selected_in]).
 var keep := Drops.SELECTED
 
+## **Where your library of programs is kept** (docs/design/automation.md §9.1):
+## the device's own file by default, read as the run opens and written when the
+## pause screen closes with a change. Empty is a library that starts empty and
+## is never read or written: `tools/drive.gd` empties it unless given
+## `--library=`, so no render opens on programs another run wrote. Set it before
+## the scene enters the tree, as [member keep] is.
+var library_at := Library.PATH
+
 @onready var _membrane: MembraneLayer = $Membrane
 @onready var _soma: SomaLayer = $Soma
 @onready var _returns: ReturnsLayer = $Returns
@@ -415,6 +435,14 @@ var keep := Drops.SELECTED
 ## The same two lines for a daughter's locus, between her line and her odds.
 @onready var _choose_numbers: Control = $Hud/Choosing/Says/Numbers
 @onready var _pause_tap: Control = $Hud/PauseTap
+## **The autopilot's icon** (automation-ux.md §5.1), in the water's top-right
+## corner, and **the programs page** with the chip that turns to it, on the pause
+## screen beside the genome (§1, §2).
+@onready var _autopilot_icon: Control = $Hud/Autopilot
+@onready var _programs: ProgramsPage = $Hud/Pause/Programs
+@onready var _page_chip: Button = $Hud/Pause/PageChip
+## The genome page, which the programs page stands in for while it shows.
+@onready var _pause_center: Control = $Hud/Pause/Center
 ## The drawn controls, under `Hud` and **before** `PauseTap` in the tree so the
 ## pause scrim covers them -- they stay drawn while paused, dead to input, which
 ## is the whole wordless explanation of the chooser below them (§5.1).
@@ -693,6 +721,31 @@ var _drops_root := ""
 ## DNA again, when it rolls anew as ever. Used once, at the next pinch.
 var _kept_daughters: Array = []
 
+## **Your library** (automation.md §3), opened from [member library_at].
+var _library := Library.new()
+## **Your instincts**: the programs that are on, wired to this cell.
+var _instincts := OwnRules.new()
+## The library's revision the instincts were last given, so a change is a new list.
+var _library_seen := -1
+## **The autopilot's icon** (automation-ux.md §5): whether it has been drawn yet in
+## this lineage, which is when it breathes once; how far its light has fallen
+## since the hand took the cell back; and whether the mouse is over it.
+var _autopilot_shown := false
+var _autopilot_breath := Swell.new(BREATH_RISE, 0.0, BREATH_FALL)
+var _autopilot_fall := Swell.new(0.0, 0.0, AUTOPILOT_FALL)
+var _autopilot_hot := false
+## The frame the autopilot was last switched, so a phone touch's emulated twin
+## does not switch it straight back.
+var _autopilot_frame := -1
+## **Which page the pause screen is on** (automation-ux.md §1.2): your programs,
+## or the genome. Kept for the run, so pause opens where it was left -- unless a
+## gene is waiting, whose clock puts the genome first.
+var _on_programs := false
+## How long the drawn controls still show behind the genome page after the
+## controls chooser was cycled ([method _controls_previewed]): seconds of frames,
+## counted down in [method _process], which runs while paused.
+var _scheme_preview_left := 0.0
+
 
 func _ready() -> void:
 	# Android Back must pause, not kill the app. quit_on_go_back is a SceneTree
@@ -841,6 +894,30 @@ func _ready() -> void:
 	_pause_tap.mouse_exited.connect(_set_pause_hot.bind(false))
 	_update_pause_tap()
 
+	# **Your library and your instincts** (automation.md §2, §3, §13): the library
+	# opened from its file -- or none, for a tool's run -- and its programs that
+	# are on wired to this cell. Nothing here draws a number or asks for a
+	# window, so a run with no programs is the game 4-1 left, to the byte.
+	if not library_at.is_empty():
+		_library.load_from(library_at)
+	_instincts.setup(_cell, _food, _metabolism, _genome)
+	_cell.instincts = _instincts
+	_cell.took_back.connect(_take_back)
+	_library_changed()
+	# **The icon, styled as the pause tap is** and as quiet: no focus, so the
+	# arrows stay the cell's; a press of its own, swallowed.
+	_autopilot_icon.focus_mode = Control.FOCUS_NONE
+	_autopilot_icon.mouse_filter = Control.MOUSE_FILTER_STOP
+	_autopilot_icon.custom_minimum_size = Vector2(PAUSE_TAP_SIZE, PAUSE_TAP_SIZE)
+	_autopilot_icon.draw.connect(_draw_autopilot_icon)
+	_autopilot_icon.gui_input.connect(_on_autopilot_icon)
+	_autopilot_icon.mouse_entered.connect(_set_autopilot_hot.bind(true))
+	_autopilot_icon.mouse_exited.connect(_set_autopilot_hot.bind(false))
+	_autopilot_icon.hide()
+	_programs.setup(self, _library, _instincts, _page_chip, _resume_button)
+	_page_chip.pressed.connect(_on_page_chip)
+	_programs.say_chip(true)
+
 	_view_button.pressed.connect(_toggle_camera)
 	_update_view_button()
 
@@ -964,6 +1041,9 @@ func _resume_cell(state: Dictionary) -> void:
 	_sense_clock = float(state["sense_clock"])
 	_sensed = bool(state["sensed"])
 	_said_divide = bool(state["said_divide"])
+	# Its last meal, for its instincts (automation.md §9.2); none kept, never.
+	if state.has("fed"):
+		_instincts.set_fed(float(state["fed"]))
 	_kept_daughters = []
 	for one: Dictionary in state["daughters"]:
 		var order: Array[StringName] = []
@@ -1060,6 +1140,10 @@ func _keep_drop() -> void:
 		}
 		if elsewhere:
 			cell["elsewhere"] = true
+		# **When it last ate** (automation.md §9.2), for its instincts' `fed`: kept
+		# only once it has, so a cell that never ate comes back never having.
+		if is_finite(_instincts.fed()):
+			cell["fed"] = _instincts.fed()
 	var done := DropSave.write(keep, DropSave.compose(state, cell))
 	if done != OK:
 		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
@@ -1094,8 +1178,13 @@ func _process(delta: float) -> void:
 	# Before every early return below, because the states those returns lead to
 	# -- dying, dividing, paused -- are exactly the ones with no button.
 	_update_pause_tap()
+	# And the autopilot's, for the same reason: hidden in exactly those states.
+	_update_autopilot_icon(delta)
 	# And before them for the opposite reason: the controls are drawn through a
-	# division and through a pause, and what changes is *which* of them.
+	# division and through a pause, and what changes is *which* of them. The
+	# chooser's preview counts down in frames' time, which this node keeps under
+	# the pause, so a render at a fixed rate shows what a player sees.
+	_scheme_preview_left = maxf(_scheme_preview_left - delta, 0.0)
 	_update_controls()
 	# Before them too: the states they lead to -- dead, paused, held, divided --
 	# are exactly the ones the body held open has to shut in. dna-body.md §8.
@@ -1264,6 +1353,11 @@ func _process(delta: float) -> void:
 	_step_eye(delta)
 	_step_sense_grant(delta)
 	_step_onboarding(delta)
+	# **Your instincts' tick** (automation.md §12): every eighth frame, read off
+	# what the membrane was just told -- the organs' frame -- and acted on while
+	# the autopilot drives. Before the cell steps, which is after this node, so
+	# the cell does what they claimed on the frame they claimed it.
+	_instincts.step(delta)
 	_push_division()
 
 	if _metabolism.starved():
@@ -1930,6 +2024,10 @@ func _be_born() -> void:
 	_cell.reset(true)
 	_cell.radius = CellBody.daughter_radius(CellBody.DIVIDE_RADIUS)
 	_metabolism.reset()
+	# **A new body, the same programs** (automation.md §2.4, row 40): she has not
+	# eaten, her instincts hold nothing, and the autopilot is as it was -- on, if
+	# it was, from her first tick. Nothing about your programs is drawn.
+	_instincts.new_body()
 	# The DNA becomes both registers again: expressed whole, at birth, which is
 	# the whole of INHERIT_TIER_LOSS being zero. **And what her mother had not
 	# placed yet goes with her, still waiting** (#118) -- `express()` empties
@@ -1984,8 +2082,10 @@ func _be_born() -> void:
 		# sister is left in it, held inside the rim, a water cell from then on:
 		# wearing the body she rolled and carrying the DNA she was made of.
 		_food.enter_water()
+		# **She carries what her cell ran** (automation.md §6.3): the programs
+		# that are on, merged in the library's order, or the founders'.
 		_food.put_sister(side, SISTER_DISTANCE, _cell.radius, other["body"],
-			other["tiers"], mother)
+			other["tiers"], mother, _sister_brain())
 	else:
 		# **The field is reseeded.** The water around you was sized to a
 		# 40-unit body and the newborn is 28; the field is a treadmill already,
@@ -2152,6 +2252,8 @@ func _on_eaten(nutrition: float, gene: StringName, _at: Vector2) -> void:
 	_cell.radius = minf(_cell.radius + CellBody.GROWTH_PER_MEAL,
 		CellBody.DIVIDE_RADIUS)
 	_genome.integrate(gene)
+	# `fed` counts from here (automation.md §4.1): a cell, or one chewed apart.
+	_instincts.ate()
 	# The flood takes the gene's hue (§2.2), which is the one place a gene is
 	# ever identified on the sensory screen -- a contact event, chemistry
 	# already inside you, bounded to this one signal and this one frame. The
@@ -2188,6 +2290,8 @@ func _on_grazed(nutrition: float, at: Vector2) -> void:
 	_bus.ingest({"gene": &""})
 	_metabolism.feed(nutrition)
 	_vision.mark_meal(nutrition, &"", at)
+	# And a floc is a meal to `fed` as a cell is.
+	_instincts.ate()
 
 
 func _on_waked(bearing: float, strength: float) -> void:
@@ -2225,6 +2329,9 @@ func _die(loud: bool, bearing: float) -> void:
 	if _menu_open:
 		_set_menu(false)
 	_life = Life.DYING
+	# **A death switches the autopilot off** (automation.md §2.4): the next cell
+	# starts with your hand. Your library is untouched.
+	_set_autopilot(false)
 	# **The black has no text** (shared-pond-ux.md §0.4, §4): whatever the line
 	# was saying goes with the light, stepped by _step_death -- the label is
 	# stepped only while alive, and rendered, a line up at the hit stood on the
@@ -2501,6 +2608,11 @@ func _return(place: Array) -> void:
 	_sensed = false
 	_found_line()
 	_said_divide = false
+	# **A new cell, the same library** (automation.md §7): it has not eaten, the
+	# autopilot is off since the death, and the icon's one breath is the new
+	# lineage's to breathe.
+	_instincts.new_body()
+	_autopilot_shown = false
 	_update_simulating()
 	_apply_mode()
 	# **The steering line comes back with the next cell if it was never read.**
@@ -2626,6 +2738,7 @@ const SCHEME_WORDS: Array[String] = ["anywhere", "stick", "pads"]
 ## preview is the game.
 func _cycle_scheme() -> void:
 	scheme = (scheme + 1) % SCHEME_WORDS.size()
+	_scheme_preview_left = SCHEME_PREVIEW
 	_controls.set_scheme(scheme)
 	RunState.save_scheme(scheme)
 	_update_scheme_button()
@@ -2640,6 +2753,28 @@ func _cycle_scheme() -> void:
 	if _onboard_steer and _onboard != Onboard.OFF and not _floating():
 		_onboarding.hide()
 		_onboard = Onboard.OFF
+
+
+## **The drawn controls behind the pause screen** (controls.md §5.1;
+## automation-ux.md §2.1). In play, always. On the genome page, **while its
+## controls chooser is in use** -- the keyboard's focus on it, or for
+## [constant SCHEME_PREVIEW] seconds after it was cycled -- so cycling the word
+## still changes the corners under the scrim, which is the chooser's whole
+## explanation; the rest of the time no pad's ghost sits under the caption, the
+## `numbers` switch or `leave`, which the 4-1 layout put over three of them. The
+## programs page never shows them, so none sits under `resume`.
+##
+## **Not a hover, nor the hidden focus a press leaves**: a phone's tap leaves the
+## chooser focused that way and, by the emulated mouse, hovered for good, and the
+## four seconds would never end.
+func _controls_previewed() -> bool:
+	if not _menu_open:
+		return true
+	if _on_programs:
+		return false
+	if _feel_button.has_focus(true):
+		return true
+	return _scheme_preview_left > 0.0
 
 
 func _update_scheme_button() -> void:
@@ -2672,7 +2807,8 @@ func _update_controls() -> void:
 	var hold := _cell.can_hold()
 	# The pond's still moments behave as a pinch does (UX §0.5, §5): the
 	# steering control stays drawn and dead, and the action pads go.
-	_controls.update((not _floating() or hold) and _life == Life.ALIVE,
+	_controls.update((not _floating() or hold) and _life == Life.ALIVE
+			and _controls_previewed(),
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
 		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0, hold)
 
@@ -2811,7 +2947,7 @@ func _step_onboarding(delta: float) -> void:
 	# about their own body must not vanish because they happened to be steering
 	# when it arrived, which at five seconds in they usually are.
 	if _onboard_steer and _onboard != Onboard.FADE_OUT \
-			and absf(_cell.steer) > CellBody.STEER_DEADZONE:
+			and absf(_cell.hand_steer) > CellBody.STEER_DEADZONE:
 		_mark_onboarding_seen()
 		_onboard_from = _onboarding.modulate.a
 		_onboard_clock = 0.0
@@ -3011,6 +3147,191 @@ func _bar(alpha: float) -> StyleBoxFlat:
 
 
 # ---------------------------------------------------------------------------
+# The autopilot (docs/design/automation.md §2; automation-ux.md §5). A switch,
+# and the icon is how you throw it: in the water's top-right corner, mirroring
+# the pause tap, and `R` at a keyboard. On, your programs have your cell from
+# their next tick; **a new press of any control your hand drives with takes it
+# back on that frame** and switches it off (row 36). It is there only while
+# there is something to run, kept through a division, switched off by a death,
+# and never saved.
+# ---------------------------------------------------------------------------
+
+## The icon's light, falling from on to off when the hand takes the cell back,
+## so a player who did it by accident can see what happened (UX §5.2).
+const AUTOPILOT_FALL := 0.6
+## How long the drawn controls show behind the genome page after its controls
+## chooser is cycled ([method _controls_previewed]).
+const SCHEME_PREVIEW := 4.0
+
+
+## **Whether there is anything to run**: the programs that are on hold at least
+## one instinct between them (§2.2).
+func _can_autopilot() -> bool:
+	return _library.runnable()
+
+
+## **Whether the icon is in the water** (UX §5.1): something to run, the cell
+## alive and short of a division's pinch, the menu shut and no pond's still
+## moment over it.
+func _autopilot_reachable() -> bool:
+	return _can_autopilot() and _life == Life.ALIVE and _split < Split.PINCH \
+		and not _held and _water_beat < 0.0 and not _entering_held
+
+
+## **The autopilot switched [param on]** -- by the icon, its copy on the page or
+## `R`, and off by a death, a takeover or nothing left to run. Switching on lets
+## go of whatever the hand held, by the pair the pause screen calls, so a thumb
+## still down or a key still held steers nothing until it is pressed again
+## (§2.2). Either way, what the instincts held goes.
+func _set_autopilot(on: bool) -> void:
+	if on == _cell.autopilot:
+		return
+	if on:
+		if not _can_autopilot() or _life != Life.ALIVE or _split >= Split.PINCH:
+			return
+		_cell.release()
+		_controls.let_go()
+		_cell.autopilot = true
+		_instincts.engage()
+		_autopilot_fall.clear()
+	else:
+		_cell.autopilot = false
+		_instincts.let_go()
+	_autopilot_icon.queue_redraw()
+	_programs.autopilot_changed()
+
+
+## **A press of the icon or of `R`**, once a frame: a phone touch arrives twice,
+## and its emulated twin must not switch it straight back.
+func _toggle_autopilot() -> void:
+	var frame := Engine.get_process_frames()
+	if frame == _autopilot_frame:
+		return
+	_autopilot_frame = frame
+	_set_autopilot(not _cell.autopilot)
+
+
+## **The hand took the cell back** (row 36): a new press of a control it drives
+## with, heard from cell.gd before that press does what it does. The glyph is a
+## T-bar on this frame, and its light falls over [constant AUTOPILOT_FALL].
+func _take_back() -> void:
+	if not _cell.autopilot:
+		return
+	_set_autopilot(false)
+	_autopilot_fall.start()
+
+
+## **The library changed** -- an edit, a switch, a reorder, a load: the programs
+## that are on are merged again, as a new list, and the instincts take it from
+## their next tick, holding nothing from before (§3.3, §3.7). With nothing left
+## to run, the autopilot goes off.
+func _library_changed() -> void:
+	if _library.revision == _library_seen:
+		return
+	_library_seen = _library.revision
+	var on: Array = []
+	for i in _library.size():
+		var one: Library.Program = _library.programs[i]
+		if one.on and not one.lines.is_empty():
+			on.append([_library.name_of(i), one.lines.duplicate()])
+	_instincts.set_list(_library.merged(FoodField.vocabulary()), on)
+	if not _can_autopilot():
+		_set_autopilot(false)
+
+
+## **Your library, kept** (§9.1) when it has changed: as the pause screen closes,
+## and as the app is left or its window closed -- never in play, and never by a
+## division, a birth or a death, which change no program (row 40). A tool's run,
+## with no [member library_at], keeps none.
+func _save_library() -> void:
+	if library_at.is_empty() or not _library.dirty:
+		return
+	var done := _library.save_to(library_at)
+	if done != OK:
+		push_warning("[NormalMode] the library was not kept at %s (%s): the last one stands"
+			% [library_at, error_string(done)])
+
+
+## **The list your sister carries into the water** (§6.3): the programs that are
+## on, merged in the library's order, as they are now -- or null for the
+## founders', when none is.
+func _sister_brain() -> Variant:
+	_library_changed()
+	return _library.merged(FoodField.vocabulary())
+
+
+func _update_autopilot_icon(delta: float) -> void:
+	var wanted := _autopilot_reachable() and not _menu_open
+	if wanted and not _autopilot_shown:
+		# **The first time it is drawn in a lineage it breathes once** (UX §5.2),
+		# with the pause tap's breath: it appears the moment a program is on.
+		_autopilot_shown = true
+		_autopilot_breath.start()
+	if _autopilot_icon.visible != wanted:
+		_autopilot_icon.visible = wanted
+		if not wanted:
+			_autopilot_hot = false
+	if not wanted:
+		return
+	var moving := _autopilot_breath.running() or _autopilot_fall.running()
+	_autopilot_breath.step(delta)
+	_autopilot_fall.step(delta)
+	if moving:
+		_autopilot_icon.queue_redraw()
+
+
+func _on_autopilot_icon(event: InputEvent) -> void:
+	if not _is_widget_tap(event):
+		return
+	# Swallowed, as the pause tap's is: an unclaimed press in the water is a
+	# steer, a short one a dash, and either would take the cell straight back.
+	_autopilot_icon.accept_event()
+	_toggle_autopilot()
+
+
+func _set_autopilot_hot(hot: bool) -> void:
+	if _autopilot_hot == hot:
+		return
+	_autopilot_hot = hot
+	_autopilot_icon.queue_redraw()
+
+
+func _draw_autopilot_icon() -> void:
+	ProgramsPage.draw_autopilot(_autopilot_icon, _cell.autopilot, _autopilot_hot,
+		_autopilot_fall.value(), _autopilot_breath.value())
+
+
+## **The pause screen's page** (automation-ux.md §1): your programs -- on the view
+## left -- or the genome. The drawn controls go with the programs page.
+func _show_programs(on: bool) -> void:
+	_on_programs = on
+	_pause_center.visible = not on
+	if on:
+		_programs.reopen()
+	else:
+		_programs.hide()
+		if _menu_open and not _fork_open():
+			_resume_button.grab_focus()
+	_programs.say_chip(not on)
+	_update_controls()
+
+
+## **The page chip** (§1.1): to your programs from the genome, up from a program
+## to the library, and from the library back to the genome.
+func _on_page_chip() -> void:
+	if not _menu_open:
+		return
+	if not _on_programs:
+		_show_programs(true)
+	elif not _programs.chip_pressed():
+		_show_programs(false)
+	else:
+		_programs.say_chip(false)
+
+
+
+
+# ---------------------------------------------------------------------------
 # Leaving. Back on Android, Esc on desktop; neither costs a pixel.
 # ---------------------------------------------------------------------------
 
@@ -3063,6 +3384,10 @@ func _notification(what: int) -> void:
 			# the top one: the view, and only the view.
 			elif _fork_open():
 				_close_fork(true)
+			# **Inside a program, Back goes up to the library** (automation-ux.md
+			# §1.2); from the library it resumes.
+			elif _menu_open and _on_programs and _programs.back():
+				pass
 			else:
 				_toggle_pause()
 		NOTIFICATION_DRAG_END:
@@ -3106,9 +3431,13 @@ func _notification(what: int) -> void:
 			# in it (row 17): Android's backgrounding comes before the system
 			# kills an app, and closing the app is a pause.
 			_keep_drop()
+			# And a library changed on a page still open: the app may never
+			# come back to close it.
+			_save_library()
 		NOTIFICATION_WM_CLOSE_REQUEST:
 			# The window closed on desktop: the same leaving.
 			_keep_drop()
+			_save_library()
 		NOTIFICATION_TRANSLATION_CHANGED:
 			# Deferred, and it has to be (settings.md §3.3): the tree is still
 			# telling every node, and the genome strip is rebuilt by adding nodes,
@@ -3290,6 +3619,9 @@ func _unhandled_input(event: InputEvent) -> void:
 			# reason: one key, one step back.
 			elif _fork_open():
 				_close_fork(true)
+			# Esc inside a program goes up to the library, as Back does.
+			elif _menu_open and _on_programs and _programs.back():
+				pass
 			else:
 				_toggle_pause()
 		get_viewport().set_input_as_handled()
@@ -3349,11 +3681,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if _life != Life.ALIVE:
 		return
 
+	# **`R` switches the autopilot** (automation-ux.md §5.2), in play and on the
+	# programs page -- not over the genome, whose keys are its own. Read raw, as
+	# `N` and `V` are: a content pack cannot add an action, and `R` sits in the
+	# same place on QWERTY and AZERTY. Not a key the hand drives with, so it
+	# takes nothing back on its way.
+	if event is InputEventKey and (not _menu_open or _programs.visible):
+		var asked_r := event as InputEventKey
+		if asked_r.pressed and not asked_r.echo \
+				and (asked_r.keycode == KEY_R or asked_r.physical_keycode == KEY_R):
+			_toggle_autopilot()
+			get_viewport().set_input_as_handled()
+			return
+
 	# **`N` turns a gene's numbers on and off** while the pause screen is up
 	# (gene-stats.md §2.2), on the press and never on an echo. Read raw, as the
 	# `Shift`+arrow move is: a content pack cannot add an action. Nothing else
 	# reads `N`.
-	if _menu_open and event is InputEventKey:
+	if _menu_open and not _on_programs and event is InputEventKey:
 		var asked := event as InputEventKey
 		if asked.pressed and not asked.echo \
 				and (asked.keycode == KEY_N or asked.physical_keycode == KEY_N):
@@ -3666,12 +4011,21 @@ func _set_menu(open: bool) -> void:
 		# slot selected, is what pause opens on. The other answer is this.
 		if PAUSE_OPENS_ON_CARDS and _hand() == &"" and not _strip_forks.is_empty():
 			_open_fork(_strip_forks[0], false)
+		# **Which page** (automation-ux.md §1.2): the genome whenever a gene is
+		# waiting, or a fork's cards are up -- both have a clock or a question --
+		# and otherwise the page and the view left in this run.
+		_show_programs(_on_programs and _genome.waiting().is_empty() and not _fork_open())
 		# **Opening the pause screen keeps the drop** (ocean.md §9.3), the cell
 		# with it: a moment off the play frame, as every save point is.
 		_keep_drop()
 	else:
 		_reset_fork_view()
 		RunState.save_gain(_bus.gain)
+		# A half-built instinct and a drag go with the page (automation-ux.md §1.2).
+		_programs.closed()
+		# **Your library is kept as the page closes with a change** (automation.md
+		# §9.1): never in play.
+		_save_library()
 		# **A sheet left open goes with the screen** (settings.md §1.1): a death
 		# or a takeover shuts pause from under it, and it must not still be open
 		# the next time pause is.
@@ -3688,6 +4042,7 @@ func _set_menu(open: bool) -> void:
 func _say_again() -> void:
 	_update_view_button()
 	_update_scheme_button()
+	_programs.say_chip(not _on_programs)
 	if _onboard_says != &"":
 		_onboarding.text = _line_words(_onboard_says)
 	_numbers_toggle.queue_redraw()
@@ -3706,6 +4061,7 @@ func _leave() -> void:
 	# **Leaving the run keeps the drop** as it is now (ocean.md §9.3): whatever
 	# the pause screen changed since it opened goes with it.
 	_keep_drop()
+	_save_library()
 	get_tree().paused = false
 	_menu_open = false
 	RunState.save_gain(_bus.gain)
@@ -8639,7 +8995,8 @@ func _home_after_black() -> Array:
 func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
 		mother: PackedInt32Array) -> void:
 	if _pond.hosting:
-		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body, dna, mother)
+		_food.put_sister(bearing, SISTER_DISTANCE, _cell.radius, body, dna, mother,
+			_sister_brain())
 		return
 	var dir := _cell.forward() * cos(bearing) + _cell.starboard() * sin(bearing)
 	var at := _cell.position + dir * SISTER_DISTANCE

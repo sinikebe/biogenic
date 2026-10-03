@@ -36,6 +36,12 @@ const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const RunState := preload("res://game/run_state.gd")
+## **The autopilot's icon and an instinct in words** (automation-ux.md §7.3): the
+## page draws the icon for the water, the page and this screen alike, and the
+## words say a rule as its row does.
+const ProgramsPage := preload("res://game/normal/programs_page.gd")
+const ProgramWords := preload("res://game/normal/program_words.gd")
+const Rulebook := preload("res://game/mechanics/rulebook.gd")
 
 const MEMBRANE_SCENE := preload("res://game/perception/membrane.tscn")
 const VISION_SCENE := preload("res://game/vision/vision.tscn")
@@ -128,6 +134,22 @@ const SEAM_COLOR := Color(0.12, 0.70, 0.58, 0.20)
 ## water. §4.4's register, drawn rather than asserted.
 const SILL_HEIGHT := 1.0
 const SILL_COLOR := Color(0.12, 0.70, 0.58, 0.13)
+## **Who had the cell, and which instinct steered** (automation.md §8.4;
+## automation-ux.md §7.3): the autopilot's icon as it stood, in the felt pane's
+## top-right corner, one launcher edge margin in as in the water -- and, while the
+## autopilot had the cell, a line under the pane's caption naming the program
+## and the instinct that steered, in a row's words. 14 px, the caption's own tint.
+const ICON_SIZE := 56.0
+const ICON_EDGE := 48.0
+const ACTING_SIZE := 14
+const ACTING_COLOR := Color(0.855, 0.953, 0.933, 0.45)
+## Where the acting line sits in the band: under the felt pane's caption,
+## centred on it, and slid left only as far as it must go to stay this clear of
+## the transport, which the replay centres in the band (replay.gd) -- and as
+## clear of the screen's left edge, where a line too long for both is trimmed.
+const ACTING_TOP := 34.0
+const ACTING_CLEAR := 16.0
+const TRANSPORT_WIDTH := 368.0
 
 ## True while this screen is mirroring a run that is still being played, which
 ## is how it was first rendered and how the harness photographs it. The replay
@@ -156,6 +178,11 @@ var _sill: ColorRect = null
 
 var _view := Vector2(1280.0, 720.0)
 var _block := PackedFloat32Array()
+## The programs that were on and `[drives, held, mask]`, as the recording says.
+var _programs: Array = []
+var _acts: Array = [false, false, 0]
+var _icon: Control = null
+var _acting: Label = null
 
 
 func _ready() -> void:
@@ -265,6 +292,77 @@ func set_division(division: Dictionary) -> void:
 			or float(division.get("pinch", 0.0)) > 0.0)
 
 
+## **The programs that were on**, as the recording last said: `[name, lines]` each,
+## in order. The icon is drawn only while there were some, as in the water.
+func set_programs(programs: Array) -> void:
+	_programs = programs
+	_say_acting()
+
+
+## **Who had the cell and what acted**, `[drives, held, mask]`.
+func set_acts(acts: Array) -> void:
+	_acts = acts
+	_say_acting()
+
+
+## The icon as it stood, and the line naming the instinct that steered -- or, on a
+## tick nothing steered, the first that acted -- while the autopilot had the cell.
+func _say_acting() -> void:
+	if _icon == null:
+		return
+	_icon.visible = not _programs.is_empty()
+	_icon.queue_redraw()
+	var line := ""
+	if bool(_acts[0]) and int(_acts[2]) != 0:
+		line = acting_line(_programs, int(_acts[2]))
+	_acting.text = line
+	_acting.visible = not line.is_empty()
+	_place_acting()
+
+
+## **The acting line under its caption** (automation-ux.md §7.3): centred on the
+## felt pane's caption, then slid left only as far as it must go to stay
+## [constant ACTING_CLEAR] clear of the transport. Placed again with every line,
+## since a line's width is what decides how far.
+func _place_acting() -> void:
+	if _acting == null:
+		return
+	var felt := felt_rect()
+	var font := _acting.get_theme_font(&"font")
+	var w := font.get_string_size(_acting.text, HORIZONTAL_ALIGNMENT_LEFT, -1,
+		ACTING_SIZE).x if font != null else 0.0
+	var right := (_view.x - TRANSPORT_WIDTH) * 0.5 - ACTING_CLEAR
+	var x := minf(felt.position.x + (felt.size.x - w) * 0.5, right - w)
+	x = maxf(x, ACTING_CLEAR)
+	_acting.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_acting.position = Vector2(x, felt.size.y + ACTING_TOP)
+	_acting.size = Vector2(maxf(right - x, 1.0), CAPTION_HEIGHT)
+
+
+## **The program and the instinct that steered**, in a row's words: `“flee” ·
+## echo → turn away`, from the programs that were on and the mask of what acted.
+## The steering one if any steered, else the first that acted; "" for none.
+static func acting_line(programs: Array, mask: int) -> String:
+	var vocab := FoodField.vocabulary()
+	var steering := int(vocab.claims.get(&"steering", 0))
+	var at := 0
+	var first := ""
+	for one: Array in programs:
+		var lines: PackedStringArray = one[1]
+		for k in lines.size():
+			if (mask & (1 << (at + k))) == 0:
+				continue
+			var rule := Rulebook.rule_from(lines[k], vocab)
+			var said := "%s · %s" % [ProgramWords.quoted(String(one[0])),
+				ProgramWords.rule_text(rule)]
+			if (rule.claims & steering) != 0:
+				return said
+			if first.is_empty():
+				first = said
+		at += lines.size()
+	return first
+
+
 ## **The recording has started again.** The world view forgets its trail and
 ## its marks, which were drawn in real time and would otherwise join the death
 ## to the start of the next pass. The membrane has nothing to forget: it is
@@ -369,6 +467,23 @@ func _build() -> void:
 	_truth_caption = _caption(tr(TRUTH_TEXT))
 	legend.add_child(_felt_caption)
 	legend.add_child(_truth_caption)
+	_icon = Control.new()
+	_icon.name = "Autopilot"
+	_icon.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_icon.visible = false
+	_icon.draw.connect(func() -> void:
+		ProgramsPage.draw_autopilot(_icon, bool(_acts[0]), false))
+	legend.add_child(_icon)
+	_acting = Label.new()
+	_acting.name = "Acting"
+	_acting.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_acting.auto_translate_mode = Node.AUTO_TRANSLATE_MODE_DISABLED
+	_acting.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
+	_acting.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	_acting.add_theme_font_size_override("font_size", ACTING_SIZE)
+	_acting.add_theme_color_override("font_color", ACTING_COLOR)
+	_acting.visible = false
+	legend.add_child(_acting)
 	add_child(legend)
 
 
@@ -449,6 +564,12 @@ func _relayout() -> void:
 		label.position = Vector2(pane.position.x,
 			pane.size.y + CAPTION_TOP)
 		label.size = Vector2(pane.size.x, CAPTION_HEIGHT)
+	# The icon in the felt pane's own top-right corner; the acting line under its
+	# caption ([method _place_acting]).
+	_icon.set_anchors_preset(Control.PRESET_TOP_LEFT, false)
+	_icon.position = Vector2(felt.end.x - ICON_EDGE - ICON_SIZE, ICON_EDGE)
+	_icon.size = Vector2(ICON_SIZE, ICON_SIZE)
+	_place_acting()
 
 
 # ---------------------------------------------------------------------------

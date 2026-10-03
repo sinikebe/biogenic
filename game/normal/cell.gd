@@ -14,6 +14,13 @@ extends Node
 
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
+## **A new press of a control the hand drives with**, while the autopilot has the
+## cell (docs/design/automation.md §2.3, row 36): a steer, a push, a dash or the
+## hold, by the scheme's own rules -- a finger on the water under `anywhere`, a
+## drawn control under `stick` and `pads`, a key. The run takes the cell back on
+## it, in the same frame, before the press does what it does. Never for a press
+## that was already down, nor while the hand is silenced.
+signal took_back
 ## `myoneme` -- a burst of speed the player asked for, and what it cost. The
 ## cell cannot spend hunger itself: metabolism belongs to the run, so the price
 ## rides out on the signal and the run pays it.
@@ -194,6 +201,13 @@ const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
 ## tail beats on its own, for every body that swims. Not a table a host's
 ## referee judges by: a held tail only ever makes a body slower.
 const HOLD_LEVEL := 2
+## **How an instinct steers onto the heading it holds** (automation.md §4.2): in
+## proportion to how far off it is, inside this band, and at full rate outside
+## it. The cirrus's lag times its rate is about 0.68 rad at every tier, so full
+## rate to the heading would carry the turn about that far past it; a band of
+## about twice that settles with a few degrees of overshoot. Radians, a starting
+## value (§15). Not a table: a host's referee judges the motion, never this.
+const HOLD_BAND := 1.3
 ## Mean of the per-impulse strength roll below, for [method speed_for].
 const IMPULSE_MEAN := 0.85
 ## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
@@ -520,42 +534,68 @@ const DECLARES := {
 }
 
 ## **What the body's parts are called** (docs/design/automation.md §13.1), beside
-## [constant DECLARES], by qualified name: the words the instincts page puts on
-## a part's chip. Phase 4-1 brings the one whose meaning the tail changed; the
-## page brings the rest with it. Read through [method words_of].
+## [constant DECLARES], by qualified name and by value name: the words the
+## programs page puts on a part's chip. Read through [method words_of].
 ##
-## TRANSLATORS: The name of an action the player's cell can be told to do by one
-## of its "instincts" (a rule the player writes: "when <a sense reports
-## something> -> <do this>"), on a small chip. Lowercase, one or two short words.
-## "rest" means: stop moving on purpose and drift with the water.
+## TRANSLATORS: The name of a sense or an action on a small chip of the player's
+## "instincts" (rules the player writes: "when <a sense reports something> -> <do
+## this>"), or of a value a sense reports. Lowercase, one or two short words.
+## "hit": a bite landing on the cell. "turn toward" / "turn away": steer to or
+## from where the sense says it is. "tumble": a sudden turn to a random side, as
+## swimming bacteria do. "swim": keep the tail beating. "rest": stop moving on
+## purpose and drift with the water.
 ## ROOM: 112 px at 15 px
 const BODY_SAYS := {
+	&"body.hit": "hit",
+	&"body.turn-toward": "turn toward",
+	&"body.turn-away": "turn away",
+	&"body.turn-random": "tumble",
+	&"body.swim": "swim",
 	&"body.rest": "rest",
 }
-## **The line that explains each of them**, beside the chip: the chip's word, a
-## middle dot, and what it makes the cell do, in plain words.
+## **What the values its senses report are called**, by value name: a test is put
+## to one of them.
 ##
-## TRANSLATORS: Explains one action an "instinct" can make the cell do, on one
-## line under the instincts: its name (the same word as on its chip), a middle
-## dot, then what it does, lowercase. "Your tail" is the cell's flagellum, which
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell: "strength", how hard a bite was.
+## Lowercase, one short word.
+## ROOM: 70 px at 14 px
+const BODY_VALUES := {
+	&"strength": "strength",
+}
+## **The line that explains each of them**, beside the chip: the chip's word, a
+## middle dot, and what it is or makes the cell do, in plain words.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same word as on its chip), a middle dot,
+## then what it is or does, lowercase. "Your tail" is the cell's flagellum, which
 ## swims; "two copies" means the gene is carried twice in the cell's DNA, which
-## is what lets the tail be held still.
+## is what lets the tail be held still; "below" means the instincts lower in the
+## list.
 ## ROOM: 856 px at 15 px
 const BODY_EXPLAINS := {
+	&"body.hit": "hit · a bite landing on you: where it came from, and how hard.",
+	&"body.turn-toward": "turn toward · steer for where the sense says it is.",
+	&"body.turn-away": "turn away · steer away from where the sense says it is.",
+	&"body.turn-random": "tumble · a quarter to a half turn, to a random side.",
+	&"body.swim": "swim · keep your tail beating, so nothing below holds it still.",
 	&"body.rest": "rest · stop steering, pushing and dashing, and drift. with two copies of"
 		+ " your tail, hold it still too.",
+	&"strength": "strength · how hard the bite was, from a graze to a full bite.",
 }
 
 
 ## **A part's words, in the language of the moment** (automation.md §13.1), for
-## the parts [constant DECLARES] names: `{"says": its chip, "explains": its
-## line}`, a key absent where there are none yet. `genome.gd` answers the same
-## way for the genes' parts, so the page asks the file that declares a part, and
-## a gene that brings a part brings its words with it.
+## the parts [constant DECLARES] names and the values they report: `{"says": its
+## chip, "explains": its line}`, a key absent where there are none. `genome.gd`
+## and `metabolism.gd` answer the same way for their parts, so the page asks the
+## file that declares a part, and a gene that brings a part brings its words.
 static func words_of(part: StringName) -> Dictionary:
 	var out := {}
 	if BODY_SAYS.has(part):
 		out["says"] = String(TranslationServer.translate(BODY_SAYS[part]))
+	elif BODY_VALUES.has(part):
+		out["says"] = String(TranslationServer.translate(BODY_VALUES[part]))
 	if BODY_EXPLAINS.has(part):
 		out["explains"] = String(TranslationServer.translate(BODY_EXPLAINS[part]))
 	return out
@@ -616,7 +656,23 @@ var controls: Node = null
 ## steering, the moment it clears. So whoever flips it calls [method release]
 ## and `controls.let_go()` at the same moment, both ways round: exactly the
 ## pair the pause screen and a lost focus already call.
+##
+## **It silences the hand only** (automation.md §2.4, §13): the autopilot drives
+## through it, so a pond's open menu lets your programs steer while you edit.
 var steering_off := false
+
+## **Whether the autopilot has the cell** (automation.md §2): set by the run, and
+## nothing here sets it. While it does, the steer, the push and the tail are what
+## [member instincts] claim, and the hand's keys and fingers move nothing until a
+## new press takes the cell back ([signal took_back]).
+var autopilot := false
+## **The instincts that drive the cell while the autopilot has it**:
+## `own_rules.gd`, set by the run. Untyped for the reason [member controls] is.
+var instincts: RefCounted = null
+## **What the hand asked to steer this frame**, -1 .. +1, whoever had the cell:
+## what the run's onboarding waits for (automation.md §18.1), never an
+## instinct's turn.
+var hand_steer := 0.0
 
 
 func _ready() -> void:
@@ -682,7 +738,11 @@ func restore_body(state: Dictionary) -> void:
 
 
 func _process(delta: float) -> void:
-	steer = _read_steer()
+	# **The hand, or the heading the instincts hold** (automation.md §4.2, §18.4):
+	# while the autopilot has the cell its instincts steer, in proportion inside
+	# HOLD_BAND, and the hand's keys and fingers move nothing.
+	hand_steer = _read_steer()
+	steer = float(instincts.call(&"steer_for", heading)) if _driven() else hand_steer
 
 	# The body knits itself back up whenever nothing is chewing on it. Here
 	# rather than in the water, because it is a thing a body does and not a
@@ -717,9 +777,13 @@ func _process(delta: float) -> void:
 	# second control would cost a pixel of screen the design does not have.
 	_dash_timer = maxf(_dash_timer - delta, 0.0)
 	var push := PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))]
-	if push > 0.0 and _pushing():
-		velocity += forward() * push * delta
-		_effort += push * delta * STROKE_COST
+	# **A strength, not a yes or no** (automation.md §4.2): the hand's is full, and
+	# an instinct's a half or full, at that share of the thrust and of its price.
+	var strength := _push_strength()
+	if push > 0.0 and strength > 0.0:
+		var thrust := push if strength >= 1.0 else push * strength
+		velocity += forward() * thrust * delta
+		_effort += thrust * delta * STROKE_COST
 
 	velocity *= exp(-DRAG * delta)
 	position += velocity * delta
@@ -909,6 +973,12 @@ func can_hold() -> bool:
 ## hand does.
 func tail_held() -> bool:
 	return _held
+
+
+## **The held tail a replay writes back** (automation.md §11), as it writes the
+## rest of a recorded frame onto this body: what both views draw still.
+func restore_held(on: bool) -> void:
+	_held = on
 
 
 func turn_rate() -> float:
@@ -1153,10 +1223,25 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventKey:
 		# `myoneme` on desktop. Space is the only key normal mode spends besides
 		# the steer keys, the push and hold keys (polled, in `_pushing` and
-		# `_holding`) and V, and it is the one key nothing else wants.
+		# `_holding`), V and R, and it is the one key nothing else wants.
 		var key := event as InputEventKey
-		if key.pressed and not key.echo and key.keycode == KEY_SPACE:
-			_dash()
+		if key.pressed and not key.echo:
+			# **A new press of a key the hand drives with takes the cell back**
+			# (row 36): a key held through the switching-on sends no new press,
+			# and takes nothing back until it is pressed again.
+			if _hand_key(key):
+				_hand_pressed()
+			if key.keycode == KEY_SPACE:
+				_dash()
+		return
+
+	# A pad's d-pad steers as the arrows do, through the same actions, and a new
+	# press of it is the hand's as much as a key's.
+	if event is InputEventJoypadButton or event is InputEventJoypadMotion:
+		for action: StringName in HAND_ACTIONS:
+			if event.is_action_pressed(action):
+				_hand_pressed()
+				break
 		return
 
 	if event is InputEventMouseMotion:
@@ -1176,9 +1261,18 @@ func _unhandled_input(event: InputEvent) -> void:
 ##
 ## The dash fires here, on the press, and never on the release -- a dash that
 ## waits for a lift is a dash that arrives after the thing that was chasing you.
+##
+## **And it is the hand, by the scheme's own rule** (automation.md §2.3): a press
+## a drawn control takes, or under `anywhere` a press anywhere on the water --
+## which is also where a dash, a push and the placing of a gene begin. Under
+## `stick` and `pads` open water is inert and takes nothing back. While the
+## autopilot has the cell that press takes it back first, on this frame, and
+## then does what it does.
 func _claim(index: int, at: Vector2) -> void:
 	if controls != null:
 		var id: int = controls.press(index, at)
+		if id != controls.NONE or controls.floating():
+			_hand_pressed()
 		if id == controls.DASH:
 			_dash()
 			return
@@ -1186,8 +1280,34 @@ func _claim(index: int, at: Vector2) -> void:
 			return
 		if not controls.floating():
 			return
+	else:
+		_hand_pressed()
 	if _pointer == POINTER_NONE:
 		_grab(index, at.x)
+
+
+## **A new press of the hand's** (row 36): the autopilot, if it has the cell,
+## gives it back -- the run hears [signal took_back] and switches it off in the
+## same frame. Nothing while the hand is silenced: a pond's open menu is moving
+## focus, not taking the cell.
+func _hand_pressed() -> void:
+	if autopilot and not steering_off:
+		took_back.emit()
+
+
+## The keys the hand drives with: steering, the push and the hold, by their
+## actions and by the letters read raw, and the dash's Space.
+const HAND_ACTIONS: Array[StringName] = [&"ui_left", &"ui_right", &"ui_up", &"ui_down"]
+const HAND_KEYS: Array[int] = [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE]
+
+
+func _hand_key(key: InputEventKey) -> bool:
+	if HAND_KEYS.has(key.keycode) or HAND_KEYS.has(key.physical_keycode):
+		return true
+	for action: StringName in HAND_ACTIONS:
+		if key.is_action_pressed(action):
+			return true
+	return false
 
 
 ## True when that pointer belongs to a drawn control, which owns every later
@@ -1243,6 +1363,10 @@ func _pushing() -> bool:
 ## _process]), so at a level-1 tail the key does nothing. `S` and `↓` are read
 ## the way `W` and `↑` are, and a content pack adds no action for them.
 func _holding() -> bool:
+	# **The instincts' hold, while the autopilot has the cell**: the flagellum's
+	# own, or a rest at this level (automation.md §4.2).
+	if _driven():
+		return bool(instincts.call(&"holds_tail"))
 	if steering_off:
 		return false
 	if Input.is_action_pressed(&"ui_down") or Input.is_key_pressed(KEY_S):
@@ -1250,11 +1374,35 @@ func _holding() -> bool:
 	return controls != null and bool(controls.holding())
 
 
+## **The push's strength this frame**: an instinct's half or full while the
+## autopilot has the cell, otherwise the hand's, which is full or nothing.
+func _push_strength() -> float:
+	if _driven():
+		return float(instincts.call(&"push_strength"))
+	return 1.0 if _pushing() else 0.0
+
+
+## Whether the instincts drive this frame.
+func _driven() -> bool:
+	return autopilot and instincts != null
+
+
+## **A dash an instinct fires** (automation.md §4.2): the hand's own burst, on its
+## cooldown and at its price -- past [member steering_off], which silences the
+## hand only, as a water body's rules fire its dash.
+func instinct_dash() -> void:
+	_dash_now()
+
+
 ## The burst. Costs hunger, which the cell does not own, so the price leaves on
 ## a signal and the run pays it.
 func _dash() -> void:
 	if steering_off:
 		return
+	_dash_now()
+
+
+func _dash_now() -> void:
 	var tier := _tier_index(extra(&"myoneme"))
 	var speed := DASH_SPEED_BY_TIER[tier]
 	if speed <= 0.0 or _dash_timer > 0.0:

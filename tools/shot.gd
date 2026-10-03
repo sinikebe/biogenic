@@ -40,6 +40,13 @@ func _ready() -> void:
 	# tiny on a phone-sized shot and invents a layout bug that is not there.
 	if size != Vector2i.ZERO:
 		get_window().size = size
+		# **And at the screen's corner.** The window opens centred at the project's
+		# 1280x720 and grows from there, so a 2400x1080 shot on a 2400x1080 Xvfb
+		# screen hung 560 px off its right edge and 180 off its bottom. The image
+		# never showed it -- it is the viewport's -- but the pointer cannot leave the
+		# screen, so a `--hover=` there landed at canvas 1226,599 at most and the
+		# shot photographed a hover that had not happened.
+		get_window().position = Vector2i.ZERO
 
 	if not ResourceLoader.exists(scene_path):
 		push_error("[shot] No scene at %s" % scene_path)

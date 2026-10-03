@@ -82,8 +82,8 @@ game, `automation-ux.md` for the screen), to the owner's answers to rows 27 to
 alone. It is built in three phases:
 
 - a tail with two copies can be held still, by hand and by instinct, for every
-  cell (4-1);
-- programs, the library and the autopilot (4-2);
+  cell (4-1, built);
+- programs, the library and the autopilot (4-2, built);
 - a friend's daughter carries her instincts (4-3, a protocol change).
 
 **Beside them, on `dev` for the same release:** the game in French, a settings

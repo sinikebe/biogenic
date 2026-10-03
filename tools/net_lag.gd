@@ -564,6 +564,7 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	# **Neither run keeps a drop** (ocean.md §9): the game's default is the
 	# player's own file, which a measurement must neither open on nor write.
 	_host_run.set("keep", "")
+	_host_run.set("library_at", "")
 	add_child(_host_run)
 	var until := _now() + 4.0
 	while _now() < until and not bool(_near.peer_pond_open()):
@@ -573,6 +574,7 @@ func _build_pond(link: String, reliable: bool, rto: float) -> bool:
 	_guest_run.set("mode", 1)
 	_guest_run.set("scheme", 0)
 	_guest_run.set("keep", "")
+	_guest_run.set("library_at", "")
 	add_child(_guest_run)
 	var guest_pond: Object = _guest_run.get("_pond")
 	until = _now() + 6.0

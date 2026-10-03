@@ -155,6 +155,12 @@ const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
 ## Only for its control ids: the hold pad, which [method _tail_drawn] finds in a run.
 const ControlsNode := preload("res://game/normal/controls.gd")
+## **Your programs and the autopilot** (automation.md §18.3, phase 4-2): the
+## library, the wiring of your instincts, and the page that builds them.
+const Library := preload("res://game/normal/library.gd")
+const OwnRules := preload("res://game/normal/own_rules.gd")
+const ProgramsPage := preload("res://game/normal/programs_page.gd")
+const ProgramWords := preload("res://game/normal/program_words.gd")
 
 ## Somewhere other than the origin, as the drop is once a run has started in it.
 const OFF_CENTRE := Vector2(-1234.5, 2345.25)
@@ -620,6 +626,14 @@ func _ready() -> void:
 		print("[drop-probe] NOTE --tail-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--programs-only` is for working on programs and the autopilot
+	# (automation.md §18.3, checks 9 to 22): their own section, and nothing else.
+	# CI never passes it, and it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--programs-only"):
+		await _programs()
+		print("[drop-probe] NOTE --programs-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	_grid()
 	_basin()
 	_replenish()
@@ -641,6 +655,7 @@ func _ready() -> void:
 	_changes()
 	_modular()
 	await _tail()
+	await _programs()
 	_flocs()
 	await _flocs_fed()
 	_one_body()
@@ -2481,6 +2496,7 @@ func _flocs_fed() -> void:
 	run.set("mode", 0)
 	run.set("scheme", 0)
 	run.set("keep", "")
+	run.set("library_at", "")
 	add_child(run)
 	await get_tree().process_frame
 	var met: Node = run.get("_metabolism")
@@ -3029,6 +3045,7 @@ func _replay_run() -> void:
 	run.set("mode", 1)
 	run.set("scheme", 0)
 	run.set("keep", "")
+	run.set("library_at", "")
 	add_child(run)
 	var rec: Node = run.get("_recorder")
 	for f in 3000:
@@ -3470,6 +3487,7 @@ func _kept_run() -> Node:
 	run.set("mode", 0)
 	run.set("scheme", 0)
 	run.set("keep", KEEP)
+	run.set("library_at", "")
 	add_child(run)
 	return run
 
@@ -4149,6 +4167,7 @@ func _drops_run(keep: String) -> Node:
 	run.set("mode", 0)
 	run.set("scheme", 0)
 	run.set("keep", keep)
+	run.set("library_at", "")
 	add_child(run)
 	for f in 30:
 		await get_tree().process_frame
@@ -4407,6 +4426,7 @@ func _sister_lineage() -> void:
 	run.set("mode", 0)
 	run.set("scheme", 0)
 	run.set("keep", "")
+	run.set("library_at", "")
 	add_child(run)
 	var food: Node = run.get("_food")
 	run.set("_generation", 3)
@@ -6032,6 +6052,7 @@ func _tail_drawn() -> void:
 		run.set("mode", 0)
 		run.set("scheme", scheme)
 		run.set("keep", "")
+		run.set("library_at", "")
 		add_child(run)
 		for f in 30:
 			await get_tree().process_frame
@@ -6278,6 +6299,1201 @@ func _tail_level_three() -> void:
 		str(worn[0]), str(worn[1]), drawn[0], drawn[1], "; ".join(words)],
 		fired == [[0], [0], [0, 1]] and worn == [false, true] and drawn[0] == 0 and drawn[1] > 0
 		and bit > 0 and not words.is_empty() and spoken)
+
+
+# --- Pack 4, phase 4-2: programs and the autopilot (automation.md §18.3) -----------
+
+## Every sense a player can wear, and the founders' organs, at once.
+const SENSES_ALL := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 2,
+	&"stigma": 1, &"palp": 2, &"ocellus": 2, &"ampulla": 1}
+## Each input the game declares, by the reader `food.gd` wires to it.
+const INPUT_READERS := {
+	&"metabolism.hunger": &"_read_hunger", &"metabolism.fed": &"_read_fed",
+	&"body.hit": &"_read_hit", &"chemocyte.smell": &"_read_smell",
+	&"stigma.shadow": &"_read_shadow", &"palp.touch": &"_read_touch",
+	&"ocellus.beam": &"_read_beam", &"ampulla.echo": &"_read_echo",
+}
+## Where a probe's library is kept, and its world's drops: never the device's.
+const LIBRARY_AT := "user://drop_probe_library/library.save"
+
+
+func _programs() -> void:
+	_instincts_read()
+	_instincts_no_magic()
+	await _instincts_autopilot()
+	_instincts_order()
+	_instincts_eight()
+	_instincts_settle()
+	_instincts_push_dash()
+	await _instincts_edits()
+	await _instincts_file()
+	await _instincts_division()
+	_instincts_determinism()
+	_instincts_modular()
+	await _instincts_replay()
+
+
+## **A player wearing [param tiers], its instincts wired**, in a drop of its own
+## and stepped by hand: `[cell, genome, field, own, metabolism, water]`. Its
+## organs as the run aims them ([method _your_organs]).
+func _own_player(tiers: Dictionary, desert := 3000.0) -> Array:
+	var water := _water(desert)
+	var field: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	var genome := _your_organs(field, cell, tiers)
+	var metabolism: Node = Metabolism.new()
+	var own: RefCounted = OwnRules.new()
+	own.call(&"setup", cell, field, metabolism, genome)
+	cell.instincts = own
+	return [cell, genome, field, own, metabolism, water]
+
+
+func _own_done(player: Array) -> void:
+	(player[0] as CellBody).instincts = null
+	(player[1] as Node).free()
+	(player[4] as Node).free()
+	_done(player[5])
+
+
+## [param lines] as a merged list of one program, by this build's vocabulary.
+func _own_list(lines: Array) -> RefCounted:
+	return FoodField.behaviour_from(PackedStringArray(lines))
+
+
+## **One tick of [param own]'s instincts**: the eight frames to it, nothing else
+## stepped.
+func _own_tick(own: RefCounted) -> void:
+	for f in 8:
+		own.call(&"step", 1.0 / 60.0)
+
+
+## **9. You read what a water cell reads** (automation.md §4.1, §18.3): every
+## input's report for your instincts, made of what your membrane's frame sensed
+## -- the nose, the eyespot, the palps, the rays and the call as the run steps
+## them, with eleven bodies, a floc and the rim round you, your tank, your last
+## meal and a bite not yet felt -- equals what a water cell posed as you were,
+## where you were, reads by its own reader, to the float. And every input the
+## game declares has a report of yours.
+func _instincts_read() -> void:
+	seed(91)
+	var player := _own_player(SENSES_ALL)
+	var cell: CellBody = player[0]
+	var field: WatchedDrop = player[2]
+	var own: RefCounted = player[3]
+	var metabolism: Node = player[4]
+	var cells: Array = field.get("_cells")
+	var p := cell.position
+	var h := 0.7
+	cell.heading = h
+	var fwd := Vector2(sin(h), -cos(h))
+	var stb := Vector2(cos(h), sin(h))
+	var centre: Vector2 = field.basin().get(&"center")
+	var inward := (centre - p).normalized() if p.distance_to(centre) > 1.0 else Vector2.RIGHT
+	var twin := _pose(field, p + inward * 2500.0, cell.radius, SENSES_ALL, h, 0.5)
+	var tb: Object = cells[twin]
+	var round_you := [[420.0, 150.0, 16.0, {&"cirrus": 1}],
+		[700.0, -260.0, 18.0, {&"flagellum": 1}],
+		[-300.0, 520.0, 14.0, {&"cirrus": 1, &"pellicle": 2}],
+		[250.0, -330.0, 40.0, {&"cytostome": 2, &"cirrus": 1}],
+		[-150.0, -480.0, 36.0, {&"cytostome": 1}],
+		[60.0, 95.0, 20.0, {&"cirrus": 1}],
+		[-640.0, 380.0, 30.0, {&"cytostome": 1, &"flagellum": 1}],
+		[1150.0, -700.0, 25.0, {&"cirrus": 1}]]
+	var ray := 0
+	for bearing: float in field.beam_bearings:
+		round_you.append([cos(bearing) * (330.0 + 140.0 * ray),
+			sin(bearing) * (330.0 + 140.0 * ray), 17.0 + 3.0 * ray, {&"cirrus": 1}])
+		ray += 1
+	for one: Array in round_you:
+		_pose(field, p + fwd * float(one[0]) + stb * float(one[1]), float(one[2]), one[3],
+			0.3, 0.5)
+	field._spawn_floc(p + fwd * 300.0 + stb * 40.0, 10.0, true)
+	# Your frame: your organs as the run steps them, on one clock.
+	var t := 731.25
+	field.set("_t", t)
+	field.set("_call_t", t)
+	own.set("clock", t)
+	metabolism.set("hunger", 0.37)
+	own.call(&"set_fed", 4.5)
+	field.player_hit = 0.6
+	field.player_hit_from = 2.1
+	field.in_water = true
+	field._refresh_me()
+	field.set("_near", field.bodies_near(p, 1800.0))
+	field._step_sense()
+	field._step_beams()
+	field._step_touch()
+	(field.get("_echoes") as Array).clear()
+	(field.get("player_calls") as Array).clear()
+	field._cast_ping()
+	var lands := INF
+	for one: Array in field.get("player_calls"):
+		lands = minf(lands, float(one[0]))
+	var heard := lands + 0.01 if is_finite(lands) else t
+	var yours := {}
+	for input: StringName in INPUT_READERS:
+		if input == &"ampulla.echo":
+			field.set("_call_t", heard)
+		yours[input] = (own.call(&"report", input) as Array).duplicate(true)
+	# The water cell, posed where you were, as you were, with you out of the water.
+	field.in_water = false
+	field._refresh_me()
+	tb.set("pos", p)
+	tb.set("heading", h)
+	field.refile(twin)
+	tb.set("hunger", 0.37)
+	tb.set("ate_at", t - 4.5)
+	tb.set("hit", 0.6)
+	tb.set("hit_from", 2.1)
+	tb.set("call_at", 0.0)
+	tb.set("echoes", [])
+	field.set("_t", t)
+	field._call_now(twin, tb)
+	var its := {}
+	for input: StringName in INPUT_READERS:
+		if input == &"ampulla.echo":
+			field.set("_t", heard)
+		its[input] = (field.call(INPUT_READERS[input], twin, tb) as Array).duplicate(true)
+	var said := PackedStringArray()
+	var ok := true
+	for input: StringName in INPUT_READERS:
+		var same := var_to_bytes(yours[input]) == var_to_bytes(its[input])
+		var n := (yours[input] as Array).size()
+		said.append("%s %d %s" % [String(input).get_slice(".", 1), n,
+			"equal" if same else "DIFFER"])
+		ok = ok and same and n > 0
+	var wired := true
+	for input: StringName in FoodField.vocabulary().inputs:
+		wired = wired and (own.get("_readers") as Dictionary).has(input)
+	_check(("9. you read what a water cell reads: your instincts' reports of your organs'"
+		+ " frame against a water cell posed as you were, to the float -- %s; every input"
+		+ " the game declares has a report of yours: %s") % [", ".join(said), str(wired)],
+		ok and wired)
+	_own_done(player)
+	seed(20260930)
+
+
+## **10. No magic** (automation.md §4.1, §18.3): **a gene you carry and do not
+## wear is not there** -- instincts on five senses your DNA carries and your body
+## does not wear, and on a dash, a push and a hold it carries at a level it does
+## not wear, are asleep through eight ticks, none of their senses read, and no
+## dash, push or hold done. **A bite is a hit only through the one door**:
+## `hear_contact`'s BITTEN sets the pending hit, and no other contact does --
+## a mote touches none of them -- and your own bite on a body you chew is felt
+## and is never a hit. **And nothing reads dread or the wake**: the vocabulary's
+## inputs are the eight this pack names, and the reports do not move when the
+## dread, the threat and a wake do.
+func _instincts_no_magic() -> void:
+	seed(92)
+	var body := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+	var dna := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"chemocyte": 1, &"stigma": 1,
+		&"palp": 1, &"ocellus": 1, &"ampulla": 1, &"axoneme": 1, &"myoneme": 1}
+	var player := _own_player(body)
+	var cell: CellBody = player[0]
+	var genome: Node = player[1]
+	var field: WatchedDrop = player[2]
+	var own: RefCounted = player[3]
+	genome.call(&"express", dna, Cilia.default_order(dna), body)
+	var reads := {}
+	for input: StringName in [&"chemocyte.smell", &"stigma.shadow", &"palp.touch",
+			&"ocellus.beam", &"ampulla.echo"]:
+		var real: Callable = (own.get("_readers") as Dictionary)[input]
+		reads[input] = 0
+		own.call(&"register", input, func() -> Array:
+			reads[input] = int(reads[input]) + 1
+			return real.call())
+	var lines := ["chemocyte.smell -> body.swim", "stigma.shadow -> body.turn-away",
+		"palp.touch -> body.turn-toward", "ocellus.beam -> body.turn-toward",
+		"ampulla.echo -> body.turn-away", "always -> myoneme.dash",
+		"always -> axoneme.push 1", "always -> flagellum.hold"]
+	own.call(&"set_list", _own_list(lines), [["probe", PackedStringArray(lines)]])
+	own.call(&"engage")
+	cell.autopilot = true
+	var dashes := [0]
+	var on_dash := func(_cost: float) -> void: dashes[0] += 1
+	cell.dashed.connect(on_dash)
+	var asleep := true
+	var pushed := false
+	var held := false
+	for k in 8:
+		for f in 8:
+			own.call(&"step", 1.0 / 60.0)
+			cell._process(1.0 / 60.0)
+			pushed = pushed or float(own.call(&"push_strength")) > 0.0
+			held = held or cell.tail_held()
+		for state: Array in own.get("states"):
+			asleep = asleep and int(state[0]) == Rulebook.State.ASLEEP
+	cell.dashed.disconnect(on_dash)
+	var unread := true
+	for input: StringName in reads:
+		unread = unread and int(reads[input]) == 0
+	# The one door: hear_contact's BITTEN, and no other contact.
+	var doors := PackedStringArray()
+	for what: int in [FoodField.Contact.WAKED, FoodField.Contact.STUNG,
+			FoodField.Contact.DARTED, FoodField.Contact.ATE, FoodField.Contact.GRAZED,
+			FoodField.Contact.BITTEN]:
+		field.player_hit = 0.0
+		field.hear_contact(what, cell.position + Vector2(40.0, 0.0), 0.7)
+		if field.player_hit > 0.0:
+			doors.append(str(what))
+	field.player_hit = 0.0
+	# Your own bite, on a mouthless body too big to swallow, at your mouth.
+	field.in_water = true
+	var bitten := [0]
+	var on_bitten := func(_bearing: float, _strength: float) -> void: bitten[0] += 1
+	field.bitten.connect(on_bitten)
+	var ahead := Vector2(sin(cell.heading), -cos(cell.heading))
+	var chewed := _pose(field, cell.position + ahead * (cell.radius + 30.0 - 6.0), 30.0, {},
+		cell.heading + PI, 0.5)
+	var hit_seen := 0.0
+	for f in 90:
+		field._process(1.0 / 60.0)
+		hit_seen = maxf(hit_seen, field.player_hit)
+		field.player_hit = 0.0
+	field.bitten.disconnect(on_bitten)
+	var wound := float((field.get("_cells") as Array)[chewed].get("wound"))
+	# Nothing reads dread or the wake.
+	var known := [&"metabolism.hunger", &"metabolism.fed", &"body.hit", &"chemocyte.smell",
+		&"stigma.shadow", &"palp.touch", &"ocellus.beam", &"ampulla.echo"]
+	var named_only := FoodField.vocabulary().inputs.size() == known.size()
+	for input: StringName in FoodField.vocabulary().inputs:
+		named_only = named_only and known.has(input)
+	genome.call(&"express", SENSES_ALL, Cilia.default_order(SENSES_ALL))
+	var before := []
+	for input: StringName in known:
+		before.append(own.call(&"report", input))
+	field.dread_level = 1.0
+	field.threat = 1.0
+	field.waked.emit(0.5, 1.0)
+	var after := []
+	for input: StringName in known:
+		after.append(own.call(&"report", input))
+	var unmoved := var_to_bytes(before) == var_to_bytes(after)
+	_check(("10. no magic: carried and not worn, eight instincts asleep through eight ticks"
+		+ " (%s), their five senses read %s, dashes %d, pushed %s, held %s; the pending hit"
+		+ " set only by contact %s (BITTEN is %d); your own bite felt %d times on a body"
+		+ " chewed to %.2f, and a hit %.2f; the vocabulary's inputs are the eight named"
+		+ " (%s), and dread, threat and a wake move no report (%s)") % [str(asleep),
+		"never" if unread else "SOMETIMES", dashes[0], str(pushed), str(held),
+		",".join(doors), FoodField.Contact.BITTEN, bitten[0], wound, hit_seen,
+		str(named_only), str(unmoved)],
+		asleep and unread and dashes[0] == 0 and not pushed and not held
+		and doors == PackedStringArray([str(FoodField.Contact.BITTEN)])
+		and bitten[0] >= 1 and wound > 0.0 and hit_seen == 0.0 and named_only and unmoved)
+	_own_done(player)
+	seed(20260930)
+
+
+## **A run of the game, for the autopilot's checks**: point of view, under
+## [param scheme], no drop kept and no library -- given [param lines] as one
+## program, on, unless empty -- wearing [param tiers]. Built and stepped by real
+## frames.
+func _ap_run(scheme: int, lines: Array, tiers: Dictionary) -> Node:
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", 0)
+	run.set("scheme", scheme)
+	run.set("keep", "")
+	run.set("library_at", "")
+	add_child(run)
+	var genome: Node = run.get("_genome")
+	genome.call(&"express", tiers, Cilia.default_order(tiers))
+	if not lines.is_empty():
+		var library: RefCounted = run.get("_library")
+		var at := int(library.call(&"add_new"))
+		library.call(&"set_lines", at, PackedStringArray(lines))
+		library.call(&"switch", at, true)
+		run.call(&"_library_changed")
+	for f in 4:
+		await get_tree().process_frame
+	return run
+
+
+## A canvas point as the window gets it, the way `tools/drive.gd` sends one.
+func _ap_window(canvas: Vector2) -> Vector2:
+	var screen := get_viewport().get_screen_transform()
+	return canvas * screen.get_scale() + screen.get_origin()
+
+
+## **A finger down, or up**, at a canvas point, read at once.
+func _ap_touch(canvas: Vector2, pressed: bool, finger := 0) -> void:
+	var event := InputEventScreenTouch.new()
+	event.index = finger
+	event.pressed = pressed
+	event.position = _ap_window(canvas)
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func _ap_drag(canvas: Vector2, finger := 0) -> void:
+	var event := InputEventScreenDrag.new()
+	event.index = finger
+	event.position = _ap_window(canvas)
+	event.relative = Vector2(12.0, 0.0)
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+## **A key down, or up**, read at once.
+func _ap_key(code: Key, pressed: bool) -> void:
+	var event := InputEventKey.new()
+	event.keycode = code
+	event.physical_keycode = code
+	event.pressed = pressed
+	Input.parse_input_event(event)
+	Input.flush_buffered_events()
+
+
+func _ap_frames(n: int) -> void:
+	for f in n:
+		await get_tree().process_frame
+
+
+## **11. The autopilot** (automation.md §2, §18.3; row 36), in runs of the game
+## by the input path a player uses. It engages only by its icon or its key --
+## frames of nothing, a pause opened and shut, leave it off -- and lets go of what
+## the hand held. **A new press of each control the hand drives with takes the
+## cell back on that frame**, under each scheme and by every key: a finger on the
+## water and the hold pad under `anywhere`, the stick, the dash pad and the hold
+## under `stick`, every pad under `pads`, and A, D, W, S, Space and the arrows. A
+## key held through the switching-on, or a finger left down, takes nothing back
+## until pressed again; a press on open water under `stick` and `pads` takes
+## nothing back; a press on the icon itself steers nothing and dashes nothing. A
+## death switches it off and a division keeps it, and switching off the last
+## program on switches it off.
+func _instincts_autopilot() -> void:
+	var was := get_window().size
+	get_window().size = Vector2i(1280, 720)
+	await _ap_frames(2)
+	var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"axoneme": 1,
+		&"myoneme": 1}
+	var lines := ["always -> body.turn-random", "always -> axoneme.push 0.5"]
+	var said := PackedStringArray()
+	var ok := true
+	# Engages only by its icon or key; lets go of what the hand held.
+	var run := await _ap_run(2, lines, tiers)
+	var cell: CellBody = run.get("_cell")
+	var controls: Control = run.get("_controls")
+	var icon: Control = run.get("_autopilot_icon")
+	await _ap_frames(20)
+	var idle := not cell.autopilot and icon.visible
+	run.call(&"_toggle_pause")
+	await _ap_frames(2)
+	run.call(&"_toggle_pause")
+	await _ap_frames(2)
+	idle = idle and not cell.autopilot
+	var port: Rect2 = controls.call(&"rect_of", ControlsNode.PORT)
+	_ap_touch(port.get_center(), true)
+	await _ap_frames(2)
+	var holding_before := bool(controls.call(&"steering"))
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	var let_go := cell.autopilot and not bool(controls.call(&"steering"))
+	_ap_touch(port.get_center(), false)
+	await _ap_frames(2)
+	var kept_on_lift := cell.autopilot
+	said.append("engages only by its key or icon %s, lets go of the hand %s, a lift takes"
+		% [str(idle), str(holding_before and let_go)] + " nothing %s" % str(kept_on_lift))
+	ok = ok and idle and holding_before and let_go and kept_on_lift
+	# The icon's own press: on, steering nothing, dashing nothing.
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	var off_by_key := not cell.autopilot
+	var dashes := [0]
+	var on_dash := func(_cost: float) -> void: dashes[0] += 1
+	cell.dashed.connect(on_dash)
+	var centre := icon.get_global_rect().get_center()
+	_ap_touch(centre, true)
+	_ap_touch(centre, false)
+	await _ap_frames(3)
+	var by_icon: bool = cell.autopilot and dashes[0] == 0 and float(cell.hand_steer) == 0.0
+	cell.dashed.disconnect(on_dash)
+	said.append("off by its key %s, on by its icon with no dash or steer %s" % [
+		str(off_by_key), str(by_icon)])
+	ok = ok and off_by_key and by_icon
+	run.queue_free()
+	await _ap_frames(2)
+	# A new press of each control, under each scheme, takes the cell back.
+	var controls_of := {0: [-1, ControlsNode.HOLD], 1: [ControlsNode.STICK, ControlsNode.DASH,
+		ControlsNode.HOLD], 2: [ControlsNode.PORT, ControlsNode.STARBOARD, ControlsNode.PUSH,
+		ControlsNode.DASH, ControlsNode.HOLD]}
+	for scheme: int in [0, 1, 2]:
+		run = await _ap_run(scheme, lines, tiers)
+		cell = run.get("_cell")
+		controls = run.get("_controls")
+		var taken := PackedStringArray()
+		var all_taken := true
+		for id: int in controls_of[scheme]:
+			_ap_key(KEY_R, true)
+			_ap_key(KEY_R, false)
+			await _ap_frames(2)
+			var on := cell.autopilot
+			var at := Vector2(640.0, 420.0) if id < 0 \
+				else (controls.call(&"rect_of", id) as Rect2).get_center()
+			_ap_touch(at, true)
+			var back := not cell.autopilot
+			_ap_touch(at, false)
+			await _ap_frames(2)
+			taken.append("%s %s" % ["water" if id < 0 else str(id), "yes" if on and back
+				else "NO"])
+			all_taken = all_taken and on and back
+		# Open water under the drawn schemes takes nothing back.
+		var water_kept := true
+		if scheme != 0:
+			_ap_key(KEY_R, true)
+			_ap_key(KEY_R, false)
+			await _ap_frames(2)
+			_ap_touch(Vector2(640.0, 300.0), true)
+			water_kept = cell.autopilot
+			_ap_touch(Vector2(640.0, 300.0), false)
+			await _ap_frames(2)
+			_ap_key(KEY_R, true)
+			_ap_key(KEY_R, false)
+			await _ap_frames(2)
+		said.append("%s: %s%s" % [["anywhere", "stick", "pads"][scheme], ", ".join(taken),
+			"" if scheme == 0 else ", open water keeps it %s" % str(water_kept)])
+		ok = ok and all_taken and water_kept and not cell.autopilot
+		run.queue_free()
+		await _ap_frames(2)
+	# Every key the hand drives with; and one held through the switching-on.
+	run = await _ap_run(0, lines, tiers)
+	cell = run.get("_cell")
+	var keys := PackedStringArray()
+	var keys_ok := true
+	for code: Key in [KEY_A, KEY_D, KEY_W, KEY_S, KEY_SPACE, KEY_LEFT, KEY_RIGHT, KEY_UP,
+			KEY_DOWN]:
+		_ap_key(KEY_R, true)
+		_ap_key(KEY_R, false)
+		await _ap_frames(2)
+		var on := cell.autopilot
+		_ap_key(code, true)
+		var back := not cell.autopilot
+		_ap_key(code, false)
+		await _ap_frames(1)
+		keys_ok = keys_ok and on and back
+		if not (on and back):
+			keys.append(OS.get_keycode_string(code))
+	# A program that never steers, so a held key that still steered would show.
+	var steady: RefCounted = run.get("_library")
+	steady.call(&"set_lines", 0, PackedStringArray(["always -> axoneme.push 0.5"]))
+	run.call(&"_library_changed")
+	_ap_key(KEY_A, true)
+	await _ap_frames(2)
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(10)
+	var through := cell.autopilot and float(cell.steer) == 0.0
+	_ap_key(KEY_A, false)
+	await _ap_frames(2)
+	through = through and cell.autopilot
+	_ap_key(KEY_A, true)
+	var again := not cell.autopilot
+	_ap_key(KEY_A, false)
+	await _ap_frames(2)
+	# A finger left down under `anywhere`: dragged, still on; a new press takes back.
+	_ap_touch(Vector2(500.0, 500.0), true)
+	await _ap_frames(2)
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(4)
+	_ap_drag(Vector2(560.0, 500.0))
+	await _ap_frames(4)
+	var finger := cell.autopilot
+	_ap_touch(Vector2(560.0, 500.0), false)
+	await _ap_frames(2)
+	finger = finger and cell.autopilot
+	_ap_touch(Vector2(500.0, 500.0), true)
+	finger = finger and not cell.autopilot
+	_ap_touch(Vector2(500.0, 500.0), false)
+	await _ap_frames(2)
+	said.append("every key takes it back %s%s; a key held through it %s, pressed again %s;"
+		% [str(keys_ok), "" if keys.is_empty() else " (NOT %s)" % ",".join(keys),
+		str(through), str(again)] + " a finger left down %s" % str(finger))
+	ok = ok and keys_ok and through and again and finger
+	# A death switches it off; switching off the last program on switches it off.
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	var library: RefCounted = run.get("_library")
+	library.call(&"switch", 0, false)
+	run.call(&"_library_changed")
+	var off_at_once := not cell.autopilot
+	await _ap_frames(2)
+	var last_off := off_at_once and not (run.get("_autopilot_icon") as Control).visible
+	library.call(&"switch", 0, true)
+	run.call(&"_library_changed")
+	await _ap_frames(2)
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	var before_death := cell.autopilot
+	run.call(&"_die", false, 0.0)
+	var death_off := before_death and not cell.autopilot
+	run.queue_free()
+	await _ap_frames(2)
+	# A division keeps it: on through the pinch, the lean and the birth.
+	run = await _ap_run(0, lines, tiers)
+	cell = run.get("_cell")
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(2)
+	var dividing := cell.autopilot
+	cell.radius = CellBody.DIVIDE_RADIUS
+	var split_born := false
+	var leaned := false
+	# By the clock, not by frames: the division's phases run on real time, and
+	# a headless run with no frame cap gets through 900 frames in under one of
+	# its 4.9 seconds to the choice.
+	var deadline := Time.get_ticks_msec() + 20000
+	while Time.get_ticks_msec() < deadline:
+		await get_tree().process_frame
+		var split := int(run.get("_split"))
+		if split == 4 and not leaned:
+			leaned = true
+			_ap_key(KEY_D, true)
+		if leaned and split == 0:
+			split_born = true
+			break
+	_ap_key(KEY_D, false)
+	await _ap_frames(4)
+	var kept: bool = dividing and split_born and cell.autopilot \
+		and cell.radius < CellBody.DIVIDE_RADIUS
+	said.append("off with the last program off %s, off at a death %s, kept through a division"
+		% [str(last_off), str(death_off)] + " %s%s" % [str(kept), "" if kept
+		else " (on before %s, born %s, on after %s, radius %.1f)" % [str(dividing),
+		str(split_born), str(cell.autopilot), cell.radius]])
+	ok = ok and last_off and death_off and kept
+	run.queue_free()
+	await _ap_frames(2)
+	get_window().size = was
+	_check("11. the autopilot, in runs of the game: %s" % "; ".join(said), ok)
+
+
+## **12. The order decides** (automation.md §3.3, §18.3): two programs on whose
+## instincts claim the steering on the same tick -- the upper one on the tank,
+## the lower one always -- the upper one acts and the lower one is held back,
+## naming the rule and so the program that took it; the library reordered, the
+## lower one wins at the next tick; and a program switched off is never read.
+func _instincts_order() -> void:
+	seed(93)
+	var player := _own_player({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	var own: RefCounted = player[3]
+	var vocab: RefCounted = FoodField.vocabulary()
+	var library: RefCounted = Library.new()
+	var upper := int(library.call(&"add_new"))
+	library.call(&"set_lines", upper, PackedStringArray(
+		["metabolism.hunger below 1 -> body.turn-random"]))
+	var lower := int(library.call(&"add_new"))
+	library.call(&"set_lines", lower, PackedStringArray(["always -> body.turn-random"]))
+	library.call(&"switch", lower, true)
+	library.call(&"rename", upper, "upper")
+	library.call(&"rename", lower, "lower")
+	var reads := [0]
+	var real: Callable = (own.get("_readers") as Dictionary)[&"metabolism.hunger"]
+	own.call(&"register", &"metabolism.hunger", func() -> Array:
+		reads[0] += 1
+		return real.call())
+	var give := func() -> void:
+		own.call(&"set_list", library.call(&"merged", vocab), [])
+	give.call()
+	own.call(&"engage")
+	_own_tick(own)
+	var first: Array = (own.get("states") as Array).duplicate(true)
+	var held_by := Vector2i(library.call(&"owner_of", int(first[1][1])))
+	# Named now: the reorder below moves what an index means.
+	var first_by := str(library.call(&"name_of", held_by.x))
+	var upper_wins := int(first[0][0]) == Rulebook.State.ACTED \
+		and int(first[1][0]) == Rulebook.State.HELD and first_by == "upper"
+	library.call(&"move", lower, upper)
+	give.call()
+	_own_tick(own)
+	var second: Array = (own.get("states") as Array).duplicate(true)
+	var by2 := Vector2i(library.call(&"owner_of", int(second[1][1])))
+	var second_by := str(library.call(&"name_of", by2.x))
+	var lower_wins := int(second[0][0]) == Rulebook.State.ACTED \
+		and int(second[1][0]) == Rulebook.State.HELD and second_by == "lower"
+	var before := int(reads[0])
+	library.call(&"switch", 1, false)
+	give.call()
+	for k in 4:
+		_own_tick(own)
+	var unread := int(reads[0]) == before and (own.get("states") as Array).size() == 1
+	_check(("12. the order decides: two programs on the steering, the upper one acts and the"
+		+ " lower one is held back by %s (%s); reordered, the other wins at the next tick, held"
+		+ " back by %s (%s); and a program off is never read (%s)") % [
+		first_by, str(upper_wins), second_by, str(lower_wins), str(unread)],
+		upper_wins and lower_wins and unread)
+	_own_done(player)
+	seed(20260930)
+
+
+## **13. Eight in all** (row 39, automation.md §3.4, §18.3): a program that would
+## take the cell past eight cannot be switched on; an instinct cannot be added to
+## a program that is on when the eight are full; and a library that says more is
+## on comes back with nothing past eight on, in its order.
+func _instincts_eight() -> void:
+	var library: RefCounted = Library.new()
+	var five := PackedStringArray(["always -> body.swim", "always -> body.swim",
+		"always -> body.swim", "always -> body.swim", "always -> body.swim"])
+	var four := five.slice(0, 4)
+	var three := five.slice(0, 3)
+	var a := int(library.call(&"add_new"))
+	library.call(&"set_lines", a, five)
+	var b := int(library.call(&"add_new"))
+	library.call(&"set_lines", b, four)
+	var refused := not bool(library.call(&"switch", b, true))
+	var c := int(library.call(&"add_new"))
+	library.call(&"set_lines", c, three)
+	var fits := bool(library.call(&"switch", c, true)) and int(library.call(&"taken")) == 8
+	var six := five.duplicate()
+	six.append("always -> body.swim")
+	var no_add := not bool(library.call(&"set_lines", a, six)) \
+		and not bool(library.call(&"can_add", a))
+	var off_grows := bool(library.call(&"set_lines", b, five + three))
+	var state: Dictionary = library.call(&"to_state")
+	for one: Dictionary in state["programs"]:
+		one["on"] = true
+	var loaded: RefCounted = Library.new()
+	loaded.call(&"set_state", state)
+	var merged: RefCounted = loaded.call(&"merged", FoodField.vocabulary())
+	var capped := int(loaded.call(&"taken")) <= 8 and (merged.get("rules") as Array).size() <= 8 \
+		and bool(loaded.get("programs")[0].get("on")) \
+		and not bool(loaded.get("programs")[1].get("on")) \
+		and bool(loaded.get("programs")[2].get("on"))
+	_check(("13. eight in all: four more on top of five refused (%s), three fit to eight (%s),"
+		+ " a sixth instinct on a program on at eight refused (%s), a program off grows (%s),"
+		+ " and a library saying thirteen on loads with %d on, in its order (%s)") % [
+		str(refused), str(fits), str(no_add), str(off_grows), int(loaded.call(&"taken")),
+		str(capped)], refused and fits and no_add and off_grows and capped)
+
+
+## **14. The held heading settles** (automation.md §4.2, §18.3): at cirrus tiers 0
+## to 3, a heading held 90° and 180° away is reached and held -- overshooting by
+## less than 15°, its tail held still so no stroke kicks it -- and the turn is paid
+## at TURN_COST a radian of the cirrus's turn, as the hand's is.
+func _instincts_settle() -> void:
+	var said := PackedStringArray()
+	var ok := true
+	for tier in 4:
+		for away: float in [PI * 0.5, PI * 0.999]:
+			seed(140 + tier)
+			var tiers := {&"cytostome": 1, &"flagellum": 2}
+			if tier > 0:
+				tiers[&"cirrus"] = tier
+			var cell := _tail_body(tiers)
+			var own: RefCounted = OwnRules.new()
+			cell.instincts = own
+			cell.autopilot = true
+			var body: Object = own.get("body")
+			var target := wrapf(cell.heading + away, -PI, PI)
+			body.set("holding", true)
+			body.set("steer", target)
+			body.set("tail_held", true)
+			var reached := -1.0
+			var overshoot := 0.0
+			var late := 0.0
+			var turned := 0.0
+			var paid := 0.0
+			var frames := 14 * 60
+			for f in frames:
+				cell._process(1.0 / 60.0)
+				turned += absf(float(cell.get("_omega"))) / 60.0
+				paid += cell.take_effort()
+				var err := rad_to_deg(angle_difference(cell.heading, target))
+				if reached < 0.0 and absf(err) < 3.0:
+					reached = float(f) / 60.0
+				if reached >= 0.0:
+					overshoot = maxf(overshoot, -err)
+				if f >= frames - 3 * 60:
+					late = maxf(late, absf(err))
+			var price_ok := turned > 0.0 and absf(paid / turned - CellBody.TURN_COST) < 1e-6
+			said.append("tier %d %.0f°: reached in %.1f s, overshot %.1f°, held within %.1f°"
+				% [tier, rad_to_deg(away), reached, overshoot, late])
+			ok = ok and reached >= 0.0 and overshoot < 15.0 and late < 15.0 and price_ok
+			cell.instincts = null
+			_tail_free(cell)
+	_check("14. the held heading settles: %s; paid at TURN_COST a radian of the turn" %
+		"; ".join(said), ok)
+	seed(20260930)
+
+
+## **15. Push and dash** (automation.md §4.2, §18.3): `axoneme.push 0.5` gives half
+## the hand's thrust at half its price, and `push 1` all of it; `myoneme.dash`
+## dashes on the hand's cooldown, at its price; and neither acts without its
+## organ.
+func _instincts_push_dash() -> void:
+	seed(150)
+	var with := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"axoneme": 1, &"myoneme": 1}
+	var thrust := []
+	for strength: float in [0.5, 1.0, -1.0]:
+		var cell := _tail_body(with)
+		cell.heading = 0.0
+		var own: RefCounted = OwnRules.new()
+		var body: Object = own.get("body")
+		if strength > 0.0:
+			cell.instincts = own
+			cell.autopilot = true
+			body.set("push", strength)
+			body.set("tail_held", true)
+		else:
+			_tail_hand(true)
+			Input.action_press(&"ui_up")
+		cell._process(1.0 / 60.0)
+		if strength < 0.0:
+			Input.action_release(&"ui_up")
+			_tail_hand(false)
+		thrust.append([cell.velocity.length(), cell.take_effort()])
+		cell.instincts = null
+		_tail_free(cell)
+	var half: bool = absf(float(thrust[0][0]) * 2.0 - float(thrust[1][0])) < 1e-4 \
+		and absf(float(thrust[0][1]) * 2.0 - float(thrust[1][1])) < 1e-9
+	var as_hand: bool = absf(float(thrust[1][0]) - float(thrust[2][0])) < 1e-4 \
+		and absf(float(thrust[1][1]) - float(thrust[2][1])) < 1e-9
+	# The rule's own way there: `always -> axoneme.push 0.5`, read on a tick.
+	var player := _own_player(with)
+	var own_p: RefCounted = player[3]
+	own_p.call(&"set_list", _own_list(["always -> axoneme.push 0.5", "always -> myoneme.dash"]),
+		[])
+	own_p.call(&"engage")
+	_own_tick(own_p)
+	var claimed := float(own_p.call(&"push_strength")) == 0.5
+	# The dash, on the hand's cooldown and price.
+	var cell_p: CellBody = player[0]
+	cell_p.autopilot = true
+	var dashes: Array = []
+	var on_dash := func(cost: float) -> void: dashes.append([own_p.get("clock"), cost])
+	cell_p.dashed.connect(on_dash)
+	for f in 6 * 60:
+		own_p.call(&"step", 1.0 / 60.0)
+		cell_p._process(1.0 / 60.0)
+	cell_p.dashed.disconnect(on_dash)
+	var spaced := dashes.size() >= 3
+	for k in range(1, dashes.size()):
+		spaced = spaced and float(dashes[k][0]) - float(dashes[k - 1][0]) \
+			>= CellBody.DASH_COOLDOWN - 1e-6
+	var priced := true
+	for one: Array in dashes:
+		priced = priced and float(one[1]) == CellBody.DASH_COST_BY_TIER[1]
+	_own_done(player)
+	# Without their organs, neither.
+	player = _own_player({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
+	own_p = player[3]
+	cell_p = player[0]
+	cell_p.autopilot = true
+	own_p.call(&"set_list", _own_list(["always -> axoneme.push 1", "always -> myoneme.dash"]),
+		[])
+	own_p.call(&"engage")
+	var none := [0]
+	var on_none := func(_cost: float) -> void: none[0] += 1
+	cell_p.dashed.connect(on_none)
+	var pushed := false
+	for f in 3 * 60:
+		own_p.call(&"step", 1.0 / 60.0)
+		cell_p._process(1.0 / 60.0)
+		pushed = pushed or float(own_p.call(&"push_strength")) > 0.0
+	cell_p.dashed.disconnect(on_none)
+	var organless: bool = none[0] == 0 and not pushed
+	_own_done(player)
+	_check(("15. push and dash: half a push is half the thrust at half the price (%s), a full"
+		+ " one the hand's (%s), and the rule claims a half (%s); %d dashes in six seconds,"
+		+ " never closer than the cooldown (%s), each at the hand's price (%s); and with"
+		+ " neither organ, no push and no dash (%s)") % [str(half), str(as_hand), str(claimed),
+		dashes.size(), str(spaced), str(priced), str(organless)],
+		half and as_hand and claimed and spaced and priced and organless)
+	seed(20260930)
+
+
+## **16. Edits** (automation.md §3.7, §18.3): an edit, a switch and a reorder each
+## act at the next tick and clear what the instincts held; every instinct the
+## page builds -- each sense, each test it offers, each action -- comes back the
+## same through its line; and the page offers no value off a ladder.
+func _instincts_edits() -> void:
+	seed(160)
+	var player := _own_player(SENSES_ALL)
+	var own: RefCounted = player[3]
+	var vocab: RefCounted = FoodField.vocabulary()
+	var library: RefCounted = Library.new()
+	var at := int(library.call(&"add_new"))
+	library.call(&"set_lines", at, PackedStringArray(["always -> body.turn-random"]))
+	var other := int(library.call(&"add_new"))
+	library.call(&"set_lines", other, PackedStringArray(["always -> body.swim"]))
+	own.call(&"set_list", library.call(&"merged", vocab), [])
+	own.call(&"engage")
+	_own_tick(own)
+	var clears := PackedStringArray()
+	var cleared := true
+	var body: Object = own.get("body")
+	for how: String in ["edit", "switch", "reorder"]:
+		_own_tick(own)
+		var had := bool(body.get("holding")) and not (body.get("memory") as Dictionary).is_empty() \
+			or bool(body.get("holding"))
+		match how:
+			"edit":
+				library.call(&"set_lines", at, PackedStringArray(
+					["metabolism.hunger below 1 -> body.turn-random"]))
+			"switch":
+				library.call(&"switch", other, true)
+			"reorder":
+				library.call(&"move", other, at)
+		own.call(&"set_list", library.call(&"merged", vocab), [])
+		var gone := not bool(body.get("holding")) and (body.get("memory") as Dictionary).is_empty()
+		_own_tick(own)
+		var acts_now := (own.get("fired") as Array).size() > 0
+		clears.append("%s %s" % [how, "cleared and acts" if had and gone and acts_now else "NO"])
+		cleared = cleared and had and gone and acts_now
+	_own_done(player)
+	# Every instinct the page builds survives its line; no value off a ladder.
+	var built: Array = ProgramsPage.every_instinct(vocab)
+	var survive := built.size() > 20
+	var broken := PackedStringArray()
+	for line: String in built:
+		var rule: Object = Rulebook.rule_from(line, vocab)
+		if bool(rule.get("inert")) or Rulebook.line_of(rule) != line:
+			survive = false
+			broken.append(line)
+	var ladders := true
+	for kind: StringName in Rulebook.LADDERS:
+		ladders = ladders and ProgramsPage.rungs_offered(kind) == Rulebook.LADDERS[kind]
+	ladders = ladders and ProgramsPage.rungs_offered(Rulebook.SIZE) == Rulebook.REFERENCES
+	_check(("16. edits: %s, each at the next tick; %d instincts the page builds come back the"
+		+ " same through their lines (%s%s); and the page's ladders are the rulebook's, nothing"
+		+ " off a rung (%s)") % [", ".join(clears), built.size(), str(survive),
+		"" if broken.is_empty() else ": NOT " + ", ".join(broken.slice(0, 3)), str(ladders)],
+		cleared and survive and ladders)
+	seed(20260930)
+
+
+## **17. The library's file** (automation.md §9.1, §18.3): it round-trips exactly,
+## typed names, defaults, switches and a line no build reads alike; a name this
+## build does not know is a rule that never fires, written back as it came; a file
+## it cannot read is moved aside once and the library starts empty; the same
+## library opens in every world -- two runs on two drops -- and after a death; and
+## a tool's run, with no library, writes none.
+func _instincts_file() -> void:
+	DirAccess.make_dir_recursive_absolute(LIBRARY_AT.get_base_dir())
+	for path: String in [LIBRARY_AT, LIBRARY_AT + ".old"]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+	var library: RefCounted = Library.new()
+	var a := int(library.call(&"add_founders"))
+	var b := int(library.call(&"add_new"))
+	library.call(&"set_lines", b, PackedStringArray(["lamella.glow level above 0.5 -> body.swim",
+		"ampulla.echo size above mouth distance below 350 -> body.turn-away"]))
+	library.call(&"rename", b, "flee")
+	var c := int(library.call(&"copy", a))
+	var kept: bool = library.call(&"save_to", LIBRARY_AT) == OK
+	var back: RefCounted = Library.new()
+	var loaded := bool(back.call(&"load_from", LIBRARY_AT))
+	var same := var_to_bytes(back.call(&"to_state")) == var_to_bytes(library.call(&"to_state"))
+	var merged: RefCounted = back.call(&"merged", FoodField.vocabulary())
+	var inert := false
+	for rule: Object in merged.get("rules") if merged != null else []:
+		if bool(rule.get("inert")) and str(rule.get("text")) == "lamella.glow level above 0.5 -> body.swim":
+			inert = true
+	# Switched on so its lines are in the merged list: the copy went right under
+	# the founders', so `flee` is third.
+	back.call(&"switch", 0, false)
+	for k in int(back.call(&"size")):
+		if str(back.call(&"name_of", k)) == "flee":
+			back.call(&"switch", k, true)
+	merged = back.call(&"merged", FoodField.vocabulary())
+	inert = false
+	for rule: Object in merged.get("rules"):
+		if bool(rule.get("inert")) and Rulebook.line_of(rule) \
+				== "lamella.glow level above 0.5 -> body.swim":
+			inert = true
+	# A file this build cannot read: set aside once, the library empty.
+	var file := FileAccess.open_compressed(LIBRARY_AT, FileAccess.WRITE, FileAccess.COMPRESSION_ZSTD)
+	file.store_var({"version": 9, "programs": []})
+	file.close()
+	var odd: RefCounted = Library.new()
+	var refused := not bool(odd.call(&"load_from", LIBRARY_AT)) and int(odd.call(&"size")) == 0 \
+		and FileAccess.file_exists(LIBRARY_AT + ".old") and not FileAccess.file_exists(LIBRARY_AT)
+	var once := not bool(odd.call(&"load_from", LIBRARY_AT)) \
+		and FileAccess.file_exists(LIBRARY_AT + ".old")
+	# Every world, and after a death: two runs on two drops, one library.
+	library.call(&"save_to", LIBRARY_AT)
+	var stamp := FileAccess.get_modified_time(LIBRARY_AT)
+	var worlds := PackedStringArray()
+	var everywhere := true
+	for drop: String in ["user://drop_probe_library/a.save", "user://drop_probe_library/b.save"]:
+		var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+		run.set("mode", 0)
+		run.set("keep", drop)
+		run.set("library_at", LIBRARY_AT)
+		add_child(run)
+		await _ap_frames(3)
+		var lib: RefCounted = run.get("_library")
+		var opened := var_to_bytes(lib.call(&"to_state")) == var_to_bytes(library.call(&"to_state"))
+		run.call(&"_die", false, 0.0)
+		run.call(&"_return", [])
+		await _ap_frames(3)
+		var after_death := var_to_bytes(lib.call(&"to_state")) \
+			== var_to_bytes(library.call(&"to_state"))
+		worlds.append("%s %s/%s" % [drop.get_file(), str(opened), str(after_death)])
+		everywhere = everywhere and opened and after_death
+		run.queue_free()
+		await _ap_frames(2)
+	var untouched := FileAccess.get_modified_time(LIBRARY_AT) == stamp
+	# A tool's run: no library, written nowhere.
+	var device := Library.PATH
+	var had := FileAccess.file_exists(device)
+	var device_stamp := FileAccess.get_modified_time(device) if had else 0
+	var tool_run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	tool_run.set("mode", 0)
+	tool_run.set("keep", "")
+	tool_run.set("library_at", "")
+	add_child(tool_run)
+	await _ap_frames(3)
+	(tool_run.get("_library") as RefCounted).call(&"add_founders")
+	tool_run.call(&"_library_changed")
+	tool_run.call(&"_toggle_pause")
+	await _ap_frames(2)
+	tool_run.call(&"_toggle_pause")
+	await _ap_frames(2)
+	var nothing := FileAccess.file_exists(device) == had \
+		and (not had or FileAccess.get_modified_time(device) == device_stamp)
+	tool_run.queue_free()
+	await _ap_frames(2)
+	for path: String in [LIBRARY_AT, LIBRARY_AT + ".old", "user://drop_probe_library/a.save",
+			"user://drop_probe_library/b.save"]:
+		if FileAccess.file_exists(path):
+			DirAccess.remove_absolute(path)
+	_check(("17. the library's file: kept %s and read back %s, the same to the byte (%s); a"
+		+ " name no build knows a rule that never fires, written back as it came (%s); a"
+		+ " file this build cannot read set aside once, the library empty (%s, %s); the same"
+		+ " library in two worlds and after a death (%s), its file untouched (%s); and a"
+		+ " tool's run writes none (%s)") % [str(kept), str(loaded), str(same), str(inert),
+		str(refused), str(once), ", ".join(worlds), str(untouched), str(nothing)],
+		kept and loaded and same and inert and refused and once and everywhere and untouched
+		and nothing)
+
+
+## **18. A division, and your sister** (row 40, automation.md §6, §18.3): two runs
+## from one seed, one with a program on and one with none, divide alike -- the same
+## two daughters rolled and the global stream left in the same place, so nothing
+## is drawn for your instincts. The daughter taken runs the same list, and the
+## library is untouched. Your sister carries the merged list as it was, and the
+## founders' -- null -- with nothing on; and a host's sister, placed in its pond
+## on the drop, carries it too.
+func _instincts_division() -> void:
+	var rolls := []
+	var said := PackedStringArray()
+	var ok := true
+	for with: bool in [true, false]:
+		seed(180)
+		var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+		run.set("mode", 0)
+		run.set("keep", "")
+		run.set("library_at", "")
+		add_child(run)
+		var library: RefCounted = run.get("_library")
+		if with:
+			library.call(&"add_founders")
+			run.call(&"_library_changed")
+		var instincts: RefCounted = run.get("_instincts")
+		var revision := int(library.get("revision"))
+		var dirty := bool(library.get("dirty"))
+		var list: Variant = instincts.get("list")
+		var field: Node = run.get("_food")
+		seed(181)
+		var daughters: Array = run.call(&"_make_daughters")
+		run.set("_daughters", daughters)
+		run.set("_chosen", 0)
+		run.call(&"_be_born")
+		var after := randi()
+		var newest: Object = null
+		for b: Object in field.call(&"bodies"):
+			if bool(b.get("seeded")) and (newest == null or int(b.get("id")) > int(newest.get("id"))):
+				newest = b
+		var carries: Variant = newest.get("brain") if newest != null else "none"
+		var carried_right: bool = (carries == library.call(&"merged", FoodField.vocabulary())
+			and carries != null) if with else carries == null
+		var same_list: bool = instincts.get("list") == list \
+			and int(library.get("revision")) == revision and bool(library.get("dirty")) == dirty
+		rolls.append([var_to_bytes(daughters), after])
+		said.append("%s: the sister carries %s (%s), the daughter the same list, the library"
+			% ["programs on" if with else "nothing on",
+			"the merged list" if with else "the founders'", str(carried_right)]
+			+ " untouched (%s)" % str(same_list))
+		ok = ok and carried_right and same_list
+		run.queue_free()
+		await get_tree().process_frame
+	var alike: bool = rolls[0][0] == rolls[1][0] and int(rolls[0][1]) == int(rolls[1][1])
+	# A host's sister, in its pond on the drop.
+	seed(182)
+	var water := _water(3000.0)
+	var host: WatchedDrop = water[0]
+	var cell: CellBody = water[1]
+	host.open_pond()
+	host.anchored = true
+	var brain: RefCounted = _own_list(["always -> body.turn-random"])
+	host.put_sister(PI * 0.5, 560.0, 28.0, {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1},
+		{}, PackedInt32Array(), brain)
+	var hosted := false
+	for b: Object in host.bodies():
+		if bool(b.get("seeded")) and b.get("brain") == brain:
+			hosted = true
+	_done(water)
+	seed(20260930)
+	_check(("18. a division and your sister: with a program on and with none, the same two"
+		+ " daughters and the same stream after (%s); %s; and a host's sister in its pond"
+		+ " carries the list (%s)") % [str(alike), "; ".join(said), str(hosted)],
+		ok and alike and hosted)
+
+
+## **19. Determinism** (automation.md §18.3): one seed, the autopilot on the
+## founders' program over a sighted player's drop for thirty seconds, run twice,
+## is the same to the bit -- its place, heading, motion and what acted every
+## frame -- and something acted.
+func _instincts_determinism() -> void:
+	var digests := []
+	var acted := 0
+	for run in 2:
+		seed(190)
+		var player := _own_player(SENSES_ALL.merged({&"axoneme": 1}), 0.0)
+		var cell: CellBody = player[0]
+		var field: WatchedDrop = player[2]
+		var own: RefCounted = player[3]
+		var metabolism: Node = player[4]
+		field.in_water = true
+		own.call(&"set_list", _own_list(Drop.FOUNDERS), [])
+		own.call(&"engage")
+		cell.autopilot = true
+		var hash := HashingContext.new()
+		hash.start(HashingContext.HASH_SHA256)
+		acted = 0
+		for f in 30 * 60:
+			metabolism.set("hunger", minf(float(metabolism.get("hunger")) + 1.0 / 2160.0, 1.0))
+			own.call(&"step", 1.0 / 60.0)
+			cell._process(1.0 / 60.0)
+			field._process(1.0 / 60.0)
+			acted |= int(own.get("acted"))
+			hash.update(var_to_bytes([cell.position, cell.heading, cell.velocity,
+				own.get("acted"), cell.tail_held()]))
+		digests.append(hash.finish().hex_encode())
+		_own_done(player)
+	seed(20260930)
+	_check("19. determinism: thirty seconds on the autopilot from one seed, twice: %s and %s (%s), what acted %s"
+		% [String(digests[0]).left(12), String(digests[1]).left(12),
+		"the same" if digests[0] == digests[1] else "DIFFER", String.num_int64(acted, 2)],
+		digests[0] == digests[1] and acted != 0)
+
+
+## **20. Modular** (automation.md §13.1, §18.3): the probe's own gene, `trial`
+## ([constant TRIAL], behaviour.md check 8), its player's report registered here
+## and nowhere else -- no line of the page, `rulebook.gd`, `library.gd` or the save
+## code names it -- is offered to a player who carries it, is read and acted on by
+## an instinct on the autopilot, and is kept by name through the library's file;
+## undeclared, its instincts are kept and never fire.
+func _instincts_modular() -> void:
+	seed(200)
+	FoodField.declare([TRIAL])
+	var vocab: RefCounted = FoodField.vocabulary()
+	var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"trial": 1}
+	var offered: Dictionary = ProgramsPage.offers(vocab, tiers, tiers)
+	var offered_ok: bool = (offered["inputs"] as Array).has(&"trial.glow") \
+		and (offered["outputs"] as Array).has(&"trial.flash")
+	var player := _own_player(tiers)
+	var cell: CellBody = player[0]
+	var own: RefCounted = player[3]
+	var flashes := [0]
+	own.call(&"register", &"trial.glow", func() -> Array:
+		return [[angle_difference(cell.heading, TRIAL_LIGHT), 0.75, TRIAL_LIGHT]])
+	own.call(&"register_trigger", &"trial.flash", func(_i: int, _b: Object, _k: int, _r: Array,
+			_before: Variant, _tick: int) -> void: flashes[0] += 1)
+	var library: RefCounted = Library.new()
+	var at := int(library.call(&"add_new"))
+	library.call(&"set_lines", at, PackedStringArray([TRIAL_RULES[0], TRIAL_RULES[1]]))
+	own.call(&"set_list", library.call(&"merged", vocab), [])
+	own.call(&"engage")
+	_own_tick(own)
+	_own_tick(own)
+	var body: Object = own.get("body")
+	var acted: bool = flashes[0] >= 2 and bool(body.get("holding")) \
+		and is_equal_approx(float(body.get("steer")), TRIAL_LIGHT)
+	_own_done(player)
+	DirAccess.make_dir_recursive_absolute(LIBRARY_AT.get_base_dir())
+	library.call(&"save_to", LIBRARY_AT)
+	FoodField.declare([])
+	var back: RefCounted = Library.new()
+	back.call(&"load_from", LIBRARY_AT)
+	var kept: bool = (back.get("programs")[0].get("lines") as PackedStringArray) \
+		== PackedStringArray([TRIAL_RULES[0], TRIAL_RULES[1]])
+	var merged: RefCounted = back.call(&"merged", FoodField.vocabulary())
+	var inert := true
+	for rule: Object in merged.get("rules"):
+		inert = inert and bool(rule.get("inert"))
+	DirAccess.remove_absolute(LIBRARY_AT)
+	seed(20260930)
+	_check(("20. modular: the probe's gene offered to a player who carries it (%s), read and"
+		+ " acted on by an instinct on the autopilot, %d flashes and a turn to its light (%s),"
+		+ " kept by name through the file (%s), and undeclared kept and never fired (%s)") % [
+		str(offered_ok), flashes[0], str(acted), str(kept), str(inert)],
+		offered_ok and acted and kept and inert)
+
+
+## **22. The replay** (automation.md §11, §18.3): a run with a program records it,
+## and every change of who drives, the hold and what acted -- the autopilot
+## switched on and taken back included; a run with none records no program, and
+## acts only for the hand's holds.
+func _instincts_replay() -> void:
+	var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2, &"axoneme": 1}
+	var lines := ["always -> body.turn-random", "always -> axoneme.push 0.5"]
+	var run := await _ap_run(0, lines, tiers)
+	var recorder: Node = run.get("_recorder")
+	_ap_key(KEY_R, true)
+	_ap_key(KEY_R, false)
+	await _ap_frames(40)
+	_ap_key(KEY_A, true)
+	_ap_key(KEY_A, false)
+	await _ap_frames(4)
+	var programs := 0
+	var drove := false
+	var taken := false
+	var acted := false
+	for row: Array in recorder.call(&"deltas"):
+		match int(row[1]):
+			RecorderNode.Delta.PROGRAMS:
+				programs += 1
+				var on: Array = row[3]
+				programs += 0 if on.size() == 1 and (on[0][1] as PackedStringArray) \
+					== PackedStringArray(lines) else 100
+			RecorderNode.Delta.ACTS:
+				var acts: Array = row[3]
+				drove = drove or bool(acts[0])
+				acted = acted or int(acts[2]) != 0
+				taken = taken or (drove and not bool(acts[0]))
+	run.queue_free()
+	await _ap_frames(2)
+	run = await _ap_run(0, [], tiers)
+	recorder = run.get("_recorder")
+	await _ap_frames(20)
+	var quiet_rows: int = (recorder.call(&"deltas") as Array).filter(func(row: Array) -> bool:
+		return int(row[1]) == RecorderNode.Delta.PROGRAMS or int(row[1]) == RecorderNode.Delta.ACTS
+		).size()
+	_ap_key(KEY_S, true)
+	await _ap_frames(20)
+	_ap_key(KEY_S, false)
+	await _ap_frames(4)
+	var holds := []
+	var none := true
+	for row: Array in recorder.call(&"deltas"):
+		if int(row[1]) == RecorderNode.Delta.PROGRAMS:
+			none = false
+		if int(row[1]) == RecorderNode.Delta.ACTS:
+			holds.append(row[3])
+	var hand_only: bool = holds.size() == 2 and not bool(holds[0][0]) and bool(holds[0][1]) \
+		and not bool(holds[1][0]) and not bool(holds[1][1])
+	run.queue_free()
+	await _ap_frames(2)
+	_check(("22. the replay: a run with a program records it once (%s) and who drove (%s), what"
+		+ " acted (%s) and the hand taking it back (%s); a run with none records nothing before"
+		+ " a hold (%d rows), then the hand's hold and its release alone (%s, no program %s)") % [
+		str(programs == 1), str(drove), str(acted), str(taken), quiet_rows, str(hand_only),
+		str(none)], programs == 1 and drove and acted and taken and quiet_rows == 0
+		and hand_only and none)
 
 
 # --- The dev app's frame readout (§14.1, §14.2) -------------------------------------------

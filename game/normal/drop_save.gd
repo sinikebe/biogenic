@@ -114,7 +114,9 @@ const SHAPE := {
 ## little more. **And, when it is there, `elsewhere`** (1b-2): true for a cell
 ## left while it swam in a friend's drop (ocean.md §9.1), whose place is not in
 ## this one -- it comes back into this drop at a quiet place, as a guest does
-## that leaves the pond.
+## that leaves the pond. **And `fed`** (pack 4, docs/design/automation.md §9.2):
+## the seconds since it last ate, for its instincts, absent for one that never
+## has. Your programs are not here: they are the device's (`library.gd`).
 const CELL := {
 	"body": {
 		"at": TYPE_VECTOR2,
@@ -629,6 +631,11 @@ static func _bad_extra(drop: Dictionary) -> String:
 static func _bad_cell(cell: Dictionary) -> String:
 	if cell.has("elsewhere") and typeof(cell["elsewhere"]) != TYPE_BOOL:
 		return "cell.elsewhere is the wrong type"
+	# **Seconds since the cell last ate** (docs/design/automation.md §9.2), for its
+	# instincts' `fed`: since pack 4's programs, and absent for a cell that never
+	# ate. A build before them loads the rest and never asks.
+	if cell.has("fed") and (typeof(cell["fed"]) != TYPE_FLOAT or not is_finite(float(cell["fed"]))):
+		return "cell.fed is not seconds"
 	for key: String in CELL_LINEAGE:
 		if cell.has(key) and typeof(cell[key]) != int(CELL_LINEAGE[key]):
 			return "cell.%s is the wrong type" % key

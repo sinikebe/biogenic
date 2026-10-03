@@ -60,6 +60,14 @@ const ARROW := "->"
 enum Test { BELOW, ABOVE, RISING, FALLING }
 const TEST_WORDS: Array[String] = ["below", "above", "rising", "falling"]
 
+## **What each rule did on a tick** (docs/design/automation.md §8.2 item 4, §13),
+## for a caller that asks [method choose] for it: it acted; it was held back,
+## because a rule above it had already claimed a trigger it claims and it would
+## otherwise have acted; it is asleep, an owner it needs is not there; its input
+## was quiet, reporting nothing; its input reported and no report passed its
+## tests; or it cannot be read at all.
+enum State { ACTED, HELD, ASLEEP, QUIET, FAILED, UNREAD }
+
 ## **The kinds of change** (§6.2), each by the name a caller weighs it by
 ## ([method changed]): one test's step or one output's option one place along
 ## its ladder; one rule's input, one of its tests or its output replaced; two
@@ -221,6 +229,11 @@ class Behaviour:
 ## before, by the list's slots. One choice at a time; nothing is kept between.
 static var _now: Array = []
 static var _before: Array = []
+## Per [method choose] asked for states: an input read early, for a rule held
+## back, and its reading of the tick before -- kept for the rule further down
+## that reads it for real, which then reads nothing again.
+static var _peek_now: Array = []
+static var _peek_before: Array = []
 ## What [constant ALWAYS] reports.
 static var _always: Array = [[]]
 
@@ -509,8 +522,15 @@ static func number(value: float) -> String:
 ## last time each was read -- what rising and falling are measured against, and
 ## only when that was [param tick] - 1. [param refs] is the sizes a size is put
 ## against, by name.
+##
+## **[param states], when a caller passes an Array, says what every rule did**
+## (automation.md §13): see [method _choose_stating]. Left null -- as the water
+## leaves it -- this is the choice pack 3 shipped, line for line.
 static func choose(list: Behaviour, read: Callable, worn: int, refs: Dictionary,
-		memory: Dictionary, tick: int, out: Array) -> void:
+		memory: Dictionary, tick: int, out: Array, states: Variant = null) -> void:
+	if states != null:
+		_choose_stating(list, read, worn, refs, memory, tick, out, states as Array)
+		return
 	out.clear()
 	var rules := list.rules
 	if list.slots.size() != rules.size():
@@ -587,6 +607,159 @@ static func _passes(rule: Rule, report: Array, before: Variant, refs: Dictionary
 		if not (now > then if test == Test.RISING else now < then):
 			return false
 	return true
+
+
+## **[method choose], saying as well what every rule did** (automation.md §8.2
+## item 4, §13): into [param states] one `[state, by, taken]` a rule, in list
+## order -- its [enum State]; for a rule held back, the index of the rule above
+## that claimed first a trigger it claims, and the triggers it found claimed, as
+## bits; -1 and 0 for every other state.
+##
+## **It chooses exactly as [method choose] does, and remembers the same.** A rule
+## is held back only when it would have acted, so its input is read to know --
+## through the same callable, but **as a peek**: not remembered, and not counted
+## as the input's read this tick. The rule further down that reads the input for
+## real takes the peek's reports, so the callable is still asked once an input a
+## tick, and what is remembered is what it would have been. [param read] must
+## answer the same within one tick, as a body's senses do.
+static func _choose_stating(list: Behaviour, read: Callable, worn: int, refs: Dictionary,
+		memory: Dictionary, tick: int, out: Array, states: Array) -> void:
+	out.clear()
+	states.clear()
+	var rules := list.rules
+	if list.slots.size() != rules.size():
+		list.index()
+	var slots := list.slots
+	if _now.size() < list.inputs:
+		_now.resize(list.inputs)
+		_before.resize(list.inputs)
+	if _peek_now.size() < list.inputs:
+		_peek_now.resize(list.inputs)
+		_peek_before.resize(list.inputs)
+	var claimed := 0
+	var have := 0
+	var peeked := 0
+	# Each trigger claimed, as its bit, to the rule that claimed it.
+	var claimer := {}
+	for k in rules.size():
+		var rule := rules[k]
+		if rule.inert:
+			states.append([State.UNREAD, -1, 0])
+			continue
+		if (worn & rule.needs) != rule.needs:
+			states.append([State.ASLEEP, -1, 0])
+			continue
+		var taken := claimed & rule.claims
+		var reports: Array = _always
+		var before: Variant = null
+		var slot := slots[k]
+		if slot >= 0:
+			var bit := 1 << slot
+			if (have & bit) != 0:
+				reports = _now[slot]
+				before = _before[slot]
+			elif taken != 0:
+				if (peeked & bit) == 0:
+					peeked |= bit
+					_peek_now[slot] = read.call(rule.input)
+					var then: Variant = memory.get(rule.input)
+					_peek_before[slot] = then[1] if then != null and int(then[0]) == tick - 1 \
+						else null
+				reports = _peek_now[slot]
+				before = _peek_before[slot]
+			else:
+				have |= bit
+				reports = _peek_now[slot] if (peeked & bit) != 0 else read.call(rule.input)
+				var was: Variant = memory.get(rule.input)
+				if was == null:
+					memory[rule.input] = [tick, reports]
+				else:
+					if int(was[0]) == tick - 1:
+						before = was[1]
+					was[0] = tick
+					was[1] = reports
+				_now[slot] = reports
+				_before[slot] = before
+		var found: Variant = null
+		if rule.clauses.is_empty():
+			if not reports.is_empty():
+				found = reports[0]
+		else:
+			for report: Array in reports:
+				if _passes(rule, report, before, refs):
+					found = report
+					break
+		if found == null:
+			states.append([State.QUIET if reports.is_empty() else State.FAILED, -1, 0])
+			continue
+		if taken != 0:
+			var by := -1
+			for bit: int in claimer:
+				if (taken & bit) != 0 and (by < 0 or int(claimer[bit]) < by):
+					by = int(claimer[bit])
+			states.append([State.HELD, by, taken])
+			continue
+		claimed |= rule.claims
+		var rest := rule.claims
+		while rest != 0:
+			var low := rest & -rest
+			if not claimer.has(low):
+				claimer[low] = k
+			rest &= ~low
+		out.append([k, found, before])
+		states.append([State.ACTED, -1, 0])
+
+
+## **Lists read one after another as one** (automation.md §3.3, §13): a new list
+## of [param lists]' rules, in their order -- the first list's from the top,
+## then the second's -- **shared**, never copied, so each rule is the very rule
+## its own list holds and nothing is written through. [method choose] reads it
+## as it reads any list: the first rule that fits wins its triggers, so a list
+## above wins a contradiction.
+static func merged(lists: Array) -> Behaviour:
+	var out := Behaviour.new()
+	for list: Behaviour in lists:
+		out.rules.append_array(list.rules)
+	return out
+
+
+## **Which rules can never act, and why** (automation-ux.md §2.3, §3.2): for
+## each rule of [param list], the index of a rule above it that takes a trigger
+## it claims on every tick, or -1. Such a rule is **unconditional** -- `always`
+## with no test, readable and awake in [param worn] -- and no rule above it that
+## could act claims any trigger it claims, so nothing ever holds it back. A rule
+## asleep in [param worn], or one that can itself never act, holds nothing.
+## Written to be sure rather than complete: a rule this does not name may still
+## never act, by some chance of the water's, and the page says so only of the
+## ones that are certain.
+static func never(list: Behaviour, worn: int) -> PackedInt32Array:
+	var out := PackedInt32Array()
+	out.resize(list.rules.size())
+	out.fill(-1)
+	# Every trigger a rule above could claim, and those an unconditional one
+	# always does, as each bit to that rule.
+	var could := 0
+	var always := {}
+	for k in list.rules.size():
+		var rule := list.rules[k]
+		if rule.inert or (worn & rule.needs) != rule.needs:
+			continue
+		var by := -1
+		for bit: int in always:
+			if (rule.claims & bit) != 0 and (by < 0 or int(always[bit]) < by):
+				by = int(always[bit])
+		if by >= 0:
+			out[k] = by
+			continue
+		if rule.input == ALWAYS and rule.clauses.is_empty() and (could & rule.claims) == 0:
+			var rest := rule.claims
+			while rest != 0:
+				var low := rest & -rest
+				if not always.has(low):
+					always[low] = k
+				rest &= ~low
+		could |= rule.claims
+	return out
 
 
 ## **A value as its kind is measured**: a bearing as degrees off the nose to
