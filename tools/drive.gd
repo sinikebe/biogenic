@@ -368,6 +368,15 @@ extends Node
 ##   --divide-at=<seconds>   grow the cell to DIVIDE_RADIUS then, so it divides
 ##                           at a known time -- in a pond, after the guest has
 ##                           arrived
+##   --shift=<from>:<to>     the division's mutation is a shift of the gene in
+##                           outside slot <from> to <to>, swapping with whatever
+##                           is there, as `Genome._mutate_shift` does -- so the
+##                           choosing screen can be photographed with a venom a
+##                           shift moved between the front and a side
+##                           (dna-slots-ux.md §3.8). The shifted daughter is put
+##                           on the port side, so a frame is the same picture
+##                           whichever way the run's own coin fell. Outside
+##                           slots only: a shift never crosses into the inside
 ##   --panes=<seconds>       raise the two-pane replay screen over the live run
 ##                           at that time, mirroring it frame for frame. The
 ##                           split screen is the part of docs/design/replay.md
@@ -397,11 +406,14 @@ extends Node
 ##                           and at once whenever it changes: whether the body
 ##                           is open and to which finger, the slot lit, the
 ##                           cell's steer and heading, and the waiting genes
-##                           and the DNA. dna-body.md §8's evidence is a log,
-##                           because what the gesture does to steering -- a tap
-##                           on the body still dashes, a drag still steers, a
-##                           second finger keeps the first one's turn -- is
-##                           nothing a frame can show
+##                           and the DNA -- its layout, its inside and every
+##                           copy count, so a placement anywhere, the inside
+##                           included, is a line (dna-slots-ux.md §3.7). The
+##                           slot lit is 7 for the inside. dna-body.md §8's
+##                           evidence is a log, because what the gesture does
+##                           to steering -- a tap on the body still dashes, a
+##                           drag still steers, a second finger keeps the first
+##                           one's turn -- is nothing a frame can show
 ##   --peer=<dist>,<bearing>[,<radius>[,<facing>]]
 ##                           **a second player**, on a real loopback session --
 ##                           two `net_session.gd` nodes in this process, a real
@@ -1000,6 +1012,10 @@ var _pond_trace := -1.0
 var _pond_trace_clock := 0.0
 ## --divide-at=: when to grow this cell to DIVIDE_RADIUS, or -1 for never.
 var _divide_at := -1.0
+## --shift=: the two outside slots the division's mutation swaps, empty for the
+## run's own roll; and whether the pair has been rewritten yet.
+var _shift: Array[int] = []
+var _shift_done := false
 ## **Your programs** (automation.md §18.1): the library this run keeps, if any;
 ## the programs given, `founders` or lines, in order; which to leave off; when
 ## to press the autopilot's key; the page to open; and the last state said.
@@ -1339,6 +1355,10 @@ func _ready() -> void:
 			_starve_near = float(text.trim_prefix("--starve-near="))
 		elif text.begins_with("--divide-at="):
 			_divide_at = float(text.trim_prefix("--divide-at="))
+		elif text.begins_with("--shift="):
+			var ends := text.trim_prefix("--shift=").split(":")
+			if ends.size() == 2:
+				_shift = [int(ends[0]), int(ends[1])]
 		elif text.begins_with("--library="):
 			_library_at = text.trim_prefix("--library=")
 			_instincts_trace = true
@@ -2229,6 +2249,7 @@ func _process(delta: float) -> void:
 	_step_starve_near()
 	_step_watch()
 	_step_divide()
+	_step_shift()
 	_step_panes()
 	_step_capture_cost(delta)
 	_step_census(delta)
@@ -2529,6 +2550,45 @@ func _step_divide() -> void:
 	if cell != null:
 		cell.radius = CellBody.DIVIDE_RADIUS
 		print("[drive] %5.2f  grown to r%.0f -- dividing" % [_clock, cell.radius])
+
+
+## --shift=: once the pair is rolled at the pinch, and before the choosing
+## screen opens on it at PART, the daughter that mutated is made again from the
+## faithful one with the asked shift -- its seats swapped and nothing else, as
+## [method Genome._mutate_shift] swaps them -- rolled into a body of her own,
+## and put on the port side. Reaching for the run's private state is a thing
+## only tools/ may do.
+func _step_shift() -> void:
+	if _shift.is_empty() or _shift_done or _run == null:
+		return
+	if int(_run.get("_split")) != NormalMode.Split.PINCH:
+		return
+	var pair: Array = _run.get("_daughters")
+	if pair.size() != 2:
+		return
+	_shift_done = true
+	var from := _shift[0]
+	var to := _shift[1]
+	var faithful: Dictionary = pair[0] if StringName(pair[0]["mutation"]) == &"" \
+		else pair[1]
+	var seats: Array[StringName] = []
+	for gene: Variant in faithful["order"]:
+		seats.append(StringName(gene))
+	if from == to or from < 0 or to < 0 or from >= seats.size() \
+			or to >= seats.size() or seats[from] == &"":
+		print("[drive] %5.2f  shift %d:%d refused -- outside slots of the order %s, from a gene" % [
+			_clock, from, to, seats])
+		return
+	var held := seats[from]
+	seats[from] = seats[to]
+	seats[to] = held
+	var tiers: Dictionary = (faithful["tiers"] as Dictionary).duplicate()
+	var shifted := {"tiers": tiers, "order": seats, "mutation": &"shift",
+		"body": GenomeNode.expressed(tiers)}
+	pair[0] = shifted
+	pair[1] = faithful
+	print("[drive] %5.2f  shift %d:%d -- port daughter %s, starboard faithful %s" % [
+		_clock, from, to, seats, faithful["order"]])
 
 
 ## `--census=`: the drop's census line, on the interval, while it runs -- and
@@ -3167,20 +3227,25 @@ func _step_offer(delta: float) -> void:
 	var keyed: bool = _run.get("_offer_key")
 	var aim: int = _run.get("_offer_aim")
 	var layout: Array = _genome.layout()
+	# **And the inside** (dna-slots-ux.md §3.7): what the DNA carries there, and
+	# every copy count, so a placement inside is a line too.
+	var inside: Array = _genome.inside_layout()
 	var who := "key e" if keyed else ("finger %d" % pointer if pointer >= 0
 		else ("mouse" if pointer == -1 else "nobody"))
-	var said := "%s %s %d %s %s" % [open, who, aim, layout, _genome.waiting()]
+	var said := "%s %s %d %s %s %s %s" % [open, who, aim, layout, inside,
+		_genome.dna(), _genome.waiting()]
 	_offer_clock += delta
 	if said == _offer_said and _offer_clock < _offer_trace:
 		return
 	_offer_clock = 0.0
 	_offer_said = said
 	var cell := _find_node_with(_run, &"bearing_to")
-	print("[offer] %6.2f  %s  %-8s  aim %2d  steer %+5.2f  heading %+7.1f  waiting %s  dna %s" % [
+	print("[offer] %6.2f  %s  %-8s  aim %2d%s  steer %+5.2f  heading %+7.1f  waiting %s  dna %s  inside %s  copies %s" % [
 		_clock, "OPEN  " if open else "closed", who, aim,
+		" (inside)" if GenomeNode.is_inside(aim) else "",
 		cell.steer if cell != null else 0.0,
 		rad_to_deg(cell.heading) if cell != null else 0.0,
-		_waiting_text(), layout])
+		_waiting_text(), layout, inside, _genome_text(_genome.dna())])
 
 
 func _field_text(index: int, cell: Node) -> String:
