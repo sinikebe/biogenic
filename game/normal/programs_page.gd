@@ -73,6 +73,11 @@ const VALUE_W := 82.0
 const DRAG_LIFT := 34.0
 ## **How long a row's state takes to change** (§3.2): a cross-fade, not a cut.
 const FADE := 0.12
+## **An inspector trigger line's word** (§2.4): where it starts, clear of the
+## mark at (12, 16) -- the dash's burst reaches about x 28 -- and the room it is
+## trimmed to, the inspector's 264 less that.
+const TRIGGER_WORD_X := 34.0
+const TRIGGER_LINE_W := 230.0
 ## How many tests the pool holds a row: one for each value the widest sense
 ## carries, the beam's and the echo's bearing included.
 const TESTS_MOST := 4
@@ -601,19 +606,27 @@ func _build(resume_style: Button) -> void:
 		row.draw.connect(_draw_row.bind(j))
 		_area.add_child(row)
 		_row_nodes.append(row)
+		# **The keyboard selects as it goes** (§2.6): focus on any of a row's
+		# controls selects its program, as a press does -- selecting costs nothing
+		# -- so the inspector, `Explain`, the lit places and `Tab` follow the keys,
+		# and `Enter` opens the program the page is showing.
 		var switch := _row_button(row, "Switch", j)
 		switch.pressed.connect(_on_switch.bind(j))
 		switch.draw.connect(_draw_switch.bind(switch, j))
+		switch.focus_entered.connect(_select_program.bind(j))
 		_switches.append(switch)
 		var body := _row_button(row, "Body", j)
 		body.button_down.connect(_select_program.bind(j))
 		body.pressed.connect(_select_program.bind(j))
 		body.gui_input.connect(_on_body_key.bind(j))
+		body.draw.connect(_draw_body_focus.bind(body, j))
+		body.focus_entered.connect(_select_program.bind(j))
 		_bodies.append(body)
 		var open := _row_button(row, "Open", j)
 		open.button_down.connect(_select_program.bind(j))
 		open.pressed.connect(_open_from_row.bind(j))
 		open.draw.connect(_draw_open.bind(open, j))
+		open.focus_entered.connect(_select_program.bind(j))
 		_opens.append(open)
 		var add := _row_button(row, "Add", j)
 		add.pressed.connect(_on_add.bind(j))
@@ -1590,16 +1603,13 @@ func _draw_library_row(row: Control, j: int) -> void:
 	else:
 		box = _box_style(Color(FILL, 0.30), Color(PALE, 0.10), 1)
 	row.draw_style_box(box, r)
-	var font := _font()
 	# The count, right-aligned before the columns; the name trimmed before it.
 	var columns_x := _rows_w - OPEN_W - COLUMNS_GAP - COLUMN_W * COLUMNS.size()
-	var count := _count_text(one.lines.size())
-	if not one.on and not _library.fits(j):
-		count += " · " + tr(NO_ROOM)
-	var count_w := _text_w(font, count, 14)
-	var count_x := columns_x - 16.0 - count_w
+	var texts := _row_texts(j)
+	var count: String = texts[0]
+	var count_x: float = texts[1]
 	_text(row, Vector2(count_x, ROW_H * 0.5), count, 14, Color(PALE, 0.45 if one.on else 0.30))
-	var name := _trimmed(font, _library.name_of(j), 15, count_x - 16.0 - NAME_X)
+	var name: String = texts[2]
 	_text(row, Vector2(NAME_X, ROW_H * 0.5), name, 15, Color(PALE, 0.92 if one.on else 0.50))
 	# The trigger columns (§2.3), each fading from what it showed.
 	var marks: Array = now_look[1]
@@ -1611,6 +1621,32 @@ func _draw_library_row(row: Control, j: int) -> void:
 			_draw_column_state(row, c, centre, String(marks[c]), t)
 		else:
 			_draw_column_state(row, c, centre, String(marks[c]), 1.0)
+
+
+## **A library row's words as it draws them**: `[its count, where the count
+## starts, its name trimmed with an ellipsis 16 px before the count]`.
+func _row_texts(j: int) -> Array:
+	var font := _font()
+	var one: Library.Program = _library.programs[j]
+	var columns_x := _rows_w - OPEN_W - COLUMNS_GAP - COLUMN_W * COLUMNS.size()
+	var count := _count_text(one.lines.size())
+	if not one.on and not _library.fits(j):
+		count += " · " + tr(NO_ROOM)
+	var count_x := columns_x - 16.0 - _text_w(font, count, 14)
+	return [count, count_x, _trimmed(font, _library.name_of(j), 15, count_x - 16.0 - NAME_X)]
+
+
+## **A library row with the keyboard on it** (§2.6): its program's name
+## underlined, 2 px of [constant SELECT] at y 38 under the name as the row draws
+## it -- under the name rather than along the row's foot, where a selected row's
+## own 2 px edge would read as a doubled line. Keyboard focus only: a press gives
+## a row's controls a hidden focus, and its selection says the rest.
+func _draw_body_focus(body: Button, j: int) -> void:
+	if _view != View.LIBRARY or j >= _library.size() or not body.has_focus(true):
+		return
+	var x := NAME_X - SWITCH_W
+	var w := _text_w(_font(), String(_row_texts(j)[2]), 15)
+	body.draw_line(Vector2(x, 38.0), Vector2(x + w, 38.0), SELECT, 2.0, true)
 
 
 ## **One column of a program's row**, as [param mark] shows it (§2.3), at
@@ -2047,8 +2083,13 @@ func _chip_box(node: CanvasItem, r: Rect2, hue: Color, lit: float, selected: boo
 	node.draw_style_box(box, r)
 
 
-## **The keyboard's mark** (§3.3 of the landed spec): the strand's underline.
+## **The keyboard's mark** (§3.3 of the landed spec): the strand's underline --
+## for the keyboard's focus only. A press gives the control it lands on a hidden
+## focus, and an underline there would double a selected row's own edge; the
+## pause screen's theme buttons hide that focus too.
 func _focus_mark(node: Control) -> void:
+	if not node.has_focus(true):
+		return
 	node.draw_line(Vector2(14.0, 44.0), Vector2(node.size.x - 14.0, 44.0), SELECT, 2.0, true)
 
 
@@ -2348,11 +2389,16 @@ func _library_hint() -> String:
 	var one: Library.Program = _library.programs[i]
 	if not one.on:
 		return ""
-	# A live hold first: one of its instincts held back by a program above.
+	# A live hold first: one of its instincts held back by a program above --
+	# unless what holds it is the very `always` that means it can never act.
+	# Then the line that cannot change is the one to give, and it agrees with
+	# the inspector's `never` (automation-ux.md §2.4).
 	for j in one.lines.size():
 		var k := _library.merged_index(i, j)
 		if _state_at(k) == Rulebook.State.HELD:
 			var by := _held_by(k)
+			if by >= 0 and k < _never.size() and _never[k] == by:
+				continue
 			if by >= 0 and _library.owner_of(by).x != i:
 				return _held_line(by, true)
 	# Then what cannot change: a trigger it can never move.
@@ -2437,9 +2483,11 @@ func _open_from_row(j: int) -> void:
 
 
 ## Whether what was just pressed was pressed by a key -- `Enter` or `Space`, or a
-## pad's accept -- so the keyboard follows it into the view it opens.
+## pad's accept -- so the keyboard follows it into the view it opens. A button's
+## `pressed` comes on the key's release, when the accept is no longer down: it was
+## just released, in the frame that pressed the button.
 func _by_keys() -> bool:
-	return Input.is_action_pressed(&"ui_accept")
+	return Input.is_action_pressed(&"ui_accept") or Input.is_action_just_released(&"ui_accept")
 
 
 func _on_body_key(event: InputEvent, j: int) -> void:
@@ -3118,7 +3166,10 @@ func _draw_trigger_line(line: Control, c: int, mark: String) -> void:
 				var above := _above_on(_program, c)
 				said += " · " + (tr(ORDER_SAYS[&"first"]) if above < 0 \
 					else tr(ORDER_AFTER) % _quoted_name(above))
-	_text(line, Vector2(30.0, 16.0), _trimmed(_font(), said, 14, 234.0), 14, ink)
+	# The word at x 34, clear of the widest mark -- the dash's burst ends about
+	# x 28 -- and trimmed at the line's room, the inspector's 264 less that.
+	_text(line, Vector2(TRIGGER_WORD_X, 16.0), _trimmed(_font(), said, 14, TRIGGER_LINE_W), 14,
+		ink)
 
 
 ## The nearest program above [param i] that is on and moves column [param c], or -1.
@@ -3897,7 +3948,7 @@ static func row_room(font: Font, row_w: float = 856.0) -> Array:
 ## **The widest line of the inspector's triggers** (§2.4), in the language of the
 ## moment: a trigger's word and where a program stands on it, after a default
 ## name -- the eighth, as long as a library of eight makes one -- as `[px, the
-## line]`, against 234 px at 14 px.
+## line]`, against [constant TRIGGER_LINE_W] px at 14 px.
 static func trigger_line_room(font: Font) -> Array:
 	var named := ProgramWords.quoted(Library.default_name([Library.NEW, Library.LIBRARY_MOST]))
 	var orders: Array[String] = [String(TranslationServer.translate(ORDER_AFTER)) % named]

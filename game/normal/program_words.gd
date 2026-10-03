@@ -114,7 +114,7 @@ const UNITS := {
 const OPTION_SAYS := ["half", "full"]
 ## TRANSLATORS: A program's name inside a sentence, in your language's quotation
 ## marks: “flee” (French « fuite »). %s is the name the player gave it.
-## ROOM: 234 px at 14 px with program 99
+## ROOM: 230 px at 14 px with program 99
 const QUOTED := "“%s”"
 
 
@@ -149,11 +149,16 @@ static func _words(part: StringName) -> Dictionary:
 		if RULEBOOK_EXPLAINS.has(part):
 			out["explains"] = String(TranslationServer.translate(RULEBOOK_EXPLAINS[part]))
 		return out
+	# Each word from the first file that has it: a value two files report takes
+	# its chip from the first and its sentence from whichever file has one --
+	# metabolism names hunger's `level`, and the genome explains a level.
+	var out := {}
 	for table: Dictionary in [CellBody.words_of(part), Metabolism.words_of(part),
 			GenomeNode.words_of(part)]:
-		if not table.is_empty():
-			return table
-	return {}
+		for key: String in table:
+			if not out.has(key):
+				out[key] = table[key]
+	return out
 
 
 ## **A test's step in its unit**: `30%`, `5 s`, `350 µm`, `60°`, or what a size is

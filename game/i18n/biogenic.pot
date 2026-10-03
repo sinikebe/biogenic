@@ -3781,7 +3781,7 @@ msgstr ""
 
 #. A program's name inside a sentence, in your language's quotation marks:
 #. “flee” (French « fuite »). %s is the name the player gave it.
-#. Room: at most 234 px in 14 px type, measured with program 99 in place of
+#. Room: at most 230 px in 14 px type, measured with program 99 in place of
 #. the placeholders; the English takes 90 px.
 #: game/normal/program_words.gd
 #, c-format

@@ -167,10 +167,10 @@ const STATS_SIZE := 15
 ## widest action, laid out as the page lays them at 1280 -- a row 856 px wide --
 ## must leave this much of the arc between them, or the row reads as chips with no
 ## nerve. And each line of the inspector's triggers, a trigger's word and where a
-## program stands on it after a default name, fits the inspector's 234 px at 14.
+## program stands on it after a default name, fits the inspector's 230 px at 14.
 ## Both are measured by the page's own code (`programs_page.gd`).
 const ROW_ROOM := 40
-const TRIGGER_LINE_ROOM := 234
+const TRIGGER_LINE_ROOM := 230
 ## The scripts that build those lines, loaded only when a game catalog is being checked.
 const SCREEN_SCRIPTS := {
 	"stats": "res://game/normal/gene_stats.gd",
