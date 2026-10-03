@@ -1842,10 +1842,16 @@ func _draw_program_row(row: Control, j: int) -> void:
 	var x0 := float(lay["end"]) + ARC_FROM
 	var x1 := (lay["action"] as Rect2).position.x - ARC_TO
 	var t := _blend(j)
-	if t < 1.0 and j < _look_was.size() and _look_was[j] != _look_now[j]:
-		_draw_arc(row, String(_look_was[j]), x0, x1, 1.0 - t)
-	_draw_arc(row, _look_of(j), x0, x1, t if j < _look_was.size() \
-		and _look_was[j] != _look_now[j] else 1.0)
+	var now_look := _look_of(j)
+	# The look it is fading from: a program row's, only ever a String -- a
+	# library row's, left from before a switch of view, is no fade at all.
+	var was_look: String = _look_was[j] if j < _look_was.size() and _look_was[j] is String \
+		else now_look
+	if t < 1.0 and was_look != now_look:
+		_draw_arc(row, was_look, x0, x1, 1.0 - t)
+		_draw_arc(row, now_look, x0, x1, t)
+	else:
+		_draw_arc(row, now_look, x0, x1, 1.0)
 
 
 ## **An instinct's arc** (§3.2) from [param x0] to [param x1], as [param look]
