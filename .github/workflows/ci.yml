@@ -412,8 +412,8 @@ jobs:
         # hour into a run. About three and a half minutes here since pack 3's
         # rules (3-1), which read every hunter's senses, and about four since
         # pack 4's tail (4-1), which runs a pack-3 drop of its own beside the
-        # new water: 235 s here at 4-1, and 319 s on a quiet local machine,
-        # against the 600 s timeout below.
+        # new water: 235 s here at 4-1 and 192 s at 4-2's programs, and 319 to
+        # 329 s on a quiet local machine, against the 600 s timeout below.
         # Grepped, not trusted to the exit code, for the reason the Back probe
         # gives.
         run: |
@@ -548,7 +548,8 @@ jobs:
         # count. Since pack 4's programs (4-2), whose pond and server sections
         # also hand a guest to its autopilot (automation.md check 23), it is
         # 18,124 on a quiet local machine, where 4-1 was 16,226 to 16,532 and
-        # 17,071 here -- so about 18,700 to 19,100 here, too near the 20000
+        # 17,071 here -- so about 18,700 to 19,100 here (18,724 on its first
+        # run, in 208.6 s), too near the 20000
         # this step stopped at until then, against local runs that have spread
         # by a tenth (14,751 to 16,354 at 4-1). Hence 24000 from 4-2. Before
         # 4-1: 15,070 with `channel`'s 240, as it was 15,070 with `upnp`'s 800

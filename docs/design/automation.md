@@ -1439,9 +1439,11 @@ Where the build differs from the text above, or found something:
   "Balance waits for players"); §19 asks the same question of a player's own
   programs.
 - **CI's two margins:**
-  - `drop_probe` ran 328.7 s locally, against 319 s at 4-1, which was 235 s on CI.
+  - `drop_probe` ran 324 to 329 s locally, against 319 s at 4-1, which was 235 s
+    on CI. On CI at 4-2 it took 192 s, against its 600 s timeout.
   - `net_probe` ran 18,124 frames locally, so its backstop went from 20,000 to
-    24,000 frames.
+    24,000 frames. On CI at 4-2 it ran 18,724 frames in 208.6 s. That margin is
+    the one to watch as 4-3 adds the wire's sections.
 - **The pause screen's bottom edge** (§5.5) is settled in `automation-ux.md`
   §10.1. On the genome page the pads show only while the controls chooser is in
   use; on the programs page they never show.
