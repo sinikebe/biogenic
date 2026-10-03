@@ -741,10 +741,10 @@ var _autopilot_frame := -1
 ## or the genome. Kept for the run, so pause opens where it was left -- unless a
 ## gene is waiting, whose clock puts the genome first.
 var _on_programs := false
-## When the controls chooser was last cycled, in seconds of the clock that runs
-## while paused: the drawn controls show behind the genome page for a moment
-## after ([method _controls_previewed]).
-var _scheme_shown_at := -INF
+## How long the drawn controls still show behind the genome page after the
+## controls chooser was cycled ([method _controls_previewed]): seconds of frames,
+## counted down in [method _process], which runs while paused.
+var _scheme_preview_left := 0.0
 
 
 func _ready() -> void:
@@ -1181,7 +1181,10 @@ func _process(delta: float) -> void:
 	# And the autopilot's, for the same reason: hidden in exactly those states.
 	_update_autopilot_icon(delta)
 	# And before them for the opposite reason: the controls are drawn through a
-	# division and through a pause, and what changes is *which* of them.
+	# division and through a pause, and what changes is *which* of them. The
+	# chooser's preview counts down in frames' time, which this node keeps under
+	# the pause, so a render at a fixed rate shows what a player sees.
+	_scheme_preview_left = maxf(_scheme_preview_left - delta, 0.0)
 	_update_controls()
 	# Before them too: the states they lead to -- dead, paused, held, divided --
 	# are exactly the ones the body held open has to shut in. dna-body.md §8.
@@ -2735,7 +2738,7 @@ const SCHEME_WORDS: Array[String] = ["anywhere", "stick", "pads"]
 ## preview is the game.
 func _cycle_scheme() -> void:
 	scheme = (scheme + 1) % SCHEME_WORDS.size()
-	_scheme_shown_at = Time.get_ticks_msec() / 1000.0
+	_scheme_preview_left = SCHEME_PREVIEW
 	_controls.set_scheme(scheme)
 	RunState.save_scheme(scheme)
 	_update_scheme_button()
@@ -2771,7 +2774,7 @@ func _controls_previewed() -> bool:
 		return false
 	if _feel_button.has_focus(true):
 		return true
-	return Time.get_ticks_msec() / 1000.0 - _scheme_shown_at < SCHEME_PREVIEW
+	return _scheme_preview_left > 0.0
 
 
 func _update_scheme_button() -> void:
