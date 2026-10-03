@@ -8989,9 +8989,10 @@ func _home_after_black() -> Array:
 ## (ocean.md §10.5): the host's referee takes her there.
 ##
 ## **A host's sister carries [param dna] and is [param mother]'s child**
-## (lineage.md §4). SISTER says what she wears and nothing more -- no protocol
-## change in pack 2 (§8) -- so a guest's arrives in the host's drop the founder
-## of a line of her own, carrying what she wears.
+## (lineage.md §4). **A guest's carries her DNA and her list too** (protocol 6,
+## automation.md §10.3): SISTER says what she wears, the DNA she was made of and
+## the list her cell ran, as lines. Not her record -- ids are per drop -- so she
+## arrives in the host's drop the founder of a line of her own.
 func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
 		mother: PackedInt32Array) -> void:
 	if _pond.hosting:
@@ -9003,7 +9004,9 @@ func _leave_sister(bearing: float, body: Dictionary, dna: Dictionary,
 	var rim: RefCounted = _food.basin()
 	if rim != null:
 		at = rim.call(&"contain", at, _cell.radius)
-	_pond.sister(at, atan2(dir.x, -dir.y), _cell.radius, body)
+	var brain: Variant = _sister_brain()
+	_pond.sister(at, atan2(dir.x, -dir.y), _cell.radius, body, dna,
+		Rulebook.lines_of(brain) if brain != null else PackedStringArray())
 
 
 ## **Set this run's own drop aside** (ocean.md §9.1), before it becomes a

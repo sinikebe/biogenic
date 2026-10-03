@@ -82,12 +82,26 @@ extends RefCounted
 ## rules are the referee's too -- so the number moves with `RULES`, and a 4 is
 ## refused at HELLO by name, as 1, 2 and 3 are.
 ##
+## **6: a guest's sister carries her DNA and her instincts**
+## (docs/design/automation.md §10.3). A SISTER said where the declined daughter
+## is left and what she wears, and nothing more, so a host's water made her of
+## her body alone: a DNA equal to it and the founders' rules, where a host's own
+## sister carries both. Now, after her body, it says the DNA she was made of --
+## by name, as her worn tiers are -- and the list her cell ran, a line for each
+## rule as `rulebook.gd` writes it, and the host reads those lines with its own
+## vocabulary. A 5 refuses the longer SISTER as a frame no writer of its own
+## produces, and the division it answers would go unanswered; a 5's shorter one
+## is not a SISTER to a 6. So the number moves, and a 5 is refused at HELLO by
+## name, as 1 to 4 are. **`RULES` does not move with it**: the referee judges
+## her place and size as it always did, and nothing it judges by changed --
+## any DNA and any list are ones evolution could reach and the page could build.
+##
 ## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
 ## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER` or the bite tables (`BITE_BY_TIER`,
 ## `BITE_GAP`, `VENOM_BITE_BACK_BY_TIER`, `VENOM_COST_BY_TIER`, `bite_damage`,
 ## `venom_back`) must bump this number**, or a host on one pack and a guest on
 ## another share a pond whose contacts one of them misjudges.
-const PROTOCOL := 5
+const PROTOCOL := 6
 ## **The rules a host's referee judges a guest by, fingerprinted**
 ## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
 ## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
@@ -395,6 +409,24 @@ const GENES_MAX := 8
 const ORDER_MAX := 7
 const NAME_MAX := 16
 const TIER_TOP := 3
+
+# --- A list of rules, by line (protocol 6, docs/design/automation.md §10.3) ----
+## **The most rules a list holds**: `drop.gd`'s MOST_RULES, eight, written out
+## because this file loads nothing, and the probe holds the two equal. A SISTER
+## carrying more is refused whole.
+const MOST_RULES := 8
+## **The longest line one rule may be**, in bytes. The longest line today's
+## vocabulary can write is under ninety -- `net_probe` measures it -- so a later
+## gene with a longer name still fits, and a rule's line is never cut.
+const RULE_BYTES_MAX := 128
+## **What a rule's line is made of, and all it is made of**: `a-z`, `0-9`, `.`,
+## `-`, `>` and the space -- every name a declaration gives, every test word,
+## every number on a ladder and the arrow (`rulebook.gd`'s `line_of`). A line is
+## a list's text, by declared name, so a name this build does not know crosses as
+## it came and the host keeps it as a rule that never fires. A line that is
+## empty, longer than [constant RULE_BYTES_MAX] or holds any other byte is not
+## one, and the reader refuses the whole SISTER rather than guess.
+const RULE_BYTES := "abcdefghijklmnopqrstuvwxyz0123456789.-> "
 ## `kind | seq | type | radius(f32)`.
 const ENTER_SIZE := EVENT_HEADER + 4
 ## `kind | seq | type | x(f32) | y(f32) | heading(u8) | rim x(f32) | rim y(f32)
@@ -440,8 +472,8 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
 ## why a host of this build refuses it. Longer, and the host hangs up before
 ## the handshake with no sentence at all; longer than [constant GUEST_FRAME_MAX]
-## (272), and it is the oversize cut, which bars the caller's address for a
-## minute (net-hardening.md A.2).
+## (1,342 since protocol 6, 272 before it), and it is the oversize cut, which
+## bars the caller's address for a minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
 ## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
 ## `len | a name of NAME_MAX letters | tier`. 145 bytes. An unknown name is
@@ -460,13 +492,21 @@ const GENOME_MIN := EVENT_HEADER + 5 + 1
 const GENOME_MAX := EVENT_HEADER + 5 + TIERS_MAX
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
 const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
-## SISTER: a place, a heading, a radius and a genome. 20 to 164.
-const SISTER_MIN := EVENT_HEADER + 13 + 1
-const SISTER_MAX := EVENT_HEADER + 13 + TIERS_MAX
-## **The most either side ever writes in one frame**: a guest's longest PERSON
+## SISTER: a place, a heading, a radius and a genome -- and since protocol 6 a
+## second genome, her DNA, and her list: a count of rules to [constant
+## MOST_RULES], then each line as `len | ASCII`. 22 bytes with nothing worn,
+## carried or run; 1,342 at the most the format holds, two genomes of eight
+## sixteen-letter genes and eight lines of [constant RULE_BYTES_MAX]. A real one
+## is under a kilobyte: a DNA holds seven genes of ten letters at most, and
+## today's longest line is under ninety bytes.
+const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1
+const SISTER_MAX := EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 \
+	+ MOST_RULES * (1 + RULE_BYTES_MAX)
+## **The most either side ever writes in one frame**: a guest's longest SISTER
+## -- since protocol 6, longer than its longest PERSON, [constant PERSON_MAX] --
 ## and a host's POND. A receiver reads no byte past the first of anything
 ## longer.
-const GUEST_FRAME_MAX := PERSON_MAX
+const GUEST_FRAME_MAX := SISTER_MAX
 const HOST_FRAME_MAX := POND_MAX
 
 # ---------------------------------------------------------------------------
@@ -802,9 +842,20 @@ static func died_payload(cause: int, by: int, at: Vector2) -> PackedByteArray:
 
 
 ## SISTER: where the declined daughter is left, which way she points, how big
-## she is and what she wears.
+## she is and what she wears -- and since protocol 6 the DNA she was made of,
+## [param dna] (`{gene: copies}`), and the list her cell ran, [param lines]: a
+## rule a line as `rulebook.gd`'s `lines_of` writes them, none for the founders'
+## (docs/design/automation.md §10.3).
+##
+## **The writer never sends what the reader refuses**: a DNA gene the wire
+## cannot name is left out as a worn one is, and so is one at no copies, which
+## is not carried; a line the reader would refuse is left out, and past
+## [constant MOST_RULES] the rest are. A list a library holds never needs it --
+## every line this build writes reads -- but a line a later build wrote into
+## the library's file is kept there as it came, whatever it holds.
 static func sister_payload(at: Vector2, heading: float, radius: float,
-		tiers: Dictionary) -> PackedByteArray:
+		tiers: Dictionary, dna: Dictionary = {},
+		lines: PackedStringArray = PackedStringArray()) -> PackedByteArray:
 	var out := PackedByteArray()
 	out.resize(13)
 	out.encode_float(0, at.x if is_finite(at.x) else 0.0)
@@ -812,6 +863,12 @@ static func sister_payload(at: Vector2, heading: float, radius: float,
 	_put_bearing(out, 8, heading if is_finite(heading) else 0.0)
 	out.encode_float(9, radius if is_finite(radius) else 0.0)
 	out.append_array(_tiers_bytes(tiers))
+	var carried := {}
+	for gene: Variant in dna:
+		if int(dna[gene]) >= 1:
+			carried[gene] = dna[gene]
+	out.append_array(_tiers_bytes(carried))
+	out.append_array(_lines_bytes(lines))
 	return out
 
 
@@ -1201,7 +1258,17 @@ static func take_died(frame: PackedByteArray) -> Array:
 	return [int(frame[EVENT_HEADER]), int(frame[EVENT_HEADER + 1]), Vector2(x, y)]
 
 
-## `[at, heading, radius, tiers]` out of a SISTER, or empty.
+## `[at, heading, radius, tiers, dna, lines]` out of a SISTER, or empty
+## (docs/design/automation.md §10.3). `dna` is `{gene: copies}`, a gene at no
+## copies left out, since it is not carried -- empty for a SISTER that names
+## none, whom a host makes of her body as before; `lines` is her list, a rule a
+## line, empty for the founders'.
+##
+## **Refused whole**, as a genome is: a DNA past [constant GENES_MAX] genes or
+## naming one the wire cannot ([method _name_ok]); more than [constant
+## MOST_RULES] lines; a line that is empty, longer than [constant
+## RULE_BYTES_MAX] or holds a byte outside [constant RULE_BYTES]; or a byte past
+## the last line.
 static func take_sister(frame: PackedByteArray) -> Array:
 	if frame.size() < EVENT_HEADER + 13 or frame[0] != KIND_EVENT \
 			or frame[5] != EVENT_SISTER:
@@ -1212,9 +1279,20 @@ static func take_sister(frame: PackedByteArray) -> Array:
 	if not (is_finite(x) and is_finite(y) and is_finite(radius)) or radius <= 0.0:
 		return []
 	var tiers := _take_tiers(frame, EVENT_HEADER + 13)
-	if tiers.is_empty() or int(tiers[1]) != frame.size():
+	if tiers.is_empty():
 		return []
-	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), radius, tiers[0]]
+	var dna := _take_tiers(frame, int(tiers[1]))
+	if dna.is_empty():
+		return []
+	var lines := _take_lines(frame, int(dna[1]))
+	if lines.is_empty() or int(lines[1]) != frame.size():
+		return []
+	var carried := {}
+	for gene: StringName in dna[0]:
+		if int(dna[0][gene]) >= 1:
+			carried[gene] = dna[0][gene]
+	return [Vector2(x, y), _take_bearing(frame, EVENT_HEADER + 8), radius, tiers[0],
+		carried, lines[0]]
 
 
 ## **The short heading a refusal is told as**, on the screen of the phone that was
@@ -1367,6 +1445,67 @@ static func _take_tiers(from: PackedByteArray, at: int) -> Array:
 		tiers[StringName(name)] = clampi(int(from[i + 1 + length]), 0, TIER_TOP)
 		i += 1 + length + 1
 	return [tiers, i]
+
+
+## **Whether [param line] can cross as a rule's line**: 1 to [constant
+## RULE_BYTES_MAX] characters, each one of [constant RULE_BYTES].
+static func _line_ok(line: String) -> bool:
+	if line.length() < 1 or line.length() > RULE_BYTES_MAX:
+		return false
+	for i in line.length():
+		if not _rule_byte_ok(line.unicode_at(i)):
+			return false
+	return true
+
+
+## Whether [param code] is one of [constant RULE_BYTES]: `a-z`, `0-9`, `.`, `-`,
+## `>` or the space.
+static func _rule_byte_ok(code: int) -> bool:
+	return (code >= 97 and code <= 122) or (code >= 48 and code <= 57) \
+		or code == 46 or code == 45 or code == 62 or code == 32
+
+
+## `u8 count`, then per line `u8 len | ASCII`. A line the reader would refuse is
+## not written, and past [constant MOST_RULES] the rest are not.
+static func _lines_bytes(lines: PackedStringArray) -> PackedByteArray:
+	var out := PackedByteArray([0])
+	var count := 0
+	for line: String in lines:
+		if count >= MOST_RULES:
+			break
+		if not _line_ok(line):
+			continue
+		out.append(line.length())
+		out.append_array(line.to_ascii_buffer())
+		count += 1
+	out[0] = count
+	return out
+
+
+## `[lines, next offset]` read at [param at], or empty for a refusal: a count
+## past [constant MOST_RULES], or a line that is empty, longer than [constant
+## RULE_BYTES_MAX], past the frame's end or holding a byte outside [constant
+## RULE_BYTES]. No byte is turned into a character before it is checked.
+static func _take_lines(from: PackedByteArray, at: int) -> Array:
+	if at >= from.size():
+		return []
+	var count: int = from[at]
+	if count > MOST_RULES:
+		return []
+	var lines := PackedStringArray()
+	var i := at + 1
+	for _n in count:
+		if i >= from.size():
+			return []
+		var length: int = from[i]
+		if length < 1 or length > RULE_BYTES_MAX or i + 1 + length > from.size():
+			return []
+		for k in range(i + 1, i + 1 + length):
+			if not _rule_byte_ok(from[k]):
+				return []
+		lines.append(from.slice(i + 1, i + 1 + length).get_string_from_ascii())
+		i += 1 + length
+	return [lines, i]
 
 
 ## `[order, next offset]` read at [param at], or empty for a refusal. An empty
