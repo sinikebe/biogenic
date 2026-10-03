@@ -26,6 +26,7 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 const MetabolismNode := preload("res://game/normal/metabolism.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
+const Doses := preload("res://game/mechanics/doses.gd")
 
 const U := Readout.Unit
 
@@ -42,13 +43,15 @@ const FREE_BELOW := 0.0005
 
 ## **The body's own terms** (§6.2), from a `{gene: copies}` body: what `crista`
 ## leaves of every cost, how much bigger `vacuole` makes the tank, and what
-## `plastid` makes.
-static func context(body: Dictionary) -> Dictionary:
+## `plastid` makes -- and its [param radius], which a dose is felt against
+## (docs/design/dna-slots.md §6.1).
+static func context(body: Dictionary, radius: float = CellBody.BASE_RADIUS) -> Dictionary:
 	return {
 		"burn": CellBody.BURN_BY_TIER[_index(body, &"crista", CellBody.BURN_BY_TIER.size())],
 		"reserve": CellBody.STORE_BY_TIER[_index(body, &"vacuole",
 			CellBody.STORE_BY_TIER.size())],
 		"sun": CellBody.SUN_BY_TIER[_index(body, &"plastid", CellBody.SUN_BY_TIER.size())],
+		"radius": radius,
 	}
 
 
@@ -59,9 +62,11 @@ static func _index(body: Dictionary, gene: StringName, size: int) -> int:
 ## **`[what it does, what it costs]`** for [param gene] worn at [param copies],
 ## in the body [param ctx] describes ([method context]). Each is an array of
 ## readout items, and `[[], []]` for a gene with no row. A levelled gene reads
-## [param level] and [param path] instead of its copies (§5.2).
+## [param level] and [param path] instead of its copies (§5.2). [param slot] is
+## where it is worn, for a gene whose numbers depend on it -- venom at the front
+## and on a side are two rows -- and -1 where nobody knows.
 static func lines(gene: StringName, copies: int, level: int, path: StringName,
-		ctx: Dictionary) -> Array:
+		ctx: Dictionary, slot: int = -1) -> Array:
 	var t := clampi(copies, 1, GenomeNode.TIER_MAX)
 	var burn := float(ctx.get("burn", 1.0))
 	var wear := wear_item(GenomeNode.UPKEEP_PER_TIER * float(t - 1), burn)
@@ -189,18 +194,10 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 			return [[Readout.item("to a mouth you are {} × your size", [armour], [U.TIMES]),
 				Readout.item("bites take {} less", [1.0 - 1.0 / armour], [U.SHARE])],
 				[wear]]
+		&"toxicyst":
+			return _venom(t, slot, ctx, wear)
 		&"veneneux":
-			# The same seconds of rest, scaled the same way, as the dash above.
-			#
-			# TRANSLATORS: The poison gene (`veneneux`, shown as `venom`): a body that
-			# bites the cell has to give part of its bite back, and a body that swallows
-			# the cell dies while the cell is spat out alive, which costs the cell some
-			# energy ("burns {} s").
-			return [[Readout.item("a biter takes back {} of its bite",
-					[CellBody.VENOM_BITE_BACK_BY_TIER[t]], [U.SHARE]),
-				Readout.item("a swallower dies, and you are spat out")],
-				[Readout.item("being spat out burns {} s", [CellBody.VENOM_COST_BY_TIER[t]
-					* MetabolismNode.HUNGER_SECONDS * burn], [U.ENERGY]), wear]]
+			return _poison(t, ctx, wear)
 		&"plastid":
 			# Not scaled by `crista`: metabolism.gd takes the sun off the bill
 			# as it is, after the bill has been discounted.
@@ -225,6 +222,70 @@ static func lines(gene: StringName, copies: int, level: int, path: StringName,
 					[U.SHARE])],
 				[wear]]
 	return [[], []]
+
+
+## **Venom** (docs/design/dna-slots.md §3.3): how many stacks it leaves, where
+## it works -- on your bite at the front, in whatever bites the side or the
+## stern it guards -- and what one stack does.
+##
+## TRANSLATORS: The venom gene (`toxicyst`, shown as `venom`) at the front of the
+## cell: each bite it makes leaves this many "stacks" of venom in the bitten body,
+## which go on hurting it. A "stack" is one dose of the toxin, the unit everything
+## about a toxin is counted in. Give the forms your language needs for the count.
+static func _venom(tier: int, slot: int, ctx: Dictionary, wear: Dictionary) -> Array:
+	var stacks := CellBody.VENOM_STACKS_BY_TIER[tier]
+	var n := int(roundf(stacks))
+	if slot < 0 or GenomeNode.is_front(slot):
+		return [[Readout.item_n("each bite leaves {} stack of venom",
+				"each bite leaves {} stacks of venom", n, [stacks], [U.COUNT]),
+			_stack_item(ctx)], [wear]]
+	# A side venom the switch has made inert stings nothing, and says nothing.
+	if not CellBody.VENOM_SIDES:
+		return [[], [wear]]
+	if slot == GenomeNode.STERN:
+		# TRANSLATORS: The venom gene at the back of the cell, where the tail is:
+		# whatever bites the cell from behind takes this many stacks of venom.
+		return [[Readout.item_n("whatever bites you from behind takes {} stack",
+				"whatever bites you from behind takes {} stacks", n, [stacks], [U.COUNT]),
+			_stack_item(ctx)], [wear]]
+	# TRANSLATORS: The venom gene on a side of the cell: whatever bites the cell on
+	# that side takes this many stacks of venom. "That side" is the side of the
+	# body where the gene's slot is.
+	return [[Readout.item_n("whatever bites you on that side takes {} stack",
+			"whatever bites you on that side takes {} stacks", n, [stacks], [U.COUNT]),
+		_stack_item(ctx)], [wear]]
+
+
+## **Poison** (§3.3): what a biter takes a bite and a swallower takes in one,
+## then what one stack does.
+##
+## TRANSLATORS: The poison gene (`veneneux`, shown as `poison`), inside the cell:
+## whatever bites the cell takes this many "stacks" of poison with each bite, and
+## whatever swallows it takes this many at once. A "stack" is one dose of the
+## toxin. Give the forms your language needs for the count.
+static func _poison(tier: int, ctx: Dictionary, wear: Dictionary) -> Array:
+	var bite := CellBody.POISON_STACKS_BY_TIER[tier]
+	var gulp := CellBody.SWALLOW_STACKS_BY_TIER[tier]
+	return [[Readout.item_n("whatever bites you takes {} stack a bite",
+			"whatever bites you takes {} stacks a bite", int(roundf(bite)), [bite],
+			[U.COUNT]),
+		Readout.item_n("a swallower takes {} stack", "a swallower takes {} stacks",
+			int(roundf(gulp)), [gulp], [U.COUNT])],
+		[_stack_item(ctx), wear]]
+
+
+## **What one stack of harm does**, to a body the reader's size: the share of it
+## taken, diluted as every dose is (doses.gd's `felt`), over the stack's life
+## down to the cutoff -- `tau x ln(1 / DOSE_GONE)`, 9.7 s for harm.
+##
+## TRANSLATORS: What one "stack" (one dose) of a toxin does: it takes this share
+## of a body the size of the player's cell, a percentage, over this many seconds.
+static func _stack_item(ctx: Dictionary) -> Dictionary:
+	var share := CellBody.HARM_PER_STACK * Doses.felt(1.0,
+		float(ctx.get("radius", CellBody.BASE_RADIUS)), CellBody.DOSE_SIZE)
+	var life := CellBody.DOSE_TAU_BY_KIND[Doses.Kind.HARM] * log(1.0 / CellBody.DOSE_GONE)
+	return Readout.item("a stack takes {} of a body your size over {} s", [share, life],
+		[U.SHARE, U.TIME])
 
 
 ## **The beam, by its level and its way** (§5.2): the fan from

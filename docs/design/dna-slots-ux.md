@@ -800,6 +800,26 @@ pixels**.
 
 ---
 
+### 10.1 As built: phase 1, 2026-10-03
+
+The build's frames were shot at both shapes in English and French and judged
+against the mock's: 170 of them, plus four of D09p. Three renders of a frame
+differ by 0 pixels. Where they differ:
+
+- **Phase 2's items are not built yet:** the empty slots' ghosts, the form's
+  ghost under a drag, the inside in the bloom, and the choosing screen's inside
+  locus.
+- **`9.66 s`, not the mock's `9.7 s`.** That is the game's own formatter.
+- **D09 became D09p.** §9.3's `--hunt=900` left the hunter off the screen, so
+  the dosed and undosed frames were identical. It is posed with `--stalk`
+  instead.
+- **W16's replay panes showed no dose at first.** `panes.gd`'s live mirror now
+  draws it.
+- **W10's stain is smaller than the mock's**, because `--poison-meal` is a real
+  meal: the cell grows, and the dose is diluted in it.
+- **The stern's French numbers row** says `de dos`. `par-derrière` came to 658
+  px against 650; the gene's line keeps `par-derrière`.
+
 ## 11. Left open
 
 What to watch when it is played, with the lever for each. None of these is a

@@ -40,6 +40,18 @@ const BEAM_COLOR := Vector3(0.62, 0.55, 1.00)
 ## more saturated than the ocellus's pale periwinkle, which is the difference
 ## the two lobes now have to carry on their own: they used to be one slot.
 const PING_COLOR := Vector3(0.655, 0.44, 1.00)
+## **The strains' hues**, by the kind of load each delivers -- harm, paralysis,
+## sleep, doses.gd's order -- copied from `Cilia.HUES` for the reason
+## [constant PING_COLOR] is (docs/design/dna-slots-ux.md §2.1). A dose that
+## arrives by a bite bruises in its strain's hue instead of teal; a poisonous meal
+## floods in it; a death by a dose closes in it. Lime is corrosive's, the one
+## strain phase 1 has. Ice and pale moon are the starting values for phases 3
+## and 4, to be rendered when those strains exist.
+const STRAIN_COLORS: Array[Vector3] = [
+	Vector3(0.84, 0.98, 0.22),   # harm: corrosive, lime
+	Vector3(0.42, 0.84, 1.00),   # paralysis: ice (phase 3)
+	Vector3(0.80, 0.78, 1.00),   # sleep: pale moon (phase 4)
+]
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -637,6 +649,15 @@ var _hum_bearing := 0.0
 ## recorded block: the replay builds its own bus, which knows nothing about the
 ## organ the recorded cell was wearing.
 var _pushed_hollow := -1.0
+## The self lobe's colour as last pushed, by the same guard.
+var _pushed_self := Vector3(-1.0, -1.0, -1.0)
+## **The colour of the self lobe**: teal, and a dose's strain hue while that
+## dose's bruise is the loudest thing on your skin (dna-slots-ux.md §5.1). It
+## rides in the recorded block, so the felt pane bruises lime where the run did.
+var _self_hue := SELF_COLOR
+## The newest bruise's tint, or zero for teal: what the self lobe turns while
+## the bruise leads the thrust and the shear.
+var _bruise_tint := Vector3.ZERO
 
 ## **What body this membrane is attached to** (§2.1), in `genes-and-cilia.md`'s
 ## arc order: `cytostome`, `cirrus`, `flagellum`, `stigma`. Written once a frame
@@ -765,6 +786,8 @@ var _inset_override := -1.0
 ## What the cell's last beat is worth. The quiet death is lit by it and nothing
 ## else, so the aperture closing is visible without a gram of white in it.
 var _last_pulse := 0.0
+## Whether this close is lit in a dose's hue rather than teal.
+var _close_tinted := false
 
 
 # ---------------------------------------------------------------------------
@@ -798,15 +821,20 @@ func _push_colors() -> void:
 ## The same write, told the hollowness instead of deriving it. The replay's own
 ## bus takes this route: it plays back a recorded membrane and has no organ to
 ## read a tier off.
+##
+## **The self lobe's colour rides in the same palette**, and is pushed by the
+## same guard: teal for five phases, and a strain's hue only for the half second
+## a dosing bite's bruise leads -- so a palette is still not a per-frame write.
 func _push_hollow(hollow: float) -> void:
 	if _material == null:
 		return
-	if is_equal_approx(hollow, _pushed_hollow):
+	if is_equal_approx(hollow, _pushed_hollow) and _self_hue == _pushed_self:
 		return
 	_pushed_hollow = hollow
+	_pushed_self = _self_hue
 	var colors := PackedVector4Array()
 	colors.resize(LOBES)
-	colors[LOBE_SELF] = _rgba(SELF_COLOR, 0.0)
+	colors[LOBE_SELF] = _rgba(_self_hue, 0.0)
 	colors[LOBE_NUTRIENT] = _rgba(NUTRIENT_COLOR, 0.0)
 	colors[LOBE_LIGHT] = _rgba(LIGHT_COLOR, 0.0)
 	colors[LOBE_BEAM] = _rgba(BEAM_COLOR, 0.0)
@@ -891,7 +919,9 @@ func apply_gain(value: float) -> void:
 ## lobes of its own**: six glow lobes instead of four is eight more floats, and
 ## the hollowness is a ninth. **Forty-seven since hunger** (hunger.md §2.2): the
 ## last is how far the contour has fallen in, so the replay of a starving death
-## closes in exactly as the run did.
+## closes in exactly as the run did. **Fifty since the toxins**
+## (dna-slots-ux.md §6): the self lobe's colour, so a dosing bite's bruise plays
+## back in its strain's hue and not in teal.
 ##
 ## Hollowness has to be in here, and that is not obvious. It rides in the
 ## palette's alpha, and the palette is pushed from the `ampulla` tier -- which
@@ -902,7 +932,7 @@ func apply_gain(value: float) -> void:
 ##
 ## The recording never outlives the run that made it, so there is no format to
 ## migrate. docs/design/replay.md §4.1.
-const BLOCK_FLOATS := 47
+const BLOCK_FLOATS := 50
 
 
 ## Writes this membrane's state into [param out] at [param at]. No allocation:
@@ -937,6 +967,9 @@ func capture_block(out: PackedFloat32Array, at: int) -> void:
 	out[at + 44] = _dread
 	out[at + 45] = PING_HOLLOW_BY_TIER[_senses[SENSE_AMPULLA]]
 	out[at + 46] = _faint
+	out[at + 47] = _self_hue.x
+	out[at + 48] = _self_hue.y
+	out[at + 49] = _self_hue.z
 
 
 ## Puts a captured membrane back on the shader, through this node's own state so
@@ -964,9 +997,11 @@ func write_block(block: PackedFloat32Array, at: int) -> void:
 	# anywhere else even if this node were processing.
 	_faint = block[at + 46]
 	_faint_target = _faint
+	_self_hue = Vector3(block[at + 47], block[at + 48], block[at + 49])
 	# The palette, because the hollowness of a ping mark lives in it and this
 	# bus has no organ to read it off. Pushed through the same guard the live
-	# one uses, so a whole replay costs one uniform write and not one a frame.
+	# one uses, so a whole replay costs a uniform write only when the recorded
+	# palette changed, and not one a frame.
 	_push_hollow(block[at + 45])
 	_apply()
 
@@ -1061,11 +1096,21 @@ func shove(bearing: float, strength: float) -> void:
 
 
 ## Contact. A hard flash of the whole contour plus a bruise where it landed.
-func hit(bearing: float, strength: float = 1.0) -> void:
+##
+## [param tint] is **the hue of what came in with it** (dna-slots-ux.md §5.1):
+## a bite that dosed you bruises in its strain's colour instead of teal, for as
+## long as that bruise is the loudest thing on your skin. Zero is teal, which is
+## every hit there was before a toxin. The arrival is at the bite's bearing
+## because a bite is; the dose's going on is drawn on the figure, not here.
+func hit(bearing: float, strength: float = 1.0, tint: Vector3 = Vector3.ZERO) -> void:
 	var s := clampf(strength, 0.0, 1.0)
 	_flash.fire(FLASH_PEAK * s)
 	_bruise.fire(BRUISE_PEAK * s, bearing)
-	sensation.emit(&"hit", {"bearing": bearing, "strength": s})
+	_bruise_tint = tint
+	var info := {"bearing": bearing, "strength": s}
+	if tint != Vector3.ZERO:
+		info["tint"] = tint
+	sensation.emit(&"hit", info)
 
 
 ## The water going wrong. Ramps toward [param level] over about ten seconds and
@@ -1326,18 +1371,25 @@ static func death_shut_at(loud: bool) -> float:
 ## [param loud] is predation: the strike, the white, 0.75s. False is starvation,
 ## which has been telegraphed for twenty seconds and does not get to be loud.
 ##
+## [param tint] lights the close in a hue other than teal: **a death by a dose
+## is the quiet close, lit in its strain's hue** (dna-slots-ux.md §6) -- a white
+## slam at a bearing, a teal sink, a lime close. Zero is teal.
+##
 ## **Either one closes from where the membrane had fallen** ([member _faint]),
 ## not from where it would have been fed: a starving cell's aperture is already
 ## part of the way in, and opening it again to close it would be a flinch the
 ## player reads as a meal. The racing beat stops with the first frame of this,
 ## so the gap is felt within a second.
-func collapse(t: float, loud: bool = true) -> void:
+func collapse(t: float, loud: bool = true, tint: Vector3 = Vector3.ZERO) -> void:
 	if not _dying:
 		_dying = true
 		# One last beat, at exactly the strength this cell had. Not a new
 		# constant: beat_strength() is already floored, so the quiet death
 		# cannot be invisible however starved and however hunted it was.
 		_last_pulse = maxf(_pulse.value, beat_strength())
+		_close_tinted = tint != Vector3.ZERO
+		if _close_tinted and _material != null:
+			_material.set_shader_parameter("pulse_color", tint)
 
 	var start := DEATH_STRIKE if loud else 0.0
 	var span := DEATH_COLLAPSE if loud else FAINT_COLLAPSE
@@ -1380,6 +1432,11 @@ func collapse(t: float, loud: bool = true) -> void:
 		arc.reset()
 
 	if t >= wait:
+		# The invitation is the old teal beat whatever closed the aperture: the
+		# hue was the death's, and this is the next life asking.
+		if _close_tinted and _material != null:
+			_material.set_shader_parameter("pulse_color", SELF_COLOR)
+		_close_tinted = false
 		_invite(t - wait)
 
 	_apply()
@@ -1436,6 +1493,13 @@ func _idle_lobes() -> void:
 func _end_collapse() -> void:
 	_dying = false
 	_inset_override = -1.0
+	# The beat is teal again: a close lit by a dose's hue was the last thing
+	# that hue had to say.
+	if _close_tinted and _material != null:
+		_material.set_shader_parameter("pulse_color", SELF_COLOR)
+	_close_tinted = false
+	_bruise_tint = Vector3.ZERO
+	_self_hue = SELF_COLOR
 	_base_hue = BASE_COLOR
 	_dread_hue = DREAD_COLOR
 	_dread = 0.0
@@ -1552,11 +1616,19 @@ func _compose_lobes() -> void:
 		level = _shear
 		bearing = _shear_bearing
 		halfwidth = SHEAR_HALFWIDTH_DEG
+	var hue := SELF_COLOR
 	if _bruise.value > level:
 		level = _bruise.value
 		bearing = _bruise.bearing
 		halfwidth = BRUISE_HALFWIDTH_DEG
+		if _bruise_tint != Vector3.ZERO:
+			hue = _bruise_tint
 	_glow_lobes[LOBE_SELF] = _lobe(bearing, halfwidth, level)
+	# The lobe's colour goes with whichever sensation is leading it: a lime
+	# bruise turns teal again the moment a thrust outshines what is left of it.
+	if hue != _self_hue:
+		_self_hue = hue
+		_push_colors()
 
 	# The nose. A **ring**, not a lobe: an intensity with no bearing in it needs
 	# a shape the player cannot mistake for a direction, and this one is welded

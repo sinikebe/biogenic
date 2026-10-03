@@ -387,6 +387,11 @@ var eye := {}
 ## run; same contract as soma.gd's. Drawn on the player's own cell and never on
 ## another body: hunger is not on the wire, so a friend is never drawn crumpled.
 var slack := 0.0
+## **What the player's own body carries, and what its toxins are doing**,
+## written once a frame by the run; same contract as soma.gd's, and cilia.gd's
+## `dose` (dna-slots-ux.md §4, §5). Every other body's loads are read off the
+## field, because every body's are drawn. Empty carries nothing.
+var dose := {}
 
 ## How far apart the two of them are seated, in world units. Rendered at 1:1
 ## with 160 between them, two r28 bodies read -- so no camera zoom, which would
@@ -924,6 +929,7 @@ func _step_friend(delta: float) -> void:
 		"order": pb.order,
 		"gape": _food_node.gape_at(FoodField.PERSON_SLOT),
 		"wound": float(pb.wound),
+		"felt": _food_node.felt_at(FoodField.PERSON_SLOT),
 		"ghost": ghost,
 	}
 	_fr_last = _peer
@@ -1088,8 +1094,14 @@ func _on_sensation(kind: StringName, info: Dictionary) -> void:
 			_kicks.append([_cell.position, float(info.get("strength", 1.0)), 0.0])
 		&"hit":
 			var bearing := float(info.get("bearing", 0.0))
+			# **A dosing bite's ray is drawn in the dose's hue** (dna-slots-ux.md
+			# §6), as its bruise was on the membrane.
+			var hue: Variant = info.get("tint", Vector3.ZERO)
+			var ray_tint := IMPACT_TINT
+			if hue is Vector3 and hue != Vector3.ZERO:
+				ray_tint = Color((hue as Vector3).x, (hue as Vector3).y, (hue as Vector3).z)
 			_hits.append([_cell.position, _ray(bearing),
-				float(info.get("strength", 1.0)), 0.0])
+				float(info.get("strength", 1.0)), 0.0, ray_tint])
 		&"shove":
 			var wake_bearing := float(info.get("bearing", 0.0))
 			_wakes.append([_cell.position, _ray(wake_bearing),
@@ -1283,14 +1295,15 @@ func _draw_hits(a: float) -> void:
 		var strength: float = float(hit[2])
 		var t: float = float(hit[3]) / HIT_LIFE
 		var fade := (1.0 - t) * (1.0 - t) * a
-		var tint := Color(IMPACT_TINT, 0.55 * fade * strength)
+		var hue: Color = hit[4] if hit.size() > 4 else IMPACT_TINT
+		var tint := Color(hue, 0.55 * fade * strength)
 		_world.draw_line(origin + dir * (_cell.radius * 0.45),
 			origin + dir * (_cell.radius + MotesField.MOTE_RADIUS),
 			tint, 1.8 / ZOOM, true)
 		# The shock, expanding from where the two surfaces met.
 		var contact := origin + dir * _cell.radius
 		_world.draw_arc(contact, 5.0 + 34.0 * t, 0.0, TAU, 30,
-			Color(IMPACT_TINT, 0.42 * fade * strength), 1.6 / ZOOM, true)
+			Color(hue, 0.42 * fade * strength), 1.6 / ZOOM, true)
 
 
 ## **How far from its centre a body can draw anything**, as a multiple of its
@@ -1395,7 +1408,19 @@ func _draw_cells(a: float) -> void:
 			genomes[i] if i < genomes.size() else {},
 			_food_node.gape_at(i), _cell.radius, false, _clock, ab,
 			0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
-			float(wounds[i]) if i < wounds.size() else 0.0)
+			float(wounds[i]) if i < wounds.size() else 0.0, 0.0, 0.0, 0.0, false,
+			Cilia.NO_EYE, Cilia.NO_TAIL, 0.0, _dose_of(i))
+
+
+## **What body [param i] carries**, as cilia.gd's `dose`: its loads felt at its
+## own radius, drawn on every body in both views. [constant Cilia.NO_DOSE] for a
+## body that carries nothing, which is nearly every body, and allocates nothing.
+func _dose_of(i: int) -> Dictionary:
+	return _dose_felt(_food_node.felt_at(i))
+
+
+func _dose_felt(felt: Vector3) -> Dictionary:
+	return Cilia.NO_DOSE if felt == Vector3.ZERO else {"felt": felt}
 
 
 ## **Every body in the drop that can reach the frame**, found by the grid round
@@ -1433,7 +1458,8 @@ func _draw_drop_cells(a: float, middle: Vector2, half: float) -> void:
 			if _food_node.births else 0.0
 		Cilia.draw_cell(_world, p, float(b.heading), r, b.genome, _food_node.gape_at(i),
 			_cell.radius, false, _clock, a, 0.0, 0.0, float(i) * 1.9, 1.0 / ZOOM, [],
-			float(b.wound), double)
+			float(b.wound), double, 0.0, 0.0, false, Cilia.NO_EYE, Cilia.NO_TAIL,
+			0.0, _dose_of(i))
 
 
 ## **A floc of detritus** (ocean.md §7.6): a clump of five rounded fragments in
@@ -1889,7 +1915,7 @@ func _draw_cell(a: float) -> void:
 		r, true, _clock, ca, _cell.steer, beat, 0.0, 1.0 / ZOOM,
 		_genome_node.body_layout() if _genome_node != null else [], _cell.wound,
 		float(division.get("double", 0.0)), float(division.get("pinch", 0.0)),
-		0.0, false, eye, _tail, slack)
+		0.0, false, eye, _tail, slack, dose)
 	_draw_held_sample(p, r, beat, ca)
 
 	_draw_heading(p, fwd, stb, r, ca)
@@ -2108,7 +2134,8 @@ func _draw_friend(a: float) -> void:
 		float(_peer["gape"]), INF if ghost else _cell.radius, false, _clock,
 		alpha * a, 0.0, 0.0, PEER_PHASE, 1.0 / ZOOM, _peer["order"],
 		float(_peer["wound"]), float(_peer["double"]), float(_peer["pinch"]), 0.0,
-		true)
+		true, Cilia.NO_EYE, Cilia.NO_TAIL, 0.0,
+		_dose_felt(_peer.get("felt", Vector3.ZERO)))
 
 
 ## **Broken, and that is the whole of what it says.** Every other ring in this

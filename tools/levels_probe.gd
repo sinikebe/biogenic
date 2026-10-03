@@ -12,12 +12,19 @@ extends Node
 ##
 ## **And the numbers a player can ask to see** (docs/design/gene-stats.md): the
 ## formatter's rules, a few rows of the table against the constants they are
-## read off, and the dash and the venom paid the way their rows say.
+## read off, the dash paid the way its row says, and the toxin's rows -- venom
+## by where it works, poison, and a stack diluted by the reader's size
+## (docs/design/dna-slots.md §3.3).
 ##
 ## **And hunger, as the player is warned of it** (docs/design/hunger.md): the
 ## beat that races, never slows and never dims, the body's slack and the
 ## membrane's fall, read off the one mapping in metabolism.gd -- a number that
 ## would show only as a warning that came too late, or not at all.
+##
+## **And what a dose is worth** (docs/design/dna-slots.md §6.2, §20.3 check 4):
+## one stack of harm takes what it says of a body of each size, a body carrying
+## harm does not mend and mends from the moment it is gone, and a body stepped
+## every eighth frame ends where one stepped every frame does.
 ##
 ## Headless and deterministic. Prints one line per check and `ALL PASS` only if
 ## every one held; CI asserts on that marker rather than on the exit code,
@@ -34,6 +41,7 @@ const Metabolism := preload("res://game/normal/metabolism.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
+const Doses := preload("res://game/mechanics/doses.gd")
 
 const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 
@@ -53,6 +61,7 @@ func _ready() -> void:
 	_energy()
 	_alarm()
 	_gene_stats()
+	_doses()
 	for node in _nodes:
 		if is_instance_valid(node):
 			node.free()
@@ -642,10 +651,11 @@ func _gene_stats() -> void:
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"
 		% clause, clause == "52 µm across · a full tank: 36 s, 24 s drifting")
 
-	# **The dash and the venom are paid as their rows say** (§11, call 2), by
-	# the run's own handlers: seconds of rest through `spend`, so a newborn pays
-	# the share it always paid, `crista` pays less, and a bigger tank pays the
-	# same seconds out of more. The run is built and never enters the tree.
+	# **The dash is paid as its row says** (§11, call 2), by the run's own
+	# handler: seconds of rest through `spend`, so a newborn pays the share it
+	# always paid, `crista` pays less, and a bigger tank pays the same seconds
+	# out of more. The run is built and never enters the tree. (The venom's
+	# spend went with the spitting: a toxin is doses now, dna-slots.md §7.)
 	var run: Node = load("res://game/normal/normal_mode.gd").new()
 	_nodes.append(run)
 	var met: Node = Metabolism.new()
@@ -658,37 +668,26 @@ func _gene_stats() -> void:
 	run.set("_metabolism", met)
 	run.set("_food", field)
 	run.set("_bus", bus)
-	field.venom_cost = CellBody.VENOM_COST_BY_TIER[3]
 	var dash := CellBody.DASH_COST_BY_TIER[1]
-	var venom := CellBody.VENOM_COST_BY_TIER[3]
 	var burn := CellBody.BURN_BY_TIER[2]
 	var tank := CellBody.STORE_BY_TIER[3]
-	var newborn_dash := _paid(run, met, 0, 0, false, dash)
-	var newborn_venom := _paid(run, met, 0, 0, true, dash)
-	_check("a newborn's dash takes %.3f of the bar and venom %.3f, exactly the share"
-		% [newborn_dash[0], newborn_venom[0]] + " each always took",
-		is_equal_approx(newborn_dash[0], dash) and is_equal_approx(newborn_venom[0], venom))
-	var burned_dash := _paid(run, met, 2, 0, false, dash)
-	var burned_venom := _paid(run, met, 2, 0, true, dash)
-	_check("with crista 2 both cost %.2f of it: a dash %.2f s, venom %.2f s"
-		% [burn, burned_dash[1], burned_venom[1]],
-		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn)
-		and is_equal_approx(burned_venom[1], venom * Metabolism.HUNGER_SECONDS * burn))
-	var stored_dash := _paid(run, met, 0, 3, false, dash)
-	var stored_venom := _paid(run, met, 0, 3, true, dash)
-	_check("with vacuole 3 they cost the same seconds (%.2f s, %.2f s), a smaller share"
-		% [stored_dash[1], stored_venom[1]] + " of a tank %.0f times as big" % tank,
+	var newborn_dash := _paid(run, met, 0, 0, dash)
+	_check("a newborn's dash takes %.3f of the bar, exactly the share it always took"
+		% newborn_dash[0], is_equal_approx(newborn_dash[0], dash))
+	var burned_dash := _paid(run, met, 2, 0, dash)
+	_check("with crista 2 it costs %.2f of it: %.2f s" % [burn, burned_dash[1]],
+		is_equal_approx(burned_dash[1], dash * Metabolism.HUNGER_SECONDS * burn))
+	var stored_dash := _paid(run, met, 0, 3, dash)
+	_check("with vacuole 3 it costs the same seconds (%.2f s), a smaller share"
+		% stored_dash[1] + " of a tank %.0f times as big" % tank,
 		is_equal_approx(stored_dash[1], dash * Metabolism.HUNGER_SECONDS)
-		and is_equal_approx(stored_venom[1], venom * Metabolism.HUNGER_SECONDS)
 		and is_equal_approx(stored_dash[0], dash / tank))
 	var s04 := GeneStats.context({&"crista": 2, &"vacuole": 3})
 	var said_dash: float = GeneStats.lines(&"myoneme", 1, 0, &"", s04)[1][0]["values"][0]
-	var said_venom: float = GeneStats.lines(&"veneneux", 3, 0, &"", s04)[1][0]["values"][0]
-	_check("and the numbers say what is paid: `each dash burns %s s`, `being spat out"
-		% Readout.format(said_dash, Readout.Unit.ENERGY) + " burns %s s`"
-		% Readout.format(said_venom, Readout.Unit.ENERGY),
-		is_equal_approx(said_dash, _paid(run, met, 2, 3, false, dash)[1])
-		and is_equal_approx(said_venom, _paid(run, met, 2, 3, true, dash)[1]))
+	_check("and the numbers say what is paid: `each dash burns %s s`"
+		% Readout.format(said_dash, Readout.Unit.ENERGY),
+		is_equal_approx(said_dash, _paid(run, met, 2, 3, dash)[1]))
+	_toxin_rows()
 	var odds := PackedStringArray([GeneStats.odds_text(1), GeneStats.odds_text(2),
 		GeneStats.odds_text(3)])
 	_check("the odds gain their percentage: %s" % " | ".join(odds),
@@ -697,17 +696,143 @@ func _gene_stats() -> void:
 		and odds[2] == "three copies · a daughter always wears it")
 
 
-## One dash of [param cost], or one sting, paid by the run's own handler out of
-## a body with `crista` and `vacuole` at those copies. Returns what it took:
-## `[share of the bar, seconds of rest out of that body's tank]`.
-func _paid(run: Node, met: Node, crista: int, vacuole: int, stung: bool,
-		cost: float) -> Array:
+## **The toxin's rows** (docs/design/dna-slots.md §3.3), read off §15's
+## constants: venom by where it works -- the front, a side, the stern -- and
+## poison, each with what one stack does, diluted by the reader's own size.
+func _toxin_rows() -> void:
+	var born := GeneStats.context({})
+	var front := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 3)[0])
+	var side := Readout.plain(GeneStats.lines(&"toxicyst", 2, 0, &"", born, 5)[0])
+	var stern := Readout.plain(GeneStats.lines(&"toxicyst", 1, 0, &"", born, 2)[0])
+	var poison: Array = GeneStats.lines(&"veneneux", 3, 0, &"", born, GenomeNode.INSIDE)
+	var big := Readout.plain(GeneStats.lines(&"toxicyst", 3, 0, &"",
+		GeneStats.context({}, 40.0), 0)[0])
+	_check("front venom reads `%s`" % front, front == "each bite leaves 2 stacks of venom"
+		+ " · a stack takes 5% of a body your size over 9.66 s")
+	_check("side venom reads `%s`" % side, side.begins_with(
+		"whatever bites you on that side takes 2 stacks · a stack takes 5%"))
+	_check("stern venom reads `%s`, one stack singular" % stern, stern.begins_with(
+		"whatever bites you from behind takes 1 stack · a stack takes 5%"))
+	_check("poison reads `%s / %s`" % [Readout.plain(poison[0]), Readout.plain(poison[1])],
+		Readout.plain(poison[0]) == "whatever bites you takes 3 stacks a bite"
+			+ " · a swallower takes 48 stacks"
+		and Readout.plain(poison[1]).begins_with("a stack takes 5% of a body your size"))
+	_check("a stack is diluted by the reader's size, (26 / 40)^2: `%s`" % big,
+		big.contains("a stack takes 2% of a body your size"))
+
+
+## One dash of [param cost] paid by the run's own handler out of a body with
+## `crista` and `vacuole` at those copies. Returns what it took: `[share of the
+## bar, seconds of rest out of that body's tank]`.
+func _paid(run: Node, met: Node, crista: int, vacuole: int, cost: float) -> Array:
 	met.reset()
 	met.burn = CellBody.BURN_BY_TIER[crista]
 	met.reserve = CellBody.STORE_BY_TIER[vacuole]
-	if stung:
-		run.call("_on_stung", 0.0)
-	else:
-		run.call("_on_dashed", cost)
+	run.call("_on_dashed", cost)
 	var share: float = met.hunger
 	return [share, share * Metabolism.HUNGER_SECONDS * float(met.reserve)]
+
+
+# --- A dose (docs/design/dna-slots.md §6.2, §20.3 check 4) ------------------------
+
+## **A stack is worth what it says**, through the one dose step every body takes:
+## cell.gd's `dosed`, which is the cell on this device's, and food.gd's
+## `_dose_step` over it, which is every water body's and every person's.
+##
+## 1. **One stack of harm takes `HARM_PER_STACK x (26 / r)^2`** of a body at r26,
+##    r34 and r40: a body at half a wound, given one stack and stepped at 60 a
+##    second until it is gone, ends that much more wounded -- less only the one
+##    frame's mending after the moment the harm ran out, far inside the cutoff's
+##    worth of a stack, which is delivered with the rest.
+## 2. **A body carrying harm does not mend**, frame after frame, and **mends from
+##    the moment the harm is gone, within the step**: a step that carries a load
+##    across the cutoff delivers all of it and mends for exactly the seconds left
+##    after the crossing. A body carrying nothing mends as it always did.
+## 3. **A drop body stepped every eighth frame and one stepped every frame end the
+##    same** -- the drop steps its far bodies on a tick, with all the time they
+##    are owed -- through `_dose_step`, from loads of one, four and a half and
+##    twelve stacks, forty seconds of each, across the cutoff.
+func _doses() -> void:
+	var harm := Doses.Kind.HARM
+	var frame := 1.0 / 60.0
+	var tau: float = CellBody.DOSE_TAU_BY_KIND[harm]
+	var worth := PackedStringArray()
+	var exact := true
+	for r: float in [26.0, 34.0, 40.0]:
+		var loads := Doses.none()
+		loads[harm] = 1.0
+		var wound := 0.5
+		var frames := 0
+		while loads[harm] > 0.0 and frames < 60 * 600:
+			wound = CellBody.dosed(loads, wound, r, frame)
+			frames += 1
+		var want := CellBody.HARM_PER_STACK * (CellBody.BASE_RADIUS / r) \
+			* (CellBody.BASE_RADIUS / r)
+		var took := wound - 0.5
+		worth.append("r%.0f %.5f of %.5f in %.2f s" % [r, took, want, float(frames) / 60.0])
+		exact = exact and took <= want + 1e-12 \
+			and took >= want - frame / CellBody.MEND_SECONDS - 1e-12
+	_check(("a stack of harm takes HARM_PER_STACK x (26 / r)^2 of a body, to within one"
+		+ " frame's mending (%.5f; a cutoff's worth is %.4f): %s") % [frame
+		/ CellBody.MEND_SECONDS, CellBody.HARM_PER_STACK * CellBody.DOSE_GONE,
+		", ".join(worth)], exact and CellBody.DOSE_SIZE == CellBody.BASE_RADIUS)
+
+	# 2. No mending while harm is in it; mending from the moment it is gone.
+	var loads := Doses.none()
+	loads[harm] = 0.3
+	var wound := 0.5
+	var fell := 0
+	var steps := 0
+	while loads[harm] > 0.0 and steps < 60 * 60:
+		var was := wound
+		wound = CellBody.dosed(loads, wound, 26.0, frame)
+		steps += 1
+		if loads[harm] > 0.0 and wound < was:
+			fell += 1
+	var after := wound
+	var mended_after := CellBody.dosed(loads, after, 26.0, frame)
+	var crossing := Doses.none()
+	crossing[harm] = 0.3
+	var once := CellBody.dosed(crossing, 0.5, 26.0, 3.0)
+	var gone_at := tau * log(0.3 / CellBody.DOSE_GONE)
+	var want_once := 0.5 + 0.3 * CellBody.HARM_PER_STACK - (3.0 - gone_at) / CellBody.MEND_SECONDS
+	var clean := CellBody.dosed(Doses.none(), 0.5, 26.0, 3.0)
+	_check(("a body carrying harm never mends (%d of %d frames fell) and mends the frame"
+		+ " after it is gone (%.6f to %.6f); a step that carries 0.3 stacks across the"
+		+ " cutoff at %.2f s delivers them all and mends the %.2f s after: %.6f, want"
+		+ " %.6f; with nothing in it a body mends as it did (%.4f)") % [fell, steps, after,
+		mended_after, gone_at, 3.0 - gone_at, once, want_once, clean],
+		fell == 0 and steps > 1 and mended_after < after
+		and is_equal_approx(mended_after, CellBody.mended(after, frame))
+		and absf(once - want_once) < 1e-12 and crossing[harm] == 0.0
+		and clean == CellBody.mended(0.5, 3.0))
+
+	# 3. Every eighth frame against every frame, through the drop's own step.
+	var field: Node = FoodField.new()
+	_nodes.append(field)
+	var same := true
+	var said := PackedStringArray()
+	for stacks: float in [1.0, 4.5, 12.0]:
+		var every := FoodField.Body.new()
+		var eighth := FoodField.Body.new()
+		for b: Object in [every, eighth]:
+			b.radius = 30.0
+			b.wound = 0.2
+			b.loads[harm] = stacks
+		for f in 40 * 60:
+			field.call(&"_dose_step", 0, every, frame)
+			if f % 8 == 7:
+				field.call(&"_dose_step", 1, eighth, 8.0 * frame)
+		# The closed form: all the harm in, then mending from the moment it ran
+		# out to the end, down to none.
+		var gone := tau * log(stacks / CellBody.DOSE_GONE)
+		var want := maxf(0.2 + stacks * CellBody.HARM_PER_STACK * (CellBody.BASE_RADIUS / 30.0)
+			* (CellBody.BASE_RADIUS / 30.0) - (40.0 - gone) / CellBody.MEND_SECONDS, 0.0)
+		said.append("%.1f stacks: %.9f and %.9f (%.9f)" % [stacks, float(every.wound),
+			float(eighth.wound), want])
+		same = same and absf(float(every.wound) - want) < 1e-12 \
+			and absf(float(eighth.wound) - want) < 1e-12 \
+			and every.loads == eighth.loads and not Doses.any(every.loads)
+	_check("a drop body stepped every eighth frame ends where one stepped every frame"
+		+ " does, forty seconds across the cutoff, both on the closed form to 1e-12: %s"
+		% "; ".join(said), same)

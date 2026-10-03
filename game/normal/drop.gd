@@ -189,9 +189,12 @@ const START_FOOD := 1100.0
 ## of the start is moved straight out to that reach and this much more.
 const START_PUSH := 100.0
 
-## The gene no drifter carries (row 13): the drop's defenceless food is never
-## venomous, and a drop short of it gets it back through the next peer.
-const VENOM := &"veneneux"
+## **The gene no drifter carries** (row 13, and docs/design/dna-slots.md §9): the
+## toxin, by its variety's name, in either of its forms -- venom outside, poison
+## inside. The drop's defenceless food is never poisonous to eat, and a mouthless
+## drifter's venom would bite nothing anyway; a drop short of it gets it back
+## through the next peer, its place by a coin.
+const TOXIN := &"veneneux"
 
 # --- How its cells behave (docs/design/behaviour.md §5, §6) --------------------
 
@@ -343,11 +346,11 @@ static func short_genes(counts: Dictionary, genes: Array[StringName]) -> Array[S
 
 
 ## **The gene the next drifter carries for the floor**, taken off
-## [param short]: the last there that is not [constant VENOM], which comes back
-## through a peer instead. Empty when nothing a drifter may carry is short.
+## [param short]: the last there that is not the toxin, in any form, which comes
+## back through a peer instead. Empty when nothing a drifter may carry is short.
 static func take_drifter_gene(short: Array[StringName]) -> StringName:
 	for i in range(short.size() - 1, -1, -1):
-		if short[i] != VENOM:
+		if Genome.variety(short[i]) != TOXIN:
 			var gene := short[i]
 			short.remove_at(i)
 			return gene
@@ -391,12 +394,12 @@ static func give_sense(tiers: Dictionary, senses: Array[StringName], pick: int) 
 	return true
 
 
-## **What a drifter's one gene is drawn from**: [param genes] without
-## [constant VENOM] (row 13).
+## **What a drifter's one gene is drawn from**: [param genes] without the
+## toxin, in any of its forms (row 13).
 static func drifter_genes(genes: Array[StringName]) -> Array[StringName]:
 	var pool: Array[StringName] = []
 	for gene: StringName in genes:
-		if gene != VENOM:
+		if Genome.variety(gene) != TOXIN:
 			pool.append(gene)
 	return pool
 
@@ -429,23 +432,28 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 	return [list, rolled[0], rolled[1]]
 
 
-## **Venom back through a peer**, when the floor wants it: [constant VENOM] at
-## tier 1. A peer with no room gives up a gene for it -- `pick` chooses which --
-## but never one of its body plan or of [param senses], so it stays a cell
-## that can live; with nothing else to give up, it takes a bonus slot.
-static func give_venom(tiers: Dictionary, slots: int, senses: Array[StringName],
-		pick: int) -> void:
-	if int(tiers.get(VENOM, 0)) > 0:
-		return
-	if tiers.size() >= slots:
+## **The toxin back through a peer**, when the floor wants it: at tier 1, and
+## [param inside] -- the coin -- as poison, or outside as venom (docs/design/
+## dna-slots.md §9). Poison takes no arc. Venom takes one, as the old gene did: a
+## peer with no room outside gives up a gene for it -- `pick` chooses which --
+## but never one of its body plan or of [param senses], so it stays a cell that
+## can live; with nothing else to give up, it takes a bonus slot. Nothing, for a
+## peer that carries the toxin in either form.
+static func give_toxin(tiers: Dictionary, slots: int, senses: Array[StringName],
+		pick: int, inside: bool) -> void:
+	for form: StringName in Genome.forms_of(TOXIN):
+		if int(tiers.get(form, 0)) > 0:
+			return
+	var form := Genome.form_in(TOXIN, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
+	if not Genome.is_inside_form(form) and Genome.count_outside(tiers) >= slots:
 		var plan := peer_plan()
 		var spare: Array[StringName] = []
 		for gene: StringName in tiers:
-			if not plan.has(gene) and not senses.has(gene):
+			if not plan.has(gene) and not senses.has(gene) and not Genome.is_inside_form(gene):
 				spare.append(gene)
 		if not spare.is_empty():
 			tiers.erase(spare[posmod(pick, spare.size())])
-	tiers[VENOM] = 1
+	tiers[form] = 1
 
 
 # --- Where things go ------------------------------------------------------------------

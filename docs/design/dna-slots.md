@@ -1699,6 +1699,68 @@ in slot 5.
 
 ---
 
+### 20.6 As built: phase 1, 2026-10-03
+
+Built to §20.2's phase 1. Every check in §20.3 passes, and so does every CI step
+run locally. It ships as content:
+
+- `PROTOCOL` is 7, and protocols 1 to 6, and an 8, are refused by name.
+- `Wire.RULES` stays `46913eab…`.
+- `binary_version` stays 6.
+
+Two builders made it. The first one's actions were blocked partway by the
+session's safety check, which said it was reacting to earlier content in its own
+conversation. The owner said to continue, and a second builder finished the
+work. Where the build differs from the text above, or found something:
+
+- **Toxins are worked out lazily**, in `food._toxins_at`, and cached by genome,
+  order and the side-venom switch (`venom_sides`, a runtime switch for check 7).
+- **The `stung` signal is gone.** `Contact.STUNG` keeps its number, because
+  `Wire.RULES` fingerprints `Contact`.
+- **The killing bite carries its toxins on every path.** That includes a bite
+  that finishes the player or a person (`_bitten_by`, `_chewed_by_friend`), as a
+  water body's last bite on another always did. This is what makes check 6's
+  "every cell alike" true.
+- **Drifters never carry a form**, in the drop or in today's water. A toxin they
+  draw is drawn again from the pool without it.
+- **`cilia.gd`'s `default_order`** could seat a fifth gene at index 7, which is
+  now the inside. It now takes the first empty home arc and never goes past 6.
+- **`Doses.wear` returns 64-bit values.** A 32-bit `Vector2` let stepping every
+  eighth frame drift from stepping every frame by 2.6e-9, which check 4 caught.
+- **The replay's block grows by 54 floats**, not 51: the bruise's tint adds 3.
+- **A guest's bruise is not tinted**, because a CONTACT carries no dose. The
+  mirror reads doses from the body's flags.
+- **The French numbers row for the stern** says `qui vous mord de dos prend {}
+  dose(s)`. The screen's `par-derrière` measured 658 px against a room of 650;
+  the gene's line keeps `par-derrière`.
+- **Check 4 (the doses) and half of check 11 were not written** in the first
+  pass. The second builder wrote them, including a friend's toxins each way in
+  the pond's field and a side sting on its quarter and off it.
+- **Check 13's re-pins went past §20.3's list.** `DEV_LINES` and CI's
+  empty-library hash moved, and so did IDENTITY, PACK3, TAIL and THREE_ONE and
+  their traces, each with its reason in `drop_probe.gd`. The water's draws now
+  take a coin for the toxin's place, every bite and swallow doses, and the
+  default order changed.
+  - The check-8 trace is dev's line for line until the drop's first toxin
+    carrier.
+  - `DEV_MUTATIONS` and `DEV_DRAWS` reproduce dev's digests exactly.
+- **Check 15's runs, as written, never meet a mouth.** It was run again with a
+  hunter posed in: stern stings and poison land on what bites, and front venom
+  rides the cell's own bites. `forage_probe` prints a `[forage-toxin]` line.
+- **`net_probe`'s pond section starts its host at the drop's centre.** A random
+  start near the rim could pin the host outside the water when it divided,
+  which failed 2 of 8 runs on this branch. Dev has the same weakness. The game
+  is unchanged.
+  - The run exposed an older game bug: a sister held back by the rim can land
+    on a player. That is issue #182.
+- **CI's two margins:**
+  - `drop_probe` takes 378 to 387 s locally (at 4-3, 251 s locally was 191 s
+    on CI), against its 600 s timeout;
+  - `net_probe` runs 16,794 to 17,811 frames, 426 checks, against 24,000.
+- **Not built, as phase 2's:** the empty slots' ghosts, the form's ghost under a
+  drag, the inside in the quick placement's bloom, and the choosing screen's
+  inside locus.
+
 ## 21. Left open
 
 1. **One inside slot.** Whether it feels like the "body internal slots" the

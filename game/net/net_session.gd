@@ -1521,12 +1521,14 @@ func send_event(type: int, payload: PackedByteArray) -> void:
 ## **One snapshot of the host's water, sent now**, unreliable (see
 ## [method _mode_for]) and on its own sequence. Returns the size it went out
 ## at, 0 when nothing went, so the size budget can be measured rather than
-## argued. shared-pond.md §2.
-func send_pond(your_wound: float, bodies: Array) -> int:
+## argued. shared-pond.md §2. [param your_loads] are the stacks the recipient
+## carries (docs/design/dna-slots.md §14.2).
+func send_pond(your_wound: float, bodies: Array,
+		your_loads: PackedFloat64Array = PackedFloat64Array()) -> int:
 	if link != Link.TOGETHER:
 		return 0
 	_out_pond_seq += 1
-	var frame := Wire.pond(_out_pond_seq, your_wound, bodies)
+	var frame := Wire.pond(_out_pond_seq, your_wound, bodies, your_loads)
 	_to_everyone(frame)
 	return frame.size()
 
@@ -1650,12 +1652,13 @@ func send_event_to(id: int, type: int, payload: PackedByteArray) -> void:
 
 ## [method send_pond], to guest [param id] alone: its own water, on its own
 ## sequence. Returns the size it went out at, 0 when nothing went.
-func send_pond_to(id: int, your_wound: float, bodies: Array) -> int:
+func send_pond_to(id: int, your_wound: float, bodies: Array,
+		your_loads: PackedFloat64Array = PackedFloat64Array()) -> int:
 	var peer: Dictionary = _peers.get(id, {})
 	if link != Link.TOGETHER or not bool(peer.get("greeted", false)):
 		return 0
 	peer["out_pond"] = int(peer["out_pond"]) + 1
-	var frame := Wire.pond(int(peer["out_pond"]), your_wound, bodies)
+	var frame := Wire.pond(int(peer["out_pond"]), your_wound, bodies, your_loads)
 	_to(id, frame)
 	return frame.size()
 
