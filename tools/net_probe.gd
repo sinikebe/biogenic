@@ -27,9 +27,9 @@ extends Node
 ## wins and the ones behind it are dropped, that the marker the world view draws
 ## off all that lands where the other cell said it was -- **on time, which is
 ## locked here** -- and the highest-value assertion in the file, that a peer on a
-## different protocol is refused with a sentence instead of hanging. Protocols
-## 1, 2 and 3 are all refused by name, because none is a hypothetical: they are
-## the three builds that shipped before this one.
+## different protocol is refused with a sentence instead of hanging. Every
+## protocol before this one -- 1 to 5 since protocol 6 -- is refused by name,
+## because none is a hypothetical: each is a build that shipped.
 ##
 ## **And the pond, played** (shared-pond.md §5, Phase 2): two sessions and two
 ## real runs of the game, one hosting the water and one mirroring it, put
@@ -190,9 +190,21 @@ func _ready() -> void:
 		print("[net-probe] NOTE --referee-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--sister-only` is the same for protocol 6's SISTER (automation.md §10.3):
+	# its wire, the referee's fingerprint and the handshake's refusals -- checks
+	# 24 to 26 but for the real divisions, which are the pond's and the server's.
+	if OS.get_cmdline_user_args().has("--sister-only"):
+		_check_pond_wire()
+		_check_sister_wire()
+		_check_referee()
+		await _check_skew()
+		print("[net-probe] NOTE --sister-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	var only_pond := OS.get_cmdline_user_args().has("--pond-only")
 	if only_pond:
 		_check_pond_wire()
+		_check_sister_wire()
 		_check_pond_field()
 		_check_referee()
 		await _check_pond()
@@ -202,6 +214,7 @@ func _ready() -> void:
 	_check_code()
 	_check_wire()
 	_check_pond_wire()
+	_check_sister_wire()
 	_check_carry()
 	_check_pond_field()
 	_check_referee()
@@ -820,11 +833,13 @@ func _check_pond_wire() -> void:
 			and d.size() == 3 and int(d[0]) == FoodField.Cause.CHEWED
 			and int(d[1]) == FoodField.By.FRIEND
 			and (d[2] as Vector2).is_equal_approx(Vector2(-44.5, 90.0))
-			and s.size() == 4 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
+			and s.size() == 6 and (s[0] as Vector2).is_equal_approx(Vector2(700.0, -3.0))
 			and absf(angle_difference(float(s[1]), -1.25)) <= step * 0.5
-			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn,
+			and is_equal_approx(float(s[2]), 28.28) and s[3] == worn
+			and (s[4] as Dictionary).is_empty() and (s[5] as PackedStringArray).is_empty(),
 		"pond wire: CONTACT carries an ATE's gene and a KILLED's cause, and DIED"
-		+ " and SISTER round-trip")
+		+ " and SISTER round-trip -- a SISTER that names no DNA and no list reads as"
+		+ " neither")
 	var events := [enter, arrive, person_frame, genome, ate, killed, bit, died, sister,
 		settle, clear, grazed]
 	var cut_ok := true
@@ -899,6 +914,332 @@ func _check_pond_wire() -> void:
 			and written[2][1] == &"",
 		"pond wire: and the writer leaves out what the reader would refuse --"
 		+ " a bad name is not sent, a bad slot goes empty, past seven slots stop")
+
+
+# ---------------------------------------------------------------------------
+# **Protocol 6's SISTER** (docs/design/automation.md §10.3; §18.3 checks 24 and
+# 25): a guest's sister carries her DNA and the list her cell ran. Socket-free:
+# the writer against the reader, every refusal against the gate's own parse,
+# and the host's reading of her lines with its own vocabulary. The real
+# divisions -- on a phone host, and in the server's room through a save and a
+# load -- are the `pond` and `server` sections'.
+# ---------------------------------------------------------------------------
+
+## The host's reading of a guest's sister's lines (`Pond.sister_list`).
+const Pond := preload("res://game/net/pond.gd")
+## **A rule of a gene no build of this game declares**: what a later build's
+## gene looks like to this one -- a rule that never fires, kept as it came.
+const LATER_LINE := "xenogene.hum above 0.5 -> body.turn-away"
+## **A guest's sister's list**, as a page builds one: three rules this build
+## reads -- a gene's sense, the metabolism's and one that always acts -- and
+## [constant LATER_LINE].
+const SISTER_LINES: Array[String] = ["palp.touch closeness above 0.5 -> body.turn-away",
+	"metabolism.hunger below 0.3 -> body.rest", LATER_LINE, "always -> body.swim"]
+
+
+func _check_sister_wire() -> void:
+	var vocab := FoodField.vocabulary()
+	# **The tables written out twice** -- drop.gd's eight, held here -- and the
+	# alphabet's two spellings, the reader's test and the documented string, the
+	# same over every byte there is.
+	var alphabet := true
+	for code in 256:
+		var listed := code > 0 and Wire.RULE_BYTES.contains(String.chr(code))
+		if Wire._rule_byte_ok(code) != listed:
+			alphabet = false
+	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
+			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
+			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
+				+ 8 * (1 + Wire.RULE_BYTES_MAX)
+			and Wire.SISTER_MAX == 1342 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
+			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX),
+		"sister wire: a list holds drop.gd's %d rules, each line 1 to %d bytes of"
+		% [FoodField.Drop.MOST_RULES, Wire.RULE_BYTES_MAX] + " the %d of a-z, 0-9,"
+		% Wire.RULE_BYTES.length() + " '.', '-', '>' and the space; a SISTER is %d"
+		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and so a"
+		% Wire.SISTER_MAX + " guest's longest frame, past a PERSON's %d"
+		% Wire.PERSON_MAX)
+
+	# **Every line this build can write crosses**: each word a rule's line is
+	# made of -- every name the declarations give, the tests, the references,
+	# every rung of every ladder, every option and the arrow -- is of the
+	# alphabet, and so are the water's seven. A merged list holds nothing else,
+	# unless a later build wrote a line into the library's file, which is kept
+	# there as it came and which the writer leaves out if the reader would not
+	# take it.
+	var words := _line_words(vocab)
+	var unfit: PackedStringArray = []
+	for word: String in words:
+		if not Wire._line_ok(word):
+			unfit.append(word)
+	for line: String in FoodField.Drop.FOUNDERS:
+		if not Wire._line_ok(line):
+			unfit.append(line)
+	var longest := _longest_line(vocab)
+	_says(unfit.is_empty() and not longest.is_empty() and Wire._line_ok(longest),
+		"sister wire: the %d words a rule's line is made of are of the alphabet,"
+		% words.size() + " and so are the water's seven; the longest rule the"
+		+ " vocabulary reads is %d bytes of %d -- '%s'" % [longest.length(),
+			Wire.RULE_BYTES_MAX, longest]
+		+ ("" if unfit.is_empty() else " -- NOT: " + ", ".join(unfit)))
+
+	# **Check 24, on the wire**: her body, her DNA and her list cross exactly --
+	# a gene at no copies is not carried, and a list of nothing is the
+	# founders' -- and the host reads the lines with its own vocabulary, a later
+	# build's rule kept as it came.
+	var body := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 2}
+	var dna := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"ampulla": 1,
+		&"palp": 2, &"stigma": 0}
+	var carried := dna.duplicate()
+	carried.erase(&"stigma")
+	var lines := PackedStringArray(SISTER_LINES)
+	var at := Vector2(-812.5, 4410.25)
+	var frame := Wire.event(21, Wire.EVENT_SISTER, Wire.sister_payload(at, 2.0,
+		Referee.DAUGHTER_RADIUS, body, dna, lines))
+	var said := Wire.take_sister(frame)
+	var bare := Wire.take_sister(Wire.event(22, Wire.EVENT_SISTER, Wire.sister_payload(at,
+		2.0, Referee.DAUGHTER_RADIUS, body, dna)))
+	var read: Array = _list_said(Pond.sister_list(said[5]) if said.size() == 6 else null)
+	_says(said.size() == 6 and (said[0] as Vector2) == at
+			and is_equal_approx(float(said[2]), Referee.DAUGHTER_RADIUS)
+			and said[3] == body and said[4] == carried and said[5] == lines
+			and bare.size() == 6 and bare[4] == carried
+			and (bare[5] as PackedStringArray).is_empty() and Pond.sister_list(bare[5]) == null
+			and read[0] == lines and read[1] == [false, false, true, false],
+		"sister wire (check 24): a guest's sister crosses with her body, her DNA --"
+		+ " %d genes, the one at no copies not carried -- and her list of %d lines,"
+		% [carried.size(), lines.size()] + " in %d bytes; the host reads them with"
+		% frame.size() + " its own vocabulary, the rule of a gene it does not know"
+		+ " kept as a rule that never fires and written back as it came; a SISTER"
+		+ " with no lines gives her the founders' rules")
+
+	# **SISTER_MAX is the most the writer writes** -- two genomes of eight
+	# sixteen-letter genes at three copies, and eight lines of 128 bytes -- and
+	# handed more, it writes no more: a gene the wire cannot name, a ninth line,
+	# an empty one, one of 129 bytes and one in capitals are each left out. The
+	# writer never sends what the reader refuses.
+	var full := {}
+	for i in Wire.GENES_MAX:
+		full[StringName(String.chr(97 + i).repeat(Wire.NAME_MAX))] = Wire.TIER_TOP
+	var overfull := {&"Cirrus": 1, StringName("z".repeat(Wire.NAME_MAX + 1)): 2}
+	overfull.merge(full)
+	var most := PackedStringArray()
+	for i in Wire.MOST_RULES + 1:
+		most.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
+	var crowded := PackedStringArray([most[0], "", _rule_line_of(Wire.RULE_BYTES_MAX + 1, 99),
+		"Chemocyte.smell above 0.5 -> body.swim"])
+	crowded.append_array(most.slice(1))
+	var biggest := Wire.sister_payload(at, 2.0, Referee.DAUGHTER_RADIUS, overfull, overfull,
+		crowded)
+	var biggest_said := Wire.take_sister(Wire.event(23, Wire.EVENT_SISTER, biggest))
+	_says(biggest.size() + Wire.EVENT_HEADER == Wire.SISTER_MAX and biggest_said.size() == 6
+			and biggest_said[3] == full and biggest_said[4] == full
+			and biggest_said[5] == most.slice(0, Wire.MOST_RULES),
+		"sister wire: SISTER_MAX, %d bytes, is the most the writer writes -- two"
+		% Wire.SISTER_MAX + " genomes of eight sixteen-letter genes and eight lines"
+		+ " of 128 -- and handed more it writes no more: a gene the wire cannot name,"
+		+ " a ninth line, an empty one, one of 129 bytes and one in capitals are left"
+		+ " out")
+
+	# **Check 25: the refusals.** Each by hand, the way no writer of this build
+	# writes it, against the reader and against the gate's own parse
+	# (`NetSession._parses`, its step 8): refused whole, so the guest that sent it
+	# is struck and nothing is placed. Then what lies just inside every bound,
+	# taken.
+	var ascii := func(text: String) -> PackedByteArray: return text.to_ascii_buffer()
+	var worn := [[ascii.call("cytostome"), 1], [ascii.call("cirrus"), 1],
+		[ascii.call("flagellum"), 2]]
+	var dna_said := [[ascii.call("cytostome"), 2], [ascii.call("ampulla"), 1]]
+	var two := [ascii.call(SISTER_LINES[0]), ascii.call(SISTER_LINES[1])]
+	var nine: Array = []
+	for i in Wire.MOST_RULES + 1:
+		nine.append(ascii.call(_rule_line_of(48, i)))
+	var nine_genes: Array = []
+	for i in Wire.GENES_MAX + 1:
+		nine_genes.append([ascii.call("gene" + "abcdefghi"[i]), 1])
+	var refused := {
+		"nine instincts": _sister_by_hand(worn, dna_said, nine),
+		"a count of nine": _sister_by_hand(worn, dna_said, nine.slice(0, 8), 9),
+		"a line of 129 bytes": _sister_by_hand(worn, dna_said,
+			[ascii.call(_rule_line_of(Wire.RULE_BYTES_MAX + 1, 1))]),
+		"an empty line": _sister_by_hand(worn, dna_said, [two[0], PackedByteArray()]),
+		"a DNA gene of 17 letters": _sister_by_hand(worn, [[ascii.call("q".repeat(17)), 1]],
+			two),
+		"a DNA gene in capitals": _sister_by_hand(worn, [[ascii.call("Ampulla"), 1]], two),
+		"a DNA gene with no name": _sister_by_hand(worn, [[PackedByteArray(), 1]], two),
+		"a DNA gene with a digit": _sister_by_hand(worn, [[ascii.call("cili5"), 1]], two),
+		"nine DNA genes": _sister_by_hand(worn, nine_genes, two),
+		"a byte after the last line": _sister_by_hand(worn, dna_said, two, -1,
+			PackedByteArray([0])),
+		"a line past its count": _sister_by_hand(worn, dna_said, two, 1),
+		"a protocol 5 SISTER, her body alone": _sister_by_hand(worn, [], [], -2),
+	}
+	var wrong: PackedStringArray = []
+	for name: String in refused:
+		var f: PackedByteArray = refused[name]
+		if not Wire.take_sister(f).is_empty() \
+				or NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f):
+			wrong.append(name)
+	var outside := 0
+	for code in 256:
+		if Wire._rule_byte_ok(code):
+			continue
+		var odd: PackedByteArray = ascii.call(SISTER_LINES[3])
+		odd[6] = code
+		var f := _sister_by_hand(worn, dna_said, [two[0], odd])
+		outside += 1
+		if not Wire.take_sister(f).is_empty() \
+				or NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f):
+			wrong.append("byte %d" % code)
+	var every := PackedByteArray()
+	for code in 256:
+		if Wire._rule_byte_ok(code):
+			every.append(code)
+	var taken := {
+		"eight instincts": _sister_by_hand(worn, dna_said, nine.slice(0, 8)),
+		"a line of 128 bytes": _sister_by_hand(worn, dna_said,
+			[ascii.call(_rule_line_of(Wire.RULE_BYTES_MAX, 1))]),
+		"a line of every byte of the alphabet": _sister_by_hand(worn, dna_said, [every]),
+		"a line of one byte": _sister_by_hand(worn, dna_said, [PackedByteArray([62])]),
+		"no DNA and no list": _sister_by_hand(worn, [], []),
+		"a DNA gene at no copies": _sister_by_hand(worn, [[ascii.call("ampulla"), 0]], two),
+	}
+	for name: String in taken:
+		var f: PackedByteArray = taken[name]
+		if Wire.take_sister(f).is_empty() \
+				or not NetSession._parses(Wire.KIND_EVENT, Wire.EVENT_SISTER, f) \
+				or not Wire.size_ok(Wire.KIND_EVENT, Wire.EVENT_SISTER, f.size(), false):
+			wrong.append("NOT TAKEN: " + name)
+	var at_no_copies := Wire.take_sister(taken["a DNA gene at no copies"])
+	if at_no_copies.size() != 6 or not (at_no_copies[4] as Dictionary).is_empty():
+		wrong.append("a gene at no copies carried")
+	var whole: PackedByteArray = taken["eight instincts"]
+	var cuts := 0
+	for cut in whole.size():
+		if not Wire.take_sister(whole.slice(0, cut)).is_empty():
+			wrong.append("cut at %d" % cut)
+		cuts += 1
+	_says(wrong.is_empty() and outside == 256 - Wire.RULE_BYTES.length() and cuts > 300,
+		"sister wire (check 25): the whole SISTER is refused, by the reader and by the"
+		+ " gate's own parse, on %s; on each of the %d bytes outside the alphabet in a"
+		% [", ".join(PackedStringArray(refused.keys())), outside] + " line; and at every"
+		+ " one of %d truncations -- and %s are taken" % [cuts,
+			", ".join(PackedStringArray(taken.keys()))]
+		+ ("" if wrong.is_empty() else " -- NOT: " + ", ".join(wrong)))
+
+
+## **A SISTER written by hand**, so a test can say what no writer of this build
+## would: [param worn] and [param dna] as `[name bytes, tier]` pairs, [param lines]
+## as raw bytes, [param count] the count byte as said -- -1 for the true one, -2
+## for none, a protocol-5 SISTER's shape -- and [param tail] any bytes after.
+static func _sister_by_hand(worn: Array, dna: Array, lines: Array, count := -1,
+		tail := PackedByteArray()) -> PackedByteArray:
+	var out := Wire.event(30, Wire.EVENT_SISTER, Wire.sister_payload(Vector2(560.0, 0.0),
+		0.0, Referee.DAUGHTER_RADIUS, {}))
+	out.resize(Wire.EVENT_HEADER + 13)
+	var genomes: Array = [worn] if count == -2 else [worn, dna]
+	for genome: Array in genomes:
+		out.append(genome.size())
+		for gene: Array in genome:
+			var name: PackedByteArray = gene[0]
+			out.append(name.size())
+			out.append_array(name)
+			out.append(int(gene[1]))
+	if count == -2:
+		return out
+	out.append(lines.size() if count < 0 else count)
+	for line: PackedByteArray in lines:
+		out.append(line.size())
+		out.append_array(line)
+	out.append_array(tail)
+	return out
+
+
+## **A line of exactly [param size] bytes** of the alphabet: [constant LATER_LINE]
+## numbered [param n], padded out.
+static func _rule_line_of(size: int, n: int) -> String:
+	return ("%s %d " % [LATER_LINE, n] + "x".repeat(size)).left(size)
+
+
+## **Every word a rule's line can hold**, as `rulebook.gd`'s `line_of` writes
+## them, from [param vocab]: its inputs and their values, its outputs and their
+## options, the tests, the references, every rung of every ladder, `always` and
+## the arrow.
+static func _line_words(vocab: Variant) -> PackedStringArray:
+	var words := PackedStringArray([String(FoodField.Rulebook.ALWAYS),
+		FoodField.Rulebook.ARROW])
+	words.append_array(PackedStringArray(FoodField.Rulebook.TEST_WORDS))
+	for ref: StringName in FoodField.Rulebook.REFERENCES:
+		words.append(String(ref))
+	for kind: StringName in FoodField.Rulebook.LADDERS:
+		for rung: float in FoodField.Rulebook.LADDERS[kind]:
+			words.append(FoodField.Rulebook.number(rung))
+	var inputs: Dictionary = vocab.get("inputs")
+	for name: StringName in inputs:
+		words.append(String(name))
+		for value: StringName in (inputs[name] as Object).get("values"):
+			words.append(String(value))
+	var outputs: Dictionary = vocab.get("outputs")
+	for name: StringName in outputs:
+		words.append(String(name))
+		for option: float in (outputs[name] as Object).get("options"):
+			words.append(FoodField.Rulebook.number(option))
+	return words
+
+
+## **The longest rule [param vocab] reads**: for each input, every value it
+## carries tested at its longest -- a rule tests a value once -- driving each
+## output at its longest option, kept when the rulebook reads it as a rule that
+## fires.
+static func _longest_line(vocab: Variant) -> String:
+	var heads: Array = [String(FoodField.Rulebook.ALWAYS)]
+	var inputs: Dictionary = vocab.get("inputs")
+	for name: StringName in inputs:
+		var input: Object = inputs[name]
+		var values: Array = input.get("values")
+		var kinds: Array = input.get("kinds")
+		var head := String(name)
+		for k in values.size():
+			var against: PackedStringArray = []
+			if StringName(kinds[k]) == FoodField.Rulebook.SIZE:
+				for ref: StringName in FoodField.Rulebook.REFERENCES:
+					against.append(String(ref))
+			else:
+				for rung: float in FoodField.Rulebook.LADDERS[StringName(kinds[k])]:
+					against.append(FoodField.Rulebook.number(rung))
+			var widest := "falling"
+			for each: String in against:
+				if ("below " + each).length() > widest.length():
+					widest = "below " + each
+			head += " %s %s" % [values[k], widest]
+		heads.append(head)
+	var longest := ""
+	var outputs: Dictionary = vocab.get("outputs")
+	for head: String in heads:
+		for name: StringName in outputs:
+			var tail := String(name)
+			var option := ""
+			for each: float in (outputs[name] as Object).get("options"):
+				if FoodField.Rulebook.number(each).length() > option.length():
+					option = FoodField.Rulebook.number(each)
+			if not option.is_empty():
+				tail += " " + option
+			var whole := "%s %s %s" % [head, FoodField.Rulebook.ARROW, tail]
+			if whole.length() > longest.length() \
+					and not bool(FoodField.Rulebook.rule_from(whole, vocab).get("inert")):
+				longest = whole
+	return longest
+
+
+## **What a list says, as lines**, and which of its rules never fire: `[lines,
+## inert flags]` -- no lines for the founders', null.
+static func _list_said(brain: Variant) -> Array:
+	if brain == null:
+		return [PackedStringArray(), []]
+	var inert: Array = []
+	for rule: Object in (brain as Object).get("rules"):
+		inert.append(bool(rule.get("inert")))
+	return [FoodField.Rulebook.lines_of(brain), inert]
 
 
 # ---------------------------------------------------------------------------
@@ -1290,18 +1631,36 @@ func _check_link() -> void:
 func _check_skew() -> void:
 	# **No older protocol is a hypothetical.** 1 is the LAN build that first
 	# shipped, 2 is the one that drew the friend half a second late, 3 is the
-	# one with a friend who cannot eat you and no pond, and 4 is today's water
-	# shared, whose snapshot is keyed on a slot; all of them are on somebody's
-	# phone right now, because updates are opt-in, and a 4 reads a protocol-5
-	# snapshot's ids as slots (ocean.md §10.4). So every one of them is refused
-	# by name, 4 included. The one from the future is still worth its two
-	# seconds: the host cannot tell which side is behind, and does not need to.
+	# one with a friend who cannot eat you and no pond, 4 is today's water
+	# shared, whose snapshot is keyed on a slot, and 5 is the drop shared, whose
+	# SISTER says a guest's sister's body and nothing more; all of them are on
+	# somebody's phone right now, because updates are opt-in. A 4 reads a
+	# protocol-5 snapshot's ids as slots (ocean.md §10.4), and a 5 refuses a
+	# protocol-6 SISTER and leaves its division unanswered (automation.md
+	# §10.3). So every one of them is refused by name, 5 included. The one from
+	# the future is still worth its two seconds: the host cannot tell which side
+	# is behind, and does not need to.
 	var older: Array = range(1, Wire.PROTOCOL)
+	var named: Array = []
 	for theirs: int in older + [Wire.PROTOCOL + 1]:
-		await _one_skew(theirs)
+		if await _one_skew(theirs):
+			named.append(theirs)
+	# **Check 26** (automation.md §18.3): every older protocol refused by name,
+	# and the rules the referee judges by just as they were -- protocol 6 moved
+	# the shape of one message, and nothing a host judges a guest by.
+	_says(named == older + [Wire.PROTOCOL + 1]
+			and _rules_text().sha256_text() == Wire.RULES,
+		"handshake (check 26): a guest on each of protocols %s is refused by a host"
+		% ", ".join(PackedStringArray(older.map(func(p: int) -> String: return str(p))))
+		+ " on %d by name, with the sentence that names the update, as is one on %d;"
+		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the referee judges by the rules"
+		+ " it did, Wire.RULES %s" % Wire.RULES.left(16))
 
 
-func _one_skew(theirs: int) -> void:
+## One guest on [param theirs] against a host on this build: true when it was
+## refused by name, and every line below passed.
+func _one_skew(theirs: int) -> bool:
+	var failed := _failed
 	var host: Node = await _session("HostSide2_%d" % theirs)
 	var guest: Node = await _session("GuestSide2_%d" % theirs)
 	# Updates are opt-in (multiplayer.md §0.1), so the gap between two installs
@@ -1333,6 +1692,7 @@ func _one_skew(theirs: int) -> void:
 	host.close()
 	guest.close()
 	await _wait(0.4)
+	return _failed == failed
 
 
 # ---------------------------------------------------------------------------
@@ -1477,9 +1837,11 @@ func _check_limits() -> void:
 
 ## **T1: every frame at its edges.** Each bound in wire.gd's size table is a
 ## frame a writer really produces -- the largest PERSON is eight genes and
-## seven slots of sixteen-letter names -- and one byte either side of it, or
-## the wrong side of the wire, is refused. Then the largest of each crosses a
-## real socket both ways and every one is taken.
+## seven slots of sixteen-letter names, and since protocol 6 the largest SISTER,
+## a guest's longest frame, is two genomes of them and eight lines of 128 bytes
+## -- and one byte either side of it, or the wrong side of the wire, is refused.
+## Then the largest of each crosses a real socket both ways and every one is
+## taken.
 func _limits_edges() -> void:
 	var genes := {}
 	for i in Wire.GENES_MAX:
@@ -1487,6 +1849,9 @@ func _limits_edges() -> void:
 	var order: Array = []
 	for i in Wire.ORDER_MAX:
 		order.append(StringName(String.chr(97 + i).repeat(Wire.NAME_MAX)))
+	var longest_list := PackedStringArray()
+	for i in Wire.MOST_RULES:
+		longest_list.append(_rule_line_of(Wire.RULE_BYTES_MAX, i))
 	var long_gene := StringName("z".repeat(Wire.NAME_MAX))
 	var bodies: Array = []
 	for i in Wire.SEND_MAX:
@@ -1497,7 +1862,7 @@ func _limits_edges() -> void:
 		0.4, 44.0, Vector2(-37.5, 12.25), -0.75])
 	var at := Vector2(700.0, -3.0)
 	var person_max := Wire.person_payload(true, genes, order)
-	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes)
+	var sister_max := Wire.sister_payload(at, -1.25, 28.28, genes, genes, longest_list)
 	var genome_max := Wire.genome_payload(0xFFFFFFFF, 255, genes)
 	var contact_max := Wire.contact_payload(FoodField.Contact.ATE, at, 0.9,
 		FoodField.By.FRIEND, long_gene)
@@ -1574,7 +1939,8 @@ func _limits_edges() -> void:
 		and Wire.GENOME_MAX == genome_max.size() + Wire.EVENT_HEADER \
 		and Wire.CONTACT_MAX == contact_max.size() + Wire.EVENT_HEADER \
 		and Wire.POND_MAX == (cases[cases.size() - 1][1] as PackedByteArray).size() \
-		and Wire.GUEST_FRAME_MAX == Wire.PERSON_MAX and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
+		and Wire.GUEST_FRAME_MAX == Wire.SISTER_MAX and Wire.SISTER_MAX > Wire.PERSON_MAX \
+		and Wire.HOST_FRAME_MAX == Wire.POND_MAX \
 		and at_bound.size() == cases.size()
 	var later := not Wire.known(0x7E, 0) and not Wire.known(Wire.KIND_EVENT, 0x7F) \
 		and not Wire.size_ok(0x7E, 0, 8, false) \
@@ -1624,8 +1990,9 @@ func _limits_edges() -> void:
 	await _limits_close([host, guest])
 
 
-## **T2: over the cap.** A 273-byte event, one past the longest frame a guest
-## writes, and then a 64 KiB reliable frame that ENet reassembles from fifty
+## **T2: over the cap.** An event one byte past the longest frame a guest
+## writes -- 1,343 bytes since protocol 6's SISTER, 273 before it -- and then a
+## 64 KiB reliable frame that ENet reassembles from fifty
 ## fragments: each is a cut on the spot, with nothing queued, and the address
 ## is barred -- a minute, then ten for a second offence -- so a call back is
 ## cut at the door.
@@ -5429,11 +5796,21 @@ class PondWatchedFood extends "res://game/normal/food.gd":
 			var pb := _cells[PERSON_SLOT]
 			if pb.person != null:
 				clear = minf(clear, sb.pos.distance_to(pb.pos) - sb.radius - pb.radius)
-		sisters.append({"slot": slot,
+		var record := {"slot": slot,
 			"was_free": slot >= 0 and (slot >= seeded.size() or seeded[slot] == 0),
 			"appended": slot >= before.size(),
 			"changed": changed, "at": at, "radius": body_radius,
-			"host_at": _cell.position, "clear": clear, "moved": moved})
+			"host_at": _cell.position, "clear": clear, "moved": moved,
+			# **What she was placed with, and what she is in the water**
+			# (automation.md §10.3, check 24): a guest's comes with no record.
+			"tiers": tiers.duplicate(), "dna": dna.duplicate(), "mother": mother.size(),
+			"brain": brain}
+		if slot >= 0:
+			var sb := _cells[slot]
+			record.merge({"id": sb.id, "parent": sb.parent, "generation": sb.generation,
+				"lineage": sb.lineage, "body_dna": sb.dna.duplicate(),
+				"body_brain": sb.brain, "genome": sb.genome.duplicate()})
+		sisters.append(record)
 		return slot
 
 
@@ -5973,6 +6350,15 @@ func _check_pond() -> void:
 	# ----------------------------------------------------------------------
 	var sisters: Array = host_food.get("sisters")
 	sisters.clear()
+	# **Check 24 on a phone host** (automation.md §10.3, §18.3): the guest
+	# divides with a program on -- the autopilot off, so nothing it does moves
+	# -- and its sister carries that list into the host's water, the rule of a
+	# gene no build declares among it.
+	var guest_library: RefCounted = guest_run.get("_library")
+	var guest_program := int(guest_library.call(&"add_new"))
+	guest_library.call(&"set_lines", guest_program, PackedStringArray(SISTER_LINES))
+	guest_library.call(&"switch", guest_program, true)
+	guest_run.call(&"_library_changed")
 	# **Aimed at the host, on purpose.** Facing north, a sister declined to
 	# starboard goes SISTER_DISTANCE due east -- so with the host put exactly
 	# there, the guest's sister is asked for the host's own place. That is
@@ -6052,6 +6438,20 @@ func _check_pond() -> void:
 			and chose_moved > 10 and seq_chose >= _pond_snapshots(5.0, chose_frames),
 		"pond: through 5 s of both choosing, %d bodies moved and the guest took"
 		% chose_moved + " %d snapshots" % seq_chose)
+	# **The daughter the guest declines carries a gene her body does not wear**
+	# -- expression is a roll, so a DNA often holds one -- and only her DNA can
+	# say it: with it, a sister made of her body alone is told apart from one
+	# made of her DNA (check 24). Both lean to the first daughter, below.
+	var declined: Dictionary = (guest_run.get("_daughters") as Array)[1]
+	var unworn := &""
+	for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus", &"chemocyte"]:
+		if not (declined["body"] as Dictionary).has(gene) \
+				and not (declined["tiers"] as Dictionary).has(gene):
+			unworn = gene
+			break
+	(declined["tiers"] as Dictionary)[unworn] = 2
+	var declined_dna: Dictionary = (declined["tiers"] as Dictionary).duplicate()
+	var declined_body: Dictionary = (declined["body"] as Dictionary).duplicate()
 	# Both lean the same way, as `_step_choosing` would after CHOOSE_HOLD.
 	for run: Node in [host_run, guest_run]:
 		run.set("_chosen", 0)
@@ -6113,6 +6513,34 @@ func _check_pond() -> void:
 		"pond: and neither landed on a player -- each at least %.0f units clear,"
 		% FoodField.SISTER_CLEAR + " moved %s units from where she was asked for"
 		% str(shifted))
+	# **Check 24 on a phone host**: the guest's sister is the one that came with
+	# no record -- the host's own is its mother's child -- and she came with her
+	# DNA and her list, read with the host's own vocabulary.
+	var from_guest := {}
+	for each: Dictionary in sisters:
+		if int(each["mother"]) == 0:
+			from_guest = each
+	var placed_list: Array = _list_said(from_guest.get("brain"))
+	var kept_list: Array = _list_said(from_guest.get("body_brain"))
+	_says(not from_guest.is_empty() and unworn != &""
+			and _by_name(from_guest["dna"]) == _by_name(declined_dna)
+			and _by_name(from_guest["body_dna"]) == _by_name(declined_dna)
+			and _by_name(from_guest["tiers"]) == _by_name(declined_body)
+			and not (from_guest["genome"] as Dictionary).has(unworn)
+			and placed_list[0] == PackedStringArray(SISTER_LINES)
+			and placed_list[1] == [false, false, true, false]
+			and kept_list[0] == PackedStringArray(SISTER_LINES)
+			and int(from_guest["parent"]) == FoodField.Descent.NOBODY
+			and int(from_guest["generation"]) == 1
+			and int(from_guest["lineage"]) == int(from_guest["id"]),
+		"pond (check 24): the guest's declined daughter arrives in the host's water"
+		+ " with her DNA, %s -- %s at 2 copies, which her body does not wear -- and"
+		% [str(from_guest.get("body_dna", {})), unworn] + " the list her cell ran,"
+		+ " %d lines read with the host's own vocabulary, the rule of a gene it does"
+		% SISTER_LINES.size() + " not know kept as it came and never firing; the"
+		+ " founder of a line of her own (id %d)" % int(from_guest.get("id", -1)))
+	guest_library.call(&"delete", guest_program)
+	guest_run.call(&"_library_changed")
 	home = host_cell.position
 	guest_home = guest_cell.position
 	host_pin = [host_cell, home, 0.0]
@@ -8100,6 +8528,22 @@ func _check_server() -> void:
 	await _pond_until(func() -> bool:
 		return (bool((e_run.get("_pond") as Object).in_pond)
 			and bool((f_run.get("_pond") as Object).in_pond)), 3.0, [])
+	# **Checks 24 and 27 in the room** (automation.md §10.3, §18.3): both divide
+	# on meals the room fed them -- the first with a program on, the second with
+	# nothing on -- and the server places each one's sister: the first's with her
+	# DNA and her list, the second's with her DNA and the founders' rules. The
+	# stop below keeps them in the room, and the next start loads them so.
+	var room_sisters: Array = await _server_sisters(pond, food, e_run, f_run)
+	var e_sister: Dictionary = room_sisters[0]
+	var f_sister: Dictionary = room_sisters[1]
+	_says(_sister_came(e_sister, true) and _sister_came(f_sister, false),
+		"server (check 24): in the room, the first guest's declined daughter arrives"
+		+ " with her DNA -- %s at 2 copies, which her body does not wear -- and the"
+		% e_sister.get("unworn", &"") + " %d lines her cell ran, the rule of a gene"
+		% SISTER_LINES.size() + " the server does not know kept as it came; the"
+		+ " second's, with nothing on, with her DNA and the founders' rules; each the"
+		+ " founder of a line of her own (ids %d and %d)" % [int(e_sister.get("id", -1)),
+			int(f_sister.get("id", -1))])
 	var fresh := int(food.drop_bodies())
 	var kept_before := int(server.get("rooms_kept"))
 	server.shut_down()
@@ -8141,6 +8585,25 @@ func _check_server() -> void:
 		"server: stopped, it kept its room first (%d bodies, %.1f s old); the next"
 		% [stop_bodies, stopped_age] + " start loads it -- %d bodies, %.1f s old --"
 		% [loaded_bodies, loaded_age] + " and keeps nothing new until it is due")
+	# **Check 27: a guest's sister's list, through a save and a load**
+	# (automation.md §10.3, §18.3): the file holds her lines as they came, the
+	# rule this build cannot read among them, and the next start gives them back
+	# to her, read again, with her DNA; the sister on the founders' stays on them.
+	var stop_lists: Array = ((stop_kept.get("drop", {}) as Dictionary).get("behaviours",
+		{}) as Dictionary).get("lists", [])
+	var e_again: Object = _body_of(again_food, int(e_sister.get("id", -1)))
+	var f_again: Object = _body_of(again_food, int(f_sister.get("id", -1)))
+	var e_back: Array = _list_said(e_again.get("brain") if e_again != null else null)
+	_says(stop_lists.has(PackedStringArray(SISTER_LINES)) and e_again != null
+			and f_again != null and e_back[0] == PackedStringArray(SISTER_LINES)
+			and e_back[1] == [false, false, true, false]
+			and _by_name(e_again.get("dna")) == _by_name(e_sister.get("body_dna"))
+			and f_again.get("brain") == null
+			and _by_name(f_again.get("dna")) == _by_name(f_sister.get("body_dna")),
+		"server (check 27): stopped, the room kept the first guest's sister's list as"
+		+ " it came -- the rule it cannot read among it -- and loaded, she has it back,"
+		+ " %d lines, one never firing, with her DNA; the second's sister is on the"
+		% (e_back[0] as PackedStringArray).size() + " founders' rules still")
 	again.set("room_path", "")
 	again.shut_down()
 	again.queue_free()
@@ -8184,6 +8647,119 @@ func _server_room_gone() -> void:
 			DirAccess.remove_absolute(path)
 	if DirAccess.dir_exists_absolute(SERVER_ROOM.get_base_dir()):
 		DirAccess.remove_absolute(SERVER_ROOM.get_base_dir())
+
+
+## **Two guests of the room divide, and the room places their sisters**
+## (automation.md §10.3; checks 24 and 27): [param first] with a program on --
+## [constant SISTER_LINES], the autopilot off -- and [param second] with nothing
+## on. Each is fed to r40 on morsels the room puts on its lip, divides as the
+## pond section's guest does, its quickening and its parting skipped, and leans
+## to its first daughter. The one it declines carries in her DNA a gene her body
+## does not wear, a different one for each, and that tells the two sisters apart
+## in the room. `[first's, second's]`, each `{unworn, dna, body}` as the guest
+## sent them and, once the room placed her, `{id, parent, generation, lineage,
+## body_dna, brain, genome}` as she is there -- `id` -1 for one it never placed.
+func _server_sisters(pond: Object, food: Node, first: Node, second: Node) -> Array:
+	var runs: Array = [first, second]
+	var pins: Array = []
+	for run: Node in runs:
+		var cell: Node = run.get_node(^"Cell")
+		pins.append([cell, cell.position, 0.0])
+	var library: RefCounted = first.get("_library")
+	var program := int(library.call(&"add_new"))
+	library.call(&"set_lines", program, PackedStringArray(SISTER_LINES))
+	first.call(&"_library_changed")
+	var placed: Array = []
+	var on_placed := func(slot: int) -> void: placed.append(slot)
+	pond.connect(&"sister_placed", on_placed)
+	for pin: Array in pins:
+		await _pond_feed(food, pin[0], pins)
+	await _pond_until(func() -> bool:
+		return runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) != NormalMode.Split.NONE), 1.0, pins)
+	await _pond_until(func() -> bool:
+		for run: Node in runs:
+			if int(run.get("_split")) == NormalMode.Split.QUICKEN:
+				run.set("_split_clock", NormalMode.DIVIDE_QUICKEN)
+			elif int(run.get("_split")) == NormalMode.Split.PART:
+				run.set("_split_clock", NormalMode.DIVIDE_PART)
+		return runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) == NormalMode.Split.CHOOSING), 3.0, [])
+	var out: Array = []
+	var taken := {}
+	for run: Node in runs:
+		var said := {"unworn": &"", "id": -1}
+		if int(run.get("_split")) == NormalMode.Split.CHOOSING:
+			var declined: Dictionary = (run.get("_daughters") as Array)[1]
+			for gene: StringName in [&"ampulla", &"stigma", &"palp", &"ocellus",
+					&"chemocyte"]:
+				if not taken.has(gene) and not (declined["body"] as Dictionary).has(gene) \
+						and not (declined["tiers"] as Dictionary).has(gene):
+					said["unworn"] = gene
+					break
+			taken[said["unworn"]] = true
+			(declined["tiers"] as Dictionary)[said["unworn"]] = 2
+			said["dna"] = (declined["tiers"] as Dictionary).duplicate()
+			said["body"] = (declined["body"] as Dictionary).duplicate()
+			# Leaning to the first, as `_step_choosing` would after CHOOSE_HOLD.
+			run.set("_chosen", 0)
+			run.set("_split", NormalMode.Split.COMMIT)
+			run.set("_split_clock", 0.0)
+		out.append(said)
+	await _pond_until(func() -> bool:
+		return placed.size() >= 2 and runs.all(func(run: Node) -> bool:
+			return int(run.get("_split")) == NormalMode.Split.NONE), 3.0, [])
+	pond.disconnect(&"sister_placed", on_placed)
+	for slot: int in placed:
+		var b: Object = food.bodies()[slot]
+		for said: Dictionary in out:
+			if said["unworn"] != &"" and (b.get("dna") as Dictionary).has(said["unworn"]):
+				said.merge({"id": int(b.get("id")), "parent": int(b.get("parent")),
+					"generation": int(b.get("generation")), "lineage": int(b.get("lineage")),
+					"body_dna": (b.get("dna") as Dictionary).duplicate(),
+					"brain": b.get("brain"), "genome": (b.get("genome") as Dictionary).duplicate()},
+					true)
+	return out
+
+
+## **Whether a guest's sister came as §10.3 says**, from [method _server_sisters]'
+## record of her: placed, with the DNA her mother sent -- the gene her body does
+## not wear in it, and not on her body -- and, [param with_list], the list of
+## [constant SISTER_LINES] read with the room's own vocabulary, the later
+## build's rule never firing; without, the founders' rules. A founder of a line
+## of her own either way: ids are per drop.
+static func _sister_came(said: Dictionary, with_list: bool) -> bool:
+	if int(said.get("id", -1)) < 0 or not said.has("dna"):
+		return false
+	var list: Array = _list_said(said.get("brain"))
+	var listed: bool = (list[0] == PackedStringArray(SISTER_LINES)
+		and list[1] == [false, false, true, false]) if with_list \
+		else said.get("brain") == null
+	return listed and _by_name(said["body_dna"]) == _by_name(said["dna"]) \
+		and not (said["genome"] as Dictionary).has(said["unworn"]) \
+		and _by_name(said["genome"]) == _by_name(said["body"]) \
+		and int(said["parent"]) == FoodField.Descent.NOBODY \
+		and int(said["generation"]) == 1 and int(said["lineage"]) == int(said["id"])
+
+
+## [param tiers] by name, `{String: int}`, so two maps are compared whatever
+## their keys were read as.
+static func _by_name(tiers: Variant) -> Dictionary:
+	var out := {}
+	if tiers is Dictionary:
+		for gene: Variant in tiers:
+			out[String(gene)] = int(tiers[gene])
+	return out
+
+
+## The body numbered [param id] in [param food]'s water, or null.
+static func _body_of(food: Node, id: int) -> Object:
+	if id < 0:
+		return null
+	for b: Object in food.bodies():
+		if bool(b.get("seeded")) and int(b.get("id")) == id:
+			return b
+	return null
 
 
 ## [method _pond_until] for anything an unreliable frame carries: given
