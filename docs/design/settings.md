@@ -343,8 +343,8 @@ settings is open. The launcher is the template's (§10).
 
 ### 4.1 What a world is, to the player
 
-> **Cells leave the worlds: `cells.md` and `cells-ux.md`** (designed 2026-10-04, not
-> built yet). A world keeps its water and nothing else. Your cells are kept in slots
+> **Cells leave the worlds: `cells.md` and `cells-ux.md`** (built 2026-10-04). A
+> world keeps its water and nothing else. Your cells are kept in slots
 > of their own, three for each view, and are chosen beside each view's button. What
 > this section says of cells is replaced there: the cells a world keeps, a world's
 > cell lines (§4.3), the delete line (§4.4) and the index's `generation` keys (§6.2)
@@ -407,9 +407,8 @@ to. At the launcher's weight, the four of them out-shouted the names (rendered).
 
 ### 4.3 What a row says
 
-> **From `cells.md` on (designed, not built yet), a world's row says its age and
-> nothing else** (`cells-ux.md` §5). The cell lines below are what the game shows
-> until then.
+> **From `cells.md` on (built 2026-10-04), a world's row says its age and nothing
+> else** (`cells-ux.md` §5). The cell lines below are what the game showed before.
 
 **The world's age, and under it a line for each view that keeps a cell in it**
 (`ocean.md` §9.5), in the order the view chooser offers them:
@@ -598,8 +597,9 @@ reasons:
 
 ### 6.2 The index: `user://drops.cfg`
 
-> **From `cells.md` §3.3 on (designed, not built yet), the `generation` keys go.**
-> `note_kept(slot, lived)` keeps the age alone, and the cells' own index is
+> **From `cells.md` §3.3 on (built 2026-10-04), the `generation` keys go.**
+> `note_kept(slot, lived, seed)` keeps the age and the drop's number (`seed`, which a
+> cell's place is checked against: `cells.md` §6.6), and the cells' own index is
 > `user://cells.cfg`.
 
 ```

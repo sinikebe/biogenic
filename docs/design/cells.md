@@ -14,10 +14,12 @@ document is the second. Cells leave the worlds and get slots of their own, and t
 per-view rule stays: **a cell belongs to the view it was born in and is only ever
 played in that view.**
 
-**Status: designed and mocked on the real screens, at 1280x720 and 2400x1080, in
-English and French (`cells-ux.md` §7). Phase 1 of §6.2 is built (§6.5): the figure,
-drawn from plain values. Phase 2, everything a player sees, is not.** This file holds
-the rules, the files, the migration, ponds and the build plan. `cells-ux.md` holds the
+**Status: built.** It was designed and mocked on the real screens, at 1280x720 and
+2400x1080, in English and French (`cells-ux.md` §7). Phase 1 of §6.2 is built (§6.5):
+the figure, drawn from plain values. **Phase 2 is built (§6.6)**: the slots, the
+migration, the place rule, the record, and every screen of `cells-ux.md`, with the
+differences §6.6 lists. This file holds the rules, the files, the migration, ponds and
+the build plan. `cells-ux.md` holds the
 screens, their words and the mocks. Three calls were the owner's (§8), answered
 2026-10-04: all three as recommended.
 
@@ -619,6 +621,91 @@ are 0 px from them.** A pose that arms a slot or a way shoots six frames after t
 the arm lapses on the wall clock (`ARM_TIMEOUT_MS`), and under load at 2400x1080 the
 24 frames of `M07` outran it once. `--lint-all`, the CI boot of every scene and every
 `ci.yml` step that runs here pass; the Android export stops only for want of an SDK.
+
+### 6.6 As built: phase 2, 2026-10-04
+
+**§§1-4 and `cells-ux.md`, as written, but for the differences below.** By file:
+
+| file | now |
+|---|---|
+| `game/normal/cell_save.gd` **new** | a cell's file (§3.1): `compose`, `write` through `DropSave.write`, `read` (sets aside), `peek` (never does), `unusable` -- the format, the shape, `lived`, `where`, `died`, then the cell by `DropSave.bad_cell` -- `converted` and `is_record` |
+| `game/normal/cells.gd` **new** | the slots by view, `cells.cfg`, select, rename and delete; the default names and the free one; where a cell is (`place_of`); every menu line, each built whole; the migration (`migrate`, `migrate_world`, `settle_selection`) |
+| `game/normal/drop_save.gd` | composes a world with no cell, and still reads one with cells for the migration; `look` reads a world and never moves it; `misfit`, `bad_cell` and `build` are public for cell_save.gd |
+| `game/normal/drops.gd` | `note_kept(slot, lived, seed)`, each world's number in the index, `forget_cells`; a world's line is its age |
+| `game/normal/normal_mode.gd` | `cells_at`; the slot opened with the world; the place rule; the cell kept first; the record; a new line in `_found_line`; `lived` counted in play |
+| `game/normal/food.gd` | `resume_player(state, moved_on)` |
+| `game/normal/genome.gd`, `metabolism.gd` | `upkeep_with_levels` and `hungry_at`, which the run's own `upkeep()` and `hungry()` now call, and `inside_of`, the code the run's own inside already used |
+| `game/normal/figure.gd` | the ring's keyboard tables, from normal_mode.gd |
+| `game/menu/cell_figure.gd` **new** | the read-only figure (`cells-ux.md` §3.3) |
+| `game/menu/corner.gd`, `.tscn` | "your cells", the detailed view, rename and delete through the corner's own sheets, the worlds' new words |
+| `game/mode_select.gd`, `.tscn`; `game/net/earshot.gd`, `.tscn` | the split buttons and chevrons, the migration on the chooser's first frame; the TOGETHER lines |
+| `game/i18n/` | 31 messages new and 2 retired, `fr.po` with them; the README's glossary sentence, composed lines and rooms |
+
+**Where it differs, and why:**
+
+- **The worlds' index keeps each world's number** (`seed`, written by every keep
+  through `Drops.note_kept(slot, lived, seed)`). §1.4 gives up a cell's place when its
+  world "holds a different drop", and a menu has to say so (`a world that is gone`)
+  without decoding three worlds each time it opens. An index from before this has no
+  number, and `Drops.seed_in` peeks that world's file once, read-only. The migration
+  forgets a world's generations with `Drops.forget_cells(slot, seed)`.
+- **A record whose world is gone says `died in a world that is gone`**, one msgid
+  more than §6 of `cells-ux.md` lists. Its world cannot be named, and saying nothing
+  would read as a cell that never died.
+- **The default names are `Cells.CELL_NAMES`.** `i18n_pot.gd` merges translators'
+  tables by constant name across files, and drops.gd's `DEFAULT_NAMES` are the
+  worlds'.
+- **Your own cells only ever go with your own worlds.** `cells_at` is your cells by
+  default, as `keep` is your worlds; a run that keeps a world of a tool's own and
+  names no folder for its cells keeps none, so no tool that forgets `--cells=` plays
+  or writes yours. drive.gd empties it unless given `--cells=`, as §6.2 says.
+- **Another view's file in a slot is set aside as `.old`**, as a file this build
+  cannot read is, and a new cell starts there (§1.3). Refused and left in place, it
+  would be written over at the new cell's first keep.
+- **`Cells.migrate` returns how many slot files it wrote**, not how many cells it
+  found in slots: a migration killed before step 3 and run again moves nothing, and
+  says 0.
+- **The read-only figure needs two numbers from plain values**, the upkeep and the
+  slack of a hungry body: genome.gd and metabolism.gd gained the statics, and their
+  live functions call them, so the pause screen and the detailed view cannot price a
+  body differently. §6.1 lists neither file.
+- **The ring's keyboard tables moved to figure.gd**, where §6.5 had left them in
+  normal_mode.gd: the detailed view's ring walks the same way.
+- **The detailed view's figure is compiled on its first `look`**, by `load()`. The
+  scripts behind figure.gd take about 0.7 s to compile on this machine's editor build,
+  and every menu screen would pay that on opening if corner.gd preloaded it. The first
+  `look` of a session pays it instead.
+- **A world with no file, or none this build can read, is made for the living cell
+  that comes into it**, its size and senses set first, as a run's first water is made
+  for a born cell.
+- **A cell that comes into another world keeps its `id`**, which that world's count
+  did not give it. Nothing reads a cell's family yet (row 21 of `lineage.md`, "not
+  yet"); when something does, a cell that changes worlds should take an id from the
+  new one.
+- **`cells.gd` has no `line_of`** (§5): each menu line has its own function --
+  `button_line`, `row_lines`, `where_line`, `died_line`, `age_and_hunger` -- built
+  whole, in `cells-ux.md`'s words.
+- **§6.3 has eleven checks and the build has twelve.** `views 7`, `V` flipping the
+  view in the editor only with a flipped run keeping nothing, is kept on slots as
+  `cells 12`: the flip is still there. `back_probe` gains your cells' layers, and
+  `earshot_shot` a `--cells=` of its own for the TOGETHER frames.
+
+**Checked.** `drop_probe` passes all 143 of its checks, in 6 min 22 s here against
+CI's 10. Its `cells` section is twelve of them, and each was shown to fail with its fix
+taken out: 21 changes to the game's code, one or two a check -- a migration that takes
+the worlds in slot order, a slot never past three, a place read from the drop's centre,
+a death that keeps no record, the water written before the cell, a menu that sets aside
+what it cannot read, a library for each cell, and the rest -- and every one was caught.
+`net_probe` passes all 440, `pond, kept` on slots and the server's room keeping no cell
+among them; three changes that broke them were caught, and the referee's fingerprint is
+`Wire.RULES` as it was. `back_probe` closes your cells one layer at a time on Back and
+on Esc, and two changes that broke it were caught. `--lint-all` passes: a cell's line
+377 px of 420 in English and 415 in French, a row's lines 330 and 377 of 402, `Then`
+two lines of two, the sheet's caption 187 and 223 of 592. The frames of `cells-ux.md`
+§9, 100 of them, were looked at, and two things changed for it. Every `ci.yml` step
+that runs here passes, the library's pinned hash among them; the exports' 12 scenes lay
+out as their source does, 721 controls, and the exported server boots. The Android
+export stops only for want of an SDK here.
 
 ---
 
