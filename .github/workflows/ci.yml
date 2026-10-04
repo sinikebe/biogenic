@@ -375,6 +375,34 @@ jobs:
             exit 1
           fi
 
+      - name: Check the genes
+        # docs/design/gene-catalogue.md §12.1: every gene's numbers, lists, tags
+        # and rules live in its organ's file under game/genes/, and everything
+        # that reads one asks the catalogue. A gene that is half there -- a key
+        # the wire refuses, a table one entry short, a gene the water can never
+        # make, a sense no channel carries, an organ file the index forgot --
+        # works alone and fails somewhere else: in a shared pond, a seeded water,
+        # a save. Static, about a second. It also prints how many gene names are
+        # still written into game/ outside game/genes/, which fails nothing
+        # until the gate of §12.2. Grepped, not trusted to the exit code, for the
+        # reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn 2>&1) || true
+          grep -E "^\[gene-probe\]" <<< "$out" || true
+          if ! grep -q "^\[gene-probe\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a gene is missing something a player or another system needs -- see the probe lines above"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the gene probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
       - name: Check the levels
         # docs/design/beam-levels.md: the arithmetic and the bookkeeping of a
         # gene's level -- the curve, the fork, what a daughter inherits, what a
