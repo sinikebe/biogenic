@@ -20,7 +20,13 @@ extends Node
 ##                           every press landing on nothing. Pass it whenever
 ##                           this harness is booted directly rather than through
 ##                           shot.tscn, which sets the window itself
-##   --mode=0|1              force the view: 0 point of view, 1 full vision
+##   --mode=0|1              force the view: 0 point of view, 1 full vision --
+##                           and so which of a world's cells a `--keep=` run
+##                           opens on and keeps, one for each view (docs/design/
+##                           ocean.md §9.5). `--tap=<seconds>:v` still flips the
+##                           view mid-run, as every run of the editor's binary
+##                           can and no exported build does; a run flipped so
+##                           keeps nothing after it
 ##   --scheme=0|1|2          force the control scheme: 0 anywhere (the one that
 ##                           ships), 1 stick, 2 pads. The choice lives in
 ##                           `user://`, so without this a scheme cannot be

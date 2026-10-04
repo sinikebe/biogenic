@@ -30,8 +30,16 @@ extends Node
 ## rebuilt from the files; new, rename and delete round the index; switching the
 ## selected drop switches the water and the cell; delete never takes the drop you
 ## are in, nor leaves its files; a tool's run never touches the drops; and a
-## default name is said in the language of the moment, a typed one never. **And
-## pack 3's first phase** (docs/design/behaviour.md §12.3, phase 3-1), the water
+## default name is said in the language of the moment, a typed one never. **And a
+## cell per view** (docs/design/ocean.md §9.5): a full-vision cell is never played
+## in point of view -- the world opened there is the same water with a new cell at
+## a quiet place, and full vision's cell, set aside, keeps its place in the water
+## as the drop moves under the new one -- nor the other way; a world keeps both,
+## and each view resumes its own; a death clears only its own view's cell; a cell
+## kept before there was one per view is full vision's; a cell left in a friend's
+## water goes back to its own view's place; the index keeps a generation for each
+## view; and `V` flips the view in the editor only, a flipped run keeping nothing.
+## **And pack 3's first phase** (docs/design/behaviour.md §12.3, phase 3-1), the water
 ## on rules: 1, with the rules off it is pack 2 to the byte -- the two drops the
 ## lineage checks read run on pack 2's hunter from seed 1 and print `dev`'s
 ## five-minute census and lineage lines, and forty seconds of a membrane fed by
@@ -108,7 +116,13 @@ extends Node
 ## offers delete on the drop you are in, a keep that does not tell the index, a
 ## default said only in English, a default's French kept as a typed name, its
 ## English kept as one in French, a new drop offered a default another wears in
-## French, and a naming field left in the language it opened in. And pack 3's
+## French, and a naming field left in the language it opened in. And a cell per
+## view's: a run that opens on `cell` whatever its view, a keep that writes its
+## cell as full vision's, one that drops the other view's cell, one that leaves it
+## where the drop was, a death that clears both, a cell from a friend's water kept
+## as full vision's, an index told one view's generation, a peek and a line that
+## know only full vision, a `cells` read without being checked, `V` that flips
+## outside the editor, and a flipped run that keeps. And pack 3's
 ## first phase, one a rule: a number drawn as a body is renewed, a nose that
 ## weighs a body by its bare radius, a water cell's nose on another arc, a call
 ## that hears half its reach, a rulebook that reads what a body does not wear, a
@@ -150,6 +164,8 @@ const Cilia := preload("res://game/vision/cilia.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
 const Drops := preload("res://game/normal/drops.gd")
+## For the views, and the name each keeps its cell under (ocean.md §9.5).
+const RunState := preload("res://game/run_state.gd")
 const Descent := preload("res://game/mechanics/descent.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
@@ -643,6 +659,16 @@ func _ready() -> void:
 		print("[drop-probe] NOTE --dna-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
+	# `--views-only` is for working on a cell per view (docs/design/ocean.md §9.5):
+	# the save, your drops and the views, the three sections a kept cell runs
+	# through, and nothing else. CI never passes it, and it never prints ALL PASS.
+	if OS.get_cmdline_user_args().has("--views-only"):
+		await _save()
+		await _drops()
+		await _views()
+		print("[drop-probe] NOTE --views-only: %d failed" % _failed)
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	_grid()
 	_basin()
 	_replenish()
@@ -673,6 +699,7 @@ func _ready() -> void:
 	await _readout_families()
 	await _save()
 	await _drops()
+	await _views()
 	await _sister_lineage()
 	await _dna_slots()
 	print("[drop-probe] ALL PASS" if _failed == 0
@@ -3548,6 +3575,25 @@ func _changes_made(field: Node) -> int:
 	return n
 
 
+## **The cell a point-of-view run keeps** in [param file], a file as
+## `DropSave.read` gives it: [method _kept_run] and [method _drops_run] are point
+## of view's, and a world keeps a cell for each view (ocean.md §9.5), so theirs
+## is under point of view's name and not in `cell`.
+static func _pov_cell(file: Dictionary) -> Dictionary:
+	return DropSave.cell_of(file, RunState.cell_key(RunState.Mode.POV))
+
+
+## **Point of view's generation in [param entry]**, a drop as `Drops.read`
+## gives it, or 0 when no point-of-view cell waits in it.
+static func _pov_generation(entry: Dictionary) -> int:
+	return int((entry["generations"] as Dictionary).get(RunState.cell_key(RunState.Mode.POV), 0))
+
+
+## [param entry]'s lines in the menu, as one line for the log.
+static func _said(entry: Dictionary) -> String:
+	return " / ".join(Drops.lines_of(entry))
+
+
 ## A run of the game that keeps its drop at [constant KEEP], in point of view.
 func _kept_run() -> Node:
 	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
@@ -3828,17 +3874,18 @@ func _drops_kept() -> void:
 		+ " a new drop in slot 2 selected (%s), played from slot %d, its line %.1f s and"
 		+ " generation %d (\"%s\"), slot 1's untouched; two waters (seeds %d and %d)") % [
 		resolved[0], str(resolved[1]).get_file(), float(one["lived"]), float(_drop_a["age"]),
-		int(one["generation"]), Drops.line_of(one), error_string(made), int(_drop_b["slot"]),
-		float(two["lived"]), int(two["generation"]), Drops.line_of(two), int(_drop_a["seed"]),
+		_pov_generation(one), _said(one), error_string(made), int(_drop_b["slot"]),
+		float(two["lived"]), _pov_generation(two), _said(two), int(_drop_a["seed"]),
 		int(_drop_b["seed"])],
 		resolved == [1, DROPS_ROOT.path_join("drop.save")] and made == OK
 		and not (_drop_a["bytes"] as PackedByteArray).is_empty()
 		and not (_drop_b["bytes"] as PackedByteArray).is_empty()
 		and int(_drop_a["slot"]) == 1 and int(_drop_b["slot"]) == 2
 		and float(one["lived"]) == 7832.0 and float(_drop_a["age"]) == 7832.6
-		and int(one["generation"]) == 3 and Drops.line_of(one) == "third generation · 2 hours old"
-		and float(two["lived"]) == 1501.0 and int(two["generation"]) == 5
-		and Drops.line_of(two) == "fifth generation · 25 minutes old"
+		and _pov_generation(one) == 3
+		and Drops.line_of(one) == "2 hours old\npoint of view · third generation"
+		and float(two["lived"]) == 1501.0 and _pov_generation(two) == 5
+		and Drops.line_of(two) == "25 minutes old\npoint of view · fifth generation"
 		and int(index["selected"]) == 2 and int(_drop_a["seed"]) != int(_drop_b["seed"]))
 
 
@@ -3862,7 +3909,9 @@ func _drops_first_launch() -> void:
 	var loaded := config.load(DROPS_ROOT.path_join(Drops.INDEX))
 	var section := loaded == OK and int(config.get_value("1", "default", -1)) == 0 \
 		and str(config.get_value("1", "name", "?")) == "" \
-		and int(config.get_value("1", "generation", -1)) == 3 \
+		and int(config.get_value("1", Drops.GENERATION, -1)) == 0 \
+		and int(config.get_value("1", Drops.GENERATION + "_"
+			+ RunState.cell_key(RunState.Mode.POV), -1)) == 3 \
 		and float(config.get_value("1", "lived", -1.0)) == floorf(float(_drop_a["age"]))
 	var still: bool = FileAccess.get_file_as_bytes(path) == _drop_a["bytes"]
 	_check(("drops 2. the first launch after the update: a drop.save with no index is slot 1"
@@ -3870,10 +3919,10 @@ func _drops_first_launch() -> void:
 		+ " with nothing set beside it (%s), and no index written by reading (%s); the first"
 		+ " change (%s) writes the index with that line in it (%s), the file still the same"
 		+ " bytes (%s); the player's slot 1 is %s") % [str(not bool(one["empty"])),
-		int(index["selected"]), Drops.name_of(one), Drops.line_of(one), str(same), str(alone),
+		int(index["selected"]), Drops.name_of(one), _said(one), str(same), str(alone),
 		str(unwritten), error_string(chose), str(section), str(still), Drops.path_of(1)],
 		not bool(one["empty"]) and bool(one["file"]) and int(index["selected"]) == 1
-		and Drops.name_of(one) == Drops.DEFAULT_NAMES[0] and int(one["generation"]) == 3
+		and Drops.name_of(one) == Drops.DEFAULT_NAMES[0] and _pov_generation(one) == 3
 		and float(one["lived"]) == float(_drop_a["age"]) and same and alone and unwritten
 		and chose == OK and section and still and Drops.path_of(1) == DropSave.PATH
 		and bool(Drops.entry_of(index, 2)["empty"]) and bool(Drops.entry_of(index, 3)["empty"]))
@@ -3929,12 +3978,12 @@ func _drops_lost_index() -> void:
 		var one := Drops.entry_of(index, 1)
 		var two := Drops.entry_of(index, 2)
 		seen.append("%s: %s / %s, %s / %s, %s, selected %d" % [how, Drops.name_of(one),
-			Drops.line_of(one), Drops.name_of(two), Drops.line_of(two),
+			_said(one), Drops.name_of(two), _said(two),
 			"slot 3 empty" if bool(Drops.entry_of(index, 3)["empty"]) else "SLOT 3 KEPT",
 			int(index["selected"])])
 		rebuilt = rebuilt and Drops.name_of(one) == Drops.DEFAULT_NAMES[0] \
 			and Drops.name_of(two) == Drops.DEFAULT_NAMES[1] \
-			and int(one["generation"]) == 3 and int(two["generation"]) == 5 \
+			and _pov_generation(one) == 3 and _pov_generation(two) == 5 \
 			and float(one["lived"]) == float(_drop_a["age"]) \
 			and float(two["lived"]) == float(_drop_b["age"]) \
 			and bool(Drops.entry_of(index, 3)["empty"]) and int(index["selected"]) == 1
@@ -3948,8 +3997,8 @@ func _drops_lost_index() -> void:
 	var index := Drops.read(DROPS_ROOT)
 	var two := Drops.entry_of(index, 2)
 	var orphan := not bool(two["empty"]) and int(two["default"]) == 0 \
-		and int(two["generation"]) == 5 and Drops.name_of(Drops.entry_of(index, 1)) == "my pond"
-	seen.append("older: slot 2 %s / %s" % [Drops.name_of(two), Drops.line_of(two)])
+		and _pov_generation(two) == 5 and Drops.name_of(Drops.entry_of(index, 1)) == "my pond"
+	seen.append("older: slot 2 %s / %s" % [Drops.name_of(two), _said(two)])
 	_check("drops 4. a lost index is rebuilt from the files: named %s, selected %d; %s" % [
 		", ".join(named.map(func(e: int) -> String: return error_string(e))),
 		int(had["selected"]), "; ".join(seen)],
@@ -4028,13 +4077,13 @@ func _drops_switch() -> void:
 		+ " keep wrote B's file (%s) and line (generation %d), A's file the same bytes (%s) and"
 		+ " its line generation %d") % [error_string(chose_one), str(got_one),
 		error_string(chose_two), str(got_two), int(_drop_a["seed"]), int(_drop_b["seed"]),
-		str(b_kept), int(Drops.entry_of(index, 2)["generation"]), str(a_same),
-		int(Drops.entry_of(index, 1)["generation"])],
+		str(b_kept), _pov_generation(Drops.entry_of(index, 2)), str(a_same),
+		_pov_generation(Drops.entry_of(index, 1))],
 		chose_one == OK and chose_two == OK
 		and got_one == [1, int(_drop_a["seed"]), 3, true]
 		and got_two == [2, int(_drop_b["seed"]), 5, true]
-		and b_kept and a_same and int(Drops.entry_of(index, 2)["generation"]) == 6
-		and int(Drops.entry_of(index, 1)["generation"]) == 3)
+		and b_kept and a_same and _pov_generation(Drops.entry_of(index, 2)) == 6
+		and _pov_generation(Drops.entry_of(index, 1)) == 3)
 
 
 ## **drops 7. Deleting empties a slot, files and all, and never the drop you are
@@ -4282,6 +4331,476 @@ func _forget_drops() -> void:
 	DirAccess.remove_absolute(DROPS_ROOT)
 
 
+# --- A cell per view (docs/design/ocean.md §9.5) ------------------------------------------
+
+## **Where these checks keep their worlds**: a folder of their own, so its index
+## and its files are never the player's.
+const VIEWS_ROOT := "user://drop_probe_views"
+
+## **A world keeping a cell for each view**, as [method _views_both] leaves it --
+## full vision's of the fourth generation, point of view's of the sixth -- for the
+## checks after it to start from; and full vision's cell as that check read it off
+## its run before the keep ([method _view_cell]).
+var _views_both_bytes := PackedByteArray()
+var _views_full_was: Array = []
+
+
+## **A cell per view** (ocean.md §9.5; the owner: "cells grown in full vision
+## should not be usable in point of view, since it's not the same difficulty and
+## gameplay"). Each check begins with an empty folder, and nothing is left in it
+## after them.
+func _views() -> void:
+	for check: Callable in [_views_apart, _views_both, _views_death, _views_old_file,
+			_views_elsewhere, _views_index, _views_key]:
+		_forget_views()
+		await check.call()
+	_forget_views()
+
+
+## **views 1. A full-vision cell is never played in point of view** (§9.5): a
+## world a full-vision run left mid-run, its cell posed to the fourth generation
+## and moved off its start, opened in point of view, is the same water -- its seed
+## and its age -- **with a new cell in it, as after a death**: not resumed, the
+## first generation, a founder, a newborn's size, **at a quiet place** -- the drop
+## moved under it, so it is not where the full-vision cell was left, and nothing
+## that could swallow it within dread's reach. Left there, its keep writes point
+## of view's cell beside full vision's, which is untouched **and in its place in
+## the water**: the drop moved under point of view's new cell, and the cell set
+## aside moved with it. Opened in full vision again, it is resumed there.
+func _views_apart() -> void:
+	var path := VIEWS_ROOT.path_join("apart.save")
+	var full := _view_run(path, RunState.Mode.FULL_VISION)
+	_view_pose(full, 4, 30.0)
+	var full_cell: CellBody = full.get("_cell")
+	full_cell.position += Vector2(640.0, -480.0)
+	var full_food: Node = full.get("_food")
+	var water := [int(full_food.get("drop_seed")), float(full_food.call(&"drop_age"))]
+	var left_at := _view_place(full)
+	var full_was := _view_cell(full)
+	full.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var kept := DropSave.read(path)
+	var kept_full := _view_kept(kept, "")
+	full.queue_free()
+	await get_tree().process_frame
+	var blind := _view_run(path, RunState.Mode.POV)
+	var blind_food: Node = blind.get("_food")
+	var opened := _view_opened(blind)
+	var at := _view_place(blind)
+	var quiet := _view_quiet(blind)
+	var same_water := int(blind_food.get("drop_seed")) == int(water[0]) \
+		and float(blind_food.call(&"drop_age")) == float(water[1])
+	blind.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var file := DropSave.read(path)
+	var moved := (file["drop"]["rim_centre"] as Vector2).distance_to(
+		kept["drop"]["rim_centre"]) if not file.is_empty() and not kept.is_empty() else 0.0
+	var beside := not _pov_cell(file).is_empty() and _view_same(_view_kept(file, ""), kept_full)
+	blind.queue_free()
+	await get_tree().process_frame
+	var again := _view_run(path, RunState.Mode.FULL_VISION)
+	var back := bool(again.get("_resumed")) and _view_same(_view_cell(again), full_was)
+	again.queue_free()
+	await get_tree().process_frame
+	_check(("views 1. a full-vision cell is not played in point of view: kept at generation"
+		+ " %d, the world opened in point of view is the same water (%s) with a new cell --"
+		+ " [resumed, generation, parent, radius] %s -- at a quiet place (%s), %.0f from where"
+		+ " full vision's was left; point of view's keep put its cell beside full vision's,"
+		+ " untouched and in its place in the water, which moved %.0f under the new cell"
+		+ " (%s); full vision resumes on it there (%s)") % [4, str(same_water), str(opened),
+		str(quiet), at.distance_to(left_at), moved, str(beside), str(back)],
+		not kept_full.is_empty() and same_water
+		and opened == [false, 1, Descent.NOBODY, CellBody.BASE_RADIUS] and quiet
+		and at.distance_to(left_at) > 1.0 and moved > 1.0 and beside and back)
+
+
+## **views 2. The other way, and both at once** (§9.5): a world a point-of-view
+## run left at the sixth generation, opened in full vision, has a new cell in it,
+## the first generation; left there at the fourth, **the file keeps both** --
+## full vision's in `cell`, point of view's beside it under its own name -- and
+## each view opens on its own cell, as it was kept, to the byte and in its place
+## in the water: full vision on the fourth generation, point of view on the sixth.
+func _views_both() -> void:
+	var path := VIEWS_ROOT.path_join("both.save")
+	var blind := _view_run(path, RunState.Mode.POV)
+	_view_pose(blind, 6, 24.0)
+	var blind_was := _view_cell(blind)
+	blind.notification(NOTIFICATION_APPLICATION_PAUSED)
+	blind.queue_free()
+	await get_tree().process_frame
+	var full := _view_run(path, RunState.Mode.FULL_VISION)
+	var opened := _view_opened(full)
+	_view_pose(full, 4, 30.0)
+	var full_was := _view_cell(full)
+	full.notification(NOTIFICATION_APPLICATION_PAUSED)
+	full.queue_free()
+	await get_tree().process_frame
+	var file := DropSave.read(path)
+	var held := [int(DropSave.cell_of(file, "").get("generation", 0)),
+		int(_pov_cell(file).get("generation", 0))]
+	_views_both_bytes = FileAccess.get_file_as_bytes(path)
+	_views_full_was = full_was
+	var back: Array = []
+	for mode: int in [RunState.Mode.FULL_VISION, RunState.Mode.POV]:
+		var run := _view_run(path, mode)
+		back.append([bool(run.get("_resumed")), int(run.get("_generation")),
+			_view_same(_view_cell(run),
+				full_was if mode == RunState.Mode.FULL_VISION else blind_was)])
+		run.queue_free()
+		await get_tree().process_frame
+	_check(("views 2. a point-of-view cell is not played in full vision, and a world keeps"
+		+ " both: point of view's left at generation 6, full vision opens on a new cell"
+		+ " %s; left at generation 4, the file holds [full vision's, point of view's] %s;"
+		+ " opened again, full vision is [resumed, generation, as kept] %s and point of"
+		+ " view %s") % [str(opened), str(held), str(back[0]), str(back[1])],
+		opened == [false, 1, Descent.NOBODY, CellBody.BASE_RADIUS] and held == [4, 6]
+		and back[0] == [true, 4, true] and back[1] == [true, 6, true])
+
+
+## **views 3. A death clears only its own view's cell** (§9.5): in a world
+## keeping both, a point-of-view cell that dies is kept as no cell -- point of
+## view's place empty -- and full vision's is still in the file, to the byte (the
+## dying cell was resumed in place, so nothing moved the drop); and the other way,
+## a full-vision death leaves point of view's.
+func _views_death() -> void:
+	var path := VIEWS_ROOT.path_join("death.save")
+	var seen: Array[String] = []
+	var held := not _views_both_bytes.is_empty()
+	for dying: int in [RunState.Mode.POV, RunState.Mode.FULL_VISION]:
+		_put(path, _views_both_bytes)
+		var before := DropSave.read(path)
+		var other := RunState.Mode.FULL_VISION if dying == RunState.Mode.POV \
+			else RunState.Mode.POV
+		var run := _view_run(path, dying)
+		run.call(&"_die", false, 0.0)
+		run.call(&"_keep_drop")
+		var after := DropSave.read(path)
+		var mine_gone := not DropSave.cell_of(before, RunState.cell_key(dying)).is_empty() \
+			and DropSave.cell_of(after, RunState.cell_key(dying)).is_empty()
+		var other_kept := not DropSave.cell_of(after, RunState.cell_key(other)).is_empty() \
+			and var_to_bytes(DropSave.cell_of(after, RunState.cell_key(other))) \
+			== var_to_bytes(DropSave.cell_of(before, RunState.cell_key(other)))
+		held = held and mine_gone and other_kept
+		seen.append("%s dies: its cell gone %s, %s's kept to the byte %s" % [
+			RunState.VIEW_WORDS[dying], str(mine_gone), RunState.VIEW_WORDS[other],
+			str(other_kept)])
+		run.queue_free()
+		await get_tree().process_frame
+	_check("views 3. a death clears only its own view's cell: %s" % "; ".join(seen), held)
+
+
+## **views 4. A cell kept before there was one per view is full vision's** (§9.5):
+## a file laid out as one written before them -- one cell, in `cell`, nothing
+## beside it -- holding point of view's sixth-generation cell, opened in full
+## vision, resumes on that cell: where it was grown cannot be told, and the rule
+## protects point of view. Opened in point of view, a new cell comes into it, and
+## point of view's keep leaves the old cell in `cell`, to the byte and in its
+## place in the water. The worlds' index, rebuilt from that file, gives its
+## generation to full vision. **And a
+## `cells` that does not hold what it says makes a file unreadable**, never
+## half-loaded: not a dictionary, a view with no name, a cell missing a key.
+func _views_old_file() -> void:
+	var path := Drops.path_of(1, VIEWS_ROOT)
+	_put(path, _views_both_bytes)
+	var both := DropSave.read(path)
+	var old := {}
+	if not both.is_empty():
+		old = {"format": both["format"], "rules": both["rules"], "content": both["content"],
+			"commit": both["commit"], "drop": both["drop"], "cell": _pov_cell(both)}
+	var wrote := DropSave.write(path, old)
+	var peeked: Dictionary = Drops.entry_of(Drops.read(VIEWS_ROOT), 1)["generations"]
+	var full := _view_run(path, RunState.Mode.FULL_VISION)
+	var as_full := [bool(full.get("_resumed")), int(full.get("_generation"))]
+	full.queue_free()
+	await get_tree().process_frame
+	var blind := _view_run(path, RunState.Mode.POV)
+	var as_blind := [bool(blind.get("_resumed")), int(blind.get("_generation"))]
+	_view_pose(blind, 2, 22.0)
+	blind.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var after := DropSave.read(path)
+	var old_kept := not old.is_empty() \
+		and _view_same(_view_kept(after, ""), _view_kept(old, "")) \
+		and int(_pov_cell(after).get("generation", 0)) == 2
+	blind.queue_free()
+	await get_tree().process_frame
+	var spoilt: Array[String] = []
+	if not after.is_empty():
+		for how in 3:
+			var copy: Dictionary = after.duplicate(true)
+			match how:
+				0:
+					copy[DropSave.CELLS] = [_pov_cell(after)]
+				1:
+					copy[DropSave.CELLS] = {"": _pov_cell(after)}
+				2:
+					var short: Dictionary = _pov_cell(copy)
+					short.erase("genome")
+			spoilt.append(DropSave.unusable(copy))
+	_check(("views 4. a cell kept before there was one per view is full vision's: written"
+		+ " the old way (%s) the menu gives its generation to %s; full vision opens on it"
+		+ " [resumed, generation] %s, point of view on a new cell %s, whose keep leaves the"
+		+ " old cell in `cell` and in its place (%s); a `cells` spoilt three ways: %s") % [
+		error_string(wrote), str(peeked), str(as_full), str(as_blind), str(old_kept),
+		str(spoilt)],
+		wrote == OK and peeked == {"": 6} and as_full == [true, 6] and as_blind == [false, 1]
+		and old_kept and spoilt.size() == 3
+		and spoilt.all(func(why: String) -> bool: return not why.is_empty()))
+
+
+## **views 5. A cell left in a friend's water goes back to its own view's place**
+## (§9.1, §9.5): in a world keeping both, a point-of-view run that joins a friend
+## -- its own drop set aside as it joins, its water a mirror of theirs -- and is
+## left there keeps its own drop, with its cell `elsewhere` **in point of view's
+## place**, and full vision's cell as it was, to the byte. Opened in point of
+## view, the cell comes back resumed at a quiet place in its own water, the drop
+## moved under it; opened in full vision, full vision's own cell is there as it
+## was left, in place, the drop where it was.
+func _views_elsewhere() -> void:
+	var path := VIEWS_ROOT.path_join("elsewhere.save")
+	_put(path, _views_both_bytes)
+	var before := DropSave.read(path)
+	var guest := _view_run(path, RunState.Mode.POV)
+	var generation := int(guest.get("_generation"))
+	guest.call(&"_set_own_drop_aside")
+	(guest.get("_food") as Node).call(&"become_mirror")
+	guest.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var after := DropSave.read(path)
+	var away := _pov_cell(after)
+	var gone_back := bool(away.get("elsewhere", false)) \
+		and int(away.get("generation", 0)) == generation \
+		and not bool(DropSave.cell_of(after, "").get("elsewhere", false))
+	var full_untouched := not before.is_empty() and not after.is_empty() \
+		and var_to_bytes(DropSave.cell_of(after, "")) == var_to_bytes(DropSave.cell_of(before, ""))
+	var own_drop := not after.is_empty() and int(after["drop"]["seed"]) == int(before["drop"]["seed"])
+	guest.queue_free()
+	await get_tree().process_frame
+	var rim: Vector2 = after["drop"]["rim_centre"] if not after.is_empty() else Vector2.INF
+	var home := _view_run(path, RunState.Mode.POV)
+	var home_back := [bool(home.get("_resumed")), int(home.get("_generation")),
+		_view_rim(home) != rim, _view_quiet(home)]
+	home.queue_free()
+	await get_tree().process_frame
+	var full := _view_run(path, RunState.Mode.FULL_VISION)
+	var full_back := [bool(full.get("_resumed")), int(full.get("_generation")),
+		_view_rim(full) == rim, _view_same(_view_cell(full), _views_full_was)]
+	full.queue_free()
+	await get_tree().process_frame
+	_check(("views 5. a cell left in a friend's water goes back to its own view's place:"
+		+ " kept elsewhere in point of view's place (%s), its own drop (%s), full vision's"
+		+ " untouched (%s); point of view comes home [resumed, generation, drop moved under"
+		+ " it, quiet] %s; full vision opens [resumed, generation, in place, as kept] %s") % [
+		str(gone_back), str(own_drop), str(full_untouched), str(home_back), str(full_back)],
+		generation == 6 and gone_back and own_drop and full_untouched
+		and home_back == [true, 6, true, true] and full_back == [true, 4, true, true])
+
+
+## **views 6. The index keeps a generation for each view** (settings.md §6.2,
+## §6.4): through the selected world of a folder of its own, a full-vision keep
+## at the fourth generation writes `generation`, and a point-of-view keep at the
+## sixth writes `generation_pov` beside it and leaves full vision's; the world's
+## lines say its age, then full vision's cell, then point of view's. With the
+## index lost, both come back from the file. A point-of-view death takes point of
+## view's generation away and leaves full vision's.
+func _views_index() -> void:
+	var marker := Drops.selected_in(VIEWS_ROOT)
+	var full := _view_run(marker, RunState.Mode.FULL_VISION)
+	_view_pose(full, 4, 30.0)
+	(full.get("_food") as Node).set("_t", 1830.0)
+	full.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var after_full := _view_index_generations(1)
+	full.queue_free()
+	await get_tree().process_frame
+	var blind := _view_run(marker, RunState.Mode.POV)
+	_view_pose(blind, 6, 24.0)
+	blind.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var after_both := _view_index_generations(1)
+	var lines := Drops.lines_of(Drops.entry_of(Drops.read(VIEWS_ROOT), 1))
+	blind.queue_free()
+	await get_tree().process_frame
+	DirAccess.remove_absolute(VIEWS_ROOT.path_join(Drops.INDEX))
+	var rebuilt: Dictionary = Drops.entry_of(Drops.read(VIEWS_ROOT), 1)["generations"]
+	var dying := _view_run(marker, RunState.Mode.POV)
+	dying.call(&"_die", false, 0.0)
+	dying.call(&"_keep_drop")
+	var after_death := _view_index_generations(1)
+	dying.queue_free()
+	await get_tree().process_frame
+	_check(("views 6. the index keeps a generation for each view, [full vision's, point of"
+		+ " view's] -- -1 for none: after full vision's keep %s, after point of view's %s,"
+		+ " the lines \"%s\"; rebuilt from the file %s; after a point-of-view death %s") % [
+		str(after_full), str(after_both), " / ".join(lines), str(rebuilt), str(after_death)],
+		after_full == [4, -1] and after_both == [4, 6]
+		and lines == PackedStringArray(["30 minutes old", "full vision · fourth generation",
+			"point of view · sixth generation"])
+		and rebuilt == {"": 4, RunState.cell_key(RunState.Mode.POV): 6}
+		and after_death == [4, -1])
+
+
+## **views 7. `V` flips the view in the editor only, and a flipped run keeps
+## nothing** (§9.5): a run posed as an exported build -- `view_flip` off, as every
+## export has it -- is told V by the input path a keyboard uses, and its view does
+## not change: its keep writes its own cell, as ever. In the editor -- `view_flip`
+## on, which every run of the editor's binary has by default -- V flips the view,
+## and the run keeps nothing after it: its file is the bytes it was before the
+## flip, however the run is left.
+func _views_key() -> void:
+	var path := VIEWS_ROOT.path_join("key.save")
+	var probe: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	var by_default := bool(probe.get("view_flip"))
+	probe.free()
+	var exported := _view_run(path, RunState.Mode.FULL_VISION, false)
+	await get_tree().process_frame
+	_ap_key(KEY_V, true)
+	_ap_key(KEY_V, false)
+	await get_tree().process_frame
+	var stayed := int(exported.get("mode")) == RunState.Mode.FULL_VISION \
+		and not bool(exported.get("_view_flipped"))
+	_view_pose(exported, 3, 26.0)
+	exported.notification(NOTIFICATION_APPLICATION_PAUSED)
+	var kept_as_ever := int(DropSave.cell_of(DropSave.read(path), "").get("generation", 0)) == 3
+	exported.queue_free()
+	await get_tree().process_frame
+	var editor := _view_run(path, RunState.Mode.FULL_VISION, true)
+	await get_tree().process_frame
+	var before := FileAccess.get_file_as_bytes(path)
+	_ap_key(KEY_V, true)
+	_ap_key(KEY_V, false)
+	await get_tree().process_frame
+	var flipped := int(editor.get("mode")) == RunState.Mode.POV \
+		and bool(editor.get("_view_flipped"))
+	_view_pose(editor, 9, 20.0)
+	editor.call(&"_set_menu", true)
+	editor.call(&"_set_menu", false)
+	await get_tree().process_frame
+	editor.notification(NOTIFICATION_APPLICATION_PAUSED)
+	await get_tree().process_frame
+	# Leaving the run keeps as a window closing does (`_leave` and the close both
+	# call `_keep_drop`); `_leave` itself would change this probe's scene.
+	editor.notification(NOTIFICATION_WM_CLOSE_REQUEST)
+	var untouched := not before.is_empty() and FileAccess.get_file_as_bytes(path) == before
+	editor.queue_free()
+	await get_tree().process_frame
+	_check(("views 7. V flips the view in the editor only: here view_flip is %s by default,"
+		+ " as the editor's binary has it; posed as an export, V left the view (%s) and its"
+		+ " keep wrote its cell as ever (%s); in the editor, V flipped it (%s), and paused,"
+		+ " left the app and closed, it kept nothing (%s)") % [str(by_default),
+		str(stayed), str(kept_as_ever), str(flipped), str(untouched)],
+		by_default == OS.has_feature("editor") and stayed and kept_as_ever and flipped
+		and untouched)
+
+
+## A run of the game with [param keep], in [param mode], as it opens: its `_ready`
+## run and not a frame after it, so what it opened on is what is read.
+## [param flip] is its `view_flip`.
+func _view_run(keep: String, mode: int, flip := true) -> Node:
+	DirAccess.make_dir_recursive_absolute(VIEWS_ROOT)
+	var run: Node = load("res://game/normal/normal_mode.tscn").instantiate()
+	run.set("mode", mode)
+	run.set("scheme", 0)
+	run.set("keep", keep)
+	run.set("library_at", "")
+	run.set("view_flip", flip)
+	add_child(run)
+	return run
+
+
+## [param run]'s cell, told apart from any other by [param generation] and
+## [param radius].
+func _view_pose(run: Node, generation: int, radius: float) -> void:
+	run.set("_generation", generation)
+	(run.get("_cell") as CellBody).radius = radius
+
+
+## What [param run] opened on: `[resumed, generation, parent, radius]`.
+func _view_opened(run: Node) -> Array:
+	return [bool(run.get("_resumed")), int(run.get("_generation")), int(run.get("_parent")),
+		(run.get("_cell") as CellBody).radius]
+
+
+## Where [param run]'s cell is in its own drop: from the rim's centre.
+func _view_place(run: Node) -> Vector2:
+	return (run.get("_cell") as CellBody).position - _view_rim(run)
+
+
+## **[param run]'s cell as the drop keeps it** ([method _kept_cell]), **its place
+## given from the centre of its drop's rim**, last: a quiet start moves the whole
+## drop under a cell that comes in, and a cell set aside moves with it, so its
+## place in the water is what stays.
+func _view_cell(run: Node) -> Array:
+	var cell := _kept_cell(run)
+	var body: Dictionary = (cell[0] as Dictionary).duplicate()
+	var place: Vector2 = (body["at"] as Vector2) - _view_rim(run)
+	body.erase("at")
+	cell[0] = body
+	cell.append(place)
+	return cell
+
+
+## **[param view]'s cell in [param file], the same way**: `[the cell but its
+## place, its place from the file's rim's centre]`, or `[]` for none.
+static func _view_kept(file: Dictionary, view: String) -> Array:
+	var cell := DropSave.cell_of(file, view) if not file.is_empty() else {}
+	if cell.is_empty():
+		return []
+	var copy: Dictionary = cell.duplicate(true)
+	var at: Vector2 = copy["body"]["at"]
+	(copy["body"] as Dictionary).erase("at")
+	return [copy, at - (file["drop"]["rim_centre"] as Vector2)]
+
+
+## **Whether two cells, as [method _view_cell] or [method _view_kept] give them,
+## are one cell in one place in its water**: to the byte but for the place, and
+## the place to a hundredth -- the drop is moved in 32-bit vectors.
+static func _view_same(a: Array, b: Array) -> bool:
+	if a.is_empty() or a.size() != b.size():
+		return false
+	var n := a.size() - 1
+	return var_to_bytes(a.slice(0, n)) == var_to_bytes(b.slice(0, n)) \
+		and (a[n] as Vector2).distance_to(b[n] as Vector2) < 0.01
+
+
+## The centre of [param run]'s drop's rim.
+func _view_rim(run: Node) -> Vector2:
+	var rim: RefCounted = (run.get("_food") as Node).call(&"basin")
+	return rim.get("center") if rim != null else Vector2.INF
+
+
+## **Whether [param run]'s cell is at a quiet place** (ocean.md §8.1): nothing in
+## its water that could swallow it within dread's reach -- what a quiet start
+## clears round a born cell.
+func _view_quiet(run: Node) -> bool:
+	var food: Node = run.get("_food")
+	var cell: CellBody = run.get("_cell")
+	var mine := cell.swallow_radius()
+	for b: Object in food.get("_cells"):
+		if not bool(b.get("seeded")) or bool(b.get("inert")):
+			continue
+		if float(food.call(&"_gape", b)) <= mine:
+			continue
+		if (b.get("pos") as Vector2).distance_to(cell.position) < FoodField.DREAD_RANGE - 1.0:
+			return false
+	return true
+
+
+## `[full vision's, point of view's]` generation in slot [param slot]'s section of
+## the folder's `drops.cfg`, as the file holds them: -1 for one it does not hold.
+func _view_index_generations(slot: int) -> Array:
+	var config := ConfigFile.new()
+	if config.load(VIEWS_ROOT.path_join(Drops.INDEX)) != OK:
+		return [-1, -1]
+	var section := str(slot)
+	return [int(config.get_value(section, Drops.GENERATION, -1)),
+		int(config.get_value(section, Drops.GENERATION + "_"
+			+ RunState.cell_key(RunState.Mode.POV), -1))]
+
+
+## Nothing of these checks left in `user://`.
+func _forget_views() -> void:
+	if not DirAccess.dir_exists_absolute(VIEWS_ROOT):
+		return
+	for file: String in DirAccess.get_files_at(VIEWS_ROOT):
+		DirAccess.remove_absolute(VIEWS_ROOT.path_join(file))
+	DirAccess.remove_absolute(VIEWS_ROOT)
+
+
 # --- Lineage (docs/design/lineage.md §11.3: pack 2's checks 8, 9 and 10, as 2-1 has them) --
 
 ## **A body's lineage and the body beside it**, read off the body itself: what
@@ -4453,7 +4972,7 @@ func _save_cell_lineage() -> void:
 	var old: Dictionary = kept.duplicate(true)
 	if not old.is_empty():
 		for key: String in DropSave.CELL_LINEAGE:
-			(old["cell"] as Dictionary).erase(key)
+			_pov_cell(old).erase(key)
 		for key: String in DropSave.LINEAGE:
 			(old["drop"]["bodies"] as Dictionary).erase(key)
 	var wrote := DropSave.write(KEEP, old)
@@ -4465,7 +4984,7 @@ func _save_cell_lineage() -> void:
 	await get_tree().process_frame
 	var bad: Dictionary = kept.duplicate(true)
 	if not bad.is_empty():
-		bad["cell"]["id"] = "seven"
+		_pov_cell(bad)["id"] = "seven"
 	var why := DropSave.unusable(bad)
 	_check(("lineage 8. the save, your cell: a run's first is %s -- the drop's next id, nobody's,"
 		+ " generation 1, its own line (%s); left as %s and opened again it is %s; kept"
@@ -9028,7 +9547,7 @@ func _dna_saves() -> void:
 				g["veneneux"] = 2
 				water_body = int((rows["slot"] as PackedInt32Array)[r])
 				break
-		var cellrec: Dictionary = file["cell"]
+		var cellrec: Dictionary = _pov_cell(file)
 		cellrec.erase("loads")
 		var old_dna := {"cytostome": 1, "cirrus": 1, "flagellum": 1, "veneneux": 2}
 		var old_order := PackedStringArray(["cytostome", "cirrus", "flagellum", "veneneux"])
