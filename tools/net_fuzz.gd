@@ -67,6 +67,8 @@ const Invite := preload("res://game/net/invite.gd")
 const NetSession := preload("res://game/net/net_session.gd")
 const Referee := preload("res://game/net/referee.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Every gene's numbers, by stat: the reach an honest call has.
+const Stats := preload("res://game/genes/stats.gd")
 const CORPUS := "res://tools/net_fuzz_corpus.txt"
 ## **The certificate every invite here carries**: made once, its key thrown
 ## away, so it proves nothing and opens nothing -- it is here so a seed's
@@ -644,8 +646,8 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 				Vector2(_rng.randf_range(-900.0, 900.0), _rng.randf_range(-900.0, 900.0)),
 				_rng.randf_range(-1.4, 1.4), _rng.randi_range(0, 7))
 		6:
-			return Wire.shout(seq, at, radius, CellBody.PING_RANGE_BY_TIER[
-				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
+			return Wire.shout(seq, at, radius, Stats.table(&"ping_range")[
+				_rng.randi_range(1, Stats.table(&"ping_range").size() - 1)])
 		7:
 			if from_host:
 				return Wire.pond(seq, _rng.randf(), _pond_bodies(), _pond_loads())
@@ -1043,8 +1045,8 @@ func _guest_frame(next: int, only := "") -> PackedByteArray:
 				_rng.randf_range(-1.4, 1.4), [Wire.STATE_POND, 0, Wire.STATE_OUT
 					| Wire.STATE_POND][_rng.randi_range(0, 2)])
 		4:
-			return Wire.shout(next, at, radius, CellBody.PING_RANGE_BY_TIER[
-				_rng.randi_range(1, CellBody.PING_RANGE_BY_TIER.size() - 1)])
+			return Wire.shout(next, at, radius, Stats.table(&"ping_range")[
+				_rng.randi_range(1, Stats.table(&"ping_range").size() - 1)])
 		5:
 			return Wire.event(next, Wire.EVENT_ENTER, Wire.enter_payload(radius))
 		6:

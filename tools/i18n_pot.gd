@@ -193,6 +193,7 @@ const SCREEN_SCRIPTS := {
 	"readout": "res://game/mechanics/readout.gd",
 	"genome": "res://game/normal/genome.gd",
 	"cell": "res://game/normal/cell.gd",
+	"catalogue": "res://game/genes/catalogue.gd",
 	"i18n": "res://game/i18n/i18n.gd",
 	"drops": "res://game/normal/drops.gd",
 	"cells": "res://game/normal/cells.gd",
@@ -1769,10 +1770,13 @@ func _measure_screens() -> Dictionary:
 	var readout := _script("readout")
 	var genome := _script("genome")
 	var cell := _script("cell")
-	if stats == null or readout == null or genome == null or cell == null:
+	var catalogue := _script("catalogue")
+	if stats == null or readout == null or genome == null or cell == null or catalogue == null:
 		return {}
-	var genes: Array = _script_const(genome, "GENE_ORDER") if _script_const(genome, "GENE_ORDER") != null else []
-	var levelled: Dictionary = _script_const(cell, "LEVELLED") if _script_const(cell, "LEVELLED") != null else {}
+	# Every live gene in the catalogue's order, and the ones that earn levels
+	# (game/genes/catalogue.gd): what the game's own screens can show.
+	var genes: Array = catalogue.call(&"live")
+	var levelled: Array = catalogue.call(&"levelled")
 	var tier_max := int(_script_const(genome, "TIER_MAX"))
 	var divide := float(_script_const(cell, "DIVIDE_RADIUS"))
 	var sep := String(_script_const(readout, "SEP"))

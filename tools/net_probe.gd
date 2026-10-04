@@ -111,6 +111,10 @@ const CellBody := preload("res://game/normal/cell.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## The genes and their numbers by stat (docs/design/gene-catalogue.md): the tables
+## the referee's rules fingerprint, the gift, the born body.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 ## For the run's own numbering -- Life, Split, the division's clocks and the
 ## pond's lines -- which the `pond` section reads off two real runs.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
@@ -2989,7 +2993,7 @@ func _check_referee() -> void:
 ## A referee whose guest has just arrived at [param at] and been seen there:
 ## PERSON with a new body, ENTER, the host's arrival, and a first state frame.
 func _ref_arrived(now: float, at: Vector2, radius: float = CellBody.BASE_RADIUS,
-		tiers: Dictionary = Genome.BORN) -> Referee:
+		tiers: Dictionary = Catalogue.born()) -> Referee:
 	var ref := Referee.new(now)
 	ref.judge_person(now, true, tiers, tiers.keys(), false)
 	ref.judge_enter(now, radius, false)
@@ -3035,17 +3039,17 @@ func _rules_text() -> String:
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
 	# The calls: how far and how often.
-	put.call("cell.PING_RANGE_BY_TIER", CellBody.PING_RANGE_BY_TIER)
-	put.call("cell.PING_PERIOD_BY_TIER", CellBody.PING_PERIOD_BY_TIER)
+	put.call("cell.PING_RANGE_BY_TIER", Stats.table(&"ping_range"))
+	put.call("cell.PING_PERIOD_BY_TIER", Stats.table(&"ping_period"))
 	# The speed and turn tables the caps sit over (`_referee_agrees`).
-	put.call("cell.IMPULSE_SPEED_BY_TIER", CellBody.IMPULSE_SPEED_BY_TIER)
-	put.call("cell.IMPULSE_GAP_MIN_BY_TIER", CellBody.IMPULSE_GAP_MIN_BY_TIER)
+	put.call("cell.IMPULSE_SPEED_BY_TIER", Stats.table(&"impulse_speed"))
+	put.call("cell.IMPULSE_GAP_MIN_BY_TIER", Stats.table(&"impulse_gap_min"))
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
 	put.call("cell.DRAG", CellBody.DRAG)
-	put.call("cell.PUSH_ACCEL_BY_TIER", CellBody.PUSH_ACCEL_BY_TIER)
-	put.call("cell.DASH_SPEED_BY_TIER", CellBody.DASH_SPEED_BY_TIER)
+	put.call("cell.PUSH_ACCEL_BY_TIER", Stats.table(&"push_accel"))
+	put.call("cell.DASH_SPEED_BY_TIER", Stats.table(&"dash_speed"))
 	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
-	put.call("cell.TURN_RATE_BY_TIER", CellBody.TURN_RATE_BY_TIER)
+	put.call("cell.TURN_RATE_BY_TIER", Stats.table(&"turn_rate"))
 	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
 	# food.gd: the grace, and what a contact and a death are called.
 	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
@@ -3068,28 +3072,35 @@ func _rules_text() -> String:
 	put.call("food.swallows_player(not hunting, on contact)",
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",
-		FoodField.armoured_size(30.0, CellBody.ARMOR_BY_TIER[2], FoodField.ARMOUR_SWALLOW))
-	# normal_mode.gd: the sister's ring and the free senses.
+		FoodField.armoured_size(30.0, Stats.at(&"armor", 2), FoodField.ARMOUR_SWALLOW))
+	# normal_mode.gd: the sister's ring; and the free senses, the catalogue's
+	# `gift` tag since there was a catalogue, under the name they had.
 	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
-	put.call("run.FIRST_SENSES", NormalMode.FIRST_SENSES)
-	# genome.gd: the tiers, a born body, and the gift's tier -- a literal in
-	# `_express_gift`, so it is measured on a real genome.
+	put.call("run.FIRST_SENSES", Catalogue.tagged(Catalogue.GIFT))
+	# genome.gd: the tiers, a born body -- each organ's own `born` -- and the
+	# gift's tier, a literal in `_express_gift`, so it is measured on a real
+	# genome.
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
-	put.call("genome.BORN", Genome.BORN)
+	put.call("genome.BORN", Catalogue.born())
 	var genome: Node = Genome.new()
-	genome.express(Genome.BORN.duplicate(), NormalMode.BORN_ORDER)
+	genome.express(Catalogue.born().duplicate(), Catalogue.born_order())
 	genome.gift(&"stigma")
 	genome.place(0)
 	put.call("genome.gift_tier", int((genome.tiers() as Dictionary).get(&"stigma", 0)))
 	genome.free()
-	# referee.gd: its own limits, and its copies of the run's numbers.
+	# referee.gd: its own limits, and its copies of the run's numbers. **The
+	# gift's senses are no copy any more**: the referee reads the catalogue's
+	# `gift` tag (gene-catalogue.md §11.1), so its line is written from there,
+	# under the name and in the place it always had.
+	var referee: Dictionary = (Referee as Script).get_script_constant_map()
 	for name: String in ["MOVE_RATE", "MOVE_HOLD", "MOVE_SLACK", "TURN_RATE", "TURN_HOLD",
 			"TURN_SLACK", "SPEED_MAX", "TURNING_MAX", "RADIUS_SLACK", "DAUGHTER_RADIUS",
 			"OUT_STILL", "BIRTH_WAIT", "SISTER_DISTANCE", "SISTER_RING", "SHOUT_REACH",
 			"SHOUT_PAST", "SHOUT_BANK", "SHOUT_EARLY", "ENTER_BANK", "ENTER_EVERY",
 			"RADIUS_EPSILON", "PERSON_RATE", "PERSON_BANK", "FIRST_SENSES", "STALE_FOR",
 			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
-		put.call("referee." + name, (Referee as Script).get_script_constant_map()[name])
+		put.call("referee." + name, Catalogue.tagged(Catalogue.GIFT) if name == "FIRST_SENSES"
+			else referee[name])
 	return "\n".join(lines)
 
 
@@ -3117,23 +3128,29 @@ static func _rule_value(value: Variant) -> String:
 ## **The numbers the referee writes out, held to where they come from**, and its
 ## caps held over the fastest and the hardest-turning bodies the tables make.
 func _referee_agrees() -> void:
-	var senses: Array = []
-	for gene: StringName in NormalMode.FIRST_SENSES:
-		senses.append(gene)
-	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
-	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
-		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
-		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
-		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	# **The gift's senses are the run's own**: every live gene the referee takes
+	# as a born body's one gift is one the run can give, and no other.
+	var senses := Catalogue.tagged(Catalogue.GIFT)
+	var gifts := not senses.is_empty()
+	for gene: StringName in Catalogue.live():
+		var after := Catalogue.born().duplicate()
+		after[gene] = 1
+		gifts = gifts and Referee._is_gift(Catalogue.born(), after) \
+			== (senses.has(gene) and not Catalogue.born().has(gene))
+	var top := Stats.table(&"impulse_speed").size() - 1
+	var peak := Stats.at(&"impulse_speed", top) \
+		/ (1.0 - exp(-CellBody.DRAG * Stats.at(&"impulse_gap_min", top))) \
+		+ Stats.at(&"push_accel", top) / CellBody.DRAG \
+		+ Stats.at(&"dash_speed", top) / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
 	# **The hardest turn**: a top-tier cirrus flat out, the drift at its most, and
 	# an impulse's kick to the nose as often as a top-tier flagellum beats.
-	var steer := CellBody.TURN_RATE_BY_TIER[CellBody.TURN_RATE_BY_TIER.size() - 1] \
+	var steer := Stats.at(&"turn_rate", Stats.table(&"turn_rate").size() - 1) \
 		+ CellBody.WANDER_RATE
-	var turn := steer + CellBody.IMPULSE_KICK / CellBody.IMPULSE_GAP_MIN_BY_TIER[top]
+	var turn := steer + CellBody.IMPULSE_KICK / Stats.at(&"impulse_gap_min", top)
 	_says(is_equal_approx(Referee.SISTER_DISTANCE, NormalMode.SISTER_DISTANCE)
 			and is_equal_approx(Referee.DAUGHTER_RADIUS,
 				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
-			and Array(Referee.FIRST_SENSES) == senses
+			and gifts
 			and Referee.SPEED_MAX > peak and Referee.MOVE_RATE > peak
 			and Referee.TURN_RATE > turn and Referee.TURNING_MAX > steer,
 		"referee: its ring (%.0f), a daughter's r%.3f and the gift's four senses are"
@@ -3194,11 +3211,11 @@ func _referee_tier_three() -> void:
 	# **And at the bound itself.** cell.gd's own physics never lines every
 	# speed-up up at its peak at once, so the body above tops out short of it; a
 	# body held at the stacked peak the tables make, straight on, is the bound.
-	var top := CellBody.IMPULSE_SPEED_BY_TIER.size() - 1
-	var peak := CellBody.IMPULSE_SPEED_BY_TIER[top] \
-		/ (1.0 - exp(-CellBody.DRAG * CellBody.IMPULSE_GAP_MIN_BY_TIER[top])) \
-		+ CellBody.PUSH_ACCEL_BY_TIER[top] / CellBody.DRAG \
-		+ CellBody.DASH_SPEED_BY_TIER[top] / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	var top := Stats.table(&"impulse_speed").size() - 1
+	var peak := Stats.at(&"impulse_speed", top) \
+		/ (1.0 - exp(-CellBody.DRAG * Stats.at(&"impulse_gap_min", top))) \
+		+ Stats.at(&"push_accel", top) / CellBody.DRAG \
+		+ Stats.at(&"dash_speed", top) / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
 	var held := _ref_straight(peak, 60.0, 26926)
 	_says(int(fouls[0]) == 0 and int(fouls[2]) > 1000 and int(fouls[3]) >= 3
 			and int(held[0]) == 0 and int(held[1]) > 900,
@@ -3219,7 +3236,7 @@ func _ref_straight(speed: float, seconds: float, dice: int) -> Array:
 	var rng := RandomNumberGenerator.new()
 	rng.seed = dice
 	var ref := Referee.new(0.0)
-	ref.judge_person(0.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	ref.judge_person(0.0, true, Catalogue.born(), Catalogue.born().keys(), false)
 	ref.judge_enter(0.0, CellBody.BASE_RADIUS, false)
 	ref.arrive(0.0, Vector2.ZERO, CellBody.BASE_RADIUS)
 	var step := 1.0 / 60.0
@@ -3376,7 +3393,7 @@ func _ref_flight(rng: RandomNumberGenerator) -> float:
 ## that stalls for 3 s, a tier-3 body held after 1.2 s of the quiet, as a
 ## guest's run holds it: no foul either.
 func _referee_silence() -> void:
-	var quiet := _ref_swim_now(Genome.BORN, 12.0, 3.0)
+	var quiet := _ref_swim_now(Catalogue.born(), 12.0, 3.0)
 	var t := 0.0
 	var at := Vector2.ZERO
 	var ref := _ref_arrived(t, at)
@@ -3486,8 +3503,8 @@ func _referee_dividing() -> void:
 	var again := ref.judge_sister(4.05, home + Vector2(0.0, 560.0), Referee.DAUGHTER_RADIUS,
 		true)
 	var again_said := ref.take_fouls()
-	var born := ref.judge_person(4.1, true, Genome.BORN, Genome.BORN.keys(), true)
-	var twice := ref.judge_person(4.2, true, Genome.BORN, Genome.BORN.keys(), true)
+	var born := ref.judge_person(4.1, true, Catalogue.born(), Catalogue.born().keys(), true)
+	var twice := ref.judge_person(4.2, true, Catalogue.born(), Catalogue.born().keys(), true)
 	var twice_said := _ref_rules(ref.take_fouls())
 	var daughter: Array = ref.claim(4.3, home, 0.0, Referee.DAUGHTER_RADIUS, Vector2.ZERO,
 		0.0, false)
@@ -3708,12 +3725,12 @@ func _referee_unseen() -> void:
 ## body every build describes after a death, never fouled.
 func _referee_bodies() -> void:
 	var ref := _ref_arrived(0.0, Vector2.ZERO)
-	var early := ref.judge_person(1.0, true, Genome.BORN, Genome.BORN.keys(), true)
+	var early := ref.judge_person(1.0, true, Catalogue.born(), Catalogue.born().keys(), true)
 	var early_said := ref.take_fouls()
 	var bigger := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 	var escalated := ref.judge_person(2.0, false, bigger, bigger.keys(), true)
 	var escalated_said := _ref_rules(ref.take_fouls())
-	var gifted := Genome.BORN.duplicate()
+	var gifted := Catalogue.born().duplicate()
 	gifted[&"ampulla"] = 1
 	var gift := ref.judge_person(3.0, false, gifted, gifted.keys(), true)
 	var gift_clean := ref.take_fouls().is_empty()
@@ -3749,7 +3766,7 @@ func _referee_bodies() -> void:
 	# The same, when the dead body was a born one with its gift: it looks like a
 	# gift, and the born body said after it is still the body, and the real gift
 	# after that is still taken.
-	var lookalike := Genome.BORN.duplicate()
+	var lookalike := Catalogue.born().duplicate()
 	lookalike[&"stigma"] = 1
 	var alike := _ref_quirk(lookalike, true)
 	# And the stale body landing after the first frame, its resend late.
@@ -3762,10 +3779,11 @@ func _referee_bodies() -> void:
 	var rate := Referee.new(0.0)
 	var taken := 0
 	for i in 8:
-		if not rate.judge_person(0.0, true, Genome.BORN, Genome.BORN.keys(), false).is_empty():
+		if not rate.judge_person(0.0, true, Catalogue.born(), Catalogue.born().keys(),
+				false).is_empty():
 			taken += 1
 	var rate_said := _ref_rules(rate.take_fouls())
-	var refilled := rate.judge_person(1.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	var refilled := rate.judge_person(1.0, true, Catalogue.born(), Catalogue.born().keys(), false)
 	_says(taken == int(Referee.PERSON_BANK) and rate_said == [Referee.BODY]
 			and refilled == [true],
 		"referee: of eight bodies said at once, %d are taken and the rest foul" % taken
@@ -3779,7 +3797,7 @@ func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
 	var ref := _ref_arrived(0.0, Vector2.ZERO)
 	ref.judge_died(5.0, FoodField.Cause.STARVED, 0, true)
 	ref.take_fouls()
-	ref.judge_person(6.0, true, Genome.BORN, Genome.BORN.keys(), false)
+	ref.judge_person(6.0, true, Catalogue.born(), Catalogue.born().keys(), false)
 	ref.judge_enter(6.0, CellBody.BASE_RADIUS, false)
 	ref.arrive(6.0, Vector2(480.0, 0.0), CellBody.BASE_RADIUS)
 	if early:
@@ -3788,10 +3806,10 @@ func _ref_quirk(dead_body: Dictionary, early: bool) -> Array:
 		false)
 	if not early:
 		ref.judge_person(6.25, false, dead_body, dead_body.keys(), true)
-	ref.judge_person(6.3, false, Genome.BORN, Genome.BORN.keys(), true)
-	var clean := ref.take_fouls().is_empty() and ref.worn == Genome.BORN
+	ref.judge_person(6.3, false, Catalogue.born(), Catalogue.born().keys(), true)
+	var clean := ref.take_fouls().is_empty() and ref.worn == Catalogue.born()
 	# Its real gift, later, is still taken.
-	var gifted := Genome.BORN.duplicate()
+	var gifted := Catalogue.born().duplicate()
 	gifted[&"ocellus"] = 1
 	var gift := ref.judge_person(12.0, false, gifted, gifted.keys(), true)
 	clean = clean and gift == [false] and ref.take_fouls().is_empty()
@@ -3877,7 +3895,7 @@ func _referee_deaths() -> void:
 ## **Shouts** (the socket-free half of R10): from where it swims, at its size,
 ## reaching what it wears, as often as that calls.
 func _referee_shouts() -> void:
-	var worn := Genome.BORN.duplicate()
+	var worn := Catalogue.born().duplicate()
 	worn[&"ampulla"] = 1
 	var ref := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
 	var honest := ref.judge_shout(1.0, Vector2(0.0, -20.0), 26.0, 1100.0, true)
@@ -3904,7 +3922,7 @@ func _referee_shouts() -> void:
 		if ref4.judge_shout(1.0, Vector2.ZERO, 26.0, 1100.0, true):
 			heard += 1
 	var rate_said := _ref_rules(ref4.take_fouls())
-	var later := ref4.judge_shout(1.0 + CellBody.PING_PERIOD_BY_TIER[1], Vector2.ZERO, 26.0,
+	var later := ref4.judge_shout(1.0 + Stats.at(&"ping_period", 1), Vector2.ZERO, 26.0,
 		1100.0, true)
 	# Alone, not in the water here: only the rate.
 	var ref5 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
@@ -3912,7 +3930,7 @@ func _referee_shouts() -> void:
 	# **A call reaching nothing**, which every build sends on coming back from the
 	# black having worn an organ (its water pulses on the dead cell's period with
 	# the born body's reach): not heard, not charged, never a foul.
-	var ref6 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, Genome.BORN)
+	var ref6 := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, Catalogue.born())
 	var bank := float(ref6.shouts.tokens)
 	var organless := ref6.judge_shout(1.0, Vector2.ZERO, 26.0, 0.0, true)
 	var organless_clean: bool = ref6.take_fouls().is_empty() \
@@ -4057,12 +4075,12 @@ func _referee_gaps() -> void:
 	var killed_said := _ref_rules(killed.take_fouls())
 	# A call no body could make, from a guest with no body here; then an honest
 	# one from the biggest body with the farthest organ.
-	var worn := Genome.BORN.duplicate()
+	var worn := Catalogue.born().duplicate()
 	worn[&"ampulla"] = 1
 	var caller := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, worn)
 	var huge := caller.judge_shout(1.0, Vector2.ZERO, 3.0e38, 3.0e38, false)
 	var huge_said := _ref_rules(caller.take_fouls())
-	var reach_max: float = CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1]
+	var reach_max: float = Stats.at(&"ping_range", Stats.table(&"ping_range").size() - 1)
 	var biggest := caller.judge_shout(2.0, Vector2(9000.0, 0.0), CellBody.DIVIDE_RADIUS,
 		reach_max, false)
 	var biggest_clean := caller.take_fouls().is_empty()
@@ -4078,13 +4096,13 @@ func _referee_gaps() -> void:
 			farmed += 1
 	farm.take_fouls()
 	var calls_itself := int(Referee.SHOUT_BANK) + 2 \
-		+ int(30.0 / (CellBody.PING_PERIOD_BY_TIER[1] - Referee.SHOUT_EARLY))
+		+ int(30.0 / (Stats.at(&"ping_period", 1) - Referee.SHOUT_EARLY))
 	# The last body's reach: while its calls may still be landing, and no longer.
-	var three := Genome.BORN.duplicate()
+	var three := Catalogue.born().duplicate()
 	three[&"ampulla"] = 3
 	var old := _ref_arrived(0.0, Vector2.ZERO, CellBody.BASE_RADIUS, three)
 	old.died(1.0)
-	old.judge_person(1.5, true, Genome.BORN, Genome.BORN.keys(), false)
+	old.judge_person(1.5, true, Catalogue.born(), Catalogue.born().keys(), false)
 	old.judge_enter(1.5, CellBody.BASE_RADIUS, false)
 	old.arrive(1.5, Vector2.ZERO, CellBody.BASE_RADIUS)
 	old.claim(1.6, Vector2.ZERO, 0.0, CellBody.BASE_RADIUS, Vector2.ZERO, 0.0, false)
@@ -4362,7 +4380,7 @@ func _check_run() -> void:
 	# TRACK_GAP -- two seconds from the last frame -- for the step below.
 	await _hold(cell, Vector2.ZERO, 0.0, 1.45)
 	var ghost: Dictionary = view._peer
-	var ladder := CellBody.IMPULSE_SPEED_BY_TIER
+	var ladder := Stats.table(&"impulse_speed")
 	var top: float = ladder[ladder.size() - 1]
 	var silent: float = mine.quiet_for()
 	var doubt: float = float(ghost["doubt"])
@@ -4605,7 +4623,7 @@ func _pond_rig(from_seed: int, radius: float, tiers: Dictionary,
 	field.ping_bearing = 0.0
 	field.ping_through = cell.ping_through()
 	field.ping_tier = cell.ping_tier()
-	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[mini(cell.extra(&"palp"), 3)]
+	field.touch_range = Stats.at(&"touch_range", mini(cell.extra(&"palp"), 3))
 	_pond_nodes.append_array([genome, cell, field])
 	_pond_fields.append(field)
 	return field
@@ -4743,7 +4761,7 @@ func _pond_person(field: Node, at: Vector2, radius: float, tiers: Dictionary,
 func _pond_swallow_rule() -> void:
 	var at := Vector2(3000.0, 0.0)
 	var hunter_genes := {&"cytostome": 3, &"flagellum": 1}
-	var gape := CellBody.gape_of(3, 30.0)
+	var gape := CellBody.gape_of({&"cytostome": 3}, 30.0)
 	# Committed, and they fit: gone, in the frame it happens.
 	var field := _pond_rig(11, 30.0, POND_SENSES)
 	field.open_pond()
@@ -4781,21 +4799,21 @@ func _pond_swallow_rule() -> void:
 	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
 	var expected := 0.0
 	if not bit.is_empty():
-		expected = CellBody.bite_damage(3, gape, 28.0, 2,
+		expected = CellBody.bite_damage(Stats.at(&"bite", 3), gape, 28.0, Stats.at(&"armor", 2),
 			_pond_flank(0.0, at, bit[2] as Vector2))
 	# The poison is the stacks the table gives, worn for at most the one step the
 	# body may have taken since; nothing yet in its wound but what that step wore.
-	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var poison_n := Stats.at(&"poison_stacks", 2)
 	var taken := float((b.loads as PackedFloat64Array)[0])
 	_says(field.person() != null and _pond_said(said, "died").is_empty()
-			and not bit.is_empty() and 28.0 * CellBody.ARMOR_BY_TIER[2] < gape,
+			and not bit.is_empty() and 28.0 * Stats.at(&"armor", 2) < gape,
 		"pond-field: an uncommitted cell whose gape fits them only bites")
 	_says(not bit.is_empty() and absf(float(person.wound) - expected) < 1e-9
 			and expected > 0.0 and taken <= poison_n
 			and taken >= poison_n * exp(-POND_STEP / CellBody.DOSE_TAU_BY_KIND[0]) - 1e-9
 			and float(b.wound) < 0.001
 			and is_equal_approx(float(bit[3]), clampf(expected
-				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)),
+				/ Stats.at(&"bite", 3), FoodField.BITE_HIT_FLOOR, 1.0)),
 		"pond-field: the chew is bite_damage for that gape, pellicle and flank"
 		+ " (%.5f, astern), and the biter takes %.3f stacks of their poison, its"
 		% [float(person.wound), taken] + " wound %.5f" % float(b.wound))
@@ -4822,7 +4840,7 @@ func _pond_swallow_rule() -> void:
 			float((b.loads as PackedFloat64Array)[0])]))
 	field._process(POND_STEP)
 	died = _pond_said(said, "died")
-	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
+	var swallow_n := Stats.at(&"swallow_stacks", 1)
 	var dosed := float(at_death[0][2]) if at_death.size() == 1 else 0.0
 	_says(field.person() == null and not died.is_empty()
 			and int(died[1]) == FoodField.Cause.SWALLOWED
@@ -4839,7 +4857,7 @@ func _pond_swallow_rule() -> void:
 
 func _pond_friends() -> void:
 	# This cell, a tier-3 mouth (gape 42), nose to the person's tail.
-	var gape := CellBody.gape_of(3, 30.0)
+	var gape := CellBody.gape_of({&"cytostome": 3}, 30.0)
 	var mouth := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
 	var field := _pond_rig(21, 30.0, mouth)
 	field.open_pond()
@@ -4866,11 +4884,11 @@ func _pond_friends() -> void:
 	said = _pond_listen(field)
 	field._process(POND_STEP)
 	var person: Object = field.bodies()[FoodField.PERSON_SLOT]
-	var expected := CellBody.bite_damage(3, gape, 28.0, 3,
+	var expected := CellBody.bite_damage(Stats.at(&"bite", 3), gape, 28.0, Stats.at(&"armor", 3),
 		_pond_flank(0.0, at, Vector2.ZERO))
 	var felt := _pond_said(said, "bitten")
 	var chewed := _pond_said(said, "touched", FoodField.Contact.BITTEN)
-	_says(field.person() != null and 28.0 * CellBody.ARMOR_BY_TIER[3] > gape
+	_says(field.person() != null and 28.0 * Stats.at(&"armor", 3) > gape
 			and absf(float(person.wound) - expected) < 1e-9 and not felt.is_empty()
 			and not chewed.is_empty() and int(chewed[4]) == FoodField.By.FRIEND,
 		"pond-field: armoured past this gape, the friend is chewed instead"
@@ -4884,16 +4902,16 @@ func _pond_friends() -> void:
 	said = _pond_listen(field2)
 	field2._process(POND_STEP)
 	var cell: Object = field2.get("_cell")
-	var their_gape := CellBody.gape_of(1, 28.0)
-	var theirs := CellBody.bite_damage(1, their_gape, 30.0, 0,
-		absf(cell.bearing_to(at)))
+	var their_gape := CellBody.gape_of({&"cytostome": 1}, 28.0)
+	var theirs := CellBody.bite_damage(Stats.at(&"bite", 1), their_gape, 30.0,
+		Stats.at(&"armor", 0), absf(cell.bearing_to(at)))
 	var hit := _pond_said(said, "bitten")
 	var told := _pond_said(said, "touched", FoodField.Contact.BITTEN)
 	_says(field2.person() != null and 30.0 > their_gape
 			and absf(float(cell.wound) - theirs) < 1e-9 and not hit.is_empty()
 			and not told.is_empty()
 			and is_equal_approx(float(told[3]), clampf(theirs
-				/ CellBody.BITE_BY_TIER[3], FoodField.BITE_HIT_FLOOR, 1.0)
+				/ Stats.at(&"bite", 3), FoodField.BITE_HIT_FLOOR, 1.0)
 				* FoodField.BITE_FELT_SHARE),
 		"pond-field: and the friend's mouth chews this cell back (%.5f, astern),"
 		% float(cell.wound) + " each side feeling its own share")
@@ -4904,8 +4922,8 @@ func _pond_friends() -> void:
 	# loads are the run's, and exact; the friend's are the water's to wear
 	# ([method _pond_worn]).
 	var venom := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	var venom_n := CellBody.VENOM_STACKS_BY_TIER[2]
-	var poison_n := CellBody.POISON_STACKS_BY_TIER[2]
+	var venom_n := Stats.at(&"venom_stacks", 2)
+	var poison_n := Stats.at(&"poison_stacks", 2)
 	var fired: Array = []
 	field = _pond_rig(24, 30.0, venom)
 	field.toxins = FoodField.toxins_of(venom,
@@ -5021,7 +5039,7 @@ func _pond_to_the_death() -> void:
 	# **This cell swallows a poisonous friend** (dna-slots.md §7.1, owner's row 5):
 	# they are eaten -- SWALLOWED by the friend -- and this cell takes the swallow's
 	# dose, felt as the meal, before the meal is told; nobody is stung any more.
-	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[1]
+	var swallow_n := Stats.at(&"swallow_stacks", 1)
 	var field := _pond_rig(81, 30.0, big)
 	field.open_pond()
 	_pond_person(field, at, 28.0, {&"cytostome": 1, &"flagellum": 1, &"veneneux": 1})
@@ -5120,7 +5138,7 @@ func _pond_to_the_death() -> void:
 	field._process(POND_STEP)
 	_says(not died.is_empty() and int(died[1]) == FoodField.Cause.CHEWED
 			and int(died[2]) == FoodField.By.FRIEND and not _pond_said(said, "eaten").is_empty()
-			and alive_after and bite_n == CellBody.POISON_STACKS_BY_TIER[3]
+			and alive_after and bite_n == Stats.at(&"poison_stacks", 3)
 			and not _pond_said(said, "killed").is_empty()
 			and int(field.died_of) == FoodField.Cause.POISONED
 			and int(field.died_by) == FoodField.By.FRIEND,
@@ -5887,7 +5905,7 @@ func _drop_pond_rules() -> void:
 	var b := _pond_pose(field, 5, 30.0, {&"cytostome": 3, &"flagellum": 1}, from,
 		_pond_face(from, at))
 	b.hunger = 0.8
-	var gape := CellBody.gape_of(3, 30.0)
+	var gape := CellBody.gape_of({&"cytostome": 3}, 30.0)
 	var reaches := Cilia.mouth_touches(b.pos, b.heading, 30.0, gape, at, CellBody.BASE_RADIUS)
 	field._process(POND_STEP)
 	var died := _pond_said(said, "died")
@@ -7462,8 +7480,8 @@ func _check_pond() -> void:
 	# Kept, less what the body spent while the host went: the second the wait
 	# allows at rest, and one stroke, which at the thirty-second pace is up to
 	# 0.06 of the bar on its own (energy.md §7).
-	var spent_max: float = (1.0 + CellBody.STROKE_COST * CellBody.IMPULSE_SPEED_BY_TIER[
-		CellBody.IMPULSE_SPEED_BY_TIER.size() - 1]) / float(guest_met.HUNGER_SECONDS)
+	var spent_max: float = (1.0 + CellBody.STROKE_COST * Stats.at(&"impulse_speed", 
+		Stats.table(&"impulse_speed").size() - 1)) / float(guest_met.HUNGER_SECONDS)
 	var gained := float(now_kept[3]) - float(kept[3])
 	_says(took >= 0.0 and took_frames <= _pond_budget(0.1) and fresh
 			and is_equal_approx(float(kept[0]), float(now_kept[0]))
@@ -7888,7 +7906,7 @@ func _check_pond_referee() -> void:
 	# **R5: OUT at r30**, after the one meal the host fed it: kept in the water,
 	# fouled, and bitten there all the same.
 	var tip := CellBody.BASE_RADIUS * Cilia.OVOID_ALONG * Cilia.GAPE_SEAT \
-		+ CellBody.gape_of(1, CellBody.BASE_RADIUS) * Cilia.GAPE_BULGE
+		+ CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS) * Cilia.GAPE_BULGE
 	var mouth_at: Vector2 = at + Vector2(0.0, -tip)
 	var morsel := _pond_pose(host_food, 4, 7.0, {}, mouth_at, 0.0)
 	var morsel_serial := int(morsel.serial)
@@ -8140,7 +8158,7 @@ func _check_pond_referee() -> void:
 	cheat.join("127.0.0.1")
 	await _until_link(cheat, NetSession.Link.TOGETHER)
 	var lie := [Vector2.ZERO, 0.0, CellBody.BASE_RADIUS, false]
-	var in_water := await _ref_by_hand(cheat, Genome.BORN, Genome.BORN.keys(), lie,
+	var in_water := await _ref_by_hand(cheat, Catalogue.born(), Catalogue.born().keys(), lie,
 		host_food, host_pin)
 	lie[2] = 40.0
 	var cut := await _ref_until(func() -> bool:
@@ -8955,7 +8973,7 @@ func _dash_onset(other: Node, view: Node, cell: Node, rest: Vector2) -> Array:
 		_pin(cell)
 		await get_tree().process_frame
 	var drawn_rest: Vector2 = view._peer["at"]
-	var burst := Vector2(0.0, -1.0) * CellBody.DASH_SPEED_BY_TIER[1]
+	var burst := Vector2(0.0, -1.0) * Stats.at(&"dash_speed", 1)
 	var levels: Array[float] = [2.0, 20.0]
 	var body_at: Array[float] = [INF, INF]
 	var drawn_at: Array[float] = [INF, INF]
@@ -9530,7 +9548,7 @@ func _check_server() -> void:
 	# and after: 13 bodies swallowed (r30 to r34), and once off the run with no
 	# growth. So nothing within its mouth's reach, and 60 more: seconds of drift
 	# for anything outside, where the wait takes a snapshot or two.
-	var hunter_gape := CellBody.gape_of(3, 30.0)
+	var hunter_gape := CellBody.gape_of({&"cytostome": 3}, 30.0)
 	_pond_clear_line(food, held_at, held_at, Cilia.mouth_reach(30.0, hunter_gape)
 		+ hunter_gape * Cilia.MOUTH_BITE + 60.0)
 	# **And nothing else coming for the other guest** (automation.md §5.3). The
