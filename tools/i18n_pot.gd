@@ -127,7 +127,8 @@ const LIST_AT_MOST := 40
 ## word after `with` is the text itself and has a digit in it: `99`, `80%`.
 const FILL_TABLES := {"word": "WORDS", "way": "PATH_TITLES", "copies": "COPIES",
 	"sense": "GENE_SENSES", "action": "GENE_SAYS", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
-	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES"}
+	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES",
+	"name": "CELL_NAMES", "world": "DEFAULT_NAMES"}
 ## How the template says each table's entry, the first time and when it comes again.
 const FILL_SAYS := {
 	"word": ["your widest gene word", "your second widest"],
@@ -141,6 +142,8 @@ const FILL_SAYS := {
 		"your second widest"],
 	"already": ["your widest \"already steers\" phrase", "your second widest"],
 	"always": ["your widest \"always swims\" phrase", "your second widest"],
+	"name": ["your widest default name of a cell", "your second widest"],
+	"world": ["your widest default name of a world", "your second widest"],
 }
 
 ## **The lines the game composes from several messages and draws as one** (SCREENS):
@@ -155,14 +158,26 @@ const NUMBERS_ROOM := 650
 const NUMBERS_SIZE := 14
 const CAPTION_ROOM := 560
 const CAPTION_SIZE := 15
-## **A world's lines in "your worlds"** (docs/design/settings.md §4.3, §7): its age, and
-## under it a line for each view that keeps a cell in it (ocean.md §9.5), the view and the
-## cell's generation joined with a middle dot (game/normal/drops.gd's `lines_of`, where a
-## world is a drop), each a line of its own under the world's name at 15 px. The menu is
-## 640 px; less its margins, the row's two 112 px buttons and their gaps, and the row's
-## 52 px for the mark and 16 at the right, 280 are left, and a longer line ends in "…".
+## **A world's line in "your worlds"** (docs/design/settings.md §4.3; cells-ux.md §5): its
+## age, alone (game/normal/drops.gd's `lines_of`, where a world is a drop), under the
+## world's name at 15 px. The menu is 640 px; less its margins, the row's two 112 px
+## buttons and their gaps, and the row's 52 px for the mark and 16 at the right, 280 are
+## left, and a longer line ends in "…".
 const STATS_ROOM := 280
 const STATS_SIZE := 15
+## **A cell's lines** (docs/design/cells-ux.md §1.2, §2.2, §3.2, §6), built with the game's
+## own game/normal/cells.gd: the line under a view's name on its button has 420 px at 15
+## -- the button's 460 less its margins -- and its name alone may give way to "…", so the
+## line is measured with every default name and has to fit; a row's two lines in "your
+## cells" have the worlds' row's 280 plus the 112 of the missing button and its gap, 402;
+## the detailed view's `Then` wraps, in a column 280 px wide, onto two lines and no more;
+## and the sheet's caption, `your cells · <view>`, has the sheet's 592 at 16.
+const CELL_LINE_ROOM := 420
+const CELL_ROW_ROOM := 402
+const CELL_THEN_ROOM := 280
+const CELL_THEN_LINES := 2
+const CELL_CAPTION_ROOM := 592
+const CELL_CAPTION_SIZE := 16
 ## **An instinct's row on the programs page** (docs/design/automation-ux.md §8,
 ## `ROW_ROOM`): for every sense, its widest test on each value it carries and the
 ## widest action, laid out as the page lays them at 1280 -- a row 856 px wide --
@@ -180,6 +195,7 @@ const SCREEN_SCRIPTS := {
 	"cell": "res://game/normal/cell.gd",
 	"i18n": "res://game/i18n/i18n.gd",
 	"drops": "res://game/normal/drops.gd",
+	"cells": "res://game/normal/cells.gd",
 	"programs": "res://game/normal/programs_page.gd",
 }
 
@@ -1663,6 +1679,9 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 		_problem(result, shown, ("a world's line in \"your worlds\" is %d px wide in %d px type; the room is"
 			+ " %d px, and a longer line ends in \"…\": \"%s\"") % [ceili(float(line[0])), STATS_SIZE,
 				STATS_ROOM, _short(String(line[1]))], true)
+	var cells: Dictionary = now["cells"]
+	for problem: String in _cell_problems(cells):
+		_problem(result, shown, problem, true)
 	var row: Array = now["row"]
 	if float(row[0]) < ROW_ROOM:
 		_problem(result, shown, ("an instinct's row on the programs page leaves %d px of arc on %s"
@@ -1676,10 +1695,11 @@ func _lint_screens(result: Dictionary, shown: String, locale: String, translatio
 	var rows: Array = now["numbers"]
 	var tightest := String((rows[0] as Array)[2]) if not rows.is_empty() else "none"
 	return ("built with the game's own code: numbers lines at most %d px of %d (%s), the pause caption"
-		+ " at most %d px of %d, a world's line at most %d px of %d, an instinct's row %d px of arc"
-		+ " (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [ceili(widest),
+		+ " at most %d px of %d, a world's line at most %d px of %d, %s, an instinct's row %d px of"
+		+ " arc (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [ceili(widest),
 		NUMBERS_ROOM, tightest, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
-		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM]
+		_cells_said(cells), floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])),
+		TRIGGER_LINE_ROOM]
 
 
 ## The composed lines in English, measured once, with the line that says so; a line that
@@ -1713,6 +1733,10 @@ func _english_screens() -> Dictionary:
 		print("[i18n] PROBLEM English: a world's line is %d px wide in %d px type; the room is %d px: \"%s\"" % [
 			ceili(float(line[0])), STATS_SIZE, STATS_ROOM, String(line[1])])
 		_english_problems += 1
+	var cells: Dictionary = now["cells"]
+	for problem: String in _cell_problems(cells):
+		print("[i18n] PROBLEM English: %s" % problem)
+		_english_problems += 1
 	var row: Array = now["row"]
 	if float(row[0]) < ROW_ROOM:
 		print("[i18n] PROBLEM English: an instinct's row leaves %d px of arc on %s; it needs %d" % [
@@ -1724,10 +1748,11 @@ func _english_screens() -> Dictionary:
 			ceili(float(trigger[0])), TRIGGER_LINE_ROOM, String(trigger[1])])
 		_english_problems += 1
 	print(("[i18n] the lines the game composes, in English: numbers lines at most %d px of %d,"
-		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, an instinct's"
-		+ " row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px of %d") % [
-		ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM, ceili(float(line[0])), STATS_ROOM,
-		floori(float(row[0])), row[1], ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM])
+		+ " the pause caption at most %d px of %d, a world's line at most %d px of %d, %s, an"
+		+ " instinct's row %d px of arc (%s, at least %d), the inspector's trigger lines at most %d px"
+		+ " of %d") % [ceili(widest), NUMBERS_ROOM, ceili(caption), CAPTION_ROOM,
+		ceili(float(line[0])), STATS_ROOM, _cells_said(cells), floori(float(row[0])), row[1],
+		ROW_ROOM, ceili(float(trigger[0])), TRIGGER_LINE_ROOM])
 	return _english
 
 
@@ -1838,29 +1863,35 @@ func _measure_screens() -> Dictionary:
 	var line := _widest_drop_line()
 	if line.is_empty():
 		return {}
+	var cells := _widest_cell_lines()
+	if cells.is_empty():
+		return {}
 	var page := _script("programs")
 	if page == null:
 		return {}
 	var row: Array = page.call(&"row_room", ThemeDB.fallback_font)
 	var trigger: Array = page.call(&"trigger_line_room", ThemeDB.fallback_font)
 	return {"numbers": numbers, "lead": lead, "rest": rest, "line": line, "row": row,
-		"trigger": trigger}
+		"trigger": trigger, "cells": cells}
 
 
 ## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the
-## game's own `Drops` (docs/design/settings.md §4.3), each line on its own: the world's age,
-## over every count of minutes, hours and days (to 999) the game uses, and "not swum in
-## yet"; and under them a line for each view's cell (ocean.md §9.5), `<view> · <generation>`,
-## for every view the game has and every generation phrase -- the ten, and the counted one
-## at 99. Empty when drops.gd, or the views it names, will not load.
+## game's own `Drops` (docs/design/settings.md §4.3; cells-ux.md §5): the world's age, over
+## every count of minutes, hours and days (to 999) the game uses, and "not swum in yet".
+## Empty when drops.gd will not load.
 func _widest_drop_line() -> Array:
 	var drops := _script("drops")
 	if drops == null:
 		return []
-	var run_state := _script_const(drops, "RunState") as GDScript
-	if run_state == null or _script_const(run_state, "VIEW_ORDER") == null:
-		return []
 	var lines: Array[String] = []
+	for seconds: float in _ages():
+		lines.append(String(drops.call(&"age_text", seconds)))
+	lines.append_array(Array(drops.call(&"lines_of", {"empty": false, "file": false})))
+	return _widest(lines, STATS_SIZE)
+
+
+## Every age the game says, a second past each count of minutes, hours and days to 999.
+func _ages() -> Array[float]:
 	var ages: Array[float] = []
 	for minutes in range(1, 60):
 		ages.append(minutes * 60.0 + 30.0)
@@ -1868,20 +1899,127 @@ func _widest_drop_line() -> Array:
 		ages.append(hours * 3600.0 + 60.0)
 	for days in range(2, 1000):
 		ages.append(days * 86400.0 + 60.0)
-	for seconds: float in ages:
-		lines.append(String(drops.call(&"age_text", seconds)))
-	lines.append_array(Array(drops.call(&"lines_of", {"empty": false, "file": false})))
-	var generations: Array = range(1, 11)
-	generations.append(99)
-	for mode: int in _script_const(run_state, "VIEW_ORDER"):
-		for generation: int in generations:
-			lines.append(String(drops.call(&"cell_line", mode, generation)))
+	return ages
+
+
+## `[width, text]` of the widest of [param lines] at [param size].
+func _widest(lines: Array, size: int) -> Array:
 	var widest: Array = [0.0, ""]
 	for text: String in lines:
-		var wide := _width_of(text, STATS_SIZE)
+		var wide := _width_of(text, size)
 		if wide > float(widest[0]):
 			widest = [wide, text]
 	return widest
+
+
+## **The widest lines a cell can say** (cells-ux.md §6), built with the game's own
+## game/normal/cells.gd and drops.gd, in the language of the moment: `button`, the line
+## under a view's name, for every default name, every generation phrase (and the
+## counted one at 99) and every way it says where the cell comes from -- none, a friend's
+## water, and every default world's name -- and over a record; `row`, a row's two lines in
+## "your cells", the widest generation, a cell's widest age and its widest hunger on the
+## first, and every way it says where it is on the second; `then`, the most lines the
+## detailed view's `Then` wraps to in its column, with every default world's name; and
+## `caption`, the sheet's caption with each view. Empty when a script will not load.
+func _widest_cell_lines() -> Dictionary:
+	var cells := _script("cells")
+	var drops := _script("drops")
+	if cells == null or drops == null:
+		return {}
+	var run_state := _script_const(drops, "RunState") as GDScript
+	if run_state == null or _script_const(run_state, "VIEW_ORDER") == null:
+		return {}
+	var sep := String(_script_const(_script("readout"), "SEP"))
+	var names: Array[String] = []
+	for which in (_script_const(cells, "CELL_NAMES") as Array).size():
+		names.append(String(cells.call(&"default_name", which)))
+	var worlds: Array[String] = []
+	for which in (_script_const(drops, "DEFAULT_NAMES") as Array).size():
+		worlds.append(String(drops.call(&"default_name", which)))
+	var generations: Array[String] = []
+	for generation: int in range(1, 11) + [99]:
+		generations.append(String(drops.call(&"generation_text", generation)))
+	var froms: Array[String] = [""]
+	froms.append(sep + String(TranslationServer.translate("from a friend's water")))
+	for world: String in worlds:
+		froms.append(sep + String(TranslationServer.translate("from %s")) % String(
+			cells.call(&"quoted", world)))
+	var buttons: Array[String] = []
+	var widest_generation := String(_widest(generations, CELL_LINE_SIZE)[1])
+	for name: String in names:
+		for from: String in froms:
+			buttons.append(name + sep + widest_generation + from)
+		buttons.append(String(TranslationServer.translate("a new cell · %s died")).replace("%s", name))
+	buttons.append(String(TranslationServer.translate("a new cell")))
+	var ages: Array[String] = []
+	for seconds: float in _ages():
+		ages.append(String(cells.call(&"age_text", seconds)))
+	var hungers: Array[String] = [String(cells.call(&"hunger_text", 1.0)),
+		String(cells.call(&"hunger_text", 0.6))]
+	var rows: Array[String] = [widest_generation + sep + String(_widest(ages, CELL_LINE_SIZE)[1])
+		+ sep + String(_widest(hungers, CELL_LINE_SIZE)[1])]
+	rows.append(String(cells.call(&"friends_water")))
+	rows.append(String(cells.call(&"gone_world")))
+	rows.append(String(cells.call(&"died_line", 3, "")))
+	rows.append(String(cells.call(&"died_line", 4, "")))
+	var thens: Array[String] = [String(TranslationServer.translate("where you left it"))]
+	for world: String in worlds:
+		rows.append(String(TranslationServer.translate("world")) + sep + world)
+		rows.append(String(cells.call(&"died_line", 1, world)))
+		thens.append(String(TranslationServer.translate("comes into %s at a quiet place"))
+			% String(cells.call(&"quoted", world)))
+		thens.append(String(cells.call(&"died_line", 1, world)))
+	var most: Array = [0, ""]
+	var font := ThemeDB.fallback_font
+	for text: String in thens:
+		var tall := font.get_multiline_string_size(text, HORIZONTAL_ALIGNMENT_LEFT,
+			float(CELL_THEN_ROOM), CELL_LINE_SIZE).y
+		var count := roundi(tall / font.get_height(CELL_LINE_SIZE))
+		if count > int(most[0]):
+			most = [count, text]
+	var captions: Array[String] = []
+	var words: Dictionary = _script_const(run_state, "VIEW_WORDS")
+	for mode: int in _script_const(run_state, "VIEW_ORDER"):
+		captions.append(String(TranslationServer.translate("your cells")) + sep
+			+ String(TranslationServer.translate(String(words[mode]))))
+	return {"button": _widest(buttons, CELL_LINE_SIZE), "row": _widest(rows, CELL_LINE_SIZE),
+		"then": most, "caption": _widest(captions, CELL_CAPTION_SIZE)}
+
+
+## A cell's lines are drawn in 15 px type.
+const CELL_LINE_SIZE := 15
+
+
+## What [param cells] ([method _widest_cell_lines]) says is too wide, one sentence each.
+func _cell_problems(cells: Dictionary) -> Array[String]:
+	var out: Array[String] = []
+	var button: Array = cells["button"]
+	if float(button[0]) > CELL_LINE_ROOM:
+		out.append(("a view's cell line is %d px wide in %d px type with a default name; the room is %d"
+			+ " px, and only a name the player typed may give way: \"%s\"") % [ceili(float(button[0])),
+			CELL_LINE_SIZE, CELL_LINE_ROOM, _short(String(button[1]))])
+	var row: Array = cells["row"]
+	if float(row[0]) > CELL_ROW_ROOM:
+		out.append("a cell's row line in \"your cells\" is %d px wide in %d px type; the room is %d px: \"%s\"" % [
+			ceili(float(row[0])), CELL_LINE_SIZE, CELL_ROW_ROOM, _short(String(row[1]))])
+	var then: Array = cells["then"]
+	if int(then[0]) > CELL_THEN_LINES:
+		out.append("a cell's `Then` wraps onto %d lines of %d px in %d px type; it has %d: \"%s\"" % [
+			int(then[0]), CELL_THEN_ROOM, CELL_LINE_SIZE, CELL_THEN_LINES, _short(String(then[1]))])
+	var caption: Array = cells["caption"]
+	if float(caption[0]) > CELL_CAPTION_ROOM:
+		out.append("the cells' sheet caption is %d px wide in %d px type; the room is %d px: \"%s\"" % [
+			ceili(float(caption[0])), CELL_CAPTION_SIZE, CELL_CAPTION_ROOM, _short(String(caption[1]))])
+	return out
+
+
+## The cells' lines, measured, as the report says them.
+func _cells_said(cells: Dictionary) -> String:
+	return ("a cell's line at most %d px of %d, its row lines at most %d px of %d, its `Then` at"
+		+ " most %d of %d lines, the cells' caption at most %d px of %d") % [
+		ceili(float(cells["button"][0])), CELL_LINE_ROOM, ceili(float(cells["row"][0])),
+		CELL_ROW_ROOM, int(cells["then"][0]), CELL_THEN_LINES, ceili(float(cells["caption"][0])),
+		CELL_CAPTION_ROOM]
 
 
 ## [param soft] says the problem is only about how the text looks (too wide, a stray

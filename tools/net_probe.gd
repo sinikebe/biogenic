@@ -114,8 +114,8 @@ const Genome := preload("res://game/normal/genome.gd")
 ## For the run's own numbering -- Life, Split, the division's clocks and the
 ## pond's lines -- which the `pond` section reads off two real runs.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
-## For the views, and the name each keeps its cell under (docs/design/ocean.md
-## §9.5), which `pond, kept` reads a player's own worlds by.
+## For the views, and the name each keeps its cells under (docs/design/cells.md
+## §1.2), which `pond, kept` reads a player's own slots by.
 const RunState := preload("res://game/run_state.gd")
 ## For the recording's own numbering, which the replay in a pond is checked by
 ## (shared-pond.md §5, Phase 3): what a PERSON row is, and where the friend sits
@@ -197,8 +197,8 @@ func _ready() -> void:
 		print("[net-probe] NOTE --referee-only: %d failed" % _failed)
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
-	# `--kept-only` is the same for `pond, kept`: a player's own worlds, a cell for
-	# each view, through a real pond (docs/design/ocean.md §9.5).
+	# `--kept-only` is the same for `pond, kept`: a player's own worlds and cells in
+	# slots, through a real pond (docs/design/cells.md §2).
 	if OS.get_cmdline_user_args().has("--kept-only"):
 		Engine.max_fps = 250
 		await _check_pond_kept()
@@ -7596,21 +7596,30 @@ func _check_pond() -> void:
 
 
 # ---------------------------------------------------------------------------
-# **A player's own world keeps a cell per view, in a pond too** (docs/design/
-# ocean.md §9.1, §9.5): two worlds of a player's own, each keeping a full-vision
-# cell of the third generation and a point-of-view cell of the seventh, made by
-# solo runs of the game. A host opens one in full vision, as the pond, and a guest
-# joins it with the other in point of view. Each plays its own view's cell and
-# never the other's, and each keeps it back into its own view's place -- the
-# guest's `elsewhere`, from the friend's water -- the other view's cell left in
-# the file as it was. Alone again, the guest's world gives full vision its own
-# cell where it was, the drop where it was, and point of view the cell that swam
-# in the friend's water, back at a quiet place in its own -- the drop moved under
-# it. Nothing on the wire is new: a view is never said there.
+# **Your cells, in slots, in a pond too** (docs/design/cells.md §2, §6.3): a host and
+# a guest, each with worlds and cells of its own -- a folder each -- made by runs of
+# the game alone. The host's full vision has two cells, the third generation's
+# selected in slot 2 beside the fifth's in slot 1, and its point of view one of the
+# sixth; the guest's point of view has one of the seventh, selected, and its full
+# vision one of the third. The host opens its selected world in full vision, as the
+# pond, on its selected cell, **resumed in place** -- the drop moved under it since
+# by point of view's quiet start, so in place is read in the frame of the rim it
+# was kept with. The guest joins in point of view on its own. Left there, **each
+# keeps its cell into its own selected slot** -- the guest's `elsewhere`, its place
+# its own world as it was set aside -- every other slot as it was, no file new, and
+# each world with no cell in it. Alone again, the guest's full vision resumes in
+# place, and **point of view's cell comes home to its own world at a quiet place**:
+# the drop moved under it, which its next keep records as its place. Nothing on the
+# wire is new: a view, a slot or a name is never said there.
 # ---------------------------------------------------------------------------
 
-## Where `pond, kept` keeps the two worlds: a folder of its own.
+## Where `pond, kept` keeps the two players' worlds and cells: a folder each.
 const KEPT_ROOT := "user://net_probe_kept"
+## **Your cells** (cells.md): the slots, the index and a cell's file.
+const Cells := preload("res://game/normal/cells.gd")
+const CellSave := preload("res://game/normal/cell_save.gd")
+## **Your worlds**: which one a run plays, and where its file is.
+const Drops := preload("res://game/normal/drops.gd")
 
 
 func _check_pond_kept() -> void:
@@ -7618,27 +7627,34 @@ func _check_pond_kept() -> void:
 	var began_frames := Engine.get_process_frames()
 	var full_key := RunState.cell_key(RunState.Mode.FULL_VISION)
 	var pov_key := RunState.cell_key(RunState.Mode.POV)
-	var host_path := KEPT_ROOT.path_join("host.save")
-	var guest_path := KEPT_ROOT.path_join("guest.save")
+	var host_root := KEPT_ROOT.path_join("host")
+	var guest_root := KEPT_ROOT.path_join("guest")
 	_forget_kept_worlds()
-	DirAccess.make_dir_recursive_absolute(KEPT_ROOT)
-	# **Two worlds of a player's own**, a cell for each view in each, by runs alone.
-	for path: String in [host_path, guest_path]:
-		for made: Array in [[RunState.Mode.FULL_VISION, 3], [RunState.Mode.POV, 7]]:
-			var alone := _kept_run_scene(null, path, int(made[0]))
-			get_tree().root.add_child.call_deferred(alone)
-			await alone.ready
-			alone.set("_generation", int(made[1]))
-			alone.notification(NOTIFICATION_APPLICATION_PAUSED)
-			alone.queue_free()
-			await get_tree().process_frame
-	var host_before := DropSave.read(host_path)
-	var guest_before := DropSave.read(guest_path)
-	var made_both := true
-	for kept: Dictionary in [host_before, guest_before]:
-		made_both = made_both and not kept.is_empty() \
-			and int(DropSave.cell_of(kept, full_key).get("generation", 0)) == 3 \
-			and int(DropSave.cell_of(kept, pov_key).get("generation", 0)) == 7
+	# **Cells in slots, by runs alone**: `[folder, view, slot, generation]`, each
+	# selected as it is made -- the last of each view stays selected.
+	var made := [[host_root, RunState.Mode.FULL_VISION, 1, 5],
+		[host_root, RunState.Mode.FULL_VISION, 2, 3], [host_root, RunState.Mode.POV, 1, 6],
+		[guest_root, RunState.Mode.FULL_VISION, 1, 3], [guest_root, RunState.Mode.POV, 1, 7]]
+	for one: Array in made:
+		var root := str(one[0])
+		DirAccess.make_dir_recursive_absolute(root)
+		Cells.select(RunState.cell_key(int(one[1])), int(one[2]), root)
+		var alone := _kept_run_scene(null, root, int(one[1]))
+		get_tree().root.add_child.call_deferred(alone)
+		await alone.ready
+		alone.set("_generation", int(one[3]))
+		alone.notification(NOTIFICATION_APPLICATION_PAUSED)
+		alone.queue_free()
+		await get_tree().process_frame
+	var generations: Array = []
+	for one: Array in made:
+		generations.append(int((_kept_slot(str(one[0]), RunState.cell_key(int(one[1])),
+			int(one[2])).get("cell", {}) as Dictionary).get("generation", 0)))
+	var host_files := _kept_files(host_root)
+	var guest_files := _kept_files(guest_root)
+	var host_slot := _kept_slot(host_root, full_key, 2)
+	var host_world := DropSave.read(Drops.path_of(1, host_root))
+	var guest_world := DropSave.read(Drops.path_of(1, guest_root))
 	# **The pond**: the host's world in full vision, the guest's in point of view.
 	var host_net: Node = await _session("KeptHost")
 	var guest_net: Node = await _session("KeptGuest")
@@ -7646,107 +7662,182 @@ func _check_pond_kept() -> void:
 	guest_net.join("127.0.0.1")
 	await _until_link(guest_net, NetSession.Link.TOGETHER)
 	await _until_link(host_net, NetSession.Link.TOGETHER)
-	var host_run := _kept_run_scene(host_net, host_path, RunState.Mode.FULL_VISION)
+	var host_run := _kept_run_scene(host_net, host_root, RunState.Mode.FULL_VISION)
 	get_tree().root.add_child.call_deferred(host_run)
 	await host_run.ready
 	var host_food: Node = host_run.get_node(^"Food")
+	# **In place**: where the slot keeps it, from the rim it was kept with, against
+	# where it is now, from the rim now -- the drop has moved since.
+	var host_moved := 0.0
+	var host_in_place := false
+	if not host_slot.is_empty() and not host_world.is_empty():
+		var rim_now: Vector2 = (host_food.call(&"basin") as RefCounted).get("center")
+		host_moved = rim_now.distance_to(host_slot["where"]["rim"])
+		var host_at: Vector2 = host_run.get_node(^"Cell").get("position")
+		host_in_place = (host_at - rim_now).distance_to((host_slot["cell"]["body"]["at"] as Vector2)
+			- (host_slot["where"]["rim"] as Vector2)) < 0.01
 	await _pond_until(func() -> bool: return bool(guest_net.peer_pond_open()), 2.0, [])
-	var guest_run := _kept_run_scene(guest_net, guest_path, RunState.Mode.POV)
+	var guest_run := _kept_run_scene(guest_net, guest_root, RunState.Mode.POV)
 	get_tree().root.add_child.call_deferred(guest_run)
 	await guest_run.ready
 	var guest_pond: Object = guest_run.get("_pond")
 	var arrived := await _pond_until(func() -> bool: return bool(guest_pond.in_pond), 3.0, [])
 	var host_plays := [bool(host_run.get("_resumed")), int(host_run.get("_generation")),
-		bool(host_food.pond_open())]
+		int(host_run.get("_cell_slot")), host_in_place, bool(host_food.pond_open())]
 	var guest_plays := [bool(guest_run.get("_resumed")), int(guest_run.get("_generation")),
-		arrived >= 0.0]
+		int(guest_run.get("_cell_slot")), arrived >= 0.0]
 	# **Each left where it is**: the app paused, a keep.
 	host_run.notification(NOTIFICATION_APPLICATION_PAUSED)
 	guest_run.notification(NOTIFICATION_APPLICATION_PAUSED)
-	var host_after := DropSave.read(host_path)
-	var guest_after := DropSave.read(guest_path)
-	var host_kept := [int(DropSave.cell_of(host_after, full_key).get("generation", 0)),
-		bool(DropSave.cell_of(host_after, full_key).get("elsewhere", false)),
-		_same_kept(host_after, host_before, pov_key)]
-	var guest_kept := [int(DropSave.cell_of(guest_after, pov_key).get("generation", 0)),
-		bool(DropSave.cell_of(guest_after, pov_key).get("elsewhere", false)),
-		_same_kept(guest_after, guest_before, full_key),
-		not guest_after.is_empty() and not guest_before.is_empty()
-			and int(guest_after["drop"]["seed"]) == int(guest_before["drop"]["seed"])]
+	var host_kept_slot := _kept_slot(host_root, full_key, 2)
+	var guest_kept_slot := _kept_slot(guest_root, pov_key, 1)
+	var host_world_after := DropSave.read(Drops.path_of(1, host_root))
+	var guest_world_after := DropSave.read(Drops.path_of(1, guest_root))
+	var host_kept := [int((host_kept_slot.get("cell", {}) as Dictionary).get("generation", 0)),
+		bool((host_kept_slot.get("cell", {}) as Dictionary).get("elsewhere", false)),
+		_kept_where(host_kept_slot, host_world_after),
+		_kept_others(host_root, host_files, [Cells.path_of(full_key, 2, host_root)]),
+		_kept_bare(host_world_after)]
+	var guest_kept := [int((guest_kept_slot.get("cell", {}) as Dictionary).get("generation", 0)),
+		bool((guest_kept_slot.get("cell", {}) as Dictionary).get("elsewhere", false)),
+		_kept_where(guest_kept_slot, guest_world_after),
+		_kept_others(guest_root, guest_files, [Cells.path_of(pov_key, 1, guest_root)]),
+		_kept_bare(guest_world_after) and not guest_world.is_empty()
+			and int(guest_world_after["drop"]["seed"]) == int(guest_world["drop"]["seed"])]
 	guest_run.queue_free()
 	host_run.queue_free()
 	guest_net.close()
 	host_net.close()
 	await _wait(0.3)
-	# **The guest's world alone again**, in each view.
-	var rim: Vector2 = guest_after["drop"]["rim_centre"] if not guest_after.is_empty() \
-		else Vector2.INF
+	# **The guest alone again**, in each view: full vision's cell in place, the drop
+	# where it was; point of view's home at a quiet place, which its keep records.
+	var rim: Vector2 = guest_world_after["drop"]["rim_centre"] \
+		if not guest_world_after.is_empty() else Vector2.INF
 	var back: Array = []
+	var home: Array = []
 	for mode: int in [RunState.Mode.FULL_VISION, RunState.Mode.POV]:
-		var alone := _kept_run_scene(null, guest_path, mode)
+		var alone := _kept_run_scene(null, guest_root, mode)
 		get_tree().root.add_child.call_deferred(alone)
 		await alone.ready
 		var basin: RefCounted = (alone.get_node(^"Food")).call(&"basin")
 		var centre: Vector2 = basin.get("center") if basin != null else Vector2.ZERO
 		back.append([bool(alone.get("_resumed")), int(alone.get("_generation")),
 			centre.is_equal_approx(rim)])
+		if mode == RunState.Mode.POV:
+			var place := (alone.get_node(^"Cell").get("position") as Vector2) - centre
+			alone.notification(NOTIFICATION_APPLICATION_PAUSED)
+			var slot := _kept_slot(guest_root, pov_key, 1)
+			var world := DropSave.read(Drops.path_of(1, guest_root))
+			var cell: Dictionary = slot.get("cell", {})
+			home = [not slot.is_empty() and not bool(cell.get("elsewhere", false)),
+				_kept_where(slot, world), not slot.is_empty() and ((cell["body"]["at"] as Vector2)
+				- (slot["where"]["rim"] as Vector2)).distance_to(place) < 0.01]
 		alone.queue_free()
 		await get_tree().process_frame
 	_forget_kept_worlds()
-	_says(made_both and host_plays == [true, 3, true] and guest_plays == [true, 7, true]
-			and host_kept == [3, false, true] and guest_kept == [7, true, true, true]
-			and back == [[true, 3, true], [true, 7, false]],
-		("pond, kept: each player's own world keeps a cell for each view (made: %s) --"
-		+ " the host opens its world in full vision on full vision's cell [resumed,"
-		+ " generation, the pond] %s, the guest joins in point of view on point of view's"
-		+ " %s; left there, the host keeps full vision's [generation, elsewhere, point of"
-		+ " view's as it was] %s and the guest point of view's [generation, elsewhere, full"
-		+ " vision's as it was, its own drop] %s; alone again, the guest's world gives"
-		+ " [resumed, generation, the drop where it was] %s -- full vision's own cell in"
-		+ " place, and point of view's back from the friend's water at a quiet place") % [
-		str(made_both), str(host_plays), str(guest_plays), str(host_kept), str(guest_kept),
-		str(back)])
+	_says(generations == [5, 3, 6, 3, 7] and host_moved > 1.0
+			and host_plays == [true, 3, 2, true, true] and guest_plays == [true, 7, 1, true]
+			and host_kept == [3, false, true, true, true]
+			and guest_kept == [7, true, true, true, true]
+			and back == [[true, 3, true], [true, 7, false]] and home == [true, true, true],
+		("pond, kept: a host and a guest with cells in slots of their own (made, by generation:"
+		+ " %s) -- the host opens its world in full vision on its selected cell [resumed,"
+		+ " generation, slot, in place, the pond] %s, the drop moved %.0f under it since; the"
+		+ " guest joins in point of view on its own %s; left there, the host keeps [generation,"
+		+ " elsewhere, its own world, every other slot as it was and none new, the world with no"
+		+ " cell] %s and the guest %s, its place its own world as it was set aside; alone again,"
+		+ " the guest's world gives [resumed, generation, the drop where it was] %s -- full"
+		+ " vision's own cell in place, and point of view's home from the friend's water at a"
+		+ " quiet place, which its keep records [not elsewhere, its own world, its place] %s") % [
+		str(generations), str(host_plays), host_moved, str(guest_plays), str(host_kept),
+		str(guest_kept), str(back), str(home)])
 	print("[net-probe] NOTE pond, kept took %.1f s and %d frames"
 		% [_now() - began, Engine.get_process_frames() - began_frames])
 
 
-## A run of the game on [param net] -- null for one alone -- keeping its world at
-## [param keep], in [param mode], on the shipped scheme.
-func _kept_run_scene(net: Node, keep: String, mode: int) -> Node:
+## A run of the game on [param net] -- null for one alone -- playing the selected
+## world and the selected cell of the folder [param root], in [param mode], on the
+## shipped scheme.
+func _kept_run_scene(net: Node, root: String, mode: int) -> Node:
 	NetSession.current = net
 	var run: Node = load(RUN_SCENE).instantiate()
 	run.set("mode", mode)
 	run.set("scheme", 0)
-	run.set("keep", keep)
+	run.set("keep", Drops.selected_in(root))
+	run.set("cells_at", Cells.selected_in(root))
 	run.set("library_at", "")
 	return run
 
 
-## **Whether [param view]'s cell is one cell in one place in its water** in the
-## files [param a] and [param b]: to the byte but for its place, and that from
-## each file's rim's centre to a hundredth -- a cell set aside moves with the
-## drop (ocean.md §9.5), in 32-bit vectors.
-static func _same_kept(a: Dictionary, b: Dictionary, view: String) -> bool:
-	var one: Dictionary = DropSave.cell_of(a, view) if not a.is_empty() else {}
-	var two: Dictionary = DropSave.cell_of(b, view) if not b.is_empty() else {}
-	if one.is_empty() or two.is_empty():
+## [param view]'s slot [param slot] in the folder [param root], read and never
+## moved: an empty Dictionary for none.
+static func _kept_slot(root: String, view: String, slot: int) -> Dictionary:
+	return CellSave.peek(Cells.path_of(view, slot, root))
+
+
+## **Whether [param slot] keeps its cell in [param world]**: the folder's world 1,
+## that drop's number, and the rim it was kept with.
+static func _kept_where(slot: Dictionary, world: Dictionary) -> bool:
+	if slot.is_empty() or world.is_empty() or (slot["where"] as Dictionary).is_empty():
 		return false
-	var x: Dictionary = one.duplicate(true)
-	var y: Dictionary = two.duplicate(true)
-	var at_x: Vector2 = (x["body"]["at"] as Vector2) - (a["drop"]["rim_centre"] as Vector2)
-	var at_y: Vector2 = (y["body"]["at"] as Vector2) - (b["drop"]["rim_centre"] as Vector2)
-	(x["body"] as Dictionary).erase("at")
-	(y["body"] as Dictionary).erase("at")
-	return var_to_bytes(x) == var_to_bytes(y) and at_x.distance_to(at_y) < 0.01
+	var where: Dictionary = slot["where"]
+	return int(where["world"]) == 1 and int(where["drop"]) == int(world["drop"]["seed"]) \
+		and (where["rim"] as Vector2).is_equal_approx(world["drop"]["rim_centre"])
+
+
+## **Every file of [param root]'s cells, with its bytes**: the index and the
+## folder's files, by name.
+static func _kept_files(root: String) -> Dictionary:
+	var out := {}
+	for path: String in [root.path_join(Cells.INDEX), root.path_join(Cells.INDEX_TMP)]:
+		if FileAccess.file_exists(path):
+			out[path] = FileAccess.get_file_as_bytes(path)
+	var folder := Cells.folder_of(root)
+	if DirAccess.dir_exists_absolute(folder):
+		for file: String in DirAccess.get_files_at(folder):
+			out[folder.path_join(file)] = FileAccess.get_file_as_bytes(folder.path_join(file))
+	return out
+
+
+## Whether [param root]'s cells are [param before] but for the files [param played]:
+## the same files, and every other one the same bytes.
+static func _kept_others(root: String, before: Dictionary, played: Array) -> bool:
+	var now := _kept_files(root)
+	if now.keys().size() != before.keys().size():
+		return false
+	for path: String in before:
+		if not now.has(path):
+			return false
+		if not played.has(path) and now[path] != before[path]:
+			return false
+	return true
+
+
+## **The player's own cells on this machine**, by path, with their bytes: what no
+## server and no probe may write.
+static func _own_cells() -> Dictionary:
+	return _kept_files(Cells.ROOT)
+
+
+## Whether a world's file keeps no cell: `cell` empty and no `cells`.
+static func _kept_bare(world: Dictionary) -> bool:
+	return not world.is_empty() and (world["cell"] as Dictionary).is_empty() \
+		and not world.has(DropSave.CELLS)
 
 
 ## Nothing of `pond, kept` left in `user://`.
 func _forget_kept_worlds() -> void:
-	if not DirAccess.dir_exists_absolute(KEPT_ROOT):
-		return
-	for file: String in DirAccess.get_files_at(KEPT_ROOT):
-		DirAccess.remove_absolute(KEPT_ROOT.path_join(file))
-	DirAccess.remove_absolute(KEPT_ROOT)
+	for root: String in [KEPT_ROOT.path_join("host"), KEPT_ROOT.path_join("guest")]:
+		for dir: String in [Cells.folder_of(root), root]:
+			if not DirAccess.dir_exists_absolute(dir):
+				continue
+			for file: String in DirAccess.get_files_at(dir):
+				DirAccess.remove_absolute(dir.path_join(file))
+			DirAccess.remove_absolute(dir)
+	if DirAccess.dir_exists_absolute(KEPT_ROOT):
+		for file: String in DirAccess.get_files_at(KEPT_ROOT):
+			DirAccess.remove_absolute(KEPT_ROOT.path_join(file))
+		DirAccess.remove_absolute(KEPT_ROOT)
 
 
 # ---------------------------------------------------------------------------
@@ -9063,6 +9154,9 @@ func _check_server() -> void:
 	# A room of the probe's own, never there before it starts.
 	_server_room_gone()
 	server.set("room_path", SERVER_ROOM)
+	# **And no cell of anyone's** (cells.md §2): the player's own cells on this
+	# machine, which the server never reads or writes.
+	var cells_before := _own_cells()
 	get_tree().root.add_child.call_deferred(server)
 	await server.ready
 	var net: Node = server.session()
@@ -9745,6 +9839,10 @@ func _check_server() -> void:
 	_says(float(tally[0].get("fouls", 0.0)) == 0.0 and server_referees.size() == 5,
 		"server: and its referees called no foul on an honest guest -- %s"
 		% _referee_said(server_referees))
+	_says(_own_cells() == cells_before,
+		("server: and no cell file was written for its room -- user://%s and user://%s/ as"
+		+ " they were before it started, %d files") % [Cells.INDEX, Cells.FOLDER,
+		cells_before.size()])
 	print("[net-probe] NOTE server took %.1f s and %d frames, at most %d a second;"
 		% [_now() - began, Engine.get_process_frames() - began_frames, Engine.max_fps]
 		+ " its longest wait on an unreliable frame %.2f s, of %.0f"

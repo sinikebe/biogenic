@@ -60,6 +60,14 @@ extends Node
 ## width in its own font, every button's rect and which has the focus, and the
 ## link and its `trouble_key` -- so a page that went somewhere else says so.
 ##
+## **Your cells on `together`** (docs/design/cells-ux.md §4): `--cells=` is what the
+## TOGETHER buttons' second lines read -- `two` (full vision's selected slot a
+## slipper of the fourth generation, point of view's empty), `dead` (the slipper
+## died: its record, selected) or `wide` (twenty `W`s at generation 12) -- from a
+## folder of the harness's own, which the screen's corner is pointed at before it
+## is built, and which is removed when the run ends. Without it the page reads this
+## machine's own cells, and never writes them.
+##
 ## Excluded from export (`tools/*` on both presets), so none of it ships.
 
 const SCREEN := "res://game/net/earshot.tscn"
@@ -75,6 +83,14 @@ const InviteBook := preload("res://game/server/invite_book.gd")
 ## writes as the real one does.
 const DedicatedServer := preload("res://game/server/server.gd")
 const Earshot := preload("res://game/net/earshot.gd")
+## **Your cells** (cells.md), for `--cells=`: the slots and a cell's file, and the
+## mock's own cell, as corner_shot.gd makes it.
+const Cells := preload("res://game/normal/cells.gd")
+const CellSave := preload("res://game/normal/cell_save.gd")
+const RunState := preload("res://game/run_state.gd")
+const CornerShot := preload("res://tools/corner_shot.gd")
+## Where `--cells=` keeps its cells: a folder of the harness's own.
+const CELLS_ROOT := "user://earshot_shot_cells"
 
 ## **The harness's own key and certificate**, kept between runs: every invite
 ## it pastes that no server of ours answers is pinned to it, and so is the one
@@ -135,6 +151,7 @@ func _overran() -> void:
 	push_error("[earshot-shot] gave up waiting")
 	_kill_server()
 	_put_back()
+	_forget_cells()
 	get_tree().quit(1)
 
 
@@ -150,10 +167,13 @@ func _ready() -> void:
 	var size := Vector2i.ZERO
 	var u := -1.0
 	var address := ""
+	var cells := ""
 	for arg in OS.get_cmdline_user_args():
 		var text := str(arg)
 		if text.begins_with("--page="):
 			page = text.trim_prefix("--page=")
+		elif text.begins_with("--cells="):
+			cells = text.trim_prefix("--cells=")
 		elif text.begins_with("--their="):
 			their = int(text.trim_prefix("--their="))
 		elif text.begins_with("--out="):
@@ -183,6 +203,13 @@ func _ready() -> void:
 
 	var packed: PackedScene = load(FAR_SCREEN if _far_page else SCREEN)
 	var scene := packed.instantiate()
+	if not cells.is_empty():
+		_forget_cells()
+		if not _make_cells(cells):
+			push_error("[earshot-shot] no such --cells: %s" % cells)
+			await _finish(1)
+			return
+		_earshot_in(scene).get_node(^"Corner").set("cells_root", CELLS_ROOT)
 	get_tree().root.add_child.call_deferred(scene)
 	await scene.ready
 	get_tree().current_scene = scene
@@ -779,7 +806,46 @@ func _finish(code: int) -> void:
 			guest.close()
 	await _server_down()
 	_put_back()
+	_forget_cells()
 	get_tree().quit(code)
+
+
+## **The cells `--cells=` names**, in the harness's own folder: full vision's slot
+## 1, selected, and point of view's slots empty. False for a name it does not know.
+func _make_cells(which: String) -> bool:
+	var full := RunState.cell_key(RunState.Mode.FULL_VISION)
+	match which:
+		"two":
+			_keep_cell(full, "", CornerShot._cell(4, 34.0, 0.62, false), {})
+		"dead":
+			_keep_cell(full, "", CornerShot._cell(4, 34.0, 0.62, false),
+				{"cause": 0, "at": 1759500000})
+		"wide":
+			_keep_cell(full, CornerShot.WIDE_NAME, CornerShot._cell(12, 38.0, 1.0, false), {})
+		_:
+			return false
+	return true
+
+
+## [param view]'s slot 1: called [param named] or wearing the first default, two
+## hours old, kept in world 1 -- [param died] a record's.
+static func _keep_cell(view: String, named: String, cell: Dictionary, died: Dictionary) -> void:
+	var where := {"world": 1, "drop": 1111, "rim": Vector2.ZERO, "age": 120.0}
+	var data := CellSave.compose(view, named, 0, 1759400000, 2.0 * 3600.0 + 340.0, where, cell,
+		died)
+	var done := CellSave.write(Cells.path_of(view, 1, CELLS_ROOT), data)
+	if done != OK:
+		push_error("[earshot-shot] cell %s/1 not kept: %s" % [view, error_string(done)])
+
+
+## Nothing of `--cells=` left in `user://`.
+static func _forget_cells() -> void:
+	for dir: String in [Cells.folder_of(CELLS_ROOT), CELLS_ROOT]:
+		if not DirAccess.dir_exists_absolute(dir):
+			continue
+		for file: String in DirAccess.get_files_at(dir):
+			DirAccess.remove_absolute(dir.path_join(file))
+		DirAccess.remove_absolute(dir)
 
 
 static func _bytes_or_null(path: String) -> Variant:
