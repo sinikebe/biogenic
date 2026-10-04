@@ -128,6 +128,23 @@ func restore_point(index: int, at: Vector2) -> void:
 		_motes[index] = at
 
 
+## **Grit a replay writes into, of its own** (shared-pond.md §5, Phase 3): in a
+## session the run's grit is not the replay's to scribble on, so the replay
+## brings this -- the run's fourteen, [param points], copied as they lie -- and
+## writes the recording onto it with [method restore_point]. **Nothing is drawn
+## from the random stream**, which [method setup] draws a place for every mote
+## from, and which the live water seeds from too; and it never steps: it has no
+## cell.
+func open_replay(points: PackedVector2Array) -> void:
+	_cell = null
+	_rim = null
+	_first_pending = false
+	_motes.resize(COUNT)
+	_motes.fill(Vector2.ZERO)
+	for i in mini(points.size(), COUNT):
+		_motes[i] = points[i]
+
+
 func _spawn_point() -> Vector2:
 	var angle := randf_range(-PI, PI)
 	var distance := randf_range(RING_MIN, RING_MAX)

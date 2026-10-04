@@ -27,6 +27,16 @@ extends Node
 ## The run's field is the drop, which outlives the run and which the player
 ## swims back into after watching, so nothing here ever writes to it.
 ##
+## **In a shared pond, so is everything else** (docs/design/shared-pond.md §5,
+## Phase 3). The friend plays on while you watch -- the host's water keeps
+## stepping and keeps being sent, dead host or not -- and the wire reads this
+## run's own cell and genome on the black: what this cell wears, for PERSON, and
+## where it died, for where a returning friend lands. So in a session the
+## recording is written onto a cell, a genome and grit of this screen's own
+## ([member private_nodes]), and the run's are never touched. The friend is in
+## the water it shows, a body in the field's person slot, drawn as the live view
+## draws them.
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const Panes := preload("res://game/replay/panes.gd")
@@ -88,6 +98,13 @@ const SPEED_TEXT: Array[String] = ["1x", "2x", "4x", "1/4x", "1/2x"]
 
 ## Set by the run before this scene enters the tree.
 var recorder: RecorderNode = null
+## **Whether the run's own cell, genome and grit are off limits**, set by the run
+## before this scene enters the tree: true in a session (shared-pond.md §5,
+## Phase 3), where the wire reads them on the black and this screen writes onto
+## nodes of its own instead ([method _make_own]). False is single player, where
+## a run keeps nothing and scribbling on its nodes is free -- and is exactly what
+## this screen always did.
+var private_nodes := false
 
 var _panes: Panes = null
 var _cell: CellBody = null
@@ -139,11 +156,15 @@ var _view := Vector2(1280.0, 720.0)
 ## the start of the window, so the world view forgets its history there and not
 ## at the death it has just left.
 var _forget := false
+## The nodes [method _make_own] made, never in the tree, freed with this screen.
+var _own: Array[Node] = []
 
 
 func _ready() -> void:
 	_frame.resize(RecorderNode.STRIDE)
 	_find(get_parent())
+	if private_nodes:
+		_make_own()
 	_food = _water()
 	_panes = Panes.new()
 	_panes.name = "Panes"
@@ -175,6 +196,16 @@ func _process(delta: float) -> void:
 		_panes.rewound()
 
 
+## **The nodes of this screen's own go with it.** Never in the tree, so nothing
+## frees them but this -- called after every child has left, so no view is
+## reading them by then.
+func _exit_tree() -> void:
+	for node: Node in _own:
+		if is_instance_valid(node):
+			node.free()
+	_own.clear()
+
+
 # ---------------------------------------------------------------------------
 # Playback. The recorded per-frame delta paces this, so a stretch the phone
 # rendered at 30 fps replays at the speed it happened.
@@ -194,8 +225,9 @@ func _seek() -> void:
 
 ## The recorded state, written straight onto the run's own frozen cell, genome
 ## and grit, which are not simulating and never will again -- *a run keeps
-## nothing* of its cell, and `_wake_up()` builds every one of them afresh -- and
-## onto this screen's own field, which is the water as the cell had it.
+## nothing* of its cell, and `_wake_up()` builds every one of them afresh -- or,
+## in a session, onto this screen's own ([member private_nodes]); and onto this
+## screen's own field, which is the water as the cell had it, the friend in it.
 func _write_state() -> void:
 	if _cell != null:
 		_cell.position = Vector2(_frame[0], _frame[1])
@@ -216,6 +248,7 @@ func _write_state() -> void:
 			_food.restore_body(i, Vector2(_frame[at], _frame[at + 1]),
 				_frame[at + 2], _frame[at + 3], _frame[at + 4])
 			_food.restore_loads(i, _frame[at + RecorderNode.BODY_LOADS])
+		_write_friend()
 		_write_flocs()
 		_food.beams = _read_beams()
 		_food.ping_fronts = _read_ping_fronts()
@@ -253,6 +286,20 @@ func _write_state() -> void:
 	# The same question the run asks of its genome, asked of the one restored.
 	_panes.set_eye(Run.eye_of(_genome, _eye_gene, _eye_flare.value()))
 	_panes.push_block(_frame, RecorderNode.AT_MEMBRANE)
+
+
+## **The friend, where the recording has them** (shared-pond.md §5, Phase 3):
+## their body in the field's person slot, nobody when the recording says so, and
+## their silence for the world view to fade their presence by. Nothing in a
+## recording with no friend in it, which is every single player's.
+func _write_friend() -> void:
+	if not _food.pond_open():
+		return
+	var at := RecorderNode.AT_PERSON
+	_food.restore_person(Vector2(_frame[at], _frame[at + 1]), _frame[at + 2],
+		_frame[at + 3], _frame[at + 4], _frame[at + RecorderNode.PERSON_LOADS],
+		_frame[at + RecorderNode.PERSON_WET] > 0.5)
+	_panes.set_friend_quiet(_frame[at + RecorderNode.PERSON_QUIET])
 
 
 ## **Every floc the recording has settled, where it lies and as far as it has
@@ -418,6 +465,12 @@ func _apply_deltas() -> void:
 				if _cell != null:
 					_cell.restore_held(bool(_acts[1]))
 				_panes.set_acts(_acts)
+			RecorderNode.Delta.PERSON:
+				# **What the friend wears**: their fringe, and the mouth their
+				# threat bow is measured by.
+				var worn: Array = row[3]
+				if _food != null:
+					_food.restore_person_genome(worn[0], worn[1])
 			_:
 				pass
 	_watch_levels()
@@ -458,6 +511,10 @@ func _fire_events() -> void:
 		_mark_at += 1
 		if row[1] == &"struck":
 			_panes.mark_struck(row[2])
+		elif row[1] == &"gone":
+			# How the friend left, as the run told its view: the recorder keeps
+			# it where a meal keeps its nutrition.
+			_panes.friend_gone(int(row[3]), row[2])
 		else:
 			_panes.mark_meal(float(row[3]), row[4], row[2])
 
@@ -643,12 +700,48 @@ func _water() -> FoodField:
 	water.name = "Water"
 	water.process_mode = Node.PROCESS_MODE_DISABLED
 	water.open_replay(_cell, RecorderNode.BODIES)
+	# **And the friend's slot**, when the recording has a friend in it: a pond's
+	# field, so the world view draws them as it does in a live one.
+	if recorder != null and recorder.holds_person():
+		water.open_replay_person()
 	add_child(water)
 	water.set_process(false)
 	var rim: Array = recorder.rim() if recorder != null else []
 	if rim.size() == 2:
 		water.restore_rim(rim[0], float(rim[1]))
 	return water
+
+
+## **A cell, a genome and grit of this screen's own**, in a session
+## ([member private_nodes]): copies of the run's as they lie on the black, which
+## the recording is then written onto exactly as it would be onto the run's --
+## so the panes draw the same thing either way, and the run's are left as the
+## death left them. While this screen is up a dead host's guest can come back,
+## and lands by where the host's cell died; and the pond tells the other player
+## what this cell wears whenever it changes, which a replay of an earlier body
+## would otherwise change every loop -- PERSONs a host's referee holds a guest to.
+##
+## **Never in the tree.** A node that enters it runs its `_ready`, and cell.gd's
+## draws from the random stream -- the one the live water is seeded from, which
+## goes on stepping under this screen. Freed in [method _exit_tree].
+func _make_own() -> void:
+	var cell := CellBody.new()
+	var genome := GenomeNode.new()
+	var motes := MotesField.new()
+	_own = [cell, genome, motes]
+	cell.genome = genome
+	if _cell != null:
+		cell.restore_body(_cell.body_state())
+		cell.restore_loads(_cell.loads)
+		cell.restore_held(_cell.tail_held())
+		cell.steer = _cell.steer
+	genome.setup(cell)
+	if _genome != null:
+		genome.set_state(_genome.to_state())
+	motes.open_replay(_motes.points() if _motes != null else PackedVector2Array())
+	_cell = cell
+	_genome = genome
+	_motes = motes
 
 
 func _walk(node: Node) -> void:
