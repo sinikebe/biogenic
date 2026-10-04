@@ -344,12 +344,13 @@ settings is open. The launcher is the template's (§10).
 ### 4.1 What a world is, to the player
 
 A world is a drop of water with everything living in it, kept between launches
-(`ocean.md` §9), together with the cell you left in it. You have room for three and
-are in one at a time. The selected world is the one that:
+(`ocean.md` §9), together with the cells you left in it: one for each view, never
+played in the other (`ocean.md` §9.5). You have room for three and are in one at a
+time. The selected world is the one that:
 
 - a run plays in;
 - a host serves to a friend;
-- a guest's cell comes from, and goes back to.
+- a guest's cell comes from, and goes back to -- the cell of the view it plays in.
 
 **"world" is the player's word** (owner row 5, answered in §11). The code and
 `ocean.md` keep "drop" for the same thing -- `drops.gd`, `drops.cfg`, `drop.save` --
@@ -370,18 +371,21 @@ Drops        Control, full rect, IGNORE
    └─ Box    VBoxContainer, separation 10
       ├─ Caption   Label 16 px Color(0.855, 0.953, 0.933, 0.52)   "your worlds"
       ├─ Row1..3   HBoxContainer, separation 10
-      │  ├─ Pick     Button, EXPAND x 68, content_margin_left 52, mark at x 26
+      │  ├─ Pick     Button, EXPAND x 68, + 25 a line past the first; content_margin_left 52, mark at x 26
       │  │  └─ Lines VBoxContainer, full rect, offsets 52 / -16, centred, IGNORE
       │  │     ├─ Name   Label 20 px Color(0.855, 0.953, 0.933, 1), ellipsis, auto-translate off
-      │  │     └─ Stats  Label 15 px Color(0.482, 0.686, 0.643, 1), ellipsis
+      │  │     └─ Stats  Label 15 px Color(0.482, 0.686, 0.643, 1), ellipsis, a line each (§4.3)
       │  ├─ Rename   Button 112 x 68, 15 px, quiet box
       │  └─ Delete   Button 112 x 68, 15 px, quiet box; on the selected row, an empty 112 x 68 Control
       └─ Note      Label 15 px Color(0.318, 0.463, 0.435, 1)
                    "each world keeps its own water, and your cell in it"
 ```
 
-It spans x 592..1232, y 112..440 at 1280x720. At 2400x1080 it moves with the right
-edge, to x 912..1552 of 1600. A row's states:
+It spans x 592..1232, y 112..440 at 1280x720 with a line under every name. **A row
+grows by one line of its Stats type, 25 px, for each line past the first** (§4.3),
+and its rename and delete grow with it: with a world keeping both cells, one keeping
+one and one keeping none, the panel is y 112..516. At 2400x1080 it moves with the
+right edge, to x 912..1552 of 1600. A row's states:
 
 | row | mark at x 26 | box | Name | Stats |
 |---|---|---|---|---|
@@ -396,19 +400,38 @@ to. At the launcher's weight, the four of them out-shouted the names (rendered).
 
 ### 4.3 What a row says
 
-**`<generation> · <age>`:**
+**The world's age, and under it a line for each view that keeps a cell in it**
+(`ocean.md` §9.5), in the order the view chooser offers them:
 
-- **Generation:** the cell's, when a cell waits in the world, in the pause caption's
-  own words ("fourth generation", "generation 12").
+```
+pond water
+2 hours old
+full vision · fourth generation
+point of view · seventh generation
+```
+
 - **Age:** the world's, in whole minutes under an hour, hours under 48, then days:
   "25 minutes old", "2 hours old", "3 days old". Under a minute is "1 minute old": a
   world that has been swum in is never nothing old.
+- **A cell's line, `<view> · <generation>`:** the view in the view chooser's own
+  button words, and the cell's generation in the pause caption's own words ("fourth
+  generation", "generation 12"). Nothing new to translate: both were already
+  translated. Each line is built whole and has the row's 280 px to itself.
 
 The other cases:
 
-- A world whose last cell died says only its age.
+- A world where no cell waits -- its last cells died, or it was only ever left after
+  a death -- says only its age.
 - A world never swum in says "not swum in yet": it has no file yet, or its last keep
   left it at no age with no cell.
+
+**Why lines and not one line.** The one line said `<generation> · <age>` for the one
+cell there was. With a cell per view it has to name the view, and one view's cell
+with the age is already up to 366 px of the 280 ("point of view · seventh generation
+· 59 minutes old"); two cells would be over 470. So each fact has its line, and the
+row grows. Rendered at both shapes with both cells, one and none (§9): the age stays
+right under every name, the views line up across rows, and a row with no cell is
+the row it always was.
 - **No row shows families.** The owner answered "not yet" to showing lineage anywhere
   a player looks (`lineage.md` §4, row 21).
 
@@ -456,14 +479,17 @@ hide, as they do under naming (§5.1).
 
 - **No run is ever switched under you.** The chip is on no screen a run is played
   from.
-- **Each world keeps its own cell.** A cell left mid-run is in its world's file
-  (`ocean.md` §9.1), so switching at the view chooser loses nothing: the other world
-  waits, frozen, with its cell where it was.
+- **Each world keeps its own cells**, one for each view (`ocean.md` §9.5). A cell
+  left mid-run is in its world's file (`ocean.md` §9.1), so switching at the view
+  chooser loses nothing: the other world waits, frozen, with its cells where they
+  were. Choosing the other view opens the same water on that view's cell, or on a
+  new one.
 - **A host serves the selected world.** Nothing changes here: the run's own drop is
   the pond (`ocean.md` §10.2). Changing the selection on CALLING or TOGETHER, before
   the run starts, changes what the friend will swim in.
 - **A guest's cell comes from its selected world and goes back to it**, marked
-  `elsewhere` (`ocean.md` §9.1). The chip is hidden on every guest page, so the
+  `elsewhere` (`ocean.md` §9.1) -- the cell of the view it plays in, from that view's
+  place and back to it (§9.5). The chip is hidden on every guest page, so the
   selection cannot change while joining.
 - **The dedicated server is not affected.** It keeps `user://rooms/1.save`
   (`server.gd`'s `ROOM_PATH`), never builds a screen, and never reads the drop index.
@@ -568,8 +594,15 @@ selected=1          ; the drop a run opens, 1..3
 name=""             ; typed, as typed; "" while it wears its default
 default=0           ; which default name
 lived=7800.0        ; the drop's age at its last keep, in whole seconds
-generation=4        ; the cell's generation at its last keep; 0 for no cell
+generation=4        ; full vision's cell's generation at its last keep; 0 for no cell
+generation_pov=7    ; point of view's, only while a point-of-view cell waits
 ```
+
+**A generation for each view** (`ocean.md` §9.5): `generation` is the first view's,
+full vision's, as it always was, so a build from before the split still reads it;
+every other view's is `generation_<view>`, under the name `run_state.gd`'s
+`CELL_KEYS` keeps its cell by, and read by that pattern, so a view added later is
+kept by a build that does not know it.
 
 A slot is empty when it has neither a section nor a file. The index is written beside
 itself as `drops.tmp`, read back and compared with what was meant, and renamed over,
@@ -588,9 +621,9 @@ and probe, leaves `drops.cfg` as it found it.
    default name, and the first one there is is selected: slot 1, on a fresh install
    and on the first launch after the update. Slot 1 is made, with default name 0,
    only when there is no world at all, so a lost index never puts a new world in the
-   place of one the player has. A file's `lived` and `generation` come from a new
-   `DropSave.peek(path)`, which decodes and checks as `read()` does but **never moves
-   a file aside**. It costs about 2 ms on a desktop for 600 bodies, on every read
+   place of one the player has. A file's `lived` and each view's `generation` come
+   from a new `DropSave.peek(path)`, which decodes and checks as `read()` does but
+   **never moves a file aside**. It costs about 2 ms on a desktop for 600 bodies, on every read
    until the index is written.
 2. **A slot file has no section**, because the index was lost or is older than the
    file. It is read as in step 1, with the next free default name. A world is never
@@ -611,8 +644,9 @@ and probe, leaves `drops.cfg` as it found it.
     drop's path; the run remembers the slot. Tools still set `keep` to `""` or to a
     file of their own, so no tool run touches the index.
   - After every successful `_keep_drop()` write to a slot, it calls
-    `Drops.note_kept(slot, drop age, cell generation)`. The menu never opens a 30 KB
-    drop to say how old it is.
+    `Drops.note_kept(slot, drop age, view, cell generation)`, which writes that view's
+    generation and leaves every other view's (`ocean.md` §9.5). The menu never opens
+    a 30 KB drop to say how old it is.
 - **The generation words:** the menu says the generation with the pause caption's own
   phrases (`GENERATIONS`, `generation %d`). Move them, with `_generation_text()`,
   to a static function that both can call, so the menu never preloads
@@ -656,13 +690,15 @@ a `ROOM:` line (README, "Making a string translatable"). Sizes are in px of type
   room shrinks from about 220 to 164 px at 20, because the button is 208 wide here
   and 264 on the earshot page.
 - `first generation` … `tenth generation` and `generation %d`: also a world's line.
+- `full vision` and `point of view`: also the start of a cell's line in a world's row
+  (`ocean.md` §9.5), the view as the view chooser's buttons name it.
 - `the water is still moving · you can still be eaten`: also the sheet, in a pond.
 
-**A row's line is built whole**, like the gene numbers lines and the pause caption:
-`<generation> · <age>` in 280 px at 15 px. The English takes at most 260 ("seventh
-generation · 59 minutes old") and the French 253 (`âgé de`, as `monde` is
-masculine). Add it to the lint's built
-lines (`STATS_ROOM`), composed with each generation phrase and the widest age.
+**A row's lines are built whole**, like the gene numbers lines and the pause caption:
+the age, and `<view> · <generation>` for each view's cell, each in 280 px at 15 px.
+The English takes at most 247 ("point of view · seventh generation") and the French
+235 (`âgé de`, as `monde` is masculine). The lint's built lines (`STATS_ROOM`) are
+composed with every age, and with every view and every generation phrase.
 
 **Phase 2's README** gains a glossary line: "A **world** is one of the three the
 player keeps: a drop of water with everything living in it, kept between launches,
@@ -721,6 +757,7 @@ widest name; and the launcher with `settings`, before and after a live switch.
 | the sheet rebuilt inside the notification | it vanished on a language change | deferred (§3.3) |
 | delete on every row | the world you are in was one mis-tap from gone | none on the selected row |
 | row actions 104 wide | French `renommer` took 78 of 80 px | 112 wide |
+| one line, `<generation> · <age>`, once a world kept a cell per view (`ocean.md` §9.5) | naming the view made it 342 to 366 px of the 280, two cells over 470 | the age, then a line for each view's cell; the row grows 25 px a line, and its own buttons with it (§4.3) |
 
 **Fits, at both shapes.** At 1280x720 the cluster at its widest starts at x 824. The
 longest heading on an earshot page that shows the chip is "different versions",

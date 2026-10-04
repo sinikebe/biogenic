@@ -1654,6 +1654,7 @@ drop, and a device keeps one of each kind at most:
   app in the middle of a run saves your cell with the drop -- where it is, its
   size, its genes in their order, its generation and its hunger -- and the next
   launch carries on from there, behind the same beat a return from a pond has.
+  **One cell for each view** (§9.5): the next launch in the same view.
   Today a run is one session (genes-and-cilia.md §9 item 4: "the arc is one
   session"); with yes, a run can span several, and a death is still the only
   clean restart. The replay is not saved (§11): after a resume it holds only
@@ -1808,6 +1809,68 @@ nothing; only the log differs -- `your drop, … as you left it`, or `CONVERTED`
 with what it trimmed and contained. A file that is not a drop this build can
 read -- one it cannot decode, or one that does not hold what its format says --
 is treated as an unknown format: kept as `.old`, never half-loaded.
+
+### 9.5 A cell per view
+
+The owner, 2026-10-04: *"Split the saved cells between full vision and point of
+view. Cells grown in full vision should not be usable in point of view, since it's
+not the same difficulty and gameplay."*
+
+**One cell per view, per world.** A world keeps a full-vision cell and a
+point-of-view cell, each the one left mid-run in that view, or none. **The water
+is shared**: a world is still one drop, and only your cell is split. Opening a
+world in a view resumes that view's cell, or brings a new cell into the water at a
+quiet place (§8.1), as a death does. The other view's cell is kept aside, out of
+the water and untouched, and a death clears only the dying view's cell.
+
+**A cell kept aside keeps its place in the water.** A quiet start moves the whole
+drop under the cell that comes in -- in the probe's world, 7,112 units -- so a cell
+out of the water has to move with it, or it would come back that far from where it
+was left, past the rim as often as not. Every keep moves each cell set aside by
+as much as the drop's rim has moved since the run read it (`normal_mode.gd`'s
+`_cells_kept_aside`), so every place in a file is in the frame of the drop kept
+with it.
+
+**An old cell is full vision's.** Where a cell kept before the split was grown
+cannot be told, and the rule is there to protect point of view: an old file's
+`cell` loads as full vision's, and point of view starts a new cell in every world.
+
+**In the file** (`drop_save.gd`'s `CELLS`): `cell` stays full vision's, and point
+of view's sits beside it in `cells`, a dictionary from a view's name to its cell,
+written only while some other view keeps one -- so a world with only a full-vision
+cell is laid out exactly as before. **`FORMAT` stays 1**: like `cell.loads`, it is
+an optional key, checked as `cell` is when it is there, which a build before it
+loads past and never asks for (and drops the next time it writes). The views are
+named once, in `run_state.gd`'s `CELL_KEYS`: full vision's is `""`, which is
+`cell`, and point of view's `pov`. The file and the worlds' index know a view only
+by that name.
+
+**The worlds' index** (`drops.cfg`, settings.md §6.2) keeps a generation for each
+view: `generation`, full vision's, as it always was, and `generation_pov` beside
+it while a point-of-view cell waits. A keep writes its own view's and leaves the
+other's, and a world's line in the menu names each view's cell (settings.md §4.3).
+
+**`V` flips the view in the editor only** (`normal_mode.gd`'s `view_flip`, which is
+`OS.has_feature("editor")`): the developer's comparison tool it was written as. In
+an exported build -- the dev app's included -- the mode select is the only way to
+choose a view, so no cell crosses views. **A run whose view was flipped keeps
+nothing from then on**: its cell has been played in both, so it goes into
+neither, and what was kept before the flip stands. Every tool that forces a view
+-- `tools/drive.gd --mode=`, the probes -- sets `mode` before the run opens, so it
+opens on that view's cell.
+
+**Ponds follow the same rule.** A guest's cell comes from its own world's place
+for the view it plays in and goes back to it -- `elsewhere` included (§9.1) -- and
+a host's own cell likewise. Nothing on the wire changes: `Wire.PROTOCOL` stays 7
+and `Wire.RULES` with it, because a host judges the body a guest brings, never
+where it was kept.
+
+**What carries over is the water, doing what it was doing.** A hunter mid-chase
+of the cell one view left goes on chasing whichever cell is in the water next, as
+one chasing a cell that dies goes on after the tap brings a new one: single player
+freezes the water on the black and never ends that run. A new cell's quiet start
+clears dread's reach round it either way; a resumed cell gets no clearing, as
+ever.
 
 ---
 

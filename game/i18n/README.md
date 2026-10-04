@@ -232,11 +232,12 @@ The rule: **the English is the message id, and it goes through `tr()`**.
   the same gene twice. `--check` fails on a ROOM with too few or too many words, a word
   it does not know, a line it cannot read, and an English text wider than its own room.
 - **A line the game builds from several messages has no room of its own**: a gene's
-  numbers line, the pause caption, and a world's line in the world menu (its generation
-  and its age). `--lint-all` builds them in each language with the game's code
-  (`gene_stats.gd`: every gene, every copy count, every level and way, every body that
-  changes a number; `drops.gd`: every generation phrase with the widest age), so a new
-  gene is covered without being named. Their budgets are constants at the top of the
+  numbers line, the pause caption, and a world's lines in the world menu (its age, and
+  under it a line for each view's cell: the view and the cell's generation).
+  `--lint-all` builds them in each language with the game's code (`gene_stats.gd`:
+  every gene, every copy count, every level and way, every body that changes a number;
+  `drops.gd`: every age, and every view with every generation phrase), so a new gene,
+  or a new view, is covered without being named. Their budgets are constants at the top of the
   tool (`NUMBERS_ROOM`, `CAPTION_ROOM`, `STATS_ROOM`), with the layout they come from;
   change them with the layout.
 - **Translate the template first, then fill in the values**: `tr("level %d") % n`,
@@ -298,7 +299,7 @@ tightest first:
 | a gene's line on the pause screen (what it does) | 440 px, 15 px type | 417 px | 5 % |
 | a gene's short word on a chip | 47 px, 13 px type | 44 px (`venom`) | 6 % |
 | a fork card's two lines | 185 px, 14 px type | 172 px | 7 % |
-| a world's line in the world menu: `<generation> · <age>`, built whole | 280 px, 15 px type | 260 px | 7 % |
+| a world's lines in the world menu: its age, and `<view> · <generation>` for each view's cell, each built whole | 280 px, 15 px type | 247 px | 13 % |
 | the tray's "waiting" | 64 px, 15 px type | 54 px | 18 % |
 | a gene's numbers line (two to a gene), built whole | 650 px, 14 px type | 550 px | 18 % |
 | a sentence on the earshot screens, one line | 1180 px, 17 px type | 982 px | 20 % |
@@ -309,8 +310,9 @@ The three built-whole rows have no message of their own: a gene's numbers are ph
 joined with a middle dot into two lines, centred, and a line of more than 650 px runs
 into the Leave button at its left (the button's edge is 344 px from the line's middle;
 650 px leaves 19 px of air). The pause caption is a label in a column 560 px wide: past
-that the column, and the whole screen, shifts sideways to make room. A world's line has
-the 280 px under its name in a menu row; a longer one ends in "…". The lint builds all
+that the column, and the whole screen, shifts sideways to make room. A world's lines
+have the 280 px under its name in a menu row, each line on its own; a longer one ends in
+"…". The lint builds all
 three with the game's own code in the language it is checking, so **every phrase counts
 towards them, and each has to be about as short as its English**. The hint and
 instruction rows under the figure have 560 px (430 px when a level and a gauge share the

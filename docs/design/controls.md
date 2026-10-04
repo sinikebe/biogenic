@@ -74,7 +74,10 @@ is the whole explanation and costs no string (§5).
 > turn without swimming, and now also without paying to swim.
 
 **Keys are unchanged under every scheme.** `ui_left`/`A`, `ui_right`/`D`,
-`ui_up`/`W`, `Space`, `V`, `Esc`. The scheme is a *touch* choice; a desktop
+`ui_up`/`W`, `Space`, `V`, `Esc`. (`V` flips the view mid-run **in the editor
+only**, as a developer's comparison: a world keeps a cell for each view, so in an
+exported build the view chooser is the one way to pick one -- `ocean.md` §9.5.)
+The scheme is a *touch* choice; a desktop
 player who picks `pads` gets the pads **and** the keys, and there is no platform
 branch anywhere in this design — branching on `OS.has_feature("mobile")` would
 make the phone layout the one thing nobody can photograph.
