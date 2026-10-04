@@ -25,6 +25,11 @@ const MetabolismNode := preload("res://game/normal/metabolism.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+## **Every gene there is, and the stats it buys** (docs/design/gene-catalogue.md):
+## what this run wires to the field and the membrane is read through these, by
+## stat and by tag, and never by a gene's name.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const ReturnsLayer := preload("res://game/perception/returns.gd")
 const RunState := preload("res://game/run_state.gd")
@@ -172,15 +177,10 @@ const SENSE_LINE_HOLD := 7.0
 # after a newborn that has not eaten has starved.
 
 ## About five seconds of swimming, which is two involuntary impulses -- long
-## enough to have felt the cell move and be wondering what to do with it.
+## enough to have felt the cell move and be wondering what to do with it. The
+## sense is drawn flat from the genes tagged `gift` (the catalogue's
+## `tagged()`): the four that answer *where is something*.
 const FIRST_SENSE_AT := 5.0
-## The four senses that answer *where is something*. Drawn flat. `stigma` is the
-## weakest opening of the four -- a shadow is mass, and the authored first
-## arrival is a drifter with almost none -- but it is a real sense, and what it
-## does see is the half of the water that can eat you.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const FIRST_SENSES: Array[StringName] = [
-	&"ocellus", &"ampulla", &"chemocyte", &"stigma"]
 
 ## The pause scrim, in the launcher's base colour, at two strengths. Point of
 ## view keeps Phase 4's half-veil because the membrane behind it is the live
@@ -679,7 +679,7 @@ var _vision_cut := false
 ## frame to frame because a sweep is a place in a cycle.
 var _beam_fan := RayFan.new()
 ## Different bodies the beam touched this second, which is its experience.
-var _beam_tally := Tally.new(CellBody.BEAM_XP_CAP)
+var _beam_tally := Tally.new(int(Catalogue.number_for({}, &"beam_range", &"xp_cap")))
 ## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
 ## is only lit once a pass stays on the skin and fades over the revisit time,
 ## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes
@@ -1571,40 +1571,35 @@ func _process(delta: float) -> void:
 		_lived += delta
 	# Read once, post once. Nothing below carries a position.
 	_metabolism.upkeep = _genome.upkeep()
-	# `vacuole` and `plastid`: a bigger tank and a body that makes some of its
-	# own. Both land on the beat, which is where every cost in this game lands.
-	_metabolism.reserve = CellBody.STORE_BY_TIER[
-		mini(_cell.extra(&"vacuole"), CellBody.STORE_BY_TIER.size() - 1)]
-	_metabolism.photosynthesis = CellBody.SUN_BY_TIER[
-		mini(_cell.extra(&"plastid"), CellBody.SUN_BY_TIER.size() - 1)]
-	# **In the drop a cell with no `cytostome` absorbs its food from the water**,
-	# as every body there does (ocean.md §5.3, row 11): an income beside the
-	# light, so a player who put a gene over its own mouth lives on as a slow,
-	# cheap body. Today's water keeps today's rule.
-	if _food.in_drop() and _cell.extra(&"cytostome") == 0:
+	# `store` and `sun`: a bigger tank and a body that makes some of its own
+	# (`vacuole`'s and `plastid`'s). Both land on the beat, which is where every
+	# cost in this game lands.
+	_metabolism.reserve = _cell.stat(&"store")
+	_metabolism.photosynthesis = _cell.stat(&"sun")
+	# **In the drop a cell with no mouth absorbs its food from the water**, as
+	# every body there does (ocean.md §5.3, row 11): an income beside the light,
+	# so a player who put a gene over its own mouth lives on as a slow, cheap
+	# body. Today's water keeps today's rule.
+	if _food.in_drop() and _cell.provider(&"gape") == &"":
 		_metabolism.photosynthesis += _food.absorb
-	# `crista`: the same efficiency upkeep already carries, for what moving
-	# costs. Then what moving has cost since this was last paid -- every stroke,
+	# `burn` (`crista`'s): the same efficiency upkeep already carries, for what
+	# moving costs. Then what moving has cost since this was last paid -- every stroke,
 	# a held push and every radian of steering (docs/design/energy.md) -- after
 	# the tank and the burn it is measured against. The cell steps after this
 	# node, so it is the step before this one, and after a still moment it is
 	# whatever the body did in it, paid once.
-	_metabolism.burn = CellBody.BURN_BY_TIER[
-		mini(_cell.extra(&"crista"), CellBody.BURN_BY_TIER.size() - 1)]
+	_metabolism.burn = _cell.stat(&"burn")
 	_metabolism.spend(_cell.take_effort())
 	# What the water has to be told about this body before it answers. All
 	# scalars about the cell's own anatomy; the field turns them into bearings.
-	_food.touch_range = CellBody.TOUCH_RANGE_BY_TIER[
-		mini(_cell.extra(&"palp"), CellBody.TOUCH_RANGE_BY_TIER.size() - 1)]
-	var dart := mini(_cell.extra(&"trichocyst"),
-		CellBody.DART_RANGE_BY_TIER.size() - 1)
-	_food.dart_range = CellBody.DART_RANGE_BY_TIER[dart]
-	_food.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[dart]
+	_food.touch_range = _cell.stat(&"touch_range")
+	_food.dart_range = _cell.stat(&"dart_range")
+	_food.dart_cooldown = _cell.stat(&"dart_cooldown")
 	# **The dart looks along the arc it is worn on**, exactly as the beam does
 	# and resolved in the same place for the same reason: this file has both the
 	# genome and cilia.gd's arc table. A rear dart answers a flank, which is what
 	# makes `trichocyst` a placement decision instead of a radius.
-	_food.dart_bearing = _slot_bearing_of(&"trichocyst")
+	_food.dart_bearing = _slot_bearing_of(_cell.provider(&"dart_range"))
 	# **What this cell's toxins do, and where** (docs/design/dna-slots.md §7.1):
 	# its venom on its bite or its sting on the side it guards, read off the
 	# arc each is worn on, and its poison for whatever bites or swallows it.
@@ -1620,14 +1615,14 @@ func _process(delta: float) -> void:
 	# below is: this file has both the genome and cilia.gd's arc table. Smell
 	# stopped being a bearing (three-senses.md §2) -- what the field answers is
 	# a level, and this is the arc that level is weighted about.
-	_food.smell_bearing = _slot_bearing_of(&"chemocyte")
+	_food.smell_bearing = _slot_bearing_of(_cell.provider(&"smell_range"))
 	_food.ping_range = _cell.ping_range()
 	_food.ping_period = _cell.ping_period()
 	# **Where the pulse leaves from**, resolved here for the same reason the
 	# beam's fan and the dart's arc are: this file has both the genome and
 	# cilia.gd's arc table. It is a bearing, not a place -- the field turns it
 	# into the one world position it needs and spends it inside `_cast_ping`.
-	_food.ping_bearing = _slot_bearing_of(&"ampulla")
+	_food.ping_bearing = _slot_bearing_of(_cell.provider(&"ping_range"))
 	_food.ping_through = _cell.ping_through()
 	# The organ's own resolution, beside its reach and its rate: how many bodies
 	# one pulse answers for and how much of each body's true angular extent
@@ -1650,9 +1645,11 @@ func _process(delta: float) -> void:
 	# **What body this membrane is attached to** (§2.1). One post a frame, beside
 	# the beat, and it is what makes a tier change something point of view can
 	# feel: the thrust bloom, the turn shear and the ingest flood are the same
-	# three organs the fringe draws, seen from inside.
-	_bus.organs(_cell.tier(&"cytostome"), _cell.tier(&"cirrus"),
-		_cell.tier(&"flagellum"), _cell.tier(&"stigma"))
+	# three organs the fringe draws, seen from inside -- the mouth, the cirrus and
+	# the tail, each the organ that provides its stat -- and the eyespot, the one
+	# on the light channel. The bus reads its own tables at their tiers.
+	_bus.organs(_cell.tier_for(&"gape"), _cell.tier_for(&"turn_rate"),
+		_cell.tier_for(&"impulse_speed"), _eyespot_tier())
 	# The stigma only reports if the cell has grown one. The field works out
 	# what the water is doing either way -- what is out there is not a function
 	# of which organs are watching -- but a cell with no eye is handed **no
@@ -1660,14 +1657,14 @@ func _process(delta: float) -> void:
 	# derived from ground truth, the post gate fires on bearing movement as well
 	# as on strength, and an ungated eyeless cell posted forty `light`
 	# sensations a minute for an organ it does not have.
-	var eye := _cell.tier(&"stigma") > 0
+	var eye := _eyespot_tier() > 0
 	_bus.light(_food.shadow_bearing if eye else 0.0, _food.shadow if eye else 0.0)
 	# The earned senses, beside organs() and for the same reason: a tier is a
 	# property of the organ, not of what it senses.
 	# The beam's by its level, held to the three rungs the membrane's lobe
 	# widths are written for; the other two are still their copies.
-	_bus.sense_organs(mini(_cell.beam_level(), CellBody.BEAM_FORK_LEVEL),
-		_cell.extra(&"chemocyte"), _cell.extra(&"ampulla"))
+	_bus.sense_organs(mini(_cell.beam_level(), _beam_fork()),
+		_cell.tier_for(&"smell_range"), _cell.tier_for(&"ping_range"))
 	_post_beam(delta)
 	_earn_beam(delta)
 	_post_pings()
@@ -1753,8 +1750,9 @@ func _settle_slack() -> void:
 ## to be tested across everything it crossed (beam-levels.md §4.3), and the
 ## fan's middle and half-width, so it can skip bodies nowhere near it (§4.4).
 func _aim_beam(delta: float) -> void:
-	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
-	var slot := _genome.slot_of(&"ocellus")
+	var beam := _cell.provider(&"beam_range")
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path(), beam)
+	var slot := _genome.slot_of(beam) if beam != &"" else -1
 	_food.beam_range = float(shape[3])
 	var bearings := PackedFloat32Array()
 	var arcs := PackedFloat32Array()
@@ -1789,14 +1787,15 @@ func _aim_beam(delta: float) -> void:
 ## Every body counts -- food, a hunter, a sister, the other player -- because
 ## the beam's job is to find surfaces, not to judge them.
 func _earn_beam(delta: float) -> void:
-	if _cell.extra(&"ocellus") <= 0:
+	var beam := _cell.provider(&"beam_range")
+	if beam == &"":
 		_beam_tally.reset()
 		return
 	for index: int in _food.beam_touched:
 		_beam_tally.touch(index)
 	var earned := _beam_tally.step(delta)
 	if earned > 0:
-		_earn(&"ocellus", float(earned))
+		_earn(beam, float(earned))
 
 
 ## **Experience for [param gene], and what a level-up shows** (beam-levels.md
@@ -1900,6 +1899,19 @@ func _slot_bearing_of(gene: StringName) -> float:
 	return Cilia.bearing_of(_genome, gene)
 
 
+## **The tier of this body's eyespot**: the organ it drives the light channel
+## with, 0 for none. It buys no number of its own -- what it gates is the shade --
+## so it is found by its channel.
+func _eyespot_tier() -> int:
+	return _cell.tier(_cell.on_channel(Catalogue.LIGHT))
+
+
+## **The level the beam forks at** (`ocellus.gd`), which the membrane's beam lobe
+## is held to: its widths are written for the three rungs below it.
+func _beam_fork() -> int:
+	return int(Catalogue.levels(Catalogue.first_provider(&"beam_range")).get("fork", 0))
+
+
 ## The one beam the membrane hears about: the nearest hit. There is one glow
 ## lobe left in the shader and many rays past the fork, so they compete rather
 ## than sum -- the closest surface is the one worth telling a blind cell about.
@@ -1990,8 +2002,7 @@ func _hear_others() -> void:
 		# referee is the only thing between a guest's call and here -- a guest
 		# has none over its host. Honest calls are never over either.
 		var radius := minf(float(said[1]), CellBody.DIVIDE_RADIUS)
-		var reach := minf(float(said[2]),
-			CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1])
+		var reach := minf(float(said[2]), Stats.top(&"ping_range"))
 		# A bodiless or organless shouter is not a thing a cell can hear, and
 		# it is also the one input that would divide by zero below. Both
 		# answered by not hearing it.
@@ -2089,10 +2100,11 @@ func _step_sense_grant(delta: float) -> void:
 	if _sense_clock < FIRST_SENSE_AT:
 		return
 	_sensed = true
-	for sense: StringName in FIRST_SENSES:
+	var senses := Catalogue.tagged(Catalogue.GIFT)
+	for sense: StringName in senses:
 		if _cell.extra(sense) > 0:
 			return
-	var gene: StringName = FIRST_SENSES[randi() % FIRST_SENSES.size()]
+	var gene: StringName = senses[randi() % senses.size()]
 	# It is in the DNA already but not on this body -- a lineage that wrote a
 	# sense down and then never expressed it. Nothing to give.
 	if _genome.dna_tier(gene) > 0:
@@ -3310,7 +3322,7 @@ func _update_controls() -> void:
 	_controls.update((not _floating() or hold) and _life == Life.ALIVE
 			and _controls_previewed(),
 		_split >= Split.PINCH or _held or _water_beat >= 0.0 or _entering_held,
-		_cell.extra(&"axoneme") > 0, _cell.extra(&"myoneme") > 0, hold)
+		_cell.provider(&"push_accel") != &"", _cell.provider(&"dash_speed") != &"", hold)
 
 
 ## True while the world layer is the thing behind the Hud. Read by the pause
@@ -5287,7 +5299,7 @@ func _update_hint() -> void:
 			_set_hint((tr(HINT_LOSES) if worn else tr(HINT_LOSES_CARRIED))
 				% _word(under))
 		return
-	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
+	if Catalogue.has_tag(gene, Catalogue.ALWAYS_EXPRESSED):
 		_set_hint(tr(Figure.HINT_CERTAIN), gene)
 		return
 	# **[method _copies_of] and never the bare DNA tier**, because a waiting
@@ -5826,7 +5838,7 @@ func _update_numbers() -> void:
 		if grown != null:
 			level = grown.effective_level()
 			path = grown.path
-		elif CellBody.LEVELLED.has(gene):
+		elif Catalogue.has_levels(gene):
 			level = 1
 		var way := _way_reading()
 		if _fork_open() and way >= 0:
@@ -7378,11 +7390,11 @@ func _way_level() -> int:
 
 
 ## `[rays, half-span deg, sweep deg/s, reach]` for [param gene] at [param level]
-## down [param path], or empty for a gene whose cards have no fan to show. The
-## beam is the only gene that forks, and this is where it is named.
+## down [param path], or empty for a gene whose cards have no fan to show: one
+## that casts no beam. The beam is the only gene that forks today.
 func _way_shape(gene: StringName, level: int, path: StringName) -> Array:
-	if gene == &"ocellus":
-		return CellBody.beam_shape(level, path)
+	if Catalogue.provides(gene, &"beam_range"):
+		return CellBody.beam_shape(level, path, gene)
 	return []
 
 
@@ -8559,7 +8571,7 @@ func _choose_gene_at(side: int, slot: int) -> StringName:
 	if GenomeNode.is_inside(slot):
 		var dna: Dictionary = _daughters[side]["tiers"]
 		var held: Array[StringName] = []
-		for gene: StringName in GenomeNode.GENE_ORDER:
+		for gene: StringName in Catalogue.keys():
 			if GenomeNode.is_inside_form(gene) and dna.has(gene):
 				held.append(gene)
 		for gene: StringName in dna:
@@ -8618,7 +8630,7 @@ func _choose_say() -> void:
 	if _show_numbers and gene != &"":
 		var works_at := 0
 		var took: StringName = &""
-		if CellBody.LEVELLED.has(gene):
+		if Catalogue.has_levels(gene):
 			var inherited: Progression = _genome.heritable_levels().get(gene, null)
 			works_at = inherited.effective_level() if inherited != null else 1
 			took = inherited.path if inherited != null else &""
@@ -8643,7 +8655,7 @@ func _choose_say() -> void:
 	var says := _explains(gene, slot)
 	_choose_line.text = "" if says.is_empty() else "· " + says
 	var register := tr(CHOOSE_WORN) if _choose_worn else tr(CHOOSE_CARRIED)
-	var odds := tr(Figure.HINT_CERTAIN) if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
+	var odds := tr(Figure.HINT_CERTAIN) if Catalogue.has_tag(gene, Catalogue.ALWAYS_EXPRESSED) \
 		else _odds(int(found[1]))
 	# **The level goes in the line, not on the strands** (§8.6): both daughters
 	# carry the same level for every gene they share, so a mark on both strands
@@ -8662,7 +8674,7 @@ func _choose_say() -> void:
 ## which the lineage's DNA did not carry, even if her mother's body still
 ## wore it. 0 for a gene that does not level.
 func _choose_level(gene: StringName) -> int:
-	if not CellBody.LEVELLED.has(gene):
+	if not Catalogue.has_levels(gene):
 		return 0
 	var grown: Progression = _genome.heritable_levels().get(gene, null)
 	return grown.level() if grown != null else 1
@@ -8862,9 +8874,6 @@ const LINE_GONE := "their water is gone · this one is yours"
 const LINE_CUT := "cut off from their water · this one is yours"
 ## TRANSLATORS: The friend left the player's world.
 const LINE_LEFT := "they left"
-## A born cell's layout, for the body a guest asks to arrive as from the black:
-## genome.gd's own reset, written out because the body has not been reset yet.
-const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
 
 ## The vision was switched back on half way through the beat.
 var _beat_in := false
@@ -9058,7 +9067,10 @@ func _enter_from_black() -> void:
 		# A mirror's water runs under the black, as the host's does.
 		_update_simulating()
 	_wake_pending = true
-	_pond.enter(CellBody.BASE_RADIUS, GenomeNode.BORN, BORN_ORDER)
+	# A born cell's body and layout, for the body a guest asks to arrive as from
+	# the black: genome.gd's own reset, read here because the body has not been
+	# reset yet.
+	_pond.enter(CellBody.BASE_RADIUS, Catalogue.born(), Catalogue.born_order())
 
 
 ## **Where the host comes back from the black** (owner's row A): near its

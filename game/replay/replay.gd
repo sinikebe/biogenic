@@ -42,6 +42,8 @@ extends Node
 const Panes := preload("res://game/replay/panes.gd")
 const RecorderNode := preload("res://game/replay/recorder.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## The genes (docs/design/gene-catalogue.md): which organ calls, by its stat.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const RayFan := preload("res://game/mechanics/ray_fan.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
@@ -315,16 +317,20 @@ func _write_flocs() -> void:
 			float(floc[2]), float(floc[3]), t - float(row[0])))
 
 
-## Which way the `ampulla` was pointing on the body being watched. The slot is
-## the arc and the arc is the bearing, exactly as `normal_mode.gd` resolves it,
-## and it is the slot the organ was **worn** in: a gene dropped over the
-## `ampulla`'s locus takes it out of the DNA and leaves the organ on the body,
-## so a body slot survives a DNA that no longer mentions the gene at all.
+## Which way the organ that calls -- the provider of `ping_range`, the
+## `ampulla` -- was pointing on the body being watched. The slot is the arc and
+## the arc is the bearing, exactly as `normal_mode.gd` resolves it, and it is the
+## slot the organ was **worn** in: a gene dropped over its locus takes it out of
+## the DNA and leaves the organ on the body, so a body slot survives a DNA that
+## no longer mentions the gene at all.
 ##
 ## Dead ahead for a run that never wore one -- which also never drew a wave,
-## because a cell with no `ampulla` has no reach and no pulse in flight.
+## because a cell with no organ that calls has no reach and no pulse in flight.
 func _ping_bearing() -> float:
-	return Cilia.bearing_of(_genome, &"ampulla")
+	if _genome == null:
+		return 0.0
+	var caller := Catalogue.worn_provider(_genome.tiers(), &"ping_range")
+	return Cilia.bearing_of(_genome, caller) if caller != &"" else 0.0
 
 
 ## The revisit time of the beam being watched, 0 for a fan that does not sweep
@@ -332,7 +338,8 @@ func _ping_bearing() -> float:
 func _beam_hold() -> float:
 	if _cell == null:
 		return 0.0
-	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path())
+	var shape := CellBody.beam_shape(_cell.beam_level(), _cell.beam_path(),
+		_cell.provider(&"beam_range"))
 	return RayFan.revisit_of(int(shape[0]), deg_to_rad(float(shape[1])),
 		deg_to_rad(float(shape[2])))
 

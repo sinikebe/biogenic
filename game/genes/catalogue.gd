@@ -57,6 +57,12 @@ const GIFT := Gene.GIFT
 const ALWAYS_EXPRESSED := Gene.ALWAYS_EXPRESSED
 const NEVER_DRIFTS := Gene.NEVER_DRIFTS
 const RETIRED := Gene.RETIRED
+## The membrane's channels (gene.gd), for the same reason.
+const LIGHT := Gene.LIGHT
+const BEAM := Gene.BEAM
+const PING := Gene.PING
+const SMELL := Gene.SMELL
+const TOUCH := Gene.TOUCH
 
 ## **The water's list of what a drifter may be made of**, and the parts genes
 ## declare to a body's rules, by the names their orders are pinned under below.
@@ -284,6 +290,15 @@ static func levels(key: StringName) -> Dictionary:
 static func number(key: StringName, name: StringName) -> Variant:
 	var record := gene(key)
 	return record.numbers.get(name) if record != null else null
+
+
+## **The number [param name] of the organ a body wearing [param tiers] provides
+## [param stat] with** -- or of the first that provides it, for a body that wears
+## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
+## acts through, and never names it.
+static func number_for(tiers: Dictionary, stat: StringName, name: StringName) -> Variant:
+	var key := worn_provider(tiers, stat)
+	return number(key if key != &"" else first_provider(stat), name)
 
 
 ## **What [param key] adds to the metabolic multiplier at [param level] down

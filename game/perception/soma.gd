@@ -28,6 +28,8 @@ extends CanvasLayer
 const Cilia := preload("res://game/vision/cilia.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes: the born cell's body, for a soma with no genome to read.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 ## Canvas pixels per world unit. A born cell is radius 26 and a full-grown one
 ## 40, so the figure runs about 44 to 68 pixels across the body with the
@@ -184,7 +186,7 @@ func _process(delta: float) -> void:
 func _draw_figure() -> void:
 	if _cell == null:
 		return
-	var tiers := _genome.tiers() if _genome != null else GenomeNode.BORN
+	var tiers := _genome.tiers() if _genome != null else Catalogue.born()
 	# **The body's layout for the body, the DNA's for what is loose in it.** The
 	# organs are where they were grown; an empty socket is a hole in the DNA,
 	# which is where a gene you are holding is actually going.
@@ -261,7 +263,7 @@ func _draw_daughters(centre: Vector2) -> void:
 		# and neither draws a threat bow. The one being declined takes her own
 		# colour on the way out, and that is `shed`.
 		Cilia.draw_cell(_figure, seat, 0.0, r, tiers,
-			CellBody.gape_of(int(tiers.get(&"cytostome", 0)), r), r, true,
+			CellBody.gape_of(tiers, r), r, true,
 			_clock, float(one["fade"]), 0.0, clampf(beat, 0.0, 1.0),
 			float(side) * 2.7, 1.0, one["order"], 0.0, 0.0, 0.0,
 			float(one["shed"]))

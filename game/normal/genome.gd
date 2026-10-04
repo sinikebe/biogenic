@@ -39,6 +39,10 @@ extends Node
 
 const CellBody := preload("res://game/normal/cell.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
+## **Every gene there is** (docs/design/gene-catalogue.md): its order, its forms,
+## its tags and its numbers, by key. Every rule here is generic and asks it.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 
 ## What eating something did. Returned by [method integrate] so the caller --
 ## and the genome strip on the pause screen -- can react without re-deriving it.
@@ -57,45 +61,17 @@ enum Result {
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const TIER_MAX := 3
 
-## Arc order, from §4.1, and therefore the tie-break for [method dominant_of]:
-## the body is drawn in this order, so the cell you can see is the gene you get.
-## Genes outside this list are later phases' and sort after it, in genome order.
-##
-## `stigma` is carried, integrated and inherited here like any other gene. What
-## it buys is §6's light lobe -- a sharp, certain bearing on **mass**, at its
-## tier's width at every range, which dread cannot muffle. It is silent about
-## the two cells §1.1 exists to create, and deliberately: a shadow is a fact
-## about a body, not about a mouth.
-## `chemocyte` and `ampulla` are inserted after `ocellus` rather than anywhere
-## more natural, so that no tie between two genes that already existed changes
-## which one a body is drawn as.
-##
-## **`rhabdom` was removed from this list and nothing closed over the gap**, for
-## the same reason: the order is a tie-break, so lifting one entry out of the
-## middle leaves every remaining pair in the order it was already in. `statocyst`
-## / level went the same way on 2026-09-28: the owner judged it useless, since
-## knowing which way is up says nothing about the water. This list
-## is also what [method _mutate_drift] draws a replacement gene from, so a gene
-## that is not on it can never re-enter a lineage. three-senses.md §8 row 2 is
-## the decision and food.gd's DRIFTER_GENES carries the reasoning.
-##
-## **A gene that is not on this list is still a gene.** [method dominant_of] has
-## an explicit second pass for exactly that case and [method tier_of] is a
-## `.get`, so a `{gene: tier}` map that names a retired organ keeps it, pays
-## upkeep on it and draws it in cilia.gd's reserved hue. Nothing is silently
-## dropped from a genome here.
-##
-## **`toxicyst` is appended, last** (docs/design/dna-slots.md §3): the toxin's
-## form outside, venom, beside `veneneux`, its form inside, poison. At the end so
-## that no tie between two genes that already existed changes. **A drift never
-## draws it by this name**: what comes is a gene, not a form, and the toxin
-## comes as its variety ([method _mutate_drift]).
-const GENE_ORDER: Array[StringName] = [
-	&"cytostome", &"cirrus", &"flagellum", &"stigma",
-	&"ocellus", &"chemocyte", &"ampulla",
-	&"axoneme", &"palp", &"myoneme",
-	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
-	&"toxicyst"]
+# **The order genes are ranked in** -- the tie-break of `dominant_of`, arc order
+# from §4.1, so the cell you can see is the gene you get -- is each gene's own
+# `order` now, in its organ's file, and the catalogue's `keys()` lists every gene
+# in it. It is append-only, and a gene that left it before there was a catalogue
+# (`rhabdom`, `statocyst`) has no place in it: it is ranked as a name this build
+# does not know, as it was when it left.
+#
+# **A gene that is not in the catalogue is still a gene.** `dominant_of` ranks it
+# after every known one and `tier_of` is a `.get`, so a `{gene: tier}` map that
+# names one keeps it, pays upkeep on it and draws it in cilia.gd's reserved hue.
+# Nothing is silently dropped from a genome here.
 
 # --- Places and forms (docs/design/dna-slots.md §2, §3) -------------------------
 # The owner, 2026-10-03: *"We need add body internal slots. Those express inside
@@ -126,21 +102,12 @@ const FRONT: Array[int] = [0, 3, 4]
 ## bites from behind; named for the words that say so, and nothing else.
 const STERN := 2
 
-## **A gene that is a different form in another place**: form to `[gene, strain,
-## place]`. A name not here is an outside gene of one form: itself outside, and
-## nothing inside. **The first listed form of a gene and strain is its
-## variety**, the name the gene goes by where no place is known yet: the water's
-## draws, the floor's count, and two meals in the tray found to be one.
-##
-## `veneneux` keeps its name, and its meaning: what harms whoever bites or
-## swallows it -- French for *poisonous*. `toxicyst` is the real organ, the
-## harpoon hunting ciliates fire from round their mouths. From phase 3 each strain
-## is two more forms, one a place (§8.3); their names are permanent once
-## shipped, because saves and the wire keep them.
-const FORMS := {
-	&"veneneux": [&"toxin", &"harm", &"inside"],
-	&"toxicyst": [&"toxin", &"harm", &"outside"],
-}
+# **A gene that is a different form in another place** is the catalogue's to
+# say: every key is one form of its organ's variant, in one place, and the first
+# form a variant lists is its variety -- the name the gene goes by where no place
+# is known yet: the water's draws, the floor's count, and two meals in the tray
+# found to be one. The toxin is today's one gene with two (organs/toxin.gd);
+# every other is itself, outside. The statics below ask the catalogue.
 
 ## **The name a gene goes by on screen, where it is not its key** (owner's row
 ## 1): both of the toxin's forms are `toxicyst`. The keys never change; they are
@@ -161,46 +128,16 @@ const MOVE_NOTHING := &"nothing"
 const MOVE_FACES_OUT := &"faces_out"
 const MOVE_COLLISION := &"collision"
 
-## **What each gene gives a body's rules** (docs/design/behaviour.md §3): the
-## inputs it senses and the outputs it triggers, by name, beside the list a
-## gene is named in -- so a gene added here brings its own blocks, and rules can
-## read and drive it, the save keeps it and mutation draws it without one being
-## written by hand (§3.5). The body's own parts are declared in `cell.gd` and the
-## metabolism's in `metabolism.gd`, in the same shape.
-##
-## An input has a name, says whether it carries a bearing, and lists the values
-## it carries, each of a kind the rulebook knows (`rulebook.gd`'s ladders). An
-## output has a name, the triggers it claims, and may take an option -- a push's
-## strength. A gene that only acts on its own, as the dart, the call and the
-## mouth do, declares nothing (§3.3). Organs are what declare: what each input
-## reports is the organ's, computed for any body by `food.gd`.
-##
-## **A part may wait for a level** (docs/design/automation.md §4.3): `"level"`
-## says the owner must work at that level or more for the part to be there --
-## its worn copies, for every gene but the beam. The flagellum's `hold` is the
-## first: it holds the tail still and only the tail, claiming the `swimming`
-## trigger `body.swim` claims, from the second copy (`cell.gd`'s HOLD_LEVEL,
-## rows 29 and 38). Declared last, so its owner's bits come after every other.
-const DECLARES := {
-	&"ocellus": {"in": [{"name": &"beam", "bearing": true,
-		"values": {&"distance": &"distance"}}]},
-	&"ampulla": {"in": [{"name": &"echo", "bearing": true,
-		"values": {&"distance": &"distance", &"size": &"size"}}]},
-	&"chemocyte": {"in": [{"name": &"smell", "bearing": false,
-		"values": {&"level": &"level"}}]},
-	&"stigma": {"in": [{"name": &"shadow", "bearing": true,
-		"values": {&"level": &"level"}}]},
-	&"palp": {"in": [{"name": &"touch", "bearing": true,
-		"values": {&"closeness": &"level"}}]},
-	&"myoneme": {"out": [{"name": &"dash", "claims": [&"dash"]}]},
-	&"axoneme": {"out": [{"name": &"push", "claims": [&"push"],
-		"options": [0.5, 1.0]}]},
-	&"flagellum": {"out": [{"name": &"hold", "claims": [&"swimming"],
-		"level": CellBody.HOLD_LEVEL}]},
-}
+# **What each gene gives a body's rules** (docs/design/behaviour.md §3) is its
+# organ's `declares`, read through the catalogue's `declares()`: the inputs it
+# senses and the outputs it triggers, by name -- so a gene brings its own blocks,
+# and rules can read and drive it, the save keeps it and mutation draws it
+# without one being written by hand (§3.5). The body's own parts are declared in
+# `cell.gd` and the metabolism's in `metabolism.gd`, in the same shape. Their
+# words are still here, below.
 
 ## **What the genes' parts are called** (docs/design/automation.md §13.1), beside
-## [constant DECLARES], by qualified name: the words the programs page puts on a
+## what they declare, by qualified name: the words the programs page puts on a
 ## part's chip -- each organ's sense and action, as the player knows the organ.
 ## Read through [method words_of].
 ##
@@ -302,8 +239,8 @@ const GENE_NEEDS := {
 
 
 ## **A part's words, in the language of the moment** (automation.md §13.1), for
-## the parts [constant DECLARES] names: `{"says": its chip, "explains": its
-## line, "asleep": what an instinct using it says while it waits for its level,
+## the parts the genes declare: `{"says": its chip, "explains": its line,
+## "asleep": what an instinct using it says while it waits for its level,
 ## "needs": what the page says when it is picked too early}`, a key absent where
 ## there are none. `cell.gd` answers the same way for the body's parts, so the
 ## page asks the file that declares a part, and a gene brings its own words.
@@ -323,10 +260,9 @@ static func words_of(part: StringName) -> Dictionary:
 		out["needs"] = String(TranslationServer.translate(GENE_NEEDS[part]))
 	return out
 
-## The starting cell is already full: three slots, three organs, all tier 1.
-## You are not an empty vessel; you are mediocre at three things. §1.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const BORN := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+# **The starting cell is already full**: three slots, three organs, all tier 1
+# -- each organ's own `born` (the catalogue's `born()`). You are not an empty
+# vessel; you are mediocre at three things. §1.
 
 ## The price of power, paid in the one channel the game already reads -- the
 ## beat. At rest, one tier-3 gene empties the tank in 36 / 1.36 = 26 s rather
@@ -354,11 +290,11 @@ const SAMPLE_SECONDS := 45.0
 ## it, which is the answer to "a chance takes determinism out of the build".
 const EXPRESS_CHANCE: Array[float] = [0.0, 0.55, 0.80, 1.00]
 
-## **The mouth always expresses.** The same argument [method _mutate_drift]
-## already makes: a daughter born with no cytostome is not one of two builds to
-## choose between, it is a body that cannot feed itself, and nobody would pick
-## it. One exception, named, rather than a rule with a soft edge.
-const ALWAYS_EXPRESSED: Array[StringName] = [&"cytostome"]
+# **The mouth always expresses**: a gene tagged `always_expressed`. The same
+# argument `_mutate_drift` already makes: a daughter born with no mouth is not
+# one of two builds to choose between, it is a body that cannot feed itself, and
+# nobody would pick it. One exception, tagged, rather than a rule with a soft
+# edge.
 
 ## One gene waiting for a slot: which gene, how many copies of it have been
 ## eaten since it arrived, and how many seconds it has left.
@@ -462,7 +398,8 @@ var _body_slots := {}
 var _gift: StringName = &""
 
 ## **One progression per gene that earns levels** (docs/design/beam-levels.md
-## §3): gene to Progression, for the genes in cell.gd's LEVELLED.
+## §3): gene to Progression, for the genes whose organ says how it levels
+## (the catalogue's `levelled()`).
 ##
 ## **The level is the lineage's, not the body's.** It is kept while the body
 ## wears the gene or the DNA carries it, so a daughter who carries the beam
@@ -482,7 +419,7 @@ var _cell: CellBody = null
 
 func _ready() -> void:
 	if _dna.is_empty():
-		express(BORN, [&"cytostome", &"cirrus", &"flagellum"])
+		express(Catalogue.born(), Catalogue.born_order())
 	_sync_order()
 
 
@@ -498,7 +435,7 @@ func setup(cell: CellBody) -> void:
 ## everything** -- lifecycle.md §1.5, replacing §9.4. Death is still a clean
 ## restart as the born cell, three organs, all tier 1.
 func reset() -> void:
-	express(BORN, [&"cytostome", &"cirrus", &"flagellum"])
+	express(Catalogue.born(), Catalogue.born_order())
 
 
 ## **A body born of a DNA.** The two registers are set here and nowhere else: a
@@ -894,7 +831,7 @@ func level_of(gene: StringName) -> int:
 	var grown := progression(gene)
 	if grown != null:
 		return grown.effective_level()
-	if CellBody.LEVELLED.has(gene) and (_body.has(gene) or _dna.has(gene)):
+	if Catalogue.has_levels(gene) and (_body.has(gene) or _dna.has(gene)):
 		return 1
 	return tier(gene)
 
@@ -1015,14 +952,22 @@ static func tiers_from_names(named: Dictionary) -> Dictionary:
 ## every levelled gene either one holds, a fresh one at level 1 for a gene just
 ## arrived, and none for a gene neither holds any more.
 func _tend_levels() -> void:
-	for gene: StringName in CellBody.LEVELLED:
+	for gene: StringName in Catalogue.levelled():
 		if (_dna.has(gene) or _body.has(gene)) and not _levels.has(gene):
-			var rules: Array = CellBody.LEVELLED[gene]
-			_levels[gene] = Progression.new(float(rules[0]), int(rules[1]),
-				rules[2])
+			_levels[gene] = progression_for(gene)
 	for gene: StringName in _levels.keys():
 		if not _dna.has(gene) and not _body.has(gene):
 			_levels.erase(gene)
+
+
+## **A fresh progression for [param gene]**, at level 1, by the rules its organ
+## levels by (gene.gd's `levels`): what a gene arriving in a lineage starts with,
+## and what a screen that shows a cell from its file rebuilds a level on.
+static func progression_for(gene: StringName) -> Progression:
+	var rules := Catalogue.levels(gene)
+	var paths: Array[StringName] = []
+	paths.assign(rules.get("paths", []))
+	return Progression.new(float(rules["step"]), int(rules.get("fork", 0)), paths)
 
 
 ## What this cell is most made of, which is what eating it gives you. §3.4.
@@ -1335,7 +1280,7 @@ func _slot_gene(slot: int) -> StringName:
 
 
 ## **What the DNA carries inside** (dna-slots.md §2.2): its inside forms, in
-## [constant GENE_ORDER] and then any other, padded with `&""` to
+## the catalogue's order and then any other, padded with `&""` to
 ## [constant INSIDE_SLOTS]. **The inside keeps no order of its own**: nothing
 ## inside faces anywhere, so which inside slot holds what means nothing, and it is
 ## read off the DNA rather than kept -- which is why no save, no message and no
@@ -1358,7 +1303,7 @@ static func inside_of(tiers: Dictionary) -> Array[StringName]:
 
 static func _inside_of(tiers: Dictionary) -> Array[StringName]:
 	var out: Array[StringName] = []
-	for gene: StringName in GENE_ORDER:
+	for gene: StringName in Catalogue.keys():
 		if is_inside_form(gene) and tiers.has(gene):
 			out.append(gene)
 	for gene: StringName in tiers:
@@ -1488,32 +1433,36 @@ static func upkeep_of(tiers: Dictionary, priced: Dictionary = {}) -> float:
 			levelled += float(priced[gene])
 			continue
 		extra += maxi(int(tiers[gene]) - 1, 0)
-	# `crista` / burn is the one gene that buys upkeep back, and it is applied
-	# as a multiplier on the whole bill rather than as a subtraction: it is
-	# worth most to the expensive build, which is the one that needs it.
-	var burn := CellBody.BURN_BY_TIER[clampi(tier_of(tiers, &"crista"), 0,
-		CellBody.BURN_BY_TIER.size() - 1)]
+	# `burn` is the one stat that buys upkeep back (`crista`'s), and it is
+	# applied as a multiplier on the whole bill rather than as a subtraction: it
+	# is worth most to the expensive build, which is the one that needs it.
+	var burn := Stats.of(tiers, &"burn")
 	return (1.0 + UPKEEP_PER_TIER * float(extra) + levelled) * burn
 
 
 ## The highest-tier gene, ties broken by arc order. Deterministic on purpose:
 ## the dominant gene is also what the cell looks like, so what you can see
 ## before you commit is exactly what you get.
+##
+## **Ties by rank** (the catalogue's `rank()`): of two genes at the same tier the
+## earlier in the order wins, a gene with a place in it beats one with none, and
+## two with none -- retired before the catalogue, or unknown to this build -- go
+## by the genome's own dictionary order. One pass over what the body wears, not
+## over every gene there is.
 static func dominant_of(tiers: Dictionary) -> StringName:
 	var best: StringName = &""
 	var best_tier := 0
-	for gene: StringName in GENE_ORDER:
-		var value := int(tiers.get(gene, 0))
-		if value > best_tier:
-			best_tier = value
-			best = gene
+	var best_rank := -1
 	for gene: StringName in tiers:
-		if GENE_ORDER.has(gene):
-			continue
 		var value := int(tiers[gene])
-		if value > best_tier:
-			best_tier = value
-			best = gene
+		if value <= 0 or value < best_tier:
+			continue
+		var rank := Catalogue.rank(gene)
+		if value == best_tier and (rank < 0 or (best_rank >= 0 and rank > best_rank)):
+			continue
+		best_tier = value
+		best = gene
+		best_rank = rank
 	return best
 
 
@@ -1538,7 +1487,8 @@ static func expressed(dna: Dictionary) -> Dictionary:
 		var copies := clampi(int(dna[gene]), 0, TIER_MAX)
 		if copies <= 0:
 			continue
-		if ALWAYS_EXPRESSED.has(gene) or randf() < EXPRESS_CHANCE[copies]:
+		if Catalogue.has_tag(gene, Catalogue.ALWAYS_EXPRESSED) \
+				or randf() < EXPRESS_CHANCE[copies]:
 			body[gene] = copies
 	return body
 
@@ -1548,7 +1498,7 @@ static func expressed(dna: Dictionary) -> Dictionary:
 static func express_chance(gene: StringName, copies: int) -> float:
 	if copies <= 0:
 		return 0.0
-	if ALWAYS_EXPRESSED.has(gene):
+	if Catalogue.has_tag(gene, Catalogue.ALWAYS_EXPRESSED):
 		return 1.0
 	return EXPRESS_CHANCE[clampi(copies, 0, TIER_MAX)]
 
@@ -1599,34 +1549,27 @@ static func is_front(slot: int) -> bool:
 	return FRONT.has(slot)
 
 
-## **The place [param form] sits in**: its row's in [constant FORMS], and outside
-## for a gene of one form.
+## **The place [param form] sits in**: its own, by the catalogue, and outside for
+## a gene of one form.
 static func place_of_form(form: StringName) -> StringName:
-	return StringName((FORMS[form] as Array)[2]) if FORMS.has(form) else OUTSIDE_PLACE
+	return Catalogue.place_of(form)
 
 
 ## Whether [param form] sits inside: never in the outside layout, never on an arc.
 static func is_inside_form(form: StringName) -> bool:
-	return FORMS.has(form) and StringName((FORMS[form] as Array)[2]) == INSIDE_PLACE
+	return Catalogue.place_of(form) == INSIDE_PLACE
 
 
 ## Whether [param form] is one form of a gene with others.
 static func has_forms(form: StringName) -> bool:
-	return FORMS.has(form)
+	return Catalogue.has_forms(form)
 
 
 ## **[param form]'s gene and strain, in [param place]**: the toxin's poison
 ## inside and its venom outside; a gene of one form is itself outside and
 ## `&""` -- it cannot sit there -- inside.
 static func form_in(form: StringName, place: StringName) -> StringName:
-	if not FORMS.has(form):
-		return form if place == OUTSIDE_PLACE else &""
-	var row: Array = FORMS[form]
-	for other: StringName in FORMS:
-		var it: Array = FORMS[other]
-		if it[0] == row[0] and it[1] == row[1] and it[2] == place:
-			return other
-	return &""
+	return Catalogue.form_in(form, place)
 
 
 ## [method form_in] at the place of [param slot]: what [param form] becomes there.
@@ -1643,35 +1586,19 @@ static func fits(form: StringName, slot: int) -> bool:
 ## name it goes by where no place is known -- `veneneux` for both of the toxin's
 ## forms, today. Itself for a gene of one form.
 static func variety(form: StringName) -> StringName:
-	if not FORMS.has(form):
-		return form
-	var row: Array = FORMS[form]
-	for other: StringName in FORMS:
-		var it: Array = FORMS[other]
-		if it[0] == row[0] and it[1] == row[1]:
-			return other
-	return form
+	return Catalogue.variety(form)
 
 
 ## **Every form of [param form]'s gene and strain**, its variety first; itself
 ## alone for a gene of one form.
 static func forms_of(form: StringName) -> Array[StringName]:
-	var out: Array[StringName] = []
-	if not FORMS.has(form):
-		out.append(form)
-		return out
-	var row: Array = FORMS[form]
-	for other: StringName in FORMS:
-		var it: Array = FORMS[other]
-		if it[0] == row[0] and it[1] == row[1]:
-			out.append(other)
-	return out
+	return Catalogue.forms_of(form)
 
 
 ## The strain [param form] is of -- the kind of dose it delivers -- or `&""` for a
 ## gene of one form.
 static func strain_of(form: StringName) -> StringName:
-	return StringName((FORMS[form] as Array)[1]) if FORMS.has(form) else &""
+	return Catalogue.dose_of(form)
 
 
 ## **The name [param gene] goes by on screen** ([constant NAMES]): `toxicyst`
@@ -1783,9 +1710,10 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ## whole organ changes colour and shape, which is why this is the kind that is
 ## unmistakable at a glance.
 ##
-## **The mouth is never the gene that is replaced.** Every other trade here is
-## even; losing the cytostome is not, and a daughter born without a mouth is a
-## choice no one would make rather than a choice between two builds.
+## **The mouth is never the gene that is replaced, nor the one that comes**: a
+## gene tagged `never_drifts`. Every other trade here is even; losing the mouth is
+## not, and a daughter born without one is a choice no one would make rather than
+## a choice between two builds.
 ##
 ## **The toxin, by three rules** (dna-slots.md §5.5), and a genome with no toxin
 ## draws exactly what it always drew:
@@ -1806,12 +1734,15 @@ static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var goes: Array[StringName] = []
 	var carried := {}
 	for gene: StringName in tiers:
-		if gene != &"cytostome":
+		if not Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS):
 			goes.append(gene)
 		carried[variety(gene)] = true
+	# **What may come**: every live gene by the catalogue's order, a variety and
+	# not yet carried -- an even draw, as it always was.
 	var comes: Array[StringName] = []
-	for gene: StringName in GENE_ORDER:
-		if gene != &"cytostome" and variety(gene) == gene and not carried.has(gene):
+	for gene: StringName in Catalogue.live():
+		if not Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS) and variety(gene) == gene \
+				and not carried.has(gene):
 			comes.append(gene)
 	if goes.is_empty() or comes.is_empty():
 		return false

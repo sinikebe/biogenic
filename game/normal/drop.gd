@@ -17,7 +17,7 @@ extends RefCounted
 ## **food.gd holds one of these for a run in the drop** (its `setup_drop`),
 ## and asks it every one of those decisions; a run with a session up plays
 ## today's water and never makes one (§10.1). It does not preload food.gd, so
-## food.gd can preload it: a table of food.gd's -- the genes a drifter can
+## food.gd can preload it: a list of the catalogue's -- the genes a drifter can
 ## carry, the senses -- is passed in by the caller.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
@@ -28,6 +28,8 @@ const Replenish := preload("res://game/mechanics/replenish.gd")
 const Snowfall := preload("res://game/mechanics/snowfall.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Genome := preload("res://game/normal/genome.gd")
+## The genes there are (docs/design/gene-catalogue.md): the born cell's body plan.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 # --- Size and shape (§2) -----------------------------------------------------
 
@@ -376,7 +378,7 @@ static func next_turn(turn: int, players: int) -> int:
 ## mouth and whatever the dice give.
 static func peer_plan() -> Array[StringName]:
 	var plan: Array[StringName] = []
-	for gene: StringName in Genome.BORN:
+	for gene: StringName in Catalogue.born():
 		plan.append(gene)
 	return plan
 

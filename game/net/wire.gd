@@ -113,12 +113,14 @@ extends RefCounted
 ## `Contact.STUNG`'s number are kept for the same reason.
 ##
 ## **Rule, until the ladder hash lands (shared-pond.md §7): any content change to
-## `cell.gd`'s `GAPE_BY_TIER`, `ARMOR_BY_TIER`, the bite tables (`BITE_BY_TIER`,
-## `BITE_GAP`, `bite_damage`) or the dose tables (`VENOM_STACKS_BY_TIER`,
-## `POISON_STACKS_BY_TIER`, `SWALLOW_STACKS_BY_TIER`, `VENOM_ARC_DEG`,
-## `VENOM_SIDES`, `HARM_PER_STACK`, `DOSE_TAU_BY_KIND`, `DOSE_GONE`, `DOSE_SIZE`)
-## must bump this number**, or a host on one pack and a guest on another share a
-## pond whose contacts one of them misjudges.
+## the gape and the bite (`GAPE_BY_TIER`, `BITE_BY_TIER`, the mouth's own, in
+## game/genes/organs/cytostome.gd), the armour (`ARMOR_BY_TIER`, pellicle.gd's),
+## `cell.gd`'s `BITE_GAP` and `bite_damage`, or the dose tables (the toxin's
+## `VENOM_STACKS_BY_TIER`, `POISON_STACKS_BY_TIER` and `SWALLOW_STACKS_BY_TIER`,
+## in organs/toxin.gd, and `cell.gd`'s `VENOM_ARC_DEG`, `VENOM_SIDES`,
+## `HARM_PER_STACK`, `DOSE_TAU_BY_KIND`, `DOSE_GONE` and `DOSE_SIZE`) must bump
+## this number**, or a host on one pack and a guest on another share a pond whose
+## contacts one of them misjudges.
 const PROTOCOL := 7
 ## **The rules a host's referee judges a guest by, fingerprinted**
 ## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that

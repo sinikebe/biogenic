@@ -39,6 +39,8 @@ extends CanvasLayer
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+const Stats := preload("res://game/genes/stats.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const MotesField := preload("res://game/normal/motes.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
@@ -750,8 +752,7 @@ func _step_peer(delta: float) -> void:
 	# **How far they could have got since, at the fastest a cell swims.** Read
 	# off the ladder rather than written down, so a tuning pass on the drive
 	# cannot leave a circle here claiming a speed the game no longer has.
-	var ladder := CellBody.IMPULSE_SPEED_BY_TIER
-	var top: float = ladder[ladder.size() - 1]
+	var top := Stats.top(&"impulse_speed")
 	_peer = {
 		"at": at,
 		"heading": wrapf(float(body[1]) + _peer_twist, -PI, PI),
@@ -1917,7 +1918,7 @@ func _draw_cell(a: float) -> void:
 		_world.draw_circle(p, r * (1.05 + 1.75 * k),
 			Color(SELF_TINT, 0.013 * (1.0 - k) * lift * ca), true, -1.0, true)
 
-	var tiers := _genome_node.tiers() if _genome_node != null else GenomeNode.BORN
+	var tiers := _genome_node.tiers() if _genome_node != null else Catalogue.born()
 	# `is_self` is what keeps the player's own body pure SELF_TINT and its own
 	# lip bow green: you are the one cell in the water whose identity you do not
 	# have to read, and your own mouth cannot swallow you.
@@ -1955,7 +1956,7 @@ func _draw_daughters(p: Vector2, beat: float) -> void:
 		var tiers: Dictionary = one["tiers"]
 		var seat := p + across * (spread * (-1.0 if side == 0 else 1.0))
 		Cilia.draw_cell(_world, seat, _cell.heading, r, tiers,
-			CellBody.gape_of(int(tiers.get(&"cytostome", 0)), r), r, true,
+			CellBody.gape_of(tiers, r), r, true,
 			_clock, float(one["fade"]), 0.0, beat, float(side) * 2.7,
 			1.0 / ZOOM, one["order"], 0.0, 0.0, 0.0, float(one["shed"]))
 
