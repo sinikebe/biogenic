@@ -144,7 +144,7 @@ catalogs"); the second is for a pull request that claims a complete language.
 | a placeholder lost, added, retyped or reordered; numbered and plain mixed; a `%` that is not a placeholder | |
 | a control character in a translation, other than a line feed: a raw 0x13 where a dash was meant is invisible in an editor and a box on screen | |
 | text wider than the room a message has, a placeholder measured with the widest word that can stand in it (game catalogs; see **Room**) | |
-| a gene's numbers line, the pause caption, or a world's line in the world menu, wider than its room: the game's own code builds them in the language being checked | |
+| a gene's numbers line, the pause caption, a world's line in the world menu, or a cell's lines, wider than their room: the game's own code builds them in the language being checked | |
 | a message defined twice, or translated differently by the game's catalog and the launcher's for one language (the engine takes whichever loaded last) | |
 | a catalog none of whose messages is in its template (a launcher file in the game's folder, or the other way round) | |
 | a `.po` anywhere but the two folders (the game never reads it, and `addons/` and `ci/` are wiped by a sync) | |
@@ -232,14 +232,17 @@ The rule: **the English is the message id, and it goes through `tr()`**.
   the same gene twice. `--check` fails on a ROOM with too few or too many words, a word
   it does not know, a line it cannot read, and an English text wider than its own room.
 - **A line the game builds from several messages has no room of its own**: a gene's
-  numbers line, the pause caption, and a world's lines in the world menu (its age, and
-  under it a line for each view's cell: the view and the cell's generation).
-  `--lint-all` builds them in each language with the game's code (`gene_stats.gd`:
-  every gene, every copy count, every level and way, every body that changes a number;
-  `drops.gd`: every age, and every view with every generation phrase), so a new gene,
-  or a new view, is covered without being named. Their budgets are constants at the top of the
-  tool (`NUMBERS_ROOM`, `CAPTION_ROOM`, `STATS_ROOM`), with the layout they come from;
-  change them with the layout.
+  numbers line, the pause caption, a world's line in the world menu (its age), and a
+  cell's lines -- under its view's name on the button that plays it, on its row in
+  "your cells", the detailed view's line about what pressing its view will do, and the
+  sheet's caption. `--lint-all` builds them in each language with the game's code
+  (`gene_stats.gd`: every gene, every copy count, every level and way, every body that
+  changes a number; `drops.gd`: every age; `cells.gd`: every default name, generation
+  phrase, age, hunger and place a cell can have), so a new gene, a new view or a new
+  default name is covered without being named. Their budgets are constants at the top
+  of the tool (`NUMBERS_ROOM`, `CAPTION_ROOM`, `STATS_ROOM`, `CELL_LINE_ROOM`,
+  `CELL_ROW_ROOM`, `CELL_THEN_ROOM`, `CELL_CAPTION_ROOM`), with the layout they come
+  from; change them with the layout.
 - **Translate the template first, then fill in the values**: `tr("level %d") % n`,
   never `tr("level %d" % n)`.
 - **A whole sentence is one message.** Never join pieces of a sentence that were
@@ -284,7 +287,11 @@ player keeps: a drop of water with everything living in it, kept between launche
 and named by the player (the code calls it a drop). **A name the player typed is
 never translated**; a world that has not been named wears one of the game's
 default names (`pond water`, `rain barrel`...), which are translated like any
-other message, and follows the language.
+other message, and follows the language. The player keeps **cells**, three for
+each view, each with a **name**: their own words, or one of the game's default
+names (`slipper`, `bell`...), which are translated like a world's and follow the
+language. A cell is feminine in French (`cellule`): `morte`, `âgée` and
+`laissée` agree with it.
 
 **Room.** Nothing in the game wraps or shrinks: a string that is too long runs into
 its neighbour or off the screen, at 1280 x 720, which is the narrowest the game gets.
@@ -299,22 +306,26 @@ tightest first:
 | a gene's line on the pause screen (what it does) | 440 px, 15 px type | 417 px | 5 % |
 | a gene's short word on a chip | 47 px, 13 px type | 44 px (`venom`) | 6 % |
 | a fork card's two lines | 185 px, 14 px type | 172 px | 7 % |
-| a world's lines in the world menu: its age, and `<view> · <generation>` for each view's cell, each built whole | 280 px, 15 px type | 247 px | 13 % |
+| a cell's line on its view's button, `<name> · <generation> · from “<world>”`, built whole with every default name (a name the player typed gives way to "…") | 420 px, 15 px type | 377 px | 11 % |
 | the tray's "waiting" | 64 px, 15 px type | 54 px | 18 % |
 | a gene's numbers line (two to a gene), built whole | 650 px, 14 px type | 550 px | 18 % |
 | a sentence on the earshot screens, one line | 1180 px, 17 px type | 982 px | 20 % |
+| a cell's two lines on its row in "your cells", each built whole | 402 px, 15 px type | 330 px | 21 % |
 | "numbers", the switch | 80 px, 14 px type | 61 px | 31 % |
 | the replay's `leave` and speed buttons | 64 px, 17 px type | 44 px | 45 % |
+| a world's line in the world menu: its age | 280 px, 15 px type | 116 px | 140 % |
 
-The three built-whole rows have no message of their own: a gene's numbers are phrases
+The built-whole rows have no message of their own: a gene's numbers are phrases
 joined with a middle dot into two lines, centred, and a line of more than 650 px runs
 into the Leave button at its left (the button's edge is 344 px from the line's middle;
 650 px leaves 19 px of air). The pause caption is a label in a column 560 px wide: past
-that the column, and the whole screen, shifts sideways to make room. A world's lines
-have the 280 px under its name in a menu row, each line on its own; a longer one ends in
-"…". The lint builds all
-three with the game's own code in the language it is checking, so **every phrase counts
-towards them, and each has to be about as short as its English**. The hint and
+that the column, and the whole screen, shifts sideways to make room. A world's line has
+the 280 px under its name in a menu row; a longer one ends in "…". A cell's line on its
+button has 420 px, and only the name the player typed may give way; its row's lines have
+402; and the detailed view's line about what pressing its view will do wraps onto two
+lines of 280 px and no more. The lint builds them all with the game's own code in the
+language it is checking, so **every phrase counts towards them, and each has to be about
+as short as its English**. The hint and
 instruction rows under the figure have 560 px (430 px when a level and a gauge share the
 row), and the English takes at most 355 of them, so they are roomy; they are measured
 with the widest gene word in every `%s`. **In short, a translation should be no longer

@@ -1,6 +1,9 @@
 extends Control
 ## Where Play lands: the one screen that asks which of the game's two views this
-## run is played in.
+## run is played in -- **and which of your cells** (docs/design/cells-ux.md §1):
+## each view's button names the cell it plays, on a second line under the view,
+## and a chevron beside it opens that view's cells. A view only ever lists its
+## own, so the button and its cell can never disagree.
 ##
 ## It exists because the launcher cannot ask. Its extra buttons emit a signal
 ## only the launcher scene itself can receive, and addons/launcher/ is synced
@@ -24,6 +27,10 @@ const RunState := preload("res://game/run_state.gd")
 const NetSession := preload("res://game/net/net_session.gd")
 ## For one constant: what the way in by invite is called on screen.
 const Invite := preload("res://game/net/invite.gd")
+## **Your cells and your worlds** (docs/design/cells.md): the cell each view plays,
+## and the world it is measured against, for the line under the view's name.
+const Cells := preload("res://game/normal/cells.gd")
+const Drops := preload("res://game/normal/drops.gd")
 
 const NORMAL_SCENE := "res://game/normal/normal_mode.tscn"
 ## Two phones on one wi-fi, one of them hosting. docs/design/multiplayer.md
@@ -41,9 +48,22 @@ const LAUNCHER_SCENE := "res://addons/launcher/launcher.tscn"
 
 ## Both options are well over the 48px minimum, and the pair is separated by far
 ## more than 48 canvas px -- for the same reason the pause buttons are. A low
-## tap on one must land in dead space, not on the other.
-const OPTION_SIZE := Vector2(460.0, 64.0)
+## tap on one must land in dead space, not on the other. **80 tall since each
+## carries its cell's line** (cells-ux.md §1.1): two lines of 20 and 15 px need
+## 48, and the margins take the rest.
+const OPTION_SIZE := Vector2(460.0, 80.0)
 const COMPANION_SIZE := Vector2(320.0, 52.0)
+## **The line under a view's name has this much room** (cells-ux.md §1.2): the
+## button's 460 less its two margins of 20. Wider, the cell's name alone gives
+## way to "…".
+const CELL_LINE_ROOM := 420.0
+const CELL_LINE_SIZE := 15
+## **The chevron beside each view**, the world chip's: its three points round the
+## button's middle, 2 px, at the gear's two alphas (cells-ux.md §1.1).
+const CHEVRON: Array[Vector2] = [Vector2(-5.5, -2.5), Vector2(0.0, 3.0), Vector2(5.5, -2.5)]
+const CHEVRON_INK := Color(0.855, 0.953, 0.933)
+const CHEVRON_REST := 0.8
+const CHEVRON_HOT := 0.95
 
 # --- The words in mode_select.tscn ---------------------------------------------
 # A scene's text is translated by the Control that shows it, and the template reads
@@ -52,22 +72,32 @@ const COMPANION_SIZE := Vector2(320.0, 52.0)
 # TRANSLATORS "choose a view": The heading of the screen where a game is started, in
 # 17 px type. The player chooses how the water is drawn for this game: a "view".
 #
-# TRANSLATORS "full vision": A button, 460 px wide in 20 px type: the view that draws
-# the water the cell swims in, and the membrane (the cell's skin, which senses) over it.
+# TRANSLATORS "full vision": The first line of a button 460 px wide, in 20 px type: the
+# view that draws the water the cell swims in, and the membrane (the cell's skin, which
+# senses) over it. The cell that view plays is named on the line under it.
 #
 # TRANSLATORS "the water the cell is swimming in, and the membrane over it": A note in
 # 15 px type under the "full vision" button, on one line: about 60 characters at most.
 #
-# TRANSLATORS "point of view": A button, 460 px wide in 20 px type: the view that shows
-# only what the cell itself can feel, as if the player were inside it.
+# TRANSLATORS "point of view": The first line of a button 460 px wide, in 20 px type: the
+# view that shows only what the cell itself can feel, as if the player were inside it.
+# The cell that view plays is named on the line under it.
 #
 # TRANSLATORS "only what the cell itself can feel": A note in 15 px type under the
 # "point of view" button: about 40 characters at most.
 #
 # TRANSLATORS "a friend on the same wi-fi": A note in 15 px type under the "within
 # earshot" button, which is 320 px wide: about 35 characters at most.
-@onready var _full: Button = $Center/Column/FullBlock/Full
-@onready var _pov: Button = $Center/Column/PovBlock/Pov
+@onready var _full: Button = $Center/Column/FullBlock/Row/Full
+@onready var _pov: Button = $Center/Column/PovBlock/Row/Pov
+## **Each view's chevron**, which opens that view's cells, and the two lines its
+## button says: the view, and the cell it plays (cells-ux.md §1.1).
+@onready var _full_cells: Button = $Center/Column/FullBlock/Row/Cells
+@onready var _pov_cells: Button = $Center/Column/PovBlock/Row/Cells
+@onready var _full_view: Label = $Center/Column/FullBlock/Row/Full/Lines/View
+@onready var _pov_view: Label = $Center/Column/PovBlock/Row/Pov/Lines/View
+@onready var _full_line: Label = $Center/Column/FullBlock/Row/Full/Lines/Cell
+@onready var _pov_line: Label = $Center/Column/PovBlock/Row/Pov/Lines/Cell
 @onready var _net: Button = $Center/Column/Company/NetBlock/Net
 @onready var _far: Button = $Center/Column/Company/FarBlock/Far
 @onready var _far_note: Label = $Center/Column/Company/FarBlock/FarNote
@@ -93,10 +123,39 @@ func _ready() -> void:
 	_pov.pressed.connect(_choose.bind(RunState.Mode.POV))
 	_net.pressed.connect(_company.bind(EARSHOT_SCENE))
 	_far.pressed.connect(_company.bind(FAR_SCENE))
+	# **A chevron opens its own view's cells** (cells-ux.md §2), in the corner's sheet.
+	_full_cells.pressed.connect(_corner.open_cells.bind(RunState.Mode.FULL_VISION))
+	_pov_cells.pressed.connect(_corner.open_cells.bind(RunState.Mode.POV))
 
 	for button: Button in [_full, _pov]:
 		button.custom_minimum_size = OPTION_SIZE
 		button.focus_mode = Control.FOCUS_ALL
+	# **The view's name follows its button's states** (cells-ux.md §1.1), as the
+	# button's own text did before it had two lines.
+	for pair: Array in [[_full, _full_view], [_pov, _pov_view]]:
+		var button: Button = pair[0]
+		var said: Label = pair[1]
+		for change: Signal in [button.mouse_entered, button.mouse_exited,
+				button.focus_entered, button.focus_exited, button.button_down,
+				button.button_up]:
+			# Deferred: a button takes in that it is hovered or pressed after it
+			# says so, and the colour is read off what it then is.
+			change.connect(_tint_view.bind(button, said), CONNECT_DEFERRED)
+		_tint_view(button, said)
+	for chevron: Button in [_full_cells, _pov_cells]:
+		chevron.focus_mode = Control.FOCUS_ALL
+		chevron.draw.connect(_draw_chevron.bind(chevron))
+		for change: Signal in [chevron.mouse_entered, chevron.mouse_exited,
+				chevron.focus_entered, chevron.focus_exited]:
+			change.connect(chevron.queue_redraw)
+	# **Your cells first leave your worlds here** (cells.md §4): on this screen's
+	# first frame, for every world whose index still names a cell -- once, after
+	# the update, and nothing at all from then on. Before the lines are said, so
+	# each view's button names the cell the migration selected for it.
+	Cells.migrate(_corner.drops_root, _corner.cells_root)
+	# Each view's line is said again whenever the corner closes: a cell chosen,
+	# renamed or deleted in its sheet, or another world chosen with the chip.
+	_corner.closed.connect(_say_cells)
 	# Subordinate on purpose: this screen's question is still "which view", and
 	# the company options are a different question asked underneath it --
 	# narrower and shorter than the two views, side by side in one row, and
@@ -112,17 +171,32 @@ func _ready() -> void:
 		button.focus_mode = Control.FOCUS_ALL
 	_say()
 
-	# **Down from point of view lands on within earshot.** The pair sits
-	# symmetrically under it, so the automatic pick is a tie, and a tie-break is
-	# not a decision. Up from either comes back to point of view; left and right
-	# walk the pair.
+	# **The keyboard walks the views keeping its column** (cells-ux.md §1.3):
+	# Right from a view is its chevron and Left comes back; Down and Up go between
+	# full vision and point of view, and between their chevrons. **Down from point
+	# of view lands on within earshot**, and from its chevron on by invite: the
+	# pair sits under them, and a tie-break is not a decision. Up from the pair
+	# comes back to the column it left; left and right walk the pair.
+	for row: Array in [[_full, _full_cells], [_pov, _pov_cells]]:
+		var view: Button = row[0]
+		var chevron: Button = row[1]
+		view.focus_neighbor_right = view.get_path_to(chevron)
+		view.focus_neighbor_left = view.get_path_to(view)
+		chevron.focus_neighbor_left = chevron.get_path_to(view)
+		chevron.focus_neighbor_right = chevron.get_path_to(chevron)
+	_full.focus_neighbor_bottom = _full.get_path_to(_pov)
+	_pov.focus_neighbor_top = _pov.get_path_to(_full)
+	_full_cells.focus_neighbor_bottom = _full_cells.get_path_to(_pov_cells)
+	_pov_cells.focus_neighbor_top = _pov_cells.get_path_to(_full_cells)
 	_pov.focus_neighbor_bottom = _pov.get_path_to(_net)
+	_pov_cells.focus_neighbor_bottom = _pov_cells.get_path_to(_far)
 	_net.focus_neighbor_top = _net.get_path_to(_pov)
-	_far.focus_neighbor_top = _far.get_path_to(_pov)
+	_far.focus_neighbor_top = _far.get_path_to(_pov_cells)
 	_net.focus_neighbor_right = _net.get_path_to(_far)
 	_far.focus_neighbor_left = _far.get_path_to(_net)
-	# **Up from full vision is the gear**, and Down from the gear comes back.
-	_corner.link_focus(_full)
+	# **Up from full vision is the gear**, and from its chevron too; Down from the
+	# gear comes back.
+	_corner.link_focus(_full, [_full_cells])
 
 	# The remembered choice is the focused one, so the keyboard path is one key
 	# and the returning player can see what they picked last time.
@@ -147,6 +221,60 @@ func _say() -> void:
 	# constant.
 	_far.text = tr(Invite.DOOR_NAME)
 	_far_note.text = far_note(Invite.DOOR_NAME)
+	# The chevrons' tooltip is the sheet's own caption (cells-ux.md §1.3).
+	for chevron: Button in [_full_cells, _pov_cells]:
+		chevron.tooltip_text = tr("your cells")
+		chevron.accessibility_name = chevron.tooltip_text
+	_say_cells()
+
+
+## **The cell each view plays, on the line under its name** (cells-ux.md §1.2):
+## `slipper · fourth generation`, with where it comes from when its place is not
+## in the selected world, `a new cell` for an empty slot, and `a new cell ·
+## slipper died` over a record -- read afresh, never written. The name alone gives
+## way to "…" when the line is wider than the button.
+func _say_cells() -> void:
+	if not is_node_ready():
+		return
+	var worlds := Drops.read(_corner.drops_root)
+	for row: Array in [[RunState.Mode.FULL_VISION, _full, _full_line],
+			[RunState.Mode.POV, _pov, _pov_line]]:
+		var mode := int(row[0])
+		var button: Button = row[1]
+		var line: Label = row[2]
+		var index := Cells.read(RunState.cell_key(mode), _corner.cells_root)
+		var entry := Cells.entry_of(index, int(index["selected"]))
+		line.text = Cells.fit(Cells.button_line(entry, worlds, true, _corner.drops_root),
+			line.get_theme_font(&"font"), CELL_LINE_SIZE, CELL_LINE_ROOM)
+		# The button's own text is empty now: what it says is its two lines.
+		button.accessibility_name = "%s, %s" % [tr(RunState.VIEW_WORDS[mode]), line.text]
+
+
+## **A view's name in its button's font colour for the state it is in**: pressed,
+## hovered, focused or at rest, as the launcher theme colours a button's own text.
+func _tint_view(button: Button, said: Label) -> void:
+	var state := &"font_color"
+	match button.get_draw_mode():
+		BaseButton.DRAW_PRESSED, BaseButton.DRAW_HOVER_PRESSED:
+			state = &"font_pressed_color"
+		BaseButton.DRAW_HOVER:
+			state = &"font_hover_color"
+		_:
+			if button.has_focus():
+				state = &"font_focus_color"
+	said.add_theme_color_override(&"font_color", button.get_theme_color(state, &"Button"))
+
+
+## **The chevron, drawn** as the world chip's is: it says the button opens a list.
+## Brighter while hovered or focused, as the gear is.
+func _draw_chevron(chevron: Button) -> void:
+	var hot := chevron.is_hovered() or chevron.has_focus()
+	var at := chevron.size * 0.5
+	var points := PackedVector2Array()
+	for point: Vector2 in CHEVRON:
+		points.append(at + point)
+	chevron.draw_polyline(points, Color(CHEVRON_INK, CHEVRON_HOT if hot else CHEVRON_REST),
+		2.0, true)
 
 
 ## **The note under the far button** (invites-ux.md §6.1). "by invite" already

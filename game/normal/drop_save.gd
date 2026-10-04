@@ -1,9 +1,13 @@
 extends RefCounted
 ## **A drop, kept** (docs/design/ocean.md §9): the file a drop lives in between
 ## two launches, and what a build does with one that another build wrote. A
-## personal drop and a room are the same file (§9.1, §10.3) -- a drop, and the
-## cell of whoever left it mid-run, if anyone did: **one cell for each view**
-## (§9.5), each the one left mid-run in that view, never played in another.
+## personal drop and a room are the same file (§9.1, §10.3). **A world keeps only
+## its water** (docs/design/cells.md §3.3): your cells have files of their own
+## (cell_save.gd), and `cell` is written `{}`. A file a build before them wrote
+## may still hold its cells -- **one for each view** (ocean.md §9.5), `cell` and
+## [constant CELLS] -- which this still reads, checks and composes, for the
+## migration that moves them into slots (cells.gd) and for the run that has to
+## carry one it could not move.
 ##
 ## **The file** (§9.3): one `store_var` of plain types -- Dictionaries, Arrays
 ## and Packed arrays, never an object -- through `open_compressed`, written to a
@@ -384,18 +388,19 @@ static func _rule_value(value: Variant) -> String:
 
 # --- The file (§9.3) ----------------------------------------------------------------
 
-## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, and the
-## cells kept with it, **by view** -- [param cells] is a view's name to its cell,
-## the first view's under "" ([constant CELLS]) -- under this build's format,
-## rules, content version and commit. A view with no cell is left out; a drop
-## with no cell at all -- after a death, or with nobody in it -- is `{}`.
-static func compose(drop: Dictionary, cells: Dictionary) -> Dictionary:
-	var build := _build()
+## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, under
+## this build's format, rules, content version and commit, **with no cell in it**
+## (cells.md §3.3): `cell` is `{}` and there is no [constant CELLS]. [param cells]
+## is for the one case that still writes some -- **cells a migration could not
+## move yet** (§4), a view's name to its cell, the first view's under "", which a
+## run carries aside and writes back so that nothing is lost.
+static func compose(drop: Dictionary, cells: Dictionary = {}) -> Dictionary:
+	var stamp := build()
 	var data := {
 		"format": FORMAT,
 		"rules": rules(),
-		"content": int(build[0]),
-		"commit": str(build[1]),
+		"content": int(stamp[0]),
+		"commit": str(stamp[1]),
 		"drop": drop,
 		"cell": cells.get("", {}),
 	}
@@ -480,28 +485,39 @@ static func read(path: String) -> Dictionary:
 
 
 ## **What the drop at [param path] would say about itself, read and never
-## moved** (docs/design/settings.md §6.3): `{lived, generations}` -- the drop's
-## age in seconds, and the generation of each cell left in it, by view, a view
-## that left none not in it -- or an empty Dictionary for none, and for one this
-## build cannot use. Decoded and checked as [method read] does, but **a file it
-## cannot use stays where it is**: only a run that is about to play a drop may set
-## its file aside, and the drop menu, which asks this of a drop its index does not
-## name, is not one.
+## moved** (docs/design/settings.md §6.3): `{lived, seed, generations}` -- the
+## drop's age in seconds, its number, and the generation of each cell a build
+## before cells.md left in it, by view, a view that left none not in it -- or an
+## empty Dictionary for none, and for one this build cannot use. Decoded and
+## checked as [method read] does, but **a file it cannot use stays where it is**:
+## only a run that is about to play a drop may set its file aside, and the drop
+## menu, which asks this of a drop its index does not name, is not one.
 ## It costs a whole decode -- 2 ms on a desktop for a drop of 600 bodies, more on
-## a phone -- so it is asked only of a file the index does not name, and the
-## index keeps the answer from its next write on.
+## a phone -- so it is asked only of a file the index does not name, or whose
+## number it does not hold, and the index keeps the answer from its next write on.
 static func peek(path: String) -> Dictionary:
-	if not FileAccess.file_exists(path):
-		return {}
-	var data: Variant = _decoded(path)
-	if not unusable(data).is_empty():
+	var data := look(path)
+	if data.is_empty():
 		return {}
 	var drop: Dictionary = data["drop"]
 	var generations := {}
 	var cells := cells_of(data)
 	for view: String in cells:
 		generations[view] = int(cells[view]["generation"])
-	return {"lived": float(drop["age"]), "generations": generations}
+	return {"lived": float(drop["age"]), "seed": int(drop["seed"]),
+		"generations": generations}
+
+
+## **The drop at [param path], read and never moved**: the file as [method read]
+## gives it, or an empty Dictionary for none and for one this build cannot use,
+## which stays where it is. What the chooser's migration reads a world by
+## (cells.md §4): it is no run, and only a run about to play a drop sets a file
+## aside.
+static func look(path: String) -> Dictionary:
+	if not FileAccess.file_exists(path):
+		return {}
+	var data: Variant = _decoded(path)
+	return data if unusable(data).is_empty() else {}
 
 
 ## The one value the file at [param path] holds, or null when it would not open.
@@ -529,15 +545,15 @@ static func unusable(data: Variant) -> String:
 	if int(file["format"]) != FORMAT:
 		return "format %d, which this build (format %d) does not know" % [
 			int(file["format"]), FORMAT]
-	var bad := _misfit(file, SHAPE)
+	var bad := misfit(file, SHAPE)
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
-		bad = _misfit(file["cell"], CELL, "cell.")
+		bad = misfit(file["cell"], CELL, "cell.")
 	if bad.is_empty():
 		bad = _bad_bodies(file["drop"])
 	if bad.is_empty():
 		bad = _bad_extra(file["drop"])
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
-		bad = _bad_cell(file["cell"])
+		bad = bad_cell(file["cell"], "cell.")
 	if bad.is_empty():
 		bad = _bad_cells(file)
 	return "" if bad.is_empty() else "format %d but unreadable (%s)" % [FORMAT, bad]
@@ -560,17 +576,16 @@ static func _bad_cells(file: Dictionary) -> String:
 		var cell: Dictionary = cells[view]
 		if cell.is_empty():
 			continue
-		var bad := _misfit(cell, CELL, "cells.%s." % view)
-		if bad.is_empty():
-			bad = _bad_cell(cell)
+		var bad := bad_cell(cell, "cells.%s." % view)
 		if not bad.is_empty():
 			return bad
 	return ""
 
 
 ## The first key of [param shape] that [param value] does not hold as the type
-## it says, by its path; "" when every one is.
-static func _misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
+## it says, by its path; "" when every one is. cell_save.gd checks its own file
+## with it too.
+static func misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
 	for key: String in shape:
 		if not value.has(key):
 			return at + key + " missing"
@@ -578,7 +593,7 @@ static func _misfit(value: Dictionary, shape: Dictionary, at := "") -> String:
 		if want is Dictionary:
 			if not value[key] is Dictionary:
 				return at + key + " is not a dictionary"
-			var inner := _misfit(value[key], want, at + key + ".")
+			var inner := misfit(value[key], want, at + key + ".")
 			if not inner.is_empty():
 				return inner
 		elif typeof(value[key]) != int(want):
@@ -671,7 +686,7 @@ static func _bad_behaviour(drop: Dictionary, bodies: Dictionary, n: int) -> Stri
 		if not drop["behaviours"] is Dictionary:
 			return "drop.behaviours is not a dictionary"
 		var kept: Dictionary = drop["behaviours"]
-		var bad := _misfit(kept, BEHAVIOURS, "drop.behaviours.")
+		var bad := misfit(kept, BEHAVIOURS, "drop.behaviours.")
 		if not bad.is_empty():
 			return bad
 		unread = int(kept["version"]) != BEHAVIOURS_VERSION
@@ -731,7 +746,7 @@ static func _bad_extra(drop: Dictionary) -> String:
 		if not drop["runs"] is Dictionary:
 			return "drop.runs is not a dictionary"
 		var runs: Dictionary = drop["runs"]
-		var bad := _misfit(runs, RUNS, "drop.runs.")
+		var bad := misfit(runs, RUNS, "drop.runs.")
 		if not bad.is_empty():
 			return bad
 		if (runs["state"] as PackedByteArray).size() != n \
@@ -753,44 +768,53 @@ static func _bad_extra(drop: Dictionary) -> String:
 	return ""
 
 
-static func _bad_cell(cell: Dictionary) -> String:
+## **Why [param cell] is not a cell this build can load**, or "" when it is:
+## [constant CELL], key by key, then what a type cannot say -- `elsewhere`, `fed`,
+## the record, the loads, two daughters by gene name, a genome of gene names to
+## tiers, its waiting genes and its levels. A world's `cell` and [constant CELLS]
+## are checked with it, and so is a slot's (cell_save.gd), so a cell is one thing
+## wherever it is kept. [param at] is where it sits, for the reason given.
+static func bad_cell(cell: Dictionary, at := "cell.") -> String:
+	var bad := misfit(cell, CELL, at)
+	if not bad.is_empty():
+		return bad
 	if cell.has("elsewhere") and typeof(cell["elsewhere"]) != TYPE_BOOL:
-		return "cell.elsewhere is the wrong type"
+		return at + "elsewhere is the wrong type"
 	# **Seconds since the cell last ate** (docs/design/automation.md §9.2), for its
 	# instincts' `fed`: since pack 4's programs, and absent for a cell that never
 	# ate. A build before them loads the rest and never asks.
 	if cell.has("fed") and (typeof(cell["fed"]) != TYPE_FLOAT or not is_finite(float(cell["fed"]))):
-		return "cell.fed is not seconds"
+		return at + "fed is not seconds"
 	for key: String in CELL_LINEAGE:
 		if cell.has(key) and typeof(cell[key]) != int(CELL_LINEAGE[key]):
-			return "cell.%s is the wrong type" % key
+			return at + "%s is the wrong type" % key
 	# **The cell's own loads** (the toxin's doses): three counts of stacks.
 	if cell.has("loads") and (typeof(cell["loads"]) != TYPE_PACKED_FLOAT64_ARRAY
 			or (cell["loads"] as PackedFloat64Array).size() != LOADS
 			or not _are_stacks(cell["loads"])):
-		return "cell.loads is not three counts of stacks"
+		return at + "loads is not three counts of stacks"
 	var pair: Array = cell["daughters"]
 	if not pair.is_empty() and pair.size() != 2:
-		return "cell.daughters is not two daughters"
+		return at + "daughters is not two daughters"
 	for one: Variant in pair:
-		if not one is Dictionary or not _misfit(one, DAUGHTER).is_empty() \
+		if not one is Dictionary or not misfit(one, DAUGHTER).is_empty() \
 				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]):
-			return "cell.daughters is not two daughters by gene name"
+			return at + "daughters is not two daughters by gene name"
 	var genome: Dictionary = cell["genome"]
 	if not _is_genes(genome["dna"]) or not _is_genes(genome["body"]):
-		return "cell.genome is not gene names to tiers"
+		return at + "genome is not gene names to tiers"
 	for one: Variant in genome["waiting"]:
 		if not one is Array or (one as Array).size() != 3 \
 				or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT \
 				or typeof(one[2]) != TYPE_FLOAT:
-			return "cell.genome.waiting is not gene, copies and seconds"
+			return at + "genome.waiting is not gene, copies and seconds"
 	var levels: Dictionary = genome["levels"]
 	for gene: Variant in levels:
 		var level: Variant = levels[gene]
 		if typeof(gene) != TYPE_STRING or not level is Array \
 				or (level as Array).size() != 2 or typeof(level[0]) != TYPE_FLOAT \
 				or typeof(level[1]) != TYPE_STRING:
-			return "cell.genome.levels is not gene names to experience and path"
+			return at + "genome.levels is not gene names to experience and path"
 	return ""
 
 
@@ -813,19 +837,18 @@ static func converted(data: Dictionary) -> bool:
 
 
 ## **What a load says in the log**, so a tester can tell a converted drop from a
-## resumed one: the drop's age and bodies, whether [param view]'s cell came back
-## with it, how many other views' cells wait aside (§9.5), and under other rules
-## what the conversion did -- [param done] is what food.gd's `load_drop` returns.
-## Content and commit are the build that wrote it.
-static func note(data: Dictionary, done: Dictionary, view := "") -> String:
+## resumed one: the drop's age and bodies, the cells a build before cells.md
+## still keeps in it -- none once they are in slots (cells.md §4) -- and under
+## other rules what the conversion did: [param done] is what food.gd's
+## `load_drop` returns. Content and commit are the build that wrote it. **Your
+## cell is cells.gd's to say**: it is no longer in this file.
+static func note(data: Dictionary, done: Dictionary) -> String:
 	var drop: Dictionary = data["drop"]
-	var own := not cell_of(data, view).is_empty()
-	var aside := cells_of(data).size() - (1 if own else 0)
-	var line := "[drop-save] your drop, %d bodies, %.0f s old, %s%s" % [
+	var kept := cells_of(data).size()
+	var line := "[drop-save] your drop, %d bodies, %.0f s old%s" % [
 		int(done.get("bodies", 0)), float(drop["age"]),
-		"and your cell in it" if own else "and a new cell",
-		"" if aside == 0 else (", another view's cell kept aside" if aside == 1
-			else ", %d other views' cells kept aside" % aside)]
+		"" if kept == 0 else (", a cell from before the slots still in it" if kept == 1
+			else ", %d cells from before the slots still in it" % kept)]
 	if not converted(data):
 		return line + ", as you left it"
 	return line + (", CONVERTED: written by content %d (%s) under rules %s, read under %s;"
@@ -836,8 +859,9 @@ static func note(data: Dictionary, done: Dictionary, view := "") -> String:
 
 
 ## `[content version, commit]` of this build, from the launcher's BuildInfo --
-## `[0, ""]` with none to ask, as in a tool's run.
-static func _build() -> Array:
+## `[0, ""]` with none to ask, as in a tool's run. cell_save.gd stamps a cell
+## with it too.
+static func build() -> Array:
 	var tree := Engine.get_main_loop() as SceneTree
 	var info: Node = tree.root.get_node_or_null(^"BuildInfo") if tree != null else null
 	if info == null:

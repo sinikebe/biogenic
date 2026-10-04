@@ -36,6 +36,9 @@ const RunState := preload("res://game/run_state.gd")
 const NetSession := preload("res://game/net/net_session.gd")
 const Lan := preload("res://game/net/lan.gd")
 const Invite := preload("res://game/net/invite.gd")
+## **Your cells** (docs/design/cells-ux.md §4): the cell each view brings into the
+## pond, named on its button once the call is answered.
+const Cells := preload("res://game/normal/cells.gd")
 
 const NORMAL_SCENE := "res://game/normal/normal_mode.tscn"
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -49,6 +52,12 @@ enum Page { CHOOSE, CALLING, ANSWERING, TOGETHER, TROUBLE, FAR, FAR_CALLING, FOR
 ## lands in dead space rather than on the other -- the same rule the view
 ## chooser and the pause column are built to.
 const BUTTON_SIZE := Vector2(264.0, 56.0)
+## **TOGETHER's two view buttons carry their cell's line** (cells-ux.md §4): 8 px
+## taller, their two lines in the chooser's two sizes, 14 px in from each side --
+## which leaves the line 236 px, and the cell's name alone gives way to "…".
+const VIEW_BUTTON_SIZE := Vector2(264.0, 64.0)
+const CELL_LINE_ROOM := 236.0
+const CELL_LINE_SIZE := 15
 
 ## The ring the code is written on. 160px puts 84px of arc under each of the
 ## twelve bearings and 156px of radial band behind it, so every target is over
@@ -182,6 +191,17 @@ func _ready() -> void:
 	for button: Button in [_first, _second, _third]:
 		button.custom_minimum_size = BUTTON_SIZE
 		button.focus_mode = Control.FOCUS_ALL
+	# **A view's line follows its cell** (cells-ux.md §4): said again whenever the
+	# corner closes -- the host's chip may have chosen another world. And its name
+	# follows the button's states, as the chooser's does (§1.1).
+	_corner.closed.connect(_on_corner_closed)
+	for button: Button in [_first, _second]:
+		var said: Label = button.get_node(^"Lines/View")
+		for change: Signal in [button.mouse_entered, button.mouse_exited,
+				button.focus_entered, button.focus_exited, button.button_down,
+				button.button_up]:
+			change.connect(_tint_view.bind(button, said), CONNECT_DEFERRED)
+		_tint_view(button, said)
 	_first.pressed.connect(_on_first)
 	_second.pressed.connect(_on_second)
 	_third.pressed.connect(_on_third)
@@ -341,12 +361,13 @@ func _say_page() -> void:
 			_receipt.text = _receipt_of(_kept) if far else ""
 			# TRANSLATORS: Two buttons that choose how the shared game is drawn: the
 			# first shows the water the cell swims in and the membrane over it, the
-			# second shows only what the cell itself can feel. Also the two options
-			# on the screen where a game is started.
-			_button(_first, tr("full vision"))
+			# second shows only what the cell itself can feel. The first line of each
+			# button, in 20 px type; the cell that view brings in is named under it.
+			# Also the two options on the screen where a game is started.
+			_view_button(_first, tr("full vision"), RunState.Mode.FULL_VISION)
 			# TRANSLATORS: The second of the two buttons above: the view that shows
 			# only what the cell itself can feel.
-			_button(_second, tr("point of view"))
+			_view_button(_second, tr("point of view"), RunState.Mode.POV)
 		Page.TROUBLE:
 			_say_trouble()
 		Page.FAR:
@@ -1078,6 +1099,52 @@ func _point(middle: Vector2, digit: int, radius: float) -> Vector2:
 func _button(button: Button, text: String) -> void:
 	button.text = text
 	button.visible = not text.is_empty()
+	button.custom_minimum_size = BUTTON_SIZE
+	button.accessibility_name = ""
+	var lines := button.get_node_or_null(^"Lines") as Control
+	if lines != null:
+		lines.hide()
+
+
+## **A view's button on TOGETHER** (cells-ux.md §4): [param words] -- the view --
+## and under it the cell [param mode]'s view brings into the pond, as the chooser
+## names it but **without `from`**: a pond is a friend's water whatever the cell's
+## place was. Over a record it says `a new cell` alone.
+func _view_button(button: Button, words: String, mode: int) -> void:
+	button.text = ""
+	button.visible = true
+	button.custom_minimum_size = VIEW_BUTTON_SIZE
+	var view := RunState.cell_key(mode)
+	var index := Cells.read(view, _corner.cells_root)
+	var entry := Cells.entry_of(index, int(index["selected"]))
+	var said: Label = button.get_node(^"Lines/View")
+	var cell: Label = button.get_node(^"Lines/Cell")
+	said.text = words
+	cell.text = Cells.fit(Cells.button_line(entry, {}, false), cell.get_theme_font(&"font"),
+		CELL_LINE_SIZE, CELL_LINE_ROOM)
+	button.accessibility_name = "%s, %s" % [words, cell.text]
+	(button.get_node(^"Lines") as Control).show()
+
+
+## **A view's name in its button's font colour for the state it is in**, as the
+## launcher theme colours a button's own text (mode_select.gd's, the same).
+func _tint_view(button: Button, said: Label) -> void:
+	var state := &"font_color"
+	match button.get_draw_mode():
+		BaseButton.DRAW_PRESSED, BaseButton.DRAW_HOVER_PRESSED:
+			state = &"font_pressed_color"
+		BaseButton.DRAW_HOVER:
+			state = &"font_hover_color"
+		_:
+			if button.has_focus():
+				state = &"font_focus_color"
+	said.add_theme_color_override(&"font_color", button.get_theme_color(state, &"Button"))
+
+
+## The corner closed over this page: on TOGETHER, each view's cell is said again.
+func _on_corner_closed() -> void:
+	if _page == Page.TOGETHER:
+		_say_page()
 
 
 ## Which verb to name. Deliberately not asking the DisplayServer, which has no

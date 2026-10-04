@@ -84,6 +84,12 @@ const DropSave := preload("res://game/normal/drop_save.gd")
 ## generation, which the pause caption shares with the drop menu, are its too:
 ## figure.gd builds the caption with them.
 const Drops := preload("res://game/normal/drops.gd")
+## **Your cells, kept apart from the worlds** (docs/design/cells.md): three slots
+## for each view, the selected one each view's button plays ([member cells_at]),
+## and the file each cell lives in. This file decides when a cell is read and
+## kept, and what its place means; those two know the layout.
+const Cells := preload("res://game/normal/cells.gd")
+const CellSave := preload("res://game/normal/cell_save.gd")
 ## **Your cell's record of descent** (docs/design/lineage.md §4): a general
 ## piece that knows nothing of cells. This file numbers the cell and names its
 ## mother; the drop keeps the record of every other body.
@@ -309,8 +315,9 @@ const WATCH_MIN_SECONDS := 2.0
 
 ## Which view this run is drawn with, as [enum RunState.Mode]. Set it before the
 ## scene enters the tree to override the remembered choice; left alone it picks
-## up whatever the mode select last stored. **It is also which cell the run
-## plays** (docs/design/ocean.md §9.5): a world keeps a cell for each view.
+## up whatever the mode select last stored. **It is also which cells the run
+## plays from** (docs/design/cells.md §1.2): each view keeps slots of its own,
+## and a cell is only ever played in the view it was born in.
 var mode := -1
 
 ## **Whether `V` flips the view mid-run** ([method _toggle_mode]): only in the
@@ -349,7 +356,7 @@ var drop := -1
 ## written at every moment [method _keep_drop] names. By default **the selected
 ## one of your drops** ([constant Drops.SELECTED], docs/design/settings.md §6.4),
 ## which the run resolves to that drop's file as it opens, remembering the slot
-## so each keep can tell the index the drop's age and generation. A file path is
+## so each keep can tell the index the drop's age and number. A file path is
 ## that file and nothing else, and empty is a run that neither reads nor writes
 ## one -- and neither touches `drops.cfg`. Set it before the scene enters the
 ## tree: `tools/drive.gd` empties it unless it is given `--keep=`, so no render
@@ -357,6 +364,19 @@ var drop := -1
 ## probe that tests the keeping points it at a file of its own, or at the
 ## selected drop of a folder of its own ([method Drops.selected_in]).
 var keep := Drops.SELECTED
+
+## **Where this run keeps its cell** (docs/design/cells.md §1.3, §6.2): by
+## default **your cells**, [constant Cells.SELECTED], which the run resolves as it
+## opens to this view's selected slot -- the cell its button named -- and keeps
+## the cell there at every moment it keeps the water, the cell first. A folder of
+## a tool's own is [method Cells.selected_in] of it, and empty is a run that
+## neither reads nor writes a cell, nor `cells.cfg`. **A cell is only kept with a
+## world** -- its place means nothing without one -- so a run that keeps no
+## drop keeps no cell, and **your own cells only ever go with your own worlds**:
+## a run that keeps a world of a tool's own and was given no folder for its cells
+## keeps none, rather than playing yours in it. Set it before the scene enters the
+## tree, as [member keep] is: `tools/drive.gd` empties it unless given `--cells=`.
+var cells_at := Cells.SELECTED
 
 ## **Where your library of programs is kept** (docs/design/automation.md §9.1):
 ## the device's own file by default, read as the run opens and written when the
@@ -781,31 +801,51 @@ var _own_drop := {}
 ## the drops' index.
 var _drop_slot := 0
 var _drops_root := ""
-## **Which view's cell this run plays and keeps** (ocean.md §9.5): the name
-## run_state.gd keeps [member mode]'s cell under, decided as the run opens -- the
-## drop's file keeps one cell for each view, and this run reads and writes this
-## one alone.
+## **Which view's cells this run plays and keeps** (cells.md §1.2): the name
+## run_state.gd keeps [member mode]'s cells under, decided as the run opens. Its
+## slots are this view's, and this run reads and writes one of them alone.
 var _cell_view := ""
-## **Every other view's cell, kept aside** (§9.5): as the drop's file held them
-## when the run opened, by view, out of the water and untouched, and written back
-## at every keep -- a death in this view clears this view's cell, and none of
-## these. **Each keeps its place in the water**, which moves: a cell that comes in
-## at a quiet start has the whole drop moved under it ([method
-## FoodField.return_to_drop]), so every keep moves these by as much as the drop's
-## rim has moved since [member _aside_rim] ([method _cells_kept_aside]).
+## **The cells a build before cells.md left in this world, which could not be
+## moved into slots yet** (cells.md §4) -- or every one, for a run that keeps no
+## cell of its own: as the drop's file held them when the run opened, by view,
+## out of the water and untouched, and written back at every keep, so nothing is
+## lost and the next migration finds them. **Each keeps its place in the water**,
+## which moves: a cell that comes in at a quiet start has the whole drop moved
+## under it ([method FoodField.return_to_drop]), so every keep moves these by as
+## much as the drop's rim has moved since [member _aside_rim]
+## ([method _cells_kept_aside]). Empty once they are in slots.
 var _cells_aside := {}
 ## Where the drop's rim was centred in the file [member _cells_aside] were read
 ## from: the frame their places are in.
 var _aside_rim := Vector2.ZERO
 ## **The view was flipped in this run** (`V`, in the editor only): it keeps
-## nothing from then on. Its cell has been played in both views, and a world's
-## cells never cross, so it is kept into neither (§9.5).
+## nothing from then on. Its cell has been played in both views, and a cell is
+## played only in the view it was born in (cells.md §1.3), so it is kept into
+## neither its slot nor its world.
 var _view_flipped := false
 ## **The two daughters a division had rolled when the app was left** (row 17).
 ## The division plays again on return, from its quickening, and offers these
 ## two on the same sides -- unless the cell ate in that quickening and wrote its
 ## DNA again, when it rolls anew as ever. Used once, at the next pinch.
 var _kept_daughters: Array = []
+## **Which of your cells this run plays and keeps** (docs/design/cells.md §1.3),
+## decided as it opens: the folder they are in, and this view's selected slot
+## there, from 1 -- "" and 0 for a run that keeps no cell ([member cells_at]).
+var _cells_root := ""
+var _cell_slot := 0
+## **What the slot keeps besides the cell** (§1.1, §1.7): its name as typed, ""
+## while it wears its default, [member _cell_default]; the unix second its line
+## was born, 0 when nobody knows; and the seconds its line has been played, -1
+## when nobody knows -- a cell kept before there were slots (§4), which no age is
+## ever shown for. A division keeps all four; a new cell starts them again.
+var _cell_named := ""
+var _cell_default := 0
+var _born := 0
+var _lived := -1.0
+## **The cell as it died** (§1.5, owner's row 1): its state at the death, how it
+## died and when, which every keep until a new cell starts writes into its slot
+## as its record. Empty while it lives.
+var _death_record := {}
 
 ## **Your library** (automation.md §3), opened from [member library_at].
 var _library := Library.new()
@@ -888,15 +928,19 @@ func _ready() -> void:
 	# the drop, session or none -- a host's is the pond, and a guest's waits for
 	# it, set aside while it swims in its friend's. The drop is made first and
 	# the grit then hung inside its rim; today's water keeps its own order, grit
-	# first. **The drop is yours, kept** (§9.1): the one left last time, and the
-	# cell in it if it was left mid-run -- **in the drop you selected**
-	# (settings.md §4.5), which is the one a host serves and a guest's cell
-	# comes from. **And the cell is this view's** (ocean.md §9.5), so the view is
-	# decided first: a drop keeps a cell for each view, and opens on this one's.
+	# first. **The drop is yours, kept** (§9.1): the one left last time, **in the
+	# drop you selected** (settings.md §4.5), which is the one a host serves and
+	# a guest's cell comes from. **And the cell is this view's selected one**
+	# (cells.md §1.3): kept apart from the world, in the place it was left in --
+	# so the view is decided first, because each view keeps cells of its own.
 	if mode < 0:
 		mode = RunState.load_mode()
 	_cell_view = RunState.cell_key(mode)
+	# **Your cells go with your worlds** (cells.md §6.2), so which the run keeps
+	# is asked before the world is resolved to a file.
+	var own_worlds := keep == Drops.SELECTED
 	_resolve_keep()
+	_resolve_cells(own_worlds)
 	var resumed := {}
 	if drop != 0:
 		resumed = _open_drop()
@@ -1086,47 +1130,152 @@ func _resolve_keep() -> void:
 	_drops_root = str(resolved["root"])
 
 
+## **Which cells [member cells_at] means, decided once, as the run opens**
+## (docs/design/cells.md §6.2): the folder of a [constant Cells.MARK]. **A cell is
+## only kept with a world**, so a run that keeps none keeps no cell; and **your
+## own cells only ever go with your own worlds** -- [param own_worlds] is whether
+## [member keep] was yours -- so a tool that kept a world of its own and named no
+## folder for its cells keeps none, and never plays or writes yours. The slot is
+## chosen with the world's cells moved into slots, as [method _open_drop] reads it.
+func _resolve_cells(own_worlds: bool) -> void:
+	if cells_at == Cells.SELECTED and not own_worlds and not keep.is_empty():
+		print("[cells] this run keeps a world of its own, so it keeps no cell of yours")
+		cells_at = ""
+	if keep.is_empty():
+		cells_at = ""
+	_cells_root = Cells.resolve(cells_at)
+
+
 ## **The drop this run is in** (§9.1): yours as you left it, if there is one at
 ## [member keep] this build can read, or a new one -- then the grit, hung inside
-## its rim. Left mid-run, your cell is put back where it was and what else it
-## was is returned, for [method _resume_cell] once the genome is set up; left
-## after a death, a new cell comes into it at a quiet start (§8.1), as the tap
-## on the black brings one. The log says which, and whether a content pack
-## changed the rules since (§9.4).
+## its rim -- **and this view's selected cell** (docs/design/cells.md §1.3, §1.4),
+## which it returns for [method _resume_cell] once the genome is set up, or
+## nothing for a new cell. The log says which, and whether a content pack changed
+## the rules since (§9.4).
 ##
-## **Your cell is this view's** (§9.5): the one left mid-run in this view, or a
-## new one as after a death when this view left none -- never another view's,
-## which is kept aside out of the water, as it was, for [method _keep_drop] to
-## write back. A file from before there was a cell per view holds full vision's.
+## **Where the cell comes in** (cells.md §1.4): kept in this very drop -- this
+## world's slot and this drop's number, and not in a friend's water -- it
+## **resumes at its place, read in the frame of the rim it was kept with**: moved
+## by as much as the drop has moved under it since, held inside the rim, and,
+## when the water ran on without it, with dread's reach cleared round it.
+## Anywhere else -- another world, a world deleted or made again since, a
+## friend's water -- it comes in at a quiet place, as a new cell does, and its
+## next keep gives it that place. A new drop is made for the cell that comes into
+## it.
+##
+## **A world a build before cells.md wrote still keeps its cells** (§4): they are
+## moved into slots before the slot is chosen, so the first press after the
+## update plays what it played before; what cannot be moved is carried aside.
 func _open_drop() -> Dictionary:
 	var kept := DropSave.read(keep) if not keep.is_empty() else {}
-	var cell := {}
+	if not kept.is_empty():
+		_cells_aside = _migrate_kept(kept)
+		_aside_rim = kept["drop"]["rim_centre"]
+	var slot := _open_slot()
+	var cell: Dictionary = slot.get("cell", {})
+	if not cell.is_empty():
+		_cell.restore_body(cell["body"])
+		# **And what it carried** (docs/design/dna-slots.md §12): a dose
+		# survives the app being closed mid-fight. A file from before the
+		# toxins has none, and the body carries nothing.
+		if cell.has("loads"):
+			_cell.restore_loads(cell["loads"])
 	if kept.is_empty():
+		if not cell.is_empty():
+			# **A new drop is made for the cell that comes into it**: its size and
+			# what it senses, as a run's first water is made for a born cell. The
+			# genome is set up again, and given the cell again, as the run goes on.
+			_genome.setup(_cell)
+			_genome.set_state(cell["genome"])
 		_food.setup_drop(_cell)
 		if not keep.is_empty():
 			print("[drop-save] no drop kept at %s: a new one is made" % keep)
 	else:
-		cell = DropSave.cell_of(kept, _cell_view)
-		_cells_aside = DropSave.cells_of(kept)
-		_cells_aside.erase(_cell_view)
-		_aside_rim = kept["drop"]["rim_centre"]
-		if not cell.is_empty():
-			_cell.restore_body(cell["body"])
-			# **And what it carried** (docs/design/dna-slots.md §12): a dose
-			# survives the app being closed mid-fight. A file from before the
-			# toxins has none, and the body carries nothing.
-			if cell.has("loads"):
-				_cell.restore_loads(cell["loads"])
 		var done := _food.load_drop(_cell, kept["drop"])
-		# **A cell left while it swam in a friend's drop** (§9.1) comes back
-		# into this one as a guest leaving the pond does: at a quiet place.
-		if cell.is_empty() or bool(cell.get("elsewhere", false)):
-			_food.return_to_drop()
+		print(DropSave.note(kept, done))
+		var where: Dictionary = slot.get("where", {})
+		if not cell.is_empty() and _in_place(cell, where, kept["drop"]):
+			var moved: Vector2 = (kept["drop"]["rim_centre"] as Vector2) - (where["rim"] as Vector2)
+			var at: Vector2 = (cell["body"]["at"] as Vector2) + moved
+			# A content pack may have shrunk the rim since.
+			var rim: RefCounted = _food.basin()
+			_cell.position = rim.call(&"contain", at, _cell.radius) if rim != null else at
+			var moved_on := float(kept["drop"]["age"]) != float(where["age"])
+			_food.resume_player(cell["water"], moved_on)
+			print("[cells] %s, slot %d: resumed where it was left, the drop %.0f away under it%s"
+				% [_cell_view_said(), _cell_slot, moved.length(),
+				", and cleared round: its water ran on without it" if moved_on else ""])
 		else:
-			_food.restore_player(cell["water"])
-		print(DropSave.note(kept, done, _cell_view))
+			# A new cell, and one whose place is not in this drop, come in at a
+			# quiet place, as a guest leaving a friend's water does.
+			_food.return_to_drop()
+			if not cell.is_empty():
+				print("[cells] %s, slot %d: comes in at a quiet place" % [_cell_view_said(),
+					_cell_slot])
 	_motes.setup(_cell, _food.basin())
 	return cell
+
+
+## **Whether a cell kept [param where] is in place in [param drop]** (cells.md
+## §1.4): kept in this world's slot and this drop, and not in a friend's water.
+func _in_place(cell: Dictionary, where: Dictionary, drop: Dictionary) -> bool:
+	return not bool(cell.get("elsewhere", false)) and not where.is_empty() \
+		and int(where["world"]) == _drop_slot and int(where["drop"]) == int(drop["seed"])
+
+
+## **The cells a build before cells.md kept in [param kept] go into slots** (§4)
+## as the run opens it -- free, since the file is decoded anyway -- and the
+## selection is settled, this world's cells first. Returns the ones it could not
+## move, which the run carries aside and writes back with the world, so nothing is
+## lost and the next migration finds them; every one, for a run that keeps no
+## cell of its own, which moves nothing.
+func _migrate_kept(kept: Dictionary) -> Dictionary:
+	var cells := DropSave.cells_of(kept)
+	if cells.is_empty() or _cells_root.is_empty():
+		return cells
+	var done := Cells.migrate_world(kept, keep, _drop_slot, _drops_root, _cells_root)
+	Cells.settle_selection(done["moved"], _cells_root)
+	return done["left"]
+
+
+## **This view's selected slot, opened** (cells.md §1.3, §3.1): `{cell, where}`,
+## the cell it keeps and where, or an empty Dictionary for a new cell -- an empty
+## slot; a record (owner's row 1), whose slot the new cell takes, the record going
+## at its first keep; a file this build cannot use, set aside; or **another
+## view's cell**, which a run never plays (§1.3: a damaged index or a tool), set
+## aside too, so nothing is written over it.
+func _open_slot() -> Dictionary:
+	if _cells_root.is_empty():
+		return {}
+	_cell_slot = Cells.selected(_cell_view, _cells_root)
+	var path := Cells.path_of(_cell_view, _cell_slot, _cells_root)
+	var data := CellSave.read(path)
+	if data.is_empty():
+		print("[cells] %s, slot %d: a new cell" % [_cell_view_said(), _cell_slot])
+		return {}
+	if str(data["view"]) != _cell_view:
+		CellSave.set_aside(path, "a cell of another view (\"%s\"), which this view never plays"
+			% str(data["view"]))
+		return {}
+	if CellSave.is_record(data):
+		print("[cells] %s, slot %d: the cell there died, and a new one starts in its place"
+			% [_cell_view_said(), _cell_slot])
+		return {}
+	_cell_named = str(data["name"])
+	_cell_default = int(data["default"])
+	_born = int(data["born"])
+	_lived = float(data.get(CellSave.LIVED, -1.0))
+	if CellSave.converted(data):
+		print(("[cells] %s, slot %d: kept by content %d (%s) under rules %s, read under %s:"
+			+ " its genome re-derived by name") % [_cell_view_said(), _cell_slot,
+			int(data["content"]), str(data["commit"]), str(data["rules"]).left(12),
+			DropSave.rules().left(12)])
+	return {"cell": data["cell"], "where": data["where"]}
+
+
+## This run's view in English, for the log: never translated.
+func _cell_view_said() -> String:
+	return str(RunState.VIEW_WORDS.get(mode, _cell_view))
 
 
 ## **Your cell, as you left it** (row 17): the genome's two registers, its queue
@@ -1196,29 +1345,30 @@ func _kept_pair() -> Array:
 	return []
 
 
-## **This run's drop, kept** (§9.3) -- and the cell with it while it is in the
-## water (row 17), none after a death. At a death, on the black; when the pause
-## screen opens; when the app is left or its window closed; when the run is
-## left; and, as a guest, **before joining a friend** (§9.1), whose drop it then
-## swims in. **Never in the middle of play**: nobody is watching the water at
-## any of those moments, so the two or three frames a save costs a phone are
-## never seen, and there is no save on a timer. Twice in one frame is once.
+## **This run's drop, kept** (§9.3) -- **and its cell, in its slot, first**
+## (docs/design/cells.md §3.4). At a death, on the black; when the pause screen
+## opens; when the app is left or its window closed; when the run is left; and,
+## as a guest, **before joining a friend** (§9.1), whose drop it then swims in.
+## **Never in the middle of play**: nobody is watching the water at any of those
+## moments, so the two or three frames a save costs a phone are never seen, and
+## there is no save on a timer. Twice in one frame is once.
 ##
 ## **A host keeps the drop it serves** -- so hosting stopping, by leaving the
 ## run or the app, keeps it as the host's drop again, with whatever the friends
 ## ate, grew or left behind (§9.1); the friend is never in the file. **A guest
-## in a friend's drop keeps its own**, set aside as it joined, and the cell it
-## is now, `elsewhere`: the next launch brings it back into its own drop at a
-## quiet place, as leaving the pond does. A tool's run keeps nothing at all
-## ([member keep]). A write that fails leaves the last good drop where it was,
-## and says so. **A write that lands tells the drops' index** the drop's age and
-## its cell's generation (docs/design/settings.md §6.4), so the drop menu says
-## them without opening the file.
+## in a friend's drop keeps its own**, set aside as it joined, and its cell
+## `elsewhere`: the next launch brings it back into its own drop at a quiet
+## place, as leaving the pond does. A tool's run keeps nothing at all
+## ([member keep]). A write that fails leaves the last good file where it was,
+## and says so. **A world's write that lands tells the drops' index** its age and
+## its number (docs/design/settings.md §6.4), so no menu opens it to say them.
 ##
-## **The cell kept is this view's, in this view's place** (§9.5) -- `elsewhere`
-## included, a guest's in its own drop -- and every other view's goes back as it
-## was read, so a death here clears this view's cell and leaves the others. **A
-## run whose view was flipped keeps nothing** ([member _view_flipped]).
+## **The cell first, then the water** (cells.md §3.4): a phone killed between the
+## two keeps the cell's newer state and the water one keep older, which the place
+## rule then treats as water that ran on, and clears round the cell -- the safe
+## side. **The world keeps no cell** ([constant DropSave.CELLS] only for the ones
+## a migration could not move yet). **A run whose view was flipped keeps nothing**
+## ([member _view_flipped]).
 func _keep_drop() -> void:
 	if keep.is_empty() or not is_node_ready() or keep.begins_with(Drops.MARK):
 		return
@@ -1237,52 +1387,86 @@ func _keep_drop() -> void:
 	if frame == _kept_frame:
 		return
 	_kept_frame = frame
-	var cell := {}
-	if _life == Life.ALIVE or _life == Life.RETURNING:
-		cell = {
-			"body": _cell.body_state(),
-			"genome": _genome.to_state(),
-			"hunger": _metabolism.hunger,
-			"starve": _metabolism.starve_seconds,
-			"generation": _generation,
-			"id": _id,
-			"parent": _parent,
-			"lineage": _lineage,
-			"sense_clock": _sense_clock,
-			"sensed": _sensed,
-			"said_divide": _said_divide,
-			"daughters": _daughters_by_name(_daughters),
-			"water": _food.player_state(),
-			"loads": _cell.loads.duplicate(),
-		}
-		if elsewhere:
-			cell["elsewhere"] = true
-		# **When it last ate** (automation.md §9.2), for its instincts' `fed`: kept
-		# only once it has, so a cell that never ate comes back never having.
-		if is_finite(_instincts.fed()):
-			cell["fed"] = _instincts.fed()
-	var cells := _cells_kept_aside(state)
-	if not cell.is_empty():
-		cells[_cell_view] = cell
-	var done := DropSave.write(keep, DropSave.compose(state, cells))
+	_keep_cell(state, elsewhere)
+	var done := DropSave.write(keep, DropSave.compose(state, _cells_kept_aside(state)))
 	if done != OK:
 		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
 			% [keep, error_string(done)])
 		return
 	if _drop_slot > 0:
-		var noted := Drops.note_kept(_drop_slot, float(state.get("age", 0.0)), _cell_view,
-			_generation if not cell.is_empty() else 0, _drops_root)
+		var noted := Drops.note_kept(_drop_slot, float(state.get("age", 0.0)),
+			int(state.get("seed", -1)), _drops_root)
 		if noted != OK:
 			push_warning("[NormalMode] the drops' index did not take drop %d's line (%s)"
 				% [_drop_slot, error_string(noted)])
 
 
-## **Every other view's cell, where it is in the water [param state] is**
-## (§9.5): [member _cells_aside] as read, each moved by as much as that drop's
-## rim has moved since they were -- a quiet start moves the whole drop under the
-## cell that comes in, and a cell out of the water has to go with it, or it
-## comes back somewhere else in the water, or past its rim. Copies: what was
-## read stays as it was, for the next keep to move from.
+## **This run's cell, into its slot** (cells.md §1.1, §1.5, §3.1): while it lives,
+## the cell as it is now, its place in the water [param state] is -- `elsewhere`
+## for a guest in a friend's water, [param elsewhere], whose place is its own
+## world as it was set aside -- its name, its line's birth and age. **After a
+## death, its record** (owner's row 1): the cell as it died, where, how and when,
+## until the tap's new cell takes the slot at its first keep. Nothing for a run
+## that keeps no cell. A write that fails leaves the last good cell where it was.
+func _keep_cell(state: Dictionary, elsewhere: bool) -> void:
+	if _cells_root.is_empty() or _cell_slot < 1:
+		return
+	var where := {"world": _drop_slot, "drop": int(state.get("seed", 0)),
+		"rim": state.get("rim_centre", Vector2.ZERO), "age": float(state.get("age", 0.0))}
+	var data := {}
+	if _life == Life.ALIVE or _life == Life.RETURNING:
+		data = CellSave.compose(_cell_view, _cell_named, _cell_default, _born, _lived, where,
+			_cell_state(elsewhere))
+	elif not _death_record.is_empty():
+		data = CellSave.compose(_cell_view, _cell_named, _cell_default, _born, _lived, where,
+			_death_record["cell"], {"cause": int(_death_record["cause"]),
+			"at": int(_death_record["at"])})
+	else:
+		return
+	var path := Cells.path_of(_cell_view, _cell_slot, _cells_root)
+	var done := CellSave.write(path, data)
+	if done != OK:
+		push_warning("[NormalMode] the cell was not kept at %s (%s): the last one stands"
+			% [path, error_string(done)])
+
+
+## **The cell as a file keeps it** ([constant DropSave.CELL]): its body, its
+## genome by gene name, its tank and starve clock, its generation and record,
+## what the run has told it, the daughters it was offered, the water's part of
+## it, its loads and when it last ate -- and `elsewhere` when [param elsewhere],
+## a guest's in a friend's water, whose place is not in its own drop.
+func _cell_state(elsewhere: bool) -> Dictionary:
+	var cell := {
+		"body": _cell.body_state(),
+		"genome": _genome.to_state(),
+		"hunger": _metabolism.hunger,
+		"starve": _metabolism.starve_seconds,
+		"generation": _generation,
+		"id": _id,
+		"parent": _parent,
+		"lineage": _lineage,
+		"sense_clock": _sense_clock,
+		"sensed": _sensed,
+		"said_divide": _said_divide,
+		"daughters": _daughters_by_name(_daughters),
+		"water": _food.player_state(),
+		"loads": _cell.loads.duplicate(),
+	}
+	if elsewhere:
+		cell["elsewhere"] = true
+	# **When it last ate** (automation.md §9.2), for its instincts' `fed`: kept
+	# only once it has, so a cell that never ate comes back never having.
+	if is_finite(_instincts.fed()):
+		cell["fed"] = _instincts.fed()
+	return cell
+
+
+## **The cells carried aside, where they are in the water [param state] is**
+## (cells.md §4): [member _cells_aside] as read, each moved by as much as that
+## drop's rim has moved since they were -- a quiet start moves the whole drop
+## under the cell that comes in, and a cell out of the water has to go with it,
+## or it comes back somewhere else in the water, or past its rim. Copies: what
+## was read stays as it was, for the next keep to move from.
 func _cells_kept_aside(state: Dictionary) -> Dictionary:
 	var rim: Vector2 = state.get("rim_centre", _aside_rim)
 	var moved := rim - _aside_rim
@@ -1379,6 +1563,12 @@ func _process(delta: float) -> void:
 		if _split >= Split.PINCH:
 			return
 
+	# **Its line's age** (docs/design/cells.md §1.1): every second a cell of the
+	# line is alive in the water, across its divisions -- never under a pause, a
+	# still moment of a pond or the choosing, which all returned above. A line
+	# whose age nobody knows (-1) is never given one.
+	if _lived >= 0.0:
+		_lived += delta
 	# Read once, post once. Nothing below carries a position.
 	_metabolism.upkeep = _genome.upkeep()
 	# `vacuole` and `plastid`: a bigger tank and a body that makes some of its
@@ -2316,9 +2506,20 @@ func _set_record(record: PackedInt32Array) -> void:
 
 
 ## **A cell the water did not have**: a run's first, or a new one after a death
-## -- generation 1, nobody's daughter, the first of its own line.
+## -- generation 1, nobody's daughter, the first of its own line. **And a new
+## line in its slot** (docs/design/cells.md §1.7): born now, played for no
+## second yet, and wearing the first default name no cell in any slot, living or
+## recorded, wears or is called -- so the cell that follows a death is not given
+## the dead one's name, whose record keeps the slot until this one's first keep.
 func _found_line() -> void:
 	_set_record(Descent.founder(_take_id()))
+	_death_record = {}
+	if _cells_root.is_empty() or _cell_slot < 1:
+		return
+	_cell_named = ""
+	_cell_default = Cells.next_default(_cells_root)
+	_born = int(Time.get_unix_time_from_system())
+	_lived = 0.0
 
 
 ## **An id for this cell from its own drop's count**: the drop it swims in, or
@@ -2604,6 +2805,12 @@ func _die(loud: bool, bearing: float,
 		cause: int = FoodField.Cause.STARVED) -> void:
 	if not _in_the_water():
 		return
+	# **Its record** (docs/design/cells.md §1.5, owner's row 1): the cell as it
+	# died, before anything below lets go of it, how and when -- what its slot
+	# keeps from the black on, until a new cell starts there.
+	_death_record = {"cell": _cell_state(not _own_drop.is_empty()),
+		"cause": _food.died_of if loud else cause,
+		"at": int(Time.get_unix_time_from_system())}
 	# **A death closes the menu** (shared-pond.md §1.7): reachable only with a
 	# session up, where the menu no longer stops the water and a hunter can
 	# reach this cell under it.
@@ -3119,8 +3326,9 @@ func _vision_active() -> bool:
 ## select is the one way a player chooses. Deliberately not remembered.
 ##
 ## **A run flipped keeps nothing from then on** (ocean.md §9.5): its cell has now
-## been played in both views, and a world keeps a cell for each that never
-## crosses -- so it goes into neither. What was kept before the flip stands.
+## been played in both views, and a cell is only ever played in the view it was
+## born in (docs/design/cells.md) -- so it goes into neither its slot nor its
+## world. What was kept before the flip stands.
 func _toggle_mode() -> void:
 	mode = RunState.Mode.POV if mode == RunState.Mode.FULL_VISION else RunState.Mode.FULL_VISION
 	if not _view_flipped and not keep.is_empty():
@@ -4007,10 +4215,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
-	# V flips the view, **in the editor only** ([member view_flip]): a world keeps
-	# a cell for each view, and in an exported build -- the dev app's too -- the
-	# mode select is the one way to choose, so no cell crosses views (ocean.md
-	# §9.5). Anywhere else V is nobody's key, and goes on unhandled.
+	# V flips the view, **in the editor only** ([member view_flip]): a cell is
+	# played only in the view it was born in, and in an exported build -- the dev
+	# app's too -- the mode select is the one way to choose, so no cell crosses
+	# views (cells.md §1.3). Anywhere else V is nobody's key, and goes on unhandled.
 	if _menu_open or not (event is InputEventKey) or not view_flip:
 		return
 	var key := event as InputEventKey
@@ -4548,31 +4756,6 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 # resolved into plain values as each piece is drawn, and handed over.
 # ---------------------------------------------------------------------------
 
-## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
-## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
-## **One table for both**, so the key that looks at a slot is the key that moves
-## a gene into it. **Down from the nose goes in**, and so do left from the flank
-## and up from the tail: the inside is the body's middle, and those three are the
-## slots beside it. Nothing wraps: a gene that left one edge of the ring and came
-## back in at the other would land on an arc nobody aimed at, which is the
-## strand's clamp argument in two dimensions. Every arrow has its way back.
-const SLOT_NEIGHBOUR: Array = [
-	[4, -1, 3, 7],    # 0 nose
-	[7, 3, -1, 5],    # 1 starboard flank
-	[6, 7, 5, -1],    # 2 tail
-	[0, -1, -1, 1],   # 3 forward starboard
-	[-1, -1, 0, 6],   # 4 forward port
-	[2, 1, -1, -1],   # 5 rear starboard
-	[-1, 4, 2, -1],   # 6 rear port
-	[-1, 0, 1, 2],    # 7 inside: up the nose, right the flank, down the tail
-]
-## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
-## them for a focus neighbour.
-const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
-## Tab order: clockwise round the body from the nose, then in, and then on to
-## the `numbers` switch and `light`.
-const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
-
 ## How far above the pointer the travelling gene rides during a drag.
 ##
 ## **Above the finger, not under it.** A fingertip is about 9 mm, which at
@@ -4941,19 +5124,19 @@ func _build_genome_strip() -> void:
 ## Godot takes as *stay here*. Left unset, its geometric search would carry the
 ## focus off the ring to whatever control happens to lie that way -- and an
 ## unearned slot would be a hole the arrow fell straight through, which is the
-## one thing [constant SLOT_NEIGHBOUR] says a move into it is not.
+## one thing [constant Figure.SLOT_NEIGHBOUR] says a move into it is not.
 func _wire_focus() -> void:
 	var live: Array[Control] = []
-	for slot: int in SLOT_RING:
+	for slot: int in Figure.SLOT_RING:
 		if _slot_live(slot):
 			live.append(_slot_chips[slot])
 	for i in live.size():
 		var chip := live[i]
 		var slot := int(chip.get_meta(&"slot"))
-		for way in NEIGHBOUR_SIDES.size():
-			var to := int(SLOT_NEIGHBOUR[slot][way])
+		for way in Figure.NEIGHBOUR_SIDES.size():
+			var to := int(Figure.SLOT_NEIGHBOUR[slot][way])
 			var neighbour: Control = _slot_chips[to] if _slot_live(to) else chip
-			chip.set_focus_neighbor(NEIGHBOUR_SIDES[way],
+			chip.set_focus_neighbor(Figure.NEIGHBOUR_SIDES[way],
 				chip.get_path_to(neighbour))
 		chip.focus_next = chip.get_path_to(
 			live[i + 1] if i + 1 < live.size() else _numbers_toggle)
@@ -5543,7 +5726,7 @@ func _build_numbers() -> void:
 	_numbers_toggle.focus_exited.connect(_numbers_toggle.queue_redraw)
 	# **No arrow leaves it**, the ring's own rule: its four neighbours are
 	# itself. Tab and Shift-Tab are set with the ring's, in [method _wire_focus].
-	for side in NEIGHBOUR_SIDES:
+	for side in Figure.NEIGHBOUR_SIDES:
 		_numbers_toggle.set_focus_neighbor(side,
 			_numbers_toggle.get_path_to(_numbers_toggle))
 	_toggle_boxes = Figure.toggle_boxes()
@@ -6168,7 +6351,7 @@ func _on_slot_input(event: InputEvent, tile: Control, index: int) -> void:
 		# `accept_event()` on the chord, or GUI focus navigation runs as well
 		# and the keyboard walks off the slot the gene just moved to.
 		tile.accept_event()
-		var to := int(SLOT_NEIGHBOUR[index][way])
+		var to := int(Figure.SLOT_NEIGHBOUR[index][way])
 		# **A chord the genome refuses says why** (dna-slots-ux.md §3.4), for
 		# two seconds, and moves nothing: the focus stays where it was.
 		if _slot_live(to) and _gene_at(index) != &"" \
@@ -6407,7 +6590,7 @@ func _drop_waiting(gene: StringName, slot: int) -> void:
 ## **`Shift` and an arrow, read raw.** A content pack cannot add an `InputMap`
 ## action, and the bare arrows are how the GUI is navigated -- so the chord is
 ## read off the key event itself rather than through an action. Returns the
-## arrow's side in [constant SLOT_NEIGHBOUR] -- 0 left, 1 up, 2 right, 3 down --
+## arrow's side in [constant Figure.SLOT_NEIGHBOUR] -- 0 left, 1 up, 2 right, 3 down --
 ## or -1 for anything else. Directions on the ring, not steps along a strand.
 func _move_key(event: InputEvent) -> int:
 	var key := event as InputEventKey
@@ -6426,7 +6609,7 @@ func _move_key(event: InputEvent) -> int:
 
 
 ## One move, from either gesture. [param to] is taken or refused, never
-## adjusted: the table in [constant SLOT_NEIGHBOUR] and the drop target both
+## adjusted: the table in [constant Figure.SLOT_NEIGHBOUR] and the drop target both
 ## name an exact arc, and a gene that landed on a different one would defeat the
 ## whole thing a move is for.
 func _move_slot(from: int, to: int) -> void:
