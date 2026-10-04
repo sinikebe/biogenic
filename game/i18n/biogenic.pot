@@ -1061,7 +1061,7 @@ msgstr ""
 #. entry: body.swim
 #. entry: flagellum
 #. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/cell.gd game/normal/normal_mode.gd
+#: game/normal/cell.gd game/normal/figure.gd
 msgid "swim"
 msgstr ""
 
@@ -1438,6 +1438,563 @@ msgid "%d day old"
 msgid_plural "%d days old"
 msgstr[0] ""
 msgstr[1] ""
+
+#. A small caption, in 15 px type, at the start of the row of chips that wait
+#. for the player. Two kinds of chip wait there: genes the cell has just eaten
+#. and not yet placed on its body, and, after them, a gene's fork, which waits
+#. for the player to choose how that gene grows (today the beam's, between
+#. `fill` and `sweep`). **The same word captions both**, so it must say only
+#. that they wait: not "to place", which is wrong for a fork. One lowercase
+#. word. Four chips fit on a row beside it; a wider word makes the fourth wrap
+#. onto the next row.
+#. Room: at most 64 px in 15 px type; the English takes 54 px.
+#: game/normal/figure.gd
+msgid "waiting"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 256 px.
+#: game/normal/figure.gd
+msgid "one copy · a daughter may not wear it"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 279 px.
+#: game/normal/figure.gd
+msgid "two copies · a daughter probably wears it"
+msgstr ""
+
+#. The hint under the figure, in 14 px type, about the gene being read: how
+#. many copies of it the cell's DNA holds (one to three) and so how likely a
+#. daughter cell is to wear it (to show it as an organ). The copies are words,
+#. not digits, on purpose. The row is 560 px wide and a level and a gauge
+#. share it, which leaves the text 430 px.
+#. Room: at most 430 px in 14 px type; the English takes 275 px.
+#: game/normal/figure.gd
+msgid "three copies · a daughter always wears it"
+msgstr ""
+
+#. The hint (see the copies line above) for the mouth gene, which every
+#. daughter always wears. The row may be shared with a level and a gauge.
+#. Room: at most 430 px in 14 px type; the English takes 263 px.
+#: game/normal/figure.gd
+msgid "the mouth · a daughter always wears it"
+msgstr ""
+
+#. The hint under an empty place on the body: nothing is there, so nothing can
+#. be passed on to a daughter from it.
+#. Room: at most 560 px in 14 px type; the English takes 301 px.
+#: game/normal/figure.gd
+msgid "an empty slot · nothing to pass on from here"
+msgstr ""
+
+#. A gene's level, a whole number that grows with use: "level 7". Keep %d.
+#. Shown in 14 px type at the start of the hint row, before a gauge and the
+#. hint itself, which share the row's 560 px with it.
+#. Room: at most 70 px in 14 px type, measured with 99 in place of the
+#. placeholders; the English takes 52 px.
+#: game/normal/figure.gd
+#, c-format
+msgid "level %d"
+msgstr ""
+
+#. The word for a toxin gene that has been eaten and is waiting to be placed,
+#. on its chip in the tray and on a finger dragging it. Placed outside the
+#. body it becomes `venom`, inside it becomes `poison`; until then it is
+#. neither. One short lowercase word, like the other gene words.
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/normal/figure.gd
+msgid "toxin"
+msgstr ""
+
+#. The gene line for a toxin that is waiting, before a slot is chosen: it
+#. hurts over time, and becomes venom or poison depending on where it is
+#. placed. After the gene's scientific name and a middle dot. No longer than
+#. the English.
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/normal/figure.gd
+msgid "a toxin that goes on hurting, as venom or as poison"
+msgstr ""
+
+#. The line for the empty slot inside the body (the one slot in the middle of
+#. the body, not round it): nothing is there yet, and a toxin placed there
+#. becomes poison.
+#. Room: at most 520 px in 15 px type; the English takes 350 px.
+#: game/normal/figure.gd
+msgid "nothing inside yet · a toxin here becomes poison"
+msgstr ""
+
+#. Under that line, for the empty inside slot: the slot is inside the cell's
+#. body, and a toxin is the only gene that can go there.
+#. Room: at most 560 px in 14 px type; the English takes 272 px.
+#: game/normal/figure.gd
+msgid "inside your body · only a toxin goes here"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cytostome
+#. Room: at most 47 px in 13 px type; the English takes 21 px.
+#: game/normal/figure.gd
+msgid "eat"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cirrus
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/normal/figure.gd
+msgid "turn"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: stigma
+#. Room: at most 47 px in 13 px type; the English takes 22 px.
+#: game/normal/figure.gd
+msgid "see"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ocellus
+#. Room: at most 47 px in 13 px type; the English takes 36 px.
+#: game/normal/figure.gd
+msgid "beam"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. The name of an action the player's cell can be told to do by one of its
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
+#. forward; "push": thrust held on; "hold still": stop the tail (the
+#. flagellum, which swims) from beating, and keep it still.
+#. entry: axoneme
+#. entry: axoneme.push
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/figure.gd game/normal/genome.gd
+msgid "push"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: palp
+#. Room: at most 47 px in 13 px type; the English takes 37 px.
+#: game/normal/figure.gd
+msgid "touch"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. The name of an action the player's cell can be told to do by one of its
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
+#. forward; "push": thrust held on; "hold still": stop the tail (the
+#. flagellum, which swims) from beating, and keep it still.
+#. entry: myoneme
+#. entry: myoneme.dash
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/figure.gd game/normal/genome.gd
+msgid "dash"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: trichocyst
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/figure.gd
+msgid "sting"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: pellicle
+#. Room: at most 47 px in 13 px type; the English takes 40 px.
+#: game/normal/figure.gd
+msgid "armor"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: veneneux
+#. Room: at most 47 px in 13 px type; the English takes 43 px.
+#: game/normal/figure.gd
+msgid "poison"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: toxicyst
+#. Room: at most 47 px in 13 px type; the English takes 44 px.
+#: game/normal/figure.gd
+msgid "venom"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: plastid
+#. Room: at most 47 px in 13 px type; the English takes 23 px.
+#: game/normal/figure.gd
+msgid "sun"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: vacuole
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/normal/figure.gd
+msgid "store"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: crista
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/normal/figure.gd
+msgid "burn"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: chemocyte
+#. Room: at most 47 px in 13 px type; the English takes 34 px.
+#: game/normal/figure.gd
+msgid "smell"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ampulla
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/normal/figure.gd
+msgid "ping"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cytostome
+#. Room: at most 440 px in 15 px type; the English takes 321 px.
+#: game/normal/figure.gd
+msgid "a wider mouth swallows bigger things whole"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cirrus
+#. Room: at most 440 px in 15 px type; the English takes 304 px.
+#: game/normal/figure.gd
+msgid "turns you faster, and sooner after you ask"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: flagellum
+#. Room: at most 440 px in 15 px type; the English takes 278 px.
+#: game/normal/figure.gd
+msgid "your tail beats harder, and more often"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: stigma
+#. Room: at most 440 px in 15 px type; the English takes 342 px.
+#: game/normal/figure.gd
+msgid "feels the shadow of anything big, however dark"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ocellus
+#. Room: at most 440 px in 15 px type; the English takes 357 px.
+#: game/normal/figure.gd
+msgid "a ray out of that side, marking whatever it strikes"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: chemocyte
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
+#: game/normal/figure.gd
+msgid "smells food, strongest where your nose is pointed"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ampulla
+#. Room: at most 440 px in 15 px type; the English takes 356 px.
+#: game/normal/figure.gd
+msgid "a pulse that answers off everything, not just food"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: axoneme
+#. Room: at most 440 px in 15 px type; the English takes 341 px.
+#: game/normal/figure.gd
+msgid "holding on pushes you, instead of only steering"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: palp
+#. Room: at most 440 px in 15 px type; the English takes 316 px.
+#: game/normal/figure.gd
+msgid "feels what is against you, with no light at all"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: myoneme
+#. Room: at most 440 px in 15 px type; the English takes 308 px.
+#: game/normal/figure.gd
+msgid "tap for a burst of speed, paid for in hunger"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: trichocyst
+#. Room: at most 440 px in 15 px type; the English takes 290 px.
+#: game/normal/figure.gd
+msgid "a dart at whatever closes in on that side"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: pellicle
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/normal/figure.gd
+msgid "thicker skin, so bites take less and fewer mouths fit"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: veneneux
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
+#: game/normal/figure.gd
+msgid "whatever bites or swallows you takes your poison"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 337 px.
+#: game/normal/figure.gd
+msgid "your bite leaves venom, which goes on hurting"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: plastid
+#. Room: at most 440 px in 15 px type; the English takes 365 px.
+#: game/normal/figure.gd
+msgid "makes a little of its own food, so you starve slower"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: vacuole
+#. Room: at most 440 px in 15 px type; the English takes 363 px.
+#: game/normal/figure.gd
+msgid "a bigger tank, so hunger takes longer to reach you"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: crista
+#. Room: at most 440 px in 15 px type; the English takes 350 px.
+#: game/normal/figure.gd
+msgid "burns cleaner, so everything you carry costs less"
+msgstr ""
+
+#. The line of the venom gene (`toxicyst`, shown as `venom`) when it sits on a
+#. side of the body: whatever bites the cell on that side takes venom from it.
+#. "That side" is the side of the body where the gene's slot is. Same limit as
+#. the gene lines above: no longer than the English.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 325 px.
+#: game/normal/figure.gd
+msgid "whatever bites you on that side takes venom"
+msgstr ""
+
+#. The same line when the venom sits at the back of the body, where the tail
+#. is: whatever bites the cell from behind takes venom from it.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 329 px.
+#: game/normal/figure.gd
+msgid "whatever bites you from behind takes venom"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/extend
+#. Room: at most 470 px in 15 px type; the English takes 363 px.
+#: game/normal/figure.gd
+msgid "a fan of rays out of that side, one more every level"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/sweep
+#. Room: at most 470 px in 15 px type; the English takes 345 px.
+#: game/normal/figure.gd
+msgid "three rays sweeping that side, faster every level"
+msgstr ""
+
+#. The line for an empty slot on the body, in 15 px type, in the place where a
+#. gene's line goes. An "organ" is what a gene makes the cell grow; "this
+#. side" is the side of the body the slot is on. No longer than the English
+#. (368 px, 51 characters).
+#. Room: at most 520 px in 15 px type; the English takes 368 px.
+#: game/normal/figure.gd
+msgid "nothing here yet · an organ here grows on this side"
+msgstr ""
+
+#. The label of the pause screen's switch that shows the exact numbers behind
+#. each gene (how fast, how far, what it costs). One lowercase word, drawn in
+#. 14 px type on a slab 96 px wide.
+#. Room: at most 80 px in 14 px type; the English takes 61 px.
+#: game/normal/figure.gd
+msgid "numbers"
+msgstr ""
+
+#. The caption above the figure on the pause screen, in 15 px type: the word
+#. for the cell's whole set of genes, then a middle dot and %s, which is the
+#. generation ("first generation"). Keep %s. With the numbers switch on, more
+#. is added after it, and the whole caption has 560 px: beyond that the whole
+#. pause screen shifts to make room, so keep this short.
+#: game/normal/figure.gd
+#, c-format
+msgid "genome · %s"
+msgstr ""
 
 #. How many copies of a gene the cell's DNA holds, in words, at the start of
 #. the odds line ("one copy · 55% of daughters wear it"). One to three; the
@@ -2121,40 +2678,6 @@ msgstr ""
 #. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
 #. forward; "push": thrust held on; "hold still": stop the tail (the
 #. flagellum, which swims) from beating, and keep it still.
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: myoneme.dash
-#. entry: myoneme
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/genome.gd game/normal/normal_mode.gd
-msgid "dash"
-msgstr ""
-
-#. The name of an action the player's cell can be told to do by one of its
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
-#. forward; "push": thrust held on; "hold still": stop the tail (the
-#. flagellum, which swims) from beating, and keep it still.
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: axoneme.push
-#. entry: axoneme
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/genome.gd game/normal/normal_mode.gd
-msgid "push"
-msgstr ""
-
-#. The name of an action the player's cell can be told to do by one of its
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
-#. forward; "push": thrust held on; "hold still": stop the tail (the
-#. flagellum, which swims) from beating, and keep it still.
 #. entry: flagellum.hold
 #. Room: at most 112 px in 15 px type; the English takes 62 px.
 #: game/normal/genome.gd
@@ -2635,63 +3158,6 @@ msgstr ""
 msgid "a sense grew · hold e to place it"
 msgstr ""
 
-#. A small caption, in 15 px type, at the start of the row of chips that wait
-#. for the player. Two kinds of chip wait there: genes the cell has just eaten
-#. and not yet placed on its body, and, after them, a gene's fork, which waits
-#. for the player to choose how that gene grows (today the beam's, between
-#. `fill` and `sweep`). **The same word captions both**, so it must say only
-#. that they wait: not "to place", which is wrong for a fork. One lowercase
-#. word. Four chips fit on a row beside it; a wider word makes the fourth wrap
-#. onto the next row.
-#. Room: at most 64 px in 15 px type; the English takes 54 px.
-#: game/normal/normal_mode.gd
-msgid "waiting"
-msgstr ""
-
-#. The hint under the figure, in 14 px type, about the gene being read: how
-#. many copies of it the cell's DNA holds (one to three) and so how likely a
-#. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 256 px.
-#: game/normal/normal_mode.gd
-msgid "one copy · a daughter may not wear it"
-msgstr ""
-
-#. The hint under the figure, in 14 px type, about the gene being read: how
-#. many copies of it the cell's DNA holds (one to three) and so how likely a
-#. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 279 px.
-#: game/normal/normal_mode.gd
-msgid "two copies · a daughter probably wears it"
-msgstr ""
-
-#. The hint under the figure, in 14 px type, about the gene being read: how
-#. many copies of it the cell's DNA holds (one to three) and so how likely a
-#. daughter cell is to wear it (to show it as an organ). The copies are words,
-#. not digits, on purpose. The row is 560 px wide and a level and a gauge
-#. share it, which leaves the text 430 px.
-#. Room: at most 430 px in 14 px type; the English takes 275 px.
-#: game/normal/normal_mode.gd
-msgid "three copies · a daughter always wears it"
-msgstr ""
-
-#. The hint (see the copies line above) for the mouth gene, which every
-#. daughter always wears. The row may be shared with a level and a gauge.
-#. Room: at most 430 px in 14 px type; the English takes 263 px.
-#: game/normal/normal_mode.gd
-msgid "the mouth · a daughter always wears it"
-msgstr ""
-
-#. The hint under an empty place on the body: nothing is there, so nothing can
-#. be passed on to a daughter from it.
-#. Room: at most 560 px in 14 px type; the English takes 301 px.
-#: game/normal/normal_mode.gd
-msgid "an empty slot · nothing to pass on from here"
-msgstr ""
-
 #. The hint while the player is about to write a waiting gene over one that is
 #. already in the DNA. %s is the short word of the gene that would be lost
 #. (such as `eat` or `ping`): keep %s as it is. "Your body keeps it" means
@@ -2730,16 +3196,6 @@ msgstr ""
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "%s leaves your dna · its level %d is lost"
-msgstr ""
-
-#. A gene's level, a whole number that grows with use: "level 7". Keep %d.
-#. Shown in 14 px type at the start of the hint row, before a gauge and the
-#. hint itself, which share the row's 560 px with it.
-#. Room: at most 70 px in 14 px type, measured with 99 in place of the
-#. placeholders; the English takes 52 px.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "level %d"
 msgstr ""
 
 #. All the `ACT_` lines are one line of instructions in 14 px type, centred
@@ -2838,39 +3294,6 @@ msgstr ""
 msgid "tap again to choose how %s grows"
 msgstr ""
 
-#. The word for a toxin gene that has been eaten and is waiting to be placed,
-#. on its chip in the tray and on a finger dragging it. Placed outside the
-#. body it becomes `venom`, inside it becomes `poison`; until then it is
-#. neither. One short lowercase word, like the other gene words.
-#. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/normal_mode.gd
-msgid "toxin"
-msgstr ""
-
-#. The gene line for a toxin that is waiting, before a slot is chosen: it
-#. hurts over time, and becomes venom or poison depending on where it is
-#. placed. After the gene's scientific name and a middle dot. No longer than
-#. the English.
-#. Room: at most 440 px in 15 px type; the English takes 371 px.
-#: game/normal/normal_mode.gd
-msgid "a toxin that goes on hurting, as venom or as poison"
-msgstr ""
-
-#. The line for the empty slot inside the body (the one slot in the middle of
-#. the body, not round it): nothing is there yet, and a toxin placed there
-#. becomes poison.
-#. Room: at most 520 px in 15 px type; the English takes 350 px.
-#: game/normal/normal_mode.gd
-msgid "nothing inside yet · a toxin here becomes poison"
-msgstr ""
-
-#. Under that line, for the empty inside slot: the slot is inside the cell's
-#. body, and a toxin is the only gene that can go there.
-#. Room: at most 560 px in 14 px type; the English takes 272 px.
-#: game/normal/normal_mode.gd
-msgid "inside your body · only a toxin goes here"
-msgstr ""
-
 #. While a toxin is waiting and no slot is chosen: tapping a slot round the
 #. body (outside) makes it venom, the slot in the body (inside) makes it
 #. poison.
@@ -2965,429 +3388,6 @@ msgstr ""
 #: game/normal/normal_mode.gd
 #, c-format
 msgid "let go to swap %s and %s · they trade copies"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: cytostome
-#. Room: at most 47 px in 13 px type; the English takes 21 px.
-#: game/normal/normal_mode.gd
-msgid "eat"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: cirrus
-#. Room: at most 47 px in 13 px type; the English takes 28 px.
-#: game/normal/normal_mode.gd
-msgid "turn"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: stigma
-#. Room: at most 47 px in 13 px type; the English takes 22 px.
-#: game/normal/normal_mode.gd
-msgid "see"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: ocellus
-#. Room: at most 47 px in 13 px type; the English takes 36 px.
-#: game/normal/normal_mode.gd
-msgid "beam"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: palp
-#. Room: at most 47 px in 13 px type; the English takes 37 px.
-#: game/normal/normal_mode.gd
-msgid "touch"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: trichocyst
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/normal_mode.gd
-msgid "sting"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: pellicle
-#. Room: at most 47 px in 13 px type; the English takes 40 px.
-#: game/normal/normal_mode.gd
-msgid "armor"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: veneneux
-#. Room: at most 47 px in 13 px type; the English takes 43 px.
-#: game/normal/normal_mode.gd
-msgid "poison"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: toxicyst
-#. Room: at most 47 px in 13 px type; the English takes 44 px.
-#: game/normal/normal_mode.gd
-msgid "venom"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: plastid
-#. Room: at most 47 px in 13 px type; the English takes 23 px.
-#: game/normal/normal_mode.gd
-msgid "sun"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: vacuole
-#. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/normal_mode.gd
-msgid "store"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: crista
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/normal_mode.gd
-msgid "burn"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: chemocyte
-#. Room: at most 47 px in 13 px type; the English takes 34 px.
-#: game/normal/normal_mode.gd
-msgid "smell"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: ampulla
-#. Room: at most 47 px in 13 px type; the English takes 28 px.
-#: game/normal/normal_mode.gd
-msgid "ping"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: cytostome
-#. Room: at most 440 px in 15 px type; the English takes 321 px.
-#: game/normal/normal_mode.gd
-msgid "a wider mouth swallows bigger things whole"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: cirrus
-#. Room: at most 440 px in 15 px type; the English takes 304 px.
-#: game/normal/normal_mode.gd
-msgid "turns you faster, and sooner after you ask"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: flagellum
-#. Room: at most 440 px in 15 px type; the English takes 278 px.
-#: game/normal/normal_mode.gd
-msgid "your tail beats harder, and more often"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: stigma
-#. Room: at most 440 px in 15 px type; the English takes 342 px.
-#: game/normal/normal_mode.gd
-msgid "feels the shadow of anything big, however dark"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: ocellus
-#. Room: at most 440 px in 15 px type; the English takes 357 px.
-#: game/normal/normal_mode.gd
-msgid "a ray out of that side, marking whatever it strikes"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: chemocyte
-#. Room: at most 440 px in 15 px type; the English takes 360 px.
-#: game/normal/normal_mode.gd
-msgid "smells food, strongest where your nose is pointed"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: ampulla
-#. Room: at most 440 px in 15 px type; the English takes 356 px.
-#: game/normal/normal_mode.gd
-msgid "a pulse that answers off everything, not just food"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: axoneme
-#. Room: at most 440 px in 15 px type; the English takes 341 px.
-#: game/normal/normal_mode.gd
-msgid "holding on pushes you, instead of only steering"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: palp
-#. Room: at most 440 px in 15 px type; the English takes 316 px.
-#: game/normal/normal_mode.gd
-msgid "feels what is against you, with no light at all"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: myoneme
-#. Room: at most 440 px in 15 px type; the English takes 308 px.
-#: game/normal/normal_mode.gd
-msgid "tap for a burst of speed, paid for in hunger"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: trichocyst
-#. Room: at most 440 px in 15 px type; the English takes 290 px.
-#: game/normal/normal_mode.gd
-msgid "a dart at whatever closes in on that side"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: pellicle
-#. Room: at most 440 px in 15 px type; the English takes 371 px.
-#: game/normal/normal_mode.gd
-msgid "thicker skin, so bites take less and fewer mouths fit"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: veneneux
-#. Room: at most 440 px in 15 px type; the English takes 360 px.
-#: game/normal/normal_mode.gd
-msgid "whatever bites or swallows you takes your poison"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 337 px.
-#: game/normal/normal_mode.gd
-msgid "your bite leaves venom, which goes on hurting"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: plastid
-#. Room: at most 440 px in 15 px type; the English takes 365 px.
-#: game/normal/normal_mode.gd
-msgid "makes a little of its own food, so you starve slower"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: vacuole
-#. Room: at most 440 px in 15 px type; the English takes 363 px.
-#: game/normal/normal_mode.gd
-msgid "a bigger tank, so hunger takes longer to reach you"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: crista
-#. Room: at most 440 px in 15 px type; the English takes 350 px.
-#: game/normal/normal_mode.gd
-msgid "burns cleaner, so everything you carry costs less"
-msgstr ""
-
-#. The line of the venom gene (`toxicyst`, shown as `venom`) when it sits on a
-#. side of the body: whatever bites the cell on that side takes venom from it.
-#. "That side" is the side of the body where the gene's slot is. Same limit as
-#. the gene lines above: no longer than the English.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 325 px.
-#: game/normal/normal_mode.gd
-msgid "whatever bites you on that side takes venom"
-msgstr ""
-
-#. The same line when the venom sits at the back of the body, where the tail
-#. is: whatever bites the cell from behind takes venom from it.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 329 px.
-#: game/normal/normal_mode.gd
-msgid "whatever bites you from behind takes venom"
-msgstr ""
-
-#. As the gene lines above, for a gene that can grow in two ways and has been
-#. given one: what it does now. The `entry` line gives the gene and the way.
-#. Same limit: no longer than the English, which is 464 px at most with the
-#. gene's name in front.
-#. entry: ocellus/extend
-#. Room: at most 470 px in 15 px type; the English takes 363 px.
-#: game/normal/normal_mode.gd
-msgid "a fan of rays out of that side, one more every level"
-msgstr ""
-
-#. As the gene lines above, for a gene that can grow in two ways and has been
-#. given one: what it does now. The `entry` line gives the gene and the way.
-#. Same limit: no longer than the English, which is 464 px at most with the
-#. gene's name in front.
-#. entry: ocellus/sweep
-#. Room: at most 470 px in 15 px type; the English takes 345 px.
-#: game/normal/normal_mode.gd
-msgid "three rays sweeping that side, faster every level"
-msgstr ""
-
-#. The line for an empty slot on the body, in 15 px type, in the place where a
-#. gene's line goes. An "organ" is what a gene makes the cell grow; "this
-#. side" is the side of the body the slot is on. No longer than the English
-#. (368 px, 51 characters).
-#. Room: at most 520 px in 15 px type; the English takes 368 px.
-#: game/normal/normal_mode.gd
-msgid "nothing here yet · an organ here grows on this side"
-msgstr ""
-
-#. The label of the pause screen's switch that shows the exact numbers behind
-#. each gene (how fast, how far, what it costs). One lowercase word, drawn in
-#. 14 px type on a slab 96 px wide.
-#. Room: at most 80 px in 14 px type; the English takes 61 px.
-#: game/normal/normal_mode.gd
-msgid "numbers"
-msgstr ""
-
-#. The caption above the figure on the pause screen, in 15 px type: the word
-#. for the cell's whole set of genes, then a middle dot and %s, which is the
-#. generation ("first generation"). Keep %s. With the numbers switch on, more
-#. is added after it, and the whole caption has 560 px: beyond that the whole
-#. pause screen shifts to make room, so keep this short.
-#: game/normal/normal_mode.gd
-#, c-format
-msgid "genome · %s"
 msgstr ""
 
 #. The name of one of the two ways a levelled gene can grow, as the title of

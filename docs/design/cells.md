@@ -15,10 +15,11 @@ per-view rule stays: **a cell belongs to the view it was born in and is only eve
 played in that view.**
 
 **Status: designed and mocked on the real screens, at 1280x720 and 2400x1080, in
-English and French (`cells-ux.md` §7). Nothing is built.** This file holds the rules,
-the files, the migration, ponds and the build plan. `cells-ux.md` holds the screens,
-their words and the mocks. Three calls were the owner's (§8), answered 2026-10-04:
-all three as recommended.
+English and French (`cells-ux.md` §7). Phase 1 of §6.2 is built (§6.5): the figure,
+drawn from plain values. Phase 2, everything a player sees, is not.** This file holds
+the rules, the files, the migration, ponds and the build plan. `cells-ux.md` holds the
+screens, their words and the mocks. Three calls were the owner's (§8), answered
+2026-10-04: all three as recommended.
 
 **What it replaces.** Where these say otherwise, this document wins:
 
@@ -550,6 +551,74 @@ place. No cell file is written for the server's room.
 4. A run plays only its own view's slot.
 5. No menu or tool writes a file by reading.
 6. Names are never translated and never sent.
+
+### 6.5 As built: phase 1, 2026-10-04
+
+**`game/normal/figure.gd`, and nothing a player can notice.** The figure's constants
+moved there as they were, their translators' notes and rooms with them: its geometry,
+its inks, and the words of the chips, the tray and the lines under the figure. Its
+drawing became static functions. Each takes the values its own piece draws, so a
+screen resolves a cell into them, from a live genome or from a file:
+
+| piece | `Figure.` | takes |
+|---|---|---|
+| the body, its tethers, its own words | `draw_body` | `body`, `body_layout`, the eight slots' genes (`layout` and the inside), how many are live, `slack`, and the loads' marks (`FoodField.felt_of(loads, radius)`) |
+| the part being read, lit | `draw_mark` | the slot, and the gene whose hue it takes |
+| a chip | `draw_chip`, `chip_at` | its gene, copies, worn copies, hue and level; a screen with input adds `forking`, `selected`, `trace`, `refused` and a ghost |
+| the tray | `make_tray_caption`, `draw_waiting`, `draw_fork_chip`, `waiting_width`, `fork_chip_width` | a waiting gene's copies and seconds left, in hand or not; a fork's level, open or not, stepped back or not |
+| the caption | `caption` | the generation, the switch, `radius`, `body` and the upkeep |
+| the lines | `explains`, `explain_empty`, `hint_empty`, `odds`, `level_text`, `draw_explain_organ`, `numbers_lines`, `draw_numbers` | a gene, the slot it is read at and the way its fork took; a copy count; a level |
+| the switch, the gauge | `toggle_boxes`, `draw_toggle`, `draw_gauge` | on and hovered; a level's progress |
+
+**Where it differs from §6.2, and why:**
+
+- **More moved than §6.2 lists:** the `numbers` switch, the level's gauge, the
+  explanation's organ, the tray's caption and the travelling gene. The detailed view
+  draws the first four (`cells-ux.md` §3.3), and moving them here put them under this
+  phase's pixel check instead of the next one's.
+- **Values for each piece, not one set for the whole figure.** §6.2 names a cell's
+  values. Each function takes the ones its piece draws, already resolved: a level as a
+  number, a gauge as a fraction, a waiting gene as its copies and its seconds left.
+- **The upkeep is a value.** `caption()` takes it, because the genome prices a levelled
+  gene by its level and figure.gd prices nothing. Phase 2 reads a body from a file, so
+  it needs that price without a `Genome`: one static on genome.gd, which `upkeep()`
+  then calls.
+- **What stays in normal_mode.gd:** the state and the input, as §6.2 says, and with them
+  the ring's keyboard (`SLOT_NEIGHBOUR`, `SLOT_RING`), the verb lines and the lines
+  that price an eviction (`ACT_*`, `HINT_LOSES*`), the fork's cards, and the choosing
+  screen's own strands. `_word`, `_carried_word`, `_odds` and `_explains` stay there as
+  one-line doors to figure.gd, so the lines that call them did not change.
+- **The template**, `biogenic.pot`, is written again: the same 502 messages, 52 of them
+  now referenced from figure.gd, and the notes of `dash` and `push` in the other order.
+  `fr.po` is untouched, and `--lint-all` says what it said before, to the pixel.
+
+**Checked: pixel-identical.** Every frame is `tools/shot.tscn` driving
+`tools/drive.tscn` under `--fixed-fps 60 --rendering-driver opengl3`, with `--seed=`, at
+1280x720 and 2400x1080: three times on the commit before this one, and twice after it.
+47 poses, 94 frames:
+
+- `G` of `gene-stats.md` §8 with the numbers off and on, a chip read, the three-copy
+  tail in both views, a chip and the switch hovered, and Tab walked to a chip, to the
+  inside, to the switch, and to a waiting gene's chip and a fork's;
+- a gene waiting, and five; a fork waiting to be chosen (`beam-levels.md` §8.7's
+  `G F5`) with the numbers off and on, with a gene in hand, with its cards up and with a
+  way armed; a beam at level 7 read, armed over with a gene in hand, and at level 120;
+- `dna-slots.md` §20's `T` and `S`, and `dna-slots-ux.md` §9.3's `B3`: a toxin inside
+  and read, a side venom read, a toxin in hand with its ghosts, armed inside and
+  outside, adding a copy elsewhere and to a form at three copies, dragged from the tray
+  onto an empty slot; a gene that faces out, armed inside; the poison dragged where it
+  would be a form already carried;
+- `--hunger=0.72`; `--dose=harm:4`; the beam in the air over the tail; a body wearing an
+  organ its DNA no longer carries;
+- the choosing screen: `gene-stats.md` §8's `CH` with a worn and a carried gene read,
+  with the numbers off, at a level, and `dna-slots.md` §20's `D12` with the inside;
+- in French: a chip read, a gene waiting, a toxin in hand, a fork, the choosing screen.
+
+**The three renders before were 0 px apart in all 94 frames, and both renders after
+are 0 px from them.** A pose that arms a slot or a way shoots six frames after the tap:
+the arm lapses on the wall clock (`ARM_TIMEOUT_MS`), and under load at 2400x1080 the
+24 frames of `M07` outran it once. `--lint-all`, the CI boot of every scene and every
+`ci.yml` step that runs here pass; the Android export stops only for want of an SDK.
 
 ---
 
