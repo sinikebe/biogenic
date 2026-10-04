@@ -17,7 +17,8 @@ played in that view.**
 **Status: designed and mocked on the real screens, at 1280x720 and 2400x1080, in
 English and French (`cells-ux.md` §7). Nothing is built.** This file holds the rules,
 the files, the migration, ponds and the build plan. `cells-ux.md` holds the screens,
-their words and the mocks. Three calls are the owner's (§8).
+their words and the mocks. Three calls were the owner's (§8), answered 2026-10-04:
+all three as recommended.
 
 **What it replaces.** Where these say otherwise, this document wins:
 
@@ -570,6 +571,11 @@ place. No cell file is written for the server's room.
 | 1 | When a cell dies, what does its slot show until you start a new one there? | **The dead cell, marked as dead: its name, where it died, and its last body if you look ✓ recommended** · nothing: the slot is empty at once | If you leave the game right after dying, or close it on the black screen, your cell's slot still says what happened to it, and you can take a last look at it. With the other option the slot just says "new cell", and the cell has simply vanished. Either way, your next cell starts in the same slot. |
 | 2 | Do cells have names? | **Yes: each new cell arrives with a name, and you can type your own, like a world ✓ recommended** · only if you type one · no names | With names, you can tell your cells apart at a glance and call one "the fast one". Without names, a cell is shown as its view, its generation and its age, such as "full vision · fourth generation". |
 | 3 | What is a new cell called before you name it? | **What the first microscopists called the little animals in a drop: slipper, bell, trumpet, proteus, swan, wheel, sparkle ✓ recommended** · cell 1, cell 2, cell 3 · the microscopists' own names: leeuwenhoek, hooke, müller | Your cells get the real old nicknames for what swims in pond water, which go well with the worlds' names (pond water, rain barrel). Numbers are plain and easy to forget. Scientists' names honour people, but read oddly on a creature. |
+
+**Answered 2026-10-04:** "All recommended". A dead cell's slot keeps its record until a
+new cell starts there (row 1); every new cell arrives with a name and can be renamed
+(row 2); the defaults are the first microscopists' names for the little animals in a
+drop (row 3).
 
 **Under the table.**
 
