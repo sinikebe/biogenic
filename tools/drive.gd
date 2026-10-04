@@ -21,9 +21,9 @@ extends Node
 ##                           this harness is booted directly rather than through
 ##                           shot.tscn, which sets the window itself
 ##   --mode=0|1              force the view: 0 point of view, 1 full vision --
-##                           and so which of a world's cells a `--keep=` run
-##                           opens on and keeps, one for each view (docs/design/
-##                           ocean.md §9.5). `--tap=<seconds>:v` still flips the
+##                           and so which view's slots a `--cells=` run plays
+##                           its cell from, each view keeping its own (docs/
+##                           design/cells.md §1.2). `--tap=<seconds>:v` still flips the
 ##                           view mid-run, as every run of the editor's binary
 ##                           can and no exported build does; a run flipped so
 ##                           keeps nothing after it
@@ -623,7 +623,18 @@ extends Node
 ##                           drop another run left behind, and none leaves one.
 ##                           With it, the run prints the cell and the drop's
 ##                           census sum as it opens, which is what a relaunch
-##                           is compared by
+##                           is compared by. **The cell is kept apart**, with
+##                           `--cells=` (docs/design/cells.md): without it a
+##                           relaunch opens the same water on a new cell
+##   --cells=<folder>        keep the cell in that folder's slots, the way the
+##                           game keeps yours in `user://cells/`: the view's
+##                           selected slot there (`cells.cfg`) is read as the
+##                           run opens and written at every save point, the
+##                           cell before the water. Only with `--keep=`: a cell
+##                           is kept with a world. **Without it this harness
+##                           keeps no cell**, so no render opens on a cell
+##                           another run left, or leaves one (`--cell=` is a
+##                           posed water cell, and another thing)
 ##   --leave-at=<seconds>    leave the app at that time, as a phone does: the
 ##                           window loses focus and the activity pauses
 ##                           (NOTIFICATION_APPLICATION_FOCUS_OUT, then _PAUSED),
@@ -815,6 +826,9 @@ var _census := -1.0
 var _census_clock := 0.0
 ## `--keep=`: where the run keeps its drop, or "" for a run that keeps none.
 var _keep := ""
+## `--cells=`: the folder the run keeps its cell in, or "" for a run that keeps
+## none (docs/design/cells.md §6.2).
+var _cells := ""
 ## `--leave-at=`: when the app is left, or -1.
 var _leave_at := -1.0
 ## The slot the posed hunter is in: 0 in today's water, as it always was; in
@@ -1213,6 +1227,8 @@ func _ready() -> void:
 			_census = float(text.trim_prefix("--census="))
 		elif text.begins_with("--keep="):
 			_keep = text.trim_prefix("--keep=")
+		elif text.begins_with("--cells="):
+			_cells = text.trim_prefix("--cells=")
 		elif text.begins_with("--leave-at="):
 			_leave_at = float(text.trim_prefix("--leave-at="))
 		elif text.begins_with("--start="):
@@ -1495,6 +1511,11 @@ func _ready() -> void:
 	# open on nor write.
 	if &"keep" in run:
 		run.set("keep", _keep)
+	# **And no cell** unless told where (docs/design/cells.md §6.2): the game's
+	# default is the player's own cells, which a render must neither open on nor
+	# write. The folder is a run's marker for its selected slots.
+	if &"cells_at" in run:
+		run.set("cells_at", NormalMode.Cells.selected_in(_cells) if _cells != "" else "")
 	# **And no library** unless told where (automation.md §9.1): the game's
 	# default is the device's own file, which a render must neither open on nor
 	# write.
@@ -1850,6 +1871,7 @@ func _open_far_seat(scene: PackedScene) -> void:
 		far.set("drop", _drop_flag)
 	if &"keep" in far:
 		far.set("keep", "")
+		far.set("cells_at", "")
 		far.set("library_at", "")
 	_far_view.add_child(far)
 	NetSession.current = _seat_session(far_seat)
@@ -2640,6 +2662,8 @@ func _kept_text() -> String:
 	if _genome != null:
 		line += " dna %s body %s waiting %s" % [_genome.call(&"layout"),
 			_genome.call(&"body_layout"), _waiting_text()]
+	if _cells != "":
+		line += " | cell slot %d" % int(_run.get("_cell_slot"))
 	return line + " | drop sum %s" % str(_food.call(&"census_line")).get_slice("| sum ", 1)
 
 

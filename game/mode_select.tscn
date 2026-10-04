@@ -59,8 +59,45 @@ horizontal_alignment = 1
 size_flags_horizontal = 4
 theme_override_constants/separation = 10
 
-[node name="Full" type="Button" parent="Center/Column/FullBlock"]
+[node name="Row" type="HBoxContainer" parent="Center/Column/FullBlock"]
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Balance" type="Control" parent="Center/Column/FullBlock/Row"]
+custom_minimum_size = Vector2(64, 0)
+mouse_filter = 2
+
+[node name="Full" type="Button" parent="Center/Column/FullBlock/Row"]
+clip_contents = true
+
+[node name="Lines" type="VBoxContainer" parent="Center/Column/FullBlock/Row/Full"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_right = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="View" type="Label" parent="Center/Column/FullBlock/Row/Full/Lines"]
+mouse_filter = 2
+theme_override_font_sizes/font_size = 20
 text = "full vision"
+horizontal_alignment = 1
+
+[node name="Cell" type="Label" parent="Center/Column/FullBlock/Row/Full/Lines"]
+mouse_filter = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
+
+[node name="Cells" type="Button" parent="Center/Column/FullBlock/Row"]
+custom_minimum_size = Vector2(64, 80)
 
 [node name="FullNote" type="Label" parent="Center/Column/FullBlock"]
 mouse_filter = 2
@@ -73,8 +110,45 @@ horizontal_alignment = 1
 size_flags_horizontal = 4
 theme_override_constants/separation = 10
 
-[node name="Pov" type="Button" parent="Center/Column/PovBlock"]
+[node name="Row" type="HBoxContainer" parent="Center/Column/PovBlock"]
+size_flags_horizontal = 4
+mouse_filter = 2
+theme_override_constants/separation = 24
+
+[node name="Balance" type="Control" parent="Center/Column/PovBlock/Row"]
+custom_minimum_size = Vector2(64, 0)
+mouse_filter = 2
+
+[node name="Pov" type="Button" parent="Center/Column/PovBlock/Row"]
+clip_contents = true
+
+[node name="Lines" type="VBoxContainer" parent="Center/Column/PovBlock/Row/Pov"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 20.0
+offset_right = -20.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="View" type="Label" parent="Center/Column/PovBlock/Row/Pov/Lines"]
+mouse_filter = 2
+theme_override_font_sizes/font_size = 20
 text = "point of view"
+horizontal_alignment = 1
+
+[node name="Cell" type="Label" parent="Center/Column/PovBlock/Row/Pov/Lines"]
+mouse_filter = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+horizontal_alignment = 1
+
+[node name="Cells" type="Button" parent="Center/Column/PovBlock/Row"]
+custom_minimum_size = Vector2(64, 80)
 
 [node name="PovNote" type="Label" parent="Center/Column/PovBlock"]
 mouse_filter = 2

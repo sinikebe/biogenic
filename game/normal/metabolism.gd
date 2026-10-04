@@ -329,7 +329,13 @@ func starved() -> bool:
 ## quickens on it and the body goes slack on it -- normal_mode.gd eases the
 ## drawn slack toward it, so a meal fills the body out rather than popping it.
 func hungry() -> float:
-	return clampf((hunger - HUNGRY_FROM) / (1.0 - HUNGRY_FROM), 0.0, 1.0)
+	return hungry_at(hunger)
+
+
+## [method hungry] at a [member hunger] of [param level], for a body kept in a
+## file (docs/design/cells.md §6.6): the slack its figure is drawn with.
+static func hungry_at(level: float) -> float:
+	return clampf((level - HUNGRY_FROM) / (1.0 - HUNGRY_FROM), 0.0, 1.0)
 
 
 ## THE mapping, half one. Seconds between beats: [constant REST_PERIOD] above

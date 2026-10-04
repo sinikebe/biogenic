@@ -57,12 +57,12 @@ msgid "your worlds"
 msgstr "vos mondes"
 
 #. The footnote under the menu of the player's worlds, in 15 px type. "Water"
-#. is what everything in a world swims in; "your cell" is the player's
-#. creature, which waits in the world it was left in.
-#. Room: at most 592 px in 15 px type; the English takes 361 px.
+#. is what everything in a world swims in. The player's cells are kept apart
+#. from the worlds, so a world keeps only that.
+#. Room: at most 592 px in 15 px type; the English takes 229 px.
 #: game/menu/corner.gd
-msgid "each world keeps its own water, and your cell in it"
-msgstr "chaque monde garde son eau, et votre cellule dedans"
+msgid "each world keeps its own water"
+msgstr "chaque monde garde sa propre eau"
 
 #. An empty row in the menu of the player's worlds, in 20 px type: tap it to
 #. make a new world there and name it.
@@ -125,12 +125,14 @@ msgstr "retour"
 msgid "delete %s?"
 msgstr "supprimer %s ?"
 
-#. Under that question, in 17 px type, wrapping: what deleting the world does.
-#. A full sentence with a full stop. "It" is the world; "your cell" is the
-#. player's creature, which waits in the world it was left in.
+#. Under that question, in 17 px type, wrapping onto a second line if it must:
+#. what deleting the world does. Two short sentences with full stops. "It" is
+#. the world; "your cells" are the player's creatures, which are kept apart
+#. from the worlds, so deleting one does not touch them (French "vos cellules,
+#. non.").
 #: game/menu/corner.gd
-msgid "everything living in it, and your cell with it, is gone for good."
-msgstr "tout ce qui y vit, et votre cellule avec, disparaît pour de bon."
+msgid "everything living in it is gone for good. your cells are not."
+msgstr "tout ce qui y vit disparaît pour de bon. vos cellules, non."
 
 #. The caption on a button in the top-right corner, in 17 px type, before the
 #. name of the world that is selected ("world pond water"). A "world" is one
@@ -5015,3 +5017,308 @@ msgid "its %d instinct is gone for good."
 msgid_plural "its %d instincts are gone for good."
 msgstr[0] "son %d instinct disparaît pour de bon."
 msgstr[1] "ses %d instincts disparaissent pour de bon."
+
+#. The caption at the top of the menu of the player's cells for one of the two
+#. views, in 16 px type, before the view's name: "your cells · full vision".
+#. Also the tooltip of the button beside each view that opens it. A "cell" is
+#. the player's creature (French: une cellule, feminine); the player keeps
+#. three for each view.
+#: game/menu/corner.gd game/mode_select.gd
+msgid "your cells"
+msgstr "vos cellules"
+
+#. The footnote under the menu of the player's cells, in 15 px type: a cell
+#. grown in one view (full vision, or point of view) can never be played in
+#. the other, because they are not the same game. "It" is the cell (French
+#. "née" agrees with "cellule").
+#. Room: at most 592 px in 15 px type; the English takes 325 px.
+#: game/menu/corner.gd
+msgid "a cell is played only in the view it was born in"
+msgstr "une cellule ne se joue que dans la vue où elle est née"
+
+#. An empty row in the menu of the player's cells, in 20 px type: tap it to
+#. choose it, and pressing the view then starts a new cell there. A "cell" is
+#. the player's creature (French: une nouvelle cellule).
+#. Room: at most 402 px in 20 px type; the English takes 79 px.
+#: game/menu/corner.gd
+msgid "new cell"
+msgstr "nouvelle cellule"
+
+#. A small button on a cell's row in the menu of the player's cells, in 15 px
+#. type, 112 px wide: open the cell's detailed view, to see its body and its
+#. genes (French "voir").
+#. Room: at most 88 px in 15 px type; the English takes 32 px.
+#: game/menu/corner.gd
+msgid "look"
+msgstr "voir"
+
+#. In a cell's detailed view, in 15 px type under where the cell is: pressing
+#. its view will play it where the player left it. A "cell" is the player's
+#. creature (French "là où vous l'avez laissée": "laissée" agrees with
+#. "cellule").
+#. Room: at most 280 px in 15 px type; the English takes 119 px.
+#: game/menu/corner.gd
+msgid "where you left it"
+msgstr "là où vous l'avez laissée"
+
+#. The same, when the cell's place is not in the world that is selected now:
+#. pressing its view brings it into that world, at a quiet place. %s is that
+#. world's name in quotation marks ("comes into “pond water” at a quiet
+#. place"). It may wrap onto a second line of 280 px, and no more.
+#: game/menu/corner.gd
+#, c-format
+msgid "comes into %s at a quiet place"
+msgstr "arrive dans %s, à un endroit calme"
+
+#. The title of the sheet that renames one of the player's cells, in 22 px
+#. type. A "cell" is the player's creature (French: renommer cette cellule).
+#. Room: at most 512 px in 22 px type; the English takes 170 px.
+#: game/menu/corner.gd
+msgid "rename this cell"
+msgstr "renommer cette cellule"
+
+#. Under the question "delete slipper?" (slipper being a cell's name), in 17
+#. px type, wrapping if it must: what deleting one of the player's cells does.
+#. A full sentence with a full stop. "Its" is the cell's: its body and the
+#. genes it carries.
+#: game/menu/corner.gd
+msgid "its body and its genes are gone for good."
+msgstr "son corps et ses gènes disparaissent pour de bon."
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 66 px.
+#: game/normal/cells.gd
+msgid "slipper"
+msgstr "pantoufle"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 36 px.
+#: game/normal/cells.gd
+msgid "bell"
+msgstr "cloche"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 81 px.
+#: game/normal/cells.gd
+msgid "trumpet"
+msgstr "trompette"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 76 px.
+#: game/normal/cells.gd
+msgid "proteus"
+msgstr "protée"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 51 px.
+#: game/normal/cells.gd
+msgid "swan"
+msgstr "cygne"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 58 px.
+#: game/normal/cells.gd
+msgid "wheel"
+msgstr "roue"
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 71 px.
+#: game/normal/cells.gd
+msgid "sparkle"
+msgstr "étincelle"
+
+#. The second line of a button that starts a game in one of the two views, in
+#. 15 px type under the view's name: pressing it starts a new cell. A "cell"
+#. is the player's creature (French: une cellule, feminine). The button on the
+#. earshot screen leaves 236 px for it.
+#. Room: at most 236 px in 15 px type; the English takes 72 px.
+#: game/normal/cells.gd
+msgid "a new cell"
+msgstr "une nouvelle cellule"
+
+#. The same line, when the cell that was played in this view died and the
+#. player left before a new one started: pressing the button starts a new
+#. cell. %s is the dead cell's name, the player's own words or a default such
+#. as "slipper" (French "une nouvelle cellule · %s est morte": "morte" agrees
+#. with "cellule"). A long name is shortened with "…" so the line fits the 420
+#. px it has.
+#. Room: at most 420 px in 15 px type, measured with your widest default name
+#. of a cell in place of the placeholders; the English takes 179 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "a new cell · %s died"
+msgstr "une nouvelle cellule · %s est morte"
+
+#. The end of the line under a view's name on its button, after the cell's
+#. name and generation, in 15 px type: the cell was left while it swam in a
+#. friend's game ("water"), and pressing the button brings it home. The whole
+#. line has 420 px.
+#: game/normal/cells.gd
+msgid "from a friend's water"
+msgstr "depuis l'eau d'un ami"
+
+#. The same, for a cell left in another of the player's worlds than the one
+#. selected: pressing the button brings it from there. %s is that world's name
+#. in quotation marks ("“rain barrel”"). The whole line has 420 px.
+#. Room: at most 420 px in 15 px type, measured with your widest default name
+#. of a world in place of the placeholders; the English takes 137 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "from %s"
+msgstr "depuis %s"
+
+#. Where a cell died, in 15 px type, on its row in "your cells" and in its
+#. detailed view: in a friend's game ("water"). A "cell" is the player's
+#. creature (French: une cellule, feminine, so "morte").
+#. Room: at most 402 px in 15 px type; the English takes 167 px.
+#: game/normal/cells.gd
+msgid "died in a friend's water"
+msgstr "morte dans l'eau d'un ami"
+
+#. The same, for a cell that died in one of the player's worlds that has since
+#. been deleted or made again (French: "morte").
+#. Room: at most 402 px in 15 px type; the English takes 196 px.
+#: game/normal/cells.gd
+msgid "died in a world that is gone"
+msgstr "morte dans un monde disparu"
+
+#. The same, in one of the player's worlds: %s is its name in quotation marks
+#. ("died in “pond water”"). French "morte dans %s" agrees with "cellule". In
+#. the detailed view it may wrap onto a second line of 280 px.
+#. Room: at most 402 px in 15 px type, measured with your widest default name
+#. of a world in place of the placeholders; the English takes 151 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "died in %s"
+msgstr "morte dans %s"
+
+#. Where a cell is, in 15 px type on its row in "your cells", and in 17 px in
+#. its detailed view: it was left while it swam in a friend's game, which the
+#. game calls their "water". A "cell" is the player's creature.
+#. Room: at most 280 px in 17 px type; the English takes 129 px.
+#: game/normal/cells.gd
+msgid "a friend's water"
+msgstr "l'eau d'un ami"
+
+#. Where a cell is, in 15 px type on its row in "your cells", and in 17 px in
+#. its detailed view: the world it was kept in has been deleted or made again
+#. since, so it will come into another at a quiet place. A "world" is one of
+#. the three the player keeps.
+#. Room: at most 280 px in 17 px type; the English takes 162 px.
+#: game/normal/cells.gd
+msgid "a world that is gone"
+msgstr "un monde disparu"
+
+#. The end of a cell's line, in 15 px type: its tank is empty and it is dying
+#. of hunger. A "cell" is the player's creature (French: une cellule,
+#. feminine).
+#. Room: at most 160 px in 15 px type; the English takes 59 px.
+#: game/normal/cells.gd
+msgid "starving"
+msgstr "meurt de faim"
+
+#. The same, when its tank is half empty or less: it is hungry (French
+#. "affamée", agreeing with "cellule").
+#. Room: at most 160 px in 15 px type; the English takes 52 px.
+#: game/normal/cells.gd
+msgid "hungry"
+msgstr "affamée"
+
+#. How long a cell's line has been played, in 15 px type on its row in "your
+#. cells" and in its detailed view: "25 minutes old". A "cell" is the player's
+#. creature, and its daughters are the same line; French makes it feminine, so
+#. "âgée de %d minutes". Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 100 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d minute old"
+msgid_plural "%d minutes old"
+msgstr[0] "âgée de %d minute"
+msgstr[1] "âgée de %d minutes"
+
+#. The same, in hours: "2 hours old" (French "âgée de 2 heures"). Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d hour old"
+msgid_plural "%d hours old"
+msgstr[0] "âgée de %d heure"
+msgstr[1] "âgée de %d heures"
+
+#. The same, in days: "3 days old" (French "âgée de 3 jours"). Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 999 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d day old"
+msgid_plural "%d days old"
+msgstr[0] "âgée de %d jour"
+msgstr[1] "âgée de %d jours"

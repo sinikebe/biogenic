@@ -437,6 +437,348 @@ layout_mode = 2
 theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
 theme_override_font_sizes/font_size = 15
 
+[node name="Cells" type="Control" parent="."]
+layout_mode = 1
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="PanelContainer" parent="Cells"]
+layout_mode = 1
+anchors_preset = 5
+custom_minimum_size = Vector2(640, 0)
+anchor_left = 0.5
+anchor_right = 0.5
+offset_left = -320.0
+offset_top = 112.0
+offset_right = 320.0
+offset_bottom = 490.0
+grow_horizontal = 2
+theme_override_styles/panel = SubResource("StyleBoxFlat_sheet")
+
+[node name="Box" type="VBoxContainer" parent="Cells/Panel"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Caption" type="Label" parent="Cells/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.52)
+theme_override_font_sizes/font_size = 16
+
+[node name="Scroll" type="ScrollContainer" parent="Cells/Panel/Box"]
+layout_mode = 2
+follow_focus = true
+horizontal_scroll_mode = 0
+
+[node name="Rows" type="VBoxContainer" parent="Cells/Panel/Box/Scroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+theme_override_constants/separation = 10
+
+[node name="Row1" type="HBoxContainer" parent="Cells/Panel/Box/Scroll/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Pick" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row1"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 68)
+size_flags_horizontal = 3
+
+[node name="Lines" type="VBoxContainer" parent="Cells/Panel/Box/Scroll/Rows/Row1/Pick"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 52.0
+offset_right = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Name" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row1/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 1)
+theme_override_font_sizes/font_size = 20
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Stats" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row1/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Look" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row1"]
+layout_mode = 2
+custom_minimum_size = Vector2(112, 68)
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.78)
+theme_override_font_sizes/font_size = 15
+
+[node name="Hold" type="Control" parent="Cells/Panel/Box/Scroll/Rows/Row1"]
+layout_mode = 2
+visible = false
+custom_minimum_size = Vector2(112, 68)
+mouse_filter = 2
+
+[node name="Row2" type="HBoxContainer" parent="Cells/Panel/Box/Scroll/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Pick" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row2"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 68)
+size_flags_horizontal = 3
+
+[node name="Lines" type="VBoxContainer" parent="Cells/Panel/Box/Scroll/Rows/Row2/Pick"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 52.0
+offset_right = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Name" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row2/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 1)
+theme_override_font_sizes/font_size = 20
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Stats" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row2/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Look" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row2"]
+layout_mode = 2
+custom_minimum_size = Vector2(112, 68)
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.78)
+theme_override_font_sizes/font_size = 15
+
+[node name="Hold" type="Control" parent="Cells/Panel/Box/Scroll/Rows/Row2"]
+layout_mode = 2
+visible = false
+custom_minimum_size = Vector2(112, 68)
+mouse_filter = 2
+
+[node name="Row3" type="HBoxContainer" parent="Cells/Panel/Box/Scroll/Rows"]
+layout_mode = 2
+theme_override_constants/separation = 10
+
+[node name="Pick" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row3"]
+layout_mode = 2
+custom_minimum_size = Vector2(0, 68)
+size_flags_horizontal = 3
+
+[node name="Lines" type="VBoxContainer" parent="Cells/Panel/Box/Scroll/Rows/Row3/Pick"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+offset_left = 52.0
+offset_right = -16.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+theme_override_constants/separation = 0
+alignment = 1
+
+[node name="Name" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row3/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 1)
+theme_override_font_sizes/font_size = 20
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Stats" type="Label" parent="Cells/Panel/Box/Scroll/Rows/Row3/Pick/Lines"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Look" type="Button" parent="Cells/Panel/Box/Scroll/Rows/Row3"]
+layout_mode = 2
+custom_minimum_size = Vector2(112, 68)
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.78)
+theme_override_font_sizes/font_size = 15
+
+[node name="Hold" type="Control" parent="Cells/Panel/Box/Scroll/Rows/Row3"]
+layout_mode = 2
+visible = false
+custom_minimum_size = Vector2(112, 68)
+mouse_filter = 2
+
+[node name="Note" type="Label" parent="Cells/Panel/Box"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.318, 0.463, 0.435, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="Cell" type="Control" parent="."]
+layout_mode = 1
+visible = false
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Back" type="ColorRect" parent="Cell"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+color = Color(0.023, 0.055, 0.05, 1)
+
+[node name="Center" type="CenterContainer" parent="Cell"]
+layout_mode = 1
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Columns" type="HBoxContainer" parent="Cell/Center"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 48
+
+[node name="Side" type="VBoxContainer" parent="Cell/Center/Columns"]
+custom_minimum_size = Vector2(280, 535)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+theme_override_constants/separation = 0
+
+[node name="Name" type="Label" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 1)
+theme_override_font_sizes/font_size = 28
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Gap" type="Control" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(0, 4)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Kind" type="Label" parent="Cell/Center/Columns/Side"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="Gap2" type="Control" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Age" type="Label" parent="Cell/Center/Columns/Side"]
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+
+[node name="Gap3" type="Control" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(0, 28)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Where" type="HBoxContainer" parent="Cell/Center/Columns/Side"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 10
+
+[node name="Caption" type="Label" parent="Cell/Center/Columns/Side/Where"]
+layout_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.52)
+theme_override_font_sizes/font_size = 17
+
+[node name="Value" type="Label" parent="Cell/Center/Columns/Side/Where"]
+layout_mode = 2
+size_flags_horizontal = 3
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 1)
+theme_override_font_sizes/font_size = 17
+clip_text = true
+text_overrun_behavior = 3
+
+[node name="Gap4" type="Control" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(0, 2)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Then" type="Label" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(280, 0)
+layout_mode = 2
+auto_translate_mode = 2
+theme_override_colors/font_color = Color(0.482, 0.686, 0.643, 1)
+theme_override_font_sizes/font_size = 15
+autowrap_mode = 3
+
+[node name="Fill" type="Control" parent="Cell/Center/Columns/Side"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Actions" type="HBoxContainer" parent="Cell/Center/Columns/Side"]
+layout_mode = 2
+mouse_filter = 2
+theme_override_constants/separation = 16
+
+[node name="Rename" type="Button" parent="Cell/Center/Columns/Side/Actions"]
+custom_minimum_size = Vector2(132, 56)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.78)
+theme_override_font_sizes/font_size = 15
+
+[node name="Delete" type="Button" parent="Cell/Center/Columns/Side/Actions"]
+custom_minimum_size = Vector2(132, 56)
+layout_mode = 2
+theme_override_colors/font_color = Color(0.855, 0.953, 0.933, 0.78)
+theme_override_font_sizes/font_size = 15
+
+[node name="Gap5" type="Control" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(0, 48)
+layout_mode = 2
+mouse_filter = 2
+
+[node name="Close" type="Button" parent="Cell/Center/Columns/Side"]
+custom_minimum_size = Vector2(280, 56)
+layout_mode = 2
+theme_override_font_sizes/font_size = 20
+
+[node name="Figure" type="CenterContainer" parent="Cell/Center/Columns"]
+custom_minimum_size = Vector2(560, 548)
+layout_mode = 2
+size_flags_vertical = 4
+mouse_filter = 2
+
 [node name="Naming" type="Control" parent="."]
 layout_mode = 1
 visible = false

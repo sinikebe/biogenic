@@ -7,7 +7,11 @@ extends Control
 ## makes a new one through the naming sheet (§5), and a row's own buttons rename it
 ## or, through a confirm, delete it. **The player's word for a drop is "world"**
 ## (owner's row 5): every word on screen says world, and the code says drop, as
-## ocean.md and drops.gd do.
+## ocean.md and drops.gd do. **And "your cells"** (docs/design/cells-ux.md §2, §3),
+## which a view's chevron on the chooser opens ([method open_cells]): one view's
+## slots, one tap to select one, and each cell's **detailed view**, a layer of its
+## own over the sheet, where it can be renamed and deleted. The player's word for
+## a slot is never "slot": they read `your cells`, a row and `new cell`.
 ##
 ## It is the **last child** of the view chooser and of the earshot screen (so of
 ## far.tscn too), and of the pause screen in a run, where it hides with the screen.
@@ -17,7 +21,8 @@ extends Control
 ## asks [method close_top] before doing what Back does**, and stops when it says
 ## true. The corner never listens for Back itself: if it did, one Back would close
 ## two things. **One Back closes one layer**: naming and the confirm go back to the
-## drop menu, and the menu or the settings sheet back to the screen.
+## drop menu, or to the cell's detailed view they were opened from; the detailed
+## view back to "your cells"; and a menu or the settings sheet back to the screen.
 ##
 ## **Every layer is a node of corner.tscn, hidden until it is opened**, and the one
 ## thing built in code is the language list, once, in `_ready()`. So a change of
@@ -47,6 +52,16 @@ signal closed
 
 const I18n := preload("res://game/i18n/i18n.gd")
 const Drops := preload("res://game/normal/drops.gd")
+## **Your cells** (docs/design/cells.md): each view's slots, read as the sheet opens
+## and changed only by a choice, a rename or a delete.
+const Cells := preload("res://game/normal/cells.gd")
+## For the views: the name each keeps its cells under, and its words.
+const RunState := preload("res://game/run_state.gd")
+## For [constant Readout.SEP]: the sheet's caption is a list, `your cells · full vision`.
+const Readout := preload("res://game/mechanics/readout.gd")
+## **A cell's figure, read-only**, loaded the first time a detailed view opens
+## (cell_figure.gd says why).
+const CELL_FIGURE := "res://game/menu/cell_figure.gd"
 
 ## The width of a language row: the sheet's 520 less its two margins of 24.
 const ROW_SIZE := Vector2(472.0, 56.0)
@@ -90,6 +105,13 @@ const CHEVRON_ALPHA := 0.8
 const PLUS_ARM := 6.0
 const PLUS_ALPHA := 0.6
 const EMPTY_ALPHA := 0.82
+## **A record's row** (cells-ux.md §2.2): its name and its lines fainter -- it is
+## past -- under the plus of the new cell that starts there.
+const RECORD_NAME_ALPHA := 0.6
+const RECORD_LINE_ALPHA := 0.75
+## "your cells" scrolls past this many rows (cells-ux.md §2.1): a fourth exists
+## only after a rare migration, and from a fifth the rows scroll, four high.
+const CELL_ROWS_SHOWN := 4
 ## A row's own buttons sit in the pause screen's quiet slab, with room for French
 ## `renommer` inside 112 px (§9).
 const QUIET_MARGIN := Vector2(12.0, 10.0)
@@ -144,6 +166,9 @@ var drops_root := Drops.ROOT:
 		if is_node_ready() and show_drop:
 			_read_drops()
 			_say_chip()
+## **Where the cells are kept** (docs/design/cells.md §3): the player's own, or a
+## tool's folder, set before a sheet opens. Nothing in the game changes it.
+var cells_root := Cells.ROOT
 
 @onready var _cluster: Control = $Cluster
 @onready var _chip: Button = $Cluster/Chip
@@ -171,6 +196,25 @@ var drops_root := Drops.ROOT:
 @onready var _confirm_line: Label = $Confirm/Panel/Box/Line
 @onready var _keep: Button = $Confirm/Panel/Box/Actions/Keep
 @onready var _delete: Button = $Confirm/Panel/Box/Actions/Delete
+@onready var _cells: Control = $Cells
+@onready var _cells_panel: PanelContainer = $Cells/Panel
+@onready var _cells_caption: Label = $Cells/Panel/Box/Caption
+@onready var _cells_scroll: ScrollContainer = $Cells/Panel/Box/Scroll
+@onready var _cell_rows: VBoxContainer = $Cells/Panel/Box/Scroll/Rows
+@onready var _cells_note: Label = $Cells/Panel/Box/Note
+@onready var _cell: Control = $Cell
+@onready var _cell_name: Label = $Cell/Center/Columns/Side/Name
+@onready var _cell_kind: Label = $Cell/Center/Columns/Side/Kind
+@onready var _cell_age: Label = $Cell/Center/Columns/Side/Age
+@onready var _cell_where: HBoxContainer = $Cell/Center/Columns/Side/Where
+@onready var _cell_where_caption: Label = $Cell/Center/Columns/Side/Where/Caption
+@onready var _cell_where_value: Label = $Cell/Center/Columns/Side/Where/Value
+@onready var _cell_then: Label = $Cell/Center/Columns/Side/Then
+@onready var _cell_actions: HBoxContainer = $Cell/Center/Columns/Side/Actions
+@onready var _cell_rename: Button = $Cell/Center/Columns/Side/Actions/Rename
+@onready var _cell_delete: Button = $Cell/Center/Columns/Side/Actions/Delete
+@onready var _cell_close: Button = $Cell/Center/Columns/Side/Close
+@onready var _cell_seat: CenterContainer = $Cell/Center/Columns/Figure
 
 ## The layer on top, or null: settings or the drop menu, or naming or the
 ## confirm over the menu.
@@ -209,6 +253,29 @@ var _beside: Array = []
 ## while the sheets serve worlds. A sheet opened this way sits over the screen and
 ## not over the drop menu, so Back and `back` go back to the screen.
 var _answer := Callable()
+## **The layer naming or the confirm goes back to** when it was opened over one
+## that is not the drop menu: a cell's detailed view (cells-ux.md §3.4). Null for
+## the drop menu's own, and for a screen's.
+var _under: Control = null
+## **The sheet "your cells" is about**: the view, by the mode the chooser offers it
+## as and by the name its cells are kept under; the cells as the sheet last read
+## them (cells.gd's `read`), the worlds they are measured against, and the slot the
+## detailed view shows, with its entry.
+var _cells_mode := 0
+var _cells_view := ""
+var _cells_index := {}
+var _cells_worlds := {}
+var _cell_slot := 0
+var _cell_entry := {}
+## **The detailed view's figure** (cell_figure.gd), made the first time it opens.
+var _cell_figure: Control = null
+## A row's height with one line under its name, read off the first one fitted.
+var _cell_row_height := 0.0
+## What gets the focus back when the detailed view goes back to the sheet -- the
+## row's `look` -- and when naming or the confirm goes back to the detailed view:
+## `rename` or `delete`.
+var _cell_opener: Control = null
+var _cell_action: Control = null
 
 
 func _ready() -> void:
@@ -230,6 +297,8 @@ func _ready() -> void:
 	_ready_drops()
 	_ready_naming()
 	_ready_confirm()
+	_ready_cells()
+	_ready_cell()
 	if show_drop:
 		_read_drops()
 	_say()
@@ -271,8 +340,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## **Closes the top layer, and says whether Back or Esc has been answered.**
 ## Every screen's Back asks this first and stops when it is true. Naming and the
-## confirm go back to the drop menu -- Back means "nothing changed" on the one,
-## and "keep" on the other -- and the menu and the settings sheet to the screen.
+## confirm go back to what they opened over -- the drop menu, or a cell's detailed
+## view (docs/design/cells-ux.md §3.4) -- Back meaning "nothing changed" on the one
+## and "keep" on the other; the detailed view goes back to your cells; and your
+## cells, the menu and the settings sheet go back to the screen.
 ##
 ## **True as well when something was closed this frame.** Back can arrive twice
 ## in one frame, as the notification and as Esc (normal_mode.gd, `_back_once`),
@@ -286,6 +357,10 @@ func close_top() -> bool:
 	_closed_frame = Engine.get_process_frames()
 	if _over_menu():
 		_back_to_drops()
+	elif _over_cell():
+		_back_to_cell()
+	elif _open == _cell:
+		_back_to_cells()
 	else:
 		_shut(true)
 	return true
@@ -337,15 +412,20 @@ func _link_cluster() -> void:
 # Opening and closing the layers.
 # ---------------------------------------------------------------------------
 
-## The four layers, in the order they are drawn.
+## The layers, in the order they are drawn.
 func _layers() -> Array[Control]:
-	return [_settings, _drops, _naming, _confirm]
+	return [_settings, _drops, _cells, _cell, _naming, _confirm]
 
 
 ## True while naming or the confirm is open over the drop menu -- and not over a
-## screen that opened it for its own thing ([member _answer]).
+## screen that opened it for its own thing ([member _answer]), nor over a cell.
 func _over_menu() -> bool:
 	return _open != null and (_open == _naming or _open == _confirm) and not _answer.is_valid()
+
+
+## True while naming or the confirm is open over a cell's detailed view.
+func _over_cell() -> bool:
+	return _open != null and (_open == _naming or _open == _confirm) and _under == _cell
 
 
 ## True while the drop menu, or a layer over it, is open.
@@ -355,13 +435,15 @@ func _in_drops() -> bool:
 
 ## **[param layer] on top**, the others hidden, the veil under it. Naming and the
 ## confirm hide the cluster: naming's panel spans the top of the screen to x 920,
-## and a wide chip starts at 824 (§9).
+## and a wide chip starts at 824 (§9). So does a cell's detailed view, which is
+## the whole screen (cells-ux.md §3.1).
 func _show_layer(layer: Control) -> void:
 	for each: Control in _layers():
 		each.visible = each == layer
 	_veil.show()
 	_open = layer
-	_cluster.visible = show_cluster and not (layer == _naming or layer == _confirm)
+	_cluster.visible = show_cluster \
+		and not (layer == _naming or layer == _confirm or layer == _cell)
 
 
 ## Remembers what had the focus as the first layer opens, so closing gives it
@@ -389,6 +471,7 @@ func _shut(give_focus_back: bool) -> void:
 		each.hide()
 	_open = null
 	_answer = Callable()
+	_under = null
 	_veil.hide()
 	_cluster.visible = show_cluster
 	if give_focus_back:
@@ -594,10 +677,10 @@ func _say_drops() -> void:
 	# ROOM: 592 px at 16 px
 	_drops_caption.text = tr("your worlds")
 	# TRANSLATORS: The footnote under the menu of the player's worlds, in 15 px
-	# type. "Water" is what everything in a world swims in; "your cell" is the
-	# player's creature, which waits in the world it was left in.
+	# type. "Water" is what everything in a world swims in. The player's cells are
+	# kept apart from the worlds, so a world keeps only that.
 	# ROOM: 592 px at 15 px
-	_drops_note.text = tr("each world keeps its own water, and your cell in it")
+	_drops_note.text = tr("each world keeps its own water")
 	if _index.is_empty():
 		return
 	for slot in range(1, Drops.SLOTS + 1):
@@ -641,9 +724,9 @@ func _say_drops() -> void:
 
 
 ## **A row as tall as its lines** (§4.3): a name and one line under it fit the
-## height corner.tscn gives every row, and each line more -- a cell waiting for
-## a view (ocean.md §9.5) -- adds one line of the Stats label's own type, so the
-## row grows and its lines never crowd.
+## height corner.tscn gives every row, and each line more adds one line of the
+## Stats label's own type, so the row grows and its lines never crowd. A world's
+## row has one line, its age (cells-ux.md §5); a cell's has two.
 func _fit_row(slot: int, lines: int) -> void:
 	var pick := _pick(slot)
 	if _row_height <= 0.0:
@@ -681,6 +764,14 @@ func _trap_drops() -> void:
 			if control.visible:
 				row.append(control)
 		grid.append(row)
+	_trap_grid(grid)
+
+
+## **A grid of rows kept on its sheet** ([method _trap_drops] and
+## [method _trap_cells]): [param grid] is its rows, each its controls left to
+## right. Up and Down keep to a column where the next row has one, Left and Right
+## walk a row, and Tab goes round them all in reading order.
+func _trap_grid(grid: Array) -> void:
 	var ring: Array[Control] = []
 	for r in grid.size():
 		var row: Array[Control] = grid[r]
@@ -847,6 +938,11 @@ func _on_named() -> void:
 	if _answer.is_valid():
 		var answer := _answer
 		_closed_frame = Engine.get_process_frames()
+		if _under == _cell:
+			# **Kept, and back to the cell, which shows it** (cells-ux.md §3.4).
+			answer.call(typed)
+			_back_to_cell()
+			return
 		_shut(true)
 		answer.call(typed)
 		return
@@ -911,10 +1007,12 @@ func _say_confirm() -> void:
 	# wrapping onto two lines if it must. %s is the world's name, in the player's
 	# own words or a default name such as "pond water": keep %s.
 	_confirm_title.text = tr("delete %s?") % Drops.name_of(Drops.entry_of(_index, _slot))
-	# TRANSLATORS: Under that question, in 17 px type, wrapping: what deleting the
-	# world does. A full sentence with a full stop. "It" is the world; "your cell"
-	# is the player's creature, which waits in the world it was left in.
-	_confirm_line.text = tr("everything living in it, and your cell with it, is gone for good.")
+	# TRANSLATORS: Under that question, in 17 px type, wrapping onto a second line
+	# if it must: what deleting the world does. Two short sentences with full
+	# stops. "It" is the world; "your cells" are the player's creatures, which are
+	# kept apart from the worlds, so deleting one does not touch them (French
+	# "vos cellules, non.").
+	_confirm_line.text = tr("everything living in it is gone for good. your cells are not.")
 	# TRANSLATORS: The safe answer to "delete pond water?" -- keep the world -- on a
 	# button 208 px wide in 20 px type, beside "delete". The same word answers
 	# "forget this invite?" on another screen.
@@ -931,6 +1029,12 @@ func _on_delete() -> void:
 	if _answer.is_valid():
 		var answer := _answer
 		_closed_frame = Engine.get_process_frames()
+		if _under == _cell:
+			# **Deleted, and back to the sheet**, whose row is empty now
+			# (cells-ux.md §3.4).
+			answer.call()
+			_back_to_cells()
+			return
 		_shut(true)
 		answer.call()
 		return
@@ -939,6 +1043,456 @@ func _on_delete() -> void:
 		push_warning("[Corner] drop %d was not deleted (%s)" % [_slot, error_string(done)])
 	_closed_frame = Engine.get_process_frames()
 	_back_to_drops()
+
+
+# ---------------------------------------------------------------------------
+# "Your cells", and a cell's detailed view (docs/design/cells-ux.md §2, §3).
+# ---------------------------------------------------------------------------
+
+## The rows corner.tscn gives the sheet, wired once: what each press does, the
+## launcher's boxes with room for the mark, and the quiet slab on `look`.
+func _ready_cells() -> void:
+	for row: Node in _cell_rows.get_children():
+		_wire_cell_row(row as HBoxContainer)
+
+
+func _wire_cell_row(row: HBoxContainer) -> void:
+	var pick: Button = row.get_node(^"Pick")
+	var look: Button = row.get_node(^"Look")
+	pick.focus_mode = Control.FOCUS_ALL
+	_restyle(pick, Vector2(ROW_TEXT_X, -1.0))
+	pick.pressed.connect(_on_cell_pick.bind(row))
+	pick.draw.connect(_draw_cell_mark.bind(pick, row))
+	look.focus_mode = Control.FOCUS_ALL
+	_restyle(look, QUIET_MARGIN)
+	if quiet_box != null:
+		look.add_theme_stylebox_override(&"normal", quiet_box)
+	look.pressed.connect(_open_cell.bind(row))
+
+
+## **Opens "your cells" for [param mode]'s view** (cells-ux.md §2): that view's
+## slots, read afresh, centred under the veil, with the focus on the one its
+## button plays. The chooser's chevron beside the view calls it.
+func open_cells(mode: int) -> void:
+	if _open == _cells and _cells_mode == mode:
+		return
+	_remember_opener(null)
+	_cells_mode = mode
+	_cells_view = RunState.cell_key(mode)
+	_read_cells()
+	_show_layer(_cells)
+	_say_cells()
+	_focus_cell_row(int(_cells_index["selected"]))
+
+
+func _read_cells() -> void:
+	_cells_index = Cells.read(_cells_view, cells_root)
+	_cells_worlds = Drops.read(drops_root)
+
+
+## **The sheet's words and rows** (cells-ux.md §2.2): each slot's name and its two
+## lines, its mark, its box and its `look` -- an empty slot says `new cell`, holds
+## the place of a `look` it does not have, and starts a cell when its view is
+## pressed; a record is its name and lines, fainter, under the plus of the cell
+## that starts there.
+func _say_cells() -> void:
+	# TRANSLATORS: The caption at the top of the menu of the player's cells for one
+	# of the two views, in 16 px type, before the view's name: "your cells · full
+	# vision". Also the tooltip of the button beside each view that opens it. A
+	# "cell" is the player's creature (French: une cellule, feminine); the player
+	# keeps three for each view.
+	_cells_caption.text = tr("your cells") + Readout.SEP + tr(RunState.VIEW_WORDS[_cells_mode])
+	# TRANSLATORS: The footnote under the menu of the player's cells, in 15 px type:
+	# a cell grown in one view (full vision, or point of view) can never be played
+	# in the other, because they are not the same game. "It" is the cell (French
+	# "née" agrees with "cellule").
+	# ROOM: 592 px at 15 px
+	_cells_note.text = tr("a cell is played only in the view it was born in")
+	if _cells_index.is_empty():
+		return
+	var slots: Array = _cells_index["slots"]
+	_grow_cell_rows(slots.size())
+	var selected := int(_cells_index["selected"])
+	for i in _cell_rows.get_child_count():
+		var row := _cell_rows.get_child(i) as HBoxContainer
+		row.visible = i < slots.size()
+		if not row.visible:
+			continue
+		var entry: Dictionary = slots[i]
+		var slot := int(entry["slot"])
+		row.set_meta(&"slot", slot)
+		var empty := bool(entry["empty"])
+		var record := bool(entry["record"])
+		var current := slot == selected
+		var pick: Button = row.get_node(^"Pick")
+		var called: Label = pick.get_node(^"Lines/Name")
+		var stats: Label = pick.get_node(^"Lines/Stats")
+		# TRANSLATORS: An empty row in the menu of the player's cells, in 20 px
+		# type: tap it to choose it, and pressing the view then starts a new cell
+		# there. A "cell" is the player's creature (French: une nouvelle cellule).
+		# ROOM: 402 px at 20 px
+		called.text = tr("new cell") if empty else Cells.name_of(entry)
+		called.add_theme_color_override(&"font_color", Color(INK, EMPTY_ALPHA if empty
+			else (RECORD_NAME_ALPHA if record else 1.0)))
+		var lines := Cells.row_lines(entry, _cells_worlds, drops_root)
+		stats.text = "\n".join(lines)
+		stats.visible = not empty
+		stats.add_theme_color_override(&"font_color", Color(NOTE_INK,
+			RECORD_LINE_ALPHA if record else 1.0))
+		_fit_cell_row(row, lines.size())
+		pick.accessibility_name = called.text
+		var box: StyleBox = (current_box if current else empty_box) if record \
+			else (empty_box if empty and not current else (current_box if current else null))
+		if box == null:
+			box = _moved(get_theme_stylebox(&"normal", &"Button"), Vector2(ROW_TEXT_X, -1.0))
+		pick.add_theme_stylebox_override(&"normal", box)
+		pick.queue_redraw()
+		var look: Button = row.get_node(^"Look")
+		# TRANSLATORS: A small button on a cell's row in the menu of the player's
+		# cells, in 15 px type, 112 px wide: open the cell's detailed view, to see
+		# its body and its genes (French "voir").
+		# ROOM: 88 px at 15 px
+		look.text = tr("look")
+		look.visible = not empty
+		(row.get_node(^"Hold") as Control).visible = empty
+	_size_cell_scroll(slots.size())
+	_trap_cells()
+	# **The sheet as tall as its rows.** A panel grows to fit by itself, and is
+	# told to shrink: three empty slots are shorter than three cells, and shorter
+	# than the panel corner.tscn draws. Deferred, so the rows' new heights are in.
+	_cells_panel.reset_size.call_deferred()
+
+
+## A cell's line ink, from corner.tscn's Stats labels.
+const NOTE_INK := Color(0.482, 0.686, 0.643, 1.0)
+
+
+## **Enough rows for [param count] slots**: the three corner.tscn has, and one
+## more for each slot past them -- a cell an older build kept after the migration
+## (cells.md §4) -- made like the third, and wired as the others are.
+func _grow_cell_rows(count: int) -> void:
+	while _cell_rows.get_child_count() < count:
+		var model := _cell_rows.get_child(_cell_rows.get_child_count() - 1) as HBoxContainer
+		var row := model.duplicate(Node.DUPLICATE_GROUPS | Node.DUPLICATE_SCRIPTS
+			| Node.DUPLICATE_USE_INSTANTIATION) as HBoxContainer
+		row.name = "Row%d" % (_cell_rows.get_child_count() + 1)
+		_cell_rows.add_child(row)
+		_wire_cell_row(row)
+
+
+## A row as tall as its lines, as a world's row is ([method _fit_row]): `look` and
+## the hold beside it follow, as the box's other children.
+func _fit_cell_row(row: HBoxContainer, lines: int) -> void:
+	var pick: Button = row.get_node(^"Pick")
+	if _cell_row_height <= 0.0:
+		_cell_row_height = pick.custom_minimum_size.y
+	var stats: Label = pick.get_node(^"Lines/Stats")
+	var step := stats.get_theme_font(&"font").get_height(stats.get_theme_font_size(&"font_size")) \
+		+ float(stats.get_theme_constant(&"line_spacing"))
+	pick.custom_minimum_size.y = _cell_row_height + step * float(maxi(lines - 1, 0))
+
+
+## **The rows show four at most** (cells-ux.md §2.1): as tall as they are up to
+## [constant CELL_ROWS_SHOWN], after which they scroll.
+func _size_cell_scroll(count: int) -> void:
+	var height := 0.0
+	var gap := float(_cell_rows.get_theme_constant(&"separation"))
+	for i in mini(count, CELL_ROWS_SHOWN):
+		var pick: Button = _cell_rows.get_child(i).get_node(^"Pick")
+		height += pick.custom_minimum_size.y + (gap if i > 0 else 0.0)
+	_cells_scroll.custom_minimum_size = Vector2(0.0, height)
+
+
+## **The mark at a row's left** (cells-ux.md §2.2): the filled dot of the cell the
+## view plays, the empty ring of another, and the plus of an empty slot -- and of
+## a record, where a new cell starts.
+func _draw_cell_mark(pick: Button, row: HBoxContainer) -> void:
+	if _cells_index.is_empty() or not row.has_meta(&"slot"):
+		return
+	var slot := int(row.get_meta(&"slot"))
+	var entry := Cells.entry_of(_cells_index, slot)
+	var at := Vector2(MARK_X, pick.size.y * 0.5)
+	if bool(entry["empty"]) or bool(entry["record"]):
+		var ink := Color(INK, PLUS_ALPHA)
+		pick.draw_line(at - Vector2(PLUS_ARM, 0.0), at + Vector2(PLUS_ARM, 0.0), ink, 2.0, true)
+		pick.draw_line(at - Vector2(0.0, PLUS_ARM), at + Vector2(0.0, PLUS_ARM), ink, 2.0, true)
+	elif slot == int(_cells_index["selected"]):
+		pick.draw_circle(at, MARK_R, BRIGHT, true, -1.0, true)
+	else:
+		pick.draw_arc(at, MARK_R, 0.0, TAU, 32, Color(INK, RING_ALPHA), RING_WIDTH, true)
+
+
+## Up and Down walk the rows, Left and Right a row's `Pick` and `look`, and Tab
+## goes round (cells-ux.md §2.3): [method _trap_drops], one more time.
+func _trap_cells() -> void:
+	var grid: Array = []
+	for row: Node in _cell_rows.get_children():
+		if not (row as Control).visible:
+			continue
+		var line: Array[Control] = [row.get_node(^"Pick") as Control]
+		var look := row.get_node(^"Look") as Control
+		if look.visible:
+			line.append(look)
+		grid.append(line)
+	_trap_grid(grid)
+
+
+## The focus on [param slot]'s row, or the first row's when it is not shown.
+func _focus_cell_row(slot: int) -> void:
+	for row: Node in _cell_rows.get_children():
+		if (row as Control).visible and int(row.get_meta(&"slot", 0)) == slot:
+			(row.get_node(^"Pick") as Control).grab_focus()
+			return
+	(_cell_rows.get_child(0).get_node(^"Pick") as Control).grab_focus()
+
+
+## **A row tapped** (cells-ux.md §2.3): that slot becomes the one its view plays,
+## and the sheet closes -- the view's button then says its cell. An empty slot is
+## chosen too: a new cell is born there when the view is pressed. Tapping the row
+## already chosen just closes the sheet.
+func _on_cell_pick(row: HBoxContainer) -> void:
+	var slot := int(row.get_meta(&"slot", 0))
+	if slot < 1 or _open != _cells:
+		return
+	if slot != int(_cells_index["selected"]):
+		var done := Cells.select(_cells_view, slot, cells_root)
+		if done != OK:
+			push_warning("[Corner] cell slot %d was not chosen (%s)" % [slot, error_string(done)])
+			_read_cells()
+			_say_cells()
+			return
+	_shut(true)
+
+
+## **`look`: the cell's detailed view** (cells-ux.md §3), over the sheet, with the
+## focus on `close`, so a stray Enter only closes it.
+func _open_cell(row: HBoxContainer) -> void:
+	var slot := int(row.get_meta(&"slot", 0))
+	var entry := Cells.entry_of_slot(_cells_view, slot, cells_root)
+	if bool(entry["empty"]) or _open != _cells:
+		return
+	_cell_slot = slot
+	_cell_entry = entry
+	_cell_opener = row.get_node(^"Look")
+	_cell_action = null
+	_make_cell_figure()
+	_show_layer(_cell)
+	_say_cell()
+	_trap_cell()
+	_cell_close.grab_focus()
+
+
+## **The figure is made the first time a detailed view opens** (cell_figure.gd
+## says why), and kept.
+func _make_cell_figure() -> void:
+	if _cell_figure != null and is_instance_valid(_cell_figure):
+		return
+	var script := load(CELL_FIGURE) as GDScript
+	if script == null:
+		push_warning("[Corner] no cell figure at %s" % CELL_FIGURE)
+		return
+	_cell_figure = script.new() as Control
+	_cell_seat.add_child(_cell_figure)
+
+
+## **The detailed view's words** (cells-ux.md §3.2, §3.5): the name; the view and
+## the generation; the line's age and its hunger, hidden when neither is known;
+## for a living cell, where it is and **what pressing its view will do** -- the one
+## place the player is told about a place given up -- and for a record, where it
+## died, with nothing to rename or delete. Then the figure.
+func _say_cell() -> void:
+	if _cell_entry.is_empty():
+		return
+	var record := bool(_cell_entry["record"])
+	_cell_name.text = Cells.name_of(_cell_entry)
+	_cell_kind.text = Drops.cell_line(_cells_mode, Cells.generation_of(_cell_entry))
+	var age := Cells.age_and_hunger(_cell_entry)
+	_cell_age.text = age
+	_cell_age.visible = not age.is_empty()
+	_cell_where.visible = not record
+	var place := Cells.place_of(_cell_entry, _cells_worlds, drops_root)
+	if record:
+		_cell_then.text = Cells.where_line(_cell_entry, _cells_worlds, drops_root)
+	else:
+		var in_world := place == Cells.Place.HERE or place == Cells.Place.THERE
+		_cell_where_caption.visible = in_world
+		_cell_where_caption.text = tr("world")
+		_cell_where_value.text = Cells.world_name_of(_cell_entry, _cells_worlds) if in_world \
+			else (Cells.friends_water() if place == Cells.Place.FRIEND else Cells.gone_world())
+		if place == Cells.Place.HERE:
+			# TRANSLATORS: In a cell's detailed view, in 15 px type under where the
+			# cell is: pressing its view will play it where the player left it. A
+			# "cell" is the player's creature (French "là où vous l'avez laissée":
+			# "laissée" agrees with "cellule").
+			# ROOM: 280 px at 15 px
+			_cell_then.text = tr("where you left it")
+		else:
+			# TRANSLATORS: The same, when the cell's place is not in the world that
+			# is selected now: pressing its view brings it into that world, at a
+			# quiet place. %s is that world's name in quotation marks ("comes into
+			# “pond water” at a quiet place"). It may wrap onto a second line of
+			# 280 px, and no more.
+			_cell_then.text = tr("comes into %s at a quiet place") % Cells.quoted(
+				Drops.name_of(Drops.entry_of(_cells_worlds, int(_cells_worlds["selected"]))))
+	_cell_actions.visible = not record
+	_cell_rename.text = tr("rename")
+	_cell_delete.text = tr("delete")
+	_cell_close.text = tr("close")
+	if _cell_figure != null and is_instance_valid(_cell_figure):
+		_cell_figure.call(&"show_cell", _cell_entry["data"]["cell"], record)
+
+
+## **The detailed view's keyboard** (cells-ux.md §3.4): Tab goes from `close` to
+## `rename`, `delete`, the ring of slots from the nose, `numbers`, and back to
+## `close`; the arrows walk the side's buttons, and on the ring go where they
+## point, as on pause. Nothing leads off the layer.
+func _trap_cell() -> void:
+	var record := bool(_cell_entry.get("record", false))
+	var side: Array[Control] = [_cell_close]
+	if not record:
+		side = [_cell_close, _cell_rename, _cell_delete]
+	var figure := _cell_figure if _cell_figure != null and is_instance_valid(_cell_figure) else null
+	var first: Control = figure.call(&"first_chip") if figure != null else _cell_close
+	var last: Control = figure.call(&"toggle") if figure != null else side[side.size() - 1]
+	for i in side.size():
+		var control := side[i]
+		control.focus_next = control.get_path_to(side[i + 1] if i + 1 < side.size() else first)
+		control.focus_previous = control.get_path_to(side[i - 1] if i > 0 else last)
+		for way in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+			control.set_focus_neighbor(way, control.get_path_to(control))
+	if figure != null:
+		figure.call(&"link_tab", side[side.size() - 1], _cell_close)
+	if not record:
+		_cell_close.focus_neighbor_top = _cell_close.get_path_to(_cell_rename)
+		_cell_rename.focus_neighbor_bottom = _cell_rename.get_path_to(_cell_close)
+		_cell_rename.focus_neighbor_right = _cell_rename.get_path_to(_cell_delete)
+		_cell_delete.focus_neighbor_bottom = _cell_delete.get_path_to(_cell_close)
+		_cell_delete.focus_neighbor_left = _cell_delete.get_path_to(_cell_rename)
+
+
+## **Back from the detailed view to the sheet**, which says the cells as they now
+## are, with the focus where it left: the row's `look`, or its row when the cell
+## has gone.
+func _back_to_cells() -> void:
+	_under = null
+	_answer = Callable()
+	_read_cells()
+	_show_layer(_cells)
+	_say_cells()
+	if is_instance_valid(_cell_opener) and _cell_opener.is_visible_in_tree():
+		_cell_opener.grab_focus()
+	else:
+		_focus_cell_row(_cell_slot)
+	_cell_opener = null
+
+
+## **Back from naming or the confirm to the detailed view**, which says the cell
+## as it now is, with the focus on the button that opened them -- or back to the
+## sheet, when the cell is no longer there.
+func _back_to_cell() -> void:
+	_under = null
+	_answer = Callable()
+	var entry := Cells.entry_of_slot(_cells_view, _cell_slot, cells_root)
+	if bool(entry["empty"]):
+		_back_to_cells()
+		return
+	_cell_entry = entry
+	_cells_worlds = Drops.read(drops_root)
+	_show_layer(_cell)
+	_say_cell()
+	_trap_cell()
+	var back_to := _cell_action if is_instance_valid(_cell_action) \
+		and _cell_action.is_visible_in_tree() else _cell_close
+	back_to.grab_focus()
+	_cell_action = null
+
+
+func _ready_cell() -> void:
+	for button: Button in [_cell_rename, _cell_delete]:
+		button.focus_mode = Control.FOCUS_ALL
+		_restyle(button, QUIET_MARGIN)
+		if quiet_box != null:
+			button.add_theme_stylebox_override(&"normal", quiet_box)
+	_cell_close.focus_mode = Control.FOCUS_ALL
+	_cell_rename.pressed.connect(_on_cell_rename)
+	_cell_delete.pressed.connect(_on_cell_delete)
+	_cell_close.pressed.connect(close_top)
+
+
+## **`rename`** (cells-ux.md §3.4): the corner's own naming sheet, its name in the
+## field and selected, so typing replaces it; a default's own words keep the
+## default, as for a world. Kept, it goes back to this view, which shows it.
+func _on_cell_rename() -> void:
+	if _open != _cell or bool(_cell_entry.get("record", true)):
+		return
+	var view := _cells_view
+	var slot := _cell_slot
+	var root := cells_root
+	open_naming_for(_cell_naming_title(), Cells.name_of(_cell_entry),
+		Cells.default_name(int(_cell_entry["data"]["default"])),
+		func(typed: String) -> void:
+			var done := Cells.rename(view, slot, typed, root)
+			if done != OK:
+				push_warning("[Corner] cell slot %d was not renamed (%s)" % [slot,
+					error_string(done)]))
+	_under = _cell
+	_cell_action = _cell_rename
+
+
+## **`delete`** (cells-ux.md §3.4): the corner's confirm, `keep` focused and Back
+## meaning keep; `delete` empties the slot and goes back to the sheet. **The cell
+## a view plays can be deleted**: its slot stays chosen, and the view starts a new
+## cell there.
+func _on_cell_delete() -> void:
+	if _open != _cell or bool(_cell_entry.get("record", true)):
+		return
+	var view := _cells_view
+	var slot := _cell_slot
+	var root := cells_root
+	open_confirm_for(Cells.name_of(_cell_entry), _cell_gone_line(),
+		func() -> void:
+			var done := Cells.delete(view, slot, root)
+			if done != OK:
+				push_warning("[Corner] cell slot %d was not deleted (%s)" % [slot,
+					error_string(done)]))
+	_under = _cell
+	_cell_action = _cell_delete
+
+
+func _cell_naming_title() -> String:
+	# TRANSLATORS: The title of the sheet that renames one of the player's cells, in
+	# 22 px type. A "cell" is the player's creature (French: renommer cette
+	# cellule).
+	# ROOM: 512 px at 22 px
+	return tr("rename this cell")
+
+
+func _cell_gone_line() -> String:
+	# TRANSLATORS: Under the question "delete slipper?" (slipper being a cell's
+	# name), in 17 px type, wrapping if it must: what deleting one of the player's
+	# cells does. A full sentence with a full stop. "Its" is the cell's: its body
+	# and the genes it carries.
+	return tr("its body and its genes are gone for good.")
+
+
+## The cell's naming sheet, said again in the language of the moment.
+func _say_cell_naming() -> void:
+	_naming_title.text = _cell_naming_title()
+	_make.text = tr("rename")
+	_naming_back.text = tr("back")
+	if not _cell_entry.is_empty() and not bool(_cell_entry["empty"]):
+		_field.placeholder_text = Cells.default_name(int(_cell_entry["data"]["default"]))
+
+
+## The cell's confirm, said again in the language of the moment.
+func _say_cell_confirm() -> void:
+	# TRANSLATORS: The question asked before one of the player's cells is deleted,
+	# in 22 px type: %s is the cell's name, the player's own words or a default
+	# such as "slipper".
+	_confirm_title.text = tr("delete %s?") % Cells.name_of(_cell_entry)
+	_confirm_line.text = _cell_gone_line()
+	_keep.text = tr("keep")
+	_delete.text = tr("delete")
 
 
 # ---------------------------------------------------------------------------
@@ -976,9 +1530,17 @@ func _say() -> void:
 	_say_chip()
 	if _in_drops():
 		_say_drops()
+	if _open == _cells:
+		_say_cells()
+	elif _open == _cell:
+		_say_cell()
 	# A sheet opened for a screen's own thing was given its words by that screen,
-	# which says them again itself.
-	if _open == _naming and not _answer.is_valid():
+	# which says them again itself; one opened over a cell is the corner's own.
+	if _open == _naming and _under == _cell:
+		_say_cell_naming()
+	elif _open == _confirm and _under == _cell:
+		_say_cell_confirm()
+	elif _open == _naming and not _answer.is_valid():
 		_say_naming()
 	elif _open == _confirm and not _answer.is_valid():
 		_say_confirm()

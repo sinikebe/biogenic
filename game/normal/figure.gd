@@ -101,6 +101,35 @@ const SLOT_SEAT: Array[Vector2] = [
 	Vector2(0.0, 6.0),
 ]
 
+## **The ring's keyboard**, the pause screen's and a cell's detailed view's alike
+## (docs/design/cells-ux.md §3.4): where an arrow goes from each slot, its sides,
+## and the order Tab goes round them.
+##
+## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
+## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
+## **One table for both**, so the key that looks at a slot is the key that moves
+## a gene into it. **Down from the nose goes in**, and so do left from the flank
+## and up from the tail: the inside is the body's middle, and those three are the
+## slots beside it. Nothing wraps: a gene that left one edge of the ring and came
+## back in at the other would land on an arc nobody aimed at, which is the
+## strand's clamp argument in two dimensions. Every arrow has its way back.
+const SLOT_NEIGHBOUR: Array = [
+	[4, -1, 3, 7],    # 0 nose
+	[7, 3, -1, 5],    # 1 starboard flank
+	[6, 7, 5, -1],    # 2 tail
+	[0, -1, -1, 1],   # 3 forward starboard
+	[-1, -1, 0, 6],   # 4 forward port
+	[2, 1, -1, -1],   # 5 rear starboard
+	[-1, 4, 2, -1],   # 6 rear port
+	[-1, 0, 1, 2],    # 7 inside: up the nose, right the flank, down the tail
+]
+## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
+## them for a focus neighbour.
+const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
+## Tab order: clockwise round the body from the nose, then in, and then on to
+## the `numbers` switch -- and on the pause screen, `light`.
+const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
+
 ## **A tether per live slot**, from the chip's edge to the middle of its arc on
 ## the skin, drawn under the body so the body wins wherever the two cross. It is
 ## what makes a diagonal exact -- rendered without, a corner chip is only an

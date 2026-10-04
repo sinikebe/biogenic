@@ -7594,6 +7594,19 @@ func restore_player(state: Dictionary) -> void:
 			break
 
 
+## **A cell kept with the frame its place was measured in comes back to it**
+## (docs/design/cells.md §1.4): [method restore_player], and -- when
+## [param moved_on], the water having run on since it was kept, under another
+## cell -- whatever could swallow it is moved out of dread's reach of where it
+## is, as a quiet start clears round a born cell ([method _clear_round]). The
+## caller has put the body back at its place, moved by however far the drop has
+## moved under it since.
+func resume_player(state: Dictionary, moved_on: bool) -> void:
+	restore_player(state)
+	if moved_on:
+		_clear_round(_cell.position)
+
+
 # --- The frame (§4) ----------------------------------------------------------------------
 
 func _process_drop(delta: float) -> void:

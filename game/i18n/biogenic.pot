@@ -33,11 +33,11 @@ msgid "your worlds"
 msgstr ""
 
 #. The footnote under the menu of the player's worlds, in 15 px type. "Water"
-#. is what everything in a world swims in; "your cell" is the player's
-#. creature, which waits in the world it was left in.
-#. Room: at most 592 px in 15 px type; the English takes 361 px.
+#. is what everything in a world swims in. The player's cells are kept apart
+#. from the worlds, so a world keeps only that.
+#. Room: at most 592 px in 15 px type; the English takes 229 px.
 #: game/menu/corner.gd
-msgid "each world keeps its own water, and your cell in it"
+msgid "each world keeps its own water"
 msgstr ""
 
 #. An empty row in the menu of the player's worlds, in 20 px type: tap it to
@@ -100,6 +100,9 @@ msgstr ""
 #. The question asked before a world is deleted, in 22 px type, wrapping onto
 #. two lines if it must. %s is the world's name, in the player's own words or
 #. a default name such as "pond water": keep %s.
+#. The question asked before one of the player's cells is deleted, in 22 px
+#. type: %s is the cell's name, the player's own words or a default such as
+#. "slipper".
 #: game/menu/corner.gd
 #, c-format
 msgid "delete %s?"
@@ -115,11 +118,97 @@ msgstr ""
 msgid "keep"
 msgstr ""
 
-#. Under that question, in 17 px type, wrapping: what deleting the world does.
-#. A full sentence with a full stop. "It" is the world; "your cell" is the
-#. player's creature, which waits in the world it was left in.
+#. Under that question, in 17 px type, wrapping onto a second line if it must:
+#. what deleting the world does. Two short sentences with full stops. "It" is
+#. the world; "your cells" are the player's creatures, which are kept apart
+#. from the worlds, so deleting one does not touch them (French "vos cellules,
+#. non.").
 #: game/menu/corner.gd
-msgid "everything living in it, and your cell with it, is gone for good."
+msgid "everything living in it is gone for good. your cells are not."
+msgstr ""
+
+#. The caption at the top of the menu of the player's cells for one of the two
+#. views, in 16 px type, before the view's name: "your cells · full vision".
+#. Also the tooltip of the button beside each view that opens it. A "cell" is
+#. the player's creature (French: une cellule, feminine); the player keeps
+#. three for each view.
+#: game/menu/corner.gd game/mode_select.gd
+msgid "your cells"
+msgstr ""
+
+#. The footnote under the menu of the player's cells, in 15 px type: a cell
+#. grown in one view (full vision, or point of view) can never be played in
+#. the other, because they are not the same game. "It" is the cell (French
+#. "née" agrees with "cellule").
+#. Room: at most 592 px in 15 px type; the English takes 325 px.
+#: game/menu/corner.gd
+msgid "a cell is played only in the view it was born in"
+msgstr ""
+
+#. An empty row in the menu of the player's cells, in 20 px type: tap it to
+#. choose it, and pressing the view then starts a new cell there. A "cell" is
+#. the player's creature (French: une nouvelle cellule).
+#. Room: at most 402 px in 20 px type; the English takes 79 px.
+#: game/menu/corner.gd
+msgid "new cell"
+msgstr ""
+
+#. A small button on a cell's row in the menu of the player's cells, in 15 px
+#. type, 112 px wide: open the cell's detailed view, to see its body and its
+#. genes (French "voir").
+#. Room: at most 88 px in 15 px type; the English takes 32 px.
+#: game/menu/corner.gd
+msgid "look"
+msgstr ""
+
+#. The caption on a button in the top-right corner, in 17 px type, before the
+#. name of the world that is selected ("world pond water"). A "world" is one
+#. of the three the player keeps: a drop of water and everything in it, named
+#. by the player. One lowercase word.
+#. Room: at most 80 px in 17 px type; the English takes 47 px.
+#: game/menu/corner.gd game/normal/cells.gd
+msgid "world"
+msgstr ""
+
+#. In a cell's detailed view, in 15 px type under where the cell is: pressing
+#. its view will play it where the player left it. A "cell" is the player's
+#. creature (French "là où vous l'avez laissée": "laissée" agrees with
+#. "cellule").
+#. Room: at most 280 px in 15 px type; the English takes 119 px.
+#: game/menu/corner.gd
+msgid "where you left it"
+msgstr ""
+
+#. The same, when the cell's place is not in the world that is selected now:
+#. pressing its view brings it into that world, at a quiet place. %s is that
+#. world's name in quotation marks ("comes into “pond water” at a quiet
+#. place"). It may wrap onto a second line of 280 px, and no more.
+#: game/menu/corner.gd
+#, c-format
+msgid "comes into %s at a quiet place"
+msgstr ""
+
+#. A button at the bottom of the settings sheet: close the sheet and go back
+#. to the screen under it. One lowercase word, in 20 px type on a button 232
+#. px wide.
+#. Room: at most 180 px in 20 px type; the English takes 49 px.
+#: game/menu/corner.gd
+msgid "close"
+msgstr ""
+
+#. The title of the sheet that renames one of the player's cells, in 22 px
+#. type. A "cell" is the player's creature (French: renommer cette cellule).
+#. Room: at most 512 px in 22 px type; the English takes 170 px.
+#: game/menu/corner.gd
+msgid "rename this cell"
+msgstr ""
+
+#. Under the question "delete slipper?" (slipper being a cell's name), in 17
+#. px type, wrapping if it must: what deleting one of the player's cells does.
+#. A full sentence with a full stop. "Its" is the cell's: its body and the
+#. genes it carries.
+#: game/menu/corner.gd
+msgid "its body and its genes are gone for good."
 msgstr ""
 
 #. The title of the settings sheet, which opens from a gear in the top-right
@@ -139,14 +228,6 @@ msgstr ""
 msgid "language"
 msgstr ""
 
-#. A button at the bottom of the settings sheet: close the sheet and go back
-#. to the screen under it. One lowercase word, in 20 px type on a button 232
-#. px wide.
-#. Room: at most 180 px in 20 px type; the English takes 49 px.
-#: game/menu/corner.gd
-msgid "close"
-msgstr ""
-
 #. Also shown on the settings sheet, in 15 px type, when it is opened from the
 #. pause screen of a game shared with a friend: it covers the pause screen's
 #. own warning, so it says it again.
@@ -158,15 +239,6 @@ msgstr ""
 #. Room: at most 472 px in 15 px type; the English takes 338 px.
 #: game/menu/corner.gd game/normal/normal_mode.tscn game/normal/programs_page.gd
 msgid "the water is still moving · you can still be eaten"
-msgstr ""
-
-#. The caption on a button in the top-right corner, in 17 px type, before the
-#. name of the world that is selected ("world pond water"). A "world" is one
-#. of the three the player keeps: a drop of water and everything in it, named
-#. by the player. One lowercase word.
-#. Room: at most 80 px in 17 px type; the English takes 47 px.
-#: game/menu/corner.gd
-msgid "world"
 msgstr ""
 
 #. The hint along the bottom edge of the screen, in small type. It names the
@@ -209,15 +281,17 @@ msgstr ""
 
 #. Two buttons that choose how the shared game is drawn: the first shows the
 #. water the cell swims in and the membrane over it, the second shows only
-#. what the cell itself can feel. Also the two options on the screen where a
-#. game is started.
+#. what the cell itself can feel. The first line of each button, in 20 px
+#. type; the cell that view brings in is named under it. Also the two options
+#. on the screen where a game is started.
 #. The two views, as the buttons that start a game say them. Also the start of
 #. a line in the menu of the player's worlds, in 15 px type, for the cell that
 #. waits in a world for that view: "point of view · fourth generation", where
 #. the whole line has 280 px.
-#. A button, 460 px wide in 20 px type: the view that draws the water the cell
-#. swims in, and the membrane (the cell's skin, which senses) over it.
-#. Button "Full" in game/mode_select.tscn
+#. The first line of a button 460 px wide, in 20 px type: the view that draws
+#. the water the cell swims in, and the membrane (the cell's skin, which
+#. senses) over it. The cell that view plays is named on the line under it.
+#. Label "View" in game/mode_select.tscn
 #: game/mode_select.tscn game/net/earshot.gd game/run_state.gd
 msgid "full vision"
 msgstr ""
@@ -235,9 +309,10 @@ msgstr ""
 #. a line in the menu of the player's worlds, in 15 px type, for the cell that
 #. waits in a world for that view: "point of view · fourth generation", where
 #. the whole line has 280 px.
-#. A button, 460 px wide in 20 px type: the view that shows only what the cell
-#. itself can feel, as if the player were inside it.
-#. Button "Pov" in game/mode_select.tscn
+#. The first line of a button 460 px wide, in 20 px type: the view that shows
+#. only what the cell itself can feel, as if the player were inside it. The
+#. cell that view plays is named on the line under it.
+#. Label "View" in game/mode_select.tscn
 #: game/mode_select.tscn game/net/earshot.gd game/run_state.gd
 msgid "point of view"
 msgstr ""
@@ -1171,6 +1246,257 @@ msgstr ""
 msgid "strength · how hard the bite was, from a graze to a full bite."
 msgstr ""
 
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 66 px.
+#: game/normal/cells.gd
+msgid "slipper"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 36 px.
+#: game/normal/cells.gd
+msgid "bell"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 81 px.
+#: game/normal/cells.gd
+msgid "trumpet"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 76 px.
+#: game/normal/cells.gd
+msgid "proteus"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 51 px.
+#: game/normal/cells.gd
+msgid "swan"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 58 px.
+#: game/normal/cells.gd
+msgid "wheel"
+msgstr ""
+
+#. A cell's name until the player types one: the old nickname of a little
+#. animal the first microscopists found in a drop of pond water -- "slipper"
+#. is the paramecium, "bell" the vorticella, "trumpet" the stentor, "proteus"
+#. the amoeba, "swan" Lacrymaria olor, "wheel" the rotifer, "sparkle" the sea
+#. sparkle (Noctiluca). Use your language's own old name where it has one. A
+#. "cell" is the player's creature, and French makes it feminine (cellule).
+#. Short and lowercase, as a player would name it; at most 20 characters, as a
+#. typed name is. Shown on a view's button in 15 px type, in the "your cells"
+#. menu in 20 px type, and as the title of a cell's detailed view in 28 px
+#. type.
+#. Room: at most 220 px in 20 px type; the English takes 71 px.
+#: game/normal/cells.gd
+msgid "sparkle"
+msgstr ""
+
+#. The second line of a button that starts a game in one of the two views, in
+#. 15 px type under the view's name: pressing it starts a new cell. A "cell"
+#. is the player's creature (French: une cellule, feminine). The button on the
+#. earshot screen leaves 236 px for it.
+#. Room: at most 236 px in 15 px type; the English takes 72 px.
+#: game/normal/cells.gd
+msgid "a new cell"
+msgstr ""
+
+#. The same line, when the cell that was played in this view died and the
+#. player left before a new one started: pressing the button starts a new
+#. cell. %s is the dead cell's name, the player's own words or a default such
+#. as "slipper" (French "une nouvelle cellule · %s est morte": "morte" agrees
+#. with "cellule"). A long name is shortened with "…" so the line fits the 420
+#. px it has.
+#. Room: at most 420 px in 15 px type, measured with your widest default name
+#. of a cell in place of the placeholders; the English takes 179 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "a new cell · %s died"
+msgstr ""
+
+#. The end of the line under a view's name on its button, after the cell's
+#. name and generation, in 15 px type: the cell was left while it swam in a
+#. friend's game ("water"), and pressing the button brings it home. The whole
+#. line has 420 px.
+#: game/normal/cells.gd
+msgid "from a friend's water"
+msgstr ""
+
+#. The same, for a cell left in another of the player's worlds than the one
+#. selected: pressing the button brings it from there. %s is that world's name
+#. in quotation marks ("“rain barrel”"). The whole line has 420 px.
+#. Room: at most 420 px in 15 px type, measured with your widest default name
+#. of a world in place of the placeholders; the English takes 137 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "from %s"
+msgstr ""
+
+#. Where a cell died, in 15 px type, on its row in "your cells" and in its
+#. detailed view: in a friend's game ("water"). A "cell" is the player's
+#. creature (French: une cellule, feminine, so "morte").
+#. Room: at most 402 px in 15 px type; the English takes 167 px.
+#: game/normal/cells.gd
+msgid "died in a friend's water"
+msgstr ""
+
+#. The same, for a cell that died in one of the player's worlds that has since
+#. been deleted or made again (French: "morte").
+#. Room: at most 402 px in 15 px type; the English takes 196 px.
+#: game/normal/cells.gd
+msgid "died in a world that is gone"
+msgstr ""
+
+#. The same, in one of the player's worlds: %s is its name in quotation marks
+#. ("died in “pond water”"). French "morte dans %s" agrees with "cellule". In
+#. the detailed view it may wrap onto a second line of 280 px.
+#. Room: at most 402 px in 15 px type, measured with your widest default name
+#. of a world in place of the placeholders; the English takes 151 px.
+#: game/normal/cells.gd
+#, c-format
+msgid "died in %s"
+msgstr ""
+
+#. A name inside a sentence, in your language's quotation marks: here a
+#. world's name in a cell's line ("slipper · fourth generation · from “rain
+#. barrel”"; French « eau de mare »). %s is the name, the player's own words
+#. or a default name.
+#. A program's name inside a sentence, in your language's quotation marks:
+#. “flee” (French « fuite »). %s is the name the player gave it.
+#. Room: at most 230 px in 14 px type, measured with program 99 in place of
+#. the placeholders; the English takes 90 px.
+#: game/normal/cells.gd game/normal/program_words.gd
+#, c-format
+msgid "“%s”"
+msgstr ""
+
+#. Where a cell is, in 15 px type on its row in "your cells", and in 17 px in
+#. its detailed view: it was left while it swam in a friend's game, which the
+#. game calls their "water". A "cell" is the player's creature.
+#. Room: at most 280 px in 17 px type; the English takes 129 px.
+#: game/normal/cells.gd
+msgid "a friend's water"
+msgstr ""
+
+#. Where a cell is, in 15 px type on its row in "your cells", and in 17 px in
+#. its detailed view: the world it was kept in has been deleted or made again
+#. since, so it will come into another at a quiet place. A "world" is one of
+#. the three the player keeps.
+#. Room: at most 280 px in 17 px type; the English takes 162 px.
+#: game/normal/cells.gd
+msgid "a world that is gone"
+msgstr ""
+
+#. The end of a cell's line, in 15 px type: its tank is empty and it is dying
+#. of hunger. A "cell" is the player's creature (French: une cellule,
+#. feminine).
+#. Room: at most 160 px in 15 px type; the English takes 59 px.
+#: game/normal/cells.gd
+msgid "starving"
+msgstr ""
+
+#. The same, when its tank is half empty or less: it is hungry (French
+#. "affamée", agreeing with "cellule").
+#. Room: at most 160 px in 15 px type; the English takes 52 px.
+#: game/normal/cells.gd
+msgid "hungry"
+msgstr ""
+
+#. How long a cell's line has been played, in 15 px type on its row in "your
+#. cells" and in its detailed view: "25 minutes old". A "cell" is the player's
+#. creature, and its daughters are the same line; French makes it feminine, so
+#. "âgée de %d minutes". Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 100 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d minute old"
+msgid_plural "%d minutes old"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The same, in hours: "2 hours old" (French "âgée de 2 heures"). Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 99 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d hour old"
+msgid_plural "%d hours old"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The same, in days: "3 days old" (French "âgée de 3 jours"). Keep %d.
+#. Room: at most 300 px in 15 px type, measured with 999 in place of the
+#. placeholders; the English takes 83 px.
+#: game/normal/cells.gd
+#, c-format
+msgctxt "cell"
+msgid "%d day old"
+msgid_plural "%d days old"
+msgstr[0] ""
+msgstr[1] ""
+
 #. A world's name until the player types one: a real place a microscopist
 #. takes a water sample from ("pond water"). A "world" is one of the three the
 #. player keeps: a drop of water and everything living in it. Short and
@@ -1284,10 +1610,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "first generation"
 msgstr ""
@@ -1295,10 +1622,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "second generation"
 msgstr ""
@@ -1306,10 +1634,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "third generation"
 msgstr ""
@@ -1317,10 +1646,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "fourth generation"
 msgstr ""
@@ -1328,10 +1658,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "fifth generation"
 msgstr ""
@@ -1339,10 +1670,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "sixth generation"
 msgstr ""
@@ -1350,10 +1682,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "seventh generation"
 msgstr ""
@@ -1361,10 +1694,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "eighth generation"
 msgstr ""
@@ -1372,10 +1706,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "ninth generation"
 msgstr ""
@@ -1383,10 +1718,11 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the end
-#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
-#. in a world for one of the two views: "point of view · fourth generation",
-#. where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also part of
+#. a cell's lines, in 15 px type: on a view's button, after its name ("slipper
+#. · fourth generation", 420 px for the whole line); at the start of a row in
+#. "your cells" ("fourth generation · 2 hours old", 402 px); and after the
+#. view in a cell's detailed view ("point of view · fourth generation").
 #: game/normal/drops.gd
 msgid "tenth generation"
 msgstr ""
@@ -1399,8 +1735,9 @@ msgstr ""
 msgid "not swum in yet"
 msgstr ""
 
-#. The generation, counted past the tenth: "generation 12". Keep %d. Also the
-#. end of a line in the "your worlds" menu: "point of view · generation 12".
+#. The generation, counted past the tenth: "generation 12". Keep %d. Used
+#. wherever the ten phrases are: "genome · generation 12", "slipper ·
+#. generation 12", "point of view · generation 12".
 #: game/normal/drops.gd
 #, c-format
 msgid "generation %d"
@@ -1408,8 +1745,8 @@ msgstr ""
 
 #. A world's line in the "your worlds" menu, in 15 px type, under its name:
 #. how long the world has been played, "25 minutes old". A world is one of the
-#. three the player keeps. Under it, a line for each cell waiting in it. Keep
-#. %d.
+#. three the player keeps, and "old" agrees with it. A cell's age is a message
+#. of its own, under the context "cell". Keep %d.
 #. Room: at most 280 px in 15 px type, measured with 99 in place of the
 #. placeholders; the English takes 100 px.
 #: game/normal/drops.gd
@@ -4025,15 +4362,6 @@ msgstr ""
 #. Room: at most 60 px in 14 px type; the English takes 22 px.
 #: game/normal/program_words.gd
 msgid "full"
-msgstr ""
-
-#. A program's name inside a sentence, in your language's quotation marks:
-#. “flee” (French « fuite »). %s is the name the player gave it.
-#. Room: at most 230 px in 14 px type, measured with program 99 in place of
-#. the placeholders; the English takes 90 px.
-#: game/normal/program_words.gd
-#, c-format
-msgid "“%s”"
 msgstr ""
 
 #. The words on the chip under the settings gear that turns the pause screen's

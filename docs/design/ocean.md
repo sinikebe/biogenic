@@ -1651,8 +1651,8 @@ drop, and a device keeps one of each kind at most:
   play (§5.9), so a frozen one is as alive as a caught-up one the moment it
   wakes.
 - **Your cell is in it when you come back** (row 17, answered; from `cells.md` on,
-  designed and not built yet, your cell is kept in a slot of its own and remembers its
-  place in this water). Leaving the
+  built 2026-10-04, your cell is kept in a slot of its own and remembers its place in
+  this water). Leaving the
   app in the middle of a run saves your cell with the drop -- where it is, its
   size, its genes in their order, its generation and its hunger -- and the next
   launch carries on from there, behind the same beat a return from a pond has.
@@ -1814,11 +1814,11 @@ is treated as an unknown format: kept as `.old`, never half-loaded.
 
 ### 9.5 A cell per view
 
-> **Superseded by `cells.md`** (designed 2026-10-04, not built yet). The owner then
-> asked for cells to leave the worlds' files. A cell is now a save of its own, in
-> slots, three for each view, and a world keeps only its water. The per-view rule
-> below stands. The rest of this section is what each world's file holds until the
-> migration of `cells.md` §4 moves its cells out.
+> **Superseded by `cells.md`** (built 2026-10-04). The owner then asked for cells to
+> leave the worlds' files. A cell is now a save of its own, in slots, three for each
+> view, and a world keeps only its water. The per-view rule below stands. The rest of
+> this section is what a world's file held before, which the migration of `cells.md`
+> §4 moves out of it the first time it runs.
 
 The owner, 2026-10-04: *"Split the saved cells between full vision and point of
 view. Cells grown in full vision should not be usable in point of view, since it's

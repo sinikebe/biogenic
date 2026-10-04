@@ -4,11 +4,13 @@ The screens for `cells.md`: where a cell is picked, the list of your cells, a ce
 detailed view, and what changes on the pages around them. The rules, the files and the build plan are in
 `cells.md`. This file says what is drawn and what it says.
 
-**Status: mocked on the real scenes and photographed** at 1280x720 and 2400x1080, in
-English and French (§7). The mock was a scratch scene, `tools/cells_mock.tscn`, and it
-is not in the repository. It added these screens to the real `mode_select.tscn`,
-`earshot.tscn` and corner, in the corner's own styles. The detailed view's figure was
-cropped from a real render of the pause screen. Nothing here is built.
+**Status: built** (`cells.md` §6.6), and photographed again on the build: every frame
+of §7 and more, at both shapes and in both languages (§9). It was first mocked on the
+real scenes and photographed at 1280x720 and 2400x1080, in English and French (§7).
+The mock was a scratch scene, `tools/cells_mock.tscn`, and it is not in the
+repository. It added these screens to the real `mode_select.tscn`, `earshot.tscn` and
+corner, in the corner's own styles, and its figure was cropped from a real render of
+the pause screen.
 
 ---
 
@@ -489,3 +491,41 @@ and the ones marked "both" at 2400x1080 too:
    (`slipper · bell`) would fit, if players look for one.
 4. **A phone's keyboard over `rename this cell`** is the worlds' open question
    (`settings.md` §12 item 1): the sheet is the same and sits at the top.
+
+---
+
+## 9. As built: phase 2, 2026-10-04
+
+**Photographed on the build**, through the harnesses' own input paths:
+`tools/corner_shot.tscn` for the chooser, the sheet, the detailed view, the corner's
+sheets and "your worlds", and `tools/earshot_shot.tscn --cells=` for TOGETHER. Each of
+25 states at 1280x720 and 2400x1080, in English and in French: 100 frames, kept in the
+build session's notes, as the mock's were. They are §7's frames, and with them a view
+whose selected slot holds the other's cell (`chooser_pov`), nothing anywhere
+(`chooser_fresh`), the widest name in a gone world (`chooser_wide_gone`), the chevron
+and the view hovered, point of view's empty sheet, and the detailed view wide, dead,
+at a fork with the numbers on, and with a slot read by touch.
+
+**Where it lands**, measured on the build: every rect of §1.1, §2.1 and §3.1 to the
+pixel, at both shapes. The sheet runs from y 112 to 491 with two cells and an empty
+slot, to 516 with three cells, and to 441 with three empty slots. The widest lines:
+`pantoufle · 4e génération · depuis « tonneau de pluie »`, 394 of 420 px; twenty `W`s
+from "hay infusion", the name given way, 419 and 420 of 420; a row's French line 1, 368
+of 402; `Then` in French, two lines of 280.
+
+**What judging the build changed:**
+
+| first build | what it looked like | now |
+|---|---|---|
+| the sheet's panel as tall as corner.tscn draws it | three empty slots left 50 px of empty panel under the footnote | the panel shrinks to its rows each time they are filled |
+| a record's whole figure at alpha 0.55 | its `numbers` switch looked switched off, and still worked | the caption, the tray, the figure and its lines at 0.55; the switch as on any cell |
+
+**Where it differs from the sections above, and why:**
+
+- **A selected empty slot has the "current" box** (§2.2 gives an empty slot the faint
+  box). It is §7's own fix for a selected record: otherwise nothing says which slot the
+  view plays, and point of view's sheet, three empty slots, would show none.
+- **A record whose world is gone says `died in a world that is gone`** (one msgid more
+  than §6), since that world cannot be named.
+- **The figure's first `look` in a session compiles it** (`cells.md` §6.6): on a slow
+  phone, the first detailed view may take a moment longer to open than the next.

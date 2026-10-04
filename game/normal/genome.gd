@@ -840,16 +840,24 @@ func filled() -> int:
 ## §5). Copies stopped buying strength, so they stopped costing anything: what
 ## the body pays for its beam is the beam it actually has.
 func upkeep() -> float:
+	return upkeep_with_levels(_body, _levels)
+
+
+## **[method upkeep] from plain values** (docs/design/cells.md §6.5): the body
+## [param body], gene to tier, and the lineage's [param levels], gene to
+## progression -- so a screen that shows a cell from its file prices it as the
+## run does, without a genome.
+static func upkeep_with_levels(body: Dictionary, levels: Dictionary) -> float:
 	var priced := {}
-	for gene: StringName in _levels:
-		if not _body.has(gene):
+	for gene: StringName in levels:
+		if not body.has(gene):
 			continue
-		var grown: Progression = _levels[gene]
+		var grown: Progression = levels[gene]
 		var at := grown.effective_level()
 		var cost := CellBody.levelled_upkeep(gene, at, grown.path)
 		priced[gene] = cost if cost >= 0.0 \
 			else UPKEEP_PER_TIER * float(maxi(at - 1, 0))
-	return upkeep_of(_body, priced)
+	return upkeep_of(body, priced)
 
 
 # --- Levels (docs/design/beam-levels.md) ------------------------------------
@@ -1339,6 +1347,13 @@ func inside_layout() -> Array[StringName]:
 ## **What the body wears inside**: the same, off the body.
 func body_inside() -> Array[StringName]:
 	return _inside_of(_body)
+
+
+## **The inside of [param tiers]**, a DNA or a body, gene to tier: what
+## [method inside_layout] is of a genome, for a screen that has its file and no
+## genome (docs/design/cells.md §6.6).
+static func inside_of(tiers: Dictionary) -> Array[StringName]:
+	return _inside_of(tiers)
 
 
 static func _inside_of(tiers: Dictionary) -> Array[StringName]:
