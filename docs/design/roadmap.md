@@ -94,6 +94,16 @@ the launcher (`settings.md`). Also there is hunger you cannot miss, built
 2026-10-03 (`hunger.md`): from half a tank the beat races and the body
 crumples, and the membrane falls in when the tank empties.
 
+**Your cells, apart from the worlds: designed, not built** (`cells.md` for the rules,
+`cells-ux.md` for the screens). A cell becomes a save of its own, in three slots for
+each view, and is chosen beside its view's button. Each cell can be opened in a
+detailed view: its body and genes as the pause screen draws them, its age and where
+it is. A world keeps only its water. It comes in two pull requests: the figure drawn
+from values, which changes nothing a player sees, then the slots. Three calls are the
+owner's: what a dead cell's slot shows, whether cells have names, and their default
+names. It builds on the cell per view (`ocean.md` §9.5), which is on its way to
+`dev`.
+
 **Before the release: genes that work by where they sit** (`dna-slots.md` for the
 rules, `dna-slots-ux.md` for the screen), to the owner's answers to rows 1 to 15.
 - The body gains an inside slot.
