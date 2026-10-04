@@ -211,10 +211,14 @@ msgstr ""
 #. water the cell swims in and the membrane over it, the second shows only
 #. what the cell itself can feel. Also the two options on the screen where a
 #. game is started.
+#. The two views, as the buttons that start a game say them. Also the start of
+#. a line in the menu of the player's worlds, in 15 px type, for the cell that
+#. waits in a world for that view: "point of view · fourth generation", where
+#. the whole line has 280 px.
 #. A button, 460 px wide in 20 px type: the view that draws the water the cell
 #. swims in, and the membrane (the cell's skin, which senses) over it.
 #. Button "Full" in game/mode_select.tscn
-#: game/mode_select.tscn game/net/earshot.gd
+#: game/mode_select.tscn game/net/earshot.gd game/run_state.gd
 msgid "full vision"
 msgstr ""
 
@@ -227,10 +231,14 @@ msgstr ""
 
 #. The second of the two buttons above: the view that shows only what the cell
 #. itself can feel.
+#. The two views, as the buttons that start a game say them. Also the start of
+#. a line in the menu of the player's worlds, in 15 px type, for the cell that
+#. waits in a world for that view: "point of view · fourth generation", where
+#. the whole line has 280 px.
 #. A button, 460 px wide in 20 px type: the view that shows only what the cell
 #. itself can feel, as if the player were inside it.
 #. Button "Pov" in game/mode_select.tscn
-#: game/mode_select.tscn game/net/earshot.gd
+#: game/mode_select.tscn game/net/earshot.gd game/run_state.gd
 msgid "point of view"
 msgstr ""
 
@@ -1276,9 +1284,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "first generation"
 msgstr ""
@@ -1286,9 +1295,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "second generation"
 msgstr ""
@@ -1296,9 +1306,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "third generation"
 msgstr ""
@@ -1306,9 +1317,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "fourth generation"
 msgstr ""
@@ -1316,9 +1328,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "fifth generation"
 msgstr ""
@@ -1326,9 +1339,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "sixth generation"
 msgstr ""
@@ -1336,9 +1350,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "seventh generation"
 msgstr ""
@@ -1346,9 +1361,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "eighth generation"
 msgstr ""
@@ -1356,9 +1372,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "ninth generation"
 msgstr ""
@@ -1366,9 +1383,10 @@ msgstr ""
 #. Part of the pause screen's caption, in 15 px type: "genome · first
 #. generation". A "generation" is how many times the cell has divided: the
 #. first cell is the first generation, its chosen daughter the second. The
-#. caption's own wording is "genome · %s", translated separately. Also the
-#. start of a world's line in the "your worlds" menu, in 15 px type: "fourth
-#. generation · 2 hours old", where the whole line has 280 px.
+#. caption's own wording is "genome · %s", translated separately. Also the end
+#. of a line in the "your worlds" menu, in 15 px type, for the cell that waits
+#. in a world for one of the two views: "point of view · fourth generation",
+#. where the whole line has 280 px.
 #: game/normal/drops.gd
 msgid "tenth generation"
 msgstr ""
@@ -1382,15 +1400,16 @@ msgid "not swum in yet"
 msgstr ""
 
 #. The generation, counted past the tenth: "generation 12". Keep %d. Also the
-#. start of a world's line in the "your worlds" menu.
+#. end of a line in the "your worlds" menu: "point of view · generation 12".
 #: game/normal/drops.gd
 #, c-format
 msgid "generation %d"
 msgstr ""
 
-#. The end of a world's line in the "your worlds" menu, in 15 px type: how
-#. long the world has been played, "fourth generation · 25 minutes old". A
-#. world is one of the three the player keeps. Keep %d.
+#. A world's line in the "your worlds" menu, in 15 px type, under its name:
+#. how long the world has been played, "25 minutes old". A world is one of the
+#. three the player keeps. Under it, a line for each cell waiting in it. Keep
+#. %d.
 #. Room: at most 280 px in 15 px type, measured with 99 in place of the
 #. placeholders; the English takes 100 px.
 #: game/normal/drops.gd
@@ -1400,7 +1419,7 @@ msgid_plural "%d minutes old"
 msgstr[0] ""
 msgstr[1] ""
 
-#. The same, in hours: "fourth generation · 2 hours old". Keep %d.
+#. The same, in hours: "2 hours old". Keep %d.
 #. Room: at most 280 px in 15 px type, measured with 99 in place of the
 #. placeholders; the English takes 83 px.
 #: game/normal/drops.gd
@@ -1410,7 +1429,7 @@ msgid_plural "%d hours old"
 msgstr[0] ""
 msgstr[1] ""
 
-#. The same, in days: "fourth generation · 3 days old". Keep %d.
+#. The same, in days: "3 days old". Keep %d.
 #. Room: at most 280 px in 15 px type, measured with 999 in place of the
 #. placeholders; the English takes 83 px.
 #: game/normal/drops.gd
