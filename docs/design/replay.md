@@ -143,6 +143,16 @@ scribbling on those nodes is free: `_wake_up()` rebuilds all of them.
 > a run with a session still plays, is recorded the same way and comes out as it
 > always did.
 
+> **The shared pond, 2026-10-04** (`shared-pond.md` §5, Phase 3). The replay is
+> offered in a pond too, and the cell's own nodes stopped being free there: the
+> wire reads them on the black -- what the cell wears, which a guest's PERSON
+> says and the host's referee holds it to, and where a dead host's cell lies,
+> which a returning friend arrives beside. So in a session the replay writes onto
+> a cell, a genome and grit of its own, copies of the run's that never enter the
+> tree; single player scribbles on the run's as before, to the byte. The friend
+> is in the recording -- their body, what they wear, how long since they were
+> heard, how they left -- and in the water the replay shows.
+
 A is the elegant answer and it measures clean. B is the one that does not put a
 tripwire under every future gene.
 
@@ -189,7 +199,10 @@ in the last twenty seconds. The constant is the knob and the arithmetic is
 
 > **Since then**: the beam's twenty-four rays took the stride to 385 floats, and
 > the drop to 470 -- 48 bodies, and the killer -- which is 113 KB a second and
-> **6.8 MB** for the minute (`ocean.md` §11).
+> **6.8 MB** for the minute (`ocean.md` §11). Hunger and the toxins took it to
+> 526, and the shared pond's friend to **534**: eight floats for the other
+> player's body, 128 KB a second and **7.7 MB** for the minute, 115 KB more
+> (`shared-pond.md` §5, Phase 3).
 
 ## 4. The spec
 
@@ -387,6 +400,10 @@ buffer.
 **Tapping anywhere else still restarts, exactly as today** — a `Button` consumes
 its own press, so `_unhandled_input` never sees it, and a player who does not
 want a replay experiences no change at all.
+
+**In a shared pond too**, since its Phase 3 (`shared-pond.md` §5): until then
+the offer was withheld there, because the recording held no friend. The tap
+still wakes a guest into the host's water, near its friend, as it always has.
 
 The replay screen is self-contained: it instances its own membrane rects, soma,
 returns and vision, binds them to the run's frozen nodes through the existing
