@@ -624,9 +624,6 @@ var _run_clock := 0.0
 var _friend_dead := false
 var _friend_ever := false
 var _quiet_said := false
-## This run's recording holds pond frames, so there is no replay to offer yet
-## (shared-pond.md §5, Phase 3).
-var _ponded := false
 
 ## **Forward is always up.** The world turns instead of the cell, which is the
 ## other way of reading a heading and the one a player who has been staring at
@@ -841,9 +838,13 @@ func _ready() -> void:
 	# **The one thing the world view is told about the wire**, and it is a read
 	# handle: full vision draws the other player where they are, and point of
 	# view does not and must not. `panes.gd` builds its own copy of that view
-	# for a recording and deliberately never calls this -- a replay has no peer
-	# in it. See vision.gd's `set_session`.
+	# for a recording and deliberately never calls this -- a recording is not
+	# happening now. See vision.gd's `set_session`.
 	_vision.set_session(_net)
+	# **And the recorder the same handle, for the same one number** (shared-pond.md
+	# §5, Phase 3): how long since the friend was last heard, which the replay
+	# fades their presence by as the live view does.
+	_recorder.set_session(_net)
 	# The two halves of one cell, introduced here and nowhere else: the body
 	# reads its drive constants out of the genome, and the genome takes its
 	# capacity from the body's radius.
@@ -2663,14 +2664,12 @@ func _offer_replay(on: bool) -> void:
 		# A death inside the first breath has nothing to show, and an offer
 		# that opens on two frames of water is worse than no offer.
 		#
-		# **Withheld while the recording holds a pond** (shared-pond.md §5):
-		# the ring records the water nearest this cell and no person, so the
-		# friend would be missing from the water the two of them shared. The
-		# replay binds a field of its own since the drop (ocean.md §11); what
-		# a pond still lacks is the person in the recording, which that
-		# document's Phase 3 plans.
-		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS \
-			and not (_ponded or _food.pond_open())
+		# **In a pond too** (shared-pond.md §5, Phase 3): the recording holds
+		# the friend as a body, and the replay writes onto a field, a cell, a
+		# genome and grit of its own, so the water goes on under it for both
+		# of you. Until then it was withheld here, because a player the friend
+		# ate would have watched themselves eaten by nothing.
+		_watch_ui.visible = _recorder.span() >= WATCH_MIN_SECONDS
 		return
 	_watch_ui.hide()
 	_close_replay()
@@ -2691,12 +2690,12 @@ func _offer_replay(on: bool) -> void:
 func _watch() -> void:
 	if _replay != null:
 		return
-	# **Only over a run that has finished dying.** The screen writes recorded
-	# state onto the live nodes and stops the field processing on the way in;
-	# both are free once `_die()` has stopped the simulation for good and
-	# neither is free a frame earlier. Today nothing can reach here otherwise --
-	# the offer only goes up in WAITING -- which is exactly the kind of thing
-	# that stays true until a second caller appears.
+	# **Only over a run that has finished dying.** In single player the screen
+	# writes recorded state onto this run's cell, genome and grit, which is free
+	# once `_die()` has stopped them for good and not a frame earlier. Today
+	# nothing can reach here otherwise -- the offer only goes up in WAITING --
+	# which is exactly the kind of thing that stays true until a second caller
+	# appears.
 	if _life != Life.WAITING:
 		return
 	if not ResourceLoader.exists(REPLAY_SCENE):
@@ -2709,6 +2708,12 @@ func _watch() -> void:
 	_bus.attach(null)
 	_replay = packed.instantiate()
 	_replay.set(&"recorder", _recorder)
+	# **In a session nothing of this run is the screen's to write**
+	# (shared-pond.md §5, Phase 3): the pond reads this cell's genome and where
+	# it died while it is dead -- for PERSON, and for where a returning friend
+	# lands -- and the water and the wire go on under the screen, so it writes
+	# onto nodes of its own.
+	_replay.set(&"private_nodes", _pond != null)
 	# **The re-attach rides on the screen's own lifetime, not on this file's
 	# discipline.** The detach above and the attach in `_close_replay` were a
 	# hand-maintained pair, and a pair is only as good as the routes that
@@ -2807,7 +2812,6 @@ func _return(place: Array) -> void:
 	else:
 		_motes.setup(_cell)
 		_food.setup(_cell)
-		_ponded = false
 	_genome.setup(_cell)
 	_soma.setup(_cell, _genome)
 	_forget_eye()
@@ -9701,14 +9705,12 @@ func _session_up() -> bool:
 func _begin_pond() -> void:
 	if _pond.hosting:
 		_food.open_pond()
-		_ponded = true
 		return
 	if not _pond.together() or not _net.peer_pond_open():
 		return
 	_set_own_drop_aside()
 	_food.become_mirror()
 	_pond.mirror_began()
-	_ponded = true
 	_entering_held = true
 	_update_simulating()
 	_pond.enter(_cell.radius, _genome.tiers(), _genome.body_layout())
@@ -9779,7 +9781,6 @@ func _enter_timed_out() -> void:
 		# No answer: the run opens alone (§1.6).
 		_entering_held = false
 		_leave_mirror()
-		_ponded = false
 		_update_simulating()
 	elif _wake_pending:
 		# A tap nobody answered swims on alone, as a solo return does.
@@ -9838,7 +9839,6 @@ func _swap_in(at: Vector2, heading: float) -> void:
 	_set_own_drop_aside()
 	_food.become_mirror()
 	_pond.mirror_began()
-	_ponded = true
 	_food.mirror_rim(_rim[0], float(_rim[1]))
 	_place_arrival(at, heading)
 	_motes.setup(_cell, _food.basin())
@@ -9865,7 +9865,6 @@ func _enter_from_black() -> void:
 		_food.become_mirror()
 		_pond.mirror_began()
 		_food.leave_water(true)
-		_ponded = true
 		# A mirror's water runs under the black, as the host's does.
 		_update_simulating()
 	_wake_pending = true
@@ -9950,7 +9949,6 @@ func _take_over() -> void:
 	if _entering_held:
 		_entering_held = false
 		_leave_mirror()
-		_ponded = false
 		_update_simulating()
 		return
 	if _wake_pending:
@@ -10111,6 +10109,9 @@ func _on_friend_died(cause: int, _by: int, at: Vector2, eaten_by_me: bool) -> vo
 		# they stop where they were, as a starving friend does.
 		how = VisionLayer.Gone.STARVED
 	_vision.friend_gone(how, at)
+	# **And the recording, in the same breath** (shared-pond.md §5, Phase 3), so
+	# the replay draws the departure the view drew.
+	_recorder.friend_gone(how, at)
 	_pond_say("dead", &"ate" if eaten_by_me else &"died")
 
 
@@ -10119,6 +10120,7 @@ func _on_friend_left() -> void:
 	_friend_dead = false
 	_friend_ever = false
 	_vision.friend_gone(VisionLayer.Gone.LEFT, Vector2.ZERO)
+	_recorder.friend_gone(VisionLayer.Gone.LEFT, Vector2.ZERO)
 	_pond_say("left", &"left")
 
 

@@ -4340,7 +4340,9 @@ func open_replay(cell: CellBody, slots: int) -> void:
 ## **The drop's rim, written back from a recording**: this field is in the drop
 ## from here, with its meniscus at [param center] and [param radius], and every
 ## body in it filed in a grid of its own -- which is what the view asks what is
-## on screen. Nothing happens if the rim is already there.
+## on screen. Nothing happens if the rim is already there. **Never the friend**,
+## who is in no grid in a live pond either (ocean.md §10.2): filed, they would be
+## drawn a second time, as a water cell.
 func restore_rim(center: Vector2, radius: float) -> void:
 	if _drop != null and _drop.meniscus.center == center \
 			and _drop.meniscus.radius == radius:
@@ -4348,8 +4350,63 @@ func restore_rim(center: Vector2, radius: float) -> void:
 	_drop = Drop.new(center)
 	_drop.meniscus.radius = radius
 	for i in _cells.size():
-		if _cells[i].seeded:
+		if _cells[i].seeded and _cells[i].person == null:
 			_drop.grid.insert(i, _cells[i].pos)
+
+
+## **A replay's field with the other player in it** (shared-pond.md §5, Phase
+## 3): a pond's, so the view draws the friend as it does in a live one -- from
+## [constant PERSON_SLOT], where every client keeps them -- with nobody there
+## until [method restore_person]. Its flocs go past the slot, and the slots
+## between the recorded bodies and it stay empty. A field [method open_replay]
+## made only.
+func open_replay_person() -> void:
+	if not _replay:
+		return
+	_pond = true
+	while _cells.size() <= PERSON_SLOT:
+		_cells.append(Body.new())
+	_replay_slots = maxi(_replay_slots, PERSON_SLOT + 1)
+
+
+## **The friend, written back from a recording**: their body in
+## [constant PERSON_SLOT] -- where, which way, how big, their wound, what they
+## carry as [method pack_loads] packed it, and whether they are in the water,
+## which is what unseeds a person here as it does live. [param radius] 0 is
+## nobody, and then there is no person at all. Out of every grid, as a person
+## always is. A field [method open_replay_person] made only, never a run's.
+func restore_person(at: Vector2, heading: float, radius: float, wound: float,
+		packed_loads: float, wet: bool) -> void:
+	if not _replay or not _pond or _cells.size() <= PERSON_SLOT:
+		return
+	var pb := _cells[PERSON_SLOT]
+	if radius <= 0.0:
+		pb.person = null
+		pb.seeded = false
+		pb.radius = 0.0
+		pb.loads.fill(0.0)
+		return
+	if pb.person == null:
+		pb.person = Person.new()
+		pb.drifter = false
+	pb.person.in_water = wet
+	pb.pos = at
+	pb.heading = heading
+	pb.radius = radius
+	pb.wound = wound
+	pb.seeded = wet
+	unpack_loads(packed_loads, pb.loads)
+
+
+## What the friend wears, written back from a recording: their worn tiers and
+## the slot each is worn in, as PERSON said them -- the fringe the view draws, and
+## the mouth that decides their threat bow. Stepped, never interpolated.
+func restore_person_genome(tiers: Dictionary, order: Array) -> void:
+	if not _replay or not _pond or _cells.size() <= PERSON_SLOT:
+		return
+	var pb := _cells[PERSON_SLOT]
+	pb.genome = tiers
+	pb.order = order
 
 
 ## **Where a body was, written back from a recording.** The one thing in this
@@ -4882,6 +4939,11 @@ func leave_water(dead: bool) -> void:
 func enter_water() -> void:
 	in_water = true
 	anchored = true
+	# **Nothing has killed this cell**, as every arrival says ([method _arrive]):
+	# a return in a pond comes back here and not through one, and a killer left
+	# over from the last death would be named again by the recorder at the next
+	# -- rings round an innocent body in its replay (shared-pond.md Phase 3).
+	died_to = -1
 	_first_hunt = FIRST_DELAY if _drop == null else grace
 	if _drop != null:
 		_first_pending = false

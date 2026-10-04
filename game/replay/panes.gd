@@ -24,6 +24,12 @@ extends Node
 ## the simulation nodes, from the replay driver or -- while this was being
 ## rendered -- straight off the live run.
 ##
+## **In a pond the friend is in the panes too** (shared-pond.md §5, Phase 3): a
+## body in the replay's own field, which the world view draws as it draws every
+## friend. The view is still handed no session -- a recording is not happening
+## now -- so what a session would have said, the friend's silence and how they
+## left, arrives through [method set_friend_quiet] and [method friend_gone].
+##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
 
 const MembraneLayer := preload("res://game/perception/membrane.gd")
@@ -272,6 +278,23 @@ func mark_struck(at: Vector2) -> void:
 func mark_meal(nutrition: float, gene: StringName, at: Vector2) -> void:
 	if _vision != null:
 		_vision.mark_meal(nutrition, gene, at)
+
+
+## **The friend left the water for good, and how** (shared-pond-ux.md §3, §5),
+## as the run told its own view: a meal ring where they were, a faint, or the
+## arrival fade reversed -- which a body leaving its slot cannot say alone.
+## Straight into the world view, as a meal is.
+func friend_gone(how: int, at: Vector2) -> void:
+	if _vision != null:
+		_vision.friend_gone(how, at)
+
+
+## **How long since the friend was last heard**, as the recording says: what the
+## world view fades their halo, trail and edge mark by, here where it has no
+## session to ask (shared-pond-ux.md §0.2).
+func set_friend_quiet(seconds: float) -> void:
+	if _vision != null:
+		_vision.friend_quiet = seconds
 
 
 ## What the two views draw this frame when the body is becoming two. Same

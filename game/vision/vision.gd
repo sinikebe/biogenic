@@ -295,6 +295,11 @@ var _fr_last: Dictionary = {}
 ## After a departure the field has to be seen without them once before a body
 ## there is an arrival: the body and the reason take different routes.
 var _fr_need_absence := false
+## **How long since the friend was last heard, as a recording says it**
+## (shared-pond.md §5, Phase 3): what [method _presence] reads on the replay's
+## screen, which draws the friend out of a recording and has no session to ask.
+## Written every frame by the replay; never read while a session is handed over.
+var friend_quiet := 0.0
 ## Frames this view has run since it came on: a friend there on the first one
 ## is in the first frame, not arriving.
 var _fr_frames := 0
@@ -508,9 +513,11 @@ func bind(cell: CellBody, motes: MotesField, food: FoodField,
 ## `net_session.gd` has a static `current`, so this file could find one for
 ## itself -- and then the two-pane replay screen, which instances a second copy
 ## of this view and binds it to a recording, would draw a live friend swimming
-## through last week's water. A recording has no peer in it. So the handle
-## arrives from the one node that knows whether what it is showing is happening
-## now, and `panes.gd` simply never calls this.
+## through last week's water. So the handle arrives from the one node that knows
+## whether what it is showing is happening now, and `panes.gd` simply never
+## calls this. **A recording's friend is a body in its field instead**
+## (shared-pond.md §5, Phase 3), drawn as this view draws every friend in a pond,
+## and their silence arrives as a number, [member friend_quiet].
 ##
 ## The second count is the direction of the arrow. Nothing here writes to the
 ## session and nothing here can: it is read three times a frame for a track, a
@@ -939,11 +946,14 @@ func _step_friend(delta: float) -> void:
 
 ## **Presence** (UX §0.2): #50's confidence curve on the silence, squared, down
 ## to [constant PEER_FLOOR] -- for the halo, the trail and the edge mark, never
-## the body.
+## the body. The silence is the session's, or, on the replay's screen, which has
+## none, the one the recording kept ([member friend_quiet]).
 func _presence() -> float:
-	if _session == null or not is_instance_valid(_session):
+	var quiet := friend_quiet
+	if _session != null and is_instance_valid(_session):
+		quiet = float(_session.quiet_for())
+	elif quiet <= PEER_FRESH:
 		return 1.0
-	var quiet := float(_session.quiet_for())
 	var doubt := maxf(quiet - PEER_FRESH, 0.0)
 	var slip := 1.0 - clampf(doubt / maxf(PEER_LOST - PEER_FRESH, 0.001), 0.0, 1.0)
 	return PEER_FLOOR + (1.0 - PEER_FLOOR) * slip * slip

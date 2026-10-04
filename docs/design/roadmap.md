@@ -57,7 +57,9 @@ of the daughters -- and what decides who eats whom are `lifecycle.md`,
 - **Energy.** Swimming and turning cost energy, and a cell starves in about
   thirty seconds. `energy.md`.
 - **Gene stats and the replay.** Every gene's numbers on demand, and the run
-  watched back after a death, at up to 4x. `gene-stats.md`, `replay.md`.
+  watched back after a death, at up to 4x -- in a shared pond too, the friend in
+  it as they were drawn, while the pond plays on (`shared-pond.md` Phase 3, on
+  `dev`). `gene-stats.md`, `replay.md`.
 
 ## In hand
 

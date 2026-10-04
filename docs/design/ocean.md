@@ -2041,6 +2041,10 @@ replay wrote them back onto the run's own `Food` (`replay.md` §3). A drop has
   kept nothing; it would now overwrite the drop the player returns to. This is
   the private-node binding `shared-pond.md`'s Phase 3 planned for the pond, done
   in 1a for single player; 1a-2's stash of what a replay wrote over went with it.
+  **Phase 3 did the rest in a session** (`shared-pond.md` §5): the cell, the
+  genome and the grit are the replay's own there too, since the wire reads the
+  run's on the black, and the friend is a body in the replay's field, in its
+  person slot and out of its grid.
 - **Today's water is recorded the same way**, and comes out as it did: a run with
   a session plays it in 1a, its 34 bodies are always the nearest, and taking
   slots in the field's own order puts each in the slot of its own index, with the

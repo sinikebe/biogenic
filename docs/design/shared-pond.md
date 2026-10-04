@@ -45,6 +45,9 @@ and at the pinch (`:952`); `_food.setup()` runs at every birth (`:1155`) and
 return (`:1471`); and the replay writes recorded bodies onto the live field
 (`replay.gd:151-190`) and calls `_food.set_process(false)` (`:477`). A host
 watching a replay on the black would freeze the guest's water and overwrite it.
+**Since the drop** the replay writes a field of its own (`ocean.md` §11), and
+**since Phase 3** a cell, a genome and grit of its own in a session as well, so
+none of the three is the replay's any more (§5, Phase 3).
 
 **0.5 Today's eating rule has one player special case, and a quieter
 asymmetry.** A water cell swallows another on contact, but swallows a player
@@ -407,7 +410,8 @@ snapshot up, nor a lost snapshot an event.
 - [x] Pause per §1.7, with UX §6's `SCRIM_POND` and `Warn`.
 - [x] The held pond, takeover, swap and lines (UX §0.4, §0.5, §1, §5).
 - [x] The division dims from the pinch (UX §2).
-- [x] `_offer_replay` is off while a pond is up, until Phase 3.
+- [x] `_offer_replay` is off while a pond is up, until Phase 3 -- and on again
+  since Phase 3, which hands the replay `private_nodes` in a session (§5).
 
 **`game/net/pond.gd`** (new; RefCounted, preloaded, no `class_name`, no node)
 - [x] Host: carry the guest's newest STATE into the person; every
@@ -552,11 +556,14 @@ taken out.
   `drive.gd --pond=` (a held person and two rings, for `--field-cost`); and
   `tools/field_diff.gd`, the differential half of the identity gate, against
   `main`'s `food.gd` on adversarial water.
-- [ ] Phase 3, `recorder.gd`: `BODIES := FoodField.POND_SLOTS` (+3.0 MB on a
-  4.6 MB ring) and `AT_PERSON`.
-- [ ] Phase 3, `replay.gd`: private nodes in a pond. `restore_body` writes a
-  radius without bumping `_changes`, which is safe only because the replay
-  calls it with the field stopped; the sandbox must keep that true, or bump.
+- [x] Phase 3, `recorder.gd`: `AT_PERSON`, and not `BODIES :=
+  FoodField.POND_SLOTS` (+3.0 MB on a 4.6 MB ring): since the drop the ring
+  keeps the 48 nearest bodies, and the person, who is in no grid, gets eight
+  floats of its own -- 115 KB on a 7.6 MB ring (§5, Phase 3, as built).
+- [x] Phase 3, `replay.gd`: private nodes in a session -- the field since the
+  drop (`ocean.md` §11), and now the cell, the genome and the grit. `restore_body`
+  still writes a radius without bumping `_changes`, and it is still only ever
+  called on a field that never steps: the replay's own.
 
 **A dedicated host, later** (`game/server/`, `docs/server.md`). The same
 host side, with no cell and two guests: `food.gd`'s `open_dedicated()` keeps a
@@ -844,7 +851,7 @@ identity gate**, which is the method #50 and #51 used, with no session:
   container ran slower than Phase 1's hour, so the ratio is the number: a guest
   costs the host's field about 1.4 times what it costs alone.
 
-**Phase 3 — the replay in a pond.** No wire.
+**Phase 3 — the replay in a pond.** No wire. **Built**, as content.
 
 - *Contents:* the recorder takes 69 slots and `AT_PERSON`, `replay.gd` binds
   private Cell, Motes, Food and Genome nodes in a pond, and the offer returns.
@@ -852,6 +859,150 @@ identity gate**, which is the method #50 and #51 used, with no session:
   (`--kill-at=`, then watch) at 0 pixels; `net_probe` shows the water advancing
   while a dead host watches, with the replay's Food not the run's; UX §9.7
   renders; and `--capture-cost` is printed (expect about 2×).
+- **As built, against a plan written before the drop.** Of its four parts,
+  three had moved by the time it was built.
+  1. **The replay's field was already its own.** The drop made it so in 1a
+     (`ocean.md` §11), so the water a dead host watches over never stopped
+     stepping and was never written. What "private nodes" still had to cover
+     was the cell, the genome and the grit.
+  2. **Those were not free in a pond, and that was the finding.** The replay
+     wrote the run's cell, genome and grit, as single player always has, and
+     the pond reads two of them while the player is dead. `pond.gd`'s
+     `_watch_worn()` sends PERSON whenever what this cell wears changes, on
+     both seats, dead or alive; a replay that opens on an earlier body changes
+     it within a frame, and again every loop. And a phone host's
+     `_arrival_origin()` is its own cell, "alive or where it last was", which
+     the replay had moved to wherever its cursor was. With the fix taken out,
+     the probe measures it: a dead guest watching for one second had its host's
+     referee judge 2 PERSONs and call 2 fouls -- `body: … where it wore …`, the
+     weight that cuts at the third -- and a dead host sent PERSON and lay
+     somewhere other than where it died. **So in a session the replay writes
+     onto a cell, a genome and grit of its own** (`replay.gd`'s
+     `private_nodes`, which the run sets to `_pond != null`): copies of the
+     run's as they lie on the black, **never in the tree** -- `cell.gd`'s
+     `_ready` draws from the random stream the live water seeds from -- and
+     freed with the screen. Single player keeps the old path, to the byte.
+  3. **Not `BODIES := POND_SLOTS`.** Since the drop the ring keeps the 48
+     living bodies nearest the cell, and a person is in no grid to be found
+     by. The friend has a block of their own, `AT_PERSON`, eight floats --
+     place, heading, radius (0 is nobody), wound, packed loads, in the water,
+     and the silence since they were last heard -- with a PERSON delta for
+     what they wear, written when it changes (by identity: every path that
+     changes it hands the field a new dictionary), and `gone` marks for how
+     they left, which the run hands the recorder in the same breath as its
+     view.
+  4. **The replay's field opens with a person slot** when the recording holds
+     a friend (`open_replay_person()`): a pond's field, so the world view draws
+     them with the same `_step_friend` it draws a live friend with -- slot 68,
+     out of every grid (`restore_rim` files no person), flocs past it. Their
+     silence reaches the view as `friend_quiet`, since a recording has no
+     session to ask, and `panes.gd` still never calls `set_session`.
+  - **Found on the way.** A cell back in the pond from its black kept the last
+    death's killer -- `enter_water()` never reset `died_to`, as a solo
+    `_arrive()` does -- so its next death, by hunger or by the friend, would
+    have named an innocent body, with predator rings, in the replay. Reset
+    there: a no-op in single player, where it is already -1 at every birth.
+    And `normal_mode.gd`'s `_ponded`, which only the withheld offer read, is
+    gone.
+  - **Nothing else moved.** No wire: `Wire.PROTOCOL` is still 7 and
+    `Wire.RULES` still `46913eab…`, as `net_probe`'s `referee` section
+    recomputes it -- no rule the referee copies changed, and nothing new is
+    sent. No `project.godot`, so `binary_version` stays 6 and this ships as
+    content. No new words.
+- **Measured.**
+  - **The ring:** 526 floats a frame to 534, 7,574,400 bytes to 7,689,600 --
+    **115,200 more**, 1.5 %, allocated in single player too.
+  - **`--capture-cost=25`**, mean and peak µs a frame from the recorder's own
+    `[capture]` line, `origin/dev` twice against the branch twice: single
+    player at seed 7, 223.7-238.6 (peaks 982-1,930) against 241.7-241.9
+    (910-1,224); at seed 12345, 242.4-257.9 (937-1,716) against 256.9-259.5
+    (807-1,518); a phone host with its guest at 300 units (`--pond=host
+    --friend=300,90`), 328.2-328.5 (1,311-2,459) against 337.6-344.5
+    (2,375-4,515). Single player moves no further than `origin/dev`'s two runs
+    differ from each other (7 % at seed 7): its new work is one call and eight
+    zeros a frame. The pond host pays 3-5 % more, for eight floats and a
+    session read. The plan's "about 2×" was for recording sixty-nine slots.
+  - **Single player, at the data level** (no frames: see below). A scratch
+    script ran a seeded run to a death on `origin/dev` and on this branch and
+    dumped the sealed ring -- every frame's first 526 floats as raw bytes, its
+    clock, every delta, sensation and mark -- then raised the replay as the run
+    raises it and dumped every value the panes read at each seek: the cell, the
+    genome, the grit, every body in the replay's field, beams, pings, hunter
+    and killer. Seed 7 starved at 25 s (1,501 frames, 100 seeks) and seed
+    12345's sighted forager killed at 40 s (1,948 frames, 130 seeks) are
+    **byte-identical**, but for the stride the header prints, 526 and 534, and
+    the eight new floats, zero in every frame. Each tree ran each twice,
+    identical.
+  - **`net_probe`:** ALL PASS, 438 checks -- 12 new and one rewritten, in
+    `pond-field`, `pond` and `server` -- in **17,705 frames and 233.7 s**
+    under CI's `--quit-after 24000`. With two sessions and two real runs:
+    eaten by the guest, the host's black offers `watch` 0.89 s on, and its
+    replay, on a field, cell, genome and grit of its own, draws the guest in
+    the frame before the death as recorded, a tier-3 mouth gaping over the
+    host; through 3 s of that black with the replay up, the host's own water
+    stepped 315 frames and the guest took 59 snapshots with 53 bodies moving,
+    while the replay's field stood apart; the host sent no PERSON, its cell
+    and genome as it died; then `leave`, `watch` offered again, and the tap
+    back 480 from the guest. A dead guest watching for a second: the host's
+    water stepped 107 frames and its referee judged 0 PERSONs and called 0
+    fouls; Back, watching twice -- a new screen, the host drawn as recorded --
+    and Esc, the run never leaving its black. A death 0.8 s into a life offers
+    no `watch`, as alone, and its tap lands 480 from the host. On the dedicated
+    server the same from a guest's seat, and a server stopped while a guest
+    watched: the takeover onto its own drop 2 frames later, under the screen,
+    which played on, on its own field; closed, `watch` again; the tap, a new
+    cell in its own drop, alone, the water running. With no socket: a friend
+    recorded in a host's drop -- arriving, swimming, a ghost dividing and back,
+    changing what they wear, falling quiet -- and played back is drawn as the
+    live view drew them on each of 79 frames, at most 0.0002 units apart, and
+    eaten, a SELF_TINT meal ring where they were.
+  - **Each fix fails its own check when taken out**: the run's own nodes back
+    in a session fail 6 `pond` checks and 4 `server` ones; the person slot
+    moved fails 4; the rim filing persons, `died_to` kept, the `gone` mark
+    dropped and the recorded silence dropped (presence 0.139 off) 1 each.
+  - **Every `ci.yml` step, run here on the final tree.** The engine is its
+    manifest's to the byte; `make_pot --check` and the binary-skew check are
+    clean; the patch notes collect, the build stamps, a throwaway key is made
+    and the project imports with no error. The seven scenes and the input path
+    are clean; check 8's empty library is at its pinned hash in all three
+    schemes (`7397a410…`), so it is not re-pinned. Back, the levels, the drop
+    (131 checks in 346 s, as `origin/dev`'s 346 s on the same machine), both
+    translation checks (502 messages, the template current: no new words),
+    `net_probe` as above, the fuzzer and the network taken from under a host
+    all print ALL PASS. The Windows and Linux server exports and the three
+    content packs (1.4 MB each) build, the exported scenes lay out as the
+    source does (12 scenes, 442 controls), the server boots, stops and passes
+    its pre-flight, and shellcheck is clean. Only the Android export fails
+    here, for the SDK this container lacks (`apksigner`); CI has it.
+- **Not rendered.** The owner, 2026-10-04: *"forget screenshots this time,
+  i'll playtest it."* No frame was made of the pond's replay, of its death
+  screen offering `watch`, or of a friend only nearby, and no single-player
+  replay was diffed in pixels: the data-level comparison stands in for the
+  last, and `net_probe`'s numbers for the rest (UX §9, item 7).
+- **Not drawn as live, knowingly.**
+  - The hold's dim and the dim of your own pinch are not recorded, as in single
+    player.
+  - A sister left in the water appears without her fade: the view fades in a
+    new serial, and the replay's field never changes one.
+  - The friend's departure lands one recorded frame early, as every mark does.
+  - A water cell that eats a guest is not named on the guest's replay, and no
+    predator rings go round it: a mirror is told where the death came from,
+    not which body, and it was never named live either. Nor do rings go round
+    a friend that ate you, as they do not live.
+  - A takeover's beat is not in the replay: the water changes under the cell
+    in a cut, and the friend fades out as one who left.
+  - A row written in the window's very last frame -- a friend's change of body
+    in the frame the player died -- is never applied, because a replay loops
+    before it gets there. Older than this phase, and true in single player as
+    well. `net_probe`, which seeks to that frame, seeks a hair past it: the row
+    carries the run's clock, a double, and the ring keeps the frame's time as a
+    float, which can round below it.
+- **What to watch for on a phone.** Whether the friend reads as the killer in
+  the half-width truth pane, ±320 world units at 1280x720, where a lunge from
+  farther starts off the pane and only the edge mark shows them; whether the
+  departure lands right; and a host watching while its guest swims on, the
+  replay's three nodes and its field made at every `watch` and freed at every
+  close, on a ring 115 KB larger.
 
 **Phase 4 — waiting and rejoining.** PROTOCOL 5; §6 rows 4 and 5.
 

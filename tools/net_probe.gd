@@ -114,6 +114,10 @@ const Genome := preload("res://game/normal/genome.gd")
 ## For the run's own numbering -- Life, Split, the division's clocks and the
 ## pond's lines -- which the `pond` section reads off two real runs.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
+## For the recording's own numbering, which the replay in a pond is checked by
+## (shared-pond.md §5, Phase 3): what a PERSON row is, and where the friend sits
+## in a frame.
+const RecorderNode := preload("res://game/replay/recorder.gd")
 
 ## Long enough for a loopback handshake by a wide margin; short enough that a
 ## hang is a failure rather than a job timeout.
@@ -4544,6 +4548,7 @@ func _check_pond_field() -> void:
 	_pond_out_of_water()
 	_pond_mirror()
 	_pond_housekeeping()
+	_pond_replay_field()
 	_drop_pond_rules()
 	_drop_pond_anchors()
 	_drop_pond_mirror()
@@ -5618,6 +5623,206 @@ func _pond_housekeeping() -> void:
 	_says(empty and solo,
 		"pond-field: a mirror starts empty, and leaving it is 34 fresh cells alone")
 
+	# **A return into the pond forgets the last killer** (shared-pond.md §5,
+	# Phase 3): a cell killed by a body comes back through `enter_water()`, not
+	# through an arrival as a solo return does, and a killer it remembered would
+	# be named by the recorder at its next death -- predator rings round an
+	# innocent body in the replay of a death by hunger or by the friend.
+	field = _pond_rig(74, 30.0, POND_SENSES)
+	field.open_pond()
+	field.set("died_to", 5)
+	field.leave_water(true)
+	var remembered := int(field.get("died_to"))
+	field.enter_water()
+	_says(remembered == 5 and int(field.get("died_to")) == -1,
+		"pond-field: a cell back in the pond from its black has no killer (%d,"
+		% int(field.get("died_to")) + " where its last death had %d)" % remembered)
+
+
+# --- The friend, recorded and drawn back (shared-pond.md §5, Phase 3) -----------
+
+## **A session for one number**: the friend's silence, as a check sets it --
+## what the recorder and the world view both ask a session for, and nothing
+## else a session is.
+class QuietStub extends Node:
+	var quiet := 0.0
+
+	func quiet_for() -> float:
+		return quiet
+
+	func peer_track() -> Array:
+		return []
+
+	func clock() -> float:
+		return 0.0
+
+
+## **The friend, recorded and drawn back as the live view drew them** (shared-
+## pond.md §5, Phase 3; UX §4, §9 item 7), with no socket and no frames. A
+## host's drop opened as a pond; a person arriving in it, swimming, out of the
+## water and back as a friend dividing is, changing what they wear, falling
+## quiet, and swallowed by the water and said gone -- a world view drawing them
+## live as it does in a run, and the recorder taking every frame. Then the
+## replay over the sealed ring, on nodes of its own, played frame by frame: its
+## world view draws the friend as the live one did, every number of it -- place,
+## heading, size, the arrival fade, the ghost and its pinch, the commit, the
+## tiers, the mouth, presence -- and their departure as a SELF_TINT meal ring
+## where they were eaten, one recorded frame early, as every mark is. **This is
+## the render CI cannot make**: the drawing itself is cilia.gd's, the same call
+## either way; what decides it is this dictionary.
+func _pond_replay_field() -> void:
+	var dt := 1.0 / 60.0
+	var rig := Node.new()
+	rig.name = "PondReplayRig"
+	var cell := CellBody.new()
+	cell.radius = 30.0
+	cell.process_mode = Node.PROCESS_MODE_DISABLED
+	rig.add_child(cell)
+	var field := FoodField.new()
+	field.process_mode = Node.PROCESS_MODE_DISABLED
+	rig.add_child(field)
+	var rec := RecorderNode.new()
+	rec.process_mode = Node.PROCESS_MODE_DISABLED
+	rig.add_child(rec)
+	var quiet := QuietStub.new()
+	rig.add_child(quiet)
+	add_child(rig)
+	seed(77)
+	field.setup_drop(cell)
+	field.open_pond()
+	rec.set_session(quiet)
+	var live: Node = (load("res://game/vision/vision.tscn") as PackedScene).instantiate()
+	live.bind(cell, null, field, null, null)
+	rig.add_child(live)
+	live.set_session(quiet)
+	live.set_active(true)
+	var frames := 100
+	var eat := 80
+	var from: Vector2 = cell.position + Vector2(300.0, -40.0)
+	var first := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 1}
+	var daughter := {&"cytostome": 3, &"cirrus": 1, &"flagellum": 2, &"ampulla": 1}
+	var gone_at := Vector2.ZERO
+	var lived: Array = []
+	for k in frames:
+		if k == 3:
+			field.set_person_genome(first, [&"cytostome", &"cirrus", &"flagellum"])
+		if k == 20:
+			field.set_person_in_water(false)
+		if k == 45:
+			field.set_person_in_water(true)
+		if k == 50:
+			field.set_person_genome(daughter,
+				[&"cytostome", &"cirrus", &"flagellum", &"ampulla"])
+		if k >= 3 and k < eat:
+			field.place_person(from + Vector2(2.0, 0.5) * float(k), 0.05 * float(k),
+				28.0 + 0.02 * float(k))
+		quiet.quiet = maxf(0.1 * float(k - 55), 0.0)
+		if k == eat:
+			gone_at = field.bodies()[FoodField.PERSON_SLOT].pos
+			field.call(&"_person_gone", FoodField.Cause.SWALLOWED, FoodField.By.WATER,
+				field.person())
+			rec.friend_gone(VisionLayer.Gone.EATEN, gone_at)
+			live.friend_gone(VisionLayer.Gone.EATEN, gone_at)
+		live._process(dt)
+		lived.append((live.get("_peer") as Dictionary).duplicate())
+		rec._process(dt)
+	var lived_ring := _ring_at(live.get("_meals"), gone_at)
+	rec.seal()
+	var held := bool(rec.call(&"holds_person"))
+	var screen: Node = (load("res://game/replay/replay.tscn") as PackedScene).instantiate()
+	screen.set(&"recorder", rec)
+	screen.set(&"private_nodes", true)
+	rig.add_child(screen)
+	screen.set_process(false)
+	var water: Node = screen.get("_food")
+	var shown: Node = (screen.get("_panes") as Node).get("_vision")
+	screen.call(&"_rewind")
+	screen.set("_forget", false)
+	(screen.get("_panes") as Node).call(&"rewound")
+	var drawn: Array = []
+	var in_grid := false
+	for k in int(rec.call(&"frames")):
+		# A hair past the frame, so what was written in it is in (_replay_friend).
+		screen.set("_at", float(rec.call(&"time_of", k)) + 1e-6)
+		screen.call(&"_seek")
+		shown._process(dt)
+		drawn.append((shown.get("_peer") as Dictionary).duplicate())
+		var pb: Object = _person_of(water)
+		if pb != null and float(pb.radius) > 0.0 and (water.call(&"bodies_near", pb.pos,
+				80.0) as PackedInt32Array).has(FoodField.PERSON_SLOT):
+			in_grid = true
+	var shown_ring := _ring_at(shown.get("_meals"), gone_at)
+	# **A rim told while the friend is in the water** -- a guest that swapped
+	# into a host's drop has its own rim and then the host's in one window --
+	# files every body in the replay's grid again, and still not the friend.
+	screen.call(&"_rewind")
+	screen.set("_at", float(rec.call(&"time_of", 10)) + 1e-6)
+	screen.call(&"_seek")
+	var rim: RefCounted = water.call(&"basin")
+	water.call(&"restore_rim", (rim.get(&"center") as Vector2) + Vector2(1.0, 0.0),
+		float(rim.get(&"radius")))
+	var friend: Object = _person_of(water)
+	if friend == null or (water.call(&"bodies_near", friend.pos, 80.0)
+			as PackedInt32Array).has(FoodField.PERSON_SLOT):
+		in_grid = true
+	# Every frame before the departure, number for number.
+	var worst := 0.0
+	var off: Array = []
+	var ghosts := 0
+	var commits := 0
+	for k in eat - 1:
+		var was: Dictionary = lived[k]
+		var now: Dictionary = drawn[k]
+		if was.is_empty() or now.is_empty():
+			if was.is_empty() != now.is_empty():
+				off.append("%d: %s live, %s replayed" % [k, "drawn" if not was.is_empty()
+					else "none", "drawn" if not now.is_empty() else "none"])
+			continue
+		worst = maxf(worst, (was["at"] as Vector2).distance_to(now["at"]))
+		worst = maxf(worst, absf(angle_difference(float(was["heading"]),
+			float(now["heading"]))))
+		for key: String in ["radius", "confidence", "alpha", "pinch", "double", "gape",
+				"wound", "doubt"]:
+			worst = maxf(worst, absf(float(was[key]) - float(now[key])))
+		if was["tiers"] != now["tiers"] or was["order"] != now["order"] \
+				or bool(was["ghost"]) != bool(now["ghost"]) or was["felt"] != now["felt"]:
+			off.append("%d: tiers, order, ghost or felt" % k)
+		ghosts += 1 if bool(now["ghost"]) else 0
+		commits += 1 if float(now["pinch"]) > 0.0 and not bool(now["ghost"]) else 0
+	# Presence below the body's own alpha: the silence, not the commit.
+	var faded: bool = not (drawn[eat - 2] as Dictionary).is_empty() \
+		and float((drawn[eat - 2] as Dictionary)["confidence"]) \
+			< 0.95 * float((drawn[eat - 2] as Dictionary)["alpha"])
+	var departed: bool = (drawn[eat - 1] as Dictionary).is_empty() \
+		and (lived[eat] as Dictionary).is_empty() and (drawn[eat] as Dictionary).is_empty()
+	var rings: bool = not lived_ring.is_empty() and not shown_ring.is_empty() \
+		and (shown_ring[3] as Color) == VisionLayer.SELF_TINT \
+		and absf(float(shown_ring[1]) - float(lived_ring[1])) < 0.1
+	_says(held and off.is_empty() and worst < 1e-3 and ghosts > 10 and commits > 10
+			and faded and departed and rings and not in_grid,
+		"pond-field: the friend recorded and played back is drawn as the live view drew"
+		+ " them, every frame of %d before they were eaten -- worst %.6f apart, the ghost"
+		% [eat - 1, worst] + " on %d frames and the commit on %d, presence faded %s --"
+		% [ghosts, commits, str(faded)] + " and eaten, a SELF_TINT meal ring where they"
+		+ " were (%s), one recorded frame early (%s); never in the replay's grid (%s)%s"
+		% [str(rings), str(departed), str(not in_grid),
+			"" if off.is_empty() else " -- NOT: " + ", ".join(off.slice(0, 4))])
+	rig.free()
+
+
+## The body in [param field]'s person slot, or null for a field with none.
+static func _person_of(field: Node) -> Object:
+	var bodies: Array = field.call(&"bodies")
+	return bodies[FoodField.PERSON_SLOT] if bodies.size() > FoodField.PERSON_SLOT else null
+
+
+## The meal ring [param meals] holds at [param at], or empty.
+static func _ring_at(meals: Variant, at: Vector2) -> Array:
+	for meal: Array in (meals as Array):
+		if (meal[0] as Vector2) == at:
+			return meal.duplicate()
+	return []
+
 
 # --- The pond on the drop (ocean.md §10.2, protocol 5) --------------------------
 
@@ -6566,13 +6771,31 @@ func _check_pond() -> void:
 			and said_ate == NormalMode.LINE_ATE,
 		"pond: the host swallows the guest -- a meal for the host, SWALLOWED by"
 		+ " the friend for the guest, and the host is told '%s'" % said_ate)
-	guest_run.set("_tap_pending", true)
-	await _pond_until(func() -> bool:
+
+	# **A death inside its first breath offers nothing, in a pond as alone**
+	# (replay.md §4.5; shared-pond.md §5, Phase 3): the guest was eaten under a
+	# second after it tapped back, and its black holds no `watch` -- what Phase 3
+	# brings back to the pond is the offer, not a replay of a few frames. Then
+	# its tap brings it back beside the host, as it always has.
+	var g_short := await _pond_until(func() -> bool:
+		return int(guest_run.get("_life")) == NormalMode.Life.WAITING, 1.5, [host_pin])
+	var g_span := float((guest_run.get("_recorder") as Node).call(&"span"))
+	_says(g_short >= 0.0 and g_span < NormalMode.WATCH_MIN_SECONDS
+			and not bool((guest_run.get("_watch_ui") as Control).visible),
+		"pond: eaten %.2f s into its life, the guest's black offers no `watch` --"
+		% g_span + " under the %.0f s a replay needs, in a pond as alone"
+		% NormalMode.WATCH_MIN_SECONDS)
+	guest_run.call(&"_wake_up")
+	var g_back := await _pond_until(func() -> bool:
 		return int(guest_run.get("_life")) == NormalMode.Life.RETURNING, 3.5,
 		[host_pin])
 	guest_home = guest_cell.position
 	guest_pin = [guest_cell, guest_home, 0.0]
 	pins = [host_pin, guest_pin]
+	_says(g_back >= 0.0 and absf(guest_home.distance_to(host_cell.position)
+			- host_pond.ARRIVAL) <= POND_ARRIVAL_TOLERANCE and guest_food.mirroring(),
+		"pond: and its tap brings it back %.1f units from the host, in the same water"
+		% guest_home.distance_to(host_cell.position))
 
 	# **A stronger mouth, brought in the way a player brings one** (B.5): out of
 	# the pond, grown alone, and back in by an arrival. A worn body never
@@ -6669,22 +6892,81 @@ func _check_pond() -> void:
 		% _line_of(guest_run))
 
 	# ----------------------------------------------------------------------
-	# **The host's black does not stop the pond** (owner's row A): 3 s of it,
-	# snapshots advancing and the water moving on the guest's screen -- and
-	# the replay withheld. Then its tap lands it ARRIVAL, 480, from the guest.
+	# **UX §9 item 7, from the host's seat** (shared-pond.md §5, Phase 3): the
+	# host's black offers `watch`, and the replay draws the guest that ate it,
+	# in the frame before the death, on a field, a cell, a genome and grit of
+	# the replay's own.
+	# ----------------------------------------------------------------------
+	var h_offered := await _pond_offered(host_run, [guest_pin])
+	var died_here: Vector2 = host_cell.position
+	var host_genome: Node = host_run.get_node(^"Genome")
+	var died_wearing: Dictionary = host_genome.to_state()
+	var host_worn_was: Variant = guest_pond.get("_host_worn")
+	var host_said_was := str(host_pond.get("_worn"))
+	var h_screen: Node = await _pond_watch(host_run, [guest_pin])
+	var h_bound: Array = _replay_bound(host_run, h_screen)
+	var h_seen: Array = [{}, Vector2.ZERO, 0.0, null]
+	if h_screen != null:
+		h_seen = await _replay_friend(h_screen,
+			float((host_run.get("_recorder") as Node).call(&"span")), [guest_pin])
+	var h_worn := _recorded_worn(host_run)
+	var h_peer: Dictionary = h_seen[0]
+	var h_apart := (h_seen[1] as Vector2).distance_to(h_peer.get("at", Vector2.INF))
+	_says(h_offered >= 0.0 and not h_bound.has(false) and _drawn_as_recorded(h_seen, h_worn)
+			and Genome.tier_of(h_worn, &"cytostome") == 3
+			and float(h_peer.get("gape", 0.0)) > float(h_seen[2]),
+		"pond (UX §9.7, host's seat): eaten by the guest, the host's black offers"
+		+ " `watch` %.2f s on; its replay, on a field, cell, genome and grit of its"
+		% h_offered + " own %s, draws the guest in the frame before the death where the"
+		% str(h_bound) + " recording has it, %.0f units off -- the probe put the host in"
+		% h_apart + " its mouth in one frame -- wearing its recorded tiers, cytostome %d,"
+		% Genome.tier_of(h_worn, &"cytostome") + " a gape of %.1f over the host's r%.1f"
+		% [float(h_peer.get("gape", 0.0)), float(h_seen[2])])
+
+	# ----------------------------------------------------------------------
+	# **The host's black does not stop the pond** (owner's row A), **and nor
+	# does its replay** (Phase 3): 3 s of the black with the replay up, the
+	# host's own water stepping and sent -- snapshots advancing and the water
+	# moving on the guest's screen -- while the replay's field is its own and
+	# never steps. Nothing the replay writes reaches the wire: the host sends no
+	# PERSON, and its cell is where it died and its genome what it died wearing,
+	# which is what the pond reads on the black -- for PERSON, and for where a
+	# returning guest lands. Closed, the offer is back; then its tap lands it
+	# ARRIVAL, 480, from the guest.
 	# ----------------------------------------------------------------------
 	var seq_from := Wire.seq_of(guest_net.peer_pond())
 	var water_from: Array = _pond_places(guest_food)
+	var steps_from := int(host_food.get("_frame"))
+	var replay_water: Node = h_screen.get("_food") if h_screen != null else null
 	await _pond_until(func() -> bool: return false, 3.0, [guest_pin])
 	var black_frames := _pond_frames
 	var seq_to := Wire.seq_of(guest_net.peer_pond())
 	var moved := _pond_moved(water_from, _pond_places(guest_food))
-	_says(int(host_run.get("_life")) == NormalMode.Life.WAITING
+	var steps := int(host_food.get("_frame")) - steps_from
+	var still_up: bool = h_screen != null and host_run.get("_replay") == h_screen \
+		and h_screen.get("_food") == replay_water and not replay_water.is_processing()
+	var sent_none: bool = is_same(guest_pond.get("_host_worn"), host_worn_was) \
+		and str(host_pond.get("_worn")) == host_said_was
+	var as_died: bool = host_cell.position == died_here \
+		and host_genome.to_state() == died_wearing
+	_says(int(host_run.get("_life")) == NormalMode.Life.WAITING and still_up
+			and host_food.is_processing() and steps > 10
 			and seq_to - seq_from >= _pond_snapshots(3.0, black_frames) and moved > 10
-			and not bool((host_run.get("_watch_ui") as Control).visible),
-		"pond: through %.1f s of the host's black the guest took %d snapshots"
-		% [_now() - host_died_at, seq_to - seq_from] + " and %d bodies moved;"
-		% moved + " the replay is withheld")
+			and sent_none and as_died,
+		"pond: through %.1f s of the host's black with its replay up, the host's own"
+		% (_now() - host_died_at) + " water stepped %d frames and the guest took %d"
+		% [steps, seq_to - seq_from] + " snapshots, %d bodies moving, while the"
+		% moved + " replay's field stood apart (%s); the host sent no PERSON (%s), and"
+		% [str(still_up), str(sent_none)] + " its cell and genome are as it died (%s)"
+		% str(as_died))
+	if h_screen != null:
+		(h_screen.get("_leave_button") as Button).pressed.emit()
+	await _pond_frames_on(2, [guest_pin])
+	_says(host_run.get("_replay") == null
+			and bool((host_run.get("_watch_ui") as Control).visible)
+			and int(host_run.get("_life")) == NormalMode.Life.WAITING,
+		"pond: closed with `leave`, the host's replay leaves it on its black with"
+		+ " `watch` offered again")
 	host_run.call("_wake_up")
 	await _pond_until(func() -> bool:
 		return int(host_run.get("_life")) == NormalMode.Life.RETURNING, 0.5, [guest_pin])
@@ -6976,8 +7258,6 @@ func _check_pond() -> void:
 	var corpse_at: Vector2 = guest_cell.position
 	var metabolism: Node = guest_run.get_node(^"Metabolism")
 	var corpse_on := [guest_cell.is_processing() or metabolism.is_processing()]
-	# The tap is taken now and honoured at the black, for the next check.
-	guest_run.set("_tap_pending", true)
 	await _pond_until(func() -> bool:
 		if guest_cell.is_processing() or metabolism.is_processing():
 			corpse_on[0] = true
@@ -6992,15 +7272,94 @@ func _check_pond() -> void:
 		+ " 0.3 s -- while the water it died in runs on")
 
 	# ----------------------------------------------------------------------
+	# **A dead guest watches while the host plays on** (shared-pond.md §5,
+	# Phase 3), on the black of the death above -- whose sixty seconds hold a
+	# body brought in and a division, so the replay opens on bodies this cell
+	# no longer wears. The pond tells the host what this cell wears whenever it
+	# changes, as PERSON, and the host's referee holds a guest to the body it
+	# arrived with: a replay written onto the run's own genome would say the
+	# first of those bodies within a frame, and every loop after, and be fouled
+	# for it. So for a second of it, the host running again: no PERSON judged,
+	# no foul, the guest's cell and genome as the death left them, and the host's
+	# water stepping. Android Back closes it and the offer is back; watched again
+	# it is a new screen of its own with the friend in it, and Esc closes that.
+	# ----------------------------------------------------------------------
+	_pond_start(host_run, modes)
+	host_net.set_process(true)
+	var w_offered := await _pond_offered(guest_run, [])
+	var w_ref: Object = host_pond.call("referee_of", 0)
+	var w_judged := int((w_ref.get("judged") as Dictionary)["person"]) if w_ref != null else -1
+	var w_fouls := int(w_ref.call("fouled")) if w_ref != null else -1
+	var w_said := str(guest_pond.get("_worn"))
+	var w_wearing: Dictionary = guest_genome.to_state()
+	var w_at: Vector2 = guest_cell.position
+	var w_bodies := 0
+	for row: Array in ((guest_run.get("_recorder") as Node).call(&"deltas") as Array):
+		if int(row[1]) == RecorderNode.Delta.PLAYER:
+			w_bodies += 1
+	var w_steps := int(host_food.get("_frame"))
+	var w_screen: Node = await _pond_watch(guest_run, [])
+	var w_bound: Array = _replay_bound(guest_run, w_screen)
+	await _pond_until(func() -> bool: return false, 1.0, [])
+	var w_judged_now := int((w_ref.get("judged") as Dictionary)["person"]) \
+		if w_ref != null else -2
+	var w_fouls_now := int(w_ref.call("fouled")) if w_ref != null else -2
+	w_steps = int(host_food.get("_frame")) - w_steps
+	_says(w_offered >= 0.0 and not w_bound.has(false) and w_bodies >= 2
+			and w_screen != null and guest_run.get("_replay") == w_screen
+			and w_judged_now == w_judged and w_fouls_now == w_fouls
+			and str(guest_pond.get("_worn")) == w_said
+			and guest_genome.to_state() == w_wearing and guest_cell.position == w_at
+			and host_food.is_processing() and w_steps > 10,
+		"pond: a dead guest watches while the host plays on -- a replay of %d bodies'"
+		% w_bodies + " genomes, on nodes of its own %s; through a second of it the"
+		% str(w_bound) + " host's water stepped %d frames, its referee judged %d PERSON"
+		% [w_steps, w_judged_now - w_judged] + " and called %d fouls, and the guest's"
+		% (w_fouls_now - w_fouls) + " cell and genome are as the death left them")
+	var w_first := w_screen.get_instance_id() if w_screen != null else 0
+	guest_run.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	var w_closed: bool = guest_run.get("_replay") == null
+	await _pond_frames_on(1, [])
+	var w_offered_again := bool((guest_run.get("_watch_ui") as Control).visible)
+	var w_again: Node = await _pond_watch(guest_run, [])
+	var w_again_bound: Array = _replay_bound(guest_run, w_again)
+	var w_again_seen: Array = [{}, Vector2.ZERO, 0.0, null]
+	if w_again != null:
+		w_again_seen = await _replay_friend(w_again,
+			float((guest_run.get("_recorder") as Node).call(&"span")), [])
+	# Read before Esc frees it.
+	var w_twice: bool = w_again != null and w_again.get_instance_id() != w_first \
+		and not w_again_bound.has(false) \
+		and _drawn_as_recorded(w_again_seen, _recorded_worn(guest_run))
+	var esc := InputEventKey.new()
+	esc.keycode = KEY_ESCAPE
+	esc.physical_keycode = KEY_ESCAPE
+	esc.pressed = true
+	Input.parse_input_event(esc)
+	await _pond_frames_on(2, [])
+	esc = esc.duplicate()
+	esc.pressed = false
+	Input.parse_input_event(esc)
+	var w_esc: bool = guest_run.get("_replay") == null \
+		and bool((guest_run.get("_watch_ui") as Control).visible) \
+		and int(guest_run.get("_life")) == NormalMode.Life.WAITING
+	_says(w_closed and w_offered_again and w_twice and w_esc,
+		"pond: Back closes the dead guest's replay with `watch` offered again (%s,"
+		% str(w_closed) + " %s); watched twice it is a new screen on nodes of its own %s,"
+		% [str(w_offered_again), str(w_again_bound)] + " the host drawn as recorded (%s),"
+		% str(w_twice) + " and Esc closes that one -- the run never left its black (%s)"
+		% str(w_esc))
+	# The tap, for the next check, on the black as a player's is.
+	guest_run.call(&"_wake_up")
+
+	# ----------------------------------------------------------------------
 	# **The link goes while the guest is coming back** (review, the first
 	# finding): a takeover inside the 0.9 s of RETURNING. It used to stop the
 	# fresh water outright, as for a cell on the black, and nothing started it
 	# again -- the guest came back alive into water where nothing moved and
-	# nothing could be smelt. The host is let go, answers the tap taken above,
-	# and the guest's own link is cut the moment it is returning.
+	# nothing could be smelt. The host answers the tap taken above, and the
+	# guest's own link is cut the moment it is returning.
 	# ----------------------------------------------------------------------
-	_pond_start(host_run, modes)
-	host_net.set_process(true)
 	var returning := await _pond_until(func() -> bool:
 		return int(guest_run.get("_life")) == NormalMode.Life.RETURNING, 3.0, [])
 	guest_net.close()
@@ -7667,6 +8026,105 @@ func _pond_reenter(run: Node, tiers: Dictionary, order: Array, pins: Array) -> f
 		return bool(pond.in_pond) and food.mirroring() \
 			and float(run.get("_water_beat")) < 0.0, 4.0, pins)
 	return _now() - from if back >= 0.0 else -1.0
+
+
+# --- The replay in a pond (shared-pond.md §5, Phase 3) -------------------------
+
+## **The black of a run in a pond, with `watch` on it**: seconds until the run
+## waits on its black and offers its replay, or -1.
+func _pond_offered(run: Node, pins: Array) -> float:
+	return await _pond_until(func() -> bool:
+		return int(run.get("_life")) == NormalMode.Life.WAITING \
+			and bool((run.get("_watch_ui") as Control).visible), 2.0, pins)
+
+
+## **The replay raised as its button raises it**, a frame or two on: the
+## screen, or null.
+func _pond_watch(run: Node, pins: Array) -> Node:
+	run.call(&"_watch")
+	await _pond_frames_on(2, pins)
+	return run.get("_replay")
+
+
+## [param count] frames, holding [param pins] where they are put.
+func _pond_frames_on(count: int, pins: Array) -> void:
+	var left := [count]
+	await _pond_until(func() -> bool:
+		left[0] -= 1
+		return int(left[0]) < 0, 2.0, pins)
+
+
+## **What a replay in a pond is writing onto, against [param run]'s own**:
+## `[its own field, not stepping, a person slot in it, cell genome and grit of
+## its own, none of them in the tree]` -- every one of them true is what lets the
+## water and the wire go on under it.
+func _replay_bound(run: Node, screen: Node) -> Array:
+	if screen == null:
+		return [false, false, false, false, false]
+	var water: Node = screen.get("_food")
+	var own: Array = [screen.get("_cell"), screen.get("_genome"), screen.get("_motes")]
+	var theirs: Array = [run.get_node(^"Cell"), run.get_node(^"Genome"),
+		run.get_node(^"Motes")]
+	var apart := true
+	var loose := true
+	for k in own.size():
+		if own[k] == null or own[k] == theirs[k]:
+			apart = false
+		elif (own[k] as Node).is_inside_tree():
+			loose = false
+	return [water != null and water != run.get_node(^"Food"),
+		water != null and not water.is_processing(),
+		water != null and bool(water.call(&"pond_open")), apart, loose]
+
+
+## **The friend as the replay's world view draws them at [param at] seconds into
+## the window**, sought there and its history forgotten, so they are drawn as a
+## view coming on draws them -- in it, no arrival fade: `[the view's friend, the
+## watched cell's place and radius, the friend's body in the field]`.
+##
+## Sought a hair past [param at]: a row the recorder writes in a frame carries
+## the run's own clock, a double, and the ring keeps that frame's time as a
+## float, which can round below it -- so a seek to exactly the last frame's time
+## can stop short of what the friend put on in that frame. A played replay never
+## lands there at all; it loops at the end.
+func _replay_friend(screen: Node, at: float, pins: Array) -> Array:
+	screen.set_process(false)
+	screen.call(&"_rewind")
+	screen.set("_at", at + 1e-4)
+	screen.call(&"_seek")
+	screen.set("_forget", false)
+	var panes: Node = screen.get("_panes")
+	panes.call(&"rewound")
+	await _pond_frames_on(2, pins)
+	var peer: Dictionary = ((panes.get("_vision") as Node).get("_peer") as Dictionary) \
+		.duplicate()
+	var cell: Node = screen.get("_cell")
+	var bodies: Array = (screen.get("_food") as Node).call(&"bodies")
+	var pb: Object = bodies[FoodField.PERSON_SLOT] \
+		if bodies.size() > FoodField.PERSON_SLOT else null
+	screen.set_process(true)
+	return [peer, cell.position, float(cell.radius), pb]
+
+
+## **What the recording says the friend wore last**: its newest PERSON row's
+## tiers, or empty.
+func _recorded_worn(run: Node) -> Dictionary:
+	var worn := {}
+	for row: Array in ((run.get("_recorder") as Node).call(&"deltas") as Array):
+		if int(row[1]) == RecorderNode.Delta.PERSON:
+			worn = (row[3] as Array)[0]
+	return worn
+
+
+## A replay's world view drew the friend as the recording has them: their worn
+## tiers, the field's body where it is, at [param seen] -- the view's `_peer`.
+static func _drawn_as_recorded(seen: Array, worn: Dictionary) -> bool:
+	var peer: Dictionary = seen[0]
+	var pb: Object = seen[3]
+	return peer.has("tiers") and pb != null and float(pb.radius) > 0.0 \
+		and peer["tiers"] == worn and not worn.is_empty() \
+		and (peer["at"] as Vector2) == (pb.pos as Vector2) \
+		and float(peer["alpha"]) > 0.99
 
 
 ## **A guest's tail of two copies, held still and let go** (automation.md §5.2,
@@ -8656,7 +9114,44 @@ func _check_server() -> void:
 		+ " '%s' said to it; SWALLOWED by the friend for the second, and its"
 		% _line_of(a_run) + " slot empty on the server")
 
-	b_run.set("_tap_pending", true)
+	# ----------------------------------------------------------------------
+	# **UX §9 item 7, from a guest's seat** (shared-pond.md §5, Phase 3):
+	# eaten by its friend -- here the room's other guest, who is its slot 68 as
+	# a phone host would be -- the second guest's black offers `watch`, and the
+	# replay draws the friend in the frame before the death, where the
+	# recording has it, wearing the tier-3 mouth it swam in with and wide enough
+	# for the second guest that its threat bow showed; on a field, a cell, a
+	# genome and grit of the replay's own. Android Back closes it, the offer is
+	# back, and the tap brings it back beside the first, as ever.
+	# ----------------------------------------------------------------------
+	var b_offered := await _pond_offered(b_run, [a_pin])
+	var b_screen: Node = await _pond_watch(b_run, [a_pin])
+	var b_bound: Array = _replay_bound(b_run, b_screen)
+	var b_seen: Array = [{}, Vector2.ZERO, 0.0, null]
+	if b_screen != null:
+		b_seen = await _replay_friend(b_screen,
+			float((b_run.get("_recorder") as Node).call(&"span")), [a_pin])
+	var b_worn := _recorded_worn(b_run)
+	var b_peer: Dictionary = b_seen[0]
+	var b_apart := (b_seen[1] as Vector2).distance_to(b_peer.get("at", Vector2.INF))
+	_says(b_offered >= 0.0 and not b_bound.has(false) and _drawn_as_recorded(b_seen, b_worn)
+			and Genome.tier_of(b_worn, &"cytostome") == 3
+			and float(b_peer.get("gape", 0.0)) > float(b_seen[2]),
+		"server (UX §9.7, a guest's seat): eaten by the other guest, the second's black"
+		+ " offers `watch` %.2f s on; its replay, on a field, cell, genome and grit of"
+		% b_offered + " its own %s, draws its friend in the frame before the death where"
+		% str(b_bound) + " the recording has it, %.1f units off, wearing its recorded tiers,"
+		% b_apart + " cytostome %d, a gape of %.1f over the second's r%.1f"
+		% [Genome.tier_of(b_worn, &"cytostome"), float(b_peer.get("gape", 0.0)),
+			float(b_seen[2])])
+	b_run.notification(Node.NOTIFICATION_WM_GO_BACK_REQUEST)
+	var b_closed: bool = b_run.get("_replay") == null
+	await _pond_frames_on(1, [a_pin])
+	_says(b_closed and bool((b_run.get("_watch_ui") as Control).visible)
+			and int(b_run.get("_life")) == NormalMode.Life.WAITING,
+		"server: Android Back closes its replay and leaves it on its black, `watch`"
+		+ " offered again")
+	b_run.call(&"_wake_up")
 	var b_back := await _pond_until(func() -> bool:
 		return int(b_run.get("_life")) == NormalMode.Life.RETURNING, 4.0, [a_pin])
 	b_home = b_cell.position
@@ -8945,6 +9440,33 @@ func _check_server() -> void:
 		+ " second's, with nothing on, with her DNA and the founders' rules; each the"
 		+ " founder of a line of her own (ids %d and %d)" % [int(e_sister.get("id", -1)),
 			int(f_sister.get("id", -1))])
+
+	# ----------------------------------------------------------------------
+	# **The host leaves mid-replay** (shared-pond.md §5, Phase 3): the second
+	# guest is swallowed by the room's water and watches its death back -- the
+	# other guest drawn in it as its friend, the room's way: slot 68, as a phone
+	# host would be -- and the server stops under the screen. The takeover onto
+	# its own drop leaves the replay alone: it plays on, on the field it was
+	# raised with; closed, `watch` is back on its black; and the tap brings a new
+	# cell into its own drop, alone, the water running.
+	# ----------------------------------------------------------------------
+	var f_guest: Object = pond.call("_guest_by_id", int(f_net.my_id()))
+	var f_person: Object = food.person(int(f_guest.slot)) if f_guest != null else null
+	if f_person != null:
+		food.call("_person_gone", FoodField.Cause.SWALLOWED, FoodField.By.WATER, f_person)
+	var f_offered := await _pond_offered(f_run, [])
+	var f_screen: Node = await _pond_watch(f_run, [])
+	var f_bound: Array = _replay_bound(f_run, f_screen)
+	var f_seen: Array = [{}, Vector2.ZERO, 0.0, null]
+	if f_screen != null:
+		f_seen = await _replay_friend(f_screen,
+			float((f_run.get("_recorder") as Node).call(&"span")), [])
+	var f_water: Node = f_screen.get("_food") if f_screen != null else null
+	_says(f_offered >= 0.0 and not f_bound.has(false)
+			and _drawn_as_recorded(f_seen, _recorded_worn(f_run)),
+		"server: the second guest, swallowed by the room's water, is offered `watch`"
+		+ " %.2f s on, and its replay draws the first guest as its friend, as" % f_offered
+		+ " recorded, on nodes of its own %s" % str(f_bound))
 	var fresh := int(food.drop_bodies())
 	var kept_before := int(server.get("rooms_kept"))
 	server.shut_down()
@@ -8958,6 +9480,30 @@ func _check_server() -> void:
 		"server: the next two arrive in the room, %d bodies; stopped, both take over"
 		% fresh + " their own water %d frames later (%.0f ms here) -- told, not timed out"
 		% [taken_frames, taken * 1000.0])
+	var f_at := float(f_screen.get("_at")) if f_screen != null else -1.0
+	await _pond_frames_on(10, [])
+	var f_on: bool = f_screen != null and f_run.get("_replay") == f_screen \
+		and f_screen.get("_food") == f_water and not f_water.is_processing() \
+		and bool(f_water.call(&"pond_open")) and float(f_screen.get("_at")) != f_at
+	var f_alone: bool = not f_food.mirroring() and f_food.owns_drop()
+	if f_screen != null:
+		(f_screen.get("_leave_button") as Button).pressed.emit()
+	await _pond_frames_on(2, [])
+	var f_reoffered: bool = f_run.get("_replay") == null \
+		and bool((f_run.get("_watch_ui") as Control).visible) \
+		and int(f_run.get("_life")) == NormalMode.Life.WAITING
+	f_run.call(&"_wake_up")
+	var f_back := await _pond_until(func() -> bool:
+		return int(f_run.get("_life")) == NormalMode.Life.RETURNING, 1.0, [])
+	var f_back_alone: bool = not f_food.mirroring() and f_food.owns_drop() \
+		and f_food.is_processing() and (f_run.get("_pond") as Object) != null \
+		and not bool((f_run.get("_pond") as Object).call(&"together"))
+	_says(f_on and f_alone and f_reoffered and f_back >= 0.0 and f_back_alone,
+		"server: stopped while the second guest watched, it took over its own drop"
+		+ " under the screen (%s), which played on, on its own field (%s); closed,"
+		% [str(f_alone), str(f_on)] + " `watch` is offered on its black again (%s), and"
+		% str(f_reoffered) + " its tap brings a new cell into its own drop, alone, the"
+		+ " water running (%s)" % str(f_back_alone))
 	var stop_kept := DropSave.read(SERVER_ROOM)
 	var stop_rows: Dictionary = (stop_kept.get("drop", {}) as Dictionary).get("bodies", {})
 	var stop_bodies := (stop_rows.get("slot", PackedInt32Array()) as PackedInt32Array).size()
