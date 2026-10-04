@@ -17,11 +17,15 @@ extends Node
 ## sheet has to say its words again, French to English included (§3.3). The
 ## language this machine keeps is put back afterwards. `--drops=` is what the
 ## screen's drops are: `three` (the default: "pond
-## water", fourth generation and two hours old and selected; "rain barrel", 25
-## minutes old; and slot 3 empty), `long` (an ordinary twenty-letter name
-## selected), `wide` (twenty `W`s, the widest name there is) or `wide-other`
-## (the same on slot 2, which `--open=confirm` asks about). Add `--language
-## fr` before `--` for French.
+## water", a full-vision cell of the fourth generation, two hours old and
+## selected; "rain barrel", 25 minutes old; and slot 3 empty), `long` (an
+## ordinary twenty-letter name selected), `wide` (twenty `W`s, the widest name
+## there is), `wide-other` (the same on slot 2, which `--open=confirm` asks
+## about) or `views` (a cell for each view, docs/design/ocean.md §9.5: "pond
+## water" keeping both -- full vision's fourth generation and point of view's
+## seventh, the widest line -- two hours old and selected; "rain barrel" one,
+## point of view's second, 25 minutes old; and "hay infusion" none, three days
+## old). Add `--language fr` before `--` for French.
 ##
 ## **The drops are the harness's own**: a folder in `user://`, made as the run
 ## starts and removed when it ends, which the screen's corner is pointed at before
@@ -156,8 +160,10 @@ func _ready() -> void:
 func _make_drops(which: String) -> bool:
 	var first := ""
 	var second := ""
+	var full := RunState.cell_key(RunState.Mode.FULL_VISION)
+	var pov := RunState.cell_key(RunState.Mode.POV)
 	match which:
-		"three":
+		"three", "views":
 			pass
 		"long":
 			first = LONG_NAME
@@ -168,14 +174,20 @@ func _make_drops(which: String) -> bool:
 		_:
 			return false
 	Drops.make(2, "", ROOT)
-	Drops.note_kept(2, 25.0 * 60.0 + 12.0, 0, ROOT)
-	Drops.note_kept(1, 2.0 * 3600.0 + 340.0, 4, ROOT)
+	if which == "views":
+		Drops.note_kept(2, 25.0 * 60.0 + 12.0, pov, 2, ROOT)
+		Drops.make(3, "", ROOT)
+		Drops.note_kept(3, 3.0 * 86400.0 + 600.0, full, 0, ROOT)
+		Drops.note_kept(1, 2.0 * 3600.0 + 340.0, pov, 7, ROOT)
+	else:
+		Drops.note_kept(2, 25.0 * 60.0 + 12.0, full, 0, ROOT)
+	Drops.note_kept(1, 2.0 * 3600.0 + 340.0, full, 4, ROOT)
 	Drops.select(1, ROOT)
 	if not first.is_empty():
 		Drops.rename(1, first, ROOT)
 	if not second.is_empty():
 		Drops.rename(2, second, ROOT)
-	for slot in [1, 2]:
+	for slot: int in ([1, 2, 3] if which == "views" else [1, 2]):
 		var file := FileAccess.open(Drops.path_of(slot, ROOT), FileAccess.WRITE)
 		if file != null:
 			file.store_8(0)
@@ -198,8 +210,9 @@ func _report() -> void:
 	print("[corner-shot]   canvas %dx%d, layer %s, focus %s" % [roundi(canvas.x), roundi(canvas.y),
 		"none" if open == null else str((open as Node).name),
 		"nothing" if focus == null else str(focus.get_path()).trim_prefix(str(_screen.get_path()) + "/")])
-	for path: String in ["Cluster/Chip", "Cluster/Gear", "Drops/Panel", "Naming/Panel",
-			"Confirm/Panel", "Settings/Panel"]:
+	for path: String in ["Cluster/Chip", "Cluster/Gear", "Drops/Panel",
+			"Drops/Panel/Box/Row1/Pick", "Drops/Panel/Box/Row2/Pick", "Drops/Panel/Box/Row3/Pick",
+			"Naming/Panel", "Confirm/Panel", "Settings/Panel"]:
 		var control := _corner.get_node(path) as Control
 		if control.is_visible_in_tree():
 			var box := control.get_global_rect()
@@ -217,11 +230,15 @@ func _report() -> void:
 			continue
 		var font := label.get_theme_font(&"font")
 		var px := label.get_theme_font_size(&"font_size")
-		var wide := font.get_string_size(label.text, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
-		var trimmed := wide > label.size.x + 0.5 and label.autowrap_mode == TextServer.AUTOWRAP_OFF
-		print("[corner-shot]   %-40s %2d px '%s'  %.0f of %.0f px%s" % [path.get_slice("/", 0) + "/…/"
-			+ path.get_file() if path.count("/") > 2 else path, px, label.text, wide,
-			label.size.x, "  TRIMMED" if trimmed else ""])
+		# A row's line is a line a view's cell (docs/design/ocean.md §9.5): each is
+		# measured against the width on its own, and each said.
+		for said: String in label.text.split("\n"):
+			var wide := font.get_string_size(said, HORIZONTAL_ALIGNMENT_LEFT, -1, px).x
+			var trimmed := wide > label.size.x + 0.5 \
+				and label.autowrap_mode == TextServer.AUTOWRAP_OFF
+			print("[corner-shot]   %-40s %2d px '%s'  %.0f of %.0f px%s" % [
+				path.get_slice("/", 0) + "/…/" + path.get_file() if path.count("/") > 2 else path,
+				px, said, wide, label.size.x, "  TRIMMED" if trimmed else ""])
 	for path: String in ["Drops/Panel/Box/Row1/Rename", "Drops/Panel/Box/Row2/Delete",
 			"Naming/Panel/Box/Actions/Back", "Naming/Panel/Box/Actions/Make",
 			"Confirm/Panel/Box/Actions/Keep", "Confirm/Panel/Box/Actions/Delete"]:

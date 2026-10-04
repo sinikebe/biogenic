@@ -192,6 +192,9 @@ var _in_use := ""
 ## "" when it was given a typed name -- said again on a change of language for as
 ## long as nothing has been typed over them.
 var _index := {}
+## A row's height with one line under its name, as corner.tscn gives it: read off
+## the first row the first time one is fitted ([method _fit_row]).
+var _row_height := 0.0
 var _slot := 0
 var _making := false
 var _naming_default := 0
@@ -609,8 +612,10 @@ func _say_drops() -> void:
 		# ROOM: 280 px at 20 px
 		called.text = tr("new world") if empty else Drops.name_of(entry)
 		called.add_theme_color_override(&"font_color", Color(INK, EMPTY_ALPHA if empty else 1.0))
-		stats.text = Drops.line_of(entry)
+		var lines := Drops.lines_of(entry)
+		stats.text = "\n".join(lines)
 		stats.visible = not empty
+		_fit_row(slot, lines.size())
 		pick.accessibility_name = called.text
 		var box: StyleBox = empty_box if empty else (current_box if current else null)
 		if box == null:
@@ -633,6 +638,20 @@ func _say_drops() -> void:
 		delete.visible = not empty and not current
 		_hold_of(slot).visible = current
 	_trap_drops()
+
+
+## **A row as tall as its lines** (§4.3): a name and one line under it fit the
+## height corner.tscn gives every row, and each line more -- a cell waiting for
+## a view (ocean.md §9.5) -- adds one line of the Stats label's own type, so the
+## row grows and its lines never crowd.
+func _fit_row(slot: int, lines: int) -> void:
+	var pick := _pick(slot)
+	if _row_height <= 0.0:
+		_row_height = pick.custom_minimum_size.y
+	var stats: Label = pick.get_node(^"Lines/Stats")
+	var step := stats.get_theme_font(&"font").get_height(stats.get_theme_font_size(&"font_size")) \
+		+ float(stats.get_theme_constant(&"line_spacing"))
+	pick.custom_minimum_size.y = _row_height + step * float(maxi(lines - 1, 0))
 
 
 ## **The mark at a row's left** (§4.2): the filled dot of the drop you are in,

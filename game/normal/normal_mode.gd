@@ -304,8 +304,18 @@ const WATCH_MIN_SECONDS := 2.0
 
 ## Which view this run is drawn with, as [enum RunState.Mode]. Set it before the
 ## scene enters the tree to override the remembered choice; left alone it picks
-## up whatever the mode select last stored.
+## up whatever the mode select last stored. **It is also which cell the run
+## plays** (docs/design/ocean.md §9.5): a world keeps a cell for each view.
 var mode := -1
+
+## **Whether `V` flips the view mid-run** ([method _toggle_mode]): only in the
+## editor, as the developer's comparison tool it was written as -- every run of the
+## editor's binary, the tools and CI included -- and **never in an exported
+## build**, the dev app's included, where the mode select is the one way to choose
+## a view, so no cell is played in a view it was not grown in (ocean.md §9.5). Set
+## it before the scene enters the tree to pose an exported build, which is what
+## drop_probe does: everything a probe runs is the editor's.
+var view_flip := OS.has_feature("editor")
 
 ## Which control scheme this run is played with, as [enum RunState.Scheme]. Set
 ## it before the scene enters the tree to override the remembered choice --
@@ -766,6 +776,26 @@ var _own_drop := {}
 ## the drops' index.
 var _drop_slot := 0
 var _drops_root := ""
+## **Which view's cell this run plays and keeps** (ocean.md §9.5): the name
+## run_state.gd keeps [member mode]'s cell under, decided as the run opens -- the
+## drop's file keeps one cell for each view, and this run reads and writes this
+## one alone.
+var _cell_view := ""
+## **Every other view's cell, kept aside** (§9.5): as the drop's file held them
+## when the run opened, by view, out of the water and untouched, and written back
+## at every keep -- a death in this view clears this view's cell, and none of
+## these. **Each keeps its place in the water**, which moves: a cell that comes in
+## at a quiet start has the whole drop moved under it ([method
+## FoodField.return_to_drop]), so every keep moves these by as much as the drop's
+## rim has moved since [member _aside_rim] ([method _cells_kept_aside]).
+var _cells_aside := {}
+## Where the drop's rim was centred in the file [member _cells_aside] were read
+## from: the frame their places are in.
+var _aside_rim := Vector2.ZERO
+## **The view was flipped in this run** (`V`, in the editor only): it keeps
+## nothing from then on. Its cell has been played in both views, and a world's
+## cells never cross, so it is kept into neither (§9.5).
+var _view_flipped := false
 ## **The two daughters a division had rolled when the app was left** (row 17).
 ## The division plays again on return, from its quickening, and offers these
 ## two on the same sides -- unless the cell ate in that quickening and wrote its
@@ -856,7 +886,11 @@ func _ready() -> void:
 	# first. **The drop is yours, kept** (§9.1): the one left last time, and the
 	# cell in it if it was left mid-run -- **in the drop you selected**
 	# (settings.md §4.5), which is the one a host serves and a guest's cell
-	# comes from.
+	# comes from. **And the cell is this view's** (ocean.md §9.5), so the view is
+	# decided first: a drop keeps a cell for each view, and opens on this one's.
+	if mode < 0:
+		mode = RunState.load_mode()
+	_cell_view = RunState.cell_key(mode)
 	_resolve_keep()
 	var resumed := {}
 	if drop != 0:
@@ -878,9 +912,8 @@ func _ready() -> void:
 
 	# Read before _apply_mode(), which is what carries it into the world view: a
 	# player who chose "forward up" last run must not have to choose it again.
+	# The view itself was read above, before the drop opened on its cell.
 	_camera_locked = RunState.load_camera_locked()
-	if mode < 0:
-		mode = RunState.load_mode()
 	# Read in the same breath and for the same reason: a player who chose
 	# `stick` last run must not have to choose it again.
 	if scheme < 0:
@@ -1055,6 +1088,11 @@ func _resolve_keep() -> void:
 ## after a death, a new cell comes into it at a quiet start (§8.1), as the tap
 ## on the black brings one. The log says which, and whether a content pack
 ## changed the rules since (§9.4).
+##
+## **Your cell is this view's** (§9.5): the one left mid-run in this view, or a
+## new one as after a death when this view left none -- never another view's,
+## which is kept aside out of the water, as it was, for [method _keep_drop] to
+## write back. A file from before there was a cell per view holds full vision's.
 func _open_drop() -> Dictionary:
 	var kept := DropSave.read(keep) if not keep.is_empty() else {}
 	var cell := {}
@@ -1063,7 +1101,10 @@ func _open_drop() -> Dictionary:
 		if not keep.is_empty():
 			print("[drop-save] no drop kept at %s: a new one is made" % keep)
 	else:
-		cell = kept["cell"]
+		cell = DropSave.cell_of(kept, _cell_view)
+		_cells_aside = DropSave.cells_of(kept)
+		_cells_aside.erase(_cell_view)
+		_aside_rim = kept["drop"]["rim_centre"]
 		if not cell.is_empty():
 			_cell.restore_body(cell["body"])
 			# **And what it carried** (docs/design/dna-slots.md §12): a dose
@@ -1078,7 +1119,7 @@ func _open_drop() -> Dictionary:
 			_food.return_to_drop()
 		else:
 			_food.restore_player(cell["water"])
-		print(DropSave.note(kept, done))
+		print(DropSave.note(kept, done, _cell_view))
 	_motes.setup(_cell, _food.basin())
 	return cell
 
@@ -1168,8 +1209,15 @@ func _kept_pair() -> Array:
 ## and says so. **A write that lands tells the drops' index** the drop's age and
 ## its cell's generation (docs/design/settings.md §6.4), so the drop menu says
 ## them without opening the file.
+##
+## **The cell kept is this view's, in this view's place** (§9.5) -- `elsewhere`
+## included, a guest's in its own drop -- and every other view's goes back as it
+## was read, so a death here clears this view's cell and leaves the others. **A
+## run whose view was flipped keeps nothing** ([member _view_flipped]).
 func _keep_drop() -> void:
 	if keep.is_empty() or not is_node_ready() or keep.begins_with(Drops.MARK):
+		return
+	if _view_flipped:
 		return
 	var state := {}
 	var elsewhere := false
@@ -1208,17 +1256,41 @@ func _keep_drop() -> void:
 		# only once it has, so a cell that never ate comes back never having.
 		if is_finite(_instincts.fed()):
 			cell["fed"] = _instincts.fed()
-	var done := DropSave.write(keep, DropSave.compose(state, cell))
+	var cells := _cells_kept_aside(state)
+	if not cell.is_empty():
+		cells[_cell_view] = cell
+	var done := DropSave.write(keep, DropSave.compose(state, cells))
 	if done != OK:
 		push_warning("[NormalMode] the drop was not kept at %s (%s): the last one stands"
 			% [keep, error_string(done)])
 		return
 	if _drop_slot > 0:
-		var noted := Drops.note_kept(_drop_slot, float(state.get("age", 0.0)),
+		var noted := Drops.note_kept(_drop_slot, float(state.get("age", 0.0)), _cell_view,
 			_generation if not cell.is_empty() else 0, _drops_root)
 		if noted != OK:
 			push_warning("[NormalMode] the drops' index did not take drop %d's line (%s)"
 				% [_drop_slot, error_string(noted)])
+
+
+## **Every other view's cell, where it is in the water [param state] is**
+## (§9.5): [member _cells_aside] as read, each moved by as much as that drop's
+## rim has moved since they were -- a quiet start moves the whole drop under the
+## cell that comes in, and a cell out of the water has to go with it, or it
+## comes back somewhere else in the water, or past its rim. Copies: what was
+## read stays as it was, for the next keep to move from.
+func _cells_kept_aside(state: Dictionary) -> Dictionary:
+	var rim: Vector2 = state.get("rim_centre", _aside_rim)
+	var moved := rim - _aside_rim
+	if moved == Vector2.ZERO:
+		return _cells_aside.duplicate()
+	var out := {}
+	for view: String in _cells_aside:
+		var cell: Dictionary = (_cells_aside[view] as Dictionary).duplicate()
+		var body: Dictionary = (cell["body"] as Dictionary).duplicate()
+		body["at"] = (body["at"] as Vector2) + moved
+		cell["body"] = body
+		out[view] = cell
+	return out
 
 
 func _process(delta: float) -> void:
@@ -3037,10 +3109,18 @@ func _vision_active() -> bool:
 
 
 ## Flips the view without leaving the run, so blind and sighted can be compared
-## on the same cell in the same water. Deliberately not remembered: the mode
-## select is the supported way to choose, and this is a comparison.
+## on the same cell in the same water -- **in the editor only** ([member
+## view_flip]), the developer's comparison tool this was written as; the mode
+## select is the one way a player chooses. Deliberately not remembered.
+##
+## **A run flipped keeps nothing from then on** (ocean.md §9.5): its cell has now
+## been played in both views, and a world keeps a cell for each that never
+## crosses -- so it goes into neither. What was kept before the flip stands.
 func _toggle_mode() -> void:
 	mode = RunState.Mode.POV if mode == RunState.Mode.FULL_VISION else RunState.Mode.FULL_VISION
+	if not _view_flipped and not keep.is_empty():
+		print("[drop-save] the view was flipped: this run keeps nothing from now on")
+	_view_flipped = true
 	if _life == Life.ALIVE:
 		_apply_mode()
 
@@ -3922,9 +4002,11 @@ func _unhandled_input(event: InputEvent) -> void:
 			get_viewport().set_input_as_handled()
 			return
 
-	# V flips the view. Desktop only by nature -- it costs no pixel and there is
-	# no key on a phone, where the mode select is the way in.
-	if _menu_open or not (event is InputEventKey):
+	# V flips the view, **in the editor only** ([member view_flip]): a world keeps
+	# a cell for each view, and in an exported build -- the dev app's too -- the
+	# mode select is the one way to choose, so no cell crosses views (ocean.md
+	# §9.5). Anywhere else V is nobody's key, and goes on unhandled.
+	if _menu_open or not (event is InputEventKey) or not view_flip:
 		return
 	var key := event as InputEventKey
 	if key.pressed and not key.echo \

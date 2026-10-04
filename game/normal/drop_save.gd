@@ -2,7 +2,8 @@ extends RefCounted
 ## **A drop, kept** (docs/design/ocean.md §9): the file a drop lives in between
 ## two launches, and what a build does with one that another build wrote. A
 ## personal drop and a room are the same file (§9.1, §10.3) -- a drop, and the
-## cell of whoever left it mid-run, if anyone did.
+## cell of whoever left it mid-run, if anyone did: **one cell for each view**
+## (§9.5), each the one left mid-run in that view, never played in another.
 ##
 ## **The file** (§9.3): one `store_var` of plain types -- Dictionaries, Arrays
 ## and Packed arrays, never an object -- through `open_compressed`, written to a
@@ -46,7 +47,9 @@ const PATH := "user://drop.save"
 ## **What a file of this format holds**, key by key, and each value's type. A
 ## nested Dictionary is a Dictionary that must hold its own keys; `cell` is
 ## checked against [constant CELL] unless it is empty -- a drop left after a
-## death, or by nobody, has no cell in it (§9.2).
+## death, or by nobody, has no cell in it (§9.2). `cell` is the cell of the
+## first view, the one every file kept before there was a cell per view; every
+## other view's is in [constant CELLS], beside it.
 ##
 ## `drop.bodies` is **one column a field**, every column one entry a body, in
 ## slot order: a Packed array compresses a column of clocks that are mostly
@@ -117,6 +120,9 @@ const SHAPE := {
 ## that leaves the pond. **And `fed`** (pack 4, docs/design/automation.md §9.2):
 ## the seconds since it last ate, for its instincts, absent for one that never
 ## has. Your programs are not here: they are the device's (`library.gd`).
+##
+## **This is every view's cell** ([constant CELLS]): what a view keeps is the
+## same whichever view it is.
 const CELL := {
 	"body": {
 		"at": TYPE_VECTOR2,
@@ -154,6 +160,20 @@ const CELL := {
 		"first": TYPE_INT,
 	},
 }
+
+## **Every other view's cell** (ocean.md §9.5): beside `cell`, a file may hold
+## `cells`, a Dictionary from a view's name to that view's cell -- each as
+## [constant CELL] says, and checked as `cell` is. A world keeps one cell for
+## each view, and never plays one in another: `cell` is the first view's, the
+## only one a file held before there were more, and every other view's is here,
+## under the name the views are kept by (run_state.gd's `CELL_KEYS`, where the
+## views are named; this file knows none). A view with no cell -- never played
+## in, or its last cell dead -- is not in it, and a file with no other view's
+## cell has no `cells` at all: it is laid out as one written before them, which
+## every build reads. **No new format**, as `cell.loads` was none: a build before
+## them loads `cell` and never asks for `cells` -- and keeps only `cell` the next
+## time it writes.
+const CELLS := "cells"
 
 ## **What a file of this format may also hold** (1b-2 on), and a file without
 ## them loads as 1b-1's did -- every body drifting, the floor counted again, the
@@ -364,19 +384,51 @@ static func _rule_value(value: Variant) -> String:
 
 # --- The file (§9.3) ----------------------------------------------------------------
 
-## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, and
-## [param cell] -- empty after a death, or with nobody in it -- under this
-## build's format, rules, content version and commit.
-static func compose(drop: Dictionary, cell: Dictionary) -> Dictionary:
+## **A file's worth**: [param drop] as food.gd's `drop_state` gives it, and the
+## cells kept with it, **by view** -- [param cells] is a view's name to its cell,
+## the first view's under "" ([constant CELLS]) -- under this build's format,
+## rules, content version and commit. A view with no cell is left out; a drop
+## with no cell at all -- after a death, or with nobody in it -- is `{}`.
+static func compose(drop: Dictionary, cells: Dictionary) -> Dictionary:
 	var build := _build()
-	return {
+	var data := {
 		"format": FORMAT,
 		"rules": rules(),
 		"content": int(build[0]),
 		"commit": str(build[1]),
 		"drop": drop,
-		"cell": cell,
+		"cell": cells.get("", {}),
 	}
+	var others := {}
+	for view: String in cells:
+		if not view.is_empty() and not (cells[view] as Dictionary).is_empty():
+			others[view] = cells[view]
+	if not others.is_empty():
+		data[CELLS] = others
+	return data
+
+
+## **[param view]'s cell in [param data]** -- a file as [method read] gives it,
+## the first view's for "" -- or an empty Dictionary for none.
+static func cell_of(data: Dictionary, view: String) -> Dictionary:
+	if view.is_empty():
+		return data.get("cell", {})
+	var others: Dictionary = data.get(CELLS, {})
+	return others.get(view, {})
+
+
+## **Every cell [param data] keeps, by view**: the first view's under "", and
+## only the views that left one.
+static func cells_of(data: Dictionary) -> Dictionary:
+	var out := {}
+	var first: Dictionary = data.get("cell", {})
+	if not first.is_empty():
+		out[""] = first
+	var others: Dictionary = data.get(CELLS, {})
+	for view: String in others:
+		if not (others[view] as Dictionary).is_empty():
+			out[view] = others[view]
+	return out
 
 
 ## **Keeps [param data] at [param path]** (§9.3): written to the `.tmp` beside
@@ -428,12 +480,13 @@ static func read(path: String) -> Dictionary:
 
 
 ## **What the drop at [param path] would say about itself, read and never
-## moved** (docs/design/settings.md §6.3): `{lived, generation}` -- the drop's
-## age in seconds, and its cell's generation, 0 when no cell was left in it --
-## or an empty Dictionary for none, and for one this build cannot use. Decoded
-## and checked as [method read] does, but **a file it cannot use stays where it
-## is**: only a run that is about to play a drop may set its file aside, and
-## the drop menu, which asks this of a drop its index does not name, is not one.
+## moved** (docs/design/settings.md §6.3): `{lived, generations}` -- the drop's
+## age in seconds, and the generation of each cell left in it, by view, a view
+## that left none not in it -- or an empty Dictionary for none, and for one this
+## build cannot use. Decoded and checked as [method read] does, but **a file it
+## cannot use stays where it is**: only a run that is about to play a drop may set
+## its file aside, and the drop menu, which asks this of a drop its index does not
+## name, is not one.
 ## It costs a whole decode -- 2 ms on a desktop for a drop of 600 bodies, more on
 ## a phone -- so it is asked only of a file the index does not name, and the
 ## index keeps the answer from its next write on.
@@ -444,9 +497,11 @@ static func peek(path: String) -> Dictionary:
 	if not unusable(data).is_empty():
 		return {}
 	var drop: Dictionary = data["drop"]
-	var cell: Dictionary = data["cell"]
-	return {"lived": float(drop["age"]),
-		"generation": int(cell["generation"]) if not cell.is_empty() else 0}
+	var generations := {}
+	var cells := cells_of(data)
+	for view: String in cells:
+		generations[view] = int(cells[view]["generation"])
+	return {"lived": float(drop["age"]), "generations": generations}
 
 
 ## The one value the file at [param path] holds, or null when it would not open.
@@ -463,7 +518,8 @@ static func _decoded(path: String) -> Variant:
 ## **Why [param data] cannot be loaded by this build**, or "" when it can: the
 ## format, then [constant SHAPE], then what a type cannot say -- every column as
 ## long as the others, every slot inside the count and used once, every genome
-## a gene name to a tier.
+## a gene name to a tier -- and every view's cell, `cell` and [constant CELLS]
+## alike.
 static func unusable(data: Variant) -> String:
 	if not data is Dictionary:
 		return "not a drop this build can read"
@@ -482,7 +538,34 @@ static func unusable(data: Variant) -> String:
 		bad = _bad_extra(file["drop"])
 	if bad.is_empty() and not (file["cell"] as Dictionary).is_empty():
 		bad = _bad_cell(file["cell"])
+	if bad.is_empty():
+		bad = _bad_cells(file)
 	return "" if bad.is_empty() else "format %d but unreadable (%s)" % [FORMAT, bad]
+
+
+## What a cell per view added, when it is there ([constant CELLS]): a Dictionary
+## from a view's name -- never "", which is `cell` -- to a cell, each checked as
+## `cell` is, and an empty one taken for none.
+static func _bad_cells(file: Dictionary) -> String:
+	if not file.has(CELLS):
+		return ""
+	if not file[CELLS] is Dictionary:
+		return "cells is not a dictionary"
+	var cells: Dictionary = file[CELLS]
+	for view: Variant in cells:
+		if typeof(view) != TYPE_STRING or (view as String).is_empty():
+			return "cells holds a view that is not a name"
+		if not cells[view] is Dictionary:
+			return "cells.%s is not a cell" % view
+		var cell: Dictionary = cells[view]
+		if cell.is_empty():
+			continue
+		var bad := _misfit(cell, CELL, "cells.%s." % view)
+		if bad.is_empty():
+			bad = _bad_cell(cell)
+		if not bad.is_empty():
+			return bad
+	return ""
 
 
 ## The first key of [param shape] that [param value] does not hold as the type
@@ -730,15 +813,19 @@ static func converted(data: Dictionary) -> bool:
 
 
 ## **What a load says in the log**, so a tester can tell a converted drop from a
-## resumed one: the drop's age and bodies, whether a cell came back with it, and
-## under other rules what the conversion did -- [param done] is what food.gd's
-## `load_drop` returns. Content and commit are the build that wrote it.
-static func note(data: Dictionary, done: Dictionary) -> String:
+## resumed one: the drop's age and bodies, whether [param view]'s cell came back
+## with it, how many other views' cells wait aside (§9.5), and under other rules
+## what the conversion did -- [param done] is what food.gd's `load_drop` returns.
+## Content and commit are the build that wrote it.
+static func note(data: Dictionary, done: Dictionary, view := "") -> String:
 	var drop: Dictionary = data["drop"]
-	var line := "[drop-save] your drop, %d bodies, %.0f s old, %s" % [
+	var own := not cell_of(data, view).is_empty()
+	var aside := cells_of(data).size() - (1 if own else 0)
+	var line := "[drop-save] your drop, %d bodies, %.0f s old, %s%s" % [
 		int(done.get("bodies", 0)), float(drop["age"]),
-		"and your cell in it" if not (data["cell"] as Dictionary).is_empty()
-			else "and a new cell"]
+		"and your cell in it" if own else "and a new cell",
+		"" if aside == 0 else (", another view's cell kept aside" if aside == 1
+			else ", %d other views' cells kept aside" % aside)]
 	if not converted(data):
 		return line + ", as you left it"
 	return line + (", CONVERTED: written by content %d (%s) under rules %s, read under %s;"

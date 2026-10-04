@@ -1,7 +1,9 @@
 extends RefCounted
 ## The little the game remembers between runs: which view was last chosen, how
 ## bright the membrane is, whether the one line of onboarding has been read, and
-## the language the player chose.
+## the language the player chose. And the views themselves, named once: what each
+## is called on screen, and the name each keeps its cell under (docs/design/
+## ocean.md §9.5).
 ##
 ## One small file in user://, separate from the launcher's own state, and never
 ## instanced -- everything here is static. It is deliberately not an autoload:
@@ -17,6 +19,39 @@ extends RefCounted
 ## Stored as an integer, so adding a third view later appends to this and
 ## nothing else has to move.
 enum Mode { POV, FULL_VISION }
+
+## **Each view keeps a cell of its own** (docs/design/ocean.md §9.5): a world
+## keeps one cell for each view, and a cell grown in one is never played in the
+## other -- seeing everything is not the same game as feeling your way. This is
+## the name each view's cell is kept under, in a world's file (drop_save.gd) and
+## in the worlds' index (drops.gd), which keep "a cell per view" and know no view
+## by name.
+##
+## **Full vision's is "", the one cell every world kept before there were two.**
+## Where an old cell was grown cannot be told, and the rule is there to protect
+## point of view, so an old cell is full vision's and point of view starts a new
+## one. A third view appends a name here, as it appends to [enum Mode].
+const CELL_KEYS := {Mode.FULL_VISION: "", Mode.POV: "pov"}
+
+## **What each view is called on screen**: the words of the mode select's own two
+## buttons, so a world's line in "your worlds" names a view as the player chose it.
+##
+## TRANSLATORS: The two views, as the buttons that start a game say them. Also the
+## start of a line in the menu of the player's worlds, in 15 px type, for the cell
+## that waits in a world for that view: "point of view · fourth generation", where
+## the whole line has 280 px.
+const VIEW_WORDS := {Mode.FULL_VISION: "full vision", Mode.POV: "point of view"}
+
+## The views in the order the mode select offers them, top first: the order a
+## world's line lists their cells in.
+const VIEW_ORDER: Array[int] = [Mode.FULL_VISION, Mode.POV]
+
+
+## **The name [param mode]'s cell is kept under** ([constant CELL_KEYS]). A view
+## this build does not know is drawn blind -- only full vision draws the water --
+## so it keeps point of view's cell, never full vision's.
+static func cell_key(mode: int) -> String:
+	return str(CELL_KEYS.get(mode, CELL_KEYS[Mode.POV]))
 
 ## Where the player's thumbs live. `ANYWHERE` is the scheme the game shipped
 ## with -- drag the water, a finger down is thrust, a short still press is the

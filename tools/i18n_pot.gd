@@ -155,11 +155,12 @@ const NUMBERS_ROOM := 650
 const NUMBERS_SIZE := 14
 const CAPTION_ROOM := 560
 const CAPTION_SIZE := 15
-## **A world's line in "your worlds"** (docs/design/settings.md §4.3, §7): its generation
-## and its age joined with a middle dot (game/normal/drops.gd's `line`, where a world is a
-## drop), under the world's name at 15 px. The menu is 640 px; less its margins, the row's two 112 px buttons and
-## their gaps, and the row's 52 px for the mark and 16 at the right, 280 are left, and a
-## longer line ends in "…".
+## **A world's lines in "your worlds"** (docs/design/settings.md §4.3, §7): its age, and
+## under it a line for each view that keeps a cell in it (ocean.md §9.5), the view and the
+## cell's generation joined with a middle dot (game/normal/drops.gd's `lines_of`, where a
+## world is a drop), each a line of its own under the world's name at 15 px. The menu is
+## 640 px; less its margins, the row's two 112 px buttons and their gaps, and the row's
+## 52 px for the mark and 16 at the right, 280 are left, and a longer line ends in "…".
 const STATS_ROOM := 280
 const STATS_SIZE := 15
 ## **An instinct's row on the programs page** (docs/design/automation-ux.md §8,
@@ -1847,13 +1848,19 @@ func _measure_screens() -> Dictionary:
 
 
 ## **The widest line a world's row can say** (STATS_ROOM), `[width, text]`, built with the
-## game's own `Drops.line`: every generation phrase -- none, the ten, and the counted one at
-## 99 -- with the widest age it says, found over every count of minutes, hours and days
-## (to 999) the game uses. Empty when drops.gd will not load.
+## game's own `Drops` (docs/design/settings.md §4.3), each line on its own: the world's age,
+## over every count of minutes, hours and days (to 999) the game uses, and "not swum in
+## yet"; and under them a line for each view's cell (ocean.md §9.5), `<view> · <generation>`,
+## for every view the game has and every generation phrase -- the ten, and the counted one
+## at 99. Empty when drops.gd, or the views it names, will not load.
 func _widest_drop_line() -> Array:
 	var drops := _script("drops")
 	if drops == null:
 		return []
+	var run_state := _script_const(drops, "RunState") as GDScript
+	if run_state == null or _script_const(run_state, "VIEW_ORDER") == null:
+		return []
+	var lines: Array[String] = []
 	var ages: Array[float] = []
 	for minutes in range(1, 60):
 		ages.append(minutes * 60.0 + 30.0)
@@ -1861,18 +1868,16 @@ func _widest_drop_line() -> Array:
 		ages.append(hours * 3600.0 + 60.0)
 	for days in range(2, 1000):
 		ages.append(days * 86400.0 + 60.0)
-	var widest_age := 0.0
-	var lived := ages[0]
 	for seconds: float in ages:
-		var wide := _width_of(String(drops.call(&"age_text", seconds)), STATS_SIZE)
-		if wide > widest_age:
-			widest_age = wide
-			lived = seconds
-	var generations: Array = range(0, 11)
+		lines.append(String(drops.call(&"age_text", seconds)))
+	lines.append_array(Array(drops.call(&"lines_of", {"empty": false, "file": false})))
+	var generations: Array = range(1, 11)
 	generations.append(99)
+	for mode: int in _script_const(run_state, "VIEW_ORDER"):
+		for generation: int in generations:
+			lines.append(String(drops.call(&"cell_line", mode, generation)))
 	var widest: Array = [0.0, ""]
-	for generation: int in generations:
-		var text := String(drops.call(&"line", generation, lived))
+	for text: String in lines:
 		var wide := _width_of(text, STATS_SIZE)
 		if wide > float(widest[0]):
 			widest = [wide, text]
