@@ -835,6 +835,10 @@ library.
 
 ### 9.2 The cell's part: in its world's file
 
+> **From `cells.md` on (designed, not built yet), the cell's part is in its own
+> slot's file** (`cells.md` §3.1): `fed` moves with the cell, unchanged. The library stays the player's, one for
+> every cell (`cells.md` §1.8).
+
 One optional key, checked when present: **`FORMAT` stays 1**.
 
 | key | what | when absent |

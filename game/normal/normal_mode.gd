@@ -69,15 +69,20 @@ const Swell := preload("res://game/mechanics/swell.gd")
 const Doses := preload("res://game/mechanics/doses.gd")
 ## **A gene's numbers** (gene-stats.md §6.1): the readout knows units and never
 ## genes, and gene_stats.gd is the edge where the two meet. This file only asks
-## for the lines of the gene being read, and draws them.
-const Readout := preload("res://game/mechanics/readout.gd")
+## for the lines of the gene being read, and figure.gd draws them.
 const GeneStats := preload("res://game/normal/gene_stats.gd")
+## **The figure** (docs/design/cells.md §6.2): the body, its chips, the tray and
+## the words under them, drawn from plain values -- the pause screen's drawing,
+## which a screen showing a cell nobody is playing calls too. This file keeps the
+## screen's state and its input, and hands the figure what to draw.
+const Figure := preload("res://game/normal/figure.gd")
 ## **Your drop, kept across launches** (docs/design/ocean.md §9): the file, and
 ## what a build does with one another build wrote. This file decides when.
 const DropSave := preload("res://game/normal/drop_save.gd")
 ## **Which of your drops this run is in** (docs/design/settings.md §6): the
-## selected one, unless a tool says otherwise ([member keep]); and the words
-## for a generation, which the pause caption shares with the drop menu.
+## selected one, unless a tool says otherwise ([member keep]). The words for a
+## generation, which the pause caption shares with the drop menu, are its too:
+## figure.gd builds the caption with them.
 const Drops := preload("res://game/normal/drops.gd")
 ## **Your cell's record of descent** (docs/design/lineage.md §4): a general
 ## piece that knows nothing of cells. This file numbers the cell and names its
@@ -924,13 +929,13 @@ func _ready() -> void:
 	_apply_mode()
 
 	_style_pause()
-	_explain_organ.custom_minimum_size = EXPLAIN_ORGAN_SIZE
+	_explain_organ.custom_minimum_size = Figure.EXPLAIN_ORGAN_SIZE
 	_explain_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_explain_organ.draw.connect(_draw_explain_organ)
 	# The figure's box and its body layer. The chips and the tray are built when
 	# the screen opens; nothing here draws until then, so a headless boot pays
 	# for two signal connections.
-	_figure.custom_minimum_size = FIGURE_SIZE
+	_figure.custom_minimum_size = Figure.FIGURE_SIZE
 	_figure_body.draw.connect(_draw_figure_body)
 	_tray.resized.connect(_latch_tray)
 	# The level's row and the fork's two cards: a few connections and four
@@ -4298,7 +4303,7 @@ func _set_menu(open: bool) -> void:
 		_primed = SLOT_NONE
 		# The tray's held height is let go here and only here: it never shrinks
 		# while the screen is open. See [method _latch_tray].
-		_tray.custom_minimum_size.y = WAIT_SIZE.y
+		_tray.custom_minimum_size.y = Figure.WAIT_SIZE.y
 		# Every opening starts on the figure: a fork view left open last time
 		# is a question from another moment.
 		_reset_fork_view()
@@ -4437,16 +4442,16 @@ func _style_pause() -> void:
 			Color(0.855, 0.953, 0.933, 0.52))
 
 	# The tray's `waiting` wears the same, so the genome's two captions are one
-	# voice. See [method _make_tray_caption].
-	_genome_caption.add_theme_font_size_override("font_size", CAPTION_SIZE)
-	_genome_caption.add_theme_color_override("font_color", CAPTION_TINT)
+	# voice. See [method Figure.make_tray_caption].
+	_genome_caption.add_theme_font_size_override("font_size", Figure.CAPTION_SIZE)
+	_genome_caption.add_theme_color_override("font_color", Figure.CAPTION_TINT)
 	_genome_hint.add_theme_font_size_override("font_size", 14)
 	_genome_hint.add_theme_color_override("font_color",
 		Color(0.855, 0.953, 0.933, 0.38))
 
 	for label: Label in [_explain_name, _explain_says]:
 		label.add_theme_font_size_override("font_size", 15)
-	_explain_says.add_theme_color_override("font_color", EXPLAIN_TINT)
+	_explain_says.add_theme_color_override("font_color", Figure.EXPLAIN_TINT)
 
 	_pause_well_rest = _well(0.13, 0.09)
 	_pause_well_hot = _well(0.58, 0.48)
@@ -4535,81 +4540,14 @@ func _track(fill: Color, edge: Color) -> StyleBoxFlat:
 # ---------------------------------------------------------------------------
 # The body and its slots, on the pause screen. docs/design/dna-body.md.
 #
-# **The owner could not read which part of the body an arrow meant, so the
-# screen draws the body and puts each slot beside the part it is.** The slot is
-# the arc, and the arc is a place on a body the player has been looking at for
-# the whole run -- so reading a slot is pointing at it rather than decoding a
-# bearing. The figure is the water's own drawing, `Cilia.draw_cell`, nose up and
-# still: no second drawing of a cell exists anywhere, and this is not one. Every
-# channel the strand carried has a place, and most of them are more literal
-# than the place they had:
-#
-#   which arc         where the chip sits on the 3 x 3 ring, and the faint
-#                     tether from it to its arc on the skin
-#   the plain word    under the chip's own three-lobe piece of helix
-#   the copies        rungs, as on the strand: they are the picture -- and
-#                     three pips after the word, which are the reading: a
-#                     disc for a copy this body wears, a ring for a copy only
-#                     the DNA carries, a dot for room to grow
-#   the level         a numeral in the helix's third lobe, for a gene that
-#                     levels; its strands part while its fork waits
-#                     (beam-levels.md §8)
-#   the two registers the drawing is the body and the chips are the DNA; where
-#                     the two disagree at an arc, the body names what it wears
-#   the selection     the lens fills, the word goes loud, and the arc lights on
-#                     the skin -- the owner's sentence answered on the body
-#   waiting genes     a tray above the figure, soonest to lapse first, one of
-#                     them in hand; the two taps place it, as they always have
-#
-# **A launcher-themed surface, not the membrane aesthetic.** The membrane is
-# what the cell feels; this is what the player consults. It lives on pause
-# because pause already has widgets, already has the house style and is already
-# reachable by a gesture the player knows.
+# **The figure is drawn by figure.gd** (docs/design/cells.md §6.2): the body and
+# its tethers, the chips, the tray and the words under them, as static functions
+# of plain values, so a screen that shows a cell nobody is playing draws it the
+# same way. What stays here is the pause screen's own: what is selected, hovered,
+# armed, in hand or in the air, the keyboard, the two taps and the drag --
+# resolved into plain values as each piece is drawn, and handed over.
 # ---------------------------------------------------------------------------
 
-## The figure's own box, and where the body sits in it. **Set in code, as the
-## choosing screen's column is**: every seat below is measured from
-## [constant FIGURE_AT], and a `.tscn` cannot add. The scene carries the same
-## size so the tree reads right in an editor; this is what binds.
-const FIGURE_SIZE := Vector2(420.0, 372.0)
-const FIGURE_AT := Vector2(210.0, 170.0)
-## **A fixed radius, not the cell's.** Drawn at the cell's own size the ring of
-## slots would move between two pauses as the body grew, and growth is already
-## said by the slots that light up. Sixty is what the worst body the game can
-## make -- every born organ and four earned ones at level 3 -- leaves room
-## around: the mouth's bow clears the nose row by 9 px, the flank oars by 17,
-## the tail by 21 (dna-body.md §2).
-const FIGURE_R := 60.0
-## A mirror is read, so it is drawn nearly whole: quieter than the chips beside
-## it, and far louder than the water behind the scrim.
-const FIGURE_FADE := 0.85
-## One slot, and the whole of its touch target: 144 x 84 device px at
-## 2400x1080. Neighbours are 54 px apart across and 82 and 112 down.
-const SLOT_SIZE := Vector2(96.0, 56.0)
-## Chip centres from the body's centre, by slot index. **A 3 x 3 ring, not a
-## circle at true bearings**: words are horizontal, rows and columns give the
-## arrow keys a meaning, and every chip still sits within 5.3 degrees of its
-## arc's true bearing -- the forward diagonals at 47.4 against 42.1, the rear
-## ones at 138.2 against 133.3, the flank at 90 against 92.5.
-##
-## **There is no port-flank seat, and the empty cell says so.** Slot 1 is the
-## flank pair: the cirrus wears both flanks, anything else the starboard one
-## (cilia.gd). The hole is truthful, and it has a job: see [member _light_panel].
-const SLOT_SEAT: Array[Vector2] = [
-	Vector2(0.0, -138.0),     # 0 nose
-	Vector2(150.0, 0.0),      # 1 starboard flank
-	Vector2(0.0, 168.0),      # 2 tail
-	Vector2(150.0, -138.0),   # 3 forward starboard
-	Vector2(-150.0, -138.0),  # 4 forward port
-	Vector2(150.0, 168.0),    # 5 rear starboard
-	Vector2(-150.0, 168.0),   # 6 rear port
-	# **7, the inside, on the body itself** (docs/design/dna-slots-ux.md §3.1):
-	# 6 px aft of its centre. The ring round the body is outside and the chip in
-	# it is inside, so the figure says the rule without a word. Not in the empty
-	# port-flank cell: that is where full vision's own ghost lands, and a chip
-	# there would read as a place on the skin.
-	Vector2(0.0, 6.0),
-]
 ## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
 ## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
 ## **One table for both**, so the key that looks at a slot is the key that moves
@@ -4635,193 +4573,6 @@ const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
 ## the `numbers` switch and `light`.
 const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
 
-## **A tether per live slot**, from the chip's edge to the middle of its arc on
-## the skin, drawn under the body so the body wins wherever the two cross. It is
-## what makes a diagonal exact -- rendered without, a corner chip is only an
-## approximation of an arc -- and it is the line the body's own word sits on
-## (dna-body.md §4). A thread and not a leader line: 1.2 px at 0.16, in the
-## slot's hue, and bowed, because a ruled line would be the one piece of chart
-## furniture on a surface that has none.
-const TETHER_WIDTH := 1.2
-const TETHER_ALPHA := 0.16
-const TETHER_BOW := 0.06
-## How far off the skin a tether stops, and how far inside the chip's box it
-## starts, so it ends clear of the fringe and begins clear of the chip's word.
-const TETHER_LIFT := 4.0
-const TETHER_INSET := Vector2(10.0, 4.0)
-## **The part being read lights up on the body**: the arc of the selected,
-## hovered, armed or drop-target slot, traced on the skin in the hue of whatever
-## would be there -- the gene in hand while a slot is armed, the travelling gene
-## while one is dragged. The owner's sentence, answered on the body itself.
-const ARC_MARK_WIDTH := 3.0
-const ARC_MARK_LIFT := 5.0
-const ARC_MARK_ALPHA := 0.85
-const ARC_MARK_STEPS := 12
-## **The inside, lit** (dna-slots-ux.md §3.1): read, hovered, armed or a drop
-## target, the inside slot lights the whole inside -- a ring along the ovoid at
-## this share of the radius, in the hue of what is or would be there. Every
-## outside slot lights its arc; the inside has none.
-const INSIDE_MARK_AT := 0.88
-const INSIDE_MARK_STEPS := 64
-const INSIDE_MARK_WIDTH := 2.0
-const INSIDE_MARK_ALPHA := 0.55
-## **The inside chip's window**: an ellipse of the base colour under it, so its
-## weave and its word read over the nucleus and a stain. 5.1:1 against the
-## word's ground with it, 3.7:1 without. An ellipse echoes the body round it and
-## has no edge to read as a button.
-const INSIDE_BACK := Vector2(50.0, 29.0)
-const INSIDE_BACK_STEPS := 48
-const INSIDE_BACK_TINT := Color(0.023, 0.055, 0.05, 0.62)
-## **A refusal, drawn**: the slot that would refuse keeps no lens and its weave
-## falls to this. The line says why.
-const REFUSED_INK := 0.45
-## **A tap that adds a copy elsewhere** keeps the tapped chip as it is, its lens
-## only a trace of the selection: the copy lands on the target, which is lit.
-const RAISE_TRACE := 0.35
-## **What a toxin would become, before it lands** (dna-slots-ux.md §3.2): while
-## one is in hand, every empty live slot it could be written into carries the
-## form it would make there -- `venom` round the body, `poison` in it -- as its
-## word and the hand's copies in ring pips, no rungs, this quiet. The rule is on
-## the figure before the line says it. A slot whose form is carried shows
-## nothing: a tap there adds a copy where that form already is, and says so when
-## armed.
-const GHOST_INK := 0.42
-## The same, under a drag: the form the toxin in the air would land as, on the
-## empty slot under the finger. Louder, because it is the one slot being asked.
-const LAND_INK := 0.75
-## **Where the body wears a different organ from the gene its slot now carries,
-## the body names it**: that organ's own word, in its own hue, on the tether
-## this far out from the skin. The word is needed and a render proved it -- a
-## newborn whose forward-starboard slot holds `sting` while her body wears
-## `beam` there draws two violet, three-stroke organs, and without the word the
-## figure cannot say which one that is (dna-body.md §4). `moving-a-gene.md`
-## §2.3's rule, a word only where the two registers disagree, moved from a
-## second strand onto the body it describes.
-const DISSENT_ALONG := 0.56
-const DISSENT_SIZE := 12
-const DISSENT_ALPHA := 0.92
-
-## A slot's own piece of helix, inside its 96 x 56 box: three lobes of 28 px,
-## from x 6 to 90, the middle one the slot. **An odd count, for the strand's
-## reason** -- it begins and ends at a crossing and is widest in the middle, so
-## the rungs sit where the backbones are furthest apart. 28 against 22 of swing
-## is a 1.27:1 lens, between the choosing screen's 1.33 and the old strand's
-## 0.89: it still reads as DNA at a third of the strand's height.
-const CHIP_LOBE := 28.0
-const CHIP_LOBES := 3
-const CHIP_X := 6.0
-const CHIP_MID := 19.0
-const CHIP_AMP := 11.0
-## The word's baseline, and its size -- one up from the strand's 13, because a
-## chip is read on its own rather than along a row of neighbours.
-const CHIP_BASE := 50.0
-const CHIP_WORD := 14
-## **The copies are three pips**, after the word, at its x-height. Built three
-## ways on one frame (dna-body.md §3.1): seats for three rungs inside the helix
-## read as grit at a 28 px lobe, and a digit has no scale -- two of what? -- and
-## cannot say worn against carried. Three marks are read without counting, the
-## scale is on screen, and filled against hollow is diegetic-hud.md §1's
-## integrated against held: the same shape meaning the same thing in the water
-## and here, which is shape and so survives greyscale. A gene's *level* is a
-## different number and never sits in this row (beam-levels.md §8.1).
-##
-## **The rungs stay.** They are the same count, and they are what makes a slot a
-## piece of DNA rather than a label. The rungs are the picture; the pips are the
-## reading.
-const PIP_R := 3.4
-const PIP_PITCH := 10.0
-const PIP_GAP := 7.0
-const PIP_LIFT := 4.6
-const PIP_RING := 1.4
-## Room to grow, as a dot too faint to count as a copy -- which is what puts the
-## whole scale on screen whatever the copy count is.
-const PIP_ROOM_R := 1.6
-const PIP_ROOM_ALPHA := 0.30
-
-## **The level, on its slot** (beam-levels.md §8.1): a numeral for a gene that
-## levels, which today is only the beam. Every other chip draws what it always
-## drew.
-##
-## **Owner's call 2** (§8.9), answered on 2026-09-29 with the recommended
-## option: where it sits. `LOBE`, recommended, puts it inside
-## the third lobe of the chip's helix, the one right of the rungs -- empty on
-## every chip, crossed by no tether, and truthful, because the level is
-## inherited with the gene, which is what the strand draws. `AFTER_PIPS` is the
-## built-and-rejected `M03`: `beam ●•• 12` reads as a count of the dots, and
-## `venom` with two digits is 101 px on a 96 px chip. `NONE` leaves the level to
-## the line under the figure.
-enum LevelSeat { LOBE, AFTER_PIPS, NONE }
-const LEVEL_SEAT := LevelSeat.LOBE
-## The numeral: the Hud's own font at 12 px, and 10 from level 100 up -- about
-## eighty hours of use, so a guard rather than a case. Digits are tabular, 7 px
-## each at 12, so `99` is 14 px and fits the widest chip the game makes with
-## 2.6 px to spare inside the lobe's backbones.
-const LEVEL_SIZE := 12
-const LEVEL_SIZE_SMALL := 10
-const LEVEL_SMALL_FROM := 100
-## Centred on the third lobe, `CHIP_X + 2.5 lobes`, on a baseline that puts
-## the digits' ink across the middle of the lens.
-const LEVEL_X := CHIP_X + 2.5 * CHIP_LOBE
-const LEVEL_BASE := 23.5
-## At an open fork the numeral moves into the fork's mouth, and takes the hue.
-const LEVEL_FORK_X := 81.0
-const LEVEL_FORK_ALPHA := 0.95
-## `AFTER_PIPS` only: the gap between the last pip and the numeral.
-const LEVEL_AFTER_GAP := 6.0
-
-## **The fork on the slot** (§8.3): lobes 0 and 1 as ever, and then the helix
-## stops halfway through its third and its strands part, like a replication
-## fork. The weave runs on from `along` 56 to the crest at 70, and from there
-## to [constant FORK_TIPS] each strand swings a further [constant FORK_SPREAD]
-## as the square of the way out. The tips land at chip x 94, y 1.5 and 36.5 --
-## inside the box. The outline changes, not only the colour, so it survives
-## greyscale.
-const FORK_FROM := 2.0 * CHIP_LOBE
-const FORK_TIPS := 88.0
-const FORK_SPREAD := 6.5
-## **A slot the body has not earned yet** is its helix at this brightness and
-## nothing else: no rungs, no word, no tether, no focus and no input. Only the
-## first generation shows any -- a daughter inherits a seven-long layout, so
-## hers are all live -- and that is exactly when *your body will grow a slot
-## here* is news. Empty (bright, live) and unearned (faint, dead) read apart at
-## both shapes.
-const UNEARNED_INK := 0.32
-
-## **The backbone, the depth alpha, the rung states and the segment count all
-## live in `cilia.gd`**, because the division's choosing screen draws the same
-## helix on its side and two copies of a drawing drift apart. See
-## `Cilia.STRAND_*` and choosing.md §9.1; what stays here is this surface's own
-## geometry, which is the only thing the two screens disagree about.
-##
-## The selected slot's own stretch of backbone, brighter.
-const BACKBONE_LIT := 1.25
-
-## The lens between the backbones, filled on the selected slot. Area, not a
-## border -- there is no box to put a border on, and a filled lens is the one
-## mark that cannot be confused with a rung.
-const LENS_SELECTED := 0.20
-## A chip's lens is a third the size of the choosing screen's, and needs a
-## little more fill to read as selected at all.
-const CHIP_LENS := LENS_SELECTED + 0.08
-## An empty slot has no gene, so its selection and its tether are the column's
-## own pale tint.
-const PALE := Color(0.855, 0.953, 0.933)
-
-## **A waiting gene: a base pair that is not in a ladder yet.** A bar with a
-## base at each end -- in the tray, and riding a finger across the figure.
-const SAMPLE_BAR := 15.0
-const SAMPLE_WIDTH := 2.6
-const SAMPLE_CAP := 2.5
-const SAMPLE_GAP := 6.0    ## between the bar and its word
-const SAMPLE_WORD := 13
-## Two rings, not a disc: a crisp-edged disc of even tone is the silhouette of a
-## widget, which diegetic-hud.md §2 spent three passes establishing.
-const SAMPLE_HALO: Array[float] = [9.0, 13.5]
-const SAMPLE_HALO_ALPHA: Array[float] = [0.11, 0.05]
-## The travelling gene's own box: the width of a chip, and the height of the
-## band the strand once reserved for it.
-const SAMPLE_BOX := Vector2(96.0, 26.0)
-
 ## How far above the pointer the travelling gene rides during a drag.
 ##
 ## **Above the finger, not under it.** A fingertip is about 9 mm, which at
@@ -4832,58 +4583,6 @@ const SAMPLE_BOX := Vector2(96.0, 26.0)
 ## thumb reads.
 const DRAG_LIFT := 34.0
 
-## **The tray above the figure: every gene waiting for a slot, head first**
-## (dna-body.md §5), soonest to lapse first -- #118's order. A tray chip is the
-## gene's loose base pair, its word and its level as ring pips, because a
-## waiting gene is carried by definition: `sting` eaten twice reads two rings
-## and a dot, and lands at two.
-##
-## 48 tall is the touch rule and 116 wide fits the longest word with its pips
-## and air either side. **Four fit on a row beside the caption and a fifth
-## wraps**: the tray is 560 wide, and five genes at once have been posed and
-## still fit the column with 58 px to spare above and below.
-const WAIT_SIZE := Vector2(116.0, 48.0)
-const WAIT_BAR_X := 16.0
-const WAIT_WORD_X := 32.0
-## The air right of a chip's last pip: what `venom`, the widest word, leaves at
-## 116. A gene this build has no word for is read by its own name, and a name is
-## wider than any word -- `statocyst`'s reaches 128 with its pips -- so its chip
-## grows to keep this much rather than land its pips on the next chip. See
-## [method _waiting_width].
-const WAIT_AIR := 3.0
-## Every gene not in hand is drawn down to this; the one in hand goes loud and
-## gains an underline in its own hue.
-const WAIT_DIM := 0.55
-## The tray's caption, in the voice of every other caption on this column.
-##
-## TRANSLATORS: A small caption, in 15 px type, at the start of the row of chips
-## that wait for the player. Two kinds of chip wait there: genes the cell has just
-## eaten and not yet placed on its body, and, after them, a gene's fork, which waits
-## for the player to choose how that gene grows (today the beam's, between `fill`
-## and `sweep`). **The same word captions both**, so it must say only that they
-## wait: not "to place", which is wrong for a fork. One lowercase word. Four chips
-## fit on a row beside it; a wider word makes the fourth wrap onto the next row.
-## ROOM: 64 px at 15 px
-const WAIT_CAPTION := "waiting"
-const CAPTION_TINT := Color(0.855, 0.953, 0.933, 0.45)
-const CAPTION_SIZE := 15
-
-## **A fork waits with the genes** (beam-levels.md §8.3): one chip per open
-## fork, after the waiting genes, because the tray is where this screen keeps
-## what waits for the player. It is [constant WAIT_SIZE], and it **neither drags
-## nor takes a drop**: it opens the fork's two cards. Its glyph is the slot's
-## fork -- a lobe, a half and the parting, `along` 28 to 88 -- at half size, its
-## axis on the base pairs' line.
-const FORK_GLYPH_FROM := CHIP_LOBE
-const FORK_GLYPH_SCALE := 0.5
-const FORK_GLYPH_AT := Vector2(7.0, 22.0)
-## The gene's word and its level after it, in the level's hue.
-const FORK_WORD_X := 44.0
-const FORK_WORD_BASE := 27.0
-const FORK_LEVEL_GAP := 6.0
-## While its cards are up, the chip carries the gene-in-hand mark.
-const FORK_OPEN_Y := 45.0
-
 ## The strand's dart, sized for the choosing screen, which still draws one under
 ## each locus (dna-body.md §9).
 const DART_R := 6.5
@@ -4893,39 +4592,6 @@ const ARM_GUARD_MS := 300
 ## Arming lapses on its own, so a slot left armed is not a trap.
 const ARM_TIMEOUT_MS := 4000
 
-## **What the hint says: how likely the selected slot is to reach a daughter.**
-## Eating a gene writes it into the DNA; a daughter is a roll against that DNA,
-## and copy number is the odds -- so the one line under the figure is where the
-## pips are put into words. It is said *before* the division, on the surface the
-## player is already reading, which is the whole of "the chance must be legible
-## before, not announced after". The pips draw the level; this line says why it
-## matters, which is the owner's call 2 (dna-body.md §13).
-##
-## TRANSLATORS: The hint under the figure, in 14 px type, about the gene being
-## read: how many copies of it the cell's DNA holds (one to three) and so how
-## likely a daughter cell is to wear it (to show it as an organ). The copies are
-## words, not digits, on purpose. The row is 560 px wide and a level and a gauge
-## share it, which leaves the text 430 px.
-## ROOM: 430 px at 14 px
-const HINT_CHANCE: Array[String] = [
-	"",
-	"one copy · a daughter may not wear it",
-	"two copies · a daughter probably wears it",
-	"three copies · a daughter always wears it",
-]
-## The mouth is the one gene that always expresses (genome.gd's
-## ALWAYS_EXPRESSED), so it says so instead of quoting odds it does not obey.
-##
-## TRANSLATORS: The hint (see the copies line above) for the mouth gene, which
-## every daughter always wears. The row may be shared with a level and a gauge.
-## ROOM: 430 px at 14 px
-const HINT_CERTAIN := "the mouth · a daughter always wears it"
-## The choosing screen reads this one as well, under an empty locus of its own.
-##
-## TRANSLATORS: The hint under an empty place on the body: nothing is there, so
-## nothing can be passed on to a daughter from it.
-## ROOM: 560 px at 14 px
-const HINT_EMPTY := "an empty slot · nothing to pass on from here"
 ## **Armed over a gene, the hint says what the next tap costs** instead of what
 ## the gene is worth. Reading *a daughter always wears it* about the gene the
 ## tap is about to erase was the wrong sentence at the worst moment
@@ -4958,24 +4624,6 @@ const HINT_LOSES_LEVEL := "%s leaves your dna · level %d ends with this body"
 ## ROOM: 560 px at 14 px with word, 99
 const HINT_LOSES_LEVEL_CARRIED := "%s leaves your dna · its level %d is lost"
 
-## **The level, in front of the odds** (§8.2): `level 7 ▰▰▱ · two copies · a
-## daughter probably wears it`. The level is what a daughter inherits and the
-## copies are whether she wears it -- decision 5 of beam-levels.md §0 in one
-## line. The banked level, never the one held at the fork.
-##
-## TRANSLATORS: A gene's level, a whole number that grows with use: "level 7".
-## Keep %d. Shown in 14 px type at the start of the hint row, before a gauge and
-## the hint itself, which share the row's 560 px with it.
-## ROOM: 70 px at 14 px with 99
-const HINT_LEVEL := "level %d"
-## **A gauge and not a number**, because experience means nothing to a player
-## and `progress()` is already a fraction: a 36 x 4 bar at y 9 in its own
-## 36 x 20 box, one pixel a thirty-sixth of a level.
-const GAUGE_SIZE := Vector2(36.0, 20.0)
-const GAUGE_BAR := Rect2(0.0, 9.0, 36.0, 4.0)
-const GAUGE_RADIUS := 2
-const GAUGE_TRACK := Color(0.855, 0.953, 0.933, 0.14)
-const GAUGE_FILL_ALPHA := 0.85
 ## The row itself: the level, the gauge and the words, centred as one.
 const HINT_ROW_SEPARATION := 6
 const HINT_ROW_HEIGHT := 20.0
@@ -5093,30 +4741,6 @@ const ACT_FORK := "tap again to choose how %s grows"
 # genome -- `placing()` for a gene in hand, `move_refusal()` for one in the air --
 # so the line, the chip and the guard never disagree.
 
-## **A toxin not yet placed is neither form**: the tray, the hand and a drag call
-## it this until it lands.
-##
-## TRANSLATORS: The word for a toxin gene that has been eaten and is waiting to be
-## placed, on its chip in the tray and on a finger dragging it. Placed outside the
-## body it becomes `venom`, inside it becomes `poison`; until then it is neither.
-## One short lowercase word, like the other gene words.
-## ROOM: 47 px at 13 px
-const TOXIN_WORD := "toxin"
-## TRANSLATORS: The gene line for a toxin that is waiting, before a slot is
-## chosen: it hurts over time, and becomes venom or poison depending on where it
-## is placed. After the gene's scientific name and a middle dot. No longer than
-## the English.
-## ROOM: 440 px at 15 px
-const EXPLAIN_TOXIN := "a toxin that goes on hurting, as venom or as poison"
-## TRANSLATORS: The line for the empty slot inside the body (the one slot in the
-## middle of the body, not round it): nothing is there yet, and a toxin placed
-## there becomes poison.
-## ROOM: 520 px at 15 px
-const EXPLAIN_INSIDE := "nothing inside yet · a toxin here becomes poison"
-## TRANSLATORS: Under that line, for the empty inside slot: the slot is inside the
-## cell's body, and a toxin is the only gene that can go there.
-## ROOM: 560 px at 14 px
-const HINT_INSIDE := "inside your body · only a toxin goes here"
 ## TRANSLATORS: While a toxin is waiting and no slot is chosen: tapping a slot
 ## round the body (outside) makes it venom, the slot in the body (inside) makes it
 ## poison.
@@ -5173,149 +4797,8 @@ const ACT_SWAP_COPIES := "let go to swap %s and %s · they trade copies"
 ## focus stays where it was.
 const REFUSAL_MS := 2000
 
-## The second, weaker channel behind the rungs: a gene the body does not wear
-## draws its word and its organ fainter. Honest about which one does the work.
-const ORGAN_UNEXPRESSED := 0.52
-const WORD_UNEXPRESSED := 0.42
-
-## **The plain word, never the biological name.** Four short verbs are parsed
-## instantly at arm's length; nine letters of Greek are not, on the one screen
-## whose whole job is a quick decision. §5.2, and the nine-character ceiling it
-## sets is why a new gene needs a short word as well as a real organ name.
-##
-## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
-## dots: one short lowercase word, a verb or a noun for what the gene does. The
-## `entry` line says which gene it names (its scientific name, never translated).
-## It has to be short: prefer the shortest everyday word. The same words appear
-## inside sentences such as "let go to swap eat and ping".
-## ROOM: 47 px at 13 px
-const WORDS := {
-	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
-	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
-	&"palp": "touch",
-	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
-	&"veneneux": "poison", &"toxicyst": "venom", &"plastid": "sun",
-	&"vacuole": "store", &"crista": "burn", &"chemocyte": "smell",
-	&"ampulla": "ping",
-}
-
-## **One line per gene, and it says what the gene does to the player** -- not
-## what the organelle is. Sixteen tiles carrying one word each are enough to
-## recognise a gene you already know and not enough to learn one, which is the
-## whole of the owner's ask.
-##
-## The voice is the screen's: lowercase, plain, no jargon, one clause and then
-## its consequence. No line names another gene, because a player reading `armor`
-## has not necessarily met `cytostome` yet. No line carries a number: levels are
-## the pips' job and a line that said "+30%" would be the classic HUD this game
-## spent two phases not building.
-##
-## `that side` in `ocellus` and `trichocyst` is deliberate and it points at the
-## arc the slot is tethered to -- the two directional genes are the two whose
-## line has to explain why the slot mattered.
-##
-## **This line is also the one place the biological name reaches the screen, and
-## that is a deliberate reading of §8 rather than a breach of it.** The rule §8
-## states is that *the slot* wears the plain word, and the argument it gives is
-## the glance: four short verbs are parsed at arm's length and nine letters of
-## Greek are not, on the surface whose whole job is a quick decision. This line
-## is not a glance -- it is read because the player stopped to read it -- so the
-## name sits at the head of it and the plain word keeps the slot. §9.1 gives
-## every gene two names on purpose; a name no player ever meets is a convention
-## for the compiler, and CLAUDE.md's *realism is a tool* is the argument that
-## `ampulla` is worth meeting.
-##
-## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
-## name and a middle dot: "cytostome · a wider mouth swallows bigger things
-## whole". Lowercase, plain words, no numbers. It has little room: it meets the
-## "numbers" switch at its right, so a translation should be no longer than the
-## English. "That side" is the side of the body where the gene's slot is. The
-## `entry` line says which gene.
-## ROOM: 440 px at 15 px
-const EXPLAINS := {
-	&"cytostome": "a wider mouth swallows bigger things whole",
-	&"cirrus": "turns you faster, and sooner after you ask",
-	&"flagellum": "your tail beats harder, and more often",
-	&"stigma": "feels the shadow of anything big, however dark",
-	&"ocellus": "a ray out of that side, marking whatever it strikes",
-	&"chemocyte": "smells food, strongest where your nose is pointed",
-	&"ampulla": "a pulse that answers off everything, not just food",
-	&"axoneme": "holding on pushes you, instead of only steering",
-	&"palp": "feels what is against you, with no light at all",
-	&"myoneme": "tap for a burst of speed, paid for in hunger",
-	&"trichocyst": "a dart at whatever closes in on that side",
-	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
-	&"veneneux": "whatever bites or swallows you takes your poison",
-	&"toxicyst": "your bite leaves venom, which goes on hurting",
-	&"plastid": "makes a little of its own food, so you starve slower",
-	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
-	&"crista": "burns cleaner, so everything you carry costs less",
-}
-## **Where venom works is its line** (docs/design/dna-slots.md §3.2): at the
-## front it rides on your bite, and [constant EXPLAINS] says so; on a side or
-## the stern it stings what bites you there, and these say so -- `that side`
-## as the beam and the dart already say it, and `from behind` for the stern,
-## which a player least thinks of as a side.
-##
-## TRANSLATORS: The line of the venom gene (`toxicyst`, shown as `venom`) when it
-## sits on a side of the body: whatever bites the cell on that side takes venom
-## from it. "That side" is the side of the body where the gene's slot is. Same
-## limit as the gene lines above: no longer than the English.
-## ROOM: 440 px at 15 px
-const EXPLAINS_SIDE := {
-	&"toxicyst": "whatever bites you on that side takes venom",
-}
-## TRANSLATORS: The same line when the venom sits at the back of the body, where
-## the tail is: whatever bites the cell from behind takes venom from it.
-## ROOM: 440 px at 15 px
-const EXPLAINS_STERN := {
-	&"toxicyst": "whatever bites you from behind takes venom",
-}
-## **Once a way is taken, the gene's line says which** (beam-levels.md §8.3):
-## gene, then path, then what the organ now does -- the pause screen's receipt
-## for the choice, and the choosing screen's line for a daughter who inherits
-## it. 464 and 446 px with the name in front. A fork still open reads as no
-## path yet: the gene's own line above.
-##
-## TRANSLATORS: As the gene lines above, for a gene that can grow in two ways and
-## has been given one: what it does now. The `entry` line gives the gene and the
-## way. Same limit: no longer than the English, which is 464 px at most with the
-## gene's name in front.
-## ROOM: 470 px at 15 px
-const EXPLAINS_PATH := {
-	&"ocellus": {
-		&"extend": "a fan of rays out of that side, one more every level",
-		&"sweep": "three rays sweeping that side, faster every level",
-	},
-}
-## An empty slot has no gene to explain, so it explains the one thing it does
-## have: a side of the body. The tether from it is what "this side" refers to,
-## and on the choosing screen, which reads this line too, the dart is.
-##
-## TRANSLATORS: The line for an empty slot on the body, in 15 px type, in the place
-## where a gene's line goes. An "organ" is what a gene makes the cell grow; "this
-## side" is the side of the body the slot is on. No longer than the English (368
-## px, 51 characters).
-## ROOM: 520 px at 15 px
-const EXPLAIN_EMPTY := "nothing here yet · an organ here grows on this side"
-## Loud enough to be the thing you are reading, quieter than the word on the
-## chip: caption 0.45, hint 0.38, slot word 0.66, this 0.62.
-const EXPLAIN_TINT := Color(0.855, 0.953, 0.933, 0.62)
-## The name is drawn in the gene's own hue, which is the hue of the rungs the
-## player just tapped -- that is what ties the line to the slot with no arrow
-## and no animation.
-const EXPLAIN_NAME_ALPHA := 0.95
-
-const LABEL_TINT := Color(0.855, 0.953, 0.933, 0.66)
-const LABEL_TINT_LOUD := Color(0.855, 0.953, 0.933, 0.92)
-## The choosing screen's word size. A slot's word is [constant CHIP_WORD].
+## The choosing screen's word size. A slot's word is [constant Figure.CHIP_WORD].
 const LABEL_SIZE := 13
-## Focus has to be drawn, and it must not be a box: a slot is a piece of DNA and
-## not a square. An underline under the chip says where the keyboard is
-## standing without rebuilding the thing that was replaced.
-const FOCUS_TINT := Color(0.588, 1.0, 0.859, 0.85)
-const FOCUS_INSET := 14.0
-const FOCUS_WIDTH := 2.0
 
 ## What the explanation line is currently explaining, so the organ beside it can
 ## be redrawn from the same answer rather than deriving it a second time.
@@ -5327,14 +4810,6 @@ var _explain_at := -1
 ## **A refused `Shift`+arrow's line**, and the wall-clock msec it holds until.
 var _refusal_text := ""
 var _refusal_until := 0
-## The organ drawn beside the explanation, in canvas px of its own box.
-const EXPLAIN_ORGAN_SIZE := Vector2(34.0, 26.0)
-const EXPLAIN_ORGAN_SCALE := 0.60
-## Where in that box the organ's own centre sits. **Measured, not chosen**: the
-## tallest organ is `flagellum`, whose strokes reach `TILE_ARC_RADIUS +
-## TILE_LEN` above the centre -- 18 px at this scale -- so any seat above 18.5
-## puts the tuft outside its own row.
-const EXPLAIN_ORGAN_SEAT := Vector2(17.0, 18.5)
 
 ## The seven chips, by slot index, as last built; null only before the first
 ## build.
@@ -5409,8 +4884,8 @@ func _build_genome_strip() -> void:
 	_slot_count = mini(maxi(_genome.slots(), _genome.layout().size()),
 		GenomeNode.INSIDE)
 	_slot_chips.clear()
-	_slot_chips.resize(SLOT_SEAT.size())
-	for slot in SLOT_SEAT.size():
+	_slot_chips.resize(Figure.SLOT_SEAT.size())
+	for slot in Figure.SLOT_SEAT.size():
 		var gene: StringName = _slot_genes[slot] if slot < _slot_genes.size() \
 			else &""
 		# **A rung answers *do I express this gene at all*, and the figure
@@ -5432,7 +4907,7 @@ func _build_genome_strip() -> void:
 	# with nothing loose in it should be. **A fork waits too** (beam-levels.md
 	# §8.3), after the genes, and captions the tray like one.
 	if not _strip_waiting.is_empty() or not _strip_forks.is_empty():
-		_tray.add_child(_make_tray_caption())
+		_tray.add_child(Figure.make_tray_caption())
 	for gene: StringName in _strip_waiting:
 		_tray.add_child(_make_waiting(gene))
 	for gene: StringName in _strip_forks:
@@ -5605,7 +5080,7 @@ func _update_hint() -> void:
 	# travelling gene and priced the hole.
 	var gene := _reading()
 	if gene == &"":
-		_set_hint(tr(HINT_INSIDE) if GenomeNode.is_inside(slot) else tr(HINT_EMPTY))
+		_set_hint(Figure.hint_empty(slot))
 		return
 	# **A tap that adds a copy elsewhere loses nothing here**: the line prices
 	# the copy where it lands (dna-slots-ux.md §3.3).
@@ -5630,7 +5105,7 @@ func _update_hint() -> void:
 				% _word(under))
 		return
 	if GenomeNode.ALWAYS_EXPRESSED.has(gene):
-		_set_hint(tr(HINT_CERTAIN), gene)
+		_set_hint(tr(Figure.HINT_CERTAIN), gene)
 		return
 	# **[method _copies_of] and never the bare DNA tier**, because a waiting
 	# gene is worth the copies it waited with, not none. A slot always carries
@@ -5644,13 +5119,10 @@ func _update_hint() -> void:
 	_set_hint(_odds(_hand_copies() if hand_read else _copies_of(gene)), gene)
 
 
-## **The odds a copy count gives**, in words -- and with the numbers on, with
-## their percentage (gene-stats.md §5.4). A certainty says so either way.
+## **The odds a copy count gives** ([method Figure.odds]): in words, and with
+## the numbers on, with their percentage (gene-stats.md §5.4).
 func _odds(copies: int) -> String:
-	if _show_numbers:
-		return GeneStats.odds_text(copies)
-	var at := clampi(copies, 0, HINT_CHANCE.size() - 1)
-	return tr(HINT_CHANCE[at]) if at > 0 else ""
+	return Figure.odds(copies, _show_numbers)
 
 
 ## **The row under the figure, whole** (beam-levels.md §8.2): [param text], and
@@ -5674,7 +5146,7 @@ func _set_hint(text: String, gene: StringName = &"") -> void:
 	if not levelled:
 		_genome_hint.text = text
 		return
-	_hint_level.text = tr(HINT_LEVEL) % grown.level()
+	_hint_level.text = Figure.level_text(grown.level())
 	_hint_gauge.queue_redraw()
 	_genome_hint.text = "· " + text if text != "" else ""
 
@@ -5773,18 +5245,16 @@ func _update_act() -> void:
 	_genome_act.text = tr(ACT_MOVE) if _movable(slot) else ""
 
 
-## The plain word a gene is read by on this surface. A gene this build has no
-## word for -- a later phase's, arriving over an older binary in a content pack
-## -- falls back to its own name rather than to nothing.
+## The plain word a gene is read by on this surface: [method Figure.word_of],
+## which falls back to the gene's own name for one this build has no word for.
 func _word(gene: StringName) -> String:
-	return tr(WORDS[gene]) if WORDS.has(gene) else String(gene)
+	return Figure.word_of(gene)
 
 
-## **The word for a gene not yet placed** (dna-slots-ux.md §3.5): a toxin is
-## `toxin` in the tray, in hand and on a finger, neither form until it lands.
-## Every other gene is its own word.
+## **The word for a gene not yet placed** (dna-slots-ux.md §3.5): `toxin` for a
+## toxin, neither form until it lands; [method Figure.carried_word_of].
 func _carried_word(gene: StringName) -> String:
-	return tr(TOXIN_WORD) if GenomeNode.has_forms(gene) else _word(gene)
+	return Figure.carried_word_of(gene)
 
 
 ## **What letting go of the gene from [param from] over [param to] would do, in
@@ -5923,16 +5393,15 @@ func _update_explain() -> void:
 		# Two different silences: no slot chosen says nothing at all; a chosen
 		# empty slot still has a side of the body to explain -- or, inside, the
 		# one gene that goes there.
-		_explain_says.text = "" if slot == SLOT_NONE else (tr(EXPLAIN_INSIDE)
-			if GenomeNode.is_inside(slot) else tr(EXPLAIN_EMPTY))
+		_explain_says.text = "" if slot == SLOT_NONE else Figure.explain_empty(slot)
 		return
 	# **One name for both of a gene's forms** (dna-slots.md §3.2): the toxin is
 	# `toxicyst` on this line whether it is venom or poison; the slot says which.
 	_explain_name.text = GenomeNode.name_of(gene)
 	_explain_name.add_theme_color_override("font_color",
-		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+		Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	if undecided:
-		_explain_says.text = "· " + tr(EXPLAIN_TOXIN)
+		_explain_says.text = "· " + tr(Figure.EXPLAIN_TOXIN)
 		return
 	# **The cards keep this line's job** (beam-levels.md §8.3): the gene's own
 	# line until a way is hovered or armed, and then that way, by its name.
@@ -6007,25 +5476,12 @@ func _faces_out(gene: StringName, slot: int) -> bool:
 	return gene != &"" and slot >= 0 and GenomeNode.form_at(gene, slot) == &""
 
 
-## **What [param gene] does, in the player's terms**: its line, or -- once its
-## fork is behind it -- the line for the way it took (beam-levels.md §8.3). The
+## **What [param gene] does, in the player's terms** ([method Figure.explains]):
+## its line, or the line for the way its fork took, read at [param slot]. The
 ## pause screen and the choosing screen both read it, so a daughter reads what
 ## her mother chose.
-##
-## [param slot] is where it is read at, for a gene whose line depends on it:
-## venom on a side or the stern says what it does there.
 func _explains(gene: StringName, slot: int = -1) -> String:
-	var grown := _genome.progression(gene)
-	var taken: Dictionary = EXPLAINS_PATH.get(gene, {})
-	if grown != null and taken.has(grown.path):
-		return tr(EXPLAINS_PATH[gene][grown.path])
-	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot) \
-			and CellBody.VENOM_SIDES:
-		if slot == GenomeNode.STERN and EXPLAINS_STERN.has(gene):
-			return tr(EXPLAINS_STERN[gene])
-		if EXPLAINS_SIDE.has(gene):
-			return tr(EXPLAINS_SIDE[gene])
-	return tr(EXPLAINS[gene]) if EXPLAINS.has(gene) else ""
+	return Figure.explains(gene, slot, _genome.path_of(gene))
 
 
 ## **Where [param gene] is read at**: [param slot] when it holds it, and
@@ -6042,54 +5498,6 @@ func _worn_at(gene: StringName, slot: int) -> int:
 # remembered; with it on, two lines under the gene's own -- what it does, then
 # what it costs -- on this screen, on the fork's cards and on the choosing
 # screen. The playfield never shows a number (diegetic-hud.md §3).
-
-## The two lines: 14 px, 19 apart, the first baseline 14 px into a block that
-## is 38 tall whether or not anything is in it -- so reading an empty slot moves
-## nothing below it (§3.3, §5.3).
-const NUMBERS_SIZE := 14
-const NUMBERS_PITCH := 19.0
-const NUMBERS_BASE := 14.0
-const NUMBERS_HEIGHT := 38.0
-## The words in the column's pale tint, and the numbers in the same tint a
-## little stronger, so the eye finds them -- only the number: its unit keeps the
-## words' tint. Drawn at 0.88 the values out-shone the sentence they explain;
-## at 0.70 they read as its details (§3.3).
-const NUMBERS_WORD := Color(0.855, 0.953, 0.933, 0.42)
-const NUMBERS_VALUE := Color(0.855, 0.953, 0.933, 0.70)
-## A gene this body does not wear, drawn a little dimmer: the same numbers,
-## saying *what a body wearing it would have* (§5.3). **0.85, not the figure's
-## own 0.62**: at 0.62 the words fell to the faintest text on the screen, on
-## exactly the gene a player holds while deciding where it goes. At 0.85 they
-## sit with the odds line, the faintest text the screen already had.
-const NUMBERS_DIM := 0.85
-
-## **The switch** (§2.1): a 96 x 48 hit rect and, across its middle, a 96 x 30
-## slab with `numbers` centred in it. Teal, because on this column teal means
-## *this responds*; a word and not a `+`, because beside a gene on a screen
-## about placing genes, a `+` reads as *add a copy*.
-const TOGGLE_SLAB := Rect2(0.0, 9.0, 96.0, 30.0)
-const TOGGLE_CORNER := 6
-## TRANSLATORS: The label of the pause screen's switch that shows the exact
-## numbers behind each gene (how fast, how far, what it costs). One lowercase
-## word, drawn in 14 px type on a slab 96 px wide.
-## ROOM: 80 px at 14 px
-const TOGGLE_WORD := "numbers"
-const TOGGLE_WORD_SIZE := 14
-## The chips' focus mark: an underline, under the slab.
-const TOGGLE_FOCUS_Y := 44.0
-## Its four states, off, off and hovered or focused, on, and on and hovered or
-## focused: `[fill, edge width, edge alpha, word alpha]`. **On differs from
-## hovered by its 2 px edge**, this screen's mark for an armed tile
-## (genes-and-cilia.md §5.2), so the difference is a shape and survives
-## greyscale.
-const TOGGLE_STATES: Array = [
-	[Color(0.063, 0.141, 0.125, 0.35), 1, 0.22, 0.50],
-	[Color(0.063, 0.141, 0.125, 0.55), 1, 0.40, 0.72],
-	[Color(0.086, 0.204, 0.176, 0.80), 2, 0.62, 0.80],
-	[Color(0.086, 0.204, 0.176, 0.80), 2, 0.78, 0.92],
-]
-const TOGGLE_EDGE := Color(0.12, 0.70, 0.58)
-const TOGGLE_INK := Color(0.588, 1.0, 0.859)
 
 ## Whether the numbers are shown. From [member numbers] when the harness pins
 ## it, else from `user://`.
@@ -6121,7 +5529,7 @@ func _build_numbers() -> void:
 	_numbers.hide()
 	_lines.custom_minimum_size = Vector2(0.0, _stack.get_combined_minimum_size().y)
 	for block: Control in [_numbers, _choose_numbers]:
-		block.custom_minimum_size = Vector2(0.0, NUMBERS_HEIGHT)
+		block.custom_minimum_size = Vector2(0.0, Figure.NUMBERS_HEIGHT)
 		block.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_numbers.draw.connect(_draw_numbers.bind(_numbers, false))
 	_choose_numbers.draw.connect(_draw_numbers.bind(_choose_numbers, true))
@@ -6138,10 +5546,7 @@ func _build_numbers() -> void:
 	for side in NEIGHBOUR_SIDES:
 		_numbers_toggle.set_focus_neighbor(side,
 			_numbers_toggle.get_path_to(_numbers_toggle))
-	_toggle_boxes.clear()
-	for state: Array in TOGGLE_STATES:
-		_toggle_boxes.append(_flat(state[0], TOGGLE_CORNER,
-			Color(TOGGLE_EDGE, float(state[2])), int(state[1])))
+	_toggle_boxes = Figure.toggle_boxes()
 	_apply_numbers()
 
 
@@ -6204,48 +5609,17 @@ func _set_numbers_hot(on: bool) -> void:
 	_numbers_toggle.queue_redraw()
 
 
-## The switch: its slab in one of four states, the word, and the chips' focus
-## mark when the keyboard is on it.
+## The switch ([method Figure.draw_toggle]): its slab in one of four states, the
+## word, and the chips' focus mark when the keyboard is on it.
 func _draw_numbers_toggle() -> void:
-	var node := _numbers_toggle
-	if _toggle_boxes.size() < TOGGLE_STATES.size():
-		return
-	var state := (2 if _show_numbers else 0) \
-		+ (1 if _numbers_hot or node.has_focus() else 0)
-	node.draw_style_box(_toggle_boxes[state], TOGGLE_SLAB)
-	var font := node.get_theme_default_font()
-	if font != null:
-		var word := tr(TOGGLE_WORD)
-		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			TOGGLE_WORD_SIZE).x
-		var centre := TOGGLE_SLAB.get_center()
-		var base := centre.y + (font.get_ascent(TOGGLE_WORD_SIZE)
-			- font.get_descent(TOGGLE_WORD_SIZE)) * 0.5
-		node.draw_string(font, Vector2(centre.x - width * 0.5, base), word,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, TOGGLE_WORD_SIZE,
-			Color(TOGGLE_INK, float(TOGGLE_STATES[state][3])))
-	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET, TOGGLE_FOCUS_Y),
-			Vector2(node.size.x - FOCUS_INSET, TOGGLE_FOCUS_Y), FOCUS_TINT,
-			FOCUS_WIDTH, true)
+	Figure.draw_toggle(_numbers_toggle, _show_numbers, _numbers_hot, _toggle_boxes)
 
 
-## One block's two lines, centred on it: under the figure, or under a
-## daughter's line on the choosing screen.
+## One block's two lines ([method Figure.draw_numbers]): under the figure, or
+## under a daughter's line on the choosing screen.
 func _draw_numbers(node: Control, choosing: bool) -> void:
-	var said: Array = _choose_lines if choosing else _numbers_lines
-	var font := node.get_theme_default_font()
-	if font == null:
-		return
-	var ink := NUMBERS_DIM if (_choose_dim if choosing else _numbers_dim) else 1.0
-	var word := Color(NUMBERS_WORD, NUMBERS_WORD.a * ink)
-	var value := Color(NUMBERS_VALUE, NUMBERS_VALUE.a * ink)
-	for i in mini(said.size(), 2):
-		var items: Array = said[i]
-		if items.is_empty():
-			continue
-		Readout.draw(node, font, NUMBERS_SIZE, Readout.runs(items), node.size.x * 0.5,
-			NUMBERS_BASE + NUMBERS_PITCH * float(i), word, value)
+	Figure.draw_numbers(node, _choose_lines if choosing else _numbers_lines,
+		_choose_dim if choosing else _numbers_dim)
 
 
 ## **The numbers of the gene being read** (gene-stats.md §5.3), from the same
@@ -6276,31 +5650,20 @@ func _update_numbers() -> void:
 			level = _way_level()
 			path = _way_path(way)
 			_numbers_dim = false
-		_numbers_lines = GeneStats.lines(gene, copies, level, path,
-			GeneStats.context(_genome.tiers(), _cell.radius),
-			-1 if _fork_open() else _explain_at)
 		# **The next level**, at the end of the costs: only a worn gene earns,
 		# and the cards are about a level not yet had.
-		if grown != null and worn > 0 and not _fork_open():
-			(_numbers_lines[1] as Array).append(
-				GeneStats.progress_item(grown.level(), grown.to_next()))
+		_numbers_lines = Figure.numbers_lines(gene, copies, level, path,
+			_genome.tiers(), _cell.radius, -1 if _fork_open() else _explain_at,
+			grown if grown != null and worn > 0 and not _fork_open() else null)
 	_numbers.queue_redraw()
 
 
-## **The caption, whole** (§5.4): the generation, and with the numbers on, this
-## body's size, what its full tank holds and how long that lasts drifting -- in
-## the caption's own size and tint, so it is still a caption.
+## **The caption, whole** ([method Figure.caption], §5.4): the generation, and
+## with the numbers on, this body's size, what its full tank holds and how long
+## that lasts drifting.
 func _update_caption() -> void:
-	# TRANSLATORS: The caption above the figure on the pause screen, in 15 px
-	# type: the word for the cell's whole set of genes, then a middle dot and %s,
-	# which is the generation ("first generation"). Keep %s. With the numbers
-	# switch on, more is added after it, and the whole caption has 560 px: beyond
-	# that the whole pause screen shifts to make room, so keep this short.
-	var caption := tr("genome · %s") % _generation_text()
-	if _show_numbers:
-		caption += Readout.SEP + Readout.plain(GeneStats.cell_items(_cell.radius,
-			_genome.tiers(), _genome.upkeep()))
-	_genome_caption.text = caption
+	_genome_caption.text = Figure.caption(_generation, _show_numbers, _cell.radius,
+		_genome.tiers(), _genome.upkeep())
 
 
 ## **What the three lines under the figure are about**, resolved once.
@@ -6418,14 +5781,6 @@ func _select_default() -> void:
 			return
 
 
-## **How deep the lineage is**: the only readout of how far into the run the
-## player is, and the nearest thing the game has to a score. It moved from the
-## hint to the caption when the hint took on the odds -- zero pixels either way.
-## The phrases are drops.gd's, which a drop's line in the drop menu says too.
-func _generation_text() -> String:
-	return Drops.generation_text(_generation)
-
-
 ## One chip, seated at its arc: its piece of helix, its copies, its word and its
 ## level -- and, while the gene in hand is bound for an empty one, that gene as
 ## it would land.
@@ -6441,16 +5796,16 @@ func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
 	# Named, so a focus path and a harness's `--rects=` both read as what they
 	# are. The chip it replaces has already left the tree, so the name is free.
 	node.name = "Slot%d" % slot
-	node.custom_minimum_size = SLOT_SIZE
-	node.size = SLOT_SIZE
-	node.position = FIGURE_AT + SLOT_SEAT[slot] - SLOT_SIZE * 0.5
+	node.custom_minimum_size = Figure.SLOT_SIZE
+	node.size = Figure.SLOT_SIZE
+	node.position = Figure.chip_at(slot)
 	# Its own slot number, so a rebuild can find the node that replaced it
 	# without re-deriving where it was.
 	node.set_meta(&"slot", slot)
 	if not live:
 		node.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		node.focus_mode = Control.FOCUS_NONE
-		node.draw.connect(_draw_unearned.bind(node))
+		node.draw.connect(Figure.draw_unearned.bind(node))
 		return node
 
 	# **Every live slot takes input, gene in hand or not.** Selecting is what the
@@ -6482,26 +5837,14 @@ func _make_slot(gene: StringName, tier: int, body_tier: int, slot: int,
 	return node
 
 
-## The tray's caption, the height of a chip so the row centres on it.
-func _make_tray_caption() -> Control:
-	var caption := Label.new()
-	caption.name = "Caption"
-	caption.text = tr(WAIT_CAPTION)
-	caption.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	caption.custom_minimum_size = Vector2(0.0, WAIT_SIZE.y)
-	caption.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
-	caption.add_theme_font_size_override("font_size", CAPTION_SIZE)
-	caption.add_theme_color_override("font_color", CAPTION_TINT)
-	return caption
-
-
 ## One waiting gene in the tray. **Carries its gene, not its place in the
 ## queue**: a place is exactly what a lapse or a second meal changes under an
 ## open screen. See [member _in_hand].
 func _make_waiting(gene: StringName) -> Control:
 	var node := Control.new()
 	node.name = "Waiting_%s" % gene
-	node.custom_minimum_size = Vector2(_waiting_width(gene), WAIT_SIZE.y)
+	node.custom_minimum_size = Vector2(
+		Figure.waiting_width(_tray.get_theme_default_font(), gene), Figure.WAIT_SIZE.y)
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	node.focus_mode = Control.FOCUS_ALL
 	node.set_meta(&"waiting", gene)
@@ -6513,20 +5856,6 @@ func _make_waiting(gene: StringName) -> Control:
 	node.set_drag_forwarding(_waiting_drag.bind(node, gene), Callable(),
 		Callable())
 	return node
-
-
-## How wide [param gene]'s chip is: [constant WAIT_SIZE] for every word in
-## [constant WORDS], and wider for a name that is not one -- a retired gene's,
-## handed over by a host on older content. The tray is a flow, so a wide chip
-## can cost a row but never lands on its neighbour.
-func _waiting_width(gene: StringName) -> float:
-	var font := _tray.get_theme_default_font()
-	if font == null:
-		return WAIT_SIZE.x
-	var word := font.get_string_size(_carried_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
-		-1.0, CHIP_WORD).x
-	return maxf(WAIT_SIZE.x, ceilf(WAIT_WORD_X + word + PIP_GAP + PIP_R * 2.0
-		+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + WAIT_AIR))
 
 
 func _on_slot_hover(slot: int) -> void:
@@ -6551,73 +5880,24 @@ func _on_slot_unhover(slot: int) -> void:
 		_redraw_figure()
 
 
-## **The body register, drawn as a body**: what she wears and where she wears
-## it, fixed at birth -- the routine the water uses, nose up, `clock` 0, a still
-## mirror. The tethers go first so the body wins where they cross; then the cell;
-## then the body's own words where it disagrees with its DNA; then the arc being
-## read, last, so nothing covers it.
+## **The body register, drawn as a body** ([method Figure.draw_body]): what she
+## wears and where she wears it, the tethers, and the body's own words where it
+## disagrees with its DNA; then the arc being read, last, so nothing covers it.
 ##
-## **As slack as the body is** (docs/design/hunger.md §4): a starving cell's
-## mirror is crumpled too, its creases still at `clock` 0. In single player the
+## **As slack as the body is** (docs/design/hunger.md §4): in single player the
 ## pause stops hunger and the figure holds; in a pond it burns on under the
-## menu, and [method _step_slack] draws this again as it moves.
-##
-## **And as dosed as it is** (dna-slots-ux.md §3.1): the stain round the inside
-## chip's window and the pits in the rim, as hunger's crumple is -- a reminder
-## when paused, and live in a pond, where a dose goes on hurting under the menu.
+## menu, and [method _step_slack] draws this again as it moves. **And as dosed
+## as it is** (dna-slots-ux.md §3.1): a reminder when paused, and live in a
+## pond, where a dose goes on hurting under the menu.
 func _draw_figure_body() -> void:
 	if _genome == null:
 		return
-	var tiers := _genome.tiers()
-	var worn: Array[StringName] = _genome.body_layout()
-	for slot in _slot_count:
-		_draw_tether(slot)
 	_slack_drawn = _slack
 	_dose_drawn = FoodField.felt_of(_cell.loads, _cell.radius) if _cell != null \
 		else Vector3.ZERO
-	Cilia.draw_cell(_figure_body, FIGURE_AT, 0.0, FIGURE_R, tiers,
-		CellBody.gape_of(int(tiers.get(&"cytostome", 0)), FIGURE_R), FIGURE_R,
-		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn, 0.0, 0.0, 0.0, 0.0,
-		false, Cilia.NO_EYE, Cilia.NO_TAIL, _slack,
-		Cilia.NO_DOSE if _dose_drawn == Vector3.ZERO else {"felt": _dose_drawn})
-	_draw_dissent(worn)
+	Figure.draw_body(_figure_body, _genome.tiers(), _genome.body_layout(),
+		_slot_genes, _slot_count, _slack, _dose_drawn)
 	_draw_arc_mark()
-
-
-## One slot's thread, from its chip to the middle of its arc, in its gene's hue
-## -- or the column's pale, for a slot with nothing in it yet.
-func _draw_tether(slot: int) -> void:
-	var gene := _gene_at(slot)
-	var tone := Cilia.hue(gene) if gene != &"" else PALE
-	var to := _skin_at(slot, TETHER_LIFT)
-	var from := _chip_edge(slot, to)
-	var bow := (to - from).orthogonal() * TETHER_BOW
-	_figure_body.draw_polyline(
-		PackedVector2Array([from, from.lerp(to, 0.5) + bow, to]),
-		Color(tone, TETHER_ALPHA), TETHER_WIDTH, true)
-
-
-## **Where the body disagrees with its DNA, the body says what it wears**: a
-## word at every arc whose organ is not the gene the slot now carries. A slot
-## the body leaves empty says nothing -- there is no organ to name, and the
-## chip's own floating rungs already say the DNA's gene is not worn.
-func _draw_dissent(worn: Array[StringName]) -> void:
-	var font := _figure_body.get_theme_default_font()
-	if font == null:
-		return
-	for slot in mini(worn.size(), _slot_count):
-		var mine := worn[slot]
-		if mine == &"" or mine == _gene_at(slot):
-			continue
-		var near := _skin_at(slot, TETHER_LIFT)
-		var at := near.lerp(_chip_edge(slot, near), DISSENT_ALONG)
-		var word := _word(mine)
-		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			DISSENT_SIZE).x
-		_figure_body.draw_string(font,
-			at + Vector2(-width * 0.5, DISSENT_SIZE * 0.36), word,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, DISSENT_SIZE,
-			Color(Cilia.hue(mine), DISSENT_ALPHA))
 
 
 ## **The part being read, lit on the skin.** Hovered first, like every line
@@ -6648,31 +5928,7 @@ func _draw_arc_mark() -> void:
 			gene = _gene_at(target)
 		else:
 			gene = GenomeNode.form_at(hand, slot) if GenomeNode.has_forms(hand) else hand
-	if GenomeNode.is_inside(slot):
-		_draw_inside_mark(gene)
-		return
-	var arc := Cilia.arc_for_slot(slot)
-	var points := PackedVector2Array()
-	for i in ARC_MARK_STEPS + 1:
-		var t := deg_to_rad(lerpf(arc.x, arc.y,
-			float(i) / float(ARC_MARK_STEPS)))
-		points.append(Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R, t,
-			ARC_MARK_LIFT))
-	_figure_body.draw_polyline(points,
-		Color(Cilia.hue(gene) if gene != &"" else PALE, ARC_MARK_ALPHA),
-		ARC_MARK_WIDTH, true)
-
-
-## **The inside, lit**: a ring along the ovoid just inside the rim, in the hue
-## of [param gene], or the column's pale for an empty inside.
-func _draw_inside_mark(gene: StringName) -> void:
-	var points := PackedVector2Array()
-	for i in INSIDE_MARK_STEPS + 1:
-		points.append(Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R * INSIDE_MARK_AT,
-			TAU * float(i) / float(INSIDE_MARK_STEPS)))
-	_figure_body.draw_polyline(points,
-		Color(Cilia.hue(gene) if gene != &"" else PALE, INSIDE_MARK_ALPHA),
-		INSIDE_MARK_WIDTH, true)
+	Figure.draw_mark(_figure_body, slot, gene)
 
 
 ## **Whether the gene in the air would be refused at [param slot]**: a move the
@@ -6685,34 +5941,13 @@ func _drop_refused(slot: int) -> bool:
 	return _dragging >= 0 and slot != _dragging and not _genome.can_move(_dragging, slot)
 
 
-## The middle of [param slot]'s arc on this figure's skin, [param lift] off it.
-## Slot 1 is the flank pair: its chip and its thread are on the starboard side,
-## where anything but the cirrus is worn.
-func _skin_at(slot: int, lift: float) -> Vector2:
-	var arc := Cilia.arc_for_slot(slot)
-	return Cilia.skin_point(FIGURE_AT, 0.0, FIGURE_R,
-		deg_to_rad((arc.x + arc.y) * 0.5), lift)
-
-
-## Where a line from [param slot]'s chip toward [param to] leaves the chip, inset
-## so it starts clear of the chip's own word and helix.
-func _chip_edge(slot: int, to: Vector2) -> Vector2:
-	var centre := FIGURE_AT + SLOT_SEAT[slot]
-	var d := to - centre
-	var half := SLOT_SIZE * 0.5 - TETHER_INSET
-	var k := 1.0
-	if absf(d.x) > 0.001:
-		k = minf(k, half.x / absf(d.x))
-	if absf(d.y) > 0.001:
-		k = minf(k, half.y / absf(d.y))
-	return centre + d * k
-
-
+## One chip, as the screen stands: [method Figure.draw_chip], handed what the
+## selection, the hand and the drag make of [param slot] at draw time.
 func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 		slot: int) -> void:
 	var selected := _armed == slot
 	var hand := _hand()
-	var tone := Cilia.hue(gene) if gene != &"" else PALE
+	var tone := Cilia.hue(gene) if gene != &"" else Figure.PALE
 	# **Armed for the gene in hand, the lens takes the incoming hue**, as the arc
 	# on the body does. An empty slot also shows the gene as it would land; an
 	# *occupied* one keeps drawing its own, because that is what the tap
@@ -6723,10 +5958,6 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	var armed := selected and hand != &"" and _dragging == SLOT_NONE
 	if armed:
 		tone = Cilia.hue(hand)
-	# **The inside chip sits on the body, over a window of the base colour**, so
-	# its weave and word read over the nucleus and a stain (dna-slots-ux.md §3.1).
-	if GenomeNode.is_inside(slot):
-		_draw_inside_window(node)
 	# **Where a second tap would really go** (dna-slots.md §5.2): written here,
 	# a copy added where its form already is, or nothing at all.
 	var raise_to := _raise_target(_armed) if _dragging == SLOT_NONE \
@@ -6758,9 +5989,9 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 			# coming back into it -- the displaced gene, or the column's own
 			# pale if the destination is empty. A refused move brings nothing.
 			var displaced := _gene_at(_hovered)
-			tone = Cilia.hue(displaced) if displaced != &"" else PALE
+			tone = Cilia.hue(displaced) if displaced != &"" else Figure.PALE
 			if _drop_refused(_hovered):
-				tone = PALE
+				tone = Figure.PALE
 
 	var shown := gene
 	var copies := tier
@@ -6802,7 +6033,7 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 	# and louder on the one a toxin in the air is over.
 	var ghost: StringName = &""
 	var ghost_copies := 0
-	var ghost_ink := GHOST_INK
+	var ghost_ink := Figure.GHOST_INK
 	if shown == &"" and not refused:
 		if _dragging == SLOT_NONE:
 			ghost = _ghost_at(slot)
@@ -6811,44 +6042,15 @@ func _draw_slot(node: Control, gene: StringName, tier: int, body_tier: int,
 			ghost = _landing_at(slot)
 			ghost_copies = _hand_copies() if _dragging == SLOT_SAMPLE \
 				else _genome.dna_tier(_gene_at(_dragging))
-			ghost_ink = LAND_INK
+			ghost_ink = Figure.LAND_INK
 
-	node.draw_set_transform(Vector2(CHIP_X, 0.0))
-	# **The lens fills, and that is the whole of "selected".** The middle lobe
-	# of three is the slot's own.
-	if selected:
-		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS))
-	elif trace:
-		Cilia.draw_lens(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, 0, 1.0, Color(tone, CHIP_LENS * RAISE_TRACE))
-	var bright := BACKBONE_LIT if selected else (REFUSED_INK if refused else 1.0)
-	# **A fork waiting here parts the strands** (beam-levels.md §8.3): the first
-	# two lobes as ever, and then the fork where the third one was.
-	var forking := shown != &"" and _genome.can_choose(shown)
-	if forking:
-		Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, CHIP_LOBES - 1, 0, bright, 0)
-		Cilia.draw_fork(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, FORK_FROM, FORK_TIPS, FORK_SPREAD, Cilia.hue(shown), bright)
-	else:
-		Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, CHIP_LOBES, 0, bright, 0)
-	if shown != &"":
-		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
-			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(shown), copies, worn)
-	node.draw_set_transform(Vector2.ZERO)
-
-	_draw_chip_label(node, shown, copies, worn, selected)
-	if ghost != &"":
-		_draw_ghost_label(node, ghost, ghost_copies, ghost_ink)
-	if LEVEL_SEAT == LevelSeat.LOBE:
-		_draw_chip_level(node, shown, worn, selected, forking)
-
-	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
-			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
-			FOCUS_TINT, FOCUS_WIDTH, true)
+	# **A fork waiting here parts the strands** (beam-levels.md §8.3), and a
+	# gene that levels carries its banked level in its third lobe.
+	var grown := _genome.progression(shown)
+	Figure.draw_chip(node, slot, shown, copies, worn, tone,
+		grown.level() if grown != null else 0,
+		shown != &"" and _genome.can_choose(shown), selected, trace, refused,
+		ghost, ghost_copies, ghost_ink)
 
 
 ## **The form an empty [param slot] would make of the toxin in hand**, or &"":
@@ -6882,251 +6084,33 @@ func _landing_at(slot: int) -> StringName:
 	return GenomeNode.form_at(flying, slot)
 
 
-## **A form not written yet** (dna-slots-ux.md §3.2): its word and
-## [param copies] as ring pips, centred as a chip's own reading is, at
-## [param ink]. No rungs and no level -- nothing is in the DNA until the tap or
-## the drop, and the rungs are the DNA.
-func _draw_ghost_label(node: Control, form: StringName, copies: int,
-		ink: float) -> void:
-	var font := node.get_theme_default_font()
-	if font == null:
-		return
-	var word := _word(form)
-	var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-		CHIP_WORD).x
-	var left := (SLOT_SIZE.x - width - PIP_GAP
-		- PIP_PITCH * float(GenomeNode.TIER_MAX - 1) - PIP_R * 2.0) * 0.5
-	node.draw_string(font, Vector2(left, CHIP_BASE), word,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
-		Color(PALE, LABEL_TINT_LOUD.a * ink))
-	_draw_pips(node, Vector2(left + width + PIP_GAP + PIP_R, CHIP_BASE - PIP_LIFT),
-		Cilia.hue(form), copies, 0, ink)
-
-
-## **The inside chip's window**: an ellipse of the base colour on the chip's
-## centre, drawn first, so the nucleus and a stain sit behind the chip and not
-## through its word.
-func _draw_inside_window(node: Control) -> void:
-	var centre := SLOT_SIZE * 0.5
-	var points := PackedVector2Array()
-	points.resize(INSIDE_BACK_STEPS)
-	for i in INSIDE_BACK_STEPS:
-		var a := TAU * float(i) / float(INSIDE_BACK_STEPS)
-		points[i] = centre + Vector2(cos(a) * INSIDE_BACK.x, sin(a) * INSIDE_BACK.y)
-	node.draw_colored_polygon(points, INSIDE_BACK_TINT)
-
-
-## A slot the body has not earned: its helix, faint, and nothing else.
-func _draw_unearned(node: Control) -> void:
-	node.draw_set_transform(Vector2(CHIP_X, 0.0))
-	Cilia.draw_weave(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
-		CHIP_LOBES, 0, UNEARNED_INK, 0)
-	node.draw_set_transform(Vector2.ZERO)
-
-
-## The plain word and the level, centred under the chip as one group so a long
-## word and a short one both sit under their own piece of helix.
-##
-## **The word is the slot's word**: a short verb parsed at arm's length, never
-## the biological name. That belongs to the explanation line, which is read
-## rather than glanced at.
-func _draw_chip_label(node: Control, gene: StringName, copies: int, worn: int,
-		selected: bool) -> void:
-	if gene == &"":
-		return
-	var font := node.get_theme_default_font()
-	if font == null:
-		return
-	var word := _word(gene)
-	var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-		CHIP_WORD).x
-	var group := width + PIP_GAP + PIP_PITCH * float(GenomeNode.TIER_MAX - 1) \
-		+ PIP_R * 2.0
-	# Owner's call 2 answered the other way: the level after the pips, in the
-	# group, so the whole reading stays centred under its helix.
-	var level := ""
-	var level_size := LEVEL_SIZE
-	var grown := _genome.progression(gene)
-	if LEVEL_SEAT == LevelSeat.AFTER_PIPS and grown != null:
-		level = str(grown.level())
-		level_size = _level_size(grown.level())
-		group += LEVEL_AFTER_GAP + font.get_string_size(level,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, level_size).x
-	var left := (SLOT_SIZE.x - group) * 0.5
-	var tint := _word_tint(selected, worn)
-	node.draw_string(font, Vector2(left, CHIP_BASE), word,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD, tint)
-	_draw_pips(node,
-		Vector2(left + width + PIP_GAP + PIP_R, CHIP_BASE - PIP_LIFT),
-		Cilia.hue(gene), copies, worn, 1.0)
-	if level != "":
-		node.draw_string(font, Vector2(left + width + PIP_GAP
-			+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + PIP_R * 2.0
-			+ LEVEL_AFTER_GAP, CHIP_BASE), level, HORIZONTAL_ALIGNMENT_LEFT,
-			-1.0, level_size, tint)
-
-
-## The tint a chip's word is drawn in -- and its level, which reads with it.
-## Loud while selected; quieter for an organ this body does not wear, the third
-## channel agreeing with the floating rungs and the rings.
-func _word_tint(selected: bool, worn: int) -> Color:
-	if selected:
-		return LABEL_TINT_LOUD
-	if worn <= 0:
-		return Color(PALE, WORD_UNEXPRESSED)
-	return LABEL_TINT
-
-
-## **The level, in the third lobe** (beam-levels.md §8.1): the banked level --
-## `level()`, never the one held at the fork -- centred in the lens right of the
-## rungs, in the word's own tint. At an open fork it moves into the fork's mouth
-## and takes the gene's hue, so the one chip that is asking for something is the
-## one whose number is coloured. Drawn wherever the chip draws its word, and so
-## never on a drag source or an empty slot.
-func _draw_chip_level(node: Control, gene: StringName, worn: int,
-		selected: bool, forking: bool) -> void:
-	if gene == &"":
-		return
-	var grown := _genome.progression(gene)
-	var font := node.get_theme_default_font()
-	if grown == null or font == null:
-		return
-	var text := str(grown.level())
-	var size := _level_size(grown.level())
-	var width := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-		size).x
-	var at := LEVEL_FORK_X if forking else LEVEL_X
-	node.draw_string(font, Vector2(at - width * 0.5, LEVEL_BASE), text,
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, size,
-		Color(Cilia.hue(gene), LEVEL_FORK_ALPHA) if forking
-			else _word_tint(selected, worn))
-
-
-## The numeral's size: [constant LEVEL_SIZE], and one step down from three
-## digits, which the lobe was measured to hold at two.
-func _level_size(level: int) -> int:
-	return LEVEL_SIZE if level < LEVEL_SMALL_FROM else LEVEL_SIZE_SMALL
-
-
-## Three pips from [param first], a pitch apart: a disc for each copy worn, a
-## ring for each copy only carried, a dot for each copy there is still room for.
-## [param ink] is the tray's dim; a chip passes 1.
-func _draw_pips(node: Control, first: Vector2, tone: Color, copies: int,
-		worn: int, ink: float) -> void:
-	for i in GenomeNode.TIER_MAX:
-		var at := first + Vector2(PIP_PITCH * float(i), 0.0)
-		if i < worn:
-			node.draw_circle(at, PIP_R, Color(tone, 0.95 * ink), true, -1.0, true)
-		elif i < copies:
-			# Stroked inside the disc's radius, so a ring and a disc are the
-			# same size and only their fill differs.
-			node.draw_arc(at, PIP_R - PIP_RING * 0.5, 0.0, TAU, 16,
-				Color(tone, 0.95 * ink), PIP_RING, true)
-		else:
-			node.draw_circle(at, PIP_ROOM_R, Color(PALE, PIP_ROOM_ALPHA * ink),
-				true, -1.0, true)
-
-
-## One waiting gene: its loose base pair, its word and its level as rings.
-##
-## **The wilt** (dna-body.md §5): its halos fade over its last
-## [constant Cilia.HELD_WILT] seconds, the vesicle's own clock on the body, so
-## the tray and the figure in the water say *about to lapse* the same way. Only
-## a pond shows it -- single player stops every clock while this screen is open
-## -- and [method _step_tray] redraws it there.
+## One waiting gene ([method Figure.draw_waiting]), in hand unless a gene is in
+## the air out of the tray or a fork's cards are up: one thing in the tray is
+## decided at a time, and while the cards are up the fork's chip carries the
+## in-hand mark. The hand is kept, and it is drawn in hand again the moment the
+## figure comes back. Its wilt moves only in a pond, where [method _step_tray]
+## redraws it.
 func _draw_waiting(node: Control, gene: StringName) -> void:
-	# While a fork's cards are up the fork chip carries the in-hand mark: one
-	# thing in the tray is being decided at a time. The hand is kept, and it is
-	# drawn in hand again the moment the figure comes back.
-	var in_hand := gene == _hand() and _dragging != SLOT_SAMPLE \
-		and not _fork_open()
-	var ink := 1.0 if in_hand else WAIT_DIM
-	var tone := Cilia.hue(gene)
-	var mid := WAIT_SIZE.y * 0.5 - 2.0
-	var wilt := clampf(_genome.waiting_left(gene) / Cilia.HELD_WILT, 0.0, 1.0)
-	_draw_base_pair(node, Vector2(WAIT_BAR_X, mid), tone, ink,
-		(1.6 if in_hand else 1.0) * (0.40 + 0.60 * wilt))
-	var font := node.get_theme_default_font()
-	if font != null:
-		# A toxin waits as `toxin`: neither form until it lands (§3.5).
-		var word := _carried_word(gene)
-		node.draw_string(font, Vector2(WAIT_WORD_X, mid + 5.0), word,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
-			LABEL_TINT_LOUD if in_hand else LABEL_TINT)
-		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			CHIP_WORD).x
-		# Carried by definition, so rings and never a disc.
-		_draw_pips(node, Vector2(WAIT_WORD_X + width + PIP_GAP + PIP_R, mid),
-			tone, _genome.waiting_copies(gene), 0, ink)
-	# The chip's own width, not WAIT_SIZE's: a name wider than any word grows
-	# its chip, and the underline is under the whole of it.
-	if in_hand:
-		node.draw_line(Vector2(6.0, WAIT_SIZE.y - 3.0),
-			Vector2(node.size.x - 6.0, WAIT_SIZE.y - 3.0), Color(tone, 0.55),
-			1.5, true)
-	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			Vector2(node.size.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			FOCUS_TINT, FOCUS_WIDTH, true)
+	Figure.draw_waiting(node, gene, _genome.waiting_copies(gene),
+		_genome.waiting_left(gene),
+		gene == _hand() and _dragging != SLOT_SAMPLE and not _fork_open())
 
 
-## **A base pair that is not in a ladder yet**: a bar with a base at each end,
-## inside two faint rings -- the picture of a gene that has not been given a
-## place, in the tray and on a finger alike. [param halo] scales the rings.
-func _draw_base_pair(node: CanvasItem, bar: Vector2, tone: Color, ink: float,
-		halo: float) -> void:
-	for i in SAMPLE_HALO.size():
-		node.draw_arc(bar, SAMPLE_HALO[i], 0.0, TAU, 24,
-			Color(tone, SAMPLE_HALO_ALPHA[i] * halo), 1.4, true)
-	var top := bar - Vector2(0.0, SAMPLE_BAR * 0.5)
-	var bottom := bar + Vector2(0.0, SAMPLE_BAR * 0.5)
-	node.draw_line(top, bottom, Color(tone, 0.94 * ink), SAMPLE_WIDTH, true)
-	node.draw_circle(top, SAMPLE_CAP, Color(tone, 0.94 * ink), true, -1.0, true)
-	node.draw_circle(bottom, SAMPLE_CAP, Color(tone, 0.94 * ink), true, -1.0,
-		true)
-
-
-## **The travelling gene**: the base pair with its plain word beside it, centred
-## as a group on [param centre]. The word stays, because a base pair with no
-## word is a coloured dot.
+## **The travelling gene** ([method Figure.draw_sample]): out of the tray a
+## toxin is `toxin`; out of a slot it is the form it is.
 func _draw_sample(node: Control, gene: StringName, centre: Vector2) -> void:
-	var tone := Cilia.hue(gene)
-	var font := node.get_theme_default_font()
-	# Out of the tray a toxin is `toxin`; out of a slot it is the form it is.
-	var word := _carried_word(gene) if _dragging == SLOT_SAMPLE else _word(gene)
-	var width := 0.0
-	if font != null:
-		width = font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			SAMPLE_WORD).x
-	var group := SAMPLE_WIDTH + SAMPLE_GAP + width
-	var bar := Vector2(centre.x - group * 0.5 + SAMPLE_WIDTH * 0.5, centre.y)
-	_draw_base_pair(node, bar, tone, 1.0, 1.0)
-	if font != null:
-		node.draw_string(font,
-			Vector2(bar.x + SAMPLE_WIDTH * 0.5 + SAMPLE_GAP,
-				centre.y + SAMPLE_WORD * 0.38),
-			word, HORIZONTAL_ALIGNMENT_LEFT, -1.0, SAMPLE_WORD, LABEL_TINT_LOUD)
+	Figure.draw_sample(node, gene, _carried_word(gene)
+		if _dragging == SLOT_SAMPLE else _word(gene), centre)
 
 
-## **The one organ beside a sentence on the pause screen.**
-##
-## The old tiles drew an organ each, which is what taught a point-of-view
-## player the cilia vocabulary (genes-and-cilia.md §2.4). The figure now draws
-## every organ the body wears, where it wears it; what it cannot draw is a gene
-## the body does not wear -- a waiting one, or one only the DNA carries -- and
-## seven small tufts round a ring of chips would be the four-tuft mistake
-## diegetic-hud.md §2 already made and measured. One, at the thing the player
-## is reading, in the row that already exists, keeps the vocabulary and spends
-## 30 px.
+## **The one organ beside a sentence on the pause screen**
+## ([method Figure.draw_explain_organ]): the gene being read, at full ink if
+## this body wears it or it waits to be placed.
 func _draw_explain_organ() -> void:
 	if _explain_gene == &"" or _explain_organ == null:
 		return
-	var worn := _genome.tier(_explain_gene) > 0 \
-		or _genome.waiting_index(_explain_gene) >= 0
-	Cilia.draw_tile_organ(_explain_organ, _explain_gene, _explain_tier,
-		EXPLAIN_ORGAN_SEAT,
-		Cilia.TILE_STROKE_ALPHA if worn else ORGAN_UNEXPRESSED,
-		EXPLAIN_ORGAN_SCALE)
+	Figure.draw_explain_organ(_explain_organ, _explain_gene, _explain_tier,
+		_genome.tier(_explain_gene) > 0 or _genome.waiting_index(_explain_gene) >= 0)
 
 
 # --- Two taps on the same target -------------------------------------------
@@ -7349,11 +6333,11 @@ func _waiting_drag(_at: Vector2, node: Control, gene: StringName) -> Variant:
 func _drag_preview(gene: StringName) -> Control:
 	var preview := Control.new()
 	preview.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	preview.custom_minimum_size = SAMPLE_BOX
-	preview.size = SAMPLE_BOX
-	preview.position = Vector2(-SAMPLE_BOX.x * 0.5,
-		-SAMPLE_BOX.y * 0.5 - DRAG_LIFT)
-	preview.draw.connect(_draw_sample.bind(preview, gene, SAMPLE_BOX * 0.5))
+	preview.custom_minimum_size = Figure.SAMPLE_BOX
+	preview.size = Figure.SAMPLE_BOX
+	preview.position = Vector2(-Figure.SAMPLE_BOX.x * 0.5,
+		-Figure.SAMPLE_BOX.y * 0.5 - DRAG_LIFT)
+	preview.draw.connect(_draw_sample.bind(preview, gene, Figure.SAMPLE_BOX * 0.5))
 	var wrap := Control.new()
 	wrap.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	wrap.add_child(preview)
@@ -7870,52 +6854,35 @@ func _build_level_row() -> void:
 	_hint_row.alignment = BoxContainer.ALIGNMENT_CENTER
 	_hint_row.custom_minimum_size = Vector2(0.0, HINT_ROW_HEIGHT)
 	_hint_level.add_theme_font_size_override("font_size", 14)
-	_hint_level.add_theme_color_override("font_color", LABEL_TINT)
+	_hint_level.add_theme_color_override("font_color", Figure.LABEL_TINT)
 	_hint_level.hide()
-	_hint_gauge.custom_minimum_size = GAUGE_SIZE
+	_hint_gauge.custom_minimum_size = Figure.GAUGE_SIZE
 	_hint_gauge.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_hint_gauge.hide()
 	_hint_gauge.draw.connect(_draw_gauge)
-	_gauge_track = _flat(GAUGE_TRACK, GAUGE_RADIUS)
-	_gauge_fill = _flat(GAUGE_TRACK, GAUGE_RADIUS)
+	_gauge_track = Figure.flat(Figure.GAUGE_TRACK, Figure.GAUGE_RADIUS)
+	_gauge_fill = Figure.flat(Figure.GAUGE_TRACK, Figure.GAUGE_RADIUS)
 
 
-## The gauge: a track, and the share of the level already earned in the gene's
-## hue. One pixel is a thirty-sixth of a level.
+## The gauge ([method Figure.draw_gauge]): a track, and the share of the level
+## already earned in the gene's hue. One pixel is a thirty-sixth of a level.
 func _draw_gauge() -> void:
 	var grown: Progression = _genome.progression(_gauge_gene) \
 		if _gauge_gene != &"" else null
 	if grown == null:
 		return
-	_hint_gauge.draw_style_box(_gauge_track, GAUGE_BAR)
-	var fill := roundf(GAUGE_BAR.size.x * grown.progress())
-	if fill <= 0.0:
-		return
-	_gauge_fill.bg_color = Color(Cilia.hue(_gauge_gene), GAUGE_FILL_ALPHA)
-	_hint_gauge.draw_style_box(_gauge_fill,
-		Rect2(GAUGE_BAR.position, Vector2(fill, GAUGE_BAR.size.y)))
-
-
-## A plain rounded box, filled, with an edge if one is asked for.
-func _flat(fill: Color, radius: int, edge := Color(0.0, 0.0, 0.0, 0.0),
-		width := 0) -> StyleBoxFlat:
-	var box := StyleBoxFlat.new()
-	box.bg_color = fill
-	box.set_corner_radius_all(radius)
-	if width > 0:
-		box.border_color = edge
-		box.set_border_width_all(width)
-	return box
+	Figure.draw_gauge(_hint_gauge, _gauge_gene, grown.progress(), _gauge_track,
+		_gauge_fill)
 
 
 ## The fork view's two cards. Their places are set here, as the figure's are;
 ## the scene carries the same numbers so the tree reads right in an editor.
 func _build_fork_view() -> void:
-	_fork_view.custom_minimum_size = FIGURE_SIZE
+	_fork_view.custom_minimum_size = Figure.FIGURE_SIZE
 	_fork_view.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_fork_view.hide()
-	_way_box = _flat(WAY_FILL, WAY_CORNER, WAY_EDGE, 1)
-	_way_box_armed = _flat(WAY_FILL, WAY_CORNER, WAY_EDGE, WAY_EDGE_ARMED)
+	_way_box = Figure.flat(WAY_FILL, WAY_CORNER, WAY_EDGE, 1)
+	_way_box_armed = Figure.flat(WAY_FILL, WAY_CORNER, WAY_EDGE, WAY_EDGE_ARMED)
 	for way in _ways.size():
 		var card := _ways[way]
 		card.position = WAY_SEAT[way]
@@ -7972,7 +6939,7 @@ func _levels_sign() -> int:
 	for gene: StringName in _genome.levels():
 		var grown := _genome.progression(gene)
 		sig += gene.hash() * (grown.level() * 64
-			+ int(roundf(GAUGE_BAR.size.x * grown.progress())) + 1)
+			+ int(roundf(Figure.GAUGE_BAR.size.x * grown.progress())) + 1)
 	return sig
 
 
@@ -8020,7 +6987,10 @@ func _numbers_sign() -> int:
 func _make_fork_chip(gene: StringName) -> Control:
 	var node := Control.new()
 	node.name = "Fork_%s" % gene
-	node.custom_minimum_size = Vector2(_fork_chip_width(gene), WAIT_SIZE.y)
+	var grown := _genome.progression(gene)
+	node.custom_minimum_size = Vector2(Figure.fork_chip_width(
+		_tray.get_theme_default_font(), gene, grown.level() if grown != null else 0),
+		Figure.WAIT_SIZE.y)
 	node.mouse_filter = Control.MOUSE_FILTER_STOP
 	node.focus_mode = Control.FOCUS_ALL
 	node.set_meta(&"fork", gene)
@@ -8031,57 +7001,15 @@ func _make_fork_chip(gene: StringName) -> Control:
 	return node
 
 
-## [constant WAIT_SIZE], and wider only for a name no word was written for --
-## `venom 99`, the widest the game makes, ends at 111 of 116.
-func _fork_chip_width(gene: StringName) -> float:
-	var font := _tray.get_theme_default_font()
-	var grown := _genome.progression(gene)
-	if font == null or grown == null:
-		return WAIT_SIZE.x
-	var word := font.get_string_size(_word(gene), HORIZONTAL_ALIGNMENT_LEFT,
-		-1.0, CHIP_WORD).x
-	var digits := font.get_string_size(str(grown.level()),
-		HORIZONTAL_ALIGNMENT_LEFT, -1.0, _level_size(grown.level())).x
-	return maxf(WAIT_SIZE.x, ceilf(FORK_WORD_X + word + FORK_LEVEL_GAP + digits
-		+ WAIT_AIR))
-
-
-## The fork's chip: the slot's fork, half size, then the gene's word and its
-## level in its hue. Loud, and carrying the gene-in-hand mark, while its cards
-## are up; stepped back, like every other chip in the tray, while a waiting
-## gene is in hand.
+## The fork's chip ([method Figure.draw_fork_chip]): loud, and carrying the
+## gene-in-hand mark, while its cards are up; stepped back, like every other
+## chip in the tray, while a waiting gene is in hand.
 func _draw_fork_chip(node: Control, gene: StringName) -> void:
 	var grown := _genome.progression(gene)
 	if grown == null:
 		return
-	var open := _fork_gene == gene
-	var tone := Cilia.hue(gene)
-	var ink := 1.0 if open or _hand() == &"" else WAIT_DIM
-	node.draw_set_transform(FORK_GLYPH_AT
-		- Vector2(FORK_GLYPH_FROM, CHIP_MID) * FORK_GLYPH_SCALE, 0.0,
-		Vector2.ONE * FORK_GLYPH_SCALE)
-	Cilia.draw_fork(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID, CHIP_AMP,
-		FORK_GLYPH_FROM, FORK_TIPS, FORK_SPREAD, tone, ink)
-	node.draw_set_transform(Vector2.ZERO)
-	var font := node.get_theme_default_font()
-	if font != null:
-		var word := _word(gene)
-		node.draw_string(font, Vector2(FORK_WORD_X, FORK_WORD_BASE), word,
-			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
-			LABEL_TINT_LOUD if open else LABEL_TINT)
-		var width := font.get_string_size(word, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			CHIP_WORD).x
-		node.draw_string(font,
-			Vector2(FORK_WORD_X + width + FORK_LEVEL_GAP, FORK_WORD_BASE),
-			str(grown.level()), HORIZONTAL_ALIGNMENT_LEFT, -1.0,
-			_level_size(grown.level()), Color(tone, LEVEL_FORK_ALPHA * ink))
-	if open:
-		node.draw_line(Vector2(6.0, FORK_OPEN_Y),
-			Vector2(node.size.x - 6.0, FORK_OPEN_Y), Color(tone, 0.55), 1.5, true)
-	if node.has_focus():
-		node.draw_line(Vector2(FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			Vector2(node.size.x - FOCUS_INSET, WAIT_SIZE.y - 1.0),
-			FOCUS_TINT, FOCUS_WIDTH, true)
+	Figure.draw_fork_chip(node, gene, grown.level(), _fork_gene == gene,
+		_hand() != &"")
 
 
 ## **A tap on the fork's chip opens its cards, and a second shuts them.** On the
@@ -8515,15 +7443,17 @@ func _draw_way(card: Control, way: int) -> void:
 		# A path this build has no lines for draws none, as it always did.
 		var has_lines := PATH_LINES.has(path)
 		_draw_centred(card, font, tr(PATH_LINES[path][0]) if has_lines else "",
-			WAY_PRO_BASE, WAY_LINE_SIZE, Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+			WAY_PRO_BASE, WAY_LINE_SIZE,
+			Color(Figure.EXPLAIN_TINT, Figure.EXPLAIN_TINT.a * ink))
 		_draw_centred(card, font, tr(PATH_LINES[path][1]) if has_lines else "",
-			WAY_CON_BASE, WAY_LINE_SIZE, Color(EXPLAIN_TINT, EXPLAIN_TINT.a * ink))
+			WAY_CON_BASE, WAY_LINE_SIZE,
+			Color(Figure.EXPLAIN_TINT, Figure.EXPLAIN_TINT.a * ink))
 		_draw_centred(card, font, _cost_words(way), WAY_COST_BASE,
-			WAY_LINE_SIZE, Color(PALE, WAY_COST_ALPHA * ink))
+			WAY_LINE_SIZE, Color(Figure.PALE, WAY_COST_ALPHA * ink))
 	if card.has_focus():
-		card.draw_line(Vector2(FOCUS_INSET, WAY_FOCUS_Y),
-			Vector2(card.size.x - FOCUS_INSET, WAY_FOCUS_Y), FOCUS_TINT,
-			FOCUS_WIDTH, true)
+		card.draw_line(Vector2(Figure.FOCUS_INSET, WAY_FOCUS_Y),
+			Vector2(card.size.x - Figure.FOCUS_INSET, WAY_FOCUS_Y), Figure.FOCUS_TINT,
+			Figure.FOCUS_WIDTH, true)
 
 
 ## The beam a way gives: still rays for a still way; for a sweeping one each
@@ -8715,7 +7645,7 @@ func _offer_free() -> Array[int]:
 	var out: Array[int] = []
 	var layout := _genome.layout()
 	var gene := _genome.held_sample
-	for slot in mini(mini(layout.size(), SLOT_SEAT.size()), GenomeNode.INSIDE):
+	for slot in mini(mini(layout.size(), Figure.SLOT_SEAT.size()), GenomeNode.INSIDE):
 		if layout[slot] != &"":
 			continue
 		if GenomeNode.has_forms(gene) and layout.has(GenomeNode.form_at(gene, slot)):
@@ -9221,13 +8151,13 @@ const CHOOSE_DART_X := 66.0
 ## **The word budget, measured, because it is the number this block ran out of
 ## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
 ## [constant LABEL_SIZE] 13 in the fallback font the widest of
-## [constant WORDS]'s sixteen is `venom` at **44.00**. Three pixels of tail,
+## [constant Figure.WORDS]'s sixteen is `venom` at **44.00**. Three pixels of tail,
 ## and that is the whole of it: the next word to need more has nowhere to go
 ## and will run past the block's own edge, silently, because nothing clips it.
 ##
 ## **Letters are not the measure -- the font is proportional.** `shield` is six
 ## letters and 38.00; `poison` is six and 43.00; `venom` is five and 44.00. What
-## has to be checked when [constant WORDS] gains an entry is
+## has to be checked when [constant Figure.WORDS] gains an entry is
 ## `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. The
 ## answer if it fails is to add the difference to [constant CHOOSE_BLOCK_W] on
 ## the **outboard** side, the way the 118 -> 124 widen already did, so the gap
@@ -9314,7 +8244,7 @@ func _build_choosing() -> void:
 		column.add_child(_make_choose_cap(CHOOSE_CAP_LOBES + CHOOSE_LOCI, -1))
 	_choose_says.offset_top = bottom + CHOOSE_SAYS_GAP
 	_choose_says.offset_bottom = _choose_says.offset_top + CHOOSE_SAYS_H
-	_choose_organ.custom_minimum_size = EXPLAIN_ORGAN_SIZE
+	_choose_organ.custom_minimum_size = Figure.EXPLAIN_ORGAN_SIZE
 	_choose_organ.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	_choose_organ.draw.connect(_draw_choose_organ)
 
@@ -9518,22 +8448,19 @@ func _choose_say() -> void:
 		# A locus with nothing in it still has a direction to explain, which is
 		# what the dart under it is for -- or, inside, the one gene that goes
 		# there, as the pause screen's inside chip says it.
-		var inside := GenomeNode.is_inside(slot)
-		_choose_line.text = "" if slot < 0 else (tr(EXPLAIN_INSIDE) if inside
-			else tr(EXPLAIN_EMPTY))
-		_choose_hint.text = "" if slot < 0 else (tr(HINT_INSIDE) if inside
-			else tr(HINT_EMPTY))
+		_choose_line.text = "" if slot < 0 else Figure.explain_empty(slot)
+		_choose_hint.text = "" if slot < 0 else Figure.hint_empty(slot)
 		return
 	_choose_name.text = GenomeNode.name_of(gene)
 	_choose_name.add_theme_color_override("font_color",
-		Color(Cilia.hue(gene), EXPLAIN_NAME_ALPHA))
+		Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	# **The way her mother took, if she took one** (beam-levels.md §8.6): a
 	# daughter inherits the path with the level, and an open fork reads as no
 	# path yet. A venom says where it works at her locus.
 	var says := _explains(gene, slot)
 	_choose_line.text = "" if says.is_empty() else "· " + says
 	var register := tr(CHOOSE_WORN) if _choose_worn else tr(CHOOSE_CARRIED)
-	var odds := tr(HINT_CERTAIN) if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
+	var odds := tr(Figure.HINT_CERTAIN) if GenomeNode.ALWAYS_EXPRESSED.has(gene) \
 		else _odds(int(found[1]))
 	# **The level goes in the line, not on the strands** (§8.6): both daughters
 	# carry the same level for every gene they share, so a mark on both strands
@@ -9541,7 +8468,8 @@ func _choose_say() -> void:
 	# it`; the widest, 400 px, centres clear of both blocks.
 	var level := _choose_level(gene)
 	if level > 0:
-		_choose_hint.text = "%s · %s · %s" % [register, tr(HINT_LEVEL) % level, odds]
+		_choose_hint.text = "%s · %s · %s" % [register, Figure.level_text(level),
+			odds]
 	else:
 		_choose_hint.text = "%s · %s" % [register, odds]
 
@@ -9563,10 +8491,7 @@ func _choose_level(gene: StringName) -> int:
 func _draw_choose_organ() -> void:
 	if _choose_gene == &"":
 		return
-	Cilia.draw_tile_organ(_choose_organ, _choose_gene, _choose_tier,
-		EXPLAIN_ORGAN_SEAT,
-		Cilia.TILE_STROKE_ALPHA if _choose_worn else ORGAN_UNEXPRESSED,
-		EXPLAIN_ORGAN_SCALE)
+	Figure.draw_explain_organ(_choose_organ, _choose_gene, _choose_tier, _choose_worn)
 
 
 func _draw_choose_cap(node: Control, lobe0: int, taper: int) -> void:
@@ -9580,7 +8505,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 	var found := _choose_at(side, slot)
 	var gene: StringName = found[0]
 	var selected := _choose_side == side and _choose_slot == slot
-	var tone := Cilia.hue(gene) if gene != &"" else PALE
+	var tone := Cilia.hue(gene) if gene != &"" else Figure.PALE
 	var lobe0 := CHOOSE_CAP_LOBES + slot
 	var mid := CHOOSE_PITCH * 0.5
 
@@ -9588,10 +8513,10 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 	if selected:
 		Cilia.draw_lens(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
 			CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, lobe0, 0.0,
-			Color(tone, LENS_SELECTED))
+			Color(tone, Figure.LENS_SELECTED))
 	Cilia.draw_weave(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
 		CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, 1, lobe0,
-		BACKBONE_LIT if selected else 1.0, 0)
+		Figure.BACKBONE_LIT if selected else 1.0, 0)
 	if gene != &"":
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_Y, CHOOSE_PITCH,
 			CHOOSE_HELIX_MID, CHOOSE_HELIX_AMP, lobe0, mid, tone,
@@ -9601,18 +8526,18 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 	# and a pale dart, no rungs and no word: dropping it would break the
 	# alignment that makes the comparison a horizontal scan.
 	Cilia.draw_slot_dart(node, slot,
-		tone if gene != &"" else Color(PALE, 0.6),
+		tone if gene != &"" else Color(Figure.PALE, 0.6),
 		Vector2(CHOOSE_DART_X, mid), DART_R)
 
 	var font := node.get_theme_default_font()
 	if gene != &"" and font != null:
-		var tint := LABEL_TINT
+		var tint := Figure.LABEL_TINT
 		if selected:
-			tint = LABEL_TINT_LOUD
+			tint = Figure.LABEL_TINT_LOUD
 		elif int(found[2]) <= 0:
 			# The third channel, agreeing with the floating rungs: a word for an
 			# organ this daughter does not wear is quieter than one she does.
-			tint = Color(PALE, WORD_UNEXPRESSED)
+			tint = Color(Figure.PALE, Figure.WORD_UNEXPRESSED)
 		node.draw_string(font,
 			Vector2(CHOOSE_WORD_X, mid + CHOOSE_WORD_LIFT),
 			_word(gene), HORIZONTAL_ALIGNMENT_LEFT, -1.0, LABEL_SIZE, tint)
