@@ -32,7 +32,8 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; and a faster tail as one more entry in the tail's own file (§12.3). And --
+## again; a faster tail as one more entry in the tail's own file; and a second strain
+## of the toxin, one entry of one place, covered by its organ's tags (§12.3). And --
 ## a number, not a failure (§8.3) -- the gene words with no French; and how many gene
 ## names are written into game/ outside game/genes/, which `-- --names` fails on
 ## (§12.2, CI's "Check the gene names").
