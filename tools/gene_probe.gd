@@ -169,6 +169,11 @@ const ORGANS_DIR := "res://game/genes/organs"
 ## Where the gene names left in code are counted (§12.2), and what is exempt.
 const GAME_DIR := "res://game"
 const GENES_DIR := "res://game/genes"
+## **The files the gate reads** (§12.2), by extension, each to the marker its
+## language starts a comment with: every script, scene, resource and shader under
+## game/. Not the translations (`.po`, `.pot`), whose comments and contexts name genes
+## for a translator, not for code.
+const GATED := {"gd": "#", "tscn": ";", "tres": ";", "gdshader": "//"}
 
 ## **The body plan in this commit, written out by hand** (§10.1): what a reader keeps
 ## of it -- the counts `CellBody.SLOT_MIN` and `SLOT_MAX`, `Genome.INSIDE`,
@@ -2875,26 +2880,117 @@ static func _bits_kept(before: Dictionary, now: Dictionary) -> String:
 
 # --- Gene names in code (§12.2) ----------------------------------------------------------------
 
-## **Every gene name written into game/ outside game/genes/** -- `&"<key>"` and
-## `"<key>"` alike, for every key the catalogue knows, retired ones too -- one
-## `path:line: the line` for each key a line names. Comment lines aside, and tools/
-## is not looked in: a probe names genes on purpose.
+## **Every gene name written into game/ outside game/genes/** (§12.2), in any file
+## the gate reads ([constant GATED]): a name the catalogue knows -- a key, retired ones
+## too; an organ's, which is no key when its variants list their own (`toxin`); a
+## variant's -- quoted alone, `"palp"`, `&"palp"`, `'palp'`, `&'palp'`, or with a part
+## it declares, `&"flagellum.hold"`. One `path:line: the line` for each. Comments
+## aside -- a line of one, and a line's tail from its marker on, outside a string --
+## and tools/ is not looked in: a probe names genes on purpose. **A name built by
+## concatenation or a format -- `"%s.hold" % organ` -- is not caught**: nothing read
+## line by line can, so the playbook says not to build one.
 func _name_literals() -> Array[String]:
 	var out: Array[String] = []
-	for path: String in _scripts_in(GAME_DIR):
+	var named := _names_pattern()
+	for path: String in _texts_in(GAME_DIR):
 		if path.begins_with(GENES_DIR + "/"):
 			continue
+		var marker: String = GATED[path.get_extension()]
 		var lines := FileAccess.get_file_as_string(path).split("\n")
+		var block := false
 		for k in lines.size():
-			var line := lines[k]
-			if line.strip_edges().begins_with("#"):
-				continue
-			for key: StringName in Catalogue.keys():
-				# `"key"` is in `&"key"` too, so this finds both.
-				if line.contains('"%s"' % key):
-					out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
-						line.strip_edges()])
+			var code := ""
+			if marker == "//":
+				var cut := _shader_code(lines[k], block)
+				code = cut[0]
+				block = cut[1]
+			else:
+				code = _code_of(lines[k], marker)
+			for found: RegExMatch in named.search_all(code):
+				out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
+					lines[k].strip_edges()])
 	return out
+
+
+## **Every name the gate looks for**, each once: every key the catalogue knows,
+## retired ones too, every organ's name and every variant's.
+static func _gene_names() -> PackedStringArray:
+	var names := PackedStringArray()
+	for key: StringName in Catalogue.keys():
+		for name: StringName in [key, Catalogue.organ_of(key), Catalogue.variant_of(key)]:
+			if name != &"" and not names.has(String(name)):
+				names.append(String(name))
+	return names
+
+
+## **What the gate looks for, as one pattern**: a quoted string that is one of
+## [method _gene_names], or one of them, a dot and a part. The quote that closes it is
+## the one that opened it.
+static func _names_pattern() -> RegEx:
+	var names := PackedStringArray()
+	for name: String in _gene_names():
+		names.append(_escaped(name))
+	var pattern := RegEx.new()
+	pattern.compile("([\"'])(?:%s)(?:\\.[A-Za-z0-9_-]+)?\\1" % "|".join(names))
+	return pattern
+
+
+## [param text] with every character a pattern would read as more than itself escaped.
+static func _escaped(text: String) -> String:
+	var out := ""
+	for c: String in text:
+		out += c if (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9") \
+			or c == "_" else "\\" + c
+	return out
+
+
+## **[param line] without its comment**: everything from [param marker] on, where the
+## marker stands outside a string -- so a `"#ff8800"` or a `"%s ; %s"` is code, and a
+## name in a trailing comment is not. A line inside a string that spans lines is read
+## as code, which can only find more.
+static func _code_of(line: String, marker: String) -> String:
+	var quote := ""
+	var k := 0
+	while k < line.length():
+		var c := line[k]
+		if quote != "":
+			if c == "\\":
+				k += 2
+				continue
+			if c == quote:
+				quote = ""
+		elif c == "\"" or c == "'":
+			quote = c
+		elif line.substr(k, marker.length()) == marker:
+			return line.substr(0, k)
+		k += 1
+	return line
+
+
+## **A shader's [param line] without its comments**, `//` to the end and `/* ... */`
+## within and across lines, [param block] saying whether the line before ended inside
+## one: `[the code, whether this line ends inside one]`. A shader has no strings.
+static func _shader_code(line: String, block: bool) -> Array:
+	var code := ""
+	var k := 0
+	while k < line.length():
+		if block:
+			var close := line.find("*/", k)
+			if close < 0:
+				return [code, true]
+			k = close + 2
+			block = false
+			continue
+		var tail := line.find("//", k)
+		var open := line.find("/*", k)
+		if open >= 0 and (tail < 0 or open < tail):
+			code += line.substr(k, open - k)
+			k = open + 2
+			block = true
+			continue
+		code += line.substr(k, tail - k) if tail >= 0 else line.substr(k)
+		break
+	return [code, block]
 
 
 ## **How many gene names are written into game/ outside game/genes/**, by file:
@@ -2921,8 +3017,12 @@ func _names_gate() -> void:
 	var found := _name_literals()
 	for one: String in found:
 		print("[gene-names] FAIL %s" % one)
-	print(("[gene-names] %d gene names in game/ outside game/genes/ -- %d keys looked for,"
-		+ " comment lines and tools/ aside") % [found.size(), Catalogue.keys().size()])
+	print(("[gene-names] %d gene names in game/ outside game/genes/ -- the %d names of %d"
+		+ " keys, their organs and their variants looked for, alone or with a part, in %d"
+		+ " scripts, scenes, resources and shaders; comments and tools/ aside") % [found.size(),
+		_gene_names().size(), Catalogue.keys().size(),
+		_texts_in(GAME_DIR).filter(func(path: String) -> bool:
+			return not path.begins_with(GENES_DIR + "/")).size()])
 	print("[gene-names] ALL PASS" if found.is_empty() else "[gene-names] FAILED %d" % found.size())
 	_failed += found.size()
 
@@ -3064,12 +3164,12 @@ static func _unknown_fields(organ: StringName, fields: Dictionary, own: Array) -
 	return out
 
 
-## Every `.gd` file under [param dir], in order.
-static func _scripts_in(dir: String) -> Array[String]:
+## Every file under [param dir] the gate reads ([constant GATED]), in order.
+static func _texts_in(dir: String) -> Array[String]:
 	var out: Array[String] = []
 	for file: String in DirAccess.get_files_at(dir):
-		if file.ends_with(".gd"):
+		if GATED.has(file.get_extension()):
 			out.append(dir + "/" + file)
 	for sub: String in DirAccess.get_directories_at(dir):
-		out.append_array(_scripts_in(dir + "/" + sub))
+		out.append_array(_texts_in(dir + "/" + sub))
 	return out
