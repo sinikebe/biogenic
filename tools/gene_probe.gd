@@ -138,6 +138,24 @@ func _keys() -> void:
 	_check("every key is one form's alone: %d forms in the organ files, %d keys filed%s"
 		% [forms, Catalogue.keys().size(), "" if twice.is_empty() else ", %s twice" % str(twice)],
 		twice.is_empty() and forms == Catalogue.keys().size())
+	# Unique names: the catalogue finds a variant's forms by its organ's name and
+	# its own, so two files of one organ name -- a copy of toxin.gd, say -- or two
+	# variants of one name in a file would answer for each other's forms.
+	var organs := {}
+	var clashes: Array[String] = []
+	for organ: Gene in _organs():
+		if organs.has(organ.organ):
+			clashes.append("organ %s twice" % organ.organ)
+		organs[organ.organ] = true
+		var variants := {}
+		for entry: Dictionary in organ.variants:
+			var name := StringName(entry.get("variant", &""))
+			if variants.has(name):
+				clashes.append("%s's variant %s twice" % [organ.organ, name])
+			variants[name] = true
+	_check("every organ's name is its own, %d of them, and every variant's within its organ%s"
+		% [organs.size(), "" if clashes.is_empty() else ": " + ", ".join(clashes)],
+		clashes.is_empty())
 	var moved: Array[String] = []
 	for i in SHIPPED.size():
 		if Catalogue.rank(SHIPPED[i]) != i:
