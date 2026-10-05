@@ -12,7 +12,8 @@ The owner, 2026-10-04, after the readiness review (§0):
 > "You will prepare the code for the gene pass. THe gene pass is just adding/editing
 > genes, so it should be straightforward"
 
-**Status: phase 1a built** (§15.1, 2026-10-05); phases 1b to 7 designed, not built.
+**Status: phases 1a and 1b built** (§15.1, §15.2, 2026-10-05); phases 2 to 7 designed,
+not built.
 This document is the preparation. It turns the
 genes, their variants and the slots into data that every system reads, adds the checks
 that catch a half-wired gene, and writes the playbook the gene pass follows. Phases 1
@@ -445,6 +446,11 @@ Each organ's `look` holds what `cilia.gd` keys by name today:
 `cilia.gd` draws by shape and never by name. `default_order` seats each organ in its
 `home` slot (§10) instead of naming the three home organs.
 
+**As built in 1b** (§15.2): the toxin's three are one shape, `spines`, drawn by place,
+as `gene-looks.md` §2.1 has it; the pigment is the shape's and the bud the levelled
+organ's state, so neither is a field; and `default_order` names the home organs until
+phase 2 gives each its `home`.
+
 `vision.gd`'s beams and ping, and `returns.gd`'s pointers and wave, read their hue from
 the catalogue by mechanic. `signal_bus.gd`'s colour copies (`LIGHT_COLOR`,
 `BEAM_COLOR`, `PING_COLOR`, `STRAIN_COLORS`) become reads of the catalogue. If the bus
@@ -502,6 +508,10 @@ A variant has its own name and may override any word.
 - the `.pot` is regenerated;
 - `fr.po` keeps every msgid that does not change, which is all of them in phases 1
   to 5.
+
+**As built in 1b** (§15.2): four fills read the catalogue -- the chip word, a way's
+name, a sense's word and an action's -- and an organ's word tables count as named by
+it, which reads them by name.
 
 ### 8.3 Missing translations
 
@@ -752,6 +762,19 @@ with no period (caught, and the referee still holding it to a rate), a part noth
 wires. It prints how many gene names are left in `game/`, `&"<key>"` and `"<key>"`.
 **The look, word, stats-line and colour checks are phase 1b's; the body plan's are
 phase 2's.**
+
+**v2, as built in phase 1b** (§15.2), adds them: every live gene's look (a shape there
+is, a hue, its strokes where its shape counts them, a home shape's tile, nothing a look
+does not hold) and none on a retired one; its chip word and line, its words in hand
+where it has forms and every way's where it forks, and every declared part's word, line
+and, waiting for a level, what it says, with no word table keyed by what is not its
+organ's; its numbers on the pause screen at every copy count, level, way and slot, and
+none from a retired key or an unknown one; no two hues nearer than today's floor, 10° of
+HSV hue, and none within 25° of self teal or threat red, but five pairs kept until phase
+6 (`palp` and `crista`, `stigma` and `plastid`, `flagellum` and `trichocyst`, `pellicle`
+and teal, `myoneme` and red); every copy of a gene's hue its organ's; and a registered
+organ's hue drawn at once, by the dictionaries `cilia.gd` holds. It lists the gene words
+with no French (§8.3).
 
 ### 12.2 No gene names outside `game/genes/`
 
@@ -1027,6 +1050,151 @@ that section.
   provider of the judged stats by hand-listed stat, under `Stats.label`.
 - **5**: the grep gate (§12.2), the README and the skill.
 - **7**: drift's weight.
+
+### 15.2 As built: phase 1b, 2026-10-05
+
+**Every look, colour copy, word and numbers line is its organ's, and nothing a player
+can notice.** By file:
+
+| file | now |
+|---|---|
+| `game/genes/gene.gd` | the shapes -- `mat`, `oars`, `lash`, `tuft`, `spines` -- and which are drawn on arcs of their own and which counted; the field `look`; the word tables an organ's file may hold; the hooks `stat_at` and `lines` |
+| `game/genes/catalogue.gd` | `look`, `looks`, `hues`, `shape_by_key`, `shaped`, `shapes`, `first_on`, `words`, `part_words`; the word tables read by their names (`KEY_WORDS`, `WAY_WORDS`, `PART_WORDS`); `look` a field a variant may set, frozen with the rest. The looks, the hues and shapes by key and the keys by shape are filled in place, as the stats are, because `cilia.gd` holds them |
+| `game/genes/organs/*.gd` | each live organ's look -- shape, hue, stroke count, a home organ's tile -- with the comment its hue had; its words, each table with the TRANSLATORS note, ROOM and CONTEXT it had; its `lines`. `ocellus.gd` has the ways' words, `toxin.gd` its word and line in hand and `NAMES` |
+| `game/vision/cilia.gd` | no `HUES`, `EARNED_COUNT`, `TILE_COUNT`, `TILE_LEN` or home counts: the home organs found by shape, tufts and tiles by their look's counts, spines by place, the lips in the hue of the organ the body has its gape from; `hue_for(stat)`, `hue_on(channel)` |
+| `game/perception/signal_bus.gd` | its light, beam and ping lobes the hue of the organ on each channel, its strain colours those of the forms that deliver each kind; read once, as static vars |
+| `vision.gd`, `returns.gd` | the beam's rays and the ping's wave in their channel's organ's hue |
+| `controls.gd`, `programs_page.gd`, `earshot.gd` | each pad's hue, and the dash pad's organ, by what the pad works through; the library's column marks the pads'; a body part's organ by what it acts through; the call code the ping organ's violet |
+| `figure.gd`, `genome.gd`, `normal_mode.gd`, `program_words.gd` | the words through the catalogue; the words of the values the senses report, which are no organ's, in `program_words.gd` |
+| `gene_stats.gd` | the context, the costs line's last item, the odds and the caption; a gene's lines are its organ's |
+| `tools/i18n_pot.gd`, `biogenic.pot` | the gene words a room is measured with from the catalogue, an organ's word tables named by it, the bodies by the stats that change a number |
+| `tools/gene_probe.gd`, `levels_probe.gd` | v2 (§12.1); every retired key draws no numbers |
+
+**Where it differs from the design, and why** (§7.1, §8.2 and §12.1 say so too):
+
+- **The toxin's shape is one, `spines`, drawn by place** (§7.1 lists `fangs`, `guard`
+  and `granules`): `gene-looks.md` §2.1 makes them one kind, so phase 6 adds that
+  kind's parameters rather than merging three. Fangs on the lips at the front, barbs
+  on a side or the stern, granules inside, as before.
+- **No `pigment` or `bud` field** (§7.1). The shape says whether an organ wears a
+  pigment: a tuft does, a home organ does not, spines by place. The bud is a levelled
+  organ's state, which the player's body passes as `eye` each frame. A home organ's
+  look gives its tile's count and length; a tuft's tile wears its body's count, as it
+  did.
+- **`default_order` still names the three home organs**: their seats are phase 2's.
+- **An organ's words are constants of its file, keyed by the key or the part they are
+  said of**, not fields set in `_init()`: the translation tool lists a constant that
+  carries a TRANSLATORS note, and the notes had to stay as they were. The catalogue
+  reads the tables by name.
+- **The values' words went to `program_words.gd`** (§8.1 lists them with the parts'):
+  `distance`, `size`, `level` and `closeness` are reported by several senses and are
+  no organ's. They are asked after the declaring files, so the metabolism's own
+  `level` keeps its chip.
+- **The beam's ways have words of their own** (§8.1 does not list them): their
+  titles, card lines and growing lines moved from `normal_mode.gd` to `ocellus.gd`,
+  keyed by way, and the fork's screens read them through the forking gene.
+- **The hook is `lines(t, level, path, ctx, slot, wear)`** (§8.4): `t` the copies
+  already clamped, and `wear` the costs line's last item, priced by the screen. The
+  context carries the body's terms and its tank, the five scripts a line reads numbers
+  from (`cell`, `metabolism`, `food`, `bus`, `genome`) and the screen's own `beat` and
+  `wear_item`, so an organ preloads nothing outside `game/mechanics/`. A context a
+  caller built for itself is completed.
+- **The bus keeps no copy** (§7.1 allowed one, held by the probe): its four colours
+  are read from the catalogue once. A sense's lobe is the hue of the first live organ on
+  its channel -- the organ `cilia.gd`'s `hue_on` draws that sense's marks in, so the
+  lobe and the marks cannot part -- and a kind of load is drawn in the hue of the first
+  live form that delivers it, by `dose_hue` and the bus alike. Paralysis and sleep,
+  which nothing delivers yet, keep their starting values.
+- **`earshot.gd`'s call code was a copy too**, which §7.1 does not list; it reads the
+  ping organ's hue.
+- **A sense's marks go by channel, a pad by what it works through**: the beam's rays
+  and the ping's wave by their channel; the turn pad by `turn_rate`, the push pad by
+  `push_accel`, the hold by the tail's `impulse_speed`, the dash pad's organ by
+  `dash_speed`.
+- **The translation tool reads four fills from the catalogue** (§8.2 names one): the
+  chip word, a way's name, a sense's word and an action's. **Two words as wide now
+  rank by their letters**: the sort was unstable, and the catalogue lists the words in
+  another order than `figure.gd` did, which moved one room note by a pixel. The
+  template keeps every msgid and context; its references and the order its notes
+  merge in change, and the toxin's word and line in hand gain `entry:` lines, keyed
+  by form now.
+- **Today's floor is 10°** (§12.1), of HSV hue (`Color.h`): `cirrus` and `vacuole`,
+  10.2° apart, are the nearest pair but the five kept. The degrees written beside the
+  hues in the organ files are another measure, and are left as they were.
+- **`levels_probe`'s row check was already on a retired key**, `statocyst`. It asks
+  the catalogue for every retired one now.
+
+**Checked: nothing changed** (§14), against `a37545e` (1a, and the two designs):
+
+1. Every check `ci.yml` runs passes here but `net_drop` and the door of `net_fuzz`,
+   which need a network namespace this container refuses (left to CI, as in 1a). None
+   was removed or loosened. The gene probe makes 32 checks; each of its six new ones
+   was seen to fail on a fault planted in a scratch copy -- a missing count, a stray
+   look field, a word under a wrong key, a part's line under a wrong part, a gene with
+   no lines, a hue moved next to another, a lobe and the call code copied as
+   literals, the catalogue's hues replaced where they are refilled -- and the French
+   note to list a word with none. Of the 66 gene words, it lists none.
+2. The empty library hashes to `7397a410…` under all three schemes, 69,349 lines.
+   `drop_probe` passes, its ten pins holding; the lines that differ from 1a's are of
+   the kinds that differ between two runs of one tree -- a new drop's seed and what it
+   holds, the real-time frame readout, a replay's slot.
+3. `Wire.RULES` is `46913eab9d0b76a0`; `net_probe` passes all 441, and what differs
+   is what differed between two runs in 1a.
+4. `DropSave.rules()` is `e4213164b90d…`, its 43 lines the same.
+5. **Seventeen poses at both sizes, 34 frames**, each rendered twice on `a37545e` 0 px
+   apart, and on 1b after each commit that moved drawing code, 0 px from them every
+   time: 1a's seven; the tray of waiting genes with a retired one among them; the
+   quick placement offer; the beam's numbers past its fork; a waiting toxin's numbers;
+   the store's and the burn's numbers; every pad; the programs library; and the beam's
+   fork, its cards and an armed way (three times on `a37545e`, after a first shot
+   raced the arming).
+6. The template keeps its 531 messages, every msgid and context the same; `fr.po` is
+   untouched, and `--lint-all` prints what it printed, line for line, the lines it
+   composes measured the same.
+
+And: every word, line and look a screen can ask for -- every key and one this build
+does not know, in English and in French; every part's words; every numbers line at
+every copy count, level, way and slot in eight bodies; every hue, tint and dose hue;
+the bus's, the pads' and the call code's colours; `default_order` -- 30,519 answers,
+the same to the byte; the stats' and the catalogue's 3,865 answers; `drive
+--fingerprint=3000` at seeds 7 and 12345, plain, sniffing and with seven genes on, the
+same six hashes and counts; the input path's three traces; every scene's boot; the
+levels, Back and fuzz probes; and every script compiling, at the first commit of 1b
+alone and at the last.
+
+**The cost.** The water's step is `drive --field-cost=600 --age=900`, seed 7, a sighted
+player of radius 30, p50 in µs: the median of seven rounds interleaved with `a37545e`,
+in both orders, and the spread of the seven. `drop_probe` is its whole run, alone on a
+quiet machine.
+
+| | full vision | point of view | `drop_probe` |
+|---|---|---|---|
+| `a37545e` | 2125 (2039 to 2390) | 2366 (1999 to 2641) | 354 and 353 s |
+| 1b | 2209 (2080 to 2298, and one round of 4971 the machine took) | 2199 (2049 to 3184) | 354 s |
+
+The water's step calls nothing 1b changed -- `food.gd`, `cell.gd`, `genome.gd` and
+`metabolism.gd` read no colour and no word, and the two `cilia.gd` functions the water
+calls, `default_order` and `slot_bearing`, are as they were -- so what moves between
+those columns is the machine. **Drawing is what 1b touched**, and the step does not time
+it: 300 cells a frame through `draw_cell`, timed inside `_draw` on this container's
+software GL, cost 4 % more while each organ's look was read through a function and two
+lookups. With the catalogue keeping each key's hue and shape by key, as the old tables
+did, it is within its noise: p10 136.1 ms against 135.0, four rounds each.
+
+**Gene names left in `game/`** (§12.2): 10, from 135 -- `cilia.gd`'s `default_order`
+9 (phase 2) and `drop.gd`'s `TOXIN` (phase 3) -- and 17 keys of the form
+`"<gene>.<part>"`, which the probe does not count: `food.gd`'s readers and triggers 8,
+`own_rules.gd`'s 6, and `programs_page.gd`'s `HOLDS_TAIL` and `_verb_of` 3, all phase
+3's.
+
+**Deferred, and to which phase:**
+
+- **2**: `default_order`'s home seats.
+- **3**: `Drop.TOXIN`, and every `"<gene>.<part>"` key.
+- **6**: a look's `hue` becomes its family's, and the colour checks the family rules
+  (`gene-looks.md` §8).
+- `ci.yml`'s note on *Check the genes* still lists v1's examples; a workflow is
+  edited only when asked.
 
 ---
 
