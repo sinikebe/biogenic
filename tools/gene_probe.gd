@@ -59,6 +59,7 @@ const Drop := preload("res://game/normal/drop.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Wire := preload("res://game/net/wire.gd")
 const Referee := preload("res://game/net/referee.gd")
+const Rules := preload("res://game/net/rules.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
 const Doses := preload("res://game/mechanics/doses.gd")
 ## The views that draw a gene's hue, or keep one: what the colour checks read.
@@ -547,11 +548,12 @@ func _tables() -> void:
 				or combine == Stats.PRODUCT and Stats.none(stat) != 1.0 \
 				or not [Stats.BEST, Stats.SUM, Stats.PRODUCT].has(combine):
 			rows_bad.append("%s combines by %s from %s" % [stat, combine, str(row.get("none"))])
-		if not row.has("unit") or not row.has("judged"):
-			rows_bad.append("%s has no unit or no judged" % stat)
+		if not row.has("unit") or not row.has("judged") or not row.has("contact"):
+			rows_bad.append("%s has no unit, no judged or no contact" % stat)
 	_check(("every row says which way is better, how providers combine -- a sum from 0, a"
-		+ " product from 1 -- its unit and whether the referee judges it; judged: %s%s")
-		% [str(Stats.judged()), "" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)],
+		+ " product from 1 -- its unit, whether the referee judges it and whether the host"
+		+ " decides a contact by it; judged: %s, contact: %s%s") % [str(Stats.judged()),
+		str(Stats.contact()), "" if rows_bad.is_empty() else ": " + "; ".join(rows_bad)],
 		rows_bad.is_empty())
 	# One provider each today, so every combine rule gives the table's own number.
 	var crowded: Array[StringName] = []
@@ -2219,7 +2221,7 @@ func _synthetic_gene() -> void:
 ## the tail's own organ file holding that one variant -- the tail's every field, its
 ## speed's table its own -- beside the shipped file, which keeps the tail's own key.
 ## In the tail's own file it would be the second of two entries until phase 5. The
-## fingerprints that a protocol hangs on see it, as the referee's caps do; a body
+## drop's fingerprint and the handshake's see it, as the referee's caps do; a body
 ## wearing it beside the plain tail is read by the stat rows; its parts are the
 ## tail's, and the vocabulary does not move; and the instincts page offers them to a
 ## body that wears it alone.
@@ -2229,8 +2231,7 @@ func _variant_of_shipped() -> void:
 	var plain := Catalogue.first_provider(&"impulse_speed")
 	var rules_before := DropSave.rules_text()
 	var NetProbe := load("res://tools/net_probe.gd")
-	var probe: Node = NetProbe.new()
-	var wire_before: String = probe.call(&"_rules_text")
+	var wire_before := Rules.text()
 	var peak_before := float(NetProbe.call(&"_stacked_peak"))
 	var top_before := Stats.top(&"impulse_speed")
 	var tail: Gene = (Catalogue.gene(plain).get_script() as GDScript).new()
@@ -2248,7 +2249,7 @@ func _variant_of_shipped() -> void:
 	Catalogue.register(tail)
 	var organ := Catalogue.organ_of(&"probeswift")
 	var rules_with := DropSave.rules_text()
-	var wire_with: String = probe.call(&"_rules_text")
+	var wire_with := Rules.text()
 	var peak_with := float(NetProbe.call(&"_stacked_peak"))
 	var top_with := Stats.top(&"impulse_speed")
 	var together := {plain: 2, &"probeswift": 1}
@@ -2264,10 +2265,9 @@ func _variant_of_shipped() -> void:
 	var page := _offered_alike(vocab, organ, &"probeswift", plain)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
-	var wire_after: String = probe.call(&"_rules_text")
-	probe.free()
+	var wire_after := Rules.text()
 	_check(("and a faster %s, a variant filed beside its organ (%s), is %s's own: the drop's"
-		+ " rules (%s) and the referee's (%s) fingerprint it, and are as they were once it is"
+		+ " rules (%s) and the handshake's (%s) fingerprint it, and are as they were once it is"
 		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
 		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"
 		+ " the best speed and the shortest gap of the two, as their rows say (%s, %s); its"

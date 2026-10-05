@@ -127,23 +127,21 @@ extends RefCounted
 ## this number**, or a host on one pack and a guest on another share a pond whose
 ## contacts one of them misjudges.
 const PROTOCOL := 7
-## **The rules a host's referee judges a guest by, fingerprinted**
-## (net-hardening.md B.2, B.6): SHA-256 of every value in the game that
-## `referee.gd` judges a guest's word by or derives a limit from -- the radii,
-## growth per meal, mending, the grace, the causes of death, the ping tables,
-## the sister's ring, the free senses and their tier, the speed and turn tables
-## its caps sit over -- and of the referee's own limits.
+## **The rules a host's referee judges a guest by, and the host decides every
+## contact by, fingerprinted -- pinned** (net-hardening.md B.2, B.6;
+## docs/design/gene-catalogue.md §11.3): SHA-256 of `game/net/rules.gd`'s text,
+## which the game writes out from the catalogue -- every table a stat row marks
+## judged or contact, by every organ, the run's numbers the referee judges by, the
+## contact rules no table holds, the referee's own limits and the body plan.
 ##
 ## **A host judges its guests by its own copy of these.** A guest on other rules
 ## is fouled, then cut and barred: a later content that grows five units a meal
 ## instead of four is cut 1.05 s after its first meal by a host on this one,
-## measured. So **change any of them only with [constant PROTOCOL] bumped and
-## this updated, in the same commit**: two builds on different rules are then
-## refused at the handshake, with the sentence that names the update, instead
-## of cut in the middle of a game. `tools/net_probe.gd` recomputes this from the
-## real constants (`_rules_text`, run by `_referee_rules` in its `referee`
-## section) and fails until both are done.
-const RULES := "46913eab9d0b76a01b5ee460f0eb534b3692698553b4be378046e2620f576c8e"
+## measured. So **change any of them only with this updated, in the same commit**.
+## `tools/net_probe.gd` writes the text again from the real constants
+## (`_rules_text`, run by `_referee_rules` in its `referee` section), holds the
+## game's to it, and fails until this is moved.
+const RULES := "95c66e7e537b56bf1590c00fa5ef295c3c169be574209c3f713020cd84ee24f5"
 
 # --- Frame kinds. Byte 0 of every frame. ------------------------------------
 ## Guest to host, first thing after the transport connects: *this is what I
