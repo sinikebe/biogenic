@@ -630,6 +630,14 @@ and needs nothing.
 Phase 2 builds the stamp and the migration. It proves them on a synthetic plan with a
 slot added, one moved and one removed (§12.3). It changes no plan.
 
+**As built** (§15.3): the stamp is `plan`, beside a genome's `order` and `worn` -- so a
+cell's file and a cell a world kept before slots carry it alike -- and beside each
+daughter's `order`. A world's water bodies keep no slot order, so they have nothing to
+stamp: each is laid out by `default_order`, which reads the plan in use. A gene whose
+slot is gone takes the nearest free outside slot whatever its index; an id this build
+never knew, a later plan's, takes the first free one; a gene kept at an inside slot is
+left to the DNA, which says what is inside.
+
 ### 10.4 What a plan change costs later
 
 It is an edit to `body_plan.gd`. Saves migrate by §10.3. The wire's limits follow it.
@@ -640,6 +648,13 @@ orders.
 The pause figure and the placing gesture follow the arcs. A plan with more slots than
 the figure has room for fails the probe's layout check rather than overlapping in
 silence.
+
+**As built** (§15.3), a plan change also moves the gene probe's pins of the plan that
+shipped, in the same commit, as a new gene appends to `SHIPPED`; and it moves
+`Wire.PROTOCOL` by hand until phase 4 puts the fingerprint on the handshake. A plan that
+seats the port flank takes the ring's one empty cell, which the pause screen's columns
+are shaped round. And a plan with fewer outside slots than a saved DNA has genes outside
+needs one more change first (§15.3).
 
 ---
 
@@ -776,6 +791,18 @@ and teal, `myoneme` and red); every copy of a gene's hue its organ's; and a regi
 organ's hue drawn at once, by the dictionaries `cilia.gd` holds. It lists the gene words
 with no French (§8.3).
 
+**v3, as built in phase 2** (§15.3), adds the body plan's: ids unique, and every id a
+save before stamps kept still known; outside arcs that do not overlap; radii that only
+rise, the last at `DIVIDE_RADIUS`; a home for each born organ and nothing else, always
+earned; every copy of a count the plan's own; the wire's limits at least the plan's, and
+`TIER_TOP` genome.gd's `TIER_MAX`; and room on the pause figure -- a cell of the ring and
+a chip inside the box for every slot. Each is seen failing a plan, swapped in, that
+breaks it. Today's plan is held to the one that shipped, its ladder on a sweep of
+12,071 radii. And it runs the synthetic plan of §12.3. With the 1b review it also fails
+a word the catalogue hands out that the template lacks, and a live chip word wider than
+the choosing screen's block or a chip, in English or in French. A retired key may now
+keep its look and its lines (§16).
+
 ### 12.2 No gene names outside `game/genes/`
 
 A grep gate in CI fails on any `&"<key>"` or `"<key>"` literal for a catalogue key in
@@ -795,6 +822,14 @@ A probe registers a test organ with a variant and two places. It wears it, and t
 - **the words**: the stats screen has its lines.
 
 A second run does the same with a synthetic body plan (§10.3).
+
+**As built** (§15.3), the second run is the gene probe's, from phase 2. It swaps in a
+plan with a slot moved, one retired and two added, and loads a cell kept under today's
+plan from its own file, from a world's and from before stamps, and the daughters on
+offer. Each gene lands in its slot by id, and nothing is lost. It then checks the
+genome's rules, the venom's side, the wire's limits, the referee and the pause figure
+on that plan. It loads a cell and a daughter kept under it on today's plan, and
+restores today's plan whole.
 
 ---
 
@@ -1194,6 +1229,173 @@ did, it is within its noise: p10 136.1 ms against 135.0, four rounds each.
 - **6**: a look's `hue` becomes its family's, and the colour checks the family rules
   (`gene-looks.md` §8).
 
+### 15.3 As built: phase 2, 2026-10-05
+
+**The slots are one file of rows, every save that keeps a slot order carries the plan
+it was kept under, and nothing a player can notice changes.** By file:
+
+| file | now |
+|---|---|
+| `game/genes/body_plan.gd` | today's eight rows (§10.1) and the ovoid. Everything §10.2 derives, worked out once a plan. `use` and `restore` swap a plan in and out, as `register` and `forget` do an organ; `listen` is called by a file that keeps a copy of a count. Then the stamp, `written` and `migrate` (§10.3), and `fingerprint`, which nothing reads until phase 4 |
+| `cell.gd`, `genome.gd` | `SLOT_MIN`, `SLOT_MAX`, `INSIDE`, `INSIDE_SLOTS`, `FRONT` and `STERN` under their names, static vars the plan refreshes; `slots_for` is the plan's count; a born body is seated by `home_layout`; `to_state` writes `plan`, and `set_state` lays both layouts out by `layout_from` |
+| `cilia.gd` | the arcs, `arc_for_slot`, `slot_bearing` and the ovoid read off the plan; `default_order`'s home seats are the plan's, and its nine gene literals are gone; a home organ is drawn on its home slot's arc, and the cirrus's port oars mirror its flank |
+| `figure.gd` | the ring's seats, arrows and Tab order, laid out from the bearings on the same 3 x 3 grid; `CROWDED` names a slot with no cell of its own |
+| `cell_figure.gd`, `normal_mode.gd` | a cell's layouts read by `layout_from`; the daughters on offer stamped and read the same way; the choosing screen's loci, the plan's slots |
+| `wire.gd` | `GENES_MAX` and `ORDER_MAX` are the plan's, and every size built on them is a static var worked out from them. It loads `body_plan.gd` and nothing else |
+| `referee.gd` | `_order_fits` unchanged, its doc saying why |
+| `drop_save.gd` | `rules_text`'s slot lines from the plan, under their old labels; `genome.plan` and a daughter's `plan` checked when there |
+| `catalogue.gd` | `born_order` is the born organs; where they sit is the plan's |
+| `tools/gene_probe.gd`, `net_probe.gd`, `i18n_pot.gd` | the plan's checks and the synthetic plan (§12.1, §12.3); `GENES_MAX == 9` gone, both counts held to the plan and `TIER_TOP` to `TIER_MAX`; `SLOT_MAX` read as the static var it is |
+
+**Where it differs from the design, and why** (§10 says so too):
+
+- **No water body is stamped** (§10.3 lists a world's water bodies): a water body keeps
+  no slot order. Its layout is `default_order`'s, worked out from the plan in use each
+  time, so it follows a new plan by construction.
+- **The stamp is one key, `genome.plan`**, beside `order` and `worn`, so a cell's file
+  and a cell a world kept before slots carry it the same way. A daughter on offer
+  carries her own. Every shape check takes it as optional. **A build before it reads
+  it**: `DropSave.misfit` asks only for the keys a shape names, so an older content
+  pack takes a stamped file as today's plan -- which it is -- and writes it back
+  without the stamp. Seen, not argued: phase 2's files, opened by `4f98110`, play as
+  they do on phase 2. **That holds while the plan is today's.** After a plan change,
+  a build from before phase 2 would lay a newer file out by index, and the APK's own
+  content is such a build until the next binary: it is what runs when a pack fails to
+  mount. So the first plan change should ship in an APK built since phase 2 -- with a
+  `binary_version` bump of its own, if none has gone out by then.
+- **A gene whose slot is gone takes the nearest free outside slot, whatever its index**,
+  not only one within the layout's old length: the layout grows only as far as that
+  slot. An id the build never knew -- a later plan's -- has no bearing, and takes the
+  first free slot. A gene kept at an inside slot is left to the DNA, because the
+  inside keeps no order and is read off the DNA.
+- **A plan with fewer outside slots than a saved DNA has genes outside is not covered
+  yet.** Such a gene stays in the DNA, as §10.3 says, but `genome.gd`'s `_sync_order`
+  then seats it past the outside, as it seats a pose of more genes than slots today.
+  The next birth's `_put_in_place` would read it as posed inside, and a toxin there
+  would become its inside form. No plan that only adds slots reaches this. Before a
+  plan ever drops below a body's genes, `_sync_order` should leave such a gene
+  unseated. That changes what a pose of more than seven genes does today, so phase 2
+  leaves it alone.
+- **`TIER_TOP` stays written out in `wire.gd`** (§13 lists it with the derived
+  limits): the wire loads nothing of the game but the plan. The gene probe and
+  `net_probe` hold it to `genome.gd`'s `TIER_MAX`, which nothing did before.
+- **`_order_fits` is unchanged** (§15 lists `referee.gd`): it counts no slot, and the
+  wire bounds an order, by the plan, before the referee reads one.
+- **The probe holds today's plan to the one that shipped**: `slots_for`'s formula, the
+  arcs and bearings, the counts and the ring are pinned in `gene_probe.gd`, as
+  `SHIPPED` pins the keys. A plan change moves them in the same commit.
+- **The synthetic plan runs in the gene probe**, which CI already runs. A probe of its
+  own would need a workflow step, and a workflow is edited only when asked. Its plan
+  moves the rear starboard diagonal, retires the forward port one, and adds the port
+  flank and a bow slot on the retired one's arc. That is eight outside, so every count
+  the plan sizes grows by one.
+- **The port flank is the ring's one empty cell, and the pause screen uses it**: its
+  columns are shaped so full vision's ghost of your cell lands there (`normal_mode.gd`'s
+  note on `_light_panel`). A plan that seats the port flank takes that cell -- a layout
+  decision for that change, not a fault the layout check sees.
+- **`body_plan.gd.uid` is committed**, as Godot's import made it, as every other script
+  in `game/genes` was in 1a.
+
+**Checked: nothing changed** (§14), against `4f98110`:
+
+1. Every check `ci.yml` runs passes here but `net_drop` and the door of `net_fuzz`,
+   which need a network namespace this container refuses (left to CI, as before).
+   None was removed or loosened but `net_probe`'s literal nine, which §13 names. The
+   gene probe makes 42 checks: phase 2's eight, and the review's two below. Each of
+   phase 2's eight was seen to fail on a fault planted in a scratch copy: the wire not
+   following the plan, no stamp written, a daughter unstamped, a gene whose slot is
+   gone put in the first free slot rather than the nearest, a migration by index
+   rather than by id, the ring laid out by index, `cell.gd` not listening, `slots_for`
+   strict at a rung, crowding unseen, and the last rung at 39. Each plan check also
+   fails on a plan, swapped in, that breaks it.
+2. The empty library hashes to `7397a410…` under all three schemes, 69,349 lines.
+   `drop_probe` passes all 143, its ten pins holding. The lines that differ from 1b's
+   are the kinds that differ between two runs of one tree: a new drop's seed, the
+   real-time frame readout, a replay's slot.
+3. `Wire.RULES` is `46913eab9d0b76a0`: none of its lines is a slot's. `net_probe`
+   passes all 441. What differs is the genome check's wording and what differs
+   between two runs.
+4. `DropSave.rules()` is `e4213164b90d…`: the slot lines come from the plan under the
+   labels they had, `cell.SLOT_RADIUS` its even step.
+5. **The 34 frames**: 17 poses at both sizes, rendered twice on `4f98110` 0 px apart,
+   and 0 px from them at the last commit of phase 2 and again at the last of this pull
+   request.
+6. The template is current, 531 messages; `fr.po` is untouched, and `--lint-all`
+   prints what it printed, line for line.
+
+Also the same: the 30,519 answers of every word, line and look, to the byte; the
+stats' and the catalogue's 3,865; `drive --fingerprint=3000` at seeds 7 and 12345,
+plain, sniffing and with seven genes on, the same six hashes and counts at the last
+commit of phase 2 and at the last of this pull request; the input path's three
+traces; every scene's boot; the levels, Back and fuzz probes.
+
+**And a cell left mid-choice by `4f98110`**, in its slot and its world: r40, its DNA
+moved on from what it wears, two daughters on offer. Opened by `4f98110` and by phase
+2, the 8,674 lines of four seconds are the same. Kept again, the files are the same
+but for three stamps: the genome's and each daughter's. The stamped files, opened by
+`4f98110` and by phase 2, play the same, 8,796 lines.
+
+**The cost.** The water's step, as 1b measured it: `drive --field-cost=600 --age=900`,
+seed 7, a sighted player of radius 30, p50 in µs. Each cell is the median of six
+rounds -- three with `4f98110` first and three with phase 2 first -- and the spread of
+the six. The container came back from a restart on a slower host midway, so these do
+not compare with 1b's table.
+
+| | full vision | point of view |
+|---|---|---|
+| `4f98110` | 2418 (2343 to 2877) | 2252 (2092 to 2433) |
+| phase 2 | 2488 (2347 to 2619) | 2357 (2302 to 2487) |
+
+**The water's step calls nothing phase 2 changed on its way through a frame.**
+`food.gd` is untouched. `slots_for`, `default_order` and `slot_bearing` run when a
+body eats, is spawned or is refreshed, not every frame. Point of view's six rounds
+all came out slower, so it was run once more: four rounds rotating `4f98110`, a copy
+of it, and phase 2. The two identical trees came out at 2372 and 2367, spread over
+2152 to 2795, and phase 2 at 2274 (2134 to 2310). The machine moves this measure by
+more than anything phase 2 did.
+
+**Drawing** is 300 cells a frame through `draw_cell`, on this container's software GL.
+Before the restart, eight rounds interleaved gave p50 126.7 ms for `4f98110` against
+129.2 for phase 2, and p10 121.4 against 123.4. What phase 2 put on that path costs
+about 2 µs a cell: `default_order` takes 0.8 µs more, and the three home arcs are
+looked up rather than written in. That is 0.6 ms of a 127 ms frame. A slot's bearing
+is cheaper (0.32 µs against 0.55), because it is worked out once a plan. After the
+restart, three rounds were run of `4f98110`, phase 2 and four variants: the home arcs
+written in again, the old `default_order`, `4f98110`'s whole `cilia.gd`, and a version
+that reads the plan's counts from copies of its own. All six came out within one
+another's spread, p10 149.2 to 151.6 ms, so none was kept.
+
+**And the 1b review's findings 1 to 3**, each its own commit after phase 2's:
+
+- **No gene word ships unseen, or too wide.** The translation tool lists a word table
+  only where it carries a TRANSLATORS note, and measures a word only against a ROOM
+  line. So the gene probe now looks every word the catalogue hands out up in the
+  template, under its context. It also measures every live chip word, in English and
+  in French, against the choosing screen's 47 px block and a chip's 62.2 px beside
+  its pips. Both checks fail on the review's repros: a table with no note, and
+  "carapace", 57 px, with no ROOM. French `armure` is the widest word today, at
+  47.0 px of the block's 47.
+- **Retiring a gene is its tag** (§16). A retired key may keep its look, which is held
+  as a live one's is, and its lines. A key draws nothing when its organ's file has no
+  lines, or when this build does not know it. A kept colour pair with a retired key in
+  it leaves the count. With only the tag, `pellicle` fails one check, the drifter
+  list, which §16 says it must until `SHIPPED_LISTS` records it.
+- **The nits**: `crista`'s unused `burn`; `ocellus`'s dead fallback price; `stat_at`'s
+  doc, which now says it answers 0 for a stat its organ does not provide, and why;
+  and `HOME_SHAPES`, one list, gene.gd's.
+
+**Gene names left in `game/`** (§12.2): 1, `drop.gd`'s `TOXIN` (phase 3), from 10 --
+`default_order`'s nine went with the home seats -- and the 17 keys of the form
+`"<gene>.<part>"`, phase 3's.
+
+**Deferred, and to which phase:**
+
+- **3**: `Drop.TOXIN`, and every `"<gene>.<part>"` key.
+- **4**: the plan's fingerprint on the handshake (`BodyPlan.fingerprint()`), and with
+  it the end of moving `PROTOCOL` by hand for a plan change.
+- **Before a plan drops below a body's genes**: `_sync_order` leaves a gene with no
+  outside slot unseated (above).
+
 ---
 
 ## 16. The playbook (what the gene pass will do)
@@ -1220,7 +1422,9 @@ did, it is within its noise: p10 136.1 ms against 135.0, four rounds each.
   it. If it was on a list a draw or a bit reads -- a drifter, a sense, the gift, a
   declarer -- every seeded draw moves, and the probe fails until its `SHIPPED_LISTS`
   says so.
-- **Changing the slots**: edit `body_plan.gd`; saves migrate (§10.3).
+- **Changing the slots**: edit `body_plan.gd`; saves migrate (§10.3). Move the gene
+  probe's pins of the plan that shipped with it and, until phase 4, `Wire.PROTOCOL`
+  (§15.3).
 - **Balance**: the numbers a gene ships with are starting values with their reasons
   (`CLAUDE.md`, "Balance waits for players").
 - **Names**: a gene's key and its words are the owner's call when they are new names
