@@ -1783,6 +1783,7 @@ func _check_skew() -> void:
 		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the rules it judges by are the"
 		+ " ones pinned, Wire.RULES %s" % Wire.RULES.left(16))
 	await _rules_skew()
+	await _welcome_skew()
 
 
 ## **This build's HELLO, as a session sends it** (protocol 8): the frozen prefix
@@ -1865,6 +1866,77 @@ func _rules_skew() -> void:
 			alphabet = alphabet and c >= "a" and c <= "z"
 	_says(alphabet, "skew (§11.4): every name in the catalogue, the %d keys, is one the"
 		% Catalogue.keys().size() + " wire carries -- 1 to %d letters of a-z" % Wire.NAME_MAX)
+
+
+## **The guest's half of the rules check, on the LAN** (§11.3; net_session.gd's
+## `_take_welcome`): a host that welcomes it on other rules -- another build's tail,
+## one more judged gene on a later content -- or with no tail at all is a host whose
+## own check let it through, and the guest refuses it from its end with the version
+## sentence, told which game is older by the content on the WELCOME, and never plays.
+func _welcome_skew() -> void:
+	for case: Array in [["another build's tail, on a later content", _other_tail(6),
+			"yours", "its own"], ["no tail at all", PackedByteArray(), "theirs", "the host's"]]:
+		var ended: Array = await _welcomed_by_other("Welcome%d" % (case[1] as PackedByteArray).size(),
+			case[1], {})
+		_says(int(ended[0]) == NetSession.Link.REFUSED and str(ended[1]) == "different versions"
+				and str(ended[3]).contains("launcher") and str(ended[3]).contains(str(case[2]))
+				and not bool(ended[4]),
+			"skew (§11.3): a guest on content 5 welcomed with %s gives up on the WELCOME as"
+			% case[0] + " different versions, told it is %s game that is older ('%s'), and"
+			% [case[3], ended[3]] + " is never together with that host -- it %s" % ("was, for"
+				+ " a while" if bool(ended[4]) else "never was"))
+
+
+## **A host whose every handshake frame carries a tail not its own** -- another
+## build's, or none -- as a host whose own check let a guest through would welcome
+## it: its refusal path broken, or a build that never had one. Its check of a guest's
+## HELLO is the real one, against its real rules, so it welcomes this build's guest.
+class OtherTail extends "res://game/net/net_session.gd":
+	var other := PackedByteArray()
+
+	func _tail() -> PackedByteArray:
+		return other
+
+
+## **Another build's handshake tail**: the rules of a catalogue with one more judged
+## gene -- the faster tail -- and [param content], its content version.
+static func _other_tail(content: int) -> PackedByteArray:
+	Catalogue.register(_faster_tail())
+	var rules := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	return Wire.tail(rules, content)
+
+
+## **A guest on content 5 welcomed with [param tail]** by an [OtherTail] host -- a
+## phone's on the LAN, or, given [param invite], a server's that it calls by it and
+## proves it to: `[the link it ended on, its trouble, its trouble key, the sentence
+## under it, whether it was ever together]`.
+func _welcomed_by_other(named: String, tail: PackedByteArray, invite: Dictionary) -> Array:
+	var host := OtherTail.new()
+	host.name = named + "Host"
+	host.other = tail
+	_tally_on(host)
+	get_tree().root.add_child.call_deferred(host)
+	await host.ready
+	var guest: Node = await _session(named + "Guest")
+	guest.content_override = 5
+	var links: Array = []
+	guest.link_changed.connect(func(to: int) -> void: links.append(to))
+	if invite.is_empty():
+		host.host()
+		guest.join("127.0.0.1")
+		await _until_link(guest, NetSession.Link.REFUSED)
+	else:
+		host.host(NetSession.GUESTS_MAX)
+		host.listen_internet(_inv_key, _inv_cert)
+		host.set_invites(InviteBook.table(INVITES_ROOT))
+		await _invites_call(guest, invite)
+	var ended := [int(guest.link), str(guest.trouble), str(guest.trouble_key),
+		str(guest.because), links.has(NetSession.Link.TOGETHER)]
+	host.close()
+	guest.close()
+	await _wait(0.4)
+	return ended
 
 
 ## One guest on [param guest_content] with one more judged gene, against a host on
@@ -10934,6 +11006,7 @@ func _check_invites() -> void:
 	_invites_format()
 	await _invites_calls()
 	await _invites_strangers()
+	await _invites_welcome()
 	await _invites_doors()
 	await _invites_room()
 	await _invites_house_closed()
@@ -11744,6 +11817,26 @@ func _invites_strangers() -> void:
 		"invites S6: a caller that proves bob's invite and is welcomed, then sends a second"
 		+ " PROOF, is cut with REFUSE_BROKEN and barred")
 	await _limits_close([host, quiet, mute, old, old_again, old_guest, twice])
+
+
+## **S8c: the guest's half of the rules check, by invite** (gene-catalogue.md §11.3):
+## a server whose WELCOME, after the guest proved bob's invite, carries another build's
+## tail -- one more judged gene on a later content -- or none at all, is refused from
+## the guest's end in the server's own words, this game older or the server, and the
+## guest never plays there.
+func _invites_welcome() -> void:
+	var bob := Invite.parse(FileAccess.get_file_as_string(
+		InviteBook.line_path("bob", INVITES_ROOT)))
+	for case: Array in [["another build's tail, on a later content", _other_tail(6),
+			"game_older"], ["no tail at all", PackedByteArray(), "server_older"]]:
+		var ended: Array = await _welcomed_by_other("InvWelcome%d"
+			% (case[1] as PackedByteArray).size(), case[1], bob)
+		_says(int(ended[0]) == NetSession.Link.REFUSED and str(ended[2]) == str(case[2])
+				and not bool(ended[4]),
+			"invites S8c: a guest on content 5 that proved bob's invite and was welcomed with"
+			+ " %s gives up on the WELCOME, told %s -- '%s: %s' -- and is never together"
+			% [case[0], case[2], ended[1], ended[3]] + " with that server -- it %s"
+			% ("was, for a while" if bool(ended[4]) else "never was"))
 
 
 ## **D1-D3: the doors.** The LAN-only guard is the LAN listener's alone; a
