@@ -65,6 +65,7 @@ const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const Invite := preload("res://game/net/invite.gd")
 const NetSession := preload("res://game/net/net_session.gd")
+const Rules := preload("res://game/net/rules.gd")
 const Referee := preload("res://game/net/referee.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 ## Every gene's numbers, by stat: the reach an honest call has.
@@ -267,6 +268,9 @@ var _closes := 0
 var _door_counts := {}
 ## Why the last host could not be opened, said.
 var _no_host := ""
+## **This build's handshake tail** (protocol 8): its rules and content version 0,
+## which every HELLO and WELCOME it means to be taken carries.
+var _tail := PackedByteArray()
 
 
 func _ready() -> void:
@@ -283,6 +287,7 @@ func _ready() -> void:
 			replay = arg.trim_prefix("--replay=")
 	_catcher = Catcher.new()
 	OS.add_logger(_catcher)
+	_tail = Wire.tail(Rules.fingerprint(), 0)
 	_identity()
 	await _run(replay)
 	OS.remove_logger(_catcher)
@@ -621,6 +626,18 @@ static func _finite_why(values: Variant) -> String:
 	return ""
 
 
+## **A handshake frame's tail, mostly this build's** -- its rules, so the frame is
+## taken -- and now and then none, as a build before protocol 8 sends, or other
+## rules, as a build on another catalogue does.
+func _some_tail() -> PackedByteArray:
+	var roll := _rng.randf()
+	if roll < 0.8:
+		return _tail
+	if roll < 0.9:
+		return PackedByteArray()
+	return Wire.tail(_bytes(Wire.RULES_SIZE), _rng.randi_range(0, 9999))
+
+
 ## **A valid frame of any kind** its side could send, with random values
 ## inside what a real body could say.
 func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
@@ -631,11 +648,11 @@ func _valid_frame(from_host: bool, next := -1) -> PackedByteArray:
 	var choice := _rng.randi_range(0, 15)
 	match choice:
 		0:
-			return Wire.hello(_rng.randi_range(0, 9))
+			return Wire.hello(_rng.randi_range(0, 9), _some_tail())
 		1:
-			return Wire.welcome(Wire.PROTOCOL, _rng.randi_range(2, 0x7FFFFFFF))
+			return Wire.welcome(Wire.PROTOCOL, _rng.randi_range(2, 0x7FFFFFFF), _some_tail())
 		2:
-			return Wire.refuse(Wire.PROTOCOL, _rng.randi_range(0, 8))
+			return Wire.refuse(Wire.PROTOCOL, _rng.randi_range(0, 8), _some_tail())
 		3:
 			return Wire.challenge(_bytes(Wire.NONCE_SIZE))
 		4:
@@ -1386,7 +1403,7 @@ func _door_step(host: FuzzHost, action: Array, run: Dictionary) -> bool:
 			var good := false
 			match str(what[0]):
 				"hello":
-					frame = Wire.hello(int(what[1]))
+					frame = Wire.hello(int(what[1]), _tail)
 				"proof":
 					var nonce := _nonce_for(host, id, int(began.get(line, 0)))
 					var mine := PackedByteArray()
@@ -1843,7 +1860,7 @@ func _guest_steps(by_invite: bool) -> Array:
 		match _rng.randi_range(0, 7):
 			0:
 				frame = Wire.welcome(Wire.PROTOCOL if _rng.randf() < 0.8
-					else _rng.randi_range(0, 9), _rng.randi_range(0, 9))
+					else _rng.randi_range(0, 9), _rng.randi_range(0, 9), _some_tail())
 			1:
 				frame = Wire.challenge(_bytes(Wire.NONCE_SIZE))
 			2:
@@ -1869,8 +1886,10 @@ func _guest_run(by_invite: bool, steps: Array) -> Array:
 	if by_invite:
 		guest._invite = Invite.parse(Invite.format("203.0.113.7", Invite.PORT, _key_id,
 			_secret, _der))
-	# Its first frame is not after a stall: the clock stood where it stands.
+	# Its first frame is not after a stall: the clock stood where it stands. And its
+	# rules taken, as a session's are when it calls.
 	guest._frame_at = guest.now_at
+	guest._take_rules()
 	guest._set_link(NetSession.Link.REACHING)
 	guest._on_peer_connected(1)
 	var why := ""

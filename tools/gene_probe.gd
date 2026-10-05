@@ -198,13 +198,15 @@ const SHIPPED_PLAN: Array[Dictionary] = [
 	{"id": &"inside", "place": BodyPlan.INSIDE_PLACE, "earned": BodyPlan.ALWAYS},
 ]
 const SHIPPED_RETIRED: Array[Dictionary] = []
-## **What to move when today's plan changes**, said where it fails: the pins, and --
-## until phase 4 puts the plan's fingerprint on the handshake (§11.3) -- the protocol.
+## **What to move when today's plan changes**, said where it fails: the pins, and
+## `Wire.RULES` -- the plan's fingerprint rides in the handshake's rules (§11.3) -- but
+## never the protocol.
 const PLAN_MOVED := ("today's plan changed: move SHIPPED_PLAN, SHIPPED_COUNTS, SHIPPED_SEATS,"
-	+ " SHIPPED_NEIGHBOURS and SHIPPED_RING to the new plan in the same commit, and bump"
-	+ " Wire.PROTOCOL with them -- a build on another plan is another protocol until phase"
-	+ " 4. A change of the slots' count also fails net_probe's wire sizes; a change of arcs"
-	+ " alone fails nothing on the wire side, and this is the only reminder")
+	+ " SHIPPED_NEIGHBOURS and SHIPPED_RING to the new plan in the same commit. The plan's"
+	+ " fingerprint is in the rules the handshake carries, so net_probe's Wire.RULES moves"
+	+ " too -- and no Wire.PROTOCOL: builds on other plans refuse each other at the"
+	+ " handshake by themselves. A change of the slots' count also moves net_probe's wire"
+	+ " sizes")
 ## **The ids every save before the stamp was kept under, in their order** (§10.3):
 ## `BodyPlan.BEFORE_STAMPS`, written out again here, and apart from [constant
 ## SHIPPED_PLAN], because that pin moves with a plan change and this one never does.

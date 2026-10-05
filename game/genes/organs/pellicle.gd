@@ -11,8 +11,7 @@ const Readout := preload("res://game/mechanics/readout.gd")
 const U := Readout.Unit
 
 ## **How much bigger a body is to a mouth**, by tier.
-## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
-## Wire.RULES holds its second copy's alone.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const ARMOR_BY_TIER: Array[float] = [1.0, 1.14, 1.30, 1.52]
 
 

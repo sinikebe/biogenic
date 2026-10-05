@@ -17,7 +17,7 @@ const U := Readout.Unit
 ## speed is 310, and since the chase scales its cruise off the prey's own speed,
 ## a hunter could not physically close on a pushing cell at any tier. Dread
 ## stopped meaning anything, which is most of the game.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const PUSH_ACCEL_BY_TIER: Array[float] = [0.0, 60.0, 85.0, 115.0]
 
 

@@ -172,7 +172,7 @@ var look := {}
 
 ## **The copies a newborn wears of it** (`genome.gd`'s born cell): the mouth, the
 ## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
-## referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 var born := 0
 
 ## **One variant to a body** (gene-catalogue.md §6.3): placing a second variant of

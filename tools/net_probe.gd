@@ -506,6 +506,34 @@ func _check_wire() -> void:
 			and Wire.refuse_reason(refuse) == Wire.REFUSE_PROTOCOL,
 		"a refusal carries the refuser's protocol and its reason")
 
+	# **The tail, since protocol 8** (gene-catalogue.md §11.3): the rules a build
+	# judges and decides contacts by, and its content version, after the frozen
+	# prefix of every handshake frame -- and a HELLO with it still within
+	# HANDSHAKE_MAX, so a host of any build reads its prefix and refuses it by name.
+	var rules8 := Rules.fingerprint()
+	var tail8 := Wire.tail(rules8, 4242)
+	var hello8 := Wire.hello(Wire.PROTOCOL, tail8)
+	var welcome8 := Wire.welcome(Wire.PROTOCOL, big, tail8)
+	var refuse8 := Wire.refuse(Wire.PROTOCOL, Wire.REFUSE_PROTOCOL, tail8)
+	var read8 := true
+	for each8: PackedByteArray in [hello8, welcome8, refuse8]:
+		read8 = read8 and Wire.rules_of(each8) == rules8 \
+			and Wire.content_of(each8) == 4242 and Wire.protocol_of(each8) == Wire.PROTOCOL \
+			and each8.size() <= Wire.HANDSHAKE_MAX
+	var bare7 := Wire.hello(Wire.PROTOCOL - 1)
+	var cut8 := hello8.slice(0, hello8.size() - 1)
+	_says(read8 and hello8.size() == Wire.HELLO_SIZE + Wire.TAIL_SIZE
+			and Wire.welcome_host_id(welcome8) == big
+			and Wire.refuse_reason(refuse8) == Wire.REFUSE_PROTOCOL
+			and Wire.rules_of(bare7).is_empty() and Wire.content_of(bare7) == -1
+			and Wire.rules_of(cut8).is_empty() and Wire.content_of(cut8) == -1
+			and rules8.size() == Wire.RULES_SIZE and Rules.SIZE == Wire.RULES_SIZE
+			and Wire.tail(PackedByteArray([1, 2]), 7).size() == Wire.TAIL_SIZE,
+		"the handshake's tail: a HELLO with the rules and the content version is %d"
+		% hello8.size() + " bytes of the %d any host reads, a WELCOME %d and a REFUSE"
+		% [Wire.HANDSHAKE_MAX, welcome8.size()] + " %d, each read back whole; a frame" % refuse8.size()
+		+ " with no tail, as a 7 sends, or one cut short of it, has no rules and no content")
+
 	var alive := Wire.state(70000, true, Vector2(-1806.5, 942.25), 2.25, 33.5,
 		Vector2(-121.5, 64.25), -0.625)
 	var dead := Wire.state(70001, false)
@@ -1036,8 +1064,8 @@ func _check_sister_wire() -> void:
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
 	# **1378 is the pin a plan change moves**: the body plan's slot count is in every
-	# size that holds a genome. Until phase 4 puts the plan's fingerprint on the
-	# handshake, the protocol moves with it -- said where it fails.
+	# size that holds a genome. The plan's fingerprint rides in the handshake's rules
+	# since protocol 8, so no protocol moves with it -- said where it fails.
 	var pinned := Wire.SISTER_MAX == 1378
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
@@ -1055,8 +1083,9 @@ func _check_sister_wire() -> void:
 		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
 		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps) + ("" if pinned
 			else " -- the body plan's slots changed (%d genes cross now): move the 1378 here"
-			% Wire.GENES_MAX + " and bump Wire.PROTOCOL in the same commit, until phase 4"
-			+ " puts the plan's fingerprint on the handshake (body_plan.gd)"))
+			% Wire.GENES_MAX + " and Wire.RULES in the same commit -- no Wire.PROTOCOL: the"
+			+ " plan is in the rules the handshake carries, and builds on other plans refuse"
+			+ " each other there (body_plan.gd)"))
 
 	# **Every line this build can write crosses**: each word a rule's line is
 	# made of -- every name the declarations give, the tests, the references,
@@ -1744,15 +1773,172 @@ func _check_skew() -> void:
 		if await _one_skew(theirs):
 			named.append(theirs)
 	# **Check 26** (automation.md §18.3): every older protocol refused by name,
-	# and the rules the referee judges by just as they were -- protocol 6 moved
-	# the shape of one message, and nothing a host judges a guest by.
+	# and the rules a host judges by pinned -- since protocol 8 they ride on the
+	# handshake, and moving them is the pin's to say, not a protocol's.
 	_says(named == older + [Wire.PROTOCOL + 1]
 			and _rules_text().sha256_text() == Wire.RULES,
 		"handshake (check 26): a guest on each of protocols %s is refused by a host"
 		% ", ".join(PackedStringArray(older.map(func(p: int) -> String: return str(p))))
 		+ " on %d by name, with the sentence that names the update, as is one on %d;"
-		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the referee judges by the rules"
-		+ " it did, Wire.RULES %s" % Wire.RULES.left(16))
+		% [Wire.PROTOCOL, Wire.PROTOCOL + 1] + " and the rules it judges by are the"
+		+ " ones pinned, Wire.RULES %s" % Wire.RULES.left(16))
+	await _rules_skew()
+
+
+## **This build's HELLO, as a session sends it** (protocol 8): the frozen prefix
+## and the rules' tail, content version 0. What a bare client says to be greeted.
+static func _hello() -> PackedByteArray:
+	return Wire.hello(Wire.PROTOCOL, Wire.tail(Rules.fingerprint(), 0))
+
+
+## **A faster tail**, filed as the tail's own organ with one variant whose speed is
+## its own -- one more gene the referee judges, as the gene probe files one.
+## Registered by the caller, and forgotten by its organ's name.
+static func _faster_tail() -> Object:
+	var plain := Catalogue.first_provider(&"impulse_speed")
+	var speed: Array = Catalogue.table(plain, &"impulse_speed")
+	var swift: Array = []
+	for value: Variant in speed:
+		swift.append(float(value) * 1.6)
+	swift[0] = speed[0]
+	var tail: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	tail.set(&"variants", [{"variant": &"probeswift", "order": 920, "born": 0,
+		"provides": {&"impulse_speed": swift}}])
+	return tail
+
+
+## **A palp that feels further**, the palp's own organ with one variant whose reach
+## is its own: one more gene that changes nothing a host judges or decides a
+## contact by.
+static func _longer_palp() -> Object:
+	var plain := Catalogue.first_provider(&"touch_range")
+	var reach: Array = Catalogue.table(plain, &"touch_range")
+	var longer: Array = []
+	for value: Variant in reach:
+		longer.append(float(value) * 1.5)
+	var palp: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
+	palp.set(&"variants", [{"variant": &"probefeel", "order": 921, "born": 0,
+		"provides": {&"touch_range": longer}}])
+	return palp
+
+
+## **Version skew under one protocol** (gene-catalogue.md §11.4), with two builds
+## modelled in one process: a session takes its rules as it starts, so a guest
+## that starts while one more organ is registered is a build whose catalogue has
+## it, against a host that started without.
+##
+## - **One more judged gene** -- a faster tail -- and the two refuse each other at
+##   the handshake, the guest refused by name and told which game is older by the
+##   content version on the tail, both ways round;
+## - **one more gene that judges nothing** -- a palp that feels further -- and the
+##   rules are the same, so the two play, and the gene crosses by its name to a
+##   host that has never heard of it, which keeps it as a name;
+## - and **a name the wire would refuse cannot be in the catalogue**: the gene
+##   probe holds every key to the wire's alphabet and length, and this holds the
+##   two probes' bounds to one another.
+func _rules_skew() -> void:
+	var ours := Rules.fingerprint()
+	Catalogue.register(_faster_tail())
+	var judged := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	Catalogue.register(_longer_palp())
+	var unjudged := Rules.fingerprint()
+	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
+	_says(judged != ours and unjudged == ours and Rules.fingerprint() == ours,
+		"skew: one more gene the referee judges, a faster tail, makes other rules"
+		+ " (%s against %s); one more that judges nothing, a palp that feels further,"
+		% [judged.hex_encode().left(8), ours.hex_encode().left(8)]
+		+ " leaves them as they are, and so does taking each out again")
+	var named := 0
+	for pair: Array in [[5, 6], [7, 6]]:
+		if await _one_rules_skew(int(pair[0]), int(pair[1])):
+			named += 1
+	_says(named == 2, "skew (§11.4): a guest on one more judged gene is refused at the"
+		+ " handshake on one protocol, by name, both ways round -- the older game, by its"
+		+ " content version, told to take the update")
+	await _unjudged_plays()
+	var alphabet := true
+	for key: StringName in Catalogue.keys():
+		var text := String(key)
+		alphabet = alphabet and text.length() >= 1 and text.length() <= Wire.NAME_MAX
+		for c: String in text:
+			alphabet = alphabet and c >= "a" and c <= "z"
+	_says(alphabet, "skew (§11.4): every name in the catalogue, the %d keys, is one the"
+		% Catalogue.keys().size() + " wire carries -- 1 to %d letters of a-z" % Wire.NAME_MAX)
+
+
+## One guest on [param guest_content] with one more judged gene, against a host on
+## [param host_content] without it: true when it was refused by name, told which
+## game is older, and every line below passed.
+func _one_rules_skew(guest_content: int, host_content: int) -> bool:
+	var failed := _failed
+	var host: Node = await _session("HostRules%d" % guest_content)
+	var guest: Node = await _session("GuestRules%d" % guest_content)
+	host.content_override = host_content
+	guest.content_override = guest_content
+	host.host()
+	Catalogue.register(_faster_tail())
+	guest.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _until_link(guest, NetSession.Link.REFUSED)
+	var guest_older := guest_content < host_content
+	_says(int(guest.link) == NetSession.Link.REFUSED and guest.trouble == "different versions"
+			and int(guest.refused_for) == Wire.REFUSE_PROTOCOL,
+		"a guest on content %d with one more judged gene is refused by a host on %d,"
+		% [guest_content, host_content] + " on one protocol, as different versions")
+	_says(guest.because.contains("launcher") and guest.because.contains(
+			"yours" if guest_older else "theirs"),
+		"and told it is %s game that is older: '%s'" % ["its own" if guest_older
+			else "the host's", guest.because])
+	_says(host.trouble == "different versions" and host.because.contains(
+			"theirs" if guest_older else "yours") and host.peer_count() == 0
+			and int(host.link) != NetSession.Link.TOGETHER,
+		"the host is told too, the other way round, and keeps nothing of it: '%s'"
+		% host.because)
+	_says(guest.heard.is_empty() and guest.peer_track().is_empty(),
+		"nothing from the refused guest's host reached its game")
+	host.close()
+	guest.close()
+	await _wait(0.4)
+	return _failed == failed
+
+
+## **One more gene that judges nothing, and they play**: a guest that started with a
+## palp that feels further is welcomed by a host that started without it, and its
+## PERSON names the palp to a host that does not know it -- the name whole, its
+## copies and its slot.
+func _unjudged_plays() -> void:
+	var host: Node = await _session("HostUnjudged")
+	var guest: Node = await _session("GuestUnjudged")
+	host.host()
+	Catalogue.register(_longer_palp())
+	guest.join("127.0.0.1")
+	await _until_link(guest, NetSession.Link.TOGETHER)
+	var born := Catalogue.born_order()
+	var tiers := Catalogue.born().duplicate()
+	tiers[&"probefeel"] = 2
+	var order: Array = Array(born) + [&"probefeel"]
+	var payload := Wire.person_payload(true, tiers, order)
+	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
+	guest.send_event(Wire.EVENT_PERSON, payload)
+	var until := _now() + SETTLE
+	while _now() < until and (host.pond_events as Array).is_empty():
+		await get_tree().process_frame
+	var got: Array = []
+	for frame: PackedByteArray in host.pond_events:
+		got = Wire.take_person(frame)
+		if not got.is_empty():
+			break
+	var kept := not got.is_empty() and int((got[1] as Dictionary).get(&"probefeel", 0)) == 2 \
+		and (got[2] as Array).has(&"probefeel") and not Catalogue.known(&"probefeel")
+	_says(int(guest.link) == NetSession.Link.TOGETHER and int(host.link) == NetSession.Link.TOGETHER
+			and kept,
+		"skew (§11.4): a guest with one more gene that judges nothing plays -- the two"
+		+ " are together, the rules the same -- and its PERSON names it to a host that"
+		+ " does not know it, whole: %s" % (str(got[1]) if not got.is_empty() else "nothing"))
+	host.close()
+	guest.close()
+	await _wait(0.4)
 
 
 ## One guest on [param theirs] against a host on this build: true when it was
@@ -2275,7 +2461,7 @@ func _limits_commands() -> void:
 	var host: Node = await _limits_host("LimitsCommandsHost")
 	var rogue := _limits_rogue("LimitsCommandsRogue")
 	await _limits_until(func() -> bool: return rogue.connected())
-	rogue.send(Wire.hello(Wire.PROTOCOL))
+	rogue.send(_hello())
 	await _limits_until(func() -> bool: return rogue.welcomed())
 	var path := PackedByteArray([1, 7, 0, 0, 0])
 	path.append_array("root/NetSession".to_utf8_buffer())
@@ -2385,7 +2571,7 @@ func _limits_greeted_gone() -> void:
 	host.set("silence_cut", 1.5)
 	var rogue := _limits_rogue("GoneRogue")
 	await _limits_until(func() -> bool: return rogue.connected())
-	rogue.send(Wire.hello(Wire.PROTOCOL))
+	rogue.send(_hello())
 	await _limits_until(func() -> bool:
 		return int(host.link) == NetSession.Link.TOGETHER and int(host.company()) == 1)
 	var greeted := int(host.company()) == 1 and int(host.peer_count()) == 1
@@ -11235,7 +11421,7 @@ func _invites_strangers() -> void:
 		if quiet.connected() and float(connected_at[0]) < 0.0:
 			connected_at[0] = _now()
 		return quiet.connected() and mute.connected())
-	quiet.send(Wire.hello(Wire.PROTOCOL))
+	quiet.send(_hello())
 	await _limits_until(func() -> bool: return not quiet.challenge().is_empty())
 	var challenged := quiet.challenge().size() == Wire.NONCE_SIZE
 	# S9, meanwhile: what the server's updater would wait for, beside what
@@ -11304,7 +11490,7 @@ func _invites_strangers() -> void:
 		await _limits_until(func() -> bool: return rogue.connected())
 		var cuts := int(host.gate_counts["cuts"])
 		if what != "a PROOF before any CHALLENGE":
-			rogue.send(Wire.hello(Wire.PROTOCOL))
+			rogue.send(_hello())
 			await _limits_until(func() -> bool: return not rogue.challenge().is_empty())
 		match what:
 			"a STATE before its PROOF":
@@ -11312,7 +11498,7 @@ func _invites_strangers() -> void:
 			"a PROOF before any CHALLENGE":
 				rogue.send(Wire.proof(bob["key_id"], PackedByteArray(), PackedByteArray()))
 			"a second HELLO":
-				rogue.send(Wire.hello(Wire.PROTOCOL))
+				rogue.send(_hello())
 		var gone := await _limits_until(func() -> bool: return rogue.down(), 2.0)
 		if gone >= 0.0 and int(host.gate_counts["cuts"]) == cuts + 1 and not rogue.welcomed():
 			early.append(what)
@@ -11358,7 +11544,7 @@ func _invites_strangers() -> void:
 	var twice_from := "127.0.0.8"
 	var twice := _invites_stranger("InvStrangerTwice", twice_from, 47288)
 	await _limits_until(func() -> bool: return twice.connected())
-	twice.send(Wire.hello(Wire.PROTOCOL))
+	twice.send(_hello())
 	await _limits_until(func() -> bool: return not twice.challenge().is_empty())
 	var mine := Crypto.new().generate_random_bytes(Wire.NONCE_SIZE)
 	var proof := Wire.proof(bob["key_id"], mine, Invite.proof_mac(bob["secret"], Wire.PROTOCOL,
@@ -11520,7 +11706,7 @@ func _invites_room() -> void:
 	# the second a good while after the first, so which is the elder is plain.
 	var talker := _invites_stranger("InvRoomTalker", "127.0.0.2", 47310)
 	await _limits_until(func() -> bool: return talker.connected() and peers.has(talker.id))
-	talker.send(Wire.hello(Wire.PROTOCOL))
+	talker.send(_hello())
 	await _wait(0.3)
 	var mute := _invites_stranger("InvRoomMute", "127.0.0.3", 47311)
 	await _limits_until(func() -> bool: return mute.connected() and peers.has(mute.id))
@@ -11579,7 +11765,7 @@ func _invites_room() -> void:
 	var quitter := _invites_stranger("InvRoomQuitter", "127.0.0.4", 47312)
 	await _limits_until(func() -> bool:
 		return quitter.connected() and peers.has(quitter.id))
-	quitter.send(Wire.hello(Wire.PROTOCOL))
+	quitter.send(_hello())
 	await _limits_until(func() -> bool: return not quitter.challenge().is_empty())
 	var refused_barred := int(host.gate_counts["net_refused_barred"])
 	quitter.hang_up()
