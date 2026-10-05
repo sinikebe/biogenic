@@ -12,8 +12,8 @@ The owner, 2026-10-04, after the readiness review (§0):
 > "You will prepare the code for the gene pass. THe gene pass is just adding/editing
 > genes, so it should be straightforward"
 
-**Status: phases 1a and 1b built** (§15.1, §15.2, 2026-10-05); phases 2 to 7 designed,
-not built.
+**Status: phases 1a, 1b, 2 and 3 built** (§15.1 to §15.4, 2026-10-05); phases 4 to 7
+designed, not built.
 This document is the preparation. It turns the
 genes, their variants and the slots into data that every system reads, adds the checks
 that catch a half-wired gene, and writes the playbook the gene pass follows. Phases 1
@@ -344,6 +344,16 @@ says. Slot order would need the layout at every read; the catalogue's is fixed. 
 act from every provider (a beam per eye) is the gene pass's code to write, in that
 mechanic, when an organ needs it.
 
+**As built in phase 3** (§15.4), it is the first **in slot order**: a body with two
+eyes casts from the one in the lower slot. The layout is no longer read at every
+read, because each of these is read once a body -- the cell's by `body_version`, a
+water body's when its genome is written. `stats.gd`'s `SEATED` names the stats whose
+mechanic has a place: `beam_range`, `ping_range`, `dart_range` and `smell_range`.
+Everything such a mechanic reads off its organ is that organ's: its arc, its tier, its
+level and path, its fork, its experience cap, its dart's stun. The mouth, the tail's
+level and hold and the dash have no place to act from, and act from the first in the
+catalogue's order, as before. `Stats.organ` answers which, for any stat.
+
 ### 5.3 Levels
 
 `LEVELLED` becomes the organ's `levels` field: step, fork level and paths. The beam's
@@ -413,6 +423,12 @@ because nothing today can carry two. It is a switch the gene pass sets per organ
 it adds variants. The default and the reasoning are the gene pass's call, not this
 document's.
 
+**As built** (§15.4): placing or integrating a variant of such an organ writes over
+every other variant of it in the DNA, in both its places, and empties their slots; the
+body keeps what it wears until a birth, as with any gene written over. Drift brings no
+variant of such an organ to a lineage that carries one. The gene probe switches it on
+for an organ of its own and shows both.
+
 ### 6.4 What the toxin's special cases become
 
 `Drop.TOXIN`, `take_drifter_gene`, `drifter_genes`, `give_toxin`, `_toxin_short`,
@@ -424,6 +440,15 @@ which every variant inherits:
 - `floor_by_peers`: the floor gives it back through peers.
 
 A second strain is then a variant entry, and every one of these rules covers it.
+
+**As built** (§15.4): `toxin.gd` carries both tags, and `drop.gd` and `food.gd` ask for
+them. `give_toxin` is `give_back(tiers, gene, ...)`: the coin picks the gene's inside
+or outside form, and a strain of one place takes the one it has. `toxins_of` reads any
+key with a dose, whatever its places. A strain's lines say what a stack of its own
+dose does (`gene.gd`'s `dose_line`), and the gene probe fails a live strain whose
+kind has no line, and a venom without its side and stern words -- the 1b review's
+finding 4. The probe files a second strain of one place and shows every rule above
+covering it.
 
 ---
 
@@ -809,6 +834,11 @@ A grep gate in CI fails on any `&"<key>"` or `"<key>"` literal for a catalogue k
 `game/` outside `game/genes/`. Comments and `tools/` are exempt. It lands in phase 5,
 once nothing is left to move. Until then, the probe prints the count.
 
+**As built in phase 3** (§15.4), on the coordinator's word: CI's "Check the gene names"
+runs the gene probe with `-- --names`, which prints one failure for every such literal
+-- its file, line and text -- and `ALL PASS` only for none. Comment lines and `tools/`
+are exempt, and retired keys count. There are none.
+
 ### 12.3 Synthetic genes and plans, end to end
 
 A probe registers a test organ with a variant and two places. It wears it, and then:
@@ -830,6 +860,14 @@ offer. Each gene lands in its slot by id, and nothing is lost. It then checks th
 genome's rules, the venom's side, the wire's limits, the referee and the pause figure
 on that plan. It loads a cell and a daughter kept under it on today's plan, and
 restores today's plan whole.
+
+**As built** (§15.4), the first run is the gene probe's too, from phase 3. Its organ, a
+gland, has two variants -- a plain one inside and out, and a keen one outside alone --
+with words, a look and lines, as an organ's file has them. The probe puts it through
+everything above, and through its instinct part, a water cell's and yours. It switches
+it to one variant a body, then forgets it, and the catalogue and the vocabulary are as
+they were. Then a faster tail, one more entry in the tail's own file, and a second
+strain of the toxin, one entry of one place.
 
 ---
 
@@ -940,7 +978,8 @@ nothing provides the stat), `upkeep_at`; `providers`,
 - **Drift stays an even draw** (§9) until phase 7.
 - **`channel` arrived here** (§7.3), for the eye-spot, which provides no stat.
 - **A mechanic acts from the first provider in the catalogue's order** (§5.2), not
-  in slot order: the layout would be needed at every read.
+  in slot order: the layout would be needed at every read. (Phase 3 made it slot
+  order for a mechanic with a place, once each was read once a body: §15.4.)
 - **Stats are read by name, not in a loop** (§5.2): each line of `_refresh_body`,
   `_eye_of` and `_derive_person` is one stat now, and the gene left it.
 - **A body's stats are read once, when its genome is written, and never on a tick.**
@@ -1405,7 +1444,11 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
 - **A variant**: add an entry to the organ's `variants`, with its key, words, numbers
   it changes, accent and weight. Run the gene probe. Add the French. Render the organ
   beside its nearest neighbours at both sizes. A variant in one place needs no `forms`
-  (§6.2), and its tags add to its organ's.
+  (§6.2), and its tags add to its organ's. It has its organ's instinct parts, read by
+  the same readers, and declares none of its own. Two variants of one organ are two
+  loci; `one_variant` on the organ holds a body to one (§6.3). A strain of a toxin
+  sets its `dose`, and the probe asks for a stack line where its kind has none, and
+  for its side and stern words (§6.4).
 - **An organ on existing mechanics**: copy the template to `organs/<key>.gd`, set the
   next `order`, fill every field the probe asks for, and add one line to the index.
   Then the same three steps.
