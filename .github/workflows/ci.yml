@@ -565,14 +565,15 @@ jobs:
         # field rules (`pond-field`): two players in one food.gd, the eating
         # rule both ways, the per-player water, and a mirror that must perceive
         # exactly what the field does. Then, also with no socket, the host's
-        # referee (`referee`, net-hardening.md part B): the fingerprint of every
-        # rule it judges a guest by against wire.gd's RULES -- a rule changed
-        # without PROTOCOL fails here -- and each of its rules at its edge.
+        # referee (`referee`, net-hardening.md part B): the rules the handshake
+        # carries, as the game writes them, against the probe's own and against
+        # wire.gd's RULES pin -- a rule changed without moving the pin fails
+        # here -- and each of its rules at its edge.
         # Then two real runs in one pond, and straight after them `pond
         # referee`: a guest driven by hand, as a modified client is, in a real
         # host's water, breaking each rule and then cut. Then the dedicated
         # server (`game/server/`) with two real guests on this build's own
-        # PROTOCOL 4 guest code, and its update decisions against a fake release
+        # guest code, and its update decisions against a fake release
         # feed and a loopback HTTP server -- no network. Then `invites`
         # (net-hardening.md part C): the invite line and the kept invite, calls
         # by invite over DTLS on loopback and each way one ends, hostile callers
