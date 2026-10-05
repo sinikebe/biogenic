@@ -1,8 +1,8 @@
 extends RefCounted
 ## **The catalogue** (docs/design/gene-catalogue.md §4): every gene the game
 ## knows, by key, and every question any file asks of one. A gene's numbers,
-## lists, tags and rules live in its organ's file under `organs/`; this is the
-## index of those files and the one place they are read from.
+## lists, tags, rules, look and words live in its organ's file under `organs/`;
+## this is the index of those files and the one place they are read from.
 ##
 ## **Lookups are built once**, when this script loads ([method _static_init]),
 ## into dictionaries and lists: nothing per frame walks the catalogue, and every
@@ -63,6 +63,25 @@ const BEAM := Gene.BEAM
 const PING := Gene.PING
 const SMELL := Gene.SMELL
 const TOUCH := Gene.TOUCH
+## The shapes an organ is drawn as (gene.gd), for the same reason.
+const MAT := Gene.MAT
+const OARS := Gene.OARS
+const LASH := Gene.LASH
+const TUFT := Gene.TUFT
+const SPINES := Gene.SPINES
+
+## **The tables of words an organ's file may hold** (gene.gd, "Its words"), by
+## constant name, and what each is called here: the words said of a key ...
+const KEY_WORDS := {"WORDS": &"word", "EXPLAINS": &"explains", "EXPLAINS_SIDE": &"side",
+	"EXPLAINS_STERN": &"stern", "EXPLAINS_PATH": &"paths", "CARRIED_WORDS": &"carried",
+	"CARRIED_EXPLAINS": &"carried_explains", "NAMES": &"name"}
+## ... the words of the ways its levels fork into, by way, for every key of the
+## organ: each way's name, its two card lines, and what it does as it grows ...
+const WAY_WORDS := {"PATH_TITLES": &"way_titles", "PATH_LINES": &"way_lines",
+	"PATH_SAYS": &"way_says"}
+## ... and the words of a part it declares, by the part's qualified name.
+const PART_WORDS := {"GENE_SAYS": &"says", "GENE_SENSES": &"sense",
+	"GENE_EXPLAINS": &"explains", "GENE_ASLEEP": &"asleep", "GENE_NEEDS": &"needs"}
 
 ## **The water's list of what a drifter may be made of**, and the parts genes
 ## declare to a body's rules, by the names their orders are pinned under below.
@@ -95,10 +114,13 @@ const SHIPPED_ORDERS := {
 ## The fields a variant or a form may set over its organ: everything an organ
 ## sets but its name and its variants (§6.2).
 const OVERRIDES: Array[String] = ["order", "provides", "numbers", "levels", "water", "tags",
-	"channel", "born", "declares"]
+	"channel", "born", "declares", "look"]
 
 ## An empty list, the answer for a name nothing is filed under.
 static var _none: Array[StringName] = _read_only([] as Array[StringName])
+## An empty look and empty words, the answers for a key with none.
+static var _no_look := _frozen_empty()
+static var _no_words := _frozen_empty()
 
 ## Key to its flat record: an instance of its organ's script, its variant and form
 ## written over it ([method _resolve]).
@@ -140,6 +162,25 @@ static var _levelled: Array[StringName] = []
 static var _channels := {}
 ## What a tool registered ([method register]), after the index's own.
 static var _registered: Array = []
+## **Key to its look**, every key's, a retired one's empty. Asked of every organ of
+## every body drawn, every frame, so it is one lookup -- and **filled in place and
+## never replaced**, as [member _provided] is, because cilia.gd holds it.
+static var _looks := {}
+## Shape to the live keys drawn as it, in order. **Filled in place and never
+## replaced**, as [member _looks] is, because cilia.gd holds it.
+static var _shaped := {}
+## **Key to its look's hue, and key to its look's shape**, for every key whose look
+## has one -- a retired key's has neither. Each is asked of every organ of every body
+## drawn, every frame, so each is one lookup; filled in place, as [member _looks] is,
+## because cilia.gd holds both.
+static var _hues := {}
+static var _shape_of := {}
+## Key to its words (gene.gd's word tables): [constant KEY_WORDS]' names to the
+## English, which the screens translate.
+static var _words := {}
+## Qualified part name to its words, [constant PART_WORDS]' names to the English:
+## every part an organ's file has words for.
+static var _part_words := {}
 
 
 static func _static_init() -> void:
@@ -394,6 +435,73 @@ static func worn_on(tiers: Dictionary, channel: StringName) -> StringName:
 	return &""
 
 
+# --- Looks and words (§7.1, §8) ----------------------------------------------------------
+
+## **[param key]'s look** (gene.gd's `look`), read-only; empty for a key this build
+## does not know, or a retired one.
+static func look(key: StringName) -> Dictionary:
+	return _looks.get(key, _no_look)
+
+
+## **Every key's look, by key**: the catalogue's own dictionary, which cilia.gd
+## holds once and reads every frame as its own. Every index refills it in place --
+## [method register] and [method forget] too -- and never replaces it. Read it;
+## never write it.
+static func looks() -> Dictionary:
+	return _looks
+
+
+## **The live keys drawn as [param shape]** (gene.gd's SHAPES), in order: how
+## cilia.gd finds the organ it draws on a home arc without its name.
+static func shaped(shape: StringName) -> Array[StringName]:
+	return _shaped.get(shape, _none)
+
+
+## **Every shape's [method shaped], by shape**: the catalogue's own dictionary, which
+## cilia.gd holds once and reads every frame as its own, filled in place as
+## [method looks] is. Read it; never write it.
+static func shapes() -> Dictionary:
+	return _shaped
+
+
+## **Every key's hue, by key** -- its look's `hue` -- for the keys that have one: the
+## catalogue's own dictionary, held by cilia.gd as [method looks] is. Read it; never
+## write it.
+static func hues() -> Dictionary:
+	return _hues
+
+
+## **Every key's shape, by key** -- its look's `shape` -- for the keys that have one,
+## held by cilia.gd as [method hues] is.
+static func shape_by_key() -> Dictionary:
+	return _shape_of
+
+
+## **The first live key on membrane [param channel]**, `&""` for none: whose hue a
+## channel's lobe is drawn in (signal_bus.gd).
+static func first_on(channel: StringName) -> StringName:
+	var all: Array[StringName] = _channels.get(channel, _none)
+	return all[0] if not all.is_empty() else &""
+
+
+## **[param key]'s words** (gene.gd's word tables), read-only: [constant
+## KEY_WORDS]' names -- `word`, `explains`, `side`, `stern`, `paths` (way to its
+## line), `carried`, `carried_explains`, `name` -- and [constant WAY_WORDS]' --
+## `way_titles`, `way_lines`, `way_says`, each way to its words -- to the
+## English, a key absent where its file has none. The screens translate them
+## (figure.gd, normal_mode.gd).
+static func words(key: StringName) -> Dictionary:
+	return _words.get(key, _no_words)
+
+
+## **The words of the part [param part]** an organ declares (`palp.touch`),
+## read-only: [constant PART_WORDS]' names -- `says`, `sense`, `explains`,
+## `asleep`, `needs` -- to the English; empty for a part no organ has words for.
+## The instincts page translates them (genome.gd's `words_of`).
+static func part_words(part: StringName) -> Dictionary:
+	return _part_words.get(part, _no_words)
+
+
 # --- Tools -----------------------------------------------------------------------------------
 
 ## **A tool's seam: a gene of its own** (§4.3), filed after the index's as a new
@@ -422,17 +530,38 @@ static func _index() -> void:
 	organs.append_array(_registered)
 	var records := {}
 	var resolved: Array = []
+	# Each key's words, and every part's, from its organ file's word tables.
+	var words := {}
+	var part_words := {}
 	for organ: Gene in organs:
+		var tables := (organ.get_script() as GDScript).get_script_constant_map()
 		for record: Gene in _resolve(organ):
 			if records.has(record.key):
 				push_error("[catalogue] %s is keyed twice: the second is not filed" % record.key)
 				continue
 			records[record.key] = record
 			resolved.append(record)
+			words[record.key] = _words_in(tables, record.key)
+		_part_words_into(part_words, tables)
 	for record: Gene in resolved:
 		for field: StringName in FROZEN:
 			_freeze(record.get(field))
 	_records = records
+	_freeze(words)
+	_words = words
+	_freeze(part_words)
+	_part_words = part_words
+	# In place: cilia.gd holds these dictionaries ([method looks], [method hues],
+	# [method shape_by_key]).
+	_looks.clear()
+	_hues.clear()
+	_shape_of.clear()
+	for record: Gene in resolved:
+		_looks[record.key] = record.look
+		if record.look.has("hue"):
+			_hues[record.key] = record.look["hue"]
+		if record.look.has("shape"):
+			_shape_of[record.key] = StringName(record.look["shape"])
 	var ordered := resolved.filter(func(one: Gene) -> bool: return one.order >= 0)
 	ordered.sort_custom(func(a: Gene, b: Gene) -> bool: return a.order < b.order)
 	var keys: Array[StringName] = []
@@ -466,6 +595,18 @@ static func _index() -> void:
 	_places = {}
 	for record: Gene in resolved:
 		_places[record.key] = record.place
+	# In place: cilia.gd holds this dictionary ([method shapes]).
+	var shaped := {}
+	for key: StringName in live:
+		var shape := StringName((records[key] as Gene).look.get("shape", &""))
+		if shape == &"":
+			continue
+		if not shaped.has(shape):
+			shaped[shape] = [] as Array[StringName]
+		(shaped[shape] as Array).append(key)
+	_shaped.clear()
+	for shape: StringName in shaped:
+		_shaped[shape] = _read_only(shaped[shape])
 	_providers = {}
 	_channels = {}
 	var born := {}
@@ -568,6 +709,41 @@ static func _resolve(organ: Gene) -> Array:
 	return out
 
 
+## **[param key]'s words in an organ file's word tables** -- [param tables], its
+## script's constants -- by [constant KEY_WORDS]' names.
+static func _words_in(tables: Dictionary, key: StringName) -> Dictionary:
+	var out := {}
+	for table: String in KEY_WORDS:
+		var entries: Variant = tables.get(table)
+		if entries is Dictionary and (entries as Dictionary).has(key):
+			out[KEY_WORDS[table]] = entries[key]
+	for table: String in WAY_WORDS:
+		var ways: Variant = tables.get(table)
+		if ways is Dictionary:
+			out[WAY_WORDS[table]] = ways
+	return out
+
+
+## Adds the words of every part an organ file's [param tables] have words for to
+## [param into], part to [constant PART_WORDS]' names.
+static func _part_words_into(into: Dictionary, tables: Dictionary) -> void:
+	for table: String in PART_WORDS:
+		var entries: Variant = tables.get(table)
+		if not entries is Dictionary:
+			continue
+		for part: Variant in entries:
+			if not into.has(part):
+				into[part] = {}
+			(into[part] as Dictionary)[PART_WORDS[table]] = entries[part]
+
+
+## An empty dictionary, read-only.
+static func _frozen_empty() -> Dictionary:
+	var out := {}
+	out.make_read_only()
+	return out
+
+
 ## The fields of [param organ] a variant may set over, as a dictionary.
 static func _fields_of(organ: Gene) -> Dictionary:
 	var out := {}
@@ -620,7 +796,7 @@ static func _pinned(keys: Array[StringName], shipped: Array) -> Array[StringName
 ## rest hand out is the catalogue's own, and a reader that wrote into it would
 ## change that gene for every body.
 const FROZEN: Array[StringName] = [&"provides", &"numbers", &"levels", &"water", &"tags",
-	&"declares", &"variants"]
+	&"declares", &"variants", &"look"]
 
 
 ## [param value] made read-only, and every dictionary and array inside it.

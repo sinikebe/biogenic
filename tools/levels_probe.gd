@@ -646,8 +646,15 @@ func _gene_stats() -> void:
 	_check("a fresh beam reads `%s` and `%s`" % [Readout.plain(beam[0]), next],
 		next == "level 2 after 40 strikes"
 		and Readout.plain(beam[0]) == "1 ray · reaches 620 µm")
-	_check("a gene with no row draws nothing, as a gene with no line says nothing",
-		GeneStats.lines(&"statocyst", 2, 0, &"", born) == [[], []])
+	# **A retired gene is the one with no row** (gene-catalogue.md §8.4): every live
+	# gene has its lines, which the gene probe holds, so it is the retired ones --
+	# their organs' files have no lines -- that must draw nothing.
+	var retired := Catalogue.tagged(Catalogue.RETIRED)
+	var silent := not retired.is_empty()
+	for key: StringName in retired:
+		silent = silent and GeneStats.lines(key, 2, 0, &"", born) == [[], []]
+	_check("a gene with no row draws nothing -- every retired one, %s -- as a gene with no"
+		% str(retired) + " line says nothing", silent)
 	var clause := Readout.plain(GeneStats.cell_items(CellBody.BASE_RADIUS,
 		Catalogue.born(), GenomeNode.upkeep_of(Catalogue.born())))
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"

@@ -39,6 +39,8 @@ const Invite := preload("res://game/net/invite.gd")
 ## **Your cells** (docs/design/cells-ux.md §4): the cell each view brings into the
 ## pond, named on its button once the call is answered.
 const Cells := preload("res://game/normal/cells.gd")
+## The organ the ping is called with, whose violet the code is drawn in.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 const NORMAL_SCENE := "res://game/normal/normal_mode.tscn"
 const MODE_SELECT_SCENE := "res://game/mode_select.tscn"
@@ -70,9 +72,12 @@ const HIT_OUTER := 218.0
 const MARK_HALF_DEG := 11.0
 
 # --- The palette, and it is the membrane's ----------------------------------
-## `ampulla`'s violet, copied from signal_bus.gd's PING_COLOR rather than
-## imported: this is a menu, and a menu may not preload the perception stack.
-const CODE_COLOR := Color(0.655, 0.44, 1.0)
+## `ampulla`'s violet, the ping's: the hue of the organ that drives the ping
+## channel, its organ file's, read from the catalogue as signal_bus.gd's PING_COLOR
+## is -- not from the bus: this is a menu, and a menu may not preload the
+## perception stack. The ring's green where nothing drives the ping any more.
+static var CODE_COLOR: Color = Catalogue.look(Catalogue.first_on(Catalogue.PING)).get(
+	"hue", RING_COLOR)
 ## The launcher's dim rim green, the same one the view chooser's heading wears.
 const RING_COLOR := Color(0.404, 0.639, 0.588)
 

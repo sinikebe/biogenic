@@ -27,6 +27,8 @@ const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const ProgramWords := preload("res://game/normal/program_words.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+## The organs the body's own parts act through, found by what each provides.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const ControlsNode := preload("res://game/normal/controls.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 
@@ -126,14 +128,15 @@ const AUTOPILOT_ON_INK := 0.35
 ## **The triggers, as the library's columns** (§2.3): the claims the vocabulary
 ## declares, in this order, each drawn as the pad that works it by hand.
 const COLUMNS: Array[StringName] = [&"steering", &"swimming", &"dash", &"push"]
-## **Which organ draws a part of the body's own** on its chip: the turns are the
-## cirrus's, a swim the flagellum's; a gene's parts are its own organ's, and the
-## rest the cell's own egg.
-const BODY_ORGANS := {
-	&"body.turn-toward": &"cirrus",
-	&"body.turn-away": &"cirrus",
-	&"body.turn-random": &"cirrus",
-	&"body.swim": &"flagellum",
+## **Which organ draws a part of the body's own** on its chip, by the stat the
+## part acts through: the turns are the organ that turns the body -- the cirrus --
+## and a swim the one that swims it -- the flagellum; a gene's parts are its own
+## organ's, and the rest the cell's own egg.
+const BODY_STATS := {
+	&"body.turn-toward": &"turn_rate",
+	&"body.turn-away": &"turn_rate",
+	&"body.turn-random": &"turn_rate",
+	&"body.swim": &"impulse_speed",
 }
 ## **The parts that hold the tail still wear the hold's mark** (§3.3): the pad and
 ## the page use one picture.
@@ -1744,16 +1747,17 @@ func _count_text(n: int) -> String:
 static func draw_column_mark(node: CanvasItem, column: int, centre: Vector2, ink: float) -> void:
 	match column:
 		0:
-			Cilia.draw_slot_dart(node, 1, Cilia.hue(&"cirrus") * Color(ink, ink, ink, 1.0),
+			Cilia.draw_slot_dart(node, 1, ControlsNode.TURN_HUE * Color(ink, ink, ink, 1.0),
 				centre, 9.0, false)
 		1:
 			var points := PackedVector2Array()
 			for i in 17:
 				var u := float(i) / 16.0
 				points.append(centre + Vector2((u - 0.5) * 24.0, -sin(u * TAU) * 4.5))
-			node.draw_polyline(points, Color(Cilia.hue(&"flagellum"), ink), 2.2, true)
+			node.draw_polyline(points, Color(ControlsNode.HOLD_HUE, ink), 2.2, true)
 		2:
-			Cilia.draw_tile_organ(node, &"myoneme", 1, centre + Vector2(0.0, 5.0), ink, 0.75)
+			Cilia.draw_tile_organ(node, ControlsNode.DASH_ORGAN, 1, centre + Vector2(0.0, 5.0),
+				ink, 0.75)
 		3:
 			for row in 3:
 				var points := PackedVector2Array()
@@ -1762,7 +1766,7 @@ static func draw_column_mark(node: CanvasItem, column: int, centre: Vector2, ink
 					var u := float(i) / 12.0
 					points.append(centre + Vector2((u - 0.5) * 22.0,
 						lift + sin(u * TAU + float(row) * 0.22 * TAU) * 2.4))
-				node.draw_polyline(points, Color(Cilia.hue(&"axoneme"), ink), 1.6, true)
+				node.draw_polyline(points, Color(ControlsNode.PUSH_HUE, ink), 1.6, true)
 
 
 func _draw_switch(button: Button, j: int) -> void:
@@ -2096,10 +2100,11 @@ func _focus_mark(node: Control) -> void:
 # --- Parts: their hue and their mark --------------------------------------------------
 
 ## **The organ that reports or does [param part]**: a gene's own, the cirrus for
-## a turn and the flagellum for a swim, or &"" for the cell's own and `always`.
+## a turn and the flagellum for a swim ([constant BODY_STATS]), or &"" for the
+## cell's own and `always`.
 static func organ_of(part: StringName) -> StringName:
-	if BODY_ORGANS.has(part):
-		return BODY_ORGANS[part]
+	if BODY_STATS.has(part):
+		return Catalogue.first_provider(BODY_STATS[part])
 	var vocab := FoodField.vocabulary()
 	var owner := &""
 	if vocab.inputs.has(part):
@@ -2143,9 +2148,9 @@ static func draw_part_glyph(node: CanvasItem, part: StringName, at: Vector2, alp
 
 
 ## **The hold's mark at a chip's size** (§3.3): a 19 px stroke of the tail dying
-## to flat, running into a 14 px bar, in the flagellum's hue.
+## to flat, running into a 14 px bar, in the flagellum's hue -- the hold pad's.
 static func _draw_hold_glyph(node: CanvasItem, at: Vector2, alpha: float) -> void:
-	var tone := Color(Cilia.hue(&"flagellum"), alpha)
+	var tone := Color(ControlsNode.HOLD_HUE, alpha)
 	var span := 19.0
 	var from := at.x - 12.0
 	var points := PackedVector2Array()

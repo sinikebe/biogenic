@@ -1678,7 +1678,7 @@ func _draw_wakes(a: float) -> void:
 func _draw_beams(a: float) -> void:
 	if _food_node == null:
 		return
-	var tone := Cilia.hue(&"ocellus")
+	var tone := Cilia.hue_on(Catalogue.BEAM)
 	var origin := _cell.position
 	for beam: Array in _food_node.beams:
 		var dir := _ray(float(beam[0]))
@@ -1755,7 +1755,7 @@ func _draw_ping(a: float) -> void:
 	var dir := _ray(_food_node.ping_bearing)
 	var origin := _cell.position + dir * _cell.radius
 	var mid := dir.angle()
-	var tone := Cilia.hue(&"ampulla")
+	var tone := Cilia.hue_on(Catalogue.PING)
 	var through := clampf(_food_node.ping_through, 0.0, 1.0)
 	# **All of them, not just the newest.** Up to eleven pulses are in this
 	# water at once at tier 3, and drawing one while the skin reported another

@@ -54,6 +54,8 @@ extends CanvasLayer
 const CellBody := preload("res://game/normal/cell.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
+## The membrane's channels, whose organs' hues the marks are drawn in.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const Afterglow := preload("res://game/mechanics/afterglow.gd")
 ## How far a sweeping ray turns between two of the marks it holds: 2 degrees,
@@ -257,7 +259,7 @@ func _draw_marks() -> void:
 ## beams; three beams that each stopped on something have each measured a place,
 ## and this is the register with room to say so.
 func _draw_pointers(centre: Vector2) -> void:
-	var tone := Cilia.hue(&"ocellus")
+	var tone := Cilia.hue_on(Catalogue.BEAM)
 	# **A sweep draws what it has held** (beam-levels.md §4.3): every hit of the
 	# last pass, where the body was when the ray crossed it, fading until the
 	# ray comes back. This frame's hits are the newest of them.
@@ -414,7 +416,7 @@ func _draw_wave(centre: Vector2) -> void:
 func _draw_echoes(centre: Vector2) -> void:
 	if _food.ping_echoes.is_empty():
 		return
-	var tone := Cilia.hue(&"ampulla")
+	var tone := Cilia.hue_on(Catalogue.PING)
 	var origin := centre + _ray(_food.ping_bearing) * _cell.radius * SCALE
 	var horizon := _marks.size.length() * 0.5 + origin.distance_to(centre)
 	var drawn := 0
@@ -452,7 +454,7 @@ func _draw_echoes(centre: Vector2) -> void:
 func _wave_arc(origin: Vector2, r: float, from: float, to: float, level: float) -> void:
 	if level <= 0.0:
 		return
-	var tone := Cilia.hue(&"ampulla")
+	var tone := Cilia.hue_on(Catalogue.PING)
 	var points := PackedVector2Array()
 	var colors := PackedColorArray()
 	points.resize(WAVE_STEPS + 1)

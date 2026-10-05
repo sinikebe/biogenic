@@ -5596,7 +5596,7 @@ func _update_explain() -> void:
 	_explain_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	if undecided:
-		_explain_says.text = "· " + tr(Figure.EXPLAIN_TOXIN)
+		_explain_says.text = "· " + Figure.carried_explains(gene)
 		return
 	# **The cards keep this line's job** (beam-levels.md §8.3): the gene's own
 	# line until a way is hovered or armed, and then that way, by its name.
@@ -5604,7 +5604,7 @@ func _update_explain() -> void:
 	if _fork_open() and way >= 0:
 		var path := _way_path(way)
 		_explain_name.text = _path_title(path)
-		_explain_says.text = "· " + (tr(PATH_SAYS[path]) if PATH_SAYS.has(path) else "")
+		_explain_says.text = "· " + _way_says(path)
 		return
 	# A gene this build has no line for -- a later phase's, arriving over an
 	# older binary in a content pack -- shows its name and says nothing, rather
@@ -6867,46 +6867,6 @@ func _latch_tray() -> void:
 # progression.gd knows them.
 # ---------------------------------------------------------------------------
 
-## **Owner's call 1** (beam-levels.md §8.9), answered on 2026-09-29 with the
-## recommended option: what the two ways are called. The
-## cards' titles, and the name every line about a way uses, so a different
-## answer is this line. `fill`, recommended, says what happens: each level adds
-## a ray between the ones there are, so the fan fills in and never widens.
-## `extension`, the owner's own word, can read as a longer beam, and neither way
-## is longer.
-##
-## TRANSLATORS: The name of one of the two ways a levelled gene can grow, as the
-## title of its card (20 px type on a card 200 px wide) and inside sentences such
-## as "tap again to choose sweep · for good". The beam gene: `fill` = each level
-## adds one more ray between the ones there are, so the fan fills in and never
-## widens; `sweep` = the three rays swing from side to side, faster each level.
-## One lowercase word, about 12 characters at most.
-## ROOM: 180 px at 20 px
-const PATH_TITLES := {&"extend": "fill", &"sweep": "sweep"}
-## What each way is good and bad at: one clause each, no numbers, in the gene
-## lines' voice.
-##
-## TRANSLATORS: Two short lines on a card, in 14 px type, centred: the first what
-## that way is good at, the second what it is bad at. **At most 185 px each** --
-## the card is 200 px wide and nothing wraps -- and the longest English line is
-## 172 px (about 25 characters). The `entry` line gives the way. "Rays" are the
-## beams of light the gene fires.
-## ROOM: 185 px at 14 px
-const PATH_LINES := {
-	&"extend": ["every ray lit, all the time", "small things slip between"],
-	&"sweep": ["no gaps between rays", "shows where things were"],
-}
-## What a way does as it grows, after its name on the explanation line.
-##
-## TRANSLATORS: One line in 15 px type after the way's name and a middle dot,
-## saying what that way does as the gene levels up. Same limit as the gene lines
-## elsewhere: no longer than the English (288 px, 41 characters). The `entry`
-## line gives the way.
-## ROOM: 470 px at 15 px
-const PATH_SAYS := {
-	&"extend": "a new ray every level, filling the fan",
-	&"sweep": "your three rays swing, faster every level",
-}
 ## **What a way costs is read off the prices, never written down.** X and Y are
 ## balance numbers the owner judges by playing (beam-levels.md §5); if they
 ## ever move so far that the two ways trade places, the words trade with them.
@@ -7359,10 +7319,34 @@ func _way_path(way: int) -> StringName:
 	return grown.paths[way]
 
 
-## A way's name, from [constant PATH_TITLES]; a path this build has no word for
-## is read by its own name rather than by nothing.
+## **A way's name**: the forking gene's own word for it (its organ file's
+## `PATH_TITLES`, through the catalogue); a path this build has no word for is
+## read by its own name rather than by nothing.
+##
+## i18n-ok: the organ files' way words, which the template lists from there.
 func _path_title(path: StringName) -> String:
-	return tr(PATH_TITLES[path]) if PATH_TITLES.has(path) else String(path)
+	var titles: Dictionary = Catalogue.words(_fork_gene).get(&"way_titles", {})
+	return tr(titles[path]) if titles.has(path) else String(path)
+
+
+## **What a way does as it grows**, after its name on the explanation line: the
+## forking gene's `PATH_SAYS`; "" for a path it has no line for.
+##
+## i18n-ok: the organ files' way words, which the template lists from there.
+func _way_says(path: StringName) -> String:
+	var says: Dictionary = Catalogue.words(_fork_gene).get(&"way_says", {})
+	return tr(says[path]) if says.has(path) else ""
+
+
+## **A way's card lines**, what it is good and bad at: the forking gene's
+## `PATH_LINES`, or two empty lines for a path it has none for.
+##
+## i18n-ok: the organ files' way words, which the template lists from there.
+func _way_lines(path: StringName) -> Array[String]:
+	var lines: Dictionary = Catalogue.words(_fork_gene).get(&"way_lines", {})
+	if not lines.has(path):
+		return ["", ""]
+	return [tr(lines[path][0]), tr(lines[path][1])]
 
 
 ## **The way the lines below describe**: the one the mouse is over, then the one
@@ -7636,11 +7620,11 @@ func _draw_way(card: Control, way: int) -> void:
 		_draw_centred(card, font, _path_title(path), WAY_TITLE_BASE,
 			WAY_TITLE_SIZE, Color(tone, WAY_TITLE_ALPHA * ink))
 		# A path this build has no lines for draws none, as it always did.
-		var has_lines := PATH_LINES.has(path)
-		_draw_centred(card, font, tr(PATH_LINES[path][0]) if has_lines else "",
+		var lines := _way_lines(path)
+		_draw_centred(card, font, lines[0],
 			WAY_PRO_BASE, WAY_LINE_SIZE,
 			Color(Figure.EXPLAIN_TINT, Figure.EXPLAIN_TINT.a * ink))
-		_draw_centred(card, font, tr(PATH_LINES[path][1]) if has_lines else "",
+		_draw_centred(card, font, lines[1],
 			WAY_CON_BASE, WAY_LINE_SIZE,
 			Color(Figure.EXPLAIN_TINT, Figure.EXPLAIN_TINT.a * ink))
 		_draw_centred(card, font, _cost_words(way), WAY_COST_BASE,
@@ -8345,14 +8329,14 @@ const CHOOSE_HELIX_AMP := 18.0
 const CHOOSE_DART_X := 66.0
 ## **The word budget, measured, because it is the number this block ran out of
 ## once already.** `CHOOSE_BLOCK_W - CHOOSE_WORD_X` = **47 px**, and at
-## [constant LABEL_SIZE] 13 in the fallback font the widest of
-## [constant Figure.WORDS]'s sixteen is `venom` at **44.00**. Three pixels of tail,
+## [constant LABEL_SIZE] 13 in the fallback font the widest of the organ files'
+## sixteen `WORDS` is `venom` at **44.00**. Three pixels of tail,
 ## and that is the whole of it: the next word to need more has nowhere to go
 ## and will run past the block's own edge, silently, because nothing clips it.
 ##
 ## **Letters are not the measure -- the font is proportional.** `shield` is six
 ## letters and 38.00; `poison` is six and 43.00; `venom` is five and 44.00. What
-## has to be checked when [constant Figure.WORDS] gains an entry is
+## has to be checked when an organ file's `WORDS` gains an entry is
 ## `get_string_size(word, ..., LABEL_SIZE).x <= 47`, not a letter count. The
 ## answer if it fails is to add the difference to [constant CHOOSE_BLOCK_W] on
 ## the **outboard** side, the way the 118 -> 124 widen already did, so the gap
