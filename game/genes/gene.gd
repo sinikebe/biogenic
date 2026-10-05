@@ -177,10 +177,13 @@ var look := {}
 var born := 0
 
 ## **One variant to a body** (gene-catalogue.md §6.3): placing a second variant of
-## this organ writes over the first, as the inside's one poison does, and the water
-## and drift never give a body a second. Off for every organ today, since nothing
-## today can carry two: the gene pass sets it per organ when it adds variants. The
-## organ's own, never a variant's.
+## this organ writes over the first, as the inside's one poison does -- and so does a
+## sample of one left to lapse, in the first's slot, and a water cell's meal -- and
+## the water, the gene floor and drift never give a body a second. `genome.gd`'s
+## `placing()` names the variant a write takes out; no screen says it yet. Off for
+## every organ today, since nothing today can carry two: the gene pass sets it per
+## organ when it adds variants, and words what a player is told with it. The organ's
+## own, never a variant's.
 var one_variant := false
 
 ## **What it gives a body's rules** (docs/design/behaviour.md §3), in the shape

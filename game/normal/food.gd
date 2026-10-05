@@ -9725,14 +9725,13 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 ## **A gene back through a peer** (§6.4, docs/design/dna-slots.md §9;
 ## gene-catalogue.md §6.4): a drop down to its last carriers of a gene tagged
 ## `floor_by_peers` -- the toxin's, in either form -- gives the next peer that
-## gene, its place by a coin, since no drifter may carry it.
+## gene, its place by a coin, since no drifter may carry it. A peer that carries it,
+## or another strain of an organ held to one a body, is passed over
+## (`Drop.takes_back`), and the gene waits for the next.
 func _give_back_by_peer(b: Body) -> void:
 	var gene := _peer_short()
-	if gene == &"":
+	if gene == &"" or not Drop.takes_back(b.genome, gene):
 		return
-	for form: StringName in Genome.forms_of(gene):
-		if Genome.tier_of(b.genome, form) > 0:
-			return
 	_gene_short.erase(gene)
 	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)

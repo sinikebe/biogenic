@@ -439,6 +439,15 @@ body keeps what it wears until a birth, as with any gene written over. Drift bri
 variant of such an organ to a lineage that carries one. The gene probe switches it on
 for an organ of its own and shows both.
 
+**And from phase 5** (§15.6), everywhere else a body comes to carry one: a sample of
+such a variant, left to lapse, writes over the variant the DNA carries, in its slot,
+room or none -- as a full water cell's meal already did -- where it used to be lost
+with no room; the gene floor gives no peer a second variant beside the one it wears,
+and waits for the next peer; a drop's peer born with such an organ draws none of its
+other variants; and `genome.gd`'s `placing()` reports the key a write would take out.
+**No screen says so yet**: a player-facing word for writing over a variant waits for
+the first organ that turns the switch on, and is written with it.
+
 ### 6.4 What the toxin's special cases become
 
 `Drop.TOXIN`, `take_drifter_gene`, `drifter_genes`, `give_toxin`, `_toxin_short`,

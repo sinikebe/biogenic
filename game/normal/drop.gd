@@ -434,6 +434,27 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 	return [list, rolled[0], rolled[1]]
 
 
+## **Whether the floor may give [param gene] to a peer wearing [param tiers]**
+## (gene-catalogue.md §6.3, §6.4): not to one that carries it already, in any form;
+## and, for an organ that holds one variant to a body (gene.gd's `one_variant`), not
+## to one that wears another variant of it -- **the floor never gives a body a second
+## strain beside the one it wears**. The gene waits for the next peer. Every organ
+## today holds its variants side by side, so only the first rule ever answers.
+static func takes_back(tiers: Dictionary, gene: StringName) -> bool:
+	for form: StringName in Genome.forms_of(gene):
+		if int(tiers.get(form, 0)) > 0:
+			return false
+	var organ := Catalogue.organ_of(gene)
+	if not Catalogue.one_variant(organ):
+		return true
+	var own := Catalogue.variant_of(gene)
+	for key: Variant in tiers:
+		if int(tiers[key]) > 0 and Catalogue.organ_of(StringName(key)) == organ \
+				and Catalogue.variant_of(StringName(key)) != own:
+			return false
+	return true
+
+
 ## **A gene the floor gives back through a peer** (`floor_by_peers`, the toxin's
 ## every strain; gene-catalogue.md §6.4): [param gene], a variety, at tier 1, and
 ## [param inside] -- the coin -- in its inside form, or outside in its outside one
@@ -442,12 +463,11 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 ## outside gives up a gene for it -- `pick` chooses which -- but never one of its
 ## body plan or of [param senses], so it stays a cell that can live; with nothing
 ## else to give up, it takes a bonus slot. Nothing, for a peer that carries it in
-## any form.
+## any form, or that may not take it ([method takes_back]).
 static func give_back(tiers: Dictionary, gene: StringName, slots: int,
 		senses: Array[StringName], pick: int, inside: bool) -> void:
-	for form: StringName in Genome.forms_of(gene):
-		if int(tiers.get(form, 0)) > 0:
-			return
+	if not takes_back(tiers, gene):
+		return
 	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
 	if form == &"":
 		form = Genome.forms_of(gene)[0]
