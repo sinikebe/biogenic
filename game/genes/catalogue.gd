@@ -153,6 +153,10 @@ static var _tagged := {}
 static var _tag_sets := {}
 ## The live varieties a drifter may be made of, in order.
 static var _drifters: Array[StringName] = []
+## **Organ to its own weight in the water's draws**, and organ to whether it holds
+## one variant to a body ([method organ_weight], [method one_variant]).
+static var _organ_weights := {}
+static var _one_variant := {}
 ## Key to the copies a newborn wears, and those keys in order.
 static var _born := {}
 static var _born_order: Array[StringName] = []
@@ -296,11 +300,63 @@ static func drifters() -> Array[StringName]:
 	return _drifters
 
 
-## **How often the water draws [param key]** against the others: its variant's
-## weight, 1 where it sets none and for a key this build does not know.
+## **How often the water draws [param key]** against the other varieties of its
+## organ: its variant's weight, 1 where it sets none and for a key this build does
+## not know. The organ is drawn first, by [method organ_weight].
 static func weight(key: StringName) -> int:
 	var record := gene(key)
 	return int(record.water.get("weight", 1)) if record != null else 1
+
+
+## **How often the water draws [param organ]** against the others (§6.1): the
+## weight its file sets, or, where only its variants set one, its first variety's
+## -- so an organ of one variant is drawn exactly as its key was, and the toxin's
+## strains share the toxin's draws rather than add to them (dna-slots.md §8.3).
+## Its key's weight for a name this build files no organ under.
+static func organ_weight(organ: StringName) -> int:
+	return int(_organ_weights.get(organ, weight(organ)))
+
+
+## Whether [param organ] holds one variant to a body (gene.gd's `one_variant`).
+static func one_variant(organ: StringName) -> bool:
+	return _one_variant.has(organ)
+
+
+## **The organs of [param keys], each once**, in the order its first key comes.
+static func organs_in(keys: Array[StringName]) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in keys:
+		var organ := organ_of(key)
+		if not out.has(organ):
+			out.append(organ)
+	return out
+
+
+## **The keys of [param keys] that are [param organ]'s**, in order.
+static func of_organ(keys: Array[StringName], organ: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in keys:
+		if organ_of(key) == organ:
+			out.append(key)
+	return out
+
+
+## **One of [param varieties] -- one organ's -- by their weights** (§6.1): the one
+## there is, with no number drawn, for an organ of one variety, which is every organ
+## today; otherwise one roll of the global stream, as every draw of the water's is.
+## `&""` for none.
+static func pick_variety(varieties: Array[StringName]) -> StringName:
+	if varieties.size() <= 1:
+		return varieties[0] if not varieties.is_empty() else &""
+	var total := 0
+	for key: StringName in varieties:
+		total += weight(key)
+	var roll := randi_range(1, maxi(total, 1))
+	for key: StringName in varieties:
+		roll -= weight(key)
+		if roll <= 0:
+			return key
+	return varieties[varieties.size() - 1]
 
 
 ## **The born cell's body** (`genome.gd`): key to the copies a newborn wears, in
@@ -536,8 +592,14 @@ static func _index() -> void:
 	# Each key's words, and every part's, from its organ file's word tables.
 	var words := {}
 	var part_words := {}
+	var organ_weights := {}
+	var one_variant := {}
 	for organ: Gene in organs:
 		var tables := (organ.get_script() as GDScript).get_script_constant_map()
+		# The organ's own weight, read before a variant writes over its water.
+		var own: Variant = organ.water.get("weight")
+		if organ.one_variant:
+			one_variant[organ.organ] = true
 		for record: Gene in _resolve(organ):
 			if records.has(record.key):
 				push_error("[catalogue] %s is keyed twice: the second is not filed" % record.key)
@@ -545,7 +607,12 @@ static func _index() -> void:
 			records[record.key] = record
 			resolved.append(record)
 			words[record.key] = _words_in(tables, record.key)
+			if not organ_weights.has(record.organ):
+				organ_weights[record.organ] = int(own if own != null
+					else record.water.get("weight", 1))
 		_part_words_into(part_words, tables)
+	_organ_weights = organ_weights
+	_one_variant = one_variant
 	for record: Gene in resolved:
 		for field: StringName in FROZEN:
 			_freeze(record.get(field))

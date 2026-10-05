@@ -6185,7 +6185,7 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 	# loop fills the outside to its capacity as it always did.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
 	# The ceiling, applied where §1.3 puts it: on the mouth, by taking tiers off
@@ -6206,16 +6206,34 @@ func _place_toxin(gene: StringName) -> StringName:
 	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
 
 
-func _draw_gene(pool: Array[StringName]) -> StringName:
+## **A gene drawn from [param pool]**, varieties all: **an organ first, by its
+## weight, then one of its varieties by theirs** (docs/design/gene-catalogue.md §6.1;
+## dna-slots.md §8.3) -- one roll for the organ, and a second only for an organ the
+## pool holds more than one variety of. Every organ has one today, so this draws
+## what drawing the varieties by their own weights always drew, roll for roll.
+static func _draw_gene(pool: Array[StringName]) -> StringName:
+	var organs := Catalogue.organs_in(pool)
 	var total := 0
-	for gene: StringName in pool:
-		total += Catalogue.weight(gene)
+	for organ: StringName in organs:
+		total += Catalogue.organ_weight(organ)
 	var roll := randi_range(1, maxi(total, 1))
-	for gene: StringName in pool:
-		roll -= Catalogue.weight(gene)
+	var drawn: StringName = organs[organs.size() - 1] if not organs.is_empty() else &""
+	for organ: StringName in organs:
+		roll -= Catalogue.organ_weight(organ)
 		if roll <= 0:
-			return gene
-	return pool[pool.size() - 1]
+			drawn = organ
+			break
+	return Catalogue.pick_variety(Catalogue.of_organ(pool, drawn))
+
+
+## **[param gene]'s organ, out of [param pool]**: every variety of it, so one body's
+## draws never take the same organ twice -- it counts as one gene wherever the water
+## counts genes (dna-slots.md §8.3).
+static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
+	var organ := Catalogue.organ_of(gene)
+	for k in range(pool.size() - 1, -1, -1):
+		if Catalogue.organ_of(pool[k]) == organ:
+			pool.remove_at(k)
 
 
 func _draw_tier(sensed: float) -> int:
@@ -9625,13 +9643,13 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var capacity := CellBody.slots_for(body_radius)
 	var pool: Array[StringName] = Catalogue.drifters().duplicate()
 	for gene: StringName in tiers:
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
 	# ([method _place_toxin]): a peer's draw differs from before only on a peer
 	# that drew the toxin.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
 	var mouth := Catalogue.worn_provider(tiers, &"gape")

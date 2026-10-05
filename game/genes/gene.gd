@@ -134,9 +134,12 @@ var levels := {}
 
 ## **Its place in the water** (§9): `weight`, how often a draw takes it against
 ## the others (`food.gd`'s draws; 1 if unset), and `drifter`, whether a drifter
-## may be made of it (false if unset). **The water draws a variant by its
-## variety**, its first form: its other forms answer the same weight and are in
-## no list of the water's.
+## may be made of it (false if unset). **The water draws an organ first, then one
+## of its variants** (gene-catalogue.md §6.1): an organ by its own weight -- this
+## field as its file sets it, or, where only its variants set one, its first
+## variety's -- and then a variant by the weight each answers, its share of the
+## organ's draws. **A variant is drawn by its variety**, its first form: its other
+## forms answer the same weight and are in no list of the water's.
 var water := {}
 
 ## **Its tags**: any of [constant TAGS]. A variant's or a form's are added to its
@@ -162,6 +165,13 @@ var look := {}
 ## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
 ## referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 var born := 0
+
+## **One variant to a body** (gene-catalogue.md §6.3): placing a second variant of
+## this organ writes over the first, as the inside's one poison does, and the water
+## and drift never give a body a second. Off for every organ today, since nothing
+## today can carry two: the gene pass sets it per organ when it adds variants. The
+## organ's own, never a variant's.
+var one_variant := false
 
 ## **What it gives a body's rules** (docs/design/behaviour.md §3), in the shape
 ## `rulebook.gd`'s vocabulary reads: `{"in": [...], "out": [...]}`, the inputs it

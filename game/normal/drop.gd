@@ -384,15 +384,19 @@ static func peer_plan() -> Array[StringName]:
 
 
 ## **The gift**: a peer that carries none of [param senses] is given one at
-## tier 1, `senses[pick]`, in a bonus slot -- as the player's newborn is at five
-## seconds. Returns whether it was.
+## tier 1, in a bonus slot -- as the player's newborn is at five seconds: the
+## organ [param pick] names among theirs, then one of its varieties by weight
+## (gene-catalogue.md §6.1), which with one variety to an organ is `senses[pick]`.
+## Returns whether it was.
 static func give_sense(tiers: Dictionary, senses: Array[StringName], pick: int) -> bool:
 	if senses.is_empty():
 		return false
 	for sense: StringName in senses:
 		if int(tiers.get(sense, 0)) > 0:
 			return false
-	tiers[senses[posmod(pick, senses.size())]] = 1
+	var organs := Catalogue.organs_in(senses)
+	tiers[Catalogue.pick_variety(Catalogue.of_organ(senses,
+		organs[posmod(pick, organs.size())]))] = 1
 	return true
 
 

@@ -637,6 +637,7 @@ func _raise(form: StringName, copies: int) -> void:
 ## inside form in [param slot] when the inside is full, which is the inside's
 ## one irreversible write, as writing over an arc is the outside's.
 func _write_inside(form: StringName, copies: int, slot: int) -> void:
+	_over_other_variants(_dna, form, _order)
 	if count_inside(_dna) >= INSIDE_SLOTS:
 		var held := inside_layout()
 		var over: StringName = held[clampi(slot - INSIDE, 0, held.size() - 1)]
@@ -649,6 +650,26 @@ func _write_inside(form: StringName, copies: int, slot: int) -> void:
 			_dna.erase(over)
 	_dna[form] = clampi(copies, 1, TIER_MAX)
 	_tend_levels()
+
+
+## **One variant to a body** (gene-catalogue.md §6.3): for an organ that holds one
+## (gene.gd's `one_variant`), [param gene] about to be written into [param tiers]
+## writes over every other variant of its organ there, in any form -- as the
+## inside's one poison is written over -- and its slot in [param seats], if it has
+## one, is left empty. Its own variant's other forms stay. Nothing for an organ of
+## variants side by side, which is every organ today.
+static func _over_other_variants(tiers: Dictionary, gene: StringName, seats: Array) -> void:
+	var organ := Catalogue.organ_of(gene)
+	if not Catalogue.one_variant(organ):
+		return
+	var own := Catalogue.variant_of(gene)
+	for other: Variant in tiers.keys():
+		var key := StringName(other)
+		if Catalogue.organ_of(key) == organ and Catalogue.variant_of(key) != own:
+			tiers.erase(key)
+			var at := seats.find(key)
+			if at >= 0:
+				seats[at] = &""
 
 
 ## Tier of one organ **this body wears**, 0 if it does not wear it. This is what
@@ -1294,6 +1315,7 @@ func slot_of(gene: StringName) -> int:
 ## `cytostome` now costs your *daughters* a mouth, and you have a whole
 ## generation to see it coming on the strip and put it right.
 func _write(slot: int, gene: StringName, copies: int = 1) -> void:
+	_over_other_variants(_dna, gene, _order)
 	var old := _order[slot]
 	if old != &"":
 		_dna.erase(old)
@@ -1454,6 +1476,8 @@ static func express_chance(gene: StringName, copies: int) -> float:
 static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -> int:
 	if gene == &"":
 		return Result.NOTHING
+	if not tiers.has(gene):
+		_over_other_variants(tiers, gene, [])
 	if tiers.has(gene):
 		var value := int(tiers[gene])
 		if value >= TIER_MAX:
@@ -1675,21 +1699,31 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var goes: Array[StringName] = []
 	var carried := {}
+	var organs_carried := {}
 	for gene: StringName in tiers:
 		if not Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS):
 			goes.append(gene)
 		carried[variety(gene)] = true
+		organs_carried[Catalogue.organ_of(gene)] = true
 	# **What may come**: every live gene by the catalogue's order, a variety and
-	# not yet carried -- an even draw, as it always was.
+	# not yet carried -- and none of an organ that holds one variant to a body
+	# (`one_variant`) while the lineage carries any of it.
 	var comes: Array[StringName] = []
 	for gene: StringName in Catalogue.live():
+		var organ := Catalogue.organ_of(gene)
 		if not Catalogue.has_tag(gene, Catalogue.NEVER_DRIFTS) and variety(gene) == gene \
-				and not carried.has(gene):
+				and not carried.has(gene) \
+				and not (Catalogue.one_variant(organ) and organs_carried.has(organ)):
 			comes.append(gene)
 	if goes.is_empty() or comes.is_empty():
 		return false
 	var out: StringName = goes[randi() % goes.size()]
-	var into: StringName = comes[randi() % comes.size()]
+	# **An organ first -- an even draw, as it always was -- then one of its
+	# varieties by their weights** (gene-catalogue.md §6.1): with one variety to
+	# an organ, which is every organ today, the draw it always was.
+	var organs := Catalogue.organs_in(comes)
+	var into := Catalogue.pick_variety(Catalogue.of_organ(comes,
+		organs[randi() % organs.size()]))
 	var water := seats.is_empty()
 	var form := into
 	if has_forms(into):

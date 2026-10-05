@@ -2106,7 +2106,11 @@ func _step_sense_grant(delta: float) -> void:
 	for sense: StringName in senses:
 		if _cell.extra(sense) > 0:
 			return
-	var gene: StringName = senses[randi() % senses.size()]
+	# An organ, then one of its varieties by weight (gene-catalogue.md §6.1): with
+	# one variety to an organ, which is every sense today, the draw it always was.
+	var organs := Catalogue.organs_in(senses)
+	var gene := Catalogue.pick_variety(Catalogue.of_organ(senses,
+		organs[randi() % organs.size()]))
 	# It is in the DNA already but not on this body -- a lineage that wrote a
 	# sense down and then never expressed it. Nothing to give.
 	if _genome.dna_tier(gene) > 0:
