@@ -32,9 +32,10 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; and a faster tail as one more entry in the tail's own file (§12.3). And
-## -- numbers, not yet failures (§8.3, §12.2) -- the gene words with no French, and
-## how many gene names are still written into game/ outside game/genes/.
+## again; and a faster tail as one more entry in the tail's own file (§12.3). And --
+## a number, not a failure (§8.3) -- the gene words with no French; and how many gene
+## names are written into game/ outside game/genes/, which `-- --names` fails on
+## (§12.2, CI's "Check the gene names").
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -205,6 +206,11 @@ var _failed := 0
 
 
 func _ready() -> void:
+	# **The gate of §12.2 alone**, as CI's "Check the gene names" step runs it.
+	if OS.get_cmdline_user_args().has("--names"):
+		_names_gate()
+		get_tree().quit(0 if _failed == 0 else 1)
+		return
 	_keys()
 	_index()
 	_water()
@@ -2047,39 +2053,58 @@ static func _bits_kept(before: Dictionary, now: Dictionary) -> String:
 	return ", ".join(moved)
 
 
-# --- Gene names left in code (§12.2) ----------------------------------------------------------
+# --- Gene names in code (§12.2) ----------------------------------------------------------------
 
-## **How many gene names are left written into game/ outside game/genes/** --
-## `&"<key>"` and `"<key>"` alike, comments aside: what phase 5's gate will fail
-## on (§12.2). A number, not a failure, until then.
-func _names_left() -> void:
-	var found := {}
-	var total := 0
-	var named := 0
+## **Every gene name written into game/ outside game/genes/** -- `&"<key>"` and
+## `"<key>"` alike, for every key the catalogue knows, retired ones too -- one
+## `path:line: the line` for each key a line names. Comment lines aside, and tools/
+## is not looked in: a probe names genes on purpose.
+func _name_literals() -> Array[String]:
+	var out: Array[String] = []
 	for path: String in _scripts_in(GAME_DIR):
 		if path.begins_with(GENES_DIR + "/"):
 			continue
-		var text := FileAccess.get_file_as_string(path)
-		var here := 0
-		for line: String in text.split("\n"):
+		var lines := FileAccess.get_file_as_string(path).split("\n")
+		for k in lines.size():
+			var line := lines[k]
 			if line.strip_edges().begins_with("#"):
 				continue
 			for key: StringName in Catalogue.keys():
-				# `"key"` is in `&"key"` too, so this counts both.
-				here += line.count('"%s"' % key)
-				named += line.count('&"%s"' % key)
-		if here > 0:
-			found[path.trim_prefix(GAME_DIR + "/")] = here
-			total += here
-	var files: Array = found.keys()
-	files.sort_custom(func(a: String, b: String) -> bool:
-		return int(found[a]) > int(found[b]) or (found[a] == found[b] and a < b))
+				# `"key"` is in `&"key"` too, so this finds both.
+				if line.contains('"%s"' % key):
+					out.append("%s:%d: %s" % [path.trim_prefix(GAME_DIR + "/"), k + 1,
+						line.strip_edges()])
+	return out
+
+
+## **How many gene names are written into game/ outside game/genes/**, by file:
+## a note in the full run, beside the gate that fails on any ([method _names_gate]).
+func _names_left() -> void:
+	var found := {}
+	for one: String in _name_literals():
+		var path := one.get_slice(":", 0)
+		found[path] = int(found.get(path, 0)) + 1
 	var parts := PackedStringArray()
-	for path: String in files:
+	for path: String in found:
 		parts.append("%s %d" % [path, int(found[path])])
-	print(("[gene-probe] NOTE %d gene names left in game/ outside game/genes/ -- %d"
-		+ " &\"<key>\", %d \"<key>\" -- in %d files: ") % [total, named, total - named,
-			files.size()] + ", ".join(parts))
+	print("[gene-probe] NOTE %d gene names in game/ outside game/genes/, which CI's gate"
+		% _name_literals().size() + " fails on (-- --names): %s"
+		% ("none" if parts.is_empty() else ", ".join(parts)))
+
+
+## **The gate** (§12.2), as CI's "Check the gene names" runs it (`-- --names`): every
+## gene name written into game/ outside game/genes/ is a failure, one line each, and
+## `ALL PASS` only for none. A mechanic asks the catalogue for an organ by its stat,
+## its tag or its channel, so that a gene added, varied or retired is one entry in
+## its organ's file and nothing else moves.
+func _names_gate() -> void:
+	var found := _name_literals()
+	for one: String in found:
+		print("[gene-names] FAIL %s" % one)
+	print(("[gene-names] %d gene names in game/ outside game/genes/ -- %d keys looked for,"
+		+ " comment lines and tools/ aside") % [found.size(), Catalogue.keys().size()])
+	print("[gene-names] ALL PASS" if found.is_empty() else "[gene-names] FAILED %d" % found.size())
+	_failed += found.size()
 
 
 # --- Helpers ----------------------------------------------------------------------------------
