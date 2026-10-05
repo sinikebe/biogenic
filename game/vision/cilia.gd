@@ -629,7 +629,7 @@ static func body_tint(tiers: Dictionary, is_self: bool) -> Color:
 # The body
 # ---------------------------------------------------------------------------
 
-## Draws one cell, whole: body, nucleus, the seven-arc fringe and the gape.
+## Draws one cell, whole: body, nucleus, the fringe on every arc and the gape.
 ##
 ## [param canvas] is drawn into directly, in whatever space it is already in;
 ## [param unit] is how many of that space's units make one canvas pixel, so
@@ -1132,7 +1132,8 @@ static func skin_point(at: Vector2, heading: float, r: float, t: float,
 ## arcs takes a home arc its organ left empty, the first one free, as the
 ## genome's `_sync_order` seats one; and a tool's genome with more outside genes
 ## than a body has arcs wears the rest unseated, as a player's body wears an
-## organ the gift took the arc of. No water cell carries more than seven.
+## organ the gift took the arc of. No water cell carries more than the plan's
+## slots outside.
 static func default_order(tiers: Dictionary) -> Array:
 	# **The home seats are the body plan's**: each home organ worn in its own slot,
 	# the seats before the last of them held for them whether or not they are worn.

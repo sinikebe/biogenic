@@ -31,8 +31,8 @@ extends RefCounted
 
 # --- The words fields are written in ------------------------------------------------
 
-## **The two places** (docs/design/dna-slots.md §2): the seven slots round the
-## body, and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
+## **The two places** (docs/design/dna-slots.md §2): the slots round the body,
+## and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
 ## these.
 const OUTSIDE := &"outside"
 const INSIDE := &"inside"

@@ -301,8 +301,8 @@ func show_cell(cell: Dictionary, record: bool) -> void:
 	_slack = Metabolism.hungry_at(float(cell.get("hunger", 0.0)))
 	var loads: PackedFloat64Array = cell.get("loads", PackedFloat64Array())
 	_felt = FoodField.felt_of(loads, _radius)
-	# **The chips are the DNA**: its outside layout padded to its seven, and the
-	# inside after it (dna-slots-ux.md §3.1).
+	# **The chips are the DNA**: its outside layout padded to every slot outside, and
+	# the inside after it (dna-slots-ux.md §3.1).
 	_genes.clear()
 	_genes.assign(layout)
 	while _genes.size() < GenomeNode.INSIDE:

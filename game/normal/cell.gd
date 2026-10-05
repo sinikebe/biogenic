@@ -52,9 +52,10 @@ const BASE_RADIUS := 26.0
 ## and divides at 40, so `(40 - 28.28) / 4` is 2.93.
 ##
 ## This is the dial and [constant DIVIDE_RADIUS] is not, because forty carries
-## three couplings a smaller number would break: `slots_for(40)` is 7, the body
-## has exactly seven arcs, and `food.ARRIVAL_GAPE_MAX` is 40 so the water never
-## seeds a mouth that can swallow a full-grown cell in one contact.
+## three couplings a smaller number would break: `slots_for(40)` is every slot the
+## body plan has outside, which is every arc a body has, and `food.ARRIVAL_GAPE_MAX`
+## is 40 so the water never seeds a mouth that can swallow a full-grown cell in one
+## contact.
 ##
 ## **It is the whole water's growth, not the player's.** food.gd's `_devour`
 ## reads the same constant, so a cell that has been feeding grows four times
@@ -125,8 +126,8 @@ var genome: Node = null
 
 # --- Slots -----------------------------------------------------------------
 ## **Genome size is capacity, not currency**: a body earns its slots by growing,
-## three at birth and seven at radius 40 -- and seven is every arc a body has, which
-## is why [constant DIVIDE_RADIUS] is where it divides. §3.1. **The slots are the
+## three at birth and every arc it has at radius 40 -- seven today -- which is why
+## [constant DIVIDE_RADIUS] is where it divides. §3.1. **The slots are the
 ## body plan's** (`body_plan.gd`, which writes out the radius each is earned at and
 ## says why the ladder is what it is); these are its fewest and its most, under the
 ## names every reader knows them by, read again whenever the plan changes.
@@ -146,9 +147,9 @@ static func _read_plan() -> void:
 
 # --- The end of a body, and the beginning of two -----------------------------
 # docs/design/lifecycle.md §2. **Forty is where a body runs out of places to put
-# an organ**: SLOT_MAX is 7, the body has exactly seven arcs, and slots_for(40)
-# is 7. Growth past it is the one thing a cell can do that buys nothing it can
-# pass on, so the player's radius clamps here and the body divides instead.
+# an organ**: slots_for(40) is SLOT_MAX, every arc the body plan gives a body.
+# Growth past it is the one thing a cell can do that buys nothing it can pass on,
+# so the player's radius clamps here and the body divides instead.
 #
 # The old justifications for 40 -- "nothing left in the water can eat you" and
 # "the genome fills on the same meal" -- are both withdrawn by

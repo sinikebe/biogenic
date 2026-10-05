@@ -79,7 +79,7 @@ const TIER_MAX := 3
 # --- Places and forms (docs/design/dna-slots.md §2, §3) -------------------------
 # The owner, 2026-10-03: *"We need add body internal slots. Those express inside
 # the body. The direction slots express outside the body."* **Two places**: the
-# seven slots round the body are outside, as they always were -- each the arc of
+# slots round the body are outside, as they always were -- each the arc of
 # skin it is worn on -- and one slot is inside it. A gene may be a different
 # *form* in each place, with a name of its own, so every `{name: copies}` map in
 # the game -- the DNA, the body, a water cell's genome, the wire, a save, the
@@ -279,7 +279,7 @@ var held_remaining: float:
 ## grant exists to make impossible, so the gift comes with somewhere to put it.
 ##
 ## It is absorbed rather than permanent: [method slots] still clamps at
-## SLOT_MAX, so by the time the body has earned seven the leg-up is gone. Reset
+## SLOT_MAX, so by the time the body has earned every slot the leg-up is gone. Reset
 ## with everything else on death.
 var bonus_slots := 0
 
@@ -544,7 +544,7 @@ func _process(delta: float) -> void:
 ## ([member bonus_slots]), but with a queue a gene eaten meanwhile can lapse into
 ## that slot first -- so the gift is given one more, the same leg-up the grant
 ## already gives, rather than the one rescue in the game evaporating behind an
-## ordinary meal. A layout the bonus cannot widen -- seven loci, or a newborn's
+## ordinary meal. A layout the bonus cannot widen -- every slot, or a newborn's
 ## inherited layout already longer than her body -- still has no room for it,
 ## exactly as the single held sample never did.
 func _lapse(waiting: Waiting) -> void:
@@ -1694,8 +1694,8 @@ static func _mutate_trade(tiers: Dictionary) -> bool:
 ##   comes;
 ## - **the poison that goes, inside, is replaced by a gene that faces out**, which
 ##   needs a free outside slot: a hole in a daughter's layout, or, for a water
-##   cell, fewer than seven genes outside. With none, the drift does not apply,
-##   and the caller's next kind is tried.
+##   cell, fewer genes outside than the plan has slots. With none, the drift does
+##   not apply, and the caller's next kind is tried.
 static func _mutate_drift(tiers: Dictionary, seats: Array[StringName]) -> bool:
 	var goes: Array[StringName] = []
 	var carried := {}

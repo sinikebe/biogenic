@@ -444,12 +444,12 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## is inert in every rule, which is the shipped retirement behaviour.
 ##
 ## The decoder refuses the whole message on more genes than [member GENES_MAX]
-## -- every slot the body has, seven outside and one inside, and one more: a held
-## sample, or a gift worn over an organ still worn -- on a name outside 1 to
-## [constant NAME_MAX] bytes of `a-z`, or on an order longer than [member
-## ORDER_MAX], the slots outside: the order is the worn layout, outside only,
-## because an inside form is inside by its name. Tiers clamp to 0..[constant
-## TIER_TOP]. Nine since protocol 7, and every bound after it follows
+## -- every slot the body plan has, today seven outside and one inside, and one
+## more: a held sample, or a gift worn over an organ still worn -- on a name
+## outside 1 to [constant NAME_MAX] bytes of `a-z`, or on an order longer than
+## [member ORDER_MAX], the slots outside: the order is the worn layout, outside
+## only, because an inside form is inside by its name. Tiers clamp to
+## 0..[constant TIER_TOP]. Nine since protocol 7, and every bound after it follows
 ## (docs/design/dna-slots.md §14.2).
 ##
 ## **The two counts are the body plan's** (docs/design/gene-catalogue.md §10.2),

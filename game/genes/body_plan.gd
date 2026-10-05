@@ -58,13 +58,14 @@ const OVOID_PINCH := 0.30
 ## inside after them. A slot's index is where a genome's layout keeps it, and a
 ## save's stamp says which id each index was ([method stamp]).
 ##
-## **The ladder is pinned at both ends**: three slots at birth (r26) and seven at
-## forty, `cell.gd`'s DIVIDE_RADIUS -- seven is every arc a body has, which is why
+## **Today's ladder is pinned at both ends**: three slots at birth (r26) and all
+## seven at forty, `cell.gd`'s DIVIDE_RADIUS -- every arc a body has, which is why
 ## forty is where a body divides -- and four rungs between need a step in `(2.8,
 ## 3.5]`, of which 3.5 is the top. **Four-times growth left it as it was**: what it
-## changed is that capacity stops binding in the first generation, and the seven
-## arcs and the expression roll bind instead; from generation two a newborn is over
-## capacity anyway (lifecycle.md §3.1), which is where the swap decision lives.
+## changed is that capacity stops binding in the first generation, and the arcs and
+## the expression roll bind instead; from generation two a newborn is over capacity
+## anyway (lifecycle.md §3.1), which is where the swap decision lives. A plan with
+## other rows says its own ladder here.
 ##
 ## - `id`: the slot's name, code only and permanent;
 ## - `place`: [constant OUTSIDE_PLACE] or [constant INSIDE_PLACE];
