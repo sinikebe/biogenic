@@ -3,8 +3,9 @@ extends RefCounted
 ## automation-ux.md §8): what a sense, a value, a test and an action are called
 ## on the programs page, in the replay and wherever an instinct is said.
 ##
-## **A part's words are its declaring file's**: `cell.gd`, `metabolism.gd` and
-## `genome.gd` keep a table beside their DECLARES, so a new gene brings its
+## **A part's words are its declaring file's**: `cell.gd` and `metabolism.gd` keep
+## a table beside their DECLARES, and each organ's file has its parts' (gene.gd's
+## word tables, read through `genome.gd`'s `words_of`), so a new gene brings its
 ## words, not a screen (behaviour.md §3.5). **The rulebook's own words live here**,
 ## with the page: `always`, the bearing every directed sense carries, the four
 ## tests in each kind's words, `my mouth` and `me`, and the units. A part with no
@@ -41,6 +42,40 @@ const RULEBOOK_EXPLAINS := {
 	&"bearing": "bearing · how far off your nose it is, to either side.",
 }
 
+## **The values the genes' senses report**, by value name, which a test is put to:
+## generic, so they live here with the page rather than in any one organ's file --
+## a value two organs report is one word. After the declaring files' own in
+## [method _words], so a file that names a value of its own (metabolism's
+## `level`) keeps its chip.
+##
+## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
+## "instinct" can test, on a small choice cell. Lowercase, one short word.
+## "distance": how far away; "size": how big; "level": how strong; "closeness":
+## how near, for touch.
+## ROOM: 70 px at 14 px
+const VALUE_SAYS := {
+	&"distance": "distance",
+	&"size": "size",
+	&"level": "level",
+	&"closeness": "closeness",
+}
+## **The line that explains each of them**, beside the chip.
+##
+## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
+## on one line under them: its name (the same words as on its chip), a middle
+## dot, then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+## which calls and listens; "your beam" its ocellus; "your nose" its chemocyte;
+## "your eyespot" its stigma; "your palps" its palp. "Your tail" is the cell's
+## flagellum, which swims; "two copies" means the gene is carried twice in the
+## cell's DNA, which is what lets the tail be held still. "For free" means it
+## costs no food.
+## ROOM: 856 px at 15 px
+const VALUE_EXPLAINS := {
+	&"distance": "distance · how far away it is.",
+	&"size": "size · how big it rings, against your mouth or your whole body.",
+	&"level": "level · how strong it is, from nothing to full.",
+	&"closeness": "closeness · how near it is, from the edge of your reach to your skin.",
+}
 ## **The four tests, in each kind's own words** (§3.1's below, above, rising and
 ## falling) -- the two put against a step, with the step in %s, and the two of
 ## change -- in the order `rulebook.gd`'s Test is numbered.
@@ -151,13 +186,24 @@ static func _words(part: StringName) -> Dictionary:
 		return out
 	# Each word from the first file that has it: a value two files report takes
 	# its chip from the first and its sentence from whichever file has one --
-	# metabolism names hunger's `level`, and the genome explains a level.
+	# metabolism names hunger's `level`, and the values' own words explain a level.
 	var out := {}
 	for table: Dictionary in [CellBody.words_of(part), Metabolism.words_of(part),
-			GenomeNode.words_of(part)]:
+			GenomeNode.words_of(part), _value_words(part)]:
 		for key: String in table:
 			if not out.has(key):
 				out[key] = table[key]
+	return out
+
+
+## **The words of a value the genes' senses report** ([constant VALUE_SAYS]), in
+## the language of the moment; empty for anything else.
+static func _value_words(part: StringName) -> Dictionary:
+	var out := {}
+	if VALUE_SAYS.has(part):
+		out["says"] = String(TranslationServer.translate(VALUE_SAYS[part]))
+	if VALUE_EXPLAINS.has(part):
+		out["explains"] = String(TranslationServer.translate(VALUE_EXPLAINS[part]))
 	return out
 
 

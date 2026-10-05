@@ -73,6 +73,27 @@ const TOUCH := &"touch"
 ## Every channel there is. The gene probe fails on any other.
 const CHANNELS: Array[StringName] = [LIGHT, BEAM, PING, SMELL, TOUCH]
 
+## **The shapes an organ is drawn as** (gene-catalogue.md §7.1; the kinds of
+## docs/design/gene-looks.md §2.1, the five today's organs wear): `mat`, the
+## mouth's dense fine cilia; `oars`, rowing strokes on both flanks; `lash`, the
+## tail; `tuft`, stiff bristles over a pigment disc, which every earned organ is;
+## and `spines`, the toxin's, drawn by place -- fangs on the lips at the front,
+## barbs on a side or the stern, granules under the skin inside. `cilia.gd` draws
+## by these and never by a gene's name. Phase 6 adds kinds and their parameters.
+const MAT := &"mat"
+const OARS := &"oars"
+const LASH := &"lash"
+const TUFT := &"tuft"
+const SPINES := &"spines"
+## Every shape there is. The gene probe fails on any other.
+const SHAPES: Array[StringName] = [MAT, OARS, LASH, TUFT, SPINES]
+## **The shapes drawn on arcs of their own**, whatever slot holds them -- the mouth
+## at the nose, the oars on both flanks, the tail at the stern -- and with no
+## pigment; every other shape is drawn on its slot's arc.
+const HOME_SHAPES: Array[StringName] = [MAT, OARS, LASH]
+## The shapes whose strokes are counted, so a look of one gives its `count`.
+const COUNTED: Array[StringName] = [MAT, OARS, LASH, TUFT]
+
 # --- What an organ's file sets ---------------------------------------------------------
 
 ## **The organ**: what its gene builds -- one look, one mechanic, one set of
@@ -127,6 +148,15 @@ var tags: Array[StringName] = []
 ## body wears the eyespot. `&""` for an organ that drives none.
 var channel: StringName = &""
 
+## **Its look** (gene-catalogue.md §7.1): what `cilia.gd` draws it as, on a body
+## and on a genome tile, and every hue copied from it -- `shape`, one of
+## [constant SHAPES]; `hue`, its colour, a `Color`, until phase 6 derives it from
+## a family; and, for a shape in [constant COUNTED], `count`, its strokes on a
+## body at one copy. A home shape also gives its tile's `tile_count` and
+## `tile_length` (tile px); a tuft's tile wears its body's count. Empty for a
+## retired gene, which draws as a gene the build does not know.
+var look := {}
+
 ## **The copies a newborn wears of it** (`genome.gd`'s born cell): the mouth, the
 ## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
 ## referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
@@ -136,8 +166,42 @@ var born := 0
 ## `rulebook.gd`'s vocabulary reads: `{"in": [...], "out": [...]}`, the inputs it
 ## senses and the outputs it triggers. Empty for an organ that only acts on its
 ## own, as the dart, the call and the mouth do (§3.3). A part may wait for a
-## level (automation.md §4.3). Its words are still `genome.gd`'s.
+## level (automation.md §4.3). Its words are its file's (below).
 var declares := {}
+
+# --- Its words (gene-catalogue.md §8.1) -----------------------------------------------
+#
+# **An organ's words are constants of its own file**, each a table keyed by the
+# key it is said of -- or, for a part it declares, by the part's qualified name,
+# `palp.touch` -- and each with the TRANSLATORS note, the ROOM and the CONTEXT its
+# strings had before there were organ files: tools/i18n_pot.gd lists every such
+# constant in the template, so a translator reads what they always read. The
+# catalogue reads them by name (its KEY_WORDS and PART_WORDS) and the screens
+# translate what it hands them:
+#
+#   WORDS           its chip word, one short word         figure.gd's word_of
+#   EXPLAINS        what it does, one line                 figure.gd's explains
+#   EXPLAINS_SIDE   that line for a venom on a side, and
+#   EXPLAINS_STERN  at the stern
+#   EXPLAINS_PATH   way to the line once a fork is taken
+#   CARRIED_WORDS   its word while it waits to be placed, for a gene of forms
+#   CARRIED_EXPLAINS  and its line then
+#   NAMES           its name on screen where it is not its key (not translated)
+#   GENE_SAYS       an action part's chip                  program_words.gd
+#   GENE_SENSES     a sense part's chip, in the context `sense`
+#   GENE_EXPLAINS   a part's line on the instincts page
+#   GENE_ASLEEP     what an instinct using a part says while it waits for a level
+#   GENE_NEEDS      what the page says when it is picked too early
+#
+# An organ whose levels fork has the words of its ways too, keyed by way and said
+# of every key of the organ (the catalogue's WAY_WORDS; normal_mode.gd's way
+# cards):
+#
+#   PATH_TITLES     each way's name
+#   PATH_LINES      each way's two lines on its card
+#   PATH_SAYS       what each way does as it grows, after its name
+#
+# A variant has keys of its own, so it brings its own words in the same tables.
 
 ## **Its variants**, the first being the organ as it shipped (§6): each a
 ## dictionary with its `variant` name, the `dose` it delivers (the toxin's
@@ -166,9 +230,35 @@ var dose: StringName = &""
 
 # --- Hooks: what an organ answers that is no plain field -------------------------------
 
+## **[param stat] at [param t] copies of this key**, off its own table and clamped
+## to it, as `stats.gd`'s `value` reads it: what a line of its own ([method lines])
+## says. 0 for a stat it does not provide.
+func stat_at(stat: StringName, t: int) -> float:
+	var table: Array = provides.get(stat, [])
+	if table.is_empty():
+		return 0.0
+	return float(table[clampi(t, 0, table.size() - 1)])
+
+
 ## **What it adds to the metabolic multiplier at [param level] down [param path]**,
 ## for an organ that prices its own levels (docs/design/beam-levels.md §5): the
 ## beam's price per level is the beam's. -1 for an organ with no price of its
 ## own, which `genome.gd` charges at the old per-tier rate, by level.
 func upkeep_at(_level: int, _path: StringName) -> float:
 	return -1.0
+
+
+## **Its numbers on the pause screen** (gene-catalogue.md §8.4; gene-stats.md §5):
+## `[what it does, what it costs]`, each an array of readout items, for this key
+## worn at [param t] copies -- or, for an organ that levels, at [param level]
+## down [param path] -- worn at [param slot] (-1 where nobody knows). [param ctx]
+## is `gene_stats.gd`'s context: the body's own terms (`burn`, `reserve`, `sun`,
+## `tank`, `radius`); the scripts a line reads numbers from (`cell`,
+## `metabolism`, `food`, `bus`, `genome`), passed in because an organ preloads
+## none of them; and the screen's own `beat` and `wear_item`, so that a line
+## prices as the screen does. [param wear] is the costs line's last item, what
+## wearing it costs at [param t]. `[[], []]` for an organ with no lines, which
+## draws nothing.
+func lines(_t: int, _level: int, _path: StringName, _ctx: Dictionary, _slot: int,
+		_wear: Dictionary) -> Array:
+	return [[], []]

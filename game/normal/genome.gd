@@ -109,11 +109,6 @@ const STERN := 2
 # found to be one. The toxin is today's one gene with two (organs/toxin.gd);
 # every other is itself, outside. The statics below ask the catalogue.
 
-## **The name a gene goes by on screen, where it is not its key** (owner's row
-## 1): both of the toxin's forms are `toxicyst`. The keys never change; they are
-## in saves and on the wire for good. A gene not here is its own name.
-const NAMES := {&"veneneux": "toxicyst", &"toxicyst": "toxicyst"}
-
 ## What a second tap would do with a waiting gene ([method placing]): write it
 ## here, add a copy to the form it makes where that form already is, refuse as
 ## full, or refuse because the gene faces out.
@@ -133,131 +128,34 @@ const MOVE_COLLISION := &"collision"
 # senses and the outputs it triggers, by name -- so a gene brings its own blocks,
 # and rules can read and drive it, the save keeps it and mutation draws it
 # without one being written by hand (§3.5). The body's own parts are declared in
-# `cell.gd` and the metabolism's in `metabolism.gd`, in the same shape. Their
-# words are still here, below.
-
-## **What the genes' parts are called** (docs/design/automation.md §13.1), beside
-## what they declare, by qualified name: the words the programs page puts on a
-## part's chip -- each organ's sense and action, as the player knows the organ.
-## Read through [method words_of].
-##
-## TRANSLATORS: The name of an action the player's cell can be told to do by one
-## of its "instincts" (rules the player writes: "when <a sense reports
-## something> -> <do this>"), on a small chip. Lowercase, a few short words.
-## "dash": a burst forward; "push": thrust held on; "hold still": stop the tail
-## (the flagellum, which swims) from beating, and keep it still.
-## ROOM: 112 px at 15 px
-const GENE_SAYS := {
-	&"myoneme.dash": "dash",
-	&"axoneme.push": "push",
-	&"flagellum.hold": "hold still",
-}
-## **What the genes' senses are called**, on an instinct's chip: what each organ
-## reports, as the player knows it. Words of their own, apart from the organs'
-## names on the genome page, which a language may say differently.
-##
-## TRANSLATORS: The name of a sense on a small chip of the player's "instincts"
-## (rules: "when <a sense reports something> -> <do this>"): what one organ of the
-## cell reports. "beam": what the light the cell's ocellus casts lands on; "echo":
-## what comes back of the cell's ping; "smell": the smell of food; "shadow": the
-## shade of something big; "touch": something against the cell's skin, felt by
-## its palps. Lowercase, one short word.
-## ROOM: 112 px at 15 px
-## CONTEXT: sense
-const GENE_SENSES := {
-	&"ocellus.beam": "beam",
-	&"ampulla.echo": "echo",
-	&"chemocyte.smell": "smell",
-	&"stigma.shadow": "shadow",
-	&"palp.touch": "touch",
-}
-## **What the values the genes' senses report are called**, by value name: a test
-## is put to one of them.
-##
-## TRANSLATORS: The name of a value a sense of the player's cell reports, which an
-## "instinct" can test, on a small choice cell. Lowercase, one short word.
-## "distance": how far away; "size": how big; "level": how strong; "closeness":
-## how near, for touch.
-## ROOM: 70 px at 14 px
-const GENE_VALUES := {
-	&"distance": "distance",
-	&"size": "size",
-	&"level": "level",
-	&"closeness": "closeness",
-}
-## **The line that explains each of them**, beside the chip: the chip's word, a
-## middle dot, and what it is or makes the cell do, in plain words.
-##
-## TRANSLATORS: Explains one sense, action or value of the player's "instincts",
-## on one line under them: its name (the same words as on its chip), a middle
-## dot, then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-## which calls and listens; "your beam" its ocellus; "your nose" its chemocyte;
-## "your eyespot" its stigma; "your palps" its palp. "Your tail" is the cell's
-## flagellum, which swims; "two copies" means the gene is carried twice in the
-## cell's DNA, which is what lets the tail be held still. "For free" means it
-## costs no food.
-## ROOM: 856 px at 15 px
-const GENE_EXPLAINS := {
-	&"ocellus.beam": "beam · the nearest thing each ray of your beam stops on: where, and how"
-		+ " far.",
-	&"ampulla.echo": "echo · what your ping hears back: where it came from, how far, and how"
-		+ " big it rings.",
-	&"chemocyte.smell": "smell · how strongly food your mouth could take smells, along your"
-		+ " nose.",
-	&"stigma.shadow": "shadow · the shade of anything your size or bigger: where, and how dark.",
-	&"palp.touch": "touch · the nearest thing against your skin: where, and how close.",
-	&"myoneme.dash": "dash · a burst forward, on its cooldown, paid in hunger.",
-	&"axoneme.push": "push · thrust while this holds, at half or full, paid as you go.",
-	&"flagellum.hold": "hold still · hold your tail still and keep steering, for free. needs"
-		+ " two copies of your tail.",
-	&"distance": "distance · how far away it is.",
-	&"size": "size · how big it rings, against your mouth or your whole body.",
-	&"level": "level · how strong it is, from nothing to full.",
-	&"closeness": "closeness · how near it is, from the edge of your reach to your skin.",
-}
-## **What a part that waits for a level says while it waits**: beside an
-## instinct that uses it, which is asleep until the organ reaches that level.
-##
-## TRANSLATORS: Said of an "instinct" (a rule the player wrote) that cannot act
-## yet, because the action it uses needs a gene carried twice. "Asleep" is the
-## state's name; "two copies of your tail" means the tail gene (the flagellum)
-## carried twice in the cell's DNA. Lowercase.
-## ROOM: 856 px at 14 px
-const GENE_ASLEEP := {
-	&"flagellum.hold": "asleep: needs two copies of your tail",
-}
-## **What the page says when a part that waits for a level is picked too early**.
-##
-## TRANSLATORS: Said when the player picks an action their cell cannot do yet,
-## because it needs a gene carried twice. "hold still" is the action's name, as on
-## its chip; "two copies of your tail" means the tail gene (the flagellum)
-## carried twice in the cell's DNA. Lowercase.
-## ROOM: 856 px at 14 px
-const GENE_NEEDS := {
-	&"flagellum.hold": "hold still needs two copies of your tail",
-}
+# `cell.gd` and the metabolism's in `metabolism.gd`, in the same shape. **And so
+# are their words**: each organ's file has its parts' (gene.gd's word tables), and
+# the values every sense reports are program_words.gd's.
 
 
 ## **A part's words, in the language of the moment** (automation.md §13.1), for
 ## the parts the genes declare: `{"says": its chip, "explains": its line,
 ## "asleep": what an instinct using it says while it waits for its level,
 ## "needs": what the page says when it is picked too early}`, a key absent where
-## there are none. `cell.gd` answers the same way for the body's parts, so the
-## page asks the file that declares a part, and a gene brings its own words.
+## there are none -- its organ file's (`GENE_SENSES`, `GENE_SAYS`, `GENE_EXPLAINS`,
+## `GENE_ASLEEP`, `GENE_NEEDS`), through the catalogue. `cell.gd` answers the same
+## way for the body's parts, so the page asks the file that declares a part, and a
+## gene brings its own words.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
 static func words_of(part: StringName) -> Dictionary:
+	var words := Catalogue.part_words(part)
 	var out := {}
-	if GENE_SENSES.has(part):
-		out["says"] = String(TranslationServer.translate(GENE_SENSES[part], &"sense"))
-	elif GENE_SAYS.has(part):
-		out["says"] = String(TranslationServer.translate(GENE_SAYS[part]))
-	elif GENE_VALUES.has(part):
-		out["says"] = String(TranslationServer.translate(GENE_VALUES[part]))
-	if GENE_EXPLAINS.has(part):
-		out["explains"] = String(TranslationServer.translate(GENE_EXPLAINS[part]))
-	if GENE_ASLEEP.has(part):
-		out["asleep"] = String(TranslationServer.translate(GENE_ASLEEP[part]))
-	if GENE_NEEDS.has(part):
-		out["needs"] = String(TranslationServer.translate(GENE_NEEDS[part]))
+	if words.has(&"sense"):
+		out["says"] = String(TranslationServer.translate(words[&"sense"], &"sense"))
+	elif words.has(&"says"):
+		out["says"] = String(TranslationServer.translate(words[&"says"]))
+	if words.has(&"explains"):
+		out["explains"] = String(TranslationServer.translate(words[&"explains"]))
+	if words.has(&"asleep"):
+		out["asleep"] = String(TranslationServer.translate(words[&"asleep"]))
+	if words.has(&"needs"):
+		out["needs"] = String(TranslationServer.translate(words[&"needs"]))
 	return out
 
 # **The starting cell is already full**: three slots, three organs, all tier 1
@@ -1609,10 +1507,12 @@ static func strain_of(form: StringName) -> StringName:
 	return Catalogue.dose_of(form)
 
 
-## **The name [param gene] goes by on screen** ([constant NAMES]): `toxicyst`
-## for both of the toxin's forms, and its own key for every other gene.
+## **The name [param gene] goes by on screen**, where it is not its key (owner's
+## row 1): its organ file's `NAMES` -- `toxicyst` for both of the toxin's forms --
+## and its own key for every other gene. The keys never change; they are in saves
+## and on the wire for good.
 static func name_of(gene: StringName) -> String:
-	return String(NAMES.get(gene, gene))
+	return String(Catalogue.words(gene).get(&"name", gene))
 
 
 ## How many inside forms [param tiers] holds.

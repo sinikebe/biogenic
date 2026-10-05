@@ -67,7 +67,8 @@ extends Node
 ## placeholders says what goes in them**, `# ROOM: 560 px at 14 px with word, 99`:
 ## the text is measured with the widest gene word the catalog has in place of the
 ## first `%s` and `99` in place of the `%d`. A `with` word is the name of a table of
-## words (FILL_TABLES) or the text itself, which has a digit in it. And where several
+## words (FILL_TABLES), of the genes' own words, which the catalogue lists
+## (CATALOGUE_FILLS), or the text itself, which has a digit in it. And where several
 ## messages are drawn as one line -- a gene's numbers, the pause caption, a world's line
 ## in the world menu -- no one of them has the room, so `--lint-all` builds those lines
 ## with the game's own code, in the language being checked, and measures them (see
@@ -84,6 +85,10 @@ extends Node
 ## other way round: a constant marked with `TRANSLATORS:` that no `tr()` names is
 ## listed for a translator and shown in English -- the commonest way to miss one. (A
 ## catalog's `get_message()` names one too: it looks a message up as `tr()` does.)
+## **An organ's words are named by the catalogue** (game/genes/gene.gd, "Its words"):
+## a marked constant in an organ's file under a name the catalogue reads (its
+## KEY_WORDS, WAY_WORDS and PART_WORDS) is read by it and translated by the screen
+## it hands the words to, so no `tr()` names it, and none has to.
 ##
 ## Excluded from export (`tools/*` on every preset), so none of it ships.
 
@@ -98,6 +103,8 @@ const LAUNCHER_PO_DIR := "res://game/i18n/launcher"
 const CONFIG_PATH := "res://launcher_config.tres"
 const CONFIG_TEXT := ["play_text", "quit_text", "tagline"]
 const ROOT := "res://game"
+## The organs' own files (game/genes/organs/), whose word tables the catalogue reads.
+const ORGANS_DIR := "res://game/genes/organs/"
 ## Text that is not shown to a player: the dev app's frame readout, and the
 ## dedicated server, whose log is the owner's and stays in English.
 const SKIP_DIRS: Array[String] = ["res://game/dev", "res://game/server"]
@@ -125,10 +132,16 @@ const LIST_AT_MOST := 40
 ## English where the catalog has not translated it), and when it fills two placeholders of
 ## one message, its two widest, because one line never names the same gene twice. Any other
 ## word after `with` is the text itself and has a digit in it: `99`, `80%`.
-const FILL_TABLES := {"word": "WORDS", "way": "PATH_TITLES", "copies": "COPIES",
-	"sense": "GENE_SENSES", "action": "GENE_SAYS", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
+const FILL_TABLES := {"copies": "COPIES", "body": "BODY_SAYS", "ref": "REFERENCE_SAYS",
 	"trigger": "TRIGGER_SAYS", "already": "ALREADY", "always": "ALWAYS_DOES",
 	"name": "CELL_NAMES", "world": "DEFAULT_NAMES"}
+## **And the words that are the genes' own** (game/genes/catalogue.gd): not one constant's
+## strings but the words every live gene has of that name, read from the catalogue -- a
+## key's ([method words]: its chip word, its ways' names) or a declared part's ([method
+## part_words]: a sense's word, an action's) -- so a new organ's words are measured with the
+## rest without being named here. Ranked as a table's are.
+const CATALOGUE_FILLS := {"word": [&"words", &"word"], "way": [&"words", &"way_titles"],
+	"sense": [&"part_words", &"sense"], "action": [&"part_words", &"says"]}
 ## How the template says each table's entry, the first time and when it comes again.
 const FILL_SAYS := {
 	"word": ["your widest gene word", "your second widest"],
@@ -251,8 +264,10 @@ var _named_in_calls := {}
 ## The strings of every constant marked with `TRANSLATORS:`, by its name, in the order
 ## they are written: the tables a ROOM's `with` words name (FILL_TABLES).
 var _const_ids := {}
-## The same for a table with keys (`WORDS`): `{name: {key: first string}}`.
+## The same for a table with keys (`COPIES`): `{name: {key: first string}}`.
 var _const_pairs := {}
+## The English of each of CATALOGUE_FILLS, read from the catalogue once.
+var _catalogue_fills := {}
 
 
 func _ready() -> void:
@@ -348,10 +363,14 @@ func _collect() -> void:
 			_read_scene(path)
 	_files += 1
 	_read_config()
+	var by_catalogue := _catalogue_tables()
 	for name: String in _marked:
-		if not _named_in_calls.has(name):
-			_problems.append(("%s: `%s` is marked with TRANSLATORS: but no tr() names it,"
-				+ " so it is listed and never translated") % [_marked[name], name])
+		if _named_in_calls.has(name):
+			continue
+		if String(_marked[name]).begins_with(ORGANS_DIR) and by_catalogue.has(name):
+			continue
+		_problems.append(("%s: `%s` is marked with TRANSLATORS: but no tr() names it,"
+			+ " so it is listed and never translated") % [_marked[name], name])
 	for named: Array in _named:
 		var key := "\u0004" + String(named[0])
 		if not _entries.has(key):
@@ -360,6 +379,22 @@ func _collect() -> void:
 		elif not named[1] in _entries[key]["notes"]:
 			_entries[key]["notes"].append(named[1])
 	_check_rooms()
+
+
+## **The names of the word tables the catalogue reads out of an organ's file**: its
+## KEY_WORDS, WAY_WORDS and PART_WORDS. Empty when the catalogue will not load, which
+## leaves every organ's table unnamed, and so a problem: words nobody can show.
+func _catalogue_tables() -> Dictionary:
+	var out := {}
+	var catalogue := _script("catalogue")
+	if catalogue == null:
+		return out
+	for table: String in ["KEY_WORDS", "WAY_WORDS", "PART_WORDS"]:
+		var names: Variant = _script_const(catalogue, table)
+		if names is Dictionary:
+			for name: Variant in names:
+				out[String(name)] = true
+	return out
 
 
 func _walk(dir: String, gd: Array[String], scenes: Array[String]) -> void:
@@ -1070,7 +1105,7 @@ func _fills_say(fills: Array) -> String:
 	var said: Array[String] = []
 	var seen := {}
 	for fill: String in fills:
-		if FILL_TABLES.has(fill):
+		if _is_table(fill):
 			var nth := int(seen.get(fill, 0))
 			seen[fill] = nth + 1
 			said.append(String(FILL_SAYS[fill][mini(nth, 1)]))
@@ -1090,23 +1125,68 @@ func _fill_values(fills: Array, size: int, texts: Dictionary) -> Array:
 	var taken := {}
 	var out: Array = []
 	for fill: String in fills:
-		if not FILL_TABLES.has(fill):
+		if not _is_table(fill):
 			out.append(fill)
 			continue
-		var ranked := _ranked_words(String(FILL_TABLES[fill]), size, texts)
+		var ranked := _ranked_words(fill, size, texts)
 		var nth := int(taken.get(fill, 0))
 		taken[fill] = nth + 1
 		out.append("" if ranked.is_empty() else String(ranked[mini(nth, ranked.size() - 1)]))
 	return out
 
 
-## The entries of the table [param table], widest first at [param size].
-func _ranked_words(table: String, size: int, texts: Dictionary) -> Array:
+## The words [param fill] stands for, widest first at [param size], and two as wide in
+## the order of their letters: what fills a message is then the same whatever order the
+## words were written in, or listed by the catalogue.
+func _ranked_words(fill: String, size: int, texts: Dictionary) -> Array:
 	var words: Array = []
-	for id: String in _const_ids.get(table, []):
+	for id: String in _fill_ids(fill):
 		words.append(String(texts.get(id, id)))
-	words.sort_custom(func(a: String, b: String) -> bool: return _width_of(a, size) > _width_of(b, size))
+	words.sort_custom(func(a: String, b: String) -> bool:
+		var wa := _width_of(a, size)
+		var wb := _width_of(b, size)
+		return wa > wb or (wa == wb and a < b))
 	return words
+
+
+## Whether [param fill] is a word that stands for words: a table's, or the genes'.
+func _is_table(fill: String) -> bool:
+	return FILL_TABLES.has(fill) or CATALOGUE_FILLS.has(fill)
+
+
+## **The English words [param fill] stands for**, in order, each once: its table's strings
+## (FILL_TABLES), or every live gene's words of its name in the catalogue (CATALOGUE_FILLS)
+## -- each key's, then each part every gene declares; a table of words, a way's name to
+## its title, gives each of its words.
+func _fill_ids(fill: String) -> Array:
+	if not CATALOGUE_FILLS.has(fill):
+		return _const_ids.get(String(FILL_TABLES.get(fill, "")), [])
+	if _catalogue_fills.has(fill):
+		return _catalogue_fills[fill]
+	var out: Array = []
+	var catalogue := _script("catalogue")
+	if catalogue != null:
+		var asked: StringName = CATALOGUE_FILLS[fill][0]
+		var name: StringName = CATALOGUE_FILLS[fill][1]
+		var said: Array = []
+		if asked == &"words":
+			for key: StringName in catalogue.call(&"live"):
+				said.append((catalogue.call(&"words", key) as Dictionary).get(name))
+		else:
+			var declared: Dictionary = catalogue.call(&"declares")
+			for key: StringName in declared:
+				for side: String in ["in", "out"]:
+					for part: Dictionary in (declared[key] as Dictionary).get(side, []):
+						var words: Dictionary = catalogue.call(&"part_words",
+							StringName("%s.%s" % [key, part["name"]]))
+						said.append(words.get(name))
+		for one: Variant in said:
+			var each: Array = (one as Dictionary).values() if one is Dictionary else [one]
+			for word: Variant in each:
+				if word is String and not (word as String).is_empty() and not out.has(word):
+					out.append(word)
+	_catalogue_fills[fill] = out
+	return out
 
 
 ## [param text] with its placeholders replaced by [param values]: plain ones in order,
@@ -1161,14 +1241,20 @@ func _check_rooms() -> void:
 		var fills: Array = room[2]
 		var fine := true
 		for fill: String in fills:
-			if FILL_TABLES.has(fill):
+			if CATALOGUE_FILLS.has(fill):
+				if _fill_ids(fill).is_empty():
+					_problems.append(("%s: ROOM says `with %s`, but no live gene has words for it in"
+						+ " the catalogue (%s)") % [where, fill, CATALOGUE_FILLS[fill][1]])
+					fine = false
+			elif FILL_TABLES.has(fill):
 				if not _const_ids.has(FILL_TABLES[fill]):
 					_problems.append("%s: ROOM says `with %s`, but no constant %s is marked with TRANSLATORS:" % [
 						where, fill, FILL_TABLES[fill]])
 					fine = false
 			elif not _has_digit(fill):
 				_problems.append(("%s: ROOM says `with %s`, which is not a table (%s) and has no digit"
-					+ " in it, so it is not a text") % [where, fill, ", ".join(FILL_TABLES.keys())])
+					+ " in it, so it is not a text") % [where, fill,
+						", ".join(FILL_TABLES.keys() + CATALOGUE_FILLS.keys())])
 				fine = false
 		var holes := _count_holes(id)
 		if holes != fills.size():
@@ -1783,20 +1869,20 @@ func _measure_screens() -> Dictionary:
 	if genes.is_empty() or tier_max < 1 or not _const_ids.has("GENERATIONS"):
 		return {}
 	var font := ThemeDB.fallback_font
-	var words: Dictionary = _const_pairs.get("WORDS", {})
-	var ways: Array[StringName] = [&""]
-	for way: String in (_const_pairs.get("PATH_TITLES", {}) as Dictionary):
-		ways.append(StringName(way))
-	# The bodies that change a number: how much `crista` leaves of every cost, how big
-	# `vacuole` makes the tank, what `plastid` makes. A levelled gene has many more rows, and
-	# they depend on those less, so it is read in three bodies only.
+	# The bodies that change a number, by the organs that provide what changes it
+	# (`crista`, `vacuole` and `plastid` today): how much the burn leaves of every
+	# cost, how big the store makes the tank, what the sun makes. A levelled gene has
+	# many more rows, and they depend on those less, so it is read in three bodies only.
+	var burn: StringName = catalogue.call(&"first_provider", &"burn")
+	var store: StringName = catalogue.call(&"first_provider", &"store")
+	var sun: StringName = catalogue.call(&"first_provider", &"sun")
 	var all_bodies: Array[Dictionary] = []
-	for crista in tier_max + 1:
-		for vacuole in tier_max + 1:
-			for plastid in tier_max + 1:
-				all_bodies.append({&"crista": crista, &"vacuole": vacuole, &"plastid": plastid})
-	var few_bodies: Array[Dictionary] = [{}, {&"vacuole": tier_max},
-		{&"crista": tier_max, &"vacuole": tier_max, &"plastid": tier_max}]
+	for burns in tier_max + 1:
+		for stores in tier_max + 1:
+			for suns in tier_max + 1:
+				all_bodies.append({burn: burns, store: stores, sun: suns})
+	var few_bodies: Array[Dictionary] = [{}, {store: tier_max},
+		{burn: tier_max, store: tier_max, sun: tier_max}]
 	# **And every slot**: a gene's numbers may depend on where it is worn -- venom
 	# at the front and on a side or the stern are three rows (dna-slots.md §3.3) --
 	# so a gene that does not level is read in each outside slot, and with none.
@@ -1807,7 +1893,11 @@ func _measure_screens() -> Dictionary:
 		var grows := levelled.has(gene)
 		var bodies := few_bodies if grows else all_bodies
 		var levels: Array = range(1, 100) if grows else [0]
-		var paths: Array = ways if grows else [&""]
+		# A levelled gene down no way yet, and down each of its own (gene.gd's `levels`).
+		var paths: Array = [&""]
+		if grows:
+			paths.append_array((catalogue.call(&"levels", gene) as Dictionary).get("paths", []))
+		var word := String((catalogue.call(&"words", gene) as Dictionary).get(&"word", gene))
 		var slots: Array = [-1] if grows else all_slots
 		for copies in range(1, tier_max + 1):
 			for body: Dictionary in bodies:
@@ -1834,7 +1924,7 @@ func _measure_screens() -> Dictionary:
 									about = "level %d, %s" % [level, ("way " + String(way)) if way != &"" else "no way chosen"]
 								worst[tag] = [wide, String(readout.call(&"plain", items)),
 									"the %s numbers line of %s (%s), at %s" % [
-										"first" if i == 0 else "second", words.get(String(gene), String(gene)), gene, about]]
+										"first" if i == 0 else "second", word, gene, about]]
 	var numbers: Array = worst.values()
 	numbers.sort_custom(func(a: Array, b: Array) -> bool: return float(a[0]) > float(b[0]))
 	# The caption: the widest generation, and the widest clause the numbers add to it.
@@ -1850,13 +1940,14 @@ func _measure_screens() -> Dictionary:
 		var wide := _width_of(text, CAPTION_SIZE)
 		if wide > float(lead[0]):
 			lead = [wide, text]
+	# And the tail, which sets how fast drifting spends the tank.
+	var swim: StringName = catalogue.call(&"first_provider", &"impulse_speed")
 	var rest: Array = [0.0, ""]
-	for crista in tier_max + 1:
-		for vacuole in tier_max + 1:
-			for plastid in tier_max + 1:
-				for flagellum in tier_max + 1:
-					var body := {&"crista": crista, &"vacuole": vacuole, &"plastid": plastid,
-						&"flagellum": flagellum}
+	for burns in tier_max + 1:
+		for stores in tier_max + 1:
+			for suns in tier_max + 1:
+				for swims in tier_max + 1:
+					var body := {burn: burns, store: stores, sun: suns, swim: swims}
 					for radius: float in [divide, 6.0]:
 						for upkeep: float in [0.0, 0.1, 0.5, 1.0, 2.0]:
 							var text := sep + String(readout.call(&"plain",

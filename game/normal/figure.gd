@@ -51,6 +51,7 @@ extends RefCounted
 const Cilia := preload("res://game/vision/cilia.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
@@ -422,21 +423,6 @@ const GAUGE_RADIUS := 2
 const GAUGE_TRACK := Color(0.855, 0.953, 0.933, 0.14)
 const GAUGE_FILL_ALPHA := 0.85
 
-## **A toxin not yet placed is neither form**: the tray, the hand and a drag call
-## it this until it lands.
-##
-## TRANSLATORS: The word for a toxin gene that has been eaten and is waiting to be
-## placed, on its chip in the tray and on a finger dragging it. Placed outside the
-## body it becomes `venom`, inside it becomes `poison`; until then it is neither.
-## One short lowercase word, like the other gene words.
-## ROOM: 47 px at 13 px
-const TOXIN_WORD := "toxin"
-## TRANSLATORS: The gene line for a toxin that is waiting, before a slot is
-## chosen: it hurts over time, and becomes venom or poison depending on where it
-## is placed. After the gene's scientific name and a middle dot. No longer than
-## the English.
-## ROOM: 440 px at 15 px
-const EXPLAIN_TOXIN := "a toxin that goes on hurting, as venom or as poison"
 ## TRANSLATORS: The line for the empty slot inside the body (the one slot in the
 ## middle of the body, not round it): nothing is there yet, and a toxin placed
 ## there becomes poison.
@@ -452,116 +438,6 @@ const HINT_INSIDE := "inside your body · only a toxin goes here"
 const ORGAN_UNEXPRESSED := 0.52
 const WORD_UNEXPRESSED := 0.42
 
-## **The plain word, never the biological name.** Four short verbs are parsed
-## instantly at arm's length; nine letters of Greek are not, on the one screen
-## whose whole job is a quick decision. §5.2, and the nine-character ceiling it
-## sets is why a new gene needs a short word as well as a real organ name.
-##
-## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
-## dots: one short lowercase word, a verb or a noun for what the gene does. The
-## `entry` line says which gene it names (its scientific name, never translated).
-## It has to be short: prefer the shortest everyday word. The same words appear
-## inside sentences such as "let go to swap eat and ping".
-## ROOM: 47 px at 13 px
-const WORDS := {
-	&"cytostome": "eat", &"cirrus": "turn", &"flagellum": "swim",
-	&"stigma": "see", &"ocellus": "beam", &"axoneme": "push",
-	&"palp": "touch",
-	&"myoneme": "dash", &"trichocyst": "sting", &"pellicle": "armor",
-	&"veneneux": "poison", &"toxicyst": "venom", &"plastid": "sun",
-	&"vacuole": "store", &"crista": "burn", &"chemocyte": "smell",
-	&"ampulla": "ping",
-}
-
-## **One line per gene, and it says what the gene does to the player** -- not
-## what the organelle is. Sixteen tiles carrying one word each are enough to
-## recognise a gene you already know and not enough to learn one, which is the
-## whole of the owner's ask.
-##
-## The voice is the screen's: lowercase, plain, no jargon, one clause and then
-## its consequence. No line names another gene, because a player reading `armor`
-## has not necessarily met `cytostome` yet. No line carries a number: levels are
-## the pips' job and a line that said "+30%" would be the classic HUD this game
-## spent two phases not building.
-##
-## `that side` in `ocellus` and `trichocyst` is deliberate and it points at the
-## arc the slot is tethered to -- the two directional genes are the two whose
-## line has to explain why the slot mattered.
-##
-## **This line is also the one place the biological name reaches the screen, and
-## that is a deliberate reading of §8 rather than a breach of it.** The rule §8
-## states is that *the slot* wears the plain word, and the argument it gives is
-## the glance: four short verbs are parsed at arm's length and nine letters of
-## Greek are not, on the surface whose whole job is a quick decision. This line
-## is not a glance -- it is read because the player stopped to read it -- so the
-## name sits at the head of it and the plain word keeps the slot. §9.1 gives
-## every gene two names on purpose; a name no player ever meets is a convention
-## for the compiler, and CLAUDE.md's *realism is a tool* is the argument that
-## `ampulla` is worth meeting.
-##
-## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
-## name and a middle dot: "cytostome · a wider mouth swallows bigger things
-## whole". Lowercase, plain words, no numbers. It has little room: it meets the
-## "numbers" switch at its right, so a translation should be no longer than the
-## English. "That side" is the side of the body where the gene's slot is. The
-## `entry` line says which gene.
-## ROOM: 440 px at 15 px
-const EXPLAINS := {
-	&"cytostome": "a wider mouth swallows bigger things whole",
-	&"cirrus": "turns you faster, and sooner after you ask",
-	&"flagellum": "your tail beats harder, and more often",
-	&"stigma": "feels the shadow of anything big, however dark",
-	&"ocellus": "a ray out of that side, marking whatever it strikes",
-	&"chemocyte": "smells food, strongest where your nose is pointed",
-	&"ampulla": "a pulse that answers off everything, not just food",
-	&"axoneme": "holding on pushes you, instead of only steering",
-	&"palp": "feels what is against you, with no light at all",
-	&"myoneme": "tap for a burst of speed, paid for in hunger",
-	&"trichocyst": "a dart at whatever closes in on that side",
-	&"pellicle": "thicker skin, so bites take less and fewer mouths fit",
-	&"veneneux": "whatever bites or swallows you takes your poison",
-	&"toxicyst": "your bite leaves venom, which goes on hurting",
-	&"plastid": "makes a little of its own food, so you starve slower",
-	&"vacuole": "a bigger tank, so hunger takes longer to reach you",
-	&"crista": "burns cleaner, so everything you carry costs less",
-}
-## **Where venom works is its line** (docs/design/dna-slots.md §3.2): at the
-## front it rides on your bite, and [constant EXPLAINS] says so; on a side or
-## the stern it stings what bites you there, and these say so -- `that side`
-## as the beam and the dart already say it, and `from behind` for the stern,
-## which a player least thinks of as a side.
-##
-## TRANSLATORS: The line of the venom gene (`toxicyst`, shown as `venom`) when it
-## sits on a side of the body: whatever bites the cell on that side takes venom
-## from it. "That side" is the side of the body where the gene's slot is. Same
-## limit as the gene lines above: no longer than the English.
-## ROOM: 440 px at 15 px
-const EXPLAINS_SIDE := {
-	&"toxicyst": "whatever bites you on that side takes venom",
-}
-## TRANSLATORS: The same line when the venom sits at the back of the body, where
-## the tail is: whatever bites the cell from behind takes venom from it.
-## ROOM: 440 px at 15 px
-const EXPLAINS_STERN := {
-	&"toxicyst": "whatever bites you from behind takes venom",
-}
-## **Once a way is taken, the gene's line says which** (beam-levels.md §8.3):
-## gene, then path, then what the organ now does -- the pause screen's receipt
-## for the choice, and the choosing screen's line for a daughter who inherits
-## it. 464 and 446 px with the name in front. A fork still open reads as no
-## path yet: the gene's own line above.
-##
-## TRANSLATORS: As the gene lines above, for a gene that can grow in two ways and
-## has been given one: what it does now. The `entry` line gives the gene and the
-## way. Same limit: no longer than the English, which is 464 px at most with the
-## gene's name in front.
-## ROOM: 470 px at 15 px
-const EXPLAINS_PATH := {
-	&"ocellus": {
-		&"extend": "a fan of rays out of that side, one more every level",
-		&"sweep": "three rays sweeping that side, faster every level",
-	},
-}
 ## An empty slot has no gene to explain, so it explains the one thing it does
 ## have: a side of the body. The tether from it is what "this side" refers to,
 ## and on the choosing screen, which reads this line too, the dart is.
@@ -594,9 +470,9 @@ const FOCUS_WIDTH := 2.0
 const EXPLAIN_ORGAN_SIZE := Vector2(34.0, 26.0)
 const EXPLAIN_ORGAN_SCALE := 0.60
 ## Where in that box the organ's own centre sits. **Measured, not chosen**: the
-## tallest organ is `flagellum`, whose strokes reach `TILE_ARC_RADIUS +
-## TILE_LEN` above the centre -- 18 px at this scale -- so any seat above 18.5
-## puts the tuft outside its own row.
+## tallest organ is `flagellum`, whose strokes reach `TILE_ARC_RADIUS` and its
+## look's `tile_length` above the centre -- 18 px at this scale -- so any seat above
+## 18.5 puts the tuft outside its own row.
 const EXPLAIN_ORGAN_SEAT := Vector2(17.0, 18.5)
 
 ## The two lines: 14 px, 19 apart, the first baseline 14 px into a block that
@@ -652,42 +528,87 @@ const TOGGLE_INK := Color(0.588, 1.0, 0.859)
 # Words.
 # ---------------------------------------------------------------------------
 
-## The plain word a gene is read by on this surface. A gene this build has no
-## word for -- a later phase's, arriving over an older binary in a content pack
-## -- falls back to its own name rather than to nothing.
+## **The plain word a gene is read by on this surface**: its organ file's
+## `WORDS` (gene.gd's word tables), never the biological name. Four short verbs
+## are parsed instantly at arm's length; nine letters of Greek are not, on the one
+## screen whose whole job is a quick decision. §5.2, and the nine-character
+## ceiling it sets is why a new gene needs a short word as well as a real organ
+## name. A gene this build has no word for -- a later phase's, arriving over an
+## older binary in a content pack -- falls back to its own name rather than to
+## nothing.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
 static func word_of(gene: StringName) -> String:
-	return String(TranslationServer.translate(WORDS[gene])) if WORDS.has(gene) \
+	var said := String(Catalogue.words(gene).get(&"word", ""))
+	return String(TranslationServer.translate(said)) if not said.is_empty() \
 		else String(gene)
 
 
 ## **The word for a gene not yet placed** (dna-slots-ux.md §3.5): a toxin is
-## `toxin` in the tray, in hand and on a finger, neither form until it lands.
-## Every other gene is its own word.
+## `toxin` in the tray, in hand and on a finger, neither form until it lands --
+## its organ file's `CARRIED_WORDS`. Every other gene is its own word.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
 static func carried_word_of(gene: StringName) -> String:
-	return String(TranslationServer.translate(TOXIN_WORD)) \
-		if GenomeNode.has_forms(gene) else word_of(gene)
+	var carried := String(Catalogue.words(gene).get(&"carried", ""))
+	return String(TranslationServer.translate(carried)) if not carried.is_empty() \
+		else word_of(gene)
+
+
+## **The line for a gene in hand that has not chosen its form yet**: what a
+## toxin does, as venom or as poison, before a slot says which -- its organ
+## file's `CARRIED_EXPLAINS`; "" for a gene with none.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
+static func carried_explains(gene: StringName) -> String:
+	var said := String(Catalogue.words(gene).get(&"carried_explains", ""))
+	return String(TranslationServer.translate(said)) if not said.is_empty() else ""
 
 
 ## **What [param gene] does, in the player's terms**: its line, or -- once its
 ## fork is behind it -- the line for the way it took, [param path]
-## (beam-levels.md §8.3). The pause screen and the choosing screen both read it,
-## so a daughter reads what her mother chose.
+## (beam-levels.md §8.3), each its organ file's (`EXPLAINS`, `EXPLAINS_PATH`).
+## The pause screen and the choosing screen both read it, so a daughter reads
+## what her mother chose.
+##
+## **One line per gene, and it says what the gene does to the player** -- not
+## what the organelle is. The voice is the screen's: lowercase, plain, no jargon,
+## one clause and then its consequence. No line names another gene, because a
+## player reading `armor` has not necessarily met the mouth yet. No line carries a
+## number: levels are the pips' job and a line that said "+30%" would be the
+## classic HUD this game spent two phases not building. `that side` in the beam's
+## and the dart's lines points at the arc the slot is tethered to -- the two
+## directional genes are the two whose line has to explain why the slot mattered.
+##
+## **This line is also the one place the biological name reaches the screen, and
+## that is a deliberate reading of §8 rather than a breach of it.** The rule §8
+## states is that *the slot* wears the plain word, and the argument it gives is
+## the glance. This line is not a glance -- it is read because the player stopped
+## to read it -- so the name sits at the head of it and the plain word keeps the
+## slot. §9.1 gives every gene two names on purpose, and CLAUDE.md's *realism is
+## a tool* is the argument that `ampulla` is worth meeting.
 ##
 ## [param slot] is where it is read at, for a gene whose line depends on it:
-## venom on a side or the stern says what it does there.
+## venom on a side or the stern says what it does there (`EXPLAINS_SIDE`,
+## `EXPLAINS_STERN`; docs/design/dna-slots.md §3.2) -- `that side` as the beam
+## and the dart already say it, and `from behind` for the stern, which a player
+## least thinks of as a side.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
 static func explains(gene: StringName, slot: int = -1,
 		path: StringName = &"") -> String:
-	var taken: Dictionary = EXPLAINS_PATH.get(gene, {})
+	var words := Catalogue.words(gene)
+	var taken: Dictionary = words.get(&"paths", {})
 	if taken.has(path):
-		return String(TranslationServer.translate(EXPLAINS_PATH[gene][path]))
+		return String(TranslationServer.translate(taken[path]))
 	if slot >= 0 and not GenomeNode.is_inside(slot) and not GenomeNode.is_front(slot) \
 			and CellBody.VENOM_SIDES:
-		if slot == GenomeNode.STERN and EXPLAINS_STERN.has(gene):
-			return String(TranslationServer.translate(EXPLAINS_STERN[gene]))
-		if EXPLAINS_SIDE.has(gene):
-			return String(TranslationServer.translate(EXPLAINS_SIDE[gene]))
-	if EXPLAINS.has(gene):
-		return String(TranslationServer.translate(EXPLAINS[gene]))
+		if slot == GenomeNode.STERN and words.has(&"stern"):
+			return String(TranslationServer.translate(words[&"stern"]))
+		if words.has(&"side"):
+			return String(TranslationServer.translate(words[&"side"]))
+	if words.has(&"explains"):
+		return String(TranslationServer.translate(words[&"explains"]))
 	return ""
 
 

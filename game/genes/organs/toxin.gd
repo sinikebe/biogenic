@@ -11,9 +11,17 @@ extends "res://game/genes/gene.gd"
 ## strain is a second entry in [member variants], with its own two keys
 ## (dna-slots.md §8.3): every rule that reads forms already covers it. The keys
 ## are permanent once shipped, because saves and the wire keep them, and the
-## name on screen is `genome.gd`'s NAMES, not the key.
+## name on screen is its NAMES below, not the key.
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
+
+## The readout's items (game/mechanics/readout.gd, which preloads nothing): what
+## [method lines] says this organ's numbers with.
+const Readout := preload("res://game/mechanics/readout.gd")
+const U := Readout.Unit
+## The kinds of load (game/mechanics/doses.gd, which preloads nothing): what one
+## stack of a dose does.
+const Doses := preload("res://game/mechanics/doses.gd")
 
 ## `toxicyst` / **venom**, outside: the stacks its every bite leaves at the front,
 ## and its every sting on a side, by copies. One a copy, which the line can say as
@@ -30,6 +38,72 @@ const POISON_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
 ## the same (owner's row 5): nobody is spat out any more.
 ## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
 const SWALLOW_STACKS_BY_TIER: Array[float] = [0.0, 16.0, 32.0, 48.0]
+
+
+# --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------
+
+## **Its chip word** (gene.gd's word tables): the plain word, never the biological
+## name -- one short word for what it does, read at arm's length (figure.gd).
+##
+## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
+## dots: one short lowercase word, a verb or a noun for what the gene does. The
+## `entry` line says which gene it names (its scientific name, never translated).
+## It has to be short: prefer the shortest everyday word. The same words appear
+## inside sentences such as "let go to swap eat and ping".
+## ROOM: 47 px at 13 px
+const WORDS := {
+	&"veneneux": "poison",
+	&"toxicyst": "venom",
+}
+## **What it does to the player, in one line**, after its name on the pause screen.
+##
+## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
+## name and a middle dot: "cytostome · a wider mouth swallows bigger things
+## whole". Lowercase, plain words, no numbers. It has little room: it meets the
+## "numbers" switch at its right, so a translation should be no longer than the
+## English. "That side" is the side of the body where the gene's slot is. The
+## `entry` line says which gene.
+## ROOM: 440 px at 15 px
+const EXPLAINS := {
+	&"veneneux": "whatever bites or swallows you takes your poison",
+	&"toxicyst": "your bite leaves venom, which goes on hurting",
+}
+## **Where venom works is its line** (docs/design/dna-slots.md §3.2): on a side
+## it stings what bites you there, and at the stern what bites from behind.
+##
+## TRANSLATORS: The line of the venom gene (`toxicyst`, shown as `venom`) when it
+## sits on a side of the body: whatever bites the cell on that side takes venom
+## from it. "That side" is the side of the body where the gene's slot is. Same
+## limit as the gene lines above: no longer than the English.
+## ROOM: 440 px at 15 px
+const EXPLAINS_SIDE := {&"toxicyst": "whatever bites you on that side takes venom"}
+## TRANSLATORS: The same line when the venom sits at the back of the body, where
+## the tail is: whatever bites the cell from behind takes venom from it.
+## ROOM: 440 px at 15 px
+const EXPLAINS_STERN := {&"toxicyst": "whatever bites you from behind takes venom"}
+## **A toxin not yet placed is neither form**: the tray, the hand and a drag call
+## it this until it lands (dna-slots-ux.md §3.5).
+##
+## TRANSLATORS: The word for a toxin gene that has been eaten and is waiting to be
+## placed, on its chip in the tray and on a finger dragging it. Placed outside the
+## body it becomes `venom`, inside it becomes `poison`; until then it is neither.
+## One short lowercase word, like the other gene words.
+## ROOM: 47 px at 13 px
+const CARRIED_WORDS := {&"veneneux": "toxin", &"toxicyst": "toxin"}
+## **And its line in hand**, before a slot says which form it becomes.
+##
+## TRANSLATORS: The gene line for a toxin that is waiting, before a slot is
+## chosen: it hurts over time, and becomes venom or poison depending on where it
+## is placed. After the gene's scientific name and a middle dot. No longer than
+## the English.
+## ROOM: 440 px at 15 px
+const CARRIED_EXPLAINS := {
+	&"veneneux": "a toxin that goes on hurting, as venom or as poison",
+	&"toxicyst": "a toxin that goes on hurting, as venom or as poison",
+}
+## **Its name on screen**, where it is not its key (owner's row 1): both
+## forms are `toxicyst`. Not translated: a scientific name.
+const NAMES := {&"veneneux": "toxicyst", &"toxicyst": "toxicyst"}
 
 
 func _init() -> void:
@@ -51,3 +125,89 @@ func _init() -> void:
 					"provides": {&"venom_stacks": VENOM_STACKS_BY_TIER}},
 			}},
 	]
+	# **Its look** (gene-catalogue.md §7.1): spines, drawn by place -- fangs on the
+	# lips at the front, barbs on the arc it guards at a side or the stern, granules
+	# under the whole skin inside (cilia.gd). **It wears its strain's hue, in both its
+	# forms** (dna-slots-ux.md §2.1): venom and poison of one strain are one colour,
+	# and the place is told by shape. Corrosive left nutrient green for lime: at 128
+	# deg `veneneux` *was* the scent bloom's and the taste ring's green, so a poison
+	# looked like food and a dose would have felt like a smell. Lime is the free 72
+	# deg the retired `rhabdom` left, and the only lime on either screen. signal_bus.gd
+	# reads it as its strain colour, as it reads the ping's.
+	look = {"shape": SPINES, "hue": Color(0.84, 0.98, 0.22)}  # corrosive, 71 deg (was 128)
+
+
+## **Its numbers on the pause screen** (gene.gd's `lines`): venom's, by where it
+## is worn, and poison's inside -- each form by its place.
+func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, slot: int,
+		wear: Dictionary) -> Array:
+	if place == INSIDE:
+		return _poison_lines(t, ctx, wear)
+	return _venom_lines(t, slot, ctx, wear)
+
+
+## **Venom** (docs/design/dna-slots.md §3.3): how many stacks it leaves, where
+## it works -- on your bite at the front, in whatever bites the side or the
+## stern it guards -- and what one stack does.
+##
+## TRANSLATORS: The venom gene (`toxicyst`, shown as `venom`) at the front of the
+## cell: each bite it makes leaves this many "stacks" of venom in the bitten body,
+## which go on hurting it. A "stack" is one dose of the toxin, the unit everything
+## about a toxin is counted in. Give the forms your language needs for the count.
+func _venom_lines(tier: int, slot: int, ctx: Dictionary, wear: Dictionary) -> Array:
+	var genome: Variant = ctx["genome"]
+	var stacks := stat_at(&"venom_stacks", tier)
+	var n := int(roundf(stacks))
+	if slot < 0 or genome.is_front(slot):
+		return [[Readout.item_n("each bite leaves {} stack of venom",
+				"each bite leaves {} stacks of venom", n, [stacks], [U.COUNT]),
+			_stack_item(ctx)], [wear]]
+	# A side venom the switch has made inert stings nothing, and says nothing.
+	if not ctx["cell"].VENOM_SIDES:
+		return [[], [wear]]
+	if slot == genome.STERN:
+		# TRANSLATORS: The venom gene at the back of the cell, where the tail is:
+		# whatever bites the cell from behind takes this many stacks of venom.
+		return [[Readout.item_n("whatever bites you from behind takes {} stack",
+				"whatever bites you from behind takes {} stacks", n, [stacks], [U.COUNT]),
+			_stack_item(ctx)], [wear]]
+	# TRANSLATORS: The venom gene on a side of the cell: whatever bites the cell on
+	# that side takes this many stacks of venom. "That side" is the side of the
+	# body where the gene's slot is.
+	return [[Readout.item_n("whatever bites you on that side takes {} stack",
+			"whatever bites you on that side takes {} stacks", n, [stacks], [U.COUNT]),
+		_stack_item(ctx)], [wear]]
+
+
+## **Poison** (§3.3): what a biter takes a bite and a swallower takes in one,
+## then what one stack does.
+##
+## TRANSLATORS: The poison gene (`veneneux`, shown as `poison`), inside the cell:
+## whatever bites the cell takes this many "stacks" of poison with each bite, and
+## whatever swallows it takes this many at once. A "stack" is one dose of the
+## toxin. Give the forms your language needs for the count.
+func _poison_lines(tier: int, ctx: Dictionary, wear: Dictionary) -> Array:
+	var bite := stat_at(&"poison_stacks", tier)
+	var gulp := stat_at(&"swallow_stacks", tier)
+	return [[Readout.item_n("whatever bites you takes {} stack a bite",
+			"whatever bites you takes {} stacks a bite", int(roundf(bite)), [bite],
+			[U.COUNT]),
+		Readout.item_n("a swallower takes {} stack", "a swallower takes {} stacks",
+			int(roundf(gulp)), [gulp], [U.COUNT])],
+		[_stack_item(ctx), wear]]
+
+
+## **What one stack of harm does** -- the corrosive strain's -- to a body the
+## reader's size: the share of it taken, diluted as every dose is (doses.gd's
+## `felt`), over the stack's life down to the cutoff -- `tau x ln(1 / DOSE_GONE)`,
+## 9.7 s for harm.
+##
+## TRANSLATORS: What one "stack" (one dose) of a toxin does: it takes this share
+## of a body the size of the player's cell, a percentage, over this many seconds.
+func _stack_item(ctx: Dictionary) -> Dictionary:
+	var cell: Variant = ctx["cell"]
+	var share: float = cell.HARM_PER_STACK * Doses.felt(1.0,
+		float(ctx.get("radius", cell.BASE_RADIUS)), cell.DOSE_SIZE)
+	var life: float = cell.DOSE_TAU_BY_KIND[Doses.Kind.HARM] * log(1.0 / cell.DOSE_GONE)
+	return Readout.item("a stack takes {} of a body your size over {} s", [share, life],
+		[U.SHARE, U.TIME])

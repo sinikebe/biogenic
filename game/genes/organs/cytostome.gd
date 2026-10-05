@@ -5,6 +5,11 @@ extends "res://game/genes/gene.gd"
 ##
 ## No class_name, for the reason signal_bus.gd gives. Preload it by path.
 
+## The readout's items (game/mechanics/readout.gd, which preloads nothing): what
+## [method lines] says this organ's numbers with.
+const Readout := preload("res://game/mechanics/readout.gd")
+const U := Readout.Unit
+
 ## **How wide the mouth opens**, as a multiple of body radius, by tier. Index 0
 ## is a cell with no mouth at all, which is a real state: drifters have no
 ## cytostome, and §9.7 lets the player put a fourth gene over their own.
@@ -26,6 +31,30 @@ const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
 const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 
 
+# --- Its words (gene.gd; gene-catalogue.md §8.1) -------------------------------------
+
+## **Its chip word** (gene.gd's word tables): the plain word, never the biological
+## name -- one short word for what it does, read at arm's length (figure.gd).
+##
+## TRANSLATORS: A gene's name as the player reads it on a chip beside three small
+## dots: one short lowercase word, a verb or a noun for what the gene does. The
+## `entry` line says which gene it names (its scientific name, never translated).
+## It has to be short: prefer the shortest everyday word. The same words appear
+## inside sentences such as "let go to swap eat and ping".
+## ROOM: 47 px at 13 px
+const WORDS := {&"cytostome": "eat"}
+## **What it does to the player, in one line**, after its name on the pause screen.
+##
+## TRANSLATORS: What a gene does, in one line shown after the gene's scientific
+## name and a middle dot: "cytostome · a wider mouth swallows bigger things
+## whole". Lowercase, plain words, no numbers. It has little room: it meets the
+## "numbers" switch at its right, so a translation should be no longer than the
+## English. "That side" is the side of the body where the gene's slot is. The
+## `entry` line says which gene.
+## ROOM: 440 px at 15 px
+const EXPLAINS := {&"cytostome": "a wider mouth swallows bigger things whole"}
+
+
 func _init() -> void:
 	organ = &"cytostome"
 	order = 0
@@ -39,3 +68,38 @@ func _init() -> void:
 	# and nobody would pick it.
 	tags = [ALWAYS_EXPRESSED, NEVER_DRIFTS]
 	born = 1
+	# **Its look** (gene-catalogue.md §7.1): the oral mat, dense, fine and in the
+	# nutrient green family -- the mouth *is* nutrition, so it breaks cilia.gd's
+	# spacing rule on purpose. Nine strokes on its tile, eight px long.
+	look = {"shape": MAT, "hue": Color(0.62, 1.00, 0.38), "count": 15,  # eat, 95 deg
+		"tile_count": 9, "tile_length": 8.0}
+
+
+## **Its numbers on the pause screen** (gene.gd's `lines`): what it swallows and bites,
+## and what its biggest meal is worth.
+func lines(t: int, _level: int, _path: StringName, ctx: Dictionary, _slot: int,
+		wear: Dictionary) -> Array:
+	var cell: Variant = ctx["cell"]
+	var metabolism: Variant = ctx["metabolism"]
+	var food: Variant = ctx["food"]
+	var gape := stat_at(&"gape", t)
+	var bite := stat_at(&"bite", t)
+	# The biggest meal is a body just inside the gape, and a meal is
+	# worth its size against yours, clamped as food.gd clamps it.
+	var share: float = metabolism.meal(clampf(gape, food.MEAL_MIN,
+		food.MEAL_MAX))
+	# What a bite takes depends on where it lands (cell.gd's `flank`):
+	# the least at the nose, the most at the tail, so the line says both.
+	#
+	# TRANSLATORS: The mouth gene (`cytostome`, shown as `eat`). "Its biggest
+	# meal" is the largest body this mouth can swallow; "worth {} s" is how
+	# many seconds of food it gives the cell. "Your size" is the cell's own
+	# size. "Head-on" is when the bitten body faces the mouth, "from behind"
+	# when it turns away.
+	return [[Readout.item("swallows whole under {} × your size", [gape], [U.TIMES]),
+		Readout.item("bites take {} head-on, {} from behind",
+			[bite * cell.FLANK_AHEAD, bite * cell.FLANK_ASTERN],
+			[U.SHARE, U.SHARE])],
+		[Readout.item("its biggest meal fills you") if share >= 1.0
+			else Readout.item("its biggest meal is worth {} s", [share * float(ctx["tank"])],
+				[U.ENERGY]), wear]]

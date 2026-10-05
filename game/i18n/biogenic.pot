@@ -14,6 +14,1343 @@ msgstr ""
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 "X-Generator: tools/i18n_pot.gd\n"
 
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ampulla
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/genes/organs/ampulla.gd
+msgid "ping"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ampulla
+#. Room: at most 440 px in 15 px type; the English takes 356 px.
+#: game/genes/organs/ampulla.gd
+msgid "a pulse that answers off everything, not just food"
+msgstr ""
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: ampulla.echo
+#. Room: at most 112 px in 15 px type; the English takes 35 px.
+#: game/genes/organs/ampulla.gd
+msgctxt "sense"
+msgid "echo"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: ampulla.echo
+#. Room: at most 856 px in 15 px type; the English takes 605 px.
+#: game/genes/organs/ampulla.gd
+msgid "echo · what your ping hears back: where it came from, how far, and how big it rings."
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ampulla.gd
+#, python-brace-format
+msgid "a ping every {} s"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ampulla.gd game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "out to {} µm"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ampulla.gd
+#, python-brace-format
+msgid "the nearest {} answer"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ampulla.gd
+msgid "stopped by any body"
+msgstr ""
+
+#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
+#. every body it meets. "The nearest {} answer" means the {} closest bodies
+#. send an answer (three to five, so always several); "passes a body" is how
+#. much of the pulse goes on past a body in its way.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ampulla.gd
+#, python-brace-format
+msgid "{} passes a body"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. The name of an action the player's cell can be told to do by one of its
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
+#. forward; "push": thrust held on; "hold still": stop the tail (the
+#. flagellum, which swims) from beating, and keep it still.
+#. entry: axoneme
+#. entry: axoneme.push
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/genes/organs/axoneme.gd
+msgid "push"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: axoneme
+#. Room: at most 440 px in 15 px type; the English takes 341 px.
+#: game/genes/organs/axoneme.gd
+msgid "holding on pushes you, instead of only steering"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: axoneme.push
+#. Room: at most 856 px in 15 px type; the English takes 426 px.
+#: game/genes/organs/axoneme.gd
+msgid "push · thrust while this holds, at half or full, paid as you go."
+msgstr ""
+
+#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
+#. on the water pushes the cell instead of only steering it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/axoneme.gd
+#, python-brace-format
+msgid "holding on adds up to {} µm a second"
+msgstr ""
+
+#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
+#. on the water pushes the cell instead of only steering it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/axoneme.gd
+#, python-brace-format
+msgid "pushing burns {} s a second"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: chemocyte
+#. Room: at most 47 px in 13 px type; the English takes 34 px.
+#: game/genes/organs/chemocyte.gd
+msgid "smell"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: chemocyte
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
+#: game/genes/organs/chemocyte.gd
+msgid "smells food, strongest where your nose is pointed"
+msgstr ""
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: chemocyte.smell
+#. Room: at most 112 px in 15 px type; the English takes 39 px.
+#: game/genes/organs/chemocyte.gd
+msgctxt "sense"
+msgid "smell"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: chemocyte.smell
+#. Room: at most 856 px in 15 px type; the English takes 528 px.
+#: game/genes/organs/chemocyte.gd
+msgid "smell · how strongly food your mouth could take smells, along your nose."
+msgstr ""
+
+#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
+#. compares what it smells behind the cell with what it smells in front, as a
+#. percentage.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/chemocyte.gd
+#, python-brace-format
+msgid "smells food out to {} µm"
+msgstr ""
+
+#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
+#. compares what it smells behind the cell with what it smells in front, as a
+#. percentage.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/chemocyte.gd
+#, python-brace-format
+msgid "{} as strong behind it"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cirrus
+#. Room: at most 47 px in 13 px type; the English takes 28 px.
+#: game/genes/organs/cirrus.gd
+msgid "turn"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cirrus
+#. Room: at most 440 px in 15 px type; the English takes 304 px.
+#: game/genes/organs/cirrus.gd
+msgid "turns you faster, and sooner after you ask"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cirrus.gd
+#, python-brace-format
+msgid "a half turn in {} s"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cirrus.gd
+#, python-brace-format
+msgid "the turn builds over {} s"
+msgstr ""
+
+#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
+#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
+#. seconds of the food tank, each second.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cirrus.gd
+#, python-brace-format
+msgid "turning burns {} s a second, {} s a half turn"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: crista
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/genes/organs/crista.gd
+msgid "burn"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: crista
+#. Room: at most 440 px in 15 px type; the English takes 350 px.
+#: game/genes/organs/crista.gd
+msgid "burns cleaner, so everything you carry costs less"
+msgstr ""
+
+#. The cleaner-burning gene (`crista`, shown as `burn`): everything the cell
+#. carries costs less energy to keep.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/crista.gd
+#, python-brace-format
+msgid "everything burns {} less"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: cytostome
+#. Room: at most 47 px in 13 px type; the English takes 21 px.
+#: game/genes/organs/cytostome.gd
+msgid "eat"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: cytostome
+#. Room: at most 440 px in 15 px type; the English takes 321 px.
+#: game/genes/organs/cytostome.gd
+msgid "a wider mouth swallows bigger things whole"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cytostome.gd
+#, python-brace-format
+msgid "swallows whole under {} × your size"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cytostome.gd
+#, python-brace-format
+msgid "bites take {} head-on, {} from behind"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cytostome.gd
+msgid "its biggest meal fills you"
+msgstr ""
+
+#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
+#. largest body this mouth can swallow; "worth {} s" is how many seconds of
+#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
+#. when the bitten body faces the mouth, "from behind" when it turns away.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/cytostome.gd
+#, python-brace-format
+msgid "its biggest meal is worth {} s"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. The name of a sense or an action on a small chip of the player's
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), or of a value a sense reports. Lowercase, one or two short
+#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
+#. steer to or from where the sense says it is. "tumble": a sudden turn to a
+#. random side, as swimming bacteria do. "swim": keep the tail beating.
+#. "rest": stop moving on purpose and drift with the water.
+#. entry: flagellum
+#. entry: body.swim
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/genes/organs/flagellum.gd game/normal/cell.gd
+msgid "swim"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: flagellum
+#. Room: at most 440 px in 15 px type; the English takes 278 px.
+#: game/genes/organs/flagellum.gd
+msgid "your tail beats harder, and more often"
+msgstr ""
+
+#. The name of an action the player's cell can be told to do by one of its
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
+#. forward; "push": thrust held on; "hold still": stop the tail (the
+#. flagellum, which swims) from beating, and keep it still.
+#. entry: flagellum.hold
+#. Room: at most 112 px in 15 px type; the English takes 62 px.
+#: game/genes/organs/flagellum.gd
+msgid "hold still"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: flagellum.hold
+#. Room: at most 856 px in 15 px type; the English takes 615 px.
+#: game/genes/organs/flagellum.gd
+msgid "hold still · hold your tail still and keep steering, for free. needs two copies of your tail."
+msgstr ""
+
+#. Said of an "instinct" (a rule the player wrote) that cannot act yet,
+#. because the action it uses needs a gene carried twice. "Asleep" is the
+#. state's name; "two copies of your tail" means the tail gene (the flagellum)
+#. carried twice in the cell's DNA. Lowercase.
+#. entry: flagellum.hold
+#. Room: at most 856 px in 14 px type; the English takes 245 px.
+#: game/genes/organs/flagellum.gd
+msgid "asleep: needs two copies of your tail"
+msgstr ""
+
+#. Said when the player picks an action their cell cannot do yet, because it
+#. needs a gene carried twice. "hold still" is the action's name, as on its
+#. chip; "two copies of your tail" means the tail gene (the flagellum) carried
+#. twice in the cell's DNA. Lowercase.
+#. entry: flagellum.hold
+#. Room: at most 856 px in 14 px type; the English takes 255 px.
+#: game/genes/organs/flagellum.gd
+msgid "hold still needs two copies of your tail"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/flagellum.gd
+#, python-brace-format
+msgid "swims about {} µm a second"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/flagellum.gd
+#, python-brace-format
+msgid "a beat every {}–{} s"
+msgstr ""
+
+#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
+#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/flagellum.gd
+#, python-brace-format
+msgid "beating burns {} s a second, {} s a beat"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. The name of an action the player's cell can be told to do by one of its
+#. "instincts" (rules the player writes: "when <a sense reports something> ->
+#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
+#. forward; "push": thrust held on; "hold still": stop the tail (the
+#. flagellum, which swims) from beating, and keep it still.
+#. entry: myoneme
+#. entry: myoneme.dash
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/genes/organs/myoneme.gd
+msgid "dash"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: myoneme
+#. Room: at most 440 px in 15 px type; the English takes 308 px.
+#: game/genes/organs/myoneme.gd
+msgid "tap for a burst of speed, paid for in hunger"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: myoneme.dash
+#. Room: at most 856 px in 15 px type; the English takes 399 px.
+#: game/genes/organs/myoneme.gd
+msgid "dash · a burst forward, on its cooldown, paid in hunger."
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/myoneme.gd
+#, python-brace-format
+msgid "a burst of {} µm a second, about {} µm in all"
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
+#. that closes in on that side of the body. "{} either side" is the angle, in
+#. degrees, to each side of straight ahead that it covers.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/myoneme.gd game/genes/organs/trichocyst.gd
+#, python-brace-format
+msgid "again after {} s"
+msgstr ""
+
+#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
+#. burst. "Again after {} s" is the wait before the next one.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/myoneme.gd
+#, python-brace-format
+msgid "each dash burns {} s"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: ocellus
+#. Room: at most 47 px in 13 px type; the English takes 36 px.
+#: game/genes/organs/ocellus.gd
+msgid "beam"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: ocellus
+#. Room: at most 440 px in 15 px type; the English takes 357 px.
+#: game/genes/organs/ocellus.gd
+msgid "a ray out of that side, marking whatever it strikes"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/extend
+#. Room: at most 470 px in 15 px type; the English takes 363 px.
+#: game/genes/organs/ocellus.gd
+msgid "a fan of rays out of that side, one more every level"
+msgstr ""
+
+#. As the gene lines above, for a gene that can grow in two ways and has been
+#. given one: what it does now. The `entry` line gives the gene and the way.
+#. Same limit: no longer than the English, which is 464 px at most with the
+#. gene's name in front.
+#. entry: ocellus/sweep
+#. Room: at most 470 px in 15 px type; the English takes 345 px.
+#: game/genes/organs/ocellus.gd
+msgid "three rays sweeping that side, faster every level"
+msgstr ""
+
+#. The name of one of the two ways a levelled gene can grow, as the title of
+#. its card (20 px type on a card 200 px wide) and inside sentences such as
+#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
+#. adds one more ray between the ones there are, so the fan fills in and never
+#. widens; `sweep` = the three rays swing from side to side, faster each
+#. level. One lowercase word, about 12 characters at most.
+#. entry: extend
+#. Room: at most 180 px in 20 px type; the English takes 24 px.
+#: game/genes/organs/ocellus.gd
+msgid "fill"
+msgstr ""
+
+#. The name of one of the two ways a levelled gene can grow, as the title of
+#. its card (20 px type on a card 200 px wide) and inside sentences such as
+#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
+#. adds one more ray between the ones there are, so the fan fills in and never
+#. widens; `sweep` = the three rays swing from side to side, faster each
+#. level. One lowercase word, about 12 characters at most.
+#. entry: sweep
+#. Room: at most 180 px in 20 px type; the English takes 62 px.
+#: game/genes/organs/ocellus.gd
+msgid "sweep"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: extend
+#. Room: at most 185 px in 14 px type; the English takes 164 px.
+#: game/genes/organs/ocellus.gd
+msgid "every ray lit, all the time"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: extend
+#. Room: at most 185 px in 14 px type; the English takes 171 px.
+#: game/genes/organs/ocellus.gd
+msgid "small things slip between"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: sweep
+#. Room: at most 185 px in 14 px type; the English takes 148 px.
+#: game/genes/organs/ocellus.gd
+msgid "no gaps between rays"
+msgstr ""
+
+#. Two short lines on a card, in 14 px type, centred: the first what that way
+#. is good at, the second what it is bad at. **At most 185 px each** -- the
+#. card is 200 px wide and nothing wraps -- and the longest English line is
+#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
+#. the beams of light the gene fires.
+#. entry: sweep
+#. Room: at most 185 px in 14 px type; the English takes 172 px.
+#: game/genes/organs/ocellus.gd
+msgid "shows where things were"
+msgstr ""
+
+#. One line in 15 px type after the way's name and a middle dot, saying what
+#. that way does as the gene levels up. Same limit as the gene lines
+#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
+#. line gives the way.
+#. entry: extend
+#. Room: at most 470 px in 15 px type; the English takes 255 px.
+#: game/genes/organs/ocellus.gd
+msgid "a new ray every level, filling the fan"
+msgstr ""
+
+#. One line in 15 px type after the way's name and a middle dot, saying what
+#. that way does as the gene levels up. Same limit as the gene lines
+#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
+#. line gives the way.
+#. entry: sweep
+#. Room: at most 470 px in 15 px type; the English takes 288 px.
+#: game/genes/organs/ocellus.gd
+msgid "your three rays swing, faster every level"
+msgstr ""
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: ocellus.beam
+#. Room: at most 112 px in 15 px type; the English takes 41 px.
+#: game/genes/organs/ocellus.gd
+msgctxt "sense"
+msgid "beam"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: ocellus.beam
+#. Room: at most 856 px in 15 px type; the English takes 562 px.
+#: game/genes/organs/ocellus.gd
+msgid "beam · the nearest thing each ray of your beam stops on: where, and how far."
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "reaches {} µm"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "{} ray"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "{} ray sweeping {}"
+msgid_plural "{} rays sweeping {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "every bearing lit within {} s"
+msgstr ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "{} ray across {}, one every {}"
+msgid_plural "{} rays across {}, one every {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
+#. beams of light that mark whatever they strike. The number of rays is the
+#. count (2 to 64): give the forms your language needs for it. The singular of
+#. the two-part phrases is never shown in English, since a fan has at least
+#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
+#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
+#. has covered every direction of the fan within that many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/ocellus.gd
+#, python-brace-format
+msgid "{} ray across {}"
+msgid_plural "{} rays across {}"
+msgstr[0] ""
+msgstr[1] ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: palp
+#. Room: at most 47 px in 13 px type; the English takes 37 px.
+#: game/genes/organs/palp.gd
+msgid "touch"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: palp
+#. Room: at most 440 px in 15 px type; the English takes 316 px.
+#: game/genes/organs/palp.gd
+msgid "feels what is against you, with no light at all"
+msgstr ""
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: palp.touch
+#. Room: at most 112 px in 15 px type; the English takes 42 px.
+#: game/genes/organs/palp.gd
+msgctxt "sense"
+msgid "touch"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: palp.touch
+#. Room: at most 856 px in 15 px type; the English takes 474 px.
+#: game/genes/organs/palp.gd
+msgid "touch · the nearest thing against your skin: where, and how close."
+msgstr ""
+
+#. The touch gene (`palp`, shown as `touch`): it feels what is against the
+#. cell with no light at all.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/palp.gd
+#, python-brace-format
+msgid "feels a body within {} µm of your skin"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: pellicle
+#. Room: at most 47 px in 13 px type; the English takes 40 px.
+#: game/genes/organs/pellicle.gd
+msgid "armor"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: pellicle
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/genes/organs/pellicle.gd
+msgid "thicker skin, so bites take less and fewer mouths fit"
+msgstr ""
+
+#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
+#. {} × your size" means a hunting mouth must be that much wider than the cell
+#. to swallow it, because of the skin.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/pellicle.gd
+#, python-brace-format
+msgid "to a mouth you are {} × your size"
+msgstr ""
+
+#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
+#. {} × your size" means a hunting mouth must be that much wider than the cell
+#. to swallow it, because of the skin.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/pellicle.gd
+#, python-brace-format
+msgid "bites take {} less"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: plastid
+#. Room: at most 47 px in 13 px type; the English takes 23 px.
+#: game/genes/organs/plastid.gd
+msgid "sun"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: plastid
+#. Room: at most 440 px in 15 px type; the English takes 365 px.
+#: game/genes/organs/plastid.gd
+msgid "makes a little of its own food, so you starve slower"
+msgstr ""
+
+#. The light-eating gene (`plastid`, shown as `sun`): the cell makes a little
+#. food of its own from light.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/plastid.gd
+#, python-brace-format
+msgid "makes {} s of food every second"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: stigma
+#. Room: at most 47 px in 13 px type; the English takes 22 px.
+#: game/genes/organs/stigma.gd
+msgid "see"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: stigma
+#. Room: at most 440 px in 15 px type; the English takes 342 px.
+#: game/genes/organs/stigma.gd
+msgid "feels the shadow of anything big, however dark"
+msgstr ""
+
+#. The name of a sense on a small chip of the player's "instincts" (rules:
+#. "when <a sense reports something> -> <do this>"): what one organ of the
+#. cell reports. "beam": what the light the cell's ocellus casts lands on;
+#. "echo": what comes back of the cell's ping; "smell": the smell of food;
+#. "shadow": the shade of something big; "touch": something against the cell's
+#. skin, felt by its palps. Lowercase, one short word.
+#. entry: stigma.shadow
+#. Room: at most 112 px in 15 px type; the English takes 57 px.
+#: game/genes/organs/stigma.gd
+msgctxt "sense"
+msgid "shadow"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: stigma.shadow
+#. Room: at most 856 px in 15 px type; the English takes 528 px.
+#: game/genes/organs/stigma.gd
+msgid "shadow · the shade of anything your size or bigger: where, and how dark."
+msgstr ""
+
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "feels bodies over {} × your size"
+msgstr ""
+
+#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
+#. large bodies. "A bearing to within {}" means the direction of a body is
+#. known to within that many degrees.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/stigma.gd
+#, python-brace-format
+msgid "a bearing to within {}"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: veneneux
+#. Room: at most 47 px in 13 px type; the English takes 43 px.
+#: game/genes/organs/toxin.gd
+msgid "poison"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: toxicyst
+#. Room: at most 47 px in 13 px type; the English takes 44 px.
+#: game/genes/organs/toxin.gd
+msgid "venom"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: veneneux
+#. Room: at most 440 px in 15 px type; the English takes 360 px.
+#: game/genes/organs/toxin.gd
+msgid "whatever bites or swallows you takes your poison"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 337 px.
+#: game/genes/organs/toxin.gd
+msgid "your bite leaves venom, which goes on hurting"
+msgstr ""
+
+#. The line of the venom gene (`toxicyst`, shown as `venom`) when it sits on a
+#. side of the body: whatever bites the cell on that side takes venom from it.
+#. "That side" is the side of the body where the gene's slot is. Same limit as
+#. the gene lines above: no longer than the English.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 325 px.
+#: game/genes/organs/toxin.gd
+msgid "whatever bites you on that side takes venom"
+msgstr ""
+
+#. The same line when the venom sits at the back of the body, where the tail
+#. is: whatever bites the cell from behind takes venom from it.
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 329 px.
+#: game/genes/organs/toxin.gd
+msgid "whatever bites you from behind takes venom"
+msgstr ""
+
+#. The word for a toxin gene that has been eaten and is waiting to be placed,
+#. on its chip in the tray and on a finger dragging it. Placed outside the
+#. body it becomes `venom`, inside it becomes `poison`; until then it is
+#. neither. One short lowercase word, like the other gene words.
+#. entry: veneneux
+#. entry: toxicyst
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/genes/organs/toxin.gd
+msgid "toxin"
+msgstr ""
+
+#. The gene line for a toxin that is waiting, before a slot is chosen: it
+#. hurts over time, and becomes venom or poison depending on where it is
+#. placed. After the gene's scientific name and a middle dot. No longer than
+#. the English.
+#. entry: veneneux
+#. entry: toxicyst
+#. Room: at most 440 px in 15 px type; the English takes 371 px.
+#: game/genes/organs/toxin.gd
+msgid "a toxin that goes on hurting, as venom or as poison"
+msgstr ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "each bite leaves {} stack of venom"
+msgid_plural "each bite leaves {} stacks of venom"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. The venom gene at the back of the cell, where the tail is: whatever bites
+#. the cell from behind takes this many stacks of venom.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "whatever bites you from behind takes {} stack"
+msgid_plural "whatever bites you from behind takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
+#. each bite it makes leaves this many "stacks" of venom in the bitten body,
+#. which go on hurting it. A "stack" is one dose of the toxin, the unit
+#. everything about a toxin is counted in. Give the forms your language needs
+#. for the count.
+#. The venom gene on a side of the cell: whatever bites the cell on that side
+#. takes this many stacks of venom. "That side" is the side of the body where
+#. the gene's slot is.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "whatever bites you on that side takes {} stack"
+msgid_plural "whatever bites you on that side takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
+#. bites the cell takes this many "stacks" of poison with each bite, and
+#. whatever swallows it takes this many at once. A "stack" is one dose of the
+#. toxin. Give the forms your language needs for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "whatever bites you takes {} stack a bite"
+msgid_plural "whatever bites you takes {} stacks a bite"
+msgstr[0] ""
+msgstr[1] ""
+
+#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
+#. bites the cell takes this many "stacks" of poison with each bite, and
+#. whatever swallows it takes this many at once. A "stack" is one dose of the
+#. toxin. Give the forms your language needs for the count.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "a swallower takes {} stack"
+msgid_plural "a swallower takes {} stacks"
+msgstr[0] ""
+msgstr[1] ""
+
+#. What one "stack" (one dose) of a toxin does: it takes this share of a body
+#. the size of the player's cell, a percentage, over this many seconds.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/toxin.gd
+#, python-brace-format
+msgid "a stack takes {} of a body your size over {} s"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: trichocyst
+#. Room: at most 47 px in 13 px type; the English takes 31 px.
+#: game/genes/organs/trichocyst.gd
+msgid "sting"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: trichocyst
+#. Room: at most 440 px in 15 px type; the English takes 290 px.
+#: game/genes/organs/trichocyst.gd
+msgid "a dart at whatever closes in on that side"
+msgstr ""
+
+#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
+#. that closes in on that side of the body. "{} either side" is the angle, in
+#. degrees, to each side of straight ahead that it covers.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/trichocyst.gd
+#, python-brace-format
+msgid "a dart at a hunter within {} µm, {} either side"
+msgstr ""
+
+#. A gene's name as the player reads it on a chip beside three small dots: one
+#. short lowercase word, a verb or a noun for what the gene does. The `entry`
+#. line says which gene it names (its scientific name, never translated). It
+#. has to be short: prefer the shortest everyday word. The same words appear
+#. inside sentences such as "let go to swap eat and ping".
+#. entry: vacuole
+#. Room: at most 47 px in 13 px type; the English takes 33 px.
+#: game/genes/organs/vacuole.gd
+msgid "store"
+msgstr ""
+
+#. What a gene does, in one line shown after the gene's scientific name and a
+#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
+#. Lowercase, plain words, no numbers. It has little room: it meets the
+#. "numbers" switch at its right, so a translation should be no longer than
+#. the English. "That side" is the side of the body where the gene's slot is.
+#. The `entry` line says which gene.
+#. entry: vacuole
+#. Room: at most 440 px in 15 px type; the English takes 363 px.
+#: game/genes/organs/vacuole.gd
+msgid "a bigger tank, so hunger takes longer to reach you"
+msgstr ""
+
+#. The bigger-tank gene (`vacuole`, shown as `store`): the cell can keep more
+#. food, so hunger takes longer to arrive. "A full tank holds {} s, not {}"
+#. compares with the tank of a cell without it, in seconds of food.
+#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
+#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
+#. joined with a middle dot into a line of at most 650 px; the longest English
+#. line takes 550 px.
+#: game/genes/organs/vacuole.gd
+#, python-brace-format
+msgid "a full tank holds {} s, not {}"
+msgstr ""
+
 #. Not the word for English: the name of this catalog's own language, in that
 #. language, as a speaker writes it in a list -- "Français", "Deutsch",
 #. "Português (Brasil)". It is this language's row in the game's language
@@ -1128,25 +2465,6 @@ msgstr ""
 #. steer to or from where the sense says it is. "tumble": a sudden turn to a
 #. random side, as swimming bacteria do. "swim": keep the tail beating.
 #. "rest": stop moving on purpose and drift with the water.
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: body.swim
-#. entry: flagellum
-#. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/cell.gd game/normal/figure.gd
-msgid "swim"
-msgstr ""
-
-#. The name of a sense or an action on a small chip of the player's
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), or of a value a sense reports. Lowercase, one or two short
-#. words. "hit": a bite landing on the cell. "turn toward" / "turn away":
-#. steer to or from where the sense says it is. "tumble": a sudden turn to a
-#. random side, as swimming bacteria do. "swim": keep the tail beating.
-#. "rest": stop moving on purpose and drift with the water.
 #. entry: body.rest
 #. Room: at most 112 px in 15 px type; the English takes 29 px.
 #: game/normal/cell.gd
@@ -1843,24 +3161,6 @@ msgstr ""
 msgid "level %d"
 msgstr ""
 
-#. The word for a toxin gene that has been eaten and is waiting to be placed,
-#. on its chip in the tray and on a finger dragging it. Placed outside the
-#. body it becomes `venom`, inside it becomes `poison`; until then it is
-#. neither. One short lowercase word, like the other gene words.
-#. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/figure.gd
-msgid "toxin"
-msgstr ""
-
-#. The gene line for a toxin that is waiting, before a slot is chosen: it
-#. hurts over time, and becomes venom or poison depending on where it is
-#. placed. After the gene's scientific name and a middle dot. No longer than
-#. the English.
-#. Room: at most 440 px in 15 px type; the English takes 371 px.
-#: game/normal/figure.gd
-msgid "a toxin that goes on hurting, as venom or as poison"
-msgstr ""
-
 #. The line for the empty slot inside the body (the one slot in the middle of
 #. the body, not round it): nothing is there yet, and a toxin placed there
 #. becomes poison.
@@ -1874,436 +3174,6 @@ msgstr ""
 #. Room: at most 560 px in 14 px type; the English takes 272 px.
 #: game/normal/figure.gd
 msgid "inside your body · only a toxin goes here"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: cytostome
-#. Room: at most 47 px in 13 px type; the English takes 21 px.
-#: game/normal/figure.gd
-msgid "eat"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: cirrus
-#. Room: at most 47 px in 13 px type; the English takes 28 px.
-#: game/normal/figure.gd
-msgid "turn"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: stigma
-#. Room: at most 47 px in 13 px type; the English takes 22 px.
-#: game/normal/figure.gd
-msgid "see"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: ocellus
-#. Room: at most 47 px in 13 px type; the English takes 36 px.
-#: game/normal/figure.gd
-msgid "beam"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. The name of an action the player's cell can be told to do by one of its
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
-#. forward; "push": thrust held on; "hold still": stop the tail (the
-#. flagellum, which swims) from beating, and keep it still.
-#. entry: axoneme
-#. entry: axoneme.push
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/figure.gd game/normal/genome.gd
-msgid "push"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: palp
-#. Room: at most 47 px in 13 px type; the English takes 37 px.
-#: game/normal/figure.gd
-msgid "touch"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. The name of an action the player's cell can be told to do by one of its
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
-#. forward; "push": thrust held on; "hold still": stop the tail (the
-#. flagellum, which swims) from beating, and keep it still.
-#. entry: myoneme
-#. entry: myoneme.dash
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/figure.gd game/normal/genome.gd
-msgid "dash"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: trichocyst
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/figure.gd
-msgid "sting"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: pellicle
-#. Room: at most 47 px in 13 px type; the English takes 40 px.
-#: game/normal/figure.gd
-msgid "armor"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: veneneux
-#. Room: at most 47 px in 13 px type; the English takes 43 px.
-#: game/normal/figure.gd
-msgid "poison"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: toxicyst
-#. Room: at most 47 px in 13 px type; the English takes 44 px.
-#: game/normal/figure.gd
-msgid "venom"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: plastid
-#. Room: at most 47 px in 13 px type; the English takes 23 px.
-#: game/normal/figure.gd
-msgid "sun"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: vacuole
-#. Room: at most 47 px in 13 px type; the English takes 33 px.
-#: game/normal/figure.gd
-msgid "store"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: crista
-#. Room: at most 47 px in 13 px type; the English takes 31 px.
-#: game/normal/figure.gd
-msgid "burn"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: chemocyte
-#. Room: at most 47 px in 13 px type; the English takes 34 px.
-#: game/normal/figure.gd
-msgid "smell"
-msgstr ""
-
-#. A gene's name as the player reads it on a chip beside three small dots: one
-#. short lowercase word, a verb or a noun for what the gene does. The `entry`
-#. line says which gene it names (its scientific name, never translated). It
-#. has to be short: prefer the shortest everyday word. The same words appear
-#. inside sentences such as "let go to swap eat and ping".
-#. entry: ampulla
-#. Room: at most 47 px in 13 px type; the English takes 28 px.
-#: game/normal/figure.gd
-msgid "ping"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: cytostome
-#. Room: at most 440 px in 15 px type; the English takes 321 px.
-#: game/normal/figure.gd
-msgid "a wider mouth swallows bigger things whole"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: cirrus
-#. Room: at most 440 px in 15 px type; the English takes 304 px.
-#: game/normal/figure.gd
-msgid "turns you faster, and sooner after you ask"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: flagellum
-#. Room: at most 440 px in 15 px type; the English takes 278 px.
-#: game/normal/figure.gd
-msgid "your tail beats harder, and more often"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: stigma
-#. Room: at most 440 px in 15 px type; the English takes 342 px.
-#: game/normal/figure.gd
-msgid "feels the shadow of anything big, however dark"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: ocellus
-#. Room: at most 440 px in 15 px type; the English takes 357 px.
-#: game/normal/figure.gd
-msgid "a ray out of that side, marking whatever it strikes"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: chemocyte
-#. Room: at most 440 px in 15 px type; the English takes 360 px.
-#: game/normal/figure.gd
-msgid "smells food, strongest where your nose is pointed"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: ampulla
-#. Room: at most 440 px in 15 px type; the English takes 356 px.
-#: game/normal/figure.gd
-msgid "a pulse that answers off everything, not just food"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: axoneme
-#. Room: at most 440 px in 15 px type; the English takes 341 px.
-#: game/normal/figure.gd
-msgid "holding on pushes you, instead of only steering"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: palp
-#. Room: at most 440 px in 15 px type; the English takes 316 px.
-#: game/normal/figure.gd
-msgid "feels what is against you, with no light at all"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: myoneme
-#. Room: at most 440 px in 15 px type; the English takes 308 px.
-#: game/normal/figure.gd
-msgid "tap for a burst of speed, paid for in hunger"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: trichocyst
-#. Room: at most 440 px in 15 px type; the English takes 290 px.
-#: game/normal/figure.gd
-msgid "a dart at whatever closes in on that side"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: pellicle
-#. Room: at most 440 px in 15 px type; the English takes 371 px.
-#: game/normal/figure.gd
-msgid "thicker skin, so bites take less and fewer mouths fit"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: veneneux
-#. Room: at most 440 px in 15 px type; the English takes 360 px.
-#: game/normal/figure.gd
-msgid "whatever bites or swallows you takes your poison"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 337 px.
-#: game/normal/figure.gd
-msgid "your bite leaves venom, which goes on hurting"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: plastid
-#. Room: at most 440 px in 15 px type; the English takes 365 px.
-#: game/normal/figure.gd
-msgid "makes a little of its own food, so you starve slower"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: vacuole
-#. Room: at most 440 px in 15 px type; the English takes 363 px.
-#: game/normal/figure.gd
-msgid "a bigger tank, so hunger takes longer to reach you"
-msgstr ""
-
-#. What a gene does, in one line shown after the gene's scientific name and a
-#. middle dot: "cytostome · a wider mouth swallows bigger things whole".
-#. Lowercase, plain words, no numbers. It has little room: it meets the
-#. "numbers" switch at its right, so a translation should be no longer than
-#. the English. "That side" is the side of the body where the gene's slot is.
-#. The `entry` line says which gene.
-#. entry: crista
-#. Room: at most 440 px in 15 px type; the English takes 350 px.
-#: game/normal/figure.gd
-msgid "burns cleaner, so everything you carry costs less"
-msgstr ""
-
-#. The line of the venom gene (`toxicyst`, shown as `venom`) when it sits on a
-#. side of the body: whatever bites the cell on that side takes venom from it.
-#. "That side" is the side of the body where the gene's slot is. Same limit as
-#. the gene lines above: no longer than the English.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 325 px.
-#: game/normal/figure.gd
-msgid "whatever bites you on that side takes venom"
-msgstr ""
-
-#. The same line when the venom sits at the back of the body, where the tail
-#. is: whatever bites the cell from behind takes venom from it.
-#. entry: toxicyst
-#. Room: at most 440 px in 15 px type; the English takes 329 px.
-#: game/normal/figure.gd
-msgid "whatever bites you from behind takes venom"
-msgstr ""
-
-#. As the gene lines above, for a gene that can grow in two ways and has been
-#. given one: what it does now. The `entry` line gives the gene and the way.
-#. Same limit: no longer than the English, which is 464 px at most with the
-#. gene's name in front.
-#. entry: ocellus/extend
-#. Room: at most 470 px in 15 px type; the English takes 363 px.
-#: game/normal/figure.gd
-msgid "a fan of rays out of that side, one more every level"
-msgstr ""
-
-#. As the gene lines above, for a gene that can grow in two ways and has been
-#. given one: what it does now. The `entry` line gives the gene and the way.
-#. Same limit: no longer than the English, which is 464 px at most with the
-#. gene's name in front.
-#. entry: ocellus/sweep
-#. Room: at most 470 px in 15 px type; the English takes 345 px.
-#: game/normal/figure.gd
-msgid "three rays sweeping that side, faster every level"
 msgstr ""
 
 #. The line for an empty slot on the body, in 15 px type, in the place where a
@@ -2353,576 +3223,6 @@ msgstr ""
 #: game/normal/gene_stats.gd
 msgid "three copies"
 msgstr ""
-
-#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
-#. largest body this mouth can swallow; "worth {} s" is how many seconds of
-#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
-#. when the bitten body faces the mouth, "from behind" when it turns away.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "swallows whole under {} × your size"
-msgstr ""
-
-#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
-#. largest body this mouth can swallow; "worth {} s" is how many seconds of
-#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
-#. when the bitten body faces the mouth, "from behind" when it turns away.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "bites take {} head-on, {} from behind"
-msgstr ""
-
-#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
-#. largest body this mouth can swallow; "worth {} s" is how many seconds of
-#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
-#. when the bitten body faces the mouth, "from behind" when it turns away.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-msgid "its biggest meal fills you"
-msgstr ""
-
-#. The mouth gene (`cytostome`, shown as `eat`). "Its biggest meal" is the
-#. largest body this mouth can swallow; "worth {} s" is how many seconds of
-#. food it gives the cell. "Your size" is the cell's own size. "Head-on" is
-#. when the bitten body faces the mouth, "from behind" when it turns away.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "its biggest meal is worth {} s"
-msgstr ""
-
-#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
-#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
-#. seconds of the food tank, each second.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a half turn in {} s"
-msgstr ""
-
-#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
-#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
-#. seconds of the food tank, each second.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "the turn builds over {} s"
-msgstr ""
-
-#. The steering gene (`cirrus`, shown as `turn`). "A half turn" is turning
-#. round through 180 degrees; "burns {} s a second" is the energy it uses, in
-#. seconds of the food tank, each second.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "turning burns {} s a second, {} s a half turn"
-msgstr ""
-
-#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
-#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "swims about {} µm a second"
-msgstr ""
-
-#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
-#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a beat every {}–{} s"
-msgstr ""
-
-#. The tail gene (`flagellum`, shown as `swim`). "A beat" is one stroke of the
-#. tail. "µm" is micrometres, the unit of distance in the game world; keep it.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "beating burns {} s a second, {} s a beat"
-msgstr ""
-
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "feels bodies over {} × your size"
-msgstr ""
-
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
-#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
-#. every body it meets. "The nearest {} answer" means the {} closest bodies
-#. send an answer (three to five, so always several); "passes a body" is how
-#. much of the pulse goes on past a body in its way.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "out to {} µm"
-msgstr ""
-
-#. The shadow-sensing gene (`stigma`, shown as `see`): it feels the shadow of
-#. large bodies. "A bearing to within {}" means the direction of a body is
-#. known to within that many degrees.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a bearing to within {}"
-msgstr ""
-
-#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
-#. compares what it smells behind the cell with what it smells in front, as a
-#. percentage.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "smells food out to {} µm"
-msgstr ""
-
-#. The smell gene (`chemocyte`, shown as `smell`). "{} as strong behind it"
-#. compares what it smells behind the cell with what it smells in front, as a
-#. percentage.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} as strong behind it"
-msgstr ""
-
-#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
-#. every body it meets. "The nearest {} answer" means the {} closest bodies
-#. send an answer (three to five, so always several); "passes a body" is how
-#. much of the pulse goes on past a body in its way.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a ping every {} s"
-msgstr ""
-
-#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
-#. every body it meets. "The nearest {} answer" means the {} closest bodies
-#. send an answer (three to five, so always several); "passes a body" is how
-#. much of the pulse goes on past a body in its way.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "the nearest {} answer"
-msgstr ""
-
-#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
-#. every body it meets. "The nearest {} answer" means the {} closest bodies
-#. send an answer (three to five, so always several); "passes a body" is how
-#. much of the pulse goes on past a body in its way.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-msgid "stopped by any body"
-msgstr ""
-
-#. The pulse gene (`ampulla`, shown as `ping`): a pulse that answers back off
-#. every body it meets. "The nearest {} answer" means the {} closest bodies
-#. send an answer (three to five, so always several); "passes a body" is how
-#. much of the pulse goes on past a body in its way.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} passes a body"
-msgstr ""
-
-#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
-#. on the water pushes the cell instead of only steering it.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "holding on adds up to {} µm a second"
-msgstr ""
-
-#. The thrust gene (`axoneme`, shown as `push`): holding a finger (or a key)
-#. on the water pushes the cell instead of only steering it.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "pushing burns {} s a second"
-msgstr ""
-
-#. The touch gene (`palp`, shown as `touch`): it feels what is against the
-#. cell with no light at all.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "feels a body within {} µm of your skin"
-msgstr ""
-
-#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
-#. burst. "Again after {} s" is the wait before the next one.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a burst of {} µm a second, about {} µm in all"
-msgstr ""
-
-#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
-#. burst. "Again after {} s" is the wait before the next one.
-#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
-#. that closes in on that side of the body. "{} either side" is the angle, in
-#. degrees, to each side of straight ahead that it covers.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "again after {} s"
-msgstr ""
-
-#. The burst-of-speed gene (`myoneme`, shown as `dash`): a tap gives a short
-#. burst. "Again after {} s" is the wait before the next one.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "each dash burns {} s"
-msgstr ""
-
-#. The dart gene (`trichocyst`, shown as `sting`): it fires a dart at a hunter
-#. that closes in on that side of the body. "{} either side" is the angle, in
-#. degrees, to each side of straight ahead that it covers.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a dart at a hunter within {} µm, {} either side"
-msgstr ""
-
-#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
-#. {} × your size" means a hunting mouth must be that much wider than the cell
-#. to swallow it, because of the skin.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "to a mouth you are {} × your size"
-msgstr ""
-
-#. The thicker-skin gene (`pellicle`, shown as `armor`). "To a mouth you are
-#. {} × your size" means a hunting mouth must be that much wider than the cell
-#. to swallow it, because of the skin.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "bites take {} less"
-msgstr ""
-
-#. The light-eating gene (`plastid`, shown as `sun`): the cell makes a little
-#. food of its own from light.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "makes {} s of food every second"
-msgstr ""
-
-#. The bigger-tank gene (`vacuole`, shown as `store`): the cell can keep more
-#. food, so hunger takes longer to arrive. "A full tank holds {} s, not {}"
-#. compares with the tank of a cell without it, in seconds of food.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a full tank holds {} s, not {}"
-msgstr ""
-
-#. The cleaner-burning gene (`crista`, shown as `burn`): everything the cell
-#. carries costs less energy to keep.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "everything burns {} less"
-msgstr ""
-
-#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
-#. each bite it makes leaves this many "stacks" of venom in the bitten body,
-#. which go on hurting it. A "stack" is one dose of the toxin, the unit
-#. everything about a toxin is counted in. Give the forms your language needs
-#. for the count.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "each bite leaves {} stack of venom"
-msgid_plural "each bite leaves {} stacks of venom"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
-#. each bite it makes leaves this many "stacks" of venom in the bitten body,
-#. which go on hurting it. A "stack" is one dose of the toxin, the unit
-#. everything about a toxin is counted in. Give the forms your language needs
-#. for the count.
-#. The venom gene at the back of the cell, where the tail is: whatever bites
-#. the cell from behind takes this many stacks of venom.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "whatever bites you from behind takes {} stack"
-msgid_plural "whatever bites you from behind takes {} stacks"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The venom gene (`toxicyst`, shown as `venom`) at the front of the cell:
-#. each bite it makes leaves this many "stacks" of venom in the bitten body,
-#. which go on hurting it. A "stack" is one dose of the toxin, the unit
-#. everything about a toxin is counted in. Give the forms your language needs
-#. for the count.
-#. The venom gene on a side of the cell: whatever bites the cell on that side
-#. takes this many stacks of venom. "That side" is the side of the body where
-#. the gene's slot is.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "whatever bites you on that side takes {} stack"
-msgid_plural "whatever bites you on that side takes {} stacks"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
-#. bites the cell takes this many "stacks" of poison with each bite, and
-#. whatever swallows it takes this many at once. A "stack" is one dose of the
-#. toxin. Give the forms your language needs for the count.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "whatever bites you takes {} stack a bite"
-msgid_plural "whatever bites you takes {} stacks a bite"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The poison gene (`veneneux`, shown as `poison`), inside the cell: whatever
-#. bites the cell takes this many "stacks" of poison with each bite, and
-#. whatever swallows it takes this many at once. A "stack" is one dose of the
-#. toxin. Give the forms your language needs for the count.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a swallower takes {} stack"
-msgid_plural "a swallower takes {} stacks"
-msgstr[0] ""
-msgstr[1] ""
-
-#. What one "stack" (one dose) of a toxin does: it takes this share of a body
-#. the size of the player's cell, a percentage, over this many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "a stack takes {} of a body your size over {} s"
-msgstr ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "reaches {} µm"
-msgstr ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} ray"
-msgstr ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} ray sweeping {}"
-msgid_plural "{} rays sweeping {}"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "every bearing lit within {} s"
-msgstr ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} ray across {}, one every {}"
-msgid_plural "{} rays across {}, one every {}"
-msgstr[0] ""
-msgstr[1] ""
-
-#. The light-ray gene (`ocellus`, shown as `beam`): it fires "rays", thin
-#. beams of light that mark whatever they strike. The number of rays is the
-#. count (2 to 64): give the forms your language needs for it. The singular of
-#. the two-part phrases is never shown in English, since a fan has at least
-#. two rays, but give it anyway. "{} rays across {}" is the angle the fan of
-#. rays covers, in degrees. "Every bearing lit within {} s" means the sweep
-#. has covered every direction of the fan within that many seconds.
-#. A phrase of a gene's numbers, in 14 px type; {} is a number the game
-#. writes, so keep every {}, its unit (µm, s, ×, °) and its order. Phrases are
-#. joined with a middle dot into a line of at most 650 px; the longest English
-#. line takes 550 px.
-#: game/normal/gene_stats.gd
-#, python-brace-format
-msgid "{} ray across {}"
-msgid_plural "{} rays across {}"
-msgstr[0] ""
-msgstr[1] ""
 
 #. The last item of a gene's costs line: what wearing the gene costs the cell.
 #. "Wearing" a gene is having it as an organ. "Burns {} s a second" is energy
@@ -3010,313 +3310,6 @@ msgstr ""
 msgid "a full tank: {} s, {} s drifting"
 msgstr ""
 
-#. The name of an action the player's cell can be told to do by one of its
-#. "instincts" (rules the player writes: "when <a sense reports something> ->
-#. <do this>"), on a small chip. Lowercase, a few short words. "dash": a burst
-#. forward; "push": thrust held on; "hold still": stop the tail (the
-#. flagellum, which swims) from beating, and keep it still.
-#. entry: flagellum.hold
-#. Room: at most 112 px in 15 px type; the English takes 62 px.
-#: game/normal/genome.gd
-msgid "hold still"
-msgstr ""
-
-#. The name of a sense on a small chip of the player's "instincts" (rules:
-#. "when <a sense reports something> -> <do this>"): what one organ of the
-#. cell reports. "beam": what the light the cell's ocellus casts lands on;
-#. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
-#. entry: ocellus.beam
-#. Room: at most 112 px in 15 px type; the English takes 41 px.
-#: game/normal/genome.gd
-msgctxt "sense"
-msgid "beam"
-msgstr ""
-
-#. The name of a sense on a small chip of the player's "instincts" (rules:
-#. "when <a sense reports something> -> <do this>"): what one organ of the
-#. cell reports. "beam": what the light the cell's ocellus casts lands on;
-#. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
-#. entry: ampulla.echo
-#. Room: at most 112 px in 15 px type; the English takes 35 px.
-#: game/normal/genome.gd
-msgctxt "sense"
-msgid "echo"
-msgstr ""
-
-#. The name of a sense on a small chip of the player's "instincts" (rules:
-#. "when <a sense reports something> -> <do this>"): what one organ of the
-#. cell reports. "beam": what the light the cell's ocellus casts lands on;
-#. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
-#. entry: chemocyte.smell
-#. Room: at most 112 px in 15 px type; the English takes 39 px.
-#: game/normal/genome.gd
-msgctxt "sense"
-msgid "smell"
-msgstr ""
-
-#. The name of a sense on a small chip of the player's "instincts" (rules:
-#. "when <a sense reports something> -> <do this>"): what one organ of the
-#. cell reports. "beam": what the light the cell's ocellus casts lands on;
-#. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
-#. entry: stigma.shadow
-#. Room: at most 112 px in 15 px type; the English takes 57 px.
-#: game/normal/genome.gd
-msgctxt "sense"
-msgid "shadow"
-msgstr ""
-
-#. The name of a sense on a small chip of the player's "instincts" (rules:
-#. "when <a sense reports something> -> <do this>"): what one organ of the
-#. cell reports. "beam": what the light the cell's ocellus casts lands on;
-#. "echo": what comes back of the cell's ping; "smell": the smell of food;
-#. "shadow": the shade of something big; "touch": something against the cell's
-#. skin, felt by its palps. Lowercase, one short word.
-#. entry: palp.touch
-#. Room: at most 112 px in 15 px type; the English takes 42 px.
-#: game/normal/genome.gd
-msgctxt "sense"
-msgid "touch"
-msgstr ""
-
-#. The name of a value a sense of the player's cell reports, which an
-#. "instinct" can test, on a small choice cell. Lowercase, one short word.
-#. "distance": how far away; "size": how big; "level": how strong;
-#. "closeness": how near, for touch.
-#. entry: distance
-#. Room: at most 70 px in 14 px type; the English takes 57 px.
-#: game/normal/genome.gd
-msgid "distance"
-msgstr ""
-
-#. The name of a value a sense of the player's cell reports, which an
-#. "instinct" can test, on a small choice cell. Lowercase, one short word.
-#. "distance": how far away; "size": how big; "level": how strong;
-#. "closeness": how near, for touch.
-#. entry: size
-#. Room: at most 70 px in 14 px type; the English takes 26 px.
-#: game/normal/genome.gd
-msgid "size"
-msgstr ""
-
-#. The name of a value a sense of the player's cell reports, which an
-#. "instinct" can test, on a small choice cell. Lowercase, one short word.
-#. "distance": how far away; "size": how big; "level": how strong;
-#. "closeness": how near, for touch.
-#. The name of a value a sense of the player's cell reports, which an
-#. "instinct" can test, on a small choice cell. Lowercase, one short word.
-#. "level": how full or empty; "seconds": how long ago.
-#. entry: level
-#. Room: at most 70 px in 14 px type; the English takes 32 px.
-#: game/normal/genome.gd game/normal/metabolism.gd
-msgid "level"
-msgstr ""
-
-#. The name of a value a sense of the player's cell reports, which an
-#. "instinct" can test, on a small choice cell. Lowercase, one short word.
-#. "distance": how far away; "size": how big; "level": how strong;
-#. "closeness": how near, for touch.
-#. entry: closeness
-#. Room: at most 70 px in 14 px type; the English takes 65 px.
-#: game/normal/genome.gd
-msgid "closeness"
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: ocellus.beam
-#. Room: at most 856 px in 15 px type; the English takes 562 px.
-#: game/normal/genome.gd
-msgid "beam · the nearest thing each ray of your beam stops on: where, and how far."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: ampulla.echo
-#. Room: at most 856 px in 15 px type; the English takes 605 px.
-#: game/normal/genome.gd
-msgid "echo · what your ping hears back: where it came from, how far, and how big it rings."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: chemocyte.smell
-#. Room: at most 856 px in 15 px type; the English takes 528 px.
-#: game/normal/genome.gd
-msgid "smell · how strongly food your mouth could take smells, along your nose."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: stigma.shadow
-#. Room: at most 856 px in 15 px type; the English takes 528 px.
-#: game/normal/genome.gd
-msgid "shadow · the shade of anything your size or bigger: where, and how dark."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: palp.touch
-#. Room: at most 856 px in 15 px type; the English takes 474 px.
-#: game/normal/genome.gd
-msgid "touch · the nearest thing against your skin: where, and how close."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: myoneme.dash
-#. Room: at most 856 px in 15 px type; the English takes 399 px.
-#: game/normal/genome.gd
-msgid "dash · a burst forward, on its cooldown, paid in hunger."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: axoneme.push
-#. Room: at most 856 px in 15 px type; the English takes 426 px.
-#: game/normal/genome.gd
-msgid "push · thrust while this holds, at half or full, paid as you go."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: flagellum.hold
-#. Room: at most 856 px in 15 px type; the English takes 615 px.
-#: game/normal/genome.gd
-msgid "hold still · hold your tail still and keep steering, for free. needs two copies of your tail."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: distance
-#. Room: at most 856 px in 15 px type; the English takes 204 px.
-#: game/normal/genome.gd
-msgid "distance · how far away it is."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: size
-#. Room: at most 856 px in 15 px type; the English takes 448 px.
-#: game/normal/genome.gd
-msgid "size · how big it rings, against your mouth or your whole body."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: level
-#. Room: at most 856 px in 15 px type; the English takes 311 px.
-#: game/normal/genome.gd
-msgid "level · how strong it is, from nothing to full."
-msgstr ""
-
-#. Explains one sense, action or value of the player's "instincts", on one
-#. line under them: its name (the same words as on its chip), a middle dot,
-#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
-#. which calls and listens; "your beam" its ocellus; "your nose" its
-#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
-#. the cell's flagellum, which swims; "two copies" means the gene is carried
-#. twice in the cell's DNA, which is what lets the tail be held still. "For
-#. free" means it costs no food.
-#. entry: closeness
-#. Room: at most 856 px in 15 px type; the English takes 483 px.
-#: game/normal/genome.gd
-msgid "closeness · how near it is, from the edge of your reach to your skin."
-msgstr ""
-
-#. Said of an "instinct" (a rule the player wrote) that cannot act yet,
-#. because the action it uses needs a gene carried twice. "Asleep" is the
-#. state's name; "two copies of your tail" means the tail gene (the flagellum)
-#. carried twice in the cell's DNA. Lowercase.
-#. entry: flagellum.hold
-#. Room: at most 856 px in 14 px type; the English takes 245 px.
-#: game/normal/genome.gd
-msgid "asleep: needs two copies of your tail"
-msgstr ""
-
-#. Said when the player picks an action their cell cannot do yet, because it
-#. needs a gene carried twice. "hold still" is the action's name, as on its
-#. chip; "two copies of your tail" means the tail gene (the flagellum) carried
-#. twice in the cell's DNA. Lowercase.
-#. entry: flagellum.hold
-#. Room: at most 856 px in 14 px type; the English takes 255 px.
-#: game/normal/genome.gd
-msgid "hold still needs two copies of your tail"
-msgstr ""
-
 #. The automatic name of a program the player made and has not named: "program
 #. 2". A "program" is a list of the cell's "instincts" (rules the player
 #. writes); %d is the lowest number no other program uses. Lowercase.
@@ -3361,6 +3354,19 @@ msgstr ""
 #. Room: at most 112 px in 15 px type; the English takes 36 px.
 #: game/normal/metabolism.gd
 msgid "meal"
+msgstr ""
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "level": how full or empty; "seconds": how long ago.
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: level
+#. Room: at most 70 px in 14 px type; the English takes 32 px.
+#: game/normal/metabolism.gd game/normal/program_words.gd
+msgid "level"
 msgstr ""
 
 #. The name of a value a sense of the player's cell reports, which an
@@ -3727,94 +3733,6 @@ msgstr ""
 msgid "let go to swap %s and %s · they trade copies"
 msgstr ""
 
-#. The name of one of the two ways a levelled gene can grow, as the title of
-#. its card (20 px type on a card 200 px wide) and inside sentences such as
-#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
-#. adds one more ray between the ones there are, so the fan fills in and never
-#. widens; `sweep` = the three rays swing from side to side, faster each
-#. level. One lowercase word, about 12 characters at most.
-#. entry: extend
-#. Room: at most 180 px in 20 px type; the English takes 24 px.
-#: game/normal/normal_mode.gd
-msgid "fill"
-msgstr ""
-
-#. The name of one of the two ways a levelled gene can grow, as the title of
-#. its card (20 px type on a card 200 px wide) and inside sentences such as
-#. "tap again to choose sweep · for good". The beam gene: `fill` = each level
-#. adds one more ray between the ones there are, so the fan fills in and never
-#. widens; `sweep` = the three rays swing from side to side, faster each
-#. level. One lowercase word, about 12 characters at most.
-#. entry: sweep
-#. Room: at most 180 px in 20 px type; the English takes 62 px.
-#: game/normal/normal_mode.gd
-msgid "sweep"
-msgstr ""
-
-#. Two short lines on a card, in 14 px type, centred: the first what that way
-#. is good at, the second what it is bad at. **At most 185 px each** -- the
-#. card is 200 px wide and nothing wraps -- and the longest English line is
-#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
-#. the beams of light the gene fires.
-#. entry: extend
-#. Room: at most 185 px in 14 px type; the English takes 164 px.
-#: game/normal/normal_mode.gd
-msgid "every ray lit, all the time"
-msgstr ""
-
-#. Two short lines on a card, in 14 px type, centred: the first what that way
-#. is good at, the second what it is bad at. **At most 185 px each** -- the
-#. card is 200 px wide and nothing wraps -- and the longest English line is
-#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
-#. the beams of light the gene fires.
-#. entry: extend
-#. Room: at most 185 px in 14 px type; the English takes 171 px.
-#: game/normal/normal_mode.gd
-msgid "small things slip between"
-msgstr ""
-
-#. Two short lines on a card, in 14 px type, centred: the first what that way
-#. is good at, the second what it is bad at. **At most 185 px each** -- the
-#. card is 200 px wide and nothing wraps -- and the longest English line is
-#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
-#. the beams of light the gene fires.
-#. entry: sweep
-#. Room: at most 185 px in 14 px type; the English takes 148 px.
-#: game/normal/normal_mode.gd
-msgid "no gaps between rays"
-msgstr ""
-
-#. Two short lines on a card, in 14 px type, centred: the first what that way
-#. is good at, the second what it is bad at. **At most 185 px each** -- the
-#. card is 200 px wide and nothing wraps -- and the longest English line is
-#. 172 px (about 25 characters). The `entry` line gives the way. "Rays" are
-#. the beams of light the gene fires.
-#. entry: sweep
-#. Room: at most 185 px in 14 px type; the English takes 172 px.
-#: game/normal/normal_mode.gd
-msgid "shows where things were"
-msgstr ""
-
-#. One line in 15 px type after the way's name and a middle dot, saying what
-#. that way does as the gene levels up. Same limit as the gene lines
-#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
-#. line gives the way.
-#. entry: extend
-#. Room: at most 470 px in 15 px type; the English takes 255 px.
-#: game/normal/normal_mode.gd
-msgid "a new ray every level, filling the fan"
-msgstr ""
-
-#. One line in 15 px type after the way's name and a middle dot, saying what
-#. that way does as the gene levels up. Same limit as the gene lines
-#. elsewhere: no longer than the English (288 px, 41 characters). The `entry`
-#. line gives the way.
-#. entry: sweep
-#. Room: at most 470 px in 15 px type; the English takes 288 px.
-#: game/normal/normal_mode.gd
-msgid "your three rays swing, faster every level"
-msgstr ""
-
 #. The last line on a way's card, in 14 px type: what keeping that way costs
 #. the cell in energy, compared with the other way. "To keep" means to carry
 #. the gene as it grows. **At most 185 px**: the card is 200 px wide and
@@ -4038,6 +3956,92 @@ msgstr ""
 #. Room: at most 856 px in 15 px type; the English takes 360 px.
 #: game/normal/program_words.gd
 msgid "bearing · how far off your nose it is, to either side."
+msgstr ""
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: distance
+#. Room: at most 70 px in 14 px type; the English takes 57 px.
+#: game/normal/program_words.gd
+msgid "distance"
+msgstr ""
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: size
+#. Room: at most 70 px in 14 px type; the English takes 26 px.
+#: game/normal/program_words.gd
+msgid "size"
+msgstr ""
+
+#. The name of a value a sense of the player's cell reports, which an
+#. "instinct" can test, on a small choice cell. Lowercase, one short word.
+#. "distance": how far away; "size": how big; "level": how strong;
+#. "closeness": how near, for touch.
+#. entry: closeness
+#. Room: at most 70 px in 14 px type; the English takes 65 px.
+#: game/normal/program_words.gd
+msgid "closeness"
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: distance
+#. Room: at most 856 px in 15 px type; the English takes 204 px.
+#: game/normal/program_words.gd
+msgid "distance · how far away it is."
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: size
+#. Room: at most 856 px in 15 px type; the English takes 448 px.
+#: game/normal/program_words.gd
+msgid "size · how big it rings, against your mouth or your whole body."
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: level
+#. Room: at most 856 px in 15 px type; the English takes 311 px.
+#: game/normal/program_words.gd
+msgid "level · how strong it is, from nothing to full."
+msgstr ""
+
+#. Explains one sense, action or value of the player's "instincts", on one
+#. line under them: its name (the same words as on its chip), a middle dot,
+#. then what it is or does, lowercase. "Your ping" is the cell's ampulla,
+#. which calls and listens; "your beam" its ocellus; "your nose" its
+#. chemocyte; "your eyespot" its stigma; "your palps" its palp. "Your tail" is
+#. the cell's flagellum, which swims; "two copies" means the gene is carried
+#. twice in the cell's DNA, which is what lets the tail be held still. "For
+#. free" means it costs no food.
+#. entry: closeness
+#. Room: at most 856 px in 15 px type; the English takes 483 px.
+#: game/normal/program_words.gd
+msgid "closeness · how near it is, from the edge of your reach to your skin."
 msgstr ""
 
 #. A test an "instinct" puts to a value, on a chip, in the kind's own words;
