@@ -1759,7 +1759,7 @@ body plan moves `Wire.RULES`' pin and nothing else. By file:
 | every judged or contact table's note | "a change moves Wire.RULES, not Wire.PROTOCOL", for "change it with Wire.PROTOCOL"; the plan's note too |
 | `tools/net_probe.gd` | `_rules_text` in the game's order, with the new lines; three rules checks; the tail's; every bare client's HELLO with this build's tail; the skew checks of §11.4 on a phone's host, the dedicated server and by invite |
 | `tools/gene_probe.gd` | the row check asks for `contact`; the faster tail is read through the game's rules; the plan's message says the pin, not the protocol |
-| `tools/net_fuzz.gd` | its handshake frames carry this build's tail -- now and then none, or another build's -- and its guest takes its rules |
+| `tools/net_fuzz.gd`, its corpus | its handshake frames carry this build's tail -- now and then none, or another build's -- and its guest takes its rules; its saved door cases say hello on 8, as every bump has moved them |
 | docs | `docs/server.md`; dated notes on the plans that schedule bumps for judged rules (`dna-slots.md` §14.3, `feeding.md` §7 and §8); `shared-pond.md` §7 and `net-hardening.md` B record the hand rule gone; here, §10.4, §11.3, §11.4, the playbook (§16) and §17 |
 
 **Where it differs from the design, and why** (§11 says so too):
