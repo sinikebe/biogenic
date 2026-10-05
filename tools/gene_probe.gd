@@ -197,8 +197,10 @@ func _index() -> void:
 		if organ.channel != &"" and not Gene.CHANNELS.has(organ.channel):
 			bad.append("%s's channel %s" % [organ.organ, organ.channel])
 		for entry: Dictionary in organ.variants:
-			bad.append_array(_unknown_fields(organ.organ, entry, ["variant", "dose", "forms"]))
 			var forms: Dictionary = entry.get("forms", {})
+			# A variant of no forms is keyed by its own `key`; one of forms keys each.
+			bad.append_array(_unknown_fields(organ.organ, entry,
+				["variant", "dose", "forms"] + (["key"] if forms.is_empty() else [])))
 			for place: Variant in forms:
 				if StringName(place) != Gene.OUTSIDE and StringName(place) != Gene.INSIDE:
 					bad.append("%s's place %s" % [organ.organ, place])
@@ -550,6 +552,27 @@ func _register() -> void:
 		and is_equal_approx(read[1], 1.14 * 1.25) and read[2] == 1.0)
 	_check("and a variant's and a form's tags add to their organ's, never replace them:"
 		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
+	# **A variant with no forms is one entry** (gene.gd): filed outside under its
+	# own key, or its name -- the organ as it shipped and a faster one beside it.
+	var tail := Gene.new()
+	tail.organ = &"probetail"
+	tail.provides = {&"armor": [1.0, 1.1, 1.1, 1.1]}
+	tail.variants = [{"variant": &"plain", "key": &"probetail"},
+		{"variant": &"probeswift", "provides": {&"armor": [1.0, 1.5, 1.5, 1.5]}}]
+	Catalogue.register(tail)
+	var one_each := true
+	for key: StringName in [&"probetail", &"probeswift"]:
+		one_each = one_each and Catalogue.known(key) and Catalogue.place_of(key) == Gene.OUTSIDE \
+			and Catalogue.variety(key) == key and not Catalogue.has_forms(key) \
+			and Catalogue.form_in(key, Gene.OUTSIDE) == key \
+			and Catalogue.form_in(key, Gene.INSIDE) == &"" and not Genome.is_inside_form(key)
+	var armours := [Stats.of({&"probetail": 1}, &"armor"), Stats.of({&"probeswift": 1}, &"armor")]
+	var filed_keys := _keys_of(tail)
+	Catalogue.forget(&"probetail")
+	_check(("and a variant with no forms is one entry, outside, under its key or its name:"
+		+ " %s, armour %s and %s") % [str(filed_keys), armours[0], armours[1]], one_each
+		and filed_keys == [&"probetail", &"probeswift"] and armours == [1.1, 1.5]
+		and Array(Catalogue.keys()) == before)
 
 
 # --- Gene names left in code (§12.2) ----------------------------------------------------------
@@ -593,7 +616,9 @@ func _organs() -> Array[Gene]:
 
 
 ## The keys [param organ]'s file says its forms are, as the catalogue resolves
-## them: its own name for an organ of one form.
+## them: its own name for an organ of one form, and a variant's own key -- or its
+## name -- for a variant of none. `&""` for a variant with none of the three,
+## which the catalogue cannot file, so that the count of forms says so.
 static func _keys_of(organ: Gene) -> Array[StringName]:
 	var out: Array[StringName] = []
 	if organ.variants.is_empty():
@@ -601,6 +626,9 @@ static func _keys_of(organ: Gene) -> Array[StringName]:
 		return out
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
+		if forms.is_empty():
+			out.append(StringName(entry.get("key", entry.get("variant", &""))))
+			continue
 		for place: Variant in forms:
 			var form: Variant = forms[place]
 			out.append(StringName((form as Dictionary).get("key", &"")) if form is Dictionary

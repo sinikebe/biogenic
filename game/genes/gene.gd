@@ -144,7 +144,10 @@ var declares := {}
 ## strain, doses.gd's name for a kind), its `forms` -- place to the form's key,
 ## or to a dictionary with the form's `key` and anything the form sets of its own
 ## -- and anything else the variant sets over its organ. A variant's first form
-## is its variety. Empty for an organ of one variant in one place.
+## is its variety. **A variant with no `forms` is one form, outside**, keyed by
+## its own `key` or, without one, by its name: a faster tail is one entry,
+## `{"variant": &"swift", "key": &"swiftail", "provides": {...}}`. Empty for an
+## organ of one variant in one place.
 var variants: Array = []
 
 # --- What the catalogue writes, per key ------------------------------------------------

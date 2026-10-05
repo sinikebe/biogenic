@@ -523,7 +523,7 @@ static func _index() -> void:
 ## organ of one variant in one place, keyed by its name; otherwise one record per
 ## form of every variant, in the order the organ lists them -- a fresh instance of
 ## the organ's script, the organ's fields copied onto it, then its variant's and
-## its form's written over them.
+## its form's written over them. A variant with no forms is one, outside.
 static func _resolve(organ: Gene) -> Array:
 	if organ.variants.is_empty():
 		organ.key = organ.organ
@@ -531,6 +531,15 @@ static func _resolve(organ: Gene) -> Array:
 	var out: Array = []
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
+		if forms.is_empty():
+			# **A variant with no forms is one form, outside** (gene.gd): keyed by its
+			# own `key`, or by its name -- so a faster tail is one entry.
+			var own := StringName(entry.get("key", entry.get("variant", &"")))
+			if own == &"":
+				push_error("[catalogue] a variant of %s has no forms, no key and no name:"
+					% organ.organ + " it is not filed")
+				continue
+			forms = {Gene.OUTSIDE: own}
 		for place: Variant in forms:
 			var form: Variant = forms[place]
 			var record: Gene = organ.get_script().new()
