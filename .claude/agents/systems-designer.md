@@ -68,9 +68,11 @@ and the levers that would move it, and the work goes on (`CLAUDE.md`).
   slower than this container. Say what factor you assume and why.
 - **Single player and the shared pond.** Work out what each rule does on a
   host, on a guest's mirror and on the dedicated server. If the host's referee
-  copies a rule you change, the spec must say it needs a `Wire.PROTOCOL` bump
-  and a `Wire.RULES` update (`CLAUDE.md`, "The host's referee copies the game's
-  rules").
+  copies a rule you change, or a contact reads it, the spec must say it moves
+  the `Wire.RULES` pin, so players on the old content and the new refuse each
+  other until both update. A change to a message's format, or to the order a
+  guest sends them in, is a `Wire.PROTOCOL` bump (`CLAUDE.md`, "The host's
+  referee copies the game's rules").
 - **Content or binary.** GDScript and resources ship as a content pack. Say
   so, or say why this cannot.
 - **The replay** records what happened. Anything new in the water must be
