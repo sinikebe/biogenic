@@ -3,17 +3,24 @@ extends Node
 ## gene's numbers, lists, tags and rules live in its organ's file under
 ## game/genes/organs/, and everything that reads one asks the catalogue. What a
 ## render cannot show is a gene that is half there: a key the wire refuses, a
-## table one entry short, a gene the water can never make, a sense no channel
-## carries, an organ file the index forgot. Each of those works alone and fails
-## somewhere else -- in a shared pond, a seeded water, a save -- so it fails here
-## first.
+## table one entry short, a live gene with no weight in the water, a sense no
+## channel carries, an organ file the index forgot. Each of those works alone and
+## fails somewhere else -- in a shared pond, a seeded water, a save -- so it fails
+## here first.
 ##
 ## **Static, and a few seconds**: it reads the catalogue and the files, and plays
-## nothing. Phase 1a's checks (§15): the keys, the water, the stat tables, the
-## founders' parts and the gift, every declared part wired in a water cell and in
-## yours, the index against the folder, a gene registered and forgotten, and -- a
-## number, not yet a failure (§12.2) -- how many gene names are still written into
-## game/ outside game/genes/.
+## nothing. What it checks (§15): the keys -- names the wire carries, one form's
+## each, in their shipped order, organ and variant names their own; the index
+## against the folder, and every tag, channel, place and field one there is; the
+## water's weights, drifters, senses, gift and born cell, and the lists a draw or
+## a bit reads in their shipped order; every stat table's length and first entry,
+## every row, and a provider for every stat, live or retired; the founders' parts
+## declared, and every declared part wired in a water cell and in yours; what each
+## mechanic asks of the organ it finds by a stat; and organs registered and
+## forgotten -- forms, tags that add up, variants of no forms, an organ that calls
+## with no period, a part nothing wires. And -- a number, not yet a failure
+## (§12.2) -- how many gene names are still written into game/ outside
+## game/genes/.
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -54,8 +61,8 @@ const SHIPPED_PLACELESS: Array[StringName] = [&"rhabdom", &"statocyst"]
 ## the gift, drawn `randi() % 4` in this order; and the genes that declare parts,
 ## in the order the rulebook gives them bits. A seeded water, a rule's bits and
 ## `Wire.RULES` all hang on these orders. **A new gene appends to the lists it
-## joins**; a gene leaving one -- retired, say -- changes every seeded draw, and
-## is the commit that updates this.
+## joins**, and the probe fails until it has; a gene leaving one -- retired, say
+## -- changes every seeded draw, and is the commit that updates this.
 const SHIPPED_LISTS := {
 	&"drifter": [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 		&"ocellus", &"axoneme", &"palp", &"myoneme",
@@ -211,12 +218,15 @@ func _index() -> void:
 		missing.is_empty() and stray.is_empty() and doubled.is_empty()
 			and files.size() == indexed.size())
 	var bad: Array[String] = []
-	for organ: Gene in _organs():
-		for tag: StringName in organ.tags:
+	# Every key as filed, so a variant's tags and a form's channel are held too.
+	for key: StringName in Catalogue.keys():
+		var record := Catalogue.gene(key)
+		for tag: StringName in record.tags:
 			if not Gene.TAGS.has(tag):
-				bad.append("%s's tag %s" % [organ.organ, tag])
-		if organ.channel != &"" and not Gene.CHANNELS.has(organ.channel):
-			bad.append("%s's channel %s" % [organ.organ, organ.channel])
+				bad.append("%s's tag %s" % [key, tag])
+		if record.channel != &"" and not Gene.CHANNELS.has(record.channel):
+			bad.append("%s's channel %s" % [key, record.channel])
+	for organ: Gene in _organs():
 		for entry: Dictionary in organ.variants:
 			var forms: Dictionary = entry.get("forms", {})
 			# A variant of no forms is keyed by its own `key`; one of forms keys each.
@@ -281,11 +291,16 @@ func _water() -> void:
 	for list: StringName in SHIPPED_LISTS:
 		var shipped: Array = SHIPPED_LISTS[list]
 		var now := _listed(list)
-		if now.slice(0, shipped.size()) != shipped:
+		if now == shipped:
+			continue
+		if now.slice(0, shipped.size()) == shipped:
+			moved.append("%s has %s after them: append it to SHIPPED_LISTS" % [list,
+				str(now.slice(shipped.size()))])
+		else:
 			moved.append("%s is %s" % [list, str(now)])
-	_check("the drifters, the senses, the gift and the genes that declare parts come in the"
-		+ " order they shipped, any new one after them%s" % ("" if moved.is_empty()
-			else ": %s" % "; ".join(moved)), moved.is_empty())
+	_check("the drifters, the senses, the gift and the genes that declare parts are the lists"
+		+ " that shipped, in their order, and any gene that joins one appended to it here%s"
+		% ("" if moved.is_empty() else ": %s" % "; ".join(moved)), moved.is_empty())
 
 
 ## [param list] of [constant SHIPPED_LISTS] as the catalogue has it now.
@@ -612,11 +627,13 @@ func _register() -> void:
 
 # --- Gene names left in code (§12.2) ----------------------------------------------------------
 
-## **How many `&"<key>"` literals are left in game/ outside game/genes/**, comments
-## aside: what phase 5's gate will fail on. A number, not a failure, until then.
+## **How many gene names are left written into game/ outside game/genes/** --
+## `&"<key>"` and `"<key>"` alike, comments aside: what phase 5's gate will fail
+## on (§12.2). A number, not a failure, until then.
 func _names_left() -> void:
 	var found := {}
 	var total := 0
+	var named := 0
 	for path: String in _scripts_in(GAME_DIR):
 		if path.begins_with(GENES_DIR + "/"):
 			continue
@@ -626,7 +643,9 @@ func _names_left() -> void:
 			if line.strip_edges().begins_with("#"):
 				continue
 			for key: StringName in Catalogue.keys():
-				here += line.count('&"%s"' % key)
+				# `"key"` is in `&"key"` too, so this counts both.
+				here += line.count('"%s"' % key)
+				named += line.count('&"%s"' % key)
 		if here > 0:
 			found[path.trim_prefix(GAME_DIR + "/")] = here
 			total += here
@@ -636,8 +655,9 @@ func _names_left() -> void:
 	var parts := PackedStringArray()
 	for path: String in files:
 		parts.append("%s %d" % [path, int(found[path])])
-	print("[gene-probe] NOTE %d &\"<key>\" literals left in game/ outside game/genes/, in %d"
-		% [total, files.size()] + " files: " + ", ".join(parts))
+	print(("[gene-probe] NOTE %d gene names left in game/ outside game/genes/ -- %d"
+		+ " &\"<key>\", %d \"<key>\" -- in %d files: ") % [total, named, total - named,
+			files.size()] + ", ".join(parts))
 
 
 # --- Helpers ----------------------------------------------------------------------------------

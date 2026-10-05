@@ -379,13 +379,13 @@ jobs:
         # docs/design/gene-catalogue.md §12.1: every gene's numbers, lists, tags
         # and rules live in its organ's file under game/genes/, and everything
         # that reads one asks the catalogue. A gene that is half there -- a key
-        # the wire refuses, a table one entry short, a gene the water can never
-        # make, a sense no channel carries, an organ file the index forgot --
-        # works alone and fails somewhere else: in a shared pond, a seeded water,
-        # a save. Static, about a second. It also prints how many gene names are
-        # still written into game/ outside game/genes/, which fails nothing
-        # until the gate of §12.2. Grepped, not trusted to the exit code, for the
-        # reason the Back probe gives.
+        # the wire refuses, a table one entry short, a live gene with no weight
+        # in the water, a sense no channel carries, an organ file the index
+        # forgot -- works alone and fails somewhere else: in a shared pond, a
+        # seeded water, a save. Static, about a second. It also prints how many
+        # gene names are still written into game/ outside game/genes/, which
+        # fails nothing until the gate of §12.2. Grepped, not trusted to the
+        # exit code, for the reason the Back probe gives.
         run: |
           set -uo pipefail
           # timeout: a parse error leaves Godot running rather than exiting,
