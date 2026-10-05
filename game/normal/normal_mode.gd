@@ -292,7 +292,7 @@ const DIVIDE_FADE_DIM := 0.34
 ## How far off the sister is left, on the side she was drawn on. Far enough not
 ## to be a fight at birth, near enough to be met -- and inside the frame in full
 ## vision, so the answer to "what happened to the other one" is visible.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
+## The host's referee judges by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const SISTER_DISTANCE := 560.0
 ## The one line, at the first division of a run only.
 ##

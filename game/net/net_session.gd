@@ -62,6 +62,10 @@ extends Node
 const Wire := preload("res://game/net/wire.gd")
 const Lan := preload("res://game/net/lan.gd")
 const Invite := preload("res://game/net/invite.gd")
+## **The rules this build judges a guest and decides a contact by**, which the
+## handshake carries (docs/design/gene-catalogue.md §11.3). It loads the game; the
+## wire does not.
+const Rules := preload("res://game/net/rules.gd")
 
 ## Where the link is. The screen reads this and nothing else to decide what to
 ## draw; the run reads [constant Link.TOGETHER] to decide whether to shout.
@@ -519,6 +523,10 @@ var inbox: Array = []
 ## tools/net_probe.gd sets it to something else to prove the refusal path, which
 ## is the single highest-value assertion CI can make about this file.
 var protocol_override := 0
+## **The same for the content version the handshake's tail carries**: -1 means
+## BuildInfo's. The probe sets it to say which of two builds on other rules is
+## older; nothing a player runs does.
+var content_override := -1
 ## **The other test seam: loopback counts as local on the LAN listener.** Every
 ## caller in `tools/net_probe.gd` comes from loopback, so its check that the
 ## internet listener skips the LAN-only guard -- and the LAN listener does not
@@ -526,6 +534,11 @@ var protocol_override := 0
 var loopback_is_local := true
 
 var _api: SceneMultiplayer = null
+## **This build's rules, as the handshake carries them**: `Rules`' fingerprint,
+## taken as a session starts ([method _take_rules]) -- so a tool that registers or
+## forgets an organ between two sessions poses as two builds -- and compared with
+## every caller's. Empty before the first start.
+var _rules := PackedByteArray()
 ## A guest's socket, or a host's LAN listener.
 var _peer: ENetMultiplayerPeer = null
 ## **A dedicated host's internet listener**, or null: DTLS on
@@ -959,6 +972,7 @@ func host(guests: int = 1) -> bool:
 		return false
 	_reset_socket()
 	_zero_counts()
+	_take_rules()
 	hosting = true
 	guests_max = clampi(guests, 1, GUESTS_MAX)
 	# **A phone hosts on its own network alone** (issue #104): never on its
@@ -1163,6 +1177,7 @@ func join(at: String) -> bool:
 		return false
 	_reset_socket()
 	_zero_counts()
+	_take_rules()
 	hosting = false
 	guests_max = 1
 	address = at
@@ -1218,6 +1233,7 @@ func call_invite(invite: Dictionary) -> bool:
 		return false
 	_reset_socket()
 	_zero_counts()
+	_take_rules()
 	hosting = false
 	guests_max = 1
 	if int(invite.get("read", -1)) != Invite.Read.OK or invite.get("certificate") == null:
@@ -1934,7 +1950,7 @@ func _on_peer_connected(id: int, via: int = VIA_LAN) -> void:
 	# Guesting, and this is the host announcing itself. `server_relay` is off,
 	# so it is the only id that will ever arrive here.
 	_host_id = id
-	_to(_host_id, Wire.hello(_speaks()))
+	_to(_host_id, Wire.hello(_speaks(), _tail()))
 
 
 func _on_peer_disconnected(id: int, via: int = VIA_LAN) -> void:
@@ -2077,7 +2093,9 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 	if peer.is_empty():
 		return
 	peer["protocol"] = theirs
-	if theirs != _speaks():
+	var their_rules := Wire.rules_of(frame)
+	var their_content := Wire.content_of(frame)
+	if theirs != _speaks() or their_rules != _rules:
 		# **The refusal that matters.** Updates are opt-in (multiplayer.md
 		# §0.1), so the other device may be months behind and may stay there
 		# for good. Say so, in a sentence, before hanging up -- on both screens,
@@ -2086,6 +2104,11 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		# compatibility check and the proof are two questions, and an old
 		# build's answer to the first is "update", never "ask again".
 		#
+		# **Since protocol 8, on one protocol too, when the rules differ**
+		# (gene-catalogue.md §11.3): a guest on other rules would be fouled and
+		# cut the moment it grew, so it is refused here instead, with the same
+		# sentence, the older of the two told by its content version.
+		#
 		# **There, barred for a minute and never ten** (issue #103): unbarred,
 		# it was a way out of the waiting room that let a stranger straight
 		# back in, and a friend's phone that has not updated reads this
@@ -2093,12 +2116,12 @@ func _take_hello(id: int, frame: PackedByteArray) -> void:
 		var barred := 0.0
 		if int(peer.get("via", VIA_LAN)) == VIA_NET:
 			barred = _bar(str(peer["address"]), VIA_NET, BAR_FIRST)
-		_refuse(id, Wire.REFUSE_PROTOCOL, " -- barred %d s" % roundi(barred)
-			if barred > 0.0 else "")
+		_refuse(id, Wire.REFUSE_PROTOCOL, _skew_detail(theirs, their_rules, their_content)
+			+ (" -- barred %d s" % roundi(barred) if barred > 0.0 else ""))
 		# TRANSLATORS: A heading, and a sentence under it that names the fix.
 		# The two phones run different versions of the game, so they cannot play
 		# together until the older one updates.
-		_say(tr("different versions"), _skew_says(theirs))
+		_say(tr("different versions"), _skew_says(theirs, their_content))
 		return
 	if int(peer.get("via", VIA_LAN)) == VIA_NET:
 		# **Then who are you** (part C): a fresh nonce, and the one thing this
@@ -2122,7 +2145,7 @@ func _greet(id: int) -> void:
 		_refuse(id, Wire.REFUSE_FULL)
 		return
 	peer["greeted"] = true
-	_to(id, Wire.welcome(_speaks(), my_id()))
+	_to(id, Wire.welcome(_speaks(), my_id(), _tail()))
 	# A new listener has been told nothing, so the next report goes at once.
 	_told = []
 	_say("", "")
@@ -2193,14 +2216,16 @@ func _take_welcome(id: int, frame: PackedByteArray) -> void:
 	if hosting:
 		return
 	var theirs := Wire.protocol_of(frame)
-	if theirs != _speaks():
+	var their_content := Wire.content_of(frame)
+	if theirs != _speaks() or Wire.rules_of(frame) != _rules:
 		# Belt and braces. A host that welcomes us on a protocol we do not
-		# speak is a host whose refusal path is broken; refuse it from this end
-		# rather than play a game neither of us understands.
+		# speak, or by rules we do not judge by, is a host whose refusal path is
+		# broken; refuse it from this end rather than play a game neither of us
+		# understands.
 		if not _invite.is_empty():
-			_invite_gives_up(Link.REFUSED, _skew_key(theirs))
+			_invite_gives_up(Link.REFUSED, _skew_key(theirs, their_content))
 		else:
-			_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs))
+			_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs, their_content))
 		_drop_link()
 		return
 	# **The id, learned twice and never assumed.** `peer_connected` reported it
@@ -2227,6 +2252,7 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		return
 	var reason := Wire.refuse_reason(frame)
 	var theirs := Wire.protocol_of(frame)
+	var their_content := Wire.content_of(frame)
 	refused_for = reason
 	if not _invite.is_empty():
 		# **A server's refusal, in its own words** (docs/design/invites-ux.md
@@ -2237,7 +2263,7 @@ func _take_refuse(frame: PackedByteArray) -> void:
 				_turned_away[_mark_of(_invite)] = true
 				_invite_gives_up(Link.REFUSED, &"invite_refused")
 			Wire.REFUSE_PROTOCOL:
-				_invite_gives_up(Link.REFUSED, _skew_key(theirs))
+				_invite_gives_up(Link.REFUSED, _skew_key(theirs, their_content))
 			Wire.REFUSE_FULL:
 				_invite_gives_up(Link.REFUSED, &"already_two")
 			Wire.REFUSE_BROKEN:
@@ -2247,7 +2273,7 @@ func _take_refuse(frame: PackedByteArray) -> void:
 		_drop_link()
 		return
 	if reason == Wire.REFUSE_PROTOCOL:
-		_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs))
+		_give_up(Link.REFUSED, tr("different versions"), _skew_says(theirs, their_content))
 	elif reason == Wire.REFUSE_FULL:
 		# TRANSLATORS: A heading and a sentence under it: the phone that was called
 		# already has a second player with it, and a pond holds only two.
@@ -2281,8 +2307,10 @@ func _take_refuse(frame: PackedByteArray) -> void:
 
 ## The sentence a player gets for the one failure that cannot be retried into
 ## working. It has to name the fix, because nothing on this screen is the fix.
-func _skew_says(theirs: int) -> String:
-	if _speaks() < theirs:
+## [param theirs] is the other end's protocol, and [param content] its content
+## version where its frame had a tail ([method _mine_is_older]).
+func _skew_says(theirs: int, content: int = -1) -> String:
+	if _mine_is_older(theirs, content):
 		# TRANSLATORS: Two whole sentences rather than one with a word dropped in, so
 		# each can be put in the right order for your language. Shown under the
 		# heading "different versions", in 17 px type on one line (about 125
@@ -2301,8 +2329,34 @@ func _skew_says(theirs: int) -> String:
 
 ## The same question for a call by invite, as an `Invite.SAYS` key: this game
 ## is older, or the server is -- which updates itself once its water is empty.
-func _skew_key(theirs: int) -> StringName:
-	return &"game_older" if _speaks() < theirs else &"server_older"
+func _skew_key(theirs: int, content: int = -1) -> StringName:
+	return &"game_older" if _mine_is_older(theirs, content) else &"server_older"
+
+
+## **Whether this game is the older of two that refused each other**: by
+## protocol where theirs differs, and on one protocol -- the rules differ -- by
+## content version, which every release moves and a branch's prerelease too
+## (a release's and a branch's never meet: they are on other ports, channel.gd).
+## [param content] is -1 where the other end's frame had no tail. **Never older
+## on a tie**, as before protocol 8: a tie with other rules is a build made
+## outside a release, and each end is told the other is the one to update.
+func _mine_is_older(theirs: int, content: int) -> bool:
+	if theirs != _speaks():
+		return _speaks() < theirs
+	return content >= 0 and _content() < content
+
+
+## **The log's half of a version refusal**, after "different versions": the
+## protocol the caller speaks, or -- on this one -- that its rules are not these,
+## with both fingerprints' first eight hex digits and both content versions, so
+## an owner can tell which end is older. [param rules] empty is a frame cut short
+## of its tail.
+func _skew_detail(theirs: int, rules: PackedByteArray, content: int) -> String:
+	if theirs != _speaks():
+		return " -- it speaks protocol %d, this %d" % [theirs, _speaks()]
+	return " -- it judges by other rules: %s at content %d, this %s at content %d" % [
+		rules.hex_encode().left(8) if not rules.is_empty() else "none", content,
+		_rules.hex_encode().left(8), _content()]
 
 
 ## Say no, then wait before hanging up. The waiting is not politeness -- see
@@ -2313,7 +2367,7 @@ func _skew_key(theirs: int) -> StringName:
 func _refuse(id: int, reason: int, detail: String = "") -> void:
 	var peer: Dictionary = _peers.get(id, {})
 	var from := str(peer.get("address", ""))
-	_to(id, Wire.refuse(_speaks(), reason))
+	_to(id, Wire.refuse(_speaks(), reason, _tail()))
 	_peers.erase(id)
 	_hanging_up[id] = _now() + REFUSE_LINGER
 	var key := _note_key(peer, from)
@@ -2906,7 +2960,7 @@ func _cut(id: int, why: String, tell: bool, abuse: bool,
 	var from := str(peer["address"])
 	_peers.erase(id)
 	if tell and greeted:
-		_to(id, Wire.refuse(_speaks(), reason))
+		_to(id, Wire.refuse(_speaks(), reason, _tail()))
 		_hanging_up[id] = _now() + REFUSE_LINGER
 	else:
 		_drop_now(id)
@@ -3375,6 +3429,29 @@ func _zero_counts() -> void:
 
 func _speaks() -> int:
 	return Wire.PROTOCOL if protocol_override == 0 else protocol_override
+
+
+## **This build's rules, taken as a session starts**: the game's fingerprint of
+## what it judges and decides contacts by, worked out from the catalogue in use.
+func _take_rules() -> void:
+	_rules = Rules.fingerprint()
+
+
+## **This build's content version**, which the handshake's tail carries: the pack
+## it runs, or its binary's own (BuildInfo's), or [member content_override]. 0 with
+## no BuildInfo -- a tool, or a build made outside a release.
+func _content() -> int:
+	if content_override >= 0:
+		return content_override
+	var tree := Engine.get_main_loop() as SceneTree
+	var info: Node = tree.root.get_node_or_null(^"BuildInfo") if tree != null else null
+	return maxi(int(info.get(&"content_version")), 0) if info != null else 0
+
+
+## **The tail every handshake frame this end sends carries** (wire.gd's `tail`):
+## its rules and its content version.
+func _tail() -> PackedByteArray:
+	return Wire.tail(_rules, _content())
 
 
 func _to(id: int, frame: PackedByteArray) -> void:

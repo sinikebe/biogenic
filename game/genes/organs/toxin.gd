@@ -26,17 +26,17 @@ const Doses := preload("res://game/mechanics/doses.gd")
 ## `toxicyst` / **venom**, outside: the stacks its every bite leaves at the front,
 ## and its every sting on a side, by copies. One a copy, which the line can say as
 ## such. Armour does not stop them: they ride in whole.
-## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const VENOM_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
 ## `veneneux` / **poison**, inside: the stacks whatever bites the body takes, a
 ## bite, by copies -- the price of chewing a poisonous cell, in place of the old
 ## bite-back share.
-## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const POISON_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
 ## **And what whatever swallows it takes**, by copies: one copy takes 0.8 of a
 ## born swallower, three kill anything up to r40. The swallowed body is eaten all
 ## the same (owner's row 5): nobody is spat out any more.
-## The host decides every contact by this: change it with Wire.PROTOCOL, by hand (wire.gd).
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const SWALLOW_STACKS_BY_TIER: Array[float] = [0.0, 16.0, 32.0, 48.0]
 
 

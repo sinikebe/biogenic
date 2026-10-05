@@ -79,13 +79,13 @@ const OVOID_PINCH := 0.30
 ##   a layout seats there first.
 ##
 ## The host's referee and the wire read what this derives: a change to the outside
-## slots changes `Wire.ORDER_MAX` and `Wire.GENES_MAX` with it. **Until phase 4 puts
-## the plan's fingerprint on the handshake (gene-catalogue.md §11.3), any change here
-## bumps `Wire.PROTOCOL` by hand, in the same commit**: a build on another plan is
-## another protocol. A change of the slots' count fails `net_probe`'s wire sizes and
-## the gene probe's pins; a change of the arcs alone fails only the gene probe's --
-## nothing on the wire side says it -- so bump it for that too. Then move the gene
-## probe's SHIPPED_PLAN and the pins beside it, as its failure says.
+## slots changes `Wire.ORDER_MAX` and `Wire.GENES_MAX` with it. **A build on another
+## plan is on other rules**: [method fingerprint] is in the rules the handshake
+## carries (gene-catalogue.md §11.3; game/net/rules.gd), so two builds on different
+## plans refuse each other there, by themselves, and no `Wire.PROTOCOL` moves. Any
+## change here moves `Wire.RULES`' pin, as `net_probe` says; a change of the slots'
+## count fails its wire sizes too; and every change moves the gene probe's
+## SHIPPED_PLAN and the pins beside it, as its failure says.
 const TODAY: Array[Dictionary] = [
 	{"id": &"nose", "place": OUTSIDE_PLACE, "anatomy": FRONT_ANATOMY,
 		"arc": Vector2(-42.0, 42.0), "earned": ALWAYS, "home": &"cytostome"},
