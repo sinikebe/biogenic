@@ -2520,6 +2520,7 @@ func _variant_of_shipped() -> void:
 		Catalogue.look(&"probeswift")["shape"] == Catalogue.look(plain)["shape"],
 		Cilia.accent_of(&"probeswift"), Cilia.accent_of(plain),
 		Figure.explain_name(&"probeswift")]
+	var peers := _peers_wearing(&"probeswift", plain)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after := Rules.text()
@@ -2555,7 +2556,33 @@ func _variant_of_shipped() -> void:
 		+ " it unworn, what it offers one with the plain tail at every copy count -- %s's parts"
 		+ " %s, waiting at one copy %s, carried %s -- counting parts by organ, as the body's"
 		+ " rules do") % [plain, organ, str(page[1]), str(page[2]), str(page[3])], page[0])
+	# **A peer's born organs are its born keys** (§15.6): the organ's other variants stay
+	# in its pool -- unless the organ holds one variant to a body.
+	var single: Gene = (Catalogue.gene(plain).get_script() as GDScript).new()
+	single.one_variant = true
+	single.variants = tail.variants
+	Catalogue.register(single)
+	var peers_single := _peers_wearing(&"probeswift", plain)
+	Catalogue.forget(organ)
+	_check(("and a peer's born organs are its born keys, the organ's other variants left in its"
+		+ " pool: of 400 peers made at r40, %d draw the faster %s beside the one they were born"
+		+ " with, and %d once the organ holds one variant a body") % [peers, plain, peers_single],
+		peers > 0 and peers_single == 0 and Array(Catalogue.keys()) == before)
 	_strain_of_shipped()
+
+
+## **How many of 400 peers made at r40 wear [param variant] beside [param plain]**:
+## the drop's own peer, `food.gd`'s `_draw_living`, on a seeded stream.
+static func _peers_wearing(variant: StringName, plain: StringName) -> int:
+	var field: Node = FoodField.new()
+	seed(17)
+	var wearing := 0
+	for i in 400:
+		var peer: Dictionary = field.call(&"_draw_living", CellBody.DIVIDE_RADIUS, 1.0)
+		if peer.has(variant) and peer.has(plain):
+			wearing += 1
+	field.free()
+	return wearing
 
 
 ## **What the instincts page offers a body of [param variant] alone, against one of

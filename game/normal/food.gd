@@ -6250,6 +6250,16 @@ static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
 			pool.erase(organ)
 
 
+## **[param gene]'s variety, out of [param pool]**, in every form: what a body that
+## wears it already may not draw again. The organ's other varieties stay, and the
+## pool keeps its order. One organ of one variety today, so this takes out what
+## [method _erase_organ] takes out.
+static func _erase_variety(pool: Array[StringName], gene: StringName) -> void:
+	for key: StringName in Catalogue.forms_of(gene):
+		while pool.has(key):
+			pool.erase(key)
+
+
 func _draw_tier(sensed: float) -> int:
 	var total := 0.0
 	for tier in TIER_WEIGHTS.size():
@@ -9676,6 +9686,11 @@ func _free_slot_drop() -> int:
 ## drawn as today up to the slots its radius has, the ceiling on what the water
 ## makes kept on the mouth, and a sense given in a bonus slot to a peer that
 ## drew none, as the player's newborn is given one.
+##
+## **Its born organs are the born keys** (gene-catalogue.md §15.6), and each takes
+## only its own variety out of the pool: the organ's other variants stay in it, so a
+## peer may draw a faster tail beside the tail it was born with -- unless the organ
+## holds one variant to a body, which takes the whole organ out, as any draw does.
 func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var tiers := {}
 	for gene: StringName in Drop.peer_plan():
@@ -9683,7 +9698,10 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var capacity := CellBody.slots_for(body_radius)
 	var pool: Array[StringName] = Catalogue.drifters().duplicate()
 	for gene: StringName in tiers:
-		_erase_organ(pool, gene)
+		if Catalogue.one_variant(Catalogue.organ_of(gene)):
+			_erase_organ(pool, gene)
+		else:
+			_erase_variety(pool, gene)
 	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
 	# ([method _place_toxin]): a peer's draw differs from before only on a peer
 	# that drew the toxin.
