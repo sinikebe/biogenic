@@ -229,9 +229,13 @@ var declares := {}
 ## or to a dictionary with the form's `key` and anything the form sets of its own
 ## -- and anything else the variant sets over its organ. A variant's first form
 ## is its variety. **A variant with no `forms` is one form, outside**, keyed by
-## its own `key` or, without one, by its name: a faster tail is one entry,
-## `{"variant": &"swift", "key": &"swiftail", "provides": {...}}`. Empty for an
-## organ of one variant in one place.
+## its own `key` or, without one, by its name. Empty for an organ of one variant
+## in one place. **An organ's first variant is two entries until phase 5**
+## (gene-catalogue.md §6.2): its own key is filed only while this is empty, and a
+## variant takes its `order` and `born` as it takes every field it does not set.
+## So a faster tail restates the tail first, then gives itself an order and no
+## copies at birth: `[{"key": &"flagellum"}, {"variant": &"swift", "key":
+## &"swiftail", "order": 17, "born": 0, "look": {"hue": ...}, "provides": {...}}]`.
 var variants: Array = []
 
 # --- What the catalogue writes, per key ------------------------------------------------

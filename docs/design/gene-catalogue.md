@@ -409,8 +409,15 @@ A variant may set anything its organ sets except the mechanic:
 - its dose (for the toxin).
 
 **A variant of one place needs no `forms`**: it is one form, outside, keyed by its own
-`key` or, without one, by its name. A faster tail is one entry, `{"variant": &"swift",
-"key": &"swiftail", "provides": {...}}`.
+`key` or, without one, by its name. **Until phase 5, an organ's first variant is two
+entries** (§15.4): the catalogue files an organ's own key only while its `variants` is
+empty, and a variant takes its organ's `order` and `born` as it takes every field it
+does not set. So a faster tail is the tail as it shipped, restated first, and then the
+faster one, with an order of its own and no copies at birth: `[{"key": &"flagellum"},
+{"variant": &"swift", "key": &"swiftail", "order": 17, "born": 0, "look": {"hue": ...},
+"provides": {...}}]`. Listed alone, it would take `flagellum` out of the catalogue;
+without its own `order` it would tie the tail in `dominant_of`, and without `born: 0`
+every newborn would wear both. What else it brings is §16's.
 
 The organ owns its mechanic, its shape and its family, so a variant reads as its organ
 at a glance and names itself on the pause screen (row 2).
@@ -866,8 +873,9 @@ gland, has two variants -- a plain one inside and out, and a keen one outside al
 with words, a look and lines, as an organ's file has them. The probe puts it through
 everything above, and through its instinct part, a water cell's and yours. It switches
 it to one variant a body, then forgets it, and the catalogue and the vocabulary are as
-they were. Then a faster tail, one more entry in the tail's own file, and a second
-strain of the toxin, one entry of one place.
+they were. Then a faster tail -- a copy of the tail's own file holding that one variant,
+filed beside the tail's, which keeps the tail's key (§6.2) -- and a second strain of the
+toxin, one entry of one place.
 
 ---
 
@@ -1466,9 +1474,10 @@ another's spread, p10 149.2 to 151.6 ms, so none was kept.
 
 ### 15.4 As built: phase 3, 2026-10-05
 
-**A variant is one entry in its organ's file, for any organ, and the water, the genome,
-the body, the instincts, the stats screen, the wire and saves follow it. Nothing a
-player can notice changes.** By file:
+**A variant is an entry in its organ's file, for any organ -- an organ's first is two
+until phase 5 (§6.2, below) -- and the water, the genome, the body, the instincts, the
+stats screen, the wire and saves follow it. Nothing a player can notice changes.** By
+file:
 
 | file | now |
 |---|---|
@@ -1634,6 +1643,14 @@ tooling failing them for the wrong reasons. Each its own commit:
 - **4**: the referee and the handshake, untouched here. `Wire.RULES` hangs on the
   tables of every judged stat, every provider's, so a variant that changes one -- the
   faster tail -- moves `PROTOCOL` with it until then, as `CLAUDE.md` says.
+- **5**: an organ's first variant as one entry. Today it is two (§6.2), as phase 3's
+  review found: the catalogue files an organ's own key only while its `variants` is
+  empty (`catalogue.gd:839`), so the faster tail listed alone takes `flagellum` out of
+  the catalogue; and a variant takes its organ's `order` and `born`, so restated beside
+  the tail it ties it in `dominant_of` and every newborn wears both tails. Phase 5 makes
+  the organ's own key an implicit first variant, a variant's `born` default to 0, and
+  a variant with no `order` of its own fail the probe -- so the gene pass writes one
+  entry.
 - **The gene pass**: a mechanic that acts from every provider of a stat with a place
   (a beam for each eye) is its code to write, in that mechanic, when an organ needs it.
   And the first variant of an organ that declares parts moves every body's parts onto
@@ -1655,14 +1672,23 @@ tooling failing them for the wrong reasons. Each its own commit:
 
 `game/genes/README.md` is written in phase 5 from what phases 1 to 4 built. In short:
 
-- **A variant**: add an entry to the organ's `variants`, with its key, words, numbers
-  it changes, accent and weight. Run the gene probe. Add the French. Render the organ
-  beside its nearest neighbours at both sizes. A variant in one place needs no `forms`
-  (§6.2), and its tags add to its organ's. It has its organ's instinct parts, read by
-  the same readers, and declares none of its own. Two variants of one organ are two
-  loci; `one_variant` on the organ holds a body to one (§6.3). A strain of a toxin
-  sets its `dose`, and the probe asks for a stack line where its kind has none, and
-  for its side and stern words (§6.4).
+- **A variant**: add an entry to the organ's `variants` with its key, an `order` of its
+  own (the next), `born: 0`, the numbers it changes and its weight, and its own hue
+  for now -- the design's accent waits for phase 6, and until then the probe's colour
+  floor asks for a hue (§12.1) -- and its words in the organ's word tables. **An organ
+  with no variants yet is restated first**, `{"key": <its key>}`, or its own key leaves
+  the catalogue: until phase 5 its first variant is two entries (§6.2). Append the key
+  to the gene probe's `SHIPPED`, and to each list of its `SHIPPED_LISTS` the variant
+  joins by the tags and water it takes from its organ, and write the template again
+  (`i18n_pot -- --write`). A variant that provides a stat the referee judges is a new
+  line of its rules: `Wire.RULES`, and `Wire.PROTOCOL` with it until phase 4 (Editing
+  a gene, below). Run the gene probe. Add the French. Render the organ beside its
+  nearest neighbours at both sizes. A variant in one place needs no `forms` (§6.2),
+  and its tags add to its organ's. It has its organ's instinct parts, read by the same
+  readers, and declares none of its own. Two variants of one organ are two loci;
+  `one_variant` on the organ holds a body to one (§6.3). A strain of a toxin sets its
+  `dose`, and the probe asks for a stack line where its kind has none, and for its
+  side and stern words (§6.4).
 - **An organ on existing mechanics**: copy the template to `organs/<key>.gd`, set the
   next `order`, fill every field the probe asks for, and add one line to the index.
   Then the same three steps.

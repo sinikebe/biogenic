@@ -33,8 +33,8 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; a faster tail as one more entry in the tail's own file, its parts offered on
-## the instincts page to a body that wears it alone; and a second strain of the toxin,
+## again; a faster tail, one more variant of the tail filed beside it, its parts offered
+## on the instincts page to a body that wears it alone; and a second strain of the toxin,
 ## one entry of one place, covered by its organ's tags (§12.3). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
 ## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
@@ -2215,12 +2215,14 @@ func _synthetic_gene() -> void:
 	_variant_of_shipped()
 
 
-## **A variant of a shipped organ is one entry in its file** (§6.2, §12.3): a faster
-## tail, filed as the tail's own organ file with one more variant -- the tail's every
-## field, its speed's table its own. The fingerprints that a protocol hangs on see
-## it, as the referee's caps do; a body wearing it beside the plain tail is read by
-## the stat rows; its parts are the tail's, and the vocabulary does not move; and the
-## instincts page offers them to a body that wears it alone.
+## **A variant of a shipped organ** (§6.2, §12.3): a faster tail, filed as a copy of
+## the tail's own organ file holding that one variant -- the tail's every field, its
+## speed's table its own -- beside the shipped file, which keeps the tail's own key.
+## In the tail's own file it would be the second of two entries until phase 5. The
+## fingerprints that a protocol hangs on see it, as the referee's caps do; a body
+## wearing it beside the plain tail is read by the stat rows; its parts are the
+## tail's, and the vocabulary does not move; and the instincts page offers them to a
+## body that wears it alone.
 func _variant_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var bits_before := _vocabulary_bits()
@@ -2264,7 +2266,7 @@ func _variant_of_shipped() -> void:
 	var rules_after := DropSave.rules_text()
 	var wire_after: String = probe.call(&"_rules_text")
 	probe.free()
-	_check(("and a faster %s is one entry in its organ's file (%s), %s's own: the drop's"
+	_check(("and a faster %s, a variant filed beside its organ (%s), is %s's own: the drop's"
 		+ " rules (%s) and the referee's (%s) fingerprint it, and are as they were once it is"
 		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
 		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"

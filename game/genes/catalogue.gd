@@ -844,7 +844,7 @@ static func _resolve(organ: Gene) -> Array:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():
 			# **A variant with no forms is one form, outside** (gene.gd): keyed by its
-			# own `key`, or by its name -- so a faster tail is one entry.
+			# own `key`, or by its name -- so `{"key": <the organ>}` keeps the organ's.
 			var own := StringName(entry.get("key", entry.get("variant", &"")))
 			if own == &"":
 				push_error("[catalogue] a variant of %s has no forms, no key and no name:"
