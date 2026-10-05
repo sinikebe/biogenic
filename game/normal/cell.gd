@@ -708,26 +708,35 @@ func stat(which: StringName) -> float:
 ## **The organ this body provides [param which] with**, `&""` for none: the mouth
 ## is what provides `gape`, the ping what provides `ping_range`. Where a mechanic
 ## needs the organ itself -- the arc it is worn on, its level -- it asks this,
-## never a name (gene-catalogue.md §5.2).
+## never a name (gene-catalogue.md §5.2). **For a mechanic with a place** (stats.gd's
+## `SEATED`) it is the first this body wears in slot order -- two eyes cast from the
+## one in the lower slot -- and for any other the first in the catalogue's order.
 func provider(which: StringName) -> StringName:
 	_bought_now()
 	var known: Variant = _providers.get(which)
 	if known == null:
-		known = Catalogue.worn_provider(worn(), which)
+		known = Stats.organ(seats(), worn(), which)
 		_providers[which] = known
 	return known
 
 
-## **The copies this body wears that organ at**, 0 for none: what a mechanic
-## indexes a table of its own by -- the membrane's envelopes, the ping's
-## resolution.
+## **The copies this body wears that organ at** -- [method provider]'s, clamped to
+## its table -- 0 for none: what a mechanic indexes a table of its own by -- the
+## membrane's envelopes, the ping's resolution.
 func tier_for(which: StringName) -> int:
 	_bought_now()
 	var known: Variant = _tiers.get(which)
 	if known == null:
-		known = Stats.tier(worn(), which)
+		known = Stats.tier_of(worn(), provider(which), which)
 		_tiers[which] = known
 	return known
+
+
+## **The slots this body wears its organs in**: its genome's body layout, where its
+## organs actually are -- empty while no genome is wired. What a mechanic with a
+## place finds its organ in ([method provider]).
+func seats() -> Array:
+	return genome.body_layout() if genome != null else []
 
 
 ## **The organ this body drives membrane [param channel] with** (gene.gd's
@@ -917,10 +926,12 @@ const HOLD_NEVER := 1 << 16
 
 
 ## **How long a dart stuns what it hits**, in seconds: the dart's own number
-## (`trichocyst.gd`'s DART_STUN), of the dart [param tiers] wears -- or of the
-## first organ that darts, for a body that wears none. 0 once no organ darts.
-static func dart_stun(tiers: Dictionary) -> float:
-	return float(Catalogue.number_for(tiers, &"dart_range", &"stun", 0.0))
+## (`trichocyst.gd`'s DART_STUN), of the dart [param tiers] wears -- the one that
+## fires, the first in slot order of [param layout] where it wears several
+## (gene-catalogue.md §5.2) -- or of the first organ that darts, for a body that
+## wears none. 0 once no organ darts.
+static func dart_stun(tiers: Dictionary, layout: Array = []) -> float:
+	return float(Catalogue.number_for(tiers, &"dart_range", &"stun", 0.0, layout))
 
 
 ## **Whether the tail is held still**, as this body's last step had it: what both

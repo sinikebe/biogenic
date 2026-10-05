@@ -1793,6 +1793,9 @@ func _earn_beam(delta: float) -> void:
 	if beam == &"":
 		_beam_tally.reset()
 		return
+	# Capped by the organ that casts it: its own number.
+	var cap: Variant = Catalogue.number(beam, &"xp_cap")
+	_beam_tally.cap = maxi(int(cap), 0) if cap != null else 0
 	for index: int in _food.beam_touched:
 		_beam_tally.touch(index)
 	var earned := _beam_tally.step(delta)
@@ -1909,9 +1912,14 @@ func _eyespot_tier() -> int:
 
 
 ## **The level the beam forks at** (`ocellus.gd`), which the membrane's beam lobe
-## is held to: its widths are written for the three rungs below it.
+## is held to: its widths are written for the three rungs below it. The fork of
+## the organ the beam leaves from, or of the first that casts one for a body that
+## wears none.
 func _beam_fork() -> int:
-	return int(Catalogue.levels(Catalogue.first_provider(&"beam_range")).get("fork", 0))
+	var beam := _cell.provider(&"beam_range")
+	if beam == &"":
+		beam = Catalogue.first_provider(&"beam_range")
+	return int(Catalogue.levels(beam).get("fork", 0))
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow

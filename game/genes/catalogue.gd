@@ -408,19 +408,18 @@ static func number(key: StringName, name: StringName) -> Variant:
 ## **The number [param name] of the organ a body wearing [param tiers] provides
 ## [param stat] with** -- or of the first that provides it, for a body that wears
 ## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
-## acts through, and never names it. [param otherwise] when nothing provides the
-## stat any more -- every organ that did retired (§4.4) -- or the organ has no
-## such number.
+## acts through, and never names it: [method worn_provider]'s, or, given the
+## body's [param layout] -- a mechanic with a place, the dart's --
+## [method seated_provider]'s. [param otherwise] when nothing provides the stat any
+## more -- every organ that did retired (§4.4) -- or the organ has no such number.
 static func number_for(tiers: Dictionary, stat: StringName, name: StringName,
-		otherwise: Variant = null) -> Variant:
+		otherwise: Variant = null, layout: Array = []) -> Variant:
 	var all: Array[StringName] = _providers.get(stat, _none)
 	if all.is_empty():
 		return otherwise
-	var key := all[0]
-	for each: StringName in all:
-		if int(tiers.get(each, 0)) > 0:
-			key = each
-			break
+	var key := seated_provider(layout, tiers, stat)
+	if key == &"":
+		key = all[0]
 	return (_records[key] as Gene).numbers.get(name, otherwise)
 
 
@@ -471,14 +470,32 @@ static func table(key: StringName, stat: StringName) -> Array:
 
 
 ## **The organ a body wearing [param tiers] provides [param stat] with**: the
-## first of [method providers] it wears, `&""` for none. One instance per
-## mechanic, for now (§5.2): the beam leaves from this one, and the ping calls
-## from it.
+## first of [method providers] it wears, in the catalogue's order, `&""` for
+## none. One instance per mechanic (§5.2): what a mechanic with no place acts
+## from -- the tail's level, the mouth. One with a place asks
+## [method seated_provider].
 static func worn_provider(tiers: Dictionary, stat: StringName) -> StringName:
 	for key: StringName in _providers.get(stat, _none):
 		if int(tiers.get(key, 0)) > 0:
 			return key
 	return &""
+
+
+## **The organ a mechanic with a place acts from** (§5.2; stats.gd's `SEATED`):
+## the first provider of [param stat] a body wearing [param tiers] wears **in slot
+## order** -- [param layout], its slots, the body plan's numbering -- so a body
+## with two eyes casts from the one in the lower slot, at that one's level, and its
+## stat still combines both by its row. A provider worn in no slot of [param layout]
+## -- a layout this body has none of yet -- answers in the catalogue's order, as
+## [method worn_provider]; `&""` for none. **A stat of one provider never reads the
+## layout** -- every stat today -- so its answer is [method worn_provider]'s.
+static func seated_provider(layout: Array, tiers: Dictionary, stat: StringName) -> StringName:
+	var all: Array[StringName] = _providers.get(stat, _none)
+	if all.size() > 1:
+		for key: Variant in layout:
+			if key != &"" and int(tiers.get(key, 0)) > 0 and all.has(key):
+				return key
+	return worn_provider(tiers, stat)
 
 
 ## The channel [param key] drives (gene.gd), `&""` for none.

@@ -103,6 +103,17 @@ const ROWS := {
 		"unit": "stacks", "judged": false},
 }
 
+## **The stats whose mechanic acts from a place** (gene-catalogue.md §5.2): the
+## beam leaves from where its provider is worn, the ping calls from there, the dart
+## looks along that arc, and the nose's level is weighted about it. Where a body
+## wears several providers of one, the mechanic acts from the first in slot order
+## (catalogue.gd's `seated_provider`), and everything it reads off the organ itself
+## -- its arc, its level, its tier, its own numbers -- is that organ's; the stat
+## still combines by its row. Every other mechanic acts from the first in the
+## catalogue's order (`worn_provider`) -- [method organ] says which.
+const SEATED: Array[StringName] = [&"beam_range", &"ping_range", &"dart_range",
+	&"smell_range"]
+
 ## **Each stat's providers beside their tables, `[key, table, ...]`**: the
 ## catalogue's own dictionary (its `provided()`), held here so that the read
 ## [method of] makes every frame, for every body, is a lookup in a static of this
@@ -144,10 +155,11 @@ static func of(tiers: Dictionary, stat: StringName) -> float:
 
 
 ## **The copies a body wearing [param tiers] wears its first provider of
-## [param stat] at**, clamped to its table; 0 for none. What a mechanic that
-## indexes a table of its own by the organ's tier reads (gene-catalogue.md §5.1):
-## the ping's resolution in `food.gd`, the membrane's envelopes in
-## `signal_bus.gd`.
+## [param stat] at**, in the catalogue's order, clamped to its table; 0 for none.
+## What a mechanic that indexes a table of its own by the organ's tier reads
+## (gene-catalogue.md §5.1) -- the membrane's envelopes in `signal_bus.gd` -- and
+## whether a body wears any. A mechanic with a place reads its own organ's,
+## [method tier_of] of [method organ].
 static func tier(tiers: Dictionary, stat: StringName) -> int:
 	var pairs: Array = _provided.get(stat, NO_PAIRS)
 	for i in range(0, pairs.size(), 2):
@@ -155,6 +167,26 @@ static func tier(tiers: Dictionary, stat: StringName) -> int:
 		if copies > 0:
 			return mini(copies, (pairs[i + 1] as Array).size() - 1)
 	return 0
+
+
+## **The copies a body wearing [param tiers] wears [param key] at**, clamped to
+## its table of [param stat]; 0 for none. [method tier] for the one organ a
+## mechanic acts from ([method organ]): the ping's resolution, the beam's rung.
+static func tier_of(tiers: Dictionary, key: StringName, stat: StringName) -> int:
+	var copies := int(tiers.get(key, 0)) if key != &"" else 0
+	if copies <= 0:
+		return 0
+	return mini(copies, Catalogue.table(key, stat).size() - 1)
+
+
+## **The organ a body acts from for [param stat]'s mechanic**, `&""` for none: for
+## a stat of [constant SEATED], the first provider it wears in slot order --
+## [param layout], its slots (catalogue.gd's `seated_provider`) -- and for any
+## other, the first in the catalogue's order (`worn_provider`), the layout unread.
+static func organ(layout: Array, tiers: Dictionary, stat: StringName) -> StringName:
+	if SEATED.has(stat):
+		return Catalogue.seated_provider(layout, tiers, stat)
+	return Catalogue.worn_provider(tiers, stat)
 
 
 ## **[param stat] at [param copies] of [param key]**: its own table's, clamped,

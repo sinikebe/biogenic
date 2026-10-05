@@ -326,10 +326,13 @@ func _write_flocs() -> void:
 ##
 ## Dead ahead for a run that never wore one -- which also never drew a wave,
 ## because a cell with no organ that calls has no reach and no pulse in flight.
+## Of several, the one the run called from: the first in slot order
+## (gene-catalogue.md §5.2).
 func _ping_bearing() -> float:
 	if _genome == null:
 		return 0.0
-	var caller := Catalogue.worn_provider(_genome.tiers(), &"ping_range")
+	var caller := Catalogue.seated_provider(_genome.body_layout(), _genome.tiers(),
+		&"ping_range")
 	return Cilia.bearing_of(_genome, caller) if caller != &"" else 0.0
 
 

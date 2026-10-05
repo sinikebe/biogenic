@@ -1204,10 +1204,19 @@ class Body:
 		stat_dart_tier = Stats.tier(g, &"dart_range")
 		stat_dart_range = Stats.of(g, &"dart_range")
 		stat_dart_cooldown = Stats.of(g, &"dart_cooldown")
-		stat_dart_stun = CellBody.dart_stun(g)
+		# The dart that fires stuns for its own time: the first in slot order, where
+		# it wears several (gene-catalogue.md §5.2).
+		stat_dart_stun = CellBody.dart_stun(g, seats()) if stat_dart_tier > 0 \
+			else CellBody.dart_stun(g)
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
 		stat_dash_cost = Stats.of(g, &"dash_cost")
+
+	## **The slots it wears its organs in**: a person's worn order, as they sent it,
+	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
+	## with a place finds the organ it acts from (stats.gd's `SEATED`).
+	func seats() -> Array:
+		return order if not order.is_empty() else Cilia.default_order(genome)
 
 
 ## **What a body lacks, for the body that is another player** (§1.2): how it
@@ -8327,14 +8336,14 @@ func _eye_of(b: Body) -> Observer:
 	o.touch_range = Stats.of(g, &"touch_range")
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
 	o.ping_range = Stats.of(g, &"ping_range")
-	o.ping_tier = Stats.tier(g, &"ping_range")
+	o.ping_tier = Stats.tier_of(g, Stats.organ(order, g, &"ping_range"), &"ping_range")
 	o.ping_period = Stats.of(g, &"ping_period")
 	o.ping_through = Stats.of(g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
 	# `_aim_beam`): a fixed fan of its rung's rays, spread about the arc.
-	var beam := Catalogue.worn_provider(g, &"beam_range")
-	var shape := CellBody.beam_shape(Stats.tier(g, &"beam_range"), &"", beam)
+	var beam := Stats.organ(order, g, &"beam_range")
+	var shape := CellBody.beam_shape(Stats.tier_of(g, beam, &"beam_range"), &"", beam)
 	o.beam_range = float(shape[3])
 	o.beam_arcs = PackedFloat32Array()
 	var bearings := PackedFloat32Array()
@@ -8365,10 +8374,11 @@ static func _arc_in(order: Array, tiers: Dictionary, stat: StringName) -> float:
 
 
 ## **The slot of [param order] the organ that provides [param stat] is worn in**,
-## of those [param tiers] wears; -1 for none. One instance per mechanic, for now
-## (gene-catalogue.md §5.2).
+## of those [param tiers] wears; -1 for none. One instance per mechanic
+## (gene-catalogue.md §5.2): the one it acts from, the first in slot order for a
+## mechanic with a place (stats.gd's `organ`).
 static func _seat_of(order: Array, tiers: Dictionary, stat: StringName) -> int:
-	var organ := Catalogue.worn_provider(tiers, stat)
+	var organ := Stats.organ(order, tiers, stat)
 	return order.find(organ) if organ != &"" else -1
 
 
@@ -8879,7 +8889,8 @@ func _felt_coming(b: Body, delta: float) -> void:
 				to.dart_clock = to.dart_cooldown
 			_tell(to, Contact.DARTED, b.pos, 0.0, By.WATER, &"")
 			_stun(b, _cell.position if to == null else _cells[to.slot].pos,
-				CellBody.dart_stun(_cell.worn() if to == null else _cells[to.slot].genome))
+				CellBody.dart_stun(_cell.worn(), _cell.seats()) if to == null
+					else CellBody.dart_stun(_cells[to.slot].genome, _cells[to.slot].seats()))
 			return
 	b.stroke -= delta
 	if b.stroke > 0.0:
