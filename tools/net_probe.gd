@@ -2942,6 +2942,8 @@ func _limits_unclean(all: Array) -> String:
 # ---------------------------------------------------------------------------
 
 const Referee := preload("res://game/net/referee.gd")
+## **The rules two builds must agree on, as the game writes them** (§11.3).
+const Rules := preload("res://game/net/rules.gd")
 ## R2's and R3's link: `tools/net_lag.gd`'s `rough`, modelled here with no
 ## socket -- 10-50 ms of flight, 5% of frames lost, a 5% chance of 100-250 ms
 ## more, and a reliable frame resent after 150 ms, doubling, with every
@@ -3031,52 +3033,81 @@ static func _ref_rules(fouls: Array) -> Array:
 	return fouls.map(func(foul: Array) -> String: return str(foul[0]))
 
 
-## **The rules the referee judges by, held to `Wire.RULES`** (net-hardening.md
-## B.6). A host judges its guests by its own copy of them, so a guest on other
-## rules is fouled and then cut: the fingerprint moving is what says a PROTOCOL
-## has to move with it, before a release does it for us.
+## **The rules two builds in one pond must agree on** (gene-catalogue.md §11.3):
+## the game writes them out itself (game/net/rules.gd) and the handshake carries their
+## fingerprint, so two builds on other rules refuse each other there. Here they are
+## written again from the real constants, by name, and held three ways: every table a
+## row marks judged or contact is in them, by every organ; the game's text is this
+## one, line for line; and `Wire.RULES` pins their SHA-256, so they change on purpose.
 func _referee_rules() -> void:
 	var text := _rules_text()
 	var now := text.sha256_text()
-	# Every stat a row marks as judged is in the text, by every provider.
+	# Every stat a row marks as judged or contact is in the text, by every provider.
 	var unwritten: Array[String] = []
-	for stat: StringName in Stats.judged():
+	var shared := Stats.judged() + Stats.contact()
+	for stat: StringName in shared:
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
 			if not ("\n" + text).contains("\n%s=" % label):
 				unwritten.append(label)
 	_says(unwritten.is_empty(), "referee: every table of the %d stats the referee judges"
-		% Stats.judged().size() + " is in the rules it is fingerprinted by, one line an"
-		+ " organ that provides it%s" % ("" if unwritten.is_empty()
+		% Stats.judged().size() + " and the %d the host decides a contact by" % Stats.contact().size()
+		+ " is in the rules the handshake fingerprints, one line an organ that provides"
+		+ " it%s" % ("" if unwritten.is_empty()
 			else "; not %s -- write it in _rules_text" % ", ".join(unwritten)))
+	# **The game's own text is this one**: what it carries on the handshake is what is
+	# written here from the constants themselves.
+	var game := Rules.text()
+	var ours := text.split("\n")
+	var theirs := game.split("\n")
+	var first := -1
+	for k in maxi(ours.size(), theirs.size()):
+		if k >= ours.size() or k >= theirs.size() or ours[k] != theirs[k]:
+			first = k
+			break
+	_says(first < 0, ("referee: the game writes the %d lines of its rules as this probe"
+		% theirs.size() + " does from the real constants (%s)" % Rules.hex().left(16)) if first < 0
+		else ("referee: the game's rules (game/net/rules.gd) and this probe's differ at line"
+			+ " %d: the game's '%s', this probe's '%s' -- write the same value in both"
+			% [first + 1, theirs[first] if first < theirs.size() else "",
+			ours[first] if first < ours.size() else ""]))
+	# **The tripwire**: a build's rules move only on purpose. No PROTOCOL moves with
+	# them any more -- the handshake keeps builds on other rules apart by itself.
 	var ok := now == Wire.RULES
-	_says(ok, ("referee: the %d rules it judges a guest by fingerprint to Wire.RULES"
-		% text.split("\n").size() + " (%s)" % now.left(16)) if ok
-		else ("referee: a rule the referee judges by changed: bump Wire.PROTOCOL and"
-			+ " update Wire.RULES in the same commit -- they fingerprint to %s now, and"
-			% now + " Wire.RULES says %s. A host on the old rules fouls, then cuts, an"
-			% Wire.RULES + " honest guest on the new ones (wire.gd, RULES)"))
+	_says(ok, ("referee: the %d rules two builds must agree on fingerprint to Wire.RULES"
+		% ours.size() + " (%s)" % now.left(16)) if ok
+		else ("referee: the rules two builds must agree on changed -- they fingerprint to %s"
+			% now + " now, and Wire.RULES says %s. A build on these refuses every build"
+			% Wire.RULES + " on the old ones at the handshake, with the version sentence,"
+			+ " until both update: if that is meant, set Wire.RULES to the new value in the"
+			+ " same commit. No Wire.PROTOCOL bump -- that moves only when a message's format"
+			+ " does (wire.gd)"))
 
 
-## **Every value the referee judges a guest by or derives a limit from**, one per
-## line, where it is defined -- and the referee's own limits. `Wire.RULES` is its
-## SHA-256. A value added to the referee's judgement belongs here too.
+## **Every value two builds in one pond must agree on**, one per line, written from
+## where each is defined, in the order game/net/rules.gd writes them: every table a
+## row marks judged or contact, by every organ; the run's numbers the referee judges
+## by; the contact rules no table holds; the referee's own limits; the body plan.
+## `Wire.RULES` is its SHA-256. A value added to the referee's judgement, or to what
+## the host decides a contact by, belongs here and there.
 func _rules_text() -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
-	# **A stat the referee judges, by every organ that provides it**: the first
-	# under the name its table had as cell.gd's (stats.gd's `label`), any other
-	# after it with its key, as drop_save.gd writes them. A second organ that
-	# calls, or swims, is a new line -- and a new fingerprint, so its PROTOCOL
-	# moves with it.
-	var put_stat := func(stat: StringName) -> void:
+	# **A stat two builds must agree on, by every organ that provides it**: the first
+	# under the name its table had as cell.gd's (stats.gd's `label`), any other after
+	# it with its key, as drop_save.gd writes them. A second organ that calls, or swims,
+	# or bites, is a new line -- and new rules, which the handshake keeps apart.
+	for stat: StringName in Stats.ROWS:
+		if not Stats.judged().has(stat) and not Stats.contact().has(stat):
+			continue
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
 				Catalogue.table(providers[k], stat))
-	# cell.gd: size, growth, division and mending.
+	# cell.gd: size, growth, division and mending; and the motion the caps sit over
+	# (`_referee_agrees`).
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
 	put.call("cell.GROWTH_PER_MEAL", CellBody.GROWTH_PER_MEAL)
 	put.call("cell.DIVIDE_RADIUS", CellBody.DIVIDE_RADIUS)
@@ -3084,18 +3115,9 @@ func _rules_text() -> String:
 	put.call("cell.daughter_radius", CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
-	# The calls: how far and how often.
-	put_stat.call(&"ping_range")
-	put_stat.call(&"ping_period")
-	# The speed and turn tables the caps sit over (`_referee_agrees`).
-	put_stat.call(&"impulse_speed")
-	put_stat.call(&"impulse_gap_min")
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
 	put.call("cell.DRAG", CellBody.DRAG)
-	put_stat.call(&"push_accel")
-	put_stat.call(&"dash_speed")
 	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
-	put_stat.call(&"turn_rate")
 	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
 	# food.gd: the grace, and what a contact and a death are called.
 	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
@@ -3106,9 +3128,8 @@ func _rules_text() -> String:
 	# never a meal to the referee; the rim holds a body in -- by a sample value,
 	# as `cell.mended` is -- which is where a claim past it is held and a sister
 	# near it is put; and the two eating rules a guest is held to, which the host
-	# decides and the referee never judges, one sample each, so two builds that
-	# disagree on them refuse each other at HELLO: a mouth swallows a player
-	# that fits on contact, hunting or not (row 15), and `pellicle` makes a body
+	# decides and the referee never judges, one sample each: a mouth swallows a
+	# player that fits on contact, hunting or not (row 15), and armour makes a body
 	# bigger to a mouth (row 5).
 	put.call("drop.FLOC_GROWTH", FoodField.Drop.FLOC_GROWTH)
 	var held: Vector2 = FoodField.Drop.new().meniscus.contain(Vector2(7000.0, 125.0),
@@ -3119,13 +3140,12 @@ func _rules_text() -> String:
 		FoodField.swallows_player(false, FoodField.CONTACT_SWALLOW, 20.0, 30.0))
 	put.call("food.armoured_size(r30, pellicle 2)",
 		FoodField.armoured_size(30.0, Stats.at(&"armor", 2), FoodField.ARMOUR_SWALLOW))
-	# normal_mode.gd: the sister's ring; and the free senses, the catalogue's
-	# `gift` tag since there was a catalogue, under the name they had.
+	# normal_mode.gd: the sister's ring, the run's own; and the free senses, the
+	# catalogue's `gift` tag since there was a catalogue, under the name they had.
 	put.call("run.SISTER_DISTANCE", NormalMode.SISTER_DISTANCE)
 	put.call("run.FIRST_SENSES", Catalogue.tagged(Catalogue.GIFT))
 	# genome.gd: the tiers, a born body -- each organ's own `born` -- and the
-	# gift's tier, a literal in `_express_gift`, so it is measured on a real
-	# genome.
+	# gift's tier, measured on a real genome rather than read off its constant.
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
 	put.call("genome.BORN", Catalogue.born())
 	var genome: Node = Genome.new()
@@ -3134,6 +3154,23 @@ func _rules_text() -> String:
 	genome.place(0)
 	put.call("genome.gift_tier", int((genome.tiers() as Dictionary).get(&"stigma", 0)))
 	genome.free()
+	# **The contact rules no table holds** (shared-pond.md §7; wire.gd's rule under
+	# PROTOCOL until protocol 8): the bite's gap and flank, `bite_damage` by two
+	# samples, and the doses' constants, with how a dose is felt by one.
+	put.call("cell.BITE_GAP", CellBody.BITE_GAP)
+	put.call("cell.FLANK_AHEAD", CellBody.FLANK_AHEAD)
+	put.call("cell.FLANK_ASTERN", CellBody.FLANK_ASTERN)
+	put.call("cell.bite_damage(0.3,20,r30,1.3,ahead)",
+		CellBody.bite_damage(0.3, 20.0, 30.0, 1.3, 0.0))
+	put.call("cell.bite_damage(0.3,40,r30,1,astern)",
+		CellBody.bite_damage(0.3, 40.0, 30.0, 1.0, PI))
+	put.call("cell.VENOM_ARC_DEG", CellBody.VENOM_ARC_DEG)
+	put.call("cell.VENOM_SIDES", CellBody.VENOM_SIDES)
+	put.call("cell.HARM_PER_STACK", CellBody.HARM_PER_STACK)
+	put.call("cell.DOSE_TAU_BY_KIND", CellBody.DOSE_TAU_BY_KIND)
+	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
+	put.call("cell.DOSE_SIZE", CellBody.DOSE_SIZE)
+	put.call("doses.felt(2,r30)", FoodField.Doses.felt(2.0, 30.0, CellBody.DOSE_SIZE))
 	# referee.gd: its own limits, and its copies of the run's numbers. **The
 	# gift's senses are no copy any more**: the referee reads the catalogue's
 	# `gift` tag (gene-catalogue.md §11.1), so its line is written from there,
@@ -3147,6 +3184,9 @@ func _rules_text() -> String:
 			"REENTRY_KEEPS_WOUND", "REENTRY_WITHIN", "STALL_CREDIT"]:
 		put.call("referee." + name, Catalogue.tagged(Catalogue.GIFT) if name == "FIRST_SENSES"
 			else referee[name])
+	# **The body plan** (gene-catalogue.md §10.4): builds on other plans -- other slot
+	# counts, other arcs -- are other rules.
+	put.call("plan.fingerprint", BodyPlan.fingerprint())
 	return "\n".join(lines)
 
 
