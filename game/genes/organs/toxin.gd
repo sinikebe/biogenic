@@ -130,16 +130,17 @@ func _init() -> void:
 					"provides": {&"venom_stacks": VENOM_STACKS_BY_TIER}},
 			}},
 	]
-	# **Its look** (gene-catalogue.md §7.1): spines, drawn by place -- fangs on the
-	# lips at the front, barbs on the arc it guards at a side or the stern, granules
-	# under the whole skin inside (cilia.gd). **It wears its strain's hue, in both its
-	# forms** (dna-slots-ux.md §2.1): venom and poison of one strain are one colour,
-	# and the place is told by shape. Corrosive left nutrient green for lime: at 128
-	# deg `veneneux` *was* the scent bloom's and the taste ring's green, so a poison
-	# looked like food and a dose would have felt like a smell. Lime is the free 72
-	# deg the retired `rhabdom` left, and the only lime on either screen. signal_bus.gd
-	# reads it as its strain colour, as it reads the ping's.
-	look = {"shape": SPINES, "hue": Color(0.84, 0.98, 0.22)}  # corrosive, 71 deg (was 128)
+	# **Its look** (gene-looks.md §2.1, §3.3): bead-headed spines, two a copy, drawn
+	# by place -- fangs on the lips at the front, barbs on the arc it guards at a side
+	# or the stern, and inside their beads alone, granules under the whole skin
+	# (cilia.gd). **Every strain wears defending's orange**, the colour of warning, in
+	# both its forms, and is told by its beads: a strain after this one sets an accent
+	# -- a paralysing one's beads are diamonds, a sleeping one's rings (dna-slots-ux.md
+	# §2.6) -- and a load is drawn in the hue of the organ that delivered it. Lime,
+	# corrosive's hue of its own, went with the families.
+	family = DEFENDING
+	look = {"shape": SPINES, "tip": Kinds.TIP_BEAD, "per_copy": 2, "length": 0.26,
+		"fan": 16.0, "lips": true}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): venom's, by where it

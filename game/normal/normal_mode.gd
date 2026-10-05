@@ -2611,7 +2611,8 @@ func _toxins() -> PackedFloat64Array:
 ## **A dose went into this cell** (docs/design/dna-slots-ux.md §5.1). It arrives
 ## on what brought it: the field says it just before the bite's `bitten` or the
 ## meal's `eaten`, in the same frame, and that sensation takes the dose's strain
-## hue -- a lime bruise where the bite landed, a lime flood for a poisonous meal.
+## hue, the delivering organ's -- an orange bruise where the bite landed, an
+## orange flood for a poisonous meal.
 ## Kept for this frame only, so a dose that nothing followed tints nothing later.
 ## And it seeps in: the stain on the body grows from the skin on its bearing.
 func _on_dosed(bearing: float, kind: int, _stacks: float, meal: bool) -> void:
@@ -5608,7 +5609,8 @@ func _update_explain() -> void:
 		return
 	# **One name for both of a gene's forms** (dna-slots.md §3.2): the toxin is
 	# `toxicyst` on this line whether it is venom or poison; the slot says which.
-	_explain_name.text = GenomeNode.name_of(gene)
+	# A variant's name follows its organ's (gene-looks.md §4).
+	_explain_name.text = Figure.explain_name(gene)
 	_explain_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	if undecided:
@@ -8650,7 +8652,7 @@ func _choose_say() -> void:
 		_choose_line.text = "" if slot < 0 else Figure.explain_empty(slot)
 		_choose_hint.text = "" if slot < 0 else Figure.hint_empty(slot)
 		return
-	_choose_name.text = GenomeNode.name_of(gene)
+	_choose_name.text = Figure.explain_name(gene)
 	_choose_name.add_theme_color_override("font_color",
 		Color(Cilia.hue(gene), Figure.EXPLAIN_NAME_ALPHA))
 	# **The way her mother took, if she took one** (beam-levels.md §8.6): a

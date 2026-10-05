@@ -303,6 +303,18 @@ const PIP_RING := 1.4
 const PIP_ROOM_R := 1.6
 const PIP_ROOM_ALPHA := 0.30
 
+## **A variant's accent** (docs/design/gene-looks.md §3, §4): the one mark it wears
+## where its organ wears none or another -- the mark its organ's seat shows on the
+## body and the tile -- **in the chip's first lobe**, centred in it (x 20, y 19),
+## this size across the radius, in its hue at a pip's full ink. The rungs keep the
+## middle lobe and a level the third. The organ as shipped has none, and its lobe
+## is the plain weave it always was.
+const CHIP_ACCENT := 3.6
+const CHIP_ACCENT_INK := 0.95
+## **And on a waiting chip, before its word**, as on the slot's chip: the word moves
+## right by the mark and this much air.
+const WAIT_ACCENT_GAP := 4.0
+
 ## **The level, on its slot** (beam-levels.md §8.1): a numeral for a gene that
 ## levels, which today is only the beam. Every other chip draws what it always
 ## drew.
@@ -681,6 +693,24 @@ static func explains(gene: StringName, slot: int = -1,
 	return ""
 
 
+## **The name at the head of [param gene]'s line** (docs/design/gene-looks.md §4):
+## its organ's name on screen -- `toxicyst` for both of the toxin's forms
+## (`GenomeNode.name_of`) -- and, for any variant but the organ as shipped, the
+## variant's own word after it: `toxicyst · paralysing`. The colour already says the
+## family, so there is no family mark. A variant with no word of its own
+## (`VARIANT_WORDS`) is named by its variant's name, rather than by nothing.
+##
+## i18n-ok: the organ files' word tables, which the template lists from there.
+static func explain_name(gene: StringName) -> String:
+	if Catalogue.as_shipped(gene):
+		return GenomeNode.name_of(gene)
+	var organ := GenomeNode.name_of(Catalogue.keys_of_organ(Catalogue.organ_of(gene))[0])
+	var said := String(Catalogue.words(gene).get(&"variant", ""))
+	var variant := String(TranslationServer.translate(said)) if not said.is_empty() \
+		else String(Catalogue.variant_of(gene))
+	return "%s · %s" % [organ, variant]
+
+
 ## **An empty [param slot] has no gene to explain**, so its line explains what it
 ## does have: a side of the body -- or, inside, the one gene that goes there.
 static func explain_empty(slot: int) -> String:
@@ -923,6 +953,7 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 	if gene != &"":
 		Cilia.draw_rungs(node, Cilia.STRAND_ALONG_X, CHIP_LOBE, CHIP_MID,
 			CHIP_AMP, 0, CHIP_LOBE * 1.5, Cilia.hue(gene), copies, worn)
+		draw_accent(node, gene, Vector2(CHIP_LOBE * 0.5, CHIP_MID))
 	node.draw_set_transform(Vector2.ZERO)
 
 	draw_chip_label(node, gene, copies, worn, selected, level)
@@ -935,6 +966,22 @@ static func draw_chip(node: Control, slot: int, gene: StringName, copies: int,
 		node.draw_line(Vector2(FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			Vector2(SLOT_SIZE.x - FOCUS_INSET, SLOT_SIZE.y - 1.0),
 			FOCUS_TINT, FOCUS_WIDTH, true)
+
+
+## **[param gene]'s accent at [param at]** (gene-looks.md §4): a variant's mark,
+## [constant CHIP_ACCENT] across, in its hue -- nothing for an organ as shipped.
+static func draw_accent(node: CanvasItem, gene: StringName, at: Vector2) -> void:
+	var accent := Cilia.accent_of(gene)
+	if accent != &"":
+		Cilia.draw_accent(node, accent, at, CHIP_ACCENT, Cilia.hue(gene), CHIP_ACCENT_INK)
+
+
+## Where a waiting chip's word starts: after its accent, for a variant that wears
+## one.
+static func waiting_word_x(gene: StringName) -> float:
+	if Cilia.accent_of(gene) == &"":
+		return WAIT_WORD_X
+	return WAIT_WORD_X + CHIP_ACCENT * 2.0 + WAIT_ACCENT_GAP
 
 
 ## **A form not written yet** (dna-slots-ux.md §3.2): its word and
@@ -1116,15 +1163,21 @@ static func draw_waiting(node: Control, gene: StringName, copies: int, left: flo
 		(1.6 if in_hand else 1.0) * (0.40 + 0.60 * wilt))
 	var font := node.get_theme_default_font()
 	if font != null:
+		# A variant's accent before its word, as in the slot chip's first lobe.
+		var word_x := waiting_word_x(gene)
+		if word_x > WAIT_WORD_X:
+			var accent := Cilia.accent_of(gene)
+			Cilia.draw_accent(node, accent, Vector2(WAIT_WORD_X + CHIP_ACCENT, mid),
+				CHIP_ACCENT, tone, CHIP_ACCENT_INK * ink)
 		# A toxin waits as `toxin`: neither form until it lands (§3.5).
 		var says := carried_word_of(gene)
-		node.draw_string(font, Vector2(WAIT_WORD_X, mid + 5.0), says,
+		node.draw_string(font, Vector2(word_x, mid + 5.0), says,
 			HORIZONTAL_ALIGNMENT_LEFT, -1.0, CHIP_WORD,
 			LABEL_TINT_LOUD if in_hand else LABEL_TINT)
 		var width := font.get_string_size(says, HORIZONTAL_ALIGNMENT_LEFT, -1.0,
 			CHIP_WORD).x
 		# Carried by definition, so rings and never a disc.
-		draw_pips(node, Vector2(WAIT_WORD_X + width + PIP_GAP + PIP_R, mid),
+		draw_pips(node, Vector2(word_x + width + PIP_GAP + PIP_R, mid),
 			tone, copies, 0, ink)
 	# The chip's own width, not WAIT_SIZE's: a name wider than any word grows
 	# its chip, and the underline is under the whole of it.
@@ -1147,7 +1200,7 @@ static func waiting_width(font: Font, gene: StringName) -> float:
 		return WAIT_SIZE.x
 	var width := font.get_string_size(carried_word_of(gene), HORIZONTAL_ALIGNMENT_LEFT,
 		-1.0, CHIP_WORD).x
-	return maxf(WAIT_SIZE.x, ceilf(WAIT_WORD_X + width + PIP_GAP + PIP_R * 2.0
+	return maxf(WAIT_SIZE.x, ceilf(waiting_word_x(gene) + width + PIP_GAP + PIP_R * 2.0
 		+ PIP_PITCH * float(GenomeNode.TIER_MAX - 1) + WAIT_AIR))
 
 

@@ -43,11 +43,11 @@ func _init() -> void:
 	order = 13
 	provides = {&"sun": SUN_BY_TIER}
 	water = {"weight": 2, "drifter": true}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of eight. 8 is the ceiling,
-	# found by rendering: a tier-3 tuft multiplies the count by 1.70, and above about
-	# 14 strokes a 24-degree arc closes up into a solid flag and stops being a texture
-	# -- the same failure the oral mat documents.
-	look = {"shape": TUFT, "hue": Color(1.00, 0.86, 0.26), "count": 8}  # sun, 52 deg
+	# **Its look** (gene-looks.md §6): a solid lens-shaped body under the skin, a
+	# chloroplast, one for each copy and nothing outside the skin: metabolism is
+	# drawn inside, which tells it from the mouth's mat where colour cannot.
+	family = METABOLISM
+	look = {"shape": ORGANELLE, "form": Kinds.FORM_LENS}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much food it makes.

@@ -79,8 +79,10 @@ func _init() -> void:
 	channel = LIGHT
 	declares = {"in": [{"name": &"shadow", "bearing": true,
 		"values": {&"level": &"level"}}]}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of four over its pigment.
-	look = {"shape": TUFT, "hue": Color(0.98, 0.78, 0.30), "count": 4}  # see, 45 deg
+	# **Its look** (gene-looks.md §6): three short plain bristles over its pigment,
+	# the plainest sense.
+	family = SENSING
+	look = {"shape": TUFT, "count": 3, "length": 0.26, "tip": Kinds.TIP_PLAIN}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): what it feels the shadow of,

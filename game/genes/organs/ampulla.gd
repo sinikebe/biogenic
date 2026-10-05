@@ -133,12 +133,11 @@ func _init() -> void:
 	channel = PING
 	declares = {"in": [{"name": &"echo", "bearing": true,
 		"values": {&"distance": &"distance", &"size": &"size"}}]}
-	# **Its look** (gene-catalogue.md §7.1): the ping shares the beam's glow lobe --
-	# both mean *a hard surface, that way* -- so it shares the beam's family too,
-	# deeper and more saturated than the ocellus's pale periwinkle. Ampullae of
-	# Lorenzini come in clusters of pores, and six of them next to the ocellus's
-	# three is what actually tells two neighbouring violets apart at a glance.
-	look = {"shape": TUFT, "hue": Color(0.655, 0.44, 1.00), "count": 6}  # ping, 263 deg
+	# **Its look** (gene-looks.md §6): short bristles each ending in a ring -- the
+	# pores of a cluster of ampullae of Lorenzini -- over its pigment. Sensing's shade
+	# 2, which the ping's lobes and wave are drawn in, a shade apart from the beam's.
+	family = SENSING
+	look = {"shape": TUFT, "shade": 2, "length": 0.24, "tip": Kinds.TIP_RING}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how often it pings, how far,

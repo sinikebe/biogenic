@@ -83,26 +83,33 @@ const TOUCH := &"touch"
 ## Every channel there is. The gene probe fails on any other.
 const CHANNELS: Array[StringName] = [LIGHT, BEAM, PING, SMELL, TOUCH]
 
-## **The shapes an organ is drawn as** (gene-catalogue.md §7.1; the kinds of
-## docs/design/gene-looks.md §2.1, the five today's organs wear): `mat`, the
-## mouth's dense fine cilia; `oars`, rowing strokes on both flanks; `lash`, the
-## tail; `tuft`, stiff bristles over a pigment disc, which every earned organ is;
-## and `spines`, the toxin's, drawn by place -- fangs on the lips at the front,
-## barbs on a side or the stern, granules under the skin inside. `cilia.gd` draws
-## by these and never by a gene's name. Phase 6 adds kinds and their parameters.
-const MAT := &"mat"
-const OARS := &"oars"
-const LASH := &"lash"
-const TUFT := &"tuft"
-const SPINES := &"spines"
+## **The families and the shape kinds** (docs/design/gene-looks.md §1, §2, §7): what
+## an organ looks like is its family's colour and a kind's build, both data. Neither
+## file preloads anything of the game. `cilia.gd` draws by kind and never by a gene's
+## name.
+const Families := preload("res://game/genes/families.gd")
+const Kinds := preload("res://game/genes/kinds.gd")
+## The five families, for an organ's [member family].
+const EATING := Families.EATING
+const MOVING := Families.MOVING
+const SENSING := Families.SENSING
+const DEFENDING := Families.DEFENDING
+const METABOLISM := Families.METABOLISM
+## The nine kinds, for a look's `shape`: the mouth's `mat`; the movers' `oars`,
+## `lash` and `coil`; the senses' `tuft` and `lens`; the defences' `spines` and
+## `plates`; metabolism's `organelle`. Their tips, forms and accent marks are
+## `Kinds.TIP_*`, `Kinds.FORM_*` and `Kinds.MARK_*`.
+const MAT := Kinds.MAT
+const OARS := Kinds.OARS
+const LASH := Kinds.LASH
+const COIL := Kinds.COIL
+const TUFT := Kinds.TUFT
+const LENS := Kinds.LENS
+const SPINES := Kinds.SPINES
+const PLATES := Kinds.PLATES
+const ORGANELLE := Kinds.ORGANELLE
 ## Every shape there is. The gene probe fails on any other.
-const SHAPES: Array[StringName] = [MAT, OARS, LASH, TUFT, SPINES]
-## **The shapes drawn on arcs of their own**, whatever slot holds them -- the mouth
-## at the nose, the oars on both flanks, the tail at the stern -- and with no
-## pigment; every other shape is drawn on its slot's arc.
-const HOME_SHAPES: Array[StringName] = [MAT, OARS, LASH]
-## The shapes whose strokes are counted, so a look of one gives its `count`.
-const COUNTED: Array[StringName] = [MAT, OARS, LASH, TUFT]
+const SHAPES := Kinds.KINDS
 
 # --- What an organ's file sets ---------------------------------------------------------
 
@@ -161,14 +168,25 @@ var tags: Array[StringName] = []
 ## body wears the eyespot. `&""` for an organ that drives none.
 var channel: StringName = &""
 
-## **Its look** (gene-catalogue.md §7.1): what `cilia.gd` draws it as, on a body
-## and on a genome tile, and every hue copied from it -- `shape`, one of
-## [constant SHAPES]; `hue`, its colour, a `Color`, until phase 6 derives it from
-## a family; and, for a shape in [constant COUNTED], `count`, its strokes on a
-## body at one copy. A home shape also gives its tile's `tile_count` and
-## `tile_length` (tile px); a tuft's tile wears its body's count. Empty for a
-## retired gene, which draws as a gene the build does not know.
+## **Its look** (docs/design/gene-looks.md §2, §7): what `cilia.gd` draws it as, on a
+## body and on a genome tile -- `shape`, a kind its [member family] is built as
+## ([constant SHAPES]); that kind's parameters where it wants other than their
+## defaults (`kinds.gd`: a count, a length, a tip, a bend, a form ...); and
+## `shade`, which of its family's three it wears, the middle where it sets none.
+## **No colour**: its hue is its family's shade, which the catalogue works out, so
+## two organs of one family share a colour and are told apart by shape. **A variant
+## sets `accent` and nothing else** in its look -- `disc`, `ring`, `diamond` or `bar`,
+## drawn at its kind's seat, unlike its organ's and every sibling's -- and keeps
+## everything else of its organ's, so it reads as its organ at a glance (§3). Empty
+## for a retired gene, which draws as a gene the build does not know: a plain tuft
+## in no family's colour.
 var look := {}
+
+## **Its family** (docs/design/gene-looks.md §1): one of `families.gd`'s five --
+## eating, moving, sensing, defending or metabolism -- whose colour it wears and
+## whose builds its look picks from. **The organ's own**: a variant never sets it,
+## so a variant is its organ's colour. `&""` for a retired gene with no look.
+var family: StringName = &""
 
 ## **The copies a newborn wears of it** (`genome.gd`'s born cell): the mouth, the
 ## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
@@ -207,6 +225,9 @@ var declares := {}
 #   CARRIED_WORDS   its word while it waits to be placed, for a gene of forms
 #   CARRIED_EXPLAINS  and its line then
 #   NAMES           its name on screen where it is not its key (not translated)
+#   VARIANT_WORDS   a variant's word, after its organ's name on the explaining
+#                   line -- `toxicyst · paralysing` -- for every variant but the
+#                   organ as shipped                       figure.gd's explain_name
 #   GENE_SAYS       an action part's chip                  program_words.gd
 #   GENE_SENSES     a sense part's chip, in the context `sense`
 #   GENE_EXPLAINS   a part's line on the instincts page
@@ -235,7 +256,8 @@ var declares := {}
 ## variant takes its `order` and `born` as it takes every field it does not set.
 ## So a faster tail restates the tail first, then gives itself an order and no
 ## copies at birth: `[{"key": &"flagellum"}, {"variant": &"swift", "key":
-## &"swiftail", "order": 17, "born": 0, "look": {"hue": ...}, "provides": {...}}]`.
+## &"swiftail", "order": 17, "born": 0, "look": {"accent": &"disc"},
+## "provides": {...}}]`.
 var variants: Array = []
 
 # --- What the catalogue writes, per key ------------------------------------------------

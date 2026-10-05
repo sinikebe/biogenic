@@ -76,10 +76,12 @@ func _init() -> void:
 	# two that change the most about a run.
 	water = {"weight": 2, "drifter": true}
 	declares = {"out": [{"name": &"push", "claims": [&"push"], "options": [0.5, 1.0]}]}
-	# **Its look** (gene-catalogue.md §7.1): the flagellum's evolution, so it keeps
-	# the flagellum's family: orchid -> magenta. Close on purpose -- these two are the
-	# same organ, twice.
-	look = {"shape": TUFT, "hue": Color(0.98, 0.44, 0.90), "count": 8}  # push, 306 deg
+	# **Its look** (gene-looks.md §6): the flagellum's evolution, so it is the tail's
+	# build -- one whip carrying two waves, smooth where the dash's spring is sharp.
+	# Moving's shade 2.
+	family = MOVING
+	look = {"shape": LASH, "shade": 2, "count": 1, "length": 0.50, "wave": 0.22,
+		"waves": 2.1}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much holding on adds,

@@ -112,11 +112,13 @@ func _init() -> void:
 	# copy (rows 29 and 38). Declared last of every gene's parts, so its owner's
 	# bits come after every other.
 	declares = {"out": [{"name": &"hold", "claims": [&"swimming"], "level": HOLD_LEVEL}]}
-	# **Its look** (gene-catalogue.md §7.1): the lash at the stern, six strands. Six
-	# on its tile too, 17 px long: the tallest organ on a tile, which the explaining
-	# line's glyph is measured by (figure.gd's EXPLAIN_ORGAN_SEAT).
-	look = {"shape": LASH, "hue": Color(0.80, 0.42, 0.95), "count": 6,  # swim, 291 deg
-		"tile_count": 6, "tile_length": 17.0}
+	# **Its look** (gene-looks.md §6): the lash at the stern, a wave travelling out to
+	# its tips -- the kind's defaults are the tail it always drew -- in moving's shade
+	# 0. On a tile three strands at most, reaching 17 px: still the tallest organ on a
+	# tile, which the explaining line's glyph is measured by (figure.gd's
+	# EXPLAIN_ORGAN_SEAT).
+	family = MOVING
+	look = {"shape": LASH, "shade": 0}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how fast it swims, how often

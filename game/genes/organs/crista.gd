@@ -45,8 +45,10 @@ func _init() -> void:
 	order = 15
 	provides = {&"burn": BURN_BY_TIER}
 	water = {"weight": 2, "drifter": true}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of six, darker than the palp.
-	look = {"shape": TUFT, "hue": Color(0.86, 0.50, 0.22), "count": 6}  # burn, 26 deg
+	# **Its look** (gene-looks.md §6): a long hollow rod with a fold down it, a
+	# mitochondrion's crista, under the skin, one for each copy. Metabolism's shade 2.
+	family = METABOLISM
+	look = {"shape": ORGANELLE, "shade": 2, "form": Kinds.FORM_CAPSULE}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much less everything burns.
