@@ -1193,8 +1193,6 @@ did, it is within its noise: p10 136.1 ms against 135.0, four rounds each.
 - **3**: `Drop.TOXIN`, and every `"<gene>.<part>"` key.
 - **6**: a look's `hue` becomes its family's, and the colour checks the family rules
   (`gene-looks.md` §8).
-- `ci.yml`'s note on *Check the genes* still lists v1's examples; a workflow is
-  edited only when asked.
 
 ---
 
