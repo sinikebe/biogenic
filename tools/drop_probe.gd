@@ -476,7 +476,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			_fault("born blind: %s" % str(d.genome), true)
 		for gene: StringName in d.dna:
 			var copies := int(d.dna[gene])
-			if gene == &"cytostome" or Catalogue.tagged(Catalogue.SENSE).has(gene) or copies < 1 or copies > 3:
+			if gene == &"cytostome" or Catalogue.tagged(Catalogue.SENSE).has(gene) \
+					or copies < 1 or copies > 3:
 				continue
 			rolled[copies] += 1
 			if d.genome.has(gene):
