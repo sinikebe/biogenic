@@ -2416,8 +2416,11 @@ func _synthetic_gene() -> void:
 	# **One variant to a body** (§6.3): the same organ, switched on. Placing the keen
 	# strain writes over the plain one, in a genome and in a water cell's, and drift
 	# brings no strain of it to a lineage that carries one.
+	# The floor gives it back through peers, as the toxin's strains, so that the floor
+	# below is the one a strain held to one a body meets.
 	var single := ProbeGland.new()
 	single.one_variant = true
+	single.tags = [Catalogue.FLOOR_BY_PEERS]
 	Catalogue.register(single)
 	var grown: Node = CellBody.new()
 	grown.radius = CellBody.DIVIDE_RADIUS
@@ -2429,6 +2432,7 @@ func _synthetic_gene() -> void:
 	one.place(Genome.INSIDE)
 	var had: Dictionary = one.dna().duplicate()
 	one.integrate(&"probegkeen")
+	var over_said: Array = one.placing(&"probegkeen", 4)
 	one.place(4)
 	var after: Dictionary = one.dna().duplicate()
 	var after_layout: Array = one.layout().duplicate()
@@ -2444,17 +2448,43 @@ func _synthetic_gene() -> void:
 			for gene: StringName in tiers:
 				if gene != &"probegout" and Catalogue.organ_of(gene) == &"probegland":
 					again += 1
+	# **The rest of call 8** (§15.6): a sample of the keen strain left to lapse writes over
+	# the plain one in its slot -- with no room, where it used to be gone, and with room
+	# -- and the floor gives no peer the keen strain beside the plain one it wears.
+	var lapsed := [_lapsed_over(7), _lapsed_over(6)]
+	var floor_field: Node = FoodField.new()
+	floor_field.set(&"_gene_short", [&"probegkeen"] as Array[StringName])
+	var peer: RefCounted = FoodField.Body.new()
+	peer.set(&"radius", CellBody.DIVIDE_RADIUS)
+	var peer_worn := Catalogue.born().duplicate()
+	peer_worn[&"probegout"] = 1
+	peer.set(&"genome", peer_worn)
+	floor_field.call(&"_give_back_by_peer", peer)
+	var floor_said := [(peer.get(&"genome") as Dictionary).has(&"probegkeen"),
+		(floor_field.get(&"_gene_short") as Array).has(&"probegkeen"),
+		Drop.takes_back({&"probegin": 1}, &"probegkeen"),
+		Drop.takes_back(Catalogue.born(), &"probegkeen")]
+	floor_field.free()
 	var switched := Catalogue.one_variant(&"probegland")
 	Catalogue.forget(&"probegland")
 	_check(("and switched to one variant a body, placing the keen strain writes over the"
-		+ " plain one in both its places (%s, then %s, %s), a water cell's too (%s), and drift"
-		+ " brings no strain of it to a lineage that carries one (%d in 600)") % [
-		str(had), str(after), str(after_layout), str(water), again],
+		+ " plain one in both its places (%s, then %s, %s), and says which (%s); a water cell's"
+		+ " meal does too (%s), and drift brings no strain of it to a lineage that carries one"
+		+ " (%d in 600)") % [str(had), str(after), str(after_layout), str(over_said), str(water),
+		again],
 		switched and had.has(&"probegout") and had.has(&"probegin")
 		and not after.has(&"probegout") and not after.has(&"probegin")
 		and int(after.get(&"probegkeen", 0)) == 1 and not after_layout.has(&"probegout")
+		and over_said == [Genome.PLACE_WRITE, 4, &"probegout"]
 		and water.has(&"probegkeen") and not water.has(&"probegout")
 		and not water.has(&"probegin") and again == 0)
+	_check(("and a sample of the keen strain left to lapse writes over the plain one in its"
+		+ " slot, with no room (%s) and with room (%s); and the floor gives no peer the keen"
+		+ " strain beside the plain one it wears -- given %s, still short %s -- nor one that"
+		+ " carries the plain one inside (%s), and gives one wearing neither (%s)") % [
+		str(lapsed[0]), str(lapsed[1]), str(floor_said[0]), str(floor_said[1]),
+		str(floor_said[2]), str(floor_said[3])],
+		lapsed == [[3, true], [3, true]] and floor_said == [false, true, false, true])
 
 	_check(("and forgotten, the catalogue and the vocabulary are as they were: %d keys, every"
 		+ " bit where it was (%s)") % [Catalogue.keys().size(),
@@ -2599,6 +2629,30 @@ static func _tail_levels(body: Dictionary, organ: StringName) -> Array:
 	return [int(Catalogue.by_organ(body).get(organ, 0)), yours[0], yours[1],
 		int(water.get(&"tail_level")),
 		int(water.get(&"tail_level")) >= int(water.get(&"stat_hold"))]
+
+
+## **Where a sample of the probe's keen strain goes when it lapses**, the gland held to
+## one variant a body: a cell at the divide radius whose DNA carries the plain strain
+## outside, at slot 3, among [param genes] genes outside -- 7 fills every slot. `[the
+## slot the keen strain is in afterwards, -1 for none; whether the plain one is gone]`.
+static func _lapsed_over(genes: int) -> Array:
+	var cell: Node = CellBody.new()
+	cell.radius = CellBody.DIVIDE_RADIUS
+	var genome: Node = Genome.new()
+	genome.setup(cell)
+	var dna := {}
+	var order: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"probegout",
+		&"chemocyte", &"ampulla", &"stigma"]
+	order.resize(genes)
+	for gene: StringName in order:
+		dna[gene] = 1
+	genome.express(dna, order)
+	genome.integrate(&"probegkeen")
+	genome.call(&"_process", Genome.SAMPLE_SECONDS + 1.0)
+	var out := [genome.layout().find(&"probegkeen"), not genome.dna().has(&"probegout")]
+	genome.free()
+	cell.free()
+	return out
 
 
 ## **How many of 400 peers made at r40 wear [param variant] beside [param plain]**:

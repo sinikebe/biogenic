@@ -8913,7 +8913,7 @@ func _dna_forms() -> void:
 			var result := g.place(slot)
 			var want := &"veneneux" if slot == inside else &"toxicyst"
 			var other := &"toxicyst" if slot == inside else &"veneneux"
-			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot]
+			if not (result == GenomeNode.Result.INTEGRATED and said == [GenomeNode.PLACE_WRITE, slot, &""]
 					and int(g.dna().get(want, 0)) == 1 and not g.dna().has(other)
 					and g.dna_slot(want) == slot and g.waiting().is_empty()
 					and _in_place(g) == ""):
@@ -8933,7 +8933,7 @@ func _dna_forms() -> void:
 	g.integrate(&"veneneux")
 	var elsewhere := g.placing(&"veneneux", 4)
 	var raised := g.place(4)
-	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3] \
+	var raise_ok := elsewhere == [GenomeNode.PLACE_RAISE, 3, &""] \
 		and raised == GenomeNode.Result.RAISED and int(g.dna()[&"toxicyst"]) == 2 \
 		and g.layout()[4] == &"" and not g.dna().has(&"veneneux") and _in_place(g) == ""
 	_dna_free(g)
@@ -8947,8 +8947,8 @@ func _dna_forms() -> void:
 	g.integrate(&"toxicyst")
 	var full := g.placing(&"toxicyst", inside)
 	var spent := g.place(inside)
-	var inside_ok := in_place == [GenomeNode.PLACE_RAISE, inside] \
-		and raised_in == GenomeNode.Result.RAISED and full == [GenomeNode.PLACE_FULL, inside] \
+	var inside_ok := in_place == [GenomeNode.PLACE_RAISE, inside, &""] \
+		and raised_in == GenomeNode.Result.RAISED and full == [GenomeNode.PLACE_FULL, inside, &""] \
 		and spent == GenomeNode.Result.RAISED and int(g.dna()[&"veneneux"]) == 3 \
 		and not g.dna().has(&"toxicyst") and g.waiting().is_empty() and _in_place(g) == ""
 	_dna_free(g)
@@ -8957,7 +8957,7 @@ func _dna_forms() -> void:
 	g.integrate(&"ampulla")
 	var faces := g.placing(&"ampulla", inside)
 	var refused := g.place(inside)
-	var faces_ok := faces == [GenomeNode.PLACE_FACES_OUT, -1] \
+	var faces_ok := faces == [GenomeNode.PLACE_FACES_OUT, -1, &""] \
 		and refused == GenomeNode.Result.NOTHING and g.waiting() == [&"ampulla"] \
 		and not g.dna().has(&"ampulla")
 	_dna_free(g)

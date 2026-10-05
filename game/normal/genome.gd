@@ -550,7 +550,18 @@ func _process(delta: float) -> void:
 ## ordinary meal. A layout the bonus cannot widen -- every slot, or a newborn's
 ## inherited layout already longer than her body -- still has no room for it,
 ## exactly as the single held sample never did.
+##
+## **A strain of an organ that holds one variant to a body** (gene.gd's
+## `one_variant`), whose other strain the DNA carries, writes over that strain in
+## its slot, room or none (gene-catalogue.md §6.3) -- as a full water cell's meal of
+## one writes over the strain it wears ([method integrate_into]). *Anywhere*, for an
+## organ you carry, is where it is. Every organ today holds its variants side by
+## side, and none comes here.
 func _lapse(waiting: Waiting) -> void:
+	for slot: int in _other_strains(waiting.gene):
+		if form_at(waiting.gene, slot) != &"":
+			_settle(waiting, slot)
+			return
 	if has_forms(waiting.gene):
 		_lapse_form(waiting)
 		return
@@ -668,11 +679,37 @@ static func _over_other_variants(tiers: Dictionary, gene: StringName, seats: Arr
 	var own := Catalogue.variant_of(gene)
 	for other: Variant in tiers.keys():
 		var key := StringName(other)
-		if Catalogue.organ_of(key) == organ and Catalogue.variant_of(key) != own:
+		if _other_strain(key, organ, own):
 			tiers.erase(key)
 			var at := seats.find(key)
 			if at >= 0:
 				seats[at] = &""
+
+
+## **The slots of the strains writing [param gene] would take out** (gene-catalogue.md
+## §6.3): for an organ that holds one variant to a body, every slot of the DNA that
+## carries another variant of it -- the outside in order, then the inside. None for an
+## organ of variants side by side, which is every organ today, and nothing is read.
+func _other_strains(gene: StringName) -> Array[int]:
+	var out: Array[int] = []
+	var organ := Catalogue.organ_of(gene)
+	if not Catalogue.one_variant(organ):
+		return out
+	var own := Catalogue.variant_of(gene)
+	_sync_order()
+	for slot in _order.size():
+		if _other_strain(_order[slot], organ, own):
+			out.append(slot)
+	var held := inside_layout()
+	for k in held.size():
+		if _other_strain(held[k], organ, own):
+			out.append(INSIDE + k)
+	return out
+
+
+## Whether [param key] is another variant of [param organ] than [param own].
+static func _other_strain(key: StringName, organ: StringName, own: StringName) -> bool:
+	return key != &"" and Catalogue.organ_of(key) == organ and Catalogue.variant_of(key) != own
 
 
 ## Tier of one organ **this body wears**, 0 if it does not wear it. This is what
@@ -1046,20 +1083,27 @@ func place(slot: int, which: int = 0) -> int:
 
 
 ## **What a second tap on [param slot] would do with the waiting [param gene]**
-## (dna-slots.md §5.2), as `[what, where]`: [constant PLACE_WRITE] here;
+## (dna-slots.md §5.2), as `[what, where, over]`: [constant PLACE_WRITE] here;
 ## [constant PLACE_RAISE], a copy added to the form it makes, which is already
 ## carried in slot `where`; [constant PLACE_FULL], that form is at three copies
 ## and the tap would spend the sample for nothing; [constant PLACE_FACES_OUT], a
 ## gene that cannot sit there at all. The screen's armed preview, its line and
 ## its guard all ask this, so the three never disagree.
+##
+## `over` is **the strain a write takes out** (gene-catalogue.md §6.3): for an organ
+## that holds one variant to a body (gene.gd's `one_variant`), the key of another
+## variant of it the DNA carries -- the first in slot order -- which the write takes
+## out wherever it is; `&""` for none, which is every placement today. No screen says
+## it yet: its words wait for the first organ that turns the switch on.
 func placing(gene: StringName, slot: int) -> Array:
 	var form := form_at(gene, slot)
 	if form == &"":
-		return [PLACE_FACES_OUT, -1]
+		return [PLACE_FACES_OUT, -1, &""]
 	if _dna.has(form):
 		return [PLACE_FULL if int(_dna[form]) >= TIER_MAX else PLACE_RAISE,
-			dna_slot(form)]
-	return [PLACE_WRITE, slot]
+			dna_slot(form), &""]
+	var over := _other_strains(form)
+	return [PLACE_WRITE, slot, _slot_gene(over[0]) if not over.is_empty() else &""]
 
 
 ## **Where the DNA carries [param form]**: its outside slot, the inside slot that
