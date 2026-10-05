@@ -409,15 +409,18 @@ A variant may set anything its organ sets except the mechanic:
 - its dose (for the toxin).
 
 **A variant of one place needs no `forms`**: it is one form, outside, keyed by its own
-`key` or, without one, by its name. **Until phase 5, an organ's first variant is two
-entries** (§15.4): the catalogue files an organ's own key only while its `variants` is
-empty, and a variant takes its organ's `order` and `born` as it takes every field it
-does not set. So a faster tail is the tail as it shipped, restated first, and then the
-faster one, with an order of its own and no copies at birth: `[{"key": &"flagellum"},
-{"variant": &"swift", "key": &"swiftail", "order": 17, "born": 0, "look": {"accent": &"disc"},
-"provides": {...}}]`. Listed alone, it would take `flagellum` out of the catalogue;
-without its own `order` it would tie the tail in `dominant_of`, and without `born: 0`
-every newborn would wear both. What else it brings is §16's.
+`key` or, without one, by its name. **An organ's first variant is one entry** (phase 5,
+§15.6): the organ's own key is its implicit first variant, the organ as it shipped, so
+a faster tail is `[{"variant": &"swift", "key": &"swiftail", "order": 17, "look":
+{"accent": &"disc"}, "provides": {...}}]` and `flagellum` never leaves the catalogue. A
+variant takes every field it does not set from its organ but `born`, which is 0 unless
+it sets one -- or every newborn would wear both tails. **It sets its own `order`**, the
+next: the gene probe fails one that does not, saying why -- it would take its organ's
+and tie it in `dominant_of`. Every variant listed has a name of its own, since the
+organ's own key is the variant with none. **An organ with variants and no `order` of
+its own is no key itself**: it lists its first variant too, as the toxin does, whose
+first strain sits in two places, each form with its key and order. What else a variant
+brings is the playbook's (§16).
 
 The organ owns its mechanic, its shape and its family, so a variant reads as its organ
 at a glance and names itself on the pause screen (row 2).
@@ -921,7 +924,8 @@ everything above, and through its instinct part, a water cell's and yours. It sw
 it to one variant a body, then forgets it, and the catalogue and the vocabulary are as
 they were. Then a faster tail -- a copy of the tail's own file holding that one variant,
 filed beside the tail's, which keeps the tail's key (§6.2) -- and a second strain of the
-toxin, one entry of one place.
+toxin, one entry of one place. **From phase 5** (§15.6) each is one entry in its
+organ's own file, registered in that file's place, as the gene pass will write it.
 
 ---
 
