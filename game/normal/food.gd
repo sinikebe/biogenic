@@ -2981,8 +2981,8 @@ static func toxins_of(tiers: Dictionary, order: Array = [],
 	var seats: Array = order
 	for gene: Variant in tiers:
 		var form := StringName(gene)
-		if not Genome.has_forms(form):
-			continue
+		# **A toxin is a key with a dose**, whatever its places: a strain of one place,
+		# outside alone, is venom too (gene-catalogue.md §6.4).
 		var copies := clampi(int(tiers[gene]), 0, Genome.TIER_MAX)
 		var kind := Doses.kind_of(Genome.strain_of(form))
 		if copies <= 0 or kind < 0:

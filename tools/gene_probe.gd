@@ -2012,6 +2012,58 @@ func _variant_of_shipped() -> void:
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
 		and Array(Catalogue.keys()) == before)
+	_strain_of_shipped()
+
+
+## **A second strain of the shipped organ with a dose** -- the toxin's -- as one
+## entry of one place (gene-catalogue.md §6.4): every rule that was the toxin's
+## special case covers it by its organ's tags, so no drifter carries it and the
+## floor gives it back through a peer, into the one place it has; its venom is
+## delivered at the front and on a side, by its own kind; and its lines say what a
+## stack of that kind does.
+func _strain_of_shipped() -> void:
+	var before := Array(Catalogue.keys())
+	var dosed := &""
+	for key: StringName in Catalogue.live():
+		if Catalogue.dose_of(key) != &"" and Catalogue.provides(key, &"venom_stacks"):
+			dosed = key
+			break
+	var organ: Gene = (Catalogue.gene(dosed).get_script() as GDScript).new()
+	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
+	organ.variants = [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
+		"order": 930, "water": {"weight": 1, "drifter": true},
+		"provides": {&"venom_stacks": stacks}}]
+	Catalogue.register(organ)
+	var strain := &"probebarb"
+	var tagged := Catalogue.has_tag(strain, Catalogue.NOT_ON_DRIFTERS) \
+		and Catalogue.has_tag(strain, Catalogue.FLOOR_BY_PEERS)
+	var drifting := Drop.drifter_genes(Catalogue.drifters()).has(strain)
+	var short: Array[StringName] = [strain]
+	var to_drifter := Drop.take_drifter_gene(short)
+	var field: Node = FoodField.new()
+	field.set(&"_gene_short", [strain] as Array[StringName])
+	var by_peer: StringName = field.call(&"_peer_short")
+	field.free()
+	var peer := Catalogue.born().duplicate()
+	Drop.give_back(peer, strain, CellBody.SLOT_MAX, Catalogue.tagged(Catalogue.SENSE), 0, true)
+	var kind := float(Doses.kind_of(Catalogue.dose_of(strain)))
+	var bite := FoodField.toxins_of({strain: 2}, [strain])
+	var side := FoodField.toxins_of({strain: 2}, [&"", strain])
+	var said := Catalogue.gene(strain).dose_line(GeneStats.context({}))
+	var gone := Catalogue.organ_of(strain)
+	Catalogue.forget(gone)
+	_check(("and a second strain of %s, one entry of one place, is covered by every rule"
+		+ " that was the toxin's: tagged %s, no drifter carries it (%s), the floor gives it"
+		+ " back through a peer (%s), into its one place (%s); its venom bites at the front"
+		+ " and stings on a side, by its own kind (%s; %s); and it says what a stack of its"
+		+ " dose does") % [gone, str(tagged), str(not drifting and to_drifter == &""),
+		by_peer, str(peer.get(strain, 0)), str(bite), str(side)],
+		tagged and not drifting and to_drifter == &"" and by_peer == strain
+		and int(peer.get(strain, 0)) == 1
+		and bite == PackedFloat64Array([FoodField.HOW_BITE, kind, float(stacks[2]), 0.0])
+		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
+			Cilia.slot_bearing(1)])
+		and not said.is_empty() and Array(Catalogue.keys()) == before)
 
 
 ## The part [param name] an organ of the catalogue declares as an input, its
