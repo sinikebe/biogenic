@@ -10,9 +10,10 @@ extends Node
 ##
 ## **Static, and a few seconds**: it reads the catalogue and the files, and plays
 ## nothing. Phase 1a's checks (§15): the keys, the water, the stat tables, the
-## founders' parts and the gift, the index against the folder, a gene registered
-## and forgotten, and -- a number, not yet a failure (§12.2) -- how many gene
-## names are still written into game/ outside game/genes/.
+## founders' parts and the gift, every declared part wired in a water cell and in
+## yours, the index against the folder, a gene registered and forgotten, and -- a
+## number, not yet a failure (§12.2) -- how many gene names are still written into
+## game/ outside game/genes/.
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -27,6 +28,8 @@ const Stats := preload("res://game/genes/stats.gd")
 const Genome := preload("res://game/normal/genome.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
+const FoodField := preload("res://game/normal/food.gd")
+const OwnRules := preload("res://game/normal/own_rules.gd")
 const Drop := preload("res://game/normal/drop.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Wire := preload("res://game/net/wire.gd")
@@ -60,6 +63,7 @@ func _ready() -> void:
 	_water()
 	_tables()
 	_rules()
+	_wiring()
 	_mechanics()
 	_register()
 	_names_left()
@@ -311,6 +315,67 @@ func _rules() -> void:
 		% str(declarers), levelled_ok
 		and declarers.slice(0, 8) == [&"ocellus", &"ampulla", &"chemocyte", &"stigma",
 			&"palp", &"myoneme", &"axoneme", &"flagellum"])
+
+
+## **Every part a gene declares is wired, in a water cell and in yours** (§12.1):
+## an input has a reader in the water (`food.gd`'s `_wire`) and one of the
+## player's (`own_rules.gd`'s `setup`), and an output a trigger in each. A part
+## with none is a rule that names it and reads nothing, or does nothing, in one
+## body and not the other, and says so nowhere. Then an organ that declares a
+## part nothing wires is registered, to show this check fails on one.
+func _wiring() -> void:
+	var field: Node = FoodField.new()
+	field.call(&"_wire")
+	var cell: Node = CellBody.new()
+	var metabolism: Node = Metabolism.new()
+	var genome: Node = Genome.new()
+	var own: RefCounted = OwnRules.new()
+	own.call(&"setup", cell, field, metabolism, genome)
+	var parts: Array[StringName] = []
+	var unwired := _unwired(field, own, parts)
+	_check("every one of the %d parts the genes declare is read, or performed, by a water"
+		% parts.size() + " cell and by yours: %s%s" % [str(parts), "" if unwired.is_empty()
+			else "; %s" % ", ".join(unwired)], unwired.is_empty() and not parts.is_empty())
+	var organ := Gene.new()
+	organ.organ = &"probewired"
+	organ.declares = {"in": [{"name": &"glow", "bearing": false,
+		"values": {&"level": &"level"}}], "out": [{"name": &"blink", "claims": [&"blink"]}]}
+	Catalogue.register(organ)
+	var caught := _unwired(field, own, [] as Array[StringName])
+	Catalogue.forget(&"probewired")
+	_check("and an organ declaring an input and an output nothing wires is caught on both"
+		+ " sides: %s" % ", ".join(caught), caught.size() == 4
+		and caught.all(func(line: String) -> bool: return line.begins_with("probewired.")))
+	for node: Node in [field, cell, metabolism, genome]:
+		node.free()
+
+
+## What of the genes' declared parts [param field] (a water cell's) and
+## [param own] (yours) leave unwired, one line each; the parts looked at are
+## appended to [param parts].
+func _unwired(field: Node, own: RefCounted, parts: Array[StringName]) -> Array[String]:
+	var water_readers: Dictionary = field.get("_readers")
+	var your_readers: Dictionary = own.get("_readers")
+	var your_triggers: Dictionary = own.get("_triggers")
+	var out: Array[String] = []
+	var declares := Catalogue.declares()
+	for key: StringName in declares:
+		var declared: Dictionary = declares[key]
+		for one: Dictionary in declared.get("in", []):
+			var part := StringName("%s.%s" % [key, one["name"]])
+			parts.append(part)
+			if not water_readers.has(part):
+				out.append("%s has no reader in the water" % part)
+			if not your_readers.has(part):
+				out.append("%s has no reader of yours" % part)
+		for one: Dictionary in declared.get("out", []):
+			var part := StringName("%s.%s" % [key, one["name"]])
+			parts.append(part)
+			if not (field.call(&"trigger", part) as Callable).is_valid():
+				out.append("%s has no trigger in the water" % part)
+			if not your_triggers.has(part):
+				out.append("%s has no trigger of yours" % part)
+	return out
 
 
 # --- What the mechanics ask of an organ (§5.2, §5.3) ---------------------------------------
