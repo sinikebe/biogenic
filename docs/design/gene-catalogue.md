@@ -1489,12 +1489,12 @@ file:
 | `drop.gd` | `TOXIN` gone: `take_drifter_gene` and `drifter_genes` by `not_on_drifters`; `give_toxin` is `give_back(tiers, gene, ...)`; the senses given by organ |
 | `cell.gd` | `provider` is `Stats.organ` over the body's layout (`seats`), `tier_for` that organ's copies, and `dart_stun` takes a layout |
 | `normal_mode.gd`, `replay.gd` | the gift by organ; the beam's fork and experience cap its own organ's; the replay's ping bearing its seated caller's |
-| `own_rules.gd`, `programs_page.gd`, `rulebook.gd` | your instincts' readers wired by part name, your parts counted by organ; the hold's mark and a part's verb found by its name; `part_of` |
+| `own_rules.gd`, `programs_page.gd`, `rulebook.gd` | your instincts' readers wired by part name, your parts counted by organ, and the page's offers too (phase 3's review, below); the hold's mark and a part's verb found by its name; `part_of` |
 | `toxin.gd` | its two tags; `dose_line` read off its own dose |
 | `body_plan.gd` | a stamp of no ids is no stamp; the plan's note says a plan change moves `Wire.PROTOCOL` by hand until phase 4 |
-| `tools/gene_probe.gd` | 53 checks, 42 before: the synthetic gene and its variants, the faster tail and the second strain (§12.3), the dose and venom-word checks in two of the old ones, and `-- --names`, the gate (§12.2); the plan's checks start from `SHIPPED_PLAN`, and the choosing screen is held to the canvas (phase 2's review, below) |
-| `tools/drop_probe.gd`, `net_probe.gd`, `field_diff.gd` | the toxin by its key; the stub genomes answer `body_layout`; armour posed by its stat, the outside filled from the plan, a genome past the plan's count named by letter (phase 2's review) |
-| `.github/workflows/ci.yml` | "Check the gene names" (§12.2), asked for in phase 3's brief |
+| `tools/gene_probe.gd` | 55 checks, 42 before: the synthetic gene and its variants, the faster tail and the second strain (§12.3), the dose and venom-word checks in two of the old ones, and `-- --names`, the gate (§12.2); the plan's checks start from `SHIPPED_PLAN`, and the choosing screen is held to the canvas (phase 2's review, below); `BEFORE_STAMPS` held to a pin of its own, and the instincts page's offers of a variant's parts (phase 3's review, below) |
+| `tools/drop_probe.gd`, `net_probe.gd`, `field_diff.gd` | the toxin by its key; the stub genomes answer `body_layout`; armour posed by its stat, the outside filled from the plan, a genome past the plan's count named by letter (phase 2's review); a frame past the guest cap and a list index past a save's sized from them (phase 3's review) |
+| `.github/workflows/ci.yml` | "Check the gene names" (§12.2), asked for in phase 3's brief, failing on a script error as the other gene steps do (phase 3's review) |
 
 **Where it differs from the design, and why** (the sections above say so too):
 
@@ -1635,6 +1635,29 @@ tooling failing them for the wrong reasons. Each its own commit:
   a slot fact say what the plan says, the translators' note among them, and a stamp of
   no ids is refused.
 
+**And phase 3's review**, which filed a faster tail in a scratch copy of the tail's own
+file and made phase 2's two plan changes again. Each its own commit:
+
+- **`BEFORE_STAMPS` pinned again**: the probe held today's stamp to `SHIPPED_PLAN`'s
+  ids, and nothing held the list every save before stamps is read by -- two of its ids
+  swapped passed every check, the synthetic unstamped cell being laid out from the same
+  constant. `SHIPPED_BEFORE_STAMPS` pins it apart from `SHIPPED_PLAN`, which a plan
+  change moves and this never does, and lays that cell out: the swap fails both.
+- **The instincts page counts parts by organ**, as your rules do: `ProgramsPage.offers`
+  judged by key, so a body wearing the faster tail alone was never offered the hold it
+  could run. It passes both its tables through `by_organ`; the probe checks it through
+  `offers` with its own faster tail, worn at each copy count and carried, against the
+  plain tail, and the old page fails that.
+- **CI's names gate fails on a script error**, as the other gene steps do: a null call
+  planted in its scan went green.
+- **The probes size a frame and a list index by what the plan moves**: `net_probe`'s
+  frames past the guest cap are `GUEST_OTHER_MAX + 1` bytes, not 300, which an eighth
+  slot's cap of 325 outgrows; `drop_probe`'s check 7 spoils a save with the first list
+  index past those it keeps, not 5, which the fore diagonals swapped make valid.
+- **A first variant is two entries until phase 5**, and the spec says so (§6.2, below).
+
+The gene probe makes 55 checks. The review's calls for the gene pass are below.
+
 **Gene names left in `game/`** (§12.2): none. The 17 qualified part names
 (`"<gene>.<part>"`) and `drop.gd`'s `TOXIN` are gone, and CI fails on a name.
 
@@ -1665,6 +1688,37 @@ tooling failing them for the wrong reasons. Each its own commit:
   with a second armour strain, never in today's seeded waters. A gene change moves
   those waters and can meet it. Whether the drift then picks another gene to go is the
   lifecycle's call (dna-slots.md §5.5).
+
+**Before the first variant**: phase 3's review's calls for the gene pass, by its
+numbers, each seen in a scratch copy and none changed here.
+
+- **6. Drop peers never wear a variant of a born organ**: a peer's born organs are the
+  born keys, and their organs then leave its pool (`food.gd:9681-9686`).
+- **7. Two measures of a tail's level**: the rules count the best of any tail worn
+  (`catalogue.gd:415-425`), the hold the first tail in catalogue order
+  (`cell.gd:899-912`; `food.gd:7947`, `8677`, `8976`). A plain tail at one copy beside
+  a faster one at three runs the hold and holds nothing.
+- **8. `one_variant` is not everywhere**: the floor gives a peer a strain beside the one
+  it wears (`drop.gd:446-462`, via `food.gd:9708-9719`); your sample of another strain
+  lapses with no room and is gone (`genome.gd:550-559`), where a full water cell's meal
+  of one writes over the strain it wears (`genome.gd:1480`); and `placing()` says
+  nothing of the strain it will write over (`genome.gd:1052`).
+- **9. The paralysing and sleeping strains are delivered and read by nothing**:
+  `Doses.still` and `Doses.asleep` have no callers (`doses.gd:113`, `122`). That is
+  dna-slots.md's phases 3 and 4 (§6.3, §6.4), which wait on the owner.
+- **10. Grouped stats combine stat by stat** (`stats.gd:261-267`): two tails swim at
+  one's speed with the other's gaps.
+- **11. The colour floor asks every variant for a hue of its own**
+  (`gene_probe.gd:137`), where `gene-looks.md` §3 keeps its organ's colour and gives it
+  an accent; and a mechanic's marks stay its first provider's hue (`cilia.gd:605`,
+  `612`).
+- **12. A person's genome is written before its order** (`food.gd:4880-4881`,
+  `4433-4434`), so what it buys is read under the order before. Only `stat_dart_stun`
+  reads the order there, and nothing reads that for a person.
+- **13. The names gate's gaps** (`gene_probe.gd:2429-2444`, `2592-2599`): it misses
+  `&'palp'`, a name built by concatenation, a qualified part (`&"flagellum.hold"`), an
+  organ's name that is no key (`&"toxin"`) and every file but a `.gd`; and it fails a
+  quoted name in a trailing comment.
 
 ---
 
