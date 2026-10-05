@@ -1740,6 +1740,147 @@ numbers, each seen in a scratch copy and none changed here.
   organ's name that is no key (`&"toxin"`) and every file but a `.gd`; and it fails a
   quoted name in a trailing comment.
 
+### 15.5 As built: phase 4, 2026-10-05
+
+**The game writes out the rules two builds in one pond must agree on, and the
+handshake carries their fingerprint: two builds whose rules differ refuse each other
+there, by themselves, with the sentence that already named the update.** A gene
+added "at any moment" that changes what the referee judges, a contact table or the
+body plan moves `Wire.RULES`' pin and nothing else. By file:
+
+| file | now |
+|---|---|
+| `game/net/rules.gd` (new) | the text, written from the catalogue in a fixed order: every table a stat row marks `judged` or `contact`, by every organ that provides it; the run's numbers the referee judges by; the contact rules no table holds -- `BITE_GAP`, the flank, `bite_damage` and the doses' constants, by sample where a rule is a function; the referee's own limits; the body plan's fingerprint. `fingerprint()`, its 32 bytes, and `hex()`. 1.6 ms the first time and 0.4 ms after, once a session |
+| `stats.gd` | `contact`, a row's: the gape, the bite, the armour and the three dose tables; `contact()` |
+| `genome.gd` | `GIFT_TIER`, the gift's copies, which `_express_gift` wears and the rules read |
+| `wire.gd` | `PROTOCOL` 8; the tail after every handshake frame's frozen prefix -- the rules' fingerprint, then the sender's content version (`RULES_SIZE`, `TAIL_SIZE`, `tail`, `rules_of`, `content_of`): HELLO 39 bytes, WELCOME 43, REFUSE 40; `REFUSE_PROTOCOL` covers other rules on one protocol; `RULES` is the pin; the hand rule under `PROTOCOL` is gone |
+| `net_session.gd` | the rules taken as a session starts; the tail on every HELLO, WELCOME and REFUSE; a host refuses a guest on other rules on the version check, before any invite is asked for, and a guest a welcome on other rules; which game is older, by protocol and then by content version; the log line says which; `content_override`, a test seam |
+| `server.gd` | its first line names its rules beside its protocol |
+| every judged or contact table's note | "a change moves Wire.RULES, not Wire.PROTOCOL", for "change it with Wire.PROTOCOL"; the plan's note too |
+| `tools/net_probe.gd` | `_rules_text` in the game's order, with the new lines; three rules checks; the tail's; every bare client's HELLO with this build's tail; the skew checks of §11.4 on a phone's host, the dedicated server and by invite |
+| `tools/gene_probe.gd` | the row check asks for `contact`; the faster tail is read through the game's rules; the plan's message says the pin, not the protocol |
+| `tools/net_fuzz.gd` | its handshake frames carry this build's tail -- now and then none, or another build's -- and its guest takes its rules |
+| docs | `docs/server.md`; dated notes on the plans that schedule bumps for judged rules (`dna-slots.md` §14.3, `feeding.md` §7 and §8); `shared-pond.md` §7 and `net-hardening.md` B record the hand rule gone; here, §10.4, §11.3, §11.4, the playbook (§16) and §17 |
+
+**Where it differs from the design, and why** (§11 says so too):
+
+- **`Wire.RULES` stays, as a pin.** The value on the wire is the game's own, worked
+  out at each session's start; the constant is a tripwire that makes a change
+  deliberate. Moving it says that players on the old content and the new cannot
+  play together until the older updates, which is a player-visible consequence
+  worth a line in a commit. Its failure gives the new value and says no `PROTOCOL`
+  goes with it.
+- **The content version rides in the tail too** (§11.3 named the fingerprint): on one
+  protocol, the sentence still says whose game is older -- "yours" or "theirs", "your
+  game is older" or "your friend's server is older" -- by content version, which
+  every release moves. It never decides who may play: `multiplayer.md`'s rule, never
+  refuse on `content_version`, holds. Release and branch builds never meet, being on
+  other ports (`channel.gd`); a tie with other rules is a build made outside a
+  release, and each end names the other's game as the older.
+- **REFUSE carries the tail too** (§11.3 said HELLO and WELCOME): a guest refused for
+  other rules needs the host's content version to word its sentence.
+- **No new reason and no new sentence**: `REFUSE_PROTOCOL`, "different versions" and
+  the four sentences that already said whose game is older. The log line tells an
+  owner which it was: `it speaks protocol 7, this 8`, or `it judges by other rules`,
+  with both fingerprints and both content versions.
+- **A contact table is a row's `contact`**, beside `judged`: the referee judges no
+  contact, so `judged` keeps meaning what the caps read, and the host decides
+  contacts by the other.
+- **`run.SISTER_DISTANCE` is written from the referee's copy** in the game's text:
+  `rules.gd` cannot load `normal_mode.gd` without a preload cycle through the session.
+  The probe writes the run's own, and the two texts are held equal, which holds the
+  copy to its source.
+- **The text is reordered**, stats first: all 60 lines it had are in it, value for
+  value, and 19 are added.
+
+**Checked** at `922967f`, the last commit to change what the game does, and the gene
+probe and its gate again at `f2809cc`, the last to change a probe or a comment:
+
+1. Every check `ci.yml` runs passes here but `net_drop` and the door of `net_fuzz`,
+   which need a network namespace this container refuses (left to CI, as before).
+   One condition moved rather than went: the gene probe's faster tail no longer
+   holds the game's rules to `Wire.RULES` -- with the plan in them, an eighth slot
+   failed it for a reason not its own -- and `net_probe`'s pin holds them still.
+   The new checks -- the game's text against the probe's, the pin, the tail, and
+   the skew checks on a phone's host, the dedicated server and by invite -- were
+   each seen to fail on a fault planted in a scratch copy: the game's text missing
+   a line (named at the line), a judged value changed (the pin, saying no protocol
+   goes with it), a host that skips the rules on HELLO (a guest welcomed, or told
+   "already two", or proving its invite), and a guest whose HELLO has no tail
+   (refused where it should play).
+2. **`Wire.RULES` moved on purpose**, `46913eab…` to `95c66e7e…`: the old text's 60
+   lines are all in the new one, value for value, and the 19 added are the six
+   contact tables, `BITE_GAP`, the two flanks, two samples of `bite_damage`, the
+   doses' six constants and a sample of `felt`, and the body plan's fingerprint.
+   The game writes those 79 lines as `net_probe` writes them from the constants.
+3. **The handshake**, in one process: same build and same build play -- every
+   session in `net_probe`, 465 checks; protocols 1 to 7 are refused by a host
+   on 8 by name, and 9 too; one protocol and other rules are refused with the
+   version sentence, the older game named by content version, both ways round, on
+   a phone's host, by the dedicated server -- ahead of the count of its room -- and
+   by invite, before any CHALLENGE; one more gene that judges nothing plays, and its
+   name crosses whole to a host that never had it. HELLO is 39 bytes of the 64
+   every build reads; WELCOME 43; REFUSE 40.
+4. **And in two, each build on its own code**: phase 3's (`9144209`, protocol 7)
+   and this one, on a branch channel's ports. Same and same play, on a phone's host
+   and on the dedicated server. Old and new refuse each other both ways, as either:
+   "different versions", the phase-3 end told its game is the older ("yours") and
+   this one the other's ("theirs"); a server of this build logs `it speaks protocol
+   7, this 8`, and a phase-3 server its own `different versions`. A scratch build
+   that grows five a meal, on protocol 8, is refused the same way by a phone and by
+   the server, logged `it judges by other rules: c6b216a0 at content 7, this 95c66e7e
+   at content 0`; the end on content 0 reads "yours", the end on 7 "theirs", and
+   both read "theirs" when the two are on one content.
+5. Everything else as it was against `71938d6`: the empty library hashes to
+   `7397a410…` under all three schemes, 69,349 lines; `drop_probe` passes all 143,
+   its ten pins holding; `DropSave.rules()` is `e4213164b90d…`; **the 34 frames** are
+   0 px from `71938d6`'s; the 30,519 answers of every word, line and look, the
+   3,865 of the stats and the 47 lines of the rulebook's vocabulary, to the byte;
+   `drive --fingerprint=3000`'s six hashes and counts; the input path's three
+   traces; every scene's boot; the levels, Back and fuzz probes; the gene probe's
+   53, and the gate; the template current, 531 messages, from 91 files; and a
+   world, a cell mid-choice and a library kept by `71938d6`: opened by both builds,
+   the 10,261 lines of four seconds are the same; kept again by each, the files dump
+   the same and the library is the same bytes; opened again by both, 10,260 lines
+   are the same.
+6. **On the owner's eighth-slot plan**, the gene probe fails its plan pin alone, and
+   `net_probe` its wire size and `Wire.RULES`, each saying what to move and that no
+   protocol goes with it.
+
+**The cost**: the fingerprint is worked out once a session, as it starts -- 1.6 ms
+the first time in a process, 0.4 ms after. Nothing runs per frame. `net_probe`
+finishes in 18,560 frames of the 24,000 CI allows.
+
+**What a player on an old build sees.** A phone on protocol 7 that calls a phone or
+a server on 8, or is called by one, is refused by name, as any protocol bump does:
+"different versions", and under it "one of these games is older than the other --
+yours. take the update from the launcher, restart, and call again." -- or "theirs",
+on the phone that is newer; by invite, "your game is older than your friend's
+server..." or "your friend's server is older, and updates itself once nobody is
+swimming there...". A dedicated server takes protocol 8 when it next restarts with
+nobody in its water. **After this phase, a content release that changes the rules
+does the same on one protocol**, with the same words: a phone that has not taken it
+cannot play with one that has, until it does.
+
+**Deferred:**
+
+- **`CLAUDE.md`'s "The host's referee copies the game's rules"** still says to bump
+  `Wire.PROTOCOL` with `Wire.RULES`, and that a change to the referee's own limits
+  needs no bump. It is not this phase's to edit: it should say that a change to a
+  rule the referee copies, a contact table, the body plan or the referee's own limits
+  moves `Wire.RULES`' pin, which the handshake carries, and that `PROTOCOL` moves only
+  with a message's format.
+- **A referee's limit is a rule too**, as §11.3 asked, so a change to one splits
+  builds at the handshake, where before it split none. Most of them copy a rule of the
+  run or bound what a guest does -- its motion, its shouts, its arrivals, its bodies
+  -- so a change to one usually comes with a change to what a guest does, and the
+  split is right. A slack loosened alone, after a false positive, splits builds for
+  nothing a guest does; if that cost is ever felt, the pure slacks can leave the
+  handshake's text and stay under the pin.
+- **net_fuzz's door and `net_drop`** need a network namespace this container refuses:
+  CI runs them. The door's HELLOs carry this build's tail; it does not try other
+  rules at the door, which `net_probe` covers by invite.
+
 ---
 
 ## 16. The playbook (what the gene pass will do)
@@ -1754,9 +1895,9 @@ numbers, each seen in a scratch copy and none changed here.
   the catalogue: until phase 5 its first variant is two entries (§6.2). Append the key
   to the gene probe's `SHIPPED`, and to each list of its `SHIPPED_LISTS` the variant
   joins by the tags and water it takes from its organ, and write the template again
-  (`i18n_pot -- --write`). A variant that provides a stat the referee judges is a new
-  line of its rules: `Wire.RULES`, and `Wire.PROTOCOL` with it until phase 4 (Editing
-  a gene, below). Run the gene probe. Add the French. Render the organ beside its
+  (`i18n_pot -- --write`). A variant that provides a stat the referee judges, or a
+  contact stat, is a new line of its rules: `Wire.RULES`' pin moves, and no protocol
+  (Editing a gene, below). Run the gene probe. Add the French. Render the organ beside its
   nearest neighbours at both sizes. A variant in one place needs no `forms` (§6.2),
   and its tags add to its organ's. It has its organ's instinct parts, read by the same
   readers, and declares none of its own. Two variants of one organ are two loci;
@@ -1774,8 +1915,8 @@ numbers, each seen in a scratch copy and none changed here.
   handshake keeps builds on other rules apart by itself (§11.3, §15.5), and
   `Wire.PROTOCOL` moves only with a message's format. A second provider of a judged
   or contact stat is a new line of the rules too. Moving the pin means a player on
-  the old content cannot play one on the new until both update: say so in the patch
-  note's line if a player can tell.
+  the old content cannot play one on the new until the older updates: say so in the
+  patch note's line if a player can tell.
 - **Retiring a gene**: tag it `retired`. Never delete the file, and never reuse its
   key. A stat only it provided reads its value with no provider, and the probe names
   it. If it was on a list a draw or a bit reads -- a drifter, a sense, the gift, a
@@ -1817,7 +1958,7 @@ server takes it when it next restarts empty, and until then builds on either sid
 it refuse each other with the version sentence. **After it, so does any content
 release that changes the rules** -- a gene a body swims or bites with, a contact
 table, the body plan -- with no protocol bump: phones and servers on the old content
-and the new refuse each other until both update.
+and the new refuse each other until the older updates.
 
 ---
 
