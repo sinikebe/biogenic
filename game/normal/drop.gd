@@ -191,13 +191,6 @@ const START_FOOD := 1100.0
 ## of the start is moved straight out to that reach and this much more.
 const START_PUSH := 100.0
 
-## **The gene no drifter carries** (row 13, and docs/design/dna-slots.md §9): the
-## toxin, by its variety's name, in either of its forms -- venom outside, poison
-## inside. The drop's defenceless food is never poisonous to eat, and a mouthless
-## drifter's venom would bite nothing anyway; a drop short of it gets it back
-## through the next peer, its place by a coin.
-const TOXIN := &"veneneux"
-
 # --- How its cells behave (docs/design/behaviour.md §5, §6) --------------------
 
 ## **The founders' rules** (behaviour.md §5.1, row 22): what every body this
@@ -348,11 +341,13 @@ static func short_genes(counts: Dictionary, genes: Array[StringName]) -> Array[S
 
 
 ## **The gene the next drifter carries for the floor**, taken off
-## [param short]: the last there that is not the toxin, in any form, which comes
-## back through a peer instead. Empty when nothing a drifter may carry is short.
+## [param short]: the last there that a drifter may carry -- not one tagged
+## `not_on_drifters`, the toxin's every strain, in any form, which comes back
+## through a peer instead (gene-catalogue.md §6.4). Empty when nothing a drifter
+## may carry is short.
 static func take_drifter_gene(short: Array[StringName]) -> StringName:
 	for i in range(short.size() - 1, -1, -1):
-		if Genome.variety(short[i]) != TOXIN:
+		if not Catalogue.has_tag(short[i], Catalogue.NOT_ON_DRIFTERS):
 			var gene := short[i]
 			short.remove_at(i)
 			return gene
@@ -384,24 +379,29 @@ static func peer_plan() -> Array[StringName]:
 
 
 ## **The gift**: a peer that carries none of [param senses] is given one at
-## tier 1, `senses[pick]`, in a bonus slot -- as the player's newborn is at five
-## seconds. Returns whether it was.
+## tier 1, in a bonus slot -- as the player's newborn is at five seconds: the
+## organ [param pick] names among theirs, then one of its varieties by weight
+## (gene-catalogue.md §6.1), which with one variety to an organ is `senses[pick]`.
+## Returns whether it was.
 static func give_sense(tiers: Dictionary, senses: Array[StringName], pick: int) -> bool:
 	if senses.is_empty():
 		return false
 	for sense: StringName in senses:
 		if int(tiers.get(sense, 0)) > 0:
 			return false
-	tiers[senses[posmod(pick, senses.size())]] = 1
+	var organs := Catalogue.organs_in(senses)
+	tiers[Catalogue.pick_variety(Catalogue.of_organ(senses,
+		organs[posmod(pick, organs.size())]))] = 1
 	return true
 
 
-## **What a drifter's one gene is drawn from**: [param genes] without the
-## toxin, in any of its forms (row 13).
+## **What a drifter's one gene is drawn from**: [param genes] without any tagged
+## `not_on_drifters` -- the toxin, in any of its forms and strains (row 13;
+## gene-catalogue.md §6.4).
 static func drifter_genes(genes: Array[StringName]) -> Array[StringName]:
 	var pool: Array[StringName] = []
 	for gene: StringName in genes:
-		if Genome.variety(gene) != TOXIN:
+		if not Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
 			pool.append(gene)
 	return pool
 
@@ -434,25 +434,29 @@ static func daughter_behaviours(list: Rulebook.Behaviour, vocab: Rulebook.Vocabu
 	return [list, rolled[0], rolled[1]]
 
 
-## **The toxin back through a peer**, when the floor wants it: at tier 1, and
-## [param inside] -- the coin -- as poison, or outside as venom (docs/design/
-## dna-slots.md §9). Poison takes no arc. Venom takes one, as the old gene did: a
-## peer with no room outside gives up a gene for it -- `pick` chooses which --
-## but never one of its body plan or of [param senses], so it stays a cell that
-## can live; with nothing else to give up, it takes a bonus slot. Nothing, for a
-## peer that carries the toxin in either form.
-static func give_toxin(tiers: Dictionary, slots: int, senses: Array[StringName],
-		pick: int, inside: bool) -> void:
-	for form: StringName in Genome.forms_of(TOXIN):
+## **A gene the floor gives back through a peer** (`floor_by_peers`, the toxin's
+## every strain; gene-catalogue.md §6.4): [param gene], a variety, at tier 1, and
+## [param inside] -- the coin -- in its inside form, or outside in its outside one
+## (docs/design/dna-slots.md §9); a gene of one place in the one it has. Inside
+## takes no arc. Outside takes one, as the old gene did: a peer with no room
+## outside gives up a gene for it -- `pick` chooses which -- but never one of its
+## body plan or of [param senses], so it stays a cell that can live; with nothing
+## else to give up, it takes a bonus slot. Nothing, for a peer that carries it in
+## any form.
+static func give_back(tiers: Dictionary, gene: StringName, slots: int,
+		senses: Array[StringName], pick: int, inside: bool) -> void:
+	for form: StringName in Genome.forms_of(gene):
 		if int(tiers.get(form, 0)) > 0:
 			return
-	var form := Genome.form_in(TOXIN, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
+	var form := Genome.form_in(gene, Genome.INSIDE_PLACE if inside else Genome.OUTSIDE_PLACE)
+	if form == &"":
+		form = Genome.forms_of(gene)[0]
 	if not Genome.is_inside_form(form) and Genome.count_outside(tiers) >= slots:
 		var plan := peer_plan()
 		var spare: Array[StringName] = []
-		for gene: StringName in tiers:
-			if not plan.has(gene) and not senses.has(gene) and not Genome.is_inside_form(gene):
-				spare.append(gene)
+		for other: StringName in tiers:
+			if not plan.has(other) and not senses.has(other) and not Genome.is_inside_form(other):
+				spare.append(other)
 		if not spare.is_empty():
 			tiers.erase(spare[posmod(pick, spare.size())])
 	tiers[form] = 1

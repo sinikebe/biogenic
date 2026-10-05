@@ -31,8 +31,8 @@ extends RefCounted
 
 # --- The words fields are written in ------------------------------------------------
 
-## **The two places** (docs/design/dna-slots.md §2): the seven slots round the
-## body, and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
+## **The two places** (docs/design/dna-slots.md §2): the slots round the body,
+## and the one inside it. `genome.gd`'s OUTSIDE_PLACE and INSIDE_PLACE are
 ## these.
 const OUTSIDE := &"outside"
 const INSIDE := &"inside"
@@ -54,13 +54,22 @@ const INSIDE := &"inside"
 ## - `retired`: known, drawn and inert (§4.4). It drops out of every list above
 ##   and every pool the water, drift and the gift draw from, and provides nothing.
 ##   Its key stays known for good, because saves and the wire keep it.
+## - `not_on_drifters`: no drifter carries it, in any form, so the drop's
+##   defenceless food stays harmless to eat (ocean.md §5.8) -- the toxin
+##   (`food.gd`, `drop.gd`).
+## - `floor_by_peers`: the gene floor gives it back through the next peer, never a
+##   drifter, its place by a coin -- the toxin again (gene-catalogue.md §6.4).
+##   Every variant of it inherits both, so a second strain is covered by every rule.
 const SENSE := &"sense"
 const GIFT := &"gift"
 const ALWAYS_EXPRESSED := &"always_expressed"
 const NEVER_DRIFTS := &"never_drifts"
 const RETIRED := &"retired"
+const NOT_ON_DRIFTERS := &"not_on_drifters"
+const FLOOR_BY_PEERS := &"floor_by_peers"
 ## Every tag an organ may carry. The gene probe fails on any other.
-const TAGS: Array[StringName] = [SENSE, GIFT, ALWAYS_EXPRESSED, NEVER_DRIFTS, RETIRED]
+const TAGS: Array[StringName] = [SENSE, GIFT, ALWAYS_EXPRESSED, NEVER_DRIFTS, RETIRED,
+	NOT_ON_DRIFTERS, FLOOR_BY_PEERS]
 
 ## **The membrane's channels** (§7.3): which one a sense organ drives -- the
 ## shade of a body (`light`), what the beam strikes (`beam`), what the ping hears
@@ -134,9 +143,12 @@ var levels := {}
 
 ## **Its place in the water** (§9): `weight`, how often a draw takes it against
 ## the others (`food.gd`'s draws; 1 if unset), and `drifter`, whether a drifter
-## may be made of it (false if unset). **The water draws a variant by its
-## variety**, its first form: its other forms answer the same weight and are in
-## no list of the water's.
+## may be made of it (false if unset). **The water draws an organ first, then one
+## of its variants** (gene-catalogue.md §6.1): an organ by its own weight -- this
+## field as its file sets it, or, where only its variants set one, its first
+## variety's -- and then a variant by the weight each answers, its share of the
+## organ's draws. **A variant is drawn by its variety**, its first form: its other
+## forms answer the same weight and are in no list of the water's.
 var water := {}
 
 ## **Its tags**: any of [constant TAGS]. A variant's or a form's are added to its
@@ -162,6 +174,13 @@ var look := {}
 ## cirrus and the tail, one each. 0 for a gene no cell is born with. The host's
 ## referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 var born := 0
+
+## **One variant to a body** (gene-catalogue.md §6.3): placing a second variant of
+## this organ writes over the first, as the inside's one poison does, and the water
+## and drift never give a body a second. Off for every organ today, since nothing
+## today can carry two: the gene pass sets it per organ when it adds variants. The
+## organ's own, never a variant's.
+var one_variant := false
 
 ## **What it gives a body's rules** (docs/design/behaviour.md §3), in the shape
 ## `rulebook.gd`'s vocabulary reads: `{"in": [...], "out": [...]}`, the inputs it
@@ -210,9 +229,13 @@ var declares := {}
 ## or to a dictionary with the form's `key` and anything the form sets of its own
 ## -- and anything else the variant sets over its organ. A variant's first form
 ## is its variety. **A variant with no `forms` is one form, outside**, keyed by
-## its own `key` or, without one, by its name: a faster tail is one entry,
-## `{"variant": &"swift", "key": &"swiftail", "provides": {...}}`. Empty for an
-## organ of one variant in one place.
+## its own `key` or, without one, by its name. Empty for an organ of one variant
+## in one place. **An organ's first variant is two entries until phase 5**
+## (gene-catalogue.md §6.2): its own key is filed only while this is empty, and a
+## variant takes its `order` and `born` as it takes every field it does not set.
+## So a faster tail restates the tail first, then gives itself an order and no
+## copies at birth: `[{"key": &"flagellum"}, {"variant": &"swift", "key":
+## &"swiftail", "order": 17, "born": 0, "look": {"hue": ...}, "provides": {...}}]`.
 var variants: Array = []
 
 # --- What the catalogue writes, per key ------------------------------------------------
@@ -249,6 +272,14 @@ func stat_at(stat: StringName, t: int) -> float:
 ## own, which `genome.gd` charges at the old per-tier rate, by level.
 func upkeep_at(_level: int, _path: StringName) -> float:
 	return -1.0
+
+
+## **What one stack of its dose does**, a readout item, for a key that delivers a
+## dose ([member dose]): each kind its own line, read off the key's own dose --
+## a second strain says its kind's, never harm's. Empty for a key with no dose, and
+## for a kind its organ has no line for, which the gene probe fails.
+func dose_line(_ctx: Dictionary) -> Dictionary:
+	return {}
 
 
 ## **Its numbers on the pause screen** (gene-catalogue.md §8.4; gene-stats.md §5):

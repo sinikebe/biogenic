@@ -138,9 +138,13 @@ const BODY_STATS := {
 	&"body.turn-random": &"turn_rate",
 	&"body.swim": &"impulse_speed",
 }
-## **The parts that hold the tail still wear the hold's mark** (§3.3): the pad and
-## the page use one picture.
-const HOLDS_TAIL: Array[StringName] = [&"flagellum.hold"]
+## **The part that holds the tail still wears the hold's mark** (§3.3): the pad and
+## the page use one picture. By the name its organ declares it by, `hold`, so every
+## variant of the tail's is marked alike (rulebook.gd's `part_of`).
+const HOLD_PART := &"hold"
+## **What a gene's part does, as the hints' verb**, by the name its organ declares
+## it by: the dash dashes, the push pushes, the hold holds the tail.
+const PART_VERBS := {&"dash": &"dash", &"push": &"push", HOLD_PART: &"hold"}
 
 # --- Words (automation-ux.md §8) ------------------------------------------------------
 
@@ -1121,12 +1125,8 @@ func _verb_of(rule: Rulebook.Rule) -> StringName:
 			return &"swim"
 		&"body.rest":
 			return &"rest"
-		&"myoneme.dash":
-			return &"dash"
-		&"axoneme.push":
-			return &"push"
-	if HOLDS_TAIL.has(rule.output):
-		return &"hold"
+	if organ_of(rule.output) != &"":
+		return PART_VERBS.get(Rulebook.part_of(rule.output), &"act")
 	return &"act"
 
 
@@ -2099,9 +2099,10 @@ func _focus_mark(node: Control) -> void:
 
 # --- Parts: their hue and their mark --------------------------------------------------
 
-## **The organ that reports or does [param part]**: a gene's own, the cirrus for
-## a turn and the flagellum for a swim ([constant BODY_STATS]), or &"" for the
-## cell's own and `always`.
+## **The organ that reports or does [param part]**, as the key it is drawn as: a
+## gene's own -- its organ's first key, whichever variant a body wears
+## (catalogue.gd's `first_key`) -- the cirrus for a turn and the flagellum for a
+## swim ([constant BODY_STATS]), or &"" for the cell's own and `always`.
 static func organ_of(part: StringName) -> StringName:
 	if BODY_STATS.has(part):
 		return Catalogue.first_provider(BODY_STATS[part])
@@ -2113,7 +2114,13 @@ static func organ_of(part: StringName) -> StringName:
 		owner = (vocab.outputs[part] as Rulebook.OutputDecl).owner
 	if owner == &"" or FoodField.everybody().has(owner):
 		return &""
-	return owner
+	return Catalogue.first_key(owner)
+
+
+## Whether [param part] is the one that holds the tail still: a gene's part its
+## organ declares as [constant HOLD_PART].
+static func _holds_tail(part: StringName) -> bool:
+	return Rulebook.part_of(part) == HOLD_PART and organ_of(part) != &""
 
 
 ## **A part's hue**: its organ's, the cell's own for the body's and the
@@ -2131,7 +2138,7 @@ static func part_hue(part: StringName) -> Color:
 static func draw_part_glyph(node: CanvasItem, part: StringName, at: Vector2, alpha: float) -> void:
 	if part == Rulebook.ALWAYS or part == &"":
 		return
-	if HOLDS_TAIL.has(part):
+	if _holds_tail(part):
 		_draw_hold_glyph(node, at, alpha)
 		return
 	var organ := organ_of(part)
@@ -2802,12 +2809,16 @@ static func rungs_offered(kind: StringName) -> Array:
 
 ## **What the page offers to pick** (§4.2): whatever the body and the metabolism
 ## declare, and every part of a gene your DNA carries or your body wears -- in
-## [param dna] copies and [param levels], what each worn gene works at --
-## `{inputs, outputs}` in the vocabulary's order, the genes' first, `always`
-## last; with `carried` (a gene carried and not worn) and `waiting` (a part
-## waiting for its organ's level: the level it needs) for the ones that cannot
-## act yet.
+## [param dna] copies and [param levels], what each worn gene works at, both by
+## key -- `{inputs, outputs}` in the vocabulary's order, the genes' first,
+## `always` last; with `carried` (a gene carried and not worn) and `waiting` (a
+## part waiting for its organ's level: the level it needs) for the ones that
+## cannot act yet. **Counted by organ**, as your rules count your parts
+## (own_rules.gd's `worn`, catalogue.gd's `by_organ`): a part is its organ's, so
+## a body that wears any variant of the organ is offered it.
 static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictionary) -> Dictionary:
+	var carried_by := Catalogue.by_organ(dna)
+	var worn_by := Catalogue.by_organ(levels)
 	var everybody := FoodField.everybody()
 	var genes_in: Array[StringName] = []
 	var own_in: Array[StringName] = []
@@ -2824,8 +2835,8 @@ static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictiona
 			if everybody.has(owner):
 				(pair[2] as Array).append(name)
 				continue
-			var worn := int(levels.get(owner, 0))
-			if worn <= 0 and int(dna.get(owner, 0)) <= 0:
+			var worn := int(worn_by.get(owner, 0))
+			if worn <= 0 and int(carried_by.get(owner, 0)) <= 0:
 				continue
 			(pair[1] as Array).append(name)
 			if worn <= 0:
@@ -3309,6 +3320,8 @@ static func draw_pips(node: CanvasItem, first: Vector2, hue: Color, copies: int)
 			node.draw_circle(at, PIP_ROOM_R, Color(PALE, 0.30), true, -1.0, true)
 
 
+## **What the page offers this run's body**: its DNA's copies and what each gene it
+## wears works at, by key, which [method offers] counts by organ.
 func _offers() -> Dictionary:
 	var genome: Node = _run.get(&"_genome")
 	var levels := {}

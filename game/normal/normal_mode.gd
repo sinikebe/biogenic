@@ -435,8 +435,8 @@ var library_at := Library.PATH
 @onready var _tray: HFlowContainer = $Hud/Pause/Center/Columns/Genome/Waiting
 ## **The body, and the DNA at each part of it** (dna-body.md). Two layers of one
 ## box: `Body` draws the cell, its tethers, its own words and the arc being
-## read, and takes no input; `Slots` holds the seven chips, the only things on
-## the figure a finger can change. A drawing you cannot change must not look
+## read, and takes no input; `Slots` holds a chip for every slot, the only
+## things on the figure a finger can change. A drawing you cannot change must not look
 ## like one you can, and the asymmetry is drawn by what responds rather than by
 ## a tint -- the rule the two strands had, kept.
 @onready var _figure: Control = $Hud/Pause/Center/Columns/Genome/Figure
@@ -478,7 +478,8 @@ var library_at := Library.PATH
 	$Hud/Pause/Center/Columns/Genome/Fork/Way0,
 	$Hud/Pause/Center/Columns/Genome/Fork/Way1]
 ## The division's reading surface. Built once in [method _ready] and then only
-## ever redrawn: seven loci a side is an invariant, not a maximum.
+## ever redrawn: a locus for every slot, on each side, is an invariant, not a
+## maximum.
 @onready var _choosing: Control = $Hud/Choosing
 @onready var _choose_port: VBoxContainer = $Hud/Choosing/Port
 @onready var _choose_starboard: VBoxContainer = $Hud/Choosing/Starboard
@@ -1703,7 +1704,7 @@ func _process(delta: float) -> void:
 	if _metabolism.starved():
 		_die(false, 0.0)
 		return
-	# **Seven arcs, and no room for an eighth organ.** Checked after the meal
+	# **Every arc full, and no room for one more organ.** Checked after the meal
 	# that grew the body, so the division is the consequence of the mouthful
 	# rather than of the frame after it.
 	if _split == Split.NONE and _cell.radius >= CellBody.DIVIDE_RADIUS:
@@ -1793,6 +1794,9 @@ func _earn_beam(delta: float) -> void:
 	if beam == &"":
 		_beam_tally.reset()
 		return
+	# Capped by the organ that casts it: its own number.
+	var cap: Variant = Catalogue.number(beam, &"xp_cap")
+	_beam_tally.cap = maxi(int(cap), 0) if cap != null else 0
 	for index: int in _food.beam_touched:
 		_beam_tally.touch(index)
 	var earned := _beam_tally.step(delta)
@@ -1909,9 +1913,14 @@ func _eyespot_tier() -> int:
 
 
 ## **The level the beam forks at** (`ocellus.gd`), which the membrane's beam lobe
-## is held to: its widths are written for the three rungs below it.
+## is held to: its widths are written for the three rungs below it. The fork of
+## the organ the beam leaves from, or of the first that casts one for a body that
+## wears none.
 func _beam_fork() -> int:
-	return int(Catalogue.levels(Catalogue.first_provider(&"beam_range")).get("fork", 0))
+	var beam := _cell.provider(&"beam_range")
+	if beam == &"":
+		beam = Catalogue.first_provider(&"beam_range")
+	return int(Catalogue.levels(beam).get("fork", 0))
 
 
 ## The one beam the membrane hears about: the nearest hit. There is one glow
@@ -2106,7 +2115,11 @@ func _step_sense_grant(delta: float) -> void:
 	for sense: StringName in senses:
 		if _cell.extra(sense) > 0:
 			return
-	var gene: StringName = senses[randi() % senses.size()]
+	# An organ, then one of its varieties by weight (gene-catalogue.md §6.1): with
+	# one variety to an organ, which is every sense today, the draw it always was.
+	var organs := Catalogue.organs_in(senses)
+	var gene := Catalogue.pick_variety(Catalogue.of_organ(senses,
+		organs[randi() % organs.size()]))
 	# It is in the DNA already but not on this body -- a lineage that wrote a
 	# sense down and then never expressed it. Nothing to give.
 	if _genome.dna_tier(gene) > 0:
@@ -4862,10 +4875,10 @@ const HINT_ROW_HEIGHT := 20.0
 ##
 ## TRANSLATORS: All the `ACT_` lines are one line of instructions in 14 px type,
 ## centred under the figure, telling the player what the next tap or release will
-## do. A "slot" is one of seven places round the cell's body where a gene sits;
-## "place" a gene means put it in a slot; "your daughters may wear it" means the
-## cells this one divides into may show the gene as an organ. The row is 560 px
-## wide. This one: a gene is waiting, none is chosen.
+## do. A "slot" is one of the places round the cell's body, or the one inside it,
+## where a gene sits; "place" a gene means put it in a slot; "your daughters may
+## wear it" means the cells this one divides into may show the gene as an organ.
+## The row is 560 px wide. This one: a gene is waiting, none is chosen.
 ## ROOM: 560 px at 14 px
 const ACT_ARM := "tap a slot · your daughters may wear it"
 ## TRANSLATORS: A slot is chosen for the waiting gene; a second tap confirms.
@@ -5008,18 +5021,18 @@ var _explain_at := -1
 var _refusal_text := ""
 var _refusal_until := 0
 
-## The seven chips, by slot index, as last built; null only before the first
-## build.
+## The chips, one for every slot, by slot index, as last built; null only before
+## the first build.
 var _slot_chips: Array[Control] = []
-## How many of the seven slots are live: the ones the body has earned, or the
+## How many of the slots outside are live: the ones the body has earned, or the
 ## whole layout a newborn inherits. The rest are drawn and dead.
 var _slot_count := 0
 
 
 ## Rebuilds the figure's chips and the tray from the genome as it is right now.
-## Cheap and total: seven chips and a tray of a handful, built on opening the
-## pause screen, after a placement or a move, and when the genome changes under
-## an open screen in a pond.
+## Cheap and total: a chip for every slot and a tray of a handful, built on
+## opening the pause screen, after a placement or a move, and when the genome
+## changes under an open screen in a pond.
 ##
 ## **Every rebuild frees the control the keyboard was standing on, so every
 ## rebuild has to hand the keyboard somewhere.** Godot does no focus navigation
@@ -5075,9 +5088,10 @@ func _build_genome_strip() -> void:
 
 	# maxi, not slots(), so a genome can never be longer than the figure that
 	# claims to show it. **A newborn is over capacity and that is intended**: she
-	# carries up to seven genes on a body whose slots() is 3, so she may replace
-	# but not add until she grows -- and every slot her DNA has is live. The
-	# outside's count: the inside is every cell's from birth, and always live.
+	# carries a gene in every slot outside on a body whose slots() is 3, so she
+	# may replace but not add until she grows -- and every slot her DNA has is
+	# live. The outside's count: the inside is every cell's from birth, and
+	# always live.
 	_slot_count = mini(maxi(_genome.slots(), _genome.layout().size()),
 		GenomeNode.INSIDE)
 	_slot_chips.clear()
@@ -5178,9 +5192,9 @@ func _slot_live(slot: int) -> bool:
 
 
 ## **What the figure's chips stand for** (dna-slots-ux.md §3.1): the DNA's
-## outside layout padded to its seven, and the inside after it, at
-## [member GenomeNode.INSIDE]. **The genome changed when these eight changed**,
-## not the seven-long layout: a copy landing inside moves nothing outside, and a
+## outside layout padded to every slot outside, and the inside after it, at
+## [member GenomeNode.INSIDE]. **The genome changed when these changed**, not the
+## outside layout alone: a copy landing inside moves nothing outside, and a
 ## check of the layout alone would call it no change at all.
 func _screen_layout() -> Array[StringName]:
 	var out: Array[StringName] = []
@@ -5555,8 +5569,8 @@ func _hand_lost() -> bool:
 ## this column wears.
 ##
 ## Hover wins over selection, and only on desktop: a mouse can ask about a slot
-## without committing to it, which is the cheapest possible way to read all
-## seven. A thumb has no hover, so the tap path is the one that has to work, and
+## without committing to it, which is the cheapest possible way to read every
+## one. A thumb has no hover, so the tap path is the one that has to work, and
 ## it is the one that is tested.
 ##
 ## **An empty slot with a gene in hand explains the gene in hand.** There is
@@ -6726,9 +6740,9 @@ func _second_tap(index: int, by_key: bool) -> void:
 ##
 ## **Gated on the figure, not on the ladder.** `_genome.slots()` is the capacity
 ## the *body* earned, and a newborn carries her mother's whole DNA on a body two
-## thirds the size -- so gating on it would silently deaden four of seven live
-## slots for the commonest state in the late game. The chips are the DNA and the
-## DNA is what is being placed into.
+## thirds the size -- so gating on it would silently deaden four of today's
+## seven live slots for the commonest state in the late game. The chips are the
+## DNA and the DNA is what is being placed into.
 func _commit_slot(index: int) -> void:
 	# **Nothing is written while a gesture is in flight**, which is the guard
 	# [method _step_arming] already carries and this one was missing once. The
@@ -6797,7 +6811,7 @@ func _step_arming() -> void:
 		_update_act()
 	# **Nothing lapses while a gesture is in flight.** A rebuild frees the chip
 	# a drag came out of and the one under the pointer -- and four seconds is an
-	# easy hold for a thumb that is choosing between seven destinations.
+	# easy hold for a thumb that is choosing between every slot the body has.
 	if _dragging != SLOT_NONE:
 		return
 	# **A finger already down counts as a gesture in flight**, and this one was
@@ -8224,7 +8238,7 @@ func _step_offer(delta: float) -> void:
 # thing they cannot draw is what she *carries* -- a gene that lost its
 # expression roll is still in her DNA and rolls again in her own daughters. A
 # port daughter wearing three organs against a starboard one wearing six reads
-# as a broken cell, and she is not; she carries the same seven genes.
+# as a broken cell, and she is not; she carries the same genes.
 #
 # So the answer is the DNA and not a second picture of the body, and the
 # vocabulary is `dna-strand.md`'s, unchanged: hue is the gene, a rung is a copy,
@@ -8237,15 +8251,15 @@ func _step_offer(delta: float) -> void:
 #
 # Three things about the geometry are worth stating rather than deriving:
 #
-# - **Seven loci outside and the inside, always.** A division fires only at
-#   `DIVIDE_RADIUS` 40, where `slots_for(40)` is 7, and `Genome.mutated()` never
-#   changes the order's length; the inside is every cell's from birth, so it is
-#   the eighth locus, last on each strand (dna-slots-ux.md §3.8). So the column
-#   is a fixed 480 px at every division of every generation and nothing ever
-#   reflows. Empty loci are drawn -- weave and pale dart, no rungs, no word --
-#   because locus *i* has to sit at the same canvas y on both sides or the
-#   comparison stops being a horizontal scan, and that scan is the whole
-#   mechanism.
+# - **Every slot outside and the inside, always.** A division fires only at
+#   `DIVIDE_RADIUS` 40, where `slots_for(40)` is every slot the plan has outside
+#   -- today seven -- and `Genome.mutated()` never changes the order's length;
+#   the inside is every cell's from birth, so it is the last locus on each strand
+#   (dna-slots-ux.md §3.8). So the column is fixed -- 480 px today -- at every
+#   division of every generation, and nothing ever reflows. Empty loci are drawn
+#   -- weave and pale dart, no rungs, no word -- because locus *i* has to sit at
+#   the same canvas y on both sides or the comparison stops being a horizontal
+#   scan, and that scan is the whole mechanism.
 # - **One lobe per locus, at 48 px.** The pause strand was 800 canvas px wide and
 #   the space beside a daughter is 335; it did not fit at either shape, so the
 #   pitch shrinks and the lobe count with it. A locus must begin and end at a
@@ -8268,7 +8282,7 @@ func _step_offer(delta: float) -> void:
 # ---------------------------------------------------------------------------
 
 ## §3.1 -- an invariant, not a maximum. See the note above. **Every slot of the
-## body plan**: the seven outside slots and then the inside, at [member
+## body plan**: the slots outside and then the inside, at [member
 ## GenomeNode.INSIDE]: **its mark is a ring with a seed in it**, where every outside
 ## locus has its slot's dart -- a body with something inside, pointing nowhere
 ## (`Cilia.draw_slot_dart`).
@@ -8595,7 +8609,7 @@ func _choose_at(side: int, slot: int) -> Array:
 
 ## **The two lines below, and they are shared rather than one per side.** The
 ## sixteen gene lines are about the gene, and both strands carry the same gene
-## at five or six of seven loci, so a per-side line would be the same sentence
+## at all but a locus or two, so a per-side line would be the same sentence
 ## twice in most frames -- and the longest of them is 519 px, which two of,
 ## centred under daughters 264 px apart, overlap by 255. Which strand is being
 ## read is carried by the lit lens, on the thing the finger just touched.
@@ -8730,7 +8744,7 @@ func _draw_choose_locus(node: Control, side: int, slot: int) -> void:
 	# **The mutation, marked on both strands at every locus where the two DNAs
 	# disagree** (§6). Not because comparison is too much work -- `lifecycle.md`
 	# §2.2 is right that it is the skill -- but because the expression roll lands
-	# on the same seven rows and means the opposite thing. A hue, a word or a
+	# on the same rows and means the opposite thing. A hue, a word or a
 	# rung *count* is the mutation and is heritable; a rung *shape* is the roll
 	# and rolls again. Without the caret those two channels read as one.
 	#
@@ -8804,7 +8818,7 @@ func _choose_pick(side: int, slot: int) -> void:
 	_redraw_choosing()
 
 
-## Desktop reads by hovering, which is free and gets all seven loci with no
+## Desktop reads by hovering, which is free and gets every locus with no
 ## clicks. It moves the two lines and deliberately not the lens: the selection
 ## belongs to the thing the player actually touched.
 func _on_choose_hover(side: int, slot: int) -> void:

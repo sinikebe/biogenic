@@ -57,6 +57,8 @@ const GIFT := Gene.GIFT
 const ALWAYS_EXPRESSED := Gene.ALWAYS_EXPRESSED
 const NEVER_DRIFTS := Gene.NEVER_DRIFTS
 const RETIRED := Gene.RETIRED
+const NOT_ON_DRIFTERS := Gene.NOT_ON_DRIFTERS
+const FLOOR_BY_PEERS := Gene.FLOOR_BY_PEERS
 ## The membrane's channels (gene.gd), for the same reason.
 const LIGHT := Gene.LIGHT
 const BEAM := Gene.BEAM
@@ -102,7 +104,9 @@ const DECLARES := &"declares"
 ## **They pin order only, never membership**: which genes are on a list is each
 ## gene's own field, and a gene that joins one after these follows them, in
 ## [method keys]' order. So the gene pass never edits this, and a retired gene
-## named here is simply not on its list any more.
+## named here is simply not on its list any more. `declares` names organs, whose
+## parts every variant shares ([method declares]); each shipped organ goes by its
+## own key.
 const SHIPPED_ORDERS := {
 	DRIFTERS: [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
 		&"ocellus", &"axoneme", &"palp", &"myoneme",
@@ -114,9 +118,11 @@ const SHIPPED_ORDERS := {
 }
 
 ## The fields a variant or a form may set over its organ: everything an organ
-## sets but its name and its variants (§6.2).
+## sets but its name, its variants and **the parts it declares**, which are the
+## organ's -- every variant of it has them, under the organ's name, and its rules
+## read them alike (§6.2; [method declares]).
 const OVERRIDES: Array[String] = ["order", "provides", "numbers", "levels", "water", "tags",
-	"channel", "born", "declares", "look"]
+	"channel", "born", "look"]
 
 ## An empty list, the answer for a name nothing is filed under.
 static var _none: Array[StringName] = _read_only([] as Array[StringName])
@@ -153,11 +159,25 @@ static var _tagged := {}
 static var _tag_sets := {}
 ## The live varieties a drifter may be made of, in order.
 static var _drifters: Array[StringName] = []
+## **Organ to its own weight in the water's draws**, and organ to whether it holds
+## one variant to a body ([method organ_weight], [method one_variant]).
+static var _organ_weights := {}
+static var _one_variant := {}
+## **Key to its organ, and organ to its keys**, every key's, retired and forms
+## included, an organ's in the order its file lists them. Asked of every gene of
+## every draw the water makes ([method organ_of], [method keys_of_organ]), so each
+## is one lookup.
+static var _organs := {}
+static var _organ_keys := {}
 ## Key to the copies a newborn wears, and those keys in order.
 static var _born := {}
 static var _born_order: Array[StringName] = []
-## Key to the parts it declares, in the order they are declared.
+## **Organ to the parts it declares**, in the order they are declared; organ to
+## its first live key; and whether every organ that declares parts goes by its
+## own key alone ([method by_organ]).
 static var _declares := {}
+static var _first_keys := {}
+static var _owners_are_keys := true
 ## The live keys that earn levels.
 static var _levelled: Array[StringName] = []
 ## Channel to the live keys that drive it.
@@ -224,8 +244,13 @@ static func rank(key: StringName) -> int:
 
 ## The organ [param key] is a form of: itself for a key this build does not know.
 static func organ_of(key: StringName) -> StringName:
-	var record := gene(key)
-	return record.organ if record != null else key
+	return _organs.get(key, key)
+
+
+## **Every key filed under [param organ]**, its variants' forms and the retired
+## among them, in the order its file lists them; none for a name no organ goes by.
+static func keys_of_organ(organ: StringName) -> Array[StringName]:
+	return _organ_keys.get(organ, _none)
 
 
 ## The variant [param key] is a form of, `&""` for an organ of one.
@@ -296,11 +321,64 @@ static func drifters() -> Array[StringName]:
 	return _drifters
 
 
-## **How often the water draws [param key]** against the others: its variant's
-## weight, 1 where it sets none and for a key this build does not know.
+## **How often the water draws [param key]** against the other varieties of its
+## organ: its variant's weight, 1 where it sets none and for a key this build does
+## not know. The organ is drawn first, by [method organ_weight].
 static func weight(key: StringName) -> int:
 	var record := gene(key)
 	return int(record.water.get("weight", 1)) if record != null else 1
+
+
+## **How often the water draws [param organ]** against the others (§6.1): the
+## weight its file sets, or, where only its variants set one, its first variety's
+## -- so an organ of one variant is drawn exactly as its key was, and the toxin's
+## strains share the toxin's draws rather than add to them (dna-slots.md §8.3).
+## Its key's weight for a name this build files no organ under.
+static func organ_weight(organ: StringName) -> int:
+	var own: Variant = _organ_weights.get(organ)
+	return int(own) if own != null else weight(organ)
+
+
+## Whether [param organ] holds one variant to a body (gene.gd's `one_variant`).
+static func one_variant(organ: StringName) -> bool:
+	return _one_variant.has(organ)
+
+
+## **The organs of [param keys], each once**, in the order its first key comes.
+static func organs_in(keys: Array[StringName]) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in keys:
+		var organ := organ_of(key)
+		if not out.has(organ):
+			out.append(organ)
+	return out
+
+
+## **The keys of [param keys] that are [param organ]'s**, in order.
+static func of_organ(keys: Array[StringName], organ: StringName) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in keys:
+		if organ_of(key) == organ:
+			out.append(key)
+	return out
+
+
+## **One of [param varieties] -- one organ's -- by their weights** (§6.1): the one
+## there is, with no number drawn, for an organ of one variety, which is every organ
+## today; otherwise one roll of the global stream, as every draw of the water's is.
+## `&""` for none.
+static func pick_variety(varieties: Array[StringName]) -> StringName:
+	if varieties.size() <= 1:
+		return varieties[0] if not varieties.is_empty() else &""
+	var total := 0
+	for key: StringName in varieties:
+		total += weight(key)
+	var roll := randi_range(1, maxi(total, 1))
+	for key: StringName in varieties:
+		roll -= weight(key)
+		if roll <= 0:
+			return key
+	return varieties[varieties.size() - 1]
 
 
 ## **The born cell's body** (`genome.gd`): key to the copies a newborn wears, in
@@ -318,10 +396,40 @@ static func born_order() -> Array[StringName]:
 
 # --- Rules and levels -----------------------------------------------------------------
 
-## **Key to the parts it declares to a body's rules** (behaviour.md §3), in the
-## shape `rulebook.gd`'s vocabulary reads, in the order they are declared.
+## **Organ to the parts it declares to a body's rules** (behaviour.md §3), in the
+## shape `rulebook.gd`'s vocabulary reads, in the order they are declared. **The
+## parts are the organ's**: every variant of it has them, under the organ's name --
+## `chemocyte.smell` whichever nose a body wears -- so an instinct reads them alike,
+## and a list saved under one variant reads under the next. A body's rules count
+## them by organ ([method by_organ]).
 static func declares() -> Dictionary:
 	return _declares
+
+
+## **[param levels] -- a key to the level it works at -- by organ**: each organ to
+## the highest level of any live key of it, which is what a body's rules count its
+## parts by (rulebook.gd's owners are the organs of [method declares]). A retired
+## key brings nothing, as it provides nothing (§4.4), and a key this build does not
+## know stands for itself. **[param levels] itself while every organ that declares
+## parts goes by its own key alone** -- every one today -- so nothing is made.
+static func by_organ(levels: Dictionary) -> Dictionary:
+	if _owners_are_keys:
+		return levels
+	var out := {}
+	for key: Variant in levels:
+		var record := gene(StringName(key))
+		if record != null and record.tags.has(RETIRED):
+			continue
+		var organ: StringName = record.organ if record != null else StringName(key)
+		out[organ] = maxi(int(out.get(organ, 0)), int(levels[key]))
+	return out
+
+
+## **The first live key of [param organ]** -- its first variant's variety -- what
+## the organ is drawn as where no key is known: a part's chip on the instincts
+## page. The organ itself for one this build does not know.
+static func first_key(organ: StringName) -> StringName:
+	return _first_keys.get(organ, organ)
 
 
 ## The live keys that earn levels.
@@ -350,19 +458,18 @@ static func number(key: StringName, name: StringName) -> Variant:
 ## **The number [param name] of the organ a body wearing [param tiers] provides
 ## [param stat] with** -- or of the first that provides it, for a body that wears
 ## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
-## acts through, and never names it. [param otherwise] when nothing provides the
-## stat any more -- every organ that did retired (§4.4) -- or the organ has no
-## such number.
+## acts through, and never names it: [method worn_provider]'s, or, given the
+## body's [param layout] -- a mechanic with a place, the dart's --
+## [method seated_provider]'s. [param otherwise] when nothing provides the stat any
+## more -- every organ that did retired (§4.4) -- or the organ has no such number.
 static func number_for(tiers: Dictionary, stat: StringName, name: StringName,
-		otherwise: Variant = null) -> Variant:
+		otherwise: Variant = null, layout: Array = []) -> Variant:
 	var all: Array[StringName] = _providers.get(stat, _none)
 	if all.is_empty():
 		return otherwise
-	var key := all[0]
-	for each: StringName in all:
-		if int(tiers.get(each, 0)) > 0:
-			key = each
-			break
+	var key := seated_provider(layout, tiers, stat)
+	if key == &"":
+		key = all[0]
 	return (_records[key] as Gene).numbers.get(name, otherwise)
 
 
@@ -413,14 +520,32 @@ static func table(key: StringName, stat: StringName) -> Array:
 
 
 ## **The organ a body wearing [param tiers] provides [param stat] with**: the
-## first of [method providers] it wears, `&""` for none. One instance per
-## mechanic, for now (§5.2): the beam leaves from this one, and the ping calls
-## from it.
+## first of [method providers] it wears, in the catalogue's order, `&""` for
+## none. One instance per mechanic (§5.2): what a mechanic with no place acts
+## from -- the tail's level, the mouth. One with a place asks
+## [method seated_provider].
 static func worn_provider(tiers: Dictionary, stat: StringName) -> StringName:
 	for key: StringName in _providers.get(stat, _none):
 		if int(tiers.get(key, 0)) > 0:
 			return key
 	return &""
+
+
+## **The organ a mechanic with a place acts from** (§5.2; stats.gd's `SEATED`):
+## the first provider of [param stat] a body wearing [param tiers] wears **in slot
+## order** -- [param layout], its slots, the body plan's numbering -- so a body
+## with two eyes casts from the one in the lower slot, at that one's level, and its
+## stat still combines both by its row. A provider worn in no slot of [param layout]
+## -- a layout this body has none of yet -- answers in the catalogue's order, as
+## [method worn_provider]; `&""` for none. **A stat of one provider never reads the
+## layout** -- every stat today -- so its answer is [method worn_provider]'s.
+static func seated_provider(layout: Array, tiers: Dictionary, stat: StringName) -> StringName:
+	var all: Array[StringName] = _providers.get(stat, _none)
+	if all.size() > 1:
+		for key: Variant in layout:
+			if key != &"" and int(tiers.get(key, 0)) > 0 and all.has(key):
+				return key
+	return worn_provider(tiers, stat)
 
 
 ## The channel [param key] drives (gene.gd), `&""` for none.
@@ -536,8 +661,14 @@ static func _index() -> void:
 	# Each key's words, and every part's, from its organ file's word tables.
 	var words := {}
 	var part_words := {}
+	var organ_weights := {}
+	var one_variant := {}
 	for organ: Gene in organs:
 		var tables := (organ.get_script() as GDScript).get_script_constant_map()
+		# The organ's own weight, read before a variant writes over its water.
+		var own: Variant = organ.water.get("weight")
+		if organ.one_variant:
+			one_variant[organ.organ] = true
 		for record: Gene in _resolve(organ):
 			if records.has(record.key):
 				push_error("[catalogue] %s is keyed twice: the second is not filed" % record.key)
@@ -545,11 +676,28 @@ static func _index() -> void:
 			records[record.key] = record
 			resolved.append(record)
 			words[record.key] = _words_in(tables, record.key)
+			if not organ_weights.has(record.organ):
+				organ_weights[record.organ] = int(own if own != null
+					else record.water.get("weight", 1))
 		_part_words_into(part_words, tables)
+	_organ_weights = organ_weights
+	_one_variant = one_variant
 	for record: Gene in resolved:
 		for field: StringName in FROZEN:
 			_freeze(record.get(field))
 	_records = records
+	var organs_of := {}
+	var organ_keys := {}
+	for key: StringName in records:
+		var organ: StringName = (records[key] as Gene).organ
+		organs_of[key] = organ
+		if not organ_keys.has(organ):
+			organ_keys[organ] = [] as Array[StringName]
+		(organ_keys[organ] as Array).append(key)
+	for organ: StringName in organ_keys:
+		_read_only(organ_keys[organ])
+	_organs = organs_of
+	_organ_keys = organ_keys
 	_freeze(words)
 	_words = words
 	_freeze(part_words)
@@ -617,6 +765,9 @@ static func _index() -> void:
 	var levelled: Array[StringName] = []
 	var drifters: Array[StringName] = []
 	var declaring: Array[StringName] = []
+	var organ_declares := {}
+	var first_keys := {}
+	var owners_are_keys := true
 	for key: StringName in live:
 		var record: Gene = records[key]
 		for stat: StringName in record.provides:
@@ -634,8 +785,13 @@ static func _index() -> void:
 			levelled.append(key)
 		if bool(record.water.get("drifter", false)) and variety(key) == key:
 			drifters.append(key)
+		if not first_keys.has(record.organ):
+			first_keys[record.organ] = key
 		if not record.declares.is_empty():
-			declaring.append(key)
+			if not organ_declares.has(record.organ):
+				declaring.append(record.organ)
+				organ_declares[record.organ] = record.declares
+			owners_are_keys = owners_are_keys and key == record.organ
 	# In place: stats.gd holds this dictionary ([method provided]).
 	_provided.clear()
 	for stat: StringName in _providers:
@@ -653,10 +809,12 @@ static func _index() -> void:
 	_levelled = _read_only(levelled)
 	_drifters = _read_only(_pinned(drifters, SHIPPED_ORDERS[DRIFTERS]))
 	var declared := {}
-	for key: StringName in _pinned(declaring, SHIPPED_ORDERS[DECLARES]):
-		declared[key] = (records[key] as Gene).declares
+	for organ: StringName in _pinned(declaring, SHIPPED_ORDERS[DECLARES]):
+		declared[organ] = organ_declares[organ]
 	declared.make_read_only()
 	_declares = declared
+	_first_keys = first_keys
+	_owners_are_keys = owners_are_keys
 	_tagged = {}
 	_tag_sets = {}
 	for tag: StringName in Gene.TAGS:
@@ -686,7 +844,7 @@ static func _resolve(organ: Gene) -> Array:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():
 			# **A variant with no forms is one form, outside** (gene.gd): keyed by its
-			# own `key`, or by its name -- so a faster tail is one entry.
+			# own `key`, or by its name -- so `{"key": <the organ>}` keeps the organ's.
 			var own := StringName(entry.get("key", entry.get("variant", &"")))
 			if own == &"":
 				push_error("[catalogue] a variant of %s has no forms, no key and no name:"
@@ -698,6 +856,8 @@ static func _resolve(organ: Gene) -> Array:
 			var record: Gene = organ.get_script().new()
 			record.organ = organ.organ
 			record.variants = organ.variants
+			# The parts are the organ's, on every variant and form ([method declares]).
+			record.declares = organ.declares
 			_write_over(record, _fields_of(organ))
 			_write_over(record, entry)
 			if form is Dictionary:

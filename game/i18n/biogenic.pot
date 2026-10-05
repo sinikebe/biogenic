@@ -3543,10 +3543,10 @@ msgstr ""
 
 #. All the `ACT_` lines are one line of instructions in 14 px type, centred
 #. under the figure, telling the player what the next tap or release will do.
-#. A "slot" is one of seven places round the cell's body where a gene sits;
-#. "place" a gene means put it in a slot; "your daughters may wear it" means
-#. the cells this one divides into may show the gene as an organ. The row is
-#. 560 px wide. This one: a gene is waiting, none is chosen.
+#. A "slot" is one of the places round the cell's body, or the one inside it,
+#. where a gene sits; "place" a gene means put it in a slot; "your daughters
+#. may wear it" means the cells this one divides into may show the gene as an
+#. organ. The row is 560 px wide. This one: a gene is waiting, none is chosen.
 #. Room: at most 560 px in 14 px type; the English takes 261 px.
 #: game/normal/normal_mode.gd
 msgid "tap a slot · your daughters may wear it"

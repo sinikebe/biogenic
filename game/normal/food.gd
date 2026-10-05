@@ -1204,10 +1204,19 @@ class Body:
 		stat_dart_tier = Stats.tier(g, &"dart_range")
 		stat_dart_range = Stats.of(g, &"dart_range")
 		stat_dart_cooldown = Stats.of(g, &"dart_cooldown")
-		stat_dart_stun = CellBody.dart_stun(g)
+		# The dart that fires stuns for its own time: the first in slot order, where
+		# it wears several (gene-catalogue.md §5.2).
+		stat_dart_stun = CellBody.dart_stun(g, seats()) if stat_dart_tier > 0 \
+			else CellBody.dart_stun(g)
 		stat_dash_tier = Stats.tier(g, &"dash_speed")
 		stat_dash_speed = Stats.of(g, &"dash_speed")
 		stat_dash_cost = Stats.of(g, &"dash_cost")
+
+	## **The slots it wears its organs in**: a person's worn order, as they sent it,
+	## or the default order a water cell is drawn in (cilia.gd) -- where a mechanic
+	## with a place finds the organ it acts from (stats.gd's `SEATED`).
+	func seats() -> Array:
+		return order if not order.is_empty() else Cilia.default_order(genome)
 
 
 ## **What a body lacks, for the body that is another player** (§1.2): how it
@@ -2972,8 +2981,8 @@ static func toxins_of(tiers: Dictionary, order: Array = [],
 	var seats: Array = order
 	for gene: Variant in tiers:
 		var form := StringName(gene)
-		if not Genome.has_forms(form):
-			continue
+		# **A toxin is a key with a dose**, whatever its places: a strain of one place,
+		# outside alone, is venom too (gene-catalogue.md §6.4).
 		var copies := clampi(int(tiers[gene]), 0, Genome.TIER_MAX)
 		var kind := Doses.kind_of(Genome.strain_of(form))
 		if copies <= 0 or kind < 0:
@@ -6152,7 +6161,7 @@ func _seed_drifter(b: Body) -> void:
 	# a toxin drawn is drawn again from the rest -- one more number, on that
 	# drifter alone.
 	var gene := _draw_gene(Catalogue.drifters())
-	if Genome.variety(gene) == Drop.TOXIN:
+	if Catalogue.has_tag(gene, Catalogue.NOT_ON_DRIFTERS):
 		gene = _draw_gene(Drop.drifter_genes(Catalogue.drifters()))
 	b.genome = {gene: 1}
 
@@ -6185,7 +6194,7 @@ func _draw_genome(body_radius: float, sensed: float) -> Dictionary:
 	# loop fills the outside to its capacity as it always did.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
 	# The ceiling, applied where §1.3 puts it: on the mouth, by taking tiers off
@@ -6206,16 +6215,39 @@ func _place_toxin(gene: StringName) -> StringName:
 	return gene if randi() % 2 == 0 else Genome.form_in(gene, Genome.OUTSIDE_PLACE)
 
 
-func _draw_gene(pool: Array[StringName]) -> StringName:
+## **A gene drawn from [param pool]**, varieties all: **an organ first, by its
+## weight, then one of its varieties by theirs** (docs/design/gene-catalogue.md §6.1;
+## dna-slots.md §8.3) -- one roll for the organ, and a second only for an organ the
+## pool holds more than one variety of. Every organ has one today, so this draws
+## what drawing the varieties by their own weights always drew, roll for roll.
+static func _draw_gene(pool: Array[StringName]) -> StringName:
+	var organs := Catalogue.organs_in(pool)
 	var total := 0
-	for gene: StringName in pool:
-		total += Catalogue.weight(gene)
+	for organ: StringName in organs:
+		total += Catalogue.organ_weight(organ)
 	var roll := randi_range(1, maxi(total, 1))
-	for gene: StringName in pool:
-		roll -= Catalogue.weight(gene)
+	var drawn: StringName = organs[organs.size() - 1] if not organs.is_empty() else &""
+	for organ: StringName in organs:
+		roll -= Catalogue.organ_weight(organ)
 		if roll <= 0:
-			return gene
-	return pool[pool.size() - 1]
+			drawn = organ
+			break
+	return Catalogue.pick_variety(Catalogue.of_organ(pool, drawn))
+
+
+## **[param gene]'s organ, out of [param pool]**: every variety of it, so one body's
+## draws never take the same organ twice -- it counts as one gene wherever the water
+## counts genes (dna-slots.md §8.3). Every key filed under the organ, and a name no
+## gene goes by as itself, as [method Catalogue.organ_of] answers for one: the pool
+## keeps its order.
+static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
+	var organ := Catalogue.organ_of(gene)
+	for key: StringName in Catalogue.keys_of_organ(organ):
+		while pool.has(key):
+			pool.erase(key)
+	if not Catalogue.known(organ):
+		while pool.has(organ):
+			pool.erase(organ)
 
 
 func _draw_tier(sensed: float) -> int:
@@ -8224,11 +8256,12 @@ func _ruled() -> bool:
 ## **What of the vocabulary a body with [param parts] has, as the rulebook's
 ## bits** (§3.5): `Rulebook.worn` over a gene to the level it works at -- a water
 ## cell's worn copies, or a daughter's DNA copies for what a change may draw --
-## and what every body has. **Pack 3's water has no part at a level**
-## ([member tails_beat] off): those bits are never there, so nothing a level
-## brings fires, nor is drawn by a change, and the drop is pack 3's to the byte.
+## counted by organ (catalogue.gd's `by_organ`), and what every body has. **Pack
+## 3's water has no part at a level** ([member tails_beat] off): those bits are
+## never there, so nothing a level brings fires, nor is drawn by a change, and the
+## drop is pack 3's to the byte.
 func _worn_of(parts: Dictionary) -> int:
-	var mask := Rulebook.worn(vocabulary(), parts, _everybody)
+	var mask := Rulebook.worn(vocabulary(), Catalogue.by_organ(parts), _everybody)
 	return mask if tails_beat else mask & ~vocabulary().levelled
 
 
@@ -8242,11 +8275,6 @@ func _wire() -> void:
 		&"metabolism.hunger": _read_hunger,
 		&"metabolism.fed": _read_fed,
 		&"body.hit": _read_hit,
-		&"chemocyte.smell": _read_smell,
-		&"stigma.shadow": _read_shadow,
-		&"palp.touch": _read_touch,
-		&"ocellus.beam": _read_beam,
-		&"ampulla.echo": _read_echo,
 	}
 	_triggers = {
 		&"body.turn-toward": _turn_toward,
@@ -8254,12 +8282,33 @@ func _wire() -> void:
 		&"body.turn-random": _turn_random,
 		&"body.swim": _swim_on,
 		&"body.rest": _rest_on,
-		&"myoneme.dash": _dash_on,
-		&"axoneme.push": _push_on,
-		&"flagellum.hold": _hold_on,
 	}
+	wire_parts(_readers, {&"smell": _read_smell, &"shadow": _read_shadow,
+		&"touch": _read_touch, &"beam": _read_beam, &"echo": _read_echo}, true)
+	wire_parts(_triggers, {&"dash": _dash_on, &"push": _push_on, &"hold": _hold_on}, false)
 	_read_with = _read_input
 	founders()
+
+
+## **The genes' parts, wired by the names their organs declare them by**
+## (gene-catalogue.md §6): [param by_part] -- a part as it is declared, `smell`,
+## `dash` -- to the function that reads it or performs it, written into
+## [param into] under the qualified name each organ of [method Catalogue.declares]
+## has it by, `chemocyte.smell`. The parts are the organ's, so every variant of it
+## is read and performed as its organ is, and no gene is named here. [param inputs]
+## for what a body reads, else what it does. Your own instincts are wired the same
+## way (own_rules.gd).
+static func wire_parts(into: Dictionary, by_part: Dictionary, inputs: bool) -> void:
+	var vocab := vocabulary()
+	var declared: Dictionary = vocab.inputs if inputs else vocab.outputs
+	var organs := Catalogue.declares()
+	for name: StringName in declared:
+		var decl: Variant = declared[name]
+		if not organs.has(decl.owner):
+			continue
+		var part := Rulebook.part_of(name)
+		if by_part.has(part):
+			into[name] = by_part[part]
 
 
 ## **The trigger this field performs [param output] with**, for a body it does
@@ -8309,14 +8358,14 @@ func _eye_of(b: Body) -> Observer:
 	o.touch_range = Stats.of(g, &"touch_range")
 	o.eyespot = Catalogue.worn_on(g, Catalogue.LIGHT) != &""
 	o.ping_range = Stats.of(g, &"ping_range")
-	o.ping_tier = Stats.tier(g, &"ping_range")
+	o.ping_tier = Stats.tier_of(g, Stats.organ(order, g, &"ping_range"), &"ping_range")
 	o.ping_period = Stats.of(g, &"ping_period")
 	o.ping_through = Stats.of(g, &"ping_through")
 	o.ping_bearing = _arc_in(order, g, &"ping_range")
 	# The beam as the run aims yours below its fork (normal_mode.gd's
 	# `_aim_beam`): a fixed fan of its rung's rays, spread about the arc.
-	var beam := Catalogue.worn_provider(g, &"beam_range")
-	var shape := CellBody.beam_shape(Stats.tier(g, &"beam_range"), &"", beam)
+	var beam := Stats.organ(order, g, &"beam_range")
+	var shape := CellBody.beam_shape(Stats.tier_of(g, beam, &"beam_range"), &"", beam)
 	o.beam_range = float(shape[3])
 	o.beam_arcs = PackedFloat32Array()
 	var bearings := PackedFloat32Array()
@@ -8347,10 +8396,11 @@ static func _arc_in(order: Array, tiers: Dictionary, stat: StringName) -> float:
 
 
 ## **The slot of [param order] the organ that provides [param stat] is worn in**,
-## of those [param tiers] wears; -1 for none. One instance per mechanic, for now
-## (gene-catalogue.md §5.2).
+## of those [param tiers] wears; -1 for none. One instance per mechanic
+## (gene-catalogue.md §5.2): the one it acts from, the first in slot order for a
+## mechanic with a place (stats.gd's `organ`).
 static func _seat_of(order: Array, tiers: Dictionary, stat: StringName) -> int:
-	var organ := Catalogue.worn_provider(tiers, stat)
+	var organ := Stats.organ(order, tiers, stat)
 	return order.find(organ) if organ != &"" else -1
 
 
@@ -8861,7 +8911,8 @@ func _felt_coming(b: Body, delta: float) -> void:
 				to.dart_clock = to.dart_cooldown
 			_tell(to, Contact.DARTED, b.pos, 0.0, By.WATER, &"")
 			_stun(b, _cell.position if to == null else _cells[to.slot].pos,
-				CellBody.dart_stun(_cell.worn() if to == null else _cells[to.slot].genome))
+				CellBody.dart_stun(_cell.worn(), _cell.seats()) if to == null
+					else CellBody.dart_stun(_cells[to.slot].genome, _cells[to.slot].seats()))
 			return
 	b.stroke -= delta
 	if b.stroke > 0.0:
@@ -9314,7 +9365,7 @@ func _make_one(players: PackedVector2Array, reaches: PackedFloat32Array) -> int:
 	var venom := false
 	if births:
 		var share := _made_share()
-		venom = _toxin_short()
+		venom = _peer_short() != &""
 		if not venom:
 			drifter = float(_drifters) < Drop.food_count(share)
 			if not drifter \
@@ -9348,7 +9399,7 @@ func _shortfall() -> float:
 	var hunters := maxf(Drop.hunter_floor(share, floor_share) - float(_living - _drifters),
 		0.0)
 	return food + hunters * _drop.spawner.tau / maxf(floor_tau, 1e-3) \
-		+ (1.0 if _toxin_short() else 0.0)
+		+ (1.0 if _peer_short() != &"" else 0.0)
 
 
 ## **The drifter share of the water the spawner keeps**: the share each player
@@ -9361,11 +9412,18 @@ func _made_share() -> float:
 	return sum / float(turns)
 
 
-## Whether the drop is down to its last carriers of the toxin, in either form,
-## which only a peer brings back (row 13; a tool's `--drifter-toxin=1` lets a
-## drifter carry it).
-func _toxin_short() -> bool:
-	return not drifter_toxin and _gene_short.has(Drop.TOXIN)
+## **The gene the drop is down to its last carriers of that only a peer brings
+## back** (gene-catalogue.md §6.4): the first short variety tagged
+## `floor_by_peers` -- the toxin's, in either form -- or `&""` for none (row 13; a
+## tool's `--drifter-toxin=1` lets a drifter carry it, and then none waits on a
+## peer).
+func _peer_short() -> StringName:
+	if drifter_toxin:
+		return &""
+	for gene: StringName in _gene_short:
+		if Catalogue.has_tag(gene, Catalogue.FLOOR_BY_PEERS):
+			return gene
+	return &""
 
 
 ## A drifter [param reach] from a player at [param from], ahead of its
@@ -9425,7 +9483,7 @@ func _spawn(at: Vector2, drifter: bool, sensed: float, fill := false,
 		if mine <= 0.0:
 			mine = _cell.radius if _cell != null else CellBody.BASE_RADIUS
 		_seed_peer(b, mine, sensed)
-		_give_toxin_back(b)
+		_give_back_by_peer(b)
 	# Expressed whole, as a run's first cell is: after the toxin, which is worn.
 	b.dna = b.genome.duplicate()
 	b.pos = at
@@ -9625,13 +9683,13 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	var capacity := CellBody.slots_for(body_radius)
 	var pool: Array[StringName] = Catalogue.drifters().duplicate()
 	for gene: StringName in tiers:
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 	# The toxin drawn as one gene, its place by a coin, and poison taking no arc
 	# ([method _place_toxin]): a peer's draw differs from before only on a peer
 	# that drew the toxin.
 	while Genome.count_outside(tiers) < capacity and not pool.is_empty():
 		var gene := _draw_gene(pool)
-		pool.erase(gene)
+		_erase_organ(pool, gene)
 		var tier := _draw_tier(sensed)
 		tiers[_place_toxin(gene)] = tier
 	var mouth := Catalogue.worn_provider(tiers, &"gape")
@@ -9643,17 +9701,19 @@ func _draw_living(body_radius: float, sensed: float) -> Dictionary:
 	return tiers
 
 
-## **The toxin back through a peer** (§6.4, docs/design/dna-slots.md §9): a drop
-## down to its last carriers of it, in either form, gives the next peer the
-## toxin -- its place by a coin -- since no drifter may carry it.
-func _give_toxin_back(b: Body) -> void:
-	if drifter_toxin or not _gene_short.has(Drop.TOXIN):
+## **A gene back through a peer** (§6.4, docs/design/dna-slots.md §9;
+## gene-catalogue.md §6.4): a drop down to its last carriers of a gene tagged
+## `floor_by_peers` -- the toxin's, in either form -- gives the next peer that
+## gene, its place by a coin, since no drifter may carry it.
+func _give_back_by_peer(b: Body) -> void:
+	var gene := _peer_short()
+	if gene == &"":
 		return
-	for form: StringName in Genome.forms_of(Drop.TOXIN):
+	for form: StringName in Genome.forms_of(gene):
 		if Genome.tier_of(b.genome, form) > 0:
 			return
-	_gene_short.erase(Drop.TOXIN)
-	Drop.give_toxin(b.genome, CellBody.slots_for(b.radius),
+	_gene_short.erase(gene)
+	Drop.give_back(b.genome, gene, CellBody.slots_for(b.radius),
 		Catalogue.tagged(Catalogue.SENSE), randi(), randi() % 2 == 0)
 	b.derive()
 	_stat(&"gene_floor_peer")

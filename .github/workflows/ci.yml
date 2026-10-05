@@ -384,10 +384,8 @@ jobs:
         # an organ file the index forgot, a look with no shape, a gene with no
         # word or no lines, a colour too close to another -- works alone and
         # fails somewhere else: in a shared pond, a seeded water, a save, a
-        # screen. Static, a few seconds. It also prints how many
-        # gene names are still written into game/ outside game/genes/, which
-        # fails nothing until the gate of §12.2. Grepped, not trusted to the
-        # exit code, for the reason the Back probe gives.
+        # screen. Static, a few seconds. Grepped, not trusted to the exit
+        # code, for the reason the Back probe gives.
         run: |
           set -uo pipefail
           # timeout: a parse error leaves Godot running rather than exiting,
@@ -402,6 +400,33 @@ jobs:
           if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
             grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
             echo "::error::the gene probe hit a script error -- checks after it did not run"
+            exit 1
+          fi
+
+      - name: Check the gene names
+        # docs/design/gene-catalogue.md §12.2: no gene is named in game/ outside
+        # game/genes/. A mechanic asks the catalogue for an organ by its stat,
+        # its tag or its channel, so a gene added, varied or retired is one
+        # entry in its organ's file and nothing else moves -- and a name written
+        # anywhere else is a place it silently does not reach. Fails on any
+        # &"<key>" or "<key>" literal for a key the catalogue knows; comment
+        # lines and tools/ are exempt. The gene probe in its --names mode,
+        # static, a second. Grepped, not trusted to the exit code, for the
+        # reason the Back probe gives.
+        run: |
+          set -uo pipefail
+          # timeout: a parse error leaves Godot running rather than exiting,
+          # and a job that waits on it waits for GitHub's six hours.
+          out=$(timeout 120 ~/godot/godot --headless --path . res://tools/gene_probe.tscn -- --names 2>&1) || true
+          grep -E "^\[gene-names\]" <<< "$out" || true
+          if ! grep -q "^\[gene-names\] ALL PASS$" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error|ERROR:" <<< "$out" || true
+            echo "::error::a gene is named in game/ outside game/genes/ -- ask the catalogue for its organ by stat, tag or channel (see the lines above)"
+            exit 1
+          fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the gene names gate hit a script error -- the files after it were not looked in"
             exit 1
           fi
 

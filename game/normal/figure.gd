@@ -346,7 +346,7 @@ const FORK_TIPS := 88.0
 const FORK_SPREAD := 6.5
 ## **A slot the body has not earned yet** is its helix at this brightness and
 ## nothing else: no rungs, no word, no tether, no focus and no input. Only the
-## first generation shows any -- a daughter inherits a seven-long layout, so
+## first generation shows any -- a daughter inherits a layout of every slot, so
 ## hers are all live -- and that is exactly when *your body will grow a slot
 ## here* is news. Empty (bright, live) and unearned (faint, dead) read apart at
 ## both shapes.

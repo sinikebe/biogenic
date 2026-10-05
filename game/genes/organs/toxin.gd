@@ -108,6 +108,11 @@ const NAMES := {&"veneneux": "toxicyst", &"toxicyst": "toxicyst"}
 
 func _init() -> void:
 	organ = &"toxin"
+	# **No drifter carries it, and the floor gives it back through a peer**
+	# (gene-catalogue.md §6.4; dna-slots.md §9): the drop's defenceless food stays
+	# harmless to eat, and a mouthless drifter's venom would bite nothing anyway.
+	# Every strain inherits both.
+	tags = [NOT_ON_DRIFTERS, FLOOR_BY_PEERS]
 	variants = [
 		# The first form listed is the variety: the name the toxin goes by where no
 		# place is known yet -- the water's draws, the floor's count, and two meals
@@ -159,24 +164,23 @@ func _venom_lines(tier: int, slot: int, ctx: Dictionary, wear: Dictionary) -> Ar
 	var stacks := stat_at(&"venom_stacks", tier)
 	var n := int(roundf(stacks))
 	if slot < 0 or genome.is_front(slot):
-		return [[Readout.item_n("each bite leaves {} stack of venom",
-				"each bite leaves {} stacks of venom", n, [stacks], [U.COUNT]),
-			_stack_item(ctx)], [wear]]
+		return [_with_dose([Readout.item_n("each bite leaves {} stack of venom",
+				"each bite leaves {} stacks of venom", n, [stacks], [U.COUNT])], ctx), [wear]]
 	# A side venom the switch has made inert stings nothing, and says nothing.
 	if not ctx["cell"].VENOM_SIDES:
 		return [[], [wear]]
 	if slot == genome.STERN:
 		# TRANSLATORS: The venom gene at the back of the cell, where the tail is:
 		# whatever bites the cell from behind takes this many stacks of venom.
-		return [[Readout.item_n("whatever bites you from behind takes {} stack",
-				"whatever bites you from behind takes {} stacks", n, [stacks], [U.COUNT]),
-			_stack_item(ctx)], [wear]]
+		return [_with_dose([Readout.item_n("whatever bites you from behind takes {} stack",
+				"whatever bites you from behind takes {} stacks", n, [stacks], [U.COUNT])],
+			ctx), [wear]]
 	# TRANSLATORS: The venom gene on a side of the cell: whatever bites the cell on
 	# that side takes this many stacks of venom. "That side" is the side of the
 	# body where the gene's slot is.
-	return [[Readout.item_n("whatever bites you on that side takes {} stack",
-			"whatever bites you on that side takes {} stacks", n, [stacks], [U.COUNT]),
-		_stack_item(ctx)], [wear]]
+	return [_with_dose([Readout.item_n("whatever bites you on that side takes {} stack",
+			"whatever bites you on that side takes {} stacks", n, [stacks], [U.COUNT])],
+		ctx), [wear]]
 
 
 ## **Poison** (§3.3): what a biter takes a bite and a swallower takes in one,
@@ -194,20 +198,34 @@ func _poison_lines(tier: int, ctx: Dictionary, wear: Dictionary) -> Array:
 			[U.COUNT]),
 		Readout.item_n("a swallower takes {} stack", "a swallower takes {} stacks",
 			int(roundf(gulp)), [gulp], [U.COUNT])],
-		[_stack_item(ctx), wear]]
+		_with_dose([], ctx) + [wear]]
 
 
-## **What one stack of harm does** -- the corrosive strain's -- to a body the
-## reader's size: the share of it taken, diluted as every dose is (doses.gd's
-## `felt`), over the stack's life down to the cutoff -- `tau x ln(1 / DOSE_GONE)`,
-## 9.7 s for harm.
+## [param items] with what one stack of this key's dose does after them, where its
+## kind has a line ([method dose_line]).
+func _with_dose(items: Array, ctx: Dictionary) -> Array:
+	var said := dose_line(ctx)
+	if not said.is_empty():
+		items.append(said)
+	return items
+
+
+## **What one stack of this strain's dose does** (gene.gd's `dose_line`), read off
+## its own [member dose] -- the 1b review's finding 4: a second strain says its own
+## kind, never harm's. **Harm** takes a share of a body the reader's size, diluted as
+## every dose is (doses.gd's `felt`), over the stack's life down to the cutoff --
+## `tau x ln(1 / DOSE_GONE)`, 9.7 s for harm. A kind with no line yet says nothing
+## here, and the gene probe fails a live strain of it until it has one.
 ##
 ## TRANSLATORS: What one "stack" (one dose) of a toxin does: it takes this share
 ## of a body the size of the player's cell, a percentage, over this many seconds.
-func _stack_item(ctx: Dictionary) -> Dictionary:
+func dose_line(ctx: Dictionary) -> Dictionary:
+	var kind := Doses.kind_of(dose)
+	if kind != Doses.Kind.HARM:
+		return {}
 	var cell: Variant = ctx["cell"]
 	var share: float = cell.HARM_PER_STACK * Doses.felt(1.0,
 		float(ctx.get("radius", cell.BASE_RADIUS)), cell.DOSE_SIZE)
-	var life: float = cell.DOSE_TAU_BY_KIND[Doses.Kind.HARM] * log(1.0 / cell.DOSE_GONE)
+	var life: float = cell.DOSE_TAU_BY_KIND[kind] * log(1.0 / cell.DOSE_GONE)
 	return Readout.item("a stack takes {} of a body your size over {} s", [share, life],
 		[U.SHARE, U.TIME])

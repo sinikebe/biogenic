@@ -58,13 +58,14 @@ const OVOID_PINCH := 0.30
 ## inside after them. A slot's index is where a genome's layout keeps it, and a
 ## save's stamp says which id each index was ([method stamp]).
 ##
-## **The ladder is pinned at both ends**: three slots at birth (r26) and seven at
-## forty, `cell.gd`'s DIVIDE_RADIUS -- seven is every arc a body has, which is why
+## **Today's ladder is pinned at both ends**: three slots at birth (r26) and all
+## seven at forty, `cell.gd`'s DIVIDE_RADIUS -- every arc a body has, which is why
 ## forty is where a body divides -- and four rungs between need a step in `(2.8,
 ## 3.5]`, of which 3.5 is the top. **Four-times growth left it as it was**: what it
-## changed is that capacity stops binding in the first generation, and the seven
-## arcs and the expression roll bind instead; from generation two a newborn is over
-## capacity anyway (lifecycle.md §3.1), which is where the swap decision lives.
+## changed is that capacity stops binding in the first generation, and the arcs and
+## the expression roll bind instead; from generation two a newborn is over capacity
+## anyway (lifecycle.md §3.1), which is where the swap decision lives. A plan with
+## other rows says its own ladder here.
 ##
 ## - `id`: the slot's name, code only and permanent;
 ## - `place`: [constant OUTSIDE_PLACE] or [constant INSIDE_PLACE];
@@ -78,7 +79,13 @@ const OVOID_PINCH := 0.30
 ##   a layout seats there first.
 ##
 ## The host's referee and the wire read what this derives: a change to the outside
-## slots changes `Wire.ORDER_MAX` and `Wire.GENES_MAX` with it.
+## slots changes `Wire.ORDER_MAX` and `Wire.GENES_MAX` with it. **Until phase 4 puts
+## the plan's fingerprint on the handshake (gene-catalogue.md §11.3), any change here
+## bumps `Wire.PROTOCOL` by hand, in the same commit**: a build on another plan is
+## another protocol. A change of the slots' count fails `net_probe`'s wire sizes and
+## the gene probe's pins; a change of the arcs alone fails only the gene probe's --
+## nothing on the wire side says it -- so bump it for that too. Then move the gene
+## probe's SHIPPED_PLAN and the pins beside it, as its failure says.
 const TODAY: Array[Dictionary] = [
 	{"id": &"nose", "place": OUTSIDE_PLACE, "anatomy": FRONT_ANATOMY,
 		"arc": Vector2(-42.0, 42.0), "earned": ALWAYS, "home": &"cytostome"},
@@ -353,9 +360,11 @@ static func written(kept: Variant) -> PackedStringArray:
 	return kept if kept is PackedStringArray else _before
 
 
-## Whether [param kept] is a stamp a save may hold: slot ids, or nothing.
+## Whether [param kept] is a stamp a save may hold: slot ids, at least one. Every
+## plan has a slot, so a stamp of none is no plan's and a file holding one has gone
+## wrong; a save kept before stamps holds no key at all ([method written]).
 static func is_stamp(kept: Variant) -> bool:
-	return kept is PackedStringArray
+	return kept is PackedStringArray and not (kept as PackedStringArray).is_empty()
 
 
 ## **An outside layout kept under [param kept], laid out on the plan in use**
