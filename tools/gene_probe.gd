@@ -33,6 +33,7 @@ const OwnRules := preload("res://game/normal/own_rules.gd")
 const Drop := preload("res://game/normal/drop.gd")
 const Rulebook := preload("res://game/mechanics/rulebook.gd")
 const Wire := preload("res://game/net/wire.gd")
+const Referee := preload("res://game/net/referee.gd")
 
 ## **Every key that ever shipped, in its order** -- its place is its index -- and
 ## the ones retired before the catalogue, which have none. Keys are permanent
@@ -64,6 +65,23 @@ const SHIPPED_LISTS := {
 	&"declares": [&"ocellus", &"ampulla", &"chemocyte", &"stigma", &"palp", &"myoneme",
 		&"axoneme", &"flagellum"],
 }
+
+## **The stats a mechanic reads together, as one organ's** -- so every organ that
+## provides one of a group provides all of it: a call is its reach, its period
+## and how much of it passes a body; a stroke its speed and its two gaps; a turn
+## its rate and how fast it answers; a dash its burst and its price; a dart its
+## reach and its rest; a beam its reach, its rays and their fan. An organ that
+## gave one alone would be read at the others' values with no provider -- a call
+## every 0 s, which the referee divides by, or a tail's speed beating at the
+## gaps of no tail.
+const TOGETHER: Array = [
+	[&"ping_range", &"ping_period", &"ping_through"],
+	[&"impulse_speed", &"impulse_gap_min", &"impulse_gap_max"],
+	[&"turn_rate", &"turn_response"],
+	[&"dash_speed", &"dash_cost"],
+	[&"dart_range", &"dart_cooldown"],
+	[&"beam_range", &"beam_count", &"beam_fan_deg"],
+]
 
 ## The folder the index must match, file for file.
 const ORGANS_DIR := "res://game/genes/organs"
@@ -421,25 +439,12 @@ func _unwired(field: Node, own: RefCounted, parts: Array[StringName]) -> Array[S
 # --- What the mechanics ask of an organ (§5.2, §5.3) ---------------------------------------
 
 ## Every organ a mechanic finds by its stat answers what that mechanic asks of
-## it: the tail its hold level, the dart its stun, the beam its shape, its price
-## and its levels.
+## it: every stat of the group it reads together ([constant TOGETHER]), the tail
+## its hold level, the dart its stun, the beam its shape, its price and its
+## levels. Then an organ that calls with no period is registered, to show this
+## fails on one -- and that the referee holds it to a rate all the same.
 func _mechanics() -> void:
-	var missing: Array[String] = []
-	for key: StringName in Catalogue.providers(&"impulse_speed"):
-		if Catalogue.number(key, &"hold_level") == null:
-			missing.append("%s's hold_level" % key)
-	for key: StringName in Catalogue.providers(&"dart_range"):
-		if Catalogue.number(key, &"stun") == null:
-			missing.append("%s's stun" % key)
-	for key: StringName in Catalogue.providers(&"beam_range"):
-		var organ := Catalogue.gene(key)
-		if not organ.has_method(&"shape_at"):
-			missing.append("%s's shape_at" % key)
-		if Catalogue.number(key, &"xp_cap") == null:
-			missing.append("%s's xp_cap" % key)
-		for stat: StringName in [&"beam_count", &"beam_fan_deg"]:
-			if not Catalogue.provides(key, stat):
-				missing.append("%s's %s" % [key, stat])
+	var missing := _unanswered()
 	for key: StringName in Catalogue.levelled():
 		var levels := Catalogue.levels(key)
 		if float(levels.get("step", 0.0)) <= 0.0 or int(levels.get("fork", -1)) < 0 \
@@ -447,14 +452,54 @@ func _mechanics() -> void:
 			missing.append("%s's levels %s" % [key, str(levels)])
 		elif Catalogue.upkeep_at(key, 2, &"") < 0.0:
 			missing.append("%s's price per level" % key)
-	_check(("every organ a mechanic finds by its stat answers it: the tail its hold level,"
-		+ " the dart its stun, the beam its shape, xp cap and price, every levelled gene its"
-		+ " levels%s") % ("" if missing.is_empty() else ": not " + ", ".join(missing)),
+	_check(("every organ a mechanic finds by its stat answers it: all of the %d groups of"
+		% TOGETHER.size() + " stats it reads together, the tail its hold level, the dart its"
+		+ " stun, the beam its shape, xp cap and price, every levelled gene its levels%s")
+		% ("" if missing.is_empty() else ": not " + ", ".join(missing)),
 		missing.is_empty() and not Catalogue.levelled().is_empty())
 	var mouth := Catalogue.first_provider(&"gape")
 	_check("the mouth -- what provides a gape, %s -- is always expressed and never drifts"
 		% mouth, mouth != &"" and Catalogue.has_tag(mouth, Catalogue.ALWAYS_EXPRESSED)
 		and Catalogue.has_tag(mouth, Catalogue.NEVER_DRIFTS) and Catalogue.born().has(mouth))
+	# An organ that calls and gives no period: caught, and the referee -- which
+	# divides by the period -- still holds a guest wearing it to a rate.
+	var organ := Gene.new()
+	organ.organ = &"probecall"
+	organ.provides = {&"ping_range": [0.0, 900.0, 900.0, 900.0]}
+	Catalogue.register(organ)
+	var caught := _unanswered()
+	var rate := Referee._shout_rate({&"probecall": 2})
+	Catalogue.forget(&"probecall")
+	_check(("and an organ that calls with no period of its own is caught -- %s -- and held"
+		+ " to %.4f calls a second, not divided by nothing") % [", ".join(caught), rate],
+		caught.has("probecall's ping_period") and caught.has("probecall's ping_through")
+		and is_finite(rate) and rate > 0.0 and rate <= 1.0)
+
+
+## What the organs providing each stat leave unanswered of what a mechanic asks,
+## one line each: a stat of a group ([constant TOGETHER]) missing, or a number
+## or hook of the organ's own.
+func _unanswered() -> Array[String]:
+	var missing: Array[String] = []
+	for group: Array in TOGETHER:
+		for stat: StringName in group:
+			for key: StringName in Catalogue.providers(stat):
+				for other: StringName in group:
+					if not Catalogue.provides(key, other) \
+							and not missing.has("%s's %s" % [key, other]):
+						missing.append("%s's %s" % [key, other])
+	for key: StringName in Catalogue.providers(&"impulse_speed"):
+		if Catalogue.number(key, &"hold_level") == null:
+			missing.append("%s's hold_level" % key)
+	for key: StringName in Catalogue.providers(&"dart_range"):
+		if Catalogue.number(key, &"stun") == null:
+			missing.append("%s's stun" % key)
+	for key: StringName in Catalogue.providers(&"beam_range"):
+		if not Catalogue.gene(key).has_method(&"shape_at"):
+			missing.append("%s's shape_at" % key)
+		if Catalogue.number(key, &"xp_cap") == null:
+			missing.append("%s's xp_cap" % key)
+	return missing
 
 
 # --- A gene registered and forgotten (§4.3) -------------------------------------------------

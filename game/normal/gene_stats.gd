@@ -321,7 +321,7 @@ static func _beam(gene: StringName, level: int, path: StringName, burn: float) -
 	# between them is what a level buys, and it is said.
 	var count := Catalogue.table(gene, &"beam_count")
 	var top := mini(int(Catalogue.levels(gene).get("fork", 0)), count.size() - 1)
-	if rays > int(count[top]):
+	if top >= 0 and rays > int(count[top]):
 		return [[Readout.item_n("{} ray across {}, one every {}",
 			"{} rays across {}, one every {}", rays,
 			[rays, fan, fan / float(rays - 1)], [U.COUNT, U.ANGLE, U.ANGLE]), reach], costs]

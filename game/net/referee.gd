@@ -998,17 +998,19 @@ func _reach() -> float:
 	return Stats.of(worn, &"ping_range")
 
 
-## One call each ping period less a second, for the organ [param tiers] calls
-## with -- the fastest, its tier 1's, when there is none to go by: the first
-## organ that calls.
+## **One call each ping period less a second**: the period [param tiers] calls
+## at, read as the guest's own run reads it (`cell.gd`'s `ping_period`, the
+## stats' `ping_period` of what it wears) -- or, when it wears no organ that
+## calls, the fastest the first organ that calls makes, its tier 1's. **Never
+## from an empty table**: with no organ that calls at all, a call a second, the
+## most this ever allows.
 static func _shout_rate(tiers: Dictionary) -> float:
-	var caller := Catalogue.worn_provider(tiers, &"ping_range")
-	var tier := int(tiers.get(caller, 0)) if caller != &"" else 0
-	if caller == &"":
-		caller = Catalogue.first_provider(&"ping_range")
-	var periods := Catalogue.table(caller, &"ping_period")
-	var at := clampi(tier, 1, periods.size() - 1)
-	return 1.0 / maxf(float(periods[at]) - SHOUT_EARLY, 1.0)
+	var period := Stats.of(tiers, &"ping_period")
+	if period <= 0.0:
+		period = Stats.value(Catalogue.first_provider(&"ping_range"), &"ping_period", 1)
+	if period <= 0.0:
+		return 1.0
+	return 1.0 / maxf(period - SHOUT_EARLY, 1.0)
 
 
 func _new_shout_rate(now: float) -> void:
