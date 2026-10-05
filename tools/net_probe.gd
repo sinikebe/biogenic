@@ -1032,11 +1032,15 @@ func _check_sister_wire() -> void:
 		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, 300)),
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
+	# **1378 is the pin a plan change moves**: the body plan's slot count is in every
+	# size that holds a genome. Until phase 4 puts the plan's fingerprint on the
+	# handshake, the protocol moves with it -- said where it fails.
+	var pinned := Wire.SISTER_MAX == 1378
 	_says(Wire.MOST_RULES == FoodField.Drop.MOST_RULES and alphabet
 			and Wire.RULE_BYTES.length() == 40 and Wire.RULE_BYTES_MAX == 128
 			and Wire.SISTER_MAX == Wire.EVENT_HEADER + 13 + 2 * Wire.TIERS_MAX + 1
 				+ 8 * (1 + Wire.RULE_BYTES_MAX)
-			and Wire.SISTER_MAX == 1378 and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
+			and pinned and Wire.SISTER_MIN == Wire.EVENT_HEADER + 16
 			and Wire.GUEST_FRAME_MAX == maxi(Wire.PERSON_MAX, Wire.SISTER_MAX)
 			and Wire.GUEST_OTHER_MAX == Wire.PERSON_MAX
 			and caps == [Wire.SISTER_MAX, Wire.GUEST_OTHER_MAX, Wire.GUEST_OTHER_MAX,
@@ -1046,7 +1050,10 @@ func _check_sister_wire() -> void:
 		% Wire.RULE_BYTES.length() + " '.', '-', '>' and the space; a SISTER is %d"
 		% Wire.SISTER_MIN + " to %d bytes, automation.md §10.3's sum, and the one"
 		% Wire.SISTER_MAX + " guest frame that may pass the %d every other keeps"
-		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps))
+		% Wire.GUEST_OTHER_MAX + " (caps read %s)" % str(caps) + ("" if pinned
+			else " -- the body plan's slots changed (%d genes cross now): move the 1378 here"
+			% Wire.GENES_MAX + " and bump Wire.PROTOCOL in the same commit, until phase 4"
+			+ " puts the plan's fingerprint on the handshake (body_plan.gd)"))
 
 	# **Every line this build can write crosses**: each word a rule's line is
 	# made of -- every name the declarations give, the tests, the references,
