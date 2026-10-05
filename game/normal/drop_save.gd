@@ -40,6 +40,9 @@ const Drop := preload("res://game/normal/drop.gd")
 ## The genes (docs/design/gene-catalogue.md): what [method rules_text] lists of
 ## them, the order and every table any organ provides.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The body plan (gene-catalogue.md §10): the slot ladder [method rules_text]
+## lists, under the names it had when it was `cell.gd`'s.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 const Stats := preload("res://game/genes/stats.gd")
 
 ## **How the file is laid out.** Bumped only when [constant SHAPE] changes; a
@@ -315,8 +318,20 @@ const DAUGHTER := {
 ## wrong, not a drop, and is not allocated.
 const SLOTS_MAX := 1 << 16
 
-## [method rules], worked out once a process: the constants cannot change under it.
+## [method rules], worked out once a process: the constants cannot change under it,
+## and the body plan changes only when a tool swaps one in -- which forgets it
+## ([method _read_plan]).
 static var _rules := ""
+
+
+static func _static_init() -> void:
+	BodyPlan.listen(_read_plan)
+
+
+## **Another plan means other rules**: the slot ladder is in [method rules_text], so
+## a plan a tool swaps in is worked out again on the next [method rules].
+static func _read_plan() -> void:
+	_rules = ""
 
 
 # --- What the bodies mean (§9.4) ---------------------------------------------------
@@ -370,6 +385,14 @@ static func rules_text() -> String:
 	labels.sort()
 	for label: String in labels:
 		put.call(label, tables[label])
+	# **The slot ladder is the body plan's** (gene-catalogue.md §10.2), written
+	# under the names it had as `cell.gd`'s constants, so today's plan writes the
+	# lines it always did: `cell.SLOT_RADIUS` the radius one more slot costs --
+	# 3.5, or every rung for a plan whose ladder is not even -- and the fewest and
+	# the most slots outside.
+	cell["SLOT_RADIUS"] = BodyPlan.ladder()
+	cell["SLOT_MIN"] = BodyPlan.SLOT_MIN
+	cell["SLOT_MAX"] = BodyPlan.SLOT_MAX
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])

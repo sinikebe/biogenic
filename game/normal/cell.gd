@@ -23,6 +23,9 @@ const Doses := preload("res://game/mechanics/doses.gd")
 ## game/normal, so there is no cycle.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## **The body plan** (docs/design/gene-catalogue.md §10): every slot, and how many a
+## radius earns. It preloads nothing.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
@@ -121,22 +124,25 @@ var loads := Doses.none()
 var genome: Node = null
 
 # --- Slots -----------------------------------------------------------------
-## Genome size is capacity, not currency: one more slot per this much growth.
-## Three slots at birth, seven at radius 40 -- and seven is every arc a body
-## has, which is why [constant DIVIDE_RADIUS] is where it divides. §3.1.
-##
-## **Unchanged by the four-times growth, and the interval is why.** Two fixed
-## points pin it: `slots_for(26)` must be 3 and `slots_for(40)` must be 7, which
-## needs `14 / SLOT_RADIUS` in `[4, 5)` -- so the only legal values are
-## `(2.8, 3.5]` and 3.5 is already the top of that range. There is no dial here
-## to compensate with; what four-times growth really changes is that **capacity
-## stops being the binding constraint in the first generation** and the seven
-## arcs and the expression roll become it instead. From generation two a newborn
-## is over capacity anyway (lifecycle.md §3.1), which is where the swap
-## decision lives now.
-const SLOT_RADIUS := 3.5
-const SLOT_MIN := 3
-const SLOT_MAX := 7
+## **Genome size is capacity, not currency**: a body earns its slots by growing,
+## three at birth and seven at radius 40 -- and seven is every arc a body has, which
+## is why [constant DIVIDE_RADIUS] is where it divides. §3.1. **The slots are the
+## body plan's** (`body_plan.gd`, which writes out the radius each is earned at and
+## says why the ladder is what it is); these are its fewest and its most, under the
+## names every reader knows them by, read again whenever the plan changes.
+static var SLOT_MIN: int = BodyPlan.SLOT_MIN
+static var SLOT_MAX: int = BodyPlan.SLOT_MAX
+
+
+static func _static_init() -> void:
+	BodyPlan.listen(_read_plan)
+
+
+## The plan changed (`body_plan.gd`'s `use`, a tool's): its slots again.
+static func _read_plan() -> void:
+	SLOT_MIN = BodyPlan.SLOT_MIN
+	SLOT_MAX = BodyPlan.SLOT_MAX
+
 
 # --- The end of a body, and the beginning of two -----------------------------
 # docs/design/lifecycle.md §2. **Forty is where a body runs out of places to put
@@ -1015,9 +1021,10 @@ static func mended(hurt: float, delta: float) -> float:
 	return clampf(hurt - delta / MEND_SECONDS, 0.0, 1.0)
 
 
+## **How many outside slots a body of [param body_radius] has earned**: the body
+## plan's count -- every slot earned at that radius or below.
 static func slots_for(body_radius: float) -> int:
-	return clampi(SLOT_MIN + int((body_radius - BASE_RADIUS) / SLOT_RADIUS),
-		SLOT_MIN, SLOT_MAX)
+	return BodyPlan.slots_for(body_radius)
 
 
 ## **The realised speed of a body's tail**, from what it wears, [param tiers]:

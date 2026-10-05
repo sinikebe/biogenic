@@ -307,8 +307,9 @@ static func born() -> Dictionary:
 	return _born
 
 
-## The born cell's layout: the keys of [method born], slot by slot. In order,
-## which puts each organ in its home slot -- the nose, the flank and the tail.
+## The born cell's organs: the keys of [method born], in order. **Where each is
+## seated is the body plan's**: its home slot, the row of `body_plan.gd` that names
+## it (`home_layout`) -- the nose, the flank and the tail.
 static func born_order() -> Array[StringName]:
 	return _born_order
 
