@@ -179,12 +179,12 @@ func _init() -> void:
 	channel = BEAM
 	declares = {"in": [{"name": &"beam", "bearing": true,
 		"values": {&"distance": &"distance"}}]}
-	# **Its look** (gene-catalogue.md §7.1): the headline gene, a beam, so it is
-	# drawn as light. Indigo-violet is the one hue that is far from teal, far from
-	# red, far from the nutrient greens and still bright enough to be a line on
-	# near-black water. Three strokes; its pigment buds at a fork and flares as a
-	# level arrives (cilia.gd's `_draw_bud`).
-	look = {"shape": TUFT, "hue": Color(0.62, 0.55, 1.00), "count": 3}  # beam, 251 deg
+	# **Its look** (gene-looks.md §6): a lens standing on the skin over its pigment --
+	# the ocellus is a real camera eye, and a lens is what no bristle organ has.
+	# Sensing's shade 0, which the beam's lobe and rays are drawn in. Its pigment buds
+	# at a fork and flares as a level arrives (cilia.gd's `_draw_bud`).
+	family = SENSING
+	look = {"shape": LENS, "shade": 0}
 
 
 ## **The beam at [param level] down [param path]**: `[rays, half-span in degrees,

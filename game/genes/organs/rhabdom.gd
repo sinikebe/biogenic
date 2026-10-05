@@ -8,8 +8,8 @@ extends "res://game/genes/gene.gd"
 ##
 ## **Known, drawn and inert** (gene-catalogue.md §4.4): an old `{gene: tier}` map
 ## that names it -- a save, or a guest on an older build -- keeps it, pays upkeep
-## on it and draws it in `cilia.gd`'s reserved hue, and no water, drift or gift
-## ever makes one. It left the order before there was a catalogue, so it has no
+## on it and draws it as a gene it does not know, a plain tuft in no family's
+## colour (`cilia.gd`'s UNKNOWN_TINT), and no water, drift or gift ever makes one. It left the order before there was a catalogue, so it has no
 ## place in it: `dominant_of` ranks it as a name it does not know, as it always
 ## has.
 ##

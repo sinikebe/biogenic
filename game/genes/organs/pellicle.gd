@@ -44,8 +44,11 @@ func _init() -> void:
 	order = 11
 	provides = {&"armor": ARMOR_BY_TIER}
 	water = {"weight": 2, "drifter": true}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of seven.
-	look = {"shape": TUFT, "hue": Color(0.36, 0.88, 0.96), "count": 7}  # armor, 186 deg
+	# **Its look** (gene-looks.md §6): plates, overlapping scales lying along the skin
+	# over a thickened rim -- the pellicle is a real layer of plates under the
+	# membrane -- the one build that runs along a body rather than out of it.
+	family = DEFENDING
+	look = {"shape": PLATES, "count": 3}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how much bigger it makes you

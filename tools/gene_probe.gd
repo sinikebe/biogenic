@@ -21,8 +21,11 @@ extends Node
 ## with no period, a part nothing wires, a look drawn at once. Then what a gene
 ## looks like and says (§7.1, §8): every live gene's look, its words and its
 ## parts' words, no word table naming what is not its organ's, its numbers on the
-## pause screen, and the colours -- no two hues nearer than today's floor, none on
-## self teal or threat red, and every copy of a hue its organ's. Then the body plan
+## pause screen; and its look by gene-looks.md §8 -- a family there is and a kind it
+## is built as, every parameter its kind's, no two organs of a family alike at a
+## glance, a tile that fits, every variant its own accent -- and the families'
+## colours, measured in OKLCH, every copy of a hue its source's and every sense on a
+## channel with a lobe. Then the body plan
 ## (§10, §12.1): ids unique and none a save before stamps kept forgotten, arcs that
 ## do not overlap, radii that only rise to the divide, a home for each born organ,
 ## the copies of its counts and the wire's limits its own, room on the pause figure
@@ -126,24 +129,33 @@ const TOGETHER: Array = [
 	[&"beam_range", &"beam_count", &"beam_fan_deg"],
 ]
 
-## **What a look may hold today** (gene.gd's `look`): phase 6 adds a kind's
-## parameters, and this list with them.
-const LOOK_FIELDS: Array[String] = ["shape", "hue", "count", "tile_count", "tile_length"]
-## **The colours as they are** (§12.1), as HSV hue in degrees (`Color.h`): no two
-## genes' hues nearer than [constant HUE_FLOOR_DEG] -- today's narrowest gap but the
-## pairs below, `cirrus` and `vacuole`'s 10.2, rounded down -- and none within
-## [constant CLEAR_DEG] of self teal (`Cilia.SELF_TINT`) or threat red
-## (`Cilia.PREDATOR_TINT`), the two colours whose meaning is a relationship. Two
-## forms of one strain are one colour on purpose, and are one hue here.
-const HUE_FLOOR_DEG := 10.0
-const CLEAR_DEG := 25.0
-## **The pairs that already break those rules**, two genes or a gene and `teal` or
-## `red`: kept as they are until phase 6, whose families replace both rules
-## (gene-looks.md §8). Nothing is added here to let a new gene through.
-const KEPT_UNTIL_FAMILIES: Array = [
-	[&"palp", &"crista"], [&"stigma", &"plastid"], [&"flagellum", &"trichocyst"],
-	[&"pellicle", &"teal"], [&"myoneme", &"red"],
-]
+## **The families and the kinds** (docs/design/gene-looks.md §1, §2, §7): what a
+## look is checked against.
+const Families := preload("res://game/genes/families.gd")
+const Kinds := preload("res://game/genes/kinds.gd")
+## **The families' colours, measured in OKLCH** (gene-looks.md §1.3, §8, checks 6 to
+## 9), on the `Color`s themselves: a family's shades within [constant
+## SHADE_LIGHTNESS] of one lightness, stepping in hue by [constant SHADE_STEP_MIN] to
+## [constant SHADE_STEP_MAX] degrees -- a whisper, never a tier; every shade at least
+## [constant BAND_GAP] degrees from every other family's; at least [constant
+## MEANING_GAP] from self teal and threat red, the two colours whose meaning is a
+## relationship, and every family but eating that far from food green too; and any
+## two families' lightness [constant LIGHTNESS_GAP] apart, which is what keeps the
+## pairs colour blindness merges apart. **The step's floor is 4.5, not the design's
+## 5**: written to two decimals, eating's shades step 5.1 and 4.9 degrees.
+const SHADE_LIGHTNESS := 0.02
+const SHADE_STEP_MIN := 4.5
+const SHADE_STEP_MAX := 10.0
+const BAND_GAP := 20.0
+const MEANING_GAP := 30.0
+const LIGHTNESS_GAP := 0.04
+## **What a tile holds** (gene-looks.md §8, check 4), about its organ's centre, in the
+## tile's own px at one scale: the 76 px tile, its centre [constant TILE_CENTRE] down
+## it; and the explaining line's glyph box, `Figure.EXPLAIN_ORGAN_SIZE` at
+## `Figure.EXPLAIN_ORGAN_SCALE` with the organ's centre at `EXPLAIN_ORGAN_SEAT`, which
+## the line's row was measured with. Every live organ's tile inside both.
+const TILE_SIDE := 76.0
+const TILE_CENTRE := TILE_SIDE * Cilia.TILE_CENTRE_Y
 ## The game's French, whose missing gene words are listed (§8.3).
 const FRENCH := "res://game/i18n/fr.po"
 ## **The template every translation starts from** (§8.2): a word the catalogue hands
@@ -743,8 +755,10 @@ func _register() -> void:
 			Gene.OUTSIDE: {"key": &"probeout", "order": 901, "tags": [Catalogue.SENSE],
 				"provides": {&"armor": [1.0, 1.25, 1.25, 1.25]}}}}]
 	# **Its look, drawn at once**: cilia.gd holds the catalogue's hues and shapes, which
-	# every index fills in place, so a new organ's hue is there without a reload.
-	organ.look = {"shape": Gene.TUFT, "hue": Color(0.10, 0.20, 0.30), "count": 3}
+	# every index fills in place, so a new organ's colour -- its family's -- is there
+	# without a reload, and every key of it takes its organ's family.
+	organ.family = Gene.SENSING
+	organ.look = {"shape": Gene.TUFT, "count": 3}
 	var bare := Stats.of({&"probeout": 1}, &"armor")
 	# **Beside the first live organ of armour** -- whichever it is, so that retiring
 	# one is still its tag alone (§16) -- or alone, with none.
@@ -754,7 +768,8 @@ func _register() -> void:
 		pair[beside] = 1
 	var other := Stats.value(beside, &"armor", 1)
 	Catalogue.register(organ)
-	var drawn := [Cilia.hue(&"probeout"), Catalogue.shaped(Gene.TUFT).has(&"probeout")]
+	var drawn := [Cilia.hue(&"probeout"), Catalogue.shaped(Gene.TUFT).has(&"probeout")
+		and Cilia.hue(&"probein") == Cilia.hue(&"probeout")]
 	# Read through stats.gd, which holds the catalogue's dictionary: the new
 	# organ's armour at once, and a second provider combined by the row's rule.
 	var read := [Stats.of({&"probeout": 1}, &"armor"), Stats.of(pair, &"armor")]
@@ -786,10 +801,10 @@ func _register() -> void:
 		and Array(Catalogue.keys()) == before and not Catalogue.known(&"probein")
 		and bare == 1.0 and read[0] == 1.25 and is_equal_approx(read[1], other * 1.25)
 		and read[2] == 1.0)
-	_check(("and its look is drawn at once, by the dictionaries cilia.gd holds: its hue %s"
-		+ " while filed, a tuft among the tufts, and the reserved indigo once forgotten")
-		% str(drawn[0]), drawn[0] == Color(0.10, 0.20, 0.30) and drawn[1]
-		and drawn[2] == Cilia.RESERVED_HUES[0])
+	_check(("and its look is drawn at once, by the dictionaries cilia.gd holds: its family's"
+		+ " colour %s while filed, on both forms, a tuft among the tufts, and the unknown"
+		+ " tint once forgotten") % str(drawn[0]), drawn[0] == Families.shade(Gene.SENSING)
+		and drawn[1] and drawn[2] == Cilia.UNKNOWN_TINT)
 	_check("and a variant's and a form's tags add to their organ's, never replace them:"
 		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
 	# **A variant with no forms is one entry** (gene.gd): filed outside under its
@@ -815,51 +830,155 @@ func _register() -> void:
 		and Array(Catalogue.keys()) == before)
 
 
-# --- Looks (§7.1) ----------------------------------------------------------------------------
+# --- Looks (gene-looks.md §2, §3, §7, §8) ------------------------------------------------
 
-## **Every live gene's look**: a shape there is, a hue, its strokes where its
-## shape counts them and a home shape's tile, and nothing a look does not hold. A
-## retired gene has none, so that it draws as a gene this build does not know.
+## **Every look, by its family and its kind** (gene-looks.md §8, checks 1 to 5), for
+## every live organ, and every retired one that kept its look -- a body wearing it is
+## still drawn by it (§16). A retired organ with none draws as a gene this build does
+## not know, a plain tuft in no family's colour.
 func _looks() -> void:
-	var bad: Array[String] = []
 	var drawn: Array[StringName] = []
 	drawn.append_array(Catalogue.live())
-	# **A retired key's look may stay or go** (§16: retiring a gene is its tag and
-	# nothing else): one that stays is still how a body wearing it is drawn, so it is
-	# held as a live one's is.
 	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
-		if not Catalogue.look(key).is_empty():
+		if not Catalogue.gene(key).look.is_empty():
 			drawn.append(key)
+	# 1 and 2: a family there is, a kind it is built as, no colour of its own, every
+	# parameter its kind's and in range, a shade of three, an accent only on a variant.
+	var bad: Array[String] = []
+	var kinds := {}
 	for key: StringName in drawn:
-		var look := Catalogue.look(key)
-		var shape := StringName(look.get("shape", &""))
-		if not Gene.SHAPES.has(shape):
-			bad.append("%s's shape %s" % [key, shape if shape != &"" else &"(none)"])
-		if not look.get("hue") is Color:
-			bad.append("%s's hue" % key)
-		if Gene.COUNTED.has(shape) and not _counts(look.get("count")):
-			bad.append("%s's count" % key)
-		if Gene.HOME_SHAPES.has(shape) and not (_counts(look.get("tile_count"))
-				and float(look.get("tile_length", 0.0)) > 0.0):
-			bad.append("%s's tile" % key)
-		for field: Variant in look:
-			if not LOOK_FIELDS.has(String(field)):
-				bad.append("%s's look field %s" % [key, field])
-	var shapes := PackedStringArray()
-	for shape: StringName in Gene.SHAPES:
-		shapes.append("%s %d" % [shape, Catalogue.shaped(shape).size()])
-	_check(("every live gene has a look -- a shape there is, a hue, its strokes where its shape"
-		+ " counts them and a home shape's tile -- and so does every retired one that kept"
-		+ " its look, %d of them: %s%s") % [drawn.size() - Catalogue.live().size(),
-			", ".join(shapes), "" if bad.is_empty() else "; wrong: %s" % ", ".join(bad)],
-		bad.is_empty())
+		var raw: Dictionary = Catalogue.gene(key).look
+		var family := Catalogue.family_of(key)
+		var kind := StringName(raw.get("shape", &""))
+		if not Families.has(family):
+			bad.append("%s's family %s" % [key, family if family != &"" else &"(none)"])
+		elif not Families.allows(family, kind):
+			bad.append("%s's shape %s, which %s is not built as (%s)" % [key, kind, family,
+				str(Families.FAMILIES[family]["kinds"])])
+		if raw.has("hue"):
+			bad.append("%s's hue: its colour is its family's" % key)
+		for fault: String in Kinds.faults(raw, not Catalogue.as_shipped(key)):
+			if not fault.contains("field hue"):
+				bad.append("%s's %s" % [key, fault])
+		kinds[kind] = int(kinds.get(kind, 0)) + 1
+	_check(("1, 2. every live gene's look is its family's -- a family there is, a kind it is"
+		+ " built as, no colour of its own -- and every parameter one its kind knows, in"
+		+ " range, a shade of 0, 1 or 2, an accent only on a variant; %d of them, %d retired"
+		+ " that kept a look: %s%s") % [drawn.size(), drawn.size() - Catalogue.live().size(),
+			str(kinds), "" if bad.is_empty() else "; wrong: %s" % "; ".join(bad)],
+		bad.is_empty() and not drawn.is_empty())
+
+	# 3: no two organs of a family alike at a glance -- the same kind and the same
+	# structural parameters -- whatever their counts and lengths.
+	var organs: Array[StringName] = []
+	for key: StringName in drawn:
+		if not organs.has(Catalogue.organ_of(key)):
+			organs.append(Catalogue.organ_of(key))
+	var seen := {}
+	var alike: Array[String] = []
+	for organ: StringName in organs:
+		var shipped: StringName = Catalogue.keys_of_organ(organ)[0]
+		var family := Catalogue.family_of(shipped)
+		var signature := str(Kinds.signature(Catalogue.gene(shipped).look))
+		if not seen.has(family):
+			seen[family] = {}
+		var mine: Dictionary = seen[family]
+		if mine.has(signature):
+			alike.append(("%s and %s, both %s %s: tell one apart by a new tip, form or head"
+				+ " in kinds.gd -- a count or a length is never a difference")
+				% [mine[signature], organ, family, signature])
+		else:
+			mine[signature] = organ
+	var room := PackedStringArray()
+	for family: StringName in Families.FAMILIES:
+		room.append("%s %d" % [family, (seen.get(family, {}) as Dictionary).size()])
+	_check(("3. no two organs of one family are alike at a glance -- the same kind and the"
+		+ " same tip, bend, form, waves, turns or lips -- whatever their counts and lengths;"
+		+ " builds in use: %s%s") % [", ".join(room),
+			"" if alike.is_empty() else "; alike: %s" % "; ".join(alike)], alike.is_empty())
+
+	# 4: every tile fits the tile and the explaining line's row.
+	var glyph := Rect2(-Figure.EXPLAIN_ORGAN_SEAT / Figure.EXPLAIN_ORGAN_SCALE,
+		Figure.EXPLAIN_ORGAN_SIZE / Figure.EXPLAIN_ORGAN_SCALE)
+	var room_box := glyph.intersection(Rect2(-TILE_SIDE * 0.5, -TILE_CENTRE, TILE_SIDE,
+		TILE_SIDE))
+	var over: Array[String] = []
+	var top := 0.0
+	var top_key := &""
+	for key: StringName in drawn:
+		var bounds := Cilia.tile_bounds(key)
+		if not room_box.encloses(bounds):
+			over.append("%s %s" % [key, str(bounds)])
+		if -bounds.position.y > top:
+			top = -bounds.position.y
+			top_key = key
+	_check(("4. every live organ's tile, built as it is drawn and drawn on nothing, stays"
+		+ " inside the %.0f px tile and the explaining line's %s glyph box at %.1f -- %s in"
+		+ " tile px; the tallest %s, %.1f px above its centre%s") % [TILE_SIDE,
+			str(Figure.EXPLAIN_ORGAN_SIZE), Figure.EXPLAIN_ORGAN_SCALE, str(room_box), top_key,
+			top, "" if over.is_empty() else "; outside: %s" % "; ".join(over)],
+		over.is_empty())
+
+	# 5: every variant but the organ as shipped wears an accent of its own.
+	var accents: Array[String] = []
+	var worn := 0
+	for organ: StringName in organs:
+		var keys := Catalogue.keys_of_organ(organ)
+		var shipped := Catalogue.variant_of(keys[0])
+		var own_mark := StringName(Catalogue.look(keys[0]).get("shipped", Kinds.MARK_NONE))
+		var spare := Kinds.ACCENTS.filter(func(mark: StringName) -> bool:
+			return mark != own_mark)
+		var used := {}
+		var variants := {}
+		for key: StringName in keys:
+			variants[Catalogue.variant_of(key)] = StringName(Catalogue.look(key).get("accent",
+				&""))
+		for variant: StringName in variants:
+			var accent: StringName = variants[variant]
+			if variant == shipped:
+				if accent != &"":
+					accents.append("%s as shipped wears %s: the organ as shipped shows its"
+						% [organ, accent] + " seat's own mark")
+				continue
+			worn += 1
+			if not Kinds.ACCENTS.has(accent):
+				accents.append("%s's variant %s sets no accent of %s" % [organ, variant,
+					str(Kinds.ACCENTS)])
+			elif accent == own_mark:
+				accents.append("%s's variant %s wears %s, its organ's own mark" % [organ,
+					variant, accent])
+			elif used.has(accent):
+				accents.append("%s's variants %s and %s both wear %s" % [organ,
+					used[accent], variant, accent])
+			used[accent] = variant
+		if variants.size() - 1 > spare.size():
+			accents.append(("%s has %d variants besides the organ as shipped and its seat %d"
+				+ " marks to spare: make a new organ") % [organ, variants.size() - 1,
+				spare.size()])
+	# A variant sets its accent and nothing else of a look; a form, nothing of one.
+	for organ: Gene in _organs():
+		for entry: Dictionary in organ.variants:
+			for field: Variant in entry.get("look", {}):
+				if not Kinds.VARIANT_FIELDS.has(String(field)):
+					accents.append("%s's variant %s sets its look's %s: a variant sets an"
+						% [organ.organ, entry.get("variant", &""), field] + " accent and nothing else")
+			var forms: Dictionary = entry.get("forms", {})
+			for place: Variant in forms:
+				if forms[place] is Dictionary and (forms[place] as Dictionary).has("look"):
+					accents.append("%s's form %s sets a look: a form wears its variant's"
+						% [organ.organ, place])
+	_check(("5. every variant but its organ as shipped wears an accent -- a disc, a ring, a"
+		+ " diamond or a bar at its kind's seat -- unlike its organ's mark and every"
+		+ " sibling's, and sets nothing else of a look; %d variant%s today%s") % [worn,
+			"" if worn == 1 else "s", "" if accents.is_empty() else ": %s" % "; ".join(accents)],
+		accents.is_empty())
 
 
 # --- Words (§8.1) and lines (§8.4) -----------------------------------------------------------
 
 ## **Every live gene's words**: a chip word and its line; its word and line in
-## hand where it is one form of several; every way's words where its levels fork;
-## and for every part it declares, its word -- a sense's or an action's -- its
+## hand where it is one form of several; a variant's word after its organ's name;
+## every way's words where its levels fork; and for every part it declares, its word -- a sense's or an action's -- its
 ## line, and what an instinct says while the part waits for a level. And no word
 ## table in an organ's file is keyed by a key, a part or a way not its organ's:
 ## words for what nobody is, which nobody is shown.
@@ -876,6 +995,10 @@ func _words() -> void:
 		# would say its front line on the flank.
 		if Catalogue.provides(key, &"venom_stacks"):
 			needed.append_array([&"side", &"stern"] as Array[StringName])
+		# **A variant names itself after its organ** (gene-looks.md §4): every variant
+		# but the organ as shipped has its word for `organ · variant`.
+		if not Catalogue.as_shipped(key):
+			needed.append(&"variant")
 		for name: StringName in needed:
 			if not _said(words.get(name)):
 				bad.append("%s's %s" % [key, name])
@@ -1103,60 +1226,99 @@ func _lines() -> void:
 		bad.is_empty())
 
 
-# --- Colours (§12.1) ---------------------------------------------------------------------
+# --- Colours (gene-looks.md §1.3, §5, §8) ------------------------------------------------
 
-## **No two genes' hues nearer than today's floor, and none within 25° of self teal
-## or threat red**, but the pairs that already were; and **every copy of a gene's
-## hue is its organ's**: the membrane's lobes are the hues of the organs on their
-## channels, its strains the hues of the forms that deliver them, the call code the
-## ping's, and each pad the organ it works through.
+## **The families' colours, measured** (gene-looks.md §8, checks 6 to 11): each
+## family's shades one lightness and a whisper of hue apart; every band clear of every
+## other, of self teal and threat red, and -- but eating's -- of food green; the
+## families' lightness apart; **every copy of a hue its source's**, and every mark a
+## mechanic draws one family's; and every sense on a channel the membrane has a lobe
+## for.
 func _colours() -> void:
-	var hues := {}
-	for key: StringName in Catalogue.live():
-		var hue: Variant = Catalogue.look(key).get("hue")
-		if hue is Color:
-			hues[key] = (hue as Color).h * 360.0
-	var marks := {&"teal": Cilia.SELF_TINT.h * 360.0, &"red": Cilia.PREDATOR_TINT.h * 360.0}
-	var close: Array[String] = []
-	var kept: Array[String] = []
+	var bands: Array[String] = []
+	var shades: Array = []
+	var lightness := {}
+	for family: StringName in Families.FAMILIES:
+		var row: Array = Families.FAMILIES[family]["shades"]
+		if row.size() != 3:
+			bands.append("%s has %d shades, not 3" % [family, row.size()])
+			continue
+		var lch: Array[Vector3] = []
+		for i in row.size():
+			lch.append(_oklch(row[i]))
+			shades.append([family, i, lch[i]])
+		var lo := minf(lch[0].x, minf(lch[1].x, lch[2].x))
+		var hi := maxf(lch[0].x, maxf(lch[1].x, lch[2].x))
+		lightness[family] = (lch[0].x + lch[1].x + lch[2].x) / 3.0
+		if hi - lo > SHADE_LIGHTNESS:
+			bands.append("%s's shades %.3f apart in lightness" % [family, hi - lo])
+		for i in range(1, 3):
+			var step := _apart(lch[i - 1].z, lch[i].z)
+			if step < SHADE_STEP_MIN or step > SHADE_STEP_MAX:
+				bands.append("%s's shades %d and %d %.1f degrees apart" % [family, i - 1, i, step])
+	_check(("6. every family's three shades share a lightness within %.2f and step %.1f to"
+		+ " %.0f degrees of OKLCH hue: a whisper, never a tier%s") % [SHADE_LIGHTNESS,
+			SHADE_STEP_MIN, SHADE_STEP_MAX, "" if bands.is_empty() else ": %s" % "; ".join(bands)],
+		bands.is_empty() and Families.FAMILIES.size() == 5)
+	var near: Array[String] = []
 	var nearest := 360.0
-	var keys: Array = hues.keys()
-	for i in keys.size():
-		var a: StringName = keys[i]
-		for j in range(i + 1, keys.size()):
-			var b: StringName = keys[j]
-			if Catalogue.forms_of(a).has(b):
+	for i in shades.size():
+		for j in range(i + 1, shades.size()):
+			if shades[i][0] == shades[j][0]:
 				continue
-			var gap := _apart(float(hues[a]), float(hues[b]))
-			if _kept(a, b):
-				kept.append("%s and %s %.1f°" % [a, b, gap])
-			elif gap < HUE_FLOOR_DEG:
-				close.append("%s and %s %.1f°" % [a, b, gap])
-			else:
-				nearest = minf(nearest, gap)
-		for mark: StringName in marks:
-			var gap := _apart(float(hues[a]), float(marks[mark]))
-			if gap >= CLEAR_DEG:
+			var gap := _apart((shades[i][2] as Vector3).z, (shades[j][2] as Vector3).z)
+			nearest = minf(nearest, gap)
+			if gap < BAND_GAP:
+				near.append("%s %d and %s %d %.1f" % [shades[i][0], shades[i][1], shades[j][0],
+					shades[j][1], gap])
+	_check("7. every shade at least %.0f degrees of OKLCH hue from every other family's, the" \
+		% BAND_GAP + " nearest %.1f%s" % [nearest, "" if near.is_empty()
+			else ": %s" % ", ".join(near)], near.is_empty())
+	var marks := {&"self teal": [_oklch(Cilia.SELF_TINT).z, false],
+		&"threat red": [_oklch(Cilia.PREDATOR_TINT).z, false],
+		&"food green": [_oklch(_color(SignalBus.NUTRIENT_COLOR)).z, true]}
+	var meaning: Array[String] = []
+	var said := PackedStringArray()
+	for mark: StringName in marks:
+		var at: float = marks[mark][0]
+		var closest := 360.0
+		for shade: Array in shades:
+			if bool(marks[mark][1]) and shade[0] == Families.EATING:
 				continue
-			if _kept(a, mark):
-				kept.append("%s and %s %.1f°" % [a, mark, gap])
-			else:
-				close.append("%s and %s %.1f°" % [a, mark, gap])
-	_check(("no two genes' hues nearer than %.0f° -- the nearest now %.1f° -- and none within"
-		+ " %.0f° of self teal or threat red, but the %d kept until phase 6: %s%s") % [
-			HUE_FLOOR_DEG, nearest, CLEAR_DEG, kept.size(), ", ".join(kept),
-			"" if close.is_empty() else "; too near: %s" % ", ".join(close)],
-		close.is_empty() and kept.size() == _kept_live())
-	if kept.size() != _kept_live():
-		print("[gene-probe] NOTE kept until phase 6, and no longer near: take it off the list")
+			var gap := _apart((shade[2] as Vector3).z, at)
+			closest = minf(closest, gap)
+			if gap < MEANING_GAP:
+				meaning.append("%s %d %.1f from %s" % [shade[0], shade[1], gap, mark])
+		said.append("%s %.1f" % [mark, closest])
+	_check(("8. every shade at least %.0f degrees from self teal and threat red, and every"
+		+ " family's but eating's from food green: %s%s") % [MEANING_GAP, ", ".join(said),
+			"" if meaning.is_empty() else "; too near: %s" % ", ".join(meaning)],
+		meaning.is_empty())
+	var dark: Array[String] = []
+	var least := 1.0
+	var families: Array = lightness.keys()
+	for i in families.size():
+		for j in range(i + 1, families.size()):
+			var gap := absf(float(lightness[families[i]]) - float(lightness[families[j]]))
+			least = minf(least, gap)
+			if gap < LIGHTNESS_GAP:
+				dark.append("%s and %s %.3f" % [families[i], families[j], gap])
+	_check("9. any two families at least %.2f apart in OKLab lightness, the least %.3f%s" % [
+		LIGHTNESS_GAP, least, "" if dark.is_empty() else ": %s" % ", ".join(dark)],
+		dark.is_empty())
+
+	# 10: every copy of a hue is its source's, and every mark one family's.
 	var wrong: Array[String] = []
 	var copies := 0
-	for lobe: Array in [[&"light", SignalBus.LIGHT_COLOR, Catalogue.LIGHT],
-			[&"beam", SignalBus.BEAM_COLOR, Catalogue.BEAM],
+	for lobe: Array in [[&"beam", SignalBus.BEAM_COLOR, Catalogue.BEAM],
 			[&"ping", SignalBus.PING_COLOR, Catalogue.PING]]:
 		copies += 1
 		if not _same(lobe[1], Catalogue.first_on(lobe[2])):
 			wrong.append("the membrane's %s lobe" % lobe[0])
+		var family := _one_family(Array(Catalogue.tagged(Catalogue.SENSE)).filter(
+			func(key: StringName) -> bool: return Catalogue.channel_of(key) == lobe[2]))
+		if family == &"":
+			wrong.append("the %s channel's organs, of more than one family" % lobe[0])
 	for kind in Doses.Kind.size():
 		var form := _delivering(kind)
 		if form == &"":
@@ -1173,13 +1335,37 @@ func _colours() -> void:
 		var tone: Color = pad[1]
 		if not _same(Vector3(tone.r, tone.g, tone.b), Catalogue.first_provider(pad[2])):
 			wrong.append("the %s pad" % pad[0])
+		if _one_family(Array(Catalogue.providers(pad[2]))) == &"":
+			wrong.append("the %s pad's organs, of more than one family" % pad[0])
 	copies += 1
 	var code: Color = Earshot.CODE_COLOR
 	if not _same(Vector3(code.r, code.g, code.b), Catalogue.first_on(Catalogue.PING)):
 		wrong.append("the earshot's call code")
-	_check(("every one of the %d copies of a gene's hue is its organ's -- the membrane's light,"
-		+ " beam and ping lobes, its strain colours, the three pads, the call code%s") % [copies,
-			"" if wrong.is_empty() else "; not: %s" % ", ".join(wrong)], wrong.is_empty())
+	# **A variant keeps its organ's colour** (gene-looks.md §3.2): every key of an
+	# organ one hue, so no mark moves with the variant a body wears.
+	var organs := {}
+	for key: StringName in Catalogue.live():
+		var organ := Catalogue.organ_of(key)
+		if organs.has(organ) and Cilia.hue(key) != Cilia.hue(organs[organ]):
+			wrong.append("%s's hue, not its organ %s's" % [key, organ])
+		organs[organ] = organs.get(organ, key)
+	_check(("10. every one of the %d copies of a hue is its source's -- the membrane's beam"
+		+ " and ping lobes, the strain colours, the three pads, the call code -- the light"
+		+ " lobe light's own amber; every mark one family's, and every key of an organ its"
+		+ " organ's hue%s") % [copies, "" if wrong.is_empty() else "; not: %s" % ", ".join(wrong)],
+		wrong.is_empty())
+
+	# 11: every sense drives a channel the membrane has a lobe for.
+	var lobeless: Array[String] = []
+	for key: StringName in Catalogue.live():
+		var channel := Catalogue.channel_of(key)
+		if (channel != &"" or Catalogue.has_tag(key, Catalogue.SENSE)) \
+				and not SignalBus.CHANNEL_LOBES.has(channel):
+			lobeless.append("%s on %s" % [key, channel if channel != &"" else &"(none)"])
+	_check(("11. every sense names a channel the membrane has a lobe for -- %s; a new channel"
+		+ " is code, a lobe of its own%s") % [str(SignalBus.CHANNEL_LOBES),
+			"" if lobeless.is_empty() else ": not %s" % ", ".join(lobeless)],
+		lobeless.is_empty())
 
 
 ## **The gene words with no French** (§8.3), listed and never failed: a word not
@@ -1868,21 +2054,6 @@ func _said_nothing() -> Array[StringName]:
 	return out
 
 
-## **How many of [constant KEPT_UNTIL_FAMILIES] are still pairs of live colours**: a
-## pair with a retired key in it is no pair any more -- a retired key is not among
-## the colours checked -- and drops out of the count (§16).
-func _kept_live() -> int:
-	var count := 0
-	for pair: Array in KEPT_UNTIL_FAMILIES:
-		var live := true
-		for one: StringName in pair:
-			if Catalogue.known(one) and Catalogue.has_tag(one, Catalogue.RETIRED):
-				live = false
-		if live:
-			count += 1
-	return count
-
-
 ## Whether two lists hold the same values in the same order, whatever their types.
 static func _same_list(a: Variant, b: Variant) -> bool:
 	if a.size() != b.size():
@@ -1908,14 +2079,16 @@ class ProbeGland extends "res://game/genes/gene.gd":
 	const WORDS := {&"probegin": "gland", &"probegout": "gland", &"probegkeen": "keen"}
 	const EXPLAINS := {&"probegin": "keeps a little more", &"probegout": "smells a little",
 		&"probegkeen": "smells far"}
-	## Its look's hue, and the keen strain's own.
-	const HUE := Color(0.31, 0.47, 0.13)
-	const KEEN_HUE := Color(0.47, 0.31, 0.13)
+	## The keen strain's word after its organ's name on the explaining line.
+	const VARIANT_WORDS := {&"probegkeen": "keener"}
+	## Its look: a sense's hooked bristles; and the keen strain's accent, a ring.
+	const KEEN_ACCENT := Kinds.MARK_RING
 
 	func _init() -> void:
 		organ = &"probegland"
 		water = {"weight": 3, "drifter": true}
-		look = {"shape": TUFT, "hue": HUE, "count": 3}
+		family = SENSING
+		look = {"shape": TUFT, "count": 3, "tip": Kinds.TIP_HOOK}
 		variants = [
 			{"variant": &"plain", "water": {"weight": 2},
 				"forms": {
@@ -1925,7 +2098,7 @@ class ProbeGland extends "res://game/genes/gene.gd":
 						"provides": {&"smell_range": [0.0, 300.0, 400.0, 500.0]}},
 				}},
 			{"variant": &"keen", "key": &"probegkeen", "order": 912, "water": {"weight": 1},
-				"look": {"hue": KEEN_HUE},
+				"look": {"accent": KEEN_ACCENT},
 				"provides": {&"smell_range": [0.0, 600.0, 800.0, 1000.0]}},
 		]
 
@@ -2060,12 +2233,15 @@ func _synthetic_gene() -> void:
 		and not short_said.contains("probegin") and taken == &"probegkeen"
 		and brought.has(&"probegkeen") and (brought.has(&"probegin") or brought.has(&"probegout")))
 
-	# **The body**: its stats by their rows, its hue, and the mechanic with a place acting
-	# from the first provider in slot order.
+	# **The body**: its stats by their rows, its family's colour on every key and the keen
+	# strain told by its accent and named after its organ, and the mechanic with a place
+	# acting from the first provider in slot order.
 	var both := {&"probegout": 2, &"probegkeen": 1}
 	var smell := [Stats.of({&"probegout": 2}, &"smell_range"), Stats.of(both, &"smell_range")]
 	var store := Stats.of({&"probegin": 3}, &"store")
 	var hues := [Cilia.hue(&"probegout"), Cilia.hue(&"probegin"), Cilia.hue(&"probegkeen")]
+	var marked := [Cilia.accent_of(&"probegout"), Cilia.accent_of(&"probegkeen"),
+		Figure.explain_name(&"probegout"), Figure.explain_name(&"probegkeen")]
 	var seats: Array = []
 	for worn_layout: Array in [[&"cytostome", &"cirrus", &"flagellum", &"", &"probegkeen",
 			&"probegout"], [&"cytostome", &"cirrus", &"flagellum", &"probegout", &"",
@@ -2077,11 +2253,14 @@ func _synthetic_gene() -> void:
 		seats.append([cell.provider(&"smell_range"), cell.tier_for(&"smell_range"),
 			cell.stat(&"smell_range"), FoodField._seat_of(water_order, body, &"smell_range")])
 	_check(("the body takes it: a nose of %s alone, %s beside the keen strain -- the best of"
-		+ " them, as its row says -- and %s of store inside; drawn in its hue, the keen"
-		+ " strain in its own (%s); and the smell acts from the first nose in slot order,"
-		+ " here and in the water: %s") % [smell[0], smell[1], store, str(hues), str(seats)],
+		+ " them, as its row says -- and %s of store inside; drawn in its family's colour,"
+		+ " every key (%s), the keen strain told by its accent and named after its organ"
+		+ " (%s); and the smell acts from the first nose in slot order, here and in the"
+		+ " water: %s") % [smell[0], smell[1], store, str(hues), str(marked), str(seats)],
 		smell == [400.0, 600.0] and is_equal_approx(store, 1.3)
-		and hues == [ProbeGland.HUE, ProbeGland.HUE, ProbeGland.KEEN_HUE]
+		and hues == [Families.shade(Gene.SENSING), Families.shade(Gene.SENSING),
+			Families.shade(Gene.SENSING)]
+		and marked == [&"", ProbeGland.KEEN_ACCENT, "probegout", "probegin · keener"]
 		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 600.0, 3])
 
 	# **Its parts**: wired by the name it declares them under, in a water cell and in
@@ -2246,6 +2425,7 @@ func _variant_of_shipped() -> void:
 	for k in range(1, slower.size()):
 		slower[k] = float(slower[k]) + 0.4
 	tail.variants = [{"variant": &"probeswift", "order": 920, "born": 0,
+		"look": {"accent": Kinds.MARK_DISC},
 		"provides": {&"impulse_speed": swift, &"impulse_gap_min": slower}}]
 	var entries := _keys_of(tail)
 	Catalogue.register(tail)
@@ -2265,6 +2445,12 @@ func _variant_of_shipped() -> void:
 	var rows: Array = GeneStats.lines(&"probeswift", 2, 0, &"", GeneStats.context({}))
 	var born_same := not Catalogue.born().has(&"probeswift")
 	var page := _offered_alike(vocab, organ, &"probeswift", plain)
+	# **Drawn as its organ is, plus its accent**: the tail's colour and kind, a disc at
+	# its basal body, and `organ · variant` at the head of its line.
+	var looks := [Cilia.hue(&"probeswift") == Cilia.hue(plain),
+		Catalogue.look(&"probeswift")["shape"] == Catalogue.look(plain)["shape"],
+		Cilia.accent_of(&"probeswift"), Cilia.accent_of(plain),
+		Figure.explain_name(&"probeswift")]
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after := Rules.text()
@@ -2290,6 +2476,11 @@ func _variant_of_shipped() -> void:
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
 		and Array(Catalogue.keys()) == before)
+	_check("and it is drawn as its organ is, plus its accent: the same colour and kind %s,"
+		% str(looks.slice(0, 2)) + " a %s where the tail wears %s, and named %s" % [looks[2],
+			"nothing" if looks[3] == &"" else looks[3], looks[4]],
+		looks[0] and looks[1] and looks[2] == Kinds.MARK_DISC and looks[3] == &""
+		and looks[4] == "%s · probeswift" % Genome.name_of(plain))
 	_check(("and the instincts page offers a body that wears the faster %s alone, or carries"
 		+ " it unworn, what it offers one with the plain tail at every copy count -- %s's parts"
 		+ " %s, waiting at one copy %s, carried %s -- counting parts by organ, as the body's"
@@ -2348,6 +2539,7 @@ func _strain_of_shipped() -> void:
 	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
 	organ.variants = [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
 		"order": 930, "water": {"weight": 1, "drifter": true},
+		"look": {"accent": Kinds.MARK_DIAMOND},
 		"provides": {&"venom_stacks": stacks}}]
 	Catalogue.register(organ)
 	var strain := &"probebarb"
@@ -2366,20 +2558,25 @@ func _strain_of_shipped() -> void:
 	var bite := FoodField.toxins_of({strain: 2}, [strain])
 	var side := FoodField.toxins_of({strain: 2}, [&"", strain])
 	var said := Catalogue.gene(strain).dose_line(GeneStats.context({}))
+	# **Its beads are its accent** (gene-looks.md §3.3): the toxin's colour, diamonds.
+	var beads := [Cilia.hue(strain) == Cilia.hue(dosed), Cilia.accent_of(strain),
+		Figure.explain_name(strain)]
 	var gone := Catalogue.organ_of(strain)
 	Catalogue.forget(gone)
 	_check(("and a second strain of %s, one entry of one place, is covered by every rule"
 		+ " that was the toxin's: tagged %s, no drifter carries it (%s), the floor gives it"
 		+ " back through a peer (%s), into its one place (%s); its venom bites at the front"
-		+ " and stings on a side, by its own kind (%s; %s); and it says what a stack of its"
-		+ " dose does") % [gone, str(tagged), str(not drifting and to_drifter == &""),
-		by_peer, str(peer.get(strain, 0)), str(bite), str(side)],
+		+ " and stings on a side, by its own kind (%s; %s); it says what a stack of its"
+		+ " dose does; and it is the toxin's colour with %s beads, named %s") % [gone,
+		str(tagged), str(not drifting and to_drifter == &""), by_peer,
+		str(peer.get(strain, 0)), str(bite), str(side), beads[1], beads[2]],
 		tagged and not drifting and to_drifter == &"" and by_peer == strain
 		and int(peer.get(strain, 0)) == 1
 		and bite == PackedFloat64Array([FoodField.HOW_BITE, kind, float(stacks[2]), 0.0])
 		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
 			Cilia.slot_bearing(1)])
-		and not said.is_empty() and Array(Catalogue.keys()) == before)
+		and not said.is_empty() and Array(Catalogue.keys()) == before
+		and beads == [true, Kinds.MARK_DIAMOND, "%s · probebarb" % Genome.name_of(dosed)])
 
 
 ## The part [param name] an organ of the catalogue declares as an input, its
@@ -2496,11 +2693,6 @@ static func _said(value: Variant) -> bool:
 	return value is String and not (value as String).strip_edges().is_empty()
 
 
-## Whether [param value] is a count of strokes: a whole number above nought.
-static func _counts(value: Variant) -> bool:
-	return value is int and int(value) > 0
-
-
 ## The entries of an organ file's word table [param name] in [param tables], or of a
 ## table's own inner table: none where it is not a dictionary.
 static func _table(tables: Variant, name: Variant) -> Array:
@@ -2514,18 +2706,45 @@ static func _apart(a: float, b: float) -> float:
 	return minf(gap, 360.0 - gap)
 
 
-## Whether [param a] and [param b] are a pair kept until phase 6.
-static func _kept(a: StringName, b: StringName) -> bool:
-	for pair: Array in KEPT_UNTIL_FAMILIES:
-		if (pair[0] == a and pair[1] == b) or (pair[0] == b and pair[1] == a):
-			return true
-	return false
-
-
-## Whether [param rgb], a copy of a hue as the shader takes it, is [param key]'s.
+## Whether [param rgb], a copy of a hue as the shader takes it, is [param key]'s --
+## its family's shade.
 static func _same(rgb: Vector3, key: StringName) -> bool:
-	var hue: Variant = Catalogue.look(key).get("hue")
-	return hue is Color and rgb.is_equal_approx(Vector3(hue.r, hue.g, hue.b))
+	var hue := Catalogue.hue_of(key)
+	return hue.a > 0.0 and rgb.is_equal_approx(Vector3(hue.r, hue.g, hue.b))
+
+
+## **The one family [param keys] are all of**, `&""` for none or more than one.
+static func _one_family(keys: Array) -> StringName:
+	var family := &""
+	for key: Variant in keys:
+		var own := Catalogue.family_of(StringName(key))
+		if family != &"" and own != family:
+			return &""
+		family = own
+	return family
+
+
+## [param rgb] as a colour.
+static func _color(rgb: Vector3) -> Color:
+	return Color(rgb.x, rgb.y, rgb.z)
+
+
+## **[param tone] in OKLCH** (Björn Ottosson's OKLab, 2020): its lightness, its chroma
+## and its hue in degrees, as gene-looks.md §1.3 measured the families.
+static func _oklch(tone: Color) -> Vector3:
+	var lin: Array[float] = []
+	for c: float in [tone.r, tone.g, tone.b]:
+		lin.append(c / 12.92 if c <= 0.04045 else pow((c + 0.055) / 1.055, 2.4))
+	var l := pow(0.4122214708 * lin[0] + 0.5363325363 * lin[1] + 0.0514459929 * lin[2],
+		1.0 / 3.0)
+	var m := pow(0.2119034982 * lin[0] + 0.6806995451 * lin[1] + 0.1073969566 * lin[2],
+		1.0 / 3.0)
+	var s := pow(0.0883024619 * lin[0] + 0.2817188376 * lin[1] + 0.6299787005 * lin[2],
+		1.0 / 3.0)
+	var lightness := 0.2104542553 * l + 0.7936177850 * m - 0.0040720468 * s
+	var a := 1.9779984951 * l - 2.4285922050 * m + 0.4505937099 * s
+	var b := 0.0259040371 * l + 0.7827717662 * m - 0.8086757660 * s
+	return Vector3(lightness, Vector2(a, b).length(), fposmod(rad_to_deg(atan2(b, a)), 360.0))
 
 
 ## The first live form that delivers a load of [param kind], `&""` for none.

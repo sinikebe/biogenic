@@ -33,40 +33,35 @@ const Doses := preload("res://game/mechanics/doses.gd")
 # --- no flash. Chemistry is the only other hue phase 1 is allowed.
 const SELF_COLOR := Vector3(0.12, 0.70, 0.58)
 const NUTRIENT_COLOR := Vector3(0.35, 0.88, 0.42)
-## **A sense's lobe is its organ's hue**: the hue of the organ that drives the
-## lobe's channel, its organ file's (`look.hue`, gene-catalogue.md §7.1), read once
-## from the catalogue rather than copied -- the same organ cilia.gd's `hue_on`
-## draws that sense's marks in, so the lobe and the marks cannot drift apart.
-## `static var` because a constant expression cannot contain a call.
+## **The membrane colours channels, never organs** (docs/design/gene-looks.md §5):
+## each lobe takes its channel's colour, whichever organ drives it, so a new sense on
+## an existing channel changes nothing here.
 ##
-## `stigma`'s, the first earned gene: the light-sensitive spot, and the same amber
-## the gene wears on the outside (docs/design/genes-and-cilia.md §4.4). Slot 2
-## has been reserved since Phase 1 for exactly this.
-static var LIGHT_COLOR: Vector3 = _hue_on(Catalogue.LIGHT)
-## `ocellus`'s, the beam. The fourth glow slot, held empty since Phase 1 and spent
-## here. Same indigo-violet the gene wears on the outside.
+## `light`, slot 2: **light's own amber**, because what it reports has a colour --
+## whichever eyespot drives it, and whatever family that eyespot is. Slot 2 has
+## been reserved since Phase 1 for exactly this. (`smell` is the nutrient green of
+## the ring, slot 1, and `touch` the self teal of the bruise envelope, slot 0: each
+## reports something with a colour of its own.)
+const LIGHT_COLOR := Vector3(0.98, 0.78, 0.30)
+## `beam` and `ping` report a struck body and an echo, which have no colour, so
+## their lobes are **the sense's own**: the hue of the first organ on the channel,
+## its family's shade -- sensing's 0 for the beam, its 2 for the ping's two arcs, a
+## shade apart, which is the difference the two lobes have to carry on their own
+## (they used to be one slot). Read once from the catalogue rather than copied: the
+## same organ cilia.gd's `hue_on` draws the rays and the wave in, so the lobe and the
+## marks cannot drift apart. `static var` because a constant expression cannot
+## contain a call.
 static var BEAM_COLOR: Vector3 = _hue_on(Catalogue.BEAM)
-## `ampulla`'s, the ping's two arcs. The same violet the wave and the organ's own
-## tuft are drawn in. Deeper and more saturated than the ocellus's pale
-## periwinkle, which is the difference the two lobes now have to carry on their
-## own: they used to be one slot.
 static var PING_COLOR: Vector3 = _hue_on(Catalogue.PING)
 ## **The strains' hues**, by the kind of load each delivers -- harm, paralysis,
-## sleep, doses.gd's order: the hue of the forms that deliver it, their organ
-## file's, read as [member PING_COLOR] is (docs/design/dna-slots-ux.md §2.1). A
-## dose that arrives by a bite bruises in its strain's hue instead of teal; a
-## poisonous meal floods in it; a death by a dose closes in it. Lime is
-## corrosive's, the one strain phase 1 has. Read-only.
+## sleep, doses.gd's order: **the hue of the organ that delivered it**, read as
+## [member PING_COLOR] is (docs/design/gene-looks.md §3.3). Every strain of the
+## toxin wears its orange, and the kinds are told apart by their marks, which never
+## needed the hue. A dose that arrives by a bite bruises in it instead of teal; a
+## poisonous meal floods in it; a death by a dose closes in it. A kind no organ
+## delivers yet is never drawn, and keeps the self colour only to be something.
+## Read-only.
 static var STRAIN_COLORS: Array[Vector3] = _strain_colors()
-## **The starting hues of the kinds no form delivers yet**, by kind: ice for
-## paralysis and pale moon for sleep, the starting values for phases 3 and 4, to
-## be rendered when those strains exist. Harm's is never drawn -- the corrosive
-## toxin delivers it -- and is the self colour only to be something.
-const UNDELIVERED_COLORS: Array[Vector3] = [
-	SELF_COLOR,                  # harm: delivered, by the corrosive toxin
-	Vector3(0.42, 0.84, 1.00),   # paralysis: ice (phase 3)
-	Vector3(0.80, 0.78, 1.00),   # sleep: pale moon (phase 4)
-]
 
 ## The shader's own defaults, kept here because the death frames fade them to
 ## black and something has to know what to fade back to.
@@ -437,6 +432,19 @@ const LOBE_PING_B := 5
 ## How many glow lobes the shader has. Written down once, because the block
 ## layout, the colour palette and the idle sweep all count them.
 const LOBES := 6
+## **Each membrane channel's lobe** (docs/design/gene-looks.md §5.1): a sense names
+## its channel (gene.gd's `channel`), and the lobe is the channel's, whichever organ
+## drives it -- so a new sense on a channel here changes nothing on the membrane,
+## and a sense on a channel with no lobe is code: a lobe of its own, the shader's
+## arrays and the replay's block. `touch` rides the bruise's envelope on the self
+## lobe, held at a level. The gene probe fails a sense whose channel is not here.
+const CHANNEL_LOBES := {
+	Catalogue.TOUCH: LOBE_SELF,
+	Catalogue.SMELL: LOBE_NUTRIENT,
+	Catalogue.LIGHT: LOBE_LIGHT,
+	Catalogue.BEAM: LOBE_BEAM,
+	Catalogue.PING: LOBE_PING_A,
+}
 
 ## Organ slots in [method organs], in genes-and-cilia.md §4.1's arc order --
 ## which is the order the body is drawn in, the order ties break in, and now the
@@ -668,7 +676,8 @@ var _pushed_hollow := -1.0
 var _pushed_self := Vector3(-1.0, -1.0, -1.0)
 ## **The colour of the self lobe**: teal, and a dose's strain hue while that
 ## dose's bruise is the loudest thing on your skin (dna-slots-ux.md §5.1). It
-## rides in the recorded block, so the felt pane bruises lime where the run did.
+## rides in the recorded block, so the felt pane bruises where the run did, in
+## the hue the run bruised in.
 var _self_hue := SELF_COLOR
 ## The newest bruise's tint, or zero for teal: what the self lobe turns while
 ## the bruise leads the thrust and the shear.
@@ -869,20 +878,21 @@ static func _hue_on(channel: StringName) -> Vector3:
 	return _rgb_of(Catalogue.first_on(channel), SELF_COLOR)
 
 
-## [param key]'s hue as the shader takes it, [param otherwise] for a key with none.
+## [param key]'s hue -- its family's shade -- as the shader takes it, [param otherwise]
+## for a key with none.
 static func _rgb_of(key: StringName, otherwise: Vector3) -> Vector3:
-	var hue: Variant = Catalogue.look(key).get("hue")
-	if not hue is Color:
+	var tone := Catalogue.hue_of(key)
+	if tone.a <= 0.0:
 		return otherwise
-	var tone: Color = hue
 	return Vector3(tone.r, tone.g, tone.b)
 
 
 ## [member STRAIN_COLORS]: each kind of load in the hue of the first live form that
-## delivers it, and in its starting hue while none does.
+## delivers it, and in the self colour while none does.
 static func _strain_colors() -> Array[Vector3]:
 	var out: Array[Vector3] = []
-	out.assign(UNDELIVERED_COLORS)
+	for _kind in Doses.Kind.size():
+		out.append(SELF_COLOR)
 	var found := {}
 	for key: StringName in Catalogue.live():
 		var kind := Doses.kind_of(Catalogue.dose_of(key))
@@ -1420,7 +1430,7 @@ static func death_shut_at(loud: bool) -> float:
 ##
 ## [param tint] lights the close in a hue other than teal: **a death by a dose
 ## is the quiet close, lit in its strain's hue** (dna-slots-ux.md §6) -- a white
-## slam at a bearing, a teal sink, a lime close. Zero is teal.
+## slam at a bearing, a teal sink, a close in the toxin's orange. Zero is teal.
 ##
 ## **Either one closes from where the membrane had fallen** ([member _faint]),
 ## not from where it would have been fed: a starving cell's aperture is already
@@ -1671,7 +1681,7 @@ func _compose_lobes() -> void:
 		if _bruise_tint != Vector3.ZERO:
 			hue = _bruise_tint
 	_glow_lobes[LOBE_SELF] = _lobe(bearing, halfwidth, level)
-	# The lobe's colour goes with whichever sensation is leading it: a lime
+	# The lobe's colour goes with whichever sensation is leading it: a dose's
 	# bruise turns teal again the moment a thrust outshines what is left of it.
 	if hue != _self_hue:
 		_self_hue = hue

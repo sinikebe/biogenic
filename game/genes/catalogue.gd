@@ -65,20 +65,25 @@ const BEAM := Gene.BEAM
 const PING := Gene.PING
 const SMELL := Gene.SMELL
 const TOUCH := Gene.TOUCH
-## The shapes an organ is drawn as (gene.gd), for the same reason.
+## **The families and the kinds** (gene.gd; docs/design/gene-looks.md §7), and the
+## kinds an organ is drawn as, for the same reason.
+const Families := Gene.Families
+const Kinds := Gene.Kinds
 const MAT := Gene.MAT
 const OARS := Gene.OARS
 const LASH := Gene.LASH
+const COIL := Gene.COIL
 const TUFT := Gene.TUFT
+const LENS := Gene.LENS
 const SPINES := Gene.SPINES
-## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
-const HOME_SHAPES := Gene.HOME_SHAPES
+const PLATES := Gene.PLATES
+const ORGANELLE := Gene.ORGANELLE
 
 ## **The tables of words an organ's file may hold** (gene.gd, "Its words"), by
 ## constant name, and what each is called here: the words said of a key ...
 const KEY_WORDS := {"WORDS": &"word", "EXPLAINS": &"explains", "EXPLAINS_SIDE": &"side",
 	"EXPLAINS_STERN": &"stern", "EXPLAINS_PATH": &"paths", "CARRIED_WORDS": &"carried",
-	"CARRIED_EXPLAINS": &"carried_explains", "NAMES": &"name"}
+	"CARRIED_EXPLAINS": &"carried_explains", "NAMES": &"name", "VARIANT_WORDS": &"variant"}
 ## ... the words of the ways its levels fork into, by way, for every key of the
 ## organ: each way's name, its two card lines, and what it does as it grows ...
 const WAY_WORDS := {"PATH_TITLES": &"way_titles", "PATH_LINES": &"way_lines",
@@ -184,19 +189,23 @@ static var _levelled: Array[StringName] = []
 static var _channels := {}
 ## What a tool registered ([method register]), after the index's own.
 static var _registered: Array = []
-## **Key to its look**, every key's, a retired one's empty. Asked of every organ of
-## every body drawn, every frame, so it is one lookup -- and **filled in place and
-## never replaced**, as [member _provided] is, because cilia.gd holds it.
+## **Key to its look as drawn** ([method look]: its kind's every parameter, its
+## shade and its accent's seat resolved by `kinds.gd`), every key's, a retired one's
+## with none empty. Asked of every organ of every body drawn, every frame, so it is
+## one lookup -- and **filled in place and never replaced**, as [member _provided]
+## is, because cilia.gd holds it.
 static var _looks := {}
 ## Shape to the live keys drawn as it, in order. **Filled in place and never
 ## replaced**, as [member _looks] is, because cilia.gd holds it.
 static var _shaped := {}
-## **Key to its look's hue, and key to its look's shape**, for every key whose look
-## has one -- a retired key's has neither. Each is asked of every organ of every body
-## drawn, every frame, so each is one lookup; filled in place, as [member _looks] is,
-## because cilia.gd holds both.
+## **Key to its hue -- its family's shade -- and key to its look's shape**, for every
+## key with a look -- a retired key that kept none has neither. Each is asked of every
+## organ of every body drawn, every frame, so each is one lookup; filled in place, as
+## [member _looks] is, because cilia.gd holds both.
 static var _hues := {}
 static var _shape_of := {}
+## Key to its organ's family (gene.gd's `family`), every key's.
+static var _families := {}
 ## Key to its words (gene.gd's word tables): [constant KEY_WORDS]' names to the
 ## English, which the screens translate.
 static var _words := {}
@@ -563,12 +572,38 @@ static func worn_on(tiers: Dictionary, channel: StringName) -> StringName:
 	return &""
 
 
-# --- Looks and words (§7.1, §8) ----------------------------------------------------------
+# --- Looks and words (§7, §8) ------------------------------------------------------------
 
-## **[param key]'s look** (gene.gd's `look`), read-only; empty for a key this build
-## does not know, or a retired one.
+## **[param key]'s look, as it is drawn** (gene.gd's `look`, resolved by `kinds.gd`):
+## its `shape`, every parameter of that kind -- its own, or the kind's default -- its
+## `shade`, and its accent's `seat`, the mark the seat shows as `shipped` and the
+## `mark` drawn there, its `accent` where a variant sets one. Read-only; empty for a
+## key this build does not know, or a retired one with no look. The look as its file
+## wrote it is the record's, [method gene].
 static func look(key: StringName) -> Dictionary:
 	return _looks.get(key, _no_look)
+
+
+## **[param key]'s family** (gene.gd's `family`; docs/design/gene-looks.md §1), its
+## organ's: `&""` for a key this build does not know, or a retired one with none.
+static func family_of(key: StringName) -> StringName:
+	return _families.get(key, &"")
+
+
+## **[param key]'s hue**: its family's shade, which its look picks
+## (docs/design/gene-looks.md §1.3) -- [param otherwise] for a key with none, which
+## this build does not know or which retired with no look.
+static func hue_of(key: StringName, otherwise := Color(0.0, 0.0, 0.0, 0.0)) -> Color:
+	return _hues.get(key, otherwise)
+
+
+## **Whether [param key] is its organ as shipped** -- a form of its organ's first
+## variant, or of an organ with none -- which wears no accent and is named by its
+## organ alone; every other variant wears an accent and is named `organ · variant`
+## (docs/design/gene-looks.md §3, §4). True for a key this build does not know.
+static func as_shipped(key: StringName) -> bool:
+	var keys := keys_of_organ(organ_of(key))
+	return keys.is_empty() or variant_of(keys[0]) == variant_of(key)
 
 
 ## **Every key's look, by key**: the catalogue's own dictionary, which cilia.gd
@@ -592,9 +627,9 @@ static func shapes() -> Dictionary:
 	return _shaped
 
 
-## **Every key's hue, by key** -- its look's `hue` -- for the keys that have one: the
-## catalogue's own dictionary, held by cilia.gd as [method looks] is. Read it; never
-## write it.
+## **Every key's hue, by key** -- its family's shade -- for the keys that have one:
+## the catalogue's own dictionary, held by cilia.gd as [method looks] is. Read it;
+## never write it.
 static func hues() -> Dictionary:
 	return _hues
 
@@ -606,7 +641,8 @@ static func shape_by_key() -> Dictionary:
 
 
 ## **The first live key on membrane [param channel]**, `&""` for none: whose hue a
-## channel's lobe is drawn in (signal_bus.gd).
+## sense's channel is drawn in -- the beam's lobe and rays, the ping's lobes and
+## wave (signal_bus.gd, cilia.gd's `hue_on`).
 static func first_on(channel: StringName) -> StringName:
 	var all: Array[StringName] = _channels.get(channel, _none)
 	return all[0] if not all.is_empty() else &""
@@ -614,7 +650,7 @@ static func first_on(channel: StringName) -> StringName:
 
 ## **[param key]'s words** (gene.gd's word tables), read-only: [constant
 ## KEY_WORDS]' names -- `word`, `explains`, `side`, `stern`, `paths` (way to its
-## line), `carried`, `carried_explains`, `name` -- and [constant WAY_WORDS]' --
+## line), `carried`, `carried_explains`, `name`, `variant` -- and [constant WAY_WORDS]' --
 ## `way_titles`, `way_lines`, `way_says`, each way to its words -- to the
 ## English, a key absent where its file has none. The screens translate them
 ## (figure.gd, normal_mode.gd).
@@ -702,17 +738,7 @@ static func _index() -> void:
 	_words = words
 	_freeze(part_words)
 	_part_words = part_words
-	# In place: cilia.gd holds these dictionaries ([method looks], [method hues],
-	# [method shape_by_key]).
-	_looks.clear()
-	_hues.clear()
-	_shape_of.clear()
-	for record: Gene in resolved:
-		_looks[record.key] = record.look
-		if record.look.has("hue"):
-			_hues[record.key] = record.look["hue"]
-		if record.look.has("shape"):
-			_shape_of[record.key] = StringName(record.look["shape"])
+	_index_looks(organs, resolved)
 	var ordered := resolved.filter(func(one: Gene) -> bool: return one.order >= 0)
 	ordered.sort_custom(func(a: Gene, b: Gene) -> bool: return a.order < b.order)
 	var keys: Array[StringName] = []
@@ -749,7 +775,7 @@ static func _index() -> void:
 	# In place: cilia.gd holds this dictionary ([method shapes]).
 	var shaped := {}
 	for key: StringName in live:
-		var shape := StringName((records[key] as Gene).look.get("shape", &""))
+		var shape := StringName(_shape_of.get(key, &""))
 		if shape == &"":
 			continue
 		if not shaped.has(shape):
@@ -870,6 +896,37 @@ static func _resolve(organ: Gene) -> Array:
 			record.dose = StringName(entry.get("dose", &""))
 			out.append(record)
 	return out
+
+
+## **Every key's look, hue and family** (docs/design/gene-looks.md §7), from
+## [param organs] and their [param resolved] records. **A family is the organ's**:
+## every key of an organ takes the family its file sets, whatever its variant. **A
+## look is drawn resolved** -- `kinds.gd` fills in its kind's defaults and its
+## accent's seat once, here, so a body reads each parameter with one lookup -- and
+## **its hue is worked out**, its family's shade: an organ's file holds no colour.
+## In place: cilia.gd holds these dictionaries ([method looks], [method hues],
+## [method shape_by_key]).
+static func _index_looks(organs: Array, resolved: Array) -> void:
+	var families := {}
+	for organ: Gene in organs:
+		if not families.has(organ.organ):
+			families[organ.organ] = organ.family
+	_looks.clear()
+	_hues.clear()
+	_shape_of.clear()
+	_families.clear()
+	for record: Gene in resolved:
+		record.family = families.get(record.organ, &"")
+		_families[record.key] = record.family
+		if record.look.is_empty():
+			_looks[record.key] = record.look
+			continue
+		var drawn := Kinds.resolved(record.look)
+		_freeze(drawn)
+		_looks[record.key] = drawn
+		_shape_of[record.key] = StringName(drawn["shape"])
+		if Families.has(record.family):
+			_hues[record.key] = Families.shade(record.family, int(drawn["shade"]))
 
 
 ## **[param key]'s words in an organ file's word tables** -- [param tables], its

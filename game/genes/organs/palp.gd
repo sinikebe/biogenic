@@ -71,8 +71,9 @@ func _init() -> void:
 	channel = TOUCH
 	declares = {"in": [{"name": &"touch", "bearing": true,
 		"values": {&"closeness": &"level"}}]}
-	# **Its look** (gene-catalogue.md §7.1): a tuft of eight.
-	look = {"shape": TUFT, "hue": Color(1.00, 0.68, 0.48), "count": 8}  # touch, 23 deg
+	# **Its look** (gene-looks.md §6): two long feelers, splayed apart as feelers are.
+	family = SENSING
+	look = {"shape": TUFT, "shade": 2, "count": 2, "length": 0.54, "bend": 34.0}
 
 
 ## **Its numbers on the pause screen** (gene.gd's `lines`): how near a body it feels.

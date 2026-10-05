@@ -114,10 +114,10 @@ const MARK_HELD := 0.92
 ## every control on every frame it is drawn.
 static var TURN_HUE: Color = Cilia.hue_for(&"turn_rate")
 static var PUSH_HUE: Color = Cilia.hue_for(&"push_accel")
-## Hold -- `flagellum`, the tail it holds still: its own orchid, beside the
-## axoneme's magenta -- the family `cilia.gd` keeps on purpose, so it is the
-## shape that tells the two pads apart: the push pad's wave marches, and this
-## one stops.
+## Hold -- `flagellum`, the tail it holds still: moving's shade 0, beside the
+## axoneme's shade 2 -- one family, the movers' sky blue (gene-looks.md §1), so it
+## is the shape that tells the two pads apart: the push pad's wave marches, and
+## this one stops.
 static var HOLD_HUE: Color = Cilia.hue_for(&"impulse_speed")
 ## **The organ the burst pad is drawn as** -- `myoneme`, the one that dashes -- its
 ## tile at the pad's size, found by what it provides.
