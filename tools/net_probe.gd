@@ -1021,15 +1021,18 @@ func _check_sister_wire() -> void:
 		if Wire._rule_byte_ok(code) != listed:
 			alphabet = false
 	# **Only a SISTER gets the room**: every other guest frame keeps the cap a
-	# PERSON set before protocol 6, and the cap is read off the event's type.
+	# PERSON set before protocol 6, and the cap is read off the event's type. The
+	# first four frames are a byte past that cap, whatever the body plan makes it: a
+	# frame under it is never read for its type at all.
 	var padded := func(kind: int, type: int, size: int) -> PackedByteArray:
 		var frame := PackedByteArray([kind, 0, 0, 0, 0, type])
 		frame.resize(size)
 		return frame
-	var caps := [Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, 300)),
-		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_PERSON, 300)),
-		Wire.guest_cap(padded.call(Wire.KIND_STATE, Wire.EVENT_SISTER, 300)),
-		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, 300)),
+	var past := Wire.GUEST_OTHER_MAX + 1
+	var caps := [Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, past)),
+		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_PERSON, past)),
+		Wire.guest_cap(padded.call(Wire.KIND_STATE, Wire.EVENT_SISTER, past)),
+		Wire.guest_cap(padded.call(0x20, Wire.EVENT_SISTER, past)),
 		Wire.guest_cap(padded.call(Wire.KIND_EVENT, Wire.EVENT_SISTER, Wire.SISTER_MIN)),
 		Wire.guest_cap(PackedByteArray())]
 	# **1378 is the pin a plan change moves**: the body plan's slot count is in every

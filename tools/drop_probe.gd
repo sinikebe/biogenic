@@ -3759,8 +3759,10 @@ func _save_behaviour() -> void:
 		var rows: Dictionary = copy["bodies"]
 		match way:
 			0:
+				# The first index past the lists the drop keeps, however many it keeps:
+				# the seeded water a plan change moves may keep more than it does now.
 				var column: PackedInt32Array = rows["behaviour"]
-				column[0] = 5
+				column[0] = (copy["behaviours"]["lists"] as Array).size()
 				rows["behaviour"] = column
 			1:
 				var flying: Array = rows["echoes"]
@@ -9032,7 +9034,6 @@ func _dna_forms() -> void:
 		% "; then handed its body: ".join(moved_in), express_ok)
 
 
-## [param a] with [param b] over it, a new dictionary.
 ## **The outside full**: a gene for every slot the body plan has outside -- the born
 ## organs, then live genes of one place in the catalogue's order -- so a toxin eaten
 ## finds no room there whatever the plan's count.
@@ -9047,6 +9048,7 @@ static func _outside_full() -> Array[StringName]:
 	return out
 
 
+## [param a] with [param b] over it, a new dictionary.
 func _merged(a: Dictionary, b: Dictionary) -> Dictionary:
 	var out := a.duplicate()
 	out.merge(b, true)
