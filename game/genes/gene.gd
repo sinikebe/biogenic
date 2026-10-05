@@ -11,8 +11,9 @@ extends RefCounted
 ## strain is `veneneux` inside and `toxicyst` outside. A form sets anything its
 ## variant sets and a variant anything its organ sets; a dictionary field is
 ## written over key by key, so a variant that sets one table keeps the organ's
-## others. An organ with no [member variants] is one variant in one place, and its
-## one key is its organ's name.
+## others, and tags add up, so a variant that sets one keeps the organ's. An
+## organ with no [member variants] is one variant in one place, and its one key
+## is its organ's name.
 ##
 ## **The catalogue resolves that inheritance once**, when it loads, into one flat
 ## record per key -- a fresh instance of the organ's own script, with its variant
@@ -116,7 +117,8 @@ var levels := {}
 ## no list of the water's.
 var water := {}
 
-## **Its tags**: any of [constant TAGS].
+## **Its tags**: any of [constant TAGS]. A variant's or a form's are added to its
+## organ's, never in place of them.
 var tags: Array[StringName] = []
 
 ## **The channel it drives** on the membrane, one of [constant CHANNELS], for a

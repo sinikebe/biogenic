@@ -510,10 +510,11 @@ func _register() -> void:
 	var before := Array(Catalogue.keys())
 	var organ := Gene.new()
 	organ.organ = &"probeorgan"
+	organ.tags = [Catalogue.ALWAYS_EXPRESSED]
 	organ.variants = [{"variant": &"plain", "dose": &"harm",
-		"water": {"weight": 1, "drifter": false},
+		"water": {"weight": 1, "drifter": false}, "tags": [Catalogue.NEVER_DRIFTS],
 		"forms": {Gene.INSIDE: {"key": &"probein", "order": 900},
-			Gene.OUTSIDE: {"key": &"probeout", "order": 901,
+			Gene.OUTSIDE: {"key": &"probeout", "order": 901, "tags": [Catalogue.SENSE],
 				"provides": {&"armor": [1.0, 1.25, 1.25, 1.25]}}}}]
 	var bare := Stats.of({&"probeout": 1}, &"armor")
 	Catalogue.register(organ)
@@ -530,6 +531,15 @@ func _register() -> void:
 		and Catalogue.provides(&"probeout", &"armor") \
 		and not Catalogue.provides(&"probein", &"armor") \
 		and Catalogue.weight(&"probeout") == 1 and not Catalogue.drifters().has(&"probein")
+	# **Tags add up** (gene.gd): the organ's on both forms, the variant's on both,
+	# the outside form's on it alone.
+	var tags := [Catalogue.gene(&"probeout").tags, Catalogue.gene(&"probein").tags]
+	var added := Catalogue.has_tag(&"probeout", Catalogue.ALWAYS_EXPRESSED) \
+		and Catalogue.has_tag(&"probeout", Catalogue.NEVER_DRIFTS) \
+		and Catalogue.has_tag(&"probeout", Catalogue.SENSE) \
+		and Catalogue.has_tag(&"probein", Catalogue.ALWAYS_EXPRESSED) \
+		and Catalogue.has_tag(&"probein", Catalogue.NEVER_DRIFTS) \
+		and not Catalogue.has_tag(&"probein", Catalogue.SENSE)
 	Catalogue.forget(&"probeorgan")
 	read.append(Stats.of({&"probeout": 1}, &"armor"))
 	_check(("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
@@ -538,6 +548,8 @@ func _register() -> void:
 		read[2], bare], filed and Array(Catalogue.keys()) == before
 		and not Catalogue.known(&"probein") and bare == 1.0 and read[0] == 1.25
 		and is_equal_approx(read[1], 1.14 * 1.25) and read[2] == 1.0)
+	_check("and a variant's and a form's tags add to their organ's, never replace them:"
+		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
 
 
 # --- Gene names left in code (§12.2) ----------------------------------------------------------

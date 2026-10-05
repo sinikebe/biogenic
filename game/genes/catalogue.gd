@@ -559,7 +559,8 @@ static func _fields_of(organ: Gene) -> Dictionary:
 
 
 ## Writes [param fields] over [param record], those of [constant OVERRIDES] only:
-## a dictionary field key by key over a copy of what it had, any other whole.
+## a dictionary field key by key over a copy of what it had, the tags added to
+## the ones it had, any other whole.
 static func _write_over(record: Gene, fields: Dictionary) -> void:
 	for field: Variant in fields:
 		var name := String(field)
@@ -567,8 +568,13 @@ static func _write_over(record: Gene, fields: Dictionary) -> void:
 			continue
 		var value: Variant = fields[field]
 		if name == "tags":
+			# **Tags add up** (gene.gd): a tag on an organ is on every variant and form
+			# of it, so a variant's or a form's tags are added to what it has.
 			var tags: Array[StringName] = []
-			tags.assign(value)
+			tags.assign(record.tags)
+			for tag: Variant in value:
+				if not tags.has(StringName(tag)):
+					tags.append(StringName(tag))
 			record.tags = tags
 		elif value is Dictionary and record.get(name) is Dictionary:
 			var merged: Dictionary = (record.get(name) as Dictionary).duplicate()
