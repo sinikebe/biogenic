@@ -1913,14 +1913,13 @@ func _unjudged_plays() -> void:
 	host.host()
 	Catalogue.register(_longer_palp())
 	guest.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
 	await _until_link(guest, NetSession.Link.TOGETHER)
 	var born := Catalogue.born_order()
 	var tiers := Catalogue.born().duplicate()
 	tiers[&"probefeel"] = 2
 	var order: Array = Array(born) + [&"probefeel"]
-	var payload := Wire.person_payload(true, tiers, order)
-	Catalogue.forget(Catalogue.organ_of(&"probefeel"))
-	guest.send_event(Wire.EVENT_PERSON, payload)
+	guest.send_event(Wire.EVENT_PERSON, Wire.person_payload(true, tiers, order))
 	var until := _now() + SETTLE
 	while _now() < until and (host.pond_events as Array).is_empty():
 		await get_tree().process_frame
@@ -9512,6 +9511,22 @@ func _check_server() -> void:
 			and (net.guests() as Array).size() == 2,
 		"server: a third is refused with '%s', and the two stay" % c_net.trouble)
 	c_net.close()
+	# **One protocol, other rules** (gene-catalogue.md §11.3): a guest whose
+	# catalogue held one more judged gene as it called -- a faster tail -- is
+	# refused by the dedicated server on the version check, ahead of the count of
+	# its room, and the two stay.
+	var rules_net: Node = await _session("ServerGuestRules")
+	Catalogue.register(_faster_tail())
+	rules_net.join("127.0.0.1")
+	Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+	await _until_link(rules_net, NetSession.Link.REFUSED)
+	_says(int(rules_net.link) == NetSession.Link.REFUSED
+			and str(rules_net.trouble) == "different versions"
+			and int(rules_net.refused_for) == Wire.REFUSE_PROTOCOL
+			and (net.guests() as Array).size() == 2,
+		"server: a guest on one more judged gene is refused with '%s' on the version"
+		% rules_net.trouble + " check, ahead of the room's count, and the two stay")
+	rules_net.close()
 
 	# **A call crosses to the other guest**, as the numbers sent, and never
 	# back to the one who made it. Before the runs exist, which drain it.
@@ -10137,11 +10152,12 @@ func _check_server() -> void:
 		"server: no ENet peer's packet throttle fell under the section's load --"
 		+ " lowest %d of %d over %d readings, the server's and every guest's"
 		% [_throttle_lowest, ENetPacketPeer.PACKET_THROTTLE_SCALE, _throttle_reads])
-	# The third guest is refused with "already two", which is the handshake's
-	# sentence and not the door's: nothing here is an offence.
+	# The third guest is refused with "already two", and the fourth -- on other
+	# rules -- with "different versions", which are the handshake's sentences and
+	# not the door's: nothing here is an offence.
 	var tally: Array = _tally_end()
-	_says(_limits_clean(tally[0]) and int(tally[1]) == 7,
-		"server: across the server and all six guests the gate struck nothing,"
+	_says(_limits_clean(tally[0]) and int(tally[1]) == 8,
+		"server: across the server and all seven guests the gate struck nothing,"
 		+ " dropped nothing, cut nothing and refused nobody at the door, and the"
 		+ " budgets it watches would have done none of it either -- its"
 		+ " socket took %.1f KB and %d datagrams in its busiest second%s"
@@ -11540,6 +11556,38 @@ func _invites_strangers() -> void:
 		% (Wire.PROTOCOL - 1) + " check before it is ever challenged, and barred for"
 		+ " %.0f s -- and %.0f s the next time, not ten minutes -- and a guest reads"
 		% [old_held, again_held] + " '%s: %s'" % [old_guest.trouble, old_guest.because])
+	# S8b (gene-catalogue.md §11.4): one protocol and other rules -- a guest whose
+	# catalogue held one more judged gene as it called -- is refused on the same
+	# check, before any CHALLENGE, and reads the far sentence for whichever end is
+	# older by content version: this game, or the server.
+	var keys: Array[String] = []
+	var proved := 0
+	for pair: Array in [[5, 6], [7, 6]]:
+		if net_book.has("127.0.0.1"):
+			(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+		host.content_override = int(pair[1])
+		var skewed: Node = await _session("InvRulesGuest%d" % int(pair[0]))
+		skewed.content_override = int(pair[0])
+		Catalogue.register(_faster_tail())
+		skewed.call_invite(bob)
+		Catalogue.forget(Catalogue.organ_of(&"probeswift"))
+		await _limits_until(func() -> bool: return int(skewed.link) != NetSession.Link.REACHING,
+			NetSession.INVITE_REACH_TIMEOUT + NetSession.RESOLVE_TIMEOUT + 2.0)
+		keys.append("%s %s %d" % [str(skewed.trouble_key), "refused"
+			if int(skewed.link) == NetSession.Link.REFUSED else "not refused",
+			int(skewed.refused_for)])
+		# A guest by invite answers a CHALLENGE with its one PROOF: none here.
+		proved += 1 if bool(skewed.get("_proved")) else 0
+		await _limits_close([skewed])
+	host.content_override = -1
+	if net_book.has("127.0.0.1"):
+		(net_book["127.0.0.1"] as Dictionary)["barred_until"] = _now()
+	_says(keys == ["game_older refused %d" % Wire.REFUSE_PROTOCOL,
+			"server_older refused %d" % Wire.REFUSE_PROTOCOL] and proved == 0,
+		"invites S8b: a caller on protocol %d by other rules -- one more judged gene --"
+		% Wire.PROTOCOL + " is refused on the compatibility check before it is challenged,"
+		+ " and reads that its game is older, or the server, by content version (%s)"
+		% ", ".join(keys))
 	# S6: a good PROOF, then another -- cut, told and barred.
 	var twice_from := "127.0.0.8"
 	var twice := _invites_stranger("InvStrangerTwice", twice_from, 47288)
