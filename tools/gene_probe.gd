@@ -151,32 +151,63 @@ const ORGANS_DIR := "res://game/genes/organs"
 const GAME_DIR := "res://game"
 const GENES_DIR := "res://game/genes"
 
-## **The body plan as it shipped before it was data** (§10.1): `cell.gd`'s ladder --
-## three slots at r26, one more every 3.5, seven at most -- `cilia.gd`'s arcs,
-## genome.gd's front and stern, and the ring the pause figure had written out. Phase
-## 2 derives every one of them from `body_plan.gd`, and this holds today's plan to
-## them, so the move changed nothing. **A plan change fails it on purpose**: the rows
-## and these move in the same commit, as a new gene appends to [constant SHIPPED].
-const SHIPPED_LADDER := {"base": 26.0, "step": 3.5, "fewest": 3, "most": 7}
-const SHIPPED_ARCS: Array[Vector2] = [Vector2(-42.0, 42.0), Vector2(66.0, 118.0),
-	Vector2(146.0, 214.0), Vector2(42.0, 66.0), Vector2(-66.0, -42.0),
-	Vector2(118.0, 146.0), Vector2(-146.0, -118.0)]
-const SHIPPED_FRONT: Array[int] = [0, 3, 4]
-const SHIPPED_STERN := 2
+## **The body plan in this commit, written out by hand** (§10.1): what a reader keeps
+## of it -- the counts `CellBody.SLOT_MIN` and `SLOT_MAX`, `Genome.INSIDE`,
+## `INSIDE_SLOTS` and `STERN`, `Wire.ORDER_MAX` and `GENES_MAX`, and the ladder -- and
+## the ring the pause figure lays out; and below, its rows. Phase 2 held them to what
+## `cell.gd`, `cilia.gd`, `genome.gd` and the figure had written before the plan was
+## data, so the move changed nothing. **A plan change fails the check that holds
+## today's plan to them, on purpose** -- as a new gene appends to [constant SHIPPED] --
+## and its message says what to move: these and the rows, in the same commit, and the
+## protocol with them ([constant PLAN_MOVED]).
+const SHIPPED_COUNTS: Array = [3, 7, 7, 1, 2, 7, 9, 3.5]
 const SHIPPED_SEATS: Array[Vector2] = [Vector2(0.0, -138.0), Vector2(150.0, 0.0),
 	Vector2(0.0, 168.0), Vector2(150.0, -138.0), Vector2(-150.0, -138.0),
 	Vector2(150.0, 168.0), Vector2(-150.0, 168.0), Vector2(0.0, 6.0)]
 const SHIPPED_NEIGHBOURS: Array = [[4, -1, 3, 7], [7, 3, -1, 5], [6, 7, 5, -1],
 	[0, -1, -1, 1], [-1, -1, 0, 6], [2, 1, -1, -1], [-1, 4, 2, -1], [-1, 0, 1, 2]]
 const SHIPPED_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
+## **Its rows** (§10.1), which the arcs, the ladder, the front and the stern are read
+## off where today's is held to them. The broken plans each plan check is shown failing
+## on are made from it too, and the synthetic plan's cell is kept under it ([method
+## _synthetic_plan]), so a change to today's plan fails the one check that holds today's
+## to these pins, whose message says what to move, and no check that merely started
+## from today's. **What is made from it finds its slots by id and by place, never by
+## index**, so it holds when the pins move. None of its slots had left it
+## ([constant SHIPPED_RETIRED]).
+const SHIPPED_PLAN: Array[Dictionary] = [
+	{"id": &"nose", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.FRONT_ANATOMY,
+		"arc": Vector2(-42.0, 42.0), "earned": BodyPlan.ALWAYS, "home": &"cytostome"},
+	{"id": &"starboard", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.SIDE_ANATOMY,
+		"arc": Vector2(66.0, 118.0), "earned": BodyPlan.ALWAYS, "home": &"cirrus"},
+	{"id": &"tail", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.STERN_ANATOMY,
+		"arc": Vector2(146.0, 214.0), "earned": BodyPlan.ALWAYS, "home": &"flagellum"},
+	{"id": &"fore_starboard", "place": BodyPlan.OUTSIDE_PLACE,
+		"anatomy": BodyPlan.FRONT_ANATOMY, "arc": Vector2(42.0, 66.0), "earned": 29.5},
+	{"id": &"fore_port", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.FRONT_ANATOMY,
+		"arc": Vector2(-66.0, -42.0), "earned": 33.0},
+	{"id": &"aft_starboard", "place": BodyPlan.OUTSIDE_PLACE,
+		"anatomy": BodyPlan.SIDE_ANATOMY, "arc": Vector2(118.0, 146.0), "earned": 36.5},
+	{"id": &"aft_port", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.SIDE_ANATOMY,
+		"arc": Vector2(-146.0, -118.0), "earned": 40.0},
+	{"id": &"inside", "place": BodyPlan.INSIDE_PLACE, "earned": BodyPlan.ALWAYS},
+]
+const SHIPPED_RETIRED: Array[Dictionary] = []
+## **What to move when today's plan changes**, said where it fails: the pins, and --
+## until phase 4 puts the plan's fingerprint on the handshake (§11.3) -- the protocol.
+const PLAN_MOVED := ("today's plan changed: move SHIPPED_PLAN, SHIPPED_COUNTS, SHIPPED_SEATS,"
+	+ " SHIPPED_NEIGHBOURS and SHIPPED_RING to the new plan in the same commit, and bump"
+	+ " Wire.PROTOCOL with them -- a build on another plan is another protocol until phase"
+	+ " 4. A change of the slots' count also fails net_probe's wire sizes; a change of arcs"
+	+ " alone fails nothing on the wire side, and this is the only reminder")
 
 ## **A body plan of the probe's own** (§10.3, §12.3), swapped in and out as `register`
-## and `forget` put an organ through: today's with **a slot moved** -- the rear
-## starboard diagonal, four degrees narrower and one index forward -- **one removed**
-## -- the forward port diagonal, retired -- and **two added**: the port flank, in the
-## cell today's figure leaves empty, and a bow slot on the removed one's arc under an
-## id of its own. Eight slots outside, so everything the plan sizes grows by one, and
-## rungs that are not an even ladder.
+## and `forget` put an organ through: the plan as it shipped ([constant SHIPPED_PLAN])
+## with **a slot moved** -- the rear starboard diagonal, four degrees narrower and one
+## index forward -- **one removed** -- the forward port diagonal, retired -- and **two
+## added**: the port flank, in the cell the shipped figure leaves empty, and a bow slot
+## on the removed one's arc under an id of its own. Eight slots outside, so everything
+## the plan sizes grows by one, and rungs that are not an even ladder.
 const PLAN_TEST: Array[Dictionary] = [
 	{"id": &"nose", "place": BodyPlan.OUTSIDE_PLACE, "anatomy": BodyPlan.FRONT_ANATOMY,
 		"arc": Vector2(-42.0, 42.0), "earned": BodyPlan.ALWAYS, "home": &"cytostome"},
@@ -1182,7 +1213,7 @@ func _plan() -> void:
 		"" if faults.is_empty() else " -- " + "; ".join(faults)], faults.is_empty())
 	# **Today's plan, as it shipped**: the count of every radius on a sweep -- each 200th
 	# of a unit to sixty, every rung and a hair either side of it, the drifters' sizes, a
-	# newborn's, the born radius and the divide -- by the formula `slots_for` was.
+	# newborn's, the born radius and the divide -- by the shipped rows' rule.
 	var radii: Array[float] = [FoodField.DRIFTER_MIN, FoodField.DRIFTER_MAX,
 		CellBody.BASE_RADIUS, CellBody.daughter_radius(CellBody.DIVIDE_RADIUS),
 		CellBody.DIVIDE_RADIUS, FoodField.ARRIVAL_RADIUS_MAX]
@@ -1194,61 +1225,93 @@ func _plan() -> void:
 			radii.append(float(row["earned"]) + hair)
 	var miscounted: Array[float] = []
 	for radius: float in radii:
-		if CellBody.slots_for(radius) != _shipped_slots(radius):
+		if CellBody.slots_for(radius) != _slots_by_rows(SHIPPED_PLAN, radius):
 			miscounted.append(radius)
+	var outside := _outside_indexes(SHIPPED_PLAN)
+	var always := outside.size() - _earned_indexes(SHIPPED_PLAN).size()
+	var arcs: Array[Vector2] = []
+	var front: Array[int] = []
+	var stern := -1
+	for k: int in outside:
+		arcs.append(SHIPPED_PLAN[k]["arc"])
+		match StringName(SHIPPED_PLAN[k]["anatomy"]):
+			BodyPlan.FRONT_ANATOMY:
+				front.append(k)
+			BodyPlan.STERN_ANATOMY:
+				stern = k if stern < 0 else stern
 	var arcs_ok := true
-	for slot in SHIPPED_ARCS.size():
-		arcs_ok = arcs_ok and Cilia.arc_for_slot(slot) == SHIPPED_ARCS[slot] \
-			and Cilia.slot_bearing(slot) == _shipped_bearing(SHIPPED_ARCS[slot])
+	for slot in arcs.size():
+		arcs_ok = arcs_ok and Cilia.arc_for_slot(slot) == arcs[slot] \
+			and Cilia.slot_bearing(slot) == _shipped_bearing(arcs[slot])
 	# Every index past them as ever: below, the first earned arc; past, the last.
-	arcs_ok = arcs_ok and Cilia.arc_for_slot(-1) == SHIPPED_ARCS[3] \
-		and Cilia.arc_for_slot(7) == SHIPPED_ARCS[6] and Cilia.arc_for_slot(99) == SHIPPED_ARCS[6] \
-		and Cilia.slot_bearing(-1) == _shipped_bearing(SHIPPED_ARCS[3])
+	arcs_ok = arcs_ok and Cilia.arc_for_slot(-1) == arcs[always] \
+		and Cilia.arc_for_slot(arcs.size()) == arcs.back() \
+		and Cilia.arc_for_slot(99) == arcs.back() \
+		and Cilia.slot_bearing(-1) == _shipped_bearing(arcs[always])
+	# The ladder is a step, or every rung for a plan whose ladder is not even: a list
+	# here either way, as a pin can write one.
+	var ladder: Variant = BodyPlan.ladder()
 	var counts := [CellBody.SLOT_MIN, CellBody.SLOT_MAX, Genome.INSIDE, Genome.INSIDE_SLOTS,
-		Genome.STERN, Wire.ORDER_MAX, Wire.GENES_MAX, BodyPlan.ladder()]
+		Genome.STERN, Wire.ORDER_MAX, Wire.GENES_MAX,
+		Array(ladder) if ladder is PackedFloat64Array else ladder]
 	var ring := _same_list(Figure.SLOT_SEAT, SHIPPED_SEATS) \
 		and _same_list(Figure.SLOT_NEIGHBOUR, SHIPPED_NEIGHBOURS) \
 		and _same_list(Figure.SLOT_RING, SHIPPED_RING)
 	var born := BodyPlan.home_layout(Catalogue.born_order())
-	_check(("and today's plan is the one that shipped: the slots of %d radii by the ladder"
-		+ " `slots_for` was (%s miscounted), the arcs and bearings of every index (%s), the"
-		+ " counts %s, the front %s, the ring the figure had written out (%s), a born body"
-		+ " seated %s, and the stamp the ids a save before stamps was kept under (%s)") % [
-		radii.size(), str(miscounted.slice(0, 4)), str(arcs_ok), str(counts),
-		str(Genome.FRONT), str(ring), str(born), str(BodyPlan.stamp())],
-		miscounted.is_empty() and arcs_ok and counts == [3, 7, 7, 1, 2, 7, 9, 3.5]
-		and _same_list(Genome.FRONT, SHIPPED_FRONT) and Genome.STERN == SHIPPED_STERN and ring
-		and _same_list(born, Catalogue.born_order())
-		and BodyPlan.stamp() == PackedStringArray(BodyPlan.BEFORE_STAMPS))
+	var homes: Array[StringName] = []
+	var ids := PackedStringArray()
+	for row: Dictionary in SHIPPED_PLAN:
+		ids.append(String(row["id"]))
+		if row.has("home"):
+			while homes.size() < SHIPPED_PLAN.find(row):
+				homes.append(&"")
+			homes.append(StringName(row["home"]))
+	var rows_ok := BodyPlan.rows() == SHIPPED_PLAN and BodyPlan.retired() == SHIPPED_RETIRED
+	var shipped := rows_ok and miscounted.is_empty() and arcs_ok and counts == SHIPPED_COUNTS \
+		and _same_list(Genome.FRONT, front) and Genome.STERN == stern and ring \
+		and _same_list(born, homes) and BodyPlan.stamp() == ids
+	_check(("and today's plan is the one that shipped: its rows SHIPPED_PLAN's (%s), and by them"
+		+ " the slots of %d radii (%s miscounted), the arcs and bearings of every index (%s),"
+		+ " the front %s and the stern %d; the counts %s; the ring the figure had written out"
+		+ " (%s); a born body seated %s; and the stamp its ids (%s)%s") % [str(rows_ok),
+		radii.size(), str(miscounted.slice(0, 4)), str(arcs_ok), str(Genome.FRONT),
+		Genome.STERN, str(counts), str(ring), str(born), str(BodyPlan.stamp()),
+		"" if shipped else " -- " + PLAN_MOVED], shipped)
 	# **Each check fails a plan that breaks it**: one broken plan a check, swapped in,
-	# and today's again after.
+	# and today's again after. Each is made from the plan as it shipped, its slots
+	# found by place -- the first two earned, the last outside, a home -- so that a
+	# change to today's plan never makes one of these miss.
 	var broken := {}
-	var twice := BodyPlan.TODAY.duplicate(true)
-	twice[4]["id"] = &"fore_starboard"
-	broken["twice"] = [twice, []]
-	var lost := BodyPlan.TODAY.duplicate(true)
-	lost.remove_at(4)
-	broken["is not known"] = [lost, []]
-	var overlapping := BodyPlan.TODAY.duplicate(true)
-	overlapping[3]["arc"] = Vector2(30.0, 66.0)
-	broken["overlap"] = [overlapping, []]
-	var falling := BodyPlan.TODAY.duplicate(true)
-	falling[4]["earned"] = 36.5
-	falling[5]["earned"] = 33.0
-	broken["fall"] = [falling, []]
-	var short := BodyPlan.TODAY.duplicate(true)
-	short[6]["earned"] = 39.0
-	broken["DIVIDE_RADIUS"] = [short, []]
-	var homeless := BodyPlan.TODAY.duplicate(true)
-	homeless[2].erase("home")
-	broken["home slots"] = [homeless, []]
-	var crowded := BodyPlan.TODAY.duplicate(true)
+	var earned := _earned_indexes(SHIPPED_PLAN)
+	var twice := SHIPPED_PLAN.duplicate(true)
+	twice[earned[1]]["id"] = twice[earned[0]]["id"]
+	broken["twice"] = twice
+	var lost := SHIPPED_PLAN.duplicate(true)
+	lost.remove_at(earned[1])
+	broken["is not known"] = lost
+	var overlapping := SHIPPED_PLAN.duplicate(true)
+	overlapping[earned[1]]["arc"] = overlapping[earned[0]]["arc"]
+	broken["overlap"] = overlapping
+	var falling := SHIPPED_PLAN.duplicate(true)
+	falling[earned[0]]["earned"] = SHIPPED_PLAN[earned[1]]["earned"]
+	falling[earned[1]]["earned"] = SHIPPED_PLAN[earned[0]]["earned"]
+	broken["fall"] = falling
+	var short := SHIPPED_PLAN.duplicate(true)
+	short[outside.back()]["earned"] = CellBody.DIVIDE_RADIUS - 1.0
+	broken["DIVIDE_RADIUS"] = short
+	var homeless := SHIPPED_PLAN.duplicate(true)
+	for row: Dictionary in homeless:
+		if row.has("home"):
+			row.erase("home")
+			break
+	broken["home slots"] = homeless
+	var crowded := SHIPPED_PLAN.duplicate(true)
 	crowded.append({"id": &"inside_two", "place": BodyPlan.INSIDE_PLACE,
 		"earned": BodyPlan.ALWAYS})
-	broken["no room"] = [crowded, []]
+	broken["no room"] = crowded
 	var missed: Array[String] = []
 	for fault: String in broken:
-		BodyPlan.use(broken[fault][0], broken[fault][1])
+		BodyPlan.use(broken[fault], SHIPPED_RETIRED)
 		var said := "; ".join(_plan_faults())
 		if not said.contains(fault):
 			missed.append("%s (said: %s)" % [fault, said])
@@ -1353,32 +1416,46 @@ func _plan_faults() -> Array[String]:
 	return out
 
 
-## **A plan of the probe's own, end to end** (§10.3, §12.3): a cell kept under today's
-## plan -- in its own file and, as a build before slots left it, in a world's --
-## loaded under [constant PLAN_TEST], every gene in its slot by id and the removed
-## slot's gene on the arc nearest it, nothing lost; the genome's rules, the venom's
-## sides, the wire's limits and the pause figure on that plan; a cell kept under it
-## loaded on today's again; and today's plan back, all of it, after.
+## **A plan of the probe's own, end to end** (§10.3, §12.3): a cell kept under the plan
+## as it shipped ([constant SHIPPED_PLAN]) -- in its own file and, as a build before
+## slots left it, in a world's -- loaded under [constant PLAN_TEST], every gene in its
+## slot by id and the removed slot's gene on the arc nearest it, nothing lost; the
+## genome's rules, the venom's sides, the wire's limits and the pause figure on that
+## plan; a cell kept under it loaded on the shipped plan again; and today's plan back,
+## all of it, after. **Today's plan is never read here**: a change to it fails the
+## check that holds it to the pins, and none of these. Every expectation is written by
+## slot id and laid out by the plan it is read under.
 func _synthetic_plan() -> void:
 	var before := _plan_snapshot()
+	BodyPlan.use(SHIPPED_PLAN, SHIPPED_RETIRED)
 	var dna := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3, &"ocellus": 1, &"palp": 1,
 		&"toxicyst": 2, &"ampulla": 1, &"veneneux": 2}
-	var order: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"ocellus", &"palp",
-		&"toxicyst", &"ampulla"]
-	# The body still wears the stigma the DNA has since written its eyespot over.
+	# Each gene by the id of its slot: the DNA's; the body's, which still wears the
+	# stigma the DNA has since written its eyespot over; and the second daughter's,
+	# her eyespot and palp shifted.
+	var kept_ids := {&"nose": &"cytostome", &"starboard": &"cirrus", &"tail": &"flagellum",
+		&"fore_starboard": &"ocellus", &"fore_port": &"palp", &"aft_starboard": &"toxicyst",
+		&"aft_port": &"ampulla"}
+	var worn_ids := kept_ids.duplicate()
+	worn_ids[&"fore_starboard"] = &"stigma"
+	var swapped_ids := kept_ids.duplicate()
+	swapped_ids[&"fore_starboard"] = &"palp"
+	swapped_ids[&"fore_port"] = &"ocellus"
+	var order := _seated(SHIPPED_PLAN, kept_ids)
+	var worn := _seated(SHIPPED_PLAN, worn_ids)
+	var swapped := _seated(SHIPPED_PLAN, swapped_ids)
 	var body := dna.duplicate()
 	body.erase(&"ocellus")
 	body[&"stigma"] = 1
-	var worn: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"stigma", &"palp",
-		&"toxicyst", &"ampulla"]
-	var swapped: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"palp",
-		&"ocellus", &"toxicyst", &"ampulla"]
 	var kept := Genome.new()
 	kept.express(dna, order, body, worn)
 	var state: Dictionary = kept.to_state()
 	kept.free()
+	# A cell kept before stamps had its slots in BEFORE_STAMPS' order.
 	var unstamped := state.duplicate(true)
 	unstamped.erase("plan")
+	unstamped["order"] = _laid_before_stamps(kept_ids)
+	unstamped["worn"] = _laid_before_stamps(worn_ids)
 	var cell := _empty_of(DropSave.CELL)
 	cell["genome"] = state
 	cell["body"]["radius"] = CellBody.DIVIDE_RADIUS
@@ -1401,12 +1478,11 @@ func _synthetic_plan() -> void:
 	var from_drop := DropSave.read(drop_path)
 	var readable := not from_cell.is_empty() and not from_drop.is_empty() \
 		and DropSave.cells_of(from_drop).has("")
-	var expect_order: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"ocellus",
-		&"toxicyst", &"", &"ampulla", &"palp"]
-	var expect_worn: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"stigma",
-		&"toxicyst", &"", &"ampulla", &"palp"]
-	var expect_swapped: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum", &"palp",
-		&"toxicyst", &"", &"ampulla", &"ocellus"]
+	var test_ids := _read_by_id(kept_ids, PLAN_TEST, PLAN_TEST_RETIRED)
+	var expect_order := _seated(PLAN_TEST, test_ids)
+	var expect_worn := _seated(PLAN_TEST, _read_by_id(worn_ids, PLAN_TEST, PLAN_TEST_RETIRED))
+	var expect_swapped := _seated(PLAN_TEST, _read_by_id(swapped_ids, PLAN_TEST,
+		PLAN_TEST_RETIRED))
 	var loaded: Array[String] = []
 	var genomes: Array = []
 	for source: Dictionary in [from_cell.get("cell", {}).get("genome", {}),
@@ -1427,103 +1503,185 @@ func _synthetic_plan() -> void:
 			expect_order) \
 		and _same_list(Genome.layout_from(daughters[1]["order"], daughters[1].get("plan")),
 			expect_swapped)
-	_check(("a body plan of the probe's own -- a slot moved, one removed, two added, eight"
-		+ " outside -- holds to every check a plan is held to%s; a cell kept under today's,"
-		+ " in its own file and in a world's (written %s, read %s), and one kept before"
-		+ " stamps, load with every gene in its slot by id and the removed slot's on the"
-		+ " free arc nearest it, the DNA, the body and the inside whole: %s; and the"
-		+ " daughters on offer the same (%s)") % [
+	_check(("a body plan of the probe's own -- a slot moved, one removed, two added, %d"
+		+ " outside -- holds to every check a plan is held to%s; a cell kept under the plan"
+		+ " as it shipped, in its own file and in a world's (written %s, read %s), and one"
+		+ " kept before stamps, load with every gene in its slot by id and the removed"
+		+ " slot's on the free arc nearest it, the DNA, the body and the inside whole: %s;"
+		+ " and the daughters on offer the same (%s)") % [_outside_indexes(PLAN_TEST).size(),
 		"" if faults.is_empty() else " -- " + "; ".join(faults), str(wrote), str(readable),
 		"; ".join(loaded), str(offered)],
 		faults.is_empty() and wrote == [OK, OK] and readable and by_id and offered)
 
-	# **The genome's rules on it**: the counts, the ladder, the places, a move into the
-	# slot today's plan would call the inside, and the venom's side read off the plan.
+	# **The genome's rules on it**: the counts, the ladder, the places, a move out of
+	# its last slot outside, and the venom's side read off the plan.
 	var on_plan: Node = genomes[0]
+	var outside := _outside_indexes(PLAN_TEST)
+	var front: Array[int] = []
+	var stern := -1
+	for k: int in outside:
+		match StringName(PLAN_TEST[k]["anatomy"]):
+			BodyPlan.FRONT_ANATOMY:
+				front.append(k)
+			BodyPlan.STERN_ANATOMY:
+				stern = k
+	var radii: Array[float] = [FoodField.DRIFTER_MIN, CellBody.BASE_RADIUS, 29.5, 31.0, 34.0,
+		37.0, 39.99, CellBody.DIVIDE_RADIUS]
 	var ladder: Array[int] = []
-	for radius: float in [FoodField.DRIFTER_MIN, CellBody.BASE_RADIUS, 29.5, 31.0, 34.0, 37.0,
-			39.99, CellBody.DIVIDE_RADIUS]:
+	var by_rows: Array[int] = []
+	for radius: float in radii:
 		ladder.append(CellBody.slots_for(radius))
-	var moved: bool = on_plan.move(7, 5)
+		by_rows.append(_slots_by_rows(PLAN_TEST, radius))
+	# The removed slot's gene, on the arc nearest it, and the one slot left free.
+	var moved_from := expect_order.find(test_ids.get(_bow_of(test_ids, kept_ids), &""))
+	var moved_to := expect_order.find(&"")
+	var moved: bool = on_plan.move(moved_from, moved_to)
 	var after_move: Array = on_plan.layout().duplicate()
 	var stings := FoodField.toxins_of(body, _worn_of(on_plan))
 	var sting_at := NAN
 	for k in range(0, stings.size(), FoodField.TOX_STRIDE):
 		if int(stings[k]) == FoodField.HOW_STING:
 			sting_at = stings[k + 3]
+	var venom := expect_worn.find(&"toxicyst")
+	var shipped_venom: Vector2 = SHIPPED_PLAN[_outside_indexes(SHIPPED_PLAN)[
+		worn.find(&"toxicyst")]]["arc"]
 	var many := dna.duplicate()
 	many[&"stigma"] = 1
 	many[&"chemocyte"] = 1
 	var drawn := Cilia.default_order(many)
-	_check(("and the genome's rules follow it: slots %s at r13 to r40, inside from %d with %d,"
-		+ " the front %s and the stern %d; a gene moves into slot 7, outside now (%s: %s); the"
-		+ " venom on the moved rear diagonal stings along its bearing (%.4f, the plan's %.4f);"
-		+ " and a water body's default order seats %d outside") % [str(ladder), Genome.INSIDE,
-		Genome.INSIDE_SLOTS, str(Genome.FRONT), Genome.STERN, str(moved), str(after_move),
-		sting_at, Cilia.slot_bearing(4), drawn.size()],
-		ladder == [3, 3, 4, 5, 6, 7, 7, 8] and Genome.INSIDE == 8 and Genome.INSIDE_SLOTS == 1
-		and _same_list(Genome.FRONT, [0, 3, 7]) and Genome.STERN == 2
-		and Genome.place_of(7) == Genome.OUTSIDE_PLACE and Genome.place_of(8) == Genome.INSIDE_PLACE
-		and moved and after_move[5] == &"palp" and after_move[7] == &""
-		and sting_at == Cilia.slot_bearing(4) and sting_at != _shipped_bearing(SHIPPED_ARCS[5])
-		and drawn.size() == 8)
+	_check(("and the genome's rules follow it: slots %s at r13 to r40, its rows' %s; inside"
+		+ " from %d with %d, the front %s and the stern %d; the gene in slot %d, its last"
+		+ " outside, moves to the free slot %d (%s: %s); the venom on the moved rear diagonal"
+		+ " stings along its bearing (%.4f, the plan's %.4f); and a water body's default"
+		+ " order seats %d outside") % [str(ladder), str(by_rows), Genome.INSIDE,
+		Genome.INSIDE_SLOTS, str(Genome.FRONT), Genome.STERN, moved_from, moved_to, str(moved),
+		str(after_move), sting_at, Cilia.slot_bearing(venom), drawn.size()],
+		ladder == by_rows and Genome.INSIDE == outside.size()
+		and Genome.INSIDE_SLOTS == PLAN_TEST.size() - outside.size()
+		and _same_list(Genome.FRONT, front) and Genome.STERN == stern
+		and Genome.place_of(outside.size() - 1) == Genome.OUTSIDE_PLACE
+		and Genome.place_of(outside.size()) == Genome.INSIDE_PLACE
+		and moved_from == outside.back() and moved
+		and after_move[moved_to] == expect_order[moved_from] and after_move[moved_from] == &""
+		and sting_at == Cilia.slot_bearing(venom) and sting_at != _shipped_bearing(shipped_venom)
+		and drawn.size() == outside.size())
 
-	# **The wire's limits follow it**: a body of ten genes with eight slots crosses on it,
-	# and the referee takes its order; today's plan refuses the same frame.
+	# **The wire's limits follow it**: a body of as many genes as it carries, on every
+	# slot it has outside, crosses on it, and the referee takes its order; a plan with
+	# fewer slots outside -- the shipped one -- refuses the same frame.
 	var ten := body.duplicate()
 	ten[&"chemocyte"] = 1
 	ten[&"axoneme"] = 1
 	var eight: Array[StringName] = expect_worn.duplicate()
-	eight[5] = &"chemocyte"
+	eight[moved_to] = &"chemocyte"
 	var frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, ten, eight))
 	var crossed := Wire.take_person(frame)
 	var limits := [Wire.ORDER_MAX, Wire.GENES_MAX, Wire.PERSON_MAX]
+	var genes_max := PLAN_TEST.size() + 1
+	var expect_limits := [outside.size(), genes_max, Wire.EVENT_HEADER + 1
+		+ (1 + genes_max * (1 + Wire.NAME_MAX + 1)) + (1 + outside.size() * (1 + Wire.NAME_MAX))]
 	var fits := Referee._order_fits(ten, eight)
 
-	# **The figure lays it out**: the port flank in the cell today's leaves empty, the
-	# bow on the removed slot's, the ring by bearing, and the inside's arrows.
+	# **The figure lays it out**: the port flank in the cell the shipped plan leaves
+	# empty, the bow on the removed slot's, the ring by bearing, and the inside's arrows.
 	var seats := Figure.SLOT_SEAT.duplicate()
 	var ring := Figure.SLOT_RING.duplicate()
-	var inside_ways: Array = Figure.SLOT_NEIGHBOUR[8].duplicate()
+	var inside_at := _index_in(PLAN_TEST, &"inside")
+	var inside_ways: Array = Figure.SLOT_NEIGHBOUR[inside_at].duplicate()
 
-	# **And back**: a cell kept under it, loaded on today's plan -- an id today's never
-	# knew takes the first free slot -- and everything today's plan sizes as it was.
+	# **And back**: a cell kept under it, loaded on the shipped plan -- an id that plan
+	# never knew takes the first free slot -- and everything today's plan sizes as it
+	# was once today's is back.
 	var later: Dictionary = (genomes[1] as Node).to_state()
 	var offer_later: Array = NormalMode._daughters_by_name([{"tiers": dna,
 		"order": (genomes[1] as Node).layout(), "body": body, "mutation": &""}])
 	for one: Node in genomes:
 		one.free()
-	BodyPlan.restore()
+	BodyPlan.use(SHIPPED_PLAN, SHIPPED_RETIRED)
+	var back_order := _seated(SHIPPED_PLAN, _read_by_id(test_ids, SHIPPED_PLAN, SHIPPED_RETIRED))
+	var back_worn := _seated(SHIPPED_PLAN, _read_by_id(_read_by_id(worn_ids, PLAN_TEST,
+		PLAN_TEST_RETIRED), SHIPPED_PLAN, SHIPPED_RETIRED))
 	var offered_back := _same_list(Genome.layout_from(offer_later[0]["order"],
-		offer_later[0].get("plan")), order)
+		offer_later[0].get("plan")), back_order)
 	var refused := Wire.take_person(frame).is_empty()
 	var home := Genome.new()
 	home.set_state(later)
-	var round_trip := _same_list(home.layout(), order) and _same_list(home.body_layout(), worn) \
-		and home.dna() == dna and home.tiers() == body
+	var round_trip := _same_list(home.layout(), back_order) \
+		and _same_list(home.body_layout(), back_worn) and home.dna() == dna \
+		and home.tiers() == body and _same_list(back_order, order) and _same_list(back_worn, worn)
 	var back_home := "%s / %s" % [str(home.layout()), str(home.body_layout())]
 	home.free()
+	BodyPlan.restore()
+	var fewer := _outside_indexes(SHIPPED_PLAN).size() < outside.size()
 	_check(("and the wire's limits follow it -- %s slots, genes and PERSON bytes -- so a body"
-		+ " of ten genes on eight slots crosses (%s) and the referee takes its order (%s),"
-		+ " where today's plan refuses the same frame (%s)") % [str(limits),
-		str(not crossed.is_empty()), str(fits), str(refused)],
-		limits == [8, 10, Wire.EVENT_HEADER + 1 + (1 + 10 * (1 + Wire.NAME_MAX + 1))
-			+ (1 + 8 * (1 + Wire.NAME_MAX))]
+		+ " of %d genes on %d slots crosses (%s) and the referee takes its order (%s), where"
+		+ " the shipped plan, with %d outside, refuses the same frame (%s)") % [str(limits),
+		ten.size(), eight.size(), str(not crossed.is_empty()), str(fits),
+		_outside_indexes(SHIPPED_PLAN).size(), str(refused)],
+		limits == expect_limits and ten.size() == genes_max and eight.size() == outside.size()
 		and crossed.size() == 3 and (crossed[1] as Dictionary) == ten
-		and _same_list(crossed[2], eight) and fits and refused)
+		and _same_list(crossed[2], eight) and fits and refused == fewer)
 	_check(("and the pause figure lays it out: seats %s, Tab round %s, and from the inside"
 		+ " left to the port flank, %s") % [str(seats), str(ring), str(inside_ways)],
-		seats.size() == 9 and seats[5] == Vector2(-150.0, 0.0) and seats[7] == Vector2(-150.0, -138.0)
-		and seats[4] == Vector2(150.0, 168.0) and seats[8] == Vector2(0.0, 6.0)
-		and _same_list(ring, [0, 3, 1, 4, 2, 6, 5, 7, 8]) and inside_ways == [5, 0, 1, 2])
+		seats.size() == PLAN_TEST.size()
+		and seats[_index_in(PLAN_TEST, &"port")] == Vector2(-150.0, 0.0)
+		and seats[_index_in(PLAN_TEST, &"bow_port")] == Vector2(-150.0, -138.0)
+		and seats[_index_in(PLAN_TEST, &"aft_starboard")] == Vector2(150.0, 168.0)
+		and seats[inside_at] == Vector2(0.0, 6.0)
+		and _same_list(ring, _indexes_of(PLAN_TEST, [&"nose", &"fore_starboard", &"starboard",
+			&"aft_starboard", &"tail", &"aft_port", &"port", &"bow_port", &"inside"]))
+		and _same_list(inside_ways, _indexes_of(PLAN_TEST, [&"port", &"nose", &"starboard",
+			&"tail"])))
 	var after := _plan_snapshot()
 	for path: String in [cell_path, drop_path]:
 		DirAccess.remove_absolute(path)
 	DirAccess.remove_absolute(PLAN_FILES)
-	_check(("and a cell kept under it loads on today's plan with every gene where it was: %s,"
-		+ " and a daughter it was offered the same (%s); and today's plan is back, all of it,"
-		+ " after (%s)") % [back_home, str(offered_back), str(after == before)],
+	_check(("and a cell kept under it loads on the plan as it shipped with every gene where it"
+		+ " was: %s, and a daughter it was offered the same (%s); and today's plan is back,"
+		+ " all of it, after (%s)") % [back_home, str(offered_back), str(after == before)],
 		round_trip and offered_back and after == before)
+
+
+## [param by_id] laid out as a cell kept before stamps had it: by
+## `BodyPlan.BEFORE_STAMPS`' ids, in their order.
+static func _laid_before_stamps(by_id: Dictionary) -> PackedStringArray:
+	var out := PackedStringArray()
+	for id: String in BodyPlan.BEFORE_STAMPS:
+		out.append(String(by_id.get(StringName(id), &"")))
+	return out
+
+
+## **The slots [param plan]'s rows give a body of [param radius]**, by its rule: every
+## outside slot earned at that radius or below, and never fewer than those always
+## earned. What `slots_for` is held to, worked out from the rows alone.
+static func _slots_by_rows(plan: Array[Dictionary], radius: float) -> int:
+	var count := 0
+	var always := 0
+	var outside := _outside_indexes(plan)
+	for k: int in outside:
+		var earned := float(plan[k]["earned"])
+		if earned <= BodyPlan.ALWAYS:
+			always += 1
+		if earned <= radius:
+			count += 1
+	return clampi(count, always, outside.size())
+
+
+## **The id the removed slot's gene took** on the probe's plan: the one id of
+## [param test_ids] that [param kept_ids] had no gene in.
+static func _bow_of(test_ids: Dictionary, kept_ids: Dictionary) -> StringName:
+	for id: StringName in test_ids:
+		if not kept_ids.has(id):
+			return id
+	return &""
+
+
+## The indexes of [param ids] in [param plan], in their order.
+static func _indexes_of(plan: Array[Dictionary], ids: Array) -> Array[int]:
+	var out: Array[int] = []
+	for id: Variant in ids:
+		out.append(_index_in(plan, StringName(id)))
+	return out
 
 
 ## Everything a plan sizes or lays out, to tell today's plan is back after another.
@@ -1541,12 +1699,76 @@ static func _worn_of(genome: Node) -> Array:
 	return Array(genome.body_layout())
 
 
-## **The slots a radius earned by the ladder `slots_for` was** before the plan
-## (§10.1): [constant SHIPPED_LADDER]'s formula, as `cell.gd` wrote it.
-static func _shipped_slots(radius: float) -> int:
-	var fewest := int(SHIPPED_LADDER["fewest"])
-	return clampi(fewest + int((radius - float(SHIPPED_LADDER["base"]))
-		/ float(SHIPPED_LADDER["step"])), fewest, int(SHIPPED_LADDER["most"]))
+## The indexes of [param plan]'s outside rows, in order.
+static func _outside_indexes(plan: Array[Dictionary]) -> Array[int]:
+	var out: Array[int] = []
+	for k in plan.size():
+		if StringName(plan[k]["place"]) == BodyPlan.OUTSIDE_PLACE:
+			out.append(k)
+	return out
+
+
+## The indexes of [param plan]'s outside rows a body earns by growing, in order: those
+## earned at a radius, not always.
+static func _earned_indexes(plan: Array[Dictionary]) -> Array[int]:
+	var out: Array[int] = []
+	for k: int in _outside_indexes(plan):
+		if float(plan[k]["earned"]) > BodyPlan.ALWAYS:
+			out.append(k)
+	return out
+
+
+## The index of the row [param id] in [param plan], -1 for none.
+static func _index_in(plan: Array[Dictionary], id: StringName) -> int:
+	for k in plan.size():
+		if StringName(plan[k]["id"]) == id:
+			return k
+	return -1
+
+
+## **[param by_id] -- slot id to gene -- as [param plan]'s outside layout**: each gene
+## in its id's slot, `&""` in every slot it names none of. How an expectation is
+## written by id and laid out by whichever plan it is read under.
+static func _seated(plan: Array[Dictionary], by_id: Dictionary) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for k: int in _outside_indexes(plan):
+		out.append(StringName(by_id.get(StringName(plan[k]["id"]), &"")))
+	return out
+
+
+## **[param kept] -- slot id to gene -- as [param plan] reads it** (§10.3), by the rule
+## and not by `body_plan.gd`'s code: a gene whose id is [param plan]'s stays in its
+## slot; one whose slot left it, among [param gone], goes to the free outside slot
+## nearest by bearing the arc it was in; and one whose id it never knew to the first
+## free one.
+static func _read_by_id(kept: Dictionary, plan: Array[Dictionary],
+		gone: Array[Dictionary]) -> Dictionary:
+	var out := {}
+	var left: Array[StringName] = []
+	for id: StringName in kept:
+		if _index_in(plan, id) >= 0:
+			out[id] = kept[id]
+		else:
+			left.append(id)
+	for id: StringName in left:
+		var was := _index_in(gone, id)
+		var from: float = BodyPlan.arc_bearing(gone[was]["arc"]) if was >= 0 else NAN
+		var best := &""
+		var best_off := INF
+		for k: int in _outside_indexes(plan):
+			var free := StringName(plan[k]["id"])
+			if out.has(free):
+				continue
+			if is_nan(from):
+				best = free
+				break
+			var off := absf(angle_difference(from, BodyPlan.arc_bearing(plan[k]["arc"])))
+			if off < best_off:
+				best_off = off
+				best = free
+		if best != &"":
+			out[best] = kept[id]
+	return out
 
 
 ## **The bearing an arc looked along before the plan**, as `cilia.gd` worked it out.
