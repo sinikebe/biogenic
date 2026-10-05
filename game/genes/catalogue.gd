@@ -163,6 +163,12 @@ static var _drifters: Array[StringName] = []
 ## one variant to a body ([method organ_weight], [method one_variant]).
 static var _organ_weights := {}
 static var _one_variant := {}
+## **Key to its organ, and organ to its keys**, every key's, retired and forms
+## included, an organ's in the order its file lists them. Asked of every gene of
+## every draw the water makes ([method organ_of], [method keys_of_organ]), so each
+## is one lookup.
+static var _organs := {}
+static var _organ_keys := {}
 ## Key to the copies a newborn wears, and those keys in order.
 static var _born := {}
 static var _born_order: Array[StringName] = []
@@ -238,8 +244,13 @@ static func rank(key: StringName) -> int:
 
 ## The organ [param key] is a form of: itself for a key this build does not know.
 static func organ_of(key: StringName) -> StringName:
-	var record := gene(key)
-	return record.organ if record != null else key
+	return _organs.get(key, key)
+
+
+## **Every key filed under [param organ]**, its variants' forms and the retired
+## among them, in the order its file lists them; none for a name no organ goes by.
+static func keys_of_organ(organ: StringName) -> Array[StringName]:
+	return _organ_keys.get(organ, _none)
 
 
 ## The variant [param key] is a form of, `&""` for an organ of one.
@@ -324,7 +335,8 @@ static func weight(key: StringName) -> int:
 ## strains share the toxin's draws rather than add to them (dna-slots.md §8.3).
 ## Its key's weight for a name this build files no organ under.
 static func organ_weight(organ: StringName) -> int:
-	return int(_organ_weights.get(organ, weight(organ)))
+	var own: Variant = _organ_weights.get(organ)
+	return int(own) if own != null else weight(organ)
 
 
 ## Whether [param organ] holds one variant to a body (gene.gd's `one_variant`).
@@ -674,6 +686,18 @@ static func _index() -> void:
 		for field: StringName in FROZEN:
 			_freeze(record.get(field))
 	_records = records
+	var organs_of := {}
+	var organ_keys := {}
+	for key: StringName in records:
+		var organ: StringName = (records[key] as Gene).organ
+		organs_of[key] = organ
+		if not organ_keys.has(organ):
+			organ_keys[organ] = [] as Array[StringName]
+		(organ_keys[organ] as Array).append(key)
+	for organ: StringName in organ_keys:
+		_read_only(organ_keys[organ])
+	_organs = organs_of
+	_organ_keys = organ_keys
 	_freeze(words)
 	_words = words
 	_freeze(part_words)

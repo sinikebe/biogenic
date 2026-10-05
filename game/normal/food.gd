@@ -6237,12 +6237,17 @@ static func _draw_gene(pool: Array[StringName]) -> StringName:
 
 ## **[param gene]'s organ, out of [param pool]**: every variety of it, so one body's
 ## draws never take the same organ twice -- it counts as one gene wherever the water
-## counts genes (dna-slots.md §8.3).
+## counts genes (dna-slots.md §8.3). Every key filed under the organ, and a name no
+## gene goes by as itself, as [method Catalogue.organ_of] answers for one: the pool
+## keeps its order.
 static func _erase_organ(pool: Array[StringName], gene: StringName) -> void:
 	var organ := Catalogue.organ_of(gene)
-	for k in range(pool.size() - 1, -1, -1):
-		if Catalogue.organ_of(pool[k]) == organ:
-			pool.remove_at(k)
+	for key: StringName in Catalogue.keys_of_organ(organ):
+		while pool.has(key):
+			pool.erase(key)
+	if not Catalogue.known(organ):
+		while pool.has(organ):
+			pool.erase(organ)
 
 
 func _draw_tier(sensed: float) -> int:
