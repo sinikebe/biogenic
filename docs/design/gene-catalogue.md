@@ -194,7 +194,7 @@ func _init() -> void:
 	organ = &"pellicle"                      # also its key while it has one form
 	order = 11                               # its place in GENE_ORDER: append-only
 	family = &"defending"                    # row 2 (phase 6); colour comes from here
-	look = {"shape": &"tuft", "strokes": 7, "hue": Color(0.36, 0.88, 0.96)}
+	look = {"shape": &"plates", "count": 3}  # a kind and its parameters (phase 6)
 	provides = {&"armor": [1.0, 1.14, 1.30, 1.52]}     # stat -> by tier, [0] = absent
 	water = {"weight": 2, "drifter": true}   # §9
 	tags = []
@@ -213,7 +213,7 @@ A gene with variants or places lists them:
 		# phase 3 of dna-slots.md would add, as data:
 		# {"variant": &"paralysing", "dose": &"paralysis",
 		#  "forms": {&"inside": &"paraneux", &"outside": &"paracyst"},
-		#  "look": {"hue": ...}, "water": {"weight": 1}, "word": ...},
+		#  "look": {"accent": &"diamond"}, "water": {"weight": 1}, "word": ...},
 	]
 ```
 
@@ -414,7 +414,7 @@ entries** (§15.4): the catalogue files an organ's own key only while its `varia
 empty, and a variant takes its organ's `order` and `born` as it takes every field it
 does not set. So a faster tail is the tail as it shipped, restated first, and then the
 faster one, with an order of its own and no copies at birth: `[{"key": &"flagellum"},
-{"variant": &"swift", "key": &"swiftail", "order": 17, "born": 0, "look": {"hue": ...},
+{"variant": &"swift", "key": &"swiftail", "order": 17, "born": 0, "look": {"accent": &"disc"},
 "provides": {...}}]`. Listed alone, it would take `flagellum` out of the catalogue;
 without its own `order` it would tie the tail in `dominant_of`, and without `born: 0`
 every newborn would wear both. What else it brings is §16's.
@@ -499,6 +499,24 @@ Phase 6 is a design by the UX designer before any code: the family bands, the sh
 the new shapes, the membrane's colours, and today's 17 genes recoloured. It is
 rendered at 1280x720 and 2400x1080 and judged before it is built. It is the one part
 of this work a player sees on the body.
+
+**As built in phase 6** (2026-10-05; `gene-looks.md` §13). `game/genes/families.gd`
+holds the five families -- eating, moving, sensing, defending, metabolism -- each three
+shades measured in OKLCH and the kinds it is built as; `game/genes/kinds.gd` holds the
+nine kinds as data: every parameter's default, its range or its values, and whether it
+is structural (identity: a tip, a bend, a form, waves, turns, lips) or magnitude (never
+identity: a count, a length, a fan); and each kind's accent seat with the mark it shows
+as shipped. An organ's file sets `family` and a `look` of a kind and its parameters,
+`shade` 0 to 2 where it wants other than the middle. **It holds no colour**: the
+catalogue works a key's hue out, its family's shade (`hue_of`), and holds every look
+resolved -- a kind's defaults filled in once, one lookup a parameter. **What a variant
+now needs is an accent, not a hue**: `"look": {"accent": &"ring"}` -- a `disc`, `ring`,
+`diamond` or `bar` its organ's seat does not show and no sibling wears -- and nothing
+else of a look, since a variant is its organ's colour and its kind; and its word after
+its organ's name on the explaining line (`VARIANT_WORDS`: `toxicyst · paralysing`). A
+seat with no mark to spare is a new organ, and the gene probe says so. The per-gene hue
+floor and its kept pairs went with the per-gene hues: `gene-looks.md` §8's eleven checks
+replace them.
 
 ### 7.3 The membrane
 
@@ -796,7 +814,11 @@ For every stat table:
 
 Colours: no new gene within today's floor of a colour already taken (pairs that
 already break it are listed and kept until phase 6), nor within 25° of self teal or
-threat red. From phase 6, the family rules replace both.
+threat red. From phase 6, the family rules replace both. **As built in phase 6**: the
+looks and colours are `gene-looks.md` §8's eleven checks -- a family and a kind it is
+built as, every parameter in range, no two organs of a family alike at a glance, a tile
+that fits, every variant an accent of its own, and the families' colours measured in
+OKLCH, every copy of a hue its source's, every sense on a channel with a lobe.
 
 The body plan:
 
@@ -2007,9 +2029,12 @@ the referee's eleven weights, `FOUL_EVERY` and the ledger's cut and decay, less
 `game/genes/README.md` is written in phase 5 from what phases 1 to 4 built. In short:
 
 - **A variant**: add an entry to the organ's `variants` with its key, an `order` of its
-  own (the next), `born: 0`, the numbers it changes and its weight, and its own hue
-  for now -- the design's accent waits for phase 6, and until then the probe's colour
-  floor asks for a hue (§12.1) -- and its words in the organ's word tables. **An organ
+  own (the next), `born: 0`, the numbers it changes and its weight, **its accent** --
+  `"look": {"accent": &"ring"}`, one of `disc`, `ring`, `diamond` and `bar` that its
+  organ's seat does not show and no sibling wears (`gene-looks.md` §3), never a hue: a
+  variant is its organ's colour and kind, and sets nothing else of a look -- and its
+  words in the organ's word tables, its `VARIANT_WORDS` among them, the word after its
+  organ's name on the explaining line (`toxicyst · paralysing`). **An organ
   with no variants yet is restated first**, `{"key": <its key>}`, or its own key leaves
   the catalogue: until phase 5 its first variant is two entries (§6.2). Append the key
   to the gene probe's `SHIPPED`, and to each list of its `SHIPPED_LISTS` the variant
@@ -2017,7 +2042,8 @@ the referee's eleven weights, `FOUL_EVERY` and the ledger's cut and decay, less
   (`i18n_pot -- --write`). A variant that provides a stat the referee judges, or a
   contact stat, is a new line of its rules: `Wire.RULES`' pin moves, and no protocol
   (Editing a gene, below). Run the gene probe. Add the French. Render the organ beside its
-  nearest neighbours at both sizes. A variant in one place needs no `forms` (§6.2),
+  nearest neighbours at both sizes (`tools/looks_sheet.tscn`, `--variants=1` for an
+  organ's variants beside it). A variant in one place needs no `forms` (§6.2),
   and its tags add to its organ's. It has its organ's instinct parts, read by the same
   readers, and declares none of its own. Two variants of one organ are two loci;
   `one_variant` on the organ holds a body to one (§6.3). A strain of a toxin sets its
@@ -2025,7 +2051,10 @@ the referee's eleven weights, `FOUL_EVERY` and the ledger's cut and decay, less
   side and stern words (§6.4).
 - **An organ on existing mechanics**: copy the template to `organs/<key>.gd`, set the
   next `order`, fill every field the probe asks for, and add one line to the index.
-  Then the same three steps.
+  Its look is its family -- `families.gd`'s five -- and a kind that family is built as,
+  with the parameters it wants (`kinds.gd`); the probe fails one that two organs of a
+  family share at a glance, and the fix is a new tip, form or head (`gene-looks.md`
+  §2.4). Then the same three steps.
 - **An organ with a new mechanic**: write the mechanic in `game/mechanics/`, reading
   stats by name. Add its stats to `stats.gd`. Then as above. If it is a sense on no
   existing channel, it brings a membrane lobe (§7.3).
