@@ -360,9 +360,11 @@ static func written(kept: Variant) -> PackedStringArray:
 	return kept if kept is PackedStringArray else _before
 
 
-## Whether [param kept] is a stamp a save may hold: slot ids, or nothing.
+## Whether [param kept] is a stamp a save may hold: slot ids, at least one. Every
+## plan has a slot, so a stamp of none is no plan's and a file holding one has gone
+## wrong; a save kept before stamps holds no key at all ([method written]).
 static func is_stamp(kept: Variant) -> bool:
-	return kept is PackedStringArray
+	return kept is PackedStringArray and not (kept as PackedStringArray).is_empty()
 
 
 ## **An outside layout kept under [param kept], laid out on the plan in use**

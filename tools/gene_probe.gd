@@ -1513,6 +1513,12 @@ func _synthetic_plan() -> void:
 		by_id = by_id and _same_list(one.layout(), expect_order) \
 			and _same_list(one.body_layout(), expect_worn) and one.dna() == dna \
 			and one.tiers() == body and _same_list(one.inside_layout(), [&"veneneux"])
+	# A stamp of no ids is no plan's: a file holding one is refused, as one of the
+	# wrong type is.
+	var no_ids := cell.duplicate(true)
+	no_ids["genome"]["plan"] = PackedStringArray()
+	var refused_empty := not BodyPlan.is_stamp(PackedStringArray()) \
+		and DropSave.bad_cell(no_ids) != ""
 	var daughters: Array = from_cell.get("cell", {}).get("daughters", [])
 	var offered := daughters.size() == 2 \
 		and _same_list(Genome.layout_from(daughters[0]["order"], daughters[0].get("plan")),
@@ -1524,10 +1530,12 @@ func _synthetic_plan() -> void:
 		+ " as it shipped, in its own file and in a world's (written %s, read %s), and one"
 		+ " kept before stamps, load with every gene in its slot by id and the removed"
 		+ " slot's on the free arc nearest it, the DNA, the body and the inside whole: %s;"
-		+ " and the daughters on offer the same (%s)") % [_outside_indexes(PLAN_TEST).size(),
+		+ " and the daughters on offer the same (%s); a stamp of no ids is refused (%s)")
+		% [_outside_indexes(PLAN_TEST).size(),
 		"" if faults.is_empty() else " -- " + "; ".join(faults), str(wrote), str(readable),
-		"; ".join(loaded), str(offered)],
-		faults.is_empty() and wrote == [OK, OK] and readable and by_id and offered)
+		"; ".join(loaded), str(offered), str(refused_empty)],
+		faults.is_empty() and wrote == [OK, OK] and readable and by_id and offered
+		and refused_empty)
 
 	# **The genome's rules on it**: the counts, the ladder, the places, a move out of
 	# its last slot outside, and the venom's side read off the plan.
