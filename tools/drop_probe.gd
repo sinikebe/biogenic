@@ -8962,10 +8962,10 @@ func _dna_forms() -> void:
 		str(in_place), str(full), str(inside_ok), str(faces), str(faces_ok)],
 		raise_ok and inside_ok and faces_ok)
 	# A lapse follows §5.3, case by case: [what is carried, the meal, what it ends as].
-	var outside_full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 1,
-		&"ocellus": 1, &"chemocyte": 1, &"ampulla": 1}
-	var seven: Array = [&"cytostome", &"cirrus", &"flagellum", &"stigma", &"ocellus",
-		&"chemocyte", &"ampulla"]
+	var full_order := _outside_full()
+	var outside_full := {}
+	for gene: StringName in full_order:
+		outside_full[gene] = 1
 	var cases := [
 		["poison carried", with_poison, three, &"veneneux", {&"veneneux": 3}],
 		["venom carried, eaten as poison", with_venom, three + [&"toxicyst"], &"veneneux",
@@ -8974,9 +8974,10 @@ func _dna_forms() -> void:
 			three + [&"toxicyst"], &"veneneux", {&"veneneux": 3, &"toxicyst": 2}],
 		["neither, eaten as poison", base, three, &"veneneux", {&"veneneux": 1}],
 		["neither, eaten as venom", base, three, &"toxicyst", {&"toxicyst": 1}],
-		["neither, eaten as venom, the outside full", outside_full, seven, &"toxicyst",
+		["neither, eaten as venom, the outside full", outside_full, full_order, &"toxicyst",
 			{&"veneneux": 1}],
-		["poison at three, the outside full", _merged(outside_full, {&"veneneux": 3}), seven,
+		["poison at three, the outside full", _merged(outside_full, {&"veneneux": 3}),
+			full_order,
 			&"veneneux", {&"veneneux": 3, &"toxicyst": 0}],
 		["poison at three, room outside", _merged(base, {&"veneneux": 3}), three, &"veneneux",
 			{&"veneneux": 3, &"toxicyst": 1}],
@@ -9028,6 +9029,20 @@ func _dna_forms() -> void:
 
 
 ## [param a] with [param b] over it, a new dictionary.
+## **The outside full**: a gene for every slot the body plan has outside -- the born
+## organs, then live genes of one place in the catalogue's order -- so a toxin eaten
+## finds no room there whatever the plan's count.
+static func _outside_full() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for gene: StringName in Catalogue.born_order() + Catalogue.live():
+		if out.size() >= CellBody.SLOT_MAX:
+			break
+		if not out.has(gene) and not GenomeNode.has_forms(gene) \
+				and not GenomeNode.is_inside_form(gene):
+			out.append(gene)
+	return out
+
+
 func _merged(a: Dictionary, b: Dictionary) -> Dictionary:
 	var out := a.duplicate()
 	out.merge(b, true)
@@ -9772,10 +9787,11 @@ func _dna_water() -> void:
 	var seats_ok: bool = worn.size() > 3 and worn[3] == &"toxicyst" and not worn.has(&"veneneux") \
 		and worn.has(&"ampulla") and worn.has(&"pellicle")
 	# A water cell's poison takes no outside room.
-	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 1, &"ocellus": 1,
-		&"chemocyte": 1, &"ampulla": 1}
-	var in_room := GenomeNode.integrate_into(full.duplicate(), &"veneneux", 7)
-	var out_room := GenomeNode.integrate_into(full.duplicate(), &"toxicyst", 7)
+	var full := {}
+	for gene: StringName in _outside_full():
+		full[gene] = 1
+	var in_room := GenomeNode.integrate_into(full.duplicate(), &"veneneux", CellBody.SLOT_MAX)
+	var out_room := GenomeNode.integrate_into(full.duplicate(), &"toxicyst", CellBody.SLOT_MAX)
 	seed(5150)
 	var drew_poison := 0
 	var thin := 0
