@@ -1791,9 +1791,10 @@ static func _hello() -> PackedByteArray:
 	return Wire.hello(Wire.PROTOCOL, Wire.tail(Rules.fingerprint(), 0))
 
 
-## **A faster tail**, filed as the tail's own organ with one variant whose speed is
-## its own -- one more gene the referee judges, as the gene probe files one.
-## Registered by the caller, and forgotten by its organ's name.
+## **A faster tail**: the tail's own file with one entry more, a variant whose speed
+## is its own -- one more gene the referee judges, as the gene probe files one.
+## Registered by the caller in the tail's place, and forgotten by its organ's name,
+## which puts the tail's own file back.
 static func _faster_tail() -> Object:
 	var plain := Catalogue.first_provider(&"impulse_speed")
 	var speed: Array = Catalogue.table(plain, &"impulse_speed")
@@ -1802,14 +1803,14 @@ static func _faster_tail() -> Object:
 		swift.append(float(value) * 1.6)
 	swift[0] = speed[0]
 	var tail: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
-	tail.set(&"variants", [{"variant": &"probeswift", "order": 920, "born": 0,
+	tail.set(&"variants", [{"variant": &"probeswift", "order": 920,
 		"provides": {&"impulse_speed": swift}}])
 	return tail
 
 
-## **A palp that feels further**, the palp's own organ with one variant whose reach
-## is its own: one more gene that changes nothing a host judges or decides a
-## contact by.
+## **A palp that feels further**: the palp's own file with one entry more, a variant
+## whose reach is its own -- one more gene that changes nothing a host judges or
+## decides a contact by.
 static func _longer_palp() -> Object:
 	var plain := Catalogue.first_provider(&"touch_range")
 	var reach: Array = Catalogue.table(plain, &"touch_range")
@@ -1817,7 +1818,7 @@ static func _longer_palp() -> Object:
 	for value: Variant in reach:
 		longer.append(float(value) * 1.5)
 	var palp: Object = (Catalogue.gene(plain).get_script() as GDScript).new()
-	palp.set(&"variants", [{"variant": &"probefeel", "order": 921, "born": 0,
+	palp.set(&"variants", [{"variant": &"probefeel", "order": 921,
 		"provides": {&"touch_range": longer}}])
 	return palp
 

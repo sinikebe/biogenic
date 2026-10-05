@@ -10,7 +10,8 @@ extends Node
 ##
 ## **Static, and a few seconds**: it reads the catalogue and the files, and plays
 ## nothing. What it checks (§15): the keys -- names the wire carries, one form's
-## each, in their shipped order, organ and variant names their own; the index
+## each, in their shipped order, organ and variant names their own, every variant
+## at an order of its own; the index
 ## against the folder, and every tag, channel, place and field one there is; the
 ## water's weights, drifters, senses, gift and born cell, and the lists a draw or
 ## a bit reads in their shipped order; every stat table's length and first entry,
@@ -33,9 +34,9 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; a faster tail, one more variant of the tail filed beside it, its parts offered
-## on the instincts page to a body that wears it alone; and a second strain of the toxin,
-## one entry of one place, covered by its organ's tags (§12.3). And -- a number, not a
+## again; a faster tail, one entry in the tail's own file, its parts offered on the
+## instincts page to a body that wears it alone; and a second strain of the toxin, one
+## entry of one place in its own file, covered by its organ's tags (§12.3). And -- a number, not a
 ## failure (§8.3) -- the gene words with no French; and how many gene names are
 ## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
 ## "Check the gene names").
@@ -265,6 +266,7 @@ func _ready() -> void:
 		get_tree().quit(0 if _failed == 0 else 1)
 		return
 	_keys()
+	_own_orders()
 	_index()
 	_water()
 	_tables()
@@ -330,7 +332,11 @@ func _keys() -> void:
 		var variants := {}
 		for entry: Dictionary in organ.variants:
 			var variant := StringName(entry.get("variant", &""))
-			if variants.has(variant):
+			# A variant of no name would be one variant with the organ's own key,
+			# whose name is none (gene.gd's `variant`): its forms would be the organ's.
+			if variant == &"":
+				clashes.append("%s lists a variant with no name" % organ.organ)
+			elif variants.has(variant):
 				clashes.append("%s's variant %s twice" % [organ.organ, variant])
 			variants[variant] = true
 	_check("every organ's name is its own, %d of them, and every variant's within its organ%s"
@@ -368,6 +374,56 @@ func _keys() -> void:
 			and Catalogue.tagged(Catalogue.GIFT).find(key) < 0
 	_check("rhabdom and statocyst are known, retired, and in no list that makes a gene",
 		retired_ok)
+
+
+## **Every variant an organ's file lists has an order of its own** (§6.2): set in its
+## entry or its form, and no other key's. The organ's own key -- its implicit first
+## variant -- keeps the organ's order, so a variant that set none would take it, and
+## tie the organ in `dominant_of`: a body wearing both at one copy count would be
+## drawn as either, and eating it would give either. Two keys of one order do the
+## same.
+func _own_orders() -> void:
+	var next := 0
+	for key: StringName in Catalogue.keys():
+		next = maxi(next, Catalogue.rank(key) + 1)
+	var bad: Array[String] = []
+	var listed := 0
+	for organ: Gene in _organs():
+		for entry: Dictionary in organ.variants:
+			var forms: Dictionary = entry.get("forms", {})
+			var filed: Array = []
+			if forms.is_empty():
+				filed.append([StringName(entry.get("key", entry.get("variant", &""))),
+					entry.get("order")])
+			for place: Variant in forms:
+				var form: Variant = forms[place]
+				if form is Dictionary:
+					filed.append([StringName((form as Dictionary).get("key", &"")),
+						(form as Dictionary).get("order", entry.get("order"))])
+				else:
+					filed.append([StringName(form), entry.get("order")])
+			for one: Array in filed:
+				listed += 1
+				if one[1] != null:
+					continue
+				bad.append(("%s, a variant of %s, has no order of its own: it would take the"
+					+ " organ's, %d, %s. Give it the next, %d, and append it to SHIPPED") % [
+					one[0], organ.organ, organ.order,
+					("and tie %s in dominant_of -- a body wearing both at one copy count would"
+						+ " be drawn as either, and eating it would give either") % organ.organ
+						if organ.order >= 0 else "which is no place in the order", next])
+	var by_order := {}
+	for key: StringName in Catalogue.keys():
+		var rank := Catalogue.rank(key)
+		if rank < 0:
+			continue
+		if by_order.has(rank):
+			bad.append("%s and %s share the order %d, and tie in dominant_of" % [by_order[rank],
+				key, rank])
+		by_order[rank] = key
+	_check("every variant an organ's file lists has an order of its own, no other key's: %d of"
+		% listed + " them, the next order %d%s" % [next, "" if bad.is_empty() else ": "
+			+ "; ".join(bad)], bad.is_empty())
 
 
 # --- The index (§4.1) ------------------------------------------------------------------
@@ -792,13 +848,17 @@ func _register() -> void:
 		and drawn[2] == Cilia.RESERVED_HUES[0])
 	_check("and a variant's and a form's tags add to their organ's, never replace them:"
 		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
-	# **A variant with no forms is one entry** (gene.gd): filed outside under its
-	# own key, or its name -- the organ as it shipped and a faster one beside it.
+	# **An organ's first variant is one entry** (§6.2): the organ as it shipped keeps
+	# its own key, first, with its order and its copies at birth; the entry is filed
+	# after it, outside, under its name -- it has no forms and no key of its own --
+	# with an order of its own and no copies at birth, though its organ has one.
 	var tail := Gene.new()
 	tail.organ = &"probetail"
+	tail.order = 940
+	tail.born = 1
 	tail.provides = {&"armor": [1.0, 1.1, 1.1, 1.1]}
-	tail.variants = [{"variant": &"plain", "key": &"probetail"},
-		{"variant": &"probeswift", "provides": {&"armor": [1.0, 1.5, 1.5, 1.5]}}]
+	tail.variants = [{"variant": &"probeswift", "order": 941,
+		"provides": {&"armor": [1.0, 1.5, 1.5, 1.5]}}]
 	Catalogue.register(tail)
 	var one_each := true
 	for key: StringName in [&"probetail", &"probeswift"]:
@@ -808,11 +868,17 @@ func _register() -> void:
 			and Catalogue.form_in(key, Gene.INSIDE) == &"" and not Genome.is_inside_form(key)
 	var armours := [Stats.of({&"probetail": 1}, &"armor"), Stats.of({&"probeswift": 1}, &"armor")]
 	var filed_keys := _keys_of(tail)
+	var ranks := [Catalogue.rank(&"probetail"), Catalogue.rank(&"probeswift")]
+	var births := [int(Catalogue.born().get(&"probetail", 0)),
+		int(Catalogue.born().get(&"probeswift", 0))]
 	Catalogue.forget(&"probetail")
-	_check(("and a variant with no forms is one entry, outside, under its key or its name:"
-		+ " %s, armour %s and %s") % [str(filed_keys), armours[0], armours[1]], one_each
+	_check(("and an organ's first variant is one entry: the organ keeps its own key, its order"
+		+ " and its copies at birth, and the entry is filed after it, outside, under its name,"
+		+ " at its own order and born with none -- %s, ranked %s, born %s, armour %s and %s")
+		% [str(filed_keys), str(ranks), str(births), armours[0], armours[1]], one_each
 		and filed_keys == [&"probetail", &"probeswift"] and armours == [1.1, 1.5]
-		and Array(Catalogue.keys()) == before)
+		and ranks == [940, 941] and births == [1, 0]
+		and Array(Catalogue.keys()) == before and not Catalogue.born().has(&"probetail"))
 
 
 # --- Looks (§7.1) ----------------------------------------------------------------------------
@@ -2219,14 +2285,13 @@ func _synthetic_gene() -> void:
 	_variant_of_shipped()
 
 
-## **A variant of a shipped organ** (§6.2, §12.3): a faster tail, filed as a copy of
-## the tail's own organ file holding that one variant -- the tail's every field, its
-## speed's table its own -- beside the shipped file, which keeps the tail's own key.
-## In the tail's own file it would be the second of two entries until phase 5. The
-## drop's fingerprint and the handshake's see it, as the referee's caps do; a body
-## wearing it beside the plain tail is read by the stat rows; its parts are the
-## tail's, and the vocabulary does not move; and the instincts page offers them to a
-## body that wears it alone.
+## **A variant of a shipped organ** (§6.2, §12.3): a faster tail, as the gene pass will
+## write it -- **one entry in the tail's own file**, its speed's table its own and an
+## order of its own, registered in that file's place. The tail keeps its key, and the
+## variant is born with no copies. The drop's fingerprint and the handshake's see it,
+## as the referee's caps do; a body wearing it beside the plain tail is read by the
+## stat rows; its parts are the tail's, and the vocabulary does not move; and the
+## instincts page offers them to a body that wears it alone.
 func _variant_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var bits_before := _vocabulary_bits()
@@ -2245,7 +2310,8 @@ func _variant_of_shipped() -> void:
 	var slower: Array = Catalogue.table(plain, &"impulse_gap_min").duplicate()
 	for k in range(1, slower.size()):
 		slower[k] = float(slower[k]) + 0.4
-	tail.variants = [{"variant": &"probeswift", "order": 920, "born": 0,
+	var born_before := Catalogue.born().duplicate()
+	tail.variants = [{"variant": &"probeswift", "order": 920,
 		"provides": {&"impulse_speed": swift, &"impulse_gap_min": slower}}]
 	var entries := _keys_of(tail)
 	Catalogue.register(tail)
@@ -2263,12 +2329,16 @@ func _variant_of_shipped() -> void:
 	var tails := Rulebook.worn(vocab, Catalogue.by_organ({&"probeswift": 2}), FoodField.everybody())
 	var plains := Rulebook.worn(vocab, {plain: 2}, FoodField.everybody())
 	var rows: Array = GeneStats.lines(&"probeswift", 2, 0, &"", GeneStats.context({}))
-	var born_same := not Catalogue.born().has(&"probeswift")
+	# The file registered is the one filed, in the shipped file's place: the tail's own key
+	# is its record, not a second of it dropped beside the shipped one.
+	var born_same := not Catalogue.born().has(&"probeswift") and Catalogue.born() == born_before \
+		and Catalogue.gene(plain) == tail and Catalogue.rank(plain) == SHIPPED.find(plain)
 	var page := _offered_alike(vocab, organ, &"probeswift", plain)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after := Rules.text()
-	_check(("and a faster %s, a variant filed beside its organ (%s), is %s's own: the drop's"
+	_check(("and a faster %s, one entry in its own file, registered in its place (%s, the"
+		+ " tail's key kept and the variant born with none), is %s's own: the drop's"
 		+ " rules (%s) and the handshake's (%s) fingerprint it, and are as they were once it is"
 		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
 		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"
@@ -2279,7 +2349,7 @@ func _variant_of_shipped() -> void:
 		Referee.SPEED_MAX, ", which net_probe's check of the caps fails on until they move"
 			if peak_with >= Referee.SPEED_MAX else "", str(speeds), str(gaps),
 		_bits_kept(bits_before, _vocabulary_bits())],
-		entries == [&"probeswift"] and organ == Catalogue.organ_of(plain) and born_same
+		entries == [plain, &"probeswift"] and organ == Catalogue.organ_of(plain) and born_same
 		and rules_with != rules_before and rules_after == rules_before
 		and rules_with.contains(Stats.label(&"impulse_speed") + ".probeswift=")
 		and wire_with != wire_before and wire_after == wire_before
@@ -2332,11 +2402,11 @@ static func _offered_alike(vocab: Rulebook.Vocabulary, organ: StringName, varian
 
 
 ## **A second strain of the shipped organ with a dose** -- the toxin's -- as one
-## entry of one place (gene-catalogue.md §6.4): every rule that was the toxin's
-## special case covers it by its organ's tags, so no drifter carries it and the
-## floor gives it back through a peer, into the one place it has; its venom is
-## delivered at the front and on a side, by its own kind; and its lines say what a
-## stack of that kind does.
+## entry of one place in that organ's own file (gene-catalogue.md §6.4), registered
+## in its place: every rule that was the toxin's special case covers it by its
+## organ's tags, so no drifter carries it and the floor gives it back through a
+## peer, into the one place it has; its venom is delivered at the front and on a
+## side, by its own kind; and its lines say what a stack of that kind does.
 func _strain_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var dosed := &""
@@ -2346,10 +2416,13 @@ func _strain_of_shipped() -> void:
 			break
 	var organ: Gene = (Catalogue.gene(dosed).get_script() as GDScript).new()
 	var stacks: Array = Catalogue.table(dosed, &"venom_stacks")
-	organ.variants = [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
+	var shipped := Catalogue.keys_of_organ(Catalogue.organ_of(dosed)).duplicate()
+	organ.variants = organ.variants + [{"variant": &"probebarb", "dose": Catalogue.dose_of(dosed),
 		"order": 930, "water": {"weight": 1, "drifter": true},
 		"provides": {&"venom_stacks": stacks}}]
 	Catalogue.register(organ)
+	var kept := Array(Catalogue.keys_of_organ(Catalogue.organ_of(dosed))) \
+		== Array(shipped) + [&"probebarb"]
 	var strain := &"probebarb"
 	var tagged := Catalogue.has_tag(strain, Catalogue.NOT_ON_DRIFTERS) \
 		and Catalogue.has_tag(strain, Catalogue.FLOOR_BY_PEERS)
@@ -2368,13 +2441,14 @@ func _strain_of_shipped() -> void:
 	var said := Catalogue.gene(strain).dose_line(GeneStats.context({}))
 	var gone := Catalogue.organ_of(strain)
 	Catalogue.forget(gone)
-	_check(("and a second strain of %s, one entry of one place, is covered by every rule"
+	_check(("and a second strain of %s, one entry of one place in its own file (its first"
+		+ " strain's keys kept: %s), is covered by every rule"
 		+ " that was the toxin's: tagged %s, no drifter carries it (%s), the floor gives it"
 		+ " back through a peer (%s), into its one place (%s); its venom bites at the front"
 		+ " and stings on a side, by its own kind (%s; %s); and it says what a stack of its"
-		+ " dose does") % [gone, str(tagged), str(not drifting and to_drifter == &""),
+		+ " dose does") % [gone, str(kept), str(tagged), str(not drifting and to_drifter == &""),
 		by_peer, str(peer.get(strain, 0)), str(bite), str(side)],
-		tagged and not drifting and to_drifter == &"" and by_peer == strain
+		kept and tagged and not drifting and to_drifter == &"" and by_peer == strain
 		and int(peer.get(strain, 0)) == 1
 		and bite == PackedFloat64Array([FoodField.HOW_BITE, kind, float(stacks[2]), 0.0])
 		and side == PackedFloat64Array([FoodField.HOW_STING, kind, float(stacks[2]),
@@ -2559,14 +2633,15 @@ func _organs() -> Array[Gene]:
 
 
 ## The keys [param organ]'s file says its forms are, as the catalogue resolves
-## them: its own name for an organ of one form, and a variant's own key -- or its
-## name -- for a variant of none. `&""` for a variant with none of the three,
-## which the catalogue cannot file, so that the count of forms says so.
+## them: its own name first -- its implicit first variant -- unless it lists
+## variants and has no order of its own, as the toxin does; then a variant's own key
+## -- or its name -- for a variant of no forms, and every form's for one of forms.
+## `&""` for a variant with none of the three, which the catalogue cannot file, so
+## that the count of forms says so.
 static func _keys_of(organ: Gene) -> Array[StringName]:
 	var out: Array[StringName] = []
-	if organ.variants.is_empty():
+	if organ.variants.is_empty() or organ.order >= 0:
 		out.append(organ.organ)
-		return out
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():

@@ -182,7 +182,8 @@ static var _owners_are_keys := true
 static var _levelled: Array[StringName] = []
 ## Channel to the live keys that drive it.
 static var _channels := {}
-## What a tool registered ([method register]), after the index's own.
+## What a tool registered ([method register]): each in the place of the index's
+## organ of its name, or after the index's own.
 static var _registered: Array = []
 ## **Key to its look**, every key's, a retired one's empty. Asked of every organ of
 ## every body drawn, every frame, so it is one lookup -- and **filled in place and
@@ -253,7 +254,8 @@ static func keys_of_organ(organ: StringName) -> Array[StringName]:
 	return _organ_keys.get(organ, _none)
 
 
-## The variant [param key] is a form of, `&""` for an organ of one.
+## The variant [param key] is a form of, `&""` for an organ's own key -- its
+## implicit first variant -- and for a key this build does not know.
 static func variant_of(key: StringName) -> StringName:
 	var record := gene(key)
 	return record.variant if record != null else &""
@@ -632,16 +634,20 @@ static func part_words(part: StringName) -> Dictionary:
 
 # --- Tools -----------------------------------------------------------------------------------
 
-## **A tool's seam: a gene of its own** (§4.3), filed after the index's as a new
-## organ's file would be, and every lookup built again. As `food.gd`'s
-## `declare()` lets a probe declare a part, this lets one put a synthetic gene
-## through every system. Nothing in the game calls it.
+## **A tool's seam: a gene of its own** (§4.3), filed as an organ's file would be,
+## and every lookup built again: after the index's, as a new organ's file is -- or,
+## **for an organ of a name the index already has, in that organ's place**, as an
+## edit to its file would be. So a variant of a shipped organ is posed as it will
+## be written: the organ's own file with one more entry. As `food.gd`'s `declare()`
+## lets a probe declare a part, this lets one put a synthetic gene through every
+## system. Nothing in the game calls it.
 static func register(organ: Gene) -> void:
 	_registered.append(organ)
 	_index()
 
 
-## Takes back everything [method register] filed under [param organ_name].
+## Takes back everything [method register] filed under [param organ_name], and puts
+## back the index's own organ of that name where one stood in for it.
 static func forget(organ_name: StringName) -> void:
 	_registered = _registered.filter(func(one: Gene) -> bool: return one.organ != organ_name)
 	_index()
@@ -655,7 +661,18 @@ static func _index() -> void:
 	var organs: Array = []
 	for script: GDScript in ORGANS:
 		organs.append(script.new())
-	organs.append_array(_registered)
+	# What a tool registered: in the place of the organ of its name, or after them all
+	# ([method register]).
+	for one: Gene in _registered:
+		var at := -1
+		for k in organs.size():
+			if (organs[k] as Gene).organ == one.organ:
+				at = k
+				break
+		if at >= 0:
+			organs[at] = one
+		else:
+			organs.append(one)
 	var records := {}
 	var resolved: Array = []
 	# Each key's words, and every part's, from its organ file's word tables.
@@ -830,21 +847,31 @@ static func _index() -> void:
 		_tag_sets[tag] = members_set
 
 
-## **[param organ]'s keys, each a flat record** (§4.2): the organ itself for an
-## organ of one variant in one place, keyed by its name; otherwise one record per
-## form of every variant, in the order the organ lists them -- a fresh instance of
-## the organ's script, the organ's fields copied onto it, then its variant's and
-## its form's written over them. A variant with no forms is one, outside.
+## **[param organ]'s keys, each a flat record** (§4.2, §6.2). **First the organ
+## itself, keyed by its name** -- its implicit first variant, the organ as it shipped
+## -- unless it lists variants and has no place in the order of its own (below).
+## Then one record per form of every variant it lists, in its order -- a fresh
+## instance of the organ's script, the organ's fields copied onto it, then its
+## variant's and its form's written over them. A variant with no forms is one,
+## outside. **A variant is born with no copies** unless it says otherwise: `born`
+## is the one field it does not take from its organ, or every newborn would wear
+## both tails.
+##
+## **An organ with variants and no `order` of its own is no key itself**: its
+## variants are all it files, the first listed being the organ as it shipped. That
+## is the toxin, whose first strain sits in two places, each form with its key and
+## its order. Every other organ has a place in the order, so adding a variant to it
+## is one entry and its own key never leaves the catalogue.
 static func _resolve(organ: Gene) -> Array:
-	if organ.variants.is_empty():
-		organ.key = organ.organ
-		return [organ]
 	var out: Array = []
+	if organ.variants.is_empty() or organ.order >= 0:
+		organ.key = organ.organ
+		out.append(organ)
 	for entry: Dictionary in organ.variants:
 		var forms: Dictionary = entry.get("forms", {})
 		if forms.is_empty():
 			# **A variant with no forms is one form, outside** (gene.gd): keyed by its
-			# own `key`, or by its name -- so `{"key": <the organ>}` keeps the organ's.
+			# own `key`, or by its name.
 			var own := StringName(entry.get("key", entry.get("variant", &"")))
 			if own == &"":
 				push_error("[catalogue] a variant of %s has no forms, no key and no name:"
@@ -859,6 +886,8 @@ static func _resolve(organ: Gene) -> Array:
 			# The parts are the organ's, on every variant and form ([method declares]).
 			record.declares = organ.declares
 			_write_over(record, _fields_of(organ))
+			# No copies at birth unless the variant or its form says so (above).
+			record.born = 0
 			_write_over(record, entry)
 			if form is Dictionary:
 				_write_over(record, form)
