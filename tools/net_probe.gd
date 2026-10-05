@@ -1144,7 +1144,7 @@ func _check_sister_wire() -> void:
 		nine.append(ascii.call(_rule_line_of(48, i)))
 	var ten_genes: Array = []
 	for i in Wire.GENES_MAX + 1:
-		ten_genes.append([ascii.call("gene" + "abcdefghij"[i]), 1])
+		ten_genes.append([ascii.call("gene" + String.chr(97 + i)), 1])
 	var refused := {
 		"nine instincts": _sister_by_hand(worn, dna_said, nine),
 		"a count of nine": _sister_by_hand(worn, dna_said, nine.slice(0, 8), 9),
@@ -2208,7 +2208,7 @@ func _limits_malformed() -> void:
 	var nine := PackedByteArray([0, Wire.GENES_MAX + 1])
 	for i in Wire.GENES_MAX + 1:
 		nine.append(5)
-		nine.append_array(("gene" + "abcdefghij"[i]).to_ascii_buffer())
+		nine.append_array(("gene" + String.chr(97 + i)).to_ascii_buffer())
 		nine.append(1)
 	nine.append(0)
 	guest.send_event(Wire.EVENT_PERSON, nine)
