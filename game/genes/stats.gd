@@ -34,7 +34,7 @@ const PRODUCT := &"product"
 ## which way is better; `combine`, how several providers combine; `unit`, what it
 ## is counted in, for the stats screen; `judged`, whether a shared pond's referee
 ## judges a guest by it; and `contact`, whether the host decides a contact by it --
-## a mouth, a skin, a bite, a dose -- which a guest feels by its own. **A table
+## a mouth, a skin, a bite, a dose, a dart -- which a guest feels by its own. **A table
 ## either marks is one two builds in one pond must agree on**: it is in the rules
 ## the handshake fingerprints (game/net/rules.gd), by every organ that provides it,
 ## so a change to one keeps builds on the old table apart, by themselves.
@@ -94,9 +94,9 @@ const ROWS := {
 		"judged": false, "contact": false},
 	# The dart.
 	&"dart_range": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "µm",
-		"judged": false, "contact": false},
+		"judged": false, "contact": true},
 	&"dart_cooldown": {"none": 0.0, "better": LOWER, "combine": BEST, "unit": "s",
-		"judged": false, "contact": false},
+		"judged": false, "contact": true},
 	# The toxin: venom outside, poison inside (docs/design/dna-slots.md §6).
 	&"venom_stacks": {"none": 0.0, "better": HIGHER, "combine": BEST, "unit": "stacks",
 		"judged": false, "contact": true},

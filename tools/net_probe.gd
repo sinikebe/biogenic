@@ -3341,7 +3341,7 @@ func _rules_text() -> String:
 	genome.free()
 	# **The contact rules no table holds** (shared-pond.md §7; wire.gd's rule under
 	# PROTOCOL until protocol 8): the bite's gap and flank, `bite_damage` by two
-	# samples, and the doses' constants, with how a dose is felt by one.
+	# samples, the doses' constants, with how a dose is felt by one, and the dart.
 	put.call("cell.BITE_GAP", CellBody.BITE_GAP)
 	put.call("cell.FLANK_AHEAD", CellBody.FLANK_AHEAD)
 	put.call("cell.FLANK_ASTERN", CellBody.FLANK_ASTERN)
@@ -3356,6 +3356,15 @@ func _rules_text() -> String:
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
 	put.call("cell.DOSE_SIZE", CellBody.DOSE_SIZE)
 	put.call("doses.felt(2,r30)", FoodField.Doses.felt(2.0, 30.0, CellBody.DOSE_SIZE))
+	# **The dart** (behaviour.md §4.3), which the host fires for a guest as for its own
+	# cell: the arc it answers on, and what each organ that darts stuns for -- its own
+	# number, read off the organ here rather than through `dart_stun`.
+	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
+	var darts := Catalogue.providers(&"dart_range")
+	for k in darts.size():
+		var stun: Variant = Catalogue.number(darts[k], &"stun")
+		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
+			float(stun) if stun != null else 0.0)
 	# referee.gd: its own limits, and its copies of the run's numbers. **The
 	# gift's senses are no copy any more**: the referee reads the catalogue's
 	# `gift` tag (gene-catalogue.md §11.1), so its line is written from there,

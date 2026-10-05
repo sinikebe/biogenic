@@ -101,6 +101,7 @@ const FLANK_ASTERN := 2.10
 ## rule is a defence with no position: **a dart in a rear slot is the answer to
 ## being flanked**, and placement becomes a defensive decision rather than only
 ## an offensive one. §2.
+## The host decides every contact by this: a change moves Wire.RULES, not Wire.PROTOCOL (wire.gd).
 const DART_ARC_DEG := 110.0
 
 ## 0 is whole and 1 is a body that has come apart. There is no bar for this

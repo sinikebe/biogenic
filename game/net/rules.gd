@@ -3,8 +3,8 @@ extends RefCounted
 ## (docs/design/gene-catalogue.md §11.3).
 ##
 ## A host judges each guest by its own copy of what the referee reads, and decides
-## every contact -- a mouth on a body, a bite, a dose -- by its own tables, while the
-## guest swims, feels and wears its doses by its own. Two builds whose copies differ
+## every contact -- a mouth on a body, a bite, a dose, a dart -- by its own tables, while
+## the guest swims, feels and wears its doses by its own. Two builds whose copies differ
 ## share a pond one of them misjudges: a guest that grows as its own build grows is
 ## fouled and cut by a host on the old numbers, measured at 1.05 s after its first
 ## meal (net-hardening.md B.6). So the handshake carries this text's fingerprint, and
@@ -23,8 +23,9 @@ extends RefCounted
 ##    without anyone listing it;
 ## 2. the run's numbers the referee judges a guest by that no organ provides, under
 ##    the names they have where they are defined;
-## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage` and
-##    the doses' constants, by sample where a rule is a function;
+## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
+##    doses' constants, and the dart's arc and stun, by sample where a rule is a
+##    function;
 ## 4. the referee's own limits;
 ## 5. the body plan's fingerprint (body_plan.gd), so builds on other plans -- other
 ##    slot counts, other arcs -- refuse each other too.
@@ -148,6 +149,14 @@ static func text() -> String:
 	put.call("cell.DOSE_GONE", CellBody.DOSE_GONE)
 	put.call("cell.DOSE_SIZE", CellBody.DOSE_SIZE)
 	put.call("doses.felt(2,r30)", Doses.felt(2.0, 30.0, CellBody.DOSE_SIZE))
+	# **The dart** (behaviour.md §4.3): the host fires a guest's dart at a cell coming
+	# for it, on the arc its organ is worn on, and stuns what it hits for the organ's
+	# own number -- read at one copy of each organ that darts, as the tables are.
+	put.call("cell.DART_ARC_DEG", CellBody.DART_ARC_DEG)
+	var darts := Catalogue.providers(&"dart_range")
+	for k in darts.size():
+		put.call("cell.dart_stun" + ("" if k == 0 else "." + String(darts[k])),
+			CellBody.dart_stun({darts[k]: 1}))
 	# 4. The referee's own limits. **The gift's senses are no copy**: the referee
 	# reads the catalogue's `gift` tag (§11.1), so its line is written from there.
 	var referee: Dictionary = (Referee as Script).get_script_constant_map()
