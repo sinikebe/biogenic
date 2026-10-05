@@ -33,6 +33,12 @@ extends RefCounted
 ## game/net/ -- see the note at the top of signal_bus.gd.
 
 const CellBody := preload("res://game/normal/cell.gd")
+## **The genes, and the stats they buy** (docs/design/gene-catalogue.md §11.1):
+## the gift's senses are the catalogue's `gift` tag, and who may call is whoever
+## provides `ping_range`. Read, never copied: a host judges by its own catalogue.
+## Neither preloads anything of game/net, so there is no cycle.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 const FoodField := preload("res://game/normal/food.gd")
 ## The rim's arithmetic (ocean.md §10.5): a guest's body is held inside the
 ## host's drop as everything in it is.
@@ -156,10 +162,6 @@ const RADIUS_EPSILON := 0.01
 ## one each time a meal widens the layout.
 const PERSON_RATE := 2.0
 const PERSON_BANK := 6.0
-## **The four senses the free gift is drawn from**, normal_mode.gd's
-## FIRST_SENSES, written out for the reason SISTER_DISTANCE is. The one change a
-## worn body ever makes: one of these, at tier 1, once.
-const FIRST_SENSES: Array[StringName] = [&"ocellus", &"ampulla", &"chemocyte", &"stigma"]
 ## **After a death, a guest describes its dead body once more** -- every
 ## protocol-4 build does it, +104 to +108: `pond.gd`'s `_watch_worn` compares
 ## the dead cell's genome with the born one it has just announced and sends the
@@ -355,7 +357,7 @@ func _init(now: float) -> void:
 	turn = Budget.new(TURN_RATE, TURN_HOLD, TURN_SLACK, now)
 	_follow = Budget.new(MOVE_RATE, MOVE_HOLD, MOVE_SLACK, now)
 	_swing = Budget.new(TURN_RATE, TURN_HOLD, TURN_SLACK, now)
-	shouts = Budget.new(_shout_rate(0), SHOUT_BANK, 0.0, now)
+	shouts = Budget.new(_shout_rate({}), SHOUT_BANK, 0.0, now)
 	enters = Budget.new(1.0 / ENTER_EVERY, ENTER_BANK, 0.0, now)
 	bodies = Budget.new(PERSON_RATE, PERSON_BANK, 0.0, now)
 	_grant = [true, 0.0, FoodField.FIRST_DELAY, now]
@@ -539,7 +541,8 @@ func arrive(now: float, at: Vector2, radius: float) -> Array:
 ## A new body is legal with no body in the water -- the PERSON that comes just
 ## before an ENTER -- or with one that has not arrived, or once after a SISTER,
 ## which is a birth. Otherwise the worn tiers must be the ones the host already
-## has, but for the gift: one of [constant FIRST_SENSES] at tier 1, once a body.
+## has, but for the gift: one of the gift's senses -- the genes tagged `gift`, the
+## one change a worn body ever makes -- at tier 1, once a body.
 ## Whatever the tiers, every slot must name a gene it wears, once.
 func judge_person(now: float, new_body: bool, tiers: Dictionary, order: Array,
 		present: bool) -> Array:
@@ -740,7 +743,7 @@ func judge_shout(now: float, at: Vector2, radius: float, reach: float,
 	# water or out of it (#102). A listener holds a call's mark for as long as
 	# its caller's size says, so a call from a guest with no body here is held
 	# to the numbers no honest call passes.
-	var reach_max: float = CellBody.PING_RANGE_BY_TIER[CellBody.PING_RANGE_BY_TIER.size() - 1]
+	var reach_max := Stats.top(&"ping_range")
 	if radius > CellBody.DIVIDE_RADIUS + RADIUS_SLACK or reach > reach_max + RADIUS_SLACK:
 		_foul(SHOUT, WEIGHT_SHOUT, "shout: at r%.2f reaching %.0f, where no body is over"
 			% [radius, reach] + " r%.0f and no organ calls past %.0f" % [
@@ -972,7 +975,7 @@ static func _is_gift(before: Dictionary, after: Dictionary) -> bool:
 			added = gene
 		else:
 			return false
-	return added != null and FIRST_SENSES.has(StringName(added)) \
+	return added != null and Catalogue.has_tag(StringName(added), Catalogue.GIFT) \
 		and int(after[added]) == 1
 
 
@@ -990,22 +993,29 @@ static func _order_fits(tiers: Dictionary, order: Array) -> bool:
 	return true
 
 
-## How far what the body wears calls: 0 with no `ampulla`.
+## How far what the body wears calls: 0 with no organ that calls.
 func _reach() -> float:
-	return CellBody.PING_RANGE_BY_TIER[clampi(int(worn.get(&"ampulla", 0)), 0,
-		CellBody.PING_RANGE_BY_TIER.size() - 1)]
+	return Stats.of(worn, &"ping_range")
 
 
-## One call each ping period less a second, for the worn organ -- the fastest,
-## tier 1's, when there is none to go by.
-static func _shout_rate(tier: int) -> float:
-	var at := clampi(tier, 1, CellBody.PING_PERIOD_BY_TIER.size() - 1)
-	return 1.0 / maxf(CellBody.PING_PERIOD_BY_TIER[at] - SHOUT_EARLY, 1.0)
+## **One call each ping period less a second**: the period [param tiers] calls
+## at, read as the guest's own run reads it (`cell.gd`'s `ping_period`, the
+## stats' `ping_period` of what it wears) -- or, when it wears no organ that
+## calls, the fastest the first organ that calls makes, its tier 1's. **Never
+## from an empty table**: with no organ that calls at all, a call a second, the
+## most this ever allows.
+static func _shout_rate(tiers: Dictionary) -> float:
+	var period := Stats.of(tiers, &"ping_period")
+	if period <= 0.0:
+		period = Stats.value(Catalogue.first_provider(&"ping_range"), &"ping_period", 1)
+	if period <= 0.0:
+		return 1.0
+	return 1.0 / maxf(period - SHOUT_EARLY, 1.0)
 
 
 func _new_shout_rate(now: float) -> void:
 	shouts.refill(now)
-	shouts.rate = _shout_rate(int(worn.get(&"ampulla", 0)))
+	shouts.rate = _shout_rate(worn)
 
 
 ## A new body, an arrival or an organ gained zeroes the organ's clock, and it

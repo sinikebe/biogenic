@@ -25,6 +25,7 @@ extends VBoxContainer
 const Figure := preload("res://game/normal/figure.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+const Catalogue := preload("res://game/genes/catalogue.gd")
 const Cilia := preload("res://game/vision/cilia.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
@@ -283,11 +284,10 @@ func show_cell(cell: Dictionary, record: bool) -> void:
 		layout.append(StringName(gene))
 	_levels = {}
 	var kept: Dictionary = genome.get("levels", {})
-	for gene: StringName in CellBody.LEVELLED:
+	for gene: StringName in Catalogue.levelled():
 		if not _dna.has(gene) and not _tiers.has(gene):
 			continue
-		var rules: Array = CellBody.LEVELLED[gene]
-		var grown: Progression = Progression.new(float(rules[0]), int(rules[1]), rules[2])
+		var grown: Progression = GenomeNode.progression_for(gene)
 		if kept.has(String(gene)):
 			grown.set_state(kept[String(gene)] as Array)
 		_levels[gene] = grown
@@ -532,7 +532,7 @@ func _update_hint() -> void:
 	var text := ""
 	if slot != SLOT_NONE and gene == &"":
 		text = Figure.hint_empty(slot)
-	elif gene != &"" and GenomeNode.ALWAYS_EXPRESSED.has(gene):
+	elif gene != &"" and Catalogue.has_tag(gene, Catalogue.ALWAYS_EXPRESSED):
 		text = tr(Figure.HINT_CERTAIN)
 	elif gene != &"":
 		text = Figure.odds(int(_dna.get(gene, 0)), _show_numbers)
@@ -567,7 +567,7 @@ func _update_numbers() -> void:
 		if grown != null:
 			level = grown.effective_level()
 			path = grown.path
-		elif CellBody.LEVELLED.has(gene):
+		elif Catalogue.has_levels(gene):
 			level = 1
 		_numbers_lines = Figure.numbers_lines(gene, copies, level, path, _tiers, _radius,
 			_explain_at, grown if grown != null and worn > 0 else null)

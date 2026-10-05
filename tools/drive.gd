@@ -712,6 +712,8 @@ extends Node
 const DEFAULT_SCENE := "res://game/normal/normal_mode.tscn"
 const FoodField := preload("res://game/normal/food.gd")
 const CellBody := preload("res://game/normal/cell.gd")
+## Every gene's numbers, by stat: what a posed friend or a posed dose is quoted at.
+const Stats := preload("res://game/genes/stats.gd")
 ## For places and forms: the inside slot, and what a gene becomes there.
 const GenomeNode := preload("res://game/normal/genome.gd")
 ## Only for `MEAL`, so the `[meal]` line says how much of the bar a meal gave
@@ -2150,7 +2152,7 @@ func _step_peer_events() -> void:
 			continue
 		_free_peer()
 		var nose := Vector2(sin(_peer_heading), -cos(_peer_heading))
-		_peer_vel += nose * CellBody.DASH_SPEED_BY_TIER[1]
+		_peer_vel += nose * Stats.at(&"dash_speed", 1)
 		print("[peer]  %5.2f  the friend dashes from (%.0f, %.0f)"
 			% [_clock, _peer_pos.x, _peer_pos.y])
 		_peer_dashes.remove_at(i)
@@ -2171,8 +2173,8 @@ func _free_peer() -> void:
 ## drift and no involuntary impulse, so a shot repeats -- and so nothing here
 ## draws on the global random stream the player's own cell is seeded from.
 func _swim_peer(delta: float) -> void:
-	var rate: float = CellBody.TURN_RATE_BY_TIER[1]
-	var response: float = CellBody.TURN_RESPONSE_BY_TIER[1]
+	var rate: float = Stats.at(&"turn_rate", 1)
+	var response: float = Stats.at(&"turn_response", 1)
 	_peer_omega = lerpf(_peer_omega, _peer_demand * rate,
 		1.0 - exp(-delta / response))
 	_peer_heading = wrapf(_peer_heading + _peer_omega * delta, -PI, PI)
@@ -2693,11 +2695,11 @@ func _step_toxins() -> void:
 			"hit":
 				var bearing := float(event[2])
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					CellBody.VENOM_STACKS_BY_TIER[3], -1, bearing, false)
+					Stats.at(&"venom_stacks", 3), -1, bearing, false)
 				_food.bitten.emit(bearing, 1.0)
 			"meal":
 				_food.call(&"_dose", FoodField.TARGET_PLAYER, 0,
-					CellBody.SWALLOW_STACKS_BY_TIER[1], -1, 0.0, true)
+					Stats.at(&"swallow_stacks", 1), -1, 0.0, true)
 				_food.eaten.emit(FoodField.MEAL_MIN, &"",
 					cell.position if cell != null else Vector2.ZERO)
 			"fangs":
@@ -3949,7 +3951,7 @@ func _make_hunter(index: int, at: Vector2) -> void:
 	b.set("stroke", 0.2)
 	b.set("heading", atan2((cell.position - at).x, -(cell.position - at).y))
 	# Scale the radius so the gape comes out at exactly the multiple asked for.
-	var tier_gape: float = CellBody.GAPE_BY_TIER[3]
+	var tier_gape: float = Stats.at(&"gape", 3)
 	b.set("radius", cell.radius * _hunter_gape / tier_gape)
 	if in_drop:
 		# What its organs buy, read again for the body written here: its own

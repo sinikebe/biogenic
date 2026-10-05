@@ -317,7 +317,7 @@ var _had_daughters := false
 ## where a run starts, and writes nothing.
 var _programs_kept: Array = []
 var _acts_kept := 0
-## `CellBody.GAPE_BY_TIER[cytostome]` per slot, refreshed only when the genome
+## The `gape` multiplier of the body in each slot, refreshed only when the genome
 ## in it changes. See the note at the write site.
 var _gape_scale := PackedFloat32Array()
 
@@ -571,8 +571,7 @@ func _capture_bodies(at: int) -> void:
 		var meals := b.meals
 		if meals != _slot_meals[slot]:
 			_slot_meals[slot] = meals
-			_gape_scale[slot] = CellBody.gape_of(
-				GenomeNode.tier_of(b.genome, &"cytostome"), 1.0)
+			_gape_scale[slot] = CellBody.gape_of(b.genome, 1.0)
 			_deltas.append([_clock, Delta.BODY, slot, b.genome.duplicate(), b.id])
 		var pos := b.pos
 		_ring[i] = pos.x
@@ -581,10 +580,10 @@ func _capture_bodies(at: int) -> void:
 		_ring[i + 3] = b.radius
 		_ring[i + 4] = b.wound
 		# **The gape, without three calls per body to get it.**
-		# `food.gape_at()` resolves to `gape_of(tier_of(genome))`, which is a
-		# dictionary lookup and two static calls -- 102 of them a frame, and
+		# `food.gape_at()` resolves to `gape_of(genome)`, which is a stat read
+		# over the genome and a static call -- 102 of them a frame, and once
 		# measured at 34 of the 80 microseconds this function costs. A gape is
-		# `GAPE_BY_TIER[tier] * radius` and the tier only changes when the
+		# the body's `gape` times its radius, and the stat only changes when the
 		# genome does, which is a thing this file already watches, so the
 		# multiplier is cached there and this is a multiply. The float it writes
 		# is bit-identical to `gape_at()`'s.

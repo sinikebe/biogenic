@@ -37,6 +37,10 @@ const CellBody := preload("res://game/normal/cell.gd")
 const Genome := preload("res://game/normal/genome.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const Drop := preload("res://game/normal/drop.gd")
+## The genes (docs/design/gene-catalogue.md): what [method rules_text] lists of
+## them, the order and every table any organ provides.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 
 ## **How the file is laid out.** Bumped only when [constant SHAPE] changes; a
 ## content pack that changes a number changes [method rules] instead.
@@ -328,30 +332,44 @@ static func rules() -> String:
 
 ## **Every value a body is read by**, one a line, where it is defined, written
 ## the way `tools/net_probe.gd` writes the lines `Wire.RULES` fingerprints: the
-## gene list and the tiers, **every tier table cell.gd has** -- found by name, so
-## a table added later is in it without anyone remembering -- the slot ladder,
+## gene list and the tiers, **every table any gene provides** -- found by stat,
+## so a table added later is in it without anyone remembering, each under the
+## name it had when it was `cell.gd`'s (stats.gd's `label`) -- the slot ladder,
 ## growth and division, the metabolism every body runs, and the rim.
 static func rules_text() -> String:
 	var lines := PackedStringArray()
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
-	put.call("genome.GENE_ORDER", Genome.GENE_ORDER)
+	put.call("genome.GENE_ORDER", Catalogue.live())
 	put.call("genome.TIER_MAX", Genome.TIER_MAX)
 	put.call("genome.UPKEEP_PER_TIER", Genome.UPKEEP_PER_TIER)
-	# **Every name a String before anything is sorted.** The map's keys are
-	# StringNames, and Godot orders two StringNames by where they happen to sit
-	# in memory, not by name: sorted as they came, the same constants
-	# fingerprinted differently from one process to the next, and a launch could
-	# have read its own drop as converted.
+	# One line a provider, sorted by label: a stat's first provider under the
+	# stat's own label, any other after it with its key, so two providers of one
+	# stat are two lines. **Every label a String before anything is sorted**:
+	# Godot orders two StringNames by where they happen to sit in memory, not by
+	# name, and sorted as they came the same tables would fingerprint differently
+	# from one process to the next, and a launch could read its own drop as
+	# converted.
 	var cell := {}
 	var constants: Dictionary = (CellBody as Script).get_script_constant_map()
 	for key: Variant in constants:
 		cell[String(key)] = constants[key]
-	var tables: Array = cell.keys().filter(
-		func(name: String) -> bool: return name.ends_with("_BY_TIER"))
-	tables.sort()
-	for name: String in tables:
-		put.call("cell." + name, cell[name])
+	var tables := {}
+	for stat: StringName in Stats.ROWS:
+		var providers := Catalogue.providers(stat)
+		for k in providers.size():
+			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
+			tables[label] = Catalogue.table(providers[k], stat)
+	# And any table by tier cell.gd still has of its own, found by name as every
+	# one used to be: none today, and one added there later is in it without anyone
+	# remembering.
+	for name: String in cell:
+		if name.ends_with("_BY_TIER") and not tables.has("cell." + name):
+			tables["cell." + name] = cell[name]
+	var labels: Array = tables.keys()
+	labels.sort()
+	for label: String in labels:
+		put.call(label, tables[label])
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])

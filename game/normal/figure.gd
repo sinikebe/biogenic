@@ -770,7 +770,7 @@ static func draw_body(canvas: Control, body: Dictionary, worn: Array[StringName]
 	for slot in live:
 		_draw_tether(canvas, slot, _gene_in(genes, slot))
 	Cilia.draw_cell(canvas, FIGURE_AT, 0.0, FIGURE_R, body,
-		CellBody.gape_of(int(body.get(&"cytostome", 0)), FIGURE_R), FIGURE_R,
+		CellBody.gape_of(body, FIGURE_R), FIGURE_R,
 		true, 0.0, FIGURE_FADE, 0.0, 0.0, 0.0, 1.0, worn, 0.0, 0.0, 0.0, 0.0,
 		false, Cilia.NO_EYE, Cilia.NO_TAIL, slack,
 		Cilia.NO_DOSE if felt == Vector3.ZERO else {"felt": felt})

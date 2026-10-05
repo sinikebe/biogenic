@@ -17,6 +17,12 @@ extends Node
 ## it, beside every other table, and every body's wound is stepped through
 ## [method dosed]. doses.gd preloads nothing, so there is no cycle.
 const Doses := preload("res://game/mechanics/doses.gd")
+## **The genes** (docs/design/gene-catalogue.md): every organ's numbers live in
+## its own file, and this one reads a body's as stats -- `turn_rate`, `gape` --
+## through stats.gd, never by a gene's name. Neither preloads anything of
+## game/normal, so there is no cycle.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 
 ## Emitted when an impulse fires, so the membrane can bloom at the front.
 signal impulsed(strength: float)
@@ -71,11 +77,6 @@ var radius := BASE_RADIUS
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const MEND_SECONDS := 75.0
 
-## `cytostome` / bite. What one bite takes out of a body too big to swallow,
-## before the target's skin is taken into account. Tier 0 is a cell with no
-## mouth at all and it is a hard zero, not an extrapolated step: drifters have
-## no cytostome, and a floor that could chew on you would not be a floor.
-const BITE_BY_TIER: Array[float] = [0.0, 0.07, 0.10, 0.14]
 ## Seconds between bites from one mouth. One mouth, one bite, whatever it is
 ## resting against -- so a cell wedged between two others does not chew both.
 const BITE_GAP := 0.85
@@ -118,19 +119,6 @@ var loads := Doses.none()
 ## resolve. Null is legal and means the born cell -- nothing in here may assume
 ## the wiring has happened, because a headless boot builds this node first.
 var genome: Node = null
-
-# --- The gape --------------------------------------------------------------
-## How wide the mouth opens, as a multiple of body radius, by cytostome tier.
-## Index 0 is a cell with no mouth at all, which is a real state: drifters have
-## no cytostome, and §9.7 lets the player put a fourth gene over their own.
-##
-## **The gape keeps its job and loses its veto.** It used to be the whole
-## edibility rule; docs/design/edibility.md §1 withdraws that. You can attack
-## anything -- the gape decides whether you swallow it whole (`B.radius <
-## A.gape()`, evaluated in both directions independently) or have to take it
-## apart a bite at a time, and [method bite_damage]'s `min(gape / radius, 1)`
-## keeps the two continuous with each other.
-const GAPE_BY_TIER: Array[float] = [0.58, 0.82, 1.05, 1.40]
 
 # --- Slots -----------------------------------------------------------------
 ## Genome size is capacity, not currency: one more slot per this much growth.
@@ -185,31 +173,12 @@ static func daughter_radius(mother_radius: float = DIVIDE_RADIUS) -> float:
 	return mother_radius * sqrt(DIVIDE_SPLIT)
 
 # --- Drive -----------------------------------------------------------------
-# Every number in this block is indexed by a gene tier rather than fixed, and
-# the mapping lives here -- next to the constant it replaces -- for the same
-# reason perception.md §6.2 put the hunger-to-beat mapping in one place. §7.2.
-#
-# Tier 0 is the cell that has lost this organ entirely (§9.7 allows it). It is
-# **not in the design**: it is extrapolated one step below tier 1 on the
-# ladder's own spacing, which is the least invented answer available.
+# What the drive does with what the genome buys. **Every number a gene buys is
+# its organ's own** (game/genes/organs/) and is read here as a stat -- the
+# tail's beat as `impulse_speed`, the cirrus's turn as `turn_rate` -- so this
+# file names no gene. What is left here is the drive's own: the water's drag,
+# the beat's scatter, the wander. §7.2.
 
-## Speed added along the heading by one flagellar beat, by `flagellum` tier.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const IMPULSE_SPEED_BY_TIER: Array[float] = [118.0, 138.0, 162.0, 190.0]
-## Seconds between impulses, resampled after each one, by `flagellum` tier.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const IMPULSE_GAP_MIN_BY_TIER: Array[float] = [2.00, 1.70, 1.45, 1.20]
-const IMPULSE_GAP_MAX_BY_TIER: Array[float] = [4.30, 3.60, 3.00, 2.50]
-## **A tail can be held still from its second copy** (docs/design/
-## automation.md §5.2, rows 29, 37 and 38): the one number the hand's hold and
-## a body's rules both ask, of the tail's level -- `genome.gd`'s `level_of`,
-## which for every gene but the beam is its worn copies. A held tail does not
-## beat, costs nothing, and **keeps its clock**: the stroke clock stands still
-## and is never reset, so two strokes are never closer than this table's
-## shortest gap however a hold comes and goes ([method _process]). Below it the
-## tail beats on its own, for every body that swims. Not a table a host's
-## referee judges by: a held tail only ever makes a body slower.
-const HOLD_LEVEL := 2
 ## **How an instinct steers onto the heading it holds** (automation.md §4.2): in
 ## proportion to how far off it is, inside this band, and at full rate outside
 ## it. The cirrus's lag times its rate is about 0.68 rad at every tier, so full
@@ -217,7 +186,7 @@ const HOLD_LEVEL := 2
 ## about twice that settles with a few degrees of overshoot. Radians, a starting
 ## value (§15). Not a table: a host's referee judges the motion, never this.
 const HOLD_BAND := 1.3
-## Mean of the per-impulse strength roll below, for [method speed_for].
+## Mean of the per-impulse strength roll below, for [method speed_of].
 const IMPULSE_MEAN := 0.85
 ## Net speed over path speed. One impulse of v0 decaying at DRAG contributes
 ## exactly v0/DRAG of displacement however long it is left to, so a train of
@@ -236,167 +205,22 @@ const IMPULSE_KICK := 0.16
 const DRAG := 0.74
 
 # --- What the earned genes buy ----------------------------------------------
-# Same shape as the three ladders above: index by tier, index 0 is "does not
-# have this organ". They live here because this is where "what the genome buys"
-# lives; the *effects* land in food.gd (what the water does to you), in
-# metabolism.gd (what it costs) and on the signal bus (what it feels like).
+# Every table that was here is its organ's own now (game/genes/organs/), and is
+# read as a stat: the beam's reach, rays and fan, the nose's and the ping's
+# ranges, the push, the dash, the armour, the tank, the burn, the light, touch,
+# the dart and the toxin's stacks. The beam's fork and prices are the beam's,
+# and the levels any gene earns are its file's `levels`. What stays here is what
+# the mechanics themselves need.
 
-## `ocellus` / beam. How far the beam reaches, how many of them there are, and
-## how wide they fan either side of the arc they are worn on.
-##
-## **Indexed by the beam's level, not its copies** (beam-levels.md §4.1). The
-## first design asked for one beam per copy; a genome is a `{gene: tier}` map
-## and cannot hold the same gene twice, so for a while the tier bought the beams
-## and the fan widened with it, so that three beams covered 100 degrees rather
-## than sitting on top of each other. Levels replaced that: copies are how
-## likely a daughter is to grow the organ, and the level -- earned by using it
-## -- is how strong it is. Levels 1 to 3 are exactly this ladder's three rungs.
-const BEAM_RANGE_BY_TIER: Array[float] = [0.0, 620.0, 900.0, 1240.0]
-const BEAM_COUNT_BY_TIER: Array[int] = [0, 1, 2, 3]
-const BEAM_FAN_DEG_BY_TIER: Array[float] = [0.0, 0.0, 22.0, 50.0]
-
-## **Past level 3 the beam forks, for good** (beam-levels.md §1, §4). `extend`
-## adds a ray per level and the fan fills in; `sweep` keeps three rays and
-## swings each across its own third of the fan, faster every level. Until one
-## is taken the levels bank and the beam stays at level 3.
-const BEAM_FORK_LEVEL := 3
-const BEAM_PATHS: Array[StringName] = [&"extend", &"sweep"]
-## What going from level L to L + 1 costs, divided by L: level 2 at one
-## `STEP`, the fork at three. Set off an instrumented run so that ordinary play
-## reaches level 2 in about a minute and the fork in about three --
-## beam-levels.md §9 is the run.
-const BEAM_XP_STEP := 40.0
-## Experience comes from every different body the beam touched in a second,
-## and no more than this many a second (§2).
-const BEAM_XP_CAP := 3
-## **x and y, the owner's two prices** (§5): upkeep for every ray after the
-## first, and for every degree a second of sweep. X is the old per-tier price,
-## so levels 1 to 3 cost exactly what tiers 1 to 3 did; Y makes a level of
-## sweep cost half a level of extension. Balance numbers, judged by playing.
-const BEAM_RAY_COST := 0.18
-const BEAM_SWEEP_COST := 0.0027
-## How much faster each sweeping ray crosses its sector per level past the
-## fork, in degrees a second: one sector a second at level 4.
-const BEAM_SWEEP_STEP_DEG := 100.0 / 3.0
-## A ceiling on the rays one fan casts, which no player reaches -- level 64 is
-## tens of hours of use -- and which keeps `_step_beams` bounded if one does.
-const BEAM_RAYS_MAX := 64
-
-## **Which genes earn levels, and by what rules**: `[step, fork level, paths]`.
-## The progression that holds a level knows nothing about genes; this is the
-## edge where the names go.
-const LEVELLED := {
-	&"ocellus": [BEAM_XP_STEP, BEAM_FORK_LEVEL, BEAM_PATHS],
-}
-
-## `chemocyte` / smell. **How far this cell's chemoreceptors reach.** The scent
-## field itself is unchanged -- what the water is doing is not a function of who
-## is sniffing it -- but only sources inside this radius reach the taste lobe,
-## so a poor nose smells what is near and a good one smells the whole field.
-##
-## Tier 0 is a cell with no chemoreceptor at all, and it is **not** the
-## extrapolated step the drive tables use: it is a hard zero, because taste is
-## now a gene and a cell without it gets no bearing to food whatsoever. Tier 3
-## is food.gd's SCENT_RANGE, so a saturated nose is exactly the always-on taste
-## every build before this one shipped with.
-const SMELL_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1350.0, 1600.0]
-
-## `ampulla` / ping. Electroreception: a pulse every so often, and the bearing
-## of **every** body it comes back off, edible or not. That is the difference
-## from `chemocyte` -- the scent field can only ever describe a meal, and most
-## of what matters in this water is not a meal.
-##
-## **Range climbs. Rate does not, and that is the whole of the owner's answer
-## to ping-as-outline.md §10 row 1.** Each period is exactly the round trip at
-## that tier -- `2 x PING_RANGE_BY_TIER[t] / food.gd's PING_SPEED`, which is
-## 2x1100/250, 2x1500/250 and 2x1900/250 -- so the organ does not call again
-## until its own echo is home.
-##
-## A bat does not shout over its own returns. The ones that do are the
-## high-duty-cycle horseshoe bats, and they get away with it only because they
-## have Doppler-shift compensation to separate the call from the echo; this
-## cell has no such machinery, so an overlapping pulse is not a harder problem
-## for it, it is an unanswerable one. With period equal to the round trip there
-## is **exactly one pulse in the water at every tier** -- counted, not argued:
-## `--pings=` puts the peak outgoing front count at **1 at all three tiers**,
-## against 2 / 3 / 6 under the period this replaces. Nothing a mark could have
-## come from but the one call, so *when it came back* means *how far away it
-## is* again, which is the reading ping-as-outline.md §3.1 is built on.
-##
-## **Two costs, both measured on the built code**, 60 s at seed 7, `--radius=30`
-## with the organ in slot 0:
-##
-## - **Refresh stops climbing with tier.** 21 / 20 / 19 marks a minute at tiers
-##   1 / 2 / 3, against 55 / 104 / 168 under the old 3.2 / 2.2 / 1.4. Upgrading
-##   the organ now buys reach and resolution -- how far it sees and how many
-##   bodies one sweep answers for -- and not frequency.
-## - **The water is no longer always ringing.** A front or an echo is somewhere
-##   in the water 70% / 54% / 64% of the time, against 100% at every tier
-##   before. The gap is not the period -- the last possible echo lands exactly
-##   as the next call goes out -- it is that the front is culled at its own
-##   reach, half a round trip in, and the bodies it actually found are far
-##   nearer than that, so their echoes are all home early. The skin is quiet
-##   85% / 86% / 88% of the minute, against 63% / 40% / 36%.
-##
-## One thing improved rather than cost: `ping_listen` is `1 - age / trip`, so
-## the hum now breathes from full to empty exactly once per call at **every**
-## tier. Under the old ladder a tier-3 period was a tenth of its trip and the
-## hum sat nearly flat. ping-as-outline.md §10 row 1 is the table.
-## The host's referee judges by these: change them with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const PING_RANGE_BY_TIER: Array[float] = [0.0, 1100.0, 1500.0, 1900.0]
-const PING_PERIOD_BY_TIER: Array[float] = [0.0, 8.8, 12.0, 15.2]
-
-## **How much of the pulse survives one body in the way, including your own.**
-## The pulse leaves the membrane at the organ's own arc and stops on everything
-## it meets, so the body it left is the first thing in the way: a tier-1
-## `ampulla` is stone blind astern of the slot it is worn in, which is the whole
-## of the owner's *"not at the first level of the gene"*.
-##
-## Applied **once per occluder, multiplying**, so a return two bodies deep at
-## tier 3 comes back at 0.58 x 0.58 = 0.34 and three deep at 0.20. A dimmer
-## echo rather than a range or a depth count: the membrane has intensity and
-## intensity is what a fainter echo is, a count is a step the player cannot
-## count, and this one needs no rule for *how deep* -- four bodies deep at tier
-## 3 is 0.11 of an echo the range has already faded, which is a mark nobody
-## reads, and at tier 1 the first body ends it.
-##
-## The ambiguity it makes -- a shadowed near body and a clear far body both read
-## faint -- is already answered in a channel that exists: returns are staggered
-## by their own flight time, so the shadowed near body still answers *early*.
-const PING_THROUGH_BY_TIER: Array[float] = [0.0, 0.0, 0.34, 0.58]
-
-## `axoneme` / push. Acceleration along the heading while the player holds, in
-## units per second squared. **This is the flagellum made voluntary**: the
-## random involuntary impulse keeps firing underneath it at whatever tier the
-## flagellum is, and this adds a push you asked for on top.
-##
-## Held against DRAG these settle at 81 / 115 / 155 units per second, against a
-## born cell's realised 56.5. **Measured, and the first numbers were wrong by a
-## factor of two**: at 230 the terminal speed is 310, and since the chase scales
-## its cruise off the prey's own speed, a hunter could not physically close on a
-## pushing cell at any tier. Dread stopped meaning anything, which is most of
-## the game.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const PUSH_ACCEL_BY_TIER: Array[float] = [0.0, 60.0, 85.0, 115.0]
-## How much of that terminal speed the water assumes you are using when it leads
-## a chase. **The other half of the same fix**: a hunter that scaled to your
-## flagellum alone would be outrun by a gene it cannot see. Half, because you
-## are not pushing all of the time -- so a pushing cell is still faster than the
-## lead it is given, and a coasting one is over-led and easier to dodge. Both of
-## those are the right way round.
+## How much of the push's terminal speed the water assumes you are using when it
+## leads a chase. **The other half of the push's own measurement**: a hunter that
+## scaled to your tail alone would be outrun by a gene it cannot see. Half,
+## because you are not pushing all of the time -- so a pushing cell is still
+## faster than the lead it is given, and a coasting one is over-led and easier
+## to dodge. Both of those are the right way round.
 const PUSH_CHASE_SHARE := 0.5
 
-## `myoneme` / dash. A burst of speed for a tap, paid for in hunger -- a better
-## myoneme is a cheaper dash, not a bigger one, so it stays a decision.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const DASH_SPEED_BY_TIER: Array[float] = [0.0, 190.0, 240.0, 300.0]
-## **What a dash costs, as a share of a born cell's tank**: 2.2, 1.6 and 1.2 s
-## of rest. The run pays it as those seconds, through metabolism.gd's `spend`,
-## like every other cost, so `crista` makes it cheaper and a bigger `vacuole`
-## tank makes it a smaller share (gene-stats.md §11, owner's call 2, answered
-## *yes* on 2026-09-29). It was a fixed share of the bar that neither softened;
-## a born cell pays what it did.
-const DASH_COST_BY_TIER: Array[float] = [0.0, 0.060, 0.045, 0.032]
+## The dash's cooldown.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
 const DASH_COOLDOWN := 1.4
 ## A press shorter than this, that moved less than this far, is a tap and not a
@@ -404,41 +228,13 @@ const DASH_COOLDOWN := 1.4
 const TAP_SECONDS := 0.28
 const TAP_SLOP := 26.0
 
-## `pellicle` / armor. Your body as another cell's mouth measures it, so a gape
-## that could just swallow you no longer can.
-const ARMOR_BY_TIER: Array[float] = [1.0, 1.14, 1.30, 1.52]
-
-## `vacuole` / store. Hunger rises this much more slowly, because there is more
-## of you to run down.
-const STORE_BY_TIER: Array[float] = [1.0, 1.28, 1.60, 2.00]
-
-## `crista` / burn. A multiplier on upkeep, applied in genome.gd where upkeep is
-## computed -- the only gene that makes a strong build cheaper to carry.
-const BURN_BY_TIER: Array[float] = [1.0, 0.88, 0.77, 0.66]
-
-## `plastid` / sun. Passive feeding, as a fraction of one upkeep unit cancelled
-## outright. At tier 3 a third of a resting cell's hunger never happens.
-const SUN_BY_TIER: Array[float] = [0.0, 0.12, 0.22, 0.34]
-
-## `palp` / touch. How far the cell can feel a body with no light at all.
-const TOUCH_RANGE_BY_TIER: Array[float] = [0.0, 150.0, 230.0, 330.0]
-
-## `trichocyst` / sting. How close a cell hunting you gets before the dart goes
-## off, and how long before there is another one.
-const DART_RANGE_BY_TIER: Array[float] = [0.0, 130.0, 190.0, 260.0]
-const DART_COOLDOWN_BY_TIER: Array[float] = [0.0, 26.0, 18.0, 11.0]
-## **What a dart does to what it hits** (docs/design/behaviour.md §4.3): it rests
-## this long with its rules unread, and feels the dart as a `hit` at its
-## bearing. Today's darts broke off a run and left the hunter resting for the
-## same five seconds; with no run to break, the dart stuns. A starting value.
-const DART_STUN := 5.0
-
 # --- The toxin: venom outside, poison inside (docs/design/dna-slots.md §6, §7) --
 # **Doses replace both of what `veneneux` did** -- the bite-back share and the
 # swallower that died while the player was spat out. A dose is stacks that wear
 # off over seconds and act while they last, the owner's rule of 2026-09-30, and a
 # body carrying harm does not mend. Every value here is a starting value (§15):
-# balance waits for players.
+# balance waits for players. How many stacks each form delivers, by its copies,
+# is the toxin's own (game/genes/organs/toxin.gd).
 
 ## **The body a stack is quoted for**: a born cell. A load acts on any other body
 ## as `stacks x (DOSE_SIZE / r)^2` (doses.gd's `felt`).
@@ -455,10 +251,6 @@ const DOSE_TAU_BY_KIND: Array[float] = [6.0, 4.0, 8.0]
 ## **Below this a load is gone**, cleared whole: one stack lasts
 ## `6 x ln 5 = 9.7 s`, so a light dose stops a body mending for about ten.
 const DOSE_GONE := 0.2
-## `toxicyst` / **venom**, outside: the stacks its every bite leaves at the front,
-## and its every sting on a side, by copies. One a copy, which the line can say as
-## such. Armour does not stop them: they ride in whole.
-const VENOM_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
 ## **How far round its slot's bearing a venom on a side or the stern stings** a
 ## mouth that bites there: the dart's own arc, so the two weapons that guard a side
 ## reach as far round it.
@@ -467,34 +259,8 @@ const VENOM_ARC_DEG := 110.0
 ## there, and venom works through the bite alone: the switch, should the owner read
 ## *"the direction slots express outside"* as the mouth only (dna-slots.md §22.2).
 const VENOM_SIDES := true
-## `veneneux` / **poison**, inside: the stacks whatever bites the body takes, a
-## bite, by copies -- the price of chewing a poisonous cell, in place of the old
-## bite-back share.
-const POISON_STACKS_BY_TIER: Array[float] = [0.0, 1.0, 2.0, 3.0]
-## **And what whatever swallows it takes**, by copies: one copy takes 0.8 of a
-## born swallower, three kill anything up to r40. The swallowed body is eaten all
-## the same (owner's row 5): nobody is spat out any more.
-const SWALLOW_STACKS_BY_TIER: Array[float] = [0.0, 16.0, 32.0, 48.0]
-
-## `statocyst` / level used to be named here: it bought no number, only a lobe
-## on the membrane at a bearing that did not turn with the body. The owner
-## retired it on 2026-09-28 -- knowing which way is up said nothing about the
-## water -- and nothing replaced it.
-##
-## `rhabdom` / focus used to be named here beside it, for narrowing a lobe that
-## already existed. Both of the things it narrowed -- the taste lobe's width and
-## its bearing jitter -- went with three-senses.md §2, and the owner retired the
-## gene rather than re-aim it (§8 row 2). Nothing in this file replaced it.
 
 # --- Steering --------------------------------------------------------------
-## Flat out, the cell turns this fast, by `cirrus` tier. Tier 1 is about
-## 35 deg/s, so a half turn costs five seconds: slow on purpose. Tier 3 is
-## 58 deg/s, and §7.1 gives the whole of the improved dodge to this one number.
-## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
-const TURN_RATE_BY_TIER: Array[float] = [0.48, 0.62, 0.80, 1.02]
-## Seconds for the turn to actually build. The lag is what makes steering feel
-## like leaning on something rather than driving it; a better cirrus shortens it.
-const TURN_RESPONSE_BY_TIER: Array[float] = [1.43, 1.10, 0.85, 0.65]
 ## The water pushes back: a slow random walk on the heading the player never
 ## asked for and cannot switch off.
 ## The host's referee judges by this: change it with Wire.PROTOCOL and Wire.RULES (wire.gd).
@@ -519,7 +285,7 @@ const WANDER_TAU := 2.6
 ## flagellum, on the speed it gives, and a held push, on the speed it adds each
 ## frame. A tier-1 beat adds 117 u/s on average and costs 1.3 s of rest, and the
 ## flagellum beating on its own schedule comes to half again what a resting body
-## burns. The dash is not in it: `DASH_COST_BY_TIER` is its price, and it is
+## burns. The dash is not in it: the stat `dash_cost` is its price, and it is
 ## paid in the same seconds of rest, through the same `spend`, so `crista` and
 ## `vacuole` soften both alike.
 const STROKE_COST := 0.0113
@@ -561,8 +327,9 @@ const STEER_DEADZONE := 0.12
 ## **Under row 37** (docs/design/automation.md §5.3) a tail beats unless it is
 ## held, so `swim` claims the tail -- the `swimming` trigger -- and keeps a rule
 ## below it from holding it; and `rest` stops steering, the push and the dash
-## at every level, and holds the tail too only at [constant HOLD_LEVEL]. The
-## flagellum's own `hold` is `genome.gd`'s, declared at that level.
+## at every level, and holds the tail too only at the tail's hold level
+## ([method hold_level]). The tail's own `hold` is declared in its organ's file,
+## at that level.
 const DECLARES := {
 	&"body": {
 		"in": [{"name": &"hit", "bearing": true, "values": {&"strength": &"level"}}],
@@ -659,9 +426,21 @@ var _wander := 0.0
 var _impulse_timer := 0.0
 var _dash_timer := 0.0
 ## **Whether the tail was held still on this body's last step** -- by the hand,
-## at [constant HOLD_LEVEL] -- as [method _process] read it: what the views draw
+## at [method hold_level] -- as [method _process] read it: what the views draw
 ## still, and what the step that stopped the stroke clock decided.
 var _held := false
+## **What this body wears buys it, read once a body** ([method _bought_now]): the
+## genome and its body's version they were read off; stat to value, stat to the
+## organ that provides it and to its tier, channel to the organ that drives it;
+## and the realised speed and the tail's hold level, -1 until read.
+var _bought_from: Node = null
+var _bought_at: Variant = -1
+var _bought := {}
+var _providers := {}
+var _tiers := {}
+var _channels := {}
+var _swim := -1.0
+var _hold := -1
 ## Seconds of rest this body has spent moving since the run last took them
 ## ([method take_effort]).
 var _effort := 0.0
@@ -856,7 +635,7 @@ func _process(delta: float) -> void:
 	# that steers, because pushing and turning are things you do together and a
 	# second control would cost a pixel of screen the design does not have.
 	_dash_timer = maxf(_dash_timer - delta, 0.0)
-	var push := PUSH_ACCEL_BY_TIER[_tier_index(extra(&"axoneme"))]
+	var push := stat(&"push_accel")
 	# **A strength, not a yes or no** (automation.md §4.2): the hand's is full, and
 	# an instinct's a half or full, at that share of the thrust and of its price.
 	var strength := _push_strength()
@@ -882,7 +661,8 @@ func _fire_impulse() -> void:
 # ---------------------------------------------------------------------------
 # What the genome buys. Every one of these is a read, not a stored value: a
 # gene integrated mid-run has to take effect on the next frame, and a cached
-# copy is one more thing that can be stale when it matters.
+# copy is one more thing that can be stale when it matters. **Each is a stat**
+# (game/genes/stats.gd): the body's providers of it, at the copies it wears.
 # ---------------------------------------------------------------------------
 
 ## Tier of one gene, 1 if there is no genome attached yet -- the born cell is
@@ -899,106 +679,167 @@ func extra(gene: StringName) -> int:
 	return genome.tier(gene) if genome != null else 0
 
 
+## **What this body wears**, gene to copies: its genome's body, or the born
+## cell's while no genome is wired -- the cell a headless boot builds first,
+## which swims as Phase 4's did, tier 1 at its three home organs and nothing
+## else. Read it; do not write it.
+func worn() -> Dictionary:
+	return genome.tiers() if genome != null else Catalogue.born()
+
+
+## **This body's [param which]** (stats.gd): what it wears of the stat's
+## providers, combined -- `turn_rate`, `gape`, `armor`. Read off the stats once a
+## body ([method _bought_now]).
+func stat(which: StringName) -> float:
+	var bought := _bought_now()
+	var known: Variant = bought.get(which)
+	if known == null:
+		known = Stats.of(worn(), which)
+		bought[which] = known
+	return known
+
+
+## **The organ this body provides [param which] with**, `&""` for none: the mouth
+## is what provides `gape`, the ping what provides `ping_range`. Where a mechanic
+## needs the organ itself -- the arc it is worn on, its level -- it asks this,
+## never a name (gene-catalogue.md §5.2).
+func provider(which: StringName) -> StringName:
+	_bought_now()
+	var known: Variant = _providers.get(which)
+	if known == null:
+		known = Catalogue.worn_provider(worn(), which)
+		_providers[which] = known
+	return known
+
+
+## **The copies this body wears that organ at**, 0 for none: what a mechanic
+## indexes a table of its own by -- the membrane's envelopes, the ping's
+## resolution.
+func tier_for(which: StringName) -> int:
+	_bought_now()
+	var known: Variant = _tiers.get(which)
+	if known == null:
+		known = Stats.tier(worn(), which)
+		_tiers[which] = known
+	return known
+
+
+## **The organ this body drives membrane [param channel] with** (gene.gd's
+## channels), `&""` for none: how the shade finds the eyespot, which buys no
+## number of its own.
+func on_channel(channel: StringName) -> StringName:
+	_bought_now()
+	var known: Variant = _channels.get(channel)
+	if known == null:
+		known = Catalogue.worn_on(worn(), channel)
+		_channels[channel] = known
+	return known
+
+
+## **What this body wears buys it, read once a body** (docs/design/gene-catalogue.md
+## §15, as built 1a): every stat asked of it, by name -- and, beside, its organs
+## by stat and by channel, its tiers by stat, its realised speed and its tail's
+## hold level. The drive, the run and the water ask them every frame; what it
+## wears changes only when its genome expresses a body (`genome.gd`'s
+## `body_version`) or another genome is wired in, and then all of it is read
+## again, as it is asked. Returns the stats, emptied if they were stale.
+func _bought_now() -> Dictionary:
+	var version: Variant = genome.get(&"body_version") if genome != null else -1
+	if genome != _bought_from or version != _bought_at:
+		_bought_from = genome
+		_bought_at = version
+		_bought.clear()
+		_providers.clear()
+		_tiers.clear()
+		_channels.clear()
+		_swim = -1.0
+		_hold = -1
+	return _bought
+
+
 ## How wide this cell's mouth opens, in world units. Anything whose radius is
-## below this fits in it, and nothing else does.
+## below this fits in it, and nothing else does. [method gape_of]'s arithmetic,
+## its `gape` read once a body.
 func gape() -> float:
-	return gape_of(tier(&"cytostome"), radius)
+	return stat(&"gape") * radius
 
 
 ## **How big this body is to a mouth**, which `pellicle` makes larger than it
 ## looks. Every "can that eat me" test in the water reads this and not
 ## [member radius]; every "how much is that worth" test reads the radius, so
-## armour never made you a bigger meal.
+## armour never made you a bigger meal. [method swallow_radius_of]'s arithmetic,
+## its `armor` read once a body.
 func swallow_radius() -> float:
-	return swallow_radius_of(radius, extra(&"pellicle"))
+	return radius * stat(&"armor")
 
 
 ## [method swallow_radius] for a body that is not this node: its
-## [param body_radius] and its [param pellicle_tier]. In the drop every body's
+## [param body_radius] and what it wears, [param tiers]. In the drop every body's
 ## armour is asked this way, a water cell's as a player's (ocean.md §5.7, row 5).
-static func swallow_radius_of(body_radius: float, pellicle_tier: int) -> float:
-	return body_radius * ARMOR_BY_TIER[_tier_index(pellicle_tier)]
+static func swallow_radius_of(body_radius: float, tiers: Dictionary) -> float:
+	return body_radius * Stats.of(tiers, &"armor")
 
 
-## How far this cell's beams reach, 0 for a cell with no ocellus. Which way
+## How far this cell's beams reach, 0 for a cell with no beam. Which way
 ## they point is a question about the genome's *layout*, and it is asked where
 ## the arc table lives -- this file cannot preload cilia.gd, because
 ## cilia -> genome -> cell would be a preload cycle.
 func beam_range() -> float:
-	return float(beam_shape(beam_level(), beam_path())[3])
+	return float(beam_shape(beam_level(), beam_path(), provider(&"beam_range"))[3])
 
 
-## **The level this body's beam works at**, 0 for a body with no ocellus. The
+## **The level this body's beam works at**, 0 for a body with no beam. The
 ## level and not the copies (beam-levels.md §0 row 5), held at the fork until a
 ## path is taken.
 func beam_level() -> int:
-	if extra(&"ocellus") <= 0:
+	var beam := provider(&"beam_range")
+	if beam == &"":
 		return 0
-	return maxi(int(genome.level_of(&"ocellus")), 1)
+	return maxi(int(genome.level_of(beam)), 1)
 
 
 ## Which way this body's beam has grown past the fork, &"" before it has.
 func beam_path() -> StringName:
-	if extra(&"ocellus") <= 0:
+	var beam := provider(&"beam_range")
+	if beam == &"":
 		return &""
-	return StringName(genome.path_of(&"ocellus"))
+	return StringName(genome.path_of(beam))
 
 
 ## **The beam at [param level] down [param path]**: `[rays, half-span in
-## degrees, sweep in degrees a second, reach]`. Before the fork, and down a path
-## this build does not know, it is the old three-rung ladder, held at the top
-## rung. beam-levels.md §4.
-static func beam_shape(level: int, path: StringName) -> Array:
-	if level <= 0:
+## degrees, sweep in degrees a second, reach]`, as the organ that casts it --
+## [param beam], or the first that provides `beam_range` -- grows with its level
+## (`ocellus.gd`'s `shape_at`). No beam at all at level 0, or from an organ that
+## casts none. beam-levels.md §4.
+static func beam_shape(level: int, path: StringName, beam := &"") -> Array:
+	var organ := Catalogue.gene(beam if beam != &"" else Catalogue.first_provider(&"beam_range"))
+	if level <= 0 or organ == null or not organ.has_method(&"shape_at"):
 		return [0, 0.0, 0.0, 0.0]
-	var top := mini(BEAM_FORK_LEVEL, BEAM_COUNT_BY_TIER.size() - 1)
-	var rung := mini(level, top)
-	var reach: float = BEAM_RANGE_BY_TIER[rung]
-	var past := level - top
-	if past <= 0 or not BEAM_PATHS.has(path):
-		return [BEAM_COUNT_BY_TIER[rung], BEAM_FAN_DEG_BY_TIER[rung], 0.0, reach]
-	var half: float = BEAM_FAN_DEG_BY_TIER[top]
-	if path == &"sweep":
-		return [BEAM_COUNT_BY_TIER[top], half, BEAM_SWEEP_STEP_DEG * float(past),
-			reach]
-	return [mini(level, BEAM_RAYS_MAX), half, 0.0, reach]
-
-
-## **What the beam at [param level] down [param path] adds to the metabolic
-## multiplier**: x for every ray after the first, y for every degree a second
-## of sweep. beam-levels.md §5.
-static func beam_upkeep(level: int, path: StringName) -> float:
-	var shape := beam_shape(level, path)
-	return BEAM_RAY_COST * float(maxi(int(shape[0]) - 1, 0)) \
-		+ BEAM_SWEEP_COST * float(shape[2])
+	return organ.call(&"shape_at", level, path)
 
 
 ## **What a levelled gene adds to the metabolic multiplier**, in place of the
 ## `UPKEEP_PER_TIER` its copies used to cost. The genome asks this for every
-## gene in [constant LEVELLED] that the body wears; it is the one place a
-## level's price is looked up by name. -1 for a gene with no price of its own,
-## which the genome charges at the old per-tier rate, by level.
+## gene that earns levels the body wears, and the organ answers with its own
+## price (gene.gd's `upkeep_at`): the beam's is the beam's. -1 for a gene with no
+## price of its own, which the genome charges at the old per-tier rate, by level.
 static func levelled_upkeep(gene: StringName, level: int, path: StringName) -> float:
-	match gene:
-		&"ocellus":
-			return beam_upkeep(level, path)
-		_:
-			return -1.0
+	return Catalogue.upkeep_at(gene, level, path)
 
 
-## How far this cell can smell, 0 for a cell with no `chemocyte`.
+## How far this cell can smell, 0 for a cell with no nose.
 func smell_range() -> float:
-	return SMELL_RANGE_BY_TIER[_tier_index(extra(&"chemocyte"))]
+	return stat(&"smell_range")
 
 
-## How far a ping carries, 0 for a cell with no `ampulla`.
+## How far a ping carries, 0 for a cell with no organ that calls.
 func ping_range() -> float:
-	return PING_RANGE_BY_TIER[_tier_index(extra(&"ampulla"))]
+	return stat(&"ping_range")
 
 
-## Seconds between pings, 0 for a cell with no `ampulla`.
+## Seconds between pings, 0 for a cell with no organ that calls.
 func ping_period() -> float:
-	return PING_PERIOD_BY_TIER[_tier_index(extra(&"ampulla"))]
+	return stat(&"ping_period")
 
 
 ## How much of a pulse survives one body in the way, 0 at the first tier. Which
@@ -1006,16 +847,16 @@ func ping_period() -> float:
 ## where the arc table lives, exactly as the beam's bearing is -- this file
 ## cannot preload cilia.gd.
 func ping_through() -> float:
-	return PING_THROUGH_BY_TIER[_tier_index(extra(&"ampulla"))]
+	return stat(&"ping_through")
 
 
-## **The `ampulla` tier itself**, clamped to the tables, 0 for a cell with no
-## electroreceptor. The three above turn the tier into a distance, a period and
-## a fraction; the field needs the index as well, because how many bodies one
+## **The tier of the organ that calls**, clamped to its tables, 0 for a cell
+## with none. The three above turn the tier into a distance, a period and a
+## fraction; the field needs the index as well, because how many bodies one
 ## pulse answers for and how finely it reports each one are the organ's own
 ## resolution and not a property of anything in the water.
 func ping_tier() -> int:
-	return _tier_index(extra(&"ampulla"))
+	return tier_for(&"ping_range")
 
 
 ## How many genes this body can carry.
@@ -1024,28 +865,56 @@ func slots() -> int:
 
 
 func impulse_speed() -> float:
-	return IMPULSE_SPEED_BY_TIER[_tier_index(tier(&"flagellum"))]
+	return stat(&"impulse_speed")
 
 
 func impulse_gap_min() -> float:
-	return IMPULSE_GAP_MIN_BY_TIER[_tier_index(tier(&"flagellum"))]
+	return stat(&"impulse_gap_min")
 
 
 func impulse_gap_max() -> float:
-	return IMPULSE_GAP_MAX_BY_TIER[_tier_index(tier(&"flagellum"))]
+	return stat(&"impulse_gap_max")
 
 
-## **The level this body's tail works at**: `genome.gd`'s `level_of`, which for
-## the flagellum is its worn copies -- 1 for an unwired cell, which is the born
-## one. What [constant HOLD_LEVEL] is asked of.
+## **The level this body's tail works at**: `genome.gd`'s `level_of` of the
+## organ that beats, which for a tail is its worn copies -- 1 for an unwired cell,
+## which is the born one, and 0 for a body with no tail. What
+## [method hold_level] is asked of.
 func tail_level() -> int:
-	return int(genome.level_of(&"flagellum")) if genome != null else 1
+	if genome == null:
+		return 1
+	var tail := provider(&"impulse_speed")
+	return int(genome.level_of(tail)) if tail != &"" else 0
 
 
-## Whether this tail can be held still at all: at [constant HOLD_LEVEL] or more.
+## Whether this tail can be held still at all: at [method hold_level] or more.
 ## What draws the hold's control (controls.gd), and what its key and a rule ask.
 func can_hold() -> bool:
-	return tail_level() >= HOLD_LEVEL
+	_bought_now()
+	if _hold < 0:
+		_hold = hold_level(worn())
+	return tail_level() >= _hold
+
+
+## **The level a tail can be held still from**: the tail's own number
+## (`flagellum.gd`'s HOLD_LEVEL), of the organ that beats which [param tiers]
+## wears -- or of the first that beats, for a body that wears none. A held tail
+## does not beat, costs nothing and keeps its clock ([method _process]).
+## [constant HOLD_NEVER] once no organ beats at all.
+static func hold_level(tiers: Dictionary) -> int:
+	return int(Catalogue.number_for(tiers, &"impulse_speed", &"hold_level", HOLD_NEVER))
+
+
+## **The hold level with no organ that beats at all**, every one retired
+## (gene-catalogue.md §4.4): one no tail reaches, so nothing is ever held.
+const HOLD_NEVER := 1 << 16
+
+
+## **How long a dart stuns what it hits**, in seconds: the dart's own number
+## (`trichocyst.gd`'s DART_STUN), of the dart [param tiers] wears -- or of the
+## first organ that darts, for a body that wears none. 0 once no organ darts.
+static func dart_stun(tiers: Dictionary) -> float:
+	return float(Catalogue.number_for(tiers, &"dart_range", &"stun", 0.0))
 
 
 ## **Whether the tail is held still**, as this body's last step had it: what both
@@ -1062,28 +931,30 @@ func restore_held(on: bool) -> void:
 
 
 func turn_rate() -> float:
-	return TURN_RATE_BY_TIER[_tier_index(tier(&"cirrus"))]
+	return stat(&"turn_rate")
 
 
 func turn_response() -> float:
-	return TURN_RESPONSE_BY_TIER[_tier_index(tier(&"cirrus"))]
+	return stat(&"turn_response")
 
 
 ## The net speed this cell actually makes, which is what anything chasing it
 ## has to lead. §7.1: this replaces Phase 4's hard-coded 56.5, so the chase
 ## stays a chase at every tier and only `cirrus` improves the dodge.
 func swim_speed() -> float:
-	return swim_speed_of(tier(&"flagellum"), extra(&"axoneme"))
+	_bought_now()
+	if _swim < 0.0:
+		_swim = swim_speed_of(worn())
+	return _swim
 
 
 ## [method swim_speed] for a body that is not this node: the same arithmetic,
-## fed two tiers instead of a genome. **One definition with two callers** --
+## fed what it wears instead of a genome. **One definition with two callers** --
 ## a player in a shared pond is a body in the field, not a node here, and the
 ## water has to lead that chase exactly as it leads this one
 ## (shared-pond.md §1.2).
-static func swim_speed_of(flagellum: int, axoneme: int) -> float:
-	return speed_for(flagellum) + PUSH_CHASE_SHARE \
-		* PUSH_ACCEL_BY_TIER[_tier_index(axoneme)] / DRAG
+static func swim_speed_of(tiers: Dictionary) -> float:
+	return speed_of(tiers) + PUSH_CHASE_SHARE * Stats.of(tiers, &"push_accel") / DRAG
 
 
 # --- The same, for a cell that is not this one -----------------------------
@@ -1091,8 +962,10 @@ static func swim_speed_of(flagellum: int, axoneme: int) -> float:
 # a node. These are how it asks the same questions, so there is exactly one
 # definition of what a tier buys.
 
-static func gape_of(cytostome_tier: int, body_radius: float) -> float:
-	return GAPE_BY_TIER[_tier_index(cytostome_tier)] * body_radius
+## How wide the mouth of a body wearing [param tiers] opens, in world units: its
+## `gape` -- a multiple of its radius -- times [param body_radius].
+static func gape_of(tiers: Dictionary, body_radius: float) -> float:
+	return Stats.of(tiers, &"gape") * body_radius
 
 
 ## **What one bite is worth.** One definition, asked in both directions: the
@@ -1101,13 +974,14 @@ static func gape_of(cytostome_tier: int, body_radius: float) -> float:
 ##
 ## Three terms, and none of them is a new stat:
 ##
-## - the **tier** of the mouth doing it ([constant BITE_BY_TIER]);
+## - the **`bite`** of the mouth doing it -- its mouth's stat, [param bite];
 ## - **how near the target came to fitting in it** -- `gape / radius`, which is
 ##   1 for a body that has only just outgrown this mouth and falls away as it
 ##   grows. That is what keeps the bite continuous with the swallow instead of
 ##   making a mouth equally dangerous to everything it cannot eat;
-## - the target's **`pellicle`**, which already means "how hard this body is to
-##   get down" and now also means how much of a bite it turns away.
+## - the target's **`armor`** -- its `pellicle`'s, [param armor] -- which already
+##   means "how hard this body is to get down" and now also means how much of a
+##   bite it turns away.
 ##
 ## [param target_radius] is the body, not its swallow radius: armour is counted
 ## once, on the bottom of this expression, and counting it twice would make
@@ -1118,13 +992,12 @@ static func gape_of(cytostome_tier: int, body_radius: float) -> float:
 ## ahead and PI is dead astern. One definition, asked in both directions, so the
 ## water chewing on the player and the player chewing on the water read the same
 ## table. §1.2.
-static func bite_damage(cytostome_tier: int, gape: float, target_radius: float,
-		target_pellicle_tier: int, theta: float) -> float:
-	var base := BITE_BY_TIER[_tier_index(cytostome_tier)]
-	if base <= 0.0:
+static func bite_damage(bite: float, gape: float, target_radius: float,
+		armor: float, theta: float) -> float:
+	if bite <= 0.0:
 		return 0.0
-	return base * minf(gape / maxf(target_radius, 0.001), 1.0) * flank(theta) \
-		/ ARMOR_BY_TIER[_tier_index(target_pellicle_tier)]
+	return bite * minf(gape / maxf(target_radius, 0.001), 1.0) * flank(theta) \
+		/ armor
 
 
 ## How much of a bite arriving on bearing [param theta] actually lands. A
@@ -1147,18 +1020,14 @@ static func slots_for(body_radius: float) -> int:
 		SLOT_MIN, SLOT_MAX)
 
 
-static func turn_rate_for(cirrus_tier: int) -> float:
-	return TURN_RATE_BY_TIER[_tier_index(cirrus_tier)]
-
-
-static func speed_for(flagellum_tier: int) -> float:
-	var index := _tier_index(flagellum_tier)
-	var gap := (IMPULSE_GAP_MIN_BY_TIER[index] + IMPULSE_GAP_MAX_BY_TIER[index]) * 0.5
-	return IMPULSE_SPEED_BY_TIER[index] * IMPULSE_MEAN * SPREAD_LOSS / (DRAG * gap)
-
-
-static func _tier_index(value: int) -> int:
-	return clampi(value, 0, GAPE_BY_TIER.size() - 1)
+## **The realised speed of a body's tail**, from what it wears, [param tiers]:
+## one beat's speed at the beat's mean strength, over the mean gap, less what
+## the scatter costs -- its `impulse_speed` and `impulse_gap_min` and `_max`.
+## A body with no tail is the extrapolated tier 0 of them, as it always was.
+static func speed_of(tiers: Dictionary) -> float:
+	var gap := (Stats.of(tiers, &"impulse_gap_min") + Stats.of(tiers, &"impulse_gap_max")) \
+		* 0.5
+	return Stats.of(tiers, &"impulse_speed") * IMPULSE_MEAN * SPREAD_LOSS / (DRAG * gap)
 
 
 ## **How fast the heading is turning right now**, in radians a second: the
@@ -1434,7 +1303,7 @@ func _pushing() -> bool:
 ## automation-ux.md §6): `S` or `↓` held -- the opposite of `W` and `↑`, which
 ## push -- or the hold pad, which controls.gd draws under every scheme once the
 ## tail can be held. Held, not toggled, as push is: let go and the tail beats on
-## its own clock. Only asked of a tail at [constant HOLD_LEVEL] ([method
+## its own clock. Only asked of a tail at [method hold_level] ([method
 ## _process]), so at a level-1 tail the key does nothing. `S` and `↓` are read
 ## the way `W` and `↑` are, and a content pack adds no action for them.
 func _holding() -> bool:
@@ -1478,13 +1347,12 @@ func _dash() -> void:
 
 
 func _dash_now() -> void:
-	var tier := _tier_index(extra(&"myoneme"))
-	var speed := DASH_SPEED_BY_TIER[tier]
+	var speed := stat(&"dash_speed")
 	if speed <= 0.0 or _dash_timer > 0.0:
 		return
 	_dash_timer = DASH_COOLDOWN
 	velocity += forward() * speed
-	dashed.emit(DASH_COST_BY_TIER[tier])
+	dashed.emit(stat(&"dash_cost"))
 	impulsed.emit(1.0)
 
 

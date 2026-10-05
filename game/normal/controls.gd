@@ -53,7 +53,7 @@ const STARBOARD := 2
 const PUSH := 3
 const DASH := 4
 ## **The tail held still** (automation-ux.md §6): a pad of its own, held like
-## push, drawn only while the tail is at `cell.gd`'s HOLD_LEVEL.
+## push, drawn only while the tail is at its hold level (`cell.gd`'s `can_hold`).
 const HOLD := 5
 
 ## Draw and hit-test order. Never overlapping, so the order is only a
@@ -259,7 +259,7 @@ func setup(wells: Dictionary) -> void:
 ## is the pinch of a division, where the action pads go and the steering
 ## control stays; [param push], [param dash] and [param hold] are the genome --
 ## **a pad exists only when the organ that works it does**, and the hold only
-## while the tail is at `cell.gd`'s HOLD_LEVEL.
+## while the tail is at its hold level (`cell.gd`'s `can_hold`).
 func update(shown: bool, quiet: bool, push: bool, dash: bool, hold: bool) -> void:
 	var acting := not quiet
 	if visible == shown and _acting == acting and _has_push == push \

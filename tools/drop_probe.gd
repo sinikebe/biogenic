@@ -168,6 +168,10 @@ const Drop := preload("res://game/normal/drop.gd")
 const Metabolism := preload("res://game/normal/metabolism.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 const GenomeNode := preload("res://game/normal/genome.gd")
+## The genes and their numbers by stat (docs/design/gene-catalogue.md): the
+## water's lists, the born body, and every table a check reads.
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 const FoodField := preload("res://game/normal/food.gd")
 const FrameReadout := preload("res://game/dev/frame_readout.gd")
 const MotesField := preload("res://game/normal/motes.gd")
@@ -401,7 +405,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	## tried ([method _divide]).
 	func _given(d: Body) -> Array:
 		var senses: Array[StringName] = []
-		for gene: StringName in SENSE_GENES:
+		for gene: StringName in Catalogue.tagged(Catalogue.SENSE):
 			if Genome.tier_of(d.genome, gene) > 0:
 				senses.append(gene)
 		if senses.size() != 1 or int(d.genome[senses[0]]) != 1 \
@@ -456,7 +460,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	func _judge_body(d: Body, gift: Array) -> void:
 		var senses: Array[StringName] = []
 		for gene: StringName in d.genome:
-			if SENSE_GENES.has(gene):
+			if Catalogue.tagged(Catalogue.SENSE).has(gene):
 				senses.append(gene)
 		for gene: StringName in d.genome:
 			var given := gift.has(gene) or (senses.size() == 1 and senses[0] == gene
@@ -472,7 +476,8 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			_fault("born blind: %s" % str(d.genome), true)
 		for gene: StringName in d.dna:
 			var copies := int(d.dna[gene])
-			if gene == &"cytostome" or SENSE_GENES.has(gene) or copies < 1 or copies > 3:
+			if gene == &"cytostome" or Catalogue.tagged(Catalogue.SENSE).has(gene) \
+					or copies < 1 or copies > 3:
 				continue
 			rolled[copies] += 1
 			if d.genome.has(gene):
@@ -548,16 +553,20 @@ class WatchedDrop extends "res://game/normal/food.gd":
 	## the tables -- and no burst without a `myoneme`.
 	func _move_ruled(b: Body, delta: float) -> void:
 		var g := b.genome
-		var most := maxf(CellBody.speed_for(Genome.tier_of(g, &"flagellum")), DRIFT_SPEED) \
-			+ CellBody.PUSH_ACCEL_BY_TIER[clampi(Genome.tier_of(g, &"axoneme"), 0, 3)] \
-			/ CellBody.DRAG + b.dash_v
 		var burst := b.dash_v > 0.0 and Genome.tier_of(g, &"myoneme") <= 0
 		var effort := b.effort
 		var dash := b.dash_v
 		super._move_ruled(b, delta)
 		moves += 1
-		if b.speed > most + 1e-3:
-			fast_moves += 1
+		# Read off the genome by the tables, not off the body's own fields: the
+		# bound is the check. Only for a body that moved faster than the drift
+		# and its dash, which the bound is never under -- a resting body, most of
+		# them, needs no reading.
+		if b.speed > DRIFT_SPEED + dash + 1e-3:
+			var most := maxf(CellBody.speed_of(g), DRIFT_SPEED) \
+				+ Stats.of(g, &"push_accel") / CellBody.DRAG + dash
+			if b.speed > most + 1e-3:
+				fast_moves += 1
 		if burst:
 			bursts += 1
 		var paid := b.effort - effort
@@ -567,7 +576,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 				drifter_moved += 1
 		elif b.resting and b.stun <= 0.0 and dash == 0.0:
 			rest_steps += 1
-			if tails_beat and b.tail_level < CellBody.HOLD_LEVEL:
+			if tails_beat and b.tail_level < CellBody.hold_level(b.genome):
 				if absf(b.speed - b.tail) < 1e-6 \
 						and absf(paid - CellBody.stroke_cost(b.tail) * delta) < 1e-9:
 					rest_swam += 1
@@ -600,10 +609,10 @@ class WatchedDrop extends "res://game/normal/food.gd":
 		var size: float = _cell.radius if target == TARGET_PLAYER else _cells[target].radius
 		var floc: bool = target != TARGET_PLAYER and _cells[target].inert
 		var g := b.genome
-		var smell: float = CellBody.SMELL_RANGE_BY_TIER[Genome.tier_of(g, &"chemocyte")]
-		var ping: float = CellBody.PING_RANGE_BY_TIER[Genome.tier_of(g, &"ampulla")]
-		var beam: float = CellBody.BEAM_RANGE_BY_TIER[Genome.tier_of(g, &"ocellus")]
-		var touch: float = CellBody.TOUCH_RANGE_BY_TIER[Genome.tier_of(g, &"palp")]
+		var smell := Stats.of(g, &"smell_range")
+		var ping := Stats.of(g, &"ping_range")
+		var beam := Stats.of(g, &"beam_range")
+		var touch := Stats.of(g, &"touch_range")
 		var eye := SHADOW_RANGE if Genome.tier_of(g, &"stigma") > 0 else 0.0
 		var d := b.pos.distance_to(at)
 		var found := d <= b.radius + size
@@ -637,7 +646,7 @@ class WatchedDrop extends "res://game/normal/food.gd":
 			if b.seeded and not b.inert:
 				for gene: StringName in b.genome:
 					carriers[gene] = int(carriers.get(gene, 0)) + 1
-		for gene: StringName in DRIFTER_GENES:
+		for gene: StringName in Catalogue.drifters():
 			var n := int(carriers.get(gene, 0))
 			if n == 0:
 				lost_genes += 1
@@ -1156,13 +1165,12 @@ func _drop() -> void:
 		and drop.meniscus.center == OFF_CENTRE and drop.meniscus.radius == Drop.RADIUS)
 	# The hide reach (§6.3), for a born cell with each free sense.
 	var reaches := PackedFloat32Array()
-	for sense: StringName in FoodField.SENSE_GENES:
+	for sense: StringName in Catalogue.tagged(Catalogue.SENSE):
 		var tiers := {sense: 1}
-		var senses := maxf(maxf(CellBody.SMELL_RANGE_BY_TIER[GenomeNode.tier_of(tiers,
-			&"chemocyte")], CellBody.PING_RANGE_BY_TIER[GenomeNode.tier_of(tiers,
-			&"ampulla")]), CellBody.BEAM_RANGE_BY_TIER[GenomeNode.tier_of(tiers, &"ocellus")])
+		var senses := maxf(maxf(Stats.of(tiers, &"smell_range"), Stats.of(tiers, &"ping_range")),
+			Stats.of(tiers, &"beam_range"))
 		reaches.append(Drop.hide_reach(senses, FoodField.DREAD_RANGE, false))
-	var peer := Drop.hide_reach(CellBody.PING_RANGE_BY_TIER[1], FoodField.DREAD_RANGE, true)
+	var peer := Drop.hide_reach(Stats.at(&"ping_range", 1), FoodField.DREAD_RANGE, true)
 	var low := reaches[0]
 	var high := reaches[0]
 	for reach in reaches:
@@ -1172,7 +1180,7 @@ func _drop() -> void:
 		% [low, high] + " %.0f -- §6.3's 1,050 to 1,200 and 1,500" % peer,
 		absf(low - 1049.0) < 0.5 and high == 1200.0 and peer == 1500.0)
 	# What is short.
-	var genes := FoodField.DRIFTER_GENES.duplicate()
+	var genes := Catalogue.drifters().duplicate()
 	var counts := {}
 	for gene: StringName in genes:
 		counts[gene] = 5
@@ -1195,30 +1203,30 @@ func _drop() -> void:
 	_check("new bodies are made for the players in turn: %s" % str(turns),
 		turns == [0, 1, 0, 0, 0])
 	# What a new body is made of (§5.8).
-	var pool := Drop.drifter_genes(FoodField.DRIFTER_GENES)
+	var pool := Drop.drifter_genes(Catalogue.drifters())
 	_check("a drifter draws its gene from %d of the %d, all but the toxin in either form"
-		% [pool.size(), FoodField.DRIFTER_GENES.size()], not pool.has(Drop.TOXIN)
-		and not pool.has(&"toxicyst") and pool.size() == FoodField.DRIFTER_GENES.size() - 1)
+		% [pool.size(), Catalogue.drifters().size()], not pool.has(Drop.TOXIN)
+		and not pool.has(&"toxicyst") and pool.size() == Catalogue.drifters().size() - 1)
 	var plan := Drop.peer_plan()
 	var blind := {&"cytostome": 2, &"cirrus": 1, &"flagellum": 3}
-	var given := Drop.give_sense(blind, FoodField.SENSE_GENES, 7)
+	var given := Drop.give_sense(blind, Catalogue.tagged(Catalogue.SENSE), 7)
 	var sighted := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"stigma": 2}
-	var again := Drop.give_sense(sighted, FoodField.SENSE_GENES, 7)
+	var again := Drop.give_sense(sighted, Catalogue.tagged(Catalogue.SENSE), 7)
 	_check("a peer starts from a born cell's plan %s; a blind one is given %s at tier 1," % [
 		str(plan), str(blind.keys().slice(3))] + " a sighted one nothing",
 		plan == [&"cytostome", &"cirrus", &"flagellum"] and given and not again
-		and blind.size() == 4 and int(blind[FoodField.SENSE_GENES[3]]) == 1
+		and blind.size() == 4 and int(blind[Catalogue.tagged(Catalogue.SENSE)[3]]) == 1
 		and sighted.size() == 4)
 	# **The toxin back through a peer, at either place** (dna-slots.md §9, §20.3
 	# check 8): venom takes an arc as the old gene did, poison takes none.
 	var full := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_toxin(full, 5, FoodField.SENSE_GENES, 3, false)
+	Drop.give_toxin(full, 5, Catalogue.tagged(Catalogue.SENSE), 3, false)
 	var bare := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
-	Drop.give_toxin(bare, 3, FoodField.SENSE_GENES, 3, false)
+	Drop.give_toxin(bare, 3, Catalogue.tagged(Catalogue.SENSE), 3, false)
 	var inside := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"ampulla": 1, &"crista": 2}
-	Drop.give_toxin(inside, 5, FoodField.SENSE_GENES, 3, true)
+	Drop.give_toxin(inside, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
 	var carried := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1, &"toxicyst": 2}
-	Drop.give_toxin(carried, 5, FoodField.SENSE_GENES, 3, true)
+	Drop.give_toxin(carried, 5, Catalogue.tagged(Catalogue.SENSE), 3, true)
 	_check("venom back through a full peer takes a spare slot, never the plan or a sense"
 		+ " (%s); with none spare, a bonus one (%s); poison takes no slot (%s); and a"
 		% [str(full.keys()), str(bare.keys()), str(inside.keys())]
@@ -1344,7 +1352,7 @@ func _drop() -> void:
 		flocs = Vector2(minf(flocs.x, fr), maxf(flocs.y, fr))
 		var fl := Drop.floc_life()
 		lives = Vector2(minf(lives.x, fl), maxf(lives.y, fl))
-	var gape := CellBody.gape_of(1, CellBody.BASE_RADIUS)
+	var gape := CellBody.gape_of(Catalogue.born(), CellBody.BASE_RADIUS)
 	_check(("a body made in play starts fed (%s), one of a first fill at %.2f to %.2f; a"
 		+ " floc is %.1f to %.1f µm, inside a born cell's gape of %.1f, and lasts %.0f to"
 		+ " %.0f s") % [str(fed), made.x, made.y, flocs.x, flocs.y, gape, lives.x, lives.y],
@@ -1383,17 +1391,17 @@ func _drop() -> void:
 func _lod() -> void:
 	var widest := CellBody.DIVIDE_RADIUS
 	var ping := 0.0
-	for reach: float in CellBody.PING_RANGE_BY_TIER:
+	for reach: float in Stats.table(&"ping_range"):
 		ping = maxf(ping, reach)
 	var beam := 0.0
 	for level in range(1, 13):
 		for path: StringName in [&"", &"extend", &"sweep"]:
 			beam = maxf(beam, float(CellBody.beam_shape(level, path)[3]))
 	var smell := 0.0
-	for reach: float in CellBody.SMELL_RANGE_BY_TIER:
+	for reach: float in Stats.table(&"smell_range"):
 		smell = maxf(smell, reach)
 	var touch := 0.0
-	for reach: float in CellBody.TOUCH_RANGE_BY_TIER:
+	for reach: float in Stats.table(&"touch_range"):
 		touch = maxf(touch, reach)
 	var others := {"scent": FoodField.SCENT_RANGE, "smell": smell,
 		"dread": FoodField.DREAD_RANGE, "beam": beam, "touch": touch,
@@ -1437,14 +1445,14 @@ func _tank() -> void:
 	var high := 0.0
 	var frames := 3600
 	var dt := 1.0 / 60.0
-	var dash := CellBody.DASH_COST_BY_TIER[1] * Metabolism.HUNGER_SECONDS
+	var dash := Stats.at(&"dash_cost", 1) * Metabolism.HUNGER_SECONDS
 	for tiers: Dictionary in genomes:
 		var met: Node = Metabolism.new()
 		met.upkeep = GenomeNode.upkeep_of(tiers)
-		met.reserve = CellBody.STORE_BY_TIER[GenomeNode.tier_of(tiers, &"vacuole")]
-		met.photosynthesis = CellBody.SUN_BY_TIER[GenomeNode.tier_of(tiers, &"plastid")] \
+		met.reserve = Stats.of(tiers, &"store")
+		met.photosynthesis = Stats.of(tiers, &"sun") \
 			+ (Metabolism.ABSORB if GenomeNode.tier_of(tiers, &"cytostome") == 0 else 0.0)
-		met.burn = CellBody.BURN_BY_TIER[GenomeNode.tier_of(tiers, &"crista")]
+		met.burn = Stats.of(tiers, &"burn")
 		met.set_hunger(0.3)
 		var index := _pose(field, Vector2(1500.0, 0.0), 30.0, tiers, 0.0, 0.3)
 		var tank: Object = (field.get("_cells") as Array)[index]
@@ -1489,19 +1497,18 @@ func _tank() -> void:
 	# A body with no mouth at rest: every drifter the water makes holds its tank,
 	# neither burning it nor -- with light or a mitochondrion to spare -- filling it.
 	var starving := PackedStringArray()
-	for gene: StringName in Drop.drifter_genes(FoodField.DRIFTER_GENES):
+	for gene: StringName in Drop.drifter_genes(Catalogue.drifters()):
 		var tiers := {gene: 1}
 		var rate := Metabolism.rest_rate(GenomeNode.upkeep_of(tiers),
-			CellBody.SUN_BY_TIER[GenomeNode.tier_of(tiers, &"plastid")] + Metabolism.ABSORB,
-			CellBody.STORE_BY_TIER[GenomeNode.tier_of(tiers, &"vacuole")])
+			Stats.of(tiers, &"sun") + Metabolism.ABSORB, Stats.of(tiers, &"store"))
 		if rate != 0.0:
 			starving.append(str(gene))
 	# And §5.3's number: a born cell without its mouth, absorbing, steering a
 	# third of the time, is empty at about 46 s.
-	var gap := (CellBody.IMPULSE_GAP_MIN_BY_TIER[1] + CellBody.IMPULSE_GAP_MAX_BY_TIER[1]) * 0.5
-	var beating := CellBody.IMPULSE_SPEED_BY_TIER[1] * CellBody.IMPULSE_MEAN \
+	var gap := (Stats.at(&"impulse_gap_min", 1) + Stats.at(&"impulse_gap_max", 1)) * 0.5
+	var beating := Stats.at(&"impulse_speed", 1) * CellBody.IMPULSE_MEAN \
 		* CellBody.STROKE_COST / gap
-	var turning := CellBody.TURN_RATE_BY_TIER[1] * CellBody.TURN_COST
+	var turning := Stats.at(&"turn_rate", 1) * CellBody.TURN_COST
 	var mouthless := {&"cirrus": 1, &"flagellum": 1, &"chemocyte": 1}
 	var per_second := Metabolism.rest_rate(GenomeNode.upkeep_of(mouthless), Metabolism.ABSORB,
 		1.0) / Metabolism.HUNGER_SECONDS + Metabolism.effort_cost(beating + turning / 3.0, 1.0,
@@ -1509,7 +1516,7 @@ func _tank() -> void:
 	_check(("a mouthless body at rest neither starves nor fills: %d of %d drifter genes burn"
 		+ " or gain anything (%s); a born cell without its mouth is empty at %.1f s --"
 		+ " §5.3's 46") % [
-		starving.size(), Drop.drifter_genes(FoodField.DRIFTER_GENES).size(),
+		starving.size(), Drop.drifter_genes(Catalogue.drifters()).size(),
 		", ".join(starving), 1.0 / per_second],
 		starving.is_empty() and absf(1.0 / per_second - 46.0) < 1.0)
 	# The tank's arithmetic at its edges: nothing spent costs nothing, a body
@@ -1576,7 +1583,7 @@ func _pose(field: Node, at: Vector2, radius: float, tiers: Dictionary, facing :=
 	b.set("brain", _list(RESTING))
 	b.set("resting", true)
 	b.set("tail_held", bool(field.get("tails_beat"))
-		and int(b.get("tail_level")) >= CellBody.HOLD_LEVEL)
+		and int(b.get("tail_level")) >= CellBody.hold_level(b.get("genome")))
 	return index
 
 
@@ -1620,7 +1627,7 @@ func _spawns() -> void:
 	var field: WatchedDrop = water[0]
 	var cell: CellBody = water[1]
 	field.births = false
-	field.ping_range = CellBody.PING_RANGE_BY_TIER[1]
+	field.ping_range = Stats.at(&"ping_range", 1)
 	var hides := [Drop.hide_reach(field.ping_range, FoodField.DREAD_RANGE, false),
 		Drop.hide_reach(field.ping_range, FoodField.DREAD_RANGE, true)]
 	var cells: Array = field.get("_cells")
@@ -2049,7 +2056,7 @@ func _lineage() -> void:
 	var fed := enough
 	# Every gene by its variety, as [method _lineage_look] counts them.
 	var varieties := {}
-	for gene: StringName in GenomeNode.GENE_ORDER:
+	for gene: StringName in Catalogue.live():
 		varieties[GenomeNode.variety(gene)] = true
 	for run: Dictionary in composed:
 		for kind: Variant in run["made_kinds"]:
@@ -2709,7 +2716,7 @@ func _one_body() -> void:
 		float(pb.get("dart_clock")) > 0.0]
 	# The taste and the bloom, by the size the mouth measures: an r18 body 300
 	# ahead, bare and then with a thick skin that puts it past a born gape.
-	field.smell_range = CellBody.SMELL_RANGE_BY_TIER[1]
+	field.smell_range = Stats.at(&"smell_range", 1)
 	field.smell_bearing = 0.0
 	var tasted := []
 	var bloom := []
@@ -2739,9 +2746,9 @@ func _one_body() -> void:
 		str(venom_in[0]), venom_in[1], venom_in[2], str(venom_in[3]), venom_in[4],
 		"dosed, then eaten" if venom_in[5] else "OUT OF ORDER"],
 		venom_out[0] and venom_out[1] == 2 and venom_out[2]
-		and is_equal_approx(venom_out[3], CellBody.SWALLOW_STACKS_BY_TIER[3]) and venom_out[4]
+		and is_equal_approx(venom_out[3], Stats.at(&"swallow_stacks", 3)) and venom_out[4]
 		and venom_in[0] and venom_in[1] == 1 and venom_in[2] == 2 and venom_in[3]
-		and is_equal_approx(venom_in[4], CellBody.SWALLOW_STACKS_BY_TIER[3]) and venom_in[5])
+		and is_equal_approx(venom_in[4], Stats.at(&"swallow_stacks", 3)) and venom_in[5])
 	_check(("11. pellicle: an r24 body with a tier-3 skin is chewed by a mouth of %.1f"
 		+ " (%s), the same body bare is swallowed (%s); a water cell's dart breaks a run"
 		+ " at it (%s); the taste %.3f bare and %.3f armoured, the bloom %.2f and %.2f")
@@ -2950,11 +2957,10 @@ func _replay_bubble() -> void:
 				continue
 			var b: Object = cells[s]
 			var p: Vector2 = b.get("pos")
-			# The gape as the recorder has always written it: its tier's
+			# The gape as the recorder has always written it: its `gape`
 			# multiplier, held as a float, times the radius.
 			var r := float(b.get("radius"))
-			var gape := _f32(_f32(CellBody.gape_of(GenomeNode.tier_of(b.get("genome"),
-				&"cytostome"), 1.0)) * r)
+			var gape := _f32(_f32(CellBody.gape_of(b.get("genome"), 1.0)) * r)
 			if indices[s] != s or ring[o] != _f32(p.x) or ring[o + 1] != _f32(p.y) \
 					or ring[o + 2] != _f32(float(b.get("heading"))) or ring[o + 3] != _f32(r) \
 					or ring[o + 4] != _f32(float(b.get("wound"))) or ring[o + 5] != gape:
@@ -3562,11 +3568,9 @@ func _save_rules() -> void:
 	var f: Object = cells[slots[far]]
 	var g: Dictionary = b.get("genome")
 	var derived := is_equal_approx(float(b.get("upkeep")), GenomeNode.upkeep_of(g)) \
-		and float(b.get("cruise")) == CellBody.swim_speed_of(
-			GenomeNode.tier_of(g, &"flagellum"), GenomeNode.tier_of(g, &"axoneme")) \
+		and float(b.get("cruise")) == CellBody.swim_speed_of(g) \
 		and float(b.get("cruise")) > 0.0 \
-		and float(b.get("reserve")) == CellBody.STORE_BY_TIER[clampi(
-			GenomeNode.tier_of(g, &"vacuole"), 0, 3)]
+		and float(b.get("reserve")) == Stats.of(g, &"store")
 	var inside: bool = (field2.basin() as Object).call(&"inside", f.get("pos"), f.get("radius"))
 	_check(("12. a changed rules: a drop written under rules %s loads under %s, every body"
 		+ " re-derived from its genome (%s); a body at r%.0f trimmed to r%.2f, one %.0f past"
@@ -5651,18 +5655,18 @@ func _membrane_digest(rules: bool) -> String:
 	add_child(field)
 	field.setup_drop(cell)
 	field.in_water = true
-	field.smell_range = CellBody.SMELL_RANGE_BY_TIER[2]
+	field.smell_range = Stats.at(&"smell_range", 2)
 	field.smell_bearing = 0.95
-	field.beam_range = CellBody.BEAM_RANGE_BY_TIER[2]
+	field.beam_range = Stats.at(&"beam_range", 2)
 	field.beam_bearings = PackedFloat32Array([-0.94, -0.62, -0.31])
 	field.beam_fan_mid = -0.62
 	field.beam_fan_half = 0.4
-	field.ping_range = CellBody.PING_RANGE_BY_TIER[1]
-	field.ping_period = CellBody.PING_PERIOD_BY_TIER[1]
+	field.ping_range = Stats.at(&"ping_range", 1)
+	field.ping_period = Stats.at(&"ping_period", 1)
 	field.ping_bearing = -2.3
-	field.ping_through = CellBody.PING_THROUGH_BY_TIER[1]
+	field.ping_through = Stats.at(&"ping_through", 1)
 	field.ping_tier = 1
-	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[2]
+	field.touch_range = Stats.at(&"touch_range", 2)
 	var start := cell.position
 	var hash := HashingContext.new()
 	hash.start(HashingContext.HASH_SHA256)
@@ -5766,7 +5770,7 @@ func _shared_senses() -> void:
 		near[6] and near[7] and near[8] and near[9] and near[10] and far[10]
 		and float(yours[0]) > 0.05 and float(yours[1]) > 0.0 and float(yours[3]) > 0.0
 		and (near[4] as Array).size() >= 2 and (near[5] as Array).size() >= 2
-		and calls_far.size() >= 2 and deepest > 0.5 * CellBody.PING_RANGE_BY_TIER[1])
+		and calls_far.size() >= 2 and deepest > 0.5 * Stats.at(&"ping_range", 1))
 	_done(water)
 	genome.free()
 	seed(20260930)
@@ -5785,8 +5789,8 @@ func _your_organs(field: WatchedDrop, cell: CellBody, tiers: Dictionary) -> Node
 		laser.set("xp", laser.call("xp_at", int(tiers.get(&"ocellus", 0)),
 			float(laser.get("step"))))
 	cell.genome = genome
-	field.touch_range = CellBody.TOUCH_RANGE_BY_TIER[mini(cell.extra(&"palp"),
-		CellBody.TOUCH_RANGE_BY_TIER.size() - 1)]
+	field.touch_range = Stats.at(&"touch_range", mini(cell.extra(&"palp"),
+		Stats.table(&"touch_range").size() - 1))
 	field.smell_range = cell.smell_range()
 	field.smell_bearing = Cilia.bearing_of(genome, &"chemocyte")
 	field.ping_range = cell.ping_range()
@@ -5946,8 +5950,8 @@ func _no_magic() -> void:
 	var silent := straight.all(func(one: Array) -> bool: return one.is_empty())
 	# Everything the water cell's organs do not reach, changed.
 	var before := _readings(field, w)
-	var reach := maxf(maxf(CellBody.SMELL_RANGE_BY_TIER[2], CellBody.PING_RANGE_BY_TIER[2]),
-		maxf(CellBody.BEAM_RANGE_BY_TIER[2], FoodField.SHADOW_RANGE)) + 2.0 * Drop.GRID_SLACK \
+	var reach := maxf(maxf(Stats.at(&"smell_range", 2), Stats.at(&"ping_range", 2)),
+		maxf(Stats.at(&"beam_range", 2), FoodField.SHADOW_RANGE)) + 2.0 * Drop.GRID_SLACK \
 		+ CellBody.DIVIDE_RADIUS
 	var taken := 0
 	for i in cells.size():
@@ -6041,9 +6045,9 @@ func _coming_for_you() -> void:
 		field.take_out(k)
 	# Your dart, ready and facing ahead, 200 ahead of you: the first is darted --
 	# and is on a list that turns away from a hit -- and watched through its stun.
-	field.dart_range = CellBody.DART_RANGE_BY_TIER[3]
+	field.dart_range = Stats.at(&"dart_range", 3)
 	field.dart_bearing = 0.0
-	field.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[3]
+	field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
 	var yours := []
 	var stunned_for := 0.0
 	var reads_stunned := 0
@@ -6100,11 +6104,11 @@ func _coming_for_you() -> void:
 		+ " deg %d, too small to take you %d; your dart at them %s; a trichocyst in the water at"
 		+ " them %s (fired, stunned); the dart's stun %.3f s (DART_STUN %.0f), %d reads while"
 		+ " stunned, and on its first tick after it turned away from the dart: %s") % [
-		felt[0], felt[1], felt[2], str(yours), str(theirs), stunned_for, CellBody.DART_STUN,
+		felt[0], felt[1], felt[2], str(yours), str(theirs), stunned_for, CellBody.dart_stun({}),
 		reads_stunned, str(turned)],
 		felt[0] >= 1 and felt[1] == 0 and felt[2] == 0 and yours == [1, 0, 0]
 		and theirs == [[true, true], [false, false], [false, false]]
-		and absf(stunned_for - CellBody.DART_STUN) <= 1.5 / 60.0 and reads_stunned == 0
+		and absf(stunned_for - CellBody.dart_stun({})) <= 1.5 / 60.0 and reads_stunned == 0
 		and turned)
 	_done(water)
 	seed(20260930)
@@ -7026,7 +7030,7 @@ func _tail_strokes() -> void:
 		var closest := INF
 		for n in range(1, strokes.size()):
 			closest = minf(closest, float(int(strokes[n]) - int(strokes[n - 1])) / 60.0)
-		var floor_gap: float = CellBody.IMPULSE_GAP_MIN_BY_TIER[tier]
+		var floor_gap: float = Stats.at(&"impulse_gap_min", tier)
 		var at_held := 0
 		for f: int in strokes:
 			at_held += 1 if pattern[f] == 1 else 0
@@ -7132,7 +7136,7 @@ func _tail_water() -> void:
 			cells[i].set("ate_at", float(field.get("_t")))
 		for i: int in [stun_one, stun_two]:
 			cells[i].set("brain", _list(["always -> body.swim"]))
-			field._stun(cells[i], p)
+			field._stun(cells[i], p, CellBody.dart_stun({}))
 		seen.append(_tail_watch(field, [one, two, drifter, stun_one, stun_two], 2 * 60))
 		_done(water)
 	seed(20260930)
@@ -7197,9 +7201,9 @@ func _tail_coming() -> void:
 			field._process(1.0 / 60.0)
 		felt.append(wakes[0])
 		field.take_out(k)
-		field.dart_range = CellBody.DART_RANGE_BY_TIER[3]
+		field.dart_range = Stats.at(&"dart_range", 3)
 		field.dart_bearing = 0.0
-		field.dart_cooldown = CellBody.DART_COOLDOWN_BY_TIER[3]
+		field.dart_cooldown = Stats.at(&"dart_cooldown", 3)
 		field.set("_dart_clock", 999.0)
 		at = p + Vector2(0.0, -200.0)
 		k = _pose(field, at, 38.0, each[0], _facing(at, p) + deg_to_rad(15.0), 0.6)
@@ -7246,7 +7250,7 @@ func _tail_level_three() -> void:
 	seed(57)
 	var everybody := {&"body": true, &"metabolism": true}
 	var vocab: RefCounted = Rulebook.vocabulary([CellBody.DECLARES, Metabolism.DECLARES,
-		GenomeNode.DECLARES, LEVEL_THREE])
+		Catalogue.declares(), LEVEL_THREE])
 	var list: RefCounted = Rulebook.from_lines(PackedStringArray(["lamella.sheen level above 0.1"
 		+ " -> body.swim", "always -> lamella.flare"]), vocab)
 	var fired := []
@@ -8077,7 +8081,7 @@ func _instincts_push_dash() -> void:
 			>= CellBody.DASH_COOLDOWN - 1e-6
 	var priced := true
 	for one: Array in dashes:
-		priced = priced and float(one[1]) == CellBody.DASH_COST_BY_TIER[1]
+		priced = priced and float(one[1]) == Stats.at(&"dash_cost", 1)
 	_own_done(player)
 	# Without their organs, neither.
 	player = _own_player({&"cytostome": 1, &"cirrus": 1, &"flagellum": 1})
@@ -9101,7 +9105,7 @@ func _dna_moves() -> void:
 func _dna_random() -> void:
 	seed(20261003)
 	var genes: Array[StringName] = []
-	genes.assign(GenomeNode.GENE_ORDER)
+	genes.assign(Catalogue.live())
 	var g := _dna_genome(40.0)
 	var cell: CellBody = g.get("_cell")
 	var done := {"meal": 0, "place": 0, "move": 0, "refused": 0, "lapse": 0, "mutation": 0,
@@ -9375,9 +9379,9 @@ func _dna_deliveries() -> void:
 	var fired := [0, 0, 0]
 	field.toxin_fired.connect(func(how: int) -> void: fired[how] += 1)
 	var copies := 2
-	var venom_n := CellBody.VENOM_STACKS_BY_TIER[copies]
-	var poison_n := CellBody.POISON_STACKS_BY_TIER[copies]
-	var swallow_n := CellBody.SWALLOW_STACKS_BY_TIER[copies]
+	var venom_n := Stats.at(&"venom_stacks", copies)
+	var poison_n := Stats.at(&"poison_stacks", copies)
+	var swallow_n := Stats.at(&"swallow_stacks", copies)
 	var three: Array = [&"cytostome", &"cirrus", &"flagellum"]
 	var front: Array = three + [&"toxicyst"]
 	var flank: Array = three + [&"", &"", &"toxicyst"]

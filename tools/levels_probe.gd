@@ -42,8 +42,9 @@ const Readout := preload("res://game/mechanics/readout.gd")
 const GeneStats := preload("res://game/normal/gene_stats.gd")
 const SignalBus := preload("res://game/perception/signal_bus.gd")
 const Doses := preload("res://game/mechanics/doses.gd")
-
-const BORN_ORDER: Array[StringName] = [&"cytostome", &"cirrus", &"flagellum"]
+## The genes, and their numbers by stat (docs/design/gene-catalogue.md).
+const Catalogue := preload("res://game/genes/catalogue.gd")
+const Stats := preload("res://game/genes/stats.gd")
 
 var _failed := 0
 var _nodes: Array[Node] = []
@@ -140,7 +141,7 @@ func _lineage() -> void:
 		mother.level_of(&"ocellus") == 1 and mother.progression(&"ocellus") != null)
 	_check("a gene that does not level has no progression and reads its tier",
 		mother.progression(&"cirrus") == null and mother.level_of(&"cirrus") == 1)
-	mother.earn(&"ocellus", Progression.xp_at(5, CellBody.BEAM_XP_STEP))
+	mother.earn(&"ocellus", Progression.xp_at(5, _beam_step()))
 	mother.choose(&"ocellus", &"extend")
 	_check("worn and used, it levels: %d" % mother.level_of(&"ocellus"),
 		mother.level_of(&"ocellus") == 5)
@@ -170,7 +171,7 @@ func _lineage() -> void:
 		drifted.progression(&"ocellus") == null)
 
 	var reborn := _genome()
-	reborn.express(GenomeNode.BORN, BORN_ORDER)
+	reborn.express(Catalogue.born(), Catalogue.born_order())
 	reborn.express({&"cytostome": 1, &"ocellus": 1}, [&"cytostome", &"ocellus"])
 	_check("a death, or a forced genome, starts over at level 1",
 		reborn.level_of(&"ocellus") == 1)
@@ -178,7 +179,7 @@ func _lineage() -> void:
 	# Written over in the DNA: kept while the body still wears it.
 	var over := _genome()
 	over.express({&"cytostome": 1, &"ocellus": 1}, [&"cytostome", &"ocellus"])
-	over.earn(&"ocellus", Progression.xp_at(3, CellBody.BEAM_XP_STEP))
+	over.earn(&"ocellus", Progression.xp_at(3, _beam_step()))
 	over.integrate(&"palp")
 	over.place(1)
 	_check("placed over in the DNA, the body still wears it and keeps its level",
@@ -209,7 +210,7 @@ func _price() -> void:
 			var path: StringName = [&"extend", &"sweep"][i]
 			var one := _genome()
 			one.express({&"cytostome": 1, &"ocellus": 1}, [&"cytostome", &"ocellus"])
-			one.earn(&"ocellus", Progression.xp_at(at, CellBody.BEAM_XP_STEP))
+			one.earn(&"ocellus", Progression.xp_at(at, _beam_step()))
 			one.choose(&"ocellus", path)
 			rows.append("%s %d %.2f" % [path, at, one.upkeep()])
 			ok = ok and is_equal_approx(one.upkeep(), float(want[at][i]))
@@ -220,10 +221,10 @@ func _price() -> void:
 	var burned := _genome()
 	burned.express({&"cytostome": 1, &"ocellus": 1, &"crista": 1},
 		[&"cytostome", &"ocellus", &"crista"])
-	burned.earn(&"ocellus", Progression.xp_at(5, CellBody.BEAM_XP_STEP))
+	burned.earn(&"ocellus", Progression.xp_at(5, _beam_step()))
 	burned.choose(&"ocellus", &"extend")
 	_check("crista still discounts the whole bill, the level's part included",
-		is_equal_approx(burned.upkeep(), 1.72 * CellBody.BURN_BY_TIER[1]))
+		is_equal_approx(burned.upkeep(), 1.72 * Stats.at(&"burn", 1)))
 
 
 # --- The shape (§4) ------------------------------------------------------------
@@ -232,9 +233,9 @@ func _shape() -> void:
 	var same := true
 	for at in range(1, 4):
 		var shape := CellBody.beam_shape(at, &"")
-		same = same and int(shape[0]) == CellBody.BEAM_COUNT_BY_TIER[at] \
-			and is_equal_approx(float(shape[1]), CellBody.BEAM_FAN_DEG_BY_TIER[at]) \
-			and is_equal_approx(float(shape[3]), CellBody.BEAM_RANGE_BY_TIER[at])
+		same = same and int(shape[0]) == Stats.at(&"beam_count", at) \
+			and is_equal_approx(float(shape[1]), Stats.at(&"beam_fan_deg", at)) \
+			and is_equal_approx(float(shape[3]), Stats.at(&"beam_range", at))
 	_check("levels 1 to 3 are exactly the old three rungs", same)
 	var extend := CellBody.beam_shape(8, &"extend")
 	var sweep := CellBody.beam_shape(8, &"sweep")
@@ -245,7 +246,8 @@ func _shape() -> void:
 	_check("a path this build does not know is held at the fork",
 		CellBody.beam_shape(8, &"warp") == CellBody.beam_shape(3, &""))
 	_check("no fan grows past the ceiling",
-		int(CellBody.beam_shape(500, &"extend")[0]) == CellBody.BEAM_RAYS_MAX)
+		int(CellBody.beam_shape(500, &"extend")[0])
+			== int(Catalogue.number(&"ocellus", &"rays_max")))
 
 
 # --- The fan (§4.3) ------------------------------------------------------------
@@ -400,11 +402,11 @@ func _energy() -> void:
 	# The table energy.md §2 gives the gene descriptions: each organ as a
 	# multiple of a resting body. Move a cost and this moves with it, and so must
 	# the table.
-	var gap := (CellBody.IMPULSE_GAP_MIN_BY_TIER[1] + CellBody.IMPULSE_GAP_MAX_BY_TIER[1]) * 0.5
-	var beating := CellBody.IMPULSE_SPEED_BY_TIER[1] * CellBody.IMPULSE_MEAN \
+	var gap := (Stats.at(&"impulse_gap_min", 1) + Stats.at(&"impulse_gap_max", 1)) * 0.5
+	var beating := Stats.at(&"impulse_speed", 1) * CellBody.IMPULSE_MEAN \
 		* CellBody.STROKE_COST / gap
-	var turning := CellBody.TURN_RATE_BY_TIER[1] * CellBody.TURN_COST
-	var pushing := CellBody.PUSH_ACCEL_BY_TIER[1] * CellBody.STROKE_COST
+	var turning := Stats.at(&"turn_rate", 1) * CellBody.TURN_COST
+	var pushing := Stats.at(&"push_accel", 1) * CellBody.STROKE_COST
 	_check("at tier 1 the flagellum's own beating costs %.2f of rest, turning flat"
 		% beating + " out %.2f and pushing %.2f -- energy.md's 0.50, 0.81, 0.68"
 		% [turning, pushing], absf(beating - 0.50) < 0.005
@@ -418,13 +420,13 @@ func _energy() -> void:
 	# static functions the node and the drop's water both call -- and then the
 	# node itself, a frame at a time, dying at the same moment.
 	var moving := beating + turning / 3.0
-	var per_second := Metabolism.rest_rate(GenomeNode.upkeep_of(GenomeNode.BORN), 0.0,
+	var per_second := Metabolism.rest_rate(GenomeNode.upkeep_of(Catalogue.born()), 0.0,
 		1.0) / Metabolism.HUNGER_SECONDS + Metabolism.effort_cost(moving, 1.0, 1.0)
 	var steering := per_second * Metabolism.HUNGER_SECONDS
 	var dies_at := 1.0 / per_second + Metabolism.STARVE_GRACE
 	var dying: Node = Metabolism.new()
 	_nodes.append(dying)
-	dying.upkeep = GenomeNode.upkeep_of(GenomeNode.BORN)
+	dying.upkeep = GenomeNode.upkeep_of(Catalogue.born())
 	var frames := 0
 	while not dying.starved() and frames < 3600:
 		dying.spend(moving / 60.0)
@@ -444,17 +446,17 @@ func _energy() -> void:
 	met.spend(half_tank)
 	var plain: float = met.hunger
 	met.reset()
-	met.reserve = CellBody.STORE_BY_TIER[3]
+	met.reserve = Stats.at(&"store", 3)
 	met.spend(half_tank)
 	var stored: float = met.hunger
 	met.reset()
-	met.burn = CellBody.BURN_BY_TIER[3]
+	met.burn = Stats.at(&"burn", 3)
 	met.spend(half_tank)
 	var burned: float = met.hunger
 	_check("half a tank of rest spent is half the bar (%.3f), a quarter with store 3"
 		% plain + " (%.3f) and 0.66 of a half with burn 3 (%.3f)" % [stored, burned],
 		is_equal_approx(plain, 0.5) and is_equal_approx(stored, 0.25)
-		and is_equal_approx(burned, 0.5 * CellBody.BURN_BY_TIER[3]))
+		and is_equal_approx(burned, 0.5 * Stats.at(&"burn", 3)))
 	met.reset()
 	met.set_hunger(1.0)
 	met.starve_seconds = 12.0
@@ -478,12 +480,12 @@ func _energy() -> void:
 	cell.call("_fire_impulse")
 	var stroke: float = cell.call("take_effort")
 	var again: float = cell.call("take_effort")
-	var speed := CellBody.IMPULSE_SPEED_BY_TIER[1] * CellBody.STROKE_COST
+	var speed := Stats.at(&"impulse_speed", 1) * CellBody.STROKE_COST
 	_check("one tier-1 stroke costs %.2f s of rest, within %.2f..%.2f for its strength,"
 		% [stroke, 0.7 * speed, speed] + " and is paid once",
 		stroke >= 0.7 * speed - 1e-6 and stroke <= speed + 1e-6 and again == 0.0)
 	cell.set("_impulse_timer", 1000.0)
-	cell.set("_omega", CellBody.TURN_RATE_BY_TIER[1])
+	cell.set("_omega", Stats.at(&"turn_rate", 1))
 	cell.call("_process", 0.1)
 	var omega: float = cell.get("_omega")
 	var turn: float = cell.call("take_effort")
@@ -498,7 +500,7 @@ func _energy() -> void:
 	cell.call("_process", 0.1)
 	Input.action_release(&"ui_up")
 	var push: float = cell.call("take_effort")
-	var push_want := CellBody.PUSH_ACCEL_BY_TIER[1] * 0.1 * CellBody.STROKE_COST
+	var push_want := Stats.at(&"push_accel", 1) * 0.1 * CellBody.STROKE_COST
 	cell.set("_effort", 3.0)
 	cell.call("reset")
 	var after_reset: float = cell.call("take_effort")
@@ -647,7 +649,7 @@ func _gene_stats() -> void:
 	_check("a gene with no row draws nothing, as a gene with no line says nothing",
 		GeneStats.lines(&"statocyst", 2, 0, &"", born) == [[], []])
 	var clause := Readout.plain(GeneStats.cell_items(CellBody.BASE_RADIUS,
-		GenomeNode.BORN, GenomeNode.upkeep_of(GenomeNode.BORN)))
+		Catalogue.born(), GenomeNode.upkeep_of(Catalogue.born())))
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"
 		% clause, clause == "52 µm across · a full tank: 36 s, 24 s drifting")
 
@@ -668,9 +670,9 @@ func _gene_stats() -> void:
 	run.set("_metabolism", met)
 	run.set("_food", field)
 	run.set("_bus", bus)
-	var dash := CellBody.DASH_COST_BY_TIER[1]
-	var burn := CellBody.BURN_BY_TIER[2]
-	var tank := CellBody.STORE_BY_TIER[3]
+	var dash := Stats.at(&"dash_cost", 1)
+	var burn := Stats.at(&"burn", 2)
+	var tank := Stats.at(&"store", 3)
 	var newborn_dash := _paid(run, met, 0, 0, dash)
 	_check("a newborn's dash takes %.3f of the bar, exactly the share it always took"
 		% newborn_dash[0], is_equal_approx(newborn_dash[0], dash))
@@ -726,8 +728,8 @@ func _toxin_rows() -> void:
 ## bar, seconds of rest out of that body's tank]`.
 func _paid(run: Node, met: Node, crista: int, vacuole: int, cost: float) -> Array:
 	met.reset()
-	met.burn = CellBody.BURN_BY_TIER[crista]
-	met.reserve = CellBody.STORE_BY_TIER[vacuole]
+	met.burn = Stats.at(&"burn", crista)
+	met.reserve = Stats.at(&"store", vacuole)
 	run.call("_on_dashed", cost)
 	var share: float = met.hunger
 	return [share, share * Metabolism.HUNGER_SECONDS * float(met.reserve)]
@@ -836,3 +838,8 @@ func _doses() -> void:
 	_check("a drop body stepped every eighth frame ends where one stepped every frame"
 		+ " does, forty seconds across the cutoff, both on the closed form to 1e-12: %s"
 		% "; ".join(said), same)
+
+
+## What going from level L to L + 1 costs the beam, over L: its own step.
+static func _beam_step() -> float:
+	return float(Catalogue.levels(&"ocellus")["step"])

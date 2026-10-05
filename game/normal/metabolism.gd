@@ -125,10 +125,11 @@ const ABSORB := 1.0
 const RESERVE_MIN := 0.05
 
 ## **What the metabolism gives a body's rules** (docs/design/behaviour.md §3.2),
-## in the shape of `genome.gd`'s DECLARES: its `hunger`, the tank as a level,
-## which the player feels as the beat; and `fed`, the seconds since its last
-## meal -- a cell, a floc or you -- which a body knows because it is digesting.
-## No bearing in either: they are the body's own state.
+## in the shape the genes declare theirs in (game/genes/gene.gd's `declares`):
+## its `hunger`, the tank as a level, which the player feels as the beat; and
+## `fed`, the seconds since its last meal -- a cell, a floc or you -- which a
+## body knows because it is digesting. No bearing in either: they are the body's
+## own state.
 const DECLARES := {
 	&"metabolism": {"in": [
 		{"name": &"hunger", "bearing": false, "values": {&"level": &"level"}},

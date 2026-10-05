@@ -27,6 +27,8 @@ const Genome := preload("res://game/normal/genome.gd")
 const CellBody := preload("res://game/normal/cell.gd")
 ## The kinds of load, by name and index. doses.gd preloads nothing.
 const Doses := preload("res://game/mechanics/doses.gd")
+## Every gene, in order: which forms deliver a dose. Preloads nothing of game/.
+const Catalogue := preload("res://game/genes/catalogue.gd")
 
 # --- Palette (§4.4) ---------------------------------------------------------
 # A new gene hue must sit >= 30 degrees from every other gene hue and >= 40
@@ -810,8 +812,8 @@ static func draw_cell(canvas: CanvasItem, at: Vector2, heading: float,
 ## kind no form delivers yet takes the first reserved hue, as an unknown gene
 ## does, rather than drawing as nothing.
 static func dose_hue(kind: int) -> Color:
-	for form: StringName in Genome.FORMS:
-		if Doses.kind_of(Genome.strain_of(form)) == kind:
+	for form: StringName in Catalogue.keys():
+		if Genome.has_forms(form) and Doses.kind_of(Genome.strain_of(form)) == kind:
 			return hue(form)
 	return RESERVED_HUES[0]
 
