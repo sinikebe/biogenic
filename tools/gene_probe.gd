@@ -138,12 +138,12 @@ func _index() -> void:
 	for script: GDScript in Catalogue.ORGANS:
 		indexed.append(script.resource_path.get_file())
 	var files: Array[String] = []
-	for name: String in DirAccess.get_files_at(ORGANS_DIR):
-		if name.ends_with(".gd"):
-			files.append(name)
-	var missing := files.filter(func(name: String) -> bool: return not indexed.has(name))
-	var stray := indexed.filter(func(name: String) -> bool: return not files.has(name))
-	var doubled := indexed.filter(func(name: String) -> bool: return indexed.count(name) > 1)
+	for file: String in DirAccess.get_files_at(ORGANS_DIR):
+		if file.ends_with(".gd"):
+			files.append(file)
+	var missing := files.filter(func(file: String) -> bool: return not indexed.has(file))
+	var stray := indexed.filter(func(file: String) -> bool: return not files.has(file))
+	var doubled := indexed.filter(func(file: String) -> bool: return indexed.count(file) > 1)
 	_check("the index lists every one of the %d organ files once, and nothing else%s%s%s"
 		% [files.size(), "" if missing.is_empty() else "; not indexed: %s" % str(missing),
 			"" if stray.is_empty() else "; no file: %s" % str(stray),
@@ -450,9 +450,9 @@ static func _unknown_fields(organ: StringName, fields: Dictionary, own: Array) -
 ## Every `.gd` file under [param dir], in order.
 static func _scripts_in(dir: String) -> Array[String]:
 	var out: Array[String] = []
-	for name: String in DirAccess.get_files_at(dir):
-		if name.ends_with(".gd"):
-			out.append(dir + "/" + name)
+	for file: String in DirAccess.get_files_at(dir):
+		if file.ends_with(".gd"):
+			out.append(dir + "/" + file)
 	for sub: String in DirAccess.get_directories_at(dir):
 		out.append_array(_scripts_in(dir + "/" + sub))
 	return out

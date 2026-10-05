@@ -472,10 +472,10 @@ static func _index() -> void:
 				members.append(key)
 		var listed := _pinned(members, SHIPPED_ORDERS.get(tag, []))
 		_tagged[tag] = _read_only(listed)
-		var set := {}
+		var members_set := {}
 		for key: StringName in listed:
-			set[key] = true
-		_tag_sets[tag] = set
+			members_set[key] = true
+		_tag_sets[tag] = members_set
 
 
 ## **[param organ]'s keys, each a flat record** (§4.2): the organ itself for an
