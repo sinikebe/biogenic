@@ -18,13 +18,13 @@ extends Node
 ## declared, and every declared part wired in a water cell and in yours; what each
 ## mechanic asks of the organ it finds by a stat; and organs registered and
 ## forgotten -- forms, tags that add up, variants of no forms, an organ that calls
-## with no period, a part nothing wires. Then what a gene looks like and says
-## (§7.1, §8): every live gene's look, its words and its parts' words, no word
-## table naming what is not its organ's, its numbers on the pause screen, and the
-## colours -- no two hues nearer than today's floor, none on self teal or threat
-## red, and every copy of a hue its organ's. And -- numbers, not yet failures
-## (§8.3, §12.2) -- the gene words with no French, and how many gene names are
-## still written into game/ outside game/genes/.
+## with no period, a part nothing wires, a look drawn at once. Then what a gene
+## looks like and says (§7.1, §8): every live gene's look, its words and its
+## parts' words, no word table naming what is not its organ's, its numbers on the
+## pause screen, and the colours -- no two hues nearer than today's floor, none on
+## self teal or threat red, and every copy of a hue its organ's. And -- numbers,
+## not yet failures (§8.3, §12.2) -- the gene words with no French, and how many
+## gene names are still written into game/ outside game/genes/.
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -605,8 +605,12 @@ func _register() -> void:
 		"forms": {Gene.INSIDE: {"key": &"probein", "order": 900},
 			Gene.OUTSIDE: {"key": &"probeout", "order": 901, "tags": [Catalogue.SENSE],
 				"provides": {&"armor": [1.0, 1.25, 1.25, 1.25]}}}}]
+	# **Its look, drawn at once**: cilia.gd holds the catalogue's hues and shapes, which
+	# every index fills in place, so a new organ's hue is there without a reload.
+	organ.look = {"shape": Gene.TUFT, "hue": Color(0.10, 0.20, 0.30), "count": 3}
 	var bare := Stats.of({&"probeout": 1}, &"armor")
 	Catalogue.register(organ)
+	var drawn := [Cilia.hue(&"probeout"), Catalogue.shaped(Gene.TUFT).has(&"probeout")]
 	# Read through stats.gd, which holds the catalogue's dictionary: the new
 	# organ's armour at once, and a second provider combined by the row's rule.
 	var read := [Stats.of({&"probeout": 1}, &"armor"),
@@ -631,12 +635,17 @@ func _register() -> void:
 		and not Catalogue.has_tag(&"probein", Catalogue.SENSE)
 	Catalogue.forget(&"probeorgan")
 	read.append(Stats.of({&"probeout": 1}, &"armor"))
+	drawn.append(Cilia.hue(&"probeout"))
 	_check(("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
 		+ " the catalogue as it was; its armour reads through the stats at once -- %s alone,"
 		+ " %s beside a pellicle, %s again once forgotten (%s before)") % [read[0], read[1],
 		read[2], bare], filed and Array(Catalogue.keys()) == before
 		and not Catalogue.known(&"probein") and bare == 1.0 and read[0] == 1.25
 		and is_equal_approx(read[1], 1.14 * 1.25) and read[2] == 1.0)
+	_check(("and its look is drawn at once, by the dictionaries cilia.gd holds: its hue %s"
+		+ " while filed, a tuft among the tufts, and the reserved indigo once forgotten")
+		% str(drawn[0]), drawn[0] == Color(0.10, 0.20, 0.30) and drawn[1]
+		and drawn[2] == Cilia.RESERVED_HUES[0])
 	_check("and a variant's and a form's tags add to their organ's, never replace them:"
 		+ " outside %s, inside %s" % [str(tags[0]), str(tags[1])], added)
 	# **A variant with no forms is one entry** (gene.gd): filed outside under its
