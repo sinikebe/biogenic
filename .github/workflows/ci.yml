@@ -424,6 +424,11 @@ jobs:
             echo "::error::a gene is named in game/ outside game/genes/ -- ask the catalogue for its organ by stat, tag or channel (see the lines above)"
             exit 1
           fi
+          if grep -qE "SCRIPT ERROR|Parse Error" <<< "$out"; then
+            grep -E -A2 "SCRIPT ERROR|Parse Error" <<< "$out"
+            echo "::error::the gene names gate hit a script error -- the files after it were not looked in"
+            exit 1
+          fi
 
       - name: Check the levels
         # docs/design/beam-levels.md: the arithmetic and the bookkeeping of a
