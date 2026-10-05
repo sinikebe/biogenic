@@ -47,6 +47,23 @@ const SHIPPED: Array[StringName] = [
 	&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista",
 	&"toxicyst"]
 const SHIPPED_PLACELESS: Array[StringName] = [&"rhabdom", &"statocyst"]
+## **The order each list a draw or a bit reads shipped in** -- catalogue.gd's
+## `SHIPPED_ORDERS`, kept here as well so that a change there fails here: what a
+## drifter is drawn from, by weight in this order; the senses the water counts;
+## the gift, drawn `randi() % 4` in this order; and the genes that declare parts,
+## in the order the rulebook gives them bits. A seeded water, a rule's bits and
+## `Wire.RULES` all hang on these orders. **A new gene appends to the lists it
+## joins**; a gene leaving one -- retired, say -- changes every seeded draw, and
+## is the commit that updates this.
+const SHIPPED_LISTS := {
+	&"drifter": [&"cirrus", &"flagellum", &"stigma", &"chemocyte", &"ampulla",
+		&"ocellus", &"axoneme", &"palp", &"myoneme",
+		&"trichocyst", &"pellicle", &"veneneux", &"plastid", &"vacuole", &"crista"],
+	&"sense": [&"chemocyte", &"ampulla", &"ocellus", &"stigma"],
+	&"gift": [&"ocellus", &"ampulla", &"chemocyte", &"stigma"],
+	&"declares": [&"ocellus", &"ampulla", &"chemocyte", &"stigma", &"palp", &"myoneme",
+		&"axoneme", &"flagellum"],
+}
 
 ## The folder the index must match, file for file.
 const ORGANS_DIR := "res://game/genes/organs"
@@ -219,6 +236,29 @@ func _water() -> void:
 	_check("a born cell wears %s, one to %d copies each, in order %s"
 		% [str(Catalogue.born()), Genome.TIER_MAX, str(Catalogue.born_order())],
 		born_ok and Array(Catalogue.born_order()) == Catalogue.born().keys())
+	var moved: Array[String] = []
+	for list: StringName in SHIPPED_LISTS:
+		var shipped: Array = SHIPPED_LISTS[list]
+		var now := _listed(list)
+		if now.slice(0, shipped.size()) != shipped:
+			moved.append("%s is %s" % [list, str(now)])
+	_check("the drifters, the senses, the gift and the genes that declare parts come in the"
+		+ " order they shipped, any new one after them%s" % ("" if moved.is_empty()
+			else ": %s" % "; ".join(moved)), moved.is_empty())
+
+
+## [param list] of [constant SHIPPED_LISTS] as the catalogue has it now.
+func _listed(list: StringName) -> Array:
+	match list:
+		&"drifter":
+			return Array(Catalogue.drifters())
+		&"sense":
+			return Array(Catalogue.tagged(Catalogue.SENSE))
+		&"gift":
+			return Array(Catalogue.tagged(Catalogue.GIFT))
+		&"declares":
+			return Catalogue.declares().keys()
+	return []
 
 
 # --- The stats (§5.1, §12.1) ---------------------------------------------------------------
@@ -311,10 +351,10 @@ func _rules() -> void:
 			for one: Dictionary in parts.get(side, []):
 				levelled_ok = levelled_ok and int(one.get("level", 1)) >= 1 \
 					and int(one.get("level", 1)) <= Genome.TIER_MAX
+	var shipped: Array = SHIPPED_LISTS[&"declares"]
 	_check("the genes declare parts in their shipped order, each at a level a gene reaches: %s"
 		% str(declarers), levelled_ok
-		and declarers.slice(0, 8) == [&"ocellus", &"ampulla", &"chemocyte", &"stigma",
-			&"palp", &"myoneme", &"axoneme", &"flagellum"])
+		and Array(declarers).slice(0, shipped.size()) == shipped)
 
 
 ## **Every part a gene declares is wired, in a water cell and in yours** (§12.1):
