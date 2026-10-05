@@ -3014,6 +3014,18 @@ static func _ref_rules(fouls: Array) -> Array:
 func _referee_rules() -> void:
 	var text := _rules_text()
 	var now := text.sha256_text()
+	# Every stat a row marks as judged is in the text, by every provider.
+	var unwritten: Array[String] = []
+	for stat: StringName in Stats.judged():
+		var providers := Catalogue.providers(stat)
+		for k in providers.size():
+			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
+			if not ("\n" + text).contains("\n%s=" % label):
+				unwritten.append(label)
+	_says(unwritten.is_empty(), "referee: every table of the %d stats the referee judges"
+		% Stats.judged().size() + " is in the rules it is fingerprinted by, one line an"
+		+ " organ that provides it%s" % ("" if unwritten.is_empty()
+			else "; not %s -- write it in _rules_text" % ", ".join(unwritten)))
 	var ok := now == Wire.RULES
 	_says(ok, ("referee: the %d rules it judges a guest by fingerprint to Wire.RULES"
 		% text.split("\n").size() + " (%s)" % now.left(16)) if ok
@@ -3030,6 +3042,16 @@ func _rules_text() -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
+	# **A stat the referee judges, by every organ that provides it**: the first
+	# under the name its table had as cell.gd's (stats.gd's `label`), any other
+	# after it with its key, as drop_save.gd writes them. A second organ that
+	# calls, or swims, is a new line -- and a new fingerprint, so its PROTOCOL
+	# moves with it.
+	var put_stat := func(stat: StringName) -> void:
+		var providers := Catalogue.providers(stat)
+		for k in providers.size():
+			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
+				Catalogue.table(providers[k], stat))
 	# cell.gd: size, growth, division and mending.
 	put.call("cell.BASE_RADIUS", CellBody.BASE_RADIUS)
 	put.call("cell.GROWTH_PER_MEAL", CellBody.GROWTH_PER_MEAL)
@@ -3039,17 +3061,17 @@ func _rules_text() -> String:
 	put.call("cell.MEND_SECONDS", CellBody.MEND_SECONDS)
 	put.call("cell.mended(0.5,10)", CellBody.mended(0.5, 10.0))
 	# The calls: how far and how often.
-	put.call("cell.PING_RANGE_BY_TIER", Stats.table(&"ping_range"))
-	put.call("cell.PING_PERIOD_BY_TIER", Stats.table(&"ping_period"))
+	put_stat.call(&"ping_range")
+	put_stat.call(&"ping_period")
 	# The speed and turn tables the caps sit over (`_referee_agrees`).
-	put.call("cell.IMPULSE_SPEED_BY_TIER", Stats.table(&"impulse_speed"))
-	put.call("cell.IMPULSE_GAP_MIN_BY_TIER", Stats.table(&"impulse_gap_min"))
+	put_stat.call(&"impulse_speed")
+	put_stat.call(&"impulse_gap_min")
 	put.call("cell.IMPULSE_KICK", CellBody.IMPULSE_KICK)
 	put.call("cell.DRAG", CellBody.DRAG)
-	put.call("cell.PUSH_ACCEL_BY_TIER", Stats.table(&"push_accel"))
-	put.call("cell.DASH_SPEED_BY_TIER", Stats.table(&"dash_speed"))
+	put_stat.call(&"push_accel")
+	put_stat.call(&"dash_speed")
 	put.call("cell.DASH_COOLDOWN", CellBody.DASH_COOLDOWN)
-	put.call("cell.TURN_RATE_BY_TIER", Stats.table(&"turn_rate"))
+	put_stat.call(&"turn_rate")
 	put.call("cell.WANDER_RATE", CellBody.WANDER_RATE)
 	# food.gd: the grace, and what a contact and a death are called.
 	put.call("food.FIRST_DELAY", FoodField.FIRST_DELAY)
@@ -3137,16 +3159,12 @@ func _referee_agrees() -> void:
 		after[gene] = 1
 		gifts = gifts and Referee._is_gift(Catalogue.born(), after) \
 			== (senses.has(gene) and not Catalogue.born().has(gene))
-	var top := Stats.table(&"impulse_speed").size() - 1
-	var peak := Stats.at(&"impulse_speed", top) \
-		/ (1.0 - exp(-CellBody.DRAG * Stats.at(&"impulse_gap_min", top))) \
-		+ Stats.at(&"push_accel", top) / CellBody.DRAG \
-		+ Stats.at(&"dash_speed", top) / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
-	# **The hardest turn**: a top-tier cirrus flat out, the drift at its most, and
-	# an impulse's kick to the nose as often as a top-tier flagellum beats.
-	var steer := Stats.at(&"turn_rate", Stats.table(&"turn_rate").size() - 1) \
-		+ CellBody.WANDER_RATE
-	var turn := steer + CellBody.IMPULSE_KICK / Stats.at(&"impulse_gap_min", top)
+	var peak := _stacked_peak()
+	# **The hardest turn**: the best steering any organ gives, flat out, the drift
+	# at its most, and an impulse's kick to the nose as often as the shortest gap
+	# any tail beats at -- every provider of each, as the peak above.
+	var steer := Stats.top(&"turn_rate") + CellBody.WANDER_RATE
+	var turn := steer + CellBody.IMPULSE_KICK / Stats.top(&"impulse_gap_min")
 	_says(is_equal_approx(Referee.SISTER_DISTANCE, NormalMode.SISTER_DISTANCE)
 			and is_equal_approx(Referee.DAUGHTER_RADIUS,
 				CellBody.daughter_radius(CellBody.DIVIDE_RADIUS))
@@ -3159,6 +3177,18 @@ func _referee_agrees() -> void:
 		% [Referee.MOVE_RATE, peak] + " its %.2f rad/s over the hardest turn the"
 		% Referee.TURN_RATE + " tables make (%.2f rad/s, %.2f of it steering)"
 		% [turn, steer])
+
+
+## **The fastest the tables let any body go**, every speed-up at its peak at once:
+## the best beat any tail gives, as often as the shortest gap any tail allows,
+## the most push every organ that pushes adds, and the best dash -- each by
+## every organ that provides it (stats.gd's `top`), so a second organ that
+## swims is under the referee's cap as well, or this says it is not.
+static func _stacked_peak() -> float:
+	return Stats.top(&"impulse_speed") \
+		/ (1.0 - exp(-CellBody.DRAG * Stats.top(&"impulse_gap_min"))) \
+		+ Stats.top(&"push_accel") / CellBody.DRAG \
+		+ Stats.top(&"dash_speed") / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
 
 
 ## **R1: a 5,000 unit teleport.** The host moves the body no further than the
@@ -3211,11 +3241,7 @@ func _referee_tier_three() -> void:
 	# **And at the bound itself.** cell.gd's own physics never lines every
 	# speed-up up at its peak at once, so the body above tops out short of it; a
 	# body held at the stacked peak the tables make, straight on, is the bound.
-	var top := Stats.table(&"impulse_speed").size() - 1
-	var peak := Stats.at(&"impulse_speed", top) \
-		/ (1.0 - exp(-CellBody.DRAG * Stats.at(&"impulse_gap_min", top))) \
-		+ Stats.at(&"push_accel", top) / CellBody.DRAG \
-		+ Stats.at(&"dash_speed", top) / (1.0 - exp(-CellBody.DRAG * CellBody.DASH_COOLDOWN))
+	var peak := _stacked_peak()
 	var held := _ref_straight(peak, 60.0, 26926)
 	_says(int(fouls[0]) == 0 and int(fouls[2]) > 1000 and int(fouls[3]) >= 3
 			and int(held[0]) == 0 and int(held[1]) > 900,

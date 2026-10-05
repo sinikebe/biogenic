@@ -184,18 +184,23 @@ static func table(stat: StringName) -> Array:
 	return Catalogue.table(Catalogue.first_provider(stat), stat)
 
 
-## **The best [param stat] any provider reaches at any copies**, by its row's
-## `better`: how far the farthest call carries, for a limit no body passes.
+## **The best [param stat] any body reaches**, for a limit no body passes: every
+## provider at its best copies by the row's `better`, combined by the row's rule
+## as a body wearing all of them would have them -- the best of them, their sum
+## or their product. How far the farthest call carries; how much push every
+## organ that pushes adds up to.
 static func top(stat: StringName) -> float:
 	var row: Dictionary = ROWS[stat]
 	var higher: bool = row["better"] == HIGHER
 	var best := float(row["none"])
 	var pairs: Array = _provided.get(stat, NO_PAIRS)
 	for i in range(1, pairs.size(), 2):
+		var own := float(row["none"])
 		for given: Variant in pairs[i]:
 			var at_copies := float(given)
-			if (at_copies > best) if higher else (at_copies < best):
-				best = at_copies
+			if (at_copies > own) if higher else (at_copies < own):
+				own = at_copies
+		best = _combined(row, best, own)
 	return best
 
 
