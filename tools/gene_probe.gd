@@ -28,7 +28,11 @@ extends Node
 ## the copies of its counts and the wire's limits its own, room on the pause figure
 ## -- each shown failing a plan that breaks it -- and today's plan held to the one
 ## that shipped; and a plan of the probe's own put through a cell's file and a
-## world's, the genome, the wire and the figure, and taken out again (§12.3). And
+## world's, the genome, the wire and the figure, and taken out again (§12.3). Then a
+## gene of the probe's own -- an organ with two variants, one in two places -- put
+## through the genome, the water, the body, its instinct parts, the wire, a cell's
+## file, the referee and the pause screen, held to one variant a body, and taken out
+## again; and a faster tail as one more entry in the tail's own file (§12.3). And
 ## -- numbers, not yet failures (§8.3, §12.2) -- the gene words with no French, and
 ## how many gene names are still written into game/ outside game/genes/.
 ##
@@ -216,6 +220,7 @@ func _ready() -> void:
 	_colours()
 	_plan()
 	_synthetic_plan()
+	_synthetic_gene()
 	_untranslated()
 	_names_left()
 	print("[gene-probe] ALL PASS" if _failed == 0 else "[gene-probe] FAILED %d" % _failed)
@@ -1603,6 +1608,443 @@ static func _same_list(a: Variant, b: Variant) -> bool:
 		if a[k] != b[k]:
 			return false
 	return true
+
+
+# --- A gene of the probe's own, end to end (§12.3) ------------------------------------------
+
+## **The probe's own organ** (§12.3), as an organ's file has it: a gland with **two
+## variants, one of them in two places** -- its plain strain inside (`probegin`, which
+## keeps a little more) and out (`probegout`, a nose), and a keen strain outside alone
+## (`probegkeen`, a better nose) -- with its words, its look and its numbers on the
+## pause screen. Its outside forms provide a sense with a place (stats.gd's `SEATED`),
+## so a body wearing both smells from the first in slot order; and the probe has it
+## declare the part a nose declares, under the same name.
+class ProbeGland extends "res://game/genes/gene.gd":
+	const Readout := preload("res://game/mechanics/readout.gd")
+	const U := Readout.Unit
+	const WORDS := {&"probegin": "gland", &"probegout": "gland", &"probegkeen": "keen"}
+	const EXPLAINS := {&"probegin": "keeps a little more", &"probegout": "smells a little",
+		&"probegkeen": "smells far"}
+	## Its look's hue, and the keen strain's own.
+	const HUE := Color(0.31, 0.47, 0.13)
+	const KEEN_HUE := Color(0.47, 0.31, 0.13)
+
+	func _init() -> void:
+		organ = &"probegland"
+		water = {"weight": 3, "drifter": true}
+		look = {"shape": TUFT, "hue": HUE, "count": 3}
+		variants = [
+			{"variant": &"plain", "water": {"weight": 2},
+				"forms": {
+					INSIDE: {"key": &"probegin", "order": 910,
+						"provides": {&"store": [1.0, 1.1, 1.2, 1.3]}},
+					OUTSIDE: {"key": &"probegout", "order": 911,
+						"provides": {&"smell_range": [0.0, 300.0, 400.0, 500.0]}},
+				}},
+			{"variant": &"keen", "key": &"probegkeen", "order": 912, "water": {"weight": 1},
+				"look": {"hue": KEEN_HUE},
+				"provides": {&"smell_range": [0.0, 600.0, 800.0, 1000.0]}},
+		]
+
+	## Every stat it provides at [param t] copies, and what wearing it costs.
+	func lines(t: int, _level: int, _path: StringName, _ctx: Dictionary, _slot: int,
+			wear: Dictionary) -> Array:
+		var said: Array = []
+		for stat: StringName in provides:
+			said.append(Readout.item("%s {}" % stat, [stat_at(stat, t)], [U.COUNT]))
+		return [said, [wear]]
+
+
+## **A gene of the probe's own, through every system a gene goes through** (§12.3):
+## [ProbeGland] registered, worn, and taken out again. Then the same organ holding one
+## variant to a body (`one_variant`, §6.3), and a variant of a shipped organ
+## ([method _variant_of_shipped]).
+func _synthetic_gene() -> void:
+	var before := Array(Catalogue.keys())
+	var bits_before := _vocabulary_bits()
+	var gland := ProbeGland.new()
+	gland.declares = {"in": [_declared_input(&"smell")]}
+	Catalogue.register(gland)
+	FoodField.declare([])
+
+	# **Filed**: three keys, two varieties, one organ, its weight and each strain's.
+	var keys: Array[StringName] = [&"probegin", &"probegout", &"probegkeen"]
+	var filed := Catalogue.keys().size() == before.size() + 3
+	for key: StringName in keys:
+		filed = filed and Catalogue.known(key) and Catalogue.organ_of(key) == &"probegland"
+	filed = filed and Catalogue.variety(&"probegout") == &"probegin" \
+		and Catalogue.variety(&"probegkeen") == &"probegkeen" \
+		and Catalogue.has_forms(&"probegin") and not Catalogue.has_forms(&"probegkeen") \
+		and Genome.is_inside_form(&"probegin") and not Genome.is_inside_form(&"probegkeen") \
+		and Catalogue.drifters().has(&"probegin") and Catalogue.drifters().has(&"probegkeen") \
+		and not Catalogue.drifters().has(&"probegout") \
+		and Catalogue.organ_weight(&"probegland") == 3 and Catalogue.weight(&"probegin") == 2 \
+		and Catalogue.weight(&"probegkeen") == 1 and not Catalogue.one_variant(&"probegland")
+	_check(("a gene of the probe's own -- an organ with two variants, one in two places --"
+		+ " is filed: %s, varieties %s and %s, the organ weighing %d in the water and its"
+		+ " strains %d and %d") % [str(keys), Catalogue.variety(&"probegout"),
+		Catalogue.variety(&"probegkeen"), Catalogue.organ_weight(&"probegland"),
+		Catalogue.weight(&"probegin"), Catalogue.weight(&"probegkeen")], filed)
+
+	# **The genome**: integrated and placed outside -- its outside form -- and inside, the
+	# keen strain beside it as a locus of its own, raised alone, moved, expressed.
+	var cell: Node = CellBody.new()
+	cell.radius = CellBody.DIVIDE_RADIUS
+	var genome: Node = Genome.new()
+	genome.setup(cell)
+	cell.genome = genome
+	var steps: Array = []
+	steps.append(genome.integrate(&"probegin"))
+	steps.append(genome.place(3))
+	steps.append(genome.integrate(&"probegkeen"))
+	steps.append(genome.place(4))
+	steps.append(genome.integrate(&"probegin"))
+	steps.append(genome.place(Genome.INSIDE))
+	steps.append(genome.integrate(&"probegkeen"))
+	var placed: Dictionary = genome.dna().duplicate()
+	var moved: bool = genome.move(3, 5)
+	genome.express(genome.dna(), genome.layout())
+	var layout: Array = genome.layout().duplicate()
+	var worn: Dictionary = genome.tiers().duplicate()
+	var held := Genome.Result.HELD
+	var genome_ok: bool = steps == [held, Genome.Result.INTEGRATED, held, Genome.Result.INTEGRATED,
+			held, Genome.Result.INTEGRATED, Genome.Result.RAISED] \
+		and int(placed.get(&"probegout", 0)) == 1 and int(placed.get(&"probegin", 0)) == 1 \
+		and int(placed.get(&"probegkeen", 0)) == 2 and moved \
+		and layout[5] == &"probegout" and layout[4] == &"probegkeen" and layout[3] == &"" \
+		and genome.inside_layout().has(&"probegin") and worn == genome.dna()
+	# **Mutated**: every kind applies to a DNA holding it, and what each leaves is a
+	# genome -- every slot names a gene it carries, no inside form in a slot.
+	var kinds := {}
+	var sane := true
+	seed(3)
+	for i in 300:
+		var next: Array = Genome.mutated(genome.dna(), genome.layout())
+		kinds[next[2]] = int(kinds.get(next[2], 0)) + 1
+		for gene: Variant in next[1]:
+			if gene != &"" and (not (next[0] as Dictionary).has(gene)
+					or Genome.is_inside_form(StringName(gene))):
+				sane = false
+	genome_ok = genome_ok and sane and kinds.has(&"shift") and kinds.has(&"trade") \
+		and kinds.has(&"drift")
+	_check(("the genome takes it: integrated, placed outside as its outside form and inside"
+		+ " as its inside one, the keen strain a locus of its own raised alone (%s; %s),"
+		+ " moved and expressed (%s), and mutated 300 times by every kind (%s), each leaving"
+		+ " a genome") % [str(steps), str(placed), str(layout), str(kinds)], genome_ok)
+
+	# **The water**: the spawner draws the organ by its weight and then a strain by
+	# theirs; the floor counts each strain apart; drift brings each.
+	seed(11)
+	var draws := {}
+	var pool: Array[StringName] = Catalogue.drifters().duplicate()
+	var total := 0
+	for organ: StringName in Catalogue.organs_in(pool):
+		total += Catalogue.organ_weight(organ)
+	for i in 6000:
+		var drawn := FoodField._draw_gene(pool)
+		draws[drawn] = int(draws.get(drawn, 0)) + 1
+	var gland_draws := int(draws.get(&"probegin", 0)) + int(draws.get(&"probegkeen", 0))
+	var expected := 6000.0 * 3.0 / float(total)
+	var keen_share := float(draws.get(&"probegkeen", 0)) / maxf(float(gland_draws), 1.0)
+	var counts := {}
+	for gene: StringName in Catalogue.drifters():
+		counts[gene] = Drop.GENE_FLOOR
+	counts.erase(&"probegin")
+	counts.erase(&"probegkeen")
+	for body: Dictionary in [{&"probegout": 1}, {&"probegin": 2}, {&"probegkeen": 1}]:
+		for gene: StringName in body:
+			var kind := Genome.variety(gene)
+			counts[kind] = int(counts.get(kind, 0)) + 1
+	var short := Drop.short_genes(counts, Catalogue.drifters())
+	var short_said := str(short)
+	var taken := Drop.take_drifter_gene(short)
+	seed(5)
+	var brought := {}
+	for i in 600:
+		var tiers := {&"cytostome": 1, &"cirrus": 1, &"flagellum": 1}
+		if Genome._mutate_drift(tiers, [] as Array[StringName]):
+			for gene: StringName in tiers:
+				if Catalogue.organ_of(gene) == &"probegland":
+					brought[gene] = int(brought.get(gene, 0)) + 1
+	_check(("the water takes it: the spawner draws the organ %d times in 6000 (%.0f by its"
+		+ " weight) and the keen strain %.0f%% of them (a third by theirs); the floor counts"
+		+ " each strain apart -- two carriers of the plain one in either form, one of the"
+		+ " keen -- and gives a drifter the keen one (%s, short %s); and drift brings each"
+		+ " (%s)") % [gland_draws, expected, 100.0 * keen_share, taken, short_said,
+		str(brought)],
+		absf(float(gland_draws) - expected) < expected * 0.25 and keen_share > 0.2
+		and keen_share < 0.47 and short.size() == 0 and short_said.contains("probegkeen")
+		and not short_said.contains("probegin") and taken == &"probegkeen"
+		and brought.has(&"probegkeen") and (brought.has(&"probegin") or brought.has(&"probegout")))
+
+	# **The body**: its stats by their rows, its hue, and the mechanic with a place acting
+	# from the first provider in slot order.
+	var both := {&"probegout": 2, &"probegkeen": 1}
+	var smell := [Stats.of({&"probegout": 2}, &"smell_range"), Stats.of(both, &"smell_range")]
+	var store := Stats.of({&"probegin": 3}, &"store")
+	var hues := [Cilia.hue(&"probegout"), Cilia.hue(&"probegin"), Cilia.hue(&"probegkeen")]
+	var seats: Array = []
+	for worn_layout: Array in [[&"cytostome", &"cirrus", &"flagellum", &"", &"probegkeen",
+			&"probegout"], [&"cytostome", &"cirrus", &"flagellum", &"probegout", &"",
+			&"probegkeen"]]:
+		var body := Catalogue.born().duplicate()
+		body.merge(both, true)
+		genome.express(body, worn_layout, null, worn_layout)
+		var water_order: Array = worn_layout
+		seats.append([cell.provider(&"smell_range"), cell.tier_for(&"smell_range"),
+			cell.stat(&"smell_range"), FoodField._seat_of(water_order, body, &"smell_range")])
+	_check(("the body takes it: a nose of %s alone, %s beside the keen strain -- the best of"
+		+ " them, as its row says -- and %s of store inside; drawn in its hue, the keen"
+		+ " strain in its own (%s); and the smell acts from the first nose in slot order,"
+		+ " here and in the water: %s") % [smell[0], smell[1], store, str(hues), str(seats)],
+		smell == [400.0, 600.0] and is_equal_approx(store, 1.3)
+		and hues == [ProbeGland.HUE, ProbeGland.HUE, ProbeGland.KEEN_HUE]
+		and seats[0] == [&"probegkeen", 1, 600.0, 4] and seats[1] == [&"probegout", 2, 600.0, 3])
+
+	# **Its parts**: wired by the name it declares them under, in a water cell and in
+	# yours; a body wearing either strain has them; and no bit a list was read with moved.
+	var field: Node = FoodField.new()
+	field.call(&"_wire")
+	var metabolism: Node = Metabolism.new()
+	var own: RefCounted = OwnRules.new()
+	own.call(&"setup", cell, field, metabolism, genome)
+	var vocab := FoodField.vocabulary()
+	var part := &"probegland.smell"
+	var owner_bit := int(vocab.owners.get(&"probegland", 0))
+	var wears := []
+	for strain: Dictionary in [{&"probegkeen": 1}, {&"probegout": 2}, {&"cytostome": 1}]:
+		wears.append((Rulebook.worn(vocab, Catalogue.by_organ(strain), FoodField.everybody())
+			& owner_bit) != 0)
+	var kept_bits := _bits_kept(bits_before, _vocabulary_bits())
+	_check(("its part %s is read in a water cell (%s) and in yours (%s), a body wearing"
+		+ " either strain has it and one wearing neither does not (%s), and every bit the"
+		+ " vocabulary had is where it was (%s)") % [part,
+		str((field.get("_readers") as Dictionary).has(part)),
+		str((own.get("_readers") as Dictionary).has(part)), str(wears), kept_bits],
+		(field.get("_readers") as Dictionary).has(part)
+		and (own.get("_readers") as Dictionary).has(part) and owner_bit != 0
+		and wears == [true, true, false] and kept_bits == "")
+
+	# **The wire, a cell's file and the referee.**
+	var body_now: Dictionary = genome.tiers().duplicate()
+	var order_now: Array = Array(genome.body_layout())
+	var crossed := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
+		Wire.person_payload(false, body_now, order_now)))
+	var state: Dictionary = genome.to_state()
+	var kept := _empty_of(DropSave.CELL)
+	kept["genome"] = state
+	kept["body"]["radius"] = CellBody.DIVIDE_RADIUS
+	DirAccess.make_dir_recursive_absolute(PLAN_FILES)
+	var path := PLAN_FILES.path_join("gland.save")
+	var wrote := CellSave.write(path, CellSave.compose("", "", 0, 0, -1.0, {}, kept))
+	var read := CellSave.read(path)
+	DirAccess.remove_absolute(path)
+	DirAccess.remove_absolute(PLAN_FILES)
+	var back: Node = Genome.new()
+	back.set_state(read.get("cell", {}).get("genome", {}))
+	var whole: bool = back.dna() == genome.dna() and back.tiers() == genome.tiers() \
+		and _same_list(back.layout(), genome.layout()) \
+		and _same_list(back.body_layout(), genome.body_layout()) \
+		and _same_list(back.inside_layout(), genome.inside_layout())
+	back.free()
+	var referee := Referee.new(0.0)
+	var took := referee.judge_person(0.0, true, body_now, order_now, false)
+	var entered := referee.judge_enter(0.0, CellBody.BASE_RADIUS, false)
+	referee.arrive(0.0, Vector2.ZERO, CellBody.BASE_RADIUS)
+	var speed := CellBody.swim_speed_of(body_now)
+	var at := Vector2.ZERO
+	for i in 120:
+		at += Vector2(0.0, -speed / 60.0)
+		referee.claim(float(i + 1) / 60.0, at, 0.0, CellBody.BASE_RADIUS,
+			Vector2(0.0, -speed), 0.0, false)
+	var fouls := referee.take_fouls()
+	_check(("and the wire carries a body wearing it whole (%s), a cell's file keeps it whole"
+		+ " (written %s, %s), and the referee takes that body -- %s, entered %s -- and two"
+		+ " seconds of it swimming at its own %.0f u/s with %d fouls") % [
+		str(not crossed.is_empty() and crossed[1] == body_now
+			and _same_list(crossed[2], order_now)), error_string(wrote), str(whole),
+		str(took), str(entered), speed, fouls.size()],
+		not crossed.is_empty() and crossed[1] == body_now and _same_list(crossed[2], order_now)
+		and wrote == OK and whole and took == [true] and entered and fouls.is_empty())
+
+	# **The pause screen**: its words, and its numbers at every copy count.
+	var ctx := GeneStats.context({})
+	var rows_ok := true
+	var said: Array = []
+	for key: StringName in keys:
+		for copies in range(1, Genome.TIER_MAX + 1):
+			var rows: Array = GeneStats.lines(key, copies, 0, &"", ctx)
+			rows_ok = rows_ok and rows.size() == 2 and (rows[0] as Array).size() \
+				== Catalogue.gene(key).provides.size() and (rows[1] as Array).size() == 1
+		said.append(String(Catalogue.words(key).get(&"word", "")))
+	_check("and the pause screen has its numbers at every copy count, and its words: %s"
+		% str(said), rows_ok and said == ["gland", "gland", "keen"])
+
+	for node: Node in [field, metabolism, genome, cell]:
+		node.free()
+	Catalogue.forget(&"probegland")
+	FoodField.declare([])
+
+	# **One variant to a body** (§6.3): the same organ, switched on. Placing the keen
+	# strain writes over the plain one, in a genome and in a water cell's, and drift
+	# brings no strain of it to a lineage that carries one.
+	var single := ProbeGland.new()
+	single.one_variant = true
+	Catalogue.register(single)
+	var grown: Node = CellBody.new()
+	grown.radius = CellBody.DIVIDE_RADIUS
+	var one: Node = Genome.new()
+	one.setup(grown)
+	one.integrate(&"probegin")
+	one.place(3)
+	one.integrate(&"probegin")
+	one.place(Genome.INSIDE)
+	var had: Dictionary = one.dna().duplicate()
+	one.integrate(&"probegkeen")
+	one.place(4)
+	var after: Dictionary = one.dna().duplicate()
+	var after_layout: Array = one.layout().duplicate()
+	one.free()
+	grown.free()
+	var water := {&"cytostome": 1, &"probegout": 2, &"probegin": 1}
+	Genome.integrate_into(water, &"probegkeen", CellBody.SLOT_MAX)
+	seed(5)
+	var again := 0
+	for i in 600:
+		var tiers := {&"cytostome": 1, &"cirrus": 1, &"probegout": 1}
+		if Genome._mutate_drift(tiers, [] as Array[StringName]):
+			for gene: StringName in tiers:
+				if gene != &"probegout" and Catalogue.organ_of(gene) == &"probegland":
+					again += 1
+	var switched := Catalogue.one_variant(&"probegland")
+	Catalogue.forget(&"probegland")
+	_check(("and switched to one variant a body, placing the keen strain writes over the"
+		+ " plain one in both its places (%s, then %s, %s), a water cell's too (%s), and drift"
+		+ " brings no strain of it to a lineage that carries one (%d in 600)") % [
+		str(had), str(after), str(after_layout), str(water), again],
+		switched and had.has(&"probegout") and had.has(&"probegin")
+		and not after.has(&"probegout") and not after.has(&"probegin")
+		and int(after.get(&"probegkeen", 0)) == 1 and not after_layout.has(&"probegout")
+		and water.has(&"probegkeen") and not water.has(&"probegout")
+		and not water.has(&"probegin") and again == 0)
+
+	_check(("and forgotten, the catalogue and the vocabulary are as they were: %d keys, every"
+		+ " bit where it was (%s)") % [Catalogue.keys().size(),
+		_bits_kept(bits_before, _vocabulary_bits())],
+		Array(Catalogue.keys()) == before and _bits_kept(bits_before, _vocabulary_bits()) == ""
+		and _vocabulary_bits().size() == bits_before.size())
+	_variant_of_shipped()
+
+
+## **A variant of a shipped organ is one entry in its file** (§6.2, §12.3): a faster
+## tail, filed as the tail's own organ file with one more variant -- the tail's every
+## field, its speed's table its own. The fingerprints that a protocol hangs on see
+## it, as the referee's caps do; a body wearing it beside the plain tail is read by
+## the stat rows; its parts are the tail's, and the vocabulary does not move.
+func _variant_of_shipped() -> void:
+	var before := Array(Catalogue.keys())
+	var bits_before := _vocabulary_bits()
+	var plain := Catalogue.first_provider(&"impulse_speed")
+	var rules_before := DropSave.rules_text()
+	var NetProbe := load("res://tools/net_probe.gd")
+	var probe: Node = NetProbe.new()
+	var wire_before: String = probe.call(&"_rules_text")
+	var peak_before := float(NetProbe.call(&"_stacked_peak"))
+	var top_before := Stats.top(&"impulse_speed")
+	var tail: Gene = (Catalogue.gene(plain).get_script() as GDScript).new()
+	var plain_speed: Array = Catalogue.table(plain, &"impulse_speed")
+	var swift: Array = []
+	for value: Variant in plain_speed:
+		swift.append(float(value) * 1.6)
+	swift[0] = plain_speed[0]
+	var slower: Array = Catalogue.table(plain, &"impulse_gap_min").duplicate()
+	for k in range(1, slower.size()):
+		slower[k] = float(slower[k]) + 0.4
+	tail.variants = [{"variant": &"probeswift", "order": 920, "born": 0,
+		"provides": {&"impulse_speed": swift, &"impulse_gap_min": slower}}]
+	var entries := _keys_of(tail)
+	Catalogue.register(tail)
+	var organ := Catalogue.organ_of(&"probeswift")
+	var rules_with := DropSave.rules_text()
+	var wire_with: String = probe.call(&"_rules_text")
+	var peak_with := float(NetProbe.call(&"_stacked_peak"))
+	var top_with := Stats.top(&"impulse_speed")
+	var together := {plain: 2, &"probeswift": 1}
+	var speeds := [Stats.of({plain: 2}, &"impulse_speed"),
+		Stats.of({&"probeswift": 1}, &"impulse_speed"), Stats.of(together, &"impulse_speed")]
+	var gaps := [Stats.of({plain: 2}, &"impulse_gap_min"),
+		Stats.of({&"probeswift": 1}, &"impulse_gap_min"), Stats.of(together, &"impulse_gap_min")]
+	var vocab := FoodField.vocabulary()
+	var tails := Rulebook.worn(vocab, Catalogue.by_organ({&"probeswift": 2}), FoodField.everybody())
+	var plains := Rulebook.worn(vocab, {plain: 2}, FoodField.everybody())
+	var rows: Array = GeneStats.lines(&"probeswift", 2, 0, &"", GeneStats.context({}))
+	var born_same := not Catalogue.born().has(&"probeswift")
+	Catalogue.forget(organ)
+	var rules_after := DropSave.rules_text()
+	var wire_after: String = probe.call(&"_rules_text")
+	probe.free()
+	_check(("and a faster %s is one entry in its organ's file (%s), %s's own: the drop's"
+		+ " rules (%s) and the referee's (%s) fingerprint it, and are as they were once it is"
+		+ " gone; the caps see it -- the fastest a body goes %.0f u/s with it, %.0f without,"
+		+ " against the referee's %.0f%s -- and a body wearing it beside the plain tail swims at"
+		+ " the best speed and the shortest gap of the two, as their rows say (%s, %s); its"
+		+ " parts are the tail's, bit for bit, in a vocabulary that did not move (%s); and the"
+		+ " pause screen reads its own numbers") % [plain, str(entries), organ,
+		str(rules_with != rules_before), str(wire_with != wire_before), peak_with, peak_before,
+		Referee.SPEED_MAX, ", which net_probe's check of the caps fails on until they move"
+			if peak_with >= Referee.SPEED_MAX else "", str(speeds), str(gaps),
+		_bits_kept(bits_before, _vocabulary_bits())],
+		entries == [&"probeswift"] and organ == Catalogue.organ_of(plain) and born_same
+		and rules_with != rules_before and rules_after == rules_before
+		and rules_with.contains(Stats.label(&"impulse_speed") + ".probeswift=")
+		and wire_with != wire_before and wire_after == wire_before
+		and wire_before.sha256_text() == Wire.RULES
+		and top_with > top_before and peak_with > peak_before
+		and speeds[2] == maxf(speeds[0], speeds[1]) and speeds[1] > speeds[0]
+		and gaps[2] == minf(gaps[0], gaps[1]) and gaps[1] > gaps[0]
+		and tails == plains and tails != 0
+		and _bits_kept(bits_before, _vocabulary_bits()) == ""
+		and rows.size() == 2 and not (rows[0] as Array).is_empty()
+		and Array(Catalogue.keys()) == before)
+
+
+## The part [param name] an organ of the catalogue declares as an input, its
+## declaration -- what the probe's gland declares under the same name.
+static func _declared_input(name: StringName) -> Dictionary:
+	var declared := Catalogue.declares()
+	for organ: StringName in declared:
+		for one: Dictionary in (declared[organ] as Dictionary).get("in", []):
+			if StringName(one["name"]) == name:
+				return one
+	return {}
+
+
+## **Every bit the vocabulary has**, by what holds it: each owner's, each owner's
+## levels', each part's and each claim's.
+static func _vocabulary_bits() -> Dictionary:
+	var vocab := FoodField.vocabulary()
+	var out := {}
+	for owner: StringName in vocab.owners:
+		out["owner " + String(owner)] = int(vocab.owners[owner])
+	for owner: StringName in vocab.levels:
+		out["levels " + String(owner)] = str(vocab.levels[owner])
+	for name: StringName in vocab.inputs:
+		out["in " + String(name)] = (vocab.inputs[name] as Rulebook.InputDecl).bit
+	for name: StringName in vocab.outputs:
+		var output: Rulebook.OutputDecl = vocab.outputs[name]
+		out["out " + String(name)] = [output.bit, output.claims]
+	for claim: StringName in vocab.claims:
+		out["claim " + String(claim)] = int(vocab.claims[claim])
+	return out
+
+
+## What of [param before] is not in [param now] as it was, `""` for nothing.
+static func _bits_kept(before: Dictionary, now: Dictionary) -> String:
+	var moved: Array[String] = []
+	for what: String in before:
+		if not now.has(what) or str(now[what]) != str(before[what]):
+			moved.append(what)
+	return ", ".join(moved)
 
 
 # --- Gene names left in code (§12.2) ----------------------------------------------------------
