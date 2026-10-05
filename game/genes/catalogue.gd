@@ -1,8 +1,8 @@
 extends RefCounted
 ## **The catalogue** (docs/design/gene-catalogue.md §4): every gene the game
 ## knows, by key, and every question any file asks of one. A gene's numbers,
-## lists, tags and rules live in its organ's file under `organs/`; this is the
-## index of those files and the one place they are read from.
+## lists, tags, rules, look and words live in its organ's file under `organs/`;
+## this is the index of those files and the one place they are read from.
 ##
 ## **Lookups are built once**, when this script loads ([method _static_init]),
 ## into dictionaries and lists: nothing per frame walks the catalogue, and every

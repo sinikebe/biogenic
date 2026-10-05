@@ -1,6 +1,6 @@
 extends Node
 ## CI probe: **the genes, as data** (docs/design/gene-catalogue.md §12.1). Every
-## gene's numbers, lists, tags and rules live in its organ's file under
+## gene's numbers, lists, tags, rules, look and words live in its organ's file under
 ## game/genes/organs/, and everything that reads one asks the catalogue. What a
 ## render cannot show is a gene that is half there: a key the wire refuses, a
 ## table one entry short, a live gene with no weight in the water, a sense no
@@ -750,11 +750,13 @@ func _words() -> void:
 				elif table == "EXPLAINS_PATH":
 					for way: Variant in _table(tables[table], entry):
 						if not ways.has(way):
-							bad.append("%s's %s has a way %s it has not" % [organ.organ, table, way])
+							bad.append("%s's %s has a way %s it has not"
+								% [organ.organ, table, way])
 		for table: String in Catalogue.PART_WORDS:
 			for entry: Variant in _table(tables, table):
 				if not own.has(StringName(entry)):
-					bad.append("%s's %s says %s, not a part it declares" % [organ.organ, table, entry])
+					bad.append("%s's %s says %s, not a part it declares"
+						% [organ.organ, table, entry])
 		for table: String in Catalogue.WAY_WORDS:
 			for entry: Variant in _table(tables, table):
 				if not ways.has(entry):
@@ -769,7 +771,10 @@ func _words() -> void:
 ## **Every live gene has its numbers on the pause screen** -- what it does and what
 ## it costs, at every copy count, and at its first level and down each way where it
 ## levels -- and a retired gene, and a key this build does not know, draw nothing:
-## a row with nothing in it is drawn as nothing at all.
+## a row with nothing in it is drawn as nothing at all. A gene that does not level
+## is read in every slot too, as the pause screen reads it, so that every line its
+## organ's file can say is said once here; worn somewhere, it still says what it
+## costs (a side venom the switch made inert says nothing else).
 func _lines() -> void:
 	var ctx := GeneStats.context({})
 	var bad: Array[String] = []
@@ -781,13 +786,16 @@ func _lines() -> void:
 			cases = [[1, &""]]
 			for way: Variant in levels.get("paths", []):
 				cases.append([int(levels.get("fork", 1)), StringName(way)])
+		var slots: Array = [-1] if not levels.is_empty() else range(-1, CellBody.SLOT_MAX + 1)
 		for copies in range(1, Genome.TIER_MAX + 1):
 			for case: Array in cases:
-				var rows: Array = GeneStats.lines(key, copies, case[0], case[1], ctx)
-				rows_read += 1
-				if rows.size() != 2 or (rows[0] as Array).is_empty() or (rows[1] as Array).is_empty():
-					bad.append("%s at %d copies, level %d%s" % [key, copies, case[0],
-						" down " + String(case[1]) if case[1] != &"" else ""])
+				for slot: int in slots:
+					var rows: Array = GeneStats.lines(key, copies, case[0], case[1], ctx, slot)
+					rows_read += 1
+					if rows.size() != 2 or (rows[1] as Array).is_empty() \
+							or (slot < 0 and (rows[0] as Array).is_empty()):
+						bad.append("%s at %d copies, level %d%s, slot %d" % [key, copies,
+							case[0], " down " + String(case[1]) if case[1] != &"" else "", slot])
 	var silent: Array[StringName] = []
 	silent.append_array(Catalogue.tagged(Catalogue.RETIRED))
 	silent.append(&"probeunknown")
@@ -795,7 +803,7 @@ func _lines() -> void:
 		if GeneStats.lines(key, 2, 0, &"", ctx) != [[], []]:
 			bad.append("%s draws a row" % key)
 	_check(("every live gene says what it does and what it costs on the pause screen -- %d"
-		+ " readings, every copy count, level and way -- and %s draw nothing%s") % [rows_read,
+		+ " readings, every copy count, level, way and slot -- and %s draw nothing%s") % [rows_read,
 			str(silent), "" if bad.is_empty() else ": wrong: %s" % ", ".join(bad)],
 		bad.is_empty())
 

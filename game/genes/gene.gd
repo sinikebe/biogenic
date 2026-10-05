@@ -1,9 +1,10 @@
 extends RefCounted
 ## **One organ** (docs/design/gene-catalogue.md §4.2): what a gene builds, and
 ## every fact any system asks of it -- its numbers, its place in the water, its
-## tags and what it gives a body's rules -- in one file of its own under
-## `organs/`. An organ's file extends this one and sets the fields it needs in
-## `_init()`; every field it leaves keeps the default written here.
+## tags, what it gives a body's rules, its look, its words and its lines on the
+## pause screen -- in one file of its own under `organs/`. An organ's file extends
+## this one and sets the fields it needs in `_init()`; every field it leaves keeps
+## the default written here.
 ##
 ## **An organ, its variants and their forms** (§3, §6.1). A variant is the organ
 ## built differently: its own numbers, its own name and its own place in the

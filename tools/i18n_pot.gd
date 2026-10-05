@@ -1243,8 +1243,8 @@ func _check_rooms() -> void:
 		for fill: String in fills:
 			if CATALOGUE_FILLS.has(fill):
 				if _fill_ids(fill).is_empty():
-					_problems.append(("%s: ROOM says `with %s`, but no live gene has words for it in"
-						+ " the catalogue (%s)") % [where, fill, CATALOGUE_FILLS[fill][1]])
+					_problems.append(("%s: ROOM says `with %s`, but no live gene has words for it"
+						+ " in the catalogue (%s)") % [where, fill, CATALOGUE_FILLS[fill][1]])
 					fine = false
 			elif FILL_TABLES.has(fill):
 				if not _const_ids.has(FILL_TABLES[fill]):
