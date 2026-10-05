@@ -362,7 +362,8 @@ static func is_stamp(kept: Variant) -> bool:
 ## (§10.3). Under the same plan it is [param order] itself, untouched. Otherwise
 ## each gene goes back to its slot's id; one whose id has left the plan -- or whose
 ## slot another gene already took -- goes to the free outside slot nearest the one
-## it was in by bearing; and with none free it is left out of the layout,
+## it was in by bearing, and one whose id this build never knew, a later plan's,
+## to the first free one; and with none free it is left out of the layout,
 ## **unseated and never dropped**: the DNA still carries it, and `genome.gd` seats
 ## it as it seats any gene a layout lacks. A gene kept at an inside slot is left out
 ## too, because the inside keeps no order: the DNA says what is inside. The layout
