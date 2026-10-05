@@ -29,6 +29,15 @@ const CellBody := preload("res://game/normal/cell.gd")
 const Doses := preload("res://game/mechanics/doses.gd")
 ## Every gene, in order: which forms deliver a dose. Preloads nothing of game/.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## **The body plan** (docs/design/gene-catalogue.md §10): every slot's arc and
+## bearing, the home seats and the body's shape. It preloads nothing.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
+## **The plan's home seats and arcs**, held as the looks are: its own containers,
+## refilled in place whenever the plan changes, read for every body drawn.
+static var _homes: Dictionary = BodyPlan.homes()
+static var _home_slots: Array[int] = BodyPlan.home_slots()
+static var _home_genes: Array[StringName] = BodyPlan.home_genes()
+static var _plan_arcs: Array[Vector2] = BodyPlan.arcs()
 
 # --- Palette (§4.4) ---------------------------------------------------------
 # A new gene hue must sit >= 30 degrees from every other gene hue and >= 40
@@ -65,8 +74,8 @@ const MAT := Catalogue.MAT
 const OARS := Catalogue.OARS
 const LASH := Catalogue.LASH
 const SPINES := Catalogue.SPINES
-## The shapes drawn on arcs of their own, whatever slot holds them (gene.gd).
-const HOME_SHAPES: Array[StringName] = [MAT, OARS, LASH]
+## The shapes drawn on arcs of their own, whatever slot holds them: gene.gd's one list.
+const HOME_SHAPES := Catalogue.HOME_SHAPES
 ## An empty look: what a gene this build does not know has -- a retired one has the
 ## catalogue's own empty look -- and no keys of a shape nothing is drawn as.
 const NO_LOOK := {}
@@ -119,10 +128,12 @@ const TINT_TOWARD_GENE := 0.55
 # two have to be the same curve to the pixel.
 
 const OVOID_STEPS := 40
-const OVOID_ALONG := 1.18
-const OVOID_ACROSS := 0.94
+## **The body's shape is the plan's** (`body_plan.gd`): a slot's bearing is read
+## off it, so the curve drawn here and the curve a slot points along are one.
+const OVOID_ALONG := BodyPlan.OVOID_ALONG
+const OVOID_ACROSS := BodyPlan.OVOID_ACROSS
 ## How much narrower the nose is than the tail.
-const OVOID_PINCH := 0.30
+const OVOID_PINCH := BodyPlan.OVOID_PINCH
 ## A slow breath, so a body never looks like a drawn shape.
 const BREATHE := 0.035
 
@@ -202,67 +213,41 @@ const OVOID_SPLIT_ALONG := 1.62
 ## How much of the half-width the waist takes, at the beam and nowhere else.
 const OVOID_SPLIT_WAIST := 0.46
 
-# --- Seven arcs, three of them spoken for (§4.1) ----------------------------
-# In ovoid parameter t, degrees: 0 is the nose, +90 starboard, 180 aft. The
-# free arcs are also the bearing rose -- while empty they are visible gaps at
-# roughly the four diagonals, which is a 45-degree reference read off the
-# organism rather than painted over it.
-
-const ARC_CYTOSTOME := Vector2(-42.0, 42.0)
-const ARC_CIRRUS_STARBOARD := Vector2(66.0, 118.0)
-const ARC_CIRRUS_PORT := Vector2(-118.0, -66.0)
-const ARC_FLAGELLUM := Vector2(146.0, 214.0)
-## Genome slots 4..7 (zero-based 3..6) land on these, one each, in order.
-## Three home arcs plus four free arcs is cell.gd's SLOT_MAX of 7, which is not
-## a coincidence.
-const ARC_FREE: Array[Vector2] = [
-	Vector2(42.0, 66.0),
-	Vector2(-66.0, -42.0),
-	Vector2(118.0, 146.0),
-	Vector2(-146.0, -118.0),
-]
+# --- The arcs (§4.1), the body plan's ---------------------------------------
+# In ovoid parameter t, degrees: 0 is the nose, +90 starboard, 180 aft. Every
+# slot's arc is a row of the body plan (`body_plan.gd`, gene-catalogue.md §10):
+# the nose, the starboard flank and the tail are the home organs', and the four
+# diagonals are earned. The diagonals are also the bearing rose -- while empty
+# they are visible gaps at roughly the four diagonals, which is a 45-degree
+# reference read off the organism rather than painted over it.
 
 ## **The genome slot IS the arc.** Slot 0 is the anterior arc, 1 the lateral
-## pair, 2 the posterior, and 3..6 the four diagonals in [constant ARC_FREE] --
-## two forward, two rear. That is the whole of placement being a choice: the
-## two-tap on the pause strip already lets the player pick which slot a gene
-## goes into, and a directional gene reads its facing off the arc it landed on.
-## A laser in slot 5 looks backwards and cannot show you where you are going.
+## pair, 2 the posterior, and 3..6 the four diagonals -- two forward, two rear --
+## as the body plan lays them. That is the whole of placement being a choice: the
+## two-tap on the pause strip already lets the player pick which slot a gene goes
+## into, and a directional gene reads its facing off the arc it landed on. A laser
+## in slot 5 looks backwards and cannot show you where you are going.
 ##
 ## **The inside has no arc** (docs/design/dna-slots.md §2.2): nothing inside
 ## faces anywhere, so nothing inside is ever asked for one -- [method
 ## _draw_fringe] draws an inside form round the whole body, and an inside form
-## never has a slot in a layout. No layout holds an index past the seventh now
+## never has a slot in a layout. No layout holds an index past the outside now
 ## ([method default_order] keeps every outside gene on an arc); one that did
-## would land on the last free arc, as it always has.
+## would land on the last earned arc, as it always has (`body_plan.gd`'s `arc`).
 static func arc_for_slot(slot: int) -> Vector2:
-	match slot:
-		0:
-			return ARC_CYTOSTOME
-		1:
-			return ARC_CIRRUS_STARBOARD
-		2:
-			return ARC_FLAGELLUM
-		_:
-			return ARC_FREE[clampi(slot - 3, 0, ARC_FREE.size() - 1)]
+	return BodyPlan.arc(slot)
 
 
 ## The body-relative bearing an arc looks along: radians clockwise from the
-## front, which is the only way this game is allowed to describe a direction.
-##
-## Derived from the ovoid rather than from the arc's own degrees, because the
-## two are not the same number -- the parameter `t` runs faster than the bearing
-## near the nose. §4.1's table is what this reproduces: the middle of free arc 1
-## is `t` 54 and bearing 42.
+## front, which is the only way this game is allowed to describe a direction --
+## the body plan's, read off the ovoid this file draws.
 static func arc_bearing(arc: Vector2) -> float:
-	var t := deg_to_rad((arc.x + arc.y) * 0.5)
-	return atan2(sin(t) * (1.0 - OVOID_PINCH * cos(t)) * OVOID_ACROSS,
-		cos(t) * OVOID_ALONG)
+	return BodyPlan.arc_bearing(arc)
 
 
 ## Where a gene in [param slot] points. The one call a directional gene makes.
 static func slot_bearing(slot: int) -> float:
-	return arc_bearing(arc_for_slot(slot))
+	return BodyPlan.bearing(slot)
 
 
 # --- Geometry, at tier 1 (§4.2) ---------------------------------------------
@@ -1149,28 +1134,28 @@ static func skin_point(at: Vector2, heading: float, r: float, t: float,
 ## than a body has arcs wears the rest unseated, as a player's body wears an
 ## organ the gift took the arc of. No water cell carries more than seven.
 static func default_order(tiers: Dictionary) -> Array:
-	var out: Array[StringName] = [&"", &"", &""]
-	if tiers.has(&"cytostome"):
-		out[0] = &"cytostome"
-	if tiers.has(&"cirrus"):
-		out[1] = &"cirrus"
-	if tiers.has(&"flagellum"):
-		out[2] = &"flagellum"
+	# **The home seats are the body plan's**: each home organ worn in its own slot,
+	# the seats before the last of them held for them whether or not they are worn.
+	var out: Array[StringName] = []
+	out.resize(BodyPlan.HOME_SEATS)
+	for k in _home_slots.size():
+		if tiers.has(_home_genes[k]):
+			out[_home_slots[k]] = _home_genes[k]
 	for gene: StringName in tiers:
 		if Genome.has_forms(gene) and not Genome.is_inside_form(gene):
 			out.append(gene)
 	for gene: StringName in tiers:
-		if gene != &"cytostome" and gene != &"cirrus" and gene != &"flagellum" \
-				and not Genome.has_forms(gene):
+		if not _homes.has(gene) and not Genome.has_forms(gene):
 			out.append(gene)
-	for home in 3:
-		if out.size() <= Genome.INSIDE:
+	var inside := BodyPlan.INSIDE
+	for home: int in _home_slots:
+		if out.size() <= inside:
 			break
 		if out[home] == &"":
-			out[home] = out[Genome.INSIDE]
-			out.remove_at(Genome.INSIDE)
-	if out.size() > Genome.INSIDE:
-		out.resize(Genome.INSIDE)
+			out[home] = out[inside]
+			out.remove_at(inside)
+	if out.size() > inside:
+		out.resize(inside)
 	return out
 
 
@@ -1193,7 +1178,8 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		if eat > 0:
 			var look: Dictionary = _looks[gene]
 			var mat := PackedVector2Array()
-			_gather_cytostome(mat, at, fwd, stb, r, eat, clock, int(look["count"]))
+			_gather_cytostome(mat, at, fwd, stb, r, eat, clock, int(look["count"]),
+				_home_arc(gene, layout))
 			_stroke(canvas, mat, look["hue"],
 				ALPHA_CYTOSTOME * _tier(TIER_ALPHA, eat) * fade,
 				WIDTH_CYTOSTOME * unit)
@@ -1203,10 +1189,11 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 		if turn > 0:
 			var look: Dictionary = _looks[gene]
 			var oars := PackedVector2Array()
+			var flank := _home_arc(gene, layout)
 			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, 1.0,
-				int(look["count"]))
+				int(look["count"]), flank)
 			_gather_cirrus(oars, at, fwd, stb, r, turn, clock, steer, -1.0,
-				int(look["count"]))
+				int(look["count"]), flank)
 			_stroke(canvas, oars, look["hue"],
 				ALPHA_CIRRUS * _tier(TIER_ALPHA, turn) * fade, WIDTH_CIRRUS * unit)
 
@@ -1217,7 +1204,7 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 			var tails := PackedVector2Array()
 			var own := not is_nan(tail.x)
 			_gather_flagellum(tails, at, fwd, stb, r, swim, tail.x if own else clock,
-				int(look["count"]), tail.y if own else 0.0)
+				int(look["count"]), _home_arc(gene, layout), tail.y if own else 0.0)
 			_stroke(canvas, tails, look["hue"],
 				ALPHA_FLAGELLUM * _tier(TIER_ALPHA, swim) * fade,
 				WIDTH_FLAGELLUM * unit)
@@ -1256,18 +1243,28 @@ static func _draw_fringe(canvas: CanvasItem, at: Vector2, fwd: Vector2,
 				unit, float(dose.get("granules", 0.0)))
 
 
+## **The arc a home organ is drawn on**: its home slot's in the body plan --
+## whatever slot holds it, which is what makes it a home organ -- or, for one the
+## plan gives no home, the arc it is seated on in [param layout].
+static func _home_arc(gene: StringName, layout: Array) -> Vector2:
+	var home: int = _homes.get(gene, -1)
+	if home >= 0 and home < _plan_arcs.size():
+		return _plan_arcs[home]
+	return BodyPlan.arc(layout.find(gene))
+
+
 ## The oral mat: dense, fine, standing just off the surface, with a beat that
 ## travels along it. It is the only dense fine mat in the vocabulary, and that
 ## texture is `cytostome`'s positive tell -- its hue is deliberately in the
 ## nutrient green family and so is the least legible of the four at range.
 static func _gather_cytostome(into: PackedVector2Array, at: Vector2,
 		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
-		strokes: int) -> void:
+		strokes: int, arc: Vector2) -> void:
 	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(ARC_CYTOSTOME.x, ARC_CYTOSTOME.y, u))
+		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
 		var wave := sin(u * CYTOSTOME_WAVE_U - clock * CYTOSTOME_WAVE_HZ)
 		var length := LEN_CYTOSTOME * r * (0.80 + 0.30 * wave) * scale
 		var normal := _normal(fwd, stb, t)
@@ -1294,8 +1291,11 @@ static func _gather_cytostome(into: PackedVector2Array, at: Vector2,
 ## not.
 static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 		stb: Vector2, r: float, tier: int, clock: float, steer: float,
-		side: float, strokes: int) -> void:
-	var arc := ARC_CIRRUS_STARBOARD if side > 0.0 else ARC_CIRRUS_PORT
+		side: float, strokes: int, flank: Vector2) -> void:
+	# **The port oars are the starboard ones mirrored**: the `oars` shape rows on
+	# both flanks from the one slot it is the home of, so the port arc is the
+	# shape's and never a slot's.
+	var arc := flank if side > 0.0 else Vector2(-flank.y, -flank.x)
 	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	# The outboard side of the turn works harder.
@@ -1326,13 +1326,13 @@ static func _gather_cirrus(into: PackedVector2Array, at: Vector2, fwd: Vector2,
 ## [constant TAIL_HELD_LASH] (its clock is the caller's, and stops).
 static func _gather_flagellum(into: PackedVector2Array, at: Vector2,
 		fwd: Vector2, stb: Vector2, r: float, tier: int, clock: float,
-		strokes: int, still: float = 0.0) -> void:
+		strokes: int, arc: Vector2, still: float = 0.0) -> void:
 	var count := _count(strokes, tier)
 	var scale := _tier(TIER_LEN, tier)
 	var slack := lerpf(1.0, TAIL_HELD_LASH, clampf(still, 0.0, 1.0))
 	for i in count:
 		var u := (float(i) + 0.5) / float(count)
-		var t := deg_to_rad(lerpf(ARC_FLAGELLUM.x, ARC_FLAGELLUM.y, u))
+		var t := deg_to_rad(lerpf(arc.x, arc.y, u))
 		var base := sin(u * FLAGELLUM_WAVE_U - clock * FLAGELLUM_WAVE_HZ)
 		var length := LEN_FLAGELLUM * r * (0.82 + 0.26 * base) * scale
 		var dir := _normal(fwd, stb, t)
@@ -1791,7 +1791,7 @@ const HELD_WILT := 15.0
 ##
 ## [param offer] is the body held open to place [param gene] (dna-body.md §8):
 ## `{"aim": slot, "copies": n, "inside": bool}`, or empty -- `aim` is
-## [constant Genome.INSIDE] for the inside, and `inside` whether it is offered at
+## [member Genome.INSIDE] for the inside, and `inside` whether it is offered at
 ## all (dna-slots-ux.md §3.7). See [method _draw_offer].
 static func draw_pending(canvas: CanvasItem, at: Vector2, heading: float,
 		r: float, order: Array, gene: StringName, remaining: float,
@@ -1932,7 +1932,7 @@ static func _draw_offer(canvas: CanvasItem, at: Vector2, heading: float,
 				TAU, OFFER_HALO_STEPS, Color(tone, OFFER_HALO_ALPHA * fade),
 				OFFER_HALO_WIDTH * unit, true)
 	var outside := OFFER_OUT_DIM if inward else 1.0
-	for slot in mini(order.size(), 3 + ARC_FREE.size()):
+	for slot in mini(order.size(), BodyPlan.SLOT_MAX):
 		if StringName(order[slot]) != &"":
 			continue
 		# **Each free slot blooms as the form it would make**, and a slot whose
@@ -1978,7 +1978,7 @@ static func _socket_bead(at: Vector2, fwd: Vector2, stb: Vector2, r: float,
 ## layout is unknown, which is every cell but the player's.
 static func free_arcs(order: Array) -> Array[Vector2]:
 	var out: Array[Vector2] = []
-	for slot in mini(order.size(), 3 + ARC_FREE.size()):
+	for slot in mini(order.size(), BodyPlan.SLOT_MAX):
 		if StringName(order[slot]) == &"":
 			out.append(arc_for_slot(slot))
 	return out

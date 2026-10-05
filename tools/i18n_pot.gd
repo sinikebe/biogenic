@@ -1886,7 +1886,10 @@ func _measure_screens() -> Dictionary:
 	# **And every slot**: a gene's numbers may depend on where it is worn -- venom
 	# at the front and on a side or the stern are three rows (dna-slots.md §3.3) --
 	# so a gene that does not level is read in each outside slot, and with none.
-	var slot_max := int(_script_const(cell, "SLOT_MAX")) if _script_const(cell, "SLOT_MAX") != null else 0
+	# The outside slots are the body plan's (gene-catalogue.md §10.2): `cell.gd`'s
+	# SLOT_MAX follows it as a static var, which a script answers by name as it does
+	# a constant.
+	var slot_max := int(cell.get("SLOT_MAX")) if cell.get("SLOT_MAX") != null else 0
 	var all_slots: Array = range(-1, slot_max)
 	var worst := {}
 	for gene: StringName in genes:

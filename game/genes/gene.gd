@@ -232,8 +232,10 @@ var dose: StringName = &""
 # --- Hooks: what an organ answers that is no plain field -------------------------------
 
 ## **[param stat] at [param t] copies of this key**, off its own table and clamped
-## to it, as `stats.gd`'s `value` reads it: what a line of its own ([method lines])
-## says. 0 for a stat it does not provide.
+## to it, as `stats.gd`'s `value` reads a table: what a line of its own ([method
+## lines]) says. **0 for a stat it does not provide**, where `value` answers the
+## stat's value with no provider: this file cannot ask `stats.gd`, which loads the
+## organ files, and a line only ever reads a stat its own organ provides.
 func stat_at(stat: StringName, t: int) -> float:
 	var table: Array = provides.get(stat, [])
 	if table.is_empty():

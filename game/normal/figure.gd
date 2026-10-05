@@ -56,6 +56,9 @@ const GeneStats := preload("res://game/normal/gene_stats.gd")
 const Readout := preload("res://game/mechanics/readout.gd")
 const Progression := preload("res://game/mechanics/progression.gd")
 const Drops := preload("res://game/normal/drops.gd")
+## **The body plan** (docs/design/gene-catalogue.md §10): the slots the ring lays
+## out, by their bearings. It preloads nothing.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 
 ## The figure's own box, and where the body sits in it. **Set in code, as the
 ## choosing screen's column is**: every seat below is measured from
@@ -76,60 +79,126 @@ const FIGURE_FADE := 0.85
 ## One slot, and the whole of its touch target: 144 x 84 device px at
 ## 2400x1080. Neighbours are 54 px apart across and 82 and 112 down.
 const SLOT_SIZE := Vector2(96.0, 56.0)
-## Chip centres from the body's centre, by slot index. **A 3 x 3 ring, not a
-## circle at true bearings**: words are horizontal, rows and columns give the
-## arrow keys a meaning, and every chip still sits within 5.3 degrees of its
-## arc's true bearing -- the forward diagonals at 47.4 against 42.1, the rear
-## ones at 138.2 against 133.3, the flank at 90 against 92.5.
+## **The ring the chips sit on: a 3 x 3 grid, not a circle at true bearings**:
+## words are horizontal, rows and columns give the arrow keys a meaning, and every
+## chip still sits within 5.3 degrees of its arc's true bearing -- the forward
+## diagonals at 47.4 against 42.1, the rear ones at 138.2 against 133.3, the flank
+## at 90 against 92.5. Its columns and rows, from the body's centre.
+const RING_X: Array[float] = [-150.0, 0.0, 150.0]
+const RING_Y: Array[float] = [-138.0, 0.0, 168.0]
+## **The ring's eight cells, clockwise from the nose's**, as `(column, row)`: the
+## cell an outside slot takes is the one its arc's bearing is nearest, an eighth
+## of a turn each.
+const RING_CELLS: Array[Vector2i] = [Vector2i(1, 0), Vector2i(2, 0), Vector2i(2, 1),
+	Vector2i(2, 2), Vector2i(1, 2), Vector2i(0, 2), Vector2i(0, 1), Vector2i(0, 0)]
+## **The inside, on the body itself** (docs/design/dna-slots-ux.md §3.1): the ring's
+## middle, 6 px aft of the body's centre. The ring round the body is outside and the
+## chip in it is inside, so the figure says the rule without a word. Not in the
+## empty port-flank cell: that is where full vision's own ghost lands, and a chip
+## there would read as a place on the skin.
+const INSIDE_SEAT := Vector2(0.0, 6.0)
+const RING_MIDDLE := Vector2i(1, 1)
+
+## **Chip centres from the body's centre, by slot index** -- laid out from the body
+## plan (`body_plan.gd`, gene-catalogue.md §10.2): each outside slot in the ring's
+## cell nearest its bearing, the inside in the middle. Today: the nose, the
+## starboard flank, the tail, the two forward diagonals, the two rear ones, then
+## the inside.
 ##
 ## **There is no port-flank seat, and the empty cell says so.** Slot 1 is the
 ## flank pair: the cirrus wears both flanks, anything else the starboard one
 ## (cilia.gd). The hole is truthful, and it has a job: see normal_mode.gd's
 ## `_light_panel`.
-const SLOT_SEAT: Array[Vector2] = [
-	Vector2(0.0, -138.0),     # 0 nose
-	Vector2(150.0, 0.0),      # 1 starboard flank
-	Vector2(0.0, 168.0),      # 2 tail
-	Vector2(150.0, -138.0),   # 3 forward starboard
-	Vector2(-150.0, -138.0),  # 4 forward port
-	Vector2(150.0, 168.0),    # 5 rear starboard
-	Vector2(-150.0, 168.0),   # 6 rear port
-	# **7, the inside, on the body itself** (docs/design/dna-slots-ux.md §3.1):
-	# 6 px aft of its centre. The ring round the body is outside and the chip in
-	# it is inside, so the figure says the rule without a word. Not in the empty
-	# port-flank cell: that is where full vision's own ghost lands, and a chip
-	# there would read as a place on the skin.
-	Vector2(0.0, 6.0),
-]
+static var SLOT_SEAT: Array[Vector2] = []
 
 ## **The ring's keyboard**, the pause screen's and a cell's detailed view's alike
 ## (docs/design/cells-ux.md §3.4): where an arrow goes from each slot, its sides,
-## and the order Tab goes round them.
+## and the order Tab goes round them -- laid out with the seats.
 ##
 ## Where a plain arrow takes the keyboard, and where `Shift` and that arrow take
-## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way.
+## the gene, from each slot: `[left, up, right, down]`, -1 for nothing that way --
+## the next slot that way along the ring's row or column, past an empty cell.
 ## **One table for both**, so the key that looks at a slot is the key that moves
 ## a gene into it. **Down from the nose goes in**, and so do left from the flank
 ## and up from the tail: the inside is the body's middle, and those three are the
 ## slots beside it. Nothing wraps: a gene that left one edge of the ring and came
 ## back in at the other would land on an arc nobody aimed at, which is the
 ## strand's clamp argument in two dimensions. Every arrow has its way back.
-const SLOT_NEIGHBOUR: Array = [
-	[4, -1, 3, 7],    # 0 nose
-	[7, 3, -1, 5],    # 1 starboard flank
-	[6, 7, 5, -1],    # 2 tail
-	[0, -1, -1, 1],   # 3 forward starboard
-	[-1, -1, 0, 6],   # 4 forward port
-	[2, 1, -1, -1],   # 5 rear starboard
-	[-1, 4, 2, -1],   # 6 rear port
-	[-1, 0, 1, 2],    # 7 inside: up the nose, right the flank, down the tail
-]
-## The four sides of [constant SLOT_NEIGHBOUR], in its order, as Godot names
+static var SLOT_NEIGHBOUR: Array = []
+## The four sides of [member SLOT_NEIGHBOUR], in its order, as Godot names
 ## them for a focus neighbour.
 const NEIGHBOUR_SIDES: Array = [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]
 ## Tab order: clockwise round the body from the nose, then in, and then on to
 ## the `numbers` switch -- and on the pause screen, `light`.
-const SLOT_RING: Array[int] = [0, 3, 1, 5, 2, 6, 4, 7]
+static var SLOT_RING: Array[int] = []
+## **The slots the ring has no cell of their own for**: an outside slot whose
+## nearest cell another already took, or an inside one past the middle's one. Each
+## is seated somewhere so nothing breaks, but a plan that makes one fails the gene
+## probe's layout check rather than overlapping in silence (§10.4). Empty today.
+static var CROWDED: Array[int] = []
+
+
+static func _static_init() -> void:
+	_lay_out()
+	BodyPlan.listen(_lay_out)
+
+
+## **The ring, laid out from the plan**: [member SLOT_SEAT], [member SLOT_NEIGHBOUR],
+## [member SLOT_RING] and [member CROWDED], each refilled in place -- when this
+## script loads, and whenever the plan changes.
+static func _lay_out() -> void:
+	var cells: Array[Vector2i] = []
+	var taken := {}
+	CROWDED.clear()
+	for slot in BodyPlan.SLOTS:
+		var cell := RING_MIDDLE
+		if slot < BodyPlan.INSIDE:
+			var turn := wrapf(BodyPlan.bearing(slot), 0.0, TAU)
+			cell = RING_CELLS[posmod(roundi(turn / (TAU / RING_CELLS.size())),
+				RING_CELLS.size())]
+		if taken.has(cell):
+			CROWDED.append(slot)
+			cell = _free_cell(taken, cell)
+		taken[cell] = slot
+		cells.append(cell)
+	SLOT_SEAT.clear()
+	for slot in cells.size():
+		var cell := cells[slot]
+		SLOT_SEAT.append(INSIDE_SEAT if cell == RING_MIDDLE
+			else Vector2(RING_X[cell.x], RING_Y[cell.y]))
+	SLOT_NEIGHBOUR.clear()
+	var ways: Array[Vector2i] = [Vector2i(-1, 0), Vector2i(0, -1), Vector2i(1, 0),
+		Vector2i(0, 1)]
+	for slot in cells.size():
+		var sides: Array = []
+		for way: Vector2i in ways:
+			var at := cells[slot] + way
+			var to := -1
+			while at.x >= 0 and at.x < RING_X.size() and at.y >= 0 and at.y < RING_Y.size():
+				if taken.has(at):
+					to = int(taken[at])
+					break
+				at += way
+			sides.append(to)
+		SLOT_NEIGHBOUR.append(sides)
+	SLOT_RING.clear()
+	for slot in BodyPlan.INSIDE:
+		SLOT_RING.append(slot)
+	SLOT_RING.sort_custom(func(a: int, b: int) -> bool:
+		return wrapf(BodyPlan.bearing(a), 0.0, TAU) < wrapf(BodyPlan.bearing(b), 0.0, TAU))
+	for slot in range(BodyPlan.INSIDE, BodyPlan.SLOTS):
+		SLOT_RING.append(slot)
+
+
+## The free cell of the ring nearest [param cell] round it, the middle last.
+static func _free_cell(taken: Dictionary, cell: Vector2i) -> Vector2i:
+	var from := RING_CELLS.find(cell)
+	for step in RING_CELLS.size():
+		for side: int in [1, -1]:
+			var near := RING_CELLS[posmod(maxi(from, 0) + side * step, RING_CELLS.size())]
+			if not taken.has(near):
+				return near
+	return RING_MIDDLE
 
 ## **A tether per live slot**, from the chip's edge to the middle of its arc on
 ## the skin, drawn under the body so the body wins wherever the two cross. It is

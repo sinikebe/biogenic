@@ -981,6 +981,11 @@ static func _is_gift(before: Dictionary, after: Dictionary) -> bool:
 
 ## Every slot names a gene the body wears, and none twice. A worn gene may have
 ## no slot: a gift placed over a slot another organ is still worn in.
+##
+## **It counts no slot.** How long an order may be is the body plan's
+## (docs/design/gene-catalogue.md §10.2), and the wire bounds it before this reads
+## it -- `Wire.ORDER_MAX`, the plan's outside slots -- so a plan with more slots or
+## fewer is judged here as today's is.
 static func _order_fits(tiers: Dictionary, order: Array) -> bool:
 	var seen := {}
 	for gene: Variant in order:

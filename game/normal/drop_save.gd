@@ -40,6 +40,9 @@ const Drop := preload("res://game/normal/drop.gd")
 ## The genes (docs/design/gene-catalogue.md): what [method rules_text] lists of
 ## them, the order and every table any organ provides.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## The body plan (gene-catalogue.md §10): the slot ladder [method rules_text]
+## lists, under the names it had when it was `cell.gd`'s.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 const Stats := preload("res://game/genes/stats.gd")
 
 ## **How the file is laid out.** Bumped only when [constant SHAPE] changes; a
@@ -127,7 +130,9 @@ const SHAPE := {
 ## this one -- it comes back into this drop at a quiet place, as a guest does
 ## that leaves the pond. **And `fed`** (pack 4, docs/design/automation.md §9.2):
 ## the seconds since it last ate, for its instincts, absent for one that never
-## has. Your programs are not here: they are the device's (`library.gd`).
+## has. Your programs are not here: they are the device's (`library.gd`). **And
+## `genome.plan`** (docs/design/gene-catalogue.md §10.3): the body plan's slot ids
+## its two layouts are kept under, absent from a file kept before there was one.
 ##
 ## **This is every view's cell** ([constant CELLS]): what a view keeps is the
 ## same whichever view it is.
@@ -302,7 +307,9 @@ const BEHAVIOURS_VERSION := 1
 
 ## One of the two daughters a division offers, by gene name: the DNA she is
 ## made of, its layout, the body that expressed, and the mutation that made her
-## -- empty for the faithful one.
+## -- empty for the faithful one. **And, since the body plan, `plan`**: the slot
+## ids her layout is kept under (gene-catalogue.md §10.3), checked when it is
+## there, as the genome's is ([method bad_cell]).
 const DAUGHTER := {
 	"tiers": TYPE_DICTIONARY,
 	"order": TYPE_PACKED_STRING_ARRAY,
@@ -315,8 +322,20 @@ const DAUGHTER := {
 ## wrong, not a drop, and is not allocated.
 const SLOTS_MAX := 1 << 16
 
-## [method rules], worked out once a process: the constants cannot change under it.
+## [method rules], worked out once a process: the constants cannot change under it,
+## and the body plan changes only when a tool swaps one in -- which forgets it
+## ([method _read_plan]).
 static var _rules := ""
+
+
+static func _static_init() -> void:
+	BodyPlan.listen(_read_plan)
+
+
+## **Another plan means other rules**: the slot ladder is in [method rules_text], so
+## a plan a tool swaps in is worked out again on the next [method rules].
+static func _read_plan() -> void:
+	_rules = ""
 
 
 # --- What the bodies mean (§9.4) ---------------------------------------------------
@@ -370,6 +389,14 @@ static func rules_text() -> String:
 	labels.sort()
 	for label: String in labels:
 		put.call(label, tables[label])
+	# **The slot ladder is the body plan's** (gene-catalogue.md §10.2), written
+	# under the names it had as `cell.gd`'s constants, so today's plan writes the
+	# lines it always did: `cell.SLOT_RADIUS` the radius one more slot costs --
+	# 3.5, or every rung for a plan whose ladder is not even -- and the fewest and
+	# the most slots outside.
+	cell["SLOT_RADIUS"] = BodyPlan.ladder()
+	cell["SLOT_MIN"] = BodyPlan.SLOT_MIN
+	cell["SLOT_MAX"] = BodyPlan.SLOT_MAX
 	for name: String in ["BASE_RADIUS", "SLOT_RADIUS", "SLOT_MIN", "SLOT_MAX",
 			"GROWTH_PER_MEAL", "DIVIDE_RADIUS", "STROKE_COST", "TURN_COST"]:
 		put.call("cell." + name, cell[name])
@@ -816,11 +843,18 @@ static func bad_cell(cell: Dictionary, at := "cell.") -> String:
 		return at + "daughters is not two daughters"
 	for one: Variant in pair:
 		if not one is Dictionary or not misfit(one, DAUGHTER).is_empty() \
-				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]):
+				or not _is_genes(one["tiers"]) or not _is_genes(one["body"]) \
+				or (one.has("plan") and not BodyPlan.is_stamp(one["plan"])):
 			return at + "daughters is not two daughters by gene name"
 	var genome: Dictionary = cell["genome"]
 	if not _is_genes(genome["dna"]) or not _is_genes(genome["body"]):
 		return at + "genome is not gene names to tiers"
+	# **The body plan's slot ids, beside every layout** (gene-catalogue.md §10.3),
+	# the genome's and each daughter's: absent from a file kept before them, which
+	# was kept under today's plan. A build before them never asks -- a shape is
+	# checked key by key, and a key it does not name is not looked at.
+	if genome.has("plan") and not BodyPlan.is_stamp(genome["plan"]):
+		return at + "genome.plan is not slot ids"
 	for one: Variant in genome["waiting"]:
 		if not one is Array or (one as Array).size() != 3 \
 				or typeof(one[0]) != TYPE_STRING or typeof(one[1]) != TYPE_INT \

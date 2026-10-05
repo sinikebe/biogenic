@@ -36,6 +36,11 @@ extends RefCounted
 ## agree on *why* they are hanging up. Three bytes buys that forever.
 ##
 ## No class_name on purpose -- see the note at the top of signal_bus.gd.
+##
+## **It loads one file, the body plan** (`game/genes/body_plan.gd`, which loads
+## nothing): how many genes and slots a genome crosses with are the plan's
+## (docs/design/gene-catalogue.md §10.2), and follow it. Everything else it needs
+## of the game is written out here, and the probe holds each copy to its source.
 
 ## **Bumped by hand, whenever the meaning of any byte below changes.**
 ##
@@ -368,7 +373,7 @@ const POND_HEADER := 10
 ## Stacks per step of a POND load byte.
 const POND_LOAD_SCALE := 4.0
 ## How many loads the header carries: doses.gd's KINDS, written out because this
-## file loads nothing, and the probe holds the two equal.
+## file loads nothing but the body plan, and the probe holds the two equal.
 const POND_LOADS := 3
 ## One body: `id(u32) | meals(u8) | flags(u8) | x(f32) | y(f32) | heading(u8)
 ## | radius(u16, /64) | wound(u8, /255) | speed(u8, x2 u/s)`.
@@ -391,7 +396,8 @@ const POND_BODY := 19
 const POND_PERSON := POND_BODY + 12
 ## **The send set: the sixty water bodies nearest the guest, and every one
 ## hunting it wherever it is** (ocean.md §10.4) -- `food.gd`'s SEND_MAX, written
-## out because this file loads nothing. 58 lie within 1,940 units on average at
+## out because this file loads nothing but the body plan. 58 lie within 1,940
+## units on average at
 ## the drop's density, more in a thick patch.
 const SEND_MAX := 60
 ## How many bodies one snapshot may carry: the send set and the person.
@@ -424,8 +430,8 @@ const POND_SPEED_STEP := 2.0
 ## **One body of a snapshot, as an Array indexed by these.** The same order as
 ## `food.gd`'s `Entry` enum, so a snapshot goes from `pond_entries()` to these
 ## bytes and from these bytes to `apply_pond()` with no copy in between. This
-## file loads nothing, so the order is written out and the probe checks the two
-## agree. `VELOCITY` and `TURNING` read zero for a water cell. An entry may carry
+## file loads nothing but the body plan, so the order is written out and the probe
+## checks the two agree. `VELOCITY` and `TURNING` read zero for a water cell. An entry may carry
 ## more after `TURNING` -- the host's own slot for the body -- and none of it is
 ## written.
 enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
@@ -437,22 +443,33 @@ enum Entry { ID, MEALS, FLAGS, AT, HEADING, RADIUS, WOUND, SPEED,
 ## version-proof by construction: an unknown one draws in the fallback hue and
 ## is inert in every rule, which is the shipped retirement behaviour.
 ##
-## The decoder refuses the whole message on more genes than [constant
-## GENES_MAX] -- seven slots outside, one inside, and a held sample, or a gift
-## worn over an organ still worn -- on a name outside 1 to [constant NAME_MAX]
-## bytes of `a-z`, or on an order longer than [constant ORDER_MAX]: the order is
-## the worn layout, outside only, because an inside form is inside by its name.
-## Tiers clamp to 0..[constant TIER_TOP]. Nine since protocol 7, and every bound
-## after it follows (docs/design/dna-slots.md §14.2).
-const GENES_MAX := 9
-const ORDER_MAX := 7
+## The decoder refuses the whole message on more genes than [member GENES_MAX]
+## -- every slot the body has, seven outside and one inside, and one more: a held
+## sample, or a gift worn over an organ still worn -- on a name outside 1 to
+## [constant NAME_MAX] bytes of `a-z`, or on an order longer than [member
+## ORDER_MAX], the slots outside: the order is the worn layout, outside only,
+## because an inside form is inside by its name. Tiers clamp to 0..[constant
+## TIER_TOP]. Nine since protocol 7, and every bound after it follows
+## (docs/design/dna-slots.md §14.2).
+##
+## **The two counts are the body plan's** (docs/design/gene-catalogue.md §10.2),
+## worked out from it and read again whenever it changes ([method _read_plan]): a
+## plan with one more slot sends and takes one more gene, one more outside slot
+## one more in an order, and every size below that holds a genome follows. Until
+## the handshake carries the plan's fingerprint (§11.3, phase 4), a build on
+## another plan is another protocol, and [constant PROTOCOL] moves by hand.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
+static var GENES_MAX: int = BodyPlan.SLOTS + 1
+static var ORDER_MAX: int = BodyPlan.SLOT_MAX
 const NAME_MAX := 16
+## **The highest tier that crosses**: genome.gd's TIER_MAX, written out because
+## this file loads nothing but the body plan, and the probe holds the two equal.
 const TIER_TOP := 3
 
 # --- A list of rules, by line (protocol 6, docs/design/automation.md §10.3) ----
 ## **The most rules a list holds**: `drop.gd`'s MOST_RULES, eight, written out
-## because this file loads nothing, and the probe holds the two equal. A SISTER
-## carrying more is refused whole.
+## because this file loads nothing but the body plan, and the probe holds the two
+## equal. A SISTER carrying more is refused whole.
 const MOST_RULES := 8
 ## **The longest line one rule may be**, in bytes. The longest line today's
 ## vocabulary can write is under ninety -- `net_probe` measures it -- so a later
@@ -510,25 +527,29 @@ const CLEAR_SIZE := EVENT_HEADER + 4
 ##
 ## **So a later protocol's HELLO must stay within these 64 bytes** to be told
 ## why a host of this build refuses it. Longer, and the host hangs up before
-## the handshake with no sentence at all; longer than [constant GUEST_OTHER_MAX]
+## the handshake with no sentence at all; longer than [member GUEST_OTHER_MAX]
 ## (290), and it is the oversize cut, which bars the caller's address for a
 ## minute (net-hardening.md A.2).
 const HANDSHAKE_MAX := 64
-## A worn genome at its longest: the count, then [constant GENES_MAX] genes of
+## **Every size that holds a genome or an order is a static var**, worked out in
+## [method _read_plan] from the two counts above, which are the plan's: they are
+## constants in all but name, and change only with the plan.
+##
+## A worn genome at its longest: the count, then [member GENES_MAX] genes of
 ## `len | a name of NAME_MAX letters | tier`. 163 bytes. An unknown name is
 ## legal and inert, so the bound follows the format and not today's longest
 ## gene, which has ten letters.
-const TIERS_MAX := 1 + GENES_MAX * (1 + NAME_MAX + 1)
-## A slot order at its longest: the count, then [constant ORDER_MAX] slots of
+static var TIERS_MAX := 0
+## A slot order at its longest: the count, then [member ORDER_MAX] slots of
 ## `len | name`. 120 bytes.
-const ORDER_BYTES_MAX := 1 + ORDER_MAX * (1 + NAME_MAX)
+static var ORDER_BYTES_MAX := 0
 ## PERSON: the header, the new-body byte, a genome and an order -- 9 bytes with
 ## nothing worn, 290 at the most the format holds. A real one is at most 194.
 const PERSON_MIN := EVENT_HEADER + 1 + 1 + 1
-const PERSON_MAX := EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
+static var PERSON_MAX := 0
 ## GENOME: the body's id and meals, then a genome. 12 to 174.
 const GENOME_MIN := EVENT_HEADER + 5 + 1
-const GENOME_MAX := EVENT_HEADER + 5 + TIERS_MAX
+static var GENOME_MAX := 0
 ## CONTACT: an ATE carries its gene's name, a KILLED its cause. 20 to 37.
 const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## SISTER: a place, a heading, a radius and a genome -- and since protocol 6 a
@@ -539,20 +560,39 @@ const CONTACT_MAX := CONTACT_SIZE + 1 + NAME_MAX
 ## is under a kilobyte: a DNA holds eight genes of ten letters at most, and
 ## today's longest line is under ninety bytes.
 const SISTER_MIN := EVENT_HEADER + 13 + 1 + 1 + 1
-const SISTER_MAX := EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 \
-	+ MOST_RULES * (1 + RULE_BYTES_MAX)
+static var SISTER_MAX := 0
 ## **The most either side ever writes in one frame**: a guest's longest SISTER
-## -- since protocol 6, longer than its longest PERSON, [constant PERSON_MAX] --
+## -- since protocol 6, longer than its longest PERSON, [member PERSON_MAX] --
 ## and a host's POND. A receiver reads no byte past the first of anything
 ## longer.
-const GUEST_FRAME_MAX := SISTER_MAX
+static var GUEST_FRAME_MAX := 0
 const HOST_FRAME_MAX := POND_MAX
 ## **The most a guest writes in any frame but a SISTER**: its longest PERSON,
 ## which was every guest frame's cap before protocol 6. Only a SISTER needs
 ## more -- her list rides in it -- so a guest frame of any other kind past this
 ## is still the oversize cut that bars an address (net-hardening.md A.2), and
 ## not a strike on the ledger. [method guest_cap] says which applies.
-const GUEST_OTHER_MAX := PERSON_MAX
+static var GUEST_OTHER_MAX := 0
+
+
+static func _static_init() -> void:
+	_read_plan()
+	BodyPlan.listen(_read_plan)
+
+
+## **Every size that follows the body plan, worked out from it**: at load, and
+## again whenever a tool swaps a plan in (body_plan.gd's `use`).
+static func _read_plan() -> void:
+	GENES_MAX = BodyPlan.SLOTS + 1
+	ORDER_MAX = BodyPlan.SLOT_MAX
+	TIERS_MAX = 1 + GENES_MAX * (1 + NAME_MAX + 1)
+	ORDER_BYTES_MAX = 1 + ORDER_MAX * (1 + NAME_MAX)
+	PERSON_MAX = EVENT_HEADER + 1 + TIERS_MAX + ORDER_BYTES_MAX
+	GENOME_MAX = EVENT_HEADER + 5 + TIERS_MAX
+	SISTER_MAX = EVENT_HEADER + 13 + 2 * TIERS_MAX + 1 + MOST_RULES * (1 + RULE_BYTES_MAX)
+	GUEST_FRAME_MAX = SISTER_MAX
+	GUEST_OTHER_MAX = PERSON_MAX
+
 
 # ---------------------------------------------------------------------------
 # Writing.
@@ -1067,9 +1107,9 @@ static func size_ok(kind: int, type: int, size: int, from_host: bool) -> bool:
 	return span.x >= 0 and size >= span.x and size <= span.y
 
 
-## **The cap a guest's [param frame] is held to**: [constant SISTER_MAX] for a
-## SISTER event, and [constant GUEST_OTHER_MAX] for every other frame. Of a
-## frame past [constant GUEST_OTHER_MAX] it reads byte 0 and the event's type,
+## **The cap a guest's [param frame] is held to**: [member SISTER_MAX] for a
+## SISTER event, and [member GUEST_OTHER_MAX] for every other frame. Of a
+## frame past [member GUEST_OTHER_MAX] it reads byte 0 and the event's type,
 ## byte 5 -- which a frame that long has -- only to find the one kind allowed
 ## past it; of any other frame it reads nothing.
 static func guest_cap(frame: PackedByteArray) -> int:
@@ -1333,7 +1373,7 @@ static func take_died(frame: PackedByteArray) -> Array:
 ## none, whom a host makes of her body as before; `lines` is her list, a rule a
 ## line, empty for the founders'.
 ##
-## **Refused whole**, as a genome is: a DNA past [constant GENES_MAX] genes or
+## **Refused whole**, as a genome is: a DNA past [member GENES_MAX] genes or
 ## naming one the wire cannot ([method _name_ok]); more than [constant
 ## MOST_RULES] lines; a line that is empty, longer than [constant
 ## RULE_BYTES_MAX] or holds a byte outside [constant RULE_BYTES]; or a byte past
@@ -1455,7 +1495,7 @@ static func _name_ok(name: String) -> bool:
 
 
 ## `u8 count`, then per gene `u8 len | name | u8 tier`. A gene whose name would
-## be refused is not written, and past [constant GENES_MAX] the rest are not:
+## be refused is not written, and past [member GENES_MAX] the rest are not:
 ## the writer never sends what the reader refuses.
 static func _tiers_bytes(tiers: Dictionary) -> PackedByteArray:
 	var out := PackedByteArray([0])
@@ -1475,7 +1515,7 @@ static func _tiers_bytes(tiers: Dictionary) -> PackedByteArray:
 
 
 ## `u8 count`, then per slot `u8 len | name`, length 0 for an empty slot. Past
-## [constant ORDER_MAX] slots the rest are not written; a name that would be
+## [member ORDER_MAX] slots the rest are not written; a name that would be
 ## refused is written as an empty slot.
 static func _order_bytes(order: Array) -> PackedByteArray:
 	var out := PackedByteArray([0])

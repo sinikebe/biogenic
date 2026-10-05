@@ -115,6 +115,8 @@ const Genome := preload("res://game/normal/genome.gd")
 ## the referee's rules fingerprint, the gift, the born body.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## The body plan (gene-catalogue.md §10): what the wire's genome limits come from.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 ## For the run's own numbering -- Life, Split, the division's clocks and the
 ## pond's lines -- which the `pond` section reads off two real runs.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
@@ -920,14 +922,17 @@ func _check_pond_wire() -> void:
 		+ " byte long, by every decoder")
 
 	# **Genomes by name**: the reader refuses the whole message on a name that
-	# is not 1-16 bytes of a-z, on more than nine genes -- seven outside, one
-	# inside and a held sample, since protocol 7 -- or seven slots; tiers clamp to
-	# 0..3; the writer never sends what the reader refuses. Nine are taken.
+	# is not 1-16 bytes of a-z, on more genes than the body plan has slots and one
+	# more -- seven outside, one inside and a held sample, since protocol 7 -- or
+	# more slots than it has outside; tiers clamp to 0..3; the writer never sends
+	# what the reader refuses. As many as that are taken. **The counts are held to
+	# what they come from** -- the plan, and genome.gd's tiers (gene-catalogue.md
+	# §13) -- never to a number.
 	var loud := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, {&"cytostome": 9, &"cirrus": -2}, [])))
 	var ten := {}
 	for i in Wire.GENES_MAX + 1:
-		ten[StringName("gene" + "abcdefghij"[i])] = 1
+		ten[StringName("gene" + String.chr(97 + i))] = 1
 	var ten_frame := Wire.event(1, Wire.EVENT_PERSON, Wire.person_payload(false, {}, []))
 	ten_frame.resize(Wire.EVENT_HEADER + 1)
 	ten_frame.append(ten.size())
@@ -937,7 +942,7 @@ func _check_pond_wire() -> void:
 		ten_frame.append(1)
 	ten_frame.append(0)
 	var nine := ten.duplicate()
-	nine.erase(&"genej")
+	nine.erase(ten.keys().back())
 	var nine_said := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
 		Wire.person_payload(false, nine, [])))
 	var named := func(name: String, tier: int = 1) -> PackedByteArray:
@@ -948,8 +953,9 @@ func _check_pond_wire() -> void:
 		f.append(0)
 		return f
 	var clamped := Wire.take_person(named.call("cytostome", 9))
-	var eight_slots := Wire.event(1, Wire.EVENT_PERSON, PackedByteArray([0, 0, 8]))
-	for i in 8:
+	var eight_slots := Wire.event(1, Wire.EVENT_PERSON,
+		PackedByteArray([0, 0, Wire.ORDER_MAX + 1]))
+	for i in Wire.ORDER_MAX + 1:
 		eight_slots.append(0)
 	_says(loud.size() == 3 and int(loud[1][&"cytostome"]) == Wire.TIER_TOP
 			and int(loud[1][&"cirrus"]) == 0
@@ -961,18 +967,26 @@ func _check_pond_wire() -> void:
 			and Wire.take_person(named.call("cir rus")).is_empty()
 			and Wire.take_person(named.call("cili5")).is_empty()
 			and Wire.take_person(ten_frame).is_empty()
-			and nine_said.size() == 3 and nine_said[1] == nine and Wire.GENES_MAX == 9
+			and nine_said.size() == 3 and nine_said[1] == nine
+			and Wire.GENES_MAX == BodyPlan.SLOTS + 1 and Wire.ORDER_MAX == BodyPlan.SLOT_MAX
+			and Wire.TIER_TOP == Genome.TIER_MAX
 			and Wire.take_person(eight_slots).is_empty(),
-		"pond wire: a genome is refused whole on a name that is not 1-16 bytes of"
-		+ " a-z, ten genes or eight slots, and nine are taken; tiers clamp to 0..3")
+		("pond wire: a genome is refused whole on a name that is not 1-16 bytes of"
+		+ " a-z, %d genes or %d slots, and %d are taken -- the body plan's %d slots and"
+		+ " one more, and its %d outside; tiers clamp to 0..%d, genome.gd's") % [
+			Wire.GENES_MAX + 1, Wire.ORDER_MAX + 1, Wire.GENES_MAX, BodyPlan.SLOTS,
+			BodyPlan.SLOT_MAX, Wire.TIER_TOP])
+	var past: Array[StringName] = [&"cytostome", &"Bad Name", &""]
+	while past.size() < Wire.ORDER_MAX + 2:
+		past.append(StringName(String.chr(97 + past.size() - 3)))
 	var written := Wire.take_person(Wire.event(1, Wire.EVENT_PERSON,
-		Wire.person_payload(false, {&"cytostome": 1, &"Bad Name": 2, &"": 1},
-			[&"cytostome", &"Bad Name", &"", &"a", &"b", &"c", &"d", &"e", &"f"])))
+		Wire.person_payload(false, {&"cytostome": 1, &"Bad Name": 2, &"": 1}, past)))
 	_says(written.size() == 3 and (written[1] as Dictionary).size() == 1
 			and (written[2] as Array).size() == Wire.ORDER_MAX
 			and written[2][1] == &"",
 		"pond wire: and the writer leaves out what the reader would refuse --"
-		+ " a bad name is not sent, a bad slot goes empty, past seven slots stop")
+		+ " a bad name is not sent, a bad slot goes empty, past %d slots stop"
+		% Wire.ORDER_MAX)
 
 
 # ---------------------------------------------------------------------------
@@ -2121,7 +2135,7 @@ func _limits_oversize() -> void:
 
 
 ## **T2, the SISTER's room** (protocol 6, automation.md §10.3): the one kind a
-## greeted guest may send past [constant Wire.GUEST_OTHER_MAX], to [constant
+## greeted guest may send past [member Wire.GUEST_OTHER_MAX], to [member
 ## Wire.SISTER_MAX], because her list rides in it. One of a thousand-odd bytes
 ## is taken; one as long that does not read is an ordinary malformed frame, a
 ## strike and no cut; one byte past SISTER_MAX is the oversize cut. And a

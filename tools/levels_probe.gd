@@ -646,15 +646,21 @@ func _gene_stats() -> void:
 	_check("a fresh beam reads `%s` and `%s`" % [Readout.plain(beam[0]), next],
 		next == "level 2 after 40 strikes"
 		and Readout.plain(beam[0]) == "1 ray · reaches 620 µm")
-	# **A retired gene is the one with no row** (gene-catalogue.md §8.4): every live
-	# gene has its lines, which the gene probe holds, so it is the retired ones --
-	# their organs' files have no lines -- that must draw nothing.
-	var retired := Catalogue.tagged(Catalogue.RETIRED)
-	var silent := not retired.is_empty()
-	for key: StringName in retired:
+	# **A gene with no row draws nothing** (gene-catalogue.md §8.4): every live gene
+	# has its lines, which the gene probe holds, so it is a retired one whose organ's
+	# file has no lines -- retiring is its tag alone (§16), and a gene retired later
+	# keeps its lines -- and a key this build does not know that must draw nothing.
+	var silent_keys: Array[StringName] = [&"probeunknown"]
+	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
+		var organ := Catalogue.gene(key)
+		if organ != null \
+				and not (organ.get_script() as GDScript).source_code.contains("func lines("):
+			silent_keys.append(key)
+	var silent := true
+	for key: StringName in silent_keys:
 		silent = silent and GeneStats.lines(key, 2, 0, &"", born) == [[], []]
-	_check("a gene with no row draws nothing -- every retired one, %s -- as a gene with no"
-		% str(retired) + " line says nothing", silent)
+	_check("a gene with no row draws nothing -- %s -- as a gene with no line says nothing"
+		% str(silent_keys), silent)
 	var clause := Readout.plain(GeneStats.cell_items(CellBody.BASE_RADIUS,
 		Catalogue.born(), GenomeNode.upkeep_of(Catalogue.born())))
 	_check("a newborn's caption says `%s` -- energy.md §7.2 measured 24.0 s to empty"

@@ -43,6 +43,9 @@ const Progression := preload("res://game/mechanics/progression.gd")
 ## its tags and its numbers, by key. Every rule here is generic and asks it.
 const Catalogue := preload("res://game/genes/catalogue.gd")
 const Stats := preload("res://game/genes/stats.gd")
+## **The body plan** (docs/design/gene-catalogue.md §10): every slot, its place and
+## its anatomy, and the home seats. It preloads nothing.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 
 ## What eating something did. Returned by [method integrate] so the caller --
 ## and the genome strip on the pause screen -- can react without re-deriving it.
@@ -84,23 +87,38 @@ const TIER_MAX := 3
 
 ## **The inside of a body**: every slot from this index on is inside the body,
 ## and every slot before it is an arc of the skin, outside. Arcs are earned by
-## growing; the inside is every cell's from birth.
-const INSIDE := CellBody.SLOT_MAX
-## **How much room the inside has**: one slot, for the one gene that has an
-## inside form now. More inside genes, or more strains, are where it would grow
+## growing; the inside is every cell's from birth. **These four are the body
+## plan's** (`body_plan.gd`), under the names every reader knows them by, read again
+## whenever the plan changes ([method _read_plan]).
+static var INSIDE: int = BodyPlan.INSIDE
+## **How much room the inside has**: one slot today, for the one gene that has an
+## inside form. More inside genes, or more strains, are where it would grow
 ## (dna-slots.md §19). Structure, not balance.
-const INSIDE_SLOTS := 1
+static var INSIDE_SLOTS: int = BodyPlan.INSIDE_SLOTS
 ## The two places, by the owner's words.
-const OUTSIDE_PLACE := &"outside"
-const INSIDE_PLACE := &"inside"
+const OUTSIDE_PLACE := BodyPlan.OUTSIDE_PLACE
+const INSIDE_PLACE := BodyPlan.INSIDE_PLACE
 ## **The front**: the arcs that touch the mouth's own, the nose and the two
 ## either side of it. Anatomy, not a place: an outside toxin in one of them acts
 ## through the bite, and on any other arc it stings what bites that side
-## (dna-slots.md §2.3).
-const FRONT: Array[int] = [0, 3, 4]
+## (dna-slots.md §2.3). The plan's own list, refilled in place when it changes.
+static var FRONT: Array[int] = BodyPlan.FRONT
 ## **The stern**: the arc behind, the tail's. An outside toxin here stings what
 ## bites from behind; named for the words that say so, and nothing else.
-const STERN := 2
+static var STERN: int = BodyPlan.STERN
+
+
+static func _static_init() -> void:
+	BodyPlan.listen(_read_plan)
+
+
+## The plan changed (`body_plan.gd`'s `use`, a tool's): its slots again.
+static func _read_plan() -> void:
+	INSIDE = BodyPlan.INSIDE
+	INSIDE_SLOTS = BodyPlan.INSIDE_SLOTS
+	FRONT = BodyPlan.FRONT
+	STERN = BodyPlan.STERN
+
 
 # **A gene that is a different form in another place** is the catalogue's to
 # say: every key is one form of its organ's variant, in one place, and the first
@@ -322,7 +340,7 @@ var _cell: CellBody = null
 
 func _ready() -> void:
 	if _dna.is_empty():
-		express(Catalogue.born(), Catalogue.born_order())
+		express(Catalogue.born(), BodyPlan.home_layout(Catalogue.born_order()))
 	_sync_order()
 
 
@@ -338,7 +356,7 @@ func setup(cell: CellBody) -> void:
 ## everything** -- lifecycle.md §1.5, replacing §9.4. Death is still a clean
 ## restart as the born cell, three organs, all tier 1.
 func reset() -> void:
-	express(Catalogue.born(), Catalogue.born_order())
+	express(Catalogue.born(), BodyPlan.home_layout(Catalogue.born_order()))
 
 
 ## **A body born of a DNA.** The two registers are set here and nowhere else: a
@@ -796,6 +814,11 @@ func restore_levels(state: Dictionary) -> void:
 ## other -- the slots the body did not earn, the gift not yet placed, every
 ## waiting gene with its copies and the seconds it has left, and the lineage's
 ## levels. A gene this build does not know is kept by the name it has.
+##
+## **And `plan`, the body plan's slot ids by index** (gene-catalogue.md §10.3),
+## which the two layouts are kept under: a build on another plan puts each gene
+## back in its slot by id ([method layout_from]). A file before it has none, and
+## was kept under today's plan; a build before it never asks.
 func to_state() -> Dictionary:
 	var waiting: Array = []
 	for one: Waiting in _waiting:
@@ -809,6 +832,7 @@ func to_state() -> Dictionary:
 		"order": PackedStringArray(layout()),
 		"body": tiers_by_name(_body),
 		"worn": PackedStringArray(body_layout()),
+		"plan": BodyPlan.stamp(),
 		"bonus": bonus_slots,
 		"gift": String(_gift),
 		"waiting": waiting,
@@ -821,12 +845,8 @@ func to_state() -> Dictionary:
 ## queue, each clock where it had got to -- which no birth does, since a birth
 ## starts every clock full ([method carry]).
 func set_state(state: Dictionary) -> void:
-	var order: Array = []
-	for gene: String in state["order"]:
-		order.append(StringName(gene))
-	var worn: Array = []
-	for gene: String in state["worn"]:
-		worn.append(StringName(gene))
+	var order := layout_from(state["order"], state.get("plan"))
+	var worn := layout_from(state["worn"], state.get("plan"))
 	express(tiers_from_names(state["dna"]), order, tiers_from_names(state["body"]), worn)
 	restore_levels(state["levels"])
 	bonus_slots = int(state["bonus"])
@@ -835,6 +855,20 @@ func set_state(state: Dictionary) -> void:
 		_waiting.append(Waiting.new(StringName(one[0]), clampi(int(one[1]), 1, TIER_MAX),
 			float(one[2])))
 	_sync_order()
+
+
+## **A slot layout as a file keeps it, on the body plan in use**
+## (gene-catalogue.md §10.3): [param names], gene names by slot, kept under the
+## plan whose ids [param plan] stamps -- `null` for a file kept before the stamp,
+## under today's plan. Under the plan in use it is read as it is; under another,
+## every gene goes back to its slot by id, and one whose slot is gone to the free
+## slot nearest it, or out of the layout and into the DNA alone: never dropped
+## (body_plan.gd's `migrate`).
+static func layout_from(names: Variant, plan: Variant) -> Array[StringName]:
+	var out: Array[StringName] = []
+	for gene: Variant in BodyPlan.migrate(Array(names), BodyPlan.written(plan)):
+		out.append(StringName(gene))
+	return out
 
 
 ## `{gene: tier}` with every gene a String: how a file keeps a genome.
@@ -968,7 +1002,7 @@ func gift(gene: StringName) -> int:
 ## makes it survivable: the gene goes to that index whatever else is empty, so
 ## the arc it will be worn on is the arc the tile's compass promised.
 ##
-## **The inside is a slot too** ([constant INSIDE]): a toxin placed there is
+## **The inside is a slot too** ([member INSIDE]): a toxin placed there is
 ## poison. A gene that faces out is refused there and keeps waiting -- nothing
 ## is spent on a placement that cannot be.
 func place(slot: int, which: int = 0) -> int:
@@ -1186,7 +1220,7 @@ func _slot_gene(slot: int) -> StringName:
 
 ## **What the DNA carries inside** (dna-slots.md §2.2): its inside forms, in
 ## the catalogue's order and then any other, padded with `&""` to
-## [constant INSIDE_SLOTS]. **The inside keeps no order of its own**: nothing
+## [member INSIDE_SLOTS]. **The inside keeps no order of its own**: nothing
 ## inside faces anywhere, so which inside slot holds what means nothing, and it is
 ## read off the DNA rather than kept -- which is why no save, no message and no
 ## rule of the referee's changes for it.
@@ -1414,7 +1448,7 @@ static func express_chance(gene: StringName, copies: int) -> float:
 ## NO_ROOM, which only the node half knows what to do about (it holds it).
 ##
 ## **Room is by place** (dna-slots.md §5.7): an inside form asks for room
-## inside, [constant INSIDE_SLOTS], and every other gene for room outside,
+## inside, [member INSIDE_SLOTS], and every other gene for room outside,
 ## [param capacity] -- so a water cell's poison takes no arc. A genome with
 ## nothing inside counts exactly as it always did.
 static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -> int:
@@ -1439,7 +1473,7 @@ static func integrate_into(tiers: Dictionary, gene: StringName, capacity: int) -
 # What a place, a form and a variety are, for any `{gene: tier}` map -- the
 # player's genome node asks these as every cell in the water does.
 
-## **The place [param slot] is in**: inside from [constant INSIDE] on, outside
+## **The place [param slot] is in**: inside from [member INSIDE] on, outside
 ## before it.
 static func place_of(slot: int) -> StringName:
 	return INSIDE_PLACE if slot >= INSIDE else OUTSIDE_PLACE

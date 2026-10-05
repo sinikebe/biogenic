@@ -29,6 +29,9 @@ const GenomeNode := preload("res://game/normal/genome.gd")
 ## what this run wires to the field and the membrane is read through these, by
 ## stat and by tag, and never by a gene's name.
 const Catalogue := preload("res://game/genes/catalogue.gd")
+## **The body plan** (docs/design/gene-catalogue.md §10): the slots, and where a born
+## body's organs are seated. It preloads nothing.
+const BodyPlan := preload("res://game/genes/body_plan.gd")
 const Stats := preload("res://game/genes/stats.gd")
 const SomaLayer := preload("res://game/perception/soma.gd")
 const ReturnsLayer := preload("res://game/perception/returns.gd")
@@ -1304,26 +1307,25 @@ func _resume_cell(state: Dictionary) -> void:
 		_instincts.set_fed(float(state["fed"]))
 	_kept_daughters = []
 	for one: Dictionary in state["daughters"]:
-		var order: Array[StringName] = []
-		for gene: String in one["order"]:
-			order.append(StringName(gene))
 		_kept_daughters.append({
 			"tiers": GenomeNode.tiers_from_names(one["tiers"]),
-			"order": order,
+			"order": GenomeNode.layout_from(one["order"], one.get("plan")),
 			"body": GenomeNode.tiers_from_names(one["body"]),
 			"mutation": StringName(one["mutation"]),
 		})
 	_resumed = true
 
 
-## A division's two daughters as the drop keeps them, every gene by name; none
-## before the pinch has rolled them.
+## A division's two daughters as the drop keeps them, every gene by name, each
+## layout with the body plan's slot ids beside it (gene-catalogue.md §10.3), as a
+## genome's is; none before the pinch has rolled them.
 static func _daughters_by_name(pair: Array) -> Array:
 	var out: Array = []
 	for one: Dictionary in pair:
 		out.append({
 			"tiers": GenomeNode.tiers_by_name(one["tiers"]),
 			"order": PackedStringArray(one["order"]),
+			"plan": BodyPlan.stamp(),
 			"body": GenomeNode.tiers_by_name(one["body"]),
 			"mutation": String(one["mutation"]),
 		})
@@ -5136,7 +5138,7 @@ func _build_genome_strip() -> void:
 ## Godot takes as *stay here*. Left unset, its geometric search would carry the
 ## focus off the ring to whatever control happens to lie that way -- and an
 ## unearned slot would be a hole the arrow fell straight through, which is the
-## one thing [constant Figure.SLOT_NEIGHBOUR] says a move into it is not.
+## one thing [member Figure.SLOT_NEIGHBOUR] says a move into it is not.
 func _wire_focus() -> void:
 	var live: Array[Control] = []
 	for slot: int in Figure.SLOT_RING:
@@ -5177,7 +5179,7 @@ func _slot_live(slot: int) -> bool:
 
 ## **What the figure's chips stand for** (dna-slots-ux.md §3.1): the DNA's
 ## outside layout padded to its seven, and the inside after it, at
-## [constant GenomeNode.INSIDE]. **The genome changed when these eight changed**,
+## [member GenomeNode.INSIDE]. **The genome changed when these eight changed**,
 ## not the seven-long layout: a copy landing inside moves nothing outside, and a
 ## check of the layout alone would call it no change at all.
 func _screen_layout() -> Array[StringName]:
@@ -6602,7 +6604,7 @@ func _drop_waiting(gene: StringName, slot: int) -> void:
 ## **`Shift` and an arrow, read raw.** A content pack cannot add an `InputMap`
 ## action, and the bare arrows are how the GUI is navigated -- so the chord is
 ## read off the key event itself rather than through an action. Returns the
-## arrow's side in [constant Figure.SLOT_NEIGHBOUR] -- 0 left, 1 up, 2 right, 3 down --
+## arrow's side in [member Figure.SLOT_NEIGHBOUR] -- 0 left, 1 up, 2 right, 3 down --
 ## or -1 for anything else. Directions on the ring, not steps along a strand.
 func _move_key(event: InputEvent) -> int:
 	var key := event as InputEventKey
@@ -6621,7 +6623,7 @@ func _move_key(event: InputEvent) -> int:
 
 
 ## One move, from either gesture. [param to] is taken or refused, never
-## adjusted: the table in [constant Figure.SLOT_NEIGHBOUR] and the drop target both
+## adjusted: the table in [member Figure.SLOT_NEIGHBOUR] and the drop target both
 ## name an exact arc, and a gene that landed on a different one would defeat the
 ## whole thing a move is for.
 func _move_slot(from: int, to: int) -> void:
@@ -7766,7 +7768,7 @@ var _offer_clock := 0.0
 ## the press on the frame clock, which is what keeps a `--fixed-fps` run
 ## repeatable.
 var _offer_fresh := false
-## The free slot that is lit -- [constant GenomeNode.INSIDE] for the inside --
+## The free slot that is lit -- [member GenomeNode.INSIDE] for the inside --
 ## or -1 for none: a finger that never left the body, or one back inside it
 ## when the inside is not offered.
 var _offer_aim := -1
@@ -8265,11 +8267,15 @@ func _step_offer(delta: float) -> void:
 # a daughter next to it -- does not move.
 # ---------------------------------------------------------------------------
 
-## §3.1 -- an invariant, not a maximum. See the note above. The seven outside
-## slots and then the inside, at [constant GenomeNode.INSIDE]: **its mark is a
-## ring with a seed in it**, where every outside locus has its slot's dart -- a
-## body with something inside, pointing nowhere (`Cilia.draw_slot_dart`).
-const CHOOSE_LOCI := GenomeNode.INSIDE + GenomeNode.INSIDE_SLOTS
+## §3.1 -- an invariant, not a maximum. See the note above. **Every slot of the
+## body plan**: the seven outside slots and then the inside, at [member
+## GenomeNode.INSIDE]: **its mark is a ring with a seed in it**, where every outside
+## locus has its slot's dart -- a body with something inside, pointing nowhere
+## (`Cilia.draw_slot_dart`).
+static func _choose_loci() -> int:
+	return GenomeNode.INSIDE + GenomeNode.INSIDE_SLOTS
+
+
 ## One locus, along the strand, and therefore one lobe of the weave.
 const CHOOSE_PITCH := 48.0
 ## The lead-in and the tail, in lobes: the chromosome arrives and leaves rather
@@ -8403,7 +8409,7 @@ func _build_choosing() -> void:
 	# about `CHOOSE_BLOCK_W` is one place too many; the scene carries the same
 	# figures so the tree is readable in an editor, and this is what binds.
 	var bottom := CHOOSE_COLUMN_TOP \
-		+ float(CHOOSE_LOCI + 2 * CHOOSE_CAP_LOBES) * CHOOSE_PITCH
+		+ float(_choose_loci() + 2 * CHOOSE_CAP_LOBES) * CHOOSE_PITCH
 	for side in 2:
 		var column: VBoxContainer = _choose_port if side == 0 \
 			else _choose_starboard
@@ -8418,9 +8424,9 @@ func _build_choosing() -> void:
 		column.offset_top = CHOOSE_COLUMN_TOP
 		column.offset_bottom = bottom
 		column.add_child(_make_choose_cap(0, 1))
-		for slot in CHOOSE_LOCI:
+		for slot in _choose_loci():
 			column.add_child(_make_choose_locus(side, slot))
-		column.add_child(_make_choose_cap(CHOOSE_CAP_LOBES + CHOOSE_LOCI, -1))
+		column.add_child(_make_choose_cap(CHOOSE_CAP_LOBES + _choose_loci(), -1))
 	_choose_says.offset_top = bottom + CHOOSE_SAYS_GAP
 	_choose_says.offset_bottom = _choose_says.offset_top + CHOOSE_SAYS_H
 	_choose_organ.custom_minimum_size = Figure.EXPLAIN_ORGAN_SIZE
@@ -8510,7 +8516,7 @@ func _choose_begin() -> void:
 	_choose_diff = _choose_differences()
 	_choose_side = 0
 	_choose_slot = -1
-	for i in CHOOSE_LOCI:
+	for i in _choose_loci():
 		if _choose_diff.has(i):
 			_choose_slot = i
 			break
@@ -8518,7 +8524,7 @@ func _choose_begin() -> void:
 	# and then there is nothing to point at: fall back to the first locus that
 	# carries anything, and to locus 0 if even that fails.
 	if _choose_slot < 0:
-		for i in CHOOSE_LOCI:
+		for i in _choose_loci():
 			if _choose_gene_at(0, i) != &"":
 				_choose_slot = i
 				break
@@ -8539,7 +8545,7 @@ func _choose_differences() -> Dictionary:
 		return out
 	var port_dna: Dictionary = _daughters[0]["tiers"]
 	var stbd_dna: Dictionary = _daughters[1]["tiers"]
-	for i in CHOOSE_LOCI:
+	for i in _choose_loci():
 		var a: StringName = _choose_gene_at(0, i)
 		var b: StringName = _choose_gene_at(1, i)
 		if a != b or int(port_dna.get(a, 0)) != int(stbd_dna.get(b, 0)):
@@ -9054,7 +9060,8 @@ func _enter_from_black() -> void:
 	# A born cell's body and layout, for the body a guest asks to arrive as from
 	# the black: genome.gd's own reset, read here because the body has not been
 	# reset yet.
-	_pond.enter(CellBody.BASE_RADIUS, Catalogue.born(), Catalogue.born_order())
+	_pond.enter(CellBody.BASE_RADIUS, Catalogue.born(),
+		BodyPlan.home_layout(Catalogue.born_order()))
 
 
 ## **Where the host comes back from the black** (owner's row A): near its

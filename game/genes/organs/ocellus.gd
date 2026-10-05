@@ -238,10 +238,7 @@ func lines(_t: int, level: int, path: StringName, ctx: Dictionary, _slot: int,
 	var sweep := float(shape[2])
 	var fan := 2.0 * half
 	var reach := Readout.item("reaches {} µm", [shape[3]], [U.DISTANCE])
-	var price := upkeep_at(at, path)
-	if price < 0.0:
-		price = ctx["genome"].UPKEEP_PER_TIER * float(at - 1)
-	var costs := [(ctx["wear_item"] as Callable).call(price, burn)]
+	var costs := [(ctx["wear_item"] as Callable).call(upkeep_at(at, path), burn)]
 	if rays <= 1:
 		return [[Readout.item("{} ray", [rays], [U.COUNT]), reach], costs]
 	if sweep > 0.0:
