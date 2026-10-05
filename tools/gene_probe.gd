@@ -156,10 +156,10 @@ func _keys() -> void:
 		organs[organ.organ] = true
 		var variants := {}
 		for entry: Dictionary in organ.variants:
-			var name := StringName(entry.get("variant", &""))
-			if variants.has(name):
-				clashes.append("%s's variant %s twice" % [organ.organ, name])
-			variants[name] = true
+			var variant := StringName(entry.get("variant", &""))
+			if variants.has(variant):
+				clashes.append("%s's variant %s twice" % [organ.organ, variant])
+			variants[variant] = true
 	_check("every organ's name is its own, %d of them, and every variant's within its organ%s"
 		% [organs.size(), "" if clashes.is_empty() else ": " + ", ".join(clashes)],
 		clashes.is_empty())
