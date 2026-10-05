@@ -1309,6 +1309,12 @@ func _plan() -> void:
 	crowded.append({"id": &"inside_two", "place": BodyPlan.INSIDE_PLACE,
 		"earned": BodyPlan.ALWAYS})
 	broken["no room"] = crowded
+	# Two more slots inside: a locus each on the choosing screen, which runs past the
+	# canvas's foot (and the pause figure has no seat for them either).
+	var tall := crowded.duplicate(true)
+	tall.append({"id": &"inside_three", "place": BodyPlan.INSIDE_PLACE,
+		"earned": BodyPlan.ALWAYS})
+	broken["run off the canvas"] = tall
 	var missed: Array[String] = []
 	for fault: String in broken:
 		BodyPlan.use(broken[fault], SHIPPED_RETIRED)
@@ -1413,6 +1419,16 @@ func _plan_faults() -> Array[String]:
 	for slot in Figure.SLOT_SEAT.size():
 		if not box.encloses(Rect2(Figure.chip_at(slot), Figure.SLOT_SIZE)):
 			out.append("chip %d leaves the figure" % slot)
+	# **Room on the choosing screen** (normal_mode.gd's `_build_choosing`): a locus a
+	# slot between its two caps, and its words under them, above the foot of the
+	# shortest canvas there is -- landscape-locked, every one is at least this tall.
+	var loci := NormalMode._choose_loci()
+	var foot := NormalMode.CHOOSE_COLUMN_TOP + float(loci + 2 * NormalMode.CHOOSE_CAP_LOBES) \
+		* NormalMode.CHOOSE_PITCH + NormalMode.CHOOSE_SAYS_GAP + NormalMode.CHOOSE_SAYS_H
+	var canvas := float(ProjectSettings.get_setting("display/window/size/viewport_height"))
+	if foot > canvas:
+		out.append("the choosing screen's %d loci run off the canvas, to %.0f px of %.0f"
+			% [loci, foot, canvas])
 	return out
 
 
