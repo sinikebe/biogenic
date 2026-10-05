@@ -155,6 +155,8 @@ static func known(key: StringName) -> bool:
 
 ## **The flat record of [param key]**, or null for a key this build does not
 ## know: every field its organ, variant and form set, and its organ's hooks.
+## **The catalogue's own record**: its containers are read-only ([constant
+## FROZEN]); its plain fields are not, and must never be written.
 static func gene(key: StringName) -> Gene:
 	return _records.get(key, null) as Gene
 
@@ -341,7 +343,8 @@ static func providers(stat: StringName) -> Array[StringName]:
 ## value through, every frame. **It is the catalogue's own dictionary**, which
 ## stats.gd holds once and reads as its own: every index refills it in place --
 ## [method register] and [method forget] too -- and never replaces it, so the
-## holder is never stale. Read it; do not write it.
+## holder is never stale. **It is the one container here that is not read-only**,
+## so that it can be refilled in place: never write it.
 static func provided() -> Dictionary:
 	return _provided
 
@@ -426,6 +429,9 @@ static func _index() -> void:
 				continue
 			records[record.key] = record
 			resolved.append(record)
+	for record: Gene in resolved:
+		for field: StringName in FROZEN:
+			_freeze(record.get(field))
 	_records = records
 	var ordered := resolved.filter(func(one: Gene) -> bool: return one.order >= 0)
 	ordered.sort_custom(func(a: Gene, b: Gene) -> bool: return a.order < b.order)
@@ -607,6 +613,26 @@ static func _pinned(keys: Array[StringName], shipped: Array) -> Array[StringName
 		if not out.has(key):
 			out.append(key)
 	return out
+
+
+## **Every container a record holds, read-only all the way down** ([method _freeze]):
+## what [method gene], [method levels], [method declares], [method table] and the
+## rest hand out is the catalogue's own, and a reader that wrote into it would
+## change that gene for every body.
+const FROZEN: Array[StringName] = [&"provides", &"numbers", &"levels", &"water", &"tags",
+	&"declares", &"variants"]
+
+
+## [param value] made read-only, and every dictionary and array inside it.
+static func _freeze(value: Variant) -> void:
+	if value is Dictionary:
+		for inner: Variant in (value as Dictionary).values():
+			_freeze(inner)
+		(value as Dictionary).make_read_only()
+	elif value is Array:
+		for inner: Variant in (value as Array):
+			_freeze(inner)
+		(value as Array).make_read_only()
 
 
 ## [param list], made read-only and handed back.
