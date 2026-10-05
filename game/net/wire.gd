@@ -278,10 +278,10 @@ const HELLO_SIZE := 3
 ## A build before 8 sends none, and a reader of 8 finds none in its frames.
 const RULES_SIZE := 32
 const TAIL_SIZE := RULES_SIZE + 4
-## `kind | protocol | host id`, then the tail. The id is four bytes because peer ids are random
-## 32-bit values -- measured in this container, a guest came up as 694971552 --
-## and the only id that is ever a small number is an accident of ENet that a
-## WebSocket or relay transport is under no obligation to repeat.
+## `kind | protocol | host id`, then the tail. The id is four bytes because peer ids
+## are random 32-bit values -- measured in this container, a guest came up as
+## 694971552 -- and the only id that is ever a small number is an accident of ENet
+## that a WebSocket or relay transport is under no obligation to repeat.
 const WELCOME_SIZE := 7
 const REFUSE_SIZE := 4
 ## The internet handshake's pieces (net-hardening.md C): a nonce each way, the
