@@ -154,6 +154,13 @@ extends Node
 ##                           stretch transform on the way in, so this one must
 ##                           not. Either way the number you write is the canvas
 ##                           coordinate and nothing else.
+##   --specimens=1           file tools/looks_specimens.gd's variants before the run
+##                           is built -- an eye with a ring and one with a diamond
+##                           (`ocellusb`, `ocellusc`), the toxin's paralysing and
+##                           sleeping strains (`paraneux`/`paracyst`,
+##                           `hypnoneux`/`hypnocyst`) and the rest -- so the pause
+##                           screen and the tray can be shot holding a variant,
+##                           which today's content has none of (gene-looks.md §9.4)
 ##   --sample=<gene>[:copies][,<gene>[:copies]...]
 ##                           put genes in the genome's waiting queue, the state
 ##                           the body draws and §5.2 gives the strip.
@@ -734,6 +741,8 @@ const NetSession := preload("res://game/net/net_session.gd")
 ## For its Life and Split numbering only, which --pond-trace prints and
 ## --friend= reads.
 const NormalMode := preload("res://game/normal/normal_mode.gd")
+## --specimens=1: variants of shipped organs, wearing their accents.
+const Specimens := preload("res://tools/looks_specimens.gd")
 
 var _clock := 0.0
 ## Where each finger was last put, so a slide can carry the `relative` the
@@ -896,6 +905,8 @@ var _finger: Dictionary = {}
 ## The same, for the cursor.
 var _cursor := Vector2.ZERO
 var _sample: StringName = &""
+## --specimens=1: whether the specimen variants are filed before the run is built.
+var _specimens := false
 ## --sample=: every gene to queue, as `[gene, copies]`, head first.
 var _samples: Array = []
 var _sample_left := -1.0
@@ -1274,6 +1285,8 @@ func _ready() -> void:
 			_posed.append(_parse_pose(text.trim_prefix("--cell=")))
 		elif text.begins_with("--sample-left="):
 			_sample_left = float(text.trim_prefix("--sample-left="))
+		elif text == "--specimens=1":
+			_specimens = true
 		elif text.begins_with("--sample="):
 			_samples.clear()
 			for spec: String in text.trim_prefix("--sample=").split(",", false):
@@ -1498,6 +1511,10 @@ func _ready() -> void:
 	elif _peer_dist >= 0.0:
 		_open_peer()
 
+	# **The specimens are filed before anything reads the catalogue's genomes**: the
+	# run's figure, chips and tray are built from what the catalogue holds.
+	if _specimens:
+		print("[drive] specimens filed: %s" % str(Specimens.file_variants()))
 	var scene: PackedScene = load(scene_path)
 	var run := scene.instantiate()
 	# **Which water, and the drop's switches**, set before the scene enters the
