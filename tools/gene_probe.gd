@@ -681,12 +681,18 @@ func _register() -> void:
 	# every index fills in place, so a new organ's hue is there without a reload.
 	organ.look = {"shape": Gene.TUFT, "hue": Color(0.10, 0.20, 0.30), "count": 3}
 	var bare := Stats.of({&"probeout": 1}, &"armor")
+	# **Beside the first live organ of armour** -- whichever it is, so that retiring
+	# one is still its tag alone (§16) -- or alone, with none.
+	var beside := Catalogue.first_provider(&"armor")
+	var pair := {&"probeout": 1}
+	if beside != &"":
+		pair[beside] = 1
+	var other := Stats.value(beside, &"armor", 1)
 	Catalogue.register(organ)
 	var drawn := [Cilia.hue(&"probeout"), Catalogue.shaped(Gene.TUFT).has(&"probeout")]
 	# Read through stats.gd, which holds the catalogue's dictionary: the new
 	# organ's armour at once, and a second provider combined by the row's rule.
-	var read := [Stats.of({&"probeout": 1}, &"armor"),
-		Stats.of({&"pellicle": 1, &"probeout": 1}, &"armor")]
+	var read := [Stats.of({&"probeout": 1}, &"armor"), Stats.of(pair, &"armor")]
 	var filed := Catalogue.known(&"probein") and Catalogue.known(&"probeout") \
 		and Catalogue.has_forms(&"probein") and Catalogue.variety(&"probeout") == &"probein" \
 		and Catalogue.form_in(&"probein", Gene.OUTSIDE) == &"probeout" \
@@ -710,10 +716,11 @@ func _register() -> void:
 	drawn.append(Cilia.hue(&"probeout"))
 	_check(("a registered organ's two forms answer as the toxin's do, and forgetting it leaves"
 		+ " the catalogue as it was; its armour reads through the stats at once -- %s alone,"
-		+ " %s beside a pellicle, %s again once forgotten (%s before)") % [read[0], read[1],
-		read[2], bare], filed and Array(Catalogue.keys()) == before
-		and not Catalogue.known(&"probein") and bare == 1.0 and read[0] == 1.25
-		and is_equal_approx(read[1], 1.14 * 1.25) and read[2] == 1.0)
+		+ " %s beside %s, %s again once forgotten (%s before)") % [read[0], read[1],
+		beside if beside != &"" else "nothing", read[2], bare], filed
+		and Array(Catalogue.keys()) == before and not Catalogue.known(&"probein")
+		and bare == 1.0 and read[0] == 1.25 and is_equal_approx(read[1], other * 1.25)
+		and read[2] == 1.0)
 	_check(("and its look is drawn at once, by the dictionaries cilia.gd holds: its hue %s"
 		+ " while filed, a tuft among the tufts, and the reserved indigo once forgotten")
 		% str(drawn[0]), drawn[0] == Color(0.10, 0.20, 0.30) and drawn[1]
@@ -750,7 +757,15 @@ func _register() -> void:
 ## retired gene has none, so that it draws as a gene this build does not know.
 func _looks() -> void:
 	var bad: Array[String] = []
-	for key: StringName in Catalogue.live():
+	var drawn: Array[StringName] = []
+	drawn.append_array(Catalogue.live())
+	# **A retired key's look may stay or go** (§16: retiring a gene is its tag and
+	# nothing else): one that stays is still how a body wearing it is drawn, so it is
+	# held as a live one's is.
+	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
+		if not Catalogue.look(key).is_empty():
+			drawn.append(key)
+	for key: StringName in drawn:
 		var look := Catalogue.look(key)
 		var shape := StringName(look.get("shape", &""))
 		if not Gene.SHAPES.has(shape):
@@ -765,14 +780,12 @@ func _looks() -> void:
 		for field: Variant in look:
 			if not LOOK_FIELDS.has(String(field)):
 				bad.append("%s's look field %s" % [key, field])
-	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
-		if not Catalogue.look(key).is_empty():
-			bad.append("retired %s's look" % key)
 	var shapes := PackedStringArray()
 	for shape: StringName in Gene.SHAPES:
 		shapes.append("%s %d" % [shape, Catalogue.shaped(shape).size()])
 	_check(("every live gene has a look -- a shape there is, a hue, its strokes where its shape"
-		+ " counts them and a home shape's tile -- and every retired one none: %s%s") % [
+		+ " counts them and a home shape's tile -- and so does every retired one that kept"
+		+ " its look, %d of them: %s%s") % [drawn.size() - Catalogue.live().size(),
 			", ".join(shapes), "" if bad.is_empty() else "; wrong: %s" % ", ".join(bad)],
 		bad.is_empty())
 
@@ -992,14 +1005,17 @@ func _lines() -> void:
 							or (slot < 0 and (rows[0] as Array).is_empty()):
 						bad.append("%s at %d copies, level %d%s, slot %d" % [key, copies,
 							case[0], " down " + String(case[1]) if case[1] != &"" else "", slot])
-	var silent: Array[StringName] = []
-	silent.append_array(Catalogue.tagged(Catalogue.RETIRED))
+	# **A retired key needs no lines** (§16): its organ's file may keep them, and a
+	# body still wearing it reads them. One whose file says none draws nothing, as
+	# a key this build does not know draws nothing.
+	var silent: Array[StringName] = _said_nothing()
 	silent.append(&"probeunknown")
 	for key: StringName in silent:
 		if GeneStats.lines(key, 2, 0, &"", ctx) != [[], []]:
 			bad.append("%s draws a row" % key)
 	_check(("every live gene says what it does and what it costs on the pause screen -- %d"
-		+ " readings, every copy count, level, way and slot -- and %s draw nothing%s") % [rows_read,
+		+ " readings, every copy count, level, way and slot -- and a key with no lines, %s,"
+		+ " draws nothing%s") % [rows_read,
 			str(silent), "" if bad.is_empty() else ": wrong: %s" % ", ".join(bad)],
 		bad.is_empty())
 
@@ -1047,8 +1063,8 @@ func _colours() -> void:
 		+ " %.0f° of self teal or threat red, but the %d kept until phase 6: %s%s") % [
 			HUE_FLOOR_DEG, nearest, CLEAR_DEG, kept.size(), ", ".join(kept),
 			"" if close.is_empty() else "; too near: %s" % ", ".join(close)],
-		close.is_empty() and kept.size() == KEPT_UNTIL_FAMILIES.size())
-	if kept.size() != KEPT_UNTIL_FAMILIES.size():
+		close.is_empty() and kept.size() == _kept_live())
+	if kept.size() != _kept_live():
 		print("[gene-probe] NOTE kept until phase 6, and no longer near: take it off the list")
 	var wrong: Array[String] = []
 	var copies := 0
@@ -1531,6 +1547,34 @@ static func _empty_of(shape: Dictionary) -> Dictionary:
 		else:
 			out[key] = type_convert(null, int(want))
 	return out
+
+
+## **The retired keys whose organ's file says no lines**: those that draw nothing on
+## the pause screen. A key retired later keeps its organ's `lines` -- retiring is the
+## tag alone (§16) -- and a body still wearing it reads them.
+func _said_nothing() -> Array[StringName]:
+	var out: Array[StringName] = []
+	for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
+		var organ := Catalogue.gene(key)
+		var source := (organ.get_script() as GDScript).source_code if organ != null else ""
+		if not source.contains("func lines("):
+			out.append(key)
+	return out
+
+
+## **How many of [constant KEPT_UNTIL_FAMILIES] are still pairs of live colours**: a
+## pair with a retired key in it is no pair any more -- a retired key is not among
+## the colours checked -- and drops out of the count (§16).
+func _kept_live() -> int:
+	var count := 0
+	for pair: Array in KEPT_UNTIL_FAMILIES:
+		var live := true
+		for one: StringName in pair:
+			if Catalogue.known(one) and Catalogue.has_tag(one, Catalogue.RETIRED):
+				live = false
+		if live:
+			count += 1
+	return count
 
 
 ## Whether two lists hold the same values in the same order, whatever their types.
