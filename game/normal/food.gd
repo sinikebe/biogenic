@@ -4430,8 +4430,10 @@ func restore_person_genome(tiers: Dictionary, order: Array) -> void:
 	if not _replay or not _pond or _cells.size() <= PERSON_SLOT:
 		return
 	var pb := _cells[PERSON_SLOT]
-	pb.genome = tiers
+	# The order first: writing the genome reads what it buys, the seated dart's stun
+	# among it, under the order it is worn in (gene-catalogue.md §15.6).
 	pb.order = order
+	pb.genome = tiers
 
 
 ## **Where a body was, written back from a recording.** The one thing in this
@@ -4877,8 +4879,10 @@ func set_person_genome(tiers: Dictionary, order: Array,
 	if not _pond or not _is_person_slot(slot) or _cells.size() <= slot:
 		return
 	var pb := _cells[slot]
-	pb.genome = tiers.duplicate()
+	# The order first: writing the genome reads what it buys, the seated dart's stun
+	# among it, under the order it is worn in (gene-catalogue.md §15.6).
 	pb.order = order.duplicate()
+	pb.genome = tiers.duplicate()
 	if pb.person != null:
 		_derive_person(pb)
 	_changes += 1
