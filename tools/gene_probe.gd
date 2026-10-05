@@ -27,7 +27,8 @@ extends Node
 ## do not overlap, radii that only rise to the divide, a home for each born organ,
 ## the copies of its counts and the wire's limits its own, room on the pause figure
 ## -- each shown failing a plan that breaks it -- and today's plan held to the one
-## that shipped; and a plan of the probe's own put through a cell's file and a
+## that shipped, and the plan saves before stamps were kept under to its own pin,
+## which never moves; and a plan of the probe's own put through a cell's file and a
 ## world's, the genome, the wire and the figure, and taken out again (§12.3). Then a
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
@@ -200,6 +201,20 @@ const PLAN_MOVED := ("today's plan changed: move SHIPPED_PLAN, SHIPPED_COUNTS, S
 	+ " Wire.PROTOCOL with them -- a build on another plan is another protocol until phase"
 	+ " 4. A change of the slots' count also fails net_probe's wire sizes; a change of arcs"
 	+ " alone fails nothing on the wire side, and this is the only reminder")
+## **The ids every save before the stamp was kept under, in their order** (§10.3):
+## `BodyPlan.BEFORE_STAMPS`, written out again here, and apart from [constant
+## SHIPPED_PLAN], because that pin moves with a plan change and this one never does.
+## A save with no stamp -- every one kept before phase 2, players' among them --
+## names no slot: the order its genes are in is all it has, and this list is what
+## reads it. An edit to it seats an eye where a palp was in every such save at its
+## next load, and nothing else notices: the constant agrees with itself wherever it
+## is read.
+const SHIPPED_BEFORE_STAMPS: Array[String] = ["nose", "starboard", "tail", "fore_starboard",
+	"fore_port", "aft_starboard", "aft_port", "inside"]
+## What to do when `BodyPlan.BEFORE_STAMPS` has moved, said where it fails.
+const BEFORE_MOVED := ("BodyPlan.BEFORE_STAMPS changed: put it back. It is not today's plan but"
+	+ " the one every save before stamps was kept under, and it never moves -- a plan change"
+	+ " moves SHIPPED_PLAN and today's rows, never this")
 
 ## **A body plan of the probe's own** (§10.3, §12.3), swapped in and out as `register`
 ## and `forget` put an organ through: the plan as it shipped ([constant SHIPPED_PLAN])
@@ -1277,6 +1292,12 @@ func _plan() -> void:
 		radii.size(), str(miscounted.slice(0, 4)), str(arcs_ok), str(Genome.FRONT),
 		Genome.STERN, str(counts), str(ring), str(born), str(BodyPlan.stamp()),
 		"" if shipped else " -- " + PLAN_MOVED], shipped)
+	# **The plan saves before stamps were kept under**, held to its own pin and not to
+	# SHIPPED_PLAN's ids: today's plan may move, and this may not.
+	var before_kept := BodyPlan.BEFORE_STAMPS == SHIPPED_BEFORE_STAMPS
+	_check("and the plan every save before stamps was kept under is still the one it was: %s%s"
+		% [str(BodyPlan.BEFORE_STAMPS), "" if before_kept else " -- " + BEFORE_MOVED],
+		before_kept)
 	# **Each check fails a plan that breaks it**: one broken plan a check, swapped in,
 	# and today's again after. Each is made from the plan as it shipped, its slots
 	# found by place -- the first two earned, the last outside, a home -- so that a
@@ -1467,7 +1488,8 @@ func _synthetic_plan() -> void:
 	kept.express(dna, order, body, worn)
 	var state: Dictionary = kept.to_state()
 	kept.free()
-	# A cell kept before stamps had its slots in BEFORE_STAMPS' order.
+	# A cell kept before stamps had its slots in the order they were kept under: the
+	# pin's, so that a change to BodyPlan.BEFORE_STAMPS is a gene in the wrong slot here.
 	var unstamped := state.duplicate(true)
 	unstamped.erase("plan")
 	unstamped["order"] = _laid_before_stamps(kept_ids)
@@ -1666,11 +1688,12 @@ func _synthetic_plan() -> void:
 		round_trip and offered_back and after == before)
 
 
-## [param by_id] laid out as a cell kept before stamps had it: by
-## `BodyPlan.BEFORE_STAMPS`' ids, in their order.
+## [param by_id] laid out as a cell kept before stamps had it: by the ids it was kept
+## under ([constant SHIPPED_BEFORE_STAMPS]), in their order -- never by
+## `BodyPlan.BEFORE_STAMPS`, which is what loading it is checked against.
 static func _laid_before_stamps(by_id: Dictionary) -> PackedStringArray:
 	var out := PackedStringArray()
-	for id: String in BodyPlan.BEFORE_STAMPS:
+	for id: String in SHIPPED_BEFORE_STAMPS:
 		out.append(String(by_id.get(StringName(id), &"")))
 	return out
 
