@@ -17,10 +17,11 @@ extends RefCounted
 ## **Written from the catalogue**, one line a value, in a fixed order:
 ##
 ## 1. every stat a row marks `judged` -- the referee judges a guest by it -- or
-##    `contact` -- the host decides a contact by it (stats.gd) -- in the rows' order,
-##    by every organ that provides it: the first under the line its table always had
-##    (`Stats.label`), any other after it with its key. A new judged table is in it
-##    without anyone listing it;
+##    `contact` -- the host decides a contact by it (stats.gd) -- in the rows' order:
+##    first the stat's row, the fields of it that decide a body's value
+##    ([constant ROW_FIELDS]), then its table by every organ that provides it, the
+##    first under the line its table always had (`Stats.label`), any other after it
+##    with its key. A new judged table is in it without anyone listing it;
 ## 2. the run's numbers the referee judges a guest by that no organ provides, under
 ##    the names they have where they are defined;
 ## 3. the contact rules no table holds: the bite's gap and flank, `bite_damage`, the
@@ -54,6 +55,23 @@ const Referee := preload("res://game/net/referee.gd")
 ## (wire.gd's `RULES_SIZE`).
 const SIZE := 32
 
+## **The fields of a stat's row that decide a body's value**, in the order its line
+## writes them, each as `name:value`: the value with no provider, which way is better,
+## and how several providers combine -- what stats.gd's `of` and `top` read. Two
+## builds whose rows combine two providers otherwise give one body two values, so a
+## row is a rule as its tables are. **A field a later build reads to decide a value is
+## one more name at the end of this list**, and so one more `name:value` item at the
+## end of every row's line that has it -- phase 5's `group` among them.
+## `tools/net_probe.gd` fails on a field of a row that is neither here nor in
+## [constant ROW_FIELDS_UNREAD].
+const ROW_FIELDS: Array[String] = ["none", "better", "combine"]
+## **The fields of a row that decide no value**, each with why it is not written.
+const ROW_FIELDS_UNREAD := {
+	"unit": "what the stats screen counts the stat in",
+	"judged": "whether the row is here at all, which its lines say",
+	"contact": "whether the row is here at all, which its lines say",
+}
+
 ## **The referee's own limits**, by the names they have in referee.gd: the caps over
 ## motion, the slack on a radius and a ring, the shout's and the arrival's banks,
 ## the re-entry and the stall. A limit added to its judgement belongs here.
@@ -83,11 +101,13 @@ static func text() -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, value_text(value)])
-	# 1. The stats two ends must agree on, by every organ that provides each.
+	# 1. The stats two ends must agree on: each one's row, then its table by every
+	# organ that provides it.
 	for stat: StringName in Stats.ROWS:
 		var row: Dictionary = Stats.ROWS[stat]
 		if not bool(row["judged"]) and not bool(row["contact"]):
 			continue
+		lines.append("stat.%s=%s" % [stat, row_text(row)])
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
@@ -187,3 +207,13 @@ static func value_text(value: Variant) -> String:
 				parts.append("%s:%s" % [str(key), value_text(value[key])])
 			return "{" + ",".join(parts) + "}"
 	return str(value)
+
+
+## **A stat's row, as its line says it**: each of [constant ROW_FIELDS] the row has, as
+## `name:value`, in that order.
+static func row_text(row: Dictionary) -> String:
+	var items: PackedStringArray = []
+	for field: String in ROW_FIELDS:
+		if row.has(field):
+			items.append("%s:%s" % [field, value_text(row[field])])
+	return ",".join(items)

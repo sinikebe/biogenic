@@ -3231,6 +3231,8 @@ func _referee_rules() -> void:
 	var unwritten: Array[String] = []
 	var shared := Stats.judged() + Stats.contact()
 	for stat: StringName in shared:
+		if not ("\n" + text).contains("\nstat.%s=" % stat):
+			unwritten.append("stat." + String(stat))
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			var label := Stats.label(stat) + ("" if k == 0 else "." + String(providers[k]))
@@ -3239,8 +3241,29 @@ func _referee_rules() -> void:
 	_says(unwritten.is_empty(), "referee: every table of the %d stats the referee judges"
 		% Stats.judged().size() + " and the %d the host decides a contact by" % Stats.contact().size()
 		+ " is in the rules the handshake fingerprints, one line an organ that provides"
-		+ " it%s" % ("" if unwritten.is_empty()
+		+ " it, after the stat's row%s" % ("" if unwritten.is_empty()
 			else "; not %s -- write it in _rules_text" % ", ".join(unwritten)))
+	# **A row's fields are each written or said not to decide a value**: a field
+	# stats.gd's rows gain -- phase 5's `group` -- fails here until it is one or the
+	# other, so how two providers combine cannot change with no line moving.
+	var unsorted: Array[String] = []
+	var fields := {}
+	for stat: StringName in Stats.ROWS:
+		for field: Variant in Stats.ROWS[stat]:
+			fields[String(field)] = true
+			var written := Rules.ROW_FIELDS.has(String(field))
+			if written == Rules.ROW_FIELDS_UNREAD.has(String(field)):
+				unsorted.append("%s.%s" % [stat, field])
+	for field: String in Rules.ROW_FIELDS + Rules.ROW_FIELDS_UNREAD.keys():
+		if not fields.has(field):
+			unsorted.append("%s, which no row has" % field)
+	_says(unsorted.is_empty(), ("referee: every field of stats.gd's %d rows is written on"
+		% Stats.ROWS.size() + " the row's line -- %s -- or named as deciding no value, with"
+		% ", ".join(Rules.ROW_FIELDS) + " why -- %s" % ", ".join(Rules.ROW_FIELDS_UNREAD.keys()))
+		if unsorted.is_empty() else ("referee: a field of stats.gd's rows is not sorted: %s"
+			% ", ".join(unsorted) + " -- a field that decides a body's value goes at the end"
+			+ " of rules.gd's ROW_FIELDS, which moves the pin, and one that does not in"
+			+ " ROW_FIELDS_UNREAD, with why"))
 	# **The game's own text is this one**: what it carries on the handshake is what is
 	# written here from the constants themselves.
 	var game := Rules.text()
@@ -3280,13 +3303,21 @@ func _rules_text() -> String:
 	var lines: PackedStringArray = []
 	var put := func(name: String, value: Variant) -> void:
 		lines.append("%s=%s" % [name, _rule_value(value)])
-	# **A stat two builds must agree on, by every organ that provides it**: the first
-	# under the name its table had as cell.gd's (stats.gd's `label`), any other after
-	# it with its key, as drop_save.gd writes them. A second organ that calls, or swims,
-	# or bites, is a new line -- and new rules, which the handshake keeps apart.
+	# **A stat two builds must agree on**: its row -- the fields of it that decide a
+	# body's value, read here by name, each as `name:value` -- then its table by every
+	# organ that provides it, the first under the name its table had as cell.gd's
+	# (stats.gd's `label`), any other after it with its key, as drop_save.gd writes
+	# them. A second organ that calls, or swims, or bites, is a new line -- and new
+	# rules, which the handshake keeps apart.
 	for stat: StringName in Stats.ROWS:
 		if not Stats.judged().has(stat) and not Stats.contact().has(stat):
 			continue
+		var row: Dictionary = Stats.ROWS[stat]
+		var items: PackedStringArray = []
+		for field: String in Rules.ROW_FIELDS:
+			if row.has(field):
+				items.append("%s:%s" % [field, _rule_value(row[field])])
+		lines.append("stat.%s=%s" % [stat, ",".join(items)])
 		var providers := Catalogue.providers(stat)
 		for k in providers.size():
 			put.call(Stats.label(stat) + ("" if k == 0 else "." + String(providers[k])),
