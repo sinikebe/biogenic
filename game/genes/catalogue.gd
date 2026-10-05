@@ -304,17 +304,20 @@ static func number(key: StringName, name: StringName) -> Variant:
 ## **The number [param name] of the organ a body wearing [param tiers] provides
 ## [param stat] with** -- or of the first that provides it, for a body that wears
 ## none: the tail's hold level, the dart's stun. The mechanic asks the organ it
-## acts through, and never names it.
-static func number_for(tiers: Dictionary, stat: StringName, name: StringName) -> Variant:
+## acts through, and never names it. [param otherwise] when nothing provides the
+## stat any more -- every organ that did retired (§4.4) -- or the organ has no
+## such number.
+static func number_for(tiers: Dictionary, stat: StringName, name: StringName,
+		otherwise: Variant = null) -> Variant:
 	var all: Array[StringName] = _providers.get(stat, _none)
 	if all.is_empty():
-		return null
+		return otherwise
 	var key := all[0]
 	for each: StringName in all:
 		if int(tiers.get(each, 0)) > 0:
 			key = each
 			break
-	return (_records[key] as Gene).numbers.get(name)
+	return (_records[key] as Gene).numbers.get(name, otherwise)
 
 
 ## **What [param key] adds to the metabolic multiplier at [param level] down

@@ -679,7 +679,7 @@ var _vision_cut := false
 ## frame to frame because a sweep is a place in a cycle.
 var _beam_fan := RayFan.new()
 ## Different bodies the beam touched this second, which is its experience.
-var _beam_tally := Tally.new(int(Catalogue.number_for({}, &"beam_range", &"xp_cap")))
+var _beam_tally := Tally.new(int(Catalogue.number_for({}, &"beam_range", &"xp_cap", 0)))
 ## **What the membrane's beam lobe is still holding**, for a sweep: a hit that
 ## is only lit once a pass stays on the skin and fades over the revisit time,
 ## or a sweep reads as flicker (§4.3). Strength and bearing, as the bus takes

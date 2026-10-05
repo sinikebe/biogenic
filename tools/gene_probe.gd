@@ -175,9 +175,12 @@ func _keys() -> void:
 		moved.is_empty() and unlisted.is_empty())
 	var order: Array[StringName] = []
 	order.assign(Catalogue.keys().slice(0, SHIPPED.size()))
-	_check("keys() is the order, today's GENE_ORDER, then the placeless: %s"
-		% str(Catalogue.keys()), order == SHIPPED
-		and Array(Catalogue.live()) == Array(SHIPPED))
+	# A gene retired later keeps its place in the order and leaves the live ones.
+	var live := SHIPPED.filter(func(key: StringName) -> bool:
+		return not Catalogue.has_tag(key, Catalogue.RETIRED))
+	_check("keys() is the order, today's GENE_ORDER, then the placeless, and live() the same"
+		+ " less any retired: %s" % str(Catalogue.keys()), order == SHIPPED
+		and Array(Catalogue.live()) == Array(live))
 	var retired_ok := true
 	for key: StringName in SHIPPED_PLACELESS:
 		retired_ok = retired_ok and Catalogue.has_tag(key, Catalogue.RETIRED) \
@@ -324,16 +327,30 @@ func _tables() -> void:
 				var number := typeof(at) == TYPE_FLOAT or typeof(at) == TYPE_INT
 				if not number or not is_finite(float(at)):
 					bad.append("%s's %s holds %s" % [key, stat, str(at)])
+	# **A stat whose every provider retired is still a stat** (§4.4): a body reads
+	# it at its value with no provider, which retiring the organ asks for. A row
+	# nothing ever provided is a mistake.
 	var unprovided: Array[StringName] = []
+	var retired_only: Array[String] = []
 	for stat: StringName in Stats.ROWS:
-		if Catalogue.providers(stat).is_empty():
+		if not Catalogue.providers(stat).is_empty():
+			continue
+		var retired: Array[StringName] = []
+		for key: StringName in Catalogue.tagged(Catalogue.RETIRED):
+			if Catalogue.provides(key, stat):
+				retired.append(key)
+		if retired.is_empty():
 			unprovided.append(stat)
+		else:
+			retired_only.append("%s (%s)" % [stat, ", ".join(retired)])
 	_check(("every one of the %d tables has %d finite entries, the first its stat's value"
-		+ " with no provider, and every one of the %d stats a provider%s%s") % [tables,
-			Genome.TIER_MAX + 1, Stats.ROWS.size(),
+		+ " with no provider, and every one of the %d stats a provider, live or retired%s%s")
+		% [tables, Genome.TIER_MAX + 1, Stats.ROWS.size(),
 			"" if bad.is_empty() else ": " + "; ".join(bad),
-			"" if unprovided.is_empty() else "; none for %s" % str(unprovided)],
+			"" if unprovided.is_empty() else "; none ever for %s" % str(unprovided)],
 		bad.is_empty() and unprovided.is_empty() and tables > 0)
+	print("[gene-probe] NOTE stats only retired organs provide, read at their value with no"
+		+ " provider: %s" % (", ".join(retired_only) if not retired_only.is_empty() else "none"))
 	var rows_bad: Array[String] = []
 	for stat: StringName in Stats.ROWS:
 		var row: Dictionary = Stats.ROWS[stat]

@@ -900,15 +900,21 @@ func can_hold() -> bool:
 ## (`flagellum.gd`'s HOLD_LEVEL), of the organ that beats which [param tiers]
 ## wears -- or of the first that beats, for a body that wears none. A held tail
 ## does not beat, costs nothing and keeps its clock ([method _process]).
+## [constant HOLD_NEVER] once no organ beats at all.
 static func hold_level(tiers: Dictionary) -> int:
-	return int(Catalogue.number_for(tiers, &"impulse_speed", &"hold_level"))
+	return int(Catalogue.number_for(tiers, &"impulse_speed", &"hold_level", HOLD_NEVER))
+
+
+## **The hold level with no organ that beats at all**, every one retired
+## (gene-catalogue.md §4.4): one no tail reaches, so nothing is ever held.
+const HOLD_NEVER := 1 << 16
 
 
 ## **How long a dart stuns what it hits**, in seconds: the dart's own number
 ## (`trichocyst.gd`'s DART_STUN), of the dart [param tiers] wears -- or of the
-## first organ that darts, for a body that wears none.
+## first organ that darts, for a body that wears none. 0 once no organ darts.
 static func dart_stun(tiers: Dictionary) -> float:
-	return float(Catalogue.number_for(tiers, &"dart_range", &"stun"))
+	return float(Catalogue.number_for(tiers, &"dart_range", &"stun", 0.0))
 
 
 ## **Whether the tail is held still**, as this body's last step had it: what both
