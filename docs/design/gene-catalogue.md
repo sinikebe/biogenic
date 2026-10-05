@@ -1770,6 +1770,10 @@ body plan moves `Wire.RULES`' pin and nothing else. By file:
   play together until the older updates, which is a player-visible consequence
   worth a line in a commit. Its failure gives the new value and says no `PROTOCOL`
   goes with it.
+- **Worked out as a session starts, not as the game loads**: a session takes the
+  rules when it hosts or calls, so a tool that registers or forgets an organ between
+  two sessions poses as two builds, and a game that never meets anyone never pays
+  for it -- 1.6 ms the first time in a process, 0.4 ms after.
 - **The content version rides in the tail too** (§11.3 named the fingerprint): on one
   protocol, the sentence still says whose game is older -- "yours" or "theirs", "your
   game is older" or "your friend's server is older" -- by content version, which
