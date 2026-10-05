@@ -1238,6 +1238,14 @@ made itself (`referee.gd`: *"a death the host made itself, said again"*).
 
 ### 14.3 Phases 3 and 4: the referee judges a held guest
 
+> **Since gene-catalogue.md phase 4 (protocol 8, 2026-10-05)** the handshake carries
+> the rules a host judges and decides contacts by (`game/net/rules.gd`), so a change to
+> them moves `Wire.RULES`' pin and keeps older builds apart by itself. `PROTOCOL` moves
+> only when a message's format does: a new byte, bit or message. Read the bumps planned
+> here that way: one planned only for a judged or contact rule is the pin alone; a new
+> contact rule is a sample line in `rules.gd` and in `net_probe`'s `_rules_text`; and a
+> format change takes the next free number, 9 at the time of writing.
+
 **A guest paralysed or put to sleep by the host's water must stop on its own
 client**, and it does: POND tells it its loads every 50 ms, and its `cell.gd`
 applies them (§6.3, §6.4). **The referee must judge its motion knowing that**,
