@@ -33,11 +33,12 @@ extends Node
 ## gene of the probe's own -- an organ with two variants, one in two places -- put
 ## through the genome, the water, the body, its instinct parts, the wire, a cell's
 ## file, the referee and the pause screen, held to one variant a body, and taken out
-## again; a faster tail as one more entry in the tail's own file; and a second strain
-## of the toxin, one entry of one place, covered by its organ's tags (§12.3). And --
-## a number, not a failure (§8.3) -- the gene words with no French; and how many gene
-## names are written into game/ outside game/genes/, which `-- --names` fails on
-## (§12.2, CI's "Check the gene names").
+## again; a faster tail as one more entry in the tail's own file, its parts offered on
+## the instincts page to a body that wears it alone; and a second strain of the toxin,
+## one entry of one place, covered by its organ's tags (§12.3). And -- a number, not a
+## failure (§8.3) -- the gene words with no French; and how many gene names are
+## written into game/ outside game/genes/, which `-- --names` fails on (§12.2, CI's
+## "Check the gene names").
 ##
 ## Prints one line per check and `ALL PASS` only if every one held; CI asserts on
 ## that marker rather than on the exit code, because Godot exits 0 after a script
@@ -73,6 +74,8 @@ const Figure := preload("res://game/normal/figure.gd")
 const DropSave := preload("res://game/normal/drop_save.gd")
 const CellSave := preload("res://game/normal/cell_save.gd")
 const NormalMode := preload("res://game/normal/normal_mode.gd")
+## The instincts page, whose offers a variant's parts are checked through.
+const ProgramsPage := preload("res://game/normal/programs_page.gd")
 
 ## **Every key that ever shipped, in its order** -- its place is its index -- and
 ## the ones retired before the catalogue, which have none. Keys are permanent
@@ -2216,7 +2219,8 @@ func _synthetic_gene() -> void:
 ## tail, filed as the tail's own organ file with one more variant -- the tail's every
 ## field, its speed's table its own. The fingerprints that a protocol hangs on see
 ## it, as the referee's caps do; a body wearing it beside the plain tail is read by
-## the stat rows; its parts are the tail's, and the vocabulary does not move.
+## the stat rows; its parts are the tail's, and the vocabulary does not move; and the
+## instincts page offers them to a body that wears it alone.
 func _variant_of_shipped() -> void:
 	var before := Array(Catalogue.keys())
 	var bits_before := _vocabulary_bits()
@@ -2255,6 +2259,7 @@ func _variant_of_shipped() -> void:
 	var plains := Rulebook.worn(vocab, {plain: 2}, FoodField.everybody())
 	var rows: Array = GeneStats.lines(&"probeswift", 2, 0, &"", GeneStats.context({}))
 	var born_same := not Catalogue.born().has(&"probeswift")
+	var page := _offered_alike(vocab, organ, &"probeswift", plain)
 	Catalogue.forget(organ)
 	var rules_after := DropSave.rules_text()
 	var wire_after: String = probe.call(&"_rules_text")
@@ -2282,7 +2287,45 @@ func _variant_of_shipped() -> void:
 		and _bits_kept(bits_before, _vocabulary_bits()) == ""
 		and rows.size() == 2 and not (rows[0] as Array).is_empty()
 		and Array(Catalogue.keys()) == before)
+	_check(("and the instincts page offers a body that wears the faster %s alone, or carries"
+		+ " it unworn, what it offers one with the plain tail at every copy count -- %s's parts"
+		+ " %s, waiting at one copy %s, carried %s -- counting parts by organ, as the body's"
+		+ " rules do") % [plain, organ, str(page[1]), str(page[2]), str(page[3])], page[0])
 	_strain_of_shipped()
+
+
+## **What the instincts page offers a body of [param variant] alone, against one of
+## [param plain] alone** -- worn at every copy count, and carried unworn -- through the
+## page's own `ProgramsPage.offers`: `[alike, parts, waiting, carried]`. `alike` holds
+## when each pair is the same offer and the variant's body is offered every part
+## [param organ] declares, worn and carried; `parts` are those parts, and `waiting`
+## and `carried` what the variant's body was offered as such at one copy.
+static func _offered_alike(vocab: Rulebook.Vocabulary, organ: StringName, variant: StringName,
+		plain: StringName) -> Array:
+	var parts: Array[StringName] = []
+	for table: Dictionary in [vocab.inputs, vocab.outputs]:
+		for name: StringName in table:
+			if StringName((table[name] as Object).get(&"owner")) == organ:
+				parts.append(name)
+	var alike := not parts.is_empty()
+	var waiting := {}
+	var carried := {}
+	for copies in range(1, Genome.TIER_MAX + 1):
+		var worn := {variant: copies}
+		var plain_worn := {plain: copies}
+		var as_variant: Dictionary = ProgramsPage.offers(vocab, worn, worn)
+		var unworn: Dictionary = ProgramsPage.offers(vocab, worn, {})
+		alike = alike and as_variant == ProgramsPage.offers(vocab, plain_worn, plain_worn) \
+			and unworn == ProgramsPage.offers(vocab, plain_worn, {})
+		for part: StringName in parts:
+			alike = alike and ((as_variant["inputs"] as Array).has(part)
+				or (as_variant["outputs"] as Array).has(part)) \
+				and not (as_variant["carried"] as Dictionary).has(part) \
+				and (unworn["carried"] as Dictionary).has(part)
+		if copies == 1:
+			waiting = as_variant["waiting"]
+			carried = unworn["carried"]
+	return [alike, parts, waiting, carried]
 
 
 ## **A second strain of the shipped organ with a dose** -- the toxin's -- as one

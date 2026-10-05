@@ -2809,12 +2809,16 @@ static func rungs_offered(kind: StringName) -> Array:
 
 ## **What the page offers to pick** (§4.2): whatever the body and the metabolism
 ## declare, and every part of a gene your DNA carries or your body wears -- in
-## [param dna] copies and [param levels], what each worn gene works at --
-## `{inputs, outputs}` in the vocabulary's order, the genes' first, `always`
-## last; with `carried` (a gene carried and not worn) and `waiting` (a part
-## waiting for its organ's level: the level it needs) for the ones that cannot
-## act yet.
+## [param dna] copies and [param levels], what each worn gene works at, both by
+## key -- `{inputs, outputs}` in the vocabulary's order, the genes' first,
+## `always` last; with `carried` (a gene carried and not worn) and `waiting` (a
+## part waiting for its organ's level: the level it needs) for the ones that
+## cannot act yet. **Counted by organ**, as your rules count your parts
+## (own_rules.gd's `worn`, catalogue.gd's `by_organ`): a part is its organ's, so
+## a body that wears any variant of the organ is offered it.
 static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictionary) -> Dictionary:
+	var carried_by := Catalogue.by_organ(dna)
+	var worn_by := Catalogue.by_organ(levels)
 	var everybody := FoodField.everybody()
 	var genes_in: Array[StringName] = []
 	var own_in: Array[StringName] = []
@@ -2831,8 +2835,8 @@ static func offers(vocab: Rulebook.Vocabulary, dna: Dictionary, levels: Dictiona
 			if everybody.has(owner):
 				(pair[2] as Array).append(name)
 				continue
-			var worn := int(levels.get(owner, 0))
-			if worn <= 0 and int(dna.get(owner, 0)) <= 0:
+			var worn := int(worn_by.get(owner, 0))
+			if worn <= 0 and int(carried_by.get(owner, 0)) <= 0:
 				continue
 			(pair[1] as Array).append(name)
 			if worn <= 0:
@@ -3316,6 +3320,8 @@ static func draw_pips(node: CanvasItem, first: Vector2, hue: Color, copies: int)
 			node.draw_circle(at, PIP_ROOM_R, Color(PALE, 0.30), true, -1.0, true)
 
 
+## **What the page offers this run's body**: its DNA's copies and what each gene it
+## wears works at, by key, which [method offers] counts by organ.
 func _offers() -> Dictionary:
 	var genome: Node = _run.get(&"_genome")
 	var levels := {}
